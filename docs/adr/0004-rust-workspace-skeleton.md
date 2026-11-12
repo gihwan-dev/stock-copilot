@@ -32,12 +32,13 @@ CLI가 낸 정보 메시지: "`tauri` dependency has workspace inheritance enabl
 | `src-tauri`의 패키지 이름은 `src-tauri`, lib 이름은 `src_tauri`. 기본 bin(`src/main.rs`)과 `gen-bindings`(`src/bin/gen-bindings.rs`) 두 개. `default-run = "src-tauri"` | architecture.md 3.2의 의존 표가 `src-tauri`라는 이름을 쓴다. bin이 둘이면 `cargo run`과 Tauri CLI가 실행할 bin을 알아야 한다 | 패키지 이름 `stock-copilot` | architecture.md 3.1, 3.2 |
 | `build_app`은 지금 `(Builder<R>, Context<R>) -> Result<App<R>, tauri::Error>`다. `Ports` 인자는 포트가 생기는 작업에서 더한다 | 아직 포트가 없다 | 빈 `Ports` 타입을 미리 만들기 | architecture.md 3.1 |
 | 빈 앱의 화면은 `src-tauri/empty-frontend/index.html`, 아이콘은 `src-tauri/icons/icon.png`(32×32 단색) | `generate_context!`가 컴파일 때 `frontendDist` 폴더와 `icons/icon.png`를 읽는다. 없으면 컴파일이 실패했다 | 루트의 `apps/desktop/dist`(H-21 전에는 없어서 깨끗한 사본의 `just check`가 실패) | 실측 |
-| `tauri.conf.json`에 `app.security.capabilities: []`, `bundle.active: false` | 빈 앱에는 권한이 필요 없다. 묶음은 서명 작업(S-14)에서 켠다 | capability 파일 자동 탐색 | R-05 Q1 |
+| `tauri.conf.json`에 `app.security.capabilities: []`, `bundle.active: false` | 빈 앱에는 capability 파일이 없다. 빈 목록은 Tauri의 기본값과 같아서 `./capabilities/`의 파일을 모두 포함한다(tauri-utils `config.rs`). 즉 명시적 목록이 아니다. 묶음은 서명 작업(S-14)에서 켠다 | - | R-05 Q1 |
 
 ## 결과
 
 - H-21이 프런트엔드를 만들면 `frontendDist`를 그 산출 폴더로 바꾸고 `empty-frontend/`를 지운다. 아이콘은 디자인 산출물이 오면 바꾼다.
 - 앱 묶음의 `Contents/MacOS`에 `src-tauri`와 함께 `gen-bindings`가 들어갔다. Tauri 묶음은 패키지의 bin을 모두 담는다. 제품 묶음에 바인딩 생성기가 들어가지 않게 하는 방법은 H-13 또는 S-14에서 정한다.
+- 명시적 capability 목록(`["main"]`)은 U-03에서 넣는다. H-33의 `capability-check`는 빈 목록을 명시로 보지 않아야 한다.
 - `tauri dev`는 `--locked` 없이 `cargo run`을 부른다. 검사는 `just check`만 믿는다.
 - Tauri CLI 버전은 아직 저장소에 고정하지 않았다. H-21의 pnpm 작업 공간에서 `@tauri-apps/cli`를 정확한 버전으로 고정한다.
 - 바뀌면 다시 볼 조건: Tauri CLI를 3.x로 올릴 때, `tauri build`가 `src-tauri/target`을 만들기 시작할 때.
