@@ -42,7 +42,7 @@ test("frontendDist points at the Vite output folder, not the placeholder", () =>
   assert.equal(existsSync(join(tauriDir, "empty-frontend")), false);
 });
 
-test("the Vite build produced the page Tauri embeds", () => {
+test("after the vite build step of just check, dist holds the page Tauri embeds", () => {
   const built = readFileSync(join(desktopRoot, "dist", "index.html"), "utf8");
   assert.match(built, /<div id="root"><\/div>/);
   assert.match(

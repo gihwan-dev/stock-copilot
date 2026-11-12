@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { appConfigProblems } from "./app-config.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktop = join(here, "..", "..", "apps", "desktop");
@@ -16,18 +17,16 @@ const report = (status, text) => {
   if (status === "FAIL") failures.push(text);
 };
 
-const appConfig = readJson(join(desktop, "tsconfig.json"));
-report(
-  appConfig.extends === undefined ? "PASS" : "FAIL",
-  "apps/desktop/tsconfig.json does not extend another config",
+const appProblems = appConfigProblems(
+  readJson(join(desktop, "tsconfig.json")),
+  expected,
 );
-for (const [option, value] of Object.entries(expected.options)) {
-  const actual = appConfig.compilerOptions[option];
-  report(
-    isDeepStrictEqual(actual, value) ? "PASS" : "FAIL",
-    `option ${option}: expected ${JSON.stringify(value)}, got ${JSON.stringify(actual)}`,
-  );
-}
+for (const problem of appProblems)
+  report("FAIL", `apps/desktop/tsconfig.json ${problem}`);
+report(
+  appProblems.length === 0 ? "PASS" : "FAIL",
+  `apps/desktop/tsconfig.json matches expected.json exactly: ${appProblems.length} problem(s)`,
+);
 
 const ownConfig = readJson(join(here, "tsconfig.json"));
 report(
