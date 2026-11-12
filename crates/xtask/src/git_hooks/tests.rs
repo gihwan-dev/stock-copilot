@@ -869,6 +869,11 @@ fn recipe(name: &str) -> Vec<String> {
         .collect()
 }
 
+const FRESH_NODE_RECIPE: [&str; 2] = [
+    "fresh-node:",
+    "pnpm install --frozen-lockfile --force --ignore-scripts",
+];
+
 #[test]
 fn check_ends_with_the_new_disables_and_the_hook_installation() {
     let check = recipe("check");
@@ -910,11 +915,7 @@ fn check_ends_with_the_new_disables_and_the_hook_installation() {
         ],
         "fresh-cargo recipe"
     );
-    assert_eq!(
-        recipe("fresh-node"),
-        ["fresh-node:", "pnpm install --frozen-lockfile --force"],
-        "fresh-node recipe"
-    );
+    assert_eq!(recipe("fresh-node"), FRESH_NODE_RECIPE, "fresh-node recipe");
     assert_eq!(
         recipe("commit-guard"),
         [

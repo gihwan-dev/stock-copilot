@@ -1425,5 +1425,10 @@
     "path": "{root}/docs/settings.local.json",
     "decision": "allow",
     "rules": []
+  },
+  {
+    "path": "{home}/.local/state/stock-copilot-harness/records/implementer-a1.json",
+    "decision": "deny",
+    "rules": ["protected-home"]
   }
 ]

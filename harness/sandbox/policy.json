@@ -1,0 +1,95 @@
+{
+  "base": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "registry.npmjs.org",
+        "index.crates.io",
+        "static.crates.io"
+      ],
+      "allowLocalBinding": true,
+      "allowUnixSockets": ["/private/tmp/claude-501"]
+    },
+    "filesystem": {
+      "allowWrite": [
+        "../stock-copilot-wt",
+        "~/.cargo/registry",
+        "~/.cargo/advisory-dbs/db.lock",
+        "~/Library/pnpm/store",
+        "~/Library/pnpm/_tmp_*",
+        "~/Library/pnpm/_tmp_*/*",
+        "/private/tmp/pnpm-store-operation-locks-501",
+        "/private/tmp/pnpm-dir-locks-501",
+        "/private/tmp/pnpm-modules-swaps-501"
+      ],
+      "denyWrite": [
+        "./.cargo/config",
+        "./.cargo/config.toml",
+        "../stock-copilot-wt/.cargo",
+        "../stock-copilot-wt/*/.cargo/config",
+        "../stock-copilot-wt/*/.cargo/config.toml",
+        "./.git/info",
+        "~/.cargo/registry/src",
+        "~/.gitconfig",
+        "~/.config/git",
+        "~/.claude",
+        "~/.rustup/settings.toml",
+        "~/.cargo/config",
+        "~/.cargo/config.toml",
+        "~/.local/state/stock-copilot-harness",
+        "./harness/claude-hooks/hashes.json",
+        "./harness/claude-hooks/lock.txt",
+        "./harness/sandbox/lock-fragment.json"
+      ],
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.gnupg",
+        "~/.config/gh",
+        "~/.netrc",
+        "~/.npmrc",
+        "~/.docker",
+        "~/.kube",
+        "~/Library/Keychains",
+        "~/Library/Cookies",
+        "~/Library/Application Support/Google/Chrome",
+        "~/Library/Application Support/BraveSoftware",
+        "~/Library/Application Support/Microsoft Edge",
+        "~/Library/Application Support/Firefox",
+        "~/Library/Application Support/Arc",
+        "~/Library/Safari",
+        "~/.claude",
+        "~/.claude-*/projects",
+        "~/.local/state/stock-copilot-harness"
+      ],
+      "allowRead": ["~/.claude/shell-snapshots"]
+    }
+  },
+  "lock": {
+    "keepWritable": [".claude/worktrees/**"],
+    "newPaths": [
+      "*.yml",
+      "*.json",
+      "*.js",
+      "*.mjs",
+      "*.cjs",
+      "*.ts",
+      ".github",
+      ".mcp.json",
+      ".worktreeinclude",
+      ".gitattributes",
+      ".editorconfig",
+      ".tool-versions",
+      ".nvmrc",
+      ".env*",
+      ".lefthook*",
+      "lefthook-local.yml",
+      ".claude/settings*.json",
+      ".claude/skills",
+      ".claude/commands"
+    ],
+    "trackedProtected": ["docs/adr/*"]
+  }
+}

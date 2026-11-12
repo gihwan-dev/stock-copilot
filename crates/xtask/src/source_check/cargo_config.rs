@@ -5,7 +5,9 @@ pub(crate) const MUTANTS_FILE: &str = "mutants.toml";
 
 pub(crate) const NEXTEST_FILE: &str = ".config/nextest.toml";
 
-pub(crate) const SANDBOX_COMMAND: &str = "/usr/bin/sandbox-exec";
+pub(crate) const SANDBOX_SHELL: &str = "/bin/sh";
+
+pub(crate) const SANDBOX_SCRIPT: &str = "p=\"$1\"; shift; if /usr/bin/sandbox-exec -p \"$p\" /usr/bin/true 2>/dev/null; then exec /usr/bin/sandbox-exec -p \"$p\" \"$@\"; fi; if [ \"${SANDBOX_RUNTIME:-}\" = 1 ]; then exec \"$@\"; fi; echo \"network-sandbox: sandbox-exec를 적용할 수 없고 바깥 샌드박스(SANDBOX_RUNTIME=1)도 없다\" >&2; exit 1";
 
 pub(crate) const SANDBOX_PROFILE: &str = "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))";
 
@@ -72,10 +74,16 @@ fn problem(file: ConfigFile, kind: ProblemKind) -> ConfigProblem {
 
 pub(crate) fn expected_nextest() -> toml::Table {
     let command = toml::Value::Array(
-        [SANDBOX_COMMAND, "-p", SANDBOX_PROFILE]
-            .into_iter()
-            .map(|part| toml::Value::String(String::from(part)))
-            .collect(),
+        [
+            SANDBOX_SHELL,
+            "-c",
+            SANDBOX_SCRIPT,
+            SANDBOX_WRAPPER,
+            SANDBOX_PROFILE,
+        ]
+        .into_iter()
+        .map(|part| toml::Value::String(String::from(part)))
+        .collect(),
     );
     let mut wrapper = toml::Table::new();
     wrapper.insert(String::from("command"), command);

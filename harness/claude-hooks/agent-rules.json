@@ -1,0 +1,15 @@
+{
+  "subagentTypes": ["implementer", "adversarial-reviewer", "review-critic"],
+  "allowedArguments": ["description", "prompt", "subagent_type"],
+  "forbiddenTools": ["SendMessage"],
+  "baseRef": "refs/heads/master",
+  "reportFirstLines": { "done": "완료", "blocked": "막힘:" },
+  "reportMarkers": [
+    "하네스 기록:",
+    "just check 마지막 실행",
+    "완료 기준별 충족 근거"
+  ],
+  "reportLineMinimum": 20,
+  "maxBlocks": 3,
+  "outputLimit": 8000
+}

@@ -22,7 +22,8 @@
       "~/.cargo/config.toml",
       "~/.rustup/**",
       "~/.npmrc",
-      "~/.config/pnpm/**"
+      "~/.config/pnpm/**",
+      "~/.local/state/stock-copilot-harness/**"
     ],
     "configFiles": {
       "names": [
@@ -332,7 +333,26 @@
       "replace",
       "filter-branch",
       "commit-tree"
-    ]
+    ],
+    "baseBranch": {
+      "branches": ["master", "main"],
+      "creating": [
+        {
+          "rule": "git-history",
+          "subcommands": ["checkout"],
+          "long": [],
+          "short": ["B"]
+        },
+        {
+          "rule": "git-history",
+          "subcommands": ["switch"],
+          "long": ["--force-create"],
+          "short": ["C"]
+        }
+      ],
+      "refspecSubcommands": ["push", "fetch"],
+      "resetOptions": ["--soft"]
+    }
   },
   "lefthook": {
     "denied": ["install", "uninstall", "add"]
@@ -489,5 +509,29 @@
     "vi": ["-e", "-s", "-c", "+"],
     "nvim": ["--headless", "-e", "-s", "-c", "+"]
   },
-  "awk": ["awk", "gawk", "mawk", "nawk"]
+  "awk": ["awk", "gawk", "mawk", "nawk"],
+  "harnessScripts": [
+    {
+      "script": "harness/claude-hooks/hashes.mjs",
+      "modes": ["--write"]
+    },
+    {
+      "script": "harness/sandbox/fragment.mjs",
+      "modes": ["--write", "--locked-settings"]
+    }
+  ],
+  "harnessNodeValueOptions": [
+    "-r",
+    "--require",
+    "--import",
+    "--loader",
+    "--experimental-loader",
+    "-e",
+    "--eval",
+    "-p",
+    "--print",
+    "-C",
+    "--conditions",
+    "--env-file"
+  ]
 }

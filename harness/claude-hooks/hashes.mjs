@@ -9,6 +9,8 @@ export const HASHED = [
   "harness/claude-hooks/rules.json",
   "harness/agent-writable.txt",
   "harness/claude-hooks/lock.txt",
+  "harness/claude-hooks/agent-rules.json",
+  "harness/sandbox/lock-fragment.json",
 ];
 
 const hooksUnder = (root, relative) =>

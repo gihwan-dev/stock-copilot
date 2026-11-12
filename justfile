@@ -75,7 +75,7 @@ check-node:
     actual="$(node --version)"; pinned="v$(cat .node-version)"; [ "$actual" = "$pinned" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\n' "$actual" "$pinned" >&2; exit 1; }
 
 check-ts: check-node
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
     node harness/source-tree/check.mjs
@@ -140,7 +140,7 @@ fresh-cargo:
     cargo llvm-cov clean --locked --workspace
 
 fresh-node:
-    pnpm install --frozen-lockfile --force
+    pnpm install --frozen-lockfile --force --ignore-scripts
 
 commit-base:
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-base

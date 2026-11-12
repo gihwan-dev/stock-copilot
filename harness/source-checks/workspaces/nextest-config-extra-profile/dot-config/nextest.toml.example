@@ -2,8 +2,10 @@ experimental = ["wrapper-scripts"]
 
 [scripts.wrapper.network-sandbox]
 command = [
-    "/usr/bin/sandbox-exec",
-    "-p",
+    "/bin/sh",
+    "-c",
+    'p="$1"; shift; if /usr/bin/sandbox-exec -p "$p" /usr/bin/true 2>/dev/null; then exec /usr/bin/sandbox-exec -p "$p" "$@"; fi; if [ "${SANDBOX_RUNTIME:-}" = 1 ]; then exec "$@"; fi; echo "network-sandbox: sandbox-exec를 적용할 수 없고 바깥 샌드박스(SANDBOX_RUNTIME=1)도 없다" >&2; exit 1',
+    "network-sandbox",
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"

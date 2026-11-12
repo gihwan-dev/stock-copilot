@@ -53,6 +53,8 @@ mod formatting_tests;
 #[cfg(test)]
 mod harness_workspace_tests;
 #[cfg(test)]
+mod nested_sandbox_tests;
+#[cfg(test)]
 mod network_sandbox_tests;
 #[cfg(test)]
 mod rust_lints_tests;

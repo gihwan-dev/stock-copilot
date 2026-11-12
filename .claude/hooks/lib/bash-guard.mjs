@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import {
@@ -844,7 +844,205 @@ const hardLinkCreation = (invocation) => {
   return false;
 };
 
+const strippedReference = (text) =>
+  text
+    .toLowerCase()
+    .replace(/^\/+/u, "")
+    .replace(/^refs\/+/u, "")
+    .replace(/^heads\/+/u, "");
+
+const referenceName = (text) => {
+  const plain = text.replace(/^\+/u, "");
+  if (plain === "") {
+    return "";
+  }
+  try {
+    return strippedReference(
+      execFileSync(
+        "git",
+        ["check-ref-format", "--normalize", "--allow-onelevel", plain],
+        {
+          encoding: "utf8",
+          env: gitEnvironment(),
+          stdio: ["ignore", "pipe", "ignore"],
+        },
+      ).trim(),
+    );
+  } catch {
+    return /^[A-Za-z0-9._/-]+$/u.test(plain) && !plain.includes("..")
+      ? strippedReference(plain.replace(/\/{2,}/gu, "/"))
+      : undefined;
+  }
+};
+
+const baseOrUnknown = (text, branches) => {
+  const name = referenceName(text);
+  return (
+    name === undefined ||
+    branches.some((branch) => branch.toLowerCase() === name)
+  );
+};
+
+const branchOfDirectory = (directory) => {
+  try {
+    return execFileSync(
+      "git",
+      ["-C", directory, "symbolic-ref", "--quiet", "--short", "HEAD"],
+      {
+        encoding: "utf8",
+        env: gitEnvironment(),
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+  } catch {
+    return undefined;
+  }
+};
+
+const baseBranchFindings = (
+  sub,
+  options,
+  statics,
+  parsed,
+  invocation,
+  context,
+) => {
+  const base = context.rules.git.baseBranch;
+  const isBase = (text) => baseOrUnknown(text, base.branches);
+  const creating =
+    base.creating
+      .filter((rule) => rule.subcommands.includes(sub))
+      .some((rule) => optionHits(rule, options).length > 0) &&
+    statics.length > 0 &&
+    isBase(statics[0].word.text)
+      ? [
+          finding(
+            "git-history",
+            `git ${sub}로 기준 브랜치를 다시 만들지 않는다`,
+          ),
+        ]
+      : [];
+  const refspecs = base.refspecSubcommands.includes(sub)
+    ? statics
+        .filter(({ word }) => word.text.includes(":"))
+        .filter(({ word }) =>
+          isBase(word.text.slice(word.text.lastIndexOf(":") + 1)),
+        )
+        .map(({ word }) =>
+          finding(
+            "git-history",
+            `git ${sub}의 참조 사양으로 기준 브랜치를 덮어쓰지 않는다: ${word.text}`,
+          ),
+        )
+    : [];
+  const resetting =
+    sub === "reset" &&
+    options.some((option) =>
+      base.resetOptions.includes(option.long ?? `-${option.short}`),
+    );
+  const directory = resetting
+    ? aliasDirectory(parsed, invocation, context)
+    : undefined;
+  const reset =
+    resetting &&
+    (directory === undefined || isBase(branchOfDirectory(directory) ?? ""))
+      ? [
+          finding(
+            "git-history",
+            "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git reset으로 브랜치 끝을 옮기지 않는다",
+          ),
+        ]
+      : [];
+  return [...creating, ...refspecs, ...reset];
+};
+
+const realOrSelf = (path) => {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+};
+
+const scriptMatches = (text, script, directory, worktrees) => {
+  const plain = text.replace(/^(\.\/)+/u, "");
+  if (plain === script || plain.endsWith(`/${script}`)) {
+    return true;
+  }
+  const absolute = isAbsolute(text)
+    ? resolve(text)
+    : directory === undefined
+      ? undefined
+      : resolve(directory, text);
+  if (absolute === undefined) {
+    return basename(text) === basename(script);
+  }
+  const real = realOrSelf(absolute);
+  return worktrees.some(
+    (root) =>
+      realOrSelf(join(root, script)) === real ||
+      join(root, script) === absolute,
+  );
+};
+
+const nodeScript = (words, consuming) => {
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index];
+    if (word.dynamic) {
+      return { index, word };
+    }
+    if (word.text === "--") {
+      return index + 1 < words.length
+        ? { index: index + 1, word: words[index + 1] }
+        : undefined;
+    }
+    if (!isOption(word)) {
+      return { index, word };
+    }
+    index += consuming.includes(word.text) ? 2 : 1;
+  }
+  return undefined;
+};
+
 export const CHECKS = [
+  {
+    id: "harness-write-mode",
+    check: (invocation, context) => {
+      if (invocation.name !== "node") {
+        return [];
+      }
+      const found = nodeScript(
+        invocation.args,
+        context.rules.harnessNodeValueOptions,
+      );
+      if (found === undefined) {
+        return [];
+      }
+      const rest = invocation.args.slice(found.index + 1);
+      const directory = currentDirectory(invocation, context);
+      return context.rules.harnessScripts
+        .filter(
+          (entry) =>
+            found.word.dynamic ||
+            scriptMatches(
+              found.word.text,
+              entry.script,
+              directory,
+              context.project.worktrees ?? [],
+            ),
+        )
+        .filter((entry) =>
+          rest.some((word) => word.dynamic || entry.modes.includes(word.text)),
+        )
+        .map((entry) =>
+          finding(
+            "harness-write-mode",
+            `${entry.script}의 쓰기 모드(${entry.modes.join(", ")})는 사람이 서명 커밋으로 한다 (ADR 0018)`,
+          ),
+        );
+    },
+  },
   {
     id: "dynamic-command",
     check: (invocation) =>
@@ -1028,18 +1226,21 @@ export const CHECKS = [
               )
           : [];
       const forced =
-        subagent &&
         sub === "branch" &&
         options.some((option) =>
           git.forcedBranch.options.includes(option.long ?? `-${option.short}`),
         ) &&
-        statics.some(({ word }) =>
-          git.forcedBranch.branches.includes(word.text),
-        )
+        (statics.some(
+          ({ word }) =>
+            referenceName(word.text) !== undefined &&
+            baseOrUnknown(word.text, git.forcedBranch.branches),
+        ) ||
+          (statics.length > 0 &&
+            referenceName(statics[0].word.text) === undefined))
           ? [
               finding(
                 "git-history",
-                "서브에이전트는 기준 브랜치를 강제로 옮기거나 지우지 않는다",
+                "기준 브랜치를 강제로 옮기거나 지우지 않는다 (ADR 0018)",
               ),
             ]
           : [];
@@ -1053,7 +1254,21 @@ export const CHECKS = [
               ),
             )
         : [];
-      return [...found, ...plus, ...refspec, ...forced, ...dynamic];
+      return [
+        ...found,
+        ...plus,
+        ...refspec,
+        ...forced,
+        ...baseBranchFindings(
+          sub,
+          options,
+          statics,
+          parsed,
+          invocation,
+          context,
+        ),
+        ...dynamic,
+      ];
     },
   },
   {
