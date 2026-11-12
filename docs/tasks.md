@@ -102,7 +102,7 @@ O 주문 개발 (E와 함께 진행, 스위치는 꺼진 채) ┤
 | H-18 | 테스트 네트워크 차단 OS 겹 (macOS) | `.cargo/config.toml` runner의 `sandbox-exec`. 외부 연결이 실패해야 통과하는 테스트와 루프백 가짜 서버 테스트가 nextest로 돎. 실측 S-14 결과 기록. runner가 안 되면 nextest wrapper로 바꾸는 ADR. Linux 쪽은 H-16 (harness 6.2) `source-check`가 루트 `.cargo/config.toml`만 허용하고 `target.<triple>.runner` 밖의 키(`[env]`, `[alias]`, `build.*`, `rustflags`, `linker`, `[unstable]`, `include`)가 있으면 실패 (ADR 0008). | H-11 |
 | H-19 | ADR·브리프·리뷰 기록 양식 | `docs/adr/0000-template.md`, 브리프 양식(workflow 2.1), 리뷰 기록 양식(workflow 3장) | - |
 | H-28 | 사람 승인용 서명 키 (담당: 사용자). 다른 작업을 막지 않는다 | Secretive SSH 키(Touch ID), 저장소 `gpg.format=ssh`·`commit.gpgsign=false`, `harness/allowed_signers`에 공개키 (harness 7.6) | - |
-| H-20 | 로컬 잠금 (사용자 승인) | `agent-writable.txt` 기준으로 권한 `deny`·편집 훅·샌드박스가 켜짐. 에이전트의 보호 경로 편집과 셸 쓰기가 거부됨. 에이전트의 `Cargo.lock`·`pnpm-lock.yaml`·IPC 생성물 쓰기는 통과. GitHub 규칙 세트와 CI에 기대지 않음 (harness 7.2, 7.6) `lefthook.yml`, 모든 폴더의 `.gitignore`, `.git/hooks`의 삭제·변경 거부 (ADR 0015). 잠금을 켤 때(`harness/claude-hooks/lock.txt`) 훅 파일 해시를 사용자 서명 커밋의 값과 비교 (ADR 0017). | H-01 ~ H-15, H-17 ~ H-19, H-21 ~ H-25, H-29 ~ H-40 |
+| H-20 | 로컬 잠금 (사용자 승인) | `agent-writable.txt` 기준으로 권한 `deny`·편집 훅·샌드박스가 켜짐. 에이전트의 보호 경로 편집과 셸 쓰기가 거부됨. 에이전트의 `Cargo.lock`·`pnpm-lock.yaml`·IPC 생성물 쓰기는 통과. GitHub 규칙 세트와 CI에 기대지 않음 (harness 7.2, 7.6) `lefthook.yml`, 모든 폴더의 `.gitignore`, `.git/hooks`의 삭제·변경 거부 (ADR 0015). 잠금을 켤 때(`harness/claude-hooks/lock.txt`) 훅 파일 해시를 사용자 서명 커밋의 값과 비교 (ADR 0017). 잠그기 전에 풀 것: 원본 루트에서 샌드박스 안의 `just check`와 커밋·병합 훅이 통과해야 함(실측 E4b에서 실패. 원인 후보는 하네스 테스트가 프로젝트 폴더 안에 임시 git 저장소를 만드는 것). 잠금 절차는 `harness/sandbox/prelock.mjs` 확인 → 잠금 설정 생성 → `lock.txt` 켜기 → 해시 다시 쓰기 → 서명 커밋 (ADR 0018). | H-01 ~ H-15, H-17 ~ H-19, H-21 ~ H-25, H-29 ~ H-40 |
 
 ## DS. 디자인 시스템
 
