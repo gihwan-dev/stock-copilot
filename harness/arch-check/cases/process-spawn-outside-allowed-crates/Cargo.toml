@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/adapters/platform-macos",
+    "crates/adapters/secrets-keychain",
+    "crates/adapters/sources",
+    "crates/adapters/store-sqlite",
+    "crates/mcp-server",
+    "crates/scheduler",
+]

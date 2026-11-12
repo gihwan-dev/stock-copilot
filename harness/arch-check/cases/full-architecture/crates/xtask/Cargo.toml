@@ -3,3 +3,10 @@ name = "xtask"
 version = "0.1.0"
 edition = "2024"
 publish = false
+
+[dependencies]
+cargo_metadata = { version = "0.1.0" }
+syn = { version = "0.1.0" }
+proc-macro2 = { version = "0.1.0" }
+ra-ap-rustc_lexer = { version = "0.1.0" }
+toml = { version = "0.1.0" }

@@ -23,6 +23,7 @@ pub(crate) struct GraphRules {
     pub(crate) external_allowlists: Vec<ExternalAllowlist>,
     pub(crate) feature_locations: Vec<FeatureLocation>,
     pub(crate) feature_allowlists: Vec<FeatureAllowlist>,
+    pub(crate) location_exceptions: Vec<LocationException>,
 }
 
 #[derive(Debug, Clone)]
@@ -97,12 +98,28 @@ pub(crate) struct SourceRules {
     pub(crate) reexport_crates: BTreeSet<CrateName>,
     pub(crate) presence_trait: String,
     pub(crate) presence_impl_crates: BTreeSet<CrateName>,
-    pub(crate) write_methods: Vec<String>,
-    pub(crate) order_path_segments: Vec<String>,
+    pub(crate) presence_crate: String,
+    pub(crate) write_means: Vec<String>,
+    pub(crate) order_words: Vec<String>,
     pub(crate) order_write_crates: BTreeSet<CrateName>,
+    pub(crate) http_writes: Vec<HttpWrite>,
+    pub(crate) process_crates: BTreeSet<CrateName>,
     pub(crate) host_needle: String,
     pub(crate) host_crates: BTreeSet<CrateName>,
     pub(crate) host_files: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct HttpWrite {
+    pub(crate) dependent: CrateName,
+    pub(crate) allowed_files: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LocationException {
+    pub(crate) dependent: CrateName,
+    pub(crate) external: CrateName,
+    pub(crate) through: CrateName,
 }
 
 fn problem(message: String) -> CheckFailure {
@@ -343,6 +360,32 @@ fn feature_allowlist(table: &Table) -> Result<FeatureAllowlist, CheckFailure> {
     })
 }
 
+fn location_exception(table: &Table) -> Result<LocationException, CheckFailure> {
+    only_keys(
+        table,
+        "external-location-exception",
+        &["crate", "external", "through", "reason"],
+    )?;
+    if text(table, "reason")?.trim().is_empty() {
+        return Err(problem(String::from(
+            "external-location-exception에는 이유가 있어야 한다",
+        )));
+    }
+    Ok(LocationException {
+        dependent: CrateName::new(&text(table, "crate")?),
+        external: CrateName::new(&text(table, "external")?),
+        through: CrateName::new(&text(table, "through")?),
+    })
+}
+
+fn http_write(table: &Table) -> Result<HttpWrite, CheckFailure> {
+    only_keys(table, "source.http-write", &["crate", "allowed-files"])?;
+    Ok(HttpWrite {
+        dependent: CrateName::new(&text(table, "crate")?),
+        allowed_files: texts(table, "allowed-files")?.into_iter().collect(),
+    })
+}
+
 fn each<T>(
     table: &Table,
     key: &str,
@@ -361,6 +404,10 @@ fn graph_rules(table: &Table) -> Result<GraphRules, CheckFailure> {
         external_allowlists: each(table, "external-allowlist", external_allowlist)?,
         feature_locations: each(table, "feature-location", feature_location)?,
         feature_allowlists: each(table, "feature-allowlist", feature_allowlist)?,
+        location_exceptions: match table.get("external-location-exception") {
+            Some(_) => each(table, "external-location-exception", location_exception)?,
+            None => Vec::new(),
+        },
     })
 }
 
@@ -368,7 +415,14 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(
         table,
         "source",
-        &["reexport", "user-presence", "toss-order", "toss-host"],
+        &[
+            "reexport",
+            "user-presence",
+            "toss-order",
+            "http-write",
+            "process",
+            "toss-host",
+        ],
     )?;
     let reexport = sub_table(table, "reexport")?;
     only_keys(reexport, "source.reexport", &["crates"])?;
@@ -376,14 +430,16 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(
         presence,
         "source.user-presence",
-        &["trait-name", "impl-crates"],
+        &["trait-name", "impl-crates", "defining-crate"],
     )?;
     let order = sub_table(table, "toss-order")?;
     only_keys(
         order,
         "source.toss-order",
-        &["write-methods", "order-path-segments", "allowed-crates"],
+        &["write-means", "order-words", "allowed-crates"],
     )?;
+    let process = sub_table(table, "process")?;
+    only_keys(process, "source.process", &["allowed-crates"])?;
     let host = sub_table(table, "toss-host")?;
     only_keys(
         host,
@@ -394,9 +450,12 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         reexport_crates: names(reexport, "crates")?,
         presence_trait: text(presence, "trait-name")?,
         presence_impl_crates: names(presence, "impl-crates")?,
-        write_methods: texts(order, "write-methods")?,
-        order_path_segments: texts(order, "order-path-segments")?,
+        presence_crate: text(presence, "defining-crate")?,
+        write_means: texts(order, "write-means")?,
+        order_words: texts(order, "order-words")?,
         order_write_crates: names(order, "allowed-crates")?,
+        http_writes: each(table, "http-write", http_write)?,
+        process_crates: names(process, "allowed-crates")?,
         host_needle: text(host, "needle")?,
         host_crates: names(host, "allowed-crates")?,
         host_files: texts(host, "allowed-files")?.into_iter().collect(),
@@ -419,6 +478,7 @@ pub(crate) fn parse_rules(content: &str) -> Result<Rules, CheckFailure> {
             "external-allowlist",
             "feature-location",
             "feature-allowlist",
+            "external-location-exception",
             "source",
         ],
     )?;

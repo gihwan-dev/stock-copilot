@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 application = { path = "../application" }
 domain = { path = "../domain" }
-rmcp = { path = "../../../../vendor/rmcp", features = ["server"] }
+rmcp = { version = "0.1.0", features = ["server"] }
 
 [dev-dependencies]
 testkit = { path = "../testkit" }

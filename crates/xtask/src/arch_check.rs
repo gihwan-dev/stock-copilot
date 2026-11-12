@@ -20,6 +20,7 @@ pub(crate) const RULES_PATH: &str = "harness/arch-check/rules.toml";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Rule {
     UnknownCrate,
+    PathPackage,
     AllowedEdge,
     DevEdge,
     DirectDependent,
@@ -34,6 +35,8 @@ pub(crate) enum Rule {
     UserPresenceReexport,
     TossOrderWrite,
     TossHost,
+    HttpWriteMeans,
+    ProcessSpawn,
     SourceParse,
 }
 
@@ -41,6 +44,7 @@ impl Rule {
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::UnknownCrate => "unknown-crate",
+            Self::PathPackage => "path-package",
             Self::AllowedEdge => "allowed-edge",
             Self::DevEdge => "dev-edge",
             Self::DirectDependent => "direct-dependent",
@@ -55,6 +59,8 @@ impl Rule {
             Self::UserPresenceReexport => "user-presence-reexport",
             Self::TossOrderWrite => "toss-order-write",
             Self::TossHost => "toss-host",
+            Self::HttpWriteMeans => "http-write-means",
+            Self::ProcessSpawn => "process-spawn",
             Self::SourceParse => "source-parse",
         }
     }
@@ -115,16 +121,12 @@ pub(crate) fn check_workspace(
     rules: &Rules,
 ) -> Result<BTreeSet<Finding>, CheckFailure> {
     let mut findings = check_graph(&rules.graph, &workspace.graph);
-    findings.extend(check_sources(
-        &rules.source,
-        &workspace.root,
-        &workspace.packages,
-    )?);
+    findings.extend(check_sources(&rules.source, workspace)?);
     Ok(findings)
 }
 
 fn run(manifest: &Path) -> Result<BTreeSet<Finding>, CheckFailure> {
-    let workspace = load_workspace(manifest)?;
+    let workspace = load_workspace(manifest, &[])?;
     let rules = load_rules(&workspace.root.join(RULES_PATH))?;
     check_workspace(&workspace, &rules)
 }

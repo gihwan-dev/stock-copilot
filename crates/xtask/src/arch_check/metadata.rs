@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use cargo_metadata::{DependencyKind, Metadata, MetadataCommand, Package, PackageId};
+use cargo_metadata::{CargoOpt, DependencyKind, Metadata, MetadataCommand, Package, PackageId};
 
 use super::graph::{
-    CrateGraph, Declaration, DefaultFeatures, DepKind, Edge, Node, NodeKey, Origin,
+    CrateGraph, Declaration, DefaultFeatures, DepKind, Edge, Node, NodeKey, Origin, Provenance,
 };
 use super::{CheckFailure, CrateName};
 
@@ -19,6 +19,7 @@ pub(crate) struct Workspace {
     pub(crate) root: PathBuf,
     pub(crate) graph: CrateGraph,
     pub(crate) packages: Vec<MemberPackage>,
+    pub(crate) target_directory: PathBuf,
 }
 
 const fn dep_kind(kind: DependencyKind) -> DepKind {
@@ -97,6 +98,10 @@ fn graph(metadata: &Metadata) -> Result<CrateGraph, CheckFailure> {
                     } else {
                         Origin::External
                     },
+                    provenance: match package.source {
+                        Some(_) => Provenance::Sourced,
+                        None => Provenance::Path,
+                    },
                     edges: edges(&node.deps),
                     declarations: declarations(package),
                 },
@@ -122,15 +127,22 @@ fn member_packages(metadata: &Metadata) -> Vec<MemberPackage> {
         .collect()
 }
 
-pub(crate) fn load_workspace(manifest: &Path) -> Result<Workspace, CheckFailure> {
+pub(crate) fn load_workspace(
+    manifest: &Path,
+    cargo_options: &[String],
+) -> Result<Workspace, CheckFailure> {
+    let mut options = vec![String::from("--locked"), String::from("--offline")];
+    options.extend_from_slice(cargo_options);
     let metadata = MetadataCommand::new()
         .manifest_path(manifest)
-        .other_options(vec![String::from("--locked"), String::from("--offline")])
+        .features(CargoOpt::AllFeatures)
+        .other_options(options)
         .exec()
         .map_err(CheckFailure::Metadata)?;
     Ok(Workspace {
         root: metadata.workspace_root.as_std_path().to_path_buf(),
         graph: graph(&metadata)?,
         packages: member_packages(&metadata),
+        target_directory: metadata.target_directory.as_std_path().to_path_buf(),
     })
 }

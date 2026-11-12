@@ -5,6 +5,6 @@ edition = "2024"
 publish = false
 
 [dependencies]
-tauri-plugin-wdio-webdriver = { path = "../../../../../vendor/tauri-plugin-wdio-webdriver" }
-tauri-plugin-playwright = { path = "../../../../../vendor/tauri-plugin-playwright" }
-tauri-plugin-webdriver = { path = "../../../../../vendor/tauri-plugin-webdriver" }
+tauri-plugin-wdio-webdriver = { version = "0.1.0" }
+tauri-plugin-playwright = { version = "0.1.0" }
+tauri-plugin-webdriver = { version = "0.1.0" }

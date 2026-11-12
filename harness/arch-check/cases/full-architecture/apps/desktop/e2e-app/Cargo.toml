@@ -8,7 +8,8 @@ publish = false
 src-tauri = { path = "../src-tauri" }
 testkit = { path = "../../../crates/testkit" }
 trade-fakes = { path = "../../../crates/trade-fakes" }
-tauri-plugin-wdio-webdriver = { path = "../../../../../vendor/tauri-plugin-wdio-webdriver" }
+tauri = { version = "0.1.0" }
+tauri-plugin-wdio-webdriver = { version = "0.1.0" }
 
 [dev-dependencies]
 testkit = { path = "../../../crates/testkit" }

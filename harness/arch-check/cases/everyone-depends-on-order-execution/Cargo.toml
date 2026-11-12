@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/adapters/ai-claude-code",
+    "crates/adapters/ai-codex",
+    "crates/adapters/broker-toss",
+    "crates/adapters/broker-toss-schema",
+    "crates/adapters/platform-macos",
+    "crates/adapters/secrets-keychain",
+    "crates/adapters/sources",
+    "crates/adapters/store-sqlite",
+    "crates/application",
+    "crates/domain",
+    "crates/mcp-bridge",
+    "crates/mcp-server",
+    "crates/order-execution",
+    "crates/scheduler",
+    "crates/testkit",
+    "crates/toss-smoke",
+    "crates/xtask",
+]

@@ -1,15 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use crate::arch_check::rules::{TransitiveBan, parse_rules};
+use crate::arch_check::rules::parse_rules;
 use crate::arch_check::{
-    CrateName, RULES_PATH, Rules, Workspace, check_workspace, load_rules, load_workspace,
+    RULES_PATH, Rules, Workspace, check_workspace, load_rules, load_workspace,
 };
 use crate::harness_workspace::{copy_tree, fresh_directory, generate_lockfile, repository_root};
 
 type Expected = BTreeSet<(String, String)>;
-type NameSetField = fn(&mut Rules) -> &mut BTreeSet<CrateName>;
+type Cases = BTreeMap<String, (Workspace, Expected)>;
+
+const REAL_WORKSPACE: &str = "(real workspace)";
 
 fn expected_cases(root: &Path) -> BTreeMap<String, Expected> {
     let table: toml::Table = fs::read_to_string(root.join("harness/arch-check/cases.toml"))
@@ -48,20 +51,55 @@ fn expected_cases(root: &Path) -> BTreeMap<String, Expected> {
         .collect()
 }
 
-fn loaded_cases(directory_name: &str) -> (Rules, BTreeMap<String, (Workspace, Expected)>) {
+fn vendor_options(directory: &Path) -> Vec<String> {
+    vec![
+        String::from("--config"),
+        String::from("source.crates-io.replace-with=\"arch-check-vendor\""),
+        String::from("--config"),
+        format!(
+            "source.arch-check-vendor.directory=\"{}\"",
+            directory.join("vendor").display()
+        ),
+    ]
+}
+
+fn generate_vendored_lockfile(manifest: &Path, options: &[String]) {
+    let status = Command::new("cargo")
+        .args([
+            "generate-lockfile",
+            "--offline",
+            "--quiet",
+            "--manifest-path",
+        ])
+        .arg(manifest)
+        .args(options)
+        .status()
+        .expect("cargo generate-lockfile");
+    assert!(status.success(), "lockfile for {}", manifest.display());
+}
+
+fn copied_harness(directory_name: &str) -> (PathBuf, PathBuf) {
     let root = repository_root();
-    let rules = load_rules(&root.join(RULES_PATH)).expect("load rules");
     let directory = fresh_directory(&root, directory_name);
     copy_tree(&root.join("harness").join("arch-check"), &directory);
-    let cases = expected_cases(&root)
+    (root, directory)
+}
+
+fn loaded_cases(directory_name: &str) -> (Rules, Cases) {
+    let (root, directory) = copied_harness(directory_name);
+    let rules = load_rules(&root.join(RULES_PATH)).expect("load rules");
+    let options = vendor_options(&directory);
+    let mut cases: Cases = expected_cases(&root)
         .into_iter()
         .map(|(name, expected)| {
             let manifest = directory.join("cases").join(&name).join("Cargo.toml");
-            generate_lockfile(&manifest);
-            let workspace = load_workspace(&manifest).expect("load case workspace");
+            generate_vendored_lockfile(&manifest, &options);
+            let workspace = load_workspace(&manifest, &options).expect("load case workspace");
             (name, (workspace, expected))
         })
         .collect();
+    let real = load_workspace(&root.join("Cargo.toml"), &[]).expect("load real workspace");
+    cases.insert(String::from(REAL_WORKSPACE), (real, Expected::new()));
     (rules, cases)
 }
 
@@ -73,7 +111,7 @@ fn reported(workspace: &Workspace, rules: &Rules) -> Expected {
         .collect()
 }
 
-fn mismatches(rules: &Rules, cases: &BTreeMap<String, (Workspace, Expected)>) -> Vec<String> {
+fn mismatches(rules: &Rules, cases: &Cases) -> Vec<String> {
     cases
         .iter()
         .filter_map(|(name, (workspace, expected))| {
@@ -112,7 +150,7 @@ fn every_case_reports_exactly_its_findings() {
 fn real_workspace_passes_arch_check() {
     let root = repository_root();
     let rules = load_rules(&root.join(RULES_PATH)).expect("load rules");
-    let workspace = load_workspace(&root.join("Cargo.toml")).expect("load workspace");
+    let workspace = load_workspace(&root.join("Cargo.toml"), &[]).expect("load workspace");
     let findings = reported(&workspace, &rules);
     assert!(findings.is_empty(), "{findings:?}");
 }
@@ -135,209 +173,111 @@ fn unknown_rule_keys_are_rejected() {
     assert!(parse_rules(&extra).is_err(), "unknown tables must fail");
 }
 
-fn without<T: Ord + Clone>(set: &BTreeSet<T>, entry: &T) -> BTreeSet<T> {
-    let mut copy = set.clone();
-    copy.remove(entry);
-    copy
+fn without_element(items: &[toml::Value], position: usize) -> toml::Value {
+    toml::Value::Array(
+        items
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != position)
+            .map(|(_, item)| item.clone())
+            .collect(),
+    )
 }
 
-fn edge_variants(rules: &Rules, variants: &mut Vec<(String, Rules)>) {
-    for (name, allowed) in &rules.graph.edges {
-        for entry in allowed {
-            let mut variant = rules.clone();
-            variant
-                .graph
-                .edges
-                .insert(name.clone(), without(allowed, entry));
-            variants.push((format!("edges.{name} - {entry}"), variant));
-        }
-    }
-    for (name, allowed) in &rules.graph.dev_edges.crates {
-        for entry in allowed {
-            let mut variant = rules.clone();
-            variant
-                .graph
-                .dev_edges
-                .crates
-                .insert(name.clone(), without(allowed, entry));
-            variants.push((format!("dev-edges.{name} - {entry}"), variant));
-        }
-        if allowed != &rules.graph.dev_edges.other_crates {
-            let mut variant = rules.clone();
-            variant.graph.dev_edges.crates.remove(name);
-            variants.push((format!("dev-edges.{name} removed"), variant));
-        }
-    }
-    for entry in &rules.graph.dev_edges.other_crates {
-        let mut variant = rules.clone();
-        variant.graph.dev_edges.other_crates = without(&rules.graph.dev_edges.other_crates, entry);
-        variants.push((format!("dev-edges.other-crates - {entry}"), variant));
-    }
-}
-
-fn drop_at<T: Clone>(rows: &[T], position: usize) -> Vec<T> {
-    rows.iter()
-        .enumerate()
-        .filter(|(index, _)| *index != position)
-        .map(|(_, row)| row.clone())
-        .collect()
-}
-
-fn restriction_variants(rules: &Rules, variants: &mut Vec<(String, Rules)>) {
-    for (index, restriction) in rules.graph.restricted.iter().enumerate() {
-        let target = &restriction.target;
-        let mut removed = rules.clone();
-        removed.graph.restricted = drop_at(&rules.graph.restricted, index);
-        variants.push((format!("restricted {target} removed"), removed));
-        let mut changed = Vec::new();
-        for position in 0..restriction.dependents.len() {
-            let mut row = restriction.clone();
-            row.dependents = drop_at(&restriction.dependents, position);
-            changed.push((format!("restricted {target} dependent {position}"), row));
-        }
-        if !restriction.any_dependent_kinds.is_empty() {
-            let mut row = restriction.clone();
-            row.any_dependent_kinds.clear();
-            changed.push((format!("restricted {target} any-dependent-kinds"), row));
-        }
-        match restriction.transitive {
-            TransitiveBan::Nothing => {}
-            TransitiveBan::Listed(_) | TransitiveBan::AllExcept(_) => {
-                let mut row = restriction.clone();
-                row.transitive = TransitiveBan::Nothing;
-                changed.push((format!("restricted {target} transitive"), row));
-            }
-        }
-        for (label, row) in changed {
-            let mut variant = rules.clone();
-            if let Some(slot) = variant.graph.restricted.get_mut(index) {
-                *slot = row;
-            }
-            variants.push((label, variant));
-        }
+fn value_variants(value: &toml::Value, label: &str) -> Vec<(String, toml::Value)> {
+    match value {
+        toml::Value::Table(table) => table
+            .iter()
+            .flat_map(|(key, child)| {
+                value_variants(child, &format!("{label}.{key}"))
+                    .into_iter()
+                    .map(|(child_label, mutated)| {
+                        let mut copy = table.clone();
+                        copy.insert(key.clone(), mutated);
+                        (child_label, toml::Value::Table(copy))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+        toml::Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .flat_map(|(position, item)| {
+                let removed = (
+                    format!("{label}[{position}] removed"),
+                    without_element(items, position),
+                );
+                let nested = value_variants(item, &format!("{label}[{position}]"))
+                    .into_iter()
+                    .map(|(item_label, mutated)| {
+                        let mut copy = items.clone();
+                        if let Some(slot) = copy.get_mut(position) {
+                            *slot = mutated;
+                        }
+                        (item_label, toml::Value::Array(copy))
+                    })
+                    .collect::<Vec<_>>();
+                std::iter::once(removed).chain(nested).collect::<Vec<_>>()
+            })
+            .collect(),
+        toml::Value::String(_)
+        | toml::Value::Integer(_)
+        | toml::Value::Float(_)
+        | toml::Value::Boolean(_)
+        | toml::Value::Datetime(_) => Vec::new(),
     }
 }
 
-fn row_variants<T: Clone>(
-    rules: &Rules,
-    label: &str,
-    rows: fn(&mut Rules) -> &mut Vec<T>,
-    variants: &mut Vec<(String, Rules)>,
-) {
-    let mut probe = rules.clone();
-    let original = rows(&mut probe).clone();
-    for position in 0..original.len() {
-        let mut variant = rules.clone();
-        *rows(&mut variant) = drop_at(&original, position);
-        variants.push((format!("{label} row {position}"), variant));
-    }
-}
-
-fn graph_row_variants(rules: &Rules, variants: &mut Vec<(String, Rules)>) {
-    for entry in &rules.graph.product_bin.forbidden {
-        let mut variant = rules.clone();
-        variant.graph.product_bin.forbidden = without(&rules.graph.product_bin.forbidden, entry);
-        variants.push((format!("product-bin - {entry}"), variant));
-    }
-    row_variants(
-        rules,
-        "external-location",
-        |target| &mut target.graph.external_locations,
-        variants,
-    );
-    row_variants(
-        rules,
-        "external-allowlist",
-        |target| &mut target.graph.external_allowlists,
-        variants,
-    );
-    row_variants(
-        rules,
-        "feature-location",
-        |target| &mut target.graph.feature_locations,
-        variants,
-    );
-    row_variants(
-        rules,
-        "feature-allowlist",
-        |target| &mut target.graph.feature_allowlists,
-        variants,
-    );
-}
-
-fn source_variants(rules: &Rules, variants: &mut Vec<(String, Rules)>) {
-    let source = &rules.source;
-    let name_sets: [(&str, NameSetField); 4] = [
-        ("source.reexport", |target| {
-            &mut target.source.reexport_crates
-        }),
-        ("source.user-presence", |target| {
-            &mut target.source.presence_impl_crates
-        }),
-        ("source.toss-order", |target| {
-            &mut target.source.order_write_crates
-        }),
-        ("source.toss-host", |target| &mut target.source.host_crates),
-    ];
-    for (label, field) in name_sets {
-        let mut probe = rules.clone();
-        for entry in field(&mut probe).clone() {
-            let mut variant = rules.clone();
-            field(&mut variant).remove(&entry);
-            variants.push((format!("{label} - {entry}"), variant));
-        }
-    }
-    for entry in &source.host_files {
-        let mut variant = rules.clone();
-        variant.source.host_files.remove(entry);
-        variants.push((format!("source.toss-host file - {entry}"), variant));
-    }
-    for entry in &source.write_methods {
-        let mut variant = rules.clone();
-        variant
-            .source
-            .write_methods
-            .retain(|method| method != entry);
-        variants.push((format!("source.write-methods - {entry}"), variant));
-    }
-    for entry in &source.order_path_segments {
-        let mut variant = rules.clone();
-        variant
-            .source
-            .order_path_segments
-            .retain(|segment| segment != entry);
-        variants.push((format!("source.order-path-segments - {entry}"), variant));
-    }
+fn unnoticed_variant(variant: &toml::Value, cases: &Cases) -> bool {
+    let table = variant.as_table().expect("rules document table");
+    let text = toml::to_string(table).expect("serialize variant");
+    parse_rules(&text).is_ok_and(|mutated| mismatches(&mutated, cases).is_empty())
 }
 
 #[test]
-fn removing_any_rule_entry_breaks_some_case() {
+fn removing_any_rule_element_breaks_some_case() {
     let (rules, cases) = loaded_cases("arch-check-mutations");
     assert!(
         mismatches(&rules, &cases).is_empty(),
         "cases must pass before mutation"
     );
-    let mut variants = Vec::new();
-    edge_variants(&rules, &mut variants);
-    restriction_variants(&rules, &mut variants);
-    graph_row_variants(&rules, &mut variants);
-    source_variants(&rules, &mut variants);
-    assert!(variants.len() > 100, "too few variants: {}", variants.len());
-    let unnoticed: Vec<&String> = variants
-        .iter()
-        .filter(|(_, variant)| mismatches(variant, &cases).is_empty())
-        .map(|(label, _)| label)
-        .collect();
+    let document = toml::Value::Table(
+        fs::read_to_string(repository_root().join(RULES_PATH))
+            .expect("read rules")
+            .parse()
+            .expect("parse rules document"),
+    );
+    let variants = value_variants(&document, "rules");
+    assert!(variants.len() > 200, "too few variants: {}", variants.len());
+    let workers = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    let unnoticed: BTreeSet<String> = std::thread::scope(|scope| {
+        let mut handles = Vec::new();
+        for worker in 0..workers {
+            let shared_variants = &variants;
+            let shared_cases = &cases;
+            handles.push(scope.spawn(move || {
+                shared_variants
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| index.checked_rem(workers) == Some(worker))
+                    .filter(|(_, (_, variant))| unnoticed_variant(variant, shared_cases))
+                    .map(|(_, (label, _))| label.clone())
+                    .collect::<Vec<_>>()
+            }));
+        }
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("variant worker"))
+            .collect()
+    });
     assert!(
         unnoticed.is_empty(),
-        "rule entries without a case: {unnoticed:?}"
+        "rule elements without a case: {unnoticed:#?}"
     );
 }
 
 fn command_exit(case: &str, directory_name: &str) -> std::process::ExitCode {
-    let root = repository_root();
-    let directory = fresh_directory(&root, directory_name);
-    copy_tree(&root.join("harness").join("arch-check"), &directory);
+    let (root, directory) = copied_harness(directory_name);
     let case_root = directory.join("cases").join(case);
     let rules = case_root.join(RULES_PATH);
     fs::create_dir_all(rules.parent().expect("rules directory")).expect("create rules directory");
@@ -356,7 +296,10 @@ fn command_fails_on_violation_and_passes_clean_workspace() {
         std::process::ExitCode::FAILURE
     );
     assert_eq!(
-        command_exit("full-architecture", "arch-check-command-clean"),
+        command_exit(
+            "user-presence-impl-in-allowed-crates-pass",
+            "arch-check-command-clean"
+        ),
         std::process::ExitCode::SUCCESS
     );
 }

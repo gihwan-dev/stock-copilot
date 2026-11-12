@@ -25,6 +25,12 @@ pub(crate) enum Origin {
     External,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Provenance {
+    Path,
+    Sourced,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct NodeKey(String);
 
@@ -51,6 +57,7 @@ pub(crate) struct Declaration {
 pub(crate) struct Node {
     pub(crate) name: CrateName,
     pub(crate) origin: Origin,
+    pub(crate) provenance: Provenance,
     pub(crate) edges: Vec<Edge>,
     pub(crate) declarations: Vec<Declaration>,
 }
@@ -111,6 +118,26 @@ impl CrateGraph {
             }
         }
         seen
+    }
+
+    fn external_closure<'graph>(&'graph self, first: &'graph Node) -> Vec<&'graph Node> {
+        let mut seen: BTreeSet<&NodeKey> = BTreeSet::new();
+        let mut reached = vec![first];
+        let mut pending = vec![first];
+        while let Some(node) = pending.pop() {
+            let fresh: Vec<&Node> = node
+                .edges
+                .iter()
+                .filter(|edge| edge.kind != DepKind::Dev)
+                .filter_map(|edge| self.nodes.get(&edge.to).map(|target| (&edge.to, target)))
+                .filter(|(_, target)| target.origin == Origin::External)
+                .filter(|(key, _)| seen.insert(key))
+                .map(|(_, target)| target)
+                .collect();
+            reached.extend(fresh.iter().copied());
+            pending.extend(fresh);
+        }
+        reached
     }
 
     fn reaches_member(&self, start: &Node, target: &CrateName, first_hop: FirstHop) -> Option<()> {
@@ -239,21 +266,65 @@ fn location_refuses(location: &ExternalLocation, dependent: &CrateName) -> Optio
     }
 }
 
+fn location_excepted(
+    rules: &GraphRules,
+    member: &CrateName,
+    reached: &CrateName,
+    through: &CrateName,
+) -> Option<()> {
+    rules
+        .location_exceptions
+        .iter()
+        .any(|exception| {
+            &exception.dependent == member
+                && &exception.external == reached
+                && &exception.through == through
+        })
+        .then_some(())
+}
+
+fn location_refused(rules: &GraphRules, member: &CrateName, reached: &CrateName) -> Option<()> {
+    rules
+        .external_locations
+        .iter()
+        .any(|location| {
+            location_matches(location, reached).is_some()
+                && location_refuses(location, member).is_some()
+        })
+        .then_some(())
+}
+
 fn external_locations(rules: &GraphRules, graph: &CrateGraph, findings: &mut BTreeSet<Finding>) {
     for member in graph.members() {
-        for (target, _) in graph.targets(member) {
-            let refused = rules.external_locations.iter().any(|location| {
-                location_matches(location, &target.name).is_some()
-                    && location_refuses(location, &member.name).is_some()
-            });
-            if target.origin == Origin::External && refused {
-                findings.insert(Finding::new(
-                    Rule::ExternalLocation,
-                    arrow(&member.name, &target.name),
-                ));
-            }
+        for (direct, _) in graph
+            .targets(member)
+            .filter(|(target, _)| target.origin == Origin::External)
+        {
+            findings.extend(
+                graph
+                    .external_closure(direct)
+                    .into_iter()
+                    .filter(|reached| {
+                        location_refused(rules, &member.name, &reached.name).is_some()
+                            && location_excepted(rules, &member.name, &reached.name, &direct.name)
+                                .is_none()
+                    })
+                    .map(|reached| {
+                        Finding::new(Rule::ExternalLocation, reach(&member.name, &reached.name))
+                    }),
+            );
         }
     }
+}
+
+fn path_packages(graph: &CrateGraph, findings: &mut BTreeSet<Finding>) {
+    findings.extend(
+        graph
+            .nodes
+            .values()
+            .filter(|node| node.origin == Origin::External && node.provenance == Provenance::Path)
+            .map(|node| Finding::new(Rule::PathPackage, node.name.to_string())),
+    );
 }
 
 fn external_allowlists(rules: &GraphRules, graph: &CrateGraph, findings: &mut BTreeSet<Finding>) {
@@ -359,6 +430,7 @@ fn feature_allowlists(rules: &GraphRules, graph: &CrateGraph, findings: &mut BTr
 pub(crate) fn check_graph(rules: &GraphRules, graph: &CrateGraph) -> BTreeSet<Finding> {
     let mut findings = BTreeSet::new();
     unknown_crates(rules, graph, &mut findings);
+    path_packages(graph, &mut findings);
     member_edges(rules, graph, &mut findings);
     for restricted in &rules.restricted {
         restriction(restricted, graph, &mut findings);

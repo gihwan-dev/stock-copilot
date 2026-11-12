@@ -5,4 +5,4 @@ edition = "2024"
 publish = false
 
 [dependencies]
-reqwest = { path = "../../../../vendor/reqwest" }
+reqwest = { version = "0.1.0" }

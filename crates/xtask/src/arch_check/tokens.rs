@@ -5,14 +5,14 @@ use syn::{LitByteStr, LitCStr, LitStr};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Words<'rules> {
-    pub(crate) write_methods: &'rules [String],
-    pub(crate) order_path_segments: &'rules [String],
+    pub(crate) write_means: &'rules [String],
+    pub(crate) order_words: &'rules [String],
 }
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Markers {
     pub(crate) order_paths: Vec<String>,
-    pub(crate) write_methods: Vec<String>,
+    pub(crate) write_means: Vec<String>,
     pub(crate) idents: BTreeSet<String>,
 }
 
@@ -46,19 +46,17 @@ fn ident_text(ident: &proc_macro2::Ident) -> String {
 
 impl Words<'_> {
     fn is_write_method(&self, text: &str) -> Option<()> {
-        self.write_methods
+        self.write_means
             .iter()
-            .any(|method| method.eq_ignore_ascii_case(text))
+            .any(|means| means == text)
             .then_some(())
     }
 
     fn is_order_path(&self, text: &str) -> Option<()> {
-        text.split('/')
-            .any(|segment| {
-                self.order_path_segments
-                    .iter()
-                    .any(|order| order.eq_ignore_ascii_case(segment))
-            })
+        let lowered = text.to_ascii_lowercase();
+        self.order_words
+            .iter()
+            .any(|word| lowered.contains(&word.to_ascii_lowercase()))
             .then_some(())
     }
 }
@@ -83,7 +81,7 @@ impl Markers {
     fn absorb_literal(&mut self, words: Words<'_>, literal: &Literal) {
         if let Some(text) = literal_text(literal) {
             if words.is_write_method(&text).is_some() {
-                self.write_methods.push(text.clone());
+                self.write_means.push(text.clone());
             }
             self.idents.extend(inline_arguments(&text));
             if words.is_order_path(&text).is_some() {
@@ -95,7 +93,7 @@ impl Markers {
     fn absorb_ident(&mut self, words: Words<'_>, ident: &proc_macro2::Ident) {
         let text = ident_text(ident);
         if words.is_write_method(&text).is_some() {
-            self.write_methods.push(text.clone());
+            self.write_means.push(text.clone());
         }
         self.idents.insert(text);
     }

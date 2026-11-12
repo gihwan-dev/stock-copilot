@@ -7,6 +7,8 @@ publish = false
 [dependencies]
 application = { path = "../../application" }
 domain = { path = "../../domain" }
+objc2-local-authentication = { version = "0.1.0" }
+rfd = { version = "0.1.0" }
 
 [dev-dependencies]
 testkit = { path = "../../testkit" }

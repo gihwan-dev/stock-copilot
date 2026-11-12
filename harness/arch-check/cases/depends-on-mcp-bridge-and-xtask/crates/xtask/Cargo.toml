@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-regex = { path = "../../../../vendor/regex" }
+regex = { version = "0.1.0" }
 
 [dev-dependencies]
 testkit = { path = "../testkit" }
