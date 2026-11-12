@@ -80,6 +80,7 @@ redundant_pub_crate = "allow"
 missing_const_for_fn = "allow"
 option_if_let_else = "allow"
 significant_drop_tightening = "allow"
+wildcard_imports = "allow"
 
 unwrap_used = "forbid"
 expect_used = "forbid"
