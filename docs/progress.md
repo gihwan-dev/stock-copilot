@@ -14,3 +14,10 @@
 | H-31, H-32, H-33 | 완료 | a8b6a70 | [H-31](reviews/H-31.md) | S-20: SQL 검사 구조 바꾸기(파서, 금액 열을 스키마에서). H-13: 등록 명령·명령 목록·권한 묶음 대조, `build.rs` 본문 고정. S 묶음: 마이그레이션 잠금에 올리는 절차 |
 | H-39, H-40(Rust) | 완료 | 7575e7c | [H-39](reviews/H-39.md) | 도메인 작업: `harness/raw-types/rules.toml`에 없는 표준 타입이 필요하면 승인으로 추가. H-40(TS): `disable-report`에 TS 끄기 더하기 |
 | H-08, H-38 | 완료 | e9f0770 | [H-08](reviews/H-08.md) | DS-05: 표시 함수. DS-09·DS-10: JSX 속성 문구, DOM 접근. DS-18: 자유 입력 브랜드. U-04·U-05: IPC 호출 어댑터와 `detach`. 다국어: 보간 있는 문구 |
+| H-11(Rust), H-29(Rust), H-17, H-18 | 완료 | e376b39 | [H-11](reviews/H-11.md) | H-14·H-25: 기준 SHA 전달과 낡은 빌드. H-35: 샌드박스 중첩. H-16: 밤 전체 변이, 깨끗한 빌드. H-29(TS): TS 테스트 파일의 삭제·약화 |
+| H-09, H-11(Vitest) | 완료 | 30d397a | [H-09](reviews/H-09.md) | H-29(TS). DS 작업: `import.meta` 금지 재검토. 순환 검사는 `knip`으로 대체(타입 전용 순환은 못 잡음) |
+
+## 검사 명령
+
+- `just base=<HEAD 또는 40자리 커밋 ID> check`: 기준은 HEAD의 조상이어야 한다. 병합 확인은 병합 전 `master` 끝을 기준으로 돈다.
+- `just base=<…> check-full`: 전체 변이 테스트와 권고 DB 갱신 포함.
