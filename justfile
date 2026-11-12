@@ -45,6 +45,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" coverage-check
     "{{just_executable()}}" test-diff {{quote(base)}}
     "{{just_executable()}}" disable-report
+    "{{just_executable()}}" disable-report-since {{quote(base)}}
 
 check-full: advisory-db-fetch check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
@@ -101,6 +102,9 @@ disable-check:
 
 disable-report:
     cargo run --locked --quiet --package xtask -- disable-report
+
+disable-report-since commit:
+    cargo run --locked --quiet --package xtask -- disable-report --since "$1"
 
 coverage-check:
     cargo run --locked --quiet --package xtask -- coverage-check

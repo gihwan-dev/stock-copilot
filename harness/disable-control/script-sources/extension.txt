@@ -1,0 +1,2 @@
+// eslint-disable-next-line local/no-comments -- 확장자 확인
+export const value = 1;

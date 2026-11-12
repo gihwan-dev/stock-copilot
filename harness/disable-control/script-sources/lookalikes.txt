@@ -1,0 +1,5 @@
+// eslint-disabled no-console -- 이름이 다르다
+// see eslint-disable-next-line no-console
+// @ts-ignored 이름이 다르다
+// eslintrc
+const value = 1;

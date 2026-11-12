@@ -1,0 +1,155 @@
+[[source]]
+example = "next-line.txt"
+path = "apps/desktop/src/app/probe.ts"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "화면 밖 설명" },
+]
+
+[[source]]
+example = "forms.txt"
+path = "harness/scripts/forms.mjs"
+coverage = "unlinted"
+rows = [
+    { line = 1, kind = "eslint-disable (ESLint 밖)", rule = "", reason = "" },
+    { line = 3, kind = "eslint-enable (ESLint 밖)", rule = "no-console", reason = "" },
+    { line = 4, kind = "eslint-disable-line (ESLint 밖)", rule = "no-console", reason = "줄 끝" },
+    { line = 5, kind = "eslint (ESLint 밖)", rule = 'no-console: "off"', reason = "" },
+    { line = 6, kind = "@ts-ignore (ESLint 밖)", rule = "", reason = "타입 무시" },
+    { line = 7, kind = "@ts-expect-error (ESLint 밖)", rule = "", reason = "기대 오류" },
+    { line = 8, kind = "@ts-nocheck (ESLint 밖)", rule = "", reason = "파일 전체" },
+]
+
+[[source]]
+example = "literals.txt"
+path = "apps/desktop/src/app/probe.ts"
+coverage = "linted"
+rows = [
+    { line = 8, kind = "eslint-disable-line", rule = "no-console", reason = "줄 끝" },
+]
+
+[[source]]
+example = "division.txt"
+path = "apps/desktop/src/app/probe.ts"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-line", rule = "no-console", reason = "나눗셈 뒤" },
+    { line = 2, kind = "eslint-disable-line", rule = "no-console", reason = "괄호 뒤" },
+    { line = 3, kind = "eslint-disable-line", rule = "no-console", reason = "대괄호 뒤" },
+    { line = 5, kind = "eslint-disable-next-line", rule = "no-console", reason = "줄을 넘는 나눗셈" },
+]
+
+[[source]]
+example = "keywords.txt"
+path = "apps/desktop/src/app/probe.ts"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-line", rule = "no-console", reason = "return" },
+    { line = 2, kind = "eslint-disable-line", rule = "no-console", reason = "typeof" },
+    { line = 3, kind = "eslint-disable-line", rule = "no-console", reason = "instanceof" },
+    { line = 4, kind = "eslint-disable-line", rule = "no-console", reason = "in" },
+    { line = 5, kind = "eslint-disable-line", rule = "no-console", reason = "of" },
+    { line = 6, kind = "eslint-disable-line", rule = "no-console", reason = "new" },
+    { line = 7, kind = "eslint-disable-line", rule = "no-console", reason = "delete" },
+    { line = 8, kind = "eslint-disable-line", rule = "no-console", reason = "void" },
+    { line = 9, kind = "eslint-disable-line", rule = "no-console", reason = "throw" },
+    { line = 10, kind = "eslint-disable-line", rule = "no-console", reason = "case" },
+    { line = 11, kind = "eslint-disable-line", rule = "no-console", reason = "do" },
+    { line = 12, kind = "eslint-disable-line", rule = "no-console", reason = "else" },
+    { line = 13, kind = "eslint-disable-line", rule = "no-console", reason = "yield" },
+    { line = 14, kind = "eslint-disable-line", rule = "no-console", reason = "await" },
+    { line = 15, kind = "eslint-disable-line", rule = "no-console", reason = "extends" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.ts"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.tsx"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.mts"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.cts"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.js"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.jsx"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.mjs"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.cjs"
+coverage = "linted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line", rule = "local/no-comments", reason = "확장자 확인" },
+]
+
+[[source]]
+example = "extension.txt"
+path = "apps/desktop/tests/probe.json"
+coverage = "linted"
+rows = []
+
+[[source]]
+example = "extension.txt"
+path = "harness/eslint-violations/src/app/probe.ts"
+coverage = "unlinted"
+rows = []
+
+[[source]]
+example = "separators.txt"
+path = "harness/scripts/separators.mjs"
+coverage = "unlinted"
+rows = [
+    { line = 1, kind = "eslint-disable-next-line (ESLint 밖)", rule = "first, second", reason = "이유 -- 더" },
+    { line = 2, kind = "eslint-disable-next-line (ESLint 밖)", rule = "local/a--b", reason = "" },
+    { line = 3, kind = "eslint-disable-next-line (ESLint 밖)", rule = "local/c", reason = "여러 대시" },
+    { line = 4, kind = "eslint-disable-next-line (ESLint 밖)", rule = "local/d", reason = "여러 줄" },
+]
+
+[[source]]
+example = "lookalikes.txt"
+path = "apps/desktop/src/app/probe.ts"
+coverage = "linted"
+rows = []

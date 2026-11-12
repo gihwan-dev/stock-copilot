@@ -1,7 +1,11 @@
 mod allowlist;
 mod expects;
 mod lints;
+pub(crate) mod script;
+mod script_comments;
 
+#[cfg(test)]
+mod script_tests;
 #[cfg(test)]
 mod tests;
 
@@ -14,12 +18,15 @@ use std::process::ExitCode;
 
 use syn::visit::Visit;
 
+use crate::git_base;
+use crate::lint_file::targets::Targets;
 use crate::workspace_sources::{
     SourceFailure, io_failure, load_members, member_rust_files, relative_text,
 };
 use allowlist::{ALLOWLIST_FILE, Allowlist};
 use expects::{Collected, DisableRules, ExpectCollector, Target};
 use lints::{LINTS_FILE, LintCatalogue, individually_configured};
+use script::{ScriptRules, repository_script_rows, script_rows};
 
 pub(crate) const RUST_EXPECT_KIND: &str = "rust-expect";
 
@@ -353,14 +360,139 @@ fn write_findings(findings: &BTreeSet<Finding>) -> io::Result<ExitCode> {
     Ok(ExitCode::FAILURE)
 }
 
-pub(crate) fn report_command() -> ExitCode {
-    let written =
-        match repository_root().and_then(|root| repository_rows(&root)) {
-            Ok(found) => writeln!(io::stdout().lock(), "{}", render_report(&found))
-                .map(|()| ExitCode::SUCCESS),
-            Err(failure) => writeln!(io::stderr().lock(), "disable-report: {failure}")
-                .map(|()| ExitCode::FAILURE),
-        };
+pub(crate) fn all_rows(root: &Path) -> Result<Vec<Row>, SourceFailure> {
+    let mut found = repository_rows(root)?;
+    found.extend(repository_script_rows(
+        root,
+        &ScriptRules::load(root)?,
+        &Targets::load(root)?,
+    )?);
+    found.sort();
+    Ok(found)
+}
+
+pub(crate) fn language_counts(found: &[Row]) -> (usize, usize) {
+    let rust = found
+        .iter()
+        .filter(|row| row.kind == RUST_EXPECT_KIND)
+        .count();
+    (rust, found.len().saturating_sub(rust))
+}
+
+pub(crate) fn render_languages(found: &[Row]) -> String {
+    let (rust, script) = language_counts(found);
+    format!("disable-report: Rust {rust}건, TS {script}건")
+}
+
+fn base_blob(root: &Path, base: &str, path: &str) -> Result<Option<String>, SourceFailure> {
+    let spec = format!("{base}:{path}");
+    let mut exists = git_base::git(root);
+    exists.args(["cat-file", "-e", &spec]);
+    let present = exists
+        .status()
+        .map_err(|error| SourceFailure(format!("git cat-file: {error}")))?;
+    if !present.success() {
+        return Ok(None);
+    }
+    let mut blob = git_base::git(root);
+    blob.args(["cat-file", "blob", &spec]);
+    git_base::output(blob, "cat-file")
+        .map(|bytes| Some(String::from_utf8_lossy(&bytes).into_owned()))
+        .map_err(SourceFailure)
+}
+
+fn base_rows(root: &Path, base: &str, path: &str) -> Result<Vec<Row>, SourceFailure> {
+    let Some(text) = base_blob(root, base, path)? else {
+        return Ok(Vec::new());
+    };
+    let rules = load_disable_rules(&read_table(root, RULES_FILE)?)?;
+    let targets = Targets::load(root)?;
+    let coverage = |candidate: &str| targets.eslint_coverage(root, candidate);
+    let mut found = rows(path, &text, &rules);
+    found.extend(script_rows(
+        path,
+        &text,
+        &ScriptRules::load(root)?,
+        &coverage,
+    ));
+    Ok(found)
+}
+
+pub(crate) fn unmatched(current: Vec<Row>, previous: Vec<Row>) -> Vec<Row> {
+    let same = |left: &Row, right: &Row| {
+        left.kind == right.kind
+            && left.path == right.path
+            && left.rule == right.rule
+            && left.reason == right.reason
+    };
+    let mut pool: Vec<Option<Row>> = previous.into_iter().map(Some).collect();
+    current
+        .into_iter()
+        .filter(|row| {
+            pool.iter_mut()
+                .find(|slot| slot.as_ref().is_some_and(|candidate| same(candidate, row)))
+                .and_then(Option::take)
+                .is_none()
+        })
+        .collect()
+}
+
+pub(crate) fn new_rows(root: &Path, base: &str) -> Result<(String, Vec<Row>), SourceFailure> {
+    let resolved = git_base::resolve_base(root, base).map_err(SourceFailure)?;
+    let changed = git_base::changed_paths(root, &resolved).map_err(SourceFailure)?;
+    let current: Vec<Row> = all_rows(root)?
+        .into_iter()
+        .filter(|row| changed.contains(&row.path))
+        .collect();
+    let paths: BTreeSet<String> = current.iter().map(|row| row.path.clone()).collect();
+    let mut previous = Vec::new();
+    for path in &paths {
+        previous.extend(base_rows(root, &resolved, path)?);
+    }
+    Ok((resolved, unmatched(current, previous)))
+}
+
+pub(crate) fn render_new(base: &str, found: &[Row]) -> String {
+    let table = render_report(found);
+    let mut lines: Vec<&str> = table.lines().collect();
+    lines.pop();
+    let (rust, script) = language_counts(found);
+    let summary = format!(
+        "disable-report: {base} 이후 새 끄기 {}건 (Rust {rust}건, TS {script}건)",
+        found.len()
+    );
+    lines.push(&summary);
+    lines.join("\n")
+}
+
+fn report_text(arguments: &[String]) -> Result<String, SourceFailure> {
+    let root = repository_root()?;
+    match arguments {
+        [] => {
+            let found = all_rows(&root)?;
+            Ok(format!(
+                "{}\n{}",
+                render_report(&found),
+                render_languages(&found)
+            ))
+        }
+        [flag, base] if flag == "--since" => {
+            let (resolved, found) = new_rows(&root, base)?;
+            Ok(render_new(&resolved, &found))
+        }
+        _ => Err(SourceFailure(String::from(
+            "사용법: xtask disable-report [--since <HEAD|40자리 커밋 ID>]",
+        ))),
+    }
+}
+
+pub(crate) fn report_command(arguments: &[String]) -> ExitCode {
+    let written = match report_text(arguments) {
+        Ok(text) => writeln!(io::stdout().lock(), "{text}").map(|()| ExitCode::SUCCESS),
+        Err(failure) => {
+            writeln!(io::stderr().lock(), "disable-report: {failure}").map(|()| ExitCode::FAILURE)
+        }
+    };
     match written {
         Ok(code) => code,
         Err(_) => ExitCode::FAILURE,

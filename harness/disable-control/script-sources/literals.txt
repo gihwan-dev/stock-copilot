@@ -1,0 +1,8 @@
+const single = '// eslint-disable-next-line a -- b';
+const double = "/* eslint-disable */";
+const template = `// eslint-disable ${"/* eslint-disable */"} // @ts-ignore`;
+const pattern = /\/\/ eslint-disable-next-line [/]/u;
+const nested = `${`// eslint-disable`}`;
+const object = `${ {key: "/* eslint-disable */"}.key } // eslint-disable`;
+const escaped = 'it\'s // eslint-disable';
+const real = 1; // eslint-disable-line no-console -- 줄 끝

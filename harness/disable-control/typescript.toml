@@ -1,0 +1,21 @@
+extensions = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"]
+
+example-bundles = ["harness/eslint-violations/src/"]
+
+regex-keywords = [
+    "return",
+    "typeof",
+    "instanceof",
+    "in",
+    "of",
+    "new",
+    "delete",
+    "void",
+    "throw",
+    "case",
+    "do",
+    "else",
+    "yield",
+    "await",
+    "extends",
+]

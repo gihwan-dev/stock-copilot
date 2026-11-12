@@ -28,7 +28,9 @@ fn main() -> ExitCode {
         [command] if command == "capability-check" => capability_check::command(),
         [command] if command == "raw-types" => raw_types::command(),
         [command] if command == "disable-check" => disable_control::check_command(),
-        [command] if command == "disable-report" => disable_control::report_command(),
+        [command, rest @ ..] if command == "disable-report" => {
+            disable_control::report_command(rest)
+        }
         [command, rest @ ..] if command == "lint-file" => lint_file::command(rest),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),

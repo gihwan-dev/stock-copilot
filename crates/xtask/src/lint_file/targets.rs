@@ -168,6 +168,12 @@ impl Targets {
             Ok(Coverage::Linted)
         }
     }
+
+    pub(crate) fn eslint_coverage(&self, root: &Path, path: &str) -> Coverage {
+        self.eslint_for(path)
+            .and_then(|target| self.eslint_configured(root, target, path).ok())
+            .unwrap_or(Coverage::Unlinted)
+    }
 }
 
 impl EslintTarget {

@@ -1,0 +1,6 @@
+const half = total / 2; // eslint-disable-line no-console -- 나눗셈 뒤
+const ratio = (left) / (right) / count; /* eslint-disable-line no-console -- 괄호 뒤 */
+const item = list[0] / 2; // eslint-disable-line no-console -- 대괄호 뒤
+const open = 1 + /
+// eslint-disable-next-line no-console -- 줄을 넘는 나눗셈
+const after = 2;
