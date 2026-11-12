@@ -14,7 +14,7 @@ fn main() -> ExitCode {
 }
 
 #[cfg(test)]
-mod arch_check_cases;
+mod arch_check_cases_tests;
 #[cfg(test)]
 mod harness_workspace_tests;
 #[cfg(test)]
