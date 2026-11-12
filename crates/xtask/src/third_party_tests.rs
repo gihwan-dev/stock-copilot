@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
 use crate::harness_workspace_tests::{
-    copy_tree, fresh_directory, generate_lockfile, repository_root,
+    copy_tree, fresh_directory, generate_lockfile, place_git_directory_outside, repository_root,
 };
 
 const ADVISORY_DB_DIRECTORY: &str = "advisory-db-3157b0e258782691";
@@ -67,7 +67,8 @@ fn assert_rejected(run: &DenyRun, code: &str, subject: &str) {
 }
 
 fn git(repository: &Path, arguments: &[&str]) {
-    let status = Command::new("git")
+    place_git_directory_outside(repository, arguments);
+    let finished = Command::new("git")
         .arg("-C")
         .arg(repository)
         .args([
@@ -78,9 +79,13 @@ fn git(repository: &Path, arguments: &[&str]) {
         ])
         .args(["-c", "commit.gpgsign=false"])
         .args(arguments)
-        .status()
+        .output()
         .expect("run git");
-    assert!(status.success(), "git {arguments:?} failed");
+    assert!(
+        finished.status.success(),
+        "git {arguments:?} failed: {}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
 }
 
 fn config_with_local_advisory_db(root: &Path, directory: &Path, case: &Path) -> PathBuf {

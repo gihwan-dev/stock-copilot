@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 use crate::git_base::REDIRECTING_VARIABLES;
-use crate::harness_workspace_tests::{fresh_directory, repository_root};
+use crate::harness_workspace_tests::{
+    fresh_directory, place_git_directory_outside, repository_root,
+};
 
 use super::commit_base::commit_base;
 use super::{LEFTHOOK_CONFIG, LEFTHOOK_VARIABLES};
@@ -35,6 +37,7 @@ fn isolated(command: &mut Command) {
 }
 
 fn run_git(directory: &Path, arguments: &[&str]) -> Output {
+    place_git_directory_outside(directory, arguments);
     let mut command = Command::new("git");
     command
         .arg("-C")
