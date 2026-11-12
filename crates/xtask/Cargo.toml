@@ -9,3 +9,4 @@ workspace = true
 
 [dev-dependencies]
 cargo_metadata = { workspace = true }
+toml = "=1.2.1"

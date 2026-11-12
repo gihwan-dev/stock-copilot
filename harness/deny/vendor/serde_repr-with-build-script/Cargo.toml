@@ -1,0 +1,5 @@
+[package]
+name = "serde_repr"
+version = "0.1.20"
+edition = "2024"
+license = "MIT"

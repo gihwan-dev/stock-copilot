@@ -1,12 +1,40 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set positional-arguments
 
+unexport CARGO_ENCODED_RUSTFLAGS
+unexport CARGO_BUILD_RUSTFLAGS
+unexport RUSTDOCFLAGS
+unexport CARGO_BUILD_RUSTDOCFLAGS
+unexport CLIPPY_CONF_DIR
+unexport CARGO_TARGET_DIR
+unexport CARGO_BUILD_TARGET_DIR
+unexport RUSTC
+unexport CARGO_BUILD_RUSTC
+unexport CARGO_BUILD_RUSTC_WRAPPER
+unexport CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER
+unexport RUSTUP_TOOLCHAIN
+unexport RUSTC_BOOTSTRAP
+export RUSTFLAGS := "-D warnings"
+export RUSTC_WRAPPER := ""
+export RUSTC_WORKSPACE_WRAPPER := ""
+
 check:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --locked -- -D warnings
+    "{{just_executable()}}" clippy Cargo.toml
+    "{{just_executable()}}" deny
     cargo nextest run --workspace --locked
 
-check-full: check
+check-full: advisory-db-fetch check
+
+clippy manifest *flags:
+    cargo clippy --manifest-path "$1" --workspace --all-targets --locked "${@:2}" -- -D warnings
+
+deny:
+    test -d "${CARGO_HOME:-$HOME/.cargo}/advisory-dbs/advisory-db-3157b0e258782691" || { printf 'deny: 권고 DB가 없다. 네트워크가 되는 곳에서 just advisory-db-fetch를 한 번 돌린다\n' >&2; exit 1; }
+    cargo deny --locked --offline check
+
+advisory-db-fetch:
+    cargo deny --locked fetch db
 
 lint-file path:
     case "$1" in *.rs) rustfmt --edition 2024 --check -- "$1" ;; *) printf 'lint-file: %s에 적용할 검사가 아직 없다\n' "$1" ;; esac
