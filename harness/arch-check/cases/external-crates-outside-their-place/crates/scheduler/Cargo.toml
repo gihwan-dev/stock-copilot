@@ -1,0 +1,13 @@
+[package]
+name = "scheduler"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tauri = { path = "../../../../vendor/tauri" }
+rmcp = { path = "../../../../vendor/rmcp" }
+rusqlite = { path = "../../../../vendor/rusqlite" }
+security-framework = { path = "../../../../vendor/security-framework" }
+rfd = { path = "../../../../vendor/rfd" }
+toml = { path = "../../../../vendor/toml" }

@@ -1,0 +1,8 @@
+[package]
+name = "harness-ui-kit"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tauri-plugin-wdio-webdriver = { path = "../tauri-plugin-wdio-webdriver" }

@@ -1,0 +1,14 @@
+[package]
+name = "e2e-app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+src-tauri = { path = "../src-tauri" }
+testkit = { path = "../../../crates/testkit" }
+trade-fakes = { path = "../../../crates/trade-fakes" }
+tauri-plugin-wdio-webdriver = { path = "../../../../../vendor/tauri-plugin-wdio-webdriver" }
+
+[dev-dependencies]
+testkit = { path = "../../../crates/testkit" }

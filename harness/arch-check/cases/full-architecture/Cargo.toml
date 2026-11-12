@@ -1,0 +1,26 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/desktop/e2e-app",
+    "apps/desktop/src-tauri",
+    "crates/adapters/ai-claude-code",
+    "crates/adapters/ai-codex",
+    "crates/adapters/broker-toss",
+    "crates/adapters/broker-toss-schema",
+    "crates/adapters/broker-toss-trade",
+    "crates/adapters/platform-macos",
+    "crates/adapters/secrets-keychain",
+    "crates/adapters/sources",
+    "crates/adapters/store-sqlite",
+    "crates/application",
+    "crates/approval-command",
+    "crates/domain",
+    "crates/mcp-bridge",
+    "crates/mcp-server",
+    "crates/order-execution",
+    "crates/scheduler",
+    "crates/testkit",
+    "crates/toss-smoke",
+    "crates/trade-fakes",
+    "crates/xtask",
+]

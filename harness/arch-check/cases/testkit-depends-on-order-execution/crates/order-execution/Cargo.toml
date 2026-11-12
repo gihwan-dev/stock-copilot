@@ -1,0 +1,9 @@
+[package]
+name = "order-execution"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }

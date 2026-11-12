@@ -1,0 +1,13 @@
+[package]
+name = "scheduler"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }
+mcp-bridge = { path = "../mcp-bridge" }
+
+[dev-dependencies]
+xtask = { path = "../xtask" }

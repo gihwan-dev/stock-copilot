@@ -12,6 +12,8 @@ fn main() -> ExitCode {
 }
 
 #[cfg(test)]
+mod arch_check_cases;
+#[cfg(test)]
 mod harness_workspace;
 #[cfg(test)]
 mod rust_lints;

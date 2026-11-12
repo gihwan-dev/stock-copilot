@@ -1,0 +1,14 @@
+[package]
+name = "broker-toss"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+broker-toss-schema = { path = "../broker-toss-schema" }
+application = { path = "../../application" }
+domain = { path = "../../domain" }
+reqwest = { path = "../../../../../vendor/reqwest" }
+
+[dev-dependencies]
+testkit = { path = "../../testkit" }

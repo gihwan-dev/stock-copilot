@@ -1,0 +1,10 @@
+[package]
+name = "src-tauri"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tauri-plugin-wdio-webdriver = { path = "../../../../../vendor/tauri-plugin-wdio-webdriver" }
+tauri-plugin-playwright = { path = "../../../../../vendor/tauri-plugin-playwright" }
+tauri-plugin-webdriver = { path = "../../../../../vendor/tauri-plugin-webdriver" }
