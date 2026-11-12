@@ -220,3 +220,12 @@ node harness/claude-hooks/hashes.mjs --write
 - 훅의 검사는 여전히 작업 사본의 `justfile`과 xtask로 돈다. 쓰기·읽기·네트워크가 막힌 프로필 안이라 밖으로 새지 않지만 거짓 통과는 낼 수 있다(잠금 뒤에는 보호 경로 변경으로 실패).
 - 리뷰어 스냅숏은 작업 사본 수와 파일 수에 비례해 느려진다(시작·종료 훅 제한 180초·300초).
 - `allowWrite`의 pnpm 잠금 폴더, `allowUnixSockets`는 사용자 ID 501 기준이다.
+
+## 샌드박스를 켜는 시점 (2026-11-13 결정, 앞의 "지금 켜는 것"보다 앞선다)
+
+- 실측 E4b(복제본의 원본 루트에서 샌드박스 안 `just base=<SHA> check`): `disable_control::script_tests::since_lists_only_disables_added_after_the_base`의 `git init --quiet --initial-branch=main`이 실패해 nextest가 60/218에서 멈췄다. 같은 검사는 작업 사본(`../stock-copilot-wt/a`, 프로젝트 폴더 밖)에서는 통과했다(E3c). 추정 원인: Claude Code 샌드박스가 프로젝트 폴더 안 어느 깊이에서든 `.git/hooks`·`.git/config` 쓰기를 거부하는데, xtask 하네스 테스트가 프로젝트 안 `target/harness/`에 임시 git 저장소를 만든다. 원인 확정은 못 했다(테스트 도우미가 git의 오류 출력을 남기지 않는다).
+- 고쳐 본 것: 테스트 도우미 `fresh_directory`와 `hooks-installed`의 임시 저장소를 시스템 임시 폴더로 옮겼다. 그러자 프로젝트 밖에서 다른 기존 테스트가 깨졌다: `fresh_node_restores_a_replaced_tool`의 `pnpm install --offline`이 저장소의 `packageManager`를 찾지 못해 전역 pnpm 9로 돌다 멈췄고(20분 넘게), 커버리지 예제·commit-guard 예제가 경로 차이로 실패했다. 고치려면 기존 테스트 여러 개의 본문을 바꿔야 해서 되돌렸다.
+- 결정: 이번에는 `sandbox.enabled`를 켜지 않는다. 샌드박스 블록 전체(`harness/sandbox/policy.json`의 `base`: 쓰기·읽기 거부, 네트워크 허용 목록)를 `fragment.mjs --locked-settings`가 잠금 조각과 함께 만들어 H-20에서 켠다. 지금 켜는 것은 훅 9종, 환경 변수, 권한 거부(`Agent(fork)`, `SendMessage`, 에이전트 실행 도구, `Read(~/.claude/projects/**)`, `Read(~/.claude-*/projects/**)`, `Read(~/.local/state/stock-copilot-harness/**)`), `disableBypassPermissionsMode`, 셸 훅의 거부다. 훅 자신의 검사 샌드박스(`sandbox-exec`)는 그대로 쓴다.
+- 그래서 H-20 전까지는: 에이전트의 셸이 홈의 자격 증명·상태 폴더를 읽고 쓸 수 있다(셸 훅의 문자열 검사와 `Read` 거부만 있다). 상태 기록의 위조 방지와 S-03 표의 "막힘"은 H-20부터 적용된다.
+- H-20 전에 풀어야 할 것: 원본 루트에서 샌드박스 안 `just check`와 커밋·병합 훅이 통과해야 한다(위 E4b 실패와 원인 확정). 후보: 하네스 테스트의 임시 git 저장소를 프로젝트 밖으로 옮기면서 pnpm이 저장소의 `packageManager`를 쓰게 하는 것(기존 테스트 변경, 사용자 승인).
+- 설정 폴더 글롭: 실측(헤드리스 1회)으로 `denyRead`의 `~/.claude-*/projects`와 권한 `Read(~/.claude-*/projects/**)`가 `~/.claude-second/projects`의 셸 읽기와 `Read` 도구를 모두 막았다. 둘 다 넣었다.

@@ -1,5 +1,5 @@
 {
-  "now": {
+  "base": {
     "enabled": true,
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
@@ -61,6 +61,7 @@
         "~/Library/Application Support/Arc",
         "~/Library/Safari",
         "~/.claude",
+        "~/.claude-*/projects",
         "~/.local/state/stock-copilot-harness"
       ],
       "allowRead": ["~/.claude/shell-snapshots"]

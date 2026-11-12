@@ -111,11 +111,11 @@ export const trackedProtectedDenies = (trackedPaths, policy) =>
     .map((path) => `./${path}`);
 
 export const lockedSandbox = (policy, fragment, trackedPaths = []) => ({
-  ...policy.now,
+  ...policy.base,
   filesystem: {
-    ...policy.now.filesystem,
+    ...policy.base.filesystem,
     denyWrite: [
-      ...policy.now.filesystem.denyWrite,
+      ...policy.base.filesystem.denyWrite,
       ...fragment.sandbox.filesystem.denyWrite,
       ...trackedProtectedDenies(trackedPaths, policy),
     ],

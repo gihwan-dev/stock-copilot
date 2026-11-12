@@ -37,7 +37,7 @@ const tracked = trackedFiles(repoRoot);
 const fragment = readJson(FRAGMENT_FILE);
 const denies = fragment.sandbox.filesystem.denyWrite;
 
-const EXPECTED_NOW = {
+const EXPECTED_BASE = {
   enabled: true,
   failIfUnavailable: true,
   allowUnsandboxedCommands: false,
@@ -99,14 +99,15 @@ const EXPECTED_NOW = {
       "~/Library/Application Support/Arc",
       "~/Library/Safari",
       "~/.claude",
+      "~/.claude-*/projects",
       "~/.local/state/stock-copilot-harness",
     ],
     allowRead: ["~/.claude/shell-snapshots"],
   },
 };
 
-test("the sandbox that is on now is exactly the documented one", () => {
-  assert.deepEqual(policy.now, EXPECTED_NOW);
+test("the sandbox that H-20 turns on is exactly the documented one", () => {
+  assert.deepEqual(policy.base, EXPECTED_BASE);
 });
 
 test("the lock fragment is generated from agent-writable.txt and the policy", () => {
@@ -230,17 +231,17 @@ test("removing any lock policy element changes the locked sandbox", () => {
   assert.deepEqual(survivors, []);
 });
 
-test("the locked sandbox is the current one with the fragment's denials appended", () => {
+test("the locked sandbox is the base one with the fragment's denials appended", () => {
   const locked = lockedSandbox(policy, fragment, tracked);
   assert.deepEqual(
     { ...locked, filesystem: { ...locked.filesystem, denyWrite: [] } },
     {
-      ...EXPECTED_NOW,
-      filesystem: { ...EXPECTED_NOW.filesystem, denyWrite: [] },
+      ...EXPECTED_BASE,
+      filesystem: { ...EXPECTED_BASE.filesystem, denyWrite: [] },
     },
   );
   assert.deepEqual(locked.filesystem.denyWrite, [
-    ...EXPECTED_NOW.filesystem.denyWrite,
+    ...EXPECTED_BASE.filesystem.denyWrite,
     ...denies,
     ...trackedProtectedDenies(tracked, policy),
   ]);
