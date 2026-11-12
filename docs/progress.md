@@ -10,3 +10,4 @@
 | H-21, H-06 | 완료 | 71157a3 | [H-21](reviews/H-21.md) | H-17: `dist` 없는 사본. H-10: `packageManager` 해시 |
 | H-04, H-22 | 완료 (2회차 수정분 재리뷰 대기) | 79e6d29 | [H-04](reviews/H-04.md) | T-16: 범용 HTTP는 `broker-toss-trade`에만, `sources`의 토스 자격 증명 차단. RV-18 추가 |
 | H-05, H-23, H-37 | 완료 (2회차 수정분 재리뷰 대기) | 8855914 | [H-05](reviews/H-05.md) | H-40: 그룹 이름·`mod`/`impl`의 `expect`. H-18·H-17: `.cargo` 허용 열기. 시계 어댑터 작업: 허용 목록 추가 |
+| H-07, H-24, H-10 | 완료 | 4a56501 | [H-07](reviews/H-07.md) | H-08: `.catch` 금지와 허용 목록, `///` 지시문, 대문자 확장자. U-03: CSP와 외부 이동 거부. DS-10: `ref`는 `RefObject`만. H-11: Vitest 건너뛰기 0건. H-38: `~~x`, `x \| 0` |
