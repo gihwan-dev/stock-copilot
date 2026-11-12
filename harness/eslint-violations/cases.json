@@ -274,6 +274,10 @@
         "boundaries/dependencies"
       ]
     },
+    "src/app/comments/undisableable-brand.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
     "src/app/comments/undisableable-comment-rule.ts": {
       "row": "주석",
       "expect": [
@@ -330,6 +334,14 @@
         "@eslint-community/eslint-comments/no-restricted-disable"
       ]
     },
+    "src/app/comments/undisableable-promise-catch.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
+    "src/app/comments/undisableable-raw-types.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
     "src/app/comments/undisableable-test-skip.ts": {
       "row": "주석",
       "expect": [
@@ -338,6 +350,10 @@
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
+    },
+    "src/app/comments/undisableable-ui-text.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
     },
     "src/app/comments/unlimited-file-disable.ts": {
       "row": "주석",
@@ -1908,6 +1924,13 @@
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
       ]
     },
+    "src/features/money/plus.ts": {
+      "row": "숫자",
+      "expect": [
+        "@typescript-eslint/restrict-plus-operands",
+        "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
+      ]
+    },
     "src/features/money/reflect.ts": {
       "row": "숫자",
       "expect": [
@@ -2560,6 +2583,12 @@
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
       ]
     },
+    "src/shared/lib/money-parse-sum.ts": {
+      "row": "숫자",
+      "expect": [
+        "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
+      ]
+    },
     "src/shared/lib/money.ts": {
       "row": "허용 목록",
       "expect": []
@@ -2588,6 +2617,10 @@
       ]
     },
     "src/shared/platform/detach.ts": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/platform/index.ts": {
       "row": "허용 목록",
       "expect": []
     },

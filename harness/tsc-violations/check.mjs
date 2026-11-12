@@ -114,5 +114,46 @@ for (const compiler of compilers) {
   );
 }
 
+const moneyProject = join(here, "money");
+const moneyExpected = readJson(join(moneyProject, "expected.json"));
+report(
+  isDeepStrictEqual(readJson(join(moneyProject, "tsconfig.json")), {
+    extends: "../../../apps/desktop/tsconfig.json",
+    compilerOptions: { rootDir: "../../.." },
+    include: ["cases"],
+  })
+    ? "PASS"
+    : "FAIL",
+  "harness/tsc-violations/money/tsconfig.json extends the app config and reaches the real money.ts",
+);
+const moneyOnDisk = readdirSync(join(moneyProject, "cases"))
+  .map((file) => `cases/${file}`)
+  .sort();
+report(
+  isDeepStrictEqual(moneyOnDisk, Object.keys(moneyExpected).sort())
+    ? "PASS"
+    : "FAIL",
+  `money case files match money/expected.json: ${moneyOnDisk.length}`,
+);
+for (const compiler of compilers) {
+  const run = spawnSync(
+    join(desktop, "node_modules", ".bin", compiler),
+    ["-p", "tsconfig.json", "--pretty", "false"],
+    { cwd: moneyProject, encoding: "utf8" },
+  );
+  const found = Object.fromEntries(moneyOnDisk.map((file) => [file, []]));
+  for (const line of `${run.stdout}${run.stderr}`.split("\n")) {
+    const match = diagnostic.exec(line);
+    if (match !== null && match[1] in found)
+      found[match[1]] = [...new Set([...found[match[1]], match[2]])].sort();
+    else if (/error TS\d+/.test(line))
+      report("FAIL", `${compiler} money: diagnostic outside a case: ${line}`);
+  }
+  report(
+    isDeepStrictEqual(found, moneyExpected) ? "PASS" : "FAIL",
+    `${compiler} money: expected ${JSON.stringify(moneyExpected)}, got ${JSON.stringify(found)}`,
+  );
+}
+
 process.stdout.write(`tsc-violations: ${failures.length} failure(s)\n`);
 process.exitCode = failures.length === 0 ? 0 : 1;

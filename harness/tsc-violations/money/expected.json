@@ -1,0 +1,7 @@
+{
+  "cases/minus.ts": ["TS2362", "TS2363"],
+  "cases/parse-float-plus-number.ts": ["TS2345"],
+  "cases/plus.ts": ["TS2365"],
+  "cases/quantity-as-money.ts": ["TS2739"],
+  "cases/string-brand-gap.ts": []
+}

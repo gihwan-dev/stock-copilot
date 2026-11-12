@@ -31,7 +31,3 @@ export const MONEY_KEY_READERS = ["src/shared/lib/format.ts"];
 export const MESSAGES_FILES = ["src/**/messages.ts"];
 
 export const FILE_PLACEHOLDERS = [".gitkeep"];
-
-export const FILE_FOLDER_ALLOWLISTS = [
-  { folder: "src/shared/platform", files: PLATFORM_FILE_ALLOWLIST },
-];

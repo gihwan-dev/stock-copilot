@@ -104,8 +104,23 @@ export const violationLinter = (overrideConfig) =>
     ...(overrideConfig === undefined ? {} : { overrideConfig }),
   });
 
-export const lintCases = async (files, overrideConfig) => {
-  const linter = violationLinter(overrideConfig);
+const { appConfig } = await import(
+  pathToFileURL(join(desktop, "eslint", "app-config.mjs")).href
+);
+export const appAllowlists = await import(
+  pathToFileURL(join(desktop, "eslint", "allowlists.mjs")).href
+);
+
+export const allowlistLinter = (lists) =>
+  new ESLint({
+    cwd: here,
+    overrideConfigFile: true,
+    overrideConfig: appConfig(lists),
+    cache: false,
+  });
+
+export const lintCases = async (files, overrideConfig, given) => {
+  const linter = given ?? violationLinter(overrideConfig);
   const results = await linter.lintFiles(files);
   const entries = await Promise.all(
     results.map(async (result) => {

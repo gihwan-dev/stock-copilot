@@ -188,7 +188,12 @@ export const noMoneyCoercion = {
           .forEach((property) => report(property, "extraction"));
       },
       Identifier: (node) => {
-        if (!readsKeys && isKeyConstant(node)) report(node, "extraction");
+        const importedSide =
+          node.parent.type === "ImportSpecifier" &&
+          node.parent.imported === node &&
+          node.parent.local !== node;
+        if (!readsKeys && !importedSide && isKeyConstant(node))
+          report(node, "extraction");
       },
     };
   },
