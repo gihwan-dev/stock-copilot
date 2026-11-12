@@ -6,7 +6,9 @@ mod capability_check;
 mod check_support;
 mod coverage_check;
 mod disable_control;
+mod git_base;
 mod migration_check;
+mod mutants_check;
 mod nextest_list;
 mod raw_types;
 mod source_check;
@@ -25,6 +27,7 @@ fn main() -> ExitCode {
         [command] if command == "raw-types" => raw_types::command(),
         [command] if command == "disable-check" => disable_control::check_command(),
         [command] if command == "disable-report" => disable_control::report_command(),
+        [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
         _ => arch_check::usage(),
     }
 }

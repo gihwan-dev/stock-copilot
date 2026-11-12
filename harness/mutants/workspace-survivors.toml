@@ -1,0 +1,9 @@
+[[survivor]]
+file = "crates/domain/src/weak.rs"
+mutant = "replace is_positive -> bool with true"
+reason = "하네스 예제: 허용 목록에 적은 생존 변이는 통과한다"
+
+[[survivor]]
+file = "crates/domain/src/weak.rs"
+mutant = "replace > with >= in is_positive"
+reason = "하네스 예제: 허용 목록에 적은 생존 변이는 통과한다"

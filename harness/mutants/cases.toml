@@ -1,0 +1,62 @@
+[[case]]
+name = "nothing-survives"
+missed = ""
+timeouts = ""
+survivors = []
+expect = []
+
+[[case]]
+name = "unlisted-survivor"
+missed = "crates/domain/src/signal.rs:12:5: replace decide -> bool with true\n"
+timeouts = ""
+survivors = []
+expect = ["crates/domain/src/signal.rs:12: mutants:missed:replace decide -> bool with true"]
+
+[[case]]
+name = "listed-survivor"
+missed = "crates/domain/src/signal.rs:12:5: replace decide -> bool with true\n"
+timeouts = ""
+survivors = [{ file = "crates/domain/src/signal.rs", mutant = "replace decide -> bool with true" }]
+expect = []
+
+[[case]]
+name = "listed-survivor-moved-line"
+missed = "crates/domain/src/signal.rs:40:9: replace decide -> bool with true\n"
+timeouts = ""
+survivors = [{ file = "crates/domain/src/signal.rs", mutant = "replace decide -> bool with true" }]
+expect = []
+
+[[case]]
+name = "listed-in-another-file"
+missed = "crates/domain/src/signal.rs:12:5: replace decide -> bool with true\n"
+timeouts = ""
+survivors = [{ file = "crates/domain/src/order.rs", mutant = "replace decide -> bool with true" }]
+expect = ["crates/domain/src/signal.rs:12: mutants:missed:replace decide -> bool with true"]
+
+[[case]]
+name = "listed-another-mutant"
+missed = "crates/domain/src/signal.rs:12:5: replace decide -> bool with true\ncrates/domain/src/signal.rs:12:5: replace decide -> bool with false\n"
+timeouts = ""
+survivors = [{ file = "crates/domain/src/signal.rs", mutant = "replace decide -> bool with true" }]
+expect = ["crates/domain/src/signal.rs:12: mutants:missed:replace decide -> bool with false"]
+
+[[case]]
+name = "timeout-fails-even-if-listed"
+missed = ""
+timeouts = "crates/order-execution/src/lib.rs:3:5: replace submit with ()\n"
+survivors = [{ file = "crates/order-execution/src/lib.rs", mutant = "replace submit with ()" }]
+expect = ["crates/order-execution/src/lib.rs:3: mutants:timeout:replace submit with ()"]
+
+[[case]]
+name = "unreadable-outcome"
+missed = "garbage without location\n"
+timeouts = ""
+survivors = []
+expect = ["error"]
+
+[workspace]
+survivors = "harness/mutants/workspace-survivors.toml"
+expect = [
+    "crates/domain/src/weak.rs:2: mutants:missed:replace > with >= in is_positive",
+    "crates/domain/src/weak.rs:2: mutants:missed:replace is_positive -> bool with true",
+]
