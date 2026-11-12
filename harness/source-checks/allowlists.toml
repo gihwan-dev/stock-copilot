@@ -1,0 +1,15 @@
+[[generated]]
+path = "crates/adapters/broker-toss-schema"
+reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 crate (harness.md 5장)"
+
+[[clock-environment]]
+path = "apps/desktop/src-tauri/src/main.rs"
+reason = "조립 지점. 실제 어댑터를 만들 때 시계와 환경 값을 읽는다 (harness.md 3.1)"
+
+[[clock-environment]]
+path = "apps/desktop/src-tauri/src/platform/clock.rs"
+reason = "Clock 포트의 시스템 시계 어댑터 (harness.md 3.1, architecture.md 3.3)"
+
+[[build-script]]
+path = "apps/desktop/src-tauri/build.rs"
+reason = "Tauri 앱 ACL 생성. 명령 목록은 생성 파일에서 읽는다 (harness.md 3.2)"

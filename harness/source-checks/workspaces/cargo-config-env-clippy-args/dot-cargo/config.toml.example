@@ -1,0 +1,2 @@
+[env]
+CLIPPY_ARGS = { value = "-Aclippy::all", force = true }

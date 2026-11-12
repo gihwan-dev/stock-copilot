@@ -1,0 +1,528 @@
+[[source]]
+example = "comment-line.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["comment"]
+
+[[source]]
+example = "comment-block.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["comment"]
+
+[[source]]
+example = "comment-doc-outer.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["comment", "attribute:doc"]
+
+[[source]]
+example = "comment-doc-inner.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["comment", "attribute:doc"]
+
+[[source]]
+example = "comment-doc-block.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["comment", "attribute:doc"]
+
+[[source]]
+example = "attribute-doc.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:doc"]
+
+[[source]]
+example = "attribute-doc-hidden.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:doc"]
+
+[[source]]
+example = "clean-slashes-in-strings.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "attribute-allow.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:allow"]
+
+[[source]]
+example = "attribute-allow-inner.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:allow"]
+
+[[source]]
+example = "attribute-warn.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:warn"]
+
+[[source]]
+example = "attribute-deny.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:deny"]
+
+[[source]]
+example = "attribute-forbid.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:forbid"]
+
+[[source]]
+example = "attribute-path.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:path"]
+
+[[source]]
+example = "attribute-ignore.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:ignore"]
+
+[[source]]
+example = "attribute-ignore-reason.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:ignore"]
+
+[[source]]
+example = "attribute-cfg-attr.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:cfg_attr"]
+
+[[source]]
+example = "attribute-no-mangle.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:no_mangle"]
+
+[[source]]
+example = "attribute-no-mangle-unsafe.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:no_mangle"]
+
+[[source]]
+example = "attribute-export-name.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:export_name"]
+
+[[source]]
+example = "attribute-link-section.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:link_section"]
+
+[[source]]
+example = "attribute-automatically-derived.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:automatically_derived"]
+
+[[source]]
+example = "attribute-mutants.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:mutants"]
+
+[[source]]
+example = "attribute-clippy-tool.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:clippy"]
+
+[[source]]
+example = "attribute-rustfmt-tool.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:rustfmt"]
+
+[[source]]
+example = "attribute-in-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:ignore"]
+
+[[source]]
+example = "attribute-in-nested-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["attribute:allow"]
+
+[[source]]
+example = "clean-expect.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "expect-inner.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:inner"]
+
+[[source]]
+example = "expect-no-reason.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:no-reason"]
+
+[[source]]
+example = "expect-multiple-lints.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:multiple-lints"]
+
+[[source]]
+example = "cfg-not-clippy.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:not-test"]
+
+[[source]]
+example = "cfg-any-empty.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:not-test"]
+
+[[source]]
+example = "cfg-coverage.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:not-test"]
+
+[[source]]
+example = "cfg-test-function.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-outside-module"]
+
+[[source]]
+example = "cfg-test-statement.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-outside-module"]
+
+[[source]]
+example = "cfg-test-inner.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-outside-module"]
+
+[[source]]
+example = "cfg-macro-branch.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:macro"]
+
+[[source]]
+example = "clean-cfg-test-module.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "macro-rules.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:macro_rules"]
+
+[[source]]
+example = "macro-include.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:include"]
+
+[[source]]
+example = "macro-include-str.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:include_str"]
+
+[[source]]
+example = "macro-include-bytes.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:include_bytes"]
+
+[[source]]
+example = "macro-include-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:include"]
+
+[[source]]
+example = "macro-asm.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:asm"]
+
+[[source]]
+example = "macro-global-asm.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:global_asm"]
+
+[[source]]
+example = "domain-f64.rs"
+path = "crates/domain/src/lib.rs"
+expect = ["domain-float:f64"]
+
+[[source]]
+example = "domain-f32.rs"
+path = "crates/domain/src/lib.rs"
+expect = ["domain-float:f32"]
+
+[[source]]
+example = "domain-float-literal.rs"
+path = "crates/domain/src/lib.rs"
+expect = ["domain-float:f64"]
+
+[[source]]
+example = "clean-float-outside-domain.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clock-system-time.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-instant.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-alias-grouped.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-tokio.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-chrono.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-time-crate.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now_utc"]
+
+[[source]]
+example = "clock-jiff.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-elapsed.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:elapsed"]
+
+[[source]]
+example = "clock-imported-function.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "env-var.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:var"]
+
+[[source]]
+example = "env-var-os.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:var_os"]
+
+[[source]]
+example = "env-vars.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:vars"]
+
+[[source]]
+example = "env-vars-os.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:vars_os"]
+
+[[source]]
+example = "env-function-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:var"]
+
+[[source]]
+example = "env-grouped-import.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:var_os"]
+
+[[source]]
+example = "env-module-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:env", "clock-env:var_os"]
+
+[[source]]
+example = "env-glob.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:env::*"]
+
+[[source]]
+example = "env-macro-in-concat.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:env"]
+
+[[source]]
+example = "env-option-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:option_env"]
+
+[[source]]
+example = "clean-clock-port.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-clock-env-allowlisted.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = []
+
+[[source]]
+example = "clean-clock-env-allowlisted.rs"
+path = "apps/desktop/src-tauri/src/platform/clock.rs"
+expect = []
+
+[[source]]
+example = "clock-system-time.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "env-var.rs"
+path = "crates/testkit/src/lib.rs"
+expect = ["clock-env:var"]
+
+[[source]]
+example = "comment-line.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = []
+
+[[source]]
+example = "attribute-allow.rs"
+path = "crates/adapters/broker-toss-schema/src/generated.rs"
+expect = []
+
+[[source]]
+example = "comment-line.rs"
+path = "crates/adapters/broker-toss-schema-extra/src/lib.rs"
+expect = ["comment"]
+
+[[source]]
+example = "unparsable.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["unparsable"]
+
+[[workspace]]
+name = "clean"
+expect = []
+
+[[workspace]]
+name = "lints-removed"
+overlay = "lints-removed"
+expect = ["manifest:lints-not-inherited"]
+
+[[workspace]]
+name = "lints-overridden"
+overlay = "lints-overridden"
+expect = ["manifest:lints-not-inherited"]
+
+[[workspace]]
+name = "table-target"
+overlay = "table-target"
+expect = ["manifest:table:target"]
+
+[[workspace]]
+name = "table-profile"
+overlay = "table-profile"
+expect = ["manifest:table:profile"]
+
+[[workspace]]
+name = "table-patch"
+overlay = "table-patch"
+expect = ["manifest:table:patch"]
+
+[[workspace]]
+name = "table-replace"
+overlay = "table-replace"
+expect = ["manifest:table:replace"]
+
+[[workspace]]
+name = "table-features"
+overlay = "table-features"
+expect = ["manifest:table:features"]
+
+[[workspace]]
+name = "root-profile"
+overlay = "root-profile"
+expect = ["manifest:table:profile"]
+
+[[workspace]]
+name = "root-patch"
+overlay = "root-patch"
+expect = ["manifest:table:patch"]
+
+[[workspace]]
+name = "build-script-member"
+overlay = "build-script-member"
+expect = ["file:build-script"]
+
+[[workspace]]
+name = "build-script-renamed"
+overlay = "build-script-renamed"
+expect = ["file:build-script"]
+
+[[workspace]]
+name = "proc-macro"
+overlay = "proc-macro"
+expect = ["file:proc-macro"]
+
+[[workspace]]
+name = "nested-clippy"
+overlay = "nested-clippy"
+expect = ["file:nested-config:clippy.toml"]
+
+[[workspace]]
+name = "nested-dot-clippy"
+overlay = "nested-dot-clippy"
+expect = ["file:nested-config:.clippy.toml"]
+
+[[workspace]]
+name = "nested-rustfmt"
+overlay = "nested-rustfmt"
+expect = ["file:nested-config:rustfmt.toml"]
+
+[[workspace]]
+name = "nested-dot-rustfmt"
+overlay = "nested-dot-rustfmt"
+expect = ["file:nested-config:.rustfmt.toml"]
+
+[[workspace]]
+name = "nested-toolchain"
+overlay = "nested-toolchain"
+expect = ["file:nested-config:rust-toolchain"]
+
+[[workspace]]
+name = "nested-toolchain-toml"
+overlay = "nested-toolchain-toml"
+expect = ["file:nested-config:rust-toolchain.toml"]
+
+[[workspace]]
+name = "nested-config-in-app"
+overlay = "nested-config-in-app"
+expect = ["file:nested-config:clippy.toml"]
+
+[[workspace]]
+name = "cargo-config-env-clippy-conf-dir"
+overlay = "cargo-config-env-clippy-conf-dir"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-env-clippy-args"
+overlay = "cargo-config-env-clippy-args"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-alias-clippy"
+overlay = "cargo-config-alias-clippy"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-in-crate"
+overlay = "cargo-config-in-crate"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-legacy-name"
+overlay = "cargo-config-legacy-name"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "source-violation-in-member"
+overlay = "source-violation-in-member"
+expect = ["comment"]
+
+[[workspace]]
+name = "source-violation-in-app"
+overlay = "source-violation-in-app"
+expect = ["cfg:not-test"]

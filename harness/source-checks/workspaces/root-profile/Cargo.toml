@@ -1,0 +1,9 @@
+[workspace]
+resolver = "3"
+members = ["crates/sample", "apps/desktop/src-tauri"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+debug-assertions = false
