@@ -88,6 +88,10 @@
           "target": "eslint",
           "reason": "린터 (harness 4.3)"
         },
+        "eslint-plugin-boundaries": {
+          "target": "eslint-plugin-boundaries",
+          "reason": "폴더 경계 규칙 (harness 4.2, 4.3)"
+        },
         "eslint-plugin-functional": {
           "target": "eslint-plugin-functional",
           "reason": "불변·실패 처리 규칙 (harness 4.3)"
@@ -95,6 +99,10 @@
         "eslint-plugin-react-hooks": {
           "target": "eslint-plugin-react-hooks",
           "reason": "훅 규칙 (harness 4.2)"
+        },
+        "knip": {
+          "target": "knip",
+          "reason": "미사용 파일·내보내기·의존성 검사 (harness 4.3)"
         },
         "typescript": {
           "target": "@typescript/typescript6",
@@ -107,6 +115,10 @@
         "vite": {
           "target": "vite",
           "reason": "프런트엔드 빌드 (ADR 0006)"
+        },
+        "vitest": {
+          "target": "vitest",
+          "reason": "단위·컴포넌트 테스트 실행기 (harness 4.3, architecture 5.2)"
         }
       }
     }
