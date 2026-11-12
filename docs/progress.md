@@ -8,3 +8,5 @@
 | H-19 | 완료 | 8dc8542 | [H-01](reviews/H-01.md) | - |
 | H-02, H-03 | 완료 | 1bf0c1e | [H-02](reviews/H-02.md) | H-23·H-35·H-16: cargo 설정 파일과 `PATH` 우회. H-40: 끌 수 있는 린트는 그룹 소속만. H-05: `include!` |
 | H-21, H-06 | 완료 | 71157a3 | [H-21](reviews/H-21.md) | H-17: `dist` 없는 사본. H-10: `packageManager` 해시 |
+| H-04, H-22 | 완료 (2회차 수정분 재리뷰 대기) | 79e6d29 | [H-04](reviews/H-04.md) | T-16: 범용 HTTP는 `broker-toss-trade`에만, `sources`의 토스 자격 증명 차단. RV-18 추가 |
+| H-05, H-23, H-37 | 완료 (2회차 수정분 재리뷰 대기) | 8855914 | [H-05](reviews/H-05.md) | H-40: 그룹 이름·`mod`/`impl`의 `expect`. H-18·H-17: `.cargo` 허용 열기. 시계 어댑터 작업: 허용 목록 추가 |
