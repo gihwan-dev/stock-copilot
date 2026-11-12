@@ -1,5 +1,7 @@
 import { isWritable } from "./allowlist.mjs";
+import { digestOf } from "./brief.mjs";
 import { LOCK } from "./project.mjs";
+import { lineDigest, meaningfulLines, normalized } from "./normalize.mjs";
 import { STATUS } from "./state.mjs";
 
 export const REPORT = Object.freeze({
@@ -9,31 +11,31 @@ export const REPORT = Object.freeze({
 });
 
 export const reportKind = (message, rules) => {
-  const first = (typeof message === "string" ? message : "")
-    .split("\n")[0]
-    .trim();
-  if (first === rules.reportFirstLines.done) {
+  const first = normalized(
+    (typeof message === "string" ? message : "").trimStart().split("\n")[0],
+  );
+  const done = normalized(rules.reportFirstLines.done);
+  const blocked = normalized(rules.reportFirstLines.blocked);
+  if (first === done) {
     return REPORT.done;
   }
-  return first.startsWith(rules.reportFirstLines.blocked) &&
-    first.length > rules.reportFirstLines.blocked.length
+  return first.startsWith(blocked) && first.length > blocked.length
     ? REPORT.blocked
     : REPORT.invalid;
 };
 
-export const reportLinesOf = (message, prompt, rules) =>
-  [
+export const reportDigestsOf = (message, brief, rules) => {
+  const briefDigests = new Set(
+    meaningfulLines(brief, rules.reportLineMinimum).map(lineDigest),
+  );
+  return [
     ...new Set(
-      (typeof message === "string" ? message : "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(
-          (line) =>
-            line.length >= rules.reportLineMinimum &&
-            !(typeof prompt === "string" ? prompt : "").includes(line),
-        ),
+      meaningfulLines(message, rules.reportLineMinimum)
+        .map(lineDigest)
+        .filter((digest) => !briefDigests.has(digest)),
     ),
-  ].slice(0, 200);
+  ].slice(0, 400);
+};
 
 export const protectedChanges = (changed, allowlist, existingAdrs) =>
   changed
@@ -63,9 +65,17 @@ export const inspectWorktree = (record, facts) => {
   if (head === undefined) {
     return { worktree, problems: [`${worktree}의 HEAD를 읽지 못했다`] };
   }
-  const problems = facts.isAncestor(worktree, record.base, head)
-    ? []
-    : [`기준 커밋 ${record.base}이 HEAD ${head}의 조상이 아니다 (ADR 0013)`];
+  const problems = [
+    ...(facts.isAncestor(worktree, record.base, head)
+      ? []
+      : [`기준 커밋 ${record.base}이 HEAD ${head}의 조상이 아니다 (ADR 0013)`]),
+    ...facts
+      .treeProblems(worktree)
+      .map(
+        (problem) =>
+          `작업 트리가 커밋과 다르다(커밋한 것만 검사한다. 커밋하거나 되돌린 뒤 끝내라): ${problem}`,
+      ),
+  ];
   const changes = protectedChanges(
     facts.changedSince(worktree, record.base),
     facts.allowlist,
@@ -95,9 +105,9 @@ export const decideImplementerStop = (input, record, facts, rules) => {
   }
   const report = reportKind(input.last_assistant_message, rules);
   const inspected = inspectWorktree(record, facts);
-  const transcribed = facts.briefDigest(input);
+  const brief = facts.briefText(input);
   const briefProblems =
-    transcribed === undefined || transcribed === record.promptDigest
+    brief === undefined || digestOf(brief) === record.promptDigest
       ? []
       : ["서브에이전트가 받은 브리프가 시작 때 기록한 브리프와 다르다"];
   const lockedChanges =
@@ -122,12 +132,7 @@ export const decideImplementerStop = (input, record, facts, rules) => {
     worktree: inspected.worktree,
     report: report,
     protectedChanges: inspected.protectedChanges ?? [],
-    reportLines: reportLinesOf(
-      input.last_assistant_message,
-      record.prompt,
-      rules,
-    ),
-    output,
+    reportDigests: reportDigestsOf(input.last_assistant_message, brief, rules),
     updatedAt: facts.now(),
   };
   const warning =

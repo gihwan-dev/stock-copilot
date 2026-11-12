@@ -615,3 +615,26 @@ text = '''
 test_tool = 
 '''
 expect = ["cargo-mutants:unparsable"]
+
+[[case]]
+name = "nextest-wrapper-script-weakened"
+file = ".config/nextest.toml"
+text = '''
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/bin/sh",
+    "-c",
+    'shift; exec "$@"',
+    "network-sandbox",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+'''
+expect = ["nextest-config:value:scripts.wrapper.network-sandbox.command"]

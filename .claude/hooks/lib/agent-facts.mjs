@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runHarnessCheck, checkPlaces } from "./check-sandbox.mjs";
 import {
   branchOf,
@@ -10,16 +10,16 @@ import {
   isAncestor,
   refTip,
   resolveCommit,
-  statusOf,
 } from "./git-facts.mjs";
+import { contentSnapshot, treeProblems } from "./tree-hash.mjs";
 import {
   HOOKS_PROJECT_ROOT,
+  LOCK,
   readAllowlist,
   readLock,
   readRules,
   worktreesOf,
 } from "./project.mjs";
-import { digestOf } from "./brief.mjs";
 import { KIND, STATUS, listRecords } from "./state.mjs";
 import { firstPrompt } from "./subagent-start.mjs";
 
@@ -35,39 +35,63 @@ export const passedTargets = (state) =>
       .map((record) => [record.head, record.agentId]),
   );
 
-export const knownReportLines = (state) => [
-  ...new Set(
+export const knownReportDigests = (state) =>
+  new Set(
     listRecords(state, KIND.implementer).flatMap(
-      (record) => record.reportLines ?? [],
+      (record) => record.reportDigests ?? [],
     ),
-  ),
-];
+  );
 
-export const launchFacts = (root, state, rules) => ({
-  resolveCommit: (text) => resolveCommit(root, text),
-  baseTip: refTip(root, rules.baseRef),
-  passedTargets: passedTargets(state),
-  reportLines: knownReportLines(state),
-  now: () => new Date().toISOString(),
-});
+export const originalWorktree = (root) => {
+  const common = commonDirectory(root);
+  return common === undefined ? root : dirname(common);
+};
 
 export const locateWorktree = (root, worktrees, branch) => {
-  if (branch === undefined) {
-    return root;
+  const original = originalWorktree(root);
+  return branch === undefined
+    ? undefined
+    : worktrees.find((path) => path !== original && branchOf(path) === branch);
+};
+
+export const launchFacts = (root, state, rules) => {
+  const worktrees = worktreesOf(root);
+  return {
+    resolveCommit: (text) => resolveCommit(root, text),
+    baseTip: refTip(root, rules.baseRef),
+    passedTargets: passedTargets(state),
+    reportDigests: knownReportDigests(state),
+    worktreeForBranch: (branch) => locateWorktree(root, worktrees, branch),
+    now: () => new Date().toISOString(),
+  };
+};
+
+export const FRAGMENT_FILE = "harness/sandbox/lock-fragment.json";
+
+export const lockedDenies = (root, lock) => {
+  if (lock === LOCK.off) {
+    return [];
   }
-  return worktrees.find((path) => branchOf(path) === branch);
+  try {
+    return JSON.parse(readFileSync(join(root, FRAGMENT_FILE), "utf8")).sandbox
+      .filesystem.denyWrite;
+  } catch {
+    return ["./"];
+  }
 };
 
 export const stopFacts = (root, state) => {
   const worktrees = worktreesOf(root);
   const rules = readRules(root);
+  const lock = readLock(root);
   return {
-    lock: readLock(root),
+    lock,
     allowlist: readAllowlist(root),
     locateWorktree: (branch) => locateWorktree(root, worktrees, branch),
     headOf,
     isAncestor,
     changedSince,
+    treeProblems,
     existingAdrs: (worktree, base) =>
       filesAt(worktree, base, rules.paths.adr.directory),
     runCheck: (worktree, base) =>
@@ -77,19 +101,17 @@ export const stopFacts = (root, state) => {
           common: commonDirectory(worktree) ?? join(root, ".git"),
           projectRoot: root,
           state,
+          locked: lockedDenies(root, lock),
         }),
         worktree,
         base,
       ),
-    briefDigest: (input) => {
-      const prompt =
-        typeof input.agent_transcript_path === "string"
-          ? firstPrompt(input.agent_transcript_path)
-          : undefined;
-      return prompt === undefined ? undefined : digestOf(prompt);
-    },
+    briefText: (input) =>
+      typeof input.agent_transcript_path === "string"
+        ? firstPrompt(input.agent_transcript_path)
+        : undefined,
     now: () => new Date().toISOString(),
   };
 };
 
-export const snapshotFacts = { headOf, statusOf };
+export const snapshotFacts = { contentSnapshot };

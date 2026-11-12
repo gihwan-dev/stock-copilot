@@ -52,7 +52,7 @@ export const firstPrompt = (path) => {
   }
 };
 
-export const implementerStart = (input, prompt, facts) => {
+export const implementerStart = (input, prompt, facts, rules) => {
   const common = {
     kind: "implementer",
     agentId: input.agent_id,
@@ -69,7 +69,7 @@ export const implementerStart = (input, prompt, facts) => {
     };
   }
   const brief = parseBrief(prompt);
-  const verdict = baseVerdict(brief, facts);
+  const verdict = baseVerdict(brief, facts, rules);
   if (verdict.problem !== undefined) {
     return {
       ...common,
@@ -85,8 +85,8 @@ export const implementerStart = (input, prompt, facts) => {
     baseSource: verdict.source,
     baseTipAtStart: facts.baseTip,
     branch: brief.branch,
+    worktree: facts.worktreeForBranch(brief.branch),
     promptDigest: digestOf(prompt),
-    prompt,
   };
 };
 
@@ -95,32 +95,15 @@ export const startKind = (input) => {
   return role === ROLE.implementer || role === ROLE.reviewer ? role : undefined;
 };
 
-export const withPending = (queue, entry) => ({
-  entries: [...(queue?.entries ?? []), entry].slice(-20),
-});
-
-const pendingIndex = (entries, type, digest, toolUseId) => {
-  const same = (entry) => entry.type === type;
+export const choosePending = (entries, digest, toolUseId) => {
+  const ordered = [...entries].sort((left, right) =>
+    String(left.at).localeCompare(String(right.at)),
+  );
   if (digest !== undefined) {
-    return entries.findIndex((entry) => same(entry) && entry.digest === digest);
+    return ordered.find((entry) => entry.digest === digest);
   }
   if (toolUseId !== undefined) {
-    return entries.findIndex(
-      (entry) => same(entry) && entry.toolUseId === toolUseId,
-    );
+    return ordered.find((entry) => entry.toolUseId === toolUseId);
   }
-  return entries.findIndex(same);
-};
-
-export const claimPending = (queue, type, digest, toolUseId) => {
-  const entries = queue?.entries ?? [];
-  const index = pendingIndex(entries, type, digest, toolUseId);
-  return index < 0
-    ? { queue: { entries } }
-    : {
-        prompt: entries[index].prompt,
-        queue: {
-          entries: [...entries.slice(0, index), ...entries.slice(index + 1)],
-        },
-      };
+  return ordered[0];
 };

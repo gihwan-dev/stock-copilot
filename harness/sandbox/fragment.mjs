@@ -7,6 +7,9 @@ import {
   parseAllowlist,
   patternMatches,
 } from "../../.claude/hooks/lib/allowlist.mjs";
+import { globExpression } from "../../.claude/hooks/lib/sandbox-glob.mjs";
+
+export { globExpression };
 
 export const POLICY_FILE = "harness/sandbox/policy.json";
 export const FRAGMENT_FILE = "harness/sandbox/lock-fragment.json";
@@ -98,39 +101,26 @@ export const lockFragment = (trackedPaths, allowlist, policy) => ({
   },
 });
 
-export const lockedSandbox = (policy, fragment) => ({
+export const trackedProtectedDenies = (trackedPaths, policy) =>
+  trackedPaths
+    .filter((path) =>
+      policy.lock.trackedProtected.some((pattern) =>
+        patternMatches(pattern, path),
+      ),
+    )
+    .map((path) => `./${path}`);
+
+export const lockedSandbox = (policy, fragment, trackedPaths = []) => ({
   ...policy.now,
   filesystem: {
     ...policy.now.filesystem,
     denyWrite: [
       ...policy.now.filesystem.denyWrite,
       ...fragment.sandbox.filesystem.denyWrite,
+      ...trackedProtectedDenies(trackedPaths, policy),
     ],
   },
 });
-
-const escape = (text) => text.replace(/[.+^${}()|[\]\\]/gu, "\\$&");
-
-export const globExpression = (pattern) => {
-  let source = "";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index];
-    if (pattern.startsWith("**/", index)) {
-      source += "(?:.*/)?";
-      index += 2;
-    } else if (pattern.startsWith("**", index)) {
-      source += ".*";
-      index += 1;
-    } else if (character === "*") {
-      source += "[^/]*";
-    } else if (character === "?") {
-      source += "[^/]";
-    } else {
-      source += escape(character);
-    }
-  }
-  return new RegExp(`^${source}(?:/.*)?$`, "u");
-};
 
 export const deniedBy = (denies, relative) =>
   denies
@@ -172,7 +162,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.stdout.write(
       renderJson({
         ...settings,
-        sandbox: lockedSandbox(readPolicy(repoRoot), fragment),
+        sandbox: lockedSandbox(
+          readPolicy(repoRoot),
+          fragment,
+          trackedFiles(repoRoot),
+        ),
       }),
     );
   } else {

@@ -1,17 +1,6 @@
-import { reportLinesOf } from "./implementer-stop.mjs";
 import { STATUS } from "./state.mjs";
 
 export const EXPECTED_MODEL = "claude-opus-5-5";
-
-const textOf = (content) =>
-  Array.isArray(content)
-    ? content
-        .filter((part) => part !== null && typeof part === "object")
-        .map((part) => (typeof part.text === "string" ? part.text : ""))
-        .join("\n")
-    : typeof content === "string"
-      ? content
-      : "";
 
 const context = (text) => ({
   hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: text },
@@ -22,7 +11,7 @@ const modelNote = (model) =>
     ? `모델=${model}`
     : `모델=${model ?? "알 수 없음"} (정의의 ${EXPECTED_MODEL}가 아니다)`;
 
-export const agentResult = (input, readRecord, rules, currentHead) => {
+export const agentResult = (input, readRecord, currentHead) => {
   const toolInput = input.tool_input ?? {};
   const response = input.tool_response ?? {};
   const type = toolInput.subagent_type;
@@ -42,20 +31,10 @@ export const agentResult = (input, readRecord, rules, currentHead) => {
     const status = moved
       ? STATUS.unchecked
       : (record?.status ?? STATUS.unchecked);
-    const report = textOf(response.content);
     const updated =
       record === undefined
         ? undefined
-        : {
-            ...record,
-            resolvedModel: response.resolvedModel,
-            reportLines: [
-              ...new Set([
-                ...(record.reportLines ?? []),
-                ...reportLinesOf(report, record.prompt, rules),
-              ]),
-            ],
-          };
+        : { ...record, resolvedModel: response.resolvedModel };
     const changes = record?.protectedChanges ?? [];
     return {
       record: updated,

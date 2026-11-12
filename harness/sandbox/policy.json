@@ -39,7 +39,28 @@
         "~/.cargo/config",
         "~/.cargo/config.toml",
         "~/.local/state/stock-copilot-harness"
-      ]
+      ],
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.gnupg",
+        "~/.config/gh",
+        "~/.netrc",
+        "~/.npmrc",
+        "~/.docker",
+        "~/.kube",
+        "~/Library/Keychains",
+        "~/Library/Cookies",
+        "~/Library/Application Support/Google/Chrome",
+        "~/Library/Application Support/BraveSoftware",
+        "~/Library/Application Support/Microsoft Edge",
+        "~/Library/Application Support/Firefox",
+        "~/Library/Application Support/Arc",
+        "~/Library/Safari",
+        "~/.claude",
+        "~/.local/state/stock-copilot-harness"
+      ],
+      "allowRead": ["~/.claude/shell-snapshots"]
     }
   },
   "lock": {
@@ -64,6 +85,7 @@
       ".claude/settings*.json",
       ".claude/skills",
       ".claude/commands"
-    ]
+    ],
+    "trackedProtected": ["docs/adr/*"]
   }
 }

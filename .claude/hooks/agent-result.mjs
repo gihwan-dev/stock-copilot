@@ -1,4 +1,3 @@
-import { readAgentRules } from "./lib/agent-facts.mjs";
 import { agentResult } from "./lib/agent-result.mjs";
 import { headOf } from "./lib/git-facts.mjs";
 import { readInput, writeOutput } from "./lib/io.mjs";
@@ -11,7 +10,6 @@ const kindOf = (type) =>
 const result = agentResult(
   input,
   (kind, id) => readRecord(state, kind, id),
-  readAgentRules(),
   headOf,
 );
 

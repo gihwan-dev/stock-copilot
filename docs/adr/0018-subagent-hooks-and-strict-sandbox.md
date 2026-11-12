@@ -5,6 +5,7 @@
 - 결정한 사람: 메인 에이전트(사용자 확인 대기)
 - 관련 작업: H-25, H-35
 - 반영한 문서: 없음(이 ADR만 추가. harness.md 7.2~7.5와 다른 점은 "문서와 다른 점"에 모았다)
+- 개정: 2026-11-13 리뷰 반영(아래 "리뷰 반영"이 앞의 결정보다 앞선다)
 
 ## 맥락
 
@@ -124,17 +125,7 @@ harness.md 7.3~7.5는 `PreToolUse`(Agent), `PostToolUse`(Agent), `SubagentStart`
 
 ### H-20이 할 일
 
-사용자가 Claude Code 밖의 터미널에서(보호 파일이라 세션 안에서는 쓸 수 없다):
-
-```sh
-node harness/sandbox/fragment.mjs                       # 조각이 최신인지(0 failure)
-node harness/sandbox/fragment.mjs --locked-settings > "$TMPDIR/settings.json"
-mv "$TMPDIR/settings.json" .claude/settings.json        # 지금 설정 + 조각의 denyWrite
-printf 'on\n' > harness/claude-hooks/lock.txt
-node harness/claude-hooks/hashes.mjs --write
-```
-
-그다음 `harness/claude-hooks/tests/settings.test.mjs`의 기대 설정을 `lockedSandbox(policy, fragment)`로, 잠금 스위치 테스트를 `on`으로 바꾸고(기존 테스트 변경), `just base=<master> check` 통과를 확인한 뒤 `git commit -S`로 서명한다. 허용 목록·추적 파일이 바뀌어 조각이 어긋나면 첫 명령이 실패한다.
+"리뷰 반영"의 절차가 대신한다.
 
 ## 결과
 
@@ -166,3 +157,63 @@ node harness/claude-hooks/hashes.mjs --write
 - harness 7.5는 원본의 스냅숏만 말한다. 대상 작업 사본까지 보라는 H-25 3에 따라 모든 진짜 작업 사본을 본다.
 - harness 7.3은 차단 훅에 `onFailure: "block"`을 붙이라고 했지만 `SubagentStop`에는 효과가 없어(R-10 Q1) 붙이지 않았다.
 - R-10의 "격리된 리뷰어가 원본에 쓸 수 있다"는 이번 판에서 다시 재현하지 못했다(모델이 지시를 따르지 않음). 감지 훅은 그대로 둔다.
+
+## 리뷰 반영 (2026-11-13)
+
+적대적 리뷰 판정 "지금 병합하면 안 된다"의 지적을 고쳤다. 실측은 헤드리스 1회(E4, haiku, 복제본)와 `sandbox-exec` 직접 실행이다.
+
+### 바꾼 결정
+
+| 지적 | 결정 | 테스트 |
+|---|---|---|
+| 1 종료 훅의 `fresh-build`가 네트워크가 열린 프로필에서 에이전트가 고칠 수 있는 `postinstall`·`justfile` 레시피를 돌린다 | 훅은 작업 사본의 `justfile`로 `fresh-build`를 부르지 않고 직접 `cargo clean --locked --offline --workspace`, `cargo llvm-cov clean --locked --offline --workspace`, `pnpm install --frozen-lockfile --force --offline --ignore-scripts`를 돈 뒤 `just base=<SHA> check`를 돈다. 모든 단계가 네트워크 차단 프로필이다(루프백과 `$TMPDIR` 아래 유닉스 소켓만 열림, ssh-agent 등 다른 소켓은 막힘). 환경에서 `SSH_AUTH_SOCK`와 이름에 TOKEN·SECRET·PASSWORD·CREDENTIAL·API_KEY·ACCESS_KEY·PRIVATE_KEY·AUTH가 든 변수를 빼고 `CARGO_NET_OFFLINE=true`, `npm_config_offline=true`, `npm_config_ignore_scripts=true`를 준다. 받아 둔 의존성이 없으면 "네트워크가 되는 곳에서 받아 둔 뒤" 안내와 함께 실패한다. 읽기 거부: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.netrc`, `~/.npmrc`, `~/.docker`, `~/.kube`, `~/Library/Keychains`, `~/Library/Cookies`, 브라우저 프로필(Chrome, Brave, Edge, Firefox, Arc, Safari), `~/.claude`, `CLAUDE_CONFIG_DIR`, 상태 폴더. 프로젝트 `scripts`는 `harness/ts-deps`의 최상위 키 정확 일치가 이미 막는다(두 `package.json` 모두 `scripts`가 없다). `justfile`의 `pnpm install`에 `--ignore-scripts`를 더하는 것은 기존 테스트 `git_hooks::tests`의 `fresh-node` 기대값을 바꾸므로 메인이 커밋할 변경으로 남겼다 | `agent-stop.test.mjs`: `the hook check runs the offline fresh steps first…`, `code run by the hook check cannot write the state or hooks, read secrets or reach the network`, `a postinstall script is skipped…`; `ts-deps` 키 검사 |
+| 2 브랜치가 없거나 `master`면 원본을 검사한다 | 브리프는 브랜치를 반드시 적고, 그 브랜치는 기준 브랜치가 아니며, 원본(공통 git 폴더의 상위)이 아닌 등록된 진짜 작업 사본에 체크아웃돼 있어야 한다. 아니면 `PreToolUse`가 거부하고, `SubagentStart`도 다시 확인한다. 종료 훅은 원본을 찾지 않는다 | `agent-cases.json`의 브랜치 없음·`master`·작업 사본 없음·원본 예제 |
+| 3 작업 트리를 검사하는데 기록은 HEAD다 | 검사 전에 commit-guard와 같은 판정(assume-unchanged·skip-worktree 표시, 인덱스 blob과 작업 파일 내용·실행 권한, 충돌·서브모듈, 스테이징된 변경, 루트 `.gitignore`만 기준으로 한 추적하지 않는 파일)으로 작업 트리가 커밋과 같은지 보고, 다르면 검사 없이 막는다(`lib/tree-hash.mjs`) | `the stop hook refuses a worktree whose files differ from its commit`(약화를 커밋하고 작업 트리만 되돌린 반례 포함) |
+| 4 리뷰어가 상태 기록과 대화 기록을 읽는다 | 샌드박스 `denyRead`에 상태 폴더와 `~/.claude`(`allowRead`로 `~/.claude/shell-snapshots`만 다시 엶), 권한 거부 `Read(~/.claude/projects/**)`, `Read(~/.local/state/stock-copilot-harness/**)`. 상태 기록에는 브리프와 보고 본문을 담지 않는다: 상태, SHA, 횟수, 이유, 보호 경로 변경, 다이제스트(브리프 전체, 보고 줄마다 정규화한 SHA-256)만. 대기열의 implementer 브리프는 시작 때 꺼내며 지운다 | `the post-agent context…`(기록에 본문 없음), `hook entry scripts…`(`prompt` 없음) |
+| 5 표식 정확 일치 | 비교 전에 NFKC, 모든 공백과 제로 폭·방향 제어 문자 제거, 소문자. 보고 첫 줄 판정, 표식, 보고 줄 다이제스트에 같은 정규화 | 전각 콜론, 띄어 쓴 `하 네 스 기록`, 제로 폭 `완\u200b료`, `JUST CHECK`, 다시 띄어 쓴 보고 줄 예제 |
+| 6 리뷰어 쓰기 감지가 `git status` 줄 비교다 | 시작과 끝에 진짜 작업 사본마다 HEAD, 인덱스(`ls-files -s`) 다이제스트, 추적 파일과 추적하지 않는 파일(루트 `.gitignore`의 무시 제외)의 내용 해시를 비교한다. 새로 생긴·사라진 작업 사본, git 실패는 차이(차단)다 | `reviewer stops are blocked while any worktree's content differs…`(이미 바뀐 파일을 더 고침, 새 파일, 이름 변경, 새 작업 사본, git 실패) |
+| 7 기준 브랜치를 옮기는 명령 | 모든 역할에서: `git branch -f/-M/-D/-C`(대상 `master`·`main`), `checkout -B`·`switch -C/--force-create`(대상 기준 브랜치), `push`·`fetch`의 참조 사양 대상이 기준 브랜치, `update-ref`(이미 모든 역할). 메인의 `reset --soft`는 기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 거부하는 코드와 데이터 칸(`git.baseBranch.resetOptions`)을 넣었고, 값 `--soft`를 채우는 것은 기존 예제(메인 `git reset --soft HEAD~1` 통과)의 기대를 바꾸므로 메인이 커밋할 변경으로 남겼다. `reset --hard`는 이미 모든 역할에서 거부 | `bash-cases.json` 추가 26개 |
+| 8 다른 에이전트 실행 수단 | 권한 거부: `Workflow`, `RemoteTrigger`, `CronCreate`, `mcp__t3-code__delegate_task`, `create_threads`, `t3_thread_launch`, `t3_thread_send`, `schedule_task`, `run_scheduled_task_now`. 확인한 것: `--setting-sources project`로 연 헤드리스 세션(E3, E4)에는 사용자 범위 MCP `t3-code`가 들어오지 않았고 claude.ai 커넥터(Claude Docs, ClickUp, Excalidraw, Figma)는 들어왔다. 확인하지 못한 것: `--setting-sources` 없이 연 대화형 세션(사용자 설정의 MCP와 플러그인이 들어온다), 이름으로 알 수 없는 MCP 도구, 위 이름이 바뀌는 경우 | `settings.test.mjs` |
+| 9 에이전트가 해시·조각을 다시 써서 변조를 승인 | 셸 훅이 모든 역할에 `node …/harness/claude-hooks/hashes.mjs --write`, `node …/harness/sandbox/fragment.mjs --write`·`--locked-settings`(동적 인자 포함)를 거부한다. 검사 모드는 통과. 해시 대상에 `agent-rules.json`, `lock-fragment.json`을 더했다 | `bash-cases.json`의 `harness-write-mode` 예제 |
+| 10 샌드박스 읽기와 네트워크 | 1번 목록을 Claude Code 샌드박스 `denyRead`에도 넣었다(E4에서 모두 `Operation not permitted`, ssh-agent 연결 실패). `~/.gitconfig`는 git이 읽어야 해 넣지 않았다. 허용 도메인으로 실어 보내는 길: `npm publish`·`pnpm publish`는 `registry.npmjs.org`에 쓸 수 있지만 토큰이 든 `~/.npmrc`를 읽을 수 없고 셸 훅이 서브에이전트의 `npm`·`pnpm` 설정 변경을 막는다. 토큰 없이도 요청 본문·주소·헤더에 데이터를 실어 레지스트리로 보낼 수는 있다(조회 요청의 경로 등). crates.io는 `cargo publish`에 토큰이 필요하다. 이 길은 막지 않는다. 비밀 값이 저장소와 작업 사본에 없고(AGENTS.md 10) 홈의 자격 증명은 읽기 거부라는 것이 방어다 | E4 |
+| 11 대기열 | implementer 호출만 넣고 리뷰어 프롬프트는 넣지 않는다. 호출마다 파일 하나(`pending-<세션>-<도구 사용 ID>`, 원자적 교체)로 두고, 꺼낼 때 원자적 이름 바꾸기로 한 번만 가져간다 | `two implementer launches queued at the same time both stay queued`, `pending launches are chosen … and claimed once` |
+| 12 wrapper 약화 예제 | `nextest-wrapper-script-weakened`(`shift; exec "$@"`)가 `nextest-config:value:…command`로 실패 | `cargo_config_tests` |
+| 13 기존 ADR과 `.gitignore` | 잠금 설정의 `denyWrite`에 추적된 `docs/adr/*`를 하나씩 넣는다. 매 작업의 새 ADR로 조각 파일이 낡지 않도록 조각 파일이 아니라 `--locked-settings`가 만들 때 그때의 추적 파일에서 더한다(잠근 뒤 병합된 ADR은 설정을 다시 만들 때까지 셸 쓰기가 막히지 않는다). 루트 `.gitignore`에 `/.claude/worktrees/` | `the locked sandbox is …`, `removing any lock policy element changes the locked sandbox` |
+
+훅 검사 프로필은 잠금이 켜지면 잠금 조각의 보호 경로를 작업 사본과 원본에서 쓰기 거부한다(`with the lock on the hook check cannot write the fragment's protected paths`).
+
+### 실측 E4 (Claude Code 샌드박스, 지금 설정)
+
+| 시도 | 결과 |
+|---|---|
+| `~/.ssh`, `~/.ssh/config`, `~/.aws`, `~/.gnupg`, `~/.config/gh/hosts.yml`, `~/.npmrc`, `~/.docker`, `~/Library/Keychains`, `~/Library/Cookies`, `~/.claude/projects` 읽기 | 모두 `Operation not permitted` |
+| `~/.claude/shell-snapshots` 읽기 | 허용(`allowRead`) |
+| `CLAUDE_CONFIG_DIR`(이 PC는 `~/.claude-second`)의 `projects` 읽기 | **허용**. 설정 파일은 환경 변수를 쓸 수 없다. 기본 위치가 아닌 설정 폴더를 쓰면 사용자가 `denyRead`에 더해야 한다 |
+| ssh-agent(`ssh-add -l`) | 연결 실패 |
+| `~/.gitconfig` 읽기, `pnpm install --frozen-lockfile`, `git status` | 통과 |
+| `Read` 도구로 `~/.claude/projects/…` | "denied by your permission settings" |
+
+### H-20 절차 (앞의 것을 대신한다)
+
+사용자가 Claude Code 밖의 터미널에서:
+
+```sh
+node harness/sandbox/prelock.mjs <검토한 커밋 40자리>     # 작업 트리가 깨끗, 검토한 커밋 대비 harness .claude justfile crates/xtask lefthook.yml 차이 없음, 보호 파일 하드 링크 없음
+node harness/sandbox/fragment.mjs                       # 조각이 최신인지
+node harness/sandbox/fragment.mjs --locked-settings > "$TMPDIR/settings.json"
+mv "$TMPDIR/settings.json" .claude/settings.json        # 지금 설정 + 조각 + 그때 추적된 docs/adr/*
+printf 'on\n' > harness/claude-hooks/lock.txt
+node harness/claude-hooks/hashes.mjs --write
+```
+
+그다음 `settings.test.mjs`의 기대 설정과 잠금 스위치 테스트를 바꾸고(기존 테스트 변경), `just base=<master> check`를 확인한 뒤 `git commit -S`. 잠금이 켜지면 종료 훅이 보호 경로 변경을 실패로 보고, 훅 검사 프로필이 잠금 조각의 경로 쓰기를 거부한다.
+
+### 남는 한계 (고치지 않는다)
+
+- 작업 사본 쪽 보호 파일은 샌드박스로 막을 수 없다(git이 체크아웃할 때 써야 한다). 덮는 겹: 종료 훅의 보호 경로 변경 검사(기준 SHA와 비교), 메인의 병합 확인, CI 서명 검사(H-26). **세션은 원본 저장소에서만 연다.** 에이전트가 쓴 작업 사본의 `.claude/settings.json`으로 세션을 열면 훅이 꺼질 수 있다.
+- `~/.cargo/registry`와 pnpm store는 다른 프로젝트와 공유하는 캐시다(쓰기 허용).
+- 상태 기록에는 서명이 없다. 같은 사용자가 샌드박스 밖에서 고칠 수 있다.
+- 메인이 표식을 지우고 구현자 보고를 바꿔 써서 리뷰어에게 넘기는 것, `blocked` 결과를 병합하는 것은 훅으로 못 막는다.
+- 훅의 검사는 여전히 작업 사본의 `justfile`과 xtask로 돈다. 쓰기·읽기·네트워크가 막힌 프로필 안이라 밖으로 새지 않지만 거짓 통과는 낼 수 있다(잠금 뒤에는 보호 경로 변경으로 실패).
+- 리뷰어 스냅숏은 작업 사본 수와 파일 수에 비례해 느려진다(시작·종료 훅 제한 180초·300초).
+- `allowWrite`의 pnpm 잠금 폴더, `allowUnixSockets`는 사용자 ID 501 기준이다.

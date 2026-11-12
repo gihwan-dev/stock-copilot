@@ -844,7 +844,112 @@ const hardLinkCreation = (invocation) => {
   return false;
 };
 
+const branchOfDirectory = (directory) => {
+  try {
+    return execFileSync(
+      "git",
+      ["-C", directory, "symbolic-ref", "--quiet", "--short", "HEAD"],
+      {
+        encoding: "utf8",
+        env: gitEnvironment(),
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+  } catch {
+    return undefined;
+  }
+};
+
+const baseBranchFindings = (
+  sub,
+  options,
+  statics,
+  parsed,
+  invocation,
+  context,
+) => {
+  const base = context.rules.git.baseBranch;
+  const isBase = (text) =>
+    base.branches.includes(
+      text.replace(/^\+/u, "").replace(/^refs\/heads\//u, ""),
+    );
+  const creating =
+    base.creating
+      .filter((rule) => rule.subcommands.includes(sub))
+      .some((rule) => optionHits(rule, options).length > 0) &&
+    statics.some(({ word }) => isBase(word.text))
+      ? [
+          finding(
+            "git-history",
+            `git ${sub}로 기준 브랜치를 다시 만들지 않는다`,
+          ),
+        ]
+      : [];
+  const refspecs = base.refspecSubcommands.includes(sub)
+    ? statics
+        .filter(({ word }) => word.text.includes(":"))
+        .filter(({ word }) =>
+          isBase(word.text.slice(word.text.lastIndexOf(":") + 1)),
+        )
+        .map(({ word }) =>
+          finding(
+            "git-history",
+            `git ${sub}의 참조 사양으로 기준 브랜치를 덮어쓰지 않는다: ${word.text}`,
+          ),
+        )
+    : [];
+  const resetting =
+    sub === "reset" &&
+    options.some((option) =>
+      base.resetOptions.includes(option.long ?? `-${option.short}`),
+    );
+  const directory = resetting
+    ? aliasDirectory(parsed, invocation, context)
+    : undefined;
+  const reset =
+    resetting &&
+    (directory === undefined || isBase(branchOfDirectory(directory) ?? ""))
+      ? [
+          finding(
+            "git-history",
+            "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git reset으로 브랜치 끝을 옮기지 않는다",
+          ),
+        ]
+      : [];
+  return [...creating, ...refspecs, ...reset];
+};
+
+const scriptMatches = (text, script) => {
+  const plain = text.replace(/^(\.\/)+/u, "");
+  return plain === script || plain.endsWith(`/${script}`);
+};
+
 export const CHECKS = [
+  {
+    id: "harness-write-mode",
+    check: (invocation, context) => {
+      const words = invocation.args;
+      const scriptIndex = words.findIndex((word) => !isOption(word));
+      if (invocation.name !== "node" || scriptIndex < 0) {
+        return [];
+      }
+      const script = words[scriptIndex];
+      const rest = words.slice(scriptIndex + 1);
+      return context.rules.harnessScripts
+        .filter(
+          (entry) => script.dynamic || scriptMatches(script.text, entry.script),
+        )
+        .filter((entry) =>
+          rest.some((word) => word.dynamic || entry.modes.includes(word.text)),
+        )
+        .map((entry) =>
+          finding(
+            "harness-write-mode",
+            `${entry.script}의 쓰기 모드(${entry.modes.join(", ")})는 사람이 서명 커밋으로 한다 (ADR 0018)`,
+          ),
+        );
+    },
+  },
   {
     id: "dynamic-command",
     check: (invocation) =>
@@ -1028,7 +1133,6 @@ export const CHECKS = [
               )
           : [];
       const forced =
-        subagent &&
         sub === "branch" &&
         options.some((option) =>
           git.forcedBranch.options.includes(option.long ?? `-${option.short}`),
@@ -1039,7 +1143,7 @@ export const CHECKS = [
           ? [
               finding(
                 "git-history",
-                "서브에이전트는 기준 브랜치를 강제로 옮기거나 지우지 않는다",
+                "기준 브랜치를 강제로 옮기거나 지우지 않는다 (ADR 0018)",
               ),
             ]
           : [];
@@ -1053,7 +1157,21 @@ export const CHECKS = [
               ),
             )
         : [];
-      return [...found, ...plus, ...refspec, ...forced, ...dynamic];
+      return [
+        ...found,
+        ...plus,
+        ...refspec,
+        ...forced,
+        ...baseBranchFindings(
+          sub,
+          options,
+          statics,
+          parsed,
+          invocation,
+          context,
+        ),
+        ...dynamic,
+      ];
     },
   },
   {

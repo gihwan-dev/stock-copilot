@@ -3,6 +3,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -78,3 +79,23 @@ export const listRecords = (directory, kind) =>
     .map((name) => name.slice(kind.length + 1, -".json".length))
     .map((id) => readRecord(directory, kind, id))
     .filter((record) => record !== undefined);
+
+export const claimRecord = (directory, kind, id, claimant) => {
+  if (!isSafeId(id) || !isSafeId(claimant)) {
+    return undefined;
+  }
+  const source = recordFile(directory, kind, id);
+  const claimed = `${source}.claimed-${claimant}`;
+  try {
+    renameSync(source, claimed);
+  } catch {
+    return undefined;
+  }
+  try {
+    return JSON.parse(readFileSync(claimed, "utf8"));
+  } catch {
+    return undefined;
+  } finally {
+    rmSync(claimed, { force: true });
+  }
+};

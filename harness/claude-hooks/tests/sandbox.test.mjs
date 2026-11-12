@@ -1,10 +1,14 @@
 import { strict as assert } from "node:assert";
+import { execFileSync } from "node:child_process";
+import { linkSync, rmSync, writeFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
+import { prelockProblems } from "../../sandbox/prelock.mjs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
   isWritable,
   parseAllowlist,
+  patternMatches,
 } from "../../../.claude/hooks/lib/allowlist.mjs";
 import {
   FRAGMENT_FILE,
@@ -14,11 +18,18 @@ import {
   lockFragment,
   lockedSandbox,
   readAllowlistFile,
+  trackedProtectedDenies,
   readPolicy,
   renderJson,
   trackedFiles,
 } from "../../sandbox/fragment.mjs";
-import { applyVariant, dataVariants, readJson, repoRoot } from "./fixture.mjs";
+import {
+  applyVariant,
+  createFixture,
+  dataVariants,
+  readJson,
+  repoRoot,
+} from "./fixture.mjs";
 
 const policy = readPolicy(repoRoot);
 const allowlist = readAllowlistFile(repoRoot);
@@ -67,6 +78,27 @@ const EXPECTED_NOW = {
       "~/.cargo/config.toml",
       "~/.local/state/stock-copilot-harness",
     ],
+    denyRead: [
+      "~/.ssh",
+      "~/.aws",
+      "~/.gnupg",
+      "~/.config/gh",
+      "~/.netrc",
+      "~/.npmrc",
+      "~/.docker",
+      "~/.kube",
+      "~/Library/Keychains",
+      "~/Library/Cookies",
+      "~/Library/Application Support/Google/Chrome",
+      "~/Library/Application Support/BraveSoftware",
+      "~/Library/Application Support/Microsoft Edge",
+      "~/Library/Application Support/Firefox",
+      "~/Library/Application Support/Arc",
+      "~/Library/Safari",
+      "~/.claude",
+      "~/.local/state/stock-copilot-harness",
+    ],
+    allowRead: ["~/.claude/shell-snapshots"],
   },
 };
 
@@ -82,9 +114,17 @@ test("the lock fragment is generated from agent-writable.txt and the policy", ()
 });
 
 test("the lock fragment denies exactly the tracked paths agent-writable.txt protects", () => {
+  const trackedProtected = (path) =>
+    policy.lock.trackedProtected.some((pattern) =>
+      patternMatches(pattern, path),
+    );
+  const all = [...denies, ...trackedProtectedDenies(tracked, policy)];
   const wrong = tracked.filter(
-    (path) => deniedBy(denies, path) === isWritable(allowlist, path),
+    (path) =>
+      deniedBy(all, path) !==
+      (!isWritable(allowlist, path) || trackedProtected(path)),
   );
+  assert.ok(tracked.some(trackedProtected));
   assert.deepEqual(wrong, []);
 });
 
@@ -175,21 +215,20 @@ test("removing an agent-writable.txt line changes the fragment unless no tracked
   );
 });
 
-test("removing any lock policy element changes the fragment", () => {
-  const current = JSON.stringify(lockFragment(tracked, allowlist, policy));
+test("removing any lock policy element changes the locked sandbox", () => {
+  const lockedFor = (chosen) =>
+    JSON.stringify(
+      lockedSandbox(chosen, lockFragment(tracked, allowlist, chosen), tracked),
+    );
+  const current = lockedFor(policy);
   const survivors = dataVariants(policy.lock, ["lock"])
-    .filter(
-      (variant) =>
-        JSON.stringify(
-          lockFragment(tracked, allowlist, applyVariant(policy, variant)),
-        ) === current,
-    )
+    .filter((variant) => lockedFor(applyVariant(policy, variant)) === current)
     .map((variant) => variant.name);
   assert.deepEqual(survivors, []);
 });
 
 test("the locked sandbox is the current one with the fragment's denials appended", () => {
-  const locked = lockedSandbox(policy, fragment);
+  const locked = lockedSandbox(policy, fragment, tracked);
   assert.deepEqual(
     { ...locked, filesystem: { ...locked.filesystem, denyWrite: [] } },
     {
@@ -200,7 +239,13 @@ test("the locked sandbox is the current one with the fragment's denials appended
   assert.deepEqual(locked.filesystem.denyWrite, [
     ...EXPECTED_NOW.filesystem.denyWrite,
     ...denies,
+    ...trackedProtectedDenies(tracked, policy),
   ]);
+  assert.ok(
+    locked.filesystem.denyWrite.includes(
+      "./docs/adr/0017-claude-code-edit-and-shell-hooks.md",
+    ),
+  );
   [
     "./harness",
     "./.claude/hooks",
@@ -221,4 +266,59 @@ test("sandbox globs follow the measured Seatbelt matching", () => {
   assert.ok(!globExpression("*.json").test("apps/desktop/package.json"));
   assert.ok(globExpression(".env*").test(".env.local"));
   assert.ok(!deniedBy(["~/.claude"], ".claude/settings.json"));
+});
+
+test("the pre-lock check needs a clean tree, the reviewed harness and no hard links", () => {
+  const fixture = createFixture();
+  const root = fixture.root;
+  const fixtureAllowlist = parseAllowlist("docs/**\ncrates/*/src/**\n");
+  const head = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  const problems = () => prelockProblems(root, head, fixtureAllowlist, policy);
+  assert.deepEqual(problems(), [
+    "작업 트리: 추적하지 않는 파일: crates/domain/src/link.rs",
+    "작업 트리: 추적하지 않는 파일: docs/linked.txt",
+    "작업 트리: 추적하지 않는 파일: linked",
+    "하드 링크가 있는 보호 파일: harness/linked-source.txt",
+  ]);
+  rmSync(join(root, "crates/domain/src/link.rs"));
+  rmSync(join(root, "linked"));
+  rmSync(join(root, "docs/linked.txt"));
+  assert.deepEqual(problems(), []);
+  linkSync(join(root, "justfile"), join(root, "docs/hard.txt"));
+  execFileSync("git", ["-C", root, "add", "docs/hard.txt"]);
+  execFileSync("git", [
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@e.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "-C",
+    root,
+    "commit",
+    "-q",
+    "-m",
+    "link",
+  ]);
+  const linkedHead = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  assert.deepEqual(
+    prelockProblems(root, linkedHead, fixtureAllowlist, policy),
+    ["하드 링크가 있는 보호 파일: justfile"],
+  );
+  writeFileSync(join(root, "harness/claude-hooks/lock.txt"), "on\n");
+  assert.deepEqual(
+    prelockProblems(root, linkedHead, fixtureAllowlist, policy).slice(0, 2),
+    [
+      "작업 트리: 스테이징하지 않은 변경: harness/claude-hooks/lock.txt",
+      "검토한 커밋과 다르다: harness/claude-hooks/lock.txt",
+    ],
+  );
+  assert.deepEqual(
+    prelockProblems(root, "ffffffff", fixtureAllowlist, policy),
+    ["검토한 커밋 ffffffff을 풀 수 없다"],
+  );
 });

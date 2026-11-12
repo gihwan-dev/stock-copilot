@@ -7,34 +7,68 @@ export const watchedWorktrees = (worktrees, projectRoot) =>
     (path) => !path.startsWith(`${join(projectRoot, ISOLATION)}/`),
   );
 
-const relevant = (entry) => !entry.slice(3).startsWith(`${ISOLATION}/`);
+const relevant = (path) => !path.startsWith(`${ISOLATION}/`);
 
 export const snapshotOf = (worktrees, projectRoot, facts) =>
   watchedWorktrees(worktrees, projectRoot)
     .sort()
-    .map((path) => ({
-      path,
-      head: facts.headOf(path) ?? null,
-      status: (facts.statusOf(path) ?? ["<git status 실패>"]).filter(relevant),
-    }));
+    .map((path) => {
+      const taken = facts.contentSnapshot(path);
+      return taken.failed === undefined
+        ? {
+            path,
+            head: taken.head,
+            index: taken.index,
+            files: Object.fromEntries(
+              Object.entries(taken.files).filter(([file]) => relevant(file)),
+            ),
+          }
+        : { path, failed: taken.failed };
+    });
+
+const fileDifferences = (path, before, after) => {
+  const names = [
+    ...new Set([...Object.keys(before), ...Object.keys(after)]),
+  ].sort();
+  return names
+    .filter((name) => before[name] !== after[name])
+    .map((name) =>
+      before[name] === undefined
+        ? `${path}: 새 파일 ${name}`
+        : after[name] === undefined
+          ? `${path}: 사라진 파일 ${name}`
+          : `${path}: 내용이 바뀐 파일 ${name}`,
+    );
+};
 
 export const snapshotDifferences = (before, after) => {
   const earlier = new Map(before.map((entry) => [entry.path, entry]));
-  return after.flatMap((entry) => {
-    const old = earlier.get(entry.path);
-    if (old === undefined) {
-      return [];
-    }
-    const added = entry.status.filter((line) => !old.status.includes(line));
-    const removed = old.status.filter((line) => !entry.status.includes(line));
-    return [
-      ...(old.head === entry.head
-        ? []
-        : [`${entry.path}: HEAD ${old.head} -> ${entry.head}`]),
-      ...added.map((line) => `${entry.path}: 새 상태 ${line}`),
-      ...removed.map((line) => `${entry.path}: 사라진 상태 ${line}`),
-    ];
-  });
+  const later = new Map(after.map((entry) => [entry.path, entry]));
+  return [
+    ...before
+      .filter((entry) => !later.has(entry.path))
+      .map((entry) => `${entry.path}: 작업 사본이 사라졌다`),
+    ...after.flatMap((entry) => {
+      const old = earlier.get(entry.path);
+      if (old === undefined) {
+        return [`${entry.path}: 새 작업 사본이 생겼다`];
+      }
+      if (old.failed !== undefined || entry.failed !== undefined) {
+        return [
+          `${entry.path}: 상태를 읽지 못했다 (${entry.failed ?? old.failed})`,
+        ];
+      }
+      return [
+        ...(old.head === entry.head
+          ? []
+          : [`${entry.path}: HEAD ${old.head} -> ${entry.head}`]),
+        ...(old.index === entry.index
+          ? []
+          : [`${entry.path}: 인덱스가 바뀌었다`]),
+        ...fileDifferences(entry.path, old.files, entry.files),
+      ];
+    }),
+  ];
 };
 
 export const decideReviewerStop = (input, record, snapshot, rules, now) => {

@@ -4527,5 +4527,139 @@
     "command": "echo '{}' > ~/.local/state/stock-copilot-harness/records/implementer-a1.json",
     "decision": "deny",
     "rules": ["protected-home"]
+  },
+  {
+    "command": "git branch -f master HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git branch -D master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git branch -M topic main",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git checkout -B master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git switch -C master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git switch --force-create main HEAD",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git checkout -B topic",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git push . HEAD:master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git push . topic:refs/heads/master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git fetch . topic:master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git fetch . topic:other",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git update-ref refs/heads/master HEAD",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git merge --no-ff h-25",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -m 'Record review'",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node ./harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"],
+    "role": "implementer"
+  },
+  {
+    "command": "node /Users/x/repo/harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node harness/claude-hooks/hashes.mjs",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node harness/sandbox/fragment.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node harness/sandbox/fragment.mjs --locked-settings",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node harness/sandbox/fragment.mjs",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node harness/sandbox/prelock.mjs a81715afb271a8f0ede4bad6127fb7f8957ec4b2",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node harness/sandbox/fragment.mjs \"$MODE\"",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "git checkout -B topic",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git switch -C topic",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git switch --force-create topic",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
   }
 ]

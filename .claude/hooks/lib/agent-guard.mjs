@@ -1,4 +1,5 @@
 import { BRIEF_PROBLEM, parseBrief } from "./brief.mjs";
+import { lineDigest, meaningfulLines, normalized } from "./normalize.mjs";
 import { ROLE, roleOf } from "./roles.mjs";
 
 const finding = (rule, message) => ({ rule, gated: false, message });
@@ -14,11 +15,30 @@ const BRIEF_MESSAGES = new Map([
   [BRIEF_PROBLEM.badBranch, "브랜치 이름이 잘못됐다"],
 ]);
 
-export const baseVerdict = (brief, facts) => {
+export const baseBranchName = (rules) =>
+  rules.baseRef.replace(/^refs\/heads\//u, "");
+
+const branchProblem = (brief, facts, rules) => {
+  if (brief.branch === undefined) {
+    return "브리프에 작업 브랜치가 없다: `- 기준 커밋: <SHA>, 브랜치 `<이름>``";
+  }
+  if (brief.branch === baseBranchName(rules)) {
+    return `작업 브랜치는 기준 브랜치(${baseBranchName(rules)})가 아니어야 한다`;
+  }
+  return facts.worktreeForBranch(brief.branch) === undefined
+    ? `브랜치 ${brief.branch}가 체크아웃된 작업 사본(원본 밖, git worktree에 등록된 것)이 없다. 먼저 git worktree add로 만든다`
+    : undefined;
+};
+
+export const baseVerdict = (brief, facts, rules) => {
   if (brief.problem !== undefined) {
     return {
       problem: `${BRIEF_MESSAGES.get(brief.problem)}${brief.values === undefined ? "" : `: ${brief.values.join(", ")}`}`,
     };
+  }
+  const branch = branchProblem(brief, facts, rules);
+  if (branch !== undefined) {
+    return { problem: branch };
   }
   const commit = facts.resolveCommit(brief.commit);
   if (commit === undefined) {
@@ -38,22 +58,21 @@ export const baseVerdict = (brief, facts) => {
   };
 };
 
-const reportProblems = (prompt, rules, reportLines) => {
-  const lines = prompt.split("\n").map((line) => line.trim());
+const reportProblems = (prompt, rules, reportDigests) => {
+  const lines = prompt.split("\n").map(normalized);
+  const done = normalized(rules.reportFirstLines.done);
+  const blocked = normalized(rules.reportFirstLines.blocked);
+  const whole = normalized(prompt);
   const markers = [
     ...lines
-      .filter(
-        (line) =>
-          line === rules.reportFirstLines.done ||
-          line.startsWith(rules.reportFirstLines.blocked),
-      )
+      .filter((line) => line === done || line.startsWith(blocked))
       .map((line) => `보고 첫 줄 형태: ${line.slice(0, 40)}`),
     ...rules.reportMarkers
-      .filter((marker) => prompt.includes(marker))
+      .filter((marker) => whole.includes(normalized(marker)))
       .map((marker) => `보고 표식: ${marker}`),
-    ...reportLines
-      .filter((line) => prompt.includes(line))
-      .map((line) => `구현자 보고의 줄: ${line.slice(0, 60)}`),
+    ...meaningfulLines(prompt, rules.reportLineMinimum)
+      .filter((line) => reportDigests.has(lineDigest(line)))
+      .map((line) => `구현자 보고의 줄: ${line.trim().slice(0, 60)}`),
   ];
   return markers.length === 0
     ? []
@@ -114,13 +133,13 @@ export const agentFindings = (input, rules, facts) => {
   ];
   const prompt = typeof toolInput.prompt === "string" ? toolInput.prompt : "";
   if (type === "implementer") {
-    const verdict = baseVerdict(parseBrief(prompt), facts);
+    const verdict = baseVerdict(parseBrief(prompt), facts, rules);
     return verdict.problem === undefined
       ? findings
       : [...findings, finding("brief-base", verdict.problem)];
   }
   if (rules.subagentTypes.includes(type) && type !== "implementer") {
-    return [...findings, ...reportProblems(prompt, rules, facts.reportLines)];
+    return [...findings, ...reportProblems(prompt, rules, facts.reportDigests)];
   }
   return findings;
 };
