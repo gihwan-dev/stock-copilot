@@ -448,6 +448,11 @@ example = "clean-standard-paths.rs"
 crate = "domain"
 expect = []
 
+[[source]]
+example = "clean-standard-bounds.rs"
+crate = "domain"
+expect = []
+
 [[crate]]
 name = "modules"
 roots = ["src/lib.rs"]

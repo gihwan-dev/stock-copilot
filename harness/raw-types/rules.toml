@@ -219,3 +219,18 @@ reason = "표준 트레이트 구현과 경계"
 path = "future::Future"
 prelude = true
 reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "marker::Copy"
+prelude = true
+reason = "값 타입 newtype의 경계 (메인 에이전트 승인)"
+
+[[standard-trait]]
+path = "default::Default"
+prelude = true
+reason = "값 타입 newtype의 경계 (메인 에이전트 승인)"
+
+[[standard-trait]]
+path = "marker::Sized"
+prelude = true
+reason = "?Sized 경계 (메인 에이전트 승인)"

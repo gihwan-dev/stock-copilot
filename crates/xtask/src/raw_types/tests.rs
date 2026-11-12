@@ -71,7 +71,8 @@ const REGRESSION_NAMES: [&str; 47] = [
     "Ipv4Addr",
 ];
 
-const REQUIRED_CLEAN_EXAMPLES: [&str; 11] = [
+const REQUIRED_CLEAN_EXAMPLES: [&str; 12] = [
+    "clean-standard-bounds.rs",
     "clean-newtype-borrowed.rs",
     "clean-newtype-fields.rs",
     "clean-generics.rs",
