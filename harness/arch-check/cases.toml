@@ -262,6 +262,34 @@ findings = [
 ]
 
 [[case]]
+name = "reqwest-family-through-reqwest-pass"
+findings = []
+
+[[case]]
+name = "reqwest-family-direct-dependency"
+findings = [
+    { rule = "external-location", subject = "broker-toss => hyper" },
+    { rule = "external-location", subject = "broker-toss => rustls" },
+]
+
+[[case]]
+name = "tauri-reach-through-tauri-pass"
+findings = []
+
+[[case]]
+name = "tauri-reach-direct-dependency"
+findings = [
+    { rule = "external-location", subject = "src-tauri => cargo_metadata" },
+    { rule = "external-location", subject = "src-tauri => hyper" },
+    { rule = "external-location", subject = "src-tauri => hyper-util" },
+    { rule = "external-location", subject = "src-tauri => proc-macro2" },
+    { rule = "external-location", subject = "src-tauri => reqwest" },
+    { rule = "external-location", subject = "src-tauri => socket2" },
+    { rule = "external-location", subject = "src-tauri => syn" },
+    { rule = "external-location", subject = "src-tauri => toml" },
+]
+
+[[case]]
 name = "reexport-in-approval-command"
 findings = [
     { rule = "reexport", subject = "crates/approval-command/src/lib.rs" },
@@ -329,7 +357,7 @@ findings = [
 [[case]]
 name = "user-presence-glob-reexport"
 findings = [
-    { rule = "user-presence-reexport", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/adapters/ai-claude-code/src/lib.rs" },
     { rule = "user-presence-reexport", subject = "crates/application/src/lib.rs" },
     { rule = "user-presence-reexport", subject = "crates/mcp-server/src/lib.rs" },
 ]
@@ -461,4 +489,120 @@ findings = []
 name = "source-that-does-not-parse"
 findings = [
     { rule = "source-parse", subject = "crates/application/src/lib.rs" },
+]
+
+[[case]]
+name = "broker-toss-socket-means-each"
+findings = [
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_00.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_01.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_02.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_03.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_04.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_05.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_06.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_07.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_08.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_09.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_10.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_00.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_01.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_02.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_03.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_04.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_05.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_06.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_07.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_08.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_09.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_10.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_11.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/socket_module_12.rs" },
+]
+
+[[case]]
+name = "broker-toss-raw-socket-bypass"
+findings = [
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss/src/token.rs" },
+]
+
+[[case]]
+name = "socket-means-in-sources-and-broker-toss-trade"
+findings = [
+    { rule = "http-socket-means", subject = "crates/adapters/broker-toss-trade/src/lib.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/sources/src/lib.rs" },
+]
+
+[[case]]
+name = "process-spawn-raw-and-self-alias"
+findings = [
+    { rule = "process-spawn", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/mcp-server/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/scheduler/src/lib.rs" },
+]
+
+[[case]]
+name = "user-presence-raw-and-self-alias"
+findings = [
+    { rule = "user-presence-alias", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "user-presence-alias", subject = "crates/mcp-server/src/lib.rs" },
+    { rule = "user-presence-impl", subject = "crates/scheduler/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/adapters/ai-codex/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/adapters/secrets-keychain/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/adapters/store-sqlite/src/lib.rs" },
+]
+
+[[case]]
+name = "reexport-raw-and-self-alias"
+findings = [
+    { rule = "reexport", subject = "crates/adapters/broker-toss-trade/src/lib.rs" },
+    { rule = "reexport", subject = "crates/approval-command/src/lib.rs" },
+    { rule = "reexport", subject = "crates/trade-fakes/src/lib.rs" },
+]
+
+[[case]]
+name = "token-file-reexports-method"
+findings = [
+    { rule = "http-write-export", subject = "crates/adapters/broker-toss/src/token.rs" },
+]
+
+[[case]]
+name = "token-file-exports-helper"
+findings = [
+    { rule = "http-write-export", subject = "crates/adapters/broker-toss/src/token.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+    { rule = "toss-order-write", subject = "crates/adapters/broker-toss/src/orders.rs" },
+]
+
+[[case]]
+name = "token-file-exports-glob"
+findings = [
+    { rule = "http-write-export", subject = "crates/adapters/broker-toss/src/token.rs" },
+]
+
+[[case]]
+name = "token-file-exports-type"
+findings = [
+    { rule = "http-write-export", subject = "crates/adapters/broker-toss/src/token.rs" },
+]
+
+[[case]]
+name = "token-file-exports-trait-impl"
+findings = [
+    { rule = "http-write-export", subject = "crates/adapters/broker-toss/src/token.rs" },
+]
+
+[[case]]
+name = "token-file-private-helpers-pass"
+findings = []
+
+[[case]]
+name = "broker-toss-get-with-common-names-pass"
+findings = []
+
+[[case]]
+name = "broker-toss-function-value-fails"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
 ]

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/adapters/sources",
+    "crates/adapters/ai-claude-code",
     "crates/application",
     "crates/mcp-server",
     "crates/scheduler",

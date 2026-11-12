@@ -1,0 +1,3 @@
+fn open() {
+    TcpSocket::new();
+}

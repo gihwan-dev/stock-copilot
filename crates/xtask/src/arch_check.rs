@@ -36,6 +36,8 @@ pub(crate) enum Rule {
     TossOrderWrite,
     TossHost,
     HttpWriteMeans,
+    HttpWriteExport,
+    HttpSocketMeans,
     ProcessSpawn,
     SourceParse,
 }
@@ -60,6 +62,8 @@ impl Rule {
             Self::TossOrderWrite => "toss-order-write",
             Self::TossHost => "toss-host",
             Self::HttpWriteMeans => "http-write-means",
+            Self::HttpWriteExport => "http-write-export",
+            Self::HttpSocketMeans => "http-socket-means",
             Self::ProcessSpawn => "process-spawn",
             Self::SourceParse => "source-parse",
         }
@@ -160,7 +164,10 @@ pub(crate) fn command(manifest: &Path) -> ExitCode {
 }
 
 pub(crate) fn usage() -> ExitCode {
-    match writeln!(io::stderr().lock(), "사용법: xtask arch-check") {
+    match writeln!(
+        io::stderr().lock(),
+        "사용법: 표준 입력 첫 줄에 명령 이름(arch-check, source-check)을 준다"
+    ) {
         Ok(()) | Err(_) => ExitCode::FAILURE,
     }
 }

@@ -1,0 +1,19 @@
+[package]
+name = "reqwest"
+version = "0.2.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+hyper = "0.1.0"
+hyper-util = "0.1.0"
+hyper-rustls = "0.1.0"
+hyper-tls = "0.1.0"
+h2 = "0.1.0"
+h3 = "0.1.0"
+rustls = "0.1.0"
+native-tls = "0.1.0"
+tokio-rustls = "0.1.0"
+tokio-native-tls = "0.1.0"
+openssl = "0.1.0"
+socket2 = "0.1.0"

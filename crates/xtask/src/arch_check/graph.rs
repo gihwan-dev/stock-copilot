@@ -276,8 +276,8 @@ fn location_excepted(
         .location_exceptions
         .iter()
         .any(|exception| {
-            &exception.dependent == member
-                && &exception.external == reached
+            exception.dependents.contains(member)
+                && exception.externals.contains(reached)
                 && &exception.through == through
         })
         .then_some(())

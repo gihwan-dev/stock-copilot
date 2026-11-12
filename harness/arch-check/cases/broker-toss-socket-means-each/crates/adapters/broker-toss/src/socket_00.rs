@@ -1,0 +1,3 @@
+fn open() {
+    TcpStream::new();
+}

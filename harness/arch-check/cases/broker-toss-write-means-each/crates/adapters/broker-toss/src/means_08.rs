@@ -1,3 +1,3 @@
-pub(crate) fn verb() -> Method {
+fn verb() -> Method {
     Method::GET
 }

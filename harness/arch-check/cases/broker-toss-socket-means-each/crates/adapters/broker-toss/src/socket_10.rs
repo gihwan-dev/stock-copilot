@@ -1,0 +1,3 @@
+fn open() {
+    SendRequest::new();
+}

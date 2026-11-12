@@ -1,0 +1,11 @@
+[package]
+name = "tauri-build"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+cargo_metadata = "0.1.0"
+toml = "0.1.0"
+syn = "0.1.0"
+proc-macro2 = "0.1.0"

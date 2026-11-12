@@ -12,13 +12,14 @@ use super::metadata::Workspace;
 use super::rules::SourceRules;
 use super::tokens::{ConstMarkers, Markers, Words, collect_consts};
 use super::{CheckFailure, CrateName, Finding, Rule};
-use ast::AstRules;
+use ast::{AstRules, Hits};
 
 #[derive(Debug)]
 struct SourceFile {
     relative: String,
     markers: Markers,
     consts: Vec<ConstMarkers>,
+    hits: Hits,
 }
 
 fn io_failure(path: &Path, error: std::io::Error) -> CheckFailure {
@@ -81,8 +82,8 @@ fn scan_rust(
     ast.visit_file(&file);
     findings.extend(
         ast.found
-            .into_iter()
-            .map(|rule| Finding::new(rule, String::from(relative))),
+            .iter()
+            .map(|rule| Finding::new(*rule, String::from(relative))),
     );
     let words = Words {
         write_means: &rules.write_means,
@@ -97,6 +98,7 @@ fn scan_rust(
         relative: String::from(relative),
         markers,
         consts,
+        hits: ast.hits,
     })
 }
 
@@ -161,11 +163,18 @@ fn order_writes(files: &[SourceFile], findings: &mut BTreeSet<Finding>) {
         let has_order =
             !file.markers.order_paths.is_empty() || !file.markers.idents.is_disjoint(&order_consts);
         let has_write =
-            !file.markers.write_means.is_empty() || !file.markers.idents.is_disjoint(&write_consts);
+            !file.hits.write.is_empty() || !file.markers.idents.is_disjoint(&write_consts);
         if has_order && has_write {
             findings.insert(Finding::new(Rule::TossOrderWrite, file.relative.clone()));
         }
     }
+}
+
+fn crate_files<'files>(
+    by_crate: &'files BTreeMap<&CrateName, Vec<SourceFile>>,
+    name: &CrateName,
+) -> impl Iterator<Item = &'files SourceFile> {
+    by_crate.get(name).into_iter().flatten()
 }
 
 fn http_write_means(
@@ -174,14 +183,20 @@ fn http_write_means(
     findings: &mut BTreeSet<Finding>,
 ) {
     for row in &rules.http_writes {
+        for file in crate_files(by_crate, &row.dependent) {
+            if !row.allowed_files.contains(&file.relative) && !file.hits.write.is_empty() {
+                findings.insert(Finding::new(Rule::HttpWriteMeans, file.relative.clone()));
+            }
+            if !file.hits.export.is_empty() {
+                findings.insert(Finding::new(Rule::HttpWriteExport, file.relative.clone()));
+            }
+        }
+    }
+    for name in &rules.socket_crates {
         findings.extend(
-            by_crate
-                .get(&row.dependent)
-                .into_iter()
-                .flatten()
-                .filter(|file| !row.allowed_files.contains(&file.relative))
-                .filter(|file| !file.markers.write_means.is_empty())
-                .map(|file| Finding::new(Rule::HttpWriteMeans, file.relative.clone())),
+            crate_files(by_crate, name)
+                .filter(|file| !file.hits.socket.is_empty())
+                .map(|file| Finding::new(Rule::HttpSocketMeans, file.relative.clone())),
         );
     }
 }

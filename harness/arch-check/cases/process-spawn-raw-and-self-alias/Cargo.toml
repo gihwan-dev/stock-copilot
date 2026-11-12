@@ -1,0 +1,7 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/adapters/sources",
+    "crates/mcp-server",
+    "crates/scheduler",
+]

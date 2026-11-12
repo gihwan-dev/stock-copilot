@@ -1,0 +1,15 @@
+[package]
+name = "tauri"
+version = "0.2.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+reqwest = "0.1.0"
+hyper = "0.1.0"
+hyper-util = "0.1.0"
+socket2 = "0.1.0"
+cargo_metadata = "0.1.0"
+toml = "0.1.0"
+syn = "0.1.0"
+proc-macro2 = "0.1.0"

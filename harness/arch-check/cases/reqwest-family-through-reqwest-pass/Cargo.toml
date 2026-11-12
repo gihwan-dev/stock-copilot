@@ -1,0 +1,7 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/adapters/broker-toss",
+    "crates/adapters/broker-toss-trade",
+    "crates/adapters/sources",
+]

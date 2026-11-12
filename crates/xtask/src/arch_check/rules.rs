@@ -104,6 +104,9 @@ pub(crate) struct SourceRules {
     pub(crate) order_write_crates: BTreeSet<CrateName>,
     pub(crate) http_writes: Vec<HttpWrite>,
     pub(crate) process_crates: BTreeSet<CrateName>,
+    pub(crate) socket_crates: BTreeSet<CrateName>,
+    pub(crate) socket_identifiers: Vec<String>,
+    pub(crate) socket_modules: Vec<String>,
     pub(crate) host_needle: String,
     pub(crate) host_crates: BTreeSet<CrateName>,
     pub(crate) host_files: BTreeSet<String>,
@@ -117,8 +120,8 @@ pub(crate) struct HttpWrite {
 
 #[derive(Debug, Clone)]
 pub(crate) struct LocationException {
-    pub(crate) dependent: CrateName,
-    pub(crate) external: CrateName,
+    pub(crate) dependents: BTreeSet<CrateName>,
+    pub(crate) externals: BTreeSet<CrateName>,
     pub(crate) through: CrateName,
 }
 
@@ -364,7 +367,7 @@ fn location_exception(table: &Table) -> Result<LocationException, CheckFailure> 
     only_keys(
         table,
         "external-location-exception",
-        &["crate", "external", "through", "reason"],
+        &["crates", "externals", "through", "reason"],
     )?;
     if text(table, "reason")?.trim().is_empty() {
         return Err(problem(String::from(
@@ -372,8 +375,8 @@ fn location_exception(table: &Table) -> Result<LocationException, CheckFailure> 
         )));
     }
     Ok(LocationException {
-        dependent: CrateName::new(&text(table, "crate")?),
-        external: CrateName::new(&text(table, "external")?),
+        dependents: names(table, "crates")?,
+        externals: names(table, "externals")?,
         through: CrateName::new(&text(table, "through")?),
     })
 }
@@ -421,6 +424,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
             "toss-order",
             "http-write",
             "process",
+            "http-socket",
             "toss-host",
         ],
     )?;
@@ -440,6 +444,12 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     )?;
     let process = sub_table(table, "process")?;
     only_keys(process, "source.process", &["allowed-crates"])?;
+    let socket = sub_table(table, "http-socket")?;
+    only_keys(
+        socket,
+        "source.http-socket",
+        &["crates", "identifiers", "module-paths"],
+    )?;
     let host = sub_table(table, "toss-host")?;
     only_keys(
         host,
@@ -456,6 +466,9 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         order_write_crates: names(order, "allowed-crates")?,
         http_writes: each(table, "http-write", http_write)?,
         process_crates: names(process, "allowed-crates")?,
+        socket_crates: names(socket, "crates")?,
+        socket_identifiers: texts(socket, "identifiers")?,
+        socket_modules: texts(socket, "module-paths")?,
         host_needle: text(host, "needle")?,
         host_crates: names(host, "allowed-crates")?,
         host_files: texts(host, "allowed-files")?.into_iter().collect(),
