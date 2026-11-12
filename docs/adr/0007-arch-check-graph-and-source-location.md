@@ -18,10 +18,10 @@ architecture.md 3.2는 작업 공간 crate 사이의 간선, 개발 의존, 직�
 |---|---|---|
 | 실제 작업 공간 | `just arch-check` | `arch-check: 위반 0건`, 종료 코드 0. 단 아래 예외 12행을 넣은 뒤다 |
 | 외부 위치를 전이로 본 첫 실행 | `cargo run -p xtask -- arch-check` | `src-tauri => cargo_metadata, hyper, hyper-util, proc-macro2, reqwest, socket2, syn, toml` 8건. 경로는 `cargo tree --target all -i <crate>`로 확인했다(결과 절) |
-| 위반·대조 예제 54개 | `arch_check_cases::every_case_reports_exactly_its_findings` | 예제마다 기대한 (규칙, 대상) 집합과 정확히 같다 |
-| 표 원소 하나씩 빼기 | `arch_check_cases::removing_any_rule_element_breaks_some_case` | `rules.toml`을 TOML 값으로 읽어 모든 배열의 원소(문자열과 표 행) 하나를 뺀 변형 200개 넘게 만들고, 변형마다 예제나 실제 작업 공간의 결과가 바뀌는지 본다. 모두 바뀌었다 |
+| 위반·대조 예제 54개 | `arch_check_cases_tests::every_case_reports_exactly_its_findings` | 예제마다 기대한 (규칙, 대상) 집합과 정확히 같다 |
+| 표 원소 하나씩 빼기 | `arch_check_cases_tests::removing_any_rule_element_breaks_some_case` | `rules.toml`을 TOML 값으로 읽어 모든 배열의 원소(문자열과 표 행) 하나를 뺀 변형 200개 넘게 만들고, 변형마다 예제나 실제 작업 공간의 결과가 바뀌는지 본다. 모두 바뀌었다 |
 | 쓰이지 않는 원소 | `write-means`에 `unused_means`를 넣고 같은 테스트 | `rules.source.toss-order.write-means[16] removed`를 보고하며 실패 |
-| 오탈자 키 | `arch_check_cases::unknown_rule_keys_are_rejected` | 모르는 키는 규칙 파일 해석 오류 |
+| 오탈자 키 | `arch_check_cases_tests::unknown_rule_keys_are_rejected` | 모르는 키는 규칙 파일 해석 오류 |
 | 외부 crate 예제의 출처 | `cargo metadata --config source.crates-io.replace-with=…` | `harness/arch-check/vendor/`를 디렉터리 소스로 바꿔 끼우면 예제의 외부 crate가 레지스트리 출처(`registry+https://github.com/rust-lang/crates.io-index`)로 보인다 |
 
 ## 결정
