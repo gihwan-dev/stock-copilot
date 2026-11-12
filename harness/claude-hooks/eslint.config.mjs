@@ -24,7 +24,7 @@ export default [
     plugins: { local },
     rules: {
       "local/no-comments": "error",
-      [RESTRICTED]: [...restricted, "local/no-comments"],
+      [RESTRICTED]: [...new Set([...restricted, "local/no-comments"])],
     },
   },
 ];
