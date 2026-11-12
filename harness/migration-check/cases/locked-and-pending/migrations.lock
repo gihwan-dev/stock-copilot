@@ -1,0 +1,9 @@
+[[migration]]
+number = 1
+file = "0001_create_holdings.sql"
+sha256 = "43ba0abd93235b3a44877105ff4cec355572ce678dda18624a6b3e252c046efc"
+
+[[migration]]
+number = 2
+file = "0002_create_lots.sql"
+sha256 = "712185b670b24f54c8a8d4a8644846853f9bd10471c4f1e5c5c811b1b86c33fe"

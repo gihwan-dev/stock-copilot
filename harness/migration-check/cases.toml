@@ -1,0 +1,87 @@
+[[case]]
+name = "empty-workspace"
+expect = []
+
+[[case]]
+name = "pending-without-lock-entries"
+expect = []
+
+[[case]]
+name = "locked-and-pending"
+expect = []
+
+[[case]]
+name = "modified-locked"
+expect = ["migration:modified"]
+
+[[case]]
+name = "removed-locked"
+expect = ["migration:removed"]
+
+[[case]]
+name = "renamed-locked"
+expect = ["migration:removed"]
+
+[[case]]
+name = "gap"
+expect = ["migration:gap"]
+
+[[case]]
+name = "gap-after-lock"
+expect = ["migration:gap"]
+
+[[case]]
+name = "not-starting-at-one"
+expect = ["migration:gap"]
+
+[[case]]
+name = "duplicate-number"
+expect = ["migration:duplicate-number"]
+
+[[case]]
+name = "duplicate-of-locked"
+expect = ["migration:duplicate-number"]
+
+[[case]]
+name = "bad-name"
+expect = ["migration:name"]
+
+[[case]]
+name = "empty-file"
+expect = ["migration:empty"]
+
+[[case]]
+name = "lock-missing"
+expect = ["migration:lock-format"]
+
+[[case]]
+name = "lock-unparsable"
+expect = ["migration:lock-format"]
+
+[[case]]
+name = "lock-unknown-key"
+expect = ["migration:lock-format"]
+
+[[case]]
+name = "lock-bad-hash"
+expect = ["migration:lock-format"]
+
+[[case]]
+name = "lock-number-mismatch"
+expect = ["migration:lock-format"]
+
+[[case]]
+name = "lock-extra-table"
+expect = ["migration:lock-format"]
+
+[[case]]
+name = "lock-duplicate"
+expect = ["migration:lock-duplicate"]
+
+[[case]]
+name = "lock-reversed"
+expect = ["migration:lock-order"]
+
+[[case]]
+name = "lock-gap"
+expect = ["migration:lock-order", "migration:gap"]
