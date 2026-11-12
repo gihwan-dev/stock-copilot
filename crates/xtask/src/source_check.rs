@@ -109,6 +109,11 @@ pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) ->
                 .filter(|(_, rule)| {
                     generated_exempt(attributes, rule, allowlists) == Exemption::Checked
                 })
+                .filter(|(_, rule)| {
+                    allowlists
+                        .clock_names(path)
+                        .is_none_or(|allowed| !allowed.contains(&rule.to_string()))
+                })
                 .map(|(line, rule)| Finding::at_line(path, line, rule)),
         ),
         Err(_) => findings.push(Finding::whole_file(path, Rule::Unparsable)),

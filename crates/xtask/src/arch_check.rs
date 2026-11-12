@@ -166,7 +166,7 @@ pub(crate) fn command(manifest: &Path) -> ExitCode {
 pub(crate) fn usage() -> ExitCode {
     match writeln!(
         io::stderr().lock(),
-        "사용법: 표준 입력 첫 줄에 명령 이름(arch-check, source-check)을 준다"
+        "사용법: xtask arch-check | xtask source-check"
     ) {
         Ok(()) | Err(_) => ExitCode::FAILURE,
     }

@@ -6,6 +6,11 @@ reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 cra
 path = "apps/desktop/src-tauri/src/main.rs"
 reason = "조립 지점. 실제 어댑터를 만들 때 시계와 환경 값을 읽는다 (harness.md 3.1)"
 
+[[clock-environment]]
+path = "crates/xtask/src/main.rs"
+names = ["test-awareness:env::args"]
+reason = "xtask 자신의 조립 지점. 하네스 명령 이름을 명령줄 인자로 받는다. 시각과 다른 환경 값 읽기는 이 파일에서도 실패한다"
+
 [[build-script]]
 path = "apps/desktop/src-tauri/build.rs"
 reason = "Tauri 앱 ACL 생성. 명령 목록은 생성 파일에서 읽는다 (harness.md 3.2)"

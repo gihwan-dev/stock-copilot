@@ -51,10 +51,10 @@ deny:
     cargo deny --locked --offline check
 
 arch-check:
-    printf 'arch-check\n' | cargo run --locked --quiet --package xtask
+    cargo run --locked --quiet --package xtask -- arch-check
 
 source-check:
-    printf 'source-check\n' | cargo run --locked --quiet --package xtask
+    cargo run --locked --quiet --package xtask -- source-check
 
 advisory-db-fetch:
     cargo deny --locked fetch db

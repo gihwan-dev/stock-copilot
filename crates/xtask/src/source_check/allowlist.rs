@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -16,6 +16,7 @@ pub(crate) enum Membership {
 pub(crate) struct Allowlists {
     generated: BTreeSet<String>,
     clock_environment: BTreeSet<String>,
+    clock_names: BTreeMap<String, BTreeSet<String>>,
     build_scripts: BTreeSet<String>,
     generated_attributes: BTreeSet<String>,
 }
@@ -74,6 +75,39 @@ fn listed_names(table: &toml::Table, key: &str) -> Result<BTreeSet<String>, Chec
         .collect()
 }
 
+fn named_paths(
+    table: &toml::Table,
+    key: &str,
+) -> Result<BTreeMap<String, BTreeSet<String>>, CheckFailure> {
+    let entries = table
+        .get(key)
+        .and_then(toml::Value::as_array)
+        .map_or(&[][..], Vec::as_slice);
+    let mut named = BTreeMap::new();
+    for entry in entries {
+        let Some(listed) = entry.get("names") else {
+            continue;
+        };
+        let rule_names: Option<BTreeSet<String>> = listed.as_array().and_then(|items| {
+            items
+                .iter()
+                .map(|item| item.as_str().map(String::from))
+                .collect()
+        });
+        match (entry.get("path").and_then(toml::Value::as_str), rule_names) {
+            (Some(path), Some(set)) if !set.is_empty() => {
+                named.insert(String::from(path), set);
+            }
+            (Some(_) | None, Some(_) | None) => {
+                return Err(CheckFailure::Allowlist(format!(
+                    "{ALLOWLIST_FILE}: [[{key}]] names는 비어 있지 않은 규칙 이름 목록이어야 한다"
+                )));
+            }
+        }
+    }
+    Ok(named)
+}
+
 impl Allowlists {
     pub(crate) fn load(root: &Path) -> Result<Self, CheckFailure> {
         let path = root.join(ALLOWLIST_FILE);
@@ -85,6 +119,7 @@ impl Allowlists {
         Ok(Self {
             generated: listed_paths(root, &table, "generated")?,
             clock_environment: listed_paths(root, &table, "clock-environment")?,
+            clock_names: named_paths(&table, "clock-environment")?,
             build_scripts: listed_paths(root, &table, "build-script")?,
             generated_attributes: match table.get("generated-attribute") {
                 Some(_) => listed_names(&table, "generated-attribute")?,
@@ -104,8 +139,12 @@ impl Allowlists {
         }
     }
 
+    pub(crate) fn clock_names(&self, path: &str) -> Option<&BTreeSet<String>> {
+        self.clock_names.get(path)
+    }
+
     pub(crate) fn clock_environment(&self, path: &str) -> Membership {
-        if self.clock_environment.contains(path) {
+        if self.clock_environment.contains(path) && !self.clock_names.contains_key(path) {
             Membership::Listed
         } else {
             Membership::Unlisted

@@ -593,6 +593,26 @@ example = "expect-escaped-newline-reason.rs"
 path = "crates/sample/src/lib.rs"
 expect = ["expect:no-reason"]
 
+[[source]]
+example = "clean-xtask-main-args.rs"
+path = "crates/xtask/src/main.rs"
+expect = []
+
+[[source]]
+example = "xtask-main-env-var.rs"
+path = "crates/xtask/src/main.rs"
+expect = ["clock-env:var"]
+
+[[source]]
+example = "xtask-main-clock.rs"
+path = "crates/xtask/src/main.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clean-xtask-main-args.rs"
+path = "crates/sample/src/main.rs"
+expect = ["test-awareness:env::args"]
+
 [[workspace]]
 name = "clean"
 expect = []

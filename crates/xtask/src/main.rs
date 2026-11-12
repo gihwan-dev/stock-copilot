@@ -1,4 +1,3 @@
-use std::io;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -6,12 +5,7 @@ mod arch_check;
 mod source_check;
 
 fn main() -> ExitCode {
-    let mut line = String::new();
-    let read = io::stdin().read_line(&mut line);
-    let arguments: Vec<String> = match read {
-        Ok(_) => line.split_whitespace().map(String::from).collect(),
-        Err(_) => Vec::new(),
-    };
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
     match arguments.as_slice() {
         [command] if command == "arch-check" => arch_check::command(Path::new("Cargo.toml")),
         [command] if command == "source-check" => source_check::command(),

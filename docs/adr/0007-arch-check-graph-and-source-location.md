@@ -48,7 +48,7 @@ architecture.md 3.2는 작업 공간 crate 사이의 간선, 개발 의존, 직�
 | `tossinvest.com`(대소문자 무시)은 패키지 폴더의 모든 파일(바이트)에서 찾는다. `apps/desktop/src-tauri/src/main.rs`와 `toss-smoke`만 허용한다 | 녹화 자료나 설정 파일에 주소가 들어가도 잡힌다 | `.rs` 문자열 리터럴만 | harness.md 6.2 |
 | 예제는 `harness/arch-check/cases/<이름>/`의 작은 작업 공간, 기대값은 `cases.toml`, 외부 crate 대역은 `vendor/`(디렉터리 소스로 끼워 레지스트리 출처가 되게 한다), 저장소 밖 경로 crate는 `outside/`에 둔다. 테스트는 이것을 `target/harness/` 아래로 복사해 실제 규칙 파일로 검사한다. 표 원소 변형 테스트는 실제 작업 공간도 기대값 0건인 예제로 함께 본다 | 표 원소마다 그것이 없으면 결과가 바뀌는 예제가 있어야 한다. 예외 행은 실제 작업 공간이 덮는다 | 경로 crate 대역(`path-package` 규칙과 부딪힌다) | harness.md 6.8, ADR 0005 |
 | 규칙 이름: `unknown-crate`, `path-package`, `allowed-edge`, `dev-edge`, `direct-dependent`, `transitive-dependency`, `product-bin-graph`, `external-location`, `external-allowlist`, `external-feature`, `reexport`, `user-presence-impl`, `user-presence-alias`, `user-presence-reexport`, `toss-order-write`, `toss-host`, `http-write-means`, `http-write-export`, `http-socket-means`, `process-spawn`, `source-parse` | 예제의 기대값을 규칙 이름과 대상으로 적는다 | - | harness.md 6.8 |
-| `just check`는 clippy와 deny 뒤에 `just arch-check`를 돈다. xtask는 명령 이름을 표준 입력 첫 줄로 받는다(`printf 'arch-check\n' \| cargo run -p xtask`). 위반은 규칙 이름과 대상을 표준 오류에 쓰고 종료 코드 1 | `print!`·`exit`가 금지라서 `writeln!(stderr)`와 `ExitCode`를 쓴다. `env::args`는 테스트 인식 검사(ADR 0008)가 허용 목록 밖에서 막고, 그 목록은 조립 지점뿐이다 | 테스트로만 실행, xtask `main.rs`를 허용 목록에 넣기 | harness.md 1.1, 2장 |
+| `just check`는 clippy와 deny 뒤에 `just arch-check`를 돈다. 위반은 규칙 이름과 대상을 표준 오류에 쓰고 종료 코드 1 | `print!`·`exit`가 금지라서 `writeln!(stderr)`와 `ExitCode`를 쓴다. | 테스트로만 실행 | harness.md 1.1, 2장 |
 
 ## 문서의 모호한 점과 고른 해석 (가장 엄격한 쪽)
 

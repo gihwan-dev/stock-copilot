@@ -45,13 +45,13 @@ harness.md 2장과 3.2는 주석, 금지 속성·매크로, `domain`의 `f32`/`f
 | `cargo metadata`의 모든 target `src_path`(`..`을 글자로 정리한 뒤)가 그 멤버 폴더 밖이면 실패한다(`file:target-outside-member`) | `[lib]`·`[[bin]]` 등의 `path`로 검사하지 않는 폴더의 파일을 컴파일할 수 있다 | - | 리뷰 |
 | `build.rs`는 `cargo metadata`의 `custom-build` 대상(`package.build`로 이름을 바꾼 것 포함)과 멤버 폴더 안의 `build.rs` 파일 둘 다로 찾는다 | 이름을 바꾼 빌드 스크립트도 막는다 | 파일 이름만 | - |
 
-| 테스트 인식 금지(harness.md 2장 "구현 코드가 테스트를 알아보는 분기 금지"): `thread::current`, `env::args`, `env::args_os`, `env::current_exe`, `panic::Location`, 매크로 `module_path!`·`file!`·`line!`·`column!`, `use` 안의 같은 경로와 `thread`·`panic` 모듈 별칭(`as`, `self as`)·글롭이 `test-awareness:<이름>`으로 실패한다. 허용 목록은 시각·환경 변수 목록(조립 지점 `apps/desktop/src-tauri/src/main.rs`)과 같다. `env::{self as e}`는 `clock-env:env`로 실패한다 | `std::thread::current().name()`으로 테스트 스레드 이름을 읽으면 테스트에서만 다르게 동작할 수 있다 | 검사 없음 | harness.md 2장, 리뷰 |
+| 테스트 인식 금지(harness.md 2장 "구현 코드가 테스트를 알아보는 분기 금지"): `thread::current`, `env::args`, `env::args_os`, `env::current_exe`, `panic::Location`, 매크로 `module_path!`·`file!`·`line!`·`column!`, `use` 안의 같은 경로와 `thread`·`panic` 모듈 별칭(`as`, `self as`)·글롭이 `test-awareness:<이름>`으로 실패한다. 허용 목록은 시각·환경 변수 목록과 같다(조립 지점 `apps/desktop/src-tauri/src/main.rs` 전부, xtask `main.rs`는 `env::args`만). `env::{self as e}`는 `clock-env:env`로 실패한다 | `std::thread::current().name()`으로 테스트 스레드 이름을 읽으면 테스트에서만 다르게 동작할 수 있다 | 검사 없음 | harness.md 2장, 리뷰 |
 | `#[cfg(test)]` 모듈(인라인 `mod`, 그리고 이름이 `tests`이거나 `_tests`로 끝나는 모듈 파일) 안에서, 그 모듈 안에 정의되지 않은 타입(`super::…`, `crate::…`, 가져온 이름)에 대한 고유 `impl`과, 밖의 트레이트를 밖의 타입에 구현하는 `impl`이 `cfg:test-module-impl`로 실패한다. 안에서 정의한 타입의 `impl`, 밖의 트레이트를 안의 타입에 구현하는 것, 안의 트레이트를 밖의 타입에 구현하는 것은 통과한다 | 테스트 빌드에만 있는 고유 메서드가 트레이트 메서드를 가려 테스트에서만 다르게 동작한다 | - | harness.md 2장, 리뷰 |
 | harness.md 3.2 표의 속성·매크로·매니페스트·파일 이름과 `domain` 금지 식별자, 2장 테스트 인식 목록을 `harness/source-checks/harness-rules.toml`에 옮겨 두고, 코드 정의에서 만든 규칙 목록이 그것을 모두 포함하는지 `code_rules_cover_the_documented_harness_table`이 확인한다(코드가 더 많은 것은 허용) | 코드 정의만 기준으로 삼으면 문서의 항목이 코드에서 빠져도 모른다 | - | harness.md 3.2, 6.8 |
 
 ## 결과
 
-- xtask의 명령 분기가 `env::args`를 쓸 수 없게 되어, 명령 이름을 표준 입력 첫 줄로 받는다. `justfile`의 `arch-check`·`source-check` 레시피는 `printf '<명령>\n' | cargo run -p xtask`로 바뀌었다. 같은 `main.rs`에 명령을 더하는 다른 작업도 이 방식을 따라야 한다.
+- 시각·환경 변수 허용 목록(`[[clock-environment]]`) 항목은 `names`로 허용할 규칙 이름을 좁힐 수 있다. `names`가 없으면 그 파일의 시각·환경 변수·테스트 인식 검사 전부를 허용한다(`apps/desktop/src-tauri/src/main.rs`). xtask 자신의 조립 지점 `crates/xtask/src/main.rs`는 `names = ["test-awareness:env::args"]`로 명령줄 인자만 읽고, `env::var`·`SystemTime::now`는 그 파일에서도 실패한다(`clean-xtask-main-args`, `xtask-main-env-var`, `xtask-main-clock`).
 - `env-grouped-import.rs` 예제(`use std::env::{args, var_os}`)의 기대값에 `test-awareness:env::args`가 더해졌다. 판정을 더한 것이고 뺀 것은 없다.
 
 - `crates/xtask/src/workspace_layout.rs`의 `concat!(env!("CARGO_MANIFEST_DIR"), …)` 3곳을 `harness_workspace::repository_root()`로 바꿨다. 테스트의 판정은 같다. 기존 테스트 파일 변경이므로 사용자 확인이 필요하다.
