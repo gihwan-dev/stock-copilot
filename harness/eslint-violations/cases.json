@@ -2188,6 +2188,10 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/features/raw/local-value-gap.ts": {
+      "row": "원시 타입",
+      "expect": "KNOWN_GAP"
+    },
     "src/features/raw/mapped.ts": {
       "row": "원시 타입",
       "expect": [
@@ -2511,11 +2515,19 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/shared/ds/text/attribute-gap.tsx": {
+      "row": "원시 타입",
+      "expect": "KNOWN_GAP"
+    },
     "src/shared/ds/text/label.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
       ]
+    },
+    "src/shared/ds/text/library-props-gap.tsx": {
+      "row": "원시 타입",
+      "expect": "KNOWN_GAP"
     },
     "src/shared/ipc/bindings.ts": {
       "row": "원시 타입",

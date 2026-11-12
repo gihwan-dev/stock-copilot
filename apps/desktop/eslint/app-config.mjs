@@ -121,7 +121,13 @@ export const appConfig = ({
   return warningsAsErrors(
     defineConfig(
       {
-        ignores: ["dist/**", "src-tauri/**", "e2e-app/**", "node_modules/**"],
+        ignores: [
+          "dist/**",
+          "src-tauri/**",
+          "e2e-app/**",
+          "node_modules/**",
+          "!src/**/node_modules/",
+        ],
       },
       {
         linterOptions: {

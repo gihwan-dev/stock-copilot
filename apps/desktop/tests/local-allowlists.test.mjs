@@ -223,3 +223,13 @@ test("files outside .ts and .tsx under src get the extension check and no inline
     assert.equal(config.linterOptions.noInlineConfig, true, file);
   }
 });
+
+test("a node_modules folder inside src is still linted", async () => {
+  const { ESLint } = createRequire(join(desktopRoot, "package.json"))("eslint");
+  const app = new ESLint({ cwd: desktopRoot, cache: false });
+  for (const file of [
+    "src/features/node_modules/evil.ts",
+    "src/shared/platform/node_modules/x/index.ts",
+  ])
+    assert.equal(await app.isPathIgnored(join(desktopRoot, file)), false, file);
+});
