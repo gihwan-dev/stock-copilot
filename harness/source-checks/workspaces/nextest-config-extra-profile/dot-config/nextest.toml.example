@@ -1,0 +1,17 @@
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[profile.ci]
+retries = 3

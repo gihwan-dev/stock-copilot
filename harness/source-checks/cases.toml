@@ -818,3 +818,23 @@ expect = ["file:cargo-config"]
 example = "attribute-mutants-skip-cfg-attr.rs"
 path = "crates/domain/src/lib.rs"
 expect = ["attribute:cfg_attr"]
+
+[[workspace]]
+name = "cargo-config-root-runner"
+overlay = "cargo-config-root-runner"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "nextest-config-allowed"
+overlay = "nextest-config-allowed"
+expect = []
+
+[[workspace]]
+name = "nextest-config-extra-profile"
+overlay = "nextest-config-extra-profile"
+expect = ["file:nextest-config"]
+
+[[workspace]]
+name = "nextest-config-without-wrapper"
+overlay = "nextest-config-without-wrapper"
+expect = ["file:nextest-config"]

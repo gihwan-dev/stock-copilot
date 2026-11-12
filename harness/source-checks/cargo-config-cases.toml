@@ -1,254 +1,397 @@
 [[case]]
-name = "config-allowed"
-file = "config.toml"
+name = "nextest-allowed"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
 expect = []
 
 [[case]]
-name = "config-allowed-dotted"
-file = "config.toml"
+name = "nextest-other-profile"
+file = ".config/nextest.toml"
 text = '''
-target.aarch64-apple-darwin.runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[profile.ci]
+fail-fast = false
 '''
-expect = []
+expect = ["nextest-config:key:profile.ci"]
 
 [[case]]
-name = "config-env"
-file = "config.toml"
+name = "nextest-overrides"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[env]
-CLIPPY_CONF_DIR = "empty"
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[[profile.default.overrides]]
+filter = "test(network)"
+retries = 3
 '''
-expect = ["cargo-config:key:env"]
+expect = ["nextest-config:key:profile.default.overrides"]
 
 [[case]]
-name = "config-alias"
-file = "config.toml"
+name = "nextest-default-filter"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[alias]
-clippy = "check"
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[profile.default]
+default-filter = "not test(network)"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:alias"]
+expect = ["nextest-config:key:profile.default.default-filter"]
 
 [[case]]
-name = "config-build-rustflags"
-file = "config.toml"
+name = "nextest-retries"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[build]
-rustflags = ["--cap-lints=allow"]
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[profile.default]
+retries = 2
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:build"]
+expect = ["nextest-config:key:profile.default.retries"]
 
 [[case]]
-name = "config-build-rustc-wrapper"
-file = "config.toml"
+name = "nextest-script-filter-narrowed"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[build]
-rustc-wrapper = "wrapper.sh"
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "not test(network)"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:build"]
+expect = ["nextest-config:value:profile.default.scripts"]
 
 [[case]]
-name = "config-target-rustflags"
-file = "config.toml"
+name = "nextest-platform-removed"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
-rustflags = ["--cap-lints=allow"]
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:target.aarch64-apple-darwin.rustflags"]
+expect = ["nextest-config:value:profile.default.scripts"]
 
 [[case]]
-name = "config-target-linker"
-file = "config.toml"
+name = "nextest-second-script-rule"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
-linker = "wrapper.sh"
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[[profile.default.scripts]]
+filter = "test(a)"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:target.aarch64-apple-darwin.linker"]
+expect = ["nextest-config:value:profile.default.scripts"]
 
 [[case]]
-name = "config-unstable"
-file = "config.toml"
+name = "nextest-profile-changed"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[unstable]
-build-std = ["core"]
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:unstable"]
+expect = ["nextest-config:value:scripts.wrapper.network-sandbox.command"]
 
 [[case]]
-name = "config-include"
-file = "config.toml"
+name = "nextest-dns-allowed"
+file = ".config/nextest.toml"
 text = '''
-include = ["other.toml"]
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:include"]
+expect = ["nextest-config:value:scripts.wrapper.network-sandbox.command"]
 
 [[case]]
-name = "config-net"
-file = "config.toml"
+name = "nextest-sandbox-from-path"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[net]
-offline = false
+[scripts.wrapper.network-sandbox]
+command = [
+    "sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:net"]
+expect = ["nextest-config:value:scripts.wrapper.network-sandbox.command"]
 
 [[case]]
-name = "config-source-replacement"
-file = "config.toml"
+name = "nextest-runner-within"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[source.crates-io]
-replace-with = "vendored"
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "within-wrapper"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:source"]
+expect = ["nextest-config:value:scripts.wrapper.network-sandbox.target-runner"]
 
 [[case]]
-name = "config-profile"
-file = "config.toml"
+name = "nextest-runner-unset"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[profile.dev]
-debug-assertions = false
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:key:profile"]
+expect = ["nextest-config:missing:scripts.wrapper.network-sandbox.target-runner"]
 
 [[case]]
-name = "config-other-triple"
-file = "config.toml"
+name = "nextest-setup-script"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
 
-[target.x86_64-apple-darwin]
-runner = "env"
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[scripts.setup.prepare]
+command = "true"
 '''
-expect = ["cargo-config:key:target.x86_64-apple-darwin"]
+expect = ["nextest-config:key:scripts.setup"]
 
 [[case]]
-name = "config-cfg-target"
-file = "config.toml"
+name = "nextest-experimental-missing"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
 
-[target.'cfg(unix)']
-runner = "env"
-'''
-expect = ["cargo-config:key:target.cfg(unix)"]
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
 
-[[case]]
-name = "config-runner-without-sandbox"
-file = "config.toml"
-text = '''
-[target.aarch64-apple-darwin]
-runner = ["env"]
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
 '''
-expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
-
-[[case]]
-name = "config-runner-network-allowed"
-file = "config.toml"
-text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)"]
-'''
-expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+expect = ["nextest-config:missing:experimental"]
 
 [[case]]
-name = "config-runner-from-path"
-file = "config.toml"
+name = "nextest-store"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[store]
+dir = "elsewhere"
 '''
-expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+expect = ["nextest-config:key:store"]
 
 [[case]]
-name = "config-runner-extra-argument"
-file = "config.toml"
+name = "nextest-test-groups"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))", "/usr/bin/env"]
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/usr/bin/sandbox-exec",
+    "-p",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+
+[test-groups.serial]
+max-threads = 1
 '''
-expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+expect = ["nextest-config:key:test-groups"]
 
 [[case]]
-name = "config-runner-string"
-file = "config.toml"
+name = "nextest-empty"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-runner = "/usr/bin/sandbox-exec"
 '''
-expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+expect = ["nextest-config:missing:experimental", "nextest-config:missing:profile", "nextest-config:missing:scripts"]
 
 [[case]]
-name = "config-runner-missing"
-file = "config.toml"
+name = "nextest-unparsable"
+file = ".config/nextest.toml"
 text = '''
-[target.aarch64-apple-darwin]
-linker = "cc"
+[scripts
 '''
-expect = ["cargo-config:key:target.aarch64-apple-darwin.linker", "cargo-config:missing:target.aarch64-apple-darwin.runner"]
-
-[[case]]
-name = "config-empty"
-file = "config.toml"
-text = '''
-'''
-expect = ["cargo-config:missing:target.aarch64-apple-darwin.runner"]
-
-[[case]]
-name = "config-target-not-table"
-file = "config.toml"
-text = '''
-target = "aarch64-apple-darwin"
-'''
-expect = ["cargo-config:value:target"]
-
-[[case]]
-name = "config-triple-not-table"
-file = "config.toml"
-text = '''
-target.aarch64-apple-darwin = "x"
-'''
-expect = ["cargo-config:value:target.aarch64-apple-darwin"]
-
-[[case]]
-name = "config-unparsable"
-file = "config.toml"
-text = '''
-[target
-'''
-expect = ["cargo-config:unparsable"]
+expect = ["nextest-config:unparsable"]
 
 [[case]]
 name = "mutants-allowed"
@@ -259,6 +402,7 @@ cap_lints = true
 examine_globs = ["crates/domain/src/**/*.rs"]
 '''
 expect = []
+
 
 [[case]]
 name = "mutants-exclude-globs"
@@ -271,6 +415,7 @@ exclude_globs = ["crates/domain/src/signal.rs"]
 '''
 expect = ["cargo-mutants:key:exclude_globs"]
 
+
 [[case]]
 name = "mutants-exclude-re"
 file = "mutants.toml"
@@ -281,6 +426,7 @@ examine_globs = ["crates/domain/src/**/*.rs"]
 exclude_re = ["validate"]
 '''
 expect = ["cargo-mutants:key:exclude_re"]
+
 
 [[case]]
 name = "mutants-examine-re"
@@ -293,6 +439,7 @@ examine_re = ["nothing"]
 '''
 expect = ["cargo-mutants:key:examine_re"]
 
+
 [[case]]
 name = "mutants-skip-calls"
 file = "mutants.toml"
@@ -303,6 +450,7 @@ examine_globs = ["crates/domain/src/**/*.rs"]
 skip_calls = ["validate"]
 '''
 expect = ["cargo-mutants:key:skip_calls"]
+
 
 [[case]]
 name = "mutants-error-values"
@@ -315,6 +463,7 @@ error_values = ["anyhow::anyhow!(\"\")"]
 '''
 expect = ["cargo-mutants:key:error_values"]
 
+
 [[case]]
 name = "mutants-additional-cargo-args"
 file = "mutants.toml"
@@ -325,6 +474,7 @@ examine_globs = ["crates/domain/src/**/*.rs"]
 additional_cargo_args = ["--cfg", "coverage"]
 '''
 expect = ["cargo-mutants:key:additional_cargo_args"]
+
 
 [[case]]
 name = "mutants-additional-test-args"
@@ -337,6 +487,7 @@ additional_cargo_test_args = ["--skip", "validate"]
 '''
 expect = ["cargo-mutants:key:additional_cargo_test_args"]
 
+
 [[case]]
 name = "mutants-timeout-multiplier"
 file = "mutants.toml"
@@ -348,6 +499,7 @@ timeout_multiplier = 0.01
 '''
 expect = ["cargo-mutants:key:timeout_multiplier"]
 
+
 [[case]]
 name = "mutants-cargo-test-tool"
 file = "mutants.toml"
@@ -357,6 +509,7 @@ cap_lints = true
 examine_globs = ["crates/domain/src/**/*.rs"]
 '''
 expect = ["cargo-mutants:value:test_tool"]
+
 
 [[case]]
 name = "mutants-cap-lints-off"
@@ -368,6 +521,7 @@ examine_globs = ["crates/domain/src/**/*.rs"]
 '''
 expect = ["cargo-mutants:value:cap_lints"]
 
+
 [[case]]
 name = "mutants-cap-lints-missing"
 file = "mutants.toml"
@@ -376,6 +530,7 @@ test_tool = "nextest"
 examine_globs = ["crates/domain/src/**/*.rs"]
 '''
 expect = ["cargo-mutants:missing:cap_lints"]
+
 
 [[case]]
 name = "mutants-test-tool-missing"
@@ -386,6 +541,7 @@ examine_globs = ["crates/domain/src/**/*.rs"]
 '''
 expect = ["cargo-mutants:missing:test_tool"]
 
+
 [[case]]
 name = "mutants-globs-missing"
 file = "mutants.toml"
@@ -394,6 +550,7 @@ test_tool = "nextest"
 cap_lints = true
 '''
 expect = ["cargo-mutants:missing:examine_globs"]
+
 
 [[case]]
 name = "mutants-globs-empty"
@@ -405,6 +562,7 @@ examine_globs = []
 '''
 expect = ["cargo-mutants:value:examine_globs"]
 
+
 [[case]]
 name = "mutants-globs-blank"
 file = "mutants.toml"
@@ -414,6 +572,7 @@ cap_lints = true
 examine_globs = [" "]
 '''
 expect = ["cargo-mutants:value:examine_globs"]
+
 
 [[case]]
 name = "mutants-unparsable"

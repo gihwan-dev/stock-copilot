@@ -4,18 +4,17 @@ use std::path::Path;
 
 use crate::harness_workspace_tests::repository_root;
 
-use super::cargo_config::{CONFIG_FILE, ConfigFile, MUTANTS_FILE, ProblemKind, config_problems};
+use super::cargo_config::{ConfigFile, MUTANTS_FILE, NEXTEST_FILE, ProblemKind, config_problems};
 
 const CASES_FILE: &str = "harness/source-checks/cargo-config-cases.toml";
 
-const DOCUMENTED_FORBIDDEN_KEYS: [&str; 7] = [
-    "env",
-    "alias",
-    "build",
-    "target.aarch64-apple-darwin.rustflags",
-    "target.aarch64-apple-darwin.linker",
-    "unstable",
-    "include",
+const DOCUMENTED_FORBIDDEN_KEYS: [&str; 6] = [
+    "profile.ci",
+    "profile.default.overrides",
+    "profile.default.default-filter",
+    "profile.default.retries",
+    "scripts.setup",
+    "test-groups",
 ];
 
 const DOCUMENTED_FORBIDDEN_MUTANTS_KEYS: [&str; 6] = [
@@ -98,7 +97,7 @@ fn kind_catalogue() -> BTreeSet<String> {
         ProblemKind::Missing(String::new()),
         ProblemKind::Value(String::new()),
     ];
-    [ConfigFile::Config, ConfigFile::Mutants]
+    [ConfigFile::Nextest, ConfigFile::Mutants]
         .into_iter()
         .flat_map(|file| {
             kinds
@@ -152,7 +151,7 @@ fn every_cargo_config_problem_kind_has_an_example() {
         .collect();
     assert_eq!(
         clean,
-        BTreeSet::from([ConfigFile::Config, ConfigFile::Mutants]),
+        BTreeSet::from([ConfigFile::Nextest, ConfigFile::Mutants]),
         "each file needs an allowed example"
     );
 }
@@ -166,7 +165,7 @@ fn documented_forbidden_cargo_keys_have_examples() {
         .collect();
     let missing: Vec<String> = DOCUMENTED_FORBIDDEN_KEYS
         .into_iter()
-        .map(|key| format!("cargo-config:key:{key}"))
+        .map(|key| format!("nextest-config:key:{key}"))
         .chain(
             DOCUMENTED_FORBIDDEN_MUTANTS_KEYS
                 .into_iter()
@@ -192,20 +191,17 @@ fn repository_cargo_settings_are_the_allowed_ones() {
                 .expect("utf-8 name")
         })
         .collect();
-    assert_eq!(
-        names,
-        BTreeSet::from([String::from(CONFIG_FILE), String::from(MUTANTS_FILE)])
-    );
-    for (name, file) in [
-        (CONFIG_FILE, ConfigFile::Config),
-        (MUTANTS_FILE, ConfigFile::Mutants),
+    assert_eq!(names, BTreeSet::from([String::from(MUTANTS_FILE)]));
+    for (path, file) in [
+        (directory.join(MUTANTS_FILE), ConfigFile::Mutants),
+        (root.join(NEXTEST_FILE), ConfigFile::Nextest),
     ] {
-        let text = fs::read_to_string(directory.join(name)).expect("read cargo setting");
+        let text = fs::read_to_string(&path).expect("read setting");
         let problems: Vec<String> = config_problems(file, &text)
             .iter()
             .map(ToString::to_string)
             .collect();
-        assert!(problems.is_empty(), "{name}: {problems:?}");
+        assert!(problems.is_empty(), "{}: {problems:?}", path.display());
     }
 }
 

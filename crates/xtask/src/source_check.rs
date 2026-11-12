@@ -22,7 +22,7 @@ use cargo_metadata::{Metadata, MetadataCommand};
 use proc_macro2::TokenStream;
 
 use allowlist::{Allowlists, Membership};
-use cargo_config::{ConfigFile, config_problems};
+use cargo_config::{ConfigFile, NEXTEST_FILE, config_problems};
 use comments::comment_lines;
 use failure::CheckFailure;
 use finding::{Finding, Rule};
@@ -189,10 +189,15 @@ fn walk(
                 kind: EntryKind::CargoDirectory,
             });
         } else if !file_type.is_dir() {
+            let kind = if relative == NEXTEST_FILE {
+                EntryKind::CargoSetting(ConfigFile::Nextest)
+            } else {
+                EntryKind::File
+            };
             entries.push(Entry {
                 relative,
                 name,
-                kind: EntryKind::File,
+                kind,
             });
         } else if !skipped.contains(&relative) {
             walk(root, &path, skipped, entries)?;
@@ -219,8 +224,10 @@ fn cargo_settings(
             EntryKind::Symlink
         } else {
             match ConfigFile::named(&name) {
-                Some(file) if !file_type.is_dir() => EntryKind::CargoSetting(file),
-                Some(_) | None => EntryKind::CargoDirectory,
+                Some(ConfigFile::Mutants) if !file_type.is_dir() => {
+                    EntryKind::CargoSetting(ConfigFile::Mutants)
+                }
+                Some(ConfigFile::Mutants | ConfigFile::Nextest) | None => EntryKind::CargoDirectory,
             }
         };
         entries.push(Entry {
@@ -303,10 +310,14 @@ fn entry_findings(
         EntryKind::CargoSetting(file) => {
             let full = root.join(path);
             let text = fs::read_to_string(&full).map_err(|error| CheckFailure::Io(full, error))?;
+            let rule = match file {
+                ConfigFile::Mutants => Rule::CargoConfig,
+                ConfigFile::Nextest => Rule::NextestConfig,
+            };
             if config_problems(file, &text).is_empty() {
                 Vec::new()
             } else {
-                vec![Finding::whole_file(path, Rule::CargoConfig)]
+                vec![Finding::whole_file(path, rule)]
             }
         }
         EntryKind::Symlink => vec![Finding::whole_file(path, Rule::Symlink)],

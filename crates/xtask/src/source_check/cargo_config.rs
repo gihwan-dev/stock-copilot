@@ -1,19 +1,15 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub(crate) const CONFIG_FILE: &str = "config.toml";
-
 pub(crate) const MUTANTS_FILE: &str = "mutants.toml";
 
-pub(crate) const RUNNER_TRIPLE: &str = "aarch64-apple-darwin";
+pub(crate) const NEXTEST_FILE: &str = ".config/nextest.toml";
 
-pub(crate) const RUNNER_KEY: &str = "runner";
+pub(crate) const SANDBOX_COMMAND: &str = "/usr/bin/sandbox-exec";
 
-pub(crate) const EXPECTED_RUNNER: [&str; 3] = [
-    "/usr/bin/sandbox-exec",
-    "-p",
-    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))",
-];
+pub(crate) const SANDBOX_PROFILE: &str = "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))";
+
+pub(crate) const SANDBOX_WRAPPER: &str = "network-sandbox";
 
 pub(crate) const MUTANTS_TEST_TOOL: (&str, &str) = ("test_tool", "nextest");
 
@@ -23,14 +19,14 @@ pub(crate) const MUTANTS_EXAMINE_GLOBS: &str = "examine_globs";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ConfigFile {
-    Config,
+    Nextest,
     Mutants,
 }
 
 impl ConfigFile {
     pub(crate) fn named(name: &str) -> Option<Self> {
         match name {
-            CONFIG_FILE => Some(Self::Config),
+            NEXTEST_FILE => Some(Self::Nextest),
             MUTANTS_FILE => Some(Self::Mutants),
             _ => None,
         }
@@ -38,7 +34,7 @@ impl ConfigFile {
 
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Self::Config => "cargo-config",
+            Self::Nextest => "nextest-config",
             Self::Mutants => "cargo-mutants",
         }
     }
@@ -74,67 +70,81 @@ fn problem(file: ConfigFile, kind: ProblemKind) -> ConfigProblem {
     ConfigProblem { file, kind }
 }
 
-fn expected_runner() -> toml::Value {
-    toml::Value::Array(
-        EXPECTED_RUNNER
+pub(crate) fn expected_nextest() -> toml::Table {
+    let command = toml::Value::Array(
+        [SANDBOX_COMMAND, "-p", SANDBOX_PROFILE]
             .into_iter()
             .map(|part| toml::Value::String(String::from(part)))
             .collect(),
-    )
+    );
+    let mut wrapper = toml::Table::new();
+    wrapper.insert(String::from("command"), command);
+    wrapper.insert(String::from("target-runner"), toml::Value::from("ignore"));
+    let mut wrappers = toml::Table::new();
+    wrappers.insert(String::from(SANDBOX_WRAPPER), toml::Value::Table(wrapper));
+    let mut scripts = toml::Table::new();
+    scripts.insert(String::from("wrapper"), toml::Value::Table(wrappers));
+    let mut rule = toml::Table::new();
+    rule.insert(String::from("filter"), toml::Value::from("all()"));
+    rule.insert(
+        String::from("platform"),
+        toml::Value::from("cfg(target_os = \"macos\")"),
+    );
+    rule.insert(
+        String::from("run-wrapper"),
+        toml::Value::from(SANDBOX_WRAPPER),
+    );
+    let mut default = toml::Table::new();
+    default.insert(
+        String::from("scripts"),
+        toml::Value::Array(vec![toml::Value::Table(rule)]),
+    );
+    let mut profiles = toml::Table::new();
+    profiles.insert(String::from("default"), toml::Value::Table(default));
+    let mut table = toml::Table::new();
+    table.insert(
+        String::from("experimental"),
+        toml::Value::Array(vec![toml::Value::from("wrapper-scripts")]),
+    );
+    table.insert(String::from("scripts"), toml::Value::Table(scripts));
+    table.insert(String::from("profile"), toml::Value::Table(profiles));
+    table
 }
 
-fn runner_problems(triple: &toml::Value, path: &str) -> Vec<ConfigProblem> {
-    let file = ConfigFile::Config;
-    let Some(table) = triple.as_table() else {
-        return vec![problem(file, ProblemKind::Value(String::from(path)))];
-    };
-    let mut problems: Vec<ConfigProblem> = table
-        .keys()
-        .filter(|key| key.as_str() != RUNNER_KEY)
-        .map(|key| problem(file, ProblemKind::Key(format!("{path}.{key}"))))
-        .collect();
-    let runner_path = format!("{path}.{RUNNER_KEY}");
-    match table.get(RUNNER_KEY) {
-        None => problems.push(problem(file, ProblemKind::Missing(runner_path))),
-        Some(value) if *value != expected_runner() => {
-            problems.push(problem(file, ProblemKind::Value(runner_path)));
-        }
-        Some(_) => {}
+fn joined_path(prefix: &str, key: &str) -> String {
+    if prefix.is_empty() {
+        String::from(key)
+    } else {
+        format!("{prefix}.{key}")
     }
-    problems
 }
 
-fn config_table_problems(table: &toml::Table) -> Vec<ConfigProblem> {
-    let file = ConfigFile::Config;
-    let triple_path = format!("target.{RUNNER_TRIPLE}");
-    let mut problems: Vec<ConfigProblem> = table
-        .keys()
-        .filter(|key| key.as_str() != "target")
-        .map(|key| problem(file, ProblemKind::Key(key.clone())))
-        .collect();
-    match table.get("target").map(toml::Value::as_table) {
-        None => problems.push(problem(
-            file,
-            ProblemKind::Missing(format!("{triple_path}.{RUNNER_KEY}")),
-        )),
-        Some(None) => problems.push(problem(file, ProblemKind::Value(String::from("target")))),
-        Some(Some(targets)) => {
-            problems.extend(
-                targets
-                    .keys()
-                    .filter(|key| key.as_str() != RUNNER_TRIPLE)
-                    .map(|key| problem(file, ProblemKind::Key(format!("target.{key}")))),
-            );
-            match targets.get(RUNNER_TRIPLE) {
-                None => problems.push(problem(
-                    file,
-                    ProblemKind::Missing(format!("{triple_path}.{RUNNER_KEY}")),
-                )),
-                Some(triple) => problems.extend(runner_problems(triple, &triple_path)),
+fn table_differences(
+    actual: &toml::Table,
+    expected: &toml::Table,
+    prefix: &str,
+    problems: &mut Vec<ConfigProblem>,
+) {
+    let file = ConfigFile::Nextest;
+    for (key, value) in actual {
+        let path = joined_path(prefix, key);
+        match (value, expected.get(key)) {
+            (_, None) => problems.push(problem(file, ProblemKind::Key(path))),
+            (toml::Value::Table(inner), Some(toml::Value::Table(wanted))) => {
+                table_differences(inner, wanted, &path, problems);
             }
+            (_, Some(wanted)) if wanted != value => {
+                problems.push(problem(file, ProblemKind::Value(path)));
+            }
+            (_, Some(_)) => {}
         }
     }
-    problems
+    for key in expected.keys().filter(|key| !actual.contains_key(*key)) {
+        problems.push(problem(
+            file,
+            ProblemKind::Missing(joined_path(prefix, key)),
+        ));
+    }
 }
 
 fn string_list(value: &toml::Value) -> Option<Vec<&str>> {
@@ -179,8 +189,18 @@ pub(crate) fn config_problems(file: ConfigFile, text: &str) -> BTreeSet<ConfigPr
         return BTreeSet::from([problem(file, ProblemKind::Unparsable)]);
     };
     let problems = match file {
-        ConfigFile::Config => config_table_problems(&table),
+        ConfigFile::Nextest => {
+            let mut found = Vec::new();
+            table_differences(&table, &expected_nextest(), "", &mut found);
+            found
+        }
         ConfigFile::Mutants => mutants_table_problems(&table),
     };
     problems.into_iter().collect()
+}
+
+pub(crate) fn examine_globs(text: &str) -> Option<Vec<String>> {
+    let table = text.parse::<toml::Table>().ok()?;
+    string_list(table.get(MUTANTS_EXAMINE_GLOBS)?)
+        .map(|items| items.into_iter().map(String::from).collect())
 }

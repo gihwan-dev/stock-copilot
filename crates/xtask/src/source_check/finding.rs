@@ -29,6 +29,7 @@ pub(crate) enum Rule {
     ProcMacro,
     NestedConfig(String),
     CargoConfig,
+    NextestConfig,
     Symlink,
     TargetOutsideMember,
 }
@@ -58,6 +59,7 @@ impl fmt::Display for Rule {
             Self::ProcMacro => f.write_str("file:proc-macro"),
             Self::NestedConfig(name) => write!(f, "file:nested-config:{name}"),
             Self::CargoConfig => f.write_str("file:cargo-config"),
+            Self::NextestConfig => f.write_str("file:nextest-config"),
             Self::Symlink => f.write_str("file:symlink"),
             Self::TargetOutsideMember => f.write_str("file:target-outside-member"),
         }
