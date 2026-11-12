@@ -13,8 +13,16 @@ pub(crate) const NON_MONEY_RESULT_FUNCTIONS: [&str; 3] = ["length", "typeof", "c
 
 pub(crate) const ORDER_BY_END: [&str; 1] = ["limit"];
 
-pub(crate) const ASSEMBLY_MACROS: [&str; 5] =
-    ["format", "format_args", "concat", "write", "writeln"];
+pub(crate) const ASSEMBLY_MACROS: [&str; 8] = [
+    "format",
+    "format_args",
+    "concat",
+    "write",
+    "writeln",
+    "include_str",
+    "include_bytes",
+    "stringify",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Follow {
@@ -109,8 +117,25 @@ fn follows(follow: Follow, second: &str, lowered: &str) -> bool {
     }
 }
 
+fn strip_leading(text: &str) -> &str {
+    let mut rest = text;
+    loop {
+        let trimmed = rest.trim_start();
+        let next = if let Some(inside) = trimmed.strip_prefix("/*") {
+            inside.split_once("*/").map_or("", |(_, after)| after)
+        } else if let Some(inside) = trimmed.strip_prefix("--") {
+            inside.split_once('\n').map_or("", |(_, after)| after)
+        } else if let Some(inside) = trimmed.strip_prefix('(') {
+            inside
+        } else {
+            return trimmed;
+        };
+        rest = next;
+    }
+}
+
 pub(crate) fn recognize(text: &str) -> Recognition {
-    let lowered = text
+    let lowered = strip_leading(text)
         .split_whitespace()
         .collect::<Vec<&str>>()
         .join(" ")

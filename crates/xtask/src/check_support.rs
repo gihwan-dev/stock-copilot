@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use cargo_metadata::MetadataCommand;
-use proc_macro2::Literal;
+use proc_macro2::{Literal, TokenStream, TokenTree};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Location {
@@ -95,55 +95,15 @@ fn print_outcome<R: fmt::Display>(
     }
 }
 
-fn unescape(body: &str) -> String {
-    let mut text = String::new();
-    let mut rest = body.chars().peekable();
-    while let Some(next) = rest.next() {
-        if next != '\\' {
-            text.push(next);
-            continue;
-        }
-        match rest.next() {
-            Some('n') => text.push('\n'),
-            Some('r') => text.push('\r'),
-            Some('t') => text.push('\t'),
-            Some('0') => text.push('\0'),
-            Some('\n') => {
-                while rest
-                    .next_if(|candidate| candidate.is_whitespace())
-                    .is_some()
-                {}
-            }
-            Some(other) => text.push(other),
-            None => {}
-        }
-    }
-    text
-}
-
-fn raw_body(rest: &str) -> Option<String> {
-    rest.trim_start_matches('#')
-        .strip_prefix('"')
-        .map(|body| body.trim_end_matches('#'))
-        .and_then(|body| body.strip_suffix('"'))
-        .map(String::from)
-}
-
 pub(crate) fn string_value(literal: &Literal) -> Option<String> {
-    let source = literal.to_string();
-    let unprefixed = ["b", "c"]
-        .iter()
-        .find_map(|prefix| {
-            source
-                .strip_prefix(prefix)
-                .filter(|rest| rest.starts_with('"') || rest.starts_with('r'))
-        })
-        .unwrap_or(source.as_str());
-    if let Some(rest) = unprefixed.strip_prefix('r') {
-        return raw_body(rest);
+    let stream = TokenStream::from(TokenTree::Literal(literal.clone()));
+    if let Ok(text) = syn::parse2::<syn::LitStr>(stream.clone()) {
+        return Some(text.value());
     }
-    unprefixed
-        .strip_prefix('"')
-        .and_then(|rest| rest.strip_suffix('"'))
-        .map(unescape)
+    if let Ok(bytes) = syn::parse2::<syn::LitByteStr>(stream.clone()) {
+        return Some(String::from_utf8_lossy(&bytes.value()).into_owned());
+    }
+    syn::parse2::<syn::LitCStr>(stream)
+        .ok()
+        .map(|text| text.value().to_string_lossy().into_owned())
 }

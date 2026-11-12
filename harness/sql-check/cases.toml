@@ -479,3 +479,81 @@ kind = "text"
 [[recognition]]
 text = "보유 종목"
 kind = "text"
+
+[[source]]
+example = "store-hex-escape.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql-money:order-by"]
+
+[[source]]
+example = "store-unicode-escape.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql-money:order-by"]
+
+[[source]]
+example = "outside-store-hex-escape.rs"
+path = "crates/application/src/report.rs"
+expect = ["sql:outside-store"]
+
+[[source]]
+example = "outside-store-unicode-escape.rs"
+path = "crates/application/src/report.rs"
+expect = ["sql:outside-store"]
+
+[[source]]
+example = "store-raw-byte-c-strings.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql-money:function:sum", "sql-money:function:avg", "sql-money:function:max", "sql-money:function:total"]
+
+[[source]]
+example = "outside-store-leading-comment.rs"
+path = "crates/application/src/report.rs"
+expect = ["sql:outside-store"]
+
+[[source]]
+example = "outside-store-leading-parenthesis.rs"
+path = "crates/application/src/report.rs"
+expect = ["sql:outside-store"]
+
+[[source]]
+example = "outside-store-leading-line-comment.rs"
+path = "crates/application/src/report.rs"
+expect = ["sql:outside-store"]
+
+[[source]]
+example = "store-stringify.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql:assembly:stringify"]
+
+[[source]]
+example = "store-include.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql:assembly:include_str", "sql:assembly:include_bytes"]
+
+[[recognition]]
+text = "/**/SELECT id FROM holdings"
+kind = "sql"
+
+[[recognition]]
+text = "(SELECT id FROM holdings)"
+kind = "sql"
+
+[[recognition]]
+text = "-- note\nSELECT id FROM holdings"
+kind = "sql"
+
+[[recognition]]
+text = "  /* a */ -- b\n ( (DELETE FROM holdings))"
+kind = "sql"
+
+[[recognition]]
+text = "/* select id from t"
+kind = "text"
+
+[[recognition]]
+text = "-- select id from t"
+kind = "text"
+
+[[recognition]]
+text = "(note)"
+kind = "text"
