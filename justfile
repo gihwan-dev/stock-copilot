@@ -21,6 +21,7 @@ export RUSTC_WORKSPACE_WRAPPER := ""
 check:
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
+    cargo deny --locked check
     cargo nextest run --workspace --locked
 
 check-full: check

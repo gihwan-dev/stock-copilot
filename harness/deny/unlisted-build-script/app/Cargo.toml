@@ -1,0 +1,8 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde_repr = { path = "../../vendor/serde_repr-with-build-script", version = "=0.1.20" }

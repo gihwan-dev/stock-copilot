@@ -1,0 +1,8 @@
+[package]
+name = "itoa"
+version = "1.0.19"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+harness-unlisted = { path = "../harness-unlisted", version = "=0.1.0" }

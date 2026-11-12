@@ -23,6 +23,19 @@ pub(crate) fn fresh_directory(root: &Path, name: &str) -> PathBuf {
     directory
 }
 
+pub(crate) fn copy_tree(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).expect("create directory");
+    for listed in fs::read_dir(source).expect("read directory") {
+        let entry = listed.expect("directory entry");
+        let target = destination.join(entry.file_name());
+        if entry.file_type().expect("file type").is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), &target).expect("copy file");
+        }
+    }
+}
+
 pub(crate) fn generate_lockfile(manifest: &Path) {
     let status = Command::new("cargo")
         .arg("generate-lockfile")
