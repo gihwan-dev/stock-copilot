@@ -218,3 +218,51 @@ fn weak_test_example_leaves_surviving_mutants() {
     let survivors = load_survivors(&directory, "survivors.toml").expect("load example survivors");
     assert_eq!(shown(evaluate(&outcomes, &survivors)), BTreeSet::new());
 }
+
+#[test]
+fn any_change_in_a_target_crate_mutates_its_whole_scope() {
+    let root = repository_root();
+    let globs = super::target_globs(&root).expect("target globs");
+    let cases: [(&[&str], &[&str]); 5] = [
+        (&["crates/domain/src/signal_tests.rs"], &["crates/domain"]),
+        (
+            &["crates/application/src/portfolio.rs"],
+            &["crates/application"],
+        ),
+        (
+            &["crates/order-execution/tests/forge.rs"],
+            &["crates/order-execution"],
+        ),
+        (
+            &["docs/adr/0013-test-harness-coverage-mutants-network.md"],
+            &[],
+        ),
+        (
+            &["crates/domainx/src/lib.rs", "crates/xtask/src/main.rs"],
+            &[],
+        ),
+    ];
+    for (changed, expected) in cases {
+        let touched = super::touched_crates(
+            &globs,
+            &changed.iter().map(|path| String::from(*path)).collect(),
+        );
+        assert_eq!(
+            touched,
+            expected.iter().map(|path| String::from(*path)).collect(),
+            "{changed:?}"
+        );
+    }
+    let application = super::selected_globs(
+        &globs,
+        &Scope::Crates(BTreeSet::from([String::from("crates/application")])),
+    );
+    assert_eq!(
+        application,
+        vec![
+            String::from("crates/application/src/order_gate.rs"),
+            String::from("crates/application/src/order_gate/**/*.rs"),
+        ]
+    );
+    assert_eq!(super::selected_globs(&globs, &Scope::Everything), globs);
+}

@@ -4,15 +4,17 @@ mod tests;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 use crate::check_support::{Finding, read_text, report, workspace_root};
-use crate::git_base::{resolve_base, working_tree_diff};
+use crate::git_base::{changed_paths, resolve_base};
+use crate::source_check::cargo_config::examine_globs;
 
 pub(crate) const SURVIVORS_FILE: &str = "harness/mutants/survivors.toml";
 const OUTPUT_DIRECTORY: &str = "target/mutants";
-const DIFF_FILE: &str = "target/mutants/base.diff";
+const SETTINGS_FILE: &str = ".cargo/mutants.toml";
+const CRATE_DEPTH: usize = 2;
 const MISSED_FILE: &str = "missed.txt";
 const TIMEOUT_FILE: &str = "timeout.txt";
 const PASSED: i32 = 0;
@@ -50,7 +52,7 @@ pub(crate) struct Survivor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Scope {
     Everything,
-    InDiff(PathBuf),
+    Crates(BTreeSet<String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,11 +166,49 @@ fn read_outcome(directory: &Path, name: &str, written: Written) -> Result<String
     }
 }
 
+pub(crate) fn crate_of(glob: &str) -> String {
+    glob.split('/')
+        .take(CRATE_DEPTH)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
+    examine_globs(&read_text(&workspace.join(SETTINGS_FILE))?)
+        .ok_or_else(|| format!("{SETTINGS_FILE}: examine_globs가 없다"))
+}
+
+pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
+    globs
+        .iter()
+        .filter(|glob| match scope {
+            Scope::Everything => true,
+            Scope::Crates(crates) => crates.contains(&crate_of(glob)),
+        })
+        .cloned()
+        .collect()
+}
+
+pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BTreeSet<String> {
+    globs
+        .iter()
+        .map(|glob| crate_of(glob))
+        .filter(|directory| {
+            let prefix = format!("{directory}/");
+            changed.iter().any(|path| path.starts_with(&prefix))
+        })
+        .collect()
+}
+
 pub(crate) fn run(
     workspace: &Path,
     scope: &Scope,
     ignore: IgnoreFiles,
 ) -> Result<Outcomes, String> {
+    let globs = selected_globs(&target_globs(workspace)?, scope);
+    if globs.is_empty() {
+        return Ok(Outcomes::default());
+    }
     let output = workspace.join(OUTPUT_DIRECTORY);
     fs::create_dir_all(&output).map_err(|error| format!("{}: {error}", output.display()))?;
     let results = output.join("mutants.out");
@@ -180,6 +220,7 @@ pub(crate) fn run(
         .current_dir(workspace)
         .args([
             "mutants",
+            "--no-config",
             "--cap-lints=true",
             "--test-tool=nextest",
             "--no-shuffle",
@@ -190,11 +231,11 @@ pub(crate) fn run(
         .arg("--output")
         .arg(&output)
         .stdin(Stdio::null());
+    for glob in &globs {
+        command.arg("--file").arg(glob);
+    }
     if ignore == IgnoreFiles::Disregarded {
         command.arg("--gitignore=false");
-    }
-    if let Scope::InDiff(diff) = scope {
-        command.arg("--in-diff").arg(diff);
     }
     let status = command
         .status()
@@ -215,14 +256,11 @@ fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
         [] => Ok(Scope::Everything),
         [flag, base] if flag == "--in-diff" => {
             let commit = resolve_base(root, base)?;
-            let diff = root.join(DIFF_FILE);
-            if let Some(parent) = diff.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|error| format!("{}: {error}", parent.display()))?;
-            }
-            fs::write(&diff, working_tree_diff(root, &commit)?)
-                .map_err(|error| format!("{}: {error}", diff.display()))?;
-            Ok(Scope::InDiff(diff))
+            let changed = changed_paths(root, &commit)?;
+            Ok(Scope::Crates(touched_crates(
+                &target_globs(root)?,
+                &changed,
+            )))
         }
         _ => Err(String::from(
             "사용법: xtask mutants [--in-diff <HEAD|커밋 ID>]",
