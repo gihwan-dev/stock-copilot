@@ -23,6 +23,7 @@ unexport NEXTEST_USER_CONFIG_FILE
 unexport NEXTEST_TEST_THREADS
 unexport CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER
 unexport CARGO_BUILD_TARGET
+unexport ESLINT_PLUGIN_BOUNDARIES_ROOT_PATH
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
@@ -59,6 +60,7 @@ check-ts: check-node
     pnpm install --frozen-lockfile
     node harness/ts-deps/check.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml
+    node harness/source-tree/check.mjs
     pnpm -C apps/desktop exec tsc -p .
     pnpm -C apps/desktop exec eslint --max-warnings 0 src
     node harness/eslint-violations/check.mjs
