@@ -235,7 +235,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | S-09 | AI 작업·대화·MCP 호출 원장 | 왕복 테스트. MCP 호출 원장은 추가만 | S-15 |
 | S-10 | 설정 저장소 (버전 있는 스키마) | 이전 버전 설정을 읽어 올림. 토스 스펙 해시 보관 | S-15 |
 | S-13 | 서명 준비 (담당: 사용자) | Apple 개발자 멤버십 확인(open-issues U-02). 팀 ID와 프로비저닝 프로파일 준비. 멤버십이 없으면 그 사실을 기록 | - |
-| S-14 | 서명 구성과 키 분실 ADR (사용자 승인: `tauri.conf.json`) | 서명 빌드의 키체인 접근 그룹 설정. ad-hoc 개발 빌드는 별도 서비스 이름과 가짜 키만 씀 (SEC-1). ADR: DB 키 분실 시 복구 경로, 머리값 고정 시점, 멤버십이 없을 때 로그인 키체인으로 낮추는 방식 (architecture 6.1). 실측 S-17용 최소 시험 빌드(키체인 왕복과 두 확인 창만)를 서명해 만들 수 있음 | S-13, H-20 |
+| S-14 | 서명 구성과 키 분실 ADR (사용자 승인: `tauri.conf.json`) | 서명 빌드의 키체인 접근 그룹 설정. ad-hoc 개발 빌드는 별도 서비스 이름과 가짜 키만 씀 (SEC-1). ADR: DB 키 분실 시 복구 경로, 머리값 고정 시점, 멤버십이 없을 때 로그인 키체인으로 낮추는 방식 (architecture 6.1). 실측 S-17용 최소 시험 빌드(키체인 왕복과 두 확인 창만)를 서명해 만들 수 있음 `gen-bindings` 바이너리를 앱 묶음에서 뺌(example 대상으로 옮기기 등) (ADR 0016). | S-13, H-20 |
 | S-17 | 실측 S-02 (담당: 사용자). 키체인 구현 전에 한다 | S-14의 서명한 최소 시험 빌드에서 키체인 왕복, 네이티브 요약 창, macOS 본인 확인 창이 동작함. 이유 문자열 길이 한도 기록. 동작하지 않으면 S-12와 O-07을 시작하지 않고 ADR로 대안을 정함 | S-14 |
 | S-12 | 키체인 `SecretStore` | 데이터 보호 키체인, 접근 그룹, `ThisDeviceOnly`. 개발 빌드에서는 실제 서비스 이름에 닿지 않음. 가짜 비밀 문자열이 로그·오류·SQLite에 0건 (SEC-1, SEC-11) | A-02, S-14, S-17 |
 | S-16 | 감사 로그 2: HMAC과 머리값 | HMAC 키는 키체인. 마지막 순번과 해시를 키체인에 고정. 중간 수정, 삭제, 꼬리 잘라내기, 머리값 되돌리기를 각각 탐지 (ORD-3, harness 6.9) | S-08, S-12 |
@@ -246,12 +246,12 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | ID | 작업 | 완료 기준 | 선행 |
 |---|---|---|---|
 | U-01 | 조립 루트: `build_app<R: Runtime>(builder, Ports, ctx)`, 수명 주기 | `main.rs`는 실제 어댑터 생성과 `build_app` 호출만 담음(RV-6). `src-tauri`가 `order-execution`에 직접 의존하지 않음(arch-check). 앱 시작 시 저장된 데이터로 주 화면 자료를 먼저 냄 (PERF-1) | A-04, S-01 |
-| U-02 | IPC 계약: 명령·이벤트 틀, 오류 타입, 생성 | tauri-specta `ErrorHandlingMode::Result`. 입력 DTO `deny_unknown_fields`. TS에서 문자열 오류를 받지 않음. 큰 정수 타입은 생성이 거부 (architecture 3.6) | H-13, U-01 |
+| U-02 | IPC 계약: 명령·이벤트 틀, 오류 타입, 생성 | tauri-specta `ErrorHandlingMode::Result`. 입력 DTO `deny_unknown_fields`. TS에서 문자열 오류를 받지 않음. 큰 정수 타입은 생성이 거부 (architecture 3.6) 입력 DTO의 `deny_unknown_fields`가 specta derive와 함께 끌 수 없는 린트에 걸리는 문제를 정함(ADR 0016에서 넘어옴). | H-13, U-01 |
 | U-03 | Tauri 권한 최소화 | 앱 ACL(`AppManifest::commands`), capability `main` 하나, 금지 권한 없음, CSP 명시, `freezePrototype`. `xtask capability-check` 통과 (SEC-10) CSP에 `connect-src`·`img-src`·`worker-src`를 명시하고 외부 주소가 없음. Tauri의 탐색 처리로 외부 주소 이동과 새 창 열기를 거부(테스트). `freezePrototype` 켬. capability 목록을 명시 (ADR 0004, 0009). | U-02, H-33 |
 | U-18 | 메뉴 막대 상주와 단일 실행 | 창을 닫으면 숨기고 수집·예약 작업이 계속 돎. 트레이 아이콘, `Accessory`. 두 번째 실행은 기존 창을 띄우고 끝남 (REL-7, architecture 2.1) | U-01 |
 | U-20 | 자식 프로세스 정리 | 실행 중인 프로세스 그룹 ID를 기록하고 앱 시작 때 남은 그룹을 정리. `ExitRequested`에서 SIGTERM 뒤 SIGKILL. 진행 중인 감사 로그 쓰기가 끝날 때까지 종료를 미룸. 실측 S-11 결과 기록 (architecture 2.3) | U-01, S-09 |
-| U-04 | 프런트 뼈대: 라우터, 쿼리 계층, `shared/ipc` | IPC 가짜(`mockCommands`)로 화면 테스트 가능. 응답과 오류를 Zod `safeParse`로 검증. `queryFn`이 거절하지 않음 (architecture 5장) IPC 호출 어댑터(`shared/ipc/call.ts`)는 IPC 명령 호출에만 묶여 거절을 `Result`로 바꿈. 임의 Promise를 받는 범용 도우미를 내보내지 않음 (ADR 0012). | U-02, DS-08 |
-| U-05 | `shared/platform`: 코어 이벤트 구독 훅, `detach` | 이벤트가 오면 쿼리를 무효화하고 다시 읽음. 효과 훅이 허용 목록 파일에만 있음 `detach`는 정해진 종류의 작업만 받고 임의 Promise의 거절을 삼키는 범용 도우미가 아님 (ADR 0012). | U-04 |
+| U-04 | 프런트 뼈대: 라우터, 쿼리 계층, `shared/ipc` | IPC 가짜(`mockCommands`)로 화면 테스트 가능. 응답과 오류를 Zod `safeParse`로 검증. `queryFn`이 거절하지 않음 (architecture 5장) IPC 호출 어댑터(`shared/ipc/call.ts`)는 IPC 명령 호출에만 묶여 거절을 `Result`로 바꿈. 임의 Promise를 받는 범용 도우미를 내보내지 않음 (ADR 0012). IPC 호출에 시간 제한. 운영 knip 무시 목록에서 IPC 항목을 뺌 (ADR 0016). | U-02, DS-08 |
+| U-05 | `shared/platform`: 코어 이벤트 구독 훅, `detach` | 이벤트가 오면 쿼리를 무효화하고 다시 읽음. 효과 훅이 허용 목록 파일에만 있음 `detach`는 정해진 종류의 작업만 받고 임의 Promise의 거절을 삼키는 범용 도우미가 아님 (ADR 0012). 이벤트 API(`emit`, `listen`)의 허용 파일을 `harness/capability-check/webview-apis.toml`에 추가(사용자 승인) (ADR 0016). | U-04 |
 | U-23 | 설정 화면: 기본 3항목과 고급 틀 | 기본에는 토스 연결, 투자 성향, 주문 켜기만 보임. 나머지는 고급 아래 (UX-7, P-6). 선택 키가 없으면 "키를 넣으면 켜집니다" 한 줄 (P-5). 설정은 머리줄 설정 버튼, 메뉴 막대 아이콘, 창 메뉴(⌘,)에서 별도 macOS 창으로 열림. 주 창이 macOS 기본 제목 표시줄을 씀 (design 2.4, architecture 5.1) | U-04 |
 | U-24 | 위험 설정 확인 창 (`platform-macos`, 네이티브 창만) | 네이티브 확인 창에서 확인해야 A-17이 통과. 이 경로에서 macOS 본인 확인 호출 0회 (SEC-12, P-9). 창 내용은 코어가 만든 문구 | A-17, U-01 |
 | U-06 | 첫 실행 1: 토스 키 붙여넣기 | 키를 키체인에 저장하고 바로 토큰 발급 시도. 키가 WebView 상태와 로그에 남지 않음 (design 2.5, SEC-1) | U-04, S-12, T-05 |
