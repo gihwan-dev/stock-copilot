@@ -47,6 +47,8 @@ mod network_sandbox_tests;
 #[cfg(test)]
 mod rust_lints_tests;
 #[cfg(test)]
+mod test_runner_tests;
+#[cfg(test)]
 mod third_party_tests;
 #[cfg(test)]
 mod workspace_layout_tests;

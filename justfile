@@ -19,6 +19,8 @@ export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
 
+base := "HEAD"
+
 check: check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
@@ -31,9 +33,12 @@ check: check-ts
     "{{just_executable()}}" raw-types
     "{{just_executable()}}" disable-check
     cargo nextest run --workspace --locked
+    "{{just_executable()}}" coverage-check
+    "{{just_executable()}}" test-diff {{quote(base)}}
     "{{just_executable()}}" disable-report
 
 check-full: advisory-db-fetch check
+    "{{just_executable()}}" mutants-diff {{quote(base)}}
 
 check-node:
     actual="$(node --version)"; pinned="v$(cat .node-version)"; [ "$actual" = "$pinned" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\n' "$actual" "$pinned" >&2; exit 1; }
@@ -80,6 +85,18 @@ disable-check:
 
 disable-report:
     cargo run --locked --quiet --package xtask -- disable-report
+
+coverage-check:
+    cargo run --locked --quiet --package xtask -- coverage-check
+
+test-diff commit:
+    cargo run --locked --quiet --package xtask -- test-diff "$1"
+
+mutants-diff commit:
+    cargo run --locked --quiet --package xtask -- mutants --in-diff "$1"
+
+mutants-all:
+    cargo run --locked --quiet --package xtask -- mutants
 
 advisory-db-fetch:
     cargo deny --locked fetch db
