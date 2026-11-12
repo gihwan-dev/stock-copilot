@@ -108,7 +108,7 @@
 | Rust | `#[expect(<린트 하나>, reason = "<이유>")]` | 항목이나 문장 하나에만 붙인다. crate·모듈 단위(`#![expect]`)와 `#[allow]`는 실패. `expect`는 린트가 실제로 걸리지 않으면 스스로 실패하므로 남은 끄기가 생기지 않는다 |
 
 - **끌 수 없는 규칙**이 있다. 목록은 보호 파일이다.
-  - Rust: 3.1의 `forbid` 린트 전부(panic 계열, `as` 변환, 산술, 부동소수점, 무시된 결과, `unsafe_code` 등). `forbid`는 `expect`로도 꺼지지 않는다. 끌 수 있는 것은 `deny` 그룹(`pedantic`, `nursery`, `cargo`)의 린트뿐이다.
+  - Rust: 3.1의 `forbid` 린트 전부(panic 계열, `as` 변환, 산술, 부동소수점, 무시된 결과, `unsafe_code` 등). `forbid`는 `expect`로도 꺼지지 않는다. 끌 수 있는 것은 `pedantic`, `nursery`, `cargo` 그룹에 속한 린트뿐이다. 개별로 `deny`인 rustc·clippy 린트와 `disallowed_methods`·`disallowed_types`·`disallowed_macros`는 컴파일러로는 `expect`가 통하지만 xtask(H-40)가 실패시킨다. 예외는 보호된 파일 허용 목록 하나다: `apps/desktop/src-tauri/src/main.rs`의 `tauri::generate_context!()` 문장에 붙은 `disallowed_*` 세 개(ADR 0005).
   - TypeScript: 넘침 검사와 스크롤·넘침 클래스 규칙(4.4), 금액 변환(`local/no-money-coercion`), 경계(`boundaries/*`), 네트워크, 디자인 시스템 화면 코드 금지(4.4), `ban-ts-comment`, 테스트 건너뛰기, `local/forbidden-file`, `local/no-comments`. `@eslint-community/eslint-comments/no-restricted-disable`로 막는다.
 - `@ts-ignore`, `@ts-expect-error`는 계속 금지다. 타입 검사는 끌 수 없다.
 - xtask 검사(주석, 원시 타입, 소스 위치, 매니페스트)는 끄는 수단이 없다. 예외는 보호된 허용 목록으로만 둔다.
@@ -157,7 +157,7 @@ clippy와 rustc만으로는 끄기를 막지 못한다. 세 겹을 함께 쓴다
 |---|---|---|
 | ① 핵심 린트 개별 `forbid` | 그 린트에 대한 `#[allow]`, `#![allow]`, `#[expect]`(E0453), `RUSTFLAGS=-A` | `deny` 수준 린트의 끄기, `--cap-lints` |
 | ② xtask 토큰 검사 | 아래 표의 속성·매크로·파일 | 환경 변수 |
-| ③ 환경 고정 | `RUSTFLAGS`, `--cap-lints`, `CLIPPY_CONF_DIR`, `RUSTC_WRAPPER` 등. `just check`가 지우고 고정한다(1.1). 셸 훅이 거부하고(7.3), 깨끗한 CI가 다시 돈다 | - |
+| ③ 환경 고정 | `RUSTFLAGS`, `--cap-lints`, `CLIPPY_CONF_DIR`, `RUSTC_WRAPPER` 등. `just check`가 지우고 고정한다(1.1). 셸 훅이 거부하고(7.3), 깨끗한 CI가 다시 돈다 | cargo 설정 파일의 `[env]`·`[alias]`(저장소 `.cargo/`는 xtask H-23, 상위 폴더와 `CARGO_HOME`은 샌드박스 H-35와 CI), `PATH`의 가짜 `cargo`(샌드박스와 CI) (ADR 0005) |
 
 xtask가 실패시키는 것 (`proc-macro2` 토큰 트리를 재귀로 돌아서 매크로 호출 안의 속성도 본다):
 
