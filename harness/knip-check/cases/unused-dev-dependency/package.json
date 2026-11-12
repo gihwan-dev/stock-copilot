@@ -1,0 +1,8 @@
+{
+  "name": "knip-case",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "left-pad": "1.3.0"
+  }
+}

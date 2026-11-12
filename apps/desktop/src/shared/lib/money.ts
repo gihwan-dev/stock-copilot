@@ -8,7 +8,7 @@ const probabilityKey: unique symbol = Symbol("probability");
 
 export type Currency = "KRW" | "USD";
 
-export type Decimal = `${number}`;
+type Decimal = `${number}`;
 
 export type Money = {
   readonly currency: Currency;

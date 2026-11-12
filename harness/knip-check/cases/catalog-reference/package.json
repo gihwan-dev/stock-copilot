@@ -1,0 +1,8 @@
+{
+  "name": "knip-case",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "left-pad": "catalog:missing"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "knip-case",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pad": "left-pad-cli"
+  }
+}

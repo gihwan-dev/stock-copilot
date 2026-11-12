@@ -1,0 +1,13 @@
+{
+  "name": "knip-case",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "left-pad": "1.3.0"
+  },
+  "peerDependenciesMeta": {
+    "left-pad": {
+      "optional": true
+    }
+  }
+}

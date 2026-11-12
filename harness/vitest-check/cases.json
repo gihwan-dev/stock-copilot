@@ -1,0 +1,26 @@
+{
+  "config": {
+    "test": {
+      "include": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "allowOnly": false,
+      "passWithNoTests": true
+    }
+  },
+  "cases": {
+    "all-skipped": ["no-tests", "skipped"],
+    "context-skip": ["skipped"],
+    "describe-skip": ["skipped"],
+    "describe-todo": ["skipped"],
+    "empty-file": ["no-tests"],
+    "failing": ["failed", "no-tests"],
+    "it-skip": ["skipped"],
+    "it-todo": ["todo"],
+    "no-files": [],
+    "only": ["failed", "no-tests", "skipped"],
+    "outside-src": [],
+    "passing": [],
+    "run-if": ["skipped"],
+    "skip-if": ["skipped"],
+    "skip-option": ["skipped"]
+  }
+}
