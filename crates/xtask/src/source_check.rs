@@ -3,6 +3,7 @@ mod comments;
 mod failure;
 mod finding;
 mod manifest;
+mod test_impls;
 mod tokens;
 
 #[cfg(test)]
@@ -22,6 +23,7 @@ use comments::comment_lines;
 use failure::CheckFailure;
 use finding::{Finding, Rule};
 use manifest::{ManifestRole, manifest_findings};
+use test_impls::test_module_impl_lines;
 use tokens::{AttributeScope, ClockScope, FloatScope, Scope, token_rules};
 
 const SKIPPED_DIRECTORIES: [&str; 4] = [
@@ -60,6 +62,23 @@ struct Entry {
     kind: EntryKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Exemption {
+    Checked,
+    Exempt,
+}
+
+fn generated_exempt(scope: AttributeScope, rule: &Rule, allowlists: &Allowlists) -> Exemption {
+    match (scope, rule) {
+        (AttributeScope::Generated, Rule::Attribute(name))
+            if allowlists.generated_attribute(name) == Membership::Listed =>
+        {
+            Exemption::Exempt
+        }
+        _ => Exemption::Checked,
+    }
+}
+
 pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) -> Vec<Finding> {
     let attributes = match allowlists.generated(path) {
         Membership::Listed => AttributeScope::Generated,
@@ -73,7 +92,6 @@ pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) ->
         AttributeScope::Generated => Vec::new(),
     };
     let scope = Scope {
-        attributes,
         float: if path.starts_with(DOMAIN_DIRECTORY) {
             FloatScope::Domain
         } else {
@@ -88,10 +106,18 @@ pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) ->
         Ok(stream) => findings.extend(
             token_rules(stream, scope)
                 .into_iter()
+                .filter(|(_, rule)| {
+                    generated_exempt(attributes, rule, allowlists) == Exemption::Checked
+                })
                 .map(|(line, rule)| Finding::at_line(path, line, rule)),
         ),
         Err(_) => findings.push(Finding::whole_file(path, Rule::Unparsable)),
     }
+    findings.extend(
+        test_module_impl_lines(path, source)
+            .into_iter()
+            .map(|line| Finding::at_line(path, line, Rule::TestModuleImpl)),
+    );
     findings
 }
 

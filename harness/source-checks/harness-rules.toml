@@ -1,0 +1,34 @@
+attributes = [
+    "allow",
+    "warn",
+    "deny",
+    "forbid",
+    "doc",
+    "path",
+    "ignore",
+    "cfg_attr",
+    "no_mangle",
+    "export_name",
+    "link_section",
+    "automatically_derived",
+]
+tool-attributes = ["mutants", "clippy", "rustfmt"]
+expect-problems = ["inner", "no-reason", "multiple-lints"]
+cfg = ["not-test"]
+macros = ["macro_rules", "include", "include_str", "include_bytes", "asm", "global_asm"]
+manifest-tables = ["target", "profile", "patch", "replace", "features"]
+manifest = ["lints-not-inherited"]
+nested-files = ["clippy.toml", ".clippy.toml", "rustfmt.toml", "rust-toolchain", "rust-toolchain.toml"]
+files = ["build-script", "proc-macro", "cargo-config"]
+domain-identifiers = ["f32", "f64"]
+test-awareness = [
+    "thread::current",
+    "env::args",
+    "env::args_os",
+    "env::current_exe",
+    "panic::Location",
+    "module_path",
+    "file",
+    "line",
+    "column",
+]

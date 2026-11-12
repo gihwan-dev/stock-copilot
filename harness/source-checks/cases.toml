@@ -326,7 +326,7 @@ expect = ["clock-env:var"]
 [[source]]
 example = "env-grouped-import.rs"
 path = "crates/sample/src/lib.rs"
-expect = ["clock-env:var_os"]
+expect = ["clock-env:var_os", "test-awareness:env::args"]
 
 [[source]]
 example = "env-module-alias.rs"
@@ -452,6 +452,146 @@ expect = ["clock-env:now"]
 example = "env-macro-in-concat.rs"
 path = "crates/adapters/broker-toss-schema/src/lib.rs"
 expect = ["clock-env:env"]
+
+[[source]]
+example = "test-module-impl-inherent.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-module-impl"]
+
+[[source]]
+example = "test-module-impl-imported.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-module-impl"]
+
+[[source]]
+example = "test-module-impl-crate-path.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-module-impl"]
+
+[[source]]
+example = "test-module-impl-outside-trait.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-module-impl"]
+
+[[source]]
+example = "test-module-impl-file.rs"
+path = "crates/sample/src/gate_tests.rs"
+expect = ["cfg:test-module-impl"]
+
+[[source]]
+example = "clean-test-module-impl.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "generated-attribute-path.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = ["attribute:path"]
+
+[[source]]
+example = "generated-attribute-doc.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = []
+
+[[source]]
+example = "aware-thread-current.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:thread::current"]
+
+[[source]]
+example = "aware-thread-current-grouped.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:thread::current"]
+
+[[source]]
+example = "aware-thread-current-raw.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:thread::current"]
+
+[[source]]
+example = "aware-env-args.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:env::args"]
+
+[[source]]
+example = "aware-env-args-os.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:env::args_os"]
+
+[[source]]
+example = "aware-env-current-exe.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:env::current_exe"]
+
+[[source]]
+example = "aware-panic-location.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:panic::Location"]
+
+[[source]]
+example = "aware-module-path.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:module_path"]
+
+[[source]]
+example = "aware-file.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:file"]
+
+[[source]]
+example = "aware-line.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:line"]
+
+[[source]]
+example = "aware-column.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:column"]
+
+[[source]]
+example = "aware-thread-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:thread::alias"]
+
+[[source]]
+example = "aware-thread-self-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:thread::alias"]
+
+[[source]]
+example = "aware-panic-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:panic::alias"]
+
+[[source]]
+example = "aware-thread-glob.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:thread::*"]
+
+[[source]]
+example = "aware-panic-glob.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["test-awareness:panic::*"]
+
+[[source]]
+example = "clean-test-awareness-allowlisted.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = []
+
+[[source]]
+example = "env-self-alias.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:env"]
+
+[[source]]
+example = "expect-escaped-space-reason.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:no-reason"]
+
+[[source]]
+example = "expect-escaped-newline-reason.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:no-reason"]
 
 [[workspace]]
 name = "clean"

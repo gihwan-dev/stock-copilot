@@ -46,6 +46,22 @@ pub(crate) const CLOCK_METHODS: [&str; 1] = ["elapsed"];
 
 pub(crate) const DOMAIN_FLOATS: [&str; 2] = ["f32", "f64"];
 
+pub(crate) const TEST_AWARENESS_MACROS: [&str; 4] = ["module_path", "file", "line", "column"];
+
+pub(crate) const TEST_AWARENESS_PATHS: [(&str, &str); 5] = [
+    ("thread", "current"),
+    ("env", "args"),
+    ("env", "args_os"),
+    ("env", "current_exe"),
+    ("panic", "Location"),
+];
+
+pub(crate) const TEST_AWARENESS_MODULES: [&str; 2] = ["thread", "panic"];
+
+pub(crate) const MODULE_ALIAS_SUFFIX: &str = "::alias";
+
+pub(crate) const MODULE_GLOB_SUFFIX: &str = "::*";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FloatScope {
     Domain,
@@ -68,7 +84,6 @@ pub(crate) enum AttributeScope {
 pub(crate) struct Scope {
     pub(crate) float: FloatScope,
     pub(crate) clock: ClockScope,
-    pub(crate) attributes: AttributeScope,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,22 +163,22 @@ fn is_delimited(group: &Group, expected: Delimiter) -> bool {
 
 fn punct_rules(punct: &Punct, remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
     match punct.as_char() {
-        '#' => attribute_at(remaining, scope),
+        '#' => attribute_at(remaining),
         ':' if punct.spacing() == Spacing::Joint => path_call(remaining, scope),
         '.' => method_call(remaining, scope),
         _ => Vec::new(),
     }
 }
 
-fn attribute_at(remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
+fn attribute_at(remaining: &[TokenTree]) -> Vec<Rule> {
     match remaining {
         [TokenTree::Punct(bang), TokenTree::Group(group), ..]
             if bang.as_char() == '!' && is_delimited(group, Delimiter::Bracket) =>
         {
-            attribute_rules(Style::Inner, &children(group), &[], scope)
+            attribute_rules(Style::Inner, &children(group), &[])
         }
         [TokenTree::Group(group), following @ ..] if is_delimited(group, Delimiter::Bracket) => {
-            attribute_rules(Style::Outer, &children(group), following, scope)
+            attribute_rules(Style::Outer, &children(group), following)
         }
         _ => Vec::new(),
     }
@@ -220,29 +235,14 @@ fn attribute_path(content: &[TokenTree]) -> (Vec<String>, &[TokenTree]) {
     (segments, rest)
 }
 
-fn checked_in_generated_code(rule: &Rule) -> bool {
-    if let Rule::CfgNotTest | Rule::CfgTestOutsideModule | Rule::CfgTestModuleName = rule {
-        true
-    } else if let Rule::Attribute(name) = rule {
-        name == "cfg_attr"
-    } else {
-        false
-    }
-}
-
-fn attribute_rules(
-    style: Style,
-    content: &[TokenTree],
-    following: &[TokenTree],
-    scope: Scope,
-) -> Vec<Rule> {
+fn attribute_rules(style: Style, content: &[TokenTree], following: &[TokenTree]) -> Vec<Rule> {
     let (segments, arguments) = attribute_path(content);
     if let ([only], [TokenTree::Group(inner)]) = (segments.as_slice(), arguments)
         && only == "unsafe"
     {
-        return attribute_rules(style, &children(inner), following, scope);
+        return attribute_rules(style, &children(inner), following);
     }
-    let rules = match segments.as_slice() {
+    match segments.as_slice() {
         [tool, _, ..] if TOOL_ATTRIBUTES.contains(&tool.as_str()) => {
             vec![Rule::Attribute(tool.clone())]
         }
@@ -251,13 +251,6 @@ fn attribute_rules(
             builtin_attribute_rules(last, style, arguments, following)
         }
         _ => Vec::new(),
-    };
-    match scope.attributes {
-        AttributeScope::Checked => rules,
-        AttributeScope::Generated => rules
-            .into_iter()
-            .filter(checked_in_generated_code)
-            .collect(),
     }
 }
 
@@ -289,13 +282,9 @@ fn reason_content(item: &[TokenTree]) -> Option<String> {
     if let [TokenTree::Ident(_), equals, TokenTree::Literal(text)] = item
         && is_punct(equals, '=')
     {
-        let literal = text.to_string();
-        let unprefixed = literal.strip_prefix('r').unwrap_or(&literal);
-        unprefixed
-            .trim_matches('#')
-            .strip_prefix('"')
-            .and_then(|rest| rest.strip_suffix('"'))
-            .map(String::from)
+        syn::parse_str::<syn::LitStr>(&text.to_string())
+            .ok()
+            .map(|literal| literal.value())
     } else {
         None
     }
@@ -388,8 +377,59 @@ fn cfg_rules(style: Style, arguments: &[TokenTree], following: &[TokenTree]) -> 
     }
 }
 
+fn awareness_rule(name: &str, scope: Scope) -> Vec<Rule> {
+    match scope.clock {
+        ClockScope::Forbidden => vec![Rule::TestAwareness(String::from(name))],
+        ClockScope::Allowed => Vec::new(),
+    }
+}
+
+fn path_awareness(module: &str, remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
+    match remaining {
+        [first, second, TokenTree::Ident(item), ..]
+            if is_punct(first, ':') && is_punct(second, ':') =>
+        {
+            let item_name = ident_name(item);
+            if TEST_AWARENESS_PATHS.contains(&(module, item_name.as_str())) {
+                awareness_rule(&format!("{module}::{item_name}"), scope)
+            } else {
+                Vec::new()
+            }
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn module_use_awareness(module: &str, remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
+    if !TEST_AWARENESS_MODULES.contains(&module) {
+        return Vec::new();
+    }
+    match remaining {
+        [TokenTree::Ident(keyword), ..] if keyword == "as" => {
+            awareness_rule(&format!("{module}{MODULE_ALIAS_SUFFIX}"), scope)
+        }
+        [first, second, star, ..]
+            if is_punct(first, ':') && is_punct(second, ':') && is_punct(star, '*') =>
+        {
+            awareness_rule(&format!("{module}{MODULE_GLOB_SUFFIX}"), scope)
+        }
+        [
+            first,
+            second,
+            TokenTree::Ident(this),
+            TokenTree::Ident(keyword),
+            ..,
+        ] if is_punct(first, ':') && is_punct(second, ':') && this == "self" && keyword == "as" => {
+            awareness_rule(&format!("{module}{MODULE_ALIAS_SUFFIX}"), scope)
+        }
+        _ => Vec::new(),
+    }
+}
+
 fn macro_rule(name: &str, scope: Scope) -> Vec<Rule> {
-    if BANNED_MACROS.contains(&name) {
+    if TEST_AWARENESS_MACROS.contains(&name) {
+        awareness_rule(name, scope)
+    } else if BANNED_MACROS.contains(&name) {
         vec![Rule::Macro(String::from(name))]
     } else if name == "cfg" {
         vec![Rule::CfgMacro]
@@ -411,6 +451,7 @@ fn ident_rules(ident: &Ident, remaining: &[TokenTree], scope: Scope) -> Vec<Rule
     if name == "use" {
         rules.extend(use_rules(remaining, scope));
     }
+    rules.extend(path_awareness(&name, remaining, scope));
     if scope.float == FloatScope::Domain && DOMAIN_FLOATS.contains(&name.as_str()) {
         rules.push(Rule::DomainFloat(name));
     }
@@ -434,6 +475,21 @@ fn use_item_rules(rest: &[TokenTree], scope: Scope) -> Vec<Rule> {
         {
             clock_rule(ENVIRONMENT_MACRO, scope)
         }
+        [
+            TokenTree::Ident(module),
+            first,
+            second,
+            TokenTree::Ident(this),
+            TokenTree::Ident(keyword),
+            ..,
+        ] if module == ENVIRONMENT_MACRO
+            && is_punct(first, ':')
+            && is_punct(second, ':')
+            && this == "self"
+            && keyword == "as" =>
+        {
+            clock_rule(ENVIRONMENT_MACRO, scope)
+        }
         [TokenTree::Ident(module), first, second, star, ..]
             if module == ENVIRONMENT_MACRO
                 && is_punct(first, ':')
@@ -442,15 +498,18 @@ fn use_item_rules(rest: &[TokenTree], scope: Scope) -> Vec<Rule> {
         {
             clock_rule(ENVIRONMENT_GLOB, scope)
         }
-        [TokenTree::Ident(ident), ..] => {
+        [TokenTree::Ident(ident), tail @ ..] => {
             let name = ident_name(ident);
-            if is_clock_function(&name) {
+            let mut rules = path_awareness(&name, tail, scope);
+            rules.extend(module_use_awareness(&name, tail, scope));
+            rules.extend(if is_clock_function(&name) {
                 clock_rule(&name, scope)
             } else if name == ENVIRONMENT_MACRO {
                 Vec::new()
             } else {
                 macro_rule(&name, scope)
-            }
+            });
+            rules
         }
         _ => Vec::new(),
     }

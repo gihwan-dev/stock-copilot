@@ -9,3 +9,11 @@ reason = "조립 지점. 실제 어댑터를 만들 때 시계와 환경 값을 
 [[build-script]]
 path = "apps/desktop/src-tauri/build.rs"
 reason = "Tauri 앱 ACL 생성. 명령 목록은 생성 파일에서 읽는다 (harness.md 3.2)"
+
+[[generated-attribute]]
+name = "allow"
+reason = "typify 생성물이 맨 앞에 내는 #![allow(…)] (R-09 Q11)"
+
+[[generated-attribute]]
+name = "doc"
+reason = "typify 생성물이 스키마 설명으로 내는 #[doc]와 문서 주석 (R-09 Q11)"

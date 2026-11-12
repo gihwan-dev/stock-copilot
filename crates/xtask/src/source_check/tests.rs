@@ -9,8 +9,9 @@ use super::finding::{ExpectProblem, Rule};
 use super::manifest::BANNED_TABLES;
 use super::tokens::{
     BANNED_ATTRIBUTES, BANNED_MACROS, CLOCK_AND_ENVIRONMENT_FUNCTIONS, CLOCK_METHODS, CLOCK_PREFIX,
-    DOMAIN_FLOATS, ENVIRONMENT_GLOB, ENVIRONMENT_MACRO, OPTIONAL_ENVIRONMENT_MACRO,
-    TOOL_ATTRIBUTES,
+    DOMAIN_FLOATS, ENVIRONMENT_GLOB, ENVIRONMENT_MACRO, MODULE_ALIAS_SUFFIX, MODULE_GLOB_SUFFIX,
+    OPTIONAL_ENVIRONMENT_MACRO, TEST_AWARENESS_MACROS, TEST_AWARENESS_MODULES,
+    TEST_AWARENESS_PATHS, TOOL_ATTRIBUTES,
 };
 use super::{NESTED_CONFIG_FILES, check_repository, check_source};
 
@@ -26,7 +27,23 @@ const EXPECT_PROBLEMS: [ExpectProblem; 4] = [
     ExpectProblem::Malformed,
 ];
 
-const UNIT_RULES: [Rule; 12] = [
+const HARNESS_RULES_FILE: &str = "harness/source-checks/harness-rules.toml";
+
+const HARNESS_RULE_SECTIONS: [(&str, &str); 11] = [
+    ("attributes", "attribute:"),
+    ("tool-attributes", "attribute:"),
+    ("expect-problems", "expect:"),
+    ("cfg", "cfg:"),
+    ("macros", "macro:"),
+    ("manifest-tables", "manifest:table:"),
+    ("manifest", "manifest:"),
+    ("nested-files", "file:nested-config:"),
+    ("files", "file:"),
+    ("domain-identifiers", "domain-float:"),
+    ("test-awareness", "test-awareness:"),
+];
+
+const UNIT_RULES: [Rule; 13] = [
     Rule::Comment,
     Rule::Unparsable,
     Rule::CfgNotTest,
@@ -39,14 +56,17 @@ const UNIT_RULES: [Rule; 12] = [
     Rule::CargoConfig,
     Rule::Symlink,
     Rule::TargetOutsideMember,
+    Rule::TestModuleImpl,
 ];
 
-const REQUIRED_CLEAN_EXAMPLES: [&str; 5] = [
+const REQUIRED_CLEAN_EXAMPLES: [&str; 7] = [
     "clean-slashes-in-strings.rs",
     "clean-cfg-test-module.rs",
     "clean-expect.rs",
     "clean-clock-port.rs",
     "clean-clock-env-allowlisted.rs",
+    "clean-test-module-impl.rs",
+    "clean-test-awareness-allowlisted.rs",
 ];
 
 #[derive(Debug)]
@@ -151,6 +171,23 @@ fn rule_catalogue() -> BTreeSet<String> {
     );
     rules.extend(BANNED_TABLES.map(|name| Rule::ManifestTable(String::from(name))));
     rules.extend(NESTED_CONFIG_FILES.map(|name| Rule::NestedConfig(String::from(name))));
+    rules.extend(
+        TEST_AWARENESS_MACROS
+            .map(String::from)
+            .into_iter()
+            .chain(
+                TEST_AWARENESS_PATHS
+                    .into_iter()
+                    .map(|(module, item)| format!("{module}::{item}")),
+            )
+            .chain(TEST_AWARENESS_MODULES.into_iter().flat_map(|module| {
+                [
+                    format!("{module}{MODULE_ALIAS_SUFFIX}"),
+                    format!("{module}{MODULE_GLOB_SUFFIX}"),
+                ]
+            }))
+            .map(Rule::TestAwareness),
+    );
     rules.iter().map(ToString::to_string).collect()
 }
 
@@ -360,4 +397,70 @@ fn allowlist_entry_for_a_missing_file_fails_to_load() {
     fs::create_dir_all(directory.join("src")).expect("create source directory");
     fs::write(directory.join("src/clock.rs"), "pub fn clock() {}\n").expect("write clock");
     assert!(Allowlists::load(&directory).is_ok(), "existing paths load");
+}
+
+#[test]
+fn code_rules_cover_the_documented_harness_table() {
+    let root = repository_root();
+    let table: toml::Table = fs::read_to_string(root.join(HARNESS_RULES_FILE))
+        .expect("read harness rules")
+        .parse()
+        .expect("parse harness rules");
+    let documented: BTreeSet<String> = HARNESS_RULE_SECTIONS
+        .into_iter()
+        .filter_map(|(section, prefix)| {
+            table
+                .get(section)
+                .and_then(toml::Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| format!("{prefix}{}", item.as_str().expect("rule name")))
+                        .collect::<Vec<_>>()
+                })
+        })
+        .flatten()
+        .collect();
+    let sections: BTreeSet<&str> = table.keys().map(String::as_str).collect();
+    let known: BTreeSet<&str> = HARNESS_RULE_SECTIONS
+        .into_iter()
+        .map(|(section, _)| section)
+        .collect();
+    assert!(
+        sections.is_subset(&known),
+        "unknown sections in {HARNESS_RULES_FILE}: {sections:?}"
+    );
+    assert!(
+        documented.len() > 40,
+        "too few documented rules: {documented:?}"
+    );
+    let catalogue = rule_catalogue();
+    let missing: Vec<&String> = documented
+        .iter()
+        .filter(|rule| !catalogue.contains(*rule))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "documented rules without code: {missing:?}"
+    );
+}
+
+#[test]
+fn generated_code_is_exempt_only_from_what_it_emits() {
+    let root = repository_root();
+    let table: toml::Table = fs::read_to_string(root.join(ALLOWLIST_FILE))
+        .expect("read allowlists")
+        .parse()
+        .expect("parse allowlists");
+    let names: BTreeSet<String> = table
+        .get("generated-attribute")
+        .and_then(toml::Value::as_array)
+        .expect("generated-attribute list")
+        .iter()
+        .map(|entry| text_field(entry, "name"))
+        .collect();
+    assert_eq!(
+        names,
+        BTreeSet::from([String::from("allow"), String::from("doc")])
+    );
 }
