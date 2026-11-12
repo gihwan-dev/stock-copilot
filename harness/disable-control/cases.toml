@@ -1,0 +1,199 @@
+[[source]]
+example = "clean-pedantic-function.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-nursery-statement.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-expression-statement.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-cargo-item.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-field-variant.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-impl-method.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "clean-allowlisted-generate-context.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = []
+
+[[source]]
+example = "individual-deny-clippy.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "individual-deny-rustc.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "disallowed-macros.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "disallowed-methods.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "disallowed-types.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "forbid-lint.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "group-member-individually-forbidden.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "group-member-individually-allowed.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "restriction-lint.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "style-lint.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "rustc-lint.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "group-warnings.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "group-clippy-pedantic.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "group-clippy-all.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "group-unused.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "group-with-allowed-lint.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "allowlisted-statement-other-path.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "allowlisted-path-other-statement.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "allowlisted-path-other-lint.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "allowlisted-path-on-function.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "placement-module.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:module"]
+
+[[source]]
+example = "placement-impl.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:impl"]
+
+[[source]]
+example = "placement-trait.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:trait"]
+
+[[source]]
+example = "placement-foreign-block.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:foreign-block"]
+
+[[source]]
+example = "placement-item-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:macro"]
+
+[[source]]
+example = "placement-statement-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:macro"]
+
+[[source]]
+example = "placement-inside-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:macro"]
+
+[[source]]
+example = "placement-block.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-loop.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-inner-file.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:inner"]
+
+[[source]]
+example = "placement-inner-function.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:inner"]
+
+[[source]]
+example = "placement-match-arm.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:other"]
+
+[[source]]
+example = "unparsable.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:unparsable"]

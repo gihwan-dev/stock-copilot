@@ -4,6 +4,7 @@ use std::process::ExitCode;
 mod arch_check;
 mod capability_check;
 mod check_support;
+mod disable_control;
 mod migration_check;
 mod raw_types;
 mod source_check;
@@ -19,12 +20,16 @@ fn main() -> ExitCode {
         [command] if command == "migration-check" => migration_check::command(),
         [command] if command == "capability-check" => capability_check::command(),
         [command] if command == "raw-types" => raw_types::command(),
+        [command] if command == "disable-check" => disable_control::check_command(),
+        [command] if command == "disable-report" => disable_control::report_command(),
         _ => arch_check::usage(),
     }
 }
 
 #[cfg(test)]
 mod arch_check_cases_tests;
+#[cfg(test)]
+mod data_variants_tests;
 #[cfg(test)]
 mod formatting_tests;
 #[cfg(test)]

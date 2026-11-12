@@ -1,0 +1,17 @@
+[[expect]]
+path = "apps/desktop/src-tauri/src/main.rs"
+statement = "let context = tauri::generate_context!();"
+lint = "clippy::disallowed_macros"
+reason = "generate_context! 확장이 include_bytes!와 env!를 쓴다. 고칠 코드가 없다 (ADR 0005)"
+
+[[expect]]
+path = "apps/desktop/src-tauri/src/main.rs"
+statement = "let context = tauri::generate_context!();"
+lint = "clippy::disallowed_methods"
+reason = "generate_context! 확장이 std::process::exit를 쓴다. 고칠 코드가 없다 (ADR 0005)"
+
+[[expect]]
+path = "apps/desktop/src-tauri/src/main.rs"
+statement = "let context = tauri::generate_context!();"
+lint = "clippy::disallowed_types"
+reason = "generate_context! 확장이 std::collections::HashMap을 쓴다. 고칠 코드가 없다 (ADR 0005)"
