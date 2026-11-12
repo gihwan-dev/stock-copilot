@@ -9,7 +9,7 @@
   ".claude/hooks/lib/agent-guard.mjs": "2b66ab1f956cf3e6a29b97442521f8496ba64c9efeba38845f874dfb092e5fb8",
   ".claude/hooks/lib/agent-result.mjs": "be04fcdb14e873c2b719aa9f2176b5500972073947a34bac26fb233948ffbc1e",
   ".claude/hooks/lib/allowlist.mjs": "dc227119832cd2d3ae5ac75dbde89f2150fbc38b5cbe14182eef2278e19af59c",
-  ".claude/hooks/lib/bash-guard.mjs": "8cd23f5d07b67240151c4e11d65a28e45c46f18f79ec31a994de8cacde7270f3",
+  ".claude/hooks/lib/bash-guard.mjs": "346114c7fdba87643549230d21720a387b3e7030c5335f0a25e4f7d2b930795c",
   ".claude/hooks/lib/brief.mjs": "3228b408957edf429ef4e802c45fcfd0390eec5151273d861d522eaf38d966a8",
   ".claude/hooks/lib/check-sandbox.mjs": "56b21e43baf31095929dccf405bf35ba29b264cae62e1b15f12ea2b14a5078b8",
   ".claude/hooks/lib/edit-guard.mjs": "a729de40817cf175d4278301da86c8c7fc718320c9e35836181bd64076c78716",

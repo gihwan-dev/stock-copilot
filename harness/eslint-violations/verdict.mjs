@@ -49,6 +49,13 @@ export const caseProblems = (expect, keys) => {
       ];
 };
 
+export const knownGapProblems = (spec, keys) =>
+  Array.isArray(spec.reports)
+    ? caseProblems(spec.reports, keys).map(
+        (problem) => `known gap changed: ${problem}`,
+      )
+    : ["known gap without the exact reports it gets today"];
+
 const expectedKeysOf = (cases, row) =>
   Object.values(cases)
     .filter((spec) => row === undefined || spec.row === row)

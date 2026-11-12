@@ -18,6 +18,17 @@ const MAX_DEPTH = 8;
 
 const finding = (rule, message, gated = false) => ({ rule, gated, message });
 
+const remembered = (compute) => {
+  const answers = new Map();
+  return (...inputs) => {
+    const key = inputs.join("\0");
+    if (!answers.has(key)) {
+      answers.set(key, compute(...inputs));
+    }
+    return answers.get(key);
+  };
+};
+
 const literal = (text) => ({
   text,
   dynamic: false,
@@ -851,7 +862,7 @@ const strippedReference = (text) =>
     .replace(/^refs\/+/u, "")
     .replace(/^heads\/+/u, "");
 
-const referenceName = (text) => {
+const referenceName = remembered((text) => {
   const plain = text.replace(/^\+/u, "");
   if (plain === "") {
     return "";
@@ -873,7 +884,7 @@ const referenceName = (text) => {
       ? strippedReference(plain.replace(/\/{2,}/gu, "/"))
       : undefined;
   }
-};
+});
 
 const baseOrUnknown = (text, branches) => {
   const name = referenceName(text);
@@ -883,7 +894,7 @@ const baseOrUnknown = (text, branches) => {
   );
 };
 
-const branchOfDirectory = (directory) => {
+const branchOfDirectory = remembered((directory) => {
   try {
     return execFileSync(
       "git",
@@ -897,7 +908,7 @@ const branchOfDirectory = (directory) => {
   } catch {
     return undefined;
   }
-};
+});
 
 const baseBranchFindings = (
   sub,
@@ -981,7 +992,7 @@ const RESET_ARGUMENT = Object.freeze({
   ambiguous: "ambiguous",
 });
 
-const resolvesToCommit = (directory, text) => {
+const resolvesToCommit = remembered((directory, text) => {
   try {
     execFileSync(
       "git",
@@ -992,7 +1003,7 @@ const resolvesToCommit = (directory, text) => {
   } catch {
     return false;
   }
-};
+});
 
 const existsIn = (directory, text) => {
   try {

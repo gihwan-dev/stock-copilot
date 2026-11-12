@@ -171,3 +171,6 @@ gen-bindings:
 
 lint-file path:
     cargo run --locked --quiet --package xtask -- lint-file "$1"
+
+known-gaps:
+    node harness/known-gaps/list.mjs

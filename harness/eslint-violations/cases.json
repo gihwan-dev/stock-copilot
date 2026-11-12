@@ -542,7 +542,11 @@
     },
     "src/app/failure/throwing-builtin-gap.ts": {
       "row": "실패 처리",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": [
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+      ]
     },
     "src/app/failure/try.ts": {
       "row": "실패 처리",
@@ -2236,7 +2240,8 @@
     },
     "src/features/gaps/model/bare-src-gap.ts": {
       "row": "경계",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": []
     },
     "src/features/gaps/model/glob.ts": {
       "row": "경계",
@@ -2883,7 +2888,11 @@
     },
     "src/features/raw/local-value-gap.ts": {
       "row": "원시 타입",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장)."
+      ]
     },
     "src/features/raw/mapped.ts": {
       "row": "원시 타입",
@@ -3164,7 +3173,11 @@
     },
     "src/features/react/ref-named-gap.tsx": {
       "row": "React",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": [
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+      ]
     },
     "src/features/react/ref-spread.tsx": {
       "row": "React",
@@ -3375,7 +3388,12 @@
     },
     "src/shared/ds/gaps/concat-key-gap.ts": {
       "row": "전역",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": [
+        "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+      ]
     },
     "src/shared/ds/index.ts": {
       "row": "경계",
@@ -3399,7 +3417,8 @@
     },
     "src/shared/ds/text/attribute-gap.tsx": {
       "row": "원시 타입",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": []
     },
     "src/shared/ds/text/label.tsx": {
       "row": "원시 타입",
@@ -3409,7 +3428,8 @@
     },
     "src/shared/ds/text/library-props-gap.tsx": {
       "row": "원시 타입",
-      "expect": "KNOWN_GAP"
+      "expect": "KNOWN_GAP",
+      "reports": []
     },
     "src/shared/ds/text/spread-allowed.tsx": {
       "row": "React",
