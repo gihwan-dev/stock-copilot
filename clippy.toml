@@ -51,7 +51,7 @@ disallowed-methods = [
   { path = "std::mem::replace", reason = "소비형 토큰 재사용 우회로" },
   { path = "std::mem::swap", reason = "소비형 토큰 재사용 우회로" },
   { path = "rust_decimal::Decimal::from_f64_retain", reason = "부동소수점에서 금액을 만들지 않는다", allow-invalid = true },
-  { path = "rust_decimal::Decimal::to_f64", reason = "금액을 부동소수점으로 바꾸지 않는다", allow-invalid = true },
+  { path = "num_traits::ToPrimitive::to_f64", reason = "금액을 부동소수점으로 바꾸지 않는다", allow-invalid = true },
 ]
 
 disallowed-macros = [

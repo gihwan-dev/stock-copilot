@@ -76,6 +76,8 @@ enum Expectation {
     ForbiddenLint(String),
     DeniedLint(String),
     RejectedOverride(String),
+    DisallowedItem { lint: String, path: String },
+    UndetectedDisallowedItem { lint: String, path: String },
     Clean,
 }
 
@@ -83,6 +85,7 @@ enum Expectation {
 struct Case {
     package: String,
     source: String,
+    dependencies: String,
     expectation: Expectation,
 }
 
@@ -139,20 +142,24 @@ fn forbid_cases(root: &Path) -> Vec<Case> {
                 Case {
                     package: format!("forbid_{}", package_suffix(&stem)),
                     source: source.clone(),
+                    dependencies: String::new(),
                     expectation: Expectation::ForbiddenLint(lint.clone()),
                 },
                 Case {
                     package: format!("allow_{}", package_suffix(&stem)),
+                    dependencies: String::new(),
                     source: format!("#[allow({lint})]\npub mod wrapped {{\n{source}}}\n"),
                     expectation: Expectation::RejectedOverride(lint.clone()),
                 },
                 Case {
                     package: format!("inner_allow_{}", package_suffix(&stem)),
+                    dependencies: String::new(),
                     source: format!("#![allow({lint})]\n{source}"),
                     expectation: Expectation::RejectedOverride(lint.clone()),
                 },
                 Case {
                     package: format!("expect_{}", package_suffix(&stem)),
+                    dependencies: String::new(),
                     source: format!(
                         "#[expect({lint}, reason = \"harness\")]\npub mod wrapped {{\n{source}}}\n"
                     ),
@@ -169,6 +176,7 @@ fn deny_cases(root: &Path) -> Vec<Case> {
         .map(|(stem, source)| Case {
             package: format!("deny_{}", package_suffix(&stem)),
             source,
+            dependencies: String::new(),
             expectation: Expectation::DeniedLint(lint_name(&stem)),
         })
         .collect()
@@ -180,7 +188,80 @@ fn clean_cases(root: &Path) -> Vec<Case> {
         .map(|(stem, source)| Case {
             package: format!("clean_{}", package_suffix(&stem)),
             source,
+            dependencies: String::new(),
             expectation: Expectation::Clean,
+        })
+        .collect()
+}
+
+const KNOWN_DISALLOWED_GAPS: [&str; 1] = ["std::include"];
+
+const DISALLOWED_GROUPS: [(&str, &str, &str); 3] = [
+    ("disallowed-methods", "clippy::disallowed_methods", "method"),
+    ("disallowed-macros", "clippy::disallowed_macros", "macro"),
+    ("disallowed-types", "clippy::disallowed_types", "type"),
+];
+
+fn example_dependency(path: &str) -> String {
+    match path.split("::").next() {
+        Some("rust_decimal") => {
+            String::from("rust_decimal = { version = \"=1.43.0\", default-features = false }\n")
+        }
+        Some("num_traits") => {
+            String::from("num-traits = { version = \"=0.2.19\", default-features = false }\n")
+        }
+        Some(_) | None => String::new(),
+    }
+}
+
+fn disallowed_cases(root: &Path) -> Vec<Case> {
+    DISALLOWED_GROUPS
+        .into_iter()
+        .flat_map(|(group, lint, kind)| {
+            examples(root, group)
+                .into_iter()
+                .map(move |(stem, source)| {
+                    let path = stem.replace("__", "::");
+                    Case {
+                        package: format!(
+                            "disallowed_{kind}_{}",
+                            package_suffix(&stem).to_lowercase()
+                        ),
+                        source,
+                        dependencies: example_dependency(&path),
+                        expectation: if KNOWN_DISALLOWED_GAPS.contains(&path.as_str()) {
+                            Expectation::UndetectedDisallowedItem {
+                                lint: String::from(lint),
+                                path,
+                            }
+                        } else {
+                            Expectation::DisallowedItem {
+                                lint: String::from(lint),
+                                path,
+                            }
+                        },
+                    }
+                })
+        })
+        .collect()
+}
+
+fn clippy_config_paths(root: &Path, key: &str) -> BTreeSet<String> {
+    let config: toml::Table = fs::read_to_string(root.join("clippy.toml"))
+        .expect("read clippy.toml")
+        .parse()
+        .expect("parse clippy.toml");
+    config
+        .get(key)
+        .and_then(toml::Value::as_array)
+        .expect("disallowed list")
+        .iter()
+        .map(|entry| {
+            entry
+                .get("path")
+                .and_then(toml::Value::as_str)
+                .map(String::from)
+                .expect("disallowed path")
         })
         .collect()
 }
@@ -188,6 +269,7 @@ fn clean_cases(root: &Path) -> Vec<Case> {
 fn all_cases(root: &Path) -> Vec<Case> {
     let mut cases = forbid_cases(root);
     cases.extend(deny_cases(root));
+    cases.extend(disallowed_cases(root));
     cases.extend(clean_cases(root));
     cases
 }
@@ -249,11 +331,13 @@ fn write_workspace(root: &Path, directory: &Path, cases: &[Case]) {
         fs::write(
             crate_directory.join("Cargo.toml"),
             format!(
-                "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nedition = \"2024\"\npublish = false\n\n[lints]\nworkspace = true\n",
-                case.package
+                "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nedition = \"2024\"\npublish = false\n\n[lints]\nworkspace = true\n\n[dependencies]\n{}",
+                case.package, case.dependencies
             ),
         )
         .expect("write case manifest");
+        fs::write(crate_directory.join("src").join("fragment.rs"), "1_u8\n")
+            .expect("write case fragment");
         fs::write(crate_directory.join("src").join("lib.rs"), &case.source)
             .expect("write case source");
     }
@@ -357,6 +441,16 @@ fn expectation_met(
                     .message
                     .contains("incompatible with previous forbid")
         }),
+        Expectation::DisallowedItem { lint, path } => diagnostics.iter().any(|diagnostic| {
+            is_error_with_code(diagnostic, lint)
+                && diagnostic.message.contains(&format!("`{path}`"))
+        }),
+        Expectation::UndetectedDisallowedItem { lint, path } => {
+            !diagnostics.iter().any(|diagnostic| {
+                is_error_with_code(diagnostic, lint)
+                    && diagnostic.message.contains(&format!("`{path}`"))
+            })
+        }
         Expectation::Clean => {
             compilation == Compilation::Built
                 && diagnostics.iter().all(|diagnostic| {
@@ -435,8 +529,7 @@ fn prepared(name: &str, select: fn(&Path) -> Vec<Case>) -> (PathBuf, PathBuf, Ve
     (root, directory, cases)
 }
 
-const ENVIRONMENT_PROBES: [&str; 2] =
-    ["forbid_clippy_unwrap_used", "deny_clippy_disallowed_macros"];
+const ENVIRONMENT_PROBES: [&str; 2] = ["forbid_clippy_unwrap_used", "disallowed_macro_std_matches"];
 
 const EXPECT_PROBES: [&str; 3] = [
     "clean_expect_on_deny_group_lint",
@@ -495,6 +588,18 @@ fn every_forbidden_lint_has_a_violation_example() {
         .map(|(stem, _)| lint_name(&stem))
         .collect();
     assert_eq!(config_forbid_lints(&root), exemplified);
+}
+
+#[test]
+fn every_clippy_disallowed_entry_has_a_violation_example() {
+    let root = repository_root();
+    for (group, _, _) in DISALLOWED_GROUPS {
+        let exemplified: BTreeSet<String> = examples(&root, group)
+            .into_iter()
+            .map(|(stem, _)| stem.replace("__", "::"))
+            .collect();
+        assert_eq!(clippy_config_paths(&root, group), exemplified, "{group}");
+    }
 }
 
 #[test]
