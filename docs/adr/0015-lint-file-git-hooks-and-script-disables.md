@@ -59,7 +59,8 @@ harness.md 1.1은 편집 훅이 부르는 `just lint-file <경로>`, 커밋 훅�
 - 병합 뒤 저장소 루트에서 `lefthook install`을 한 번 실행해야 `just check`의 `hooks-installed`가 통과한다. 공통 `.git/hooks`에 설치되므로 모든 작업 사본의 커밋이 그때부터 훅을 거친다. `lefthook.yml`이 없는 옛 기준의 작업 사본에서는 lefthook이 설정을 찾지 못했다는 줄을 내고 커밋을 허용한다(실측).
 - 커밋마다 약 2분이 든다(harness 1.2의 커밋 훅 = `just check`). 3분을 넘지 않아 커밋 훅에서 빼는 단계는 없다. 넘게 되면 1.2에 맞춰 nextest·커버리지를 커밋 훅에 두고 `vite build`·`tsc-violations`처럼 바뀐 파일과 무관하게 같은 결과를 내는 단계부터 푸시 훅·종료 훅으로 옮기는 것을 제안한다.
 - 추적하지 않는 파일이 있으면 커밋할 수 없다. 메모 파일은 무시 목록에 넣거나 저장소 밖에 둔다.
-- 기존 테스트 `network_sandbox_tests::unix_socket_fake_server_answers`는 저장소 경로가 길면(유닉스 소켓 경로 104바이트 제한) 실패한다. 이 판에서는 고치지 않았다.
+- 기존 테스트 `network_sandbox_tests::unix_socket_fake_server_answers`는 저장소 경로가 길면(유닉스 소켓 경로 104바이트 제한) 실패해 깊은 작업 사본의 커밋을 막는다. 소켓을 시스템 임시 폴더에 만들도록 본문을 바꿨다(단언은 그대로, 메인 승인). `test-diff`가 이 테스트를 `modified`로 보고하므로 이 변경이 들어간 커밋을 기준 이전으로 두는 검사는 사용자 승인이 필요하다.
+- `lint-file`은 파일 하나로 돌지 않는 검사(Rust: clippy·arch-check·deny·테스트·커버리지·test-diff, TS: tsc·knip·Vitest·source-tree 심볼릭 링크 훑기·vite build)를 돌리지 않는다고 출력에 적는다. `check-ts`의 ESLint 대상 밖 스크립트(`apps/desktop/vitest.config.mjs` 등)는 "check-ts의 ESLint 대상 밖"으로 표시한다.
 - 원리상 훅이 못 막는 것:
   - `git commit --no-verify`, `-n`, `LEFTHOOK=0`, `LEFTHOOK_CONFIG`, `LEFTHOOK_EXCLUDE`, `git -c core.hooksPath=…`, `GIT_CONFIG_PARAMETERS`처럼 훅을 건너뛰게 하는 호출. `hooks-installed`는 설치 상태만 보고 한 번의 호출을 막지 못한다. 셸 훅(H-15)과 CI(H-16)의 몫이다.
   - `PATH` 앞에 둔 가짜 `lefthook`·`just`·`cargo`(훅 파일이 `PATH`의 `lefthook`을 먼저 부른다). H-35, H-16.
