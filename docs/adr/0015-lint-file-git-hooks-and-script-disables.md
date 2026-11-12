@@ -27,6 +27,8 @@ harness.md 1.1은 편집 훅이 부르는 `just lint-file <경로>`, 커밋 훅�
 | 낡은 빌드 | 작은 작업 공간에서 빌드 → 소스 수정 → mtime 되돌림 → `cargo run` | 고친 소스가 반영되지 않는다. `cargo clean --workspace` 뒤에는 반영된다 |
 | 정리 비용 | `cargo clean --locked --workspace`, `cargo llvm-cov clean --locked --workspace` | 약 4초. 이어지는 `just base=HEAD check` 1분 46초(정리 없이 통과하던 상태 1분 40초 안팎) |
 | 커밋 훅 전체 | 이 판을 복제한 저장소에 `lefthook install` 후 `git commit` | 2분 4초(commit-guard 0.07초, fresh-build 3.9초, check 120초). 구현 소스를 고치고 mtime을 되돌린 커밋은 다시 빌드한 테스트가 실패해 112초 만에 거부됐다 |
+| `node_modules` 바꿔치기 | `apps/desktop/node_modules/.bin/eslint`를 `exit 0` 스크립트로, 패키지 안의 `eslint.js`를 덧붙여 바꾼 뒤 `pnpm install --frozen-lockfile`, 이어서 `--force` | `--frozen-lockfile`만으로는 둘 다 남는다. `--force`는 둘 다 되돌리고 6~7초 걸린다 |
+| 수정판 커밋 훅 | 복제 저장소에 `lefthook install` 후 `git commit` | 2분 44초(fresh-build 10.9초, commit-guard 7.6초(xtask 다시 빌드 포함), check 144.6초). eslint 실행 파일을 바꿔치기하고 TS 위반을 넣은 커밋은 fresh-build가 되돌린 ESLint의 `local/no-raw-types`로 21초 만에 거부됐다 |
 | rustfmt 표준 입력 | `rustfmt --check` < 파일 | 차이가 있어도 종료 0이다. 그래서 `--emit stdout` 출력과 입력을 비교한다 |
 | ESLint 표준 입력 | `--stdin --stdin-filename` | 디스크에 없는 TS 파일은 타입 정보 프로젝트가 찾지 못해 실패한다. 있는 파일 이름으로는 준 내용을 검사한다 |
 | ESLint가 다루지 않는 파일 | `--print-config` | 무시 목록이나 맞는 `files`가 없으면 `undefined`를 낸다 |
@@ -58,7 +60,7 @@ harness.md 1.1은 편집 훅이 부르는 `just lint-file <경로>`, 커밋 훅�
 ## 결과
 
 - 병합 뒤 저장소 루트에서 `lefthook install`을 한 번 실행해야 `just check`의 `hooks-installed`가 통과한다. 공통 `.git/hooks`에 설치되므로 모든 작업 사본의 커밋이 그때부터 훅을 거친다. `lefthook.yml`이 없는 옛 기준의 작업 사본에서는 lefthook이 설정을 찾지 못했다는 줄을 내고 커밋을 허용한다(실측).
-- 커밋마다 약 2분이 든다(harness 1.2의 커밋 훅 = `just check`). 3분을 넘지 않아 커밋 훅에서 빼는 단계는 없다. 넘게 되면 1.2에 맞춰 nextest·커버리지를 커밋 훅에 두고 `vite build`·`tsc-violations`처럼 바뀐 파일과 무관하게 같은 결과를 내는 단계부터 푸시 훅·종료 훅으로 옮기는 것을 제안한다.
+- 커밋마다 약 2분 45초가 든다(harness 1.2의 커밋 훅 = `just check`). 3분을 넘지 않아 커밋 훅에서 빼는 단계는 없다. 넘게 되면 1.2에 맞춰 nextest·커버리지를 커밋 훅에 두고 `vite build`·`tsc-violations`처럼 바뀐 파일과 무관하게 같은 결과를 내는 단계부터 푸시 훅·종료 훅으로 옮기는 것을 제안한다.
 - 추적하지 않는 파일이 있으면 커밋할 수 없다. 메모 파일은 무시 목록에 넣거나 저장소 밖에 둔다.
 - 기존 테스트 `network_sandbox_tests::unix_socket_fake_server_answers`는 저장소 경로가 길면(유닉스 소켓 경로 104바이트 제한) 실패해 깊은 작업 사본의 커밋을 막는다. 소켓을 시스템 임시 폴더에 만들도록 본문을 바꿨다(단언은 그대로, 메인 승인). `test-diff`가 이 테스트를 `modified`로 보고하므로 이 변경이 들어간 커밋을 기준 이전으로 두는 검사는 사용자 승인이 필요하다.
 - `lint-file`은 파일 하나로 돌지 않는 검사(Rust: clippy·arch-check·deny·테스트·커버리지·test-diff, TS: tsc·knip·Vitest·source-tree 심볼릭 링크 훑기·vite build)를 돌리지 않는다고 출력에 적는다. `check-ts`의 ESLint 대상 밖 스크립트(`apps/desktop/vitest.config.mjs` 등)는 "check-ts의 ESLint 대상 밖"으로 표시한다.
