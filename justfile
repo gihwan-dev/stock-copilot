@@ -174,3 +174,6 @@ lint-file path:
 
 known-gaps:
     node harness/known-gaps/list.mjs
+
+claude-regression:
+    node harness/claude-regression/run.mjs
