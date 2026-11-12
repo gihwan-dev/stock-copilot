@@ -4,13 +4,17 @@ use std::path::Path;
 
 use crate::harness_workspace_tests::{copy_tree, fresh_directory, repository_root};
 
-use super::{FORBIDDEN_PERMISSIONS, Rule, TAURI_DIRECTORY, check_tauri_directory};
+use super::{
+    ALLOWED_PERMISSIONS_FILE, AllowedPermissions, FORBIDDEN_PERMISSIONS, Rule, TAURI_DIRECTORY,
+    check_tauri_directory,
+};
 
 const CASES_FILE: &str = "harness/capability-check/cases.toml";
 const BASE_DIRECTORY: &str = "harness/capability-check/base";
 const OVERLAYS_DIRECTORY: &str = "harness/capability-check/overlays";
 
-const UNIT_RULES: [Rule; 17] = [
+const UNIT_RULES: [Rule; 18] = [
+    Rule::NotAllowed,
     Rule::NotExplicit,
     Rule::ListNotMain,
     Rule::MainMissing,
@@ -54,6 +58,7 @@ struct Case {
     name: String,
     overlay: Option<String>,
     remove: Vec<String>,
+    allowed: Option<Vec<String>>,
     expect: BTreeSet<String>,
 }
 
@@ -89,6 +94,7 @@ fn cases(root: &Path) -> Vec<Case> {
                 .and_then(toml::Value::as_str)
                 .map(String::from),
             remove: strings(entry, "remove"),
+            allowed: entry.get("allowed").map(|_| strings(entry, "allowed")),
             expect: strings(entry, "expect").into_iter().collect(),
         })
         .collect()
@@ -103,7 +109,11 @@ fn reported(root: &Path, case: &Case) -> BTreeSet<String> {
     for removed in &case.remove {
         fs::remove_file(directory.join(removed)).expect("remove fixture file");
     }
-    check_tauri_directory(&directory)
+    let allowed = case.allowed.as_ref().map_or_else(
+        || AllowedPermissions::load(root).expect("load allowed permissions"),
+        |listed| AllowedPermissions::new(ALLOWED_PERMISSIONS_FILE, listed.iter().cloned()),
+    );
+    check_tauri_directory(&directory, &allowed)
         .expect("check fixture")
         .into_iter()
         .map(|finding| finding.rule.to_string())
@@ -199,7 +209,9 @@ fn clean_cases_expect_no_findings() {
 #[test]
 fn repository_passes_capability_check() {
     let root = repository_root();
-    let findings = check_tauri_directory(&root.join(TAURI_DIRECTORY)).expect("check repository");
+    let allowed = AllowedPermissions::load(&root).expect("load allowed permissions");
+    let findings =
+        check_tauri_directory(&root.join(TAURI_DIRECTORY), &allowed).expect("check repository");
     let lines: Vec<String> = findings.iter().map(ToString::to_string).collect();
     assert!(lines.is_empty(), "{lines:#?}");
 }
@@ -234,4 +246,47 @@ fn json_reader_accepts_json_and_rejects_the_rest() {
     ] {
         assert_eq!(super::json::parse(invalid), None, "{invalid:?}");
     }
+}
+
+fn probe_output(justfile: &Path) -> String {
+    let output = std::process::Command::new("just")
+        .arg("--justfile")
+        .arg(justfile)
+        .arg("probe")
+        .env("TAURI_CONFIG", HOSTILE_TAURI_CONFIG)
+        .output()
+        .expect("run just");
+    assert!(output.status.success(), "just probe failed");
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+const HOSTILE_TAURI_CONFIG: &str = "{\"app\":{\"security\":{\"capabilities\":[]}}}";
+
+const PROBE_RECIPE: &str = "probe:\n    printf '%s' \"${TAURI_CONFIG:-unset}\"\n";
+
+#[test]
+fn tauri_config_is_neutralized() {
+    let root = repository_root();
+    let directory = fresh_directory(&root, "capability-check-tauri-config");
+    let fixed = directory.join("fixed.just");
+    fs::write(
+        &fixed,
+        format!(
+            "import '{}'\n\n{PROBE_RECIPE}",
+            root.join("justfile").display()
+        ),
+    )
+    .expect("write importing justfile");
+    let plain = directory.join("plain.just");
+    fs::write(&plain, PROBE_RECIPE).expect("write plain justfile");
+    assert_eq!(
+        probe_output(&fixed),
+        "unset",
+        "TAURI_CONFIG reached just recipes"
+    );
+    assert_eq!(
+        probe_output(&plain),
+        HOSTILE_TAURI_CONFIG,
+        "TAURI_CONFIG did not reach a recipe even without the justfile"
+    );
 }

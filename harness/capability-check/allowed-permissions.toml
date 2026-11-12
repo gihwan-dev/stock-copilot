@@ -1,0 +1,2 @@
+reason = "capabilities/main.json이 생성된 commands 묶음 밖에서 가질 수 있는 권한. 지금은 WebView에 주는 권한이 없다 (architecture.md 3.6, ADR 0011)"
+permissions = []

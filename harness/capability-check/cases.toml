@@ -10,6 +10,7 @@ expect = []
 [[case]]
 name = "clean-narrow-core-permissions"
 overlay = "clean-narrow-core-permissions"
+allowed = ["core:event:allow-listen", "core:event:allow-unlisten", "core:window:allow-close"]
 expect = []
 
 [[case]]
@@ -70,6 +71,7 @@ expect = ["capability:remote"]
 [[case]]
 name = "forbidden-permissions"
 overlay = "forbidden-permissions"
+allowed = ["core:default", "core:event:default", "core:event:allow-emit", "core:event:allow-emit-to", "shell:allow-execute", "dialog:allow-open", "opener:default", "fs:allow-read-file", "http:default", "biometric:default", "notification:default", "autostart:allow-enable"]
 expect = ["capability:forbidden:core:default", "capability:forbidden:core:event:default", "capability:forbidden:core:event:allow-emit", "capability:forbidden:core:event:allow-emit-to", "capability:forbidden:shell:*", "capability:forbidden:dialog:*", "capability:forbidden:opener:*", "capability:forbidden:fs:*", "capability:forbidden:http:*", "capability:forbidden:biometric:*", "capability:forbidden:notification:*", "capability:forbidden:autostart:*"]
 
 [[case]]
@@ -156,3 +158,18 @@ expect = ["capability:unparsable"]
 name = "unparsable-build"
 overlay = "unparsable-build"
 expect = ["capability:unparsable"]
+
+[[case]]
+name = "narrow-core-permissions-without-table"
+overlay = "clean-narrow-core-permissions"
+expect = ["capability:not-allowed"]
+
+[[case]]
+name = "unlisted-core-permissions"
+overlay = "unlisted-core-permissions"
+expect = ["capability:not-allowed"]
+
+[[case]]
+name = "table-hand-written-command"
+allowed = ["allow-get-holdings"]
+expect = ["capability:hand-written-command"]
