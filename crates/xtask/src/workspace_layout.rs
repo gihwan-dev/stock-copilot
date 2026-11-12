@@ -112,3 +112,27 @@ fn repository_rustc_is_pinned_release() {
         "unexpected rustc version: {version}"
     );
 }
+
+fn lint_file_output_lines(path: &str) -> Vec<String> {
+    let output = Command::new("just")
+        .arg("lint-file")
+        .arg(path)
+        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+        .output()
+        .expect("just lint-file");
+    let mut text = String::from_utf8(output.stdout).expect("utf-8 stdout");
+    text.push_str(&String::from_utf8(output.stderr).expect("utf-8 stderr"));
+    text.lines().map(|line| String::from(line.trim())).collect()
+}
+
+#[test]
+fn lint_file_does_not_run_command_substitution_in_path() {
+    let lines = lint_file_output_lines("a$(echo INJECTED >&2).txt");
+    assert!(!lines.iter().any(|line| line == "INJECTED"), "{lines:?}");
+}
+
+#[test]
+fn lint_file_does_not_run_commands_after_quote_in_path() {
+    let lines = lint_file_output_lines("x\" ; echo PWNED ; \"y.rs");
+    assert!(!lines.iter().any(|line| line == "PWNED"), "{lines:?}");
+}
