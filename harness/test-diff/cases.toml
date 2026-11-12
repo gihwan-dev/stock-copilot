@@ -1,0 +1,1271 @@
+[[case]]
+name = "unchanged"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "reformatted"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(
+            add(1, 2),
+            3,
+            "sum"
+        );
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "new-test-added"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_large() {
+        assert_eq!(add(9, 9), 18, "large");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "new-helper-added"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    fn helper() -> u32 {
+        add(2, 2)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "production-code-changed"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right).saturating_add(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "test-removed"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+}
+'''
+
+[[case]]
+name = "test-renamed"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_nothing() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "module-renamed"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod sum_tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "test-moved-to-other-file"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+}
+'''
+"crates/domain/src/ledger_tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+
+[[case]]
+name = "file-deleted"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+
+[[case]]
+name = "body-changed"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+        assert_eq!(add(2, 2), 4, "more");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "assertion-weakened"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert!(true, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "expected-value-changed"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), add(1, 2), "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "early-return"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        if add(0, 0) == 0 {
+            return;
+        }
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "cfg-on-test"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    #[cfg(any())]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "should-panic-added"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    #[should_panic]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "ignore-added"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    #[ignore]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "test-attribute-removed"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "enclosing-module-disabled"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(any())]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "inner-attribute-added"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+#![cfg(any())]
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "signature-changed"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    pub fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "current-unparsable"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {{
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "nested-module-and-tool-test"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::outer_tests::inner::runs_async"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod outer_tests {
+    mod inner {
+        #[tokio::test(flavor = "current_thread")]
+        async fn runs_async() {
+            assert_eq!(1_u8, 1_u8, "async");
+        }
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod outer_tests {
+    mod inner {
+        #[tokio::test(flavor = "current_thread")]
+        async fn runs_async() {
+            assert!(true, "async");
+        }
+    }
+}
+'''
+
+[[case]]
+name = "nested-module-renamed"
+expect = ["test-diff:removed:crates/domain/src/lib.rs::outer_tests::inner::runs_async"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod outer_tests {
+    mod inner {
+        #[tokio::test(flavor = "current_thread")]
+        async fn runs_async() {
+            assert_eq!(1_u8, 1_u8, "async");
+        }
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod outer_tests {
+    mod moved {
+        #[tokio::test(flavor = "current_thread")]
+        async fn runs_async() {
+            assert_eq!(1_u8, 1_u8, "async");
+        }
+    }
+}
+'''
+
+[[case]]
+name = "macro-test-unchanged"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod property_tests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sums_never_shrink(left in 0_u32..10, right in 0_u32..10) {
+            prop_assert!(left.saturating_add(right) >= left);
+        }
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod property_tests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sums_never_shrink(left in 0_u32..10, right in 0_u32..10) {
+            prop_assert!(left.saturating_add(right) >= left);
+        }
+    }
+}
+'''
+
+[[case]]
+name = "macro-test-weakened"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::property_tests::sums_never_shrink"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod property_tests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sums_never_shrink(left in 0_u32..10, right in 0_u32..10) {
+            prop_assert!(left.saturating_add(right) >= left);
+        }
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod property_tests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sums_never_shrink(left in 0_u32..10, right in 0_u32..10) {
+            prop_assert!(true);
+        }
+    }
+}
+'''
+
+[[case]]
+name = "macro-test-input-narrowed"
+expect = ["test-diff:modified:crates/domain/src/lib.rs::property_tests::sums_never_shrink"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod property_tests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sums_never_shrink(left in 0_u32..10, right in 0_u32..10) {
+            prop_assert!(left.saturating_add(right) >= left);
+        }
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+#[cfg(test)]
+mod property_tests {
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn sums_never_shrink(left in 0_u32..10, right in 0_u32..1) {
+            prop_assert!(left.saturating_add(right) >= left);
+        }
+    }
+}
+'''
+
+[[case]]
+name = "harness-example-excluded"
+expect = []
+[case.base]
+"harness/source-checks/sources/sample.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+"harness/source-checks/sources/sample.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert!(true, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+
+[[case]]
+name = "non-rust-file-ignored"
+expect = []
+[case.base]
+"crates/domain/src/notes.txt" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(add(1, 2), 3, "sum");
+    }
+
+    #[test]
+    fn adds_zero() {
+        assert_eq!(add(4, 0), 4, "zero");
+    }
+}
+'''
+[case.current]
+
+[[list-case]]
+name = "lists-equal"
+base = ["domain tests::a", "domain tests::b"]
+current = ["domain tests::a", "domain tests::b"]
+expect = []
+
+[[list-case]]
+name = "list-grows"
+base = ["domain tests::a"]
+current = ["domain tests::a", "domain tests::b"]
+expect = []
+
+[[list-case]]
+name = "list-loses-a-test"
+base = ["domain tests::a", "domain tests::b"]
+current = ["domain tests::a"]
+expect = ["test-diff:not-listed:domain tests::b", "test-diff:count-decreased:2->1"]
+
+[[list-case]]
+name = "list-swaps-a-test"
+base = ["domain tests::a", "domain tests::b"]
+current = ["domain tests::a", "domain tests::c"]
+expect = ["test-diff:not-listed:domain tests::b"]
+
+[[list-case]]
+name = "list-moves-binary"
+base = ["domain tests::a"]
+current = ["domain::bin/domain tests::a"]
+expect = ["test-diff:not-listed:domain tests::a"]
+
+[[list-case]]
+name = "list-empties"
+base = ["domain tests::a"]
+current = []
+expect = ["test-diff:not-listed:domain tests::a", "test-diff:count-decreased:1->0"]

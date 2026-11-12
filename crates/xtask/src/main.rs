@@ -13,6 +13,7 @@ mod nextest_list;
 mod raw_types;
 mod source_check;
 mod sql_check;
+mod test_diff;
 mod workspace_sources;
 
 fn main() -> ExitCode {
@@ -28,6 +29,7 @@ fn main() -> ExitCode {
         [command] if command == "disable-check" => disable_control::check_command(),
         [command] if command == "disable-report" => disable_control::report_command(),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
+        [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),
         _ => arch_check::usage(),
     }
 }
