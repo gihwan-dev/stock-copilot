@@ -1,9 +1,10 @@
 packages = ["domain", "order-execution", "application"]
+relaxed = []
 
 [[threshold]]
 path = "crates/domain/src"
-percent = 95
-reason = "harness.md 6.1: domain 파일별 줄 커버리지 95% 이상"
+percent = 100
+reason = "domain은 기본이 100%다. 95%를 받는 파일은 relaxed에 이름을 적은 것뿐이다 (harness.md 6.1, ADR 0013)"
 
 [[threshold]]
 path = "crates/order-execution/src"

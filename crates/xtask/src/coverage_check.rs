@@ -1,5 +1,6 @@
 mod functions;
 mod lcov;
+mod regions;
 
 #[cfg(test)]
 mod tests;
@@ -15,10 +16,14 @@ use crate::nextest_list::list_tests;
 use crate::workspace_sources::relative_text;
 use functions::{function_lines, functions};
 use lcov::{LineCounts, parse_lcov};
+use regions::{Regions, missed_region_lines, parse_regions};
 
 pub(crate) const POLICY_FILE: &str = "harness/coverage/policy.toml";
 pub(crate) const EXCEPTIONS_FILE: &str = "harness/coverage/exceptions.toml";
 const REPORT_FILE: &str = "target/coverage/lcov.info";
+const REGION_FILE: &str = "target/coverage/regions.json";
+const RELAXED_PERCENT: u32 = 95;
+const DOMAIN_ROOT: &str = "crates/domain/src";
 const FULL_PERCENT: u32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,6 +31,8 @@ pub(crate) enum Rule {
     BelowThreshold,
     UncoveredLine,
     UntestedFile,
+    UncoveredRegion,
+    UnmeasuredFile,
 }
 
 impl fmt::Display for Rule {
@@ -34,6 +41,8 @@ impl fmt::Display for Rule {
             Self::BelowThreshold => "coverage:below-threshold",
             Self::UncoveredLine => "coverage:uncovered-line",
             Self::UntestedFile => "coverage:untested-file",
+            Self::UncoveredRegion => "coverage:uncovered-region",
+            Self::UnmeasuredFile => "coverage:unmeasured-file",
         })
     }
 }
@@ -48,6 +57,7 @@ pub(crate) struct Threshold {
 pub(crate) struct Policy {
     pub(crate) packages: Vec<String>,
     pub(crate) thresholds: Vec<Threshold>,
+    pub(crate) relaxed: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -115,9 +125,28 @@ pub(crate) fn parse_policy(text: &str) -> Result<Policy, String> {
             Ok(Threshold { path, percent })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    let relaxed = reasoned_entries(&table, "relaxed", POLICY_FILE)?
+        .iter()
+        .map(|entry| text_of(entry, "path", POLICY_FILE))
+        .collect::<Result<Vec<_>, String>>()?;
+    for path in &relaxed {
+        let inside_domain = path
+            .strip_prefix(DOMAIN_ROOT)
+            .is_some_and(|rest| rest.starts_with('/'));
+        let overlaps_full = thresholds.iter().any(|threshold| {
+            threshold.path != DOMAIN_ROOT
+                && (matches(&threshold.path, path) || matches(path, &threshold.path))
+        });
+        if !inside_domain || overlaps_full {
+            return Err(format!(
+                "{POLICY_FILE}: {path}는 95%로 낮출 수 없다(domain 안이고 100% 모듈과 겹치지 않아야 한다)"
+            ));
+        }
+    }
     Ok(Policy {
         packages,
         thresholds,
+        relaxed,
     })
 }
 
@@ -177,9 +206,40 @@ pub(crate) fn threshold_for(policy: &Policy, path: &str) -> Option<u32> {
     policy
         .thresholds
         .iter()
-        .filter(|threshold| matches(&threshold.path, path))
-        .map(|threshold| threshold.percent)
-        .max()
+        .map(|threshold| (threshold.path.as_str(), threshold.percent))
+        .chain(
+            policy
+                .relaxed
+                .iter()
+                .map(|relaxed| (relaxed.as_str(), RELAXED_PERCENT)),
+        )
+        .filter(|(prefix, _)| matches(prefix, path))
+        .max_by_key(|(prefix, percent)| (prefix.len(), *percent))
+        .map(|(_, percent)| percent)
+}
+
+pub(crate) fn evaluate_regions(
+    policy: &Policy,
+    counts: &BTreeMap<String, LineCounts>,
+    regions: &Regions,
+    excepted: &BTreeMap<String, BTreeSet<usize>>,
+) -> BTreeSet<Finding<Rule>> {
+    let empty = BTreeSet::new();
+    let mut findings = BTreeSet::new();
+    for (path, file_regions) in regions {
+        if threshold_for(policy, path) != Some(FULL_PERCENT) {
+            continue;
+        }
+        let allowed = excepted.get(path).unwrap_or(&empty);
+        let lines = counts.get(path);
+        for line in missed_region_lines(file_regions) {
+            let line_missed = lines.and_then(|known| known.get(&line)) == Some(&0);
+            if !line_missed && !allowed.contains(&line) {
+                findings.insert(Finding::at_line(path, line, Rule::UncoveredRegion));
+            }
+        }
+    }
+    findings
 }
 
 fn meets(covered: usize, total: usize, percent: u32) -> bool {
@@ -229,35 +289,59 @@ pub(crate) fn evaluate(
     findings
 }
 
-pub(crate) fn measure(workspace: &Path, packages: &[String]) -> Result<String, String> {
-    let output = workspace.join(REPORT_FILE);
+fn run_llvm_cov(workspace: &Path, arguments: &[&str], packages: &[String]) -> Result<(), String> {
     let mut command = Command::new("cargo");
     command
         .current_dir(workspace)
-        .args(["llvm-cov", "nextest", "--locked", "--lcov", "--output-path"])
-        .arg(&output)
+        .arg("llvm-cov")
+        .args(arguments)
         .arg("--manifest-path")
         .arg(workspace.join("Cargo.toml"))
         .stdin(Stdio::null());
     for package in packages {
         command.arg("--package").arg(package);
     }
+    let status = command
+        .status()
+        .map_err(|error| format!("cargo llvm-cov: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "cargo llvm-cov가 실패했다({status}). llvm-tools가 없으면 rustup component add llvm-tools"
+        ))
+    }
+}
+
+fn fresh_report(workspace: &Path, name: &str) -> Result<String, String> {
+    let output = workspace.join(name);
     if output.exists() {
         fs::remove_file(&output).map_err(|error| format!("{}: {error}", output.display()))?;
     }
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
     }
-    let status = command
-        .status()
-        .map_err(|error| format!("cargo llvm-cov: {error}"))?;
-    if status.success() {
-        read_text(&output)
-    } else {
-        Err(format!(
-            "cargo llvm-cov가 실패했다({status}). llvm-tools가 없으면 rustup component add llvm-tools"
-        ))
-    }
+    Ok(output.display().to_string())
+}
+
+pub(crate) fn measure(workspace: &Path, packages: &[String]) -> Result<(String, String), String> {
+    let lines = fresh_report(workspace, REPORT_FILE)?;
+    let regions = fresh_report(workspace, REGION_FILE)?;
+    run_llvm_cov(workspace, &["nextest", "--locked", "--no-report"], packages)?;
+    run_llvm_cov(
+        workspace,
+        &["report", "--lcov", "--output-path", &lines],
+        packages,
+    )?;
+    run_llvm_cov(
+        workspace,
+        &["report", "--json", "--output-path", &regions],
+        packages,
+    )?;
+    Ok((
+        read_text(&workspace.join(REPORT_FILE))?,
+        read_text(&workspace.join(REGION_FILE))?,
+    ))
 }
 
 fn rust_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
@@ -278,7 +362,7 @@ fn rust_files(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> 
     Ok(())
 }
 
-fn untested_findings(workspace: &Path, policy: &Policy) -> Result<BTreeSet<Finding<Rule>>, String> {
+fn policy_files(workspace: &Path, policy: &Policy) -> Result<Vec<PathBuf>, String> {
     let mut candidates = Vec::new();
     for threshold in &policy.thresholds {
         let base = workspace.join(&threshold.path);
@@ -292,16 +376,33 @@ fn untested_findings(workspace: &Path, policy: &Policy) -> Result<BTreeSet<Findi
     }
     candidates.sort();
     candidates.dedup();
-    let mut findings = BTreeSet::new();
+    let mut with_functions = Vec::new();
     for path in candidates {
         if !functions(&read_text(&path)?).is_empty() {
-            findings.insert(Finding::whole_file(
-                &relative_text(workspace, &path),
-                Rule::UntestedFile,
-            ));
+            with_functions.push(path);
         }
     }
-    Ok(findings)
+    Ok(with_functions)
+}
+
+fn untested_findings(workspace: &Path, policy: &Policy) -> Result<BTreeSet<Finding<Rule>>, String> {
+    Ok(policy_files(workspace, policy)?
+        .iter()
+        .map(|path| Finding::whole_file(&relative_text(workspace, path), Rule::UntestedFile))
+        .collect())
+}
+
+pub(crate) fn unmeasured_findings(
+    workspace: &Path,
+    policy: &Policy,
+    counts: &BTreeMap<String, LineCounts>,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    Ok(policy_files(workspace, policy)?
+        .iter()
+        .map(|path| relative_text(workspace, path))
+        .filter(|path| !counts.contains_key(path))
+        .map(|path| Finding::whole_file(&path, Rule::UnmeasuredFile))
+        .collect())
 }
 
 pub(crate) fn check_workspace(
@@ -313,12 +414,14 @@ pub(crate) fn check_workspace(
     if list_tests(workspace, &policy.packages, None)?.is_empty() {
         return untested_findings(workspace, policy);
     }
-    let report_text = measure(workspace, &policy.packages)?;
-    Ok(evaluate(
-        policy,
-        &parse_lcov(&report_text, workspace),
-        &excepted,
-    ))
+    let (line_report, region_report) = measure(workspace, &policy.packages)?;
+    let counts = parse_lcov(&line_report, workspace);
+    let regions = parse_regions(&region_report, workspace)
+        .ok_or_else(|| String::from("cargo llvm-cov JSON 보고서를 읽지 못했다"))?;
+    let mut findings = evaluate(policy, &counts, &excepted);
+    findings.extend(evaluate_regions(policy, &counts, &regions, &excepted));
+    findings.extend(unmeasured_findings(workspace, policy, &counts)?);
+    Ok(findings)
 }
 
 pub(crate) fn command() -> ExitCode {

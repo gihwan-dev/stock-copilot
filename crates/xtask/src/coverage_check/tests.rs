@@ -19,16 +19,12 @@ const EXAMPLES_DIRECTORY: &str = "harness/coverage";
 const WORKSPACE_EXAMPLE: &str = "harness/coverage/workspace";
 const UNTESTED_EXAMPLE: &str = "harness/coverage/untested-workspace";
 
-const RULES: [Rule; 3] = [
-    Rule::BelowThreshold,
-    Rule::UncoveredLine,
-    Rule::UntestedFile,
-];
+const RULES: [Rule; 2] = [Rule::UncoveredLine, Rule::UntestedFile];
 
 const DOCUMENTED_PACKAGES: [&str; 3] = ["domain", "order-execution", "application"];
 
 const DOCUMENTED_THRESHOLDS: [(&str, u32); 10] = [
-    ("crates/domain/src", 95),
+    ("crates/domain/src", 100),
     ("crates/order-execution/src", 100),
     ("crates/application/src/order_gate", 100),
     ("crates/domain/src/signal", 100),
@@ -344,4 +340,102 @@ fn workspace_without_tests_fails_files_with_functions() {
                 .and_then(|entry| entry.get("expect"))
         )
     );
+}
+
+const RELAXED_EXAMPLE: &str = "crates/domain/src/report";
+
+fn lcov_text(path: &str, hit: usize, missed: usize) -> String {
+    let records: Vec<String> = (1..=hit.saturating_add(missed))
+        .map(|line| format!("DA:{line},{}", u8::from(line <= hit)))
+        .collect();
+    format!("SF:{path}\n{}\nend_of_record\n", records.join("\n"))
+}
+
+fn relaxed_text(root: &Path, path: &str) -> String {
+    read_text(&root.join(POLICY_FILE))
+        .expect("read policy")
+        .replacen(
+            "relaxed = []",
+            &format!("relaxed = [{{ path = \"{path}\", reason = \"harness\" }}]"),
+            1,
+        )
+}
+
+#[test]
+fn relaxed_list_starts_empty() {
+    assert_eq!(
+        root_policy(&repository_root()).relaxed,
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn only_relaxed_paths_get_ninety_five_percent() {
+    let root = repository_root();
+    let policy = parse_policy(&relaxed_text(&root, RELAXED_EXAMPLE)).expect("relaxed policy");
+    let cases = [
+        (format!("{RELAXED_EXAMPLE}.rs"), 19, 1, BTreeSet::new()),
+        (
+            format!("{RELAXED_EXAMPLE}/detail.rs"),
+            18,
+            2,
+            BTreeSet::from([format!(
+                "{RELAXED_EXAMPLE}/detail.rs: coverage:below-threshold"
+            )]),
+        ),
+        (
+            String::from("crates/domain/src/sizing.rs"),
+            19,
+            1,
+            BTreeSet::from([String::from(
+                "crates/domain/src/sizing.rs:20: coverage:uncovered-line",
+            )]),
+        ),
+    ];
+    for (path, hit, missed, expected) in cases {
+        let reported = shown(evaluate(
+            &policy,
+            &parse_lcov(&lcov_text(&path, hit, missed), &root),
+            &BTreeMap::new(),
+        ));
+        assert_eq!(reported, expected, "{path}");
+    }
+}
+
+#[test]
+fn relaxed_list_cannot_lower_full_modules() {
+    let root = repository_root();
+    for path in [
+        "crates/domain/src/signal",
+        "crates/domain/src/signal/decision",
+        "crates/domain/src/order.rs",
+        "crates/domain/src",
+        "crates/order-execution/src/lib.rs",
+        "crates/application/src/order_gate",
+        "crates/application/src/portfolio",
+    ] {
+        assert!(
+            parse_policy(&relaxed_text(&root, path)).is_err(),
+            "{path} was relaxed"
+        );
+    }
+    assert_eq!(
+        parse_policy(&relaxed_text(&root, RELAXED_EXAMPLE))
+            .expect("relaxed policy")
+            .relaxed,
+        vec![String::from(RELAXED_EXAMPLE)]
+    );
+}
+
+#[test]
+fn region_and_unmeasured_rules_have_examples() {
+    let table = cases_table(&repository_root());
+    let expected = text_list(table.get("workspace").and_then(|entry| entry.get("expect")));
+    for rule in [Rule::UncoveredRegion, Rule::UnmeasuredFile] {
+        let name = rule.to_string();
+        assert!(
+            expected.iter().any(|line| line.ends_with(name.as_str())),
+            "{name} has no example"
+        );
+    }
 }

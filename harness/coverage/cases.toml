@@ -27,7 +27,7 @@ end_of_record
 expect = []
 
 [[case]]
-name = "domain-at-threshold"
+name = "domain-default-is-full"
 lcov = '''
 SF:crates/domain/src/lib.rs
 DA:1,1
@@ -52,10 +52,10 @@ DA:19,1
 DA:20,0
 end_of_record
 '''
-expect = []
+expect = ["crates/domain/src/lib.rs:20: coverage:uncovered-line"]
 
 [[case]]
-name = "domain-below-threshold"
+name = "domain-two-uncovered-lines"
 lcov = '''
 SF:crates/domain/src/lib.rs
 DA:1,1
@@ -80,20 +80,20 @@ DA:19,0
 DA:20,0
 end_of_record
 '''
-expect = ["crates/domain/src/lib.rs: coverage:below-threshold"]
+expect = ["crates/domain/src/lib.rs:19: coverage:uncovered-line", "crates/domain/src/lib.rs:20: coverage:uncovered-line"]
 
 [[case]]
-name = "domain-nested-module-below"
+name = "domain-nested-module-is-full"
 lcov = '''
 SF:crates/domain/src/ledger/entry.rs
 DA:1,1
 DA:2,0
 end_of_record
 '''
-expect = ["crates/domain/src/ledger/entry.rs: coverage:below-threshold"]
+expect = ["crates/domain/src/ledger/entry.rs:2: coverage:uncovered-line"]
 
 [[case]]
-name = "domain-excepted-lines-count-as-covered"
+name = "domain-excepted-line-skipped"
 lcov = '''
 SF:crates/domain/src/lib.rs
 DA:1,1
@@ -119,7 +119,7 @@ DA:20,0
 end_of_record
 '''
 excepted = { "crates/domain/src/lib.rs" = [19] }
-expect = []
+expect = ["crates/domain/src/lib.rs:20: coverage:uncovered-line"]
 
 [[case]]
 name = "order-execution-uncovered-line"
@@ -765,13 +765,18 @@ expect = [
     "crates/application/src/order_gate.rs:5: coverage:uncovered-line",
     "crates/application/src/order_gate.rs:6: coverage:uncovered-line",
     "crates/application/src/order_gate.rs:7: coverage:uncovered-line",
-    "crates/domain/src/below.rs: coverage:below-threshold",
+    "crates/domain/src/below.rs:5: coverage:uncovered-line",
+    "crates/domain/src/below.rs:6: coverage:uncovered-line",
+    "crates/domain/src/below.rs:7: coverage:uncovered-line",
+    "crates/domain/src/below.rs:8: coverage:uncovered-line",
+    "crates/domain/src/pick.rs:2: coverage:uncovered-region",
     "crates/domain/src/signal.rs:5: coverage:uncovered-line",
     "crates/domain/src/signal.rs:6: coverage:uncovered-line",
     "crates/domain/src/signal.rs:7: coverage:uncovered-line",
     "crates/order-execution/src/lib.rs:9: coverage:uncovered-line",
     "crates/order-execution/src/lib.rs:10: coverage:uncovered-line",
     "crates/order-execution/src/lib.rs:11: coverage:uncovered-line",
+    "crates/order-execution/src/orphan.rs: coverage:unmeasured-file",
 ]
 
 [untested-workspace]

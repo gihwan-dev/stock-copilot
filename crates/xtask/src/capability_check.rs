@@ -1,5 +1,5 @@
 mod build_script;
-mod json;
+pub(crate) mod json;
 
 #[cfg(test)]
 mod tests;

@@ -5,7 +5,7 @@ use std::str::Chars;
 const MAXIMUM_DEPTH: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Json {
+pub(crate) enum Json {
     Null,
     True,
     False,
@@ -16,7 +16,7 @@ pub(super) enum Json {
 }
 
 impl Json {
-    pub(super) fn get(&self, key: &str) -> Option<&Self> {
+    pub(crate) fn get(&self, key: &str) -> Option<&Self> {
         match self {
             Self::Object(members) => members.get(key),
             Self::Null
@@ -28,7 +28,7 @@ impl Json {
         }
     }
 
-    pub(super) fn as_array(&self) -> Option<&[Self]> {
+    pub(crate) fn as_array(&self) -> Option<&[Self]> {
         match self {
             Self::Array(items) => Some(items),
             Self::Null
@@ -40,7 +40,7 @@ impl Json {
         }
     }
 
-    pub(super) fn as_str(&self) -> Option<&str> {
+    pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
             Self::Text(text) => Some(text),
             Self::Null
@@ -195,7 +195,7 @@ fn value(rest: &mut Source<'_>, depth: usize) -> Option<Json> {
     }
 }
 
-pub(super) fn parse(text: &str) -> Option<Json> {
+pub(crate) fn parse(text: &str) -> Option<Json> {
     let mut rest = text.chars().peekable();
     let parsed = value(&mut rest, 0)?;
     skip_space(&mut rest);
