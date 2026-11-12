@@ -10,7 +10,7 @@ use super::allowlist::{ALLOWLIST_FILE, Allowlist};
 use super::expects::Target;
 use super::lints::{LINTS_FILE, LintCatalogue};
 use super::{
-    Policy, RUST_EXPECT_KIND, Row, Rule, check_source, render_report, repository_rows,
+    Policy, RULES_FILE, RUST_EXPECT_KIND, Row, Rule, check_source, render_report, repository_rows,
     repository_sources,
 };
 
@@ -24,7 +24,8 @@ const DISABLEABLE_GROUPS: [&str; 3] = ["clippy::pedantic", "clippy::nursery", "c
 const RUSTC_GROUPS_HEADER: &str = "Lint groups provided by rustc:";
 const TOOL_GROUPS_HEADER: &str = "Lint groups loaded by this crate:";
 
-const PLACEMENT_RULES: [Target; 8] = [
+const PLACEMENT_RULES: [Target; 9] = [
+    Target::NestedItem,
     Target::Module,
     Target::Impl,
     Target::Trait,
@@ -41,7 +42,8 @@ const ALLOWLISTED_LINTS: [&str; 3] = [
     "clippy::disallowed_types",
 ];
 
-const REQUIRED_CLEAN_EXAMPLES: [&str; 7] = [
+const REQUIRED_CLEAN_EXAMPLES: [&str; 8] = [
+    "clean-function-body-without-items.rs",
     "clean-pedantic-function.rs",
     "clean-nursery-statement.rs",
     "clean-expression-statement.rs",
@@ -430,37 +432,47 @@ fn removing_any_data_element_breaks_some_test() {
     let examples = example_sources(&root);
     let sources = repository_sources(Some(&root)).expect("read repository sources");
     let actual = clippy_catalogue(&root);
-    let lints = read_document(&root, LINTS_FILE);
-    let allowlist = read_document(&root, ALLOWLIST_FILE);
-    let passes = |lints_table: &toml::Table, allowlist_table: &toml::Table| {
-        Policy::from_tables(&root, lints_table, allowlist_table).is_ok_and(|policy| {
-            LintCatalogue::parse(lints_table).is_ok_and(|catalogue| catalogue == actual)
+    let documents = [
+        toml::Value::Table(read_document(&root, LINTS_FILE)),
+        toml::Value::Table(read_document(&root, ALLOWLIST_FILE)),
+        toml::Value::Table(read_document(&root, RULES_FILE)),
+    ];
+    let passes = |candidate: &[toml::Value; 3]| {
+        let [Some(lints), Some(allowlist), Some(rules)] =
+            candidate.each_ref().map(toml::Value::as_table)
+        else {
+            return false;
+        };
+        Policy::from_tables(&root, lints, allowlist, rules).is_ok_and(|policy| {
+            LintCatalogue::parse(lints).is_ok_and(|catalogue| catalogue == actual)
                 && mismatches(&examples, &policy).is_empty()
                 && repository_findings(&sources, &policy).is_empty()
         })
     };
-    assert!(
-        passes(&lints, &allowlist),
-        "data files must pass before mutation"
-    );
-    let lint_variants = element_variants(&toml::Value::Table(lints.clone()), "lints")
-        .into_iter()
-        .map(|(label, variant)| (label, variant, toml::Value::Table(allowlist.clone())));
-    let allowlist_variants = element_variants(&toml::Value::Table(allowlist.clone()), "allowlist")
-        .into_iter()
-        .map(|(label, variant)| (label, toml::Value::Table(lints.clone()), variant));
-    let variants: Vec<(String, toml::Value, toml::Value)> =
-        lint_variants.chain(allowlist_variants).collect();
-    assert!(variants.len() > 240, "too few variants: {}", variants.len());
+    assert!(passes(&documents), "data files must pass before mutation");
+    let labels = ["lints", "allowlist", "rules"];
+    let variants: Vec<(String, [toml::Value; 3])> = labels
+        .iter()
+        .enumerate()
+        .flat_map(|(position, label)| {
+            let document = documents.get(position).cloned().expect("document");
+            let base = documents.clone();
+            element_variants(&document, label)
+                .into_iter()
+                .map(move |(name, variant)| {
+                    let mut candidate = base.clone();
+                    if let Some(slot) = candidate.get_mut(position) {
+                        *slot = variant;
+                    }
+                    (name, candidate)
+                })
+        })
+        .collect();
+    assert!(variants.len() > 250, "too few variants: {}", variants.len());
     let unnoticed: Vec<String> = variants
         .into_iter()
-        .filter(|(_, lints_variant, allowlist_variant)| {
-            match (lints_variant.as_table(), allowlist_variant.as_table()) {
-                (Some(lints_table), Some(allowlist_table)) => passes(lints_table, allowlist_table),
-                (Some(_) | None, Some(_) | None) => false,
-            }
-        })
-        .map(|(label, _, _)| label)
+        .filter(|(_, candidate)| passes(candidate))
+        .map(|(label, _)| label)
         .collect();
     assert!(
         unnoticed.is_empty(),

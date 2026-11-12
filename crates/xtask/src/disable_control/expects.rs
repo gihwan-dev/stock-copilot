@@ -7,24 +7,18 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
-    AttrStyle, Attribute, Expr, Field, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
-    ForeignItemType, ImplItemConst, ImplItemFn, ImplItemMacro, ImplItemType, ItemConst, ItemEnum,
-    ItemExternCrate, ItemFn, ItemForeignMod, ItemImpl, ItemMacro, ItemMod, ItemStatic, ItemStruct,
-    ItemTrait, ItemTraitAlias, ItemType, ItemUnion, ItemUse, Local, Macro, Meta, Stmt, Token,
-    TraitItemConst, TraitItemFn, TraitItemMacro, TraitItemType, Variant,
+    AttrStyle, Attribute, Block, Expr, Field, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
+    ForeignItemType, ImplItemConst, ImplItemFn, ImplItemMacro, ImplItemType, Item, ItemConst,
+    ItemEnum, ItemExternCrate, ItemFn, ItemForeignMod, ItemImpl, ItemMacro, ItemMod, ItemStatic,
+    ItemStruct, ItemTrait, ItemTraitAlias, ItemType, ItemUnion, ItemUse, Local, Macro, Meta, Stmt,
+    Token, TraitItemConst, TraitItemFn, TraitItemMacro, TraitItemType, Variant,
 };
 
 use super::allowlist::local_text;
 
-const ATTRIBUTE_ROOTS: [&str; 3] = ["std", "core", "alloc"];
-
 const EXPECT: &str = "expect";
 
 const REASON: &str = "reason";
-
-const BLOCK_KEYWORDS: [&str; 9] = [
-    "if", "match", "loop", "while", "for", "unsafe", "async", "const", "try",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Target {
@@ -41,6 +35,78 @@ pub(crate) enum Target {
     Block,
     Inner,
     Other,
+    NestedItem,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DisableRules {
+    pub(crate) attribute_roots: BTreeSet<String>,
+    pub(crate) block_keywords: BTreeSet<String>,
+}
+
+const fn holds_one_item(target: Target) -> Option<()> {
+    match target {
+        Target::Function | Target::Statement | Target::Field | Target::Variant | Target::Item => {
+            Some(())
+        }
+        Target::Module
+        | Target::Impl
+        | Target::Trait
+        | Target::ForeignBlock
+        | Target::Macro
+        | Target::Block
+        | Target::Inner
+        | Target::Other
+        | Target::NestedItem => None,
+    }
+}
+
+#[derive(Debug, Default)]
+struct NestedItems {
+    found: Option<()>,
+}
+
+impl<'ast> Visit<'ast> for NestedItems {
+    fn visit_item(&mut self, i: &'ast Item) {
+        if let Item::Use(_) = i {
+            return;
+        }
+        self.found = Some(());
+    }
+
+    fn visit_macro(&mut self, i: &'ast Macro) {
+        if macro_may_define_items(&i.tokens).is_some() {
+            self.found = Some(());
+        }
+    }
+}
+
+fn macro_may_define_items(tokens: &TokenStream) -> Option<()> {
+    let mut nested = NestedItems::default();
+    if let Ok(file) = syn::parse2::<syn::File>(tokens.clone()) {
+        for item in &file.items {
+            nested.visit_item(item);
+        }
+    } else if let Ok(statements) = Block::parse_within.parse2(tokens.clone()) {
+        for statement in &statements {
+            nested.visit_stmt(statement);
+        }
+    } else if let Ok(expressions) =
+        Punctuated::<Expr, Token![,]>::parse_terminated.parse2(tokens.clone())
+    {
+        for expression in &expressions {
+            nested.visit_expr(expression);
+        }
+    } else {
+        nested.found = Some(());
+    }
+    nested.found
+}
+
+fn nested<F: FnOnce(&mut NestedItems)>(walk: F) -> Option<()> {
+    let mut items = NestedItems::default();
+    walk(&mut items);
+    items.found
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,14 +118,15 @@ pub(crate) struct Collected {
     pub(crate) statement: Option<String>,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct ExpectCollector {
+#[derive(Debug)]
+pub(crate) struct ExpectCollector<'rules> {
+    rules: &'rules DisableRules,
     handled: BTreeSet<(usize, usize)>,
     pending: Vec<Target>,
     pub(crate) found: Vec<Collected>,
 }
 
-fn is_expect_path(path: &syn::Path) -> Option<()> {
+fn is_expect_path(path: &syn::Path, roots: &BTreeSet<String>) -> Option<()> {
     let segments: Vec<String> = path
         .segments
         .iter()
@@ -67,7 +134,7 @@ fn is_expect_path(path: &syn::Path) -> Option<()> {
         .collect();
     let expect = match segments.as_slice() {
         [only] => only == EXPECT,
-        [root, .., last] => ATTRIBUTE_ROOTS.contains(&root.as_str()) && last == EXPECT,
+        [root, .., last] => roots.contains(root) && last == EXPECT,
         [] => false,
     };
     expect.then_some(())
@@ -104,8 +171,8 @@ fn arguments(tokens: TokenStream) -> (Vec<String>, String) {
     (lints, reason)
 }
 
-fn expect_arguments(meta: &Meta) -> Option<(Vec<String>, String)> {
-    is_expect_path(meta.path())?;
+fn expect_arguments(meta: &Meta, roots: &BTreeSet<String>) -> Option<(Vec<String>, String)> {
+    is_expect_path(meta.path(), roots)?;
     match meta {
         Meta::List(list) => Some(arguments(list.tokens.clone())),
         Meta::Path(_) | Meta::NameValue(_) => Some((Vec::new(), String::new())),
@@ -118,21 +185,43 @@ fn outer_attributes(input: ParseStream<'_>) -> syn::Result<(Vec<Attribute>, Toke
     Ok((attributes, rest))
 }
 
-fn is_block_like(rest: &TokenStream) -> Option<()> {
+fn is_block_like(rest: &TokenStream, keywords: &BTreeSet<String>) -> Option<()> {
     let block_like = match rest.clone().into_iter().next() {
         Some(TokenTree::Group(group)) => group.delimiter() == Delimiter::Brace,
-        Some(TokenTree::Ident(ident)) => BLOCK_KEYWORDS.contains(&ident.to_string().as_str()),
+        Some(TokenTree::Ident(ident)) => keywords.contains(&ident.to_string()),
         Some(TokenTree::Punct(punct)) => punct.as_char() == '\'',
         Some(TokenTree::Literal(_)) | None => false,
     };
     block_like.then_some(())
 }
 
-impl ExpectCollector {
-    fn record(&mut self, attributes: &[Attribute], target: Target, statement: Option<&String>) {
+impl<'rules> ExpectCollector<'rules> {
+    pub(crate) fn new(rules: &'rules DisableRules) -> Self {
+        Self {
+            rules,
+            handled: BTreeSet::new(),
+            pending: Vec::new(),
+            found: Vec::new(),
+        }
+    }
+
+    fn record(
+        &mut self,
+        attributes: &[Attribute],
+        target: Target,
+        statement: Option<&String>,
+        inside: Option<()>,
+    ) {
+        let checked = if holds_one_item(target).is_some() && inside.is_some() {
+            Target::NestedItem
+        } else {
+            target
+        };
         for attribute in attributes {
             let start = attribute.pound_token.span.start();
-            let Some((lints, reason)) = expect_arguments(&attribute.meta) else {
+            let Some((lints, reason)) =
+                expect_arguments(&attribute.meta, &self.rules.attribute_roots)
+            else {
                 continue;
             };
             if !self.handled.insert((start.line, start.column)) {
@@ -140,7 +229,7 @@ impl ExpectCollector {
             }
             let placed = match attribute.style {
                 AttrStyle::Inner(_) => Target::Inner,
-                AttrStyle::Outer => target,
+                AttrStyle::Outer => checked,
             };
             self.found.push(Collected {
                 line: start.line,
@@ -156,8 +245,10 @@ impl ExpectCollector {
         let Ok((attributes, rest)) = outer_attributes.parse2(source_tokens(expression)) else {
             return;
         };
-        let target = if is_block_like(&rest).is_some() {
+        let target = if is_block_like(&rest, &self.rules.block_keywords).is_some() {
             Target::Block
+        } else if nested(|items| items.visit_expr(expression)).is_some() {
+            Target::NestedItem
         } else {
             Target::Statement
         };
@@ -186,7 +277,7 @@ impl ExpectCollector {
         let Ok(meta) = syn::parse2::<Meta>(group.stream()) else {
             return;
         };
-        let Some((lints, reason)) = expect_arguments(&meta) else {
+        let Some((lints, reason)) = expect_arguments(&meta, &self.rules.attribute_roots) else {
             return;
         };
         let start = group.span_open().start();
@@ -220,37 +311,62 @@ fn source_tokens(expression: &Expr) -> TokenStream {
     }
 }
 
-impl<'ast> Visit<'ast> for ExpectCollector {
+impl<'ast> Visit<'ast> for ExpectCollector<'_> {
     fn visit_item_fn(&mut self, i: &'ast ItemFn) {
-        self.record(&i.attrs, Target::Function, None);
+        self.record(
+            &i.attrs,
+            Target::Function,
+            None,
+            nested(|items| visit::visit_item_fn(items, i)),
+        );
         visit::visit_item_fn(self, i);
     }
 
     fn visit_impl_item_fn(&mut self, i: &'ast ImplItemFn) {
-        self.record(&i.attrs, Target::Function, None);
+        self.record(
+            &i.attrs,
+            Target::Function,
+            None,
+            nested(|items| visit::visit_impl_item_fn(items, i)),
+        );
         visit::visit_impl_item_fn(self, i);
     }
 
     fn visit_trait_item_fn(&mut self, i: &'ast TraitItemFn) {
-        self.record(&i.attrs, Target::Function, None);
+        self.record(
+            &i.attrs,
+            Target::Function,
+            None,
+            nested(|items| visit::visit_trait_item_fn(items, i)),
+        );
         visit::visit_trait_item_fn(self, i);
     }
 
     fn visit_foreign_item_fn(&mut self, i: &'ast ForeignItemFn) {
-        self.record(&i.attrs, Target::Function, None);
+        self.record(
+            &i.attrs,
+            Target::Function,
+            None,
+            nested(|items| visit::visit_foreign_item_fn(items, i)),
+        );
         visit::visit_foreign_item_fn(self, i);
     }
 
     fn visit_local(&mut self, i: &'ast Local) {
         let statement = local_text(i);
-        self.record(&i.attrs, Target::Statement, statement.as_ref());
+        self.record(
+            &i.attrs,
+            Target::Statement,
+            statement.as_ref(),
+            nested(|items| visit::visit_local(items, i)),
+        );
         visit::visit_local(self, i);
     }
 
     fn visit_stmt(&mut self, i: &'ast Stmt) {
         match i {
             Stmt::Expr(expression, _) => self.expression_statement(expression),
-            Stmt::Macro(statement) => self.record(&statement.attrs, Target::Macro, None),
+            Stmt::Macro(statement) => self.record(&statement.attrs, Target::Macro, None, None),
             Stmt::Local(_) | Stmt::Item(_) => {}
         }
         visit::visit_stmt(self, i);
@@ -258,133 +374,213 @@ impl<'ast> Visit<'ast> for ExpectCollector {
     }
 
     fn visit_field(&mut self, i: &'ast Field) {
-        self.record(&i.attrs, Target::Field, None);
+        self.record(
+            &i.attrs,
+            Target::Field,
+            None,
+            nested(|items| visit::visit_field(items, i)),
+        );
         visit::visit_field(self, i);
     }
 
     fn visit_variant(&mut self, i: &'ast Variant) {
-        self.record(&i.attrs, Target::Variant, None);
+        self.record(
+            &i.attrs,
+            Target::Variant,
+            None,
+            nested(|items| visit::visit_variant(items, i)),
+        );
         visit::visit_variant(self, i);
     }
 
     fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_struct(items, i)),
+        );
         visit::visit_item_struct(self, i);
     }
 
     fn visit_item_enum(&mut self, i: &'ast ItemEnum) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_enum(items, i)),
+        );
         visit::visit_item_enum(self, i);
     }
 
     fn visit_item_union(&mut self, i: &'ast ItemUnion) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_union(items, i)),
+        );
         visit::visit_item_union(self, i);
     }
 
     fn visit_item_const(&mut self, i: &'ast ItemConst) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_const(items, i)),
+        );
         visit::visit_item_const(self, i);
     }
 
     fn visit_item_static(&mut self, i: &'ast ItemStatic) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_static(items, i)),
+        );
         visit::visit_item_static(self, i);
     }
 
     fn visit_item_type(&mut self, i: &'ast ItemType) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_type(items, i)),
+        );
         visit::visit_item_type(self, i);
     }
 
     fn visit_item_use(&mut self, i: &'ast ItemUse) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_use(items, i)),
+        );
         visit::visit_item_use(self, i);
     }
 
     fn visit_item_extern_crate(&mut self, i: &'ast ItemExternCrate) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_item_extern_crate(items, i)),
+        );
         visit::visit_item_extern_crate(self, i);
     }
 
     fn visit_impl_item_const(&mut self, i: &'ast ImplItemConst) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_impl_item_const(items, i)),
+        );
         visit::visit_impl_item_const(self, i);
     }
 
     fn visit_impl_item_type(&mut self, i: &'ast ImplItemType) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_impl_item_type(items, i)),
+        );
         visit::visit_impl_item_type(self, i);
     }
 
     fn visit_trait_item_const(&mut self, i: &'ast TraitItemConst) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_trait_item_const(items, i)),
+        );
         visit::visit_trait_item_const(self, i);
     }
 
     fn visit_trait_item_type(&mut self, i: &'ast TraitItemType) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_trait_item_type(items, i)),
+        );
         visit::visit_trait_item_type(self, i);
     }
 
     fn visit_foreign_item_static(&mut self, i: &'ast ForeignItemStatic) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_foreign_item_static(items, i)),
+        );
         visit::visit_foreign_item_static(self, i);
     }
 
     fn visit_foreign_item_type(&mut self, i: &'ast ForeignItemType) {
-        self.record(&i.attrs, Target::Item, None);
+        self.record(
+            &i.attrs,
+            Target::Item,
+            None,
+            nested(|items| visit::visit_foreign_item_type(items, i)),
+        );
         visit::visit_foreign_item_type(self, i);
     }
 
     fn visit_item_mod(&mut self, i: &'ast ItemMod) {
-        self.record(&i.attrs, Target::Module, None);
+        self.record(&i.attrs, Target::Module, None, None);
         visit::visit_item_mod(self, i);
     }
 
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
-        self.record(&i.attrs, Target::Impl, None);
+        self.record(&i.attrs, Target::Impl, None, None);
         visit::visit_item_impl(self, i);
     }
 
     fn visit_item_trait(&mut self, i: &'ast ItemTrait) {
-        self.record(&i.attrs, Target::Trait, None);
+        self.record(&i.attrs, Target::Trait, None, None);
         visit::visit_item_trait(self, i);
     }
 
     fn visit_item_trait_alias(&mut self, i: &'ast ItemTraitAlias) {
-        self.record(&i.attrs, Target::Trait, None);
+        self.record(&i.attrs, Target::Trait, None, None);
         visit::visit_item_trait_alias(self, i);
     }
 
     fn visit_item_foreign_mod(&mut self, i: &'ast ItemForeignMod) {
-        self.record(&i.attrs, Target::ForeignBlock, None);
+        self.record(&i.attrs, Target::ForeignBlock, None, None);
         visit::visit_item_foreign_mod(self, i);
     }
 
     fn visit_item_macro(&mut self, i: &'ast ItemMacro) {
-        self.record(&i.attrs, Target::Macro, None);
+        self.record(&i.attrs, Target::Macro, None, None);
         visit::visit_item_macro(self, i);
     }
 
     fn visit_impl_item_macro(&mut self, i: &'ast ImplItemMacro) {
-        self.record(&i.attrs, Target::Macro, None);
+        self.record(&i.attrs, Target::Macro, None, None);
         visit::visit_impl_item_macro(self, i);
     }
 
     fn visit_trait_item_macro(&mut self, i: &'ast TraitItemMacro) {
-        self.record(&i.attrs, Target::Macro, None);
+        self.record(&i.attrs, Target::Macro, None, None);
         visit::visit_trait_item_macro(self, i);
     }
 
     fn visit_foreign_item_macro(&mut self, i: &'ast ForeignItemMacro) {
-        self.record(&i.attrs, Target::Macro, None);
+        self.record(&i.attrs, Target::Macro, None, None);
         visit::visit_foreign_item_macro(self, i);
     }
 
     fn visit_attribute(&mut self, i: &'ast Attribute) {
         let target = self.pending.pop().unwrap_or(Target::Other);
-        self.record(std::slice::from_ref(i), target, None);
+        self.record(std::slice::from_ref(i), target, None, None);
         visit::visit_attribute(self, i);
     }
 

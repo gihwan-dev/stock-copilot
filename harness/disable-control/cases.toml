@@ -197,3 +197,123 @@ expect = ["disable:placement:other"]
 example = "unparsable.rs"
 path = "crates/sample/src/lib.rs"
 expect = ["disable:unparsable"]
+
+[[source]]
+example = "placement-if.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-match.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-while.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-for.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-unsafe.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-async.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-const.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-try.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "placement-labeled-block.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:block"]
+
+[[source]]
+example = "attribute-root-std.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "attribute-root-core.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "attribute-root-alloc.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:lint-group"]
+
+[[source]]
+example = "nested-const-wrapper.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-function-wrapper.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-array-length.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-enum-discriminant.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-statement-block.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-expression-closure.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-macro-items.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "nested-opaque-macro.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:placement:nested-item"]
+
+[[source]]
+example = "clean-function-body-without-items.rs"
+path = "crates/sample/src/lib.rs"
+expect = []
+
+[[source]]
+example = "individual-deny-needless-pass-by-value.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "individual-deny-fn-params-excessive-bools.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "individual-deny-struct-excessive-bools.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]

@@ -18,7 +18,7 @@ use crate::workspace_sources::{
     SourceFailure, io_failure, load_members, member_rust_files, relative_text,
 };
 use allowlist::{ALLOWLIST_FILE, Allowlist};
-use expects::{Collected, ExpectCollector, Target};
+use expects::{Collected, DisableRules, ExpectCollector, Target};
 use lints::{LINTS_FILE, LintCatalogue, individually_configured};
 
 pub(crate) const RUST_EXPECT_KIND: &str = "rust-expect";
@@ -46,6 +46,7 @@ const fn placement_name(target: Target) -> &'static str {
         Target::Block => "block",
         Target::Inner => "inner",
         Target::Other => "other",
+        Target::NestedItem => "nested-item",
     }
 }
 
@@ -89,9 +90,40 @@ pub(crate) struct Row {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Policy {
+    rules: DisableRules,
     catalogue: LintCatalogue,
     individual: BTreeSet<String>,
     allowlist: Allowlist,
+}
+
+pub(crate) const RULES_FILE: &str = "harness/disable-control/rules.toml";
+
+const RULES_KEYS: [&str; 2] = ["attribute-roots", "block-keywords"];
+
+fn rule_names(table: &toml::Table, key: &str) -> Result<BTreeSet<String>, SourceFailure> {
+    table
+        .get(key)
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| SourceFailure(format!("{RULES_FILE}: {key} 목록이 없다")))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|name| !name.trim().is_empty())
+                .map(String::from)
+                .ok_or_else(|| SourceFailure(format!("{RULES_FILE}: {key}의 원소는 문자열이다")))
+        })
+        .collect()
+}
+
+pub(crate) fn load_disable_rules(table: &toml::Table) -> Result<DisableRules, SourceFailure> {
+    if let Some(unknown) = table.keys().find(|key| !RULES_KEYS.contains(&key.as_str())) {
+        return Err(SourceFailure(format!("{RULES_FILE}: 모르는 키 {unknown}")));
+    }
+    Ok(DisableRules {
+        attribute_roots: rule_names(table, "attribute-roots")?,
+        block_keywords: rule_names(table, "block-keywords")?,
+    })
 }
 
 fn read_table(root: &Path, file: &str) -> Result<toml::Table, SourceFailure> {
@@ -106,8 +138,10 @@ impl Policy {
         root: &Path,
         lints: &toml::Table,
         allowlist: &toml::Table,
+        rules: &toml::Table,
     ) -> Result<Self, SourceFailure> {
         Ok(Self {
+            rules: load_disable_rules(rules)?,
             catalogue: LintCatalogue::parse(lints)?,
             individual: individually_configured(&read_table(root, "Cargo.toml")?),
             allowlist: Allowlist::parse(root, allowlist)?,
@@ -119,6 +153,7 @@ impl Policy {
             root,
             &read_table(root, LINTS_FILE)?,
             &read_table(root, ALLOWLIST_FILE)?,
+            &read_table(root, RULES_FILE)?,
         )
     }
 
@@ -146,7 +181,8 @@ impl Policy {
             | Target::Macro
             | Target::Block
             | Target::Inner
-            | Target::Other => vec![finding(
+            | Target::Other
+            | Target::NestedItem => vec![finding(
                 Rule::Placement(collected.target),
                 &collected.lints.join(","),
             )],
@@ -167,15 +203,15 @@ impl Policy {
     }
 }
 
-pub(crate) fn collect(source: &str) -> Option<Vec<Collected>> {
+pub(crate) fn collect(source: &str, rules: &DisableRules) -> Option<Vec<Collected>> {
     let file = syn::parse_file(source).ok()?;
-    let mut collector = ExpectCollector::default();
+    let mut collector = ExpectCollector::new(rules);
     collector.visit_file(&file);
     Some(collector.found)
 }
 
 pub(crate) fn check_source(path: &str, source: &str, policy: &Policy) -> BTreeSet<Finding> {
-    collect(source).map_or_else(
+    collect(source, &policy.rules).map_or_else(
         || {
             BTreeSet::from([Finding {
                 path: String::from(path),
@@ -193,8 +229,8 @@ pub(crate) fn check_source(path: &str, source: &str, policy: &Policy) -> BTreeSe
     )
 }
 
-pub(crate) fn rows(path: &str, source: &str) -> Vec<Row> {
-    collect(source)
+pub(crate) fn rows(path: &str, source: &str, rules: &DisableRules) -> Vec<Row> {
+    collect(source, rules)
         .into_iter()
         .flatten()
         .flat_map(|collected| {
@@ -240,9 +276,10 @@ pub(crate) fn check_repository(
 }
 
 pub(crate) fn repository_rows(root: &Path) -> Result<Vec<Row>, SourceFailure> {
+    let rules = load_disable_rules(&read_table(root, RULES_FILE)?)?;
     let mut found: Vec<Row> = repository_sources(Some(root))?
         .iter()
-        .flat_map(|(path, source)| rows(path, source))
+        .flat_map(|(path, source)| rows(path, source, &rules))
         .collect();
     found.sort();
     Ok(found)

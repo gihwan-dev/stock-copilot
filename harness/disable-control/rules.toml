@@ -1,0 +1,3 @@
+attribute-roots = ["std", "core", "alloc"]
+
+block-keywords = ["if", "match", "loop", "while", "for", "unsafe", "async", "const", "try"]
