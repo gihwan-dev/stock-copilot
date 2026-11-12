@@ -8,7 +8,11 @@ use crate::data_variants_tests::element_variants;
 use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 
 use super::targets::{TARGETS_FILE, Targets};
-use super::{Context, Linter, Outcome, PathProblem, Verdict, lint_text, render, resolve, verdict};
+use super::{
+    Context, Linter, Outcome, PathProblem, RUST_REPOSITORY_NOTE, SCRIPT_REPOSITORY_NOTE, Verdict,
+    lint_text, render, resolve, verdict,
+};
+use crate::disable_control::script::SCRIPT_RULES_FILE;
 
 const CASES_FILE: &str = "harness/lint-file/cases.toml";
 const EXAMPLES_DIRECTORY: &str = "harness/lint-file/examples";
@@ -30,6 +34,7 @@ struct Case {
     text: String,
     applied: BTreeSet<String>,
     failed: BTreeSet<String>,
+    messages: BTreeSet<String>,
 }
 
 fn names(entry: &toml::Value, key: &str) -> BTreeSet<String> {
@@ -69,13 +74,17 @@ fn cases(root: &Path) -> Vec<Case> {
                 path,
                 applied: names(entry, "applied"),
                 failed: names(entry, "failed"),
+                messages: entry
+                    .get("messages")
+                    .map_or_else(BTreeSet::new, |_| names(entry, "messages")),
             }
         })
         .collect()
 }
 
-fn summary(context: &Context, case: &Case) -> (BTreeSet<String>, BTreeSet<String>) {
+fn summary(context: &Context, case: &Case) -> (BTreeSet<String>, BTreeSet<String>, String) {
     let results = lint_text(context, &case.path, &case.text).expect("lint text");
+    let report = render(&case.path, &results);
     let applied = results
         .iter()
         .filter(|result| match result.outcome {
@@ -92,7 +101,7 @@ fn summary(context: &Context, case: &Case) -> (BTreeSet<String>, BTreeSet<String
         })
         .map(|result| String::from(result.check.name()))
         .collect();
-    (applied, failed)
+    (applied, failed, report)
 }
 
 #[test]
@@ -102,16 +111,53 @@ fn examples_apply_and_fail_the_expected_checks() {
     let failures: Vec<String> = cases(&root)
         .iter()
         .filter_map(|case| {
-            let (applied, failed) = summary(&context, case);
-            (applied != case.applied || failed != case.failed).then(|| {
+            let (applied, failed, report) = summary(&context, case);
+            let missing: Vec<&String> = case
+                .messages
+                .iter()
+                .filter(|message| !report.contains(message.as_str()))
+                .collect();
+            (applied != case.applied || failed != case.failed || !missing.is_empty()).then(|| {
                 format!(
-                    "{}: expected applied {:?} failed {:?}, got applied {applied:?} failed {failed:?}",
+                    "{}: expected applied {:?} failed {:?} messages {missing:?}, got applied {applied:?} failed {failed:?}\n{report}",
                     case.label, case.applied, case.failed
                 )
             })
         })
         .collect();
     assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn reports_name_the_checks_left_to_just_check() {
+    let root = repository_root();
+    let context = Context::load(Some(&root)).expect("load context");
+    for (path, note) in [
+        ("crates/domain/src/lib.rs", RUST_REPOSITORY_NOTE),
+        ("apps/desktop/src/app/App.tsx", SCRIPT_REPOSITORY_NOTE),
+    ] {
+        let text = fs::read_to_string(root.join(path)).expect("read file");
+        let results = lint_text(&context, path, &text).expect("lint text");
+        assert!(render(path, &results).contains(note), "{path}");
+    }
+    for note in [RUST_REPOSITORY_NOTE, SCRIPT_REPOSITORY_NOTE] {
+        for check in [
+            "tsc",
+            "knip",
+            "Vitest",
+            "source-tree",
+            "clippy",
+            "arch-check",
+        ] {
+            if note == SCRIPT_REPOSITORY_NOTE && ["clippy", "arch-check"].contains(&check) {
+                continue;
+            }
+            if note == RUST_REPOSITORY_NOTE && !["clippy", "arch-check"].contains(&check) {
+                continue;
+            }
+            assert!(note.contains(check), "{note} names {check}");
+        }
+    }
 }
 
 #[test]
@@ -156,7 +202,9 @@ fn verdict_and_report_are_honest() {
     assert_eq!(verdict(&mixed), Verdict::Failed, "a failure wins");
     assert_eq!(
         render("a.ts", &mixed),
-        "prettier: 통과\neslint: 위반\n  규칙 위반\nlint-file: a.ts: 위반 (prettier, eslint)",
+        format!(
+            "prettier: 통과\neslint: 위반\n  규칙 위반\n{SCRIPT_REPOSITORY_NOTE}\nlint-file: a.ts: 위반 (prettier, eslint)"
+        ),
         "report"
     );
 }
@@ -384,6 +432,9 @@ fn xtask_lint_file_fails_on_a_violating_file() {
     generate_lockfile(&work.join("Cargo.toml"));
     fs::create_dir_all(work.join("harness").join("lint-file")).expect("create data folder");
     fs::copy(root.join(TARGETS_FILE), work.join(TARGETS_FILE)).expect("copy targets");
+    fs::create_dir_all(work.join("harness").join("disable-control")).expect("create rules folder");
+    fs::copy(root.join(SCRIPT_RULES_FILE), work.join(SCRIPT_RULES_FILE))
+        .expect("copy script rules");
     symlink(root.join("node_modules"), work.join("node_modules")).expect("link node_modules");
     fs::write(work.join("package.json"), "{\"a\":1}\n").expect("write bad json");
     fs::write(work.join("pnpm-workspace.yaml"), "packages:\n  - probe\n").expect("write good yaml");

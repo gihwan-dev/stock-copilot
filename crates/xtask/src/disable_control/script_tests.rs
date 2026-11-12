@@ -392,3 +392,42 @@ fn unmatched_keeps_duplicates_beyond_the_base_count() {
     let changed = unmatched(vec![other], vec![row(2)]);
     assert_eq!(changed.len(), 1, "{changed:#?}");
 }
+
+#[test]
+fn new_scripts_and_configs_are_scanned() {
+    let root = repository_root();
+    let rules = ScriptRules::load(&root).expect("load script rules");
+    let listed = super::script::listed_files(&root).expect("list files");
+    for prefix in [
+        "apps/desktop/vitest.config.mjs",
+        "apps/desktop/eslint/boundaries.mjs",
+        "harness/source-tree/",
+        "harness/knip-check/",
+        "harness/vitest-check/",
+    ] {
+        assert!(
+            listed
+                .iter()
+                .any(|path| path.starts_with(prefix) && rules.scanned(path).is_some()),
+            "{prefix} is scanned"
+        );
+    }
+    let targets = Targets::load(&root).expect("load targets");
+    assert_eq!(
+        targets.eslint_coverage(&root, "apps/desktop/vitest.config.mjs"),
+        Coverage::Unlinted,
+        "vitest.config.mjs is outside the check-ts ESLint targets"
+    );
+    let coverage = |path: &str| targets.eslint_coverage(&root, path);
+    let found = script_rows(
+        "apps/desktop/vitest.config.mjs",
+        "// eslint-disable-next-line no-console -- 예시\nexport default {};\n",
+        &rules,
+        &coverage,
+    );
+    assert_eq!(
+        found.first().map(|row| row.kind),
+        Some("eslint-disable-next-line (ESLint 밖)"),
+        "{found:#?}"
+    );
+}

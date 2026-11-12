@@ -674,6 +674,38 @@ fn just_recipe(directory: &Path, recipe: &str) -> Output {
 }
 
 #[test]
+fn commit_guard_ignores_build_outputs_listed_in_the_real_gitignore() {
+    let directory = repository("commit-guard-outputs", Hooks::Absent);
+    fs::copy(
+        repository_root().join(".gitignore"),
+        directory.join(".gitignore"),
+    )
+    .expect("copy .gitignore");
+    git(&directory, &["add", ".gitignore"]);
+    git(
+        &directory,
+        &["commit", "--quiet", "--no-verify", "-m", "ignore"],
+    );
+    for output in [
+        "apps/desktop/dist/index.html",
+        "apps/desktop/node_modules/.vite/vitest/results.json",
+        "node_modules/.cache/knip/cache.json",
+        "target/debug/xtask",
+        "apps/desktop/src-tauri/gen/schemas/acl.json",
+    ] {
+        let path = directory.join(output);
+        fs::create_dir_all(path.parent().expect("parent")).expect("create output folder");
+        fs::write(&path, "output\n").expect("write output");
+    }
+    let guarded = just_recipe(&directory, "commit-guard");
+    assert!(
+        guarded.status.success(),
+        "{}",
+        String::from_utf8_lossy(&guarded.stderr)
+    );
+}
+
+#[test]
 fn commit_guard_refuses_unstaged_and_untracked_changes() {
     let directory = repository("commit-guard", Hooks::Absent);
     fs::write(directory.join(".gitignore"), "ignored.txt\n").expect("write ignore");

@@ -10,6 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 use crate::disable_control;
+use crate::disable_control::script::ScriptRules;
 use crate::raw_types::{self, Replacement};
 use crate::source_check;
 use crate::sql_check;
@@ -17,6 +18,18 @@ use crate::workspace_sources::{Member, Members, load_members, relative_text};
 use targets::{Coverage, Targets, under};
 
 const RUSTFMT_CONFIG: &str = "rustfmt.toml";
+
+const RUST_LINTERS: [Linter; 5] = [
+    Linter::Rustfmt,
+    Linter::SourceCheck,
+    Linter::RawTypes,
+    Linter::DisableCheck,
+    Linter::SqlCheck,
+];
+
+pub(crate) const RUST_REPOSITORY_NOTE: &str = "파일 하나로 돌지 않는 검사(clippy, arch-check, deny, 테스트, 커버리지, test-diff)는 just check가 돈다";
+
+pub(crate) const SCRIPT_REPOSITORY_NOTE: &str = "파일 하나로 돌지 않는 검사(tsc, knip, Vitest, source-tree 심볼릭 링크 훑기, vite build)는 just check가 돈다";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Linter {
@@ -83,6 +96,7 @@ impl fmt::Display for PathProblem {
 pub(crate) struct Context {
     pub(crate) members: Members,
     pub(crate) targets: Targets,
+    pub(crate) scripts: ScriptRules,
 }
 
 fn normalized(path: &Path) -> PathBuf {
@@ -152,7 +166,12 @@ impl Context {
         let manifest = root.map(|directory| directory.join("Cargo.toml"));
         let members = load_members(manifest.as_deref()).map_err(|failure| failure.0)?;
         let targets = Targets::load(&members.root).map_err(|failure| failure.0)?;
-        Ok(Self { members, targets })
+        let scripts = ScriptRules::load(&members.root).map_err(|failure| failure.0)?;
+        Ok(Self {
+            members,
+            targets,
+            scripts,
+        })
     }
 
     fn root(&self) -> &Path {
@@ -366,7 +385,10 @@ fn prettier(context: &Context, path: &str, text: &str) -> Result<Outcome, String
 
 fn eslint(context: &Context, path: &str, text: &str) -> Result<Option<Outcome>, String> {
     let Some(target) = context.targets.eslint_for(path) else {
-        return Ok(None);
+        return Ok(context
+            .scripts
+            .scanned(path)
+            .map(|()| Outcome::Skipped("check-ts의 ESLint 대상 밖")));
     };
     let root = context.root();
     if context.targets.eslint_configured(root, target, path)? == Coverage::Unlinted {
@@ -464,6 +486,13 @@ pub(crate) fn render(path: &str, results: &[CheckResult]) -> String {
         .filter(|result| !skipped(&result.outcome))
         .map(|result| result.check.name())
         .collect();
+    let ran = |wanted: &[Linter]| results.iter().any(|result| wanted.contains(&result.check));
+    if ran(&RUST_LINTERS) {
+        lines.push(String::from(RUST_REPOSITORY_NOTE));
+    }
+    if ran(&[Linter::Eslint]) {
+        lines.push(String::from(SCRIPT_REPOSITORY_NOTE));
+    }
     lines.push(match verdict(results) {
         Verdict::Passed => format!("lint-file: {path}: 통과 ({})", applied.join(", ")),
         Verdict::Failed => format!("lint-file: {path}: 위반 ({})", applied.join(", ")),
