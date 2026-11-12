@@ -1,0 +1,12 @@
+[package]
+name = "sample"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "outside"
+path = "../../outside/main.rs"
+
+[lints]
+workspace = true

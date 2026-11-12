@@ -2,65 +2,43 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::harness_workspace::{fresh_directory, generate_lockfile, repository_root};
+use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 
 use super::allowlist::{ALLOWLIST_FILE, Allowlists};
-use super::{check_repository, check_source};
+use super::finding::{ExpectProblem, Rule};
+use super::manifest::BANNED_TABLES;
+use super::tokens::{
+    BANNED_ATTRIBUTES, BANNED_MACROS, CLOCK_AND_ENVIRONMENT_FUNCTIONS, CLOCK_METHODS, CLOCK_PREFIX,
+    DOMAIN_FLOATS, ENVIRONMENT_GLOB, ENVIRONMENT_MACRO, OPTIONAL_ENVIRONMENT_MACRO,
+    TOOL_ATTRIBUTES,
+};
+use super::{NESTED_CONFIG_FILES, check_repository, check_source};
 
 const CASES_FILE: &str = "harness/source-checks/cases.toml";
 const SOURCES_DIRECTORY: &str = "harness/source-checks/sources";
 const WORKSPACES_DIRECTORY: &str = "harness/source-checks/workspaces";
 const BASE_WORKSPACE: &str = "base";
 
-const HARNESS_RULES: [&str; 48] = [
-    "comment",
-    "attribute:doc",
-    "attribute:allow",
-    "attribute:warn",
-    "attribute:deny",
-    "attribute:forbid",
-    "attribute:path",
-    "attribute:ignore",
-    "attribute:cfg_attr",
-    "attribute:no_mangle",
-    "attribute:export_name",
-    "attribute:link_section",
-    "attribute:automatically_derived",
-    "attribute:mutants",
-    "attribute:clippy",
-    "attribute:rustfmt",
-    "expect:inner",
-    "expect:no-reason",
-    "expect:multiple-lints",
-    "cfg:not-test",
-    "cfg:test-outside-module",
-    "cfg:macro",
-    "macro:macro_rules",
-    "macro:include",
-    "macro:include_str",
-    "macro:include_bytes",
-    "macro:asm",
-    "macro:global_asm",
-    "domain-float:f32",
-    "domain-float:f64",
-    "clock-env:now",
-    "clock-env:var",
-    "clock-env:var_os",
-    "clock-env:vars",
-    "clock-env:vars_os",
-    "manifest:lints-not-inherited",
-    "manifest:table:target",
-    "manifest:table:profile",
-    "manifest:table:patch",
-    "manifest:table:replace",
-    "manifest:table:features",
-    "file:build-script",
-    "file:proc-macro",
-    "file:nested-config:clippy.toml",
-    "file:nested-config:.clippy.toml",
-    "file:nested-config:rustfmt.toml",
-    "file:nested-config:rust-toolchain",
-    "file:cargo-config",
+const EXPECT_PROBLEMS: [ExpectProblem; 4] = [
+    ExpectProblem::Inner,
+    ExpectProblem::NoReason,
+    ExpectProblem::MultipleLints,
+    ExpectProblem::Malformed,
+];
+
+const UNIT_RULES: [Rule; 12] = [
+    Rule::Comment,
+    Rule::Unparsable,
+    Rule::CfgNotTest,
+    Rule::CfgTestOutsideModule,
+    Rule::CfgTestModuleName,
+    Rule::CfgMacro,
+    Rule::LintsNotInherited,
+    Rule::BuildScript,
+    Rule::ProcMacro,
+    Rule::CargoConfig,
+    Rule::Symlink,
+    Rule::TargetOutsideMember,
 ];
 
 const REQUIRED_CLEAN_EXAMPLES: [&str; 5] = [
@@ -82,6 +60,7 @@ struct SourceCase {
 struct WorkspaceCase {
     name: String,
     overlay: Option<String>,
+    symlink: Option<(String, String)>,
     expect: BTreeSet<String>,
 }
 
@@ -132,6 +111,9 @@ fn workspace_cases(root: &Path) -> Vec<WorkspaceCase> {
         .map(|entry| WorkspaceCase {
             name: text_field(entry, "name"),
             overlay: entry.get("overlay").map(|_| text_field(entry, "overlay")),
+            symlink: entry
+                .get("symlink")
+                .map(|link| (text_field(link, "link"), text_field(link, "target"))),
             expect: expected_rules(entry),
         })
         .collect()
@@ -142,6 +124,34 @@ fn reported_rules(findings: &[super::Finding]) -> BTreeSet<String> {
         .iter()
         .map(|finding| finding.rule.to_string())
         .collect()
+}
+
+fn rule_catalogue() -> BTreeSet<String> {
+    let mut rules: Vec<Rule> = UNIT_RULES.to_vec();
+    rules.extend(EXPECT_PROBLEMS.map(Rule::Expect));
+    rules.extend(
+        BANNED_ATTRIBUTES
+            .into_iter()
+            .chain(TOOL_ATTRIBUTES)
+            .map(|name| Rule::Attribute(String::from(name))),
+    );
+    rules.extend(BANNED_MACROS.map(|name| Rule::Macro(String::from(name))));
+    rules.extend(DOMAIN_FLOATS.map(|name| Rule::DomainFloat(String::from(name))));
+    rules.extend(
+        [
+            CLOCK_PREFIX,
+            ENVIRONMENT_MACRO,
+            OPTIONAL_ENVIRONMENT_MACRO,
+            ENVIRONMENT_GLOB,
+        ]
+        .into_iter()
+        .chain(CLOCK_AND_ENVIRONMENT_FUNCTIONS)
+        .chain(CLOCK_METHODS)
+        .map(|name| Rule::ClockOrEnvironment(String::from(name))),
+    );
+    rules.extend(BANNED_TABLES.map(|name| Rule::ManifestTable(String::from(name))));
+    rules.extend(NESTED_CONFIG_FILES.map(|name| Rule::NestedConfig(String::from(name))));
+    rules.iter().map(ToString::to_string).collect()
 }
 
 fn materialized_name(name: &str) -> String {
@@ -178,6 +188,9 @@ fn workspace_mismatch(
     copy_fixture(&fixtures.join(BASE_WORKSPACE), &directory);
     if let Some(overlay) = &case.overlay {
         copy_fixture(&fixtures.join(overlay), &directory);
+    }
+    if let Some((link, target)) = &case.symlink {
+        std::os::unix::fs::symlink(target, directory.join(link)).expect("create symlink");
     }
     generate_lockfile(&directory.join("Cargo.toml"));
     let reported = match check_repository(&directory, allowlists) {
@@ -260,9 +273,9 @@ fn every_harness_rule_has_a_violation_example() {
             .into_iter()
             .flat_map(|case| case.expect),
     );
-    let missing: Vec<&str> = HARNESS_RULES
+    let missing: Vec<String> = rule_catalogue()
         .into_iter()
-        .filter(|rule| !exemplified.contains(*rule))
+        .filter(|rule| !exemplified.contains(rule))
         .collect();
     assert!(
         missing.is_empty(),
@@ -307,10 +320,7 @@ fn allowlists_hold_only_the_documented_paths() {
     );
     assert_eq!(
         paths("clock-environment"),
-        BTreeSet::from([
-            String::from("apps/desktop/src-tauri/src/main.rs"),
-            String::from("apps/desktop/src-tauri/src/platform/clock.rs"),
-        ])
+        BTreeSet::from([String::from("apps/desktop/src-tauri/src/main.rs")])
     );
     assert_eq!(
         paths("build-script"),
@@ -325,4 +335,29 @@ fn repository_passes_source_checks() {
     let findings = check_repository(&root, &allowlists).expect("check repository");
     let lines: Vec<String> = findings.iter().map(ToString::to_string).collect();
     assert!(lines.is_empty(), "{lines:#?}");
+}
+
+#[test]
+fn allowlist_entry_for_a_missing_file_fails_to_load() {
+    let root = repository_root();
+    let directory = fresh_directory(&root, "source-checks-missing-allowlist");
+    let listed = directory.join(ALLOWLIST_FILE);
+    fs::create_dir_all(listed.parent().expect("allowlist directory")).expect("create directory");
+    fs::create_dir_all(directory.join("crates/generated")).expect("create generated directory");
+    fs::write(directory.join("build.rs"), "fn main() {}\n").expect("write build script");
+    fs::write(
+        &listed,
+        "[[generated]]\npath = \"crates/generated\"\nreason = \"harness\"\n\n[[clock-environment]]\npath = \"src/clock.rs\"\nreason = \"harness\"\n\n[[build-script]]\npath = \"build.rs\"\nreason = \"harness\"\n",
+    )
+    .expect("write allowlist");
+    let loaded = Allowlists::load(&directory);
+    assert!(
+        loaded
+            .as_ref()
+            .is_err_and(|failure| failure.to_string().contains("src/clock.rs")),
+        "{loaded:?}"
+    );
+    fs::create_dir_all(directory.join("src")).expect("create source directory");
+    fs::write(directory.join("src/clock.rs"), "pub fn clock() {}\n").expect("write clock");
+    assert!(Allowlists::load(&directory).is_ok(), "existing paths load");
 }

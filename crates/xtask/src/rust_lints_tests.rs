@@ -7,7 +7,7 @@ use std::process::Command;
 use cargo_metadata::Message;
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 
-use crate::harness_workspace::{fresh_directory, generate_lockfile, repository_root};
+use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 
 const HARNESS_FORBID_LINTS: [&str; 38] = [
     "unsafe_code",

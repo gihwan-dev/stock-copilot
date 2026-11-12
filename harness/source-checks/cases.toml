@@ -361,7 +361,7 @@ expect = []
 [[source]]
 example = "clean-clock-env-allowlisted.rs"
 path = "apps/desktop/src-tauri/src/platform/clock.rs"
-expect = []
+expect = ["clock-env:now", "clock-env:var"]
 
 [[source]]
 example = "clock-system-time.rs"
@@ -392,6 +392,66 @@ expect = ["comment"]
 example = "unparsable.rs"
 path = "crates/sample/src/lib.rs"
 expect = ["unparsable"]
+
+[[source]]
+example = "cfg-test-shadow-module.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["cfg:test-module-name"]
+
+[[source]]
+example = "expect-blank-reason.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:no-reason"]
+
+[[source]]
+example = "expect-whitespace-reason.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:no-reason"]
+
+[[source]]
+example = "expect-malformed.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["expect:malformed"]
+
+[[source]]
+example = "macro-naked-asm.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["macro:naked_asm"]
+
+[[source]]
+example = "clock-now-local.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now_local"]
+
+[[source]]
+example = "clock-today.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:today"]
+
+[[source]]
+example = "clock-now-prefix.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:now_v7"]
+
+[[source]]
+example = "generated-banned-macro.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = ["macro:include"]
+
+[[source]]
+example = "generated-cfg.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = ["cfg:not-test"]
+
+[[source]]
+example = "clock-system-time.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "env-macro-in-concat.rs"
+path = "crates/adapters/broker-toss-schema/src/lib.rs"
+expect = ["clock-env:env"]
 
 [[workspace]]
 name = "clean"
@@ -526,3 +586,35 @@ expect = ["comment"]
 name = "source-violation-in-app"
 overlay = "source-violation-in-app"
 expect = ["cfg:not-test"]
+
+[[workspace]]
+name = "skipped-name-target"
+overlay = "skipped-name-target"
+expect = ["comment"]
+
+[[workspace]]
+name = "skipped-name-node-modules"
+overlay = "skipped-name-node-modules"
+expect = ["comment"]
+
+[[workspace]]
+name = "symlink-directory"
+overlay = "symlink-outside"
+symlink = { link = "crates/sample/src/linked", target = "../../../outside" }
+expect = ["file:symlink"]
+
+[[workspace]]
+name = "symlink-file"
+overlay = "symlink-outside"
+symlink = { link = "crates/sample/src/linked.rs", target = "../../../outside/hidden.rs" }
+expect = ["file:symlink"]
+
+[[workspace]]
+name = "target-outside-member-bin"
+overlay = "target-outside-member-bin"
+expect = ["file:target-outside-member"]
+
+[[workspace]]
+name = "target-outside-member-lib"
+overlay = "target-outside-member-lib"
+expect = ["file:target-outside-member"]

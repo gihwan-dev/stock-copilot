@@ -16,10 +16,10 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod arch_check_cases;
 #[cfg(test)]
-mod harness_workspace;
+mod harness_workspace_tests;
 #[cfg(test)]
-mod rust_lints;
+mod rust_lints_tests;
 #[cfg(test)]
-mod third_party;
+mod third_party_tests;
 #[cfg(test)]
-mod workspace_layout;
+mod workspace_layout_tests;

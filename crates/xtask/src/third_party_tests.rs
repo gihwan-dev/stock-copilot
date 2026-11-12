@@ -3,7 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
-use crate::harness_workspace::{copy_tree, fresh_directory, generate_lockfile, repository_root};
+use crate::harness_workspace_tests::{
+    copy_tree, fresh_directory, generate_lockfile, repository_root,
+};
 
 const ADVISORY_DB_DIRECTORY: &str = "advisory-db-3157b0e258782691";
 

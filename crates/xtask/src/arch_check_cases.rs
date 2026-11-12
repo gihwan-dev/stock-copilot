@@ -7,7 +7,7 @@ use crate::arch_check::rules::parse_rules;
 use crate::arch_check::{
     RULES_PATH, Rules, Workspace, check_workspace, load_rules, load_workspace,
 };
-use crate::harness_workspace::{copy_tree, fresh_directory, generate_lockfile, repository_root};
+use crate::harness_workspace_tests::{copy_tree, fresh_directory, generate_lockfile, repository_root};
 
 type Expected = BTreeSet<(String, String)>;
 type Cases = BTreeMap<String, (Workspace, Expected)>;

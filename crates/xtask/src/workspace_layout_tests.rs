@@ -3,7 +3,7 @@ use std::process::Command;
 
 use cargo_metadata::{Metadata, MetadataCommand};
 
-use crate::harness_workspace::repository_root;
+use crate::harness_workspace_tests::repository_root;
 
 const ARCHITECTURE_CRATES: [(&str, &str); 22] = [
     ("domain", "crates/domain"),

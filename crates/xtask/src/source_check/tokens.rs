@@ -2,7 +2,7 @@ use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, TokenStream,
 
 use super::finding::{ExpectProblem, Rule};
 
-const BANNED_ATTRIBUTES: [&str; 12] = [
+pub(crate) const BANNED_ATTRIBUTES: [&str; 12] = [
     "allow",
     "warn",
     "deny",
@@ -17,11 +17,11 @@ const BANNED_ATTRIBUTES: [&str; 12] = [
     "automatically_derived",
 ];
 
-const TOOL_ATTRIBUTES: [&str; 3] = ["clippy", "rustfmt", "mutants"];
+pub(crate) const TOOL_ATTRIBUTES: [&str; 3] = ["clippy", "rustfmt", "mutants"];
 
 const STANDARD_ROOTS: [&str; 3] = ["core", "std", "alloc"];
 
-const BANNED_MACROS: [&str; 7] = [
+pub(crate) const BANNED_MACROS: [&str; 7] = [
     "macro_rules",
     "include",
     "include_str",
@@ -31,25 +31,20 @@ const BANNED_MACROS: [&str; 7] = [
     "naked_asm",
 ];
 
-const ENVIRONMENT_MACRO: &str = "env";
+pub(crate) const ENVIRONMENT_MACRO: &str = "env";
 
-const OPTIONAL_ENVIRONMENT_MACRO: &str = "option_env";
+pub(crate) const OPTIONAL_ENVIRONMENT_MACRO: &str = "option_env";
 
-const CLOCK_AND_ENVIRONMENT_FUNCTIONS: [&str; 9] = [
-    "now",
-    "now_utc",
-    "now_local",
-    "today",
-    "elapsed",
-    "var",
-    "var_os",
-    "vars",
-    "vars_os",
-];
+pub(crate) const ENVIRONMENT_GLOB: &str = "env::*";
 
-const CLOCK_METHODS: [&str; 1] = ["elapsed"];
+pub(crate) const CLOCK_PREFIX: &str = "now";
 
-const DOMAIN_FLOATS: [&str; 2] = ["f32", "f64"];
+pub(crate) const CLOCK_AND_ENVIRONMENT_FUNCTIONS: [&str; 6] =
+    ["today", "elapsed", "var", "var_os", "vars", "vars_os"];
+
+pub(crate) const CLOCK_METHODS: [&str; 1] = ["elapsed"];
+
+pub(crate) const DOMAIN_FLOATS: [&str; 2] = ["f32", "f64"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FloatScope {
@@ -63,10 +58,17 @@ pub(crate) enum ClockScope {
     Forbidden,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AttributeScope {
+    Checked,
+    Generated,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Scope {
     pub(crate) float: FloatScope,
     pub(crate) clock: ClockScope,
+    pub(crate) attributes: AttributeScope,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,10 +83,18 @@ enum CfgKind {
     Other,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Follower {
-    Module,
+    Module(String),
     Other,
+}
+
+fn is_clock_function(name: &str) -> bool {
+    name.starts_with(CLOCK_PREFIX) || CLOCK_AND_ENVIRONMENT_FUNCTIONS.contains(&name)
+}
+
+fn is_test_module_name(name: &str) -> bool {
+    name == "tests" || name.ends_with("_tests")
 }
 
 pub(crate) fn token_rules(stream: TokenStream, scope: Scope) -> Vec<(usize, Rule)> {
@@ -138,22 +148,22 @@ fn is_delimited(group: &Group, expected: Delimiter) -> bool {
 
 fn punct_rules(punct: &Punct, remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
     match punct.as_char() {
-        '#' => attribute_at(remaining),
+        '#' => attribute_at(remaining, scope),
         ':' if punct.spacing() == Spacing::Joint => path_call(remaining, scope),
         '.' => method_call(remaining, scope),
         _ => Vec::new(),
     }
 }
 
-fn attribute_at(remaining: &[TokenTree]) -> Vec<Rule> {
+fn attribute_at(remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
     match remaining {
         [TokenTree::Punct(bang), TokenTree::Group(group), ..]
             if bang.as_char() == '!' && is_delimited(group, Delimiter::Bracket) =>
         {
-            attribute_rules(Style::Inner, &children(group), &[])
+            attribute_rules(Style::Inner, &children(group), &[], scope)
         }
         [TokenTree::Group(group), following @ ..] if is_delimited(group, Delimiter::Bracket) => {
-            attribute_rules(Style::Outer, &children(group), following)
+            attribute_rules(Style::Outer, &children(group), following, scope)
         }
         _ => Vec::new(),
     }
@@ -170,7 +180,7 @@ fn path_call(remaining: &[TokenTree], scope: Scope) -> Vec<Rule> {
     match remaining {
         [TokenTree::Punct(second), TokenTree::Ident(ident), ..] if second.as_char() == ':' => {
             let name = ident_name(ident);
-            if CLOCK_AND_ENVIRONMENT_FUNCTIONS.contains(&name.as_str()) {
+            if is_clock_function(&name) {
                 clock_rule(&name, scope)
             } else {
                 Vec::new()
@@ -210,28 +220,60 @@ fn attribute_path(content: &[TokenTree]) -> (Vec<String>, &[TokenTree]) {
     (segments, rest)
 }
 
-fn attribute_rules(style: Style, content: &[TokenTree], following: &[TokenTree]) -> Vec<Rule> {
+fn checked_in_generated_code(rule: &Rule) -> bool {
+    if let Rule::CfgNotTest | Rule::CfgTestOutsideModule | Rule::CfgTestModuleName = rule {
+        true
+    } else if let Rule::Attribute(name) = rule {
+        name == "cfg_attr"
+    } else {
+        false
+    }
+}
+
+fn attribute_rules(
+    style: Style,
+    content: &[TokenTree],
+    following: &[TokenTree],
+    scope: Scope,
+) -> Vec<Rule> {
     let (segments, arguments) = attribute_path(content);
     if let ([only], [TokenTree::Group(inner)]) = (segments.as_slice(), arguments)
         && only == "unsafe"
     {
-        return attribute_rules(style, &children(inner), following);
+        return attribute_rules(style, &children(inner), following, scope);
     }
-    let builtin = match segments.as_slice() {
+    let rules = match segments.as_slice() {
         [tool, _, ..] if TOOL_ATTRIBUTES.contains(&tool.as_str()) => {
-            return vec![Rule::Attribute(tool.clone())];
+            vec![Rule::Attribute(tool.clone())]
         }
-        [single] => Some(single.as_str()),
-        [root, .., last] if STANDARD_ROOTS.contains(&root.as_str()) => Some(last.as_str()),
-        _ => None,
+        [single] => builtin_attribute_rules(single, style, arguments, following),
+        [root, .., last] if STANDARD_ROOTS.contains(&root.as_str()) => {
+            builtin_attribute_rules(last, style, arguments, following)
+        }
+        _ => Vec::new(),
     };
-    match builtin {
-        Some("expect") => expect_rules(style, arguments),
-        Some("cfg") => cfg_rules(style, arguments, following),
-        Some(name) if BANNED_ATTRIBUTES.contains(&name) => {
-            vec![Rule::Attribute(String::from(name))]
+    match scope.attributes {
+        AttributeScope::Checked => rules,
+        AttributeScope::Generated => rules
+            .into_iter()
+            .filter(checked_in_generated_code)
+            .collect(),
+    }
+}
+
+fn builtin_attribute_rules(
+    name: &str,
+    style: Style,
+    arguments: &[TokenTree],
+    following: &[TokenTree],
+) -> Vec<Rule> {
+    match name {
+        "expect" => expect_rules(style, arguments),
+        "cfg" => cfg_rules(style, arguments, following),
+        banned if BANNED_ATTRIBUTES.contains(&banned) => {
+            vec![Rule::Attribute(String::from(banned))]
         }
-        Some(_) | None => Vec::new(),
+        _ => Vec::new(),
     }
 }
 
@@ -243,13 +285,19 @@ fn is_reason(item: &[TokenTree]) -> bool {
     }
 }
 
-fn is_string_reason(item: &[TokenTree]) -> bool {
-    if let [TokenTree::Ident(_), equals, TokenTree::Literal(text)] = item {
+fn reason_content(item: &[TokenTree]) -> Option<String> {
+    if let [TokenTree::Ident(_), equals, TokenTree::Literal(text)] = item
+        && is_punct(equals, '=')
+    {
         let literal = text.to_string();
-        is_punct(equals, '=')
-            && (literal.starts_with('"') || literal.starts_with("r#") || literal.starts_with("r\""))
+        let unprefixed = literal.strip_prefix('r').unwrap_or(&literal);
+        unprefixed
+            .trim_matches('#')
+            .strip_prefix('"')
+            .and_then(|rest| rest.strip_suffix('"'))
+            .map(String::from)
     } else {
-        false
+        None
     }
 }
 
@@ -277,12 +325,18 @@ fn expect_rules(style: Style, arguments: &[TokenTree]) -> Vec<Rule> {
     if lints.len() > 1 {
         problems.push(Rule::Expect(ExpectProblem::MultipleLints));
     }
-    if reasons.is_empty() {
+    let contents: Vec<Option<String>> = reasons.iter().map(|item| reason_content(item)).collect();
+    if contents.is_empty()
+        || contents
+            .iter()
+            .flatten()
+            .any(|reason| reason.trim().is_empty())
+    {
         problems.push(Rule::Expect(ExpectProblem::NoReason));
     }
     if lints.is_empty()
         || reasons.len() > 1
-        || !reasons.iter().all(|item| is_string_reason(item))
+        || contents.iter().any(Option::is_none)
         || !lints.iter().all(|item| is_lint_path(item))
     {
         problems.push(Rule::Expect(ExpectProblem::Malformed));
@@ -315,7 +369,9 @@ fn follower(tokens: &[TokenTree]) -> Follower {
             tail @ ..,
         ] if visibility == "pub" && is_delimited(group, Delimiter::Parenthesis) => follower(tail),
         [TokenTree::Ident(visibility), tail @ ..] if visibility == "pub" => follower(tail),
-        [TokenTree::Ident(keyword), ..] if keyword == "mod" => Follower::Module,
+        [TokenTree::Ident(keyword), TokenTree::Ident(name), ..] if keyword == "mod" => {
+            Follower::Module(ident_name(name))
+        }
         _ => Follower::Other,
     }
 }
@@ -325,7 +381,8 @@ fn cfg_rules(style: Style, arguments: &[TokenTree], following: &[TokenTree]) -> 
         (CfgKind::Other, Style::Outer | Style::Inner) => vec![Rule::CfgNotTest],
         (CfgKind::Test, Style::Inner) => vec![Rule::CfgTestOutsideModule],
         (CfgKind::Test, Style::Outer) => match follower(following) {
-            Follower::Module => Vec::new(),
+            Follower::Module(name) if is_test_module_name(&name) => Vec::new(),
+            Follower::Module(_) => vec![Rule::CfgTestModuleName],
             Follower::Other => vec![Rule::CfgTestOutsideModule],
         },
     }
@@ -383,11 +440,11 @@ fn use_item_rules(rest: &[TokenTree], scope: Scope) -> Vec<Rule> {
                 && is_punct(second, ':')
                 && is_punct(star, '*') =>
         {
-            clock_rule("env::*", scope)
+            clock_rule(ENVIRONMENT_GLOB, scope)
         }
         [TokenTree::Ident(ident), ..] => {
             let name = ident_name(ident);
-            if CLOCK_AND_ENVIRONMENT_FUNCTIONS.contains(&name.as_str()) {
+            if is_clock_function(&name) {
                 clock_rule(&name, scope)
             } else if name == ENVIRONMENT_MACRO {
                 Vec::new()

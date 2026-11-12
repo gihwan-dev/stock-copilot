@@ -19,7 +19,11 @@ pub(crate) struct Allowlists {
     build_scripts: BTreeSet<String>,
 }
 
-fn listed_paths(table: &toml::Table, key: &str) -> Result<BTreeSet<String>, CheckFailure> {
+fn listed_paths(
+    root: &Path,
+    table: &toml::Table,
+    key: &str,
+) -> Result<BTreeSet<String>, CheckFailure> {
     let entries = table
         .get(key)
         .and_then(toml::Value::as_array)
@@ -30,8 +34,14 @@ fn listed_paths(table: &toml::Table, key: &str) -> Result<BTreeSet<String>, Chec
             let path = entry.get("path").and_then(toml::Value::as_str);
             let reason = entry.get("reason").and_then(toml::Value::as_str);
             match (path, reason) {
-                (Some(listed), Some(why)) if !listed.is_empty() && !why.is_empty() => {
-                    Ok(String::from(listed))
+                (Some(listed), Some(why)) if !listed.is_empty() && !why.trim().is_empty() => {
+                    if root.join(listed).exists() {
+                        Ok(String::from(listed))
+                    } else {
+                        Err(CheckFailure::Allowlist(format!(
+                            "{ALLOWLIST_FILE}: [[{key}]] {listed}가 없다"
+                        )))
+                    }
                 }
                 (Some(_) | None, Some(_) | None) => Err(CheckFailure::Allowlist(format!(
                     "{ALLOWLIST_FILE}: [[{key}]] 항목마다 path와 reason이 있어야 한다"
@@ -50,9 +60,9 @@ impl Allowlists {
             CheckFailure::Allowlist(format!("{ALLOWLIST_FILE}: {error}"))
         })?;
         Ok(Self {
-            generated: listed_paths(&table, "generated")?,
-            clock_environment: listed_paths(&table, "clock-environment")?,
-            build_scripts: listed_paths(&table, "build-script")?,
+            generated: listed_paths(root, &table, "generated")?,
+            clock_environment: listed_paths(root, &table, "clock-environment")?,
+            build_scripts: listed_paths(root, &table, "build-script")?,
         })
     }
 

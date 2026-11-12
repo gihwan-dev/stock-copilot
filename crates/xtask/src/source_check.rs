@@ -11,7 +11,7 @@ mod tests;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use cargo_metadata::{Metadata, MetadataCommand};
@@ -22,15 +22,18 @@ use comments::comment_lines;
 use failure::CheckFailure;
 use finding::{Finding, Rule};
 use manifest::{ManifestRole, manifest_findings};
-use tokens::{ClockScope, FloatScope, Scope, token_rules};
+use tokens::{AttributeScope, ClockScope, FloatScope, Scope, token_rules};
 
-const SKIPPED_DIRECTORIES: [&str; 3] = ["target", "node_modules", ".git"];
-
-const SKIPPED_TOP_LEVEL_DIRECTORIES: [&str; 1] = [".claude"];
+const SKIPPED_DIRECTORIES: [&str; 4] = [
+    ".git",
+    ".claude",
+    "node_modules",
+    "apps/desktop/node_modules",
+];
 
 const CARGO_CONFIG_DIRECTORY: &str = ".cargo";
 
-const NESTED_CONFIG_FILES: [&str; 6] = [
+pub(crate) const NESTED_CONFIG_FILES: [&str; 6] = [
     "clippy.toml",
     ".clippy.toml",
     "rustfmt.toml",
@@ -47,6 +50,7 @@ const DOMAIN_DIRECTORY: &str = "crates/domain/";
 enum EntryKind {
     File,
     CargoDirectory,
+    Symlink,
 }
 
 #[derive(Debug)]
@@ -57,14 +61,19 @@ struct Entry {
 }
 
 pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) -> Vec<Finding> {
-    if allowlists.generated(path) == Membership::Listed {
-        return Vec::new();
-    }
-    let mut findings: Vec<Finding> = comment_lines(source)
-        .into_iter()
-        .map(|line| Finding::at_line(path, line, Rule::Comment))
-        .collect();
+    let attributes = match allowlists.generated(path) {
+        Membership::Listed => AttributeScope::Generated,
+        Membership::Unlisted => AttributeScope::Checked,
+    };
+    let mut findings: Vec<Finding> = match attributes {
+        AttributeScope::Checked => comment_lines(source)
+            .into_iter()
+            .map(|line| Finding::at_line(path, line, Rule::Comment))
+            .collect(),
+        AttributeScope::Generated => Vec::new(),
+    };
     let scope = Scope {
+        attributes,
         float: if path.starts_with(DOMAIN_DIRECTORY) {
             FloatScope::Domain
         } else {
@@ -94,7 +103,28 @@ fn relative_path(root: &Path, path: &Path) -> Result<String, CheckFailure> {
         .ok_or_else(|| CheckFailure::OutsideRoot(path.to_path_buf()))
 }
 
-fn walk(root: &Path, directory: &Path, entries: &mut Vec<Entry>) -> Result<(), CheckFailure> {
+fn lexically_normalized(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::CurDir => {}
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                normalized.push(component);
+            }
+        }
+    }
+    normalized
+}
+
+fn walk(
+    root: &Path,
+    directory: &Path,
+    skipped: &BTreeSet<String>,
+    entries: &mut Vec<Entry>,
+) -> Result<(), CheckFailure> {
     let listing = fs::read_dir(directory)
         .map_err(|error| CheckFailure::Io(directory.to_path_buf(), error))?;
     for listed in listing {
@@ -105,7 +135,13 @@ fn walk(root: &Path, directory: &Path, entries: &mut Vec<Entry>) -> Result<(), C
             .file_type()
             .map_err(|error| CheckFailure::Io(path.clone(), error))?;
         let relative = relative_path(root, &path)?;
-        if name == CARGO_CONFIG_DIRECTORY {
+        if file_type.is_symlink() {
+            entries.push(Entry {
+                relative,
+                name,
+                kind: EntryKind::Symlink,
+            });
+        } else if name == CARGO_CONFIG_DIRECTORY {
             entries.push(Entry {
                 relative,
                 name,
@@ -117,10 +153,8 @@ fn walk(root: &Path, directory: &Path, entries: &mut Vec<Entry>) -> Result<(), C
                 name,
                 kind: EntryKind::File,
             });
-        } else if !SKIPPED_DIRECTORIES.contains(&name.as_str())
-            && (directory != root || !SKIPPED_TOP_LEVEL_DIRECTORIES.contains(&name.as_str()))
-        {
-            walk(root, &path, entries)?;
+        } else if !skipped.contains(&relative) {
+            walk(root, &path, skipped, entries)?;
         }
     }
     Ok(())
@@ -163,8 +197,12 @@ fn package_findings(
             &read_manifest(root, &manifest)?,
             ManifestRole::Member,
         ));
+        let directory = manifest.strip_suffix("Cargo.toml").unwrap_or(&manifest);
         for target in &package.targets {
-            let source = relative_path(root, target.src_path.as_std_path())?;
+            let source = relative_path(root, &lexically_normalized(target.src_path.as_std_path()))?;
+            if !source.starts_with(directory) {
+                findings.push(Finding::whole_file(&source, Rule::TargetOutsideMember));
+            }
             if target.is_custom_build() && allowlists.build_script(&source) == Membership::Unlisted
             {
                 findings.push(Finding::whole_file(&source, Rule::BuildScript));
@@ -173,7 +211,6 @@ fn package_findings(
                 findings.push(Finding::whole_file(&manifest, Rule::ProcMacro));
             }
         }
-        let directory = manifest.strip_suffix("Cargo.toml").unwrap_or(&manifest);
         members.push(String::from(directory));
     }
     Ok((members, findings))
@@ -191,6 +228,7 @@ fn entry_findings(
     let path = entry.relative.as_str();
     let findings = match entry.kind {
         EntryKind::CargoDirectory => vec![Finding::whole_file(path, Rule::CargoConfig)],
+        EntryKind::Symlink => vec![Finding::whole_file(path, Rule::Symlink)],
         EntryKind::File
             if NESTED_CONFIG_FILES.contains(&entry.name.as_str()) && path.contains('/') =>
         {
@@ -227,8 +265,14 @@ pub(crate) fn check_repository(
 ) -> Result<BTreeSet<Finding>, CheckFailure> {
     let metadata = workspace_metadata(Some(&root.join("Cargo.toml")))?;
     let (members, mut findings) = package_findings(root, &metadata, allowlists)?;
+    let mut skipped: BTreeSet<String> = SKIPPED_DIRECTORIES.into_iter().map(String::from).collect();
+    if let Ok(target) = metadata.target_directory.as_std_path().strip_prefix(root)
+        && let Some(relative) = target.to_str()
+    {
+        skipped.insert(String::from(relative));
+    }
     let mut entries = Vec::new();
-    walk(root, root, &mut entries)?;
+    walk(root, root, &skipped, &mut entries)?;
     for entry in &entries {
         findings.extend(entry_findings(root, entry, &members, allowlists)?);
     }

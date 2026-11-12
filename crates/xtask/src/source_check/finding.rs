@@ -16,6 +16,7 @@ pub(crate) enum Rule {
     Expect(ExpectProblem),
     CfgNotTest,
     CfgTestOutsideModule,
+    CfgTestModuleName,
     CfgMacro,
     Macro(String),
     DomainFloat(String),
@@ -26,6 +27,8 @@ pub(crate) enum Rule {
     ProcMacro,
     NestedConfig(String),
     CargoConfig,
+    Symlink,
+    TargetOutsideMember,
 }
 
 impl fmt::Display for Rule {
@@ -40,6 +43,7 @@ impl fmt::Display for Rule {
             Self::Expect(ExpectProblem::Malformed) => f.write_str("expect:malformed"),
             Self::CfgNotTest => f.write_str("cfg:not-test"),
             Self::CfgTestOutsideModule => f.write_str("cfg:test-outside-module"),
+            Self::CfgTestModuleName => f.write_str("cfg:test-module-name"),
             Self::CfgMacro => f.write_str("cfg:macro"),
             Self::Macro(name) => write!(f, "macro:{name}"),
             Self::DomainFloat(name) => write!(f, "domain-float:{name}"),
@@ -50,6 +54,8 @@ impl fmt::Display for Rule {
             Self::ProcMacro => f.write_str("file:proc-macro"),
             Self::NestedConfig(name) => write!(f, "file:nested-config:{name}"),
             Self::CargoConfig => f.write_str("file:cargo-config"),
+            Self::Symlink => f.write_str("file:symlink"),
+            Self::TargetOutsideMember => f.write_str("file:target-outside-member"),
         }
     }
 }

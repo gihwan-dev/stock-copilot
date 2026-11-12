@@ -1,6 +1,6 @@
 use super::finding::{Finding, Rule};
 
-const BANNED_TABLES: [&str; 5] = ["target", "profile", "patch", "replace", "features"];
+pub(crate) const BANNED_TABLES: [&str; 5] = ["target", "profile", "patch", "replace", "features"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ManifestRole {
