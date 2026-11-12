@@ -1,0 +1,51 @@
+packages = ["domain", "order-execution", "application"]
+
+[[threshold]]
+path = "crates/domain/src"
+percent = 95
+reason = "harness.md 6.1: domain 파일별 줄 커버리지 95% 이상"
+
+[[threshold]]
+path = "crates/order-execution/src"
+percent = 100
+reason = "harness.md 6.1: order-execution 파일별 줄 커버리지 100%"
+
+[[threshold]]
+path = "crates/application/src/order_gate"
+percent = 100
+reason = "harness.md 6.1: application의 주문 게이트 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/signal"
+percent = 100
+reason = "harness.md 6.1: domain의 신호 판정 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/threshold"
+percent = 100
+reason = "harness.md 6.1: 임계값 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/margin"
+percent = 100
+reason = "harness.md 6.1: 여유분 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/calibration"
+percent = 100
+reason = "harness.md 6.1: 보정 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/order"
+percent = 100
+reason = "harness.md 6.1: 주문 계산(수량·가격) 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/validate"
+percent = 100
+reason = "harness.md 6.1: validate 모듈 100%"
+
+[[threshold]]
+path = "crates/domain/src/outcome"
+percent = 100
+reason = "harness.md 6.1: 결과 판정 모듈 100%"

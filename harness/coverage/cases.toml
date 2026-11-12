@@ -1,0 +1,778 @@
+[[case]]
+name = "domain-full"
+lcov = '''
+SF:crates/domain/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+end_of_record
+'''
+expect = []
+
+[[case]]
+name = "domain-at-threshold"
+lcov = '''
+SF:crates/domain/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,0
+end_of_record
+'''
+expect = []
+
+[[case]]
+name = "domain-below-threshold"
+lcov = '''
+SF:crates/domain/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,0
+DA:20,0
+end_of_record
+'''
+expect = ["crates/domain/src/lib.rs: coverage:below-threshold"]
+
+[[case]]
+name = "domain-nested-module-below"
+lcov = '''
+SF:crates/domain/src/ledger/entry.rs
+DA:1,1
+DA:2,0
+end_of_record
+'''
+expect = ["crates/domain/src/ledger/entry.rs: coverage:below-threshold"]
+
+[[case]]
+name = "domain-excepted-lines-count-as-covered"
+lcov = '''
+SF:crates/domain/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,0
+DA:20,0
+end_of_record
+'''
+excepted = { "crates/domain/src/lib.rs" = [19] }
+expect = []
+
+[[case]]
+name = "order-execution-uncovered-line"
+lcov = '''
+SF:crates/order-execution/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/order-execution/src/lib.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "order-execution-excepted-line"
+lcov = '''
+SF:crates/order-execution/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+excepted = { "crates/order-execution/src/lib.rs" = [40] }
+expect = []
+
+[[case]]
+name = "order-execution-exception-elsewhere"
+lcov = '''
+SF:crates/order-execution/src/lib.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+excepted = { "crates/order-execution/src/lib.rs" = [39] }
+expect = ["crates/order-execution/src/lib.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "order-execution-submodule"
+lcov = '''
+SF:crates/order-execution/src/token/bind.rs
+DA:1,1
+DA:2,1
+DA:3,0
+end_of_record
+'''
+expect = ["crates/order-execution/src/token/bind.rs:3: coverage:uncovered-line"]
+
+[[case]]
+name = "order-gate-file-appears"
+lcov = '''
+SF:crates/application/src/order_gate.rs
+DA:1,1
+DA:2,0
+end_of_record
+'''
+expect = ["crates/application/src/order_gate.rs:2: coverage:uncovered-line"]
+
+[[case]]
+name = "order-gate-directory-appears"
+lcov = '''
+SF:crates/application/src/order_gate/facts.rs
+DA:1,1
+DA:2,0
+end_of_record
+'''
+expect = ["crates/application/src/order_gate/facts.rs:2: coverage:uncovered-line"]
+
+[[case]]
+name = "application-elsewhere-unmeasured"
+lcov = '''
+SF:crates/application/src/portfolio.rs
+DA:1,1
+DA:2,0
+DA:3,0
+DA:4,0
+end_of_record
+'''
+expect = []
+
+[[case]]
+name = "order-gate-prefix-is-not-the-module"
+lcov = '''
+SF:crates/application/src/order_gate_view.rs
+DA:1,1
+DA:2,0
+end_of_record
+'''
+expect = []
+
+[[case]]
+name = "domain-signal-module-is-full"
+lcov = '''
+SF:crates/domain/src/signal.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/signal.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-signal-directory-is-full"
+lcov = '''
+SF:crates/domain/src/signal/decision.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/signal/decision.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-threshold-module-is-full"
+lcov = '''
+SF:crates/domain/src/threshold.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/threshold.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-margin-module-is-full"
+lcov = '''
+SF:crates/domain/src/margin.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/margin.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-calibration-module-is-full"
+lcov = '''
+SF:crates/domain/src/calibration.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/calibration.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-order-module-is-full"
+lcov = '''
+SF:crates/domain/src/order.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/order.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-validate-module-is-full"
+lcov = '''
+SF:crates/domain/src/validate.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/validate.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "domain-outcome-module-is-full"
+lcov = '''
+SF:crates/domain/src/outcome.rs
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,1
+DA:5,1
+DA:6,1
+DA:7,1
+DA:8,1
+DA:9,1
+DA:10,1
+DA:11,1
+DA:12,1
+DA:13,1
+DA:14,1
+DA:15,1
+DA:16,1
+DA:17,1
+DA:18,1
+DA:19,1
+DA:20,1
+DA:21,1
+DA:22,1
+DA:23,1
+DA:24,1
+DA:25,1
+DA:26,1
+DA:27,1
+DA:28,1
+DA:29,1
+DA:30,1
+DA:31,1
+DA:32,1
+DA:33,1
+DA:34,1
+DA:35,1
+DA:36,1
+DA:37,1
+DA:38,1
+DA:39,1
+DA:40,0
+end_of_record
+'''
+expect = ["crates/domain/src/outcome.rs:40: coverage:uncovered-line"]
+
+[[case]]
+name = "other-crate-unmeasured"
+lcov = '''
+SF:crates/xtask/src/main.rs
+DA:1,1
+DA:2,0
+DA:3,0
+end_of_record
+'''
+expect = []
+
+[[case]]
+name = "duplicate-records-are-summed"
+lcov = '''
+SF:crates/order-execution/src/lib.rs
+DA:1,1
+DA:2,0
+end_of_record
+SF:crates/order-execution/src/lib.rs
+DA:1,0
+DA:2,1
+end_of_record
+'''
+expect = []
+
+[[function]]
+example = "functions.rs"
+name = "plain"
+expect = [[1, 3]]
+
+[[function]]
+example = "functions.rs"
+name = "in_impl"
+expect = [[8, 10]]
+
+[[function]]
+example = "functions.rs"
+name = "nested_module"
+expect = [[14, 17]]
+
+[[function]]
+example = "functions.rs"
+name = "repeated"
+expect = [[20, 22], [25, 27]]
+
+[[function]]
+example = "functions.rs"
+name = "declared"
+expect = []
+
+[[function]]
+example = "functions.rs"
+name = "absent"
+expect = []
+
+[workspace]
+exceptions = "harness/coverage/workspace-exceptions.toml"
+expect = [
+    "crates/application/src/order_gate.rs:5: coverage:uncovered-line",
+    "crates/application/src/order_gate.rs:6: coverage:uncovered-line",
+    "crates/application/src/order_gate.rs:7: coverage:uncovered-line",
+    "crates/domain/src/below.rs: coverage:below-threshold",
+    "crates/domain/src/signal.rs:5: coverage:uncovered-line",
+    "crates/domain/src/signal.rs:6: coverage:uncovered-line",
+    "crates/domain/src/signal.rs:7: coverage:uncovered-line",
+    "crates/order-execution/src/lib.rs:9: coverage:uncovered-line",
+    "crates/order-execution/src/lib.rs:10: coverage:uncovered-line",
+    "crates/order-execution/src/lib.rs:11: coverage:uncovered-line",
+]
+
+[untested-workspace]
+expect = ["crates/domain/src/lib.rs: coverage:untested-file"]

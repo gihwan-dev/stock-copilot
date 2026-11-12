@@ -4,8 +4,10 @@ use std::process::ExitCode;
 mod arch_check;
 mod capability_check;
 mod check_support;
+mod coverage_check;
 mod disable_control;
 mod migration_check;
+mod nextest_list;
 mod raw_types;
 mod source_check;
 mod sql_check;
@@ -17,6 +19,7 @@ fn main() -> ExitCode {
         [command] if command == "arch-check" => arch_check::command(Path::new("Cargo.toml")),
         [command] if command == "source-check" => source_check::command(),
         [command] if command == "sql-check" => sql_check::command(),
+        [command] if command == "coverage-check" => coverage_check::command(),
         [command] if command == "migration-check" => migration_check::command(),
         [command] if command == "capability-check" => capability_check::command(),
         [command] if command == "raw-types" => raw_types::command(),

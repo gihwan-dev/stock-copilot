@@ -1,0 +1,4 @@
+[[exception]]
+path = "crates/order-execution/src/lib.rs"
+function = "defensive"
+reason = "하네스 예제: 예외 목록에 적은 함수의 줄은 실행되지 않아도 통과한다"
