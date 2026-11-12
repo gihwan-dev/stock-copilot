@@ -214,6 +214,9 @@ fn dropping_a_test_module_declaration_fails_through_the_test_list() {
             String::from("test-diff:not-listed:sample extra_tests::adds_large"),
             String::from("test-diff:not-listed:sample extra_tests::adds_zero"),
             String::from("test-diff:count-decreased:3->1"),
+            String::from("test-diff:removed:sample extra_tests::adds_large"),
+            String::from("test-diff:removed:sample extra_tests::adds_zero"),
+            String::from("test-diff:unreachable:crates/sample/src/extra_tests.rs"),
         ])
     );
 }
@@ -234,6 +237,9 @@ fn replacing_a_disabled_test_with_a_new_one_still_fails() {
         BTreeSet::from([
             String::from("test-diff:not-listed:sample extra_tests::adds_large"),
             String::from("test-diff:not-listed:sample extra_tests::adds_zero"),
+            String::from("test-diff:removed:sample extra_tests::adds_large"),
+            String::from("test-diff:removed:sample extra_tests::adds_zero"),
+            String::from("test-diff:unreachable:crates/sample/src/extra_tests.rs"),
         ])
     );
 }
@@ -250,10 +256,15 @@ fn committed_weakening_fails_against_the_base_commit_but_not_against_head() {
     run_git(&directory, &["commit", "--quiet", "--all", "-m", "weaken"]);
     run_git(&directory, &["branch", "--quiet", "main"]);
     assert!(check(&directory, HEAD).expect("check HEAD").is_empty());
+    assert!(check(&directory, "").is_err(), "an empty base is rejected");
+    assert!(
+        check(&directory, "main").is_err(),
+        "a branch name is rejected"
+    );
     assert_eq!(
         shown(&check(&directory, &commit).expect("check base")),
         BTreeSet::from([String::from(
-            "test-diff:modified:crates/sample/src/extra_tests.rs::adds_zero"
+            "test-diff:modified:sample extra_tests::adds_zero"
         )])
     );
 }
@@ -297,7 +308,59 @@ fn replace_refs_do_not_change_the_base() {
     assert_eq!(
         shown(&check(&directory, &commit).expect("check base")),
         BTreeSet::from([String::from(
-            "test-diff:modified:crates/sample/src/extra_tests.rs::adds_zero"
+            "test-diff:modified:sample extra_tests::adds_zero"
         )])
+    );
+}
+
+#[test]
+fn base_must_be_an_ancestor_of_head() {
+    let (directory, commit) = committed_repository("test-diff-ancestor");
+    run_git(&directory, &["switch", "--quiet", "--orphan", "unrelated"]);
+    run_git(
+        &directory,
+        &["commit", "--quiet", "--allow-empty", "-m", "unrelated"],
+    );
+    let outcome = check(&directory, &commit);
+    assert!(
+        outcome
+            .as_ref()
+            .is_err_and(|failure| failure.contains("조상")),
+        "{outcome:?}"
+    );
+}
+
+#[test]
+fn inline_module_replacing_a_file_module_leaves_the_file_unreachable() {
+    let (directory, commit) = committed_repository("test-diff-inline-replacement");
+    edit(
+        &directory,
+        LIBRARY,
+        EXTRA_DECLARATION,
+        "#[cfg(test)]\nmod extra_tests {\n    #[test]\n    fn adds_zero() {\n        assert!(true, \"zero\");\n    }\n\n    #[test]\n    fn adds_large() {\n        assert!(true, \"large\");\n    }\n}\n",
+    );
+    assert_eq!(
+        shown(&check(&directory, &commit).expect("check")),
+        BTreeSet::from([
+            String::from("test-diff:modified:sample extra_tests::adds_large"),
+            String::from("test-diff:modified:sample extra_tests::adds_zero"),
+            String::from("test-diff:unreachable:crates/sample/src/extra_tests.rs"),
+        ])
+    );
+}
+
+#[test]
+fn stale_build_directories_do_not_affect_the_verdict() {
+    let (directory, commit) = committed_repository("test-diff-stale-cache");
+    edit(&directory, LIBRARY, EXTRA_DECLARATION, "");
+    let expected = shown(&check(&directory, &commit).expect("check"));
+    let poisoned = directory.join("target/test-diff/tree");
+    fs::create_dir_all(&poisoned).expect("create stale tree");
+    fs::write(poisoned.join("Cargo.toml"), "[workspace]\nmembers = []\n")
+        .expect("write stale manifest");
+    assert_eq!(shown(&check(&directory, &commit).expect("check")), expected);
+    assert!(
+        expected.contains("test-diff:removed:sample extra_tests::adds_zero"),
+        "{expected:?}"
     );
 }

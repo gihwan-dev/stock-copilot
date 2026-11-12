@@ -1,4 +1,5 @@
-mod functions;
+mod crates;
+mod modules;
 
 #[cfg(test)]
 mod tests;
@@ -14,13 +15,14 @@ use std::thread;
 use crate::check_support::{Finding, report, workspace_root};
 use crate::git_base::{git, output, resolve_base};
 use crate::nextest_list::list_tests;
-pub(crate) use functions::test_functions;
+use crates::crate_roots;
+pub(crate) use modules::STANDARD_MACROS;
+use modules::{ModuleRecord, Scan, Walker, has_tests};
 
 pub(crate) const EXCLUDED_PREFIXES: [&str; 1] = ["harness/"];
-const BASE_DIRECTORY: &str = "target/test-diff";
-const COPIED_BUILD_OUTPUTS: [&str; 1] = ["apps/desktop/dist"];
 const LIST_LABEL: &str = "cargo nextest list";
 const SYMLINK_MODE: &str = "120000";
+const SCOPE_KEYWORDS: [&str; 3] = ["self", "super", "crate"];
 
 pub(crate) type Sources = BTreeMap<String, String>;
 
@@ -32,6 +34,10 @@ pub(crate) enum Rule {
     Modified(String),
     NotListed(String),
     CountDecreased { base: usize, current: usize },
+    Unreachable(String),
+    SupportRemoved(String),
+    SupportModified(String),
+    Shadowing(String),
 }
 
 impl fmt::Display for Rule {
@@ -43,6 +49,10 @@ impl fmt::Display for Rule {
             Self::CountDecreased { base, current } => {
                 write!(f, "test-diff:count-decreased:{base}->{current}")
             }
+            Self::Unreachable(path) => write!(f, "test-diff:unreachable:{path}"),
+            Self::SupportRemoved(id) => write!(f, "test-diff:support-removed:{id}"),
+            Self::SupportModified(id) => write!(f, "test-diff:support-modified:{id}"),
+            Self::Shadowing(id) => write!(f, "test-diff:shadowing:{id}"),
         }
     }
 }
@@ -56,30 +66,184 @@ pub(crate) fn in_scope(path: &str) -> bool {
             .any(|prefix| path.starts_with(prefix))
 }
 
-fn all_tests(sources: &Sources) -> BTreeMap<String, (String, String)> {
-    sources
+pub(crate) fn sources(files: &Files) -> Sources {
+    files
         .iter()
-        .flat_map(|(path, source)| {
-            test_functions(path, source)
-                .into_iter()
-                .flatten()
-                .map(|(id, fingerprint)| (id, (path.clone(), fingerprint)))
+        .filter(|(path, _)| in_scope(path))
+        .map(|(path, bytes)| (path.clone(), String::from_utf8_lossy(bytes).into_owned()))
+        .collect()
+}
+
+pub(crate) fn scan(files: &Files) -> Scan {
+    let texts = sources(files);
+    let mut scan = Scan::default();
+    for root in crate_roots(files) {
+        Walker {
+            sources: &texts,
+            binary: root.binary.clone(),
+            scan: &mut scan,
+        }
+        .walk_root(&root.file);
+    }
+    scan
+}
+
+fn unreachable_findings(files: &Files, scan: &Scan) -> BTreeSet<Finding<Rule>> {
+    sources(files)
+        .into_iter()
+        .filter(|(path, source)| !scan.reached.contains(path) && has_tests(source))
+        .map(|(path, _)| Finding::whole_file(&path, Rule::Unreachable(path.clone())))
+        .collect()
+}
+
+fn use_leaves(tree: &str) -> Vec<String> {
+    let mut leaves = Vec::new();
+    let mut prefix: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for next in tree.chars() {
+        match next {
+            '{' => {
+                prefix.push(current.trim().trim_end_matches("::").trim().to_owned());
+                current.clear();
+            }
+            ',' | '}' => {
+                let leaf = current.trim().to_owned();
+                if !leaf.is_empty() {
+                    let parent = prefix.last().map_or_else(String::new, Clone::clone);
+                    leaves.push((parent, leaf));
+                }
+                current.clear();
+                if next == '}' {
+                    prefix.pop();
+                }
+            }
+            _ => current.push(next),
+        }
+    }
+    let rest = current.trim().to_owned();
+    if !rest.is_empty() {
+        leaves.push((String::new(), rest));
+    }
+    leaves
+        .into_iter()
+        .filter_map(|(parent, leaf)| {
+            let words: Vec<&str> = leaf
+                .split(|next: char| !(next.is_alphanumeric() || next == '_'))
+                .filter(|word| !word.is_empty())
+                .collect();
+            match words.as_slice() {
+                [.., "as", alias] => Some(String::from(*alias)),
+                [.., "self"] | [] => parent
+                    .rsplit(|next: char| !(next.is_alphanumeric() || next == '_'))
+                    .find(|word| !word.is_empty())
+                    .map(String::from),
+                [.., last] => Some(String::from(*last)),
+            }
         })
+        .filter(|name| !SCOPE_KEYWORDS.contains(&name.as_str()))
+        .collect()
+}
+
+fn introduced_names(kind: &str, name: &str) -> Vec<String> {
+    match kind {
+        "use" => use_leaves(name),
+        "impl" => Vec::new(),
+        _ => vec![String::from(name)],
+    }
+}
+
+fn shadows(kind: &str, name: &str, base: &ModuleRecord) -> bool {
+    match kind {
+        "use" if name.contains('*') => true,
+        "macro_rules" if STANDARD_MACROS.contains(&name) => true,
+        _ => introduced_names(kind, name)
+            .iter()
+            .any(|introduced| base.identifiers.contains(introduced)),
+    }
+}
+
+fn support_findings(base: &Scan, current: &Scan) -> BTreeSet<Finding<Rule>> {
+    let empty = ModuleRecord::default();
+    let mut findings = BTreeSet::new();
+    for (module, before) in base.modules.iter().filter(|(_, record)| record.testing) {
+        let after = current.modules.get(module).unwrap_or(&empty);
+        for ((kind, name), fingerprint) in &before.support {
+            let id = format!("{module}::{kind} {name}");
+            match after.support.get(&(kind.clone(), name.clone())) {
+                None => {
+                    findings.insert(Finding::whole_file(module, Rule::SupportRemoved(id)));
+                }
+                Some(now) if now != fingerprint => {
+                    findings.insert(Finding::whole_file(module, Rule::SupportModified(id)));
+                }
+                Some(_) => {}
+            }
+        }
+        for (kind, name) in after.support.keys() {
+            let key = (kind.clone(), name.clone());
+            if !before.support.contains_key(&key) && shadows(kind, name, before) {
+                findings.insert(Finding::whole_file(
+                    module,
+                    Rule::Shadowing(format!("{module}::{kind} {name}")),
+                ));
+            }
+        }
+    }
+    findings
+}
+
+pub(crate) fn compare_files(base: &Files, current: &Files) -> (BTreeSet<Finding<Rule>>, Scan) {
+    let before = scan(base);
+    let now = scan(current);
+    let mut findings: BTreeSet<Finding<Rule>> = before
+        .tests
+        .iter()
+        .filter_map(|(id, fingerprint)| match now.tests.get(id) {
+            None => Some(Finding::whole_file(id, Rule::Removed(id.clone()))),
+            Some(current_fingerprint) if current_fingerprint != fingerprint => {
+                Some(Finding::whole_file(id, Rule::Modified(id.clone())))
+            }
+            Some(_) => None,
+        })
+        .collect();
+    findings.extend(unreachable_findings(current, &now));
+    findings.extend(support_findings(&before, &now));
+    (findings, before)
+}
+
+const ROOT_MANIFEST: &str = "Cargo.toml";
+
+const DEFAULT_MANIFESTS: [(&str, &str); 2] = [
+    ("Cargo.toml", "[workspace]\nmembers = [\"crates/domain\"]\n"),
+    ("crates/domain/Cargo.toml", "[package]\nname = \"domain\"\n"),
+];
+
+fn with_default_manifests(sources: &Sources) -> Files {
+    let mut files: Files = sources
+        .iter()
+        .map(|(path, text)| (path.clone(), text.clone().into_bytes()))
+        .collect();
+    if !files.contains_key(ROOT_MANIFEST) {
+        for (path, text) in DEFAULT_MANIFESTS {
+            files.insert(String::from(path), text.as_bytes().to_vec());
+        }
+    }
+    files
+}
+
+fn texts(files: &Files) -> Sources {
+    files
+        .iter()
+        .map(|(path, bytes)| (path.clone(), String::from_utf8_lossy(bytes).into_owned()))
         .collect()
 }
 
 pub(crate) fn compare_sources(base: &Sources, current: &Sources) -> BTreeSet<Finding<Rule>> {
-    let now = all_tests(current);
-    all_tests(base)
-        .into_iter()
-        .filter_map(|(id, (path, fingerprint))| match now.get(&id) {
-            None => Some(Finding::whole_file(&path, Rule::Removed(id))),
-            Some((_, current_fingerprint)) if *current_fingerprint != fingerprint => {
-                Some(Finding::whole_file(&path, Rule::Modified(id)))
-            }
-            Some(_) => None,
-        })
-        .collect()
+    compare_files(
+        &with_default_manifests(base),
+        &with_default_manifests(current),
+    )
+    .0
 }
 
 pub(crate) fn compare_lists(
@@ -107,14 +271,6 @@ fn split_nul(bytes: &[u8]) -> impl Iterator<Item = String> + '_ {
         .split(|byte| *byte == 0)
         .filter(|part| !part.is_empty())
         .map(|part| String::from_utf8_lossy(part).into_owned())
-}
-
-pub(crate) fn sources(files: &Files) -> Sources {
-    files
-        .iter()
-        .filter(|(path, _)| in_scope(path))
-        .map(|(path, bytes)| (path.clone(), String::from_utf8_lossy(bytes).into_owned()))
-        .collect()
 }
 
 pub(crate) fn current_files(root: &Path) -> Result<Files, String> {
@@ -213,96 +369,12 @@ pub(crate) fn base_files(root: &Path, commit: &str) -> Result<Files, String> {
     batch_read(root, &objects)
 }
 
-fn read_directory(root: &Path, relative: &str, files: &mut Files) -> Result<(), String> {
-    let directory = root.join(relative);
-    let listing =
-        fs::read_dir(&directory).map_err(|error| format!("{}: {error}", directory.display()))?;
-    for listed in listing {
-        let entry = listed.map_err(|error| format!("{}: {error}", directory.display()))?;
-        let child = format!("{relative}/{}", entry.file_name().to_string_lossy());
-        let kind = entry
-            .file_type()
-            .map_err(|error| format!("{}: {error}", entry.path().display()))?;
-        if kind.is_dir() {
-            read_directory(root, &child, files)?;
-        } else if !kind.is_symlink() {
-            let bytes = fs::read(entry.path()).map_err(|error| format!("{child}: {error}"))?;
-            files.insert(child, bytes);
-        }
-    }
-    Ok(())
-}
-
-fn stale_files(
-    directory: &Path,
-    prefix: &str,
-    files: &Files,
-    stale: &mut Vec<String>,
-) -> Result<(), String> {
-    let listing =
-        fs::read_dir(directory).map_err(|error| format!("{}: {error}", directory.display()))?;
-    for listed in listing {
-        let entry = listed.map_err(|error| format!("{}: {error}", directory.display()))?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let relative = format!("{prefix}{name}");
-        let kind = entry
-            .file_type()
-            .map_err(|error| format!("{}: {error}", entry.path().display()))?;
-        if kind.is_dir() {
-            stale_files(&entry.path(), &format!("{relative}/"), files, stale)?;
-        } else if !files.contains_key(&relative) {
-            stale.push(relative);
-        }
-    }
-    Ok(())
-}
-
-fn write_tree(files: &Files, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination)
-        .map_err(|error| format!("{}: {error}", destination.display()))?;
-    let mut stale = Vec::new();
-    stale_files(destination, "", files, &mut stale)?;
-    for path in stale {
-        let target = destination.join(&path);
-        fs::remove_file(&target).map_err(|error| format!("{}: {error}", target.display()))?;
-    }
-    for (path, bytes) in files {
-        let target = destination.join(path);
-        if fs::read(&target).is_ok_and(|existing| existing == *bytes) {
-            continue;
-        }
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
-        }
-        fs::write(&target, bytes).map_err(|error| format!("{}: {error}", target.display()))?;
-    }
-    Ok(())
-}
-
-pub(crate) fn base_list(root: &Path, files: &Files) -> Result<BTreeSet<String>, String> {
-    let directory = root.join(BASE_DIRECTORY);
-    let tree = directory.join("tree");
-    let mut tree_files = files.clone();
-    for output_path in COPIED_BUILD_OUTPUTS {
-        let prefix = format!("{output_path}/");
-        let missing = !tree_files.keys().any(|path| path.starts_with(&prefix));
-        if missing && root.join(output_path).is_dir() {
-            read_directory(root, output_path, &mut tree_files)?;
-        }
-    }
-    write_tree(&tree_files, &tree)?;
-    list_tests(&tree, &[], Some(&directory.join("target")))
-}
-
 pub(crate) fn check(root: &Path, base: &str) -> Result<BTreeSet<Finding<Rule>>, String> {
     let commit = resolve_base(root, base)?;
     let before = base_files(root, &commit)?;
-    let now = current_files(root)?;
-    let mut findings = compare_sources(&sources(&before), &sources(&now));
-    if before != now {
-        let current = list_tests(root, &[], None)?;
-        findings.extend(compare_lists(&base_list(root, &before)?, &current));
-    }
+    let mut findings = compare_sources(&texts(&before), &texts(&current_files(root)?));
+    let expected: BTreeSet<String> = scan(&before).tests.keys().cloned().collect();
+    findings.extend(compare_lists(&expected, &list_tests(root, &[], None)?));
     Ok(findings)
 }
 

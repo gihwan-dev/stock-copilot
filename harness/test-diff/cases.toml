@@ -243,7 +243,7 @@ mod tests {
 
 [[case]]
 name = "test-removed"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -285,7 +285,7 @@ mod tests {
 
 [[case]]
 name = "test-renamed"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -331,7 +331,7 @@ mod tests {
 
 [[case]]
 name = "module-renamed"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_two_numbers", "test-diff:removed:domain tests::adds_zero", "test-diff:support-removed:domain tests::use super :: add"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -377,7 +377,7 @@ mod sum_tests {
 
 [[case]]
 name = "test-moved-to-other-file"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_zero", "test-diff:unreachable:crates/domain/src/ledger_tests.rs"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -427,7 +427,7 @@ fn adds_zero() {
 
 [[case]]
 name = "file-deleted"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_two_numbers", "test-diff:removed:domain tests::adds_zero", "test-diff:support-removed:domain tests::use super :: add"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -453,7 +453,7 @@ mod tests {
 
 [[case]]
 name = "body-changed"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+expect = ["test-diff:modified:domain tests::adds_two_numbers"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -500,7 +500,7 @@ mod tests {
 
 [[case]]
 name = "assertion-weakened"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+expect = ["test-diff:modified:domain tests::adds_two_numbers"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -546,7 +546,7 @@ mod tests {
 
 [[case]]
 name = "expected-value-changed"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+expect = ["test-diff:modified:domain tests::adds_two_numbers"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -592,7 +592,7 @@ mod tests {
 
 [[case]]
 name = "early-return"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers"]
+expect = ["test-diff:modified:domain tests::adds_two_numbers"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -641,7 +641,7 @@ mod tests {
 
 [[case]]
 name = "cfg-on-test"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:modified:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -688,7 +688,7 @@ mod tests {
 
 [[case]]
 name = "should-panic-added"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:modified:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -735,7 +735,7 @@ mod tests {
 
 [[case]]
 name = "ignore-added"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:modified:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -782,7 +782,7 @@ mod tests {
 
 [[case]]
 name = "test-attribute-removed"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -827,7 +827,7 @@ mod tests {
 
 [[case]]
 name = "enclosing-module-disabled"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:modified:domain tests::adds_two_numbers", "test-diff:modified:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -873,7 +873,7 @@ mod tests {
 
 [[case]]
 name = "inner-attribute-added"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:modified:domain tests::adds_two_numbers", "test-diff:modified:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -920,7 +920,7 @@ mod tests {
 
 [[case]]
 name = "signature-changed"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:modified:domain tests::adds_zero"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -966,7 +966,7 @@ mod tests {
 
 [[case]]
 name = "current-unparsable"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::tests::adds_two_numbers", "test-diff:removed:crates/domain/src/lib.rs::tests::adds_zero"]
+expect = ["test-diff:removed:domain tests::adds_two_numbers", "test-diff:removed:domain tests::adds_zero", "test-diff:support-removed:domain tests::use super :: add"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 pub fn add(left: u32, right: u32) -> u32 {
@@ -1012,7 +1012,7 @@ mod tests {{
 
 [[case]]
 name = "nested-module-and-tool-test"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::outer_tests::inner::runs_async"]
+expect = ["test-diff:modified:domain outer_tests::inner::runs_async"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 #[cfg(test)]
@@ -1040,7 +1040,7 @@ mod outer_tests {
 
 [[case]]
 name = "nested-module-renamed"
-expect = ["test-diff:removed:crates/domain/src/lib.rs::outer_tests::inner::runs_async"]
+expect = ["test-diff:removed:domain outer_tests::inner::runs_async"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 #[cfg(test)]
@@ -1100,7 +1100,7 @@ mod property_tests {
 
 [[case]]
 name = "macro-test-weakened"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::property_tests::sums_never_shrink"]
+expect = ["test-diff:modified:domain property_tests::sums_never_shrink"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 #[cfg(test)]
@@ -1132,7 +1132,7 @@ mod property_tests {
 
 [[case]]
 name = "macro-test-input-narrowed"
-expect = ["test-diff:modified:crates/domain/src/lib.rs::property_tests::sums_never_shrink"]
+expect = ["test-diff:modified:domain property_tests::sums_never_shrink"]
 [case.base]
 "crates/domain/src/lib.rs" = '''
 #[cfg(test)]
@@ -1233,6 +1233,891 @@ mod tests {
 }
 '''
 [case.current]
+
+[[case]]
+name = "support-unchanged"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "new-test-keeps-support"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_more() {
+        assert_eq!(sum_of(2, 2), 4, "more");
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "unrelated-helper-added"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    fn unused_helper() -> u32 {
+        7
+    }
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "use-removed-and-fake-added"
+expect = ["test-diff:support-removed:domain tests::use super :: add", "test-diff:shadowing:domain tests::fn add"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    fn add(_left: u32, _right: u32) -> u32 {
+        3
+    }
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "helper-weakened"
+expect = ["test-diff:support-modified:domain tests::fn sum_of"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        let _ = (left, right);
+        EXPECTED
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "constant-changed"
+expect = ["test-diff:support-modified:domain tests::const EXPECTED"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3 + 0;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "helper-removed"
+expect = ["test-diff:support-removed:domain tests::fn sum_of"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "assert-macro-shadowed"
+expect = ["test-diff:shadowing:domain tests::macro_rules assert_eq"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    macro_rules! assert_eq {
+        ($($any:tt)*) => {};
+    }
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "standard-macro-shadowed-unused"
+expect = ["test-diff:shadowing:domain tests::macro_rules assert_ne"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    macro_rules! assert_ne {
+        ($($any:tt)*) => {};
+    }
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "glob-import-added"
+expect = ["test-diff:shadowing:domain tests::use crate :: fakes ::*"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+    use crate::fakes::*;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "import-shadows-used-name"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+    use crate::fakes::sum as EXPECTED_ALIAS;
+    use crate::fakes::{other, EXPECTED as Unused};
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "import-alias-shadows-used-name"
+expect = ["test-diff:shadowing:domain tests::use crate :: fakes :: { other , total as sum_of }"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+    use crate::fakes::{other, total as sum_of};
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "static-shadows-used-name"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+    static EXPECTED_TOO: u32 = 1;
+
+    const EXPECTED: u32 = 3;
+
+    fn sum_of(left: u32, right: u32) -> u32 {
+        add(left, right)
+    }
+
+    #[test]
+    fn adds_two_numbers() {
+        assert_eq!(sum_of(1, 2), EXPECTED, "sum");
+    }
+}
+'''
+
+[[case]]
+name = "file-module-unchanged"
+expect = []
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+
+[[case]]
+name = "file-module-replaced-by-inline"
+expect = ["test-diff:modified:domain tests::adds_zero", "test-diff:unreachable:crates/domain/src/tests.rs"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add;
+
+    #[test]
+    fn adds_zero() {
+        assert!(true, "zero");
+    }
+}
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+
+[[case]]
+name = "file-module-declaration-dropped"
+expect = ["test-diff:removed:domain tests::adds_zero", "test-diff:support-removed:domain tests::use super :: add", "test-diff:unreachable:crates/domain/src/tests.rs"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+
+[[case]]
+name = "orphan-test-file-added"
+expect = ["test-diff:unreachable:crates/domain/src/stray_tests.rs"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub fn add(left: u32, right: u32) -> u32 {
+    left.saturating_add(right)
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+"crates/domain/src/stray_tests.rs" = '''
+use super::add;
+
+#[test]
+fn adds_zero() {
+    assert_eq!(add(4, 0), 4, "zero");
+}
+'''
+
+[[case]]
+name = "nested-file-modules-resolve"
+expect = ["test-diff:modified:domain ledger::tests::has_entry"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub mod ledger;
+'''
+"crates/domain/src/ledger.rs" = '''
+pub fn entry() -> u32 {
+    1
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/ledger/tests.rs" = '''
+#[test]
+fn has_entry() {
+    assert_eq!(super::entry(), 1, "entry");
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub mod ledger;
+'''
+"crates/domain/src/ledger.rs" = '''
+pub fn entry() -> u32 {
+    1
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/ledger/tests.rs" = '''
+#[test]
+fn has_entry() {
+    assert!(true, "entry");
+}
+'''
+
+[[case]]
+name = "mod-rs-resolves"
+expect = ["test-diff:removed:domain ledger::tests::has_entry"]
+[case.base]
+"crates/domain/src/lib.rs" = '''
+pub mod ledger;
+'''
+"crates/domain/src/ledger/mod.rs" = '''
+pub fn entry() -> u32 {
+    1
+}
+
+#[cfg(test)]
+mod tests;
+'''
+"crates/domain/src/ledger/tests.rs" = '''
+#[test]
+fn has_entry() {
+    assert_eq!(super::entry(), 1, "entry");
+}
+'''
+[case.current]
+"crates/domain/src/lib.rs" = '''
+pub mod ledger;
+'''
+"crates/domain/src/ledger/mod.rs" = '''
+pub fn entry() -> u32 {
+    1
+}
+
+#[cfg(test)]
+mod tests;
+'''
 
 [[list-case]]
 name = "lists-equal"
