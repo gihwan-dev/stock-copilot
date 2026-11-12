@@ -35,6 +35,8 @@ mod formatting_tests;
 #[cfg(test)]
 mod harness_workspace_tests;
 #[cfg(test)]
+mod network_sandbox_tests;
+#[cfg(test)]
 mod rust_lints_tests;
 #[cfg(test)]
 mod third_party_tests;

@@ -1,0 +1,3 @@
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/sample/src/**/*.rs"]

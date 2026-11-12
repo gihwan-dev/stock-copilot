@@ -778,3 +778,43 @@ expect = ["file:target-outside-member"]
 name = "target-outside-member-lib"
 overlay = "target-outside-member-lib"
 expect = ["file:target-outside-member"]
+
+[[workspace]]
+name = "cargo-config-root-allowed"
+overlay = "cargo-config-root-allowed"
+expect = []
+
+[[workspace]]
+name = "cargo-config-root-runner-changed"
+overlay = "cargo-config-root-runner-changed"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-root-runner-and-env"
+overlay = "cargo-config-root-runner-and-env"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-root-unknown-file"
+overlay = "cargo-config-root-unknown-file"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-root-mutants-exclude"
+overlay = "cargo-config-root-mutants-exclude"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-root-mutants-directory"
+overlay = "cargo-config-root-mutants-directory"
+expect = ["file:cargo-config"]
+
+[[workspace]]
+name = "cargo-config-allowed-in-crate"
+overlay = "cargo-config-allowed-in-crate"
+expect = ["file:cargo-config"]
+
+[[source]]
+example = "attribute-mutants-skip-cfg-attr.rs"
+path = "crates/domain/src/lib.rs"
+expect = ["attribute:cfg_attr"]

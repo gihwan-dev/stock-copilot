@@ -1,4 +1,5 @@
 mod allowlist;
+pub(crate) mod cargo_config;
 mod comments;
 mod failure;
 mod finding;
@@ -6,6 +7,8 @@ mod manifest;
 mod test_impls;
 mod tokens;
 
+#[cfg(test)]
+mod cargo_config_tests;
 #[cfg(test)]
 mod tests;
 
@@ -19,6 +22,7 @@ use cargo_metadata::{Metadata, MetadataCommand};
 use proc_macro2::TokenStream;
 
 use allowlist::{Allowlists, Membership};
+use cargo_config::{ConfigFile, config_problems};
 use comments::comment_lines;
 use failure::CheckFailure;
 use finding::{Finding, Rule};
@@ -52,6 +56,7 @@ const DOMAIN_DIRECTORY: &str = "crates/domain/";
 enum EntryKind {
     File,
     CargoDirectory,
+    CargoSetting(ConfigFile),
     Symlink,
 }
 
@@ -172,6 +177,11 @@ fn walk(
                 name,
                 kind: EntryKind::Symlink,
             });
+        } else if name == CARGO_CONFIG_DIRECTORY
+            && relative == CARGO_CONFIG_DIRECTORY
+            && file_type.is_dir()
+        {
+            cargo_settings(root, &path, entries)?;
         } else if name == CARGO_CONFIG_DIRECTORY {
             entries.push(Entry {
                 relative,
@@ -187,6 +197,37 @@ fn walk(
         } else if !skipped.contains(&relative) {
             walk(root, &path, skipped, entries)?;
         }
+    }
+    Ok(())
+}
+
+fn cargo_settings(
+    root: &Path,
+    directory: &Path,
+    entries: &mut Vec<Entry>,
+) -> Result<(), CheckFailure> {
+    let listing = fs::read_dir(directory)
+        .map_err(|error| CheckFailure::Io(directory.to_path_buf(), error))?;
+    for listed in listing {
+        let entry = listed.map_err(|error| CheckFailure::Io(directory.to_path_buf(), error))?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| CheckFailure::Io(path.clone(), error))?;
+        let kind = if file_type.is_symlink() {
+            EntryKind::Symlink
+        } else {
+            match ConfigFile::named(&name) {
+                Some(file) if !file_type.is_dir() => EntryKind::CargoSetting(file),
+                Some(_) | None => EntryKind::CargoDirectory,
+            }
+        };
+        entries.push(Entry {
+            relative: relative_path(root, &path)?,
+            name,
+            kind,
+        });
     }
     Ok(())
 }
@@ -259,6 +300,15 @@ fn entry_findings(
     let path = entry.relative.as_str();
     let findings = match entry.kind {
         EntryKind::CargoDirectory => vec![Finding::whole_file(path, Rule::CargoConfig)],
+        EntryKind::CargoSetting(file) => {
+            let full = root.join(path);
+            let text = fs::read_to_string(&full).map_err(|error| CheckFailure::Io(full, error))?;
+            if config_problems(file, &text).is_empty() {
+                Vec::new()
+            } else {
+                vec![Finding::whole_file(path, Rule::CargoConfig)]
+            }
+        }
         EntryKind::Symlink => vec![Finding::whole_file(path, Rule::Symlink)],
         EntryKind::File
             if NESTED_CONFIG_FILES.contains(&entry.name.as_str()) && path.contains('/') =>

@@ -1,0 +1,8 @@
+test_tool = "nextest"
+cap_lints = true
+examine_globs = [
+    "crates/domain/src/**/*.rs",
+    "crates/order-execution/src/**/*.rs",
+    "crates/application/src/order_gate.rs",
+    "crates/application/src/order_gate/**/*.rs",
+]

@@ -1,0 +1,424 @@
+[[case]]
+name = "config-allowed"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+'''
+expect = []
+
+[[case]]
+name = "config-allowed-dotted"
+file = "config.toml"
+text = '''
+target.aarch64-apple-darwin.runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+'''
+expect = []
+
+[[case]]
+name = "config-env"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[env]
+CLIPPY_CONF_DIR = "empty"
+'''
+expect = ["cargo-config:key:env"]
+
+[[case]]
+name = "config-alias"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[alias]
+clippy = "check"
+'''
+expect = ["cargo-config:key:alias"]
+
+[[case]]
+name = "config-build-rustflags"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[build]
+rustflags = ["--cap-lints=allow"]
+'''
+expect = ["cargo-config:key:build"]
+
+[[case]]
+name = "config-build-rustc-wrapper"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[build]
+rustc-wrapper = "wrapper.sh"
+'''
+expect = ["cargo-config:key:build"]
+
+[[case]]
+name = "config-target-rustflags"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+rustflags = ["--cap-lints=allow"]
+'''
+expect = ["cargo-config:key:target.aarch64-apple-darwin.rustflags"]
+
+[[case]]
+name = "config-target-linker"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+linker = "wrapper.sh"
+'''
+expect = ["cargo-config:key:target.aarch64-apple-darwin.linker"]
+
+[[case]]
+name = "config-unstable"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[unstable]
+build-std = ["core"]
+'''
+expect = ["cargo-config:key:unstable"]
+
+[[case]]
+name = "config-include"
+file = "config.toml"
+text = '''
+include = ["other.toml"]
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+'''
+expect = ["cargo-config:key:include"]
+
+[[case]]
+name = "config-net"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[net]
+offline = false
+'''
+expect = ["cargo-config:key:net"]
+
+[[case]]
+name = "config-source-replacement"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[source.crates-io]
+replace-with = "vendored"
+'''
+expect = ["cargo-config:key:source"]
+
+[[case]]
+name = "config-profile"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[profile.dev]
+debug-assertions = false
+'''
+expect = ["cargo-config:key:profile"]
+
+[[case]]
+name = "config-other-triple"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[target.x86_64-apple-darwin]
+runner = "env"
+'''
+expect = ["cargo-config:key:target.x86_64-apple-darwin"]
+
+[[case]]
+name = "config-cfg-target"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+
+[target.'cfg(unix)']
+runner = "env"
+'''
+expect = ["cargo-config:key:target.cfg(unix)"]
+
+[[case]]
+name = "config-runner-without-sandbox"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["env"]
+'''
+expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-runner-network-allowed"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)"]
+'''
+expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-runner-from-path"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+'''
+expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-runner-extra-argument"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))", "/usr/bin/env"]
+'''
+expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-runner-string"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+runner = "/usr/bin/sandbox-exec"
+'''
+expect = ["cargo-config:value:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-runner-missing"
+file = "config.toml"
+text = '''
+[target.aarch64-apple-darwin]
+linker = "cc"
+'''
+expect = ["cargo-config:key:target.aarch64-apple-darwin.linker", "cargo-config:missing:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-empty"
+file = "config.toml"
+text = '''
+'''
+expect = ["cargo-config:missing:target.aarch64-apple-darwin.runner"]
+
+[[case]]
+name = "config-target-not-table"
+file = "config.toml"
+text = '''
+target = "aarch64-apple-darwin"
+'''
+expect = ["cargo-config:value:target"]
+
+[[case]]
+name = "config-triple-not-table"
+file = "config.toml"
+text = '''
+target.aarch64-apple-darwin = "x"
+'''
+expect = ["cargo-config:value:target.aarch64-apple-darwin"]
+
+[[case]]
+name = "config-unparsable"
+file = "config.toml"
+text = '''
+[target
+'''
+expect = ["cargo-config:unparsable"]
+
+[[case]]
+name = "mutants-allowed"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+'''
+expect = []
+
+[[case]]
+name = "mutants-exclude-globs"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+exclude_globs = ["crates/domain/src/signal.rs"]
+'''
+expect = ["cargo-mutants:key:exclude_globs"]
+
+[[case]]
+name = "mutants-exclude-re"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+exclude_re = ["validate"]
+'''
+expect = ["cargo-mutants:key:exclude_re"]
+
+[[case]]
+name = "mutants-examine-re"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+examine_re = ["nothing"]
+'''
+expect = ["cargo-mutants:key:examine_re"]
+
+[[case]]
+name = "mutants-skip-calls"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+skip_calls = ["validate"]
+'''
+expect = ["cargo-mutants:key:skip_calls"]
+
+[[case]]
+name = "mutants-error-values"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+error_values = ["anyhow::anyhow!(\"\")"]
+'''
+expect = ["cargo-mutants:key:error_values"]
+
+[[case]]
+name = "mutants-additional-cargo-args"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+additional_cargo_args = ["--cfg", "coverage"]
+'''
+expect = ["cargo-mutants:key:additional_cargo_args"]
+
+[[case]]
+name = "mutants-additional-test-args"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+additional_cargo_test_args = ["--skip", "validate"]
+'''
+expect = ["cargo-mutants:key:additional_cargo_test_args"]
+
+[[case]]
+name = "mutants-timeout-multiplier"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+timeout_multiplier = 0.01
+'''
+expect = ["cargo-mutants:key:timeout_multiplier"]
+
+[[case]]
+name = "mutants-cargo-test-tool"
+file = "mutants.toml"
+text = '''
+test_tool = "cargo"
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+'''
+expect = ["cargo-mutants:value:test_tool"]
+
+[[case]]
+name = "mutants-cap-lints-off"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = false
+examine_globs = ["crates/domain/src/**/*.rs"]
+'''
+expect = ["cargo-mutants:value:cap_lints"]
+
+[[case]]
+name = "mutants-cap-lints-missing"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+examine_globs = ["crates/domain/src/**/*.rs"]
+'''
+expect = ["cargo-mutants:missing:cap_lints"]
+
+[[case]]
+name = "mutants-test-tool-missing"
+file = "mutants.toml"
+text = '''
+cap_lints = true
+examine_globs = ["crates/domain/src/**/*.rs"]
+'''
+expect = ["cargo-mutants:missing:test_tool"]
+
+[[case]]
+name = "mutants-globs-missing"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+'''
+expect = ["cargo-mutants:missing:examine_globs"]
+
+[[case]]
+name = "mutants-globs-empty"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = []
+'''
+expect = ["cargo-mutants:value:examine_globs"]
+
+[[case]]
+name = "mutants-globs-blank"
+file = "mutants.toml"
+text = '''
+test_tool = "nextest"
+cap_lints = true
+examine_globs = [" "]
+'''
+expect = ["cargo-mutants:value:examine_globs"]
+
+[[case]]
+name = "mutants-unparsable"
+file = "mutants.toml"
+text = '''
+test_tool = 
+'''
+expect = ["cargo-mutants:unparsable"]

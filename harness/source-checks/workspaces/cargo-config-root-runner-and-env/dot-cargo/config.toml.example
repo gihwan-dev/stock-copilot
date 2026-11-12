@@ -1,0 +1,4 @@
+[target.aarch64-apple-darwin]
+runner = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))"]
+[env]
+CLIPPY_ARGS = "--cap-lints=allow"
