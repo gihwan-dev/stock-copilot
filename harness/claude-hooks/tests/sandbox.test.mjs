@@ -77,6 +77,9 @@ const EXPECTED_NOW = {
       "~/.cargo/config",
       "~/.cargo/config.toml",
       "~/.local/state/stock-copilot-harness",
+      "./harness/claude-hooks/hashes.json",
+      "./harness/claude-hooks/lock.txt",
+      "./harness/sandbox/lock-fragment.json",
     ],
     denyRead: [
       "~/.ssh",

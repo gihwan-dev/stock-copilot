@@ -4661,5 +4661,171 @@
     "decision": "deny",
     "rules": ["git-history"],
     "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} reset --soft HEAD~1",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} reset --soft HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push . HEAD:heads/master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git push . HEAD:refs/heads/MASTER",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git push . HEAD:refs//heads/master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git fetch . topic:Master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git push . HEAD:/refs/heads/master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git push . 'HEAD:ma ster'",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git push . HEAD:refs/remotes/origin/master",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git branch -f MASTER HEAD",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git branch -f heads/master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git checkout -B Master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git switch -C refs/heads/master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git checkout -B topic HEAD~1",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git branch -f topic HEAD~1",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node harness/claude-hooks/../claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "cd harness/claude-hooks && node hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "cd harness && node claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node -r ./x.cjs harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --require ./x.cjs harness/sandbox/fragment.mjs --locked-settings",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --import ./x.mjs harness/sandbox/fragment.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node -- harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --conditions dev harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node -r harness/claude-hooks/hashes.mjs other.mjs --write",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node docs/hashes-notes.mjs --write",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node --loader ./x.mjs harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --experimental-loader ./x.mjs harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node -e 1 harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --eval 1 harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node -p 1 harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --print 1 harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node -C dev harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "node --env-file .env.probe harness/claude-hooks/hashes.mjs --write",
+    "decision": "deny",
+    "rules": ["harness-write-mode"]
   }
 ]

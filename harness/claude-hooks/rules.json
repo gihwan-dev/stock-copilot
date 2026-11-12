@@ -519,5 +519,19 @@
       "script": "harness/sandbox/fragment.mjs",
       "modes": ["--write", "--locked-settings"]
     }
+  ],
+  "harnessNodeValueOptions": [
+    "-r",
+    "--require",
+    "--import",
+    "--loader",
+    "--experimental-loader",
+    "-e",
+    "--eval",
+    "-p",
+    "--print",
+    "-C",
+    "--conditions",
+    "--env-file"
   ]
 }

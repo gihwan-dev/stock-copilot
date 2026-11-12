@@ -9,7 +9,7 @@
   ".claude/hooks/lib/agent-guard.mjs": "2b66ab1f956cf3e6a29b97442521f8496ba64c9efeba38845f874dfb092e5fb8",
   ".claude/hooks/lib/agent-result.mjs": "be04fcdb14e873c2b719aa9f2176b5500972073947a34bac26fb233948ffbc1e",
   ".claude/hooks/lib/allowlist.mjs": "dc227119832cd2d3ae5ac75dbde89f2150fbc38b5cbe14182eef2278e19af59c",
-  ".claude/hooks/lib/bash-guard.mjs": "dc76fa7cb1a9c967d92506615ae90e546bec498c602b28ced1fbcc8d5f148219",
+  ".claude/hooks/lib/bash-guard.mjs": "5d7d57b55556e2861e4fc8211800bafbf653d119fa604c5f5d894386822b15f9",
   ".claude/hooks/lib/brief.mjs": "3228b408957edf429ef4e802c45fcfd0390eec5151273d861d522eaf38d966a8",
   ".claude/hooks/lib/check-sandbox.mjs": "56b21e43baf31095929dccf405bf35ba29b264cae62e1b15f12ea2b14a5078b8",
   ".claude/hooks/lib/edit-guard.mjs": "a729de40817cf175d4278301da86c8c7fc718320c9e35836181bd64076c78716",
@@ -34,6 +34,6 @@
   "harness/agent-writable.txt": "10dc85ce0344881259c9c3f46c1d46079e6628871e004c22f63409510d5c71c4",
   "harness/claude-hooks/agent-rules.json": "083f56b11c43377855d5487e9c2deffd061cc9d02b95712fd92110bce083b7fe",
   "harness/claude-hooks/lock.txt": "b470b84cf0cd3189e10615bffea7d5cbd9f61134ba1c2cfd513ddd45b776a5f6",
-  "harness/claude-hooks/rules.json": "e25277e1c64f3b54e9e38ca7851a9f01e49f19712f55d21b2e68fe782d1da35c",
+  "harness/claude-hooks/rules.json": "7d4848dc9ff9a64bd39b8d3a9ae2fb40c1e78a5dde5127a5b6bf470f9b2147b0",
   "harness/sandbox/lock-fragment.json": "4109f741e42832721a01068b17d43e957057c870fe2b64c049ac5e7417649e40"
 }
