@@ -953,8 +953,11 @@ const baseBranchFindings = (
     isBase(branchOfDirectory(directory) ?? "");
   const amending =
     sub === "commit" &&
-    !isSubagent(context.role) &&
-    options.some((option) => base.amendOptions.includes(option.long)) &&
+    options.some(
+      (option) =>
+        option.long !== undefined &&
+        base.amendOptions.some((amend) => longMatches(option.long, amend)),
+    ) &&
     onBaseOrUnknown()
       ? [
           finding(

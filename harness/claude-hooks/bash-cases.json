@@ -5104,5 +5104,45 @@
     "command": "git -C {worktree} symbolic-ref --short HEAD && git -C {worktree} reset --soft",
     "decision": "deny",
     "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --amen -m x",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --am --no-edit",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git commit --amen -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {root} commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "cd \"$X\" && git commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} commit --am --no-edit",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
   }
 ]
