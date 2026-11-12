@@ -378,7 +378,7 @@ test("test and harness scripts allow only the 2.1 directive form", async () => {
       "harness/x/check.mjs",
       "/* eslint-disable-next-line no-debugger -- 블록 */\ndebugger;\n",
     ),
-    ["guard/disable-directive-form"],
+    ["guard/disable-directive-form", "local/no-comments"],
   );
   assert.deepEqual(
     await scriptRules(

@@ -160,3 +160,39 @@ test("hook scripts allow no comment except the 2.1 directive form", async () => 
     ["@eslint-community/eslint-comments/no-restricted-disable"],
   );
 });
+
+test("harness and test scripts allow no comment except the 2.1 directive form", async () => {
+  const linter = new ESLint({
+    cwd: repoRoot,
+    overrideConfigFile: join(
+      repoRoot,
+      "apps/desktop/eslint.scripts.config.mjs",
+    ),
+    cache: false,
+  });
+  const rules = async (path, code) => {
+    const [result] = await linter.lintText(code, {
+      filePath: join(repoRoot, path),
+    });
+    return [...new Set(result.messages.map((item) => item.ruleId))].sort();
+  };
+  for (const path of ["harness/x/check.mjs", "apps/desktop/tests/a.test.mjs"]) {
+    assert.deepEqual(await rules(path, "// note\nexport const a = 1;\n"), [
+      "local/no-comments",
+    ]);
+    assert.deepEqual(
+      await rules(
+        path,
+        "export const a = () => {\n  // eslint-disable-next-line no-debugger -- 예제\n  debugger;\n};\n",
+      ),
+      [],
+    );
+    assert.deepEqual(
+      await rules(
+        path,
+        "// eslint-disable-next-line local/no-comments -- 끄기\n// note\nexport const a = 1;\n",
+      ),
+      ["@eslint-community/eslint-comments/no-restricted-disable"],
+    );
+  }
+});
