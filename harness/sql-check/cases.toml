@@ -1,0 +1,481 @@
+[[statement]]
+name = "sum-amount"
+sql = "SELECT sum(amount) FROM holdings"
+expect = ["sql-money:function:sum"]
+
+[[statement]]
+name = "avg-price"
+sql = "SELECT avg(price) FROM quotes"
+expect = ["sql-money:function:avg"]
+
+[[statement]]
+name = "total-quantity"
+sql = "SELECT total(quantity) FROM lots"
+expect = ["sql-money:function:total"]
+
+[[statement]]
+name = "min-cost"
+sql = "SELECT min(cost) FROM lots"
+expect = ["sql-money:function:min"]
+
+[[statement]]
+name = "max-balance"
+sql = "SELECT max(balance) FROM accounts"
+expect = ["sql-money:function:max"]
+
+[[statement]]
+name = "abs-pnl"
+sql = "SELECT abs(pnl) FROM positions"
+expect = ["sql-money:function:abs"]
+
+[[statement]]
+name = "round-ratio"
+sql = "SELECT round(ratio, 2) FROM targets"
+expect = ["sql-money:function:round"]
+
+[[statement]]
+name = "cast-fee"
+sql = "SELECT CAST(fee AS REAL) FROM orders"
+expect = ["sql-money:function:cast"]
+
+[[statement]]
+name = "sum-loss-inside-cast"
+sql = "SELECT sum(CAST(realized_loss AS INTEGER)) FROM lots"
+expect = ["sql-money:function:sum", "sql-money:function:cast"]
+
+[[statement]]
+name = "avg-pct"
+sql = "SELECT avg(fill_pct) FROM orders"
+expect = ["sql-money:function:avg"]
+
+[[statement]]
+name = "max-return"
+sql = "SELECT max(return_1y) FROM positions"
+expect = ["sql-money:function:max"]
+
+[[statement]]
+name = "min-value"
+sql = "SELECT min(market_value) FROM positions"
+expect = ["sql-money:function:min"]
+
+[[statement]]
+name = "plus-cash"
+sql = "UPDATE accounts SET cash = cash + ?1 WHERE id = ?2"
+expect = ["sql-money:arithmetic:+"]
+
+[[statement]]
+name = "minus-proceeds"
+sql = "SELECT proceeds - 1 FROM lots"
+expect = ["sql-money:arithmetic:-"]
+
+[[statement]]
+name = "minus-profit-qualified"
+sql = "SELECT p.profit - 1 FROM positions p"
+expect = ["sql-money:arithmetic:-"]
+
+[[statement]]
+name = "times-qty"
+sql = "SELECT 2 * qty FROM orders"
+expect = ["sql-money:arithmetic:*"]
+
+[[statement]]
+name = "times-rate"
+sql = "SELECT fx_rate * 1 FROM quotes"
+expect = ["sql-money:arithmetic:*"]
+
+[[statement]]
+name = "divide-principal"
+sql = "SELECT principal / 2 FROM positions"
+expect = ["sql-money:arithmetic:/"]
+
+[[statement]]
+name = "modulo-shares"
+sql = "SELECT shares % 10 FROM lots"
+expect = ["sql-money:arithmetic:%"]
+
+[[statement]]
+name = "negate-tax"
+sql = "SELECT -tax FROM orders"
+expect = ["sql-money:arithmetic:-"]
+
+[[statement]]
+name = "plus-notional-parenthesized"
+sql = "SELECT (notional) + 1 FROM positions"
+expect = ["sql-money:arithmetic:+"]
+
+[[statement]]
+name = "less-exposure"
+sql = "SELECT id FROM positions WHERE exposure < ?1"
+expect = ["sql-money:comparison:<"]
+
+[[statement]]
+name = "greater-weight"
+sql = "SELECT id FROM targets WHERE ?1 > weight"
+expect = ["sql-money:comparison:>"]
+
+[[statement]]
+name = "at-most-threshold"
+sql = "SELECT id FROM signals WHERE threshold <= ?1"
+expect = ["sql-money:comparison:<="]
+
+[[statement]]
+name = "at-least-probability"
+sql = "SELECT id FROM estimates WHERE probability >= ?1"
+expect = ["sql-money:comparison:>="]
+
+[[statement]]
+name = "between-percent"
+sql = "SELECT id FROM targets WHERE percent NOT BETWEEN ?1 AND ?2"
+expect = ["sql-money:comparison:between"]
+
+[[statement]]
+name = "order-by-valuation"
+sql = "SELECT id FROM snapshots ORDER BY valuation DESC"
+expect = ["sql-money:order-by"]
+
+[[statement]]
+name = "order-by-alias"
+sql = "SELECT gain AS g FROM lots ORDER BY g"
+expect = ["sql-money:order-by"]
+
+[[statement]]
+name = "order-by-qualified"
+sql = "SELECT h.id FROM holdings h ORDER BY h.dividend"
+expect = ["sql-money:order-by"]
+
+[[statement]]
+name = "order-by-quoted-camel-case"
+sql = "SELECT id FROM ledger ORDER BY \"depositKrw\""
+expect = ["sql-money:order-by"]
+
+[[statement]]
+name = "order-by-in-window"
+sql = "SELECT id, row_number() OVER (ORDER BY withdrawal) FROM ledger"
+expect = ["sql-money:order-by"]
+
+[[statement]]
+name = "order-by-in-subquery"
+sql = "SELECT id FROM (SELECT id FROM lots ORDER BY cost) AS recent"
+expect = ["sql-money:order-by"]
+
+[[statement]]
+name = "order-by-position"
+sql = "SELECT id, name FROM holdings ORDER BY 2"
+expect = ["sql:order-by-position"]
+
+[[statement]]
+name = "clean-plain-columns"
+sql = "SELECT amount, price, currency FROM holdings WHERE id = ?1 ORDER BY seq"
+expect = []
+
+[[statement]]
+name = "clean-insert"
+sql = "INSERT INTO lots (quantity, cost, currency) VALUES (?1, ?2, ?3)"
+expect = []
+
+[[statement]]
+name = "clean-equality"
+sql = "UPDATE holdings SET amount = ?1 WHERE price = ?2"
+expect = []
+
+[[statement]]
+name = "clean-length"
+sql = "SELECT id FROM holdings WHERE length(amount) > 0"
+expect = []
+
+[[statement]]
+name = "clean-typeof"
+sql = "SELECT id FROM holdings WHERE typeof(price) > ''"
+expect = []
+
+[[statement]]
+name = "clean-count"
+sql = "SELECT count(amount) > 0 FROM holdings"
+expect = []
+
+[[statement]]
+name = "clean-limit-ends-order-by"
+sql = "SELECT id FROM holdings ORDER BY seq LIMIT 5, 10"
+expect = []
+
+[[statement]]
+name = "clean-strings-and-comments"
+sql = "SELECT id FROM notes WHERE body = 'price - 1' -- amount * 2\n/* sum(amount) */"
+expect = []
+
+[[statement]]
+name = "clean-wildcards"
+sql = "SELECT count(*), h.* FROM holdings h"
+expect = []
+
+[[statement]]
+name = "clean-money-table-qualifier"
+sql = "SELECT c.id FROM cash_ledger c ORDER BY c.seq"
+expect = []
+
+[[statement]]
+name = "clean-sequence-arithmetic"
+sql = "SELECT seq + 1, seq * 2 FROM audit_log WHERE seq > ?1 ORDER BY seq"
+expect = []
+
+[[source]]
+example = "store-clean.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = []
+
+[[source]]
+example = "store-money-in-constant.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql-money:function:sum"]
+
+[[source]]
+example = "store-money-in-fragment.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql-money:comparison:>"]
+
+[[source]]
+example = "store-multiline-constant.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql-money:order-by"]
+
+[[source]]
+example = "store-not-constant.rs"
+path = "crates/adapters/store-sqlite/src/holdings.rs"
+expect = ["sql:not-constant"]
+
+[[source]]
+example = "store-format.rs"
+path = "crates/adapters/store-sqlite/src/holdings.rs"
+expect = ["sql:assembly:format", "sql:not-constant"]
+
+[[source]]
+example = "store-concat-constant.rs"
+path = "crates/adapters/store-sqlite/src/queries.rs"
+expect = ["sql:assembly:concat", "sql:not-constant"]
+
+[[source]]
+example = "store-assembly-macros.rs"
+path = "crates/adapters/store-sqlite/src/text.rs"
+expect = ["sql:assembly:concat", "sql:assembly:format_args", "sql:assembly:write", "sql:assembly:writeln"]
+
+[[source]]
+example = "outside-store.rs"
+path = "crates/application/src/report.rs"
+expect = ["sql:outside-store"]
+
+[[source]]
+example = "outside-store-text.rs"
+path = "crates/application/src/report.rs"
+expect = []
+
+[[source]]
+example = "unparsable.rs"
+path = "crates/adapters/store-sqlite/src/broken.rs"
+expect = ["sql:unparsable"]
+
+[[source]]
+example = "migration-clean.sql"
+path = "crates/adapters/store-sqlite/migrations/0001_create_cash_ledger.sql"
+expect = []
+
+[[source]]
+example = "migration-arithmetic.sql"
+path = "crates/adapters/store-sqlite/migrations/0002_create_lots.sql"
+expect = ["sql-money:arithmetic:*"]
+
+[[source]]
+example = "outside-store.sql"
+path = "crates/application/queries/report.sql"
+expect = ["sql:outside-store"]
+
+[[recognition]]
+text = "SELECT 1"
+kind = "sql"
+
+[[recognition]]
+text = "INSERT INTO t VALUES (1)"
+kind = "sql"
+
+[[recognition]]
+text = "insert or replace into t values (1)"
+kind = "sql"
+
+[[recognition]]
+text = "REPLACE INTO t VALUES (1)"
+kind = "sql"
+
+[[recognition]]
+text = "UPDATE t SET a = 1"
+kind = "sql"
+
+[[recognition]]
+text = "DELETE FROM t"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE TABLE t (a TEXT) STRICT"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE INDEX i ON t (a)"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE UNIQUE INDEX i ON t (a)"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE VIEW v AS SELECT 1"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE TRIGGER g AFTER INSERT ON t BEGIN SELECT 1; END"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE VIRTUAL TABLE f USING fts5(body)"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE TEMP TABLE t (a TEXT)"
+kind = "sql"
+
+[[recognition]]
+text = "CREATE TEMPORARY TABLE t (a TEXT)"
+kind = "sql"
+
+[[recognition]]
+text = "ALTER TABLE t ADD COLUMN b TEXT"
+kind = "sql"
+
+[[recognition]]
+text = "DROP TABLE t"
+kind = "sql"
+
+[[recognition]]
+text = "DROP INDEX i"
+kind = "sql"
+
+[[recognition]]
+text = "DROP VIEW v"
+kind = "sql"
+
+[[recognition]]
+text = "DROP TRIGGER g"
+kind = "sql"
+
+[[recognition]]
+text = "WITH x AS (SELECT 1) SELECT * FROM x"
+kind = "sql"
+
+[[recognition]]
+text = "PRAGMA foreign_keys = ON"
+kind = "sql"
+
+[[recognition]]
+text = "VACUUM INTO ?1"
+kind = "sql"
+
+[[recognition]]
+text = "ATTACH DATABASE ?1 AS backup"
+kind = "sql"
+
+[[recognition]]
+text = "DETACH DATABASE backup"
+kind = "sql"
+
+[[recognition]]
+text = "BEGIN TRANSACTION"
+kind = "sql"
+
+[[recognition]]
+text = "BEGIN IMMEDIATE"
+kind = "sql"
+
+[[recognition]]
+text = "BEGIN DEFERRED"
+kind = "sql"
+
+[[recognition]]
+text = "BEGIN EXCLUSIVE"
+kind = "sql"
+
+[[recognition]]
+text = "COMMIT TRANSACTION"
+kind = "sql"
+
+[[recognition]]
+text = "END TRANSACTION"
+kind = "sql"
+
+[[recognition]]
+text = "ROLLBACK TRANSACTION"
+kind = "sql"
+
+[[recognition]]
+text = "ROLLBACK TO sp"
+kind = "sql"
+
+[[recognition]]
+text = "SAVEPOINT sp"
+kind = "sql"
+
+[[recognition]]
+text = "RELEASE SAVEPOINT sp"
+kind = "sql"
+
+[[recognition]]
+text = "ANALYZE holdings"
+kind = "sql"
+
+[[recognition]]
+text = "REINDEX holdings"
+kind = "sql"
+
+[[recognition]]
+text = "EXPLAIN QUERY PLAN SELECT 1"
+kind = "sql"
+
+[[recognition]]
+text = "  select\n  id from t"
+kind = "sql"
+
+[[recognition]]
+text = "create directory"
+kind = "text"
+
+[[recognition]]
+text = "commit"
+kind = "text"
+
+[[recognition]]
+text = "select"
+kind = "text"
+
+[[recognition]]
+text = "update failed"
+kind = "text"
+
+[[recognition]]
+text = "delete everything"
+kind = "text"
+
+[[recognition]]
+text = "with care"
+kind = "text"
+
+[[recognition]]
+text = "attach the file"
+kind = "text"
+
+[[recognition]]
+text = "begin work"
+kind = "text"
+
+[[recognition]]
+text = "release notes"
+kind = "text"
+
+[[recognition]]
+text = "보유 종목"
+kind = "text"
