@@ -22,6 +22,11 @@ const expectedLists = {
     "src/shared/platform/useCoreEvent.ts",
     "src/shared/platform/useDocumentTitle.ts",
   ],
+  IPC_TESTING_FILE_ALLOWLIST: [
+    "src/shared/ipc/testing/fakes.ts",
+    "src/shared/ipc/testing/mockBindings.ts",
+    "src/shared/ipc/testing/responses.ts",
+  ],
   TYPE_PREDICATE_ALLOWLIST: ["src/shared/lib/money.ts"],
   THROW_ALLOWLIST: ["src/shared/ipc/testing/fakes.ts"],
   CHART_NUMBER_ALLOWLIST: [],

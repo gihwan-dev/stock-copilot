@@ -27,9 +27,3 @@ module = "apps/desktop/src-tauri/src/ipc"
 site = "injected-command"
 lint = "clippy::needless_pass_by_value"
 reason = "Tauri는 AppHandle·Window·State 같은 주입 값을 값으로만 넘긴다. &AppHandle은 CommandArg가 아니다 (ADR 0016)"
-
-[[scoped-expect]]
-module = "apps/desktop/src-tauri/src/ipc"
-site = "type-module"
-lint = "clippy::disallowed_macros"
-reason = "derive(specta::Type)가 serde 컨테이너 속성이 있는 타입에 unreachable!을 펼친다. 이 끄기는 use와 Type을 derive한 struct·enum만 담은 모듈의 mod 선언에만 통한다 (ADR 0016)"

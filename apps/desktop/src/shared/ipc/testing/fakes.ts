@@ -28,6 +28,34 @@ export const returnRecordedCommandError = (): void => {
   });
 };
 
+export const answerWithMalformedResponse = (): void => {
+  mockCommands({ appVersion: () => ({ version: "not a version" }) });
+};
+
+export const rejectWithErrorObject = (): void => {
+  mockCommands({
+    appVersion: () => {
+      throw new Error("invoke failed");
+    },
+  });
+};
+
+export const rejectWithUnknownObject = (): void => {
+  mockCommands({
+    appVersion: () => {
+      throw { reason: "denied" };
+    },
+  });
+};
+
+export const rejectWithUndefined = (): void => {
+  mockCommands({
+    appVersion: () => {
+      throw undefined;
+    },
+  });
+};
+
 export const resetCommands = (): VitestUtils => {
   clearMocks();
   return vi.unstubAllGlobals();

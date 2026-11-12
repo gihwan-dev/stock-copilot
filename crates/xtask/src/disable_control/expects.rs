@@ -15,7 +15,7 @@ use syn::{
 };
 
 use super::allowlist::local_text;
-use super::scoped::{Site, function_sites, local_sites};
+use super::scoped::{Site, TauriImports, function_sites, local_sites};
 
 const EXPECT: &str = "expect";
 
@@ -118,7 +118,6 @@ pub(crate) struct Collected {
     pub(crate) target: Target,
     pub(crate) statement: Option<String>,
     pub(crate) sites: BTreeSet<Site>,
-    pub(crate) module: Option<String>,
 }
 
 #[derive(Debug)]
@@ -127,7 +126,7 @@ pub(crate) struct ExpectCollector<'rules> {
     handled: BTreeSet<(usize, usize)>,
     pending: Vec<Target>,
     next_sites: BTreeSet<Site>,
-    next_module: Option<String>,
+    imports: TauriImports,
     pub(crate) found: Vec<Collected>,
 }
 
@@ -201,13 +200,13 @@ fn is_block_like(rest: &TokenStream, keywords: &BTreeSet<String>) -> Option<()> 
 }
 
 impl<'rules> ExpectCollector<'rules> {
-    pub(crate) fn new(rules: &'rules DisableRules) -> Self {
+    pub(crate) fn new(rules: &'rules DisableRules, imports: TauriImports) -> Self {
         Self {
             rules,
             handled: BTreeSet::new(),
             pending: Vec::new(),
             next_sites: BTreeSet::new(),
-            next_module: None,
+            imports,
             found: Vec::new(),
         }
     }
@@ -220,9 +219,7 @@ impl<'rules> ExpectCollector<'rules> {
         inside: Option<()>,
     ) {
         let sites = self.next_sites.clone();
-        let module = self.next_module.clone();
         self.next_sites.clear();
-        self.next_module = None;
         let checked = if holds_one_item(target).is_some() && inside.is_some() {
             Target::NestedItem
         } else {
@@ -249,7 +246,6 @@ impl<'rules> ExpectCollector<'rules> {
                 target: placed,
                 statement: statement.cloned(),
                 sites: sites.clone(),
-                module: module.clone(),
             });
         }
     }
@@ -302,7 +298,6 @@ impl<'rules> ExpectCollector<'rules> {
                 target: Target::Macro,
                 statement: None,
                 sites: BTreeSet::new(),
-                module: None,
             });
         }
     }
@@ -328,7 +323,7 @@ fn source_tokens(expression: &Expr) -> TokenStream {
 
 impl<'ast> Visit<'ast> for ExpectCollector<'_> {
     fn visit_item_fn(&mut self, i: &'ast ItemFn) {
-        self.next_sites = function_sites(i);
+        self.next_sites = function_sites(i, &self.imports);
         self.record(
             &i.attrs,
             Target::Function,
@@ -551,9 +546,6 @@ impl<'ast> Visit<'ast> for ExpectCollector<'_> {
     }
 
     fn visit_item_mod(&mut self, i: &'ast ItemMod) {
-        if i.content.is_none() {
-            self.next_module = Some(i.ident.to_string());
-        }
         self.record(&i.attrs, Target::Module, None, None);
         visit::visit_item_mod(self, i);
     }

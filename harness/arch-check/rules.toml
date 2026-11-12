@@ -245,7 +245,7 @@ reason = "serde의 derive 기능(serde_derive)이 절차 매크로로 syn, proc-
 crates = ["src-tauri"]
 externals = ["syn", "proc-macro2"]
 through = "serde_json"
-reason = "개발 의존 serde_json → serde(derive) → serde_derive의 절차 매크로 의존. 기록 응답 비교 테스트에서만 쓴다 (ADR 0016)"
+reason = "serde_json → serde(derive) → serde_derive의 절차 매크로 의존. 기록 응답을 JSON으로 다시 읽고 쓰는 데 쓴다 (ADR 0016)"
 
 [[external-allowlist]]
 crate = "domain"

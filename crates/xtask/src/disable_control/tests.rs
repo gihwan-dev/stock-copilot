@@ -22,12 +22,53 @@ const GENERATE_CONTEXT: &str = "let context = tauri::generate_context!();";
 
 const IPC_MODULE: &str = "apps/desktop/src-tauri/src/ipc";
 
-const IPC_EXPECT_LINTS: [&str; 4] = [
-    "trivial_casts",
+const IPC_COLLECTOR_LINT: &str = "trivial_casts";
+
+const IPC_COMMAND_LINTS: [&str; 2] = [
     "clippy::needless_pass_by_value",
-    "clippy::disallowed_macros",
     "clippy::unnecessary_wraps",
 ];
+
+const IPC_COMMAND_LIST: &str = "apps/desktop/src-tauri/ipc/commands.txt";
+
+fn ipc_command_count(root: &Path) -> usize {
+    fs::read_to_string(root.join(IPC_COMMAND_LIST))
+        .expect("read command list")
+        .lines()
+        .count()
+}
+
+fn ipc_expect_problems(root: &Path, ipc: &[Row]) -> Vec<String> {
+    let commands = ipc_command_count(root);
+    let count = |lint: &str| ipc.iter().filter(|row| row.rule == lint).count();
+    let mut problems: Vec<String> = ipc
+        .iter()
+        .filter(|row| {
+            row.rule != IPC_COLLECTOR_LINT && !IPC_COMMAND_LINTS.contains(&row.rule.as_str())
+        })
+        .map(|row| {
+            format!(
+                "{}:{} {} is not an IPC expect",
+                row.path, row.line, row.rule
+            )
+        })
+        .collect();
+    if count(IPC_COLLECTOR_LINT) > 1 {
+        problems.push(format!(
+            "{} {IPC_COLLECTOR_LINT} expects for one command collector",
+            count(IPC_COLLECTOR_LINT)
+        ));
+    }
+    for lint in IPC_COMMAND_LINTS {
+        if count(lint) > commands {
+            problems.push(format!(
+                "{} {lint} expects for {commands} commands",
+                count(lint)
+            ));
+        }
+    }
+    problems
+}
 
 const DISABLEABLE_GROUPS: [&str; 3] = ["clippy::pedantic", "clippy::nursery", "clippy::cargo"];
 
@@ -399,9 +440,10 @@ fn disable_report_lists_the_three_main_rs_expects() {
             .all(|row| row.line > 0 && row.reason.contains("generate_context!")),
         "{found:#?}"
     );
-    assert!(
-        ipc.iter()
-            .all(|row| IPC_EXPECT_LINTS.contains(&row.rule.as_str()) && row.line > 0),
+    assert!(ipc.iter().all(|row| row.line > 0), "{ipc:#?}");
+    assert_eq!(
+        ipc_expect_problems(&root, &ipc),
+        Vec::<String>::new(),
         "{ipc:#?}"
     );
     let report = render_report(&found);
@@ -410,6 +452,41 @@ fn disable_report_lists_the_three_main_rs_expects() {
         Some("disable-report: 끄기 3건 (rust-expect 3건)"),
         "{report}"
     );
+}
+
+#[test]
+fn ipc_expect_bound_rejects_extra_or_foreign_expects() {
+    let root = repository_root();
+    let row = |rule: &str| Row {
+        kind: RUST_EXPECT_KIND,
+        path: format!("{IPC_MODULE}/sample.rs"),
+        line: 1,
+        rule: String::from(rule),
+        reason: String::from("harness"),
+    };
+    let commands = ipc_command_count(&root);
+    let allowed: Vec<Row> = std::iter::once(row(IPC_COLLECTOR_LINT))
+        .chain((0..commands).flat_map(|_| IPC_COMMAND_LINTS.map(row)))
+        .collect();
+    assert_eq!(
+        ipc_expect_problems(&root, &allowed),
+        Vec::<String>::new(),
+        "within the bound"
+    );
+    for extra in [
+        IPC_COLLECTOR_LINT,
+        IPC_COMMAND_LINTS[0],
+        IPC_COMMAND_LINTS[1],
+        "clippy::disallowed_macros",
+    ] {
+        let mut rows = allowed.clone();
+        rows.push(row(extra));
+        assert_eq!(
+            ipc_expect_problems(&root, &rows).len(),
+            1,
+            "{extra} beyond the bound"
+        );
+    }
 }
 
 #[test]

@@ -79,3 +79,10 @@ harness.md 1.1은 편집 훅이 부르는 `just lint-file <경로>`, 커밋 훅�
   - H-16: 깨끗한 checkout에서 훅 설치 확인을 다루는 방법(`lefthook install` 뒤 `just check`), 병합·fast-forward로 들어온 범위 검사.
   - H-20: `lefthook.yml`, 모든 폴더의 `.gitignore`, `.git/hooks`의 삭제·변경 거부.
 - 바뀌면 다시 볼 조건: lefthook을 올릴 때(훅 내용·설정 파일 이름·숨기기 동작·stdin 전달), git이 훅에 주는 환경 변수가 바뀔 때, `check-ts`의 prettier·ESLint 줄이 바뀔 때(테스트가 알린다), 커밋 훅이 3분을 넘을 때.
+
+## H-13 반영 (2026-11-12): 커밋 훅의 `test-diff` 기준
+
+- 문제: 커밋 훅과 병합 커밋 훅이 `just base=HEAD check`를 돌아, 같은 작업 브랜치에서 앞 커밋이 더한 테스트를 뒤 커밋에서 고치면 `test-diff`가 "기존 테스트 변경"으로 거부했다. 리뷰 뒤 수정 회차가 불가능했다.
+- 결정: 두 훅은 `just commit-check`를 돈다. `commit-check`는 `xtask commit-base`가 낸 `git merge-base HEAD refs/heads/master`를 기준으로 `just base=<기준> check`를 부른다. `master` 위에서 직접 커밋하면 분기점이 `HEAD`다. `refs/heads/master`가 없으면 실패한다(커밋 거부).
+- 한계: 이 기준은 에이전트가 로컬 `master` 참조를 옮겨 바꿀 수 있으므로 편의용 1차 방어다. 실제 관문은 메인의 병합 확인과, H-25의 종료 훅이 브리프의 기준 SHA로 돌리는 `just base=<SHA> check`다.
+- 테스트: `git_hooks::commit_base_tests`(master 위에서는 HEAD, 브랜치에서는 분기점, master 없으면 실패, 임시 저장소에서 실제 lefthook 훅으로 "브랜치에서 더한 테스트를 다음 커밋에서 고치면 통과, master에 있던 테스트를 고치면 거부", master가 없으면 커밋 거부). 기존 `git_hooks::tests`의 `EXPECTED_LEFTHOOK`(새 훅 명령)과 `STUB_RECIPES`(가짜 `commit-check`)를 바꿨다.

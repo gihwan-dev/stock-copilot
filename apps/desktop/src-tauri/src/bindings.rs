@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -16,13 +17,16 @@ const SNAPSHOT_DIRECTORY: &str = "apps/desktop/src-tauri/ipc/responses";
 const COMMAND_LIST_FILE: &str = "ipc/commands.txt";
 const COMMAND_SET_FILE: &str = "permissions/commands.toml";
 const SNAPSHOT_SUFFIX: &str = ".json";
+const ERROR_RECORD: &str = "ipc_errors";
 const COMMAND_SET_HEADER: &str = "[[set]]\nidentifier = \"commands\"\ndescription = \"IPC 명령 허용 항목. gen-bindings가 ipc/commands.txt와 같은 목록에서 만든다\"\n";
 
 #[derive(Debug)]
 pub enum GenerateError {
     Typescript(specta_typescript::Error),
     Io(PathBuf, io::Error),
-    SnapshotName(PathBuf),
+    Json(PathBuf, serde_json::Error),
+    UnexpectedRecord(PathBuf),
+    MissingRecord(String),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -78,36 +82,50 @@ fn io_error(path: &Path) -> impl FnOnce(io::Error) -> GenerateError + '_ {
     move |error| GenerateError::Io(path.to_path_buf(), error)
 }
 
-fn snapshot_key(path: &Path) -> Result<String, GenerateError> {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_suffix(SNAPSHOT_SUFFIX))
-        .map(camel_case)
-        .ok_or_else(|| GenerateError::SnapshotName(path.to_path_buf()))
+fn listed_records(directory: &Path) -> Result<BTreeSet<String>, GenerateError> {
+    fs::read_dir(directory)
+        .map_err(io_error(directory))?
+        .map(|entry| {
+            let path = entry.map_err(io_error(directory))?.path();
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.strip_suffix(SNAPSHOT_SUFFIX))
+                .filter(|_| path.is_file())
+                .map(String::from)
+                .ok_or(GenerateError::UnexpectedRecord(path.clone()))
+        })
+        .collect()
 }
 
-fn responses(root: &Path) -> Result<String, GenerateError> {
+fn recorded(directory: &Path, name: &str) -> Result<String, GenerateError> {
+    let file = directory.join(format!("{name}{SNAPSHOT_SUFFIX}"));
+    let text = fs::read_to_string(&file).map_err(io_error(&file))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| GenerateError::Json(file.clone(), error))?;
+    let canonical =
+        serde_json::to_string(&value).map_err(|error| GenerateError::Json(file, error))?;
+    Ok(format!("{}: {canonical},\n", camel_case(name)))
+}
+
+fn responses(root: &Path, commands: &[String]) -> Result<String, GenerateError> {
     let directory = root.join(SNAPSHOT_DIRECTORY);
-    let mut files: Vec<PathBuf> = fs::read_dir(&directory)
-        .map_err(io_error(&directory))?
-        .map(|entry| {
-            entry
-                .map(|found| found.path())
-                .map_err(io_error(&directory))
-        })
-        .collect::<Result<_, _>>()?;
-    files.retain(|file| {
-        file.file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(SNAPSHOT_SUFFIX))
-    });
-    files.sort();
-    let entries = files
+    let expected: BTreeSet<String> = commands
         .iter()
-        .map(|file| {
-            let content = fs::read_to_string(file).map_err(io_error(file))?;
-            Ok(format!("{}: {},\n", snapshot_key(file)?, content.trim()))
-        })
+        .cloned()
+        .chain([String::from(ERROR_RECORD)])
+        .collect();
+    let listed = listed_records(&directory)?;
+    if let Some(extra) = listed.difference(&expected).next() {
+        return Err(GenerateError::UnexpectedRecord(
+            directory.join(format!("{extra}{SNAPSHOT_SUFFIX}")),
+        ));
+    }
+    if let Some(missing) = expected.difference(&listed).next() {
+        return Err(GenerateError::MissingRecord(missing.clone()));
+    }
+    let entries = expected
+        .iter()
+        .map(|name| recorded(&directory, name))
         .collect::<Result<Vec<String>, GenerateError>>()?;
     Ok(format!(
         "export const responses = {{\n{}}} as const;\n",
@@ -129,8 +147,14 @@ pub fn generate(root: &Path) -> Result<(), GenerateError> {
     builder
         .export(CommandList, &tauri_directory)
         .map_err(io_error(&tauri_directory))?;
+    let list_file = tauri_directory.join(COMMAND_LIST_FILE);
+    let commands: Vec<String> = fs::read_to_string(&list_file)
+        .map_err(io_error(&list_file))?
+        .lines()
+        .map(String::from)
+        .collect();
     let responses_file = root.join(RESPONSES_FILE);
-    fs::write(&responses_file, responses(root)?).map_err(io_error(&responses_file))
+    fs::write(&responses_file, responses(root, &commands)?).map_err(io_error(&responses_file))
 }
 
 #[cfg(test)]

@@ -45,6 +45,7 @@ export const guardRuleBase = {
   "no-declare": "no-restricted-syntax",
   "no-default-case": "no-restricted-syntax",
   "no-default-export": "no-restricted-syntax",
+  "no-disposable": "no-restricted-syntax",
   "no-dom-globals": "no-restricted-globals",
   "no-dynamic-import": "no-restricted-syntax",
   "no-effect-hooks": "no-restricted-syntax",

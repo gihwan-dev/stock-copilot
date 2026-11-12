@@ -2,9 +2,16 @@ use serde::Serialize;
 use specta::Type;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-pub enum IpcError {
+pub enum IpcErrorKind {
+    #[serde(rename = "user-fixable")]
     UserFixable,
+    #[serde(rename = "retryable")]
     Retryable,
+    #[serde(rename = "bug")]
     Bug,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
+pub struct IpcError {
+    pub kind: IpcErrorKind,
 }

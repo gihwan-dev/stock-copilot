@@ -11,15 +11,18 @@
     },
     {
       "path": "apps/desktop/src/shared/ipc/bindings.ts",
-      "format": "prettier"
+      "format": "prettier",
+      "imports": ["@tauri-apps/api/core"]
     },
     {
       "path": "apps/desktop/src/shared/ipc/testing/mockBindings.ts",
-      "format": "prettier"
+      "format": "prettier",
+      "imports": ["@tauri-apps/api/core", "@tauri-apps/api/mocks"]
     },
     {
       "path": "apps/desktop/src/shared/ipc/testing/responses.ts",
-      "format": "prettier"
+      "format": "prettier",
+      "imports": []
     }
   ]
 }

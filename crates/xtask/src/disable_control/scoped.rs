@@ -1,25 +1,23 @@
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
+use syn::ext::IdentExt;
 use syn::visit::{self, Visit};
-use syn::{Attribute, Expr, FnArg, Item, ItemFn, Local, Macro, Meta, Type};
+use syn::{Attribute, Expr, File, FnArg, Item, ItemFn, ItemUse, Local, Macro, Type, UseTree};
 
 use crate::workspace_sources::SourceFailure;
 
 const SCOPED_KEYS: [&str; 4] = ["module", "site", "lint", "reason"];
 const COLLECT_MACRO: &str = "collect_commands";
 const COMMAND_ATTRIBUTE: [&str; 2] = ["tauri", "command"];
+const TAURI_CRATE: &str = "tauri";
 const INJECTED_TYPES: [&str; 5] = ["AppHandle", "Window", "Webview", "WebviewWindow", "State"];
-const TYPE_DERIVE: &str = "Type";
-const ROOT_FILES: [&str; 3] = ["lib.rs", "main.rs", "mod.rs"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Site {
     CommandCollector,
     Command,
     InjectedCommand,
-    TypeModule,
 }
 
 impl Site {
@@ -28,7 +26,6 @@ impl Site {
             "command-collector" => Some(Self::CommandCollector),
             "command" => Some(Self::Command),
             "injected-command" => Some(Self::InjectedCommand),
-            "type-module" => Some(Self::TypeModule),
             _ => None,
         }
     }
@@ -149,20 +146,129 @@ fn is_command(attributes: &[Attribute]) -> bool {
         .any(|attribute| path_segments(attribute.path()) == COMMAND_ATTRIBUTE)
 }
 
-fn injected(argument: &FnArg) -> bool {
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct TauriImports {
+    trusted: BTreeSet<String>,
+}
+
+#[derive(Debug, Default)]
+struct ImportScan {
+    imported: BTreeSet<String>,
+    shadowed: BTreeSet<String>,
+}
+
+fn injected_name(name: &str) -> bool {
+    INJECTED_TYPES.contains(&name)
+}
+
+impl ImportScan {
+    fn tree(&mut self, prefix: &[String], tree: &UseTree) {
+        match tree {
+            UseTree::Path(path) => {
+                let mut next = prefix.to_vec();
+                next.push(path.ident.unraw().to_string());
+                self.tree(&next, &path.tree);
+            }
+            UseTree::Name(name) => {
+                let leaf = name.ident.unraw().to_string();
+                if prefix == [TAURI_CRATE] && injected_name(&leaf) {
+                    self.imported.insert(leaf);
+                } else if injected_name(&leaf) {
+                    self.shadowed.insert(leaf);
+                }
+            }
+            UseTree::Rename(rename) => {
+                self.shadowed.extend(
+                    [
+                        rename.ident.unraw().to_string(),
+                        rename.rename.unraw().to_string(),
+                    ]
+                    .into_iter()
+                    .filter(|name| injected_name(name)),
+                );
+            }
+            UseTree::Group(group) => {
+                for item in &group.items {
+                    self.tree(prefix, item);
+                }
+            }
+            UseTree::Glob(_) => self.shadow_all(),
+        }
+    }
+
+    fn shadow_all(&mut self) {
+        self.shadowed.extend(INJECTED_TYPES.map(String::from));
+    }
+
+    fn defined(&mut self, name: &syn::Ident) {
+        let text = name.unraw().to_string();
+        if injected_name(&text) {
+            self.shadowed.insert(text);
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for ImportScan {
+    fn visit_item_use(&mut self, i: &'ast ItemUse) {
+        self.tree(&[], &i.tree);
+    }
+
+    fn visit_item(&mut self, i: &'ast Item) {
+        match i {
+            Item::Struct(item) => self.defined(&item.ident),
+            Item::Enum(item) => self.defined(&item.ident),
+            Item::Union(item) => self.defined(&item.ident),
+            Item::Type(item) => self.defined(&item.ident),
+            Item::Trait(item) => self.defined(&item.ident),
+            Item::TraitAlias(item) => self.defined(&item.ident),
+            Item::Fn(item) => self.defined(&item.sig.ident),
+            Item::Mod(item) => self.defined(&item.ident),
+            Item::Const(_)
+            | Item::ExternCrate(_)
+            | Item::ForeignMod(_)
+            | Item::Impl(_)
+            | Item::Macro(_)
+            | Item::Static(_)
+            | Item::Use(_)
+            | Item::Verbatim(_) => {}
+            _ => self.shadow_all(),
+        }
+        visit::visit_item(self, i);
+    }
+}
+
+pub(crate) fn tauri_imports(file: &File) -> TauriImports {
+    let mut scan = ImportScan::default();
+    scan.visit_file(file);
+    TauriImports {
+        trusted: scan.imported.difference(&scan.shadowed).cloned().collect(),
+    }
+}
+
+fn injected(argument: &FnArg, imports: &TauriImports) -> bool {
     let FnArg::Typed(typed) = argument else {
         return false;
     };
     let Type::Path(path) = typed.ty.as_ref() else {
         return false;
     };
-    path.path
+    if path.qself.is_some() {
+        return false;
+    }
+    let names: Vec<String> = path
+        .path
         .segments
-        .last()
-        .is_some_and(|segment| INJECTED_TYPES.contains(&segment.ident.to_string().as_str()))
+        .iter()
+        .map(|segment| segment.ident.unraw().to_string())
+        .collect();
+    match names.as_slice() {
+        [only] => imports.trusted.contains(only),
+        [krate, name] => krate == TAURI_CRATE && injected_name(name),
+        _ => false,
+    }
 }
 
-pub(crate) fn function_sites(function: &ItemFn) -> BTreeSet<Site> {
+pub(crate) fn function_sites(function: &ItemFn, imports: &TauriImports) -> BTreeSet<Site> {
     let mut sites = BTreeSet::new();
     let mut finder = CollectFinder::default();
     finder.visit_block(&function.block);
@@ -171,7 +277,12 @@ pub(crate) fn function_sites(function: &ItemFn) -> BTreeSet<Site> {
     }
     if is_command(&function.attrs) {
         sites.insert(Site::Command);
-        if function.sig.inputs.iter().all(injected) {
+        if function
+            .sig
+            .inputs
+            .iter()
+            .all(|argument| injected(argument, imports))
+        {
             sites.insert(Site::InjectedCommand);
         }
     }
@@ -195,66 +306,5 @@ fn matches_collect(expression: &Expr) -> bool {
         is_collect_macro(&mac.mac)
     } else {
         false
-    }
-}
-
-fn derives_type(attributes: &[Attribute]) -> bool {
-    attributes.iter().any(|attribute| {
-        let Meta::List(list) = &attribute.meta else {
-            return false;
-        };
-        list.path.is_ident("derive")
-            && list
-                .parse_args_with(
-                    syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
-                )
-                .is_ok_and(|paths| {
-                    paths.iter().any(|derived| {
-                        derived
-                            .segments
-                            .last()
-                            .is_some_and(|segment| segment.ident == TYPE_DERIVE)
-                    })
-                })
-    })
-}
-
-fn type_only(item: &Item) -> bool {
-    if let Item::Use(_) = item {
-        true
-    } else if let Item::Struct(structure) = item {
-        derives_type(&structure.attrs)
-    } else if let Item::Enum(enumeration) = item {
-        derives_type(&enumeration.attrs)
-    } else {
-        false
-    }
-}
-
-fn module_file(root: &Path, declaring: &str, name: &str) -> PathBuf {
-    let declared = Path::new(declaring);
-    let is_root = declared
-        .file_name()
-        .and_then(|file| file.to_str())
-        .is_some_and(|file| ROOT_FILES.contains(&file));
-    let directory = if is_root {
-        declared
-            .parent()
-            .map_or_else(PathBuf::new, Path::to_path_buf)
-    } else {
-        declared.with_extension("")
-    };
-    root.join(directory).join(format!("{name}.rs"))
-}
-
-pub(crate) fn module_sites(root: &Path, declaring: &str, name: &str) -> BTreeSet<Site> {
-    let only_types = fs::read_to_string(module_file(root, declaring, name))
-        .ok()
-        .and_then(|source| syn::parse_file(&source).ok())
-        .is_some_and(|file| file.attrs.is_empty() && file.items.iter().all(type_only));
-    if only_types {
-        BTreeSet::from([Site::TypeModule])
-    } else {
-        BTreeSet::new()
     }
 }

@@ -20,6 +20,8 @@ use super::{
 
 const IPC_MODULE: &str = "apps/desktop/src-tauri/src/ipc";
 
+const IPC_COMMAND_LIST: &str = "apps/desktop/src-tauri/ipc/commands.txt";
+
 const CASES_FILE: &str = "harness/disable-control/script-cases.toml";
 const SOURCES_DIRECTORY: &str = "harness/disable-control/script-sources";
 
@@ -195,6 +197,14 @@ fn full_report_counts_rust_and_typescript_separately() {
         .iter()
         .filter(|row| row.kind == RUST_EXPECT_KIND && in_module(IPC_MODULE, &row.path))
         .count();
+    let commands = fs::read_to_string(root.join(IPC_COMMAND_LIST))
+        .expect("read command list")
+        .lines()
+        .count();
+    assert!(
+        ipc <= commands.saturating_mul(2).saturating_add(1),
+        "{ipc} IPC expects for {commands} commands"
+    );
     assert_eq!(
         render_languages(&found),
         format!("disable-report: Rust {}건, TS 0건", ipc.saturating_add(3)),

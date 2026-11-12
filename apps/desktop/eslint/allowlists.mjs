@@ -5,6 +5,12 @@ export const PLATFORM_FILE_ALLOWLIST = [
   "src/shared/platform/useDocumentTitle.ts",
 ];
 
+export const IPC_TESTING_FILE_ALLOWLIST = [
+  "src/shared/ipc/testing/fakes.ts",
+  "src/shared/ipc/testing/mockBindings.ts",
+  "src/shared/ipc/testing/responses.ts",
+];
+
 export const TYPE_PREDICATE_ALLOWLIST = ["src/shared/lib/money.ts"];
 
 export const THROW_ALLOWLIST = ["src/shared/ipc/testing/fakes.ts"];

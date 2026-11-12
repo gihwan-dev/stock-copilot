@@ -179,6 +179,22 @@ export const bans = {
       message: `${name} 금지: 테스트를 건너뛰거나 골라 돌리지 않는다.`,
     })),
   ],
+  "guard/no-disposable": [
+    {
+      selector: "VariableDeclaration[kind=/using$/]",
+      message:
+        "using 선언 금지: 자원 해제는 코어(Rust)가 맡는다. esnext.disposable은 @tauri-apps/api 타입 때문에만 켠다.",
+    },
+    {
+      selector: "Identifier[name=/^(Async)?DisposableStack$/]",
+      message: "DisposableStack·AsyncDisposableStack 금지.",
+    },
+    {
+      selector:
+        "MemberExpression[object.name='Symbol'][property.name=/^(dispose|asyncDispose)$/]",
+      message: "Symbol.dispose·Symbol.asyncDispose 금지.",
+    },
+  ],
   "guard/no-import-meta": [
     {
       selector: "MetaProperty[meta.name='import']",

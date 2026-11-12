@@ -61,6 +61,7 @@ const undisableable = [
   "local/no-promise-catch",
   "local/no-computed-member",
   "local/test-file-boundary",
+  "local/ipc-testing-boundary",
   "boundaries/*",
   "guard/no-effect-hooks",
   "guard/no-sync-external-store",
@@ -148,10 +149,10 @@ test("violation cases are linted with exactly the app configuration for the same
   const generated = desktopTypeScriptPaths();
   for (const file of Object.keys(cases)) {
     if (generated.includes(file)) {
-      assert.equal(
-        await appLinter.isPathIgnored(join(desktopRoot, file)),
-        true,
+      const app = await appLinter.calculateConfigForFile(
+        join(desktopRoot, file),
       );
+      assert.equal(app.linterOptions.noInlineConfig, true, file);
       continue;
     }
     const app = await appLinter.calculateConfigForFile(join(desktopRoot, file));

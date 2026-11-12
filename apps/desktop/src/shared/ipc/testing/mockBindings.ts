@@ -14,8 +14,11 @@ export type AppVersion = {
   version: string;
 };
 
-export type IpcError =
-  { kind: "user-fixable" } | { kind: "retryable" } | { kind: "bug" };
+export type IpcError = {
+  kind: IpcErrorKind;
+};
+
+export type IpcErrorKind = "user-fixable" | "retryable" | "bug";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(

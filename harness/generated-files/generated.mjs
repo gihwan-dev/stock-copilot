@@ -96,6 +96,42 @@ export const compareGenerated = (outRoot, root = repoRoot, list = readList()) =>
       : [`${path}: differs from regenerated output; run just gen-bindings`];
   });
 
+export const fixedFile = join(
+  repoRoot,
+  "harness",
+  "generated-files",
+  "fixed.json",
+);
+
+const markers = {
+  header: [undefined, "/** Commands */"],
+  runtime: ["/* Tauri Specta runtime */", "/* Tauri Specta mocks */"],
+  handler: ["function mockCommandHandler(", undefined],
+};
+
+export const fixedPart = (text, part) => {
+  const [start, end] = markers[part];
+  const from = start === undefined ? 0 : text.indexOf(start);
+  if (from < 0) return undefined;
+  const to = end === undefined ? -1 : text.indexOf(end, from);
+  return to < 0 ? text.slice(from) : text.slice(from, to);
+};
+
+export const readFixed = () => JSON.parse(readFileSync(fixedFile, "utf8"));
+
+export const fixedPartProblems = (root = repoRoot, fixed = readFixed()) =>
+  Object.entries(fixed).flatMap(([path, parts]) => {
+    const file = join(root, path);
+    if (!existsSync(file)) return [`${path}: missing`];
+    const text = readFileSync(file, "utf8");
+    return Object.entries(parts)
+      .filter(([part, expected]) => fixedPart(text, part) !== expected)
+      .map(
+        ([part]) =>
+          `${path}: the ${part} differs from harness/generated-files/fixed.json`,
+      );
+  });
+
 export const copyGenerated = (outRoot, root = repoRoot, list = readList()) => {
   for (const path of generatedPaths(list)) {
     copyFileSync(join(outRoot, path), join(root, path));

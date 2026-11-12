@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use proc_macro2::TokenStream;
@@ -22,7 +22,6 @@ pub(crate) struct Permit {
 pub(crate) struct Allowlist {
     permits: BTreeSet<Permit>,
     scoped: BTreeSet<ScopedPermit>,
-    root: PathBuf,
 }
 
 fn failure(message: &str) -> SourceFailure {
@@ -109,15 +108,10 @@ impl Allowlist {
             Ok(Self {
                 permits: unique,
                 scoped: unique_scoped,
-                root: root.to_path_buf(),
             })
         } else {
             Err(failure("같은 항목이 두 번 있다"))
         }
-    }
-
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
     }
 
     pub(crate) fn permits_scoped(

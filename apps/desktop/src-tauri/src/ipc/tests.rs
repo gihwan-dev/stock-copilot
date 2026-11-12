@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 
 use super::app_version::app_version;
-use super::error::IpcError;
+use super::error::{IpcError, IpcErrorKind};
 
 const RESPONSE_DIRECTORY: &str = "ipc/responses";
 
@@ -35,6 +35,11 @@ fn app_version_response_is_recorded_for_the_typescript_fake() {
 fn every_ipc_error_is_recorded_with_its_tag() {
     assert_response_snapshot(
         "ipc_errors",
-        &[IpcError::UserFixable, IpcError::Retryable, IpcError::Bug],
+        &[
+            IpcErrorKind::UserFixable,
+            IpcErrorKind::Retryable,
+            IpcErrorKind::Bug,
+        ]
+        .map(|kind| IpcError { kind }),
     );
 }
