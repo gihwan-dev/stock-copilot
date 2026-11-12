@@ -1,0 +1,5 @@
+// eslint-disable-next-line first, second -- 이유 -- 더
+// eslint-disable-next-line local/a--b
+// eslint-disable-next-line local/c ---   여러 대시
+/* eslint-disable-next-line
+   local/d -- 여러 줄 */

@@ -838,3 +838,13 @@ expect = ["file:nextest-config"]
 name = "nextest-config-without-wrapper"
 overlay = "nextest-config-without-wrapper"
 expect = ["file:nextest-config"]
+
+[[workspace]]
+name = "nested-gitignore"
+overlay = "nested-gitignore"
+expect = ["file:nested-gitignore"]
+
+[[workspace]]
+name = "nested-gitignore-outside"
+overlay = "nested-gitignore-outside"
+expect = ["file:nested-gitignore"]

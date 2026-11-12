@@ -1,0 +1,3 @@
+pub fn probe(amount: u64) -> u64 {
+    amount
+}

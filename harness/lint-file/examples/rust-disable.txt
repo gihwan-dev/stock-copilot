@@ -1,0 +1,2 @@
+#[expect(clippy::all, reason = "그룹 끄기")]
+pub fn probe() {}

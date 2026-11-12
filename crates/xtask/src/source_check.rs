@@ -50,6 +50,8 @@ pub(crate) const NESTED_CONFIG_FILES: [&str; 6] = [
 
 const BUILD_SCRIPT_FILE: &str = "build.rs";
 
+const IGNORE_FILE: &str = ".gitignore";
+
 const DOMAIN_DIRECTORY: &str = "crates/domain/";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -301,6 +303,18 @@ fn entry_findings(
     members: &[String],
     allowlists: &Allowlists,
 ) -> Result<Vec<Finding>, CheckFailure> {
+    let full = root.join(&entry.relative);
+    entry_text_findings(entry, members, allowlists, || {
+        fs::read_to_string(&full).map_err(|error| CheckFailure::Io(full.clone(), error))
+    })
+}
+
+fn entry_text_findings(
+    entry: &Entry,
+    members: &[String],
+    allowlists: &Allowlists,
+    read: impl FnOnce() -> Result<String, CheckFailure>,
+) -> Result<Vec<Finding>, CheckFailure> {
     let in_member = members
         .iter()
         .any(|member| entry.relative.starts_with(member.as_str()));
@@ -308,8 +322,7 @@ fn entry_findings(
     let findings = match entry.kind {
         EntryKind::CargoDirectory => vec![Finding::whole_file(path, Rule::CargoConfig)],
         EntryKind::CargoSetting(file) => {
-            let full = root.join(path);
-            let text = fs::read_to_string(&full).map_err(|error| CheckFailure::Io(full, error))?;
+            let text = read()?;
             let rule = match file {
                 ConfigFile::Mutants => Rule::CargoConfig,
                 ConfigFile::Nextest => Rule::NextestConfig,
@@ -321,6 +334,9 @@ fn entry_findings(
             }
         }
         EntryKind::Symlink => vec![Finding::whole_file(path, Rule::Symlink)],
+        EntryKind::File if entry.name == IGNORE_FILE && path.contains('/') => {
+            vec![Finding::whole_file(path, Rule::NestedGitignore)]
+        }
         EntryKind::File
             if NESTED_CONFIG_FILES.contains(&entry.name.as_str()) && path.contains('/') =>
         {
@@ -335,9 +351,7 @@ fn entry_findings(
                     .extension()
                     .is_some_and(|extension| extension == "rs") =>
         {
-            let full = root.join(path);
-            let source =
-                fs::read_to_string(&full).map_err(|error| CheckFailure::Io(full, error))?;
+            let source = read()?;
             let mut found = check_source(path, &source, allowlists);
             if entry.name == BUILD_SCRIPT_FILE
                 && allowlists.build_script(path) == Membership::Unlisted
@@ -369,6 +383,92 @@ pub(crate) fn check_repository(
         findings.extend(entry_findings(root, entry, &members, allowlists)?);
     }
     Ok(findings.into_iter().collect())
+}
+
+fn under_directory(path: &str, directory: &str) -> bool {
+    path.strip_prefix(directory)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn file_kind(relative: &str) -> EntryKind {
+    let mut parts = relative.split('/');
+    let first = parts.next();
+    let nested_cargo = parts.any(|part| part == CARGO_CONFIG_DIRECTORY);
+    if relative == NEXTEST_FILE {
+        EntryKind::CargoSetting(ConfigFile::Nextest)
+    } else if first == Some(CARGO_CONFIG_DIRECTORY) {
+        let name = relative
+            .strip_prefix(CARGO_CONFIG_DIRECTORY)
+            .and_then(|rest| rest.strip_prefix('/'));
+        match name.and_then(ConfigFile::named) {
+            Some(ConfigFile::Mutants) => EntryKind::CargoSetting(ConfigFile::Mutants),
+            Some(ConfigFile::Nextest) | None => EntryKind::CargoDirectory,
+        }
+    } else if nested_cargo {
+        EntryKind::CargoDirectory
+    } else {
+        EntryKind::File
+    }
+}
+
+fn applicable(metadata: &Metadata, root: &Path, relative: &str) -> Result<bool, CheckFailure> {
+    let name = relative.rsplit('/').next().unwrap_or(relative);
+    let rust = Path::new(relative)
+        .extension()
+        .is_some_and(|extension| extension == "rs");
+    let nested_config =
+        (NESTED_CONFIG_FILES.contains(&name) || name == IGNORE_FILE) && relative.contains('/');
+    let mut related = relative == "Cargo.toml" || nested_config;
+    for package in metadata.workspace_packages() {
+        let manifest = relative_path(root, package.manifest_path.as_std_path())?;
+        let directory = manifest.strip_suffix("Cargo.toml").unwrap_or(&manifest);
+        related |= relative == manifest || (rust && relative.starts_with(directory));
+        for target in &package.targets {
+            let source = relative_path(root, &lexically_normalized(target.src_path.as_std_path()))?;
+            related |= relative == source;
+        }
+    }
+    Ok(related
+        || match file_kind(relative) {
+            EntryKind::CargoDirectory | EntryKind::CargoSetting(_) | EntryKind::Symlink => true,
+            EntryKind::File => false,
+        })
+}
+
+pub(crate) fn file_findings(
+    root: &Path,
+    relative: &str,
+    text: &str,
+) -> Result<Option<BTreeSet<Finding>>, CheckFailure> {
+    let metadata = workspace_metadata(Some(&root.join("Cargo.toml")))?;
+    let mut skipped: Vec<String> = SKIPPED_DIRECTORIES.into_iter().map(String::from).collect();
+    if let Ok(target) = metadata.target_directory.as_std_path().strip_prefix(root)
+        && let Some(target_text) = target.to_str()
+    {
+        skipped.push(String::from(target_text));
+    }
+    if skipped
+        .iter()
+        .any(|directory| under_directory(relative, directory))
+        || !applicable(&metadata, root, relative)?
+    {
+        return Ok(None);
+    }
+    let allowlists = Allowlists::load(root)?;
+    let (members, package) = package_findings(root, &metadata, &allowlists)?;
+    let entry = Entry {
+        relative: String::from(relative),
+        name: String::from(relative.rsplit('/').next().unwrap_or(relative)),
+        kind: file_kind(relative),
+    };
+    let mut found: BTreeSet<Finding> = package
+        .into_iter()
+        .filter(|finding| finding.path == relative)
+        .collect();
+    found.extend(entry_text_findings(&entry, &members, &allowlists, || {
+        Ok(String::from(text))
+    })?);
+    Ok(Some(found))
 }
 
 fn repository_root() -> Result<PathBuf, CheckFailure> {

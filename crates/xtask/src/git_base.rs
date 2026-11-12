@@ -83,7 +83,7 @@ pub(crate) fn resolve_base(root: &Path, base: &str) -> Result<String, String> {
     }
     let mut command = git(root);
     command
-        .args(["rev-parse", "--verify", "--quiet", "--end-of-options"])
+        .args(["rev-parse", "--verify", "--end-of-options"])
         .arg(format!("{base}^{{commit}}"));
     let found = output(command, "rev-parse")
         .map_err(|failure| format!("기준 커밋을 찾지 못했다: {base} ({failure})"))?;
@@ -103,19 +103,46 @@ pub(crate) fn resolve_base(root: &Path, base: &str) -> Result<String, String> {
     }
 }
 
+pub(crate) const ROOT_IGNORE_FILE: &str = ".gitignore";
+
+fn names(listing: &[u8]) -> BTreeSet<String> {
+    listing
+        .split(|byte| *byte == 0)
+        .filter(|name| !name.is_empty())
+        .map(|name| String::from_utf8_lossy(name).into_owned())
+        .collect()
+}
+
+pub(crate) fn untracked_command(root: &Path) -> Result<Command, String> {
+    let mut tracked_ignore = git(root);
+    tracked_ignore.args(["ls-files", "-z", "--cached", "--", ROOT_IGNORE_FILE]);
+    let ignore_tracked = !output(tracked_ignore, "ls-files")?.is_empty();
+    let mut untracked = git(root);
+    untracked.args(["ls-files", "-z", "--others"]);
+    if ignore_tracked {
+        untracked
+            .arg("--exclude-from")
+            .arg(root.join(ROOT_IGNORE_FILE));
+    }
+    Ok(untracked)
+}
+
+pub(crate) fn untracked_paths(root: &Path) -> Result<BTreeSet<String>, String> {
+    Ok(names(&output(untracked_command(root)?, "ls-files")?))
+}
+
+pub(crate) fn listed_paths(root: &Path) -> Result<BTreeSet<String>, String> {
+    let mut tracked = git(root);
+    tracked.args(["ls-files", "-z", "--cached"]);
+    let mut paths = names(&output(tracked, "ls-files")?);
+    paths.extend(untracked_paths(root)?);
+    Ok(paths)
+}
+
 pub(crate) fn changed_paths(root: &Path, base: &str) -> Result<BTreeSet<String>, String> {
     let mut tracked = git(root);
     tracked.args(["diff", "--name-only", "-z", "--no-renames", base, "--"]);
-    let mut untracked = git(root);
-    untracked.args(["ls-files", "-z", "--others", "--exclude-standard"]);
-    let mut paths = BTreeSet::new();
-    for listing in [output(tracked, "diff")?, output(untracked, "ls-files")?] {
-        paths.extend(
-            listing
-                .split(|byte| *byte == 0)
-                .filter(|name| !name.is_empty())
-                .map(|name| String::from_utf8_lossy(name).into_owned()),
-        );
-    }
+    let mut paths = names(&output(tracked, "diff")?);
+    paths.extend(untracked_paths(root)?);
     Ok(paths)
 }

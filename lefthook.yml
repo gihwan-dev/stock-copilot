@@ -1,0 +1,31 @@
+assert_lefthook_installed: true
+min_version: 2.2.2
+
+pre-commit:
+  piped: true
+  jobs:
+    - name: fresh-build
+      run: just fresh-build
+    - name: commit-guard
+      run: just commit-guard "$GIT_INDEX_FILE"
+    - name: check
+      run: just base=HEAD check
+
+pre-merge-commit:
+  piped: true
+  jobs:
+    - name: fresh-build
+      run: just fresh-build
+    - name: commit-guard
+      run: just commit-guard "$GIT_INDEX_FILE"
+    - name: check
+      run: just base=HEAD check
+
+pre-push:
+  piped: true
+  jobs:
+    - name: fresh-build
+      run: just fresh-build
+    - name: check-full
+      run: just push-check
+      use_stdin: true

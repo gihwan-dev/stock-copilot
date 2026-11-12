@@ -1,0 +1,163 @@
+[[case]]
+example = "rust-clean.txt"
+path = "crates/domain/src/lib.rs"
+applied = ["rustfmt", "source-check", "raw-types", "disable-check", "sql-check"]
+failed = []
+
+[[case]]
+example = "rust-unformatted.txt"
+path = "crates/domain/src/lib.rs"
+applied = ["rustfmt", "source-check", "raw-types", "disable-check", "sql-check"]
+failed = ["rustfmt"]
+
+[[case]]
+example = "rust-comment.txt"
+path = "crates/domain/src/lib.rs"
+applied = ["rustfmt", "source-check", "raw-types", "disable-check", "sql-check"]
+failed = ["source-check"]
+
+[[case]]
+example = "rust-raw-type.txt"
+path = "crates/domain/src/lib.rs"
+applied = ["rustfmt", "source-check", "raw-types", "disable-check", "sql-check"]
+failed = ["raw-types"]
+
+[[case]]
+example = "rust-disable.txt"
+path = "crates/domain/src/lib.rs"
+applied = ["rustfmt", "source-check", "raw-types", "disable-check", "sql-check"]
+failed = ["disable-check"]
+
+[[case]]
+example = "rust-sql.txt"
+path = "crates/scheduler/src/lib.rs"
+applied = ["rustfmt", "source-check", "disable-check", "sql-check"]
+failed = ["sql-check"]
+
+[[case]]
+example = "rust-comment.txt"
+path = "crates/xtask/src/probe.rs"
+applied = ["rustfmt", "source-check", "disable-check", "sql-check"]
+failed = ["source-check"]
+
+[[case]]
+example = "query.sql.txt"
+path = "crates/domain/queries/probe.sql"
+applied = ["sql-check"]
+failed = ["sql-check"]
+
+[[case]]
+path = "apps/desktop/src/app/App.tsx"
+applied = ["prettier", "eslint"]
+failed = []
+
+[[case]]
+example = "ts-unformatted.txt"
+path = "apps/desktop/src/app/App.tsx"
+applied = ["prettier", "eslint"]
+failed = ["prettier"]
+
+[[case]]
+example = "ts-eslint.txt"
+path = "apps/desktop/src/app/App.tsx"
+applied = ["prettier", "eslint"]
+failed = ["eslint"]
+
+[[case]]
+example = "script-eslint.txt"
+path = "harness/eslint-violations/check.mjs"
+applied = ["prettier", "eslint"]
+failed = ["eslint"]
+
+[[case]]
+path = "harness/eslint-violations/src/app/comments/no-reason.ts"
+applied = ["prettier"]
+failed = []
+
+[[case]]
+example = "ts-unformatted.txt"
+path = "harness/arch-check/vendor/probe.ts"
+applied = []
+failed = []
+
+[[case]]
+example = "json-unformatted.txt"
+path = "harness/eslint-violations/cases.json"
+applied = ["prettier"]
+failed = ["prettier"]
+
+[[case]]
+example = "toml.txt"
+path = "harness/lint-file/targets.toml"
+applied = []
+failed = []
+
+[[case]]
+example = "markdown.txt"
+path = "docs/harness.md"
+applied = []
+failed = []
+
+[[case]]
+example = "nested-config.txt"
+path = "crates/domain/clippy.toml"
+applied = ["source-check"]
+failed = ["source-check"]
+
+[[case]]
+example = "toml.txt"
+path = ".cargo/config.toml"
+applied = ["source-check"]
+failed = ["source-check"]
+
+[[case]]
+example = "rust-clean.txt"
+path = "harness/rust-lints/clean/probe.rs"
+applied = []
+failed = []
+
+[[case]]
+example = "rust-comment.txt"
+path = "target/probe.rs"
+applied = []
+failed = []
+
+[[case]]
+example = "ts-import-meta.txt"
+path = "apps/desktop/src/app/App.tsx"
+applied = ["prettier", "eslint"]
+failed = ["eslint"]
+messages = ["guard/no-import-meta"]
+
+[[case]]
+example = "ts-boundary.txt"
+path = "apps/desktop/src/shared/lib/money.ts"
+applied = ["prettier", "eslint"]
+failed = ["eslint"]
+messages = ["boundaries/"]
+
+[[case]]
+example = "ts-test-export.txt"
+path = "apps/desktop/src/shared/lib/result.test.ts"
+applied = ["prettier", "eslint"]
+failed = ["eslint"]
+messages = ["local/test-file-boundary"]
+
+[[case]]
+path = "apps/desktop/src/shared/lib/result.test.ts"
+applied = ["prettier", "eslint"]
+failed = []
+
+[[case]]
+example = "config-mjs.txt"
+path = "apps/desktop/vitest.config.mjs"
+applied = ["prettier"]
+failed = []
+messages = ["eslint: 적용하지 않음 (check-ts의 ESLint 대상 밖)"]
+
+[[case]]
+example = "gitignore.txt"
+path = "crates/domain/.gitignore"
+applied = ["source-check"]
+failed = ["source-check"]
+messages = ["file:nested-gitignore"]

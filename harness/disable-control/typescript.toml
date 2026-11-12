@@ -1,0 +1,4 @@
+extensions = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"]
+
+example-bundles = ["harness/eslint-violations/src/"]
+

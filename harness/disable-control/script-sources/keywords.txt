@@ -1,0 +1,15 @@
+return /"/; // eslint-disable-line no-console -- return
+typeof /"/; // eslint-disable-line no-console -- typeof
+instanceof /"/; // eslint-disable-line no-console -- instanceof
+in /"/; // eslint-disable-line no-console -- in
+of /"/; // eslint-disable-line no-console -- of
+new /"/; // eslint-disable-line no-console -- new
+delete /"/; // eslint-disable-line no-console -- delete
+void /"/; // eslint-disable-line no-console -- void
+throw /"/; // eslint-disable-line no-console -- throw
+case /"/; // eslint-disable-line no-console -- case
+do /"/; // eslint-disable-line no-console -- do
+else /"/; // eslint-disable-line no-console -- else
+yield /"/; // eslint-disable-line no-console -- yield
+await /"/; // eslint-disable-line no-console -- await
+extends /"/; // eslint-disable-line no-console -- extends

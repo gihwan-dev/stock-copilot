@@ -24,6 +24,19 @@ unexport NEXTEST_TEST_THREADS
 unexport CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER
 unexport CARGO_BUILD_TARGET
 unexport ESLINT_PLUGIN_BOUNDARIES_ROOT_PATH
+unexport GIT_DIR
+unexport GIT_WORK_TREE
+unexport GIT_INDEX_FILE
+unexport GIT_OBJECT_DIRECTORY
+unexport GIT_ALTERNATE_OBJECT_DIRECTORIES
+unexport GIT_COMMON_DIR
+unexport GIT_SHALLOW_FILE
+unexport GIT_CONFIG_GLOBAL
+unexport GIT_CONFIG_SYSTEM
+unexport GIT_CONFIG_COUNT
+unexport GIT_CONFIG_PARAMETERS
+unexport GIT_DIFF_OPTS
+unexport GIT_ATTR_SOURCE
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
@@ -45,6 +58,8 @@ check: check-node require-base check-ts
     "{{just_executable()}}" coverage-check
     "{{just_executable()}}" test-diff {{quote(base)}}
     "{{just_executable()}}" disable-report
+    "{{just_executable()}}" disable-report-since {{quote(base)}}
+    "{{just_executable()}}" hooks-installed
 
 check-full: advisory-db-fetch check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
@@ -102,6 +117,27 @@ disable-check:
 disable-report:
     cargo run --locked --quiet --package xtask -- disable-report
 
+disable-report-since commit:
+    cargo run --locked --quiet --package xtask -- disable-report --since "$1"
+
+hooks-installed:
+    cargo run --locked --quiet --package xtask -- hooks-installed
+
+commit-guard index="":
+    cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-guard "$1"
+
+fresh-build: fresh-cargo fresh-node
+
+fresh-cargo:
+    cargo clean --locked --workspace
+    cargo llvm-cov clean --locked --workspace
+
+fresh-node:
+    pnpm install --frozen-lockfile --force
+
+push-check:
+    base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
+
 coverage-check:
     cargo run --locked --quiet --package xtask -- coverage-check
 
@@ -118,4 +154,4 @@ advisory-db-fetch:
     cargo deny --locked fetch db
 
 lint-file path:
-    case "$1" in *.rs) rustfmt --edition 2024 --check -- "$1" ;; *) printf 'lint-file: %s에 적용할 검사가 아직 없다\n' "$1" ;; esac
+    cargo run --locked --quiet --package xtask -- lint-file "$1"

@@ -69,8 +69,10 @@ fn loopback_tcp_fake_server_answers() {
 
 #[test]
 fn unix_socket_fake_server_answers() {
-    let directory = fresh_directory(&repository_root(), "net-unix");
-    let path = directory.join("s");
+    let path = std::env::temp_dir().join(format!("stock-copilot-net-unix-{}", std::process::id()));
+    if path.exists() {
+        fs::remove_file(&path).expect("remove previous unix socket");
+    }
     let listener = UnixListener::bind(&path).expect("bind unix socket");
     let server = thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("accept unix client");
@@ -82,6 +84,7 @@ fn unix_socket_fake_server_answers() {
         .read_to_end(&mut received)
         .expect("read unix greeting");
     server.join().expect("unix server thread");
+    fs::remove_file(&path).expect("remove unix socket");
     assert_eq!(received, GREETING);
 }
 

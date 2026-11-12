@@ -1,0 +1,10 @@
+/* eslint-disable */
+const first = 1;
+/* eslint-enable no-console */
+const second = 2; // eslint-disable-line no-console -- 줄 끝
+/* eslint no-console: "off" */
+// @ts-ignore 타입 무시
+/** @ts-expect-error 기대 오류 */
+/*
+ * @ts-nocheck 파일 전체
+ */
