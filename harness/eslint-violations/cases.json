@@ -123,9 +123,30 @@
       "local/no-brand-creation",
       "local/no-raw-types",
       "local/no-ui-text"
+    ],
+    "경계": [
+      "boundaries/dependencies",
+      "boundaries/no-unknown-dependencies",
+      "boundaries/no-unknown-files"
     ]
   },
   "cases": {
+    "src/app/boundary/allowed.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/app/boundary/deep-export.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: app에서 feature의 model/value.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/app/boundary/deep-feature.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: app에서 feature의 model/value.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
     "src/app/comments/allowed-form.ts": {
       "row": "주석",
       "expect": []
@@ -276,16 +297,30 @@
         "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
       ]
     },
-    "src/app/comments/undisableable-boundaries.ts": {
+    "src/app/comments/undisableable-boundaries-real.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
+    "src/app/comments/undisableable-boundaries-unknown.ts": {
       "row": "주석",
       "expect": [
         "@eslint-community/eslint-comments/no-restricted-disable",
-        "boundaries/dependencies"
+        "boundaries/dependencies :: src의 요소(app, features/*, shared/*) 밖 파일 ../../../outside/value 가져오기 금지."
+      ]
+    },
+    "src/app/comments/undisableable-boundaries.ts": {
+      "row": "주석",
+      "expect": [
+        "(null) Unused eslint-disable directive",
+        "@eslint-community/eslint-comments/no-restricted-disable"
       ]
     },
     "src/app/comments/undisableable-brand.ts": {
       "row": "주석",
-      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
     },
     "src/app/comments/undisableable-comment-rule.ts": {
       "row": "주석",
@@ -340,6 +375,7 @@
       "row": "주석",
       "expect": [
         "@eslint-community/eslint-comments/no-restricted-disable",
+        "boundaries/dependencies :: app에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
       ]
     },
@@ -368,7 +404,10 @@
     },
     "src/app/comments/undisableable-tauri-mocks.ts": {
       "row": "주석",
-      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "boundaries/dependencies :: @tauri-apps/api 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
     },
     "src/app/comments/undisableable-test-skip.ts": {
       "row": "주석",
@@ -769,6 +808,10 @@
     "src/app/immutability/var.ts": {
       "row": "불변",
       "expect": ["@typescript-eslint/prefer-as-const", "no-var"]
+    },
+    "src/app/index.ts": {
+      "row": "경계",
+      "expect": []
     },
     "src/app/local-comments/block.ts": {
       "row": "주석",
@@ -1441,6 +1484,7 @@
     "src/app/tests/tauri-mocks.ts": {
       "row": "테스트",
       "expect": [
+        "boundaries/dependencies :: @tauri-apps/api 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "guard/no-tauri-mocks :: @tauri-apps/api/mocks는 shared/ipc/testing에서만 가져온다."
       ]
     },
@@ -1498,6 +1542,7 @@
     "src/app/text/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
       ]
@@ -1745,23 +1790,101 @@
       "row": "파일 종류",
       "expect": []
     },
+    "src/features/boundary/allowed.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/features/boundary/import-type.ts": {
+      "row": "경계",
+      "expect": [
+        "@typescript-eslint/consistent-type-imports",
+        "boundaries/dependencies :: feature에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/boundary/node-core.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: Node 내장 모듈 node:path 가져오기 금지: UI는 IPC로만 바깥과 통신한다."
+      ]
+    },
+    "src/features/boundary/outside.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: src의 요소(app, features/*, shared/*) 밖 파일 ../../../outside/value 가져오기 금지.",
+        "boundaries/no-unknown-dependencies :: Dependencies to unknown elements and files are not allowed"
+      ]
+    },
+    "src/features/boundary/reexport.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/boundary/tauri.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: @tauri-apps/api 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
+    },
+    "src/features/boundary/to-app.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 app의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/boundary/to-feature.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/boundary/to-stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: src의 요소(app, features/*, shared/*) 밖 파일 ../../misc/stray 가져오기 금지.",
+        "boundaries/no-unknown-dependencies :: Dependencies to unknown elements and files are not allowed"
+      ]
+    },
+    "src/features/boundary/type-only.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/boundary/zod-type.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
+        "functional/type-declaration-immutability"
+      ]
+    },
+    "src/features/boundary/zod.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
+    },
     "src/features/brand/assertion.ts": {
       "row": "원시 타입",
       "expect": [
         "@typescript-eslint/consistent-type-assertions",
         "@typescript-eslint/no-unsafe-type-assertion",
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
       ]
     },
     "src/features/brand/brand-symbol.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
       ]
     },
     "src/features/brand/computed-brand.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다.",
         "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다."
       ]
@@ -1769,12 +1892,15 @@
     "src/features/brand/custom.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
       ]
     },
     "src/features/brand/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
       ]
@@ -1784,12 +1910,14 @@
       "expect": [
         "@typescript-eslint/consistent-type-assertions",
         "@typescript-eslint/no-unsafe-type-assertion",
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
       ]
     },
     "src/features/brand/zod-brand.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
       ]
     },
@@ -1956,13 +2084,35 @@
         "local/forbidden-file :: src에는 소문자 확장자 .ts·.tsx 파일만 둔다. 다른 확장자, 대문자 확장자, .d.ts는 금지다."
       ]
     },
+    "src/features/gaps/bare-src-gap.ts": {
+      "row": "경계",
+      "expect": "KNOWN_GAP"
+    },
+    "src/features/gaps/glob.ts": {
+      "row": "경계",
+      "expect": [
+        "@typescript-eslint/no-unsafe-assignment",
+        "@typescript-eslint/no-unsafe-call",
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
+      ]
+    },
+    "src/features/gaps/import-equals.ts": {
+      "row": "경계",
+      "expect": [
+        "@typescript-eslint/no-require-imports",
+        "boundaries/dependencies :: feature에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
     "src/features/home/messages.ts": {
       "row": "원시 타입",
-      "expect": []
+      "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
     },
     "src/features/home2/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "functional/prefer-immutable-types",
         "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
@@ -1972,6 +2122,7 @@
     "src/features/home3/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
       ]
@@ -1979,23 +2130,28 @@
     "src/features/imports/namespace.ts": {
       "row": "문법",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
       ]
     },
     "src/features/money/allowed.ts": {
       "row": "숫자",
-      "expect": []
+      "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
     },
     "src/features/money/compare.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/computed.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
         "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
@@ -2005,12 +2161,14 @@
       "expect": [
         "@typescript-eslint/no-base-to-string",
         "@typescript-eslint/restrict-plus-operands",
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/destructure.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
         "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
@@ -2018,12 +2176,14 @@
     "src/features/money/equality.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/generic-key.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
         "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
         "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
@@ -2034,18 +2194,21 @@
     "src/features/money/generic.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/json.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
       ]
     },
     "src/features/money/own-symbols.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "guard/no-own-symbols :: Object.getOwnPropertySymbols 금지: 불투명 금액의 symbol 키를 꺼내는 길이다.",
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
       ]
@@ -2054,12 +2217,14 @@
       "row": "숫자",
       "expect": [
         "@typescript-eslint/restrict-plus-operands",
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/reflect.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "guard/no-reflect :: Reflect 금지: 불투명 금액의 symbol 키를 꺼내는 길이다.",
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
       ]
@@ -2067,6 +2232,7 @@
     "src/features/money/rest.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다.",
         "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
@@ -2075,24 +2241,28 @@
       "row": "숫자",
       "expect": [
         "@typescript-eslint/no-base-to-string",
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
       ]
     },
     "src/features/money/structured-clone.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다."
       ]
     },
     "src/features/money/subtract.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/switch.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
@@ -2101,6 +2271,7 @@
       "expect": [
         "@typescript-eslint/no-base-to-string",
         "@typescript-eslint/restrict-template-expressions",
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값을 템플릿에 넣지 않는다. shared/lib/format으로 표시한다."
       ]
     },
@@ -2108,6 +2279,7 @@
       "row": "숫자",
       "expect": [
         "@typescript-eslint/no-base-to-string",
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에서 toString·valueOf 등 선언되지 않은 멤버를 쓰지 않는다."
       ]
     },
@@ -2115,14 +2287,28 @@
       "row": "숫자",
       "expect": [
         "@typescript-eslint/no-unsafe-unary-minus",
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
       ]
     },
     "src/features/money/value-of.ts": {
       "row": "숫자",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다.",
         "local/no-money-coercion :: 금액 값에서 toString·valueOf 등 선언되지 않은 멤버를 쓰지 않는다."
+      ]
+    },
+    "src/features/nested/src/app/escape.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/nested/src/shared/lib/escape.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
       ]
     },
     "src/features/numbers/bigint.ts": {
@@ -2198,6 +2384,18 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/features/other/index.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/features/other/model/internal.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/features/other/model/value.ts": {
+      "row": "경계",
+      "expect": []
+    },
     "src/features/promise/all-settled.ts": {
       "row": "실패 처리",
       "expect": [
@@ -2250,7 +2448,9 @@
     },
     "src/features/raw/allowed.ts": {
       "row": "원시 타입",
-      "expect": []
+      "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
     },
     "src/features/raw/array-generic.ts": {
       "row": "원시 타입",
@@ -2277,6 +2477,7 @@
     "src/features/raw/conditional.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
@@ -2284,6 +2485,7 @@
       "row": "원시 타입",
       "expect": [
         "@typescript-eslint/no-generated-empty-object-type",
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
@@ -2297,12 +2499,14 @@
     "src/features/raw/generic-default.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
     "src/features/raw/imported-alias.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
@@ -2310,18 +2514,21 @@
     "src/features/raw/inferred-export.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
       ]
     },
     "src/features/raw/inferred-value.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
       ]
     },
     "src/features/raw/keyof.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
@@ -2371,6 +2578,7 @@
       "row": "원시 타입",
       "expect": [
         "@typescript-eslint/consistent-indexed-object-style",
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
@@ -2395,6 +2603,7 @@
     "src/features/raw/props-alias.tsx": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다.",
         "local/no-raw-types :: 컴포넌트 props에 원시 타입이 남아 있다."
@@ -2409,6 +2618,7 @@
     "src/features/raw/record.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
@@ -2416,6 +2626,7 @@
     "src/features/raw/return-type.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
@@ -2443,6 +2654,7 @@
     "src/features/raw/typeof.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
@@ -2631,9 +2843,17 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/features/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
     "src/features/text/clean.tsx": {
       "row": "원시 타입",
-      "expect": []
+      "expect": [
+        "boundaries/dependencies :: feature에서 feature의 messages.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
     },
     "src/features/text/jsx-array.tsx": {
       "row": "원시 타입",
@@ -2686,8 +2906,85 @@
     "src/features/text/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
         "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
+      ]
+    },
+    "src/misc/src/app/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/misc/src/features/name/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/misc/src/shared/ds/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/misc/src/shared/ipc/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/misc/src/shared/lib/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/misc/src/shared/platform/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/misc/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/shared/ds/boundary/allowed.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/shared/ds/boundary/to-app.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 app의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ds/boundary/to-feature.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ds/boundary/to-ipc.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 ipc의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ds/boundary/to-platform.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 platform의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ds/boundary/zod.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
       ]
     },
     "src/shared/ds/dom/document-allowed.ts": {
@@ -2708,6 +3005,10 @@
     "src/shared/ds/gaps/concat-key-gap.ts": {
       "row": "전역",
       "expect": "KNOWN_GAP"
+    },
+    "src/shared/ds/index.ts": {
+      "row": "경계",
+      "expect": []
     },
     "src/shared/ds/numbers/math-alias.ts": {
       "row": "숫자",
@@ -2746,6 +3047,38 @@
         "local/no-brand-creation :: 허용 목록 파일에서도 단언은 브랜드 타입으로만 쓴다."
       ]
     },
+    "src/shared/ipc/boundary/allowed.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/shared/ipc/boundary/tauri.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/shared/ipc/boundary/to-app.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ipc에서 app의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ipc/boundary/to-ds.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ipc에서 ds의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ipc/boundary/to-feature.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ipc에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ipc/boundary/to-platform.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ipc에서 platform의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
     "src/shared/ipc/call.ts": {
       "row": "허용 목록",
       "expect": []
@@ -2758,15 +3091,65 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/shared/ipc/index.ts": {
+      "row": "경계",
+      "expect": []
+    },
     "src/shared/ipc/schema.ts": {
       "row": "원시 타입",
       "expect": [
         "local/no-brand-creation :: UiText는 messages.ts에서만 만든다."
       ]
     },
+    "src/shared/ipc/testing/boundary-tauri.ts": {
+      "row": "경계",
+      "expect": []
+    },
     "src/shared/ipc/testing/tauri-mocks-allowed.ts": {
       "row": "테스트",
       "expect": []
+    },
+    "src/shared/lib/boundary/tauri.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: @tauri-apps/api 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
+    },
+    "src/shared/lib/boundary/to-app.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: lib에서 app의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/lib/boundary/to-ds.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: lib에서 ds의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/lib/boundary/to-feature.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: lib에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/lib/boundary/to-ipc.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: lib에서 ipc의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/lib/boundary/to-platform.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: lib에서 platform의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/lib/boundary/zod.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
     },
     "src/shared/lib/brand.ts": {
       "row": "허용 목록",
@@ -2789,6 +3172,10 @@
       "expect": [
         "local/no-ui-text :: 한글 문구는 messages.ts에만 둔다. 화면에는 UiText를 넘긴다."
       ]
+    },
+    "src/shared/lib/index.ts": {
+      "row": "경계",
+      "expect": []
     },
     "src/shared/lib/key-strings.ts": {
       "row": "원시 타입",
@@ -2839,6 +3226,40 @@
         "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
       ]
     },
+    "src/shared/platform/boundary-allowed.ts": {
+      "row": "경계",
+      "expect": [
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
+    },
+    "src/shared/platform/boundary-to-app.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: platform에서 app의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
+    },
+    "src/shared/platform/boundary-to-ds.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: platform에서 ds의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
+    },
+    "src/shared/platform/boundary-to-feature.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: platform에서 feature의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
+    },
+    "src/shared/platform/boundary-zod.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: zod 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다.",
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
+    },
     "src/shared/platform/detach.ts": {
       "row": "허용 목록",
       "expect": []
@@ -2880,6 +3301,18 @@
     "src/shared/platform/useDocumentTitle.ts": {
       "row": "허용 목록",
       "expect": []
+    },
+    "src/shared/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
+    },
+    "src/stray.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
+      ]
     }
   }
 }

@@ -1,12 +1,18 @@
 import js from "@eslint/js";
 import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslintReact from "@eslint-react/eslint-plugin";
+import boundaries from "eslint-plugin-boundaries";
 import functional from "eslint-plugin-functional";
 import reactHooks from "eslint-plugin-react-hooks";
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
 import { join } from "node:path";
 import { bans, importBans } from "./bans.mjs";
+import {
+  BOUNDARY_TABLES,
+  boundaryRules,
+  boundarySettings,
+} from "./boundaries.mjs";
 import { guard } from "./guard-plugin.mjs";
 import { emptyParser, local } from "./local-plugin.mjs";
 
@@ -111,18 +117,21 @@ const warningsAsErrors = (configs) =>
         },
   );
 
-export const appConfig = ({
-  CHART_NUMBER_ALLOWLIST,
-  FILE_PLACEHOLDERS,
-  MESSAGES_FILES,
-  MONEY_FILE,
-  MONEY_KEY_READERS,
-  PLATFORM_FILE_ALLOWLIST,
-  PROMISE_REJECTION_ALLOWLIST,
-  RAW_TYPE_ALLOWLIST,
-  THROW_ALLOWLIST,
-  TYPE_PREDICATE_ALLOWLIST,
-}) => {
+export const appConfig = (
+  {
+    CHART_NUMBER_ALLOWLIST,
+    FILE_PLACEHOLDERS,
+    MESSAGES_FILES,
+    MONEY_FILE,
+    MONEY_KEY_READERS,
+    PLATFORM_FILE_ALLOWLIST,
+    PROMISE_REJECTION_ALLOWLIST,
+    RAW_TYPE_ALLOWLIST,
+    THROW_ALLOWLIST,
+    TYPE_PREDICATE_ALLOWLIST,
+  },
+  boundaryTables = BOUNDARY_TABLES,
+) => {
   const FILE_FOLDER_ALLOWLISTS = [
     { folder: "src/shared/platform", files: PLATFORM_FILE_ALLOWLIST },
   ];
@@ -163,11 +172,17 @@ export const appConfig = ({
           },
         },
         plugins: {
+          boundaries,
           guard,
           local,
           "@eslint-community/eslint-comments": eslintComments,
         },
+        settings: boundarySettings(
+          boundaryTables,
+          join(import.meta.dirname, ".."),
+        ),
         rules: {
+          ...boundaryRules(boundaryTables),
           "local/no-comments": "error",
           "local/no-money-coercion": [
             "error",

@@ -96,12 +96,17 @@ export const caseFilesOnDisk = () =>
     .map((file) => relative(here, file).split(sep).join("/"))
     .sort();
 
+export const rootSettings = { settings: { "boundaries/root-path": here } };
+
 export const violationLinter = (overrideConfig) =>
   new ESLint({
     cwd: here,
     overrideConfigFile: appConfigFile,
     cache: false,
-    ...(overrideConfig === undefined ? {} : { overrideConfig }),
+    overrideConfig:
+      overrideConfig === undefined
+        ? [rootSettings]
+        : [rootSettings, overrideConfig],
   });
 
 const { appConfig } = await import(
@@ -111,11 +116,11 @@ export const appAllowlists = await import(
   pathToFileURL(join(desktop, "eslint", "allowlists.mjs")).href
 );
 
-export const allowlistLinter = (lists) =>
+export const allowlistLinter = (lists, boundaryTables) =>
   new ESLint({
     cwd: here,
     overrideConfigFile: true,
-    overrideConfig: appConfig(lists),
+    overrideConfig: [...appConfig(lists, boundaryTables), rootSettings],
     cache: false,
   });
 

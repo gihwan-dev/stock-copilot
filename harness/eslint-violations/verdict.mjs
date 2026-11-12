@@ -20,6 +20,8 @@ export const messageKey = (message, listEntries) => {
     );
     return `${severityPrefix(message)}(null) ${label === undefined ? message.message : label[1]}`;
   }
+  if (message.ruleId.startsWith("boundaries/"))
+    return `${severityPrefix(message)}${message.ruleId} :: ${message.message}`;
   const entries = listEntries[message.ruleId];
   const entry = entries === undefined ? undefined : entryOf(message, entries);
   return entries === undefined
