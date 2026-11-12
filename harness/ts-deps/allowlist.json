@@ -1,0 +1,110 @@
+{
+  "packageManager": "pnpm@12.18.0+sha512.9d7882d5dc82147ecfc4e062aa34834e0ad0296710a1837a1115ae012127d36b7109e321ac1598a1dd0a65597681b1e99917e12ed0d749eae91187943363beb3",
+  "files": {
+    "pnpm-workspace.yaml": "packages:\n  - apps/desktop\n",
+    ".npmrc": "manage-package-manager-versions=true\n"
+  },
+  "forbiddenFiles": [
+    ".pnpmfile.cjs",
+    ".pnpmfile.mjs",
+    "pnpmfile.cjs",
+    "pnpmfile.mjs",
+    "apps/desktop/.npmrc",
+    "apps/desktop/.pnpmfile.cjs",
+    "apps/desktop/.pnpmfile.mjs",
+    ".yarnrc.yml",
+    "bunfig.toml"
+  ],
+  "lockfileTopLevelKeys": [
+    "lockfileVersion",
+    "settings",
+    "importers",
+    "packages",
+    "snapshots"
+  ],
+  "manifests": {
+    "package.json": {
+      "keys": [
+        "name",
+        "private",
+        "packageManager",
+        "engines",
+        "devDependencies"
+      ],
+      "dependencies": {},
+      "devDependencies": {
+        "prettier": {
+          "target": "prettier",
+          "reason": "형식 도구 (ADR 0006)"
+        }
+      }
+    },
+    "apps/desktop/package.json": {
+      "keys": ["name", "private", "type", "dependencies", "devDependencies"],
+      "dependencies": {
+        "react": {
+          "target": "react",
+          "reason": "UI (architecture 5.2)"
+        },
+        "react-dom": {
+          "target": "react-dom",
+          "reason": "UI (architecture 5.2)"
+        }
+      },
+      "devDependencies": {
+        "@eslint-community/eslint-plugin-eslint-comments": {
+          "target": "@eslint-community/eslint-plugin-eslint-comments",
+          "reason": "검사 끄기 주석 규칙 (harness 2.1, 4.2)"
+        },
+        "@eslint-react/eslint-plugin": {
+          "target": "@eslint-react/eslint-plugin",
+          "reason": "배열 인덱스 키 등 React 규칙 (harness 4.2)"
+        },
+        "@eslint/js": {
+          "target": "@eslint/js",
+          "reason": "ESLint 기본 규칙 묶음 (R-08 7.2)"
+        },
+        "@tauri-apps/cli": {
+          "target": "@tauri-apps/cli",
+          "reason": "Tauri 빌드 (ADR 0004)"
+        },
+        "@types/react": {
+          "target": "@types/react",
+          "reason": "React 타입 (ADR 0006)"
+        },
+        "@types/react-dom": {
+          "target": "@types/react-dom",
+          "reason": "React DOM 타입 (ADR 0006)"
+        },
+        "@typescript/native": {
+          "target": "typescript",
+          "reason": "tsc 7 (harness 1.3, I-16)"
+        },
+        "eslint": {
+          "target": "eslint",
+          "reason": "린터 (harness 4.3)"
+        },
+        "eslint-plugin-functional": {
+          "target": "eslint-plugin-functional",
+          "reason": "불변·실패 처리 규칙 (harness 4.3)"
+        },
+        "eslint-plugin-react-hooks": {
+          "target": "eslint-plugin-react-hooks",
+          "reason": "훅 규칙 (harness 4.2)"
+        },
+        "typescript": {
+          "target": "@typescript/typescript6",
+          "reason": "린트용 TS 6 API (harness 1.3, I-16)"
+        },
+        "typescript-eslint": {
+          "target": "typescript-eslint",
+          "reason": "타입 인식 규칙 (harness 4.3)"
+        },
+        "vite": {
+          "target": "vite",
+          "reason": "프런트엔드 빌드 (ADR 0006)"
+        }
+      }
+    }
+  }
+}

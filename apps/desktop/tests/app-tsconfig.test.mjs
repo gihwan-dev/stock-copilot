@@ -59,13 +59,24 @@ test("an option outside the expected list is a problem", () => {
   const problems = appConfigProblems(
     {
       ...appConfig,
-      compilerOptions: { ...appConfig.compilerOptions, rootDir: "src/app" },
+      compilerOptions: { ...appConfig.compilerOptions, declaration: true },
     },
     expected,
   );
   assert.deepEqual(problems, [
-    'option rootDir: expected undefined, got "src/app"',
+    "option declaration: expected undefined, got true",
   ]);
+});
+
+test("changing rootDir away from src is a problem", () => {
+  const problems = appConfigProblems(
+    {
+      ...appConfig,
+      compilerOptions: { ...appConfig.compilerOptions, rootDir: "." },
+    },
+    expected,
+  );
+  assert.deepEqual(problems, ['option rootDir: expected "src", got "."']);
 });
 
 test("changing a non-strictness option like target is a problem", () => {
