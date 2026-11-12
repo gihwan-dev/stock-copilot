@@ -1,0 +1,39 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/domain",
+    "crates/application",
+    "crates/order-execution",
+    "crates/approval-command",
+    "crates/adapters/broker-toss-schema",
+    "crates/adapters/broker-toss",
+    "crates/adapters/broker-toss-trade",
+    "crates/adapters/sources",
+    "crates/adapters/ai-claude-code",
+    "crates/adapters/ai-codex",
+    "crates/adapters/store-sqlite",
+    "crates/adapters/secrets-keychain",
+    "crates/adapters/platform-macos",
+    "crates/mcp-server",
+    "crates/mcp-bridge",
+    "crates/scheduler",
+    "crates/testkit",
+    "crates/trade-fakes",
+    "crates/toss-smoke",
+    "crates/xtask",
+    "apps/desktop/src-tauri",
+    "apps/desktop/e2e-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+publish = false
+
+[workspace.dependencies]
+tauri = { version = "=2.12.5", default-features = false, features = ["wry"] }
+tauri-build = { version = "=2.7.4", default-features = false }
+cargo_metadata = "=0.23.1"
+
+[workspace.lints]

@@ -1,0 +1,18 @@
+[package]
+name = "src-tauri"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+default-run = "src-tauri"
+
+[dependencies]
+tauri = { workspace = true }
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tauri = { workspace = true, features = ["test"] }
