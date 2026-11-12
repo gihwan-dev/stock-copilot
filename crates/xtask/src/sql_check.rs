@@ -233,6 +233,14 @@ pub(crate) fn check_repository(
     Ok(findings)
 }
 
+pub(crate) fn text_findings(root: &Path, path: &str, text: &str) -> Result<Vec<String>, String> {
+    let names = MoneyNames::load(root)?;
+    let mut findings = check_file(path, text, &names);
+    findings.sort();
+    findings.dedup();
+    Ok(findings.iter().map(ToString::to_string).collect())
+}
+
 pub(crate) fn command() -> ExitCode {
     let outcome = workspace_root().and_then(|root| {
         let names = MoneyNames::load(&root)?;

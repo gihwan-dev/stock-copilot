@@ -119,7 +119,21 @@ fn module_file(directory: &Path, inline: &[String], name: &str) -> Option<(PathB
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Replacement<'text> {
+    pub(crate) label: &'text str,
+    pub(crate) text: &'text str,
+}
+
 fn crate_sources(root: &Path, roots: &[PathBuf]) -> Result<CrateSources, SourceFailure> {
+    crate_sources_with(root, roots, None)
+}
+
+fn crate_sources_with(
+    root: &Path,
+    roots: &[PathBuf],
+    replacement: Option<Replacement<'_>>,
+) -> Result<CrateSources, SourceFailure> {
     let mut pending: Vec<(PathBuf, PathBuf)> = roots
         .iter()
         .map(|path| {
@@ -140,7 +154,12 @@ fn crate_sources(root: &Path, roots: &[PathBuf]) -> Result<CrateSources, SourceF
             continue;
         }
         let label = relative_text(root, &path);
-        let text = fs::read_to_string(&path).map_err(|error| io_failure(&path, &error))?;
+        let text = match replacement {
+            Some(replaced) if replaced.label == label => String::from(replaced.text),
+            Some(_) | None => {
+                fs::read_to_string(&path).map_err(|error| io_failure(&path, &error))?
+            }
+        };
         let Ok(file) = syn::parse_file(&text) else {
             sources.findings.insert(Finding {
                 path: label,
@@ -227,6 +246,56 @@ pub(crate) fn check_members(
         }
     }
     Ok(findings)
+}
+
+pub(crate) fn check_file_text(
+    members: &crate::workspace_sources::Members,
+    member: &Member,
+    replacement: Replacement<'_>,
+) -> Result<Option<BTreeSet<Finding>>, SourceFailure> {
+    let crates = load_crate_rules(&members.root)?;
+    let names: BTreeSet<String> = members
+        .packages
+        .iter()
+        .map(|candidate| candidate.name.clone())
+        .collect();
+    let unclassified = crates.classification_failures(&names);
+    if !unclassified.is_empty() {
+        return Err(SourceFailure(unclassified.join("\n")));
+    }
+    if crates.scope(&member.name) != Scope::Checked {
+        return Ok(None);
+    }
+    let rules = load_raw_rules(&members.root)?;
+    let sources = crate_sources_with(&members.root, &member.roots, Some(replacement))?;
+    let in_tree = sources
+        .files
+        .iter()
+        .any(|file| file.label == replacement.label)
+        || sources
+            .findings
+            .iter()
+            .any(|finding| finding.path == replacement.label);
+    if !in_tree {
+        return Ok(None);
+    }
+    let dependencies = dependency_definitions(&members.root, member, &members.packages)?;
+    let mut findings: BTreeSet<Finding> = sources.findings;
+    for file in &sources.files {
+        file_findings(
+            file,
+            &rules,
+            &sources.definitions,
+            &dependencies,
+            &mut findings,
+        );
+    }
+    Ok(Some(
+        findings
+            .into_iter()
+            .filter(|finding| finding.path == replacement.label)
+            .collect(),
+    ))
 }
 
 fn run() -> Result<BTreeSet<Finding>, SourceFailure> {

@@ -7,6 +7,7 @@ mod check_support;
 mod coverage_check;
 mod disable_control;
 mod git_base;
+mod lint_file;
 mod migration_check;
 mod mutants_check;
 mod nextest_list;
@@ -28,6 +29,7 @@ fn main() -> ExitCode {
         [command] if command == "raw-types" => raw_types::command(),
         [command] if command == "disable-check" => disable_control::check_command(),
         [command] if command == "disable-report" => disable_control::report_command(),
+        [command, rest @ ..] if command == "lint-file" => lint_file::command(rest),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),
         _ => arch_check::usage(),
