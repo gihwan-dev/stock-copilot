@@ -13,10 +13,31 @@ const hook = (script, extra = {}) => ({
 });
 
 const EXPECTED_SETTINGS = {
+  env: {
+    CLAUDE_CODE_FORK_SUBAGENT: "0",
+    CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+    CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "1",
+    CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: "8",
+  },
   permissions: {
+    disableBypassPermissionsMode: "disable",
     deny: [
       "Edit(/harness/claude-hooks/lock.txt)",
       "Edit(/.claude/settings.local.json)",
+      "Agent(fork)",
+      "SendMessage",
+      "Read(~/.claude/projects/**)",
+      "Read(~/.claude-*/projects/**)",
+      "Read(~/.local/state/stock-copilot-harness/**)",
+      "Workflow",
+      "RemoteTrigger",
+      "CronCreate",
+      "mcp__t3-code__delegate_task",
+      "mcp__t3-code__create_threads",
+      "mcp__t3-code__t3_thread_launch",
+      "mcp__t3-code__t3_thread_send",
+      "mcp__t3-code__schedule_task",
+      "mcp__t3-code__run_scheduled_task_now",
     ],
   },
   hooks: {
@@ -29,11 +50,37 @@ const EXPECTED_SETTINGS = {
         matcher: "Bash",
         hooks: [hook("guard-bash.mjs", { onFailure: "block", timeout: 10 })],
       },
+      {
+        matcher: "Agent|SendMessage",
+        hooks: [hook("guard-agent.mjs", { onFailure: "block", timeout: 10 })],
+      },
     ],
     PostToolUse: [
       {
         matcher: "Edit|Write",
         hooks: [hook("post-edit.mjs", { onFailure: "block", timeout: 300 })],
+      },
+      {
+        matcher: "Agent",
+        hooks: [hook("agent-result.mjs", { onFailure: "block", timeout: 30 })],
+      },
+    ],
+    SubagentStart: [
+      {
+        matcher: "implementer|adversarial-reviewer|review-critic",
+        hooks: [
+          hook("subagent-start.mjs", { onFailure: "block", timeout: 180 }),
+        ],
+      },
+    ],
+    SubagentStop: [
+      {
+        matcher: "implementer",
+        hooks: [hook("implementer-stop.mjs", { timeout: 3600 })],
+      },
+      {
+        matcher: "adversarial-reviewer|review-critic",
+        hooks: [hook("reviewer-stop.mjs", { timeout: 300 })],
       },
     ],
     ConfigChange: [
@@ -47,6 +94,24 @@ const EXPECTED_SETTINGS = {
 
 test(".claude/settings.json is exactly the harness settings", () => {
   assert.deepEqual(readJson(".claude/settings.json"), EXPECTED_SETTINGS);
+});
+
+test("the settings carry exactly the nine documented harness hooks", () => {
+  const groups = Object.entries(EXPECTED_SETTINGS.hooks).flatMap(
+    ([event, list]) => list.map((group) => `${event}(${group.matcher})`),
+  );
+  assert.deepEqual(groups, [
+    "PreToolUse(Edit|Write|NotebookEdit)",
+    "PreToolUse(Bash)",
+    "PreToolUse(Agent|SendMessage)",
+    "PostToolUse(Edit|Write)",
+    "PostToolUse(Agent)",
+    "SubagentStart(implementer|adversarial-reviewer|review-critic)",
+    "SubagentStop(implementer)",
+    "SubagentStop(adversarial-reviewer|review-critic)",
+    "ConfigChange(user_settings|project_settings|local_settings|skills)",
+  ]);
+  assert.equal(readJson(".claude/settings.json").sandbox, undefined);
 });
 
 test("every hook command runs a script that exists in .claude/hooks", () => {
