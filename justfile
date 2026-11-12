@@ -28,6 +28,7 @@ check: check-ts
     "{{just_executable()}}" sql-check
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
+    "{{just_executable()}}" raw-types
     cargo nextest run --workspace --locked
 
 check-full: advisory-db-fetch check
@@ -68,6 +69,9 @@ migration-check:
 
 capability-check:
     cargo run --locked --quiet --package xtask -- capability-check
+
+raw-types:
+    cargo run --locked --quiet --package xtask -- raw-types
 
 advisory-db-fetch:
     cargo deny --locked fetch db

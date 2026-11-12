@@ -1,0 +1,321 @@
+[[source]]
+example = "string-field.rs"
+crate = "domain"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "string-full-path.rs"
+crate = "domain"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "str-parameter.rs"
+crate = "domain"
+expect = ["raw-type:str"]
+
+[[source]]
+example = "char-return.rs"
+crate = "domain"
+expect = ["raw-type:char"]
+
+[[source]]
+example = "os-strings.rs"
+crate = "domain"
+expect = ["raw-type:OsString", "raw-type:OsStr", "raw-type:CString", "raw-type:CStr", "raw-type:PathBuf", "raw-type:Path"]
+
+[[source]]
+example = "integers.rs"
+crate = "domain"
+expect = ["raw-type:i8", "raw-type:i16", "raw-type:i32", "raw-type:i64", "raw-type:i128", "raw-type:isize", "raw-type:u8", "raw-type:u16", "raw-type:u32", "raw-type:u64", "raw-type:u128", "raw-type:usize"]
+
+[[source]]
+example = "non-zero.rs"
+crate = "domain"
+expect = ["raw-type:NonZero", "raw-type:NonZeroI8", "raw-type:NonZeroI16", "raw-type:NonZeroI32", "raw-type:NonZeroI64", "raw-type:NonZeroI128", "raw-type:NonZeroIsize", "raw-type:NonZeroU8", "raw-type:NonZeroU16", "raw-type:NonZeroU32", "raw-type:NonZeroU64", "raw-type:NonZeroU128", "raw-type:NonZeroUsize"]
+
+[[source]]
+example = "floats.rs"
+crate = "domain"
+expect = ["raw-type:f32", "raw-type:f64"]
+
+[[source]]
+example = "decimal.rs"
+crate = "domain"
+expect = ["raw-type:Decimal"]
+
+[[source]]
+example = "bytes-vector.rs"
+crate = "domain"
+expect = ["raw-type:u8"]
+
+[[source]]
+example = "option-string.rs"
+crate = "domain"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "vec-u64.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "containers.rs"
+crate = "domain"
+expect = ["raw-type:i32", "raw-type:u16", "raw-type:str", "raw-type:i64"]
+
+[[source]]
+example = "enum-variant-fields.rs"
+crate = "domain"
+expect = ["raw-type:u32", "raw-type:i16"]
+
+[[source]]
+example = "bool-parameter.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "bool-return.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "bool-field.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "bool-variant.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "bool-own-trait.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "bool-shadowed-standard-trait.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "bool-standard-trait-other-method.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "standard-trait-raw-argument.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "from-str-impl.rs"
+crate = "domain"
+expect = ["raw-type:str"]
+
+[[source]]
+example = "type-alias-raw.rs"
+crate = "domain"
+expect = ["raw-type-alias"]
+
+[[source]]
+example = "type-alias-result.rs"
+crate = "domain"
+expect = ["raw-type-alias"]
+
+[[source]]
+example = "newtype-public-field.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-crate-field.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-two-fields.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-bool.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "newtype-option.rs"
+crate = "domain"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "newtype-constructor-other-name.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-constructor-two-inputs.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-constructor-raw-return.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-constructor-raw-error.rs"
+crate = "domain"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "newtype-accessor-mutable.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-accessor-bool.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "newtype-accessor-with-input.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-other-method.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-defined-elsewhere.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-trait-constructor.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "associated-type.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "const-static.rs"
+crate = "domain"
+expect = ["raw-type:u32", "raw-type:str"]
+
+[[source]]
+example = "generic-bounds.rs"
+crate = "domain"
+expect = ["raw-type:String", "raw-type:u64", "raw-type:i16"]
+
+[[source]]
+example = "const-generic.rs"
+crate = "domain"
+expect = ["raw-type:usize"]
+
+[[source]]
+example = "impl-header-raw.rs"
+crate = "domain"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "nested-function.rs"
+crate = "domain"
+expect = ["raw-type:u8"]
+
+[[source]]
+example = "trait-port.rs"
+crate = "domain"
+expect = ["raw-type:u32", "raw-type:String", "raw-type:u64"]
+
+[[source]]
+example = "dyn-function.rs"
+crate = "domain"
+expect = ["raw-type:i64", "raw-type:bool"]
+
+[[source]]
+example = "foreign-function.rs"
+crate = "domain"
+expect = ["raw-type:u32", "raw-type:i64"]
+
+[[source]]
+example = "union-field.rs"
+crate = "domain"
+expect = ["raw-type:u32"]
+
+[[source]]
+example = "macro-items.rs"
+crate = "domain"
+expect = ["raw-type:i8"]
+
+[[source]]
+example = "opaque-item-macro.rs"
+crate = "domain"
+expect = ["raw-type-opaque-macro"]
+
+[[source]]
+example = "unparsable.rs"
+crate = "domain"
+expect = ["raw-type-unparsable"]
+
+[[source]]
+example = "application-port.rs"
+crate = "application"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "order-execution-port.rs"
+crate = "order-execution"
+expect = ["raw-type:String"]
+
+[[source]]
+example = "clean-newtype.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-standard-trait-bool.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-enum-instead-of-bool.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-function-body.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-test-module.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-exception-crate.rs"
+crate = "broker-toss-schema"
+expect = []
+
+[[source]]
+example = "clean-outside-crate.rs"
+crate = "approval-command"
+expect = []
+
+[[crate]]
+name = "modules"
+roots = ["src/lib.rs"]
+expect = [
+  "src/flat.rs raw-type:u16",
+  "src/nested/mod.rs raw-type:i32",
+  "src/nested/child.rs raw-type:f32",
+  "src/inline/deep.rs raw-type:u128",
+  "src/shadow.rs raw-type:bool",
+  "src/impls.rs raw-type:bool",
+]

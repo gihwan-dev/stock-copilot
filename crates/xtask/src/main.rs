@@ -5,8 +5,10 @@ mod arch_check;
 mod capability_check;
 mod check_support;
 mod migration_check;
+mod raw_types;
 mod source_check;
 mod sql_check;
+mod workspace_sources;
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -16,6 +18,7 @@ fn main() -> ExitCode {
         [command] if command == "sql-check" => sql_check::command(),
         [command] if command == "migration-check" => migration_check::command(),
         [command] if command == "capability-check" => capability_check::command(),
+        [command] if command == "raw-types" => raw_types::command(),
         _ => arch_check::usage(),
     }
 }

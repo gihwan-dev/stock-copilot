@@ -1,0 +1,87 @@
+[[target]]
+crate = "domain"
+reason = "순수 타입과 계산 (architecture.md 3.1, harness.md 3.4)"
+
+[[target]]
+crate = "application"
+reason = "유스케이스와 포트 trait (architecture.md 3.1, 3.3, harness.md 3.4)"
+
+[[target]]
+crate = "order-execution"
+reason = "BrokerTrade 포트를 정의하는 포트 crate (architecture.md 3.3, harness.md 3.4)"
+
+[[exception]]
+crate = "broker-toss-schema"
+reason = "경계 어댑터: 토스 OpenAPI에서 만든 생성 타입 (harness.md 3.4)"
+
+[[exception]]
+crate = "broker-toss"
+reason = "경계 어댑터: 토스 읽기 응답 DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "broker-toss-trade"
+reason = "경계 어댑터: 토스 주문 요청·응답 DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "sources"
+reason = "경계 어댑터: 뉴스·DART·거시 지표 외부 응답 DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "ai-claude-code"
+reason = "경계 어댑터: AI CLI 스트림 DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "ai-codex"
+reason = "경계 어댑터: AI CLI 스트림 DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "store-sqlite"
+reason = "경계 어댑터: DB 행 (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "secrets-keychain"
+reason = "경계 어댑터: 키체인 값 (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "platform-macos"
+reason = "경계 어댑터: macOS 네이티브 호출 (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "mcp-server"
+reason = "인바운드 경계 어댑터: MCP 요청·응답 DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[exception]]
+crate = "src-tauri"
+reason = "조립 루트와 IPC DTO (architecture.md 3.1, harness.md 3.4)"
+
+[[outside]]
+crate = "approval-command"
+reason = "domain·application·포트 crate가 아니다 (harness.md 3.4의 대상 밖)"
+
+[[outside]]
+crate = "mcp-bridge"
+reason = "stdio와 Unix 소켓을 잇는 실행 파일. 대상 밖 (harness.md 3.4)"
+
+[[outside]]
+crate = "scheduler"
+reason = "domain·application·포트 crate가 아니다 (harness.md 3.4의 대상 밖)"
+
+[[outside]]
+crate = "testkit"
+reason = "테스트용 가짜. 대상 밖 (harness.md 3.4)"
+
+[[outside]]
+crate = "trade-fakes"
+reason = "테스트용 가짜. 대상 밖 (harness.md 3.4)"
+
+[[outside]]
+crate = "toss-smoke"
+reason = "사용자가 돌리는 확인 명령. 대상 밖 (harness.md 3.4)"
+
+[[outside]]
+crate = "xtask"
+reason = "하네스 명령. 대상 밖 (브리프 H-39)"
+
+[[outside]]
+crate = "e2e-app"
+reason = "E2E 전용 조립. 대상 밖 (harness.md 3.4)"
