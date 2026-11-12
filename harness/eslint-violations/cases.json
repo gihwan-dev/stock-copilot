@@ -36,7 +36,7 @@
       "functional/no-promise-reject",
       "functional/no-throw-statements",
       "functional/no-try-statements",
-      "guard/no-promise-catch",
+      "local/no-promise-catch",
       "no-void"
     ],
     "불변": [
@@ -50,6 +50,7 @@
       "guard/no-prototype",
       "guard/no-proxy",
       "guard/no-reflect",
+      "local/no-computed-member",
       "no-param-reassign",
       "no-plusplus",
       "no-var",
@@ -67,6 +68,7 @@
       "guard/no-export-all",
       "guard/no-global-object",
       "guard/no-namespace",
+      "guard/no-namespace-import",
       "max-depth",
       "max-lines",
       "max-lines-per-function",
@@ -113,9 +115,9 @@
     "전역": ["guard/no-dom-globals", "guard/no-global-object"],
     "허용 목록": [
       "guard/no-effect-hooks",
-      "guard/no-promise-catch",
       "guard/no-type-predicate",
-      "local/forbidden-file"
+      "local/forbidden-file",
+      "local/no-promise-catch"
     ],
     "원시 타입": [
       "local/no-brand-creation",
@@ -260,6 +262,13 @@
         "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
       ]
     },
+    "src/app/comments/undisableable-assertion.ts": {
+      "row": "주석",
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "@typescript-eslint/no-unsafe-type-assertion"
+      ]
+    },
     "src/app/comments/undisableable-ban-ts-comment.ts": {
       "row": "주석",
       "expect": [
@@ -289,6 +298,10 @@
         "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
       ]
     },
+    "src/app/comments/undisableable-computed-member.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
     "src/app/comments/undisableable-directive-form.ts": {
       "row": "주석",
       "expect": [
@@ -296,6 +309,10 @@
         "@eslint-community/eslint-comments/no-restricted-disable",
         "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
       ]
+    },
+    "src/app/comments/undisableable-expression-statement.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
     },
     "src/app/comments/undisableable-forbidden-file.ts": {
       "row": "주석",
@@ -317,6 +334,13 @@
       "expect": [
         "(null) Unused eslint-disable directive",
         "@eslint-community/eslint-comments/no-restricted-disable"
+      ]
+    },
+    "src/app/comments/undisableable-namespace-import.ts": {
+      "row": "주석",
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
       ]
     },
     "src/app/comments/undisableable-network.ts": {
@@ -342,6 +366,10 @@
       "row": "주석",
       "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
     },
+    "src/app/comments/undisableable-tauri-mocks.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
     "src/app/comments/undisableable-test-skip.ts": {
       "row": "주석",
       "expect": [
@@ -351,9 +379,27 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/app/comments/undisableable-throw.ts": {
+      "row": "주석",
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
+    "src/app/comments/undisableable-try.ts": {
+      "row": "주석",
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "functional/no-expression-statements"
+      ]
+    },
     "src/app/comments/undisableable-ui-text.ts": {
       "row": "주석",
       "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+    },
+    "src/app/comments/undisableable-unsafe-assertion.ts": {
+      "row": "주석",
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "@typescript-eslint/consistent-type-assertions"
+      ]
     },
     "src/app/comments/unlimited-file-disable.ts": {
       "row": "주석",
@@ -1452,7 +1498,8 @@
     "src/app/text/messages.ts": {
       "row": "원시 타입",
       "expect": [
-        "local/no-brand-creation :: 브랜드 이름은 리터럴 하나로 적는다."
+        "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
+        "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
       ]
     },
     "src/app/types/as-const-allowed.ts": {
@@ -1712,6 +1759,13 @@
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
       ]
     },
+    "src/features/brand/computed-brand.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다.",
+        "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다."
+      ]
+    },
     "src/features/brand/custom.ts": {
       "row": "원시 타입",
       "expect": [
@@ -1721,6 +1775,7 @@
     "src/features/brand/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
       ]
     },
@@ -1736,6 +1791,42 @@
       "row": "원시 타입",
       "expect": [
         "local/no-brand-creation :: 브랜드는 shared/lib/brand, shared/lib/money, shared/lib/format, shared/ipc 스키마, 생성된 bindings.ts에서만 만든다."
+      ]
+    },
+    "src/features/computed/allowed.ts": {
+      "row": "불변",
+      "expect": []
+    },
+    "src/features/computed/array-index.ts": {
+      "row": "불변",
+      "expect": [
+        "local/no-computed-member :: 배열·튜플은 리터럴 숫자 색인만 쓴다. 그 밖에는 .at() 등을 쓴다."
+      ]
+    },
+    "src/features/computed/destructure.ts": {
+      "row": "불변",
+      "expect": [
+        "@typescript-eslint/no-unnecessary-condition",
+        "@typescript-eslint/no-unnecessary-type-parameters",
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
+      ]
+    },
+    "src/features/computed/library-target.ts": {
+      "row": "불변",
+      "expect": [
+        "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다."
+      ]
+    },
+    "src/features/computed/symbol-key.ts": {
+      "row": "불변",
+      "expect": [
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
+      ]
+    },
+    "src/features/computed/type-parameter-key.ts": {
+      "row": "불변",
+      "expect": [
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
       ]
     },
     "src/features/dom/document.ts": {
@@ -1869,6 +1960,29 @@
       "row": "원시 타입",
       "expect": []
     },
+    "src/features/home2/messages.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "functional/prefer-immutable-types",
+        "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
+        "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
+      ]
+    },
+    "src/features/home3/messages.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
+        "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
+      ]
+    },
+    "src/features/imports/namespace.ts": {
+      "row": "문법",
+      "expect": [
+        "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
+      ]
+    },
     "src/features/money/allowed.ts": {
       "row": "숫자",
       "expect": []
@@ -1882,7 +1996,8 @@
     "src/features/money/computed.ts": {
       "row": "숫자",
       "expect": [
-        "local/no-money-coercion :: 금액의 비공개 키로 값을 꺼내는 일은 shared/lib/money.ts와 shared/lib/format.ts에서만 한다."
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
+        "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
     },
     "src/features/money/concat.ts": {
@@ -1896,13 +2011,24 @@
     "src/features/money/destructure.ts": {
       "row": "숫자",
       "expect": [
-        "local/no-money-coercion :: 금액의 비공개 키로 값을 꺼내는 일은 shared/lib/money.ts와 shared/lib/format.ts에서만 한다."
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
+        "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
     },
     "src/features/money/equality.ts": {
       "row": "숫자",
       "expect": [
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다."
+      ]
+    },
+    "src/features/money/generic-key.ts": {
+      "row": "숫자",
+      "expect": [
+        "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
+        "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
+        "local/no-money-coercion :: 금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다.",
+        "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
     },
     "src/features/money/generic.ts": {
@@ -1942,7 +2068,7 @@
       "row": "숫자",
       "expect": [
         "local/no-money-coercion :: 금액 값에 산술·비교·연결 금지. 계산은 Rust domain이 하고 화면은 shared/lib/format으로 표시만 한다.",
-        "local/no-money-coercion :: 금액의 비공개 키로 값을 꺼내는 일은 shared/lib/money.ts와 shared/lib/format.ts에서만 한다."
+        "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
       ]
     },
     "src/features/money/string-call.ts": {
@@ -1950,6 +2076,12 @@
       "expect": [
         "@typescript-eslint/no-base-to-string",
         "local/no-money-coercion :: 금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다."
+      ]
+    },
+    "src/features/money/structured-clone.ts": {
+      "row": "숫자",
+      "expect": [
+        "local/no-money-coercion :: 금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다."
       ]
     },
     "src/features/money/subtract.ts": {
@@ -2066,11 +2198,17 @@
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/features/promise/all-settled.ts": {
+      "row": "실패 처리",
+      "expect": [
+        "local/no-promise-catch :: Promise.allSettled 금지: 거절을 값으로 바꾸는 길이다. shared/ipc 호출 어댑터와 shared/platform/detach에서만."
+      ]
+    },
     "src/features/promise/catch-computed.ts": {
       "row": "실패 처리",
       "expect": [
         "@typescript-eslint/dot-notation",
-        "guard/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
+        "local/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
       ]
     },
     "src/features/promise/catch-destructure.ts": {
@@ -2078,13 +2216,20 @@
       "expect": [
         "@typescript-eslint/no-unnecessary-condition",
         "@typescript-eslint/unbound-method",
-        "guard/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
+        "local/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
+      ]
+    },
+    "src/features/promise/catch-name.ts": {
+      "row": "실패 처리",
+      "expect": [
+        "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
+        "local/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
       ]
     },
     "src/features/promise/catch.ts": {
       "row": "실패 처리",
       "expect": [
-        "guard/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
+        "local/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
       ]
     },
     "src/features/promise/then-one.ts": {
@@ -2094,13 +2239,13 @@
     "src/features/promise/then-spread.ts": {
       "row": "실패 처리",
       "expect": [
-        "guard/no-promise-catch :: 두 인자 then 금지: 거절 처리기는 shared/ipc 호출 어댑터와 shared/platform/detach에서만 붙인다."
+        "local/no-promise-catch :: 두 인자 then 금지: 거절 처리기는 shared/ipc 호출 어댑터와 shared/platform/detach에서만 붙인다."
       ]
     },
     "src/features/promise/then-two.ts": {
       "row": "실패 처리",
       "expect": [
-        "guard/no-promise-catch :: 두 인자 then 금지: 거절 처리기는 shared/ipc 호출 어댑터와 shared/platform/detach에서만 붙인다."
+        "local/no-promise-catch :: 두 인자 then 금지: 거절 처리기는 shared/ipc 호출 어댑터와 shared/platform/detach에서만 붙인다."
       ]
     },
     "src/features/raw/allowed.ts": {
@@ -2180,6 +2325,36 @@
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
     },
+    "src/features/raw/library-allowed.tsx": {
+      "row": "원시 타입",
+      "expect": []
+    },
+    "src/features/raw/library-error.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "functional/type-declaration-immutability",
+        "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
+      ]
+    },
+    "src/features/raw/library-keyof.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
+      ]
+    },
+    "src/features/raw/library-partial.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "functional/type-declaration-immutability",
+        "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
+      ]
+    },
+    "src/features/raw/library-pick.ts": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
+      ]
+    },
     "src/features/raw/local-alias.ts": {
       "row": "원시 타입",
       "expect": [
@@ -2198,6 +2373,10 @@
         "@typescript-eslint/consistent-indexed-object-style",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다."
       ]
+    },
+    "src/features/raw/non-nullable.ts": {
+      "row": "원시 타입",
+      "expect": []
     },
     "src/features/raw/number-return.ts": {
       "row": "원시 타입",
@@ -2290,12 +2469,17 @@
     },
     "src/features/react/array-index-key.tsx": {
       "row": "React",
-      "expect": ["@eslint-react/no-array-index-key", "functional/readonly-type"]
+      "expect": [
+        "@eslint-react/no-array-index-key",
+        "functional/readonly-type",
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+      ]
     },
     "src/features/react/clean-component.tsx": {
       "row": "React",
       "expect": [
-        "local/no-ui-text :: 한글 문구는 messages.ts에만 둔다. 화면에는 UiText를 넘긴다."
+        "local/no-ui-text :: 한글 문구는 messages.ts에만 둔다. 화면에는 UiText를 넘긴다.",
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
       ]
     },
     "src/features/react/effect-alias.ts": {
@@ -2331,6 +2515,7 @@
       "row": "React",
       "expect": [
         "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만.",
+        "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
         "guard/no-react-namespace :: react 기본·네임스페이스 가져오기 금지: 이름 있는 가져오기만 쓴다."
       ]
     },
@@ -2450,6 +2635,30 @@
       "row": "원시 타입",
       "expect": []
     },
+    "src/features/text/jsx-array.tsx": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+      ]
+    },
+    "src/features/text/jsx-concat.tsx": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+      ]
+    },
+    "src/features/text/jsx-conditional.tsx": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+      ]
+    },
+    "src/features/text/jsx-from-char-code.tsx": {
+      "row": "원시 타입",
+      "expect": [
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+      ]
+    },
     "src/features/text/jsx-hangul.tsx": {
       "row": "원시 타입",
       "expect": [
@@ -2477,6 +2686,7 @@
     "src/features/text/messages.ts": {
       "row": "원시 타입",
       "expect": [
+        "local/no-brand-creation :: messages.ts에는 문구 목록(키마다 언어별 리터럴을 as UiText로 단언한 as const 객체)과 그 목록을 리터럴 유니온 키로 고르는 함수만 둔다.",
         "local/no-brand-creation :: messages.ts에서는 문자열 리터럴로 UiText만 만든다."
       ]
     },
@@ -2532,6 +2742,7 @@
     "src/shared/ipc/bindings.ts": {
       "row": "원시 타입",
       "expect": [
+        "local/no-brand-creation :: 브랜드 이름은 리터럴 하나로 적는다.",
         "local/no-brand-creation :: 허용 목록 파일에서도 단언은 브랜드 타입으로만 쓴다."
       ]
     },
@@ -2662,8 +2873,8 @@
     "src/shared/platform/useCoreEventCatch.ts": {
       "row": "허용 목록",
       "expect": [
-        "guard/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다.",
-        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다.",
+        "local/no-promise-catch :: catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다."
       ]
     },
     "src/shared/platform/useDocumentTitle.ts": {

@@ -26,7 +26,7 @@ export const PROMISE_REJECTION_ALLOWLIST = [
 
 export const MONEY_FILE = "src/shared/lib/money.ts";
 
-export const MONEY_KEY_READERS = ["src/shared/lib/format.ts"];
+export const MONEY_KEY_READERS = [];
 
 export const MESSAGES_FILES = ["src/**/messages.ts"];
 

@@ -99,6 +99,29 @@ const isEmptyObject = (checker, type) => {
 
 const MAX_DEPTH = 10;
 
+const RESHAPING_ALIASES = new Set(["Pick", "Omit", "Partial", "Required"]);
+
+const mappedAliasName = (type) => {
+  const declaration = type.getSymbol()?.declarations?.[0];
+  const owner = declaration?.parent;
+  return (type.objectFlags & ts.ObjectFlags.Mapped) !== 0 &&
+    owner !== undefined &&
+    ts.isTypeAliasDeclaration(owner) &&
+    isLibraryFile(owner.getSourceFile())
+    ? owner.name.text
+    : undefined;
+};
+
+const isLibraryReshape = (type) =>
+  (RESHAPING_ALIASES.has(type.aliasSymbol?.escapedName.toString() ?? "") &&
+    sourceFilesOf(type.aliasSymbol).every(isLibraryFile)) ||
+  RESHAPING_ALIASES.has(mappedAliasName(type) ?? "");
+
+export const isLibraryDeclared = (type) => {
+  const files = sourceFilesOf(type.getSymbol());
+  return files.length > 0 && files.every(isLibraryFile);
+};
+
 export const rawTypeChecker = (checker) => {
   const isDefault = (parameter, argument) =>
     parameter !== undefined &&
@@ -133,7 +156,7 @@ export const rawTypeChecker = (checker) => {
     if (referenceArguments(type).some(visit)) return true;
     const indexes = checker.getIndexInfosOfType(type);
     if (indexes.some((info) => visit(info.type))) return true;
-    if (!isProjectDeclared(type)) return false;
+    if (!isProjectDeclared(type) && !isLibraryReshape(type)) return false;
     return (
       indexes.some((info) => visit(info.keyType)) ||
       checker
@@ -147,6 +170,13 @@ export const rawTypeChecker = (checker) => {
   };
 
   const intersectionRaw = (type, visit) => {
+    const generic = type.types.some(
+      (part) => (part.flags & F.TypeParameter) !== 0,
+    );
+    if (generic)
+      return type.types
+        .filter((part) => !isEmptyObject(checker, part))
+        .some(visit);
     const primitives = type.types.filter(isPrimitiveLike);
     const brands = type.types.filter((part) => isBrandObject(checker, part));
     const rest = type.types.filter(
@@ -177,3 +207,10 @@ export const rawTypeChecker = (checker) => {
 };
 
 export const typeFlags = F;
+
+export const declaredInLibrary = (symbol) => {
+  const files = sourceFilesOf(symbol);
+  return files.length > 0 && files.every(isLibraryFile);
+};
+
+export const isProjectObject = (type) => isProjectDeclared(type);

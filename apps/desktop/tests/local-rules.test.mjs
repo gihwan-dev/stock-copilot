@@ -110,6 +110,16 @@ typed.run("local/no-money-coercion", local.rules["no-money-coercion"], {
   ],
   invalid: [
     {
+      code: 'import * as M from "../../shared/lib/money";\nconst get = <O, K extends keyof O>(o: O, k: K): O[K] => o[k];\nconst name = "moneyKey";\nexport const c = (a: M.Money, b: M.Money): "x" => (get(a, M[name]) > get(b, M[name]) ? "x" : "x");',
+      filename: ts,
+      options: moneyOptions,
+      errors: errors("generic", "extraction", "generic", "extraction"),
+    },
+    {
+      ...money("export const c = (a: Money): Money => structuredClone(a);"),
+      errors: errors("generic"),
+    },
+    {
       ...money(
         'export const c = (a: Money, b: Money): "x" => (a < b ? "x" : "x");',
       ),
@@ -173,7 +183,7 @@ typed.run("local/no-money-coercion", local.rules["no-money-coercion"], {
       code: 'import { moneyKey, type Money } from "../../shared/lib/money";\nexport const c = (a: Money): "x" => (a[moneyKey] === "1" ? "x" : "x");',
       filename: ts,
       options: moneyOptions,
-      errors: errors("extraction", "extraction", "extraction"),
+      errors: errors("extraction", "extraction"),
     },
     {
       ...money(
@@ -268,6 +278,10 @@ typed.run("local/no-raw-types", local.rules["no-raw-types"], {
   ],
 });
 
+const messagesFile = at("src/features/home/messages.ts");
+const catalogSource =
+  'import type { UiText } from "../../shared/lib/brand";\nconst catalog = { "a.title": { ko: "제목" as UiText } } as const;\n';
+
 typed.run("local/no-brand-creation", local.rules["no-brand-creation"], {
   valid: [
     {
@@ -276,8 +290,13 @@ typed.run("local/no-brand-creation", local.rules["no-brand-creation"], {
       options: [{ mode: "brand-file" }],
     },
     {
-      code: 'import type { UiText } from "../../shared/lib/brand";\nconst c = { a: "가" } as const;\nexport const t = (): UiText => c.a as UiText;',
-      filename: ts,
+      code: `${catalogSource}export const t = (key: "a.title", locale: "ko"): UiText =>\n  catalog[key][locale];`,
+      filename: messagesFile,
+      options: [{ mode: "messages" }],
+    },
+    {
+      code: 'import type { UiText } from "../../shared/lib/brand";\nexport const catalog = { a: { ko: ("가" + `나`) as UiText } } as const;\nexport type Key = keyof typeof catalog;',
+      filename: messagesFile,
       options: [{ mode: "messages" }],
     },
     {
@@ -294,6 +313,18 @@ typed.run("local/no-brand-creation", local.rules["no-brand-creation"], {
   invalid: [
     {
       code: 'import { z } from "zod";\nexport const s = z.string().brand<"Ticker">();',
+      filename: ts,
+      options: [{ mode: "forbid" }],
+      errors: errors("forbidden"),
+    },
+    {
+      code: 'import { z } from "zod";\nconst method = "brand";\nexport const s = z.string()[method]<"Ticker">();',
+      filename: ts,
+      options: [{ mode: "forbid" }],
+      errors: errors("forbidden"),
+    },
+    {
+      code: 'import { z } from "zod";\nexport const b = z.string().brand;',
       filename: ts,
       options: [{ mode: "forbid" }],
       errors: errors("forbidden"),
@@ -335,78 +366,186 @@ typed.run("local/no-brand-creation", local.rules["no-brand-creation"], {
       errors: errors("unnamed"),
     },
     {
-      code: 'import { z } from "zod";\nexport const s = z.string().brand<"Ticker">();',
-      filename: ts,
+      code: 'import type { UiText } from "../../shared/lib/brand";\nexport const catalog = { a: { ko: "가" as UiText } } as const;\nexport const s = 1;',
+      filename: messagesFile,
       options: [{ mode: "messages" }],
-      errors: errors("messagesOnly"),
+      errors: errors("messagesShape"),
     },
     {
-      code: 'import type { UiText } from "../../shared/lib/brand";\nimport { plainLabel } from "../../shared/lib/brand";\nexport const t = (): UiText => plainLabel("a") as UiText;',
-      filename: ts,
+      code: `${catalogSource}const word = "단어";\nexport const t = (key: "a.title"): UiText => catalog[key].ko;\nexport const u = (): UiText => word as UiText;`,
+      filename: messagesFile,
       options: [{ mode: "messages" }],
-      errors: errors("messagesOnly"),
+      errors: errors("messagesShape", "messagesShape", "messagesOnly"),
+    },
+    {
+      code: `import type { EntityId } from "../../shared/lib/brand";\n${catalogSource}export const fromId = (id: EntityId): UiText => catalog["a.title"].ko;`,
+      filename: messagesFile,
+      options: [{ mode: "messages" }],
+      errors: errors("messagesShape"),
+    },
+    {
+      code: `${catalogSource}export const t = (key: "a.title"): UiText => catalog[key].ko as UiText;`,
+      filename: messagesFile,
+      options: [{ mode: "messages" }],
+      errors: errors("messagesShape", "messagesOnly"),
+    },
+    {
+      code: 'import { z } from "zod";\nexport const s = z.string().brand<"UiText">();',
+      filename: messagesFile,
+      options: [{ mode: "messages" }],
+      errors: errors("messagesShape", "messagesShape", "messagesOnly"),
     },
   ],
 });
 
-plain.run("local/no-ui-text", local.rules["no-ui-text"], {
+const screenFile = at("src/features/text/clean.tsx");
+const screen = (code, ...ids) => ({
+  code,
+  filename: screenFile,
+  options: [{ screen: "on" }],
+  ...(ids.length === 0 ? {} : { errors: errors(...ids) }),
+});
+
+typed.run("local/no-ui-text", local.rules["no-ui-text"], {
   valid: [
-    { code: 'export const route = "home/list";', options: [{ screen: "on" }] },
-    {
-      code: "export const e = <b>\n  <i />\n</b>;",
-      filename: "x.tsx",
-      options: [{ screen: "on" }],
-    },
+    screen('export const route = "home/list";'),
+    screen("export const e = <b>\n  <i />\n</b>;"),
     {
       code: "export const e = <b>Label</b>;",
-      filename: "x.tsx",
+      filename: screenFile,
       options: [{ screen: "off" }],
     },
-    {
-      code: 'export const e = <b key="row">{label}</b>;',
-      filename: "x.tsx",
-      options: [{ screen: "on" }],
-    },
+    screen(
+      'import type { UiText } from "../../shared/lib/brand";\nexport const e = (label: UiText, rows: readonly UiText[]) => (\n  <b key="row">\n    {label}\n    {rows}\n  </b>\n);',
+    ),
   ],
   invalid: [
     {
       code: 'export const t = "현황";',
+      filename: ts,
       options: [{ screen: "off" }],
       errors: errors("hangul"),
     },
     {
       code: "export const t = `현황`;",
+      filename: ts,
       options: [{ screen: "off" }],
       errors: errors("hangul"),
     },
     {
       code: 'export type T = "매수" | "매도";',
+      filename: ts,
       options: [{ screen: "off" }],
       errors: errors("hangul", "hangul"),
     },
     {
       code: "export const e = <b>현황</b>;",
-      filename: "x.tsx",
+      filename: screenFile,
       options: [{ screen: "off" }],
       errors: errors("hangul"),
     },
+    screen("export const e = <b>Label</b>;", "jsxText"),
+    screen('export const e = <b>{"Label"}</b>;', "jsxText"),
+    screen("export const e = <>{`Label`}</>;", "jsxText"),
+    screen(
+      'export const e = (on: "y" | "n") => <b>{on === "y" ? "Yes" : "No"}</b>;',
+      "jsxText",
+    ),
+    screen('export const e = (word: "a") => <b>{"OK " + word}</b>;', "jsxText"),
+    screen('export const e = <b>{["Buy now"]}</b>;', "jsxText"),
+    screen("export const e = <b>{String.fromCharCode(79)}</b>;", "jsxText"),
+  ],
+});
+
+typed.run("local/no-promise-catch", local.rules["no-promise-catch"], {
+  valid: [
     {
-      code: "export const e = <b>Label</b>;",
-      filename: "x.tsx",
-      options: [{ screen: "on" }],
-      errors: errors("jsxText"),
+      code: 'export const n = (p: Promise<"a">): Promise<"b"> => p.then((): "b" => "b");',
+      filename: ts,
     },
     {
-      code: 'export const e = <b>{"Label"}</b>;',
-      filename: "x.tsx",
-      options: [{ screen: "on" }],
-      errors: errors("jsxText"),
+      code: 'type Box = { readonly catch: "c" };\nexport const c = (box: Box): "c" => box.catch;',
+      filename: ts,
+    },
+  ],
+  invalid: [
+    {
+      code: 'export const r = (p: Promise<"a">) => p.catch(() => "b");',
+      filename: ts,
+      errors: errors("catch"),
     },
     {
-      code: "export const e = <>{`Label`}</>;",
-      filename: "x.tsx",
-      options: [{ screen: "on" }],
-      errors: errors("jsxText"),
+      code: 'const name = "catch";\nexport const r = (p: Promise<"a">) => p[name](() => "b");',
+      filename: ts,
+      errors: errors("catch"),
+    },
+    {
+      code: 'export const r = (p: Promise<"a">) => {\n  const { catch: c } = p;\n  return c;\n};',
+      filename: ts,
+      errors: errors("catch"),
+    },
+    {
+      code: 'export const r = (p: Promise<"a">) => p.then(() => "b", () => "c");',
+      filename: ts,
+      errors: errors("then"),
+    },
+    {
+      code: 'export const r = (p: Promise<"a">) => Promise.allSettled([p]);',
+      filename: ts,
+      errors: errors("allSettled"),
+    },
+  ],
+});
+
+typed.run("local/no-computed-member", local.rules["no-computed-member"], {
+  valid: [
+    {
+      code: 'const labels = { buy: "b", sell: "s" } as const;\nexport const l = (side: "buy" | "sell"): "b" | "s" => labels[side];',
+      filename: ts,
+    },
+    {
+      code: 'export const f = (items: readonly "a"[]): "a" | undefined => items[0];',
+      filename: ts,
+    },
+    {
+      code: 'export const f = (items: readonly "a"[]): "a" | undefined => items.at(-1);',
+      filename: ts,
+    },
+    {
+      code: 'export const f = (box: { readonly a: "a" }): "a" => box["a"];',
+      filename: ts,
+    },
+  ],
+  invalid: [
+    {
+      code: 'export const f = (items: readonly "a"[], i: 0 | 1): "a" | undefined => items[i];',
+      filename: ts,
+      errors: errors("index"),
+    },
+    {
+      code: 'const key = "size";\nexport const f = (items: ReadonlySet<"a">): "x" => (items[key] === 0 ? "x" : "x");',
+      filename: ts,
+      errors: errors("target"),
+    },
+    {
+      code: 'import * as brand from "../../shared/lib/brand";\nconst key = "toTicker";\nexport const f = brand[key];',
+      filename: ts,
+      errors: errors("target"),
+    },
+    {
+      code: 'const k: unique symbol = Symbol("k");\ntype Box = { readonly [k]: "v" };\nexport const f = (box: Box): "v" => box[k];',
+      filename: ts,
+      errors: errors("key"),
+    },
+    {
+      code: 'type Box = { readonly a: "a" };\nexport const f = <K extends keyof Box>(box: Box, key: K): Box[K] => box[key];',
+      filename: ts,
+      errors: errors("key"),
+    },
+    {
+      code: 'type Box = { readonly a: "a" };\nexport const f = <K extends keyof Box>(box: Box, key: K): Box[K] => {\n  const { [key]: v } = box;\n  return v;\n};',
+      filename: ts,
+      errors: errors("key"),
     },
   ],
 });
@@ -471,6 +610,61 @@ plain.run("local/forbidden-file", local.rules["forbidden-file"], {
       filename: at("src/shared/platform/notes.md"),
       options: fileOptions(true),
       errors: errors("extension", "unlisted"),
+    },
+  ],
+});
+
+typed.run("local/no-raw-types on library types", local.rules["no-raw-types"], {
+  valid: [
+    {
+      code: 'import type { ChangeEvent, ReactElement, RefObject } from "react";\nexport type Slot = { readonly ref: RefObject<HTMLElement | null>; readonly view: ReactElement };\nexport const handle = (event: Readonly<ChangeEvent<HTMLInputElement>>): void => {\n  event.preventDefault();\n};',
+      filename: tsx,
+    },
+    {
+      code: "export const orElse = <T>(value: T | undefined, fallback: NonNullable<T>): NonNullable<T> =>\n  value ?? fallback;",
+      filename: ts,
+    },
+  ],
+  invalid: [
+    {
+      code: 'export type F = Readonly<Pick<HTMLInputElement, "value" | "valueAsNumber" | "checked">>;',
+      filename: ts,
+      errors: errors("resolved", "resolved"),
+    },
+    {
+      code: 'export type F = Pick<Error, "message">;',
+      filename: ts,
+      errors: errors("resolved"),
+    },
+    {
+      code: 'export type F = Omit<Error, "stack">;',
+      filename: ts,
+      errors: errors("resolved"),
+    },
+    {
+      code: "export type F = Partial<Error>;",
+      filename: ts,
+      errors: errors("resolved"),
+    },
+    {
+      code: "export type F = Required<Error>;",
+      filename: ts,
+      errors: errors("resolved"),
+    },
+    {
+      code: "export type F = keyof HTMLInputElement;",
+      filename: ts,
+      errors: errors("resolved"),
+    },
+    {
+      code: 'export type F = HTMLInputElement["value"];',
+      filename: ts,
+      errors: errors("resolved"),
+    },
+    {
+      code: "export type F = { readonly [K in keyof Error]: Error[K] };",
+      filename: ts,
+      errors: errors("resolved", "resolved"),
     },
   ],
 });

@@ -1,9 +1,29 @@
+import { brandNamesOf, typeFlags as F } from "../types.mjs";
+
 const HANGUL = /\p{Script=Hangul}/u;
+const TEXT_BRANDS = ["UiText"];
+const STRING_LIKE =
+  F.String | F.StringLiteral | F.TemplateLiteral | F.StringMapping;
 const JSX_PARENTS = new Set(["JSXElement", "JSXFragment"]);
 
 const isTextExpression = (expression) =>
   (expression.type === "Literal" && typeof expression.value === "string") ||
   expression.type === "TemplateLiteral";
+
+const unbrandedText = (checker, type, depth = 0) => {
+  if (depth > 6) return false;
+  const next = (inner) => unbrandedText(checker, inner, depth + 1);
+  if (type.isUnion()) return type.types.some(next);
+  if (type.isIntersection())
+    return (
+      !brandNamesOf(checker, type).some((name) => TEXT_BRANDS.includes(name)) &&
+      type.types.some(next)
+    );
+  if ((type.flags & STRING_LIKE) !== 0) return true;
+  return checker.isArrayType(type) || checker.isTupleType(type)
+    ? checker.getTypeArguments(type).some(next)
+    : false;
+};
 
 export const noUiText = {
   meta: {
@@ -45,10 +65,18 @@ export const noUiText = {
           report(node, "jsxText");
       },
       JSXExpressionContainer: (node) => {
+        if (screen !== "on" || !JSX_PARENTS.has(node.parent.type)) return;
+        if (node.expression.type === "JSXEmptyExpression") return;
+        const services = context.sourceCode.parserServices;
+        const typed =
+          services?.program !== undefined && services.program !== null;
         if (
-          screen === "on" &&
-          JSX_PARENTS.has(node.parent.type) &&
-          isTextExpression(node.expression)
+          isTextExpression(node.expression) ||
+          (typed &&
+            unbrandedText(
+              services.program.getTypeChecker(),
+              services.getTypeAtLocation(node.expression),
+            ))
         )
           report(node, "jsxText");
       },

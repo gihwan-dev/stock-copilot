@@ -59,7 +59,7 @@ export const guardRuleBase = {
   "no-overload": "no-restricted-syntax",
   "no-own-symbols": "no-restricted-properties",
   "no-prototype": "no-restricted-syntax",
-  "no-promise-catch": "no-restricted-syntax",
+  "no-namespace-import": "no-restricted-syntax",
   "no-proxy": "no-restricted-globals",
   "no-react-namespace": "no-restricted-syntax",
   "no-react-subpath": "no-restricted-imports",

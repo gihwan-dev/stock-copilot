@@ -5,8 +5,6 @@ export {
   parseTicker,
   parseTimestamp,
 } from "./brand";
-export type { DisplayText } from "./format";
-export { formatMoney, formatPrice } from "./format";
 export type { Locale, MessageKey } from "./messages";
 export { text } from "./messages";
 export type {

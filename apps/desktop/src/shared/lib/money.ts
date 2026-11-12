@@ -1,10 +1,10 @@
 import { err, ok, type Result } from "./result";
 
-export const moneyKey: unique symbol = Symbol("money");
-export const quantityKey: unique symbol = Symbol("quantity");
-export const priceKey: unique symbol = Symbol("price");
-export const ratioKey: unique symbol = Symbol("ratio");
-export const probabilityKey: unique symbol = Symbol("probability");
+const moneyKey: unique symbol = Symbol("money");
+const quantityKey: unique symbol = Symbol("quantity");
+const priceKey: unique symbol = Symbol("price");
+const ratioKey: unique symbol = Symbol("ratio");
+const probabilityKey: unique symbol = Symbol("probability");
 
 export type Currency = "KRW" | "USD";
 

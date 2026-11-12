@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { rawTypeChecker } from "../types.mjs";
+import { isLibraryDeclared, rawTypeChecker } from "../types.mjs";
 
 const RAW_KEYWORDS = [
   "TSStringKeyword",
@@ -60,8 +60,17 @@ export const noRawTypes = {
     const { isRaw, signatureRaw } = rawTypeChecker(checker);
     const tsNodeOf = (node) => services.esTreeNodeToTSNodeMap.get(node);
 
+    const typeOfNode = (node) => checker.getTypeFromTypeNode(tsNodeOf(node));
+
+    const keyOfLibrary = (node) =>
+      node.type === "TSTypeOperator" &&
+      node.operator === "keyof" &&
+      [typeOfNode(node.typeAnnotation)]
+        .flatMap((type) => (type.isUnion() ? type.types : [type]))
+        .some(isLibraryDeclared);
+
     const checkResolved = (node) => {
-      if (isRaw(checker.getTypeFromTypeNode(tsNodeOf(node))))
+      if (keyOfLibrary(node) || isRaw(typeOfNode(node)))
         context.report({ node, messageId: "resolved" });
     };
 

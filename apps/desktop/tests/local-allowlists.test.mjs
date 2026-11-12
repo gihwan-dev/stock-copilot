@@ -37,7 +37,7 @@ const expectedLists = {
     "src/shared/platform/detach.ts",
   ],
   MONEY_FILE: "src/shared/lib/money.ts",
-  MONEY_KEY_READERS: ["src/shared/lib/format.ts"],
+  MONEY_KEY_READERS: [],
   MESSAGES_FILES: ["src/**/messages.ts"],
   FILE_PLACEHOLDERS: [".gitkeep"],
 };
@@ -177,8 +177,8 @@ test("local rules carry the documented severity and mode for each kind of file",
     ],
     ["src/shared/lib/brand.ts", "local/no-raw-types", [0]],
     ["src/shared/lib/result.ts", "local/no-raw-types", [2]],
-    ["src/shared/ipc/call.ts", "guard/no-promise-catch", [0]],
-    ["src/shared/ipc/client.ts", "guard/no-promise-catch", [2]],
+    ["src/shared/ipc/call.ts", "local/no-promise-catch", [0]],
+    ["src/shared/ipc/client.ts", "local/no-promise-catch", [2]],
     ["src/shared/lib/result.ts", "local/no-comments", [2]],
     [
       "src/features/home/ui/HomeScreen.tsx",
@@ -187,7 +187,7 @@ test("local rules carry the documented severity and mode for each kind of file",
         2,
         {
           moneyFile: "src/shared/lib/money.ts",
-          keyReaders: ["src/shared/lib/format.ts"],
+          keyReaders: [],
         },
       ],
     ],
@@ -232,4 +232,48 @@ test("a node_modules folder inside src is still linted", async () => {
     "src/shared/platform/node_modules/x/index.ts",
   ])
     assert.equal(await app.isPathIgnored(join(desktopRoot, file)), false, file);
+});
+
+test("every rule changed by a file exception block is undisableable", async () => {
+  const { appConfig } = await import("../eslint/app-config.mjs");
+  const config = appConfig({
+    ...appAllowlists,
+    THROW_ALLOWLIST: ["src/shared/lib/x.ts"],
+    CHART_NUMBER_ALLOWLIST: ["src/shared/ds/Chart.tsx"],
+  });
+  const tsFiles = JSON.stringify(["src/**/*.ts", "src/**/*.tsx"]);
+  const main = config.find(
+    (block) =>
+      JSON.stringify(block.files) === tsFiles &&
+      block.rules?.["local/no-comments"] !== undefined,
+  );
+  const undisableable =
+    main.rules["@eslint-community/eslint-comments/no-restricted-disable"].slice(
+      1,
+    );
+  const exceptionRules = [
+    ...new Set(
+      config
+        .filter(
+          (block) =>
+            block.name === undefined &&
+            block.rules !== undefined &&
+            block.files !== undefined &&
+            JSON.stringify(block.files) !== tsFiles,
+        )
+        .flatMap((block) => Object.keys(block.rules)),
+    ),
+  ];
+  assert.ok(exceptionRules.length > 10);
+  assert.deepEqual(
+    exceptionRules.filter(
+      (rule) =>
+        !undisableable.includes(rule) &&
+        !undisableable.some(
+          (entry) =>
+            entry.endsWith("/*") && rule.startsWith(entry.slice(0, -1)),
+        ),
+    ),
+    [],
+  );
 });

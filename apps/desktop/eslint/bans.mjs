@@ -175,17 +175,11 @@ export const bans = {
       message: `${name} 금지: 테스트를 건너뛰거나 골라 돌리지 않는다.`,
     })),
   ],
-  "guard/no-promise-catch": [
+  "guard/no-namespace-import": [
     {
-      selector: `:matches(${member("catch")}, ${destructured("catch")})`,
+      selector: "ImportNamespaceSpecifier",
       message:
-        "catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다.",
-    },
-    {
-      selector:
-        ":matches(CallExpression[callee.property.name='then'], CallExpression[callee.property.value='then'], CallExpression[callee.property.quasis.0.value.raw='then']):matches([arguments.length>1], :has(> SpreadElement))",
-      message:
-        "두 인자 then 금지: 거절 처리기는 shared/ipc 호출 어댑터와 shared/platform/detach에서만 붙인다.",
+        "import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
     },
   ],
   "guard/forbidden-extension": [

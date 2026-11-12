@@ -53,8 +53,10 @@ export const noMoneyCoercion = {
         "금액 값을 Number·String·parseFloat·JSON.stringify 등으로 바꾸지 않는다.",
       member:
         "금액 값에서 toString·valueOf 등 선언되지 않은 멤버를 쓰지 않는다.",
+      generic:
+        "금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다.",
       extraction:
-        "금액의 비공개 키로 값을 꺼내는 일은 shared/lib/money.ts와 shared/lib/format.ts에서만 한다.",
+        "금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다).",
     },
   },
   create: (context) => {
@@ -114,9 +116,11 @@ export const noMoneyCoercion = {
       node.arguments.forEach((argument, index) => {
         const value =
           argument.type === "SpreadElement" ? argument.argument : argument;
-        if (isMoney(value) && (coercing || openParameter(node, index))) {
+        if (!isMoney(value)) return;
+        if (coercing || openParameter(node, index))
           report(argument, "conversion");
-        }
+        else if (here !== moneyFile && genericParameter(node, index))
+          report(argument, "generic");
       });
     };
 
@@ -127,18 +131,26 @@ export const noMoneyCoercion = {
       return symbol !== undefined && declaredIn(context, symbol, [moneyFile]);
     };
 
-    const isKeyConstant = (node) => {
-      const tsNode = services.esTreeNodeToTSNodeMap.get(node);
-      const found = checker.getSymbolAtLocation(tsNode);
-      const symbol =
-        found !== undefined && (found.flags & ts.SymbolFlags.Alias) !== 0
-          ? checker.getAliasedSymbol(found)
-          : found;
-      return (
-        symbol !== undefined &&
-        declaredIn(context, symbol, [moneyFile]) &&
-        (checker.getTypeOfSymbol(symbol).flags & F.UniqueESSymbol) !== 0
+    const isKeyType = (type) =>
+      type.isUnion()
+        ? type.types.some(isKeyType)
+        : (type.flags & F.UniqueESSymbol) !== 0 &&
+          declaredIn(context, type.symbol, [moneyFile]);
+
+    const genericParameter = (call, index) => {
+      const signature = checker.getResolvedSignature(
+        services.esTreeNodeToTSNodeMap.get(call),
       );
+      const declaration = signature?.getDeclaration();
+      if (declaration === undefined) return false;
+      const parameters =
+        checker.getSignatureFromDeclaration(declaration)?.getParameters() ?? [];
+      const parameter =
+        parameters[Math.min(index, Math.max(parameters.length - 1, 0))];
+      if (parameter === undefined) return false;
+      const type = checker.getTypeOfSymbol(parameter);
+      const parts = type.isUnion() ? type.types : [type];
+      return parts.some((part) => (part.flags & F.TypeParameter) !== 0);
     };
 
     return {
@@ -187,12 +199,9 @@ export const noMoneyCoercion = {
           )
           .forEach((property) => report(property, "extraction"));
       },
-      Identifier: (node) => {
-        const importedSide =
-          node.parent.type === "ImportSpecifier" &&
-          node.parent.imported === node &&
-          node.parent.local !== node;
-        if (!readsKeys && !importedSide && isKeyConstant(node))
+      ":expression": (node) => {
+        if (node.parent.type === "ImportSpecifier") return;
+        if (!readsKeys && isKeyType(services.getTypeAtLocation(node)))
           report(node, "extraction");
       },
     };
