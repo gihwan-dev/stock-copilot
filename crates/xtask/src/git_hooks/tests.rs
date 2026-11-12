@@ -18,10 +18,20 @@ min_version: 2.2.2
 pre-commit:
   piped: true
   jobs:
-    - name: commit-guard
-      run: just commit-guard \"$GIT_INDEX_FILE\"
     - name: fresh-build
       run: just fresh-build
+    - name: commit-guard
+      run: just commit-guard \"$GIT_INDEX_FILE\"
+    - name: check
+      run: just base=HEAD check
+
+pre-merge-commit:
+  piped: true
+  jobs:
+    - name: fresh-build
+      run: just fresh-build
+    - name: commit-guard
+      run: just commit-guard \"$GIT_INDEX_FILE\"
     - name: check
       run: just base=HEAD check
 
@@ -69,7 +79,7 @@ const FOREIGN_CONFIGS: [&str; 29] = [
     ".config/lefthook-local.jsonc",
 ];
 
-const HOOKS: [&str; 2] = ["pre-commit", "pre-push"];
+const HOOKS: [&str; 3] = ["pre-commit", "pre-merge-commit", "pre-push"];
 
 const IDENTITY: [&str; 6] = [
     "-c",
@@ -427,7 +437,7 @@ fn commit_hook_runs_the_check_and_rejects_violating_commits() {
     assert!(commit(&directory, "clean"), "clean commit is accepted");
     assert_eq!(
         hook_log(&directory),
-        ["commit-guard", "fresh-build", "check base=HEAD"],
+        ["fresh-build", "commit-guard", "check base=HEAD"],
         "commit hook order"
     );
     let before = git(&directory, &["rev-parse", "HEAD"]);
@@ -436,7 +446,7 @@ fn commit_hook_runs_the_check_and_rejects_violating_commits() {
     assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
     assert_eq!(
         hook_log(&directory),
-        ["commit-guard", "fresh-build", "check base=HEAD"],
+        ["fresh-build", "commit-guard", "check base=HEAD"],
         "checked before rejecting"
     );
     fs::write(directory.join("src.txt"), "fixed\n").expect("fix");
@@ -444,8 +454,8 @@ fn commit_hook_runs_the_check_and_rejects_violating_commits() {
     assert!(!commit(&directory, "stale"), "failed clean stops the hook");
     assert_eq!(
         hook_log(&directory),
-        ["commit-guard", "fresh-build"],
-        "check does not run after a failed clean"
+        ["fresh-build"],
+        "nothing runs after a failed clean"
     );
 }
 
@@ -460,14 +470,22 @@ fn commit_hook_refuses_partial_commits_and_untracked_files() {
         &["commit", "--quiet", "-m", "partial", "--", "src.txt"],
     );
     assert!(!partial.status.success(), "partial commit is rejected");
-    assert_eq!(hook_log(&directory), ["commit-guard"], "guard stops it");
+    assert_eq!(
+        hook_log(&directory),
+        ["fresh-build", "commit-guard"],
+        "guard stops it"
+    );
     fs::write(directory.join("other.txt"), "other\n").expect("restore other");
     fs::write(directory.join("new.txt"), "new\n").expect("write untracked");
     assert!(
         !commit(&directory, "untracked"),
         "untracked file is rejected"
     );
-    assert_eq!(hook_log(&directory), ["commit-guard"], "guard stops it");
+    assert_eq!(
+        hook_log(&directory),
+        ["fresh-build", "commit-guard"],
+        "guard stops it"
+    );
     assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
     fs::remove_file(directory.join("new.txt")).expect("remove untracked");
     assert!(commit(&directory, "all"), "commit --all is accepted");
@@ -727,7 +745,7 @@ fn commit_guard_refuses_unstaged_and_untracked_changes() {
     let unstaged = just_recipe(&directory, "commit-guard");
     assert!(!unstaged.status.success(), "unstaged change");
     assert!(
-        String::from_utf8_lossy(&unstaged.stderr).contains("스테이징하지 않은 변경"),
+        String::from_utf8_lossy(&unstaged.stderr).contains("commit-guard:changed: src.txt"),
         "unstaged message"
     );
     git(&directory, &["add", "src.txt"]);
@@ -787,7 +805,7 @@ fn fresh_build_rebuilds_sources_whose_mtime_was_rewound() {
         .and_then(|file| file.set_modified(written))
         .expect("rewind mtime");
     assert_eq!(run_probe(&work), "old", "cargo trusts the rewound mtime");
-    let cleaned = just_recipe(&work, "fresh-build");
+    let cleaned = just_recipe(&work, "fresh-cargo");
     assert!(
         cleaned.status.success(),
         "{}",
@@ -877,12 +895,30 @@ fn check_ends_with_the_new_disables_and_the_hook_installation() {
     );
     assert_eq!(
         recipe("fresh-build"),
+        ["fresh-build: fresh-cargo fresh-node"],
+        "fresh-build recipe"
+    );
+    assert_eq!(
+        recipe("fresh-cargo"),
         [
-            "fresh-build:",
+            "fresh-cargo:",
             "cargo clean --locked --workspace",
             "cargo llvm-cov clean --locked --workspace"
         ],
-        "fresh-build recipe"
+        "fresh-cargo recipe"
+    );
+    assert_eq!(
+        recipe("fresh-node"),
+        ["fresh-node:", "pnpm install --frozen-lockfile --force"],
+        "fresh-node recipe"
+    );
+    assert_eq!(
+        recipe("commit-guard"),
+        [
+            "commit-guard index=\"\":",
+            "cargo run --locked --quiet --manifest-path \"{{ justfile_directory() }}/Cargo.toml\" --package xtask -- commit-guard \"$1\""
+        ],
+        "commit-guard recipe"
     );
     assert_eq!(
         recipe("push-check"),
@@ -891,5 +927,190 @@ fn check_ends_with_the_new_disables_and_the_hook_installation() {
             "base=\"$(cargo run --locked --quiet --package xtask -- push-base)\"; \"{{ just_executable() }}\" base=\"$base\" check-full"
         ],
         "push-check recipe"
+    );
+}
+
+fn guard_stderr(directory: &Path) -> String {
+    let guarded = just_recipe(directory, "commit-guard");
+    assert!(!guarded.status.success(), "commit-guard must refuse");
+    String::from_utf8_lossy(&guarded.stderr).into_owned()
+}
+
+fn staged_blob(directory: &Path, text: &str) -> String {
+    let blob = directory.parent().expect("parent").join("weakened.txt");
+    fs::write(&blob, text).expect("write weakened blob");
+    git(
+        directory,
+        &["hash-object", "-w", blob.to_str().expect("utf-8 path")],
+    )
+}
+
+#[test]
+fn commit_guard_refuses_content_that_lives_only_in_the_index() {
+    for flag in ["--skip-worktree", "--assume-unchanged"] {
+        let directory = repository(&format!("guard-index{flag}"), Hooks::Absent);
+        let blob = staged_blob(&directory, "weakened\n");
+        git(
+            &directory,
+            &[
+                "update-index",
+                "--cacheinfo",
+                &format!("100644,{blob},src.txt"),
+            ],
+        );
+        let changed = guard_stderr(&directory);
+        assert!(
+            changed.contains("commit-guard:changed: src.txt"),
+            "{changed}"
+        );
+        git(&directory, &["update-index", flag, "src.txt"]);
+        let flagged = guard_stderr(&directory);
+        assert!(
+            flagged.contains("commit-guard:flagged: src.txt")
+                && flagged.contains("commit-guard:changed: src.txt"),
+            "{flag}: {flagged}"
+        );
+    }
+}
+
+#[test]
+fn commit_guard_refuses_a_flag_even_when_contents_match() {
+    let directory = repository("guard-flag-only", Hooks::Absent);
+    git(&directory, &["update-index", "--skip-worktree", "src.txt"]);
+    let flagged = guard_stderr(&directory);
+    assert!(
+        flagged.contains("commit-guard:flagged: src.txt")
+            && !flagged.contains("commit-guard:changed"),
+        "{flagged}"
+    );
+}
+
+#[test]
+fn commit_guard_uses_only_the_root_gitignore() {
+    let directory = repository("guard-hidden", Hooks::Absent);
+    fs::write(directory.join(".gitignore"), "ignored.txt\n").expect("write root ignore");
+    git(&directory, &["add", ".gitignore"]);
+    git(
+        &directory,
+        &["commit", "--quiet", "--no-verify", "-m", "ignore"],
+    );
+    fs::write(directory.join("ignored.txt"), "x\n").expect("write ignored");
+    assert!(
+        just_recipe(&directory, "commit-guard").status.success(),
+        "root .gitignore applies"
+    );
+    let exclude = directory.join(".git").join("info").join("exclude");
+    fs::create_dir_all(exclude.parent().expect("parent")).expect("create info");
+    fs::write(&exclude, "hidden.txt\n").expect("write info exclude");
+    fs::write(directory.join("hidden.txt"), "x\n").expect("write hidden");
+    let excluded = guard_stderr(&directory);
+    assert!(
+        excluded.contains("commit-guard:untracked: hidden.txt"),
+        "{excluded}"
+    );
+    fs::remove_file(directory.join("hidden.txt")).expect("remove hidden");
+    fs::create_dir_all(directory.join("sub")).expect("create sub");
+    fs::write(directory.join("sub").join(".gitignore"), "*\n").expect("write sub ignore");
+    fs::write(directory.join("sub").join("hidden.rs"), "fn x() {}\n").expect("write sub file");
+    let nested = guard_stderr(&directory);
+    assert!(
+        nested.contains("commit-guard:untracked: sub/hidden.rs")
+            && nested.contains("commit-guard:untracked: sub/.gitignore"),
+        "{nested}"
+    );
+    let listed = crate::git_base::listed_paths(&directory).expect("listed paths");
+    for hidden in ["sub/hidden.rs", "sub/.gitignore"] {
+        assert!(listed.contains(hidden), "{hidden} is listed for the checks");
+    }
+    fs::write(directory.join("hidden.txt"), "x\n").expect("write hidden again");
+    let changed = crate::git_base::changed_paths(&directory, "HEAD").expect("changed paths");
+    assert!(changed.contains("hidden.txt"), "{changed:?}");
+    assert!(!changed.contains("ignored.txt"), "{changed:?}");
+}
+
+#[test]
+fn merge_commits_run_the_check_and_reject_violations() {
+    let directory = stub_repository("hooks-merge");
+    git(&directory, &["switch", "--quiet", "-c", "side"]);
+    fs::write(directory.join("src.txt"), "violation\n").expect("write violation");
+    git(
+        &directory,
+        &["commit", "--quiet", "--all", "--no-verify", "-m", "bad"],
+    );
+    git(&directory, &["switch", "--quiet", "main"]);
+    fs::write(directory.join("other.txt"), "main change\n").expect("change other");
+    git(
+        &directory,
+        &["commit", "--quiet", "--all", "--no-verify", "-m", "main"],
+    );
+    let before = git(&directory, &["rev-parse", "HEAD"]);
+    let merged = git_output(
+        &directory,
+        &["merge", "--quiet", "--no-ff", "-m", "merge", "side"],
+    );
+    assert!(!merged.status.success(), "violating merge is rejected");
+    assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
+    assert_eq!(
+        hook_log(&directory),
+        ["fresh-build", "commit-guard", "check base=HEAD"],
+        "merge commit hook order"
+    );
+}
+
+#[test]
+fn fresh_node_restores_a_replaced_tool() {
+    let work = fresh_directory(&repository_root(), "fresh-node");
+    fs::copy(repository_root().join(".npmrc"), work.join(".npmrc")).expect("copy .npmrc");
+    fs::write(
+        work.join("package.json"),
+        "{\n  \"name\": \"probe\",\n  \"private\": true,\n  \"devDependencies\": { \"prettier\": \"3.9.10\" }\n}\n",
+    )
+    .expect("write package.json");
+    let mut install = Command::new("pnpm");
+    install
+        .args(["install", "--offline", "--silent"])
+        .current_dir(&work)
+        .stdin(Stdio::null());
+    assert!(
+        install.status().expect("pnpm install").success(),
+        "offline install"
+    );
+    let shim = work.join("node_modules").join(".bin").join("prettier");
+    let genuine = fs::read(&shim).expect("read shim");
+    fs::remove_file(&shim).expect("unlink shim");
+    fs::write(&shim, "#!/bin/sh\nexit 0\n").expect("replace shim");
+    let module = work
+        .join("node_modules")
+        .join("prettier")
+        .join("package.json");
+    let package = fs::read(&module).expect("read prettier package");
+    fs::remove_file(&module).expect("unlink prettier package");
+    fs::write(&module, "{}\n").expect("replace prettier package");
+    let restored = just_recipe(&work, "fresh-node");
+    assert!(
+        restored.status.success(),
+        "{}",
+        String::from_utf8_lossy(&restored.stderr)
+    );
+    assert_eq!(
+        fs::read(&shim).expect("read shim"),
+        genuine,
+        "shim restored"
+    );
+    assert_eq!(
+        fs::read(&module).expect("read prettier package"),
+        package,
+        "package file restored"
+    );
+}
+
+#[test]
+fn missing_base_commit_reports_the_git_cause() {
+    let directory = repository("base-cause", Hooks::Absent);
+    let missing = "1234567890123456789012345678901234567890";
+    let failure = crate::git_base::resolve_base(&directory, missing).expect_err("missing base");
+    assert!(
+        failure.contains(missing) && failure.contains("fatal:"),
+        "{failure}"
     );
 }

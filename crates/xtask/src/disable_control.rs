@@ -2,7 +2,6 @@ mod allowlist;
 mod expects;
 mod lints;
 pub(crate) mod script;
-mod script_comments;
 
 #[cfg(test)]
 mod script_tests;
@@ -401,31 +400,77 @@ fn base_blob(root: &Path, base: &str, path: &str) -> Result<Option<String>, Sour
         .map_err(SourceFailure)
 }
 
-fn base_rows(root: &Path, base: &str, path: &str) -> Result<Vec<Row>, SourceFailure> {
-    let Some(text) = base_blob(root, base, path)? else {
-        return Ok(Vec::new());
-    };
-    let rules = load_disable_rules(&read_table(root, RULES_FILE)?)?;
+fn attribute_end(lines: &[&str], start: usize) -> usize {
+    let mut depth: usize = 0;
+    let mut opened = false;
+    for (index, line) in lines.iter().enumerate().skip(start) {
+        for next in line.chars() {
+            match next {
+                '[' => {
+                    depth = depth.saturating_add(1);
+                    opened = true;
+                }
+                ']' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        if opened && depth == 0 {
+            return index;
+        }
+    }
+    start
+}
+
+pub(crate) fn rust_applied_line(source: &str, line: usize) -> String {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut index = attribute_end(&lines, line.saturating_sub(1)).saturating_add(1);
+    while let Some(text) = lines.get(index) {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            index = index.saturating_add(1);
+        } else if trimmed.starts_with("#[") {
+            index = attribute_end(&lines, index).saturating_add(1);
+        } else {
+            return String::from(trimmed);
+        }
+    }
+    String::new()
+}
+
+fn keyed(
+    root: &Path,
+    files: &[(String, String)],
+    rules: &DisableRules,
+) -> Result<Vec<(Row, String)>, SourceFailure> {
     let targets = Targets::load(root)?;
     let coverage = |candidate: &str| targets.eslint_coverage(root, candidate);
-    let mut found = rows(path, &text, &rules);
+    let mut found: Vec<(Row, String)> = files
+        .iter()
+        .flat_map(|(path, text)| {
+            rows(path, text, rules).into_iter().map(|row| {
+                let applied = rust_applied_line(text, row.line);
+                (row, applied)
+            })
+        })
+        .collect();
     found.extend(script_rows(
-        path,
-        &text,
+        root,
+        files,
         &ScriptRules::load(root)?,
         &coverage,
-    ));
+    )?);
     Ok(found)
 }
 
-pub(crate) fn unmatched(current: Vec<Row>, previous: Vec<Row>) -> Vec<Row> {
-    let same = |left: &Row, right: &Row| {
-        left.kind == right.kind
-            && left.path == right.path
-            && left.rule == right.rule
-            && left.reason == right.reason
+pub(crate) fn unmatched(current: Vec<(Row, String)>, previous: Vec<(Row, String)>) -> Vec<Row> {
+    let same = |left: &(Row, String), right: &(Row, String)| {
+        left.0.kind == right.0.kind
+            && left.0.path == right.0.path
+            && left.0.rule == right.0.rule
+            && left.0.reason == right.0.reason
+            && left.1 == right.1
     };
-    let mut pool: Vec<Option<Row>> = previous.into_iter().map(Some).collect();
+    let mut pool: Vec<Option<(Row, String)>> = previous.into_iter().map(Some).collect();
     current
         .into_iter()
         .filter(|row| {
@@ -434,21 +479,31 @@ pub(crate) fn unmatched(current: Vec<Row>, previous: Vec<Row>) -> Vec<Row> {
                 .and_then(Option::take)
                 .is_none()
         })
+        .map(|(row, _)| row)
         .collect()
 }
 
 pub(crate) fn new_rows(root: &Path, base: &str) -> Result<(String, Vec<Row>), SourceFailure> {
     let resolved = git_base::resolve_base(root, base).map_err(SourceFailure)?;
     let changed = git_base::changed_paths(root, &resolved).map_err(SourceFailure)?;
-    let current: Vec<Row> = all_rows(root)?
+    let paths: BTreeSet<String> = all_rows(root)?
         .into_iter()
         .filter(|row| changed.contains(&row.path))
+        .map(|row| row.path)
         .collect();
-    let paths: BTreeSet<String> = current.iter().map(|row| row.path.clone()).collect();
-    let mut previous = Vec::new();
+    let mut current_files = Vec::new();
+    let mut base_files = Vec::new();
     for path in &paths {
-        previous.extend(base_rows(root, &resolved, path)?);
+        let full = root.join(path);
+        let text = fs::read_to_string(&full).map_err(|error| io_failure(&full, &error))?;
+        current_files.push((path.clone(), text));
+        if let Some(previous) = base_blob(root, &resolved, path)? {
+            base_files.push((path.clone(), previous));
+        }
     }
+    let rules = load_disable_rules(&read_table(root, RULES_FILE)?)?;
+    let current = keyed(root, &current_files, &rules)?;
+    let previous = keyed(root, &base_files, &rules)?;
     Ok((resolved, unmatched(current, previous)))
 }
 

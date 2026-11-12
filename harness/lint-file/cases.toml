@@ -154,3 +154,10 @@ path = "apps/desktop/vitest.config.mjs"
 applied = ["prettier"]
 failed = []
 messages = ["eslint: 적용하지 않음 (check-ts의 ESLint 대상 밖)"]
+
+[[case]]
+example = "gitignore.txt"
+path = "crates/domain/.gitignore"
+applied = ["source-check"]
+failed = ["source-check"]
+messages = ["file:nested-gitignore"]

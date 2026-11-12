@@ -274,16 +274,8 @@ fn split_nul(bytes: &[u8]) -> impl Iterator<Item = String> + '_ {
 }
 
 pub(crate) fn current_files(root: &Path) -> Result<Files, String> {
-    let mut listing = git(root);
-    listing.args([
-        "ls-files",
-        "-z",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-    ]);
     let mut files = Files::new();
-    for path in split_nul(&output(listing, "ls-files")?) {
+    for path in crate::git_base::listed_paths(root)? {
         let full = root.join(&path);
         let kind = fs::symlink_metadata(&full);
         if kind.is_ok_and(|metadata| metadata.is_file()) {

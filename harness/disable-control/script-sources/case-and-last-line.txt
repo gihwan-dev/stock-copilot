@@ -1,0 +1,8 @@
+// @TS-NOCHECK 대문자
+/*
+ * 설명
+ * @ts-ignore 마지막 줄
+ */
+const value = 1;
+// ESLint-Disable-Next-Line no-console -- 섞인 대소문자
+console.log(value);

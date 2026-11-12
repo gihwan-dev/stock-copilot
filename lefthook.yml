@@ -4,10 +4,20 @@ min_version: 2.2.2
 pre-commit:
   piped: true
   jobs:
-    - name: commit-guard
-      run: just commit-guard "$GIT_INDEX_FILE"
     - name: fresh-build
       run: just fresh-build
+    - name: commit-guard
+      run: just commit-guard "$GIT_INDEX_FILE"
+    - name: check
+      run: just base=HEAD check
+
+pre-merge-commit:
+  piped: true
+  jobs:
+    - name: fresh-build
+      run: just fresh-build
+    - name: commit-guard
+      run: just commit-guard "$GIT_INDEX_FILE"
     - name: check
       run: just base=HEAD check
 

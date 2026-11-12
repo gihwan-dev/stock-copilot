@@ -124,12 +124,16 @@ hooks-installed:
     cargo run --locked --quiet --package xtask -- hooks-installed
 
 commit-guard index="":
-    if [ -n "$1" ]; then export GIT_INDEX_FILE="$1"; fi; git diff --quiet --no-ext-diff -- || { printf 'commit-guard: 스테이징하지 않은 변경이 있다. 커밋 훅은 작업 사본을 검사하므로 커밋할 내용과 작업 사본이 같아야 한다\n' >&2; exit 1; }
-    if [ -n "$1" ]; then export GIT_INDEX_FILE="$1"; fi; untracked="$(git ls-files --others --exclude-standard)"; [ -z "$untracked" ] || { printf 'commit-guard: 추적하지 않는 파일이 있다. 커밋하거나 지운 뒤 커밋한다:\n%s\n' "$untracked" >&2; exit 1; }
+    cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-guard "$1"
 
-fresh-build:
+fresh-build: fresh-cargo fresh-node
+
+fresh-cargo:
     cargo clean --locked --workspace
     cargo llvm-cov clean --locked --workspace
+
+fresh-node:
+    pnpm install --frozen-lockfile --force
 
 push-check:
     base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full

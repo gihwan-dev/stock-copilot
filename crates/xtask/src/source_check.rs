@@ -50,6 +50,8 @@ pub(crate) const NESTED_CONFIG_FILES: [&str; 6] = [
 
 const BUILD_SCRIPT_FILE: &str = "build.rs";
 
+const IGNORE_FILE: &str = ".gitignore";
+
 const DOMAIN_DIRECTORY: &str = "crates/domain/";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -332,6 +334,9 @@ fn entry_text_findings(
             }
         }
         EntryKind::Symlink => vec![Finding::whole_file(path, Rule::Symlink)],
+        EntryKind::File if entry.name == IGNORE_FILE && path.contains('/') => {
+            vec![Finding::whole_file(path, Rule::NestedGitignore)]
+        }
         EntryKind::File
             if NESTED_CONFIG_FILES.contains(&entry.name.as_str()) && path.contains('/') =>
         {
@@ -411,7 +416,8 @@ fn applicable(metadata: &Metadata, root: &Path, relative: &str) -> Result<bool, 
     let rust = Path::new(relative)
         .extension()
         .is_some_and(|extension| extension == "rs");
-    let nested_config = NESTED_CONFIG_FILES.contains(&name) && relative.contains('/');
+    let nested_config =
+        (NESTED_CONFIG_FILES.contains(&name) || name == IGNORE_FILE) && relative.contains('/');
     let mut related = relative == "Cargo.toml" || nested_config;
     for package in metadata.workspace_packages() {
         let manifest = relative_path(root, package.manifest_path.as_std_path())?;

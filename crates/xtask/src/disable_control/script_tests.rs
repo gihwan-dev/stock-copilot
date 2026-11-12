@@ -8,10 +8,12 @@ use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, reposit
 use crate::lint_file::targets::{Coverage, TARGETS_FILE, Targets};
 
 use super::script::{
-    DIRECTIVES, SCRIPT_RULES_FILE, ScriptRules, repository_script_rows, script_rows,
+    COMMENTS_SCRIPT, Comment, DIRECTIVES, SCRIPT_RULES_FILE, ScriptRules, comments_of, keyed_rows,
+    repository_script_rows, script_rows,
 };
 use super::{
-    RULES_FILE, RUST_EXPECT_KIND, Row, all_rows, new_rows, render_languages, render_new, unmatched,
+    RULES_FILE, RUST_EXPECT_KIND, Row, all_rows, new_rows, render_languages, render_new,
+    rust_applied_line, unmatched,
 };
 
 const CASES_FILE: &str = "harness/disable-control/script-cases.toml";
@@ -94,15 +96,36 @@ fn reported(rows: &[Row]) -> Expected {
         .collect()
 }
 
-fn mismatches(cases: &[(ScriptCase, String)], rules: &ScriptRules) -> Vec<String> {
+fn case_comments(root: &Path, cases: &[(ScriptCase, String)]) -> Vec<Vec<Comment>> {
+    let files: Vec<(String, String)> = cases
+        .iter()
+        .map(|(case, source)| (case.path.clone(), source.clone()))
+        .collect();
+    comments_of(root, &files).expect("collect comments")
+}
+
+fn mismatches(
+    cases: &[(ScriptCase, String)],
+    comments: &[Vec<Comment>],
+    rules: &ScriptRules,
+) -> Vec<String> {
     cases
         .iter()
-        .filter_map(|(case, source)| {
+        .zip(comments)
+        .filter_map(|((case, source), found)| {
             let coverage = |_: &str| case.coverage;
-            let found = reported(&script_rows(&case.path, source, rules, &coverage));
-            (found != case.rows).then(|| {
+            let rows: Vec<Row> = if rules.scanned(&case.path).is_some() {
+                keyed_rows(&case.path, source, found, &coverage)
+                    .into_iter()
+                    .map(|(row, _)| row)
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let reported = reported(&rows);
+            (reported != case.rows).then(|| {
                 format!(
-                    "{} as {}: expected {:?}, reported {found:?}",
+                    "{} as {}: expected {:?}, reported {reported:?}",
                     case.example, case.path, case.rows
                 )
             })
@@ -119,7 +142,9 @@ fn repository_rows_with(root: &Path, rules: &ScriptRules) -> Vec<Row> {
 fn script_examples_report_expected_rows() {
     let root = repository_root();
     let rules = ScriptRules::load(&root).expect("load script rules");
-    let failures = mismatches(&script_cases(&root), &rules);
+    let cases = script_cases(&root);
+    let comments = case_comments(&root, &cases);
+    let failures = mismatches(&cases, &comments, &rules);
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
@@ -224,6 +249,7 @@ fn eslint_coverage_follows_the_real_configuration() {
 fn removing_any_script_rule_element_breaks_some_test() {
     let root = repository_root();
     let cases = script_cases(&root);
+    let comments = case_comments(&root, &cases);
     let document = toml::Value::Table(
         fs::read_to_string(root.join(SCRIPT_RULES_FILE))
             .expect("read script rules")
@@ -235,7 +261,8 @@ fn removing_any_script_rule_element_breaks_some_test() {
             return false;
         };
         ScriptRules::parse(table).is_ok_and(|rules| {
-            mismatches(&cases, &rules).is_empty() && repository_rows_with(&root, &rules).is_empty()
+            mismatches(&cases, &comments, &rules).is_empty()
+                && repository_rows_with(&root, &rules).is_empty()
         })
     };
     assert!(passes(&document), "the unmodified rules must pass");
@@ -283,7 +310,13 @@ const NEW_RUST: &str = "#[expect(clippy::too_many_lines, reason = \"새 끄기\"
 
 const OLD_SCRIPT: &str = "// eslint-disable-next-line no-console -- 옛 이유\nconsole.log(1);\n";
 
-const NEW_SCRIPT: &str = "const top = 1;\n// eslint-disable-next-line no-console -- 옛 이유\nconsole.log(top);\n// eslint-disable-next-line no-console -- 새 이유\nconsole.log(2);\n";
+const NEW_SCRIPT: &str = "const top = 1;\n// eslint-disable-next-line no-console -- 옛 이유\nconsole.log(1);\n// eslint-disable-next-line no-console -- 새 이유\nconsole.log(top);\n";
+
+const OLD_MOVED: &str =
+    "// eslint-disable-next-line no-console -- 옮김\nconsole.log(1);\nconsole.log(3);\n";
+
+const NEW_MOVED: &str =
+    "console.log(1);\n// eslint-disable-next-line no-console -- 옮김\nconsole.log(3);\n";
 
 fn since_workspace(root: &Path) -> (std::path::PathBuf, String) {
     let work = fresh_directory(root, "disable-report-since");
@@ -299,13 +332,21 @@ fn since_workspace(root: &Path) -> (std::path::PathBuf, String) {
     );
     write(&work, "probe/src/lib.rs", OLD_RUST);
     write(&work, "scripts/tool.mjs", OLD_SCRIPT);
-    for file in [RULES_FILE, SCRIPT_RULES_FILE, TARGETS_FILE] {
+    write(&work, "scripts/moved.mjs", OLD_MOVED);
+    for file in [RULES_FILE, SCRIPT_RULES_FILE, TARGETS_FILE, COMMENTS_SCRIPT] {
         write(
             &work,
             file,
             &fs::read_to_string(root.join(file)).expect("read data file"),
         );
     }
+    fs::create_dir_all(work.join("apps").join("desktop")).expect("create desktop folder");
+    std::os::unix::fs::symlink(
+        root.join("apps").join("desktop").join("node_modules"),
+        work.join("apps").join("desktop").join("node_modules"),
+    )
+    .expect("link desktop node_modules");
+    write(&work, ".gitignore", "node_modules\n/target/\n");
     generate_lockfile(&work.join("Cargo.toml"));
     git(&work, &["init", "--quiet", "--initial-branch=main"]);
     git(&work, &["add", "--all"]);
@@ -313,6 +354,7 @@ fn since_workspace(root: &Path) -> (std::path::PathBuf, String) {
     let base = git(&work, &["rev-parse", "HEAD"]);
     write(&work, "probe/src/lib.rs", NEW_RUST);
     write(&work, "scripts/tool.mjs", NEW_SCRIPT);
+    write(&work, "scripts/moved.mjs", NEW_MOVED);
     write(
         &work,
         "scripts/fresh.cjs",
@@ -356,16 +398,22 @@ fn since_lists_only_disables_added_after_the_base() {
             String::new(),
             String::new(),
         ),
+        (
+            String::from("scripts/moved.mjs"),
+            2,
+            String::from("no-console"),
+            String::from("옮김"),
+        ),
     ]);
     assert_eq!(listed, expected, "{found:#?}");
     let rendered = render_new(&resolved, &found);
     assert_eq!(
         rendered.lines().last(),
-        Some(format!("disable-report: {base} 이후 새 끄기 3건 (Rust 1건, TS 2건)").as_str()),
+        Some(format!("disable-report: {base} 이후 새 끄기 4건 (Rust 1건, TS 3건)").as_str()),
         "{rendered}"
     );
     let unchanged = new_rows(&work, "HEAD").expect("rows since HEAD");
-    assert_eq!(unchanged.1.len(), 3, "uncommitted rows count against HEAD");
+    assert_eq!(unchanged.1.len(), 4, "uncommitted rows count against HEAD");
     for refused in ["main", "HEAD~0", "abc"] {
         assert!(
             new_rows(&work, refused).is_err(),
@@ -376,21 +424,48 @@ fn since_lists_only_disables_added_after_the_base() {
 
 #[test]
 fn unmatched_keeps_duplicates_beyond_the_base_count() {
-    let row = |line: usize| Row {
-        kind: "eslint-disable-next-line",
-        path: String::from("apps/desktop/src/app/App.tsx"),
-        line,
-        rule: String::from("no-console"),
-        reason: String::from("같은 이유"),
+    let row = |line: usize| {
+        (
+            Row {
+                kind: "eslint-disable-next-line",
+                path: String::from("apps/desktop/src/app/App.tsx"),
+                line,
+                rule: String::from("no-console"),
+                reason: String::from("같은 이유"),
+            },
+            String::from("console.log(1);"),
+        )
     };
     let left = unmatched(vec![row(3), row(9)], vec![row(1)]);
     assert_eq!(left.len(), 1, "{left:#?}");
     let moved = unmatched(vec![row(7)], vec![row(1)]);
     assert!(moved.is_empty(), "{moved:#?}");
     let mut other = row(2);
-    other.reason = String::from("다른 이유");
+    other.0.reason = String::from("다른 이유");
     let changed = unmatched(vec![other], vec![row(2)]);
     assert_eq!(changed.len(), 1, "{changed:#?}");
+    let mut retargeted = row(2);
+    retargeted.1 = String::from("console.log(2);");
+    let applied = unmatched(vec![retargeted], vec![row(2)]);
+    assert_eq!(applied.len(), 1, "{applied:#?}");
+}
+
+#[test]
+fn rust_applied_line_skips_attributes_and_blank_lines() {
+    let source = "#[expect(\n    clippy::too_many_lines,\n    reason = \"긴 함수\"\n)]\n#[inline]\n\npub fn long() {}\n";
+    assert_eq!(
+        rust_applied_line(source, 1),
+        "pub fn long() {}",
+        "multi-line attribute"
+    );
+    assert_eq!(
+        rust_applied_line(
+            "#[expect(clippy::a, reason = \"b\")] pub fn one() {}\nfn two() {}\n",
+            1
+        ),
+        "fn two() {}",
+        "attribute on the item line uses the next line"
+    );
 }
 
 #[test]
@@ -420,14 +495,36 @@ fn new_scripts_and_configs_are_scanned() {
     );
     let coverage = |path: &str| targets.eslint_coverage(&root, path);
     let found = script_rows(
-        "apps/desktop/vitest.config.mjs",
-        "// eslint-disable-next-line no-console -- 예시\nexport default {};\n",
+        &root,
+        &[(
+            String::from("apps/desktop/vitest.config.mjs"),
+            String::from("// eslint-disable-next-line no-console -- 예시\nexport default {};\n"),
+        )],
         &rules,
         &coverage,
-    );
+    )
+    .expect("script rows");
     assert_eq!(
-        found.first().map(|row| row.kind),
+        found.first().map(|(row, _)| row.kind),
         Some("eslint-disable-next-line (ESLint 밖)"),
         "{found:#?}"
+    );
+}
+
+#[test]
+fn comments_survive_quotes_backslashes_tabs_and_control_characters() {
+    let root = repository_root();
+    let text = "const s = \"\\\"\\\\\u{1}\";\n// eslint-disable-next-line a -- 따옴표 \"와 \\ 그리고\t탭\nconst t = 1;\n";
+    let found = comments_of(&root, &[(String::from("probe.ts"), String::from(text))])
+        .expect("collect comments");
+    let comments = found.first().expect("one file");
+    assert_eq!(comments.len(), 1, "{comments:#?}");
+    let coverage = |_: &str| Coverage::Linted;
+    let rows = keyed_rows("probe.ts", text, comments, &coverage);
+    assert_eq!(
+        rows.first()
+            .map(|(row, applied)| (row.reason.as_str(), applied.as_str())),
+        Some(("따옴표 \"와 \\ 그리고\t탭", "const t = 1;")),
+        "{rows:#?}"
     );
 }

@@ -1,0 +1,7 @@
+export const View = () => <p>`</p>;
+// eslint-disable-next-line no-console -- JSX 뒤
+console.log(1);
+const fake = "// eslint-disable-next-line no-console -- 가짜";
+export const Text = () => <p>// eslint-disable-line no-console -- JSX 글자</p>;
+export const Quote = () => <p>don't // eslint-disable</p>;
+export const Real = () => <p>{/* eslint-disable-line no-console -- JSX 식 */}</p>;

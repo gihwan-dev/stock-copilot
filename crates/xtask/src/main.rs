@@ -4,6 +4,7 @@ use std::process::ExitCode;
 mod arch_check;
 mod capability_check;
 mod check_support;
+mod commit_guard;
 mod coverage_check;
 mod disable_control;
 mod git_base;
@@ -35,6 +36,7 @@ fn main() -> ExitCode {
         [command, rest @ ..] if command == "lint-file" => lint_file::command(rest),
         [command] if command == "hooks-installed" => git_hooks::installed_command(),
         [command] if command == "push-base" => git_hooks::push_base_command(),
+        [command, rest @ ..] if command == "commit-guard" => commit_guard::command(rest),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),
         _ => arch_check::usage(),

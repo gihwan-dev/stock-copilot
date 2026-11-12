@@ -1,17 +1,20 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
+use std::process::{Command, Stdio};
 
-use crate::git_base::{git, output};
+use crate::git_base::listed_paths;
 use crate::lint_file::targets::{Coverage, Targets};
 use crate::workspace_sources::{SourceFailure, io_failure};
 
 use super::Row;
-use super::script_comments::comments;
 
 pub(crate) const SCRIPT_RULES_FILE: &str = "harness/disable-control/typescript.toml";
 
-const SCRIPT_RULES_KEYS: [&str; 3] = ["example-bundles", "extensions", "regex-keywords"];
+const SCRIPT_RULES_KEYS: [&str; 2] = ["example-bundles", "extensions"];
+
+pub(crate) const COMMENTS_SCRIPT: &str = "harness/disable-control/comments.mjs";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Directive {
@@ -94,13 +97,13 @@ pub(crate) struct Found {
     pub(crate) directive: Directive,
     pub(crate) rule: String,
     pub(crate) reason: String,
+    pub(crate) applied: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ScriptRules {
     pub(crate) extensions: BTreeSet<String>,
     pub(crate) example_bundles: BTreeSet<String>,
-    pub(crate) regex_keywords: BTreeSet<String>,
 }
 
 fn names(table: &toml::Table, key: &str) -> Result<BTreeSet<String>, SourceFailure> {
@@ -134,7 +137,6 @@ impl ScriptRules {
         Ok(Self {
             extensions: names(table, "extensions")?,
             example_bundles: names(table, "example-bundles")?,
-            regex_keywords: names(table, "regex-keywords")?,
         })
     }
 
@@ -172,78 +174,255 @@ fn separated(rest: &str) -> (String, String) {
     (String::from(rest.trim()), String::new())
 }
 
-fn directive(text: &str) -> Option<(Directive, &str)> {
-    let body = text.trim_start_matches(|next: char| next.is_whitespace() || next == '*');
+fn directive(line: &str) -> Option<(Directive, &str)> {
+    let body =
+        line.trim_start_matches(|next: char| next.is_whitespace() || next == '*' || next == '/');
     DIRECTIVES.into_iter().find_map(|candidate| {
-        body.strip_prefix(candidate.name())
-            .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
-            .map(|rest| (candidate, rest))
+        let name = candidate.name();
+        let head = body.get(..name.len())?;
+        let rest = body.get(name.len()..)?;
+        (head.eq_ignore_ascii_case(name)
+            && (rest.is_empty() || rest.starts_with(char::is_whitespace)))
+        .then_some((candidate, rest))
     })
 }
 
-pub(crate) fn directives(source: &str, rules: &ScriptRules) -> Vec<Found> {
-    comments(source, &rules.regex_keywords)
-        .into_iter()
-        .filter_map(|comment| {
-            let (found, rest) = directive(&comment.text)?;
-            let (rule, reason) = match found.described() {
-                Described::RuleAndReason => separated(rest),
-                Described::ReasonOnly => (String::new(), String::from(rest.trim())),
-            };
-            Some(Found {
-                line: comment.line,
-                directive: found,
-                rule,
-                reason,
-            })
-        })
-        .collect()
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Comment {
+    pub(crate) line: usize,
+    pub(crate) end_line: usize,
+    pub(crate) text: String,
 }
 
-pub(crate) fn script_rows(
+fn json_string(text: &str) -> String {
+    let mut quoted = String::from("\"");
+    for next in text.chars() {
+        match next {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            _ if u32::from(next) < 0x20 => {
+                let code = u32::from(next);
+                quoted.push_str("\\u00");
+                for nibble in [code.checked_shr(4).unwrap_or(0), code & 0xf] {
+                    quoted.push(char::from_digit(nibble, 16).unwrap_or('0'));
+                }
+            }
+            _ => quoted.push(next),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+fn unescaped(text: &str) -> String {
+    let mut plain = String::new();
+    let mut chars = text.chars();
+    while let Some(next) = chars.next() {
+        if next != '\\' {
+            plain.push(next);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => plain.push('\n'),
+            Some('r') => plain.push('\r'),
+            Some('t') => plain.push('\t'),
+            Some(other) => plain.push(other),
+            None => {}
+        }
+    }
+    plain
+}
+
+fn parsed_line(line: &str) -> Option<(usize, Comment)> {
+    let mut fields = line.splitn(4, '\t');
+    let index = fields.next()?.parse().ok()?;
+    let start = fields.next()?.parse().ok()?;
+    let end = fields.next()?.parse().ok()?;
+    Some((
+        index,
+        Comment {
+            line: start,
+            end_line: end,
+            text: unescaped(fields.next()?),
+        },
+    ))
+}
+
+pub(crate) fn comments_of(
+    root: &Path,
+    files: &[(String, String)],
+) -> Result<Vec<Vec<Comment>>, SourceFailure> {
+    let mut found: Vec<Vec<Comment>> = files.iter().map(|_| Vec::new()).collect();
+    if files.is_empty() {
+        return Ok(found);
+    }
+    let input = format!(
+        "[{}]",
+        files
+            .iter()
+            .map(|(name, text)| format!("[{},{}]", json_string(name), json_string(text)))
+            .collect::<Vec<String>>()
+            .join(",")
+    );
+    let mut child = Command::new("node")
+        .arg(root.join(COMMENTS_SCRIPT))
+        .current_dir(root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| SourceFailure(format!("node {COMMENTS_SCRIPT}: {error}")))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(input.as_bytes())
+            .map_err(|error| SourceFailure(format!("node {COMMENTS_SCRIPT}: {error}")))?;
+    }
+    let finished = child
+        .wait_with_output()
+        .map_err(|error| SourceFailure(format!("node {COMMENTS_SCRIPT}: {error}")))?;
+    if !finished.status.success() {
+        return Err(SourceFailure(format!(
+            "node {COMMENTS_SCRIPT}: {}",
+            String::from_utf8_lossy(&finished.stderr).trim()
+        )));
+    }
+    for line in String::from_utf8_lossy(&finished.stdout).lines() {
+        let (index, comment) = parsed_line(line)
+            .ok_or_else(|| SourceFailure(format!("node {COMMENTS_SCRIPT}: 모르는 출력 {line}")))?;
+        found
+            .get_mut(index)
+            .ok_or_else(|| {
+                SourceFailure(format!("node {COMMENTS_SCRIPT}: 없는 파일 번호 {index}"))
+            })?
+            .push(comment);
+    }
+    Ok(found)
+}
+
+fn applied_line(source: &str, directive: Directive, line: usize, end_line: usize) -> String {
+    let lines: Vec<&str> = source.lines().collect();
+    let found = match directive {
+        Directive::DisableLine => lines.get(line.saturating_sub(1)).copied(),
+        Directive::DisableNextLine
+        | Directive::Disable
+        | Directive::Enable
+        | Directive::InlineConfig
+        | Directive::TsIgnore
+        | Directive::TsExpectError
+        | Directive::TsNocheck => lines
+            .iter()
+            .skip(end_line)
+            .find(|text| !text.trim().is_empty())
+            .copied(),
+    };
+    found.map_or_else(String::new, |text| String::from(text.trim()))
+}
+
+pub(crate) fn directives(source: &str, comments: &[Comment]) -> Vec<Found> {
+    let mut found = Vec::new();
+    for comment in comments {
+        let lines: Vec<&str> = comment.text.split('\n').collect();
+        for (offset, line) in lines.iter().enumerate() {
+            let Some((matched, rest)) = directive(line) else {
+                continue;
+            };
+            let following: Vec<&str> = lines
+                .iter()
+                .skip(offset.saturating_add(1))
+                .copied()
+                .collect();
+            let mut whole = String::from(rest);
+            for next in following {
+                whole.push('\n');
+                whole.push_str(next);
+            }
+            let (rule, reason) = match matched.described() {
+                Described::RuleAndReason => separated(&whole),
+                Described::ReasonOnly => (String::new(), String::from(whole.trim())),
+            };
+            found.push(Found {
+                line: comment.line.saturating_add(offset),
+                directive: matched,
+                rule,
+                reason,
+                applied: applied_line(source, matched, comment.line, comment.end_line),
+            });
+        }
+    }
+    found
+}
+
+pub(crate) fn keyed_rows(
     path: &str,
     source: &str,
-    rules: &ScriptRules,
+    comments: &[Comment],
     coverage: &dyn Fn(&str) -> Coverage,
-) -> Vec<Row> {
-    if rules.scanned(path).is_none() {
-        return Vec::new();
-    }
-    let found = directives(source, rules);
+) -> Vec<(Row, String)> {
+    let found = directives(source, comments);
     if found.is_empty() {
         return Vec::new();
     }
     let covered = coverage(path);
     found
         .into_iter()
-        .map(|item| Row {
-            kind: item.directive.kind(covered),
-            path: String::from(path),
-            line: item.line,
-            rule: item.rule,
-            reason: item.reason,
+        .map(|item| {
+            (
+                Row {
+                    kind: item.directive.kind(covered),
+                    path: String::from(path),
+                    line: item.line,
+                    rule: item.rule,
+                    reason: item.reason,
+                },
+                item.applied,
+            )
         })
         .collect()
 }
 
-pub(crate) fn listed_files(root: &Path) -> Result<Vec<String>, SourceFailure> {
-    let mut command = git(root);
-    command.args([
-        "ls-files",
-        "-z",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-    ]);
-    let listing = output(command, "ls-files").map_err(SourceFailure)?;
-    let mut paths: Vec<String> = listing
-        .split(|byte| *byte == 0)
-        .filter(|name| !name.is_empty())
-        .map(|name| String::from_utf8_lossy(name).into_owned())
+pub(crate) fn script_rows(
+    root: &Path,
+    files: &[(String, String)],
+    rules: &ScriptRules,
+    coverage: &dyn Fn(&str) -> Coverage,
+) -> Result<Vec<(Row, String)>, SourceFailure> {
+    let scanned: Vec<(String, String)> = files
+        .iter()
+        .filter(|(path, _)| rules.scanned(path).is_some())
+        .cloned()
         .collect();
-    paths.sort();
-    paths.dedup();
-    Ok(paths)
+    let comments = comments_of(root, &scanned)?;
+    Ok(scanned
+        .iter()
+        .zip(comments)
+        .flat_map(|((path, text), found)| keyed_rows(path, text, &found, coverage))
+        .collect())
+}
+
+pub(crate) fn listed_files(root: &Path) -> Result<Vec<String>, SourceFailure> {
+    Ok(listed_paths(root)
+        .map_err(SourceFailure)?
+        .into_iter()
+        .collect())
+}
+
+pub(crate) fn repository_files(
+    root: &Path,
+    rules: &ScriptRules,
+) -> Result<Vec<(String, String)>, SourceFailure> {
+    let mut files = Vec::new();
+    for path in listed_files(root)? {
+        let full = root.join(&path);
+        if rules.scanned(&path).is_none() || !full.is_file() {
+            continue;
+        }
+        let text = fs::read_to_string(&full).map_err(|error| io_failure(&full, &error))?;
+        files.push((path, text));
+    }
+    Ok(files)
 }
 
 pub(crate) fn repository_script_rows(
@@ -252,15 +431,11 @@ pub(crate) fn repository_script_rows(
     targets: &Targets,
 ) -> Result<Vec<Row>, SourceFailure> {
     let coverage = |path: &str| targets.eslint_coverage(root, path);
-    let mut found = Vec::new();
-    for path in listed_files(root)? {
-        let full = root.join(&path);
-        if rules.scanned(&path).is_none() || !full.is_file() {
-            continue;
-        }
-        let text = fs::read_to_string(&full).map_err(|error| io_failure(&full, &error))?;
-        found.extend(script_rows(&path, &text, rules, &coverage));
-    }
+    let files = repository_files(root, rules)?;
+    let mut found: Vec<Row> = script_rows(root, &files, rules, &coverage)?
+        .into_iter()
+        .map(|(row, _)| row)
+        .collect();
     found.sort();
     Ok(found)
 }
