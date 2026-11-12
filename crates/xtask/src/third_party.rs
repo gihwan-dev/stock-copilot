@@ -164,18 +164,101 @@ fn vulnerable_dependency_fails() {
     assert_rejected(&run, "vulnerability", "RUSTSEC-2099-0001");
 }
 
-#[test]
-fn check_recipe_runs_cargo_deny() {
+const UNREACHABLE_PROXY: &str = "http://127.0.0.1:9";
+
+const PROXY_VARIABLES: [&str; 6] = [
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+];
+
+fn without_network(command: &mut Command) -> &mut Command {
+    for name in PROXY_VARIABLES {
+        command.env(name, UNREACHABLE_PROXY);
+    }
+    command
+}
+
+fn recipe_lines(recipe: &str) -> Vec<String> {
     let output = Command::new("just")
-        .args(["--show", "check"])
+        .args(["--show", recipe])
         .current_dir(repository_root())
         .output()
-        .expect("just --show check");
-    let recipe = String::from_utf8(output.stdout).expect("utf-8 recipe");
+        .expect("just --show");
+    String::from_utf8(output.stdout)
+        .expect("utf-8 recipe")
+        .lines()
+        .map(|line| String::from(line.trim()))
+        .collect()
+}
+
+#[test]
+fn check_recipe_runs_offline_cargo_deny() {
+    let check = recipe_lines("check");
     assert!(
-        recipe
-            .lines()
-            .any(|line| line.trim() == "cargo deny --locked check"),
-        "{recipe}"
+        check
+            .iter()
+            .any(|line| line == "\"{{ just_executable() }}\" deny"),
+        "{check:?}"
     );
+    let deny = recipe_lines("deny");
+    assert!(
+        deny.iter()
+            .any(|line| line == "cargo deny --locked --offline check"),
+        "{deny:?}"
+    );
+}
+
+#[test]
+fn check_full_fetches_advisory_db_first() {
+    let check_full = recipe_lines("check-full");
+    assert!(
+        check_full
+            .iter()
+            .any(|line| line == "check-full: advisory-db-fetch check"),
+        "{check_full:?}"
+    );
+}
+
+#[test]
+fn deny_recipe_passes_without_network() {
+    let root = repository_root();
+    let online =
+        without_network(Command::new("cargo").args(["deny", "--locked", "check", "advisories"]))
+            .current_dir(&root)
+            .output()
+            .expect("cargo deny with fetch");
+    assert!(
+        !online.status.success(),
+        "proxy did not block the advisory fetch"
+    );
+    let offline = without_network(Command::new("just").arg("deny"))
+        .current_dir(&root)
+        .output()
+        .expect("just deny");
+    let mut text = String::from_utf8(offline.stdout).expect("utf-8 just deny stdout");
+    text.push_str(&String::from_utf8(offline.stderr).expect("utf-8 just deny stderr"));
+    assert!(offline.status.success(), "{text}");
+    assert!(
+        text.contains("advisories ok, bans ok, licenses ok, sources ok"),
+        "{text}"
+    );
+}
+
+#[test]
+fn deny_recipe_explains_missing_advisory_db() {
+    let root = repository_root();
+    let empty_home = fresh_directory(&root, "deny-empty-cargo-home");
+    let output = Command::new("just")
+        .arg("deny")
+        .env("CARGO_HOME", &empty_home)
+        .current_dir(&root)
+        .output()
+        .expect("just deny");
+    let text = String::from_utf8(output.stderr).expect("utf-8 just deny output");
+    assert!(!output.status.success(), "{text}");
+    assert!(text.contains("just advisory-db-fetch"), "{text}");
 }
