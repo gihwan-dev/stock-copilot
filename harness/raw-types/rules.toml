@@ -1,0 +1,221 @@
+standard-roots = ["std", "core", "alloc"]
+
+local-roots = ["crate", "self", "super"]
+
+constructor-names = ["new", "try_new"]
+
+constructor-wrappers = ["Result", "Option"]
+
+accessor-prefix = "as_"
+
+external-types = []
+
+external-traits = []
+
+newtype-fields = [
+  "String",
+  "char",
+  "OsString",
+  "CString",
+  "PathBuf",
+  "i8",
+  "i16",
+  "i32",
+  "i64",
+  "i128",
+  "isize",
+  "u8",
+  "u16",
+  "u32",
+  "u64",
+  "u128",
+  "usize",
+  "NonZeroI8",
+  "NonZeroI16",
+  "NonZeroI32",
+  "NonZeroI64",
+  "NonZeroI128",
+  "NonZeroIsize",
+  "NonZeroU8",
+  "NonZeroU16",
+  "NonZeroU32",
+  "NonZeroU64",
+  "NonZeroU128",
+  "NonZeroUsize",
+  "f32",
+  "f64",
+  "Decimal",
+  "Vec<u8>",
+]
+
+borrowed-forms = [
+  { owned = "String", borrowed = "&str" },
+  { owned = "Vec<u8>", borrowed = "&[u8]" },
+  { owned = "PathBuf", borrowed = "&Path" },
+  { owned = "OsString", borrowed = "&OsStr" },
+  { owned = "CString", borrowed = "&CStr" },
+]
+
+bool-methods = [
+  { trait = "cmp::PartialEq", method = "eq" },
+  { trait = "cmp::PartialEq", method = "ne" },
+  { trait = "cmp::PartialOrd", method = "lt" },
+  { trait = "cmp::PartialOrd", method = "le" },
+  { trait = "cmp::PartialOrd", method = "gt" },
+  { trait = "cmp::PartialOrd", method = "ge" },
+]
+
+[[standard-type]]
+path = "option::Option"
+prelude = true
+reason = "값이 없을 수 있음"
+
+[[standard-type]]
+path = "result::Result"
+prelude = true
+reason = "실패할 수 있는 결과"
+
+[[standard-type]]
+path = "vec::Vec"
+prelude = true
+reason = "전용 타입의 목록"
+
+[[standard-type]]
+path = "boxed::Box"
+prelude = true
+reason = "재귀 타입과 트레이트 객체"
+
+[[standard-type]]
+path = "sync::Arc"
+prelude = false
+reason = "포트 객체 공유"
+
+[[standard-type]]
+path = "collections::BTreeMap"
+prelude = false
+reason = "순서가 정해진 사전"
+
+[[standard-type]]
+path = "collections::BTreeSet"
+prelude = false
+reason = "순서가 정해진 집합"
+
+[[standard-type]]
+path = "marker::PhantomData"
+prelude = false
+reason = "타입 상태 표식"
+
+[[standard-type]]
+path = "cmp::Ordering"
+prelude = false
+reason = "Ord 구현의 반환"
+
+[[standard-type]]
+path = "fmt::Formatter"
+prelude = false
+reason = "Debug·Display 구현의 인자"
+
+[[standard-type]]
+path = "fmt::Result"
+prelude = false
+reason = "Debug·Display 구현의 반환"
+
+[[standard-trait]]
+path = "cmp::PartialEq"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "cmp::Eq"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "cmp::PartialOrd"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "cmp::Ord"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "hash::Hash"
+prelude = false
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "hash::Hasher"
+prelude = false
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "fmt::Debug"
+prelude = false
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "fmt::Display"
+prelude = false
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "error::Error"
+prelude = false
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "clone::Clone"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "marker::Send"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "marker::Sync"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "iter::Iterator"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "ops::Fn"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "ops::FnMut"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "ops::FnOnce"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "convert::From"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "convert::Into"
+prelude = true
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "str::FromStr"
+prelude = false
+reason = "표준 트레이트 구현과 경계"
+
+[[standard-trait]]
+path = "future::Future"
+prelude = true
+reason = "표준 트레이트 구현과 경계"

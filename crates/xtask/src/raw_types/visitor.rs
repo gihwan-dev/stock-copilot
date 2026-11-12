@@ -1,142 +1,255 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::TokenStream;
 use syn::ext::IdentExt;
 use syn::visit::{self, Visit};
 use syn::{
-    Field, ForeignItemFn, ForeignItemMacro, ForeignItemStatic, Generics, ImplItemConst, ImplItemFn,
-    ImplItemMacro, ImplItemType, ItemConst, ItemEnum, ItemFn, ItemImpl, ItemMacro, ItemMod,
-    ItemStatic, ItemStruct, ItemTrait, ItemType, ItemUnion, Macro, Path, Signature, TraitItemConst,
-    TraitItemFn, TraitItemMacro, TraitItemType, Type, TypeParamBound,
+    Field, FnArg, ForeignItemFn, ForeignItemMacro, ForeignItemStatic, GenericParam, Generics,
+    ImplItemConst, ImplItemFn, ImplItemMacro, ImplItemType, ItemConst, ItemEnum, ItemFn, ItemImpl,
+    ItemMacro, ItemMod, ItemStatic, ItemStruct, ItemTrait, ItemType, ItemUnion, Macro, Path,
+    ReturnType, Signature, TraitItemConst, TraitItemFn, TraitItemMacro, TraitItemType, Type,
+    TypeParamBound,
 };
 
 use super::Rule;
-use super::catalogue::{
-    ACCESSOR_PREFIX, BOOL_TYPE, CONSTRUCTOR_NAMES, STANDARD_ROOTS, TRAIT_BOOL_METHODS,
-};
-use super::scan::{
-    TypeNames, generics_names, input_names, is_test_module, newtype_name, output_names,
-    returns_self, type_names,
-};
+use super::resolve::{FileContext, Resolution, TypeCheck};
+use super::rules::Kind;
+use super::scan::{is_test_module, newtype_field, shape};
+
+const BOOL_TYPE: &str = "bool";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ImplContext {
     Outside,
-    Newtype(String),
+    Newtype(String, String),
+    Trait(Option<String>),
     OtherInherent,
-    BoolTrait(String),
-    OtherTrait,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Exemption {
     Nothing,
     Inputs,
-    AllButBool,
+    Output,
     Bool,
 }
 
 #[derive(Debug)]
 pub(super) struct RawTypes<'context> {
-    local_traits: &'context BTreeSet<String>,
-    newtypes: BTreeSet<String>,
-    context: ImplContext,
+    context: &'context FileContext<'context>,
+    newtypes: BTreeMap<String, String>,
+    generics: Vec<BTreeSet<String>>,
+    impl_context: ImplContext,
     pub(super) found: Vec<(usize, Rule)>,
 }
 
-fn path_names(path: &Path) -> Vec<(usize, String)> {
-    let mut names = TypeNames::new();
-    names.visit_path(path);
-    names.found
-}
-
-fn bounds_names<'bound>(
-    bounds: impl IntoIterator<Item = &'bound TypeParamBound>,
-) -> Vec<(usize, String)> {
-    let mut names = TypeNames::new();
-    for bound in bounds {
-        names.visit_type_param_bound(bound);
-    }
-    names.found
-}
-
-fn fields_names<'field>(fields: impl IntoIterator<Item = &'field Field>) -> Vec<(usize, String)> {
-    fields
-        .into_iter()
-        .flat_map(|field| type_names(&field.ty))
+fn generic_names(generics: &Generics) -> BTreeSet<String> {
+    generics
+        .params
+        .iter()
+        .filter_map(|param| match param {
+            GenericParam::Type(ty) => Some(ty.ident.unraw().to_string()),
+            GenericParam::Const(constant) => Some(constant.ident.unraw().to_string()),
+            GenericParam::Lifetime(_) => None,
+        })
         .collect()
+}
+
+fn path_names(path: &Path) -> Vec<String> {
+    path.segments
+        .iter()
+        .map(|segment| segment.ident.unraw().to_string())
+        .collect()
+}
+
+fn first_type_argument(ty: &Type) -> Option<&Type> {
+    if let Type::Path(path) = ty
+        && let Some(last) = path.path.segments.last()
+        && let syn::PathArguments::AngleBracketed(angle) = &last.arguments
+        && let Some(syn::GenericArgument::Type(inner)) = angle.args.first()
+    {
+        Some(inner)
+    } else {
+        None
+    }
 }
 
 impl<'context> RawTypes<'context> {
     pub(super) fn new(
-        local_traits: &'context BTreeSet<String>,
-        newtypes: BTreeSet<String>,
+        context: &'context FileContext<'context>,
+        newtypes: BTreeMap<String, String>,
     ) -> Self {
         Self {
-            local_traits,
+            context,
             newtypes,
-            context: ImplContext::Outside,
+            generics: Vec::new(),
+            impl_context: ImplContext::Outside,
             found: Vec::new(),
         }
     }
 
-    fn report(&mut self, names: Vec<(usize, String)>) {
-        self.found.extend(
-            names
-                .into_iter()
-                .map(|(line, name)| (line, Rule::RawType(name))),
-        );
+    fn scope(&self) -> BTreeSet<String> {
+        self.generics.iter().flatten().cloned().collect()
+    }
+
+    fn checker<F: FnOnce(&mut TypeCheck<'_>)>(&self, check: F) -> Vec<(usize, Rule)> {
+        let scope = self.scope();
+        let mut checker = TypeCheck::new(self.context, &scope);
+        check(&mut checker);
+        checker.found
+    }
+
+    fn check_type(&mut self, ty: &Type) {
+        let found = self.checker(|checker| checker.visit_type(ty));
+        self.found.extend(found);
+    }
+
+    fn check_generics(&mut self, generics: &Generics) {
+        let found = self.checker(|checker| checker.visit_generics(generics));
+        self.found.extend(found);
+    }
+
+    fn check_bounds<'bound>(&mut self, bounds: impl IntoIterator<Item = &'bound TypeParamBound>) {
+        let collected: Vec<&TypeParamBound> = bounds.into_iter().collect();
+        let found = self.checker(|checker| {
+            for bound in collected {
+                checker.visit_type_param_bound(bound);
+            }
+        });
+        self.found.extend(found);
+    }
+
+    fn check_fields<'field>(&mut self, fields: impl IntoIterator<Item = &'field Field>) {
+        for field in fields {
+            self.check_type(&field.ty);
+        }
     }
 
     fn signature(&mut self, signature: &Signature, exemption: Exemption) {
-        let mut names = generics_names(&signature.generics);
-        let inputs = input_names(signature);
-        let outputs = output_names(signature);
+        self.generics.push(generic_names(&signature.generics));
+        let mut found = self.checker(|checker| checker.visit_generics(&signature.generics));
+        let inputs = self.checker(|checker| {
+            for input in &signature.inputs {
+                match input {
+                    FnArg::Receiver(receiver) => checker.visit_type(&receiver.ty),
+                    FnArg::Typed(typed) => checker.visit_type(&typed.ty),
+                }
+            }
+        });
+        let outputs = self.checker(|checker| match &signature.output {
+            ReturnType::Default => {}
+            ReturnType::Type(_, ty) => checker.check_return(ty),
+        });
+        self.generics.pop();
+        let is_bool = |(_, rule): &(usize, Rule)| *rule == Rule::RawType(String::from(BOOL_TYPE));
         match exemption {
             Exemption::Nothing => {
-                names.extend(inputs);
-                names.extend(outputs);
+                found.extend(inputs);
+                found.extend(outputs);
             }
-            Exemption::Inputs => names.extend(outputs),
-            Exemption::AllButBool => names.extend(
+            Exemption::Inputs => found.extend(outputs),
+            Exemption::Output => found.extend(inputs),
+            Exemption::Bool => found.extend(
                 inputs
                     .into_iter()
                     .chain(outputs)
-                    .filter(|(_, name)| name != BOOL_TYPE),
+                    .filter(|finding| !is_bool(finding)),
             ),
-            Exemption::Bool => {
-                names.extend(inputs);
-                names.extend(outputs.into_iter().filter(|(_, name)| name == BOOL_TYPE));
-            }
         }
-        self.report(names);
+        self.found.extend(found);
     }
 
-    fn generics(&mut self, generics: &Generics) {
-        self.report(generics_names(generics));
+    fn field_forms(&self, field_shape: &str) -> BTreeSet<String> {
+        let mut forms = BTreeSet::from([String::from(field_shape)]);
+        if let Some(borrowed) = self.context.rules.borrowed_forms.get(field_shape) {
+            forms.extend(borrowed.iter().cloned());
+        }
+        forms
     }
 
-    fn trait_context(&self, path: &Path) -> ImplContext {
-        let segments: Vec<String> = path
-            .segments
-            .iter()
-            .map(|segment| segment.ident.unraw().to_string())
-            .collect();
-        let known = |module: &str, name: &str| {
-            TRAIT_BOOL_METHODS
-                .iter()
-                .any(|(listed_module, listed, _)| *listed_module == module && *listed == name)
+    fn returns_self(&self, signature: &Signature, newtype: &str) -> Option<()> {
+        let ReturnType::Type(_, ty) = &signature.output else {
+            return None;
         };
-        match segments.as_slice() {
-            [name] if !self.local_traits.contains(name) && known_trait(name) => {
-                ImplContext::BoolTrait(name.clone())
+        let names_self = |candidate: &Type| {
+            shape(candidate).is_some_and(|name| name == "Self" || name == newtype)
+        };
+        if names_self(ty) {
+            return Some(());
+        }
+        let wrapper = if let Type::Path(path) = ty.as_ref() {
+            path.path
+                .segments
+                .last()
+                .map(|segment| segment.ident.unraw().to_string())
+        } else {
+            None
+        };
+        (wrapper.is_some_and(|name| self.context.rules.constructor_wrappers.contains(&name))
+            && first_type_argument(ty).is_some_and(names_self))
+        .then_some(())
+    }
+
+    fn newtype_exemption(&self, signature: &Signature, newtype: &str, field: &str) -> Exemption {
+        let rules = self.context.rules;
+        let name = signature.ident.unraw().to_string();
+        let forms = self.field_forms(field);
+        let single_input = match signature.inputs.first() {
+            Some(FnArg::Typed(typed)) if signature.inputs.len() == 1 => shape(&typed.ty),
+            Some(FnArg::Typed(_) | FnArg::Receiver(_)) | None => None,
+        };
+        if rules.constructor_names.contains(&name)
+            && single_input.is_some_and(|input| forms.contains(&input))
+            && self.returns_self(signature, newtype).is_some()
+        {
+            return Exemption::Inputs;
+        }
+        let shared_self = signature.inputs.len() == 1
+            && signature.receiver().is_some_and(|receiver| {
+                receiver.reference.is_some()
+                    && receiver.mutability.is_none()
+                    && receiver.colon_token.is_none()
+            });
+        let output = match &signature.output {
+            ReturnType::Type(_, ty) => shape(ty),
+            ReturnType::Default => None,
+        };
+        let accessor_forms: BTreeSet<String> = forms
+            .iter()
+            .cloned()
+            .chain(std::iter::once(format!("&{field}")))
+            .collect();
+        if name.starts_with(rules.accessor_prefix.as_str())
+            && shared_self
+            && output.is_some_and(|returned| accessor_forms.contains(&returned))
+        {
+            Exemption::Output
+        } else {
+            Exemption::Nothing
+        }
+    }
+
+    fn method_exemption(&self, signature: &Signature) -> Exemption {
+        match &self.impl_context {
+            ImplContext::Newtype(newtype, field) => {
+                self.newtype_exemption(signature, newtype, field)
             }
-            [root, module, name]
-                if STANDARD_ROOTS.contains(&root.as_str()) && known(module, name) =>
-            {
-                ImplContext::BoolTrait(name.clone())
+            ImplContext::Trait(Some(trait_path)) => {
+                let name = signature.ident.unraw().to_string();
+                if self
+                    .context
+                    .rules
+                    .bool_methods
+                    .contains(&(trait_path.clone(), name))
+                {
+                    Exemption::Bool
+                } else {
+                    Exemption::Nothing
+                }
             }
-            _ => ImplContext::OtherTrait,
+            ImplContext::Outside | ImplContext::Trait(None) | ImplContext::OtherInherent => {
+                Exemption::Nothing
+            }
         }
     }
 
@@ -145,50 +258,11 @@ impl<'context> RawTypes<'context> {
             && path.qself.is_none()
             && let [segment] = path.path.segments.iter().collect::<Vec<_>>().as_slice()
             && segment.arguments.is_none()
-            && self.newtypes.contains(&segment.ident.unraw().to_string())
+            && let Some(field) = self.newtypes.get(&segment.ident.unraw().to_string())
         {
-            ImplContext::Newtype(segment.ident.unraw().to_string())
+            ImplContext::Newtype(segment.ident.unraw().to_string(), field.clone())
         } else {
             ImplContext::OtherInherent
-        }
-    }
-
-    fn method_exemption(&self, signature: &Signature) -> Exemption {
-        let name = signature.ident.unraw().to_string();
-        match &self.context {
-            ImplContext::Newtype(newtype) => {
-                if CONSTRUCTOR_NAMES.contains(&name.as_str())
-                    && signature.receiver().is_none()
-                    && signature.inputs.len() == 1
-                    && returns_self(signature, newtype).is_some()
-                {
-                    Exemption::Inputs
-                } else if name.starts_with(ACCESSOR_PREFIX)
-                    && signature.inputs.len() == 1
-                    && signature.receiver().is_some_and(|receiver| {
-                        receiver.reference.is_some()
-                            && receiver.mutability.is_none()
-                            && receiver.colon_token.is_none()
-                    })
-                {
-                    Exemption::Bool
-                } else {
-                    Exemption::Nothing
-                }
-            }
-            ImplContext::BoolTrait(trait_name) => {
-                if TRAIT_BOOL_METHODS
-                    .iter()
-                    .any(|(_, listed, method)| listed == trait_name && *method == name)
-                {
-                    Exemption::AllButBool
-                } else {
-                    Exemption::Nothing
-                }
-            }
-            ImplContext::Outside | ImplContext::OtherInherent | ImplContext::OtherTrait => {
-                Exemption::Nothing
-            }
         }
     }
 
@@ -200,10 +274,11 @@ impl<'context> RawTypes<'context> {
     }
 }
 
-fn known_trait(name: &str) -> bool {
-    TRAIT_BOOL_METHODS
-        .iter()
-        .any(|(_, listed, _)| *listed == name)
+fn macro_line(mac: &Macro) -> usize {
+    mac.path
+        .segments
+        .first()
+        .map_or(0, |segment| segment.ident.span().start().line)
 }
 
 impl<'ast> Visit<'ast> for RawTypes<'_> {
@@ -235,24 +310,30 @@ impl<'ast> Visit<'ast> for RawTypes<'_> {
     }
 
     fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
-        self.generics(&i.generics);
-        if newtype_name(i).is_none() {
-            self.report(fields_names(&i.fields));
+        self.generics.push(generic_names(&i.generics));
+        self.check_generics(&i.generics);
+        if newtype_field(i, self.context.rules).is_none() {
+            self.check_fields(&i.fields);
         }
+        self.generics.pop();
         visit::visit_item_struct(self, i);
     }
 
     fn visit_item_enum(&mut self, i: &'ast ItemEnum) {
-        self.generics(&i.generics);
+        self.generics.push(generic_names(&i.generics));
+        self.check_generics(&i.generics);
         for variant in &i.variants {
-            self.report(fields_names(&variant.fields));
+            self.check_fields(&variant.fields);
         }
+        self.generics.pop();
         visit::visit_item_enum(self, i);
     }
 
     fn visit_item_union(&mut self, i: &'ast ItemUnion) {
-        self.generics(&i.generics);
-        self.report(fields_names(&i.fields.named));
+        self.generics.push(generic_names(&i.generics));
+        self.check_generics(&i.generics);
+        self.check_fields(&i.fields.named);
+        self.generics.pop();
         visit::visit_item_union(self, i);
     }
 
@@ -263,103 +344,111 @@ impl<'ast> Visit<'ast> for RawTypes<'_> {
     }
 
     fn visit_item_const(&mut self, i: &'ast ItemConst) {
-        self.report(type_names(&i.ty));
+        self.check_type(&i.ty);
         visit::visit_item_const(self, i);
     }
 
     fn visit_item_static(&mut self, i: &'ast ItemStatic) {
-        self.report(type_names(&i.ty));
+        self.check_type(&i.ty);
         visit::visit_item_static(self, i);
     }
 
     fn visit_impl_item_const(&mut self, i: &'ast ImplItemConst) {
-        self.report(type_names(&i.ty));
+        self.check_type(&i.ty);
         visit::visit_impl_item_const(self, i);
     }
 
     fn visit_impl_item_type(&mut self, i: &'ast ImplItemType) {
-        self.report(type_names(&i.ty));
+        self.check_type(&i.ty);
         visit::visit_impl_item_type(self, i);
     }
 
     fn visit_trait_item_const(&mut self, i: &'ast TraitItemConst) {
-        self.report(type_names(&i.ty));
+        self.check_type(&i.ty);
         visit::visit_trait_item_const(self, i);
     }
 
     fn visit_trait_item_type(&mut self, i: &'ast TraitItemType) {
-        self.generics(&i.generics);
-        self.report(bounds_names(&i.bounds));
+        self.generics.push(generic_names(&i.generics));
+        self.check_generics(&i.generics);
+        self.check_bounds(&i.bounds);
         if let Some((_, default)) = &i.default {
-            self.report(type_names(default));
+            self.check_type(default);
         }
+        self.generics.pop();
         visit::visit_trait_item_type(self, i);
     }
 
     fn visit_foreign_item_static(&mut self, i: &'ast ForeignItemStatic) {
-        self.report(type_names(&i.ty));
+        self.check_type(&i.ty);
         visit::visit_foreign_item_static(self, i);
     }
 
     fn visit_item_impl(&mut self, i: &'ast ItemImpl) {
-        self.generics(&i.generics);
-        self.report(type_names(&i.self_ty));
+        self.generics.push(generic_names(&i.generics));
+        self.check_generics(&i.generics);
+        self.check_type(&i.self_ty);
         let context = match &i.trait_ {
             Some((_, path, _)) => {
-                self.report(path_names(path));
-                self.trait_context(path)
+                let scope = self.scope();
+                let resolution = self.context.resolve(&path_names(path), Kind::Trait, &scope);
+                let bound = syn::TraitBound {
+                    paren_token: None,
+                    modifier: syn::TraitBoundModifier::None,
+                    lifetimes: None,
+                    path: path.clone(),
+                };
+                let found = self.checker(|checker| checker.visit_trait_bound(&bound));
+                self.found.extend(found);
+                match resolution {
+                    Resolution::Accepted(standard) => ImplContext::Trait(standard),
+                    Resolution::Rejected => ImplContext::Trait(None),
+                }
             }
             None => self.inherent_context(&i.self_ty),
         };
-        let saved = self.context.clone();
-        self.context = context;
+        let saved = self.impl_context.clone();
+        self.impl_context = context;
         for item in &i.items {
             self.visit_impl_item(item);
         }
-        self.context = saved;
+        self.impl_context = saved;
+        self.generics.pop();
     }
 
     fn visit_item_trait(&mut self, i: &'ast ItemTrait) {
-        self.generics(&i.generics);
-        self.report(bounds_names(&i.supertraits));
+        self.generics.push(generic_names(&i.generics));
+        self.check_generics(&i.generics);
+        self.check_bounds(&i.supertraits);
+        let saved = self.impl_context.clone();
+        self.impl_context = ImplContext::Outside;
         visit::visit_item_trait(self, i);
+        self.impl_context = saved;
+        self.generics.pop();
     }
 
     fn visit_item_macro(&mut self, i: &'ast ItemMacro) {
-        self.item_macro(&i.mac.tokens, i.mac.path_span_line());
+        self.item_macro(&i.mac.tokens, macro_line(&i.mac));
     }
 
     fn visit_impl_item_macro(&mut self, i: &'ast ImplItemMacro) {
-        self.item_macro(&i.mac.tokens, i.mac.path_span_line());
+        self.item_macro(&i.mac.tokens, macro_line(&i.mac));
     }
 
     fn visit_trait_item_macro(&mut self, i: &'ast TraitItemMacro) {
-        self.item_macro(&i.mac.tokens, i.mac.path_span_line());
+        self.item_macro(&i.mac.tokens, macro_line(&i.mac));
     }
 
     fn visit_foreign_item_macro(&mut self, i: &'ast ForeignItemMacro) {
-        self.item_macro(&i.mac.tokens, i.mac.path_span_line());
+        self.item_macro(&i.mac.tokens, macro_line(&i.mac));
     }
 
     fn visit_macro(&mut self, i: &'ast Macro) {
         if let Ok(file) = syn::parse2::<syn::File>(i.tokens.clone()) {
-            let saved = self.context.clone();
-            self.context = ImplContext::Outside;
+            let saved = self.impl_context.clone();
+            self.impl_context = ImplContext::Outside;
             self.visit_file(&file);
-            self.context = saved;
+            self.impl_context = saved;
         }
-    }
-}
-
-trait MacroLine {
-    fn path_span_line(&self) -> usize;
-}
-
-impl MacroLine for Macro {
-    fn path_span_line(&self) -> usize {
-        self.path
-            .segments
-            .first()
-            .map_or(0, |segment| segment.ident.span().start().line)
     }
 }

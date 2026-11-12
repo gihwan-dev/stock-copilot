@@ -1,13 +1,14 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use syn::ext::IdentExt;
 use syn::visit::{self, Visit};
 use syn::{
-    Attribute, Block, Expr, Fields, FnArg, GenericArgument, Generics, ItemMod, ItemStruct,
-    ItemTrait, PathArguments, ReturnType, Signature, Type, TypePath,
+    Attribute, Fields, GenericArgument, ItemEnum, ItemMod, ItemStruct, ItemTrait, ItemUnion,
+    ItemUse, PathArguments, Type, UseTree,
 };
 
-use super::catalogue::{BOOL_TYPE, BYTE_VECTOR, raw_names};
+use super::Rule;
+use super::rules::{Kind, RawRules};
 
 pub(super) fn is_test_module(attributes: &[Attribute]) -> Option<()> {
     attributes
@@ -22,11 +23,34 @@ pub(super) fn is_test_module(attributes: &[Attribute]) -> Option<()> {
         .then_some(())
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Definitions {
+    pub(super) types: BTreeSet<String>,
+    pub(super) traits: BTreeSet<String>,
+    pub(super) modules: BTreeSet<String>,
+}
+
+impl Definitions {
+    pub(super) fn has(&self, kind: Kind, name: &str) -> Option<()> {
+        let names = match kind {
+            Kind::Type => &self.types,
+            Kind::Trait => &self.traits,
+        };
+        names.contains(name).then_some(())
+    }
+
+    pub(super) fn extend(&mut self, other: &Self) {
+        self.types.extend(other.types.iter().cloned());
+        self.traits.extend(other.traits.iter().cloned());
+        self.modules.extend(other.modules.iter().cloned());
+    }
+}
+
 #[derive(Debug, Default)]
 pub(super) struct ModuleScan {
     inline: Vec<String>,
     pub(super) declared: Vec<(Vec<String>, String)>,
-    pub(super) traits: BTreeSet<String>,
+    pub(super) definitions: Definitions,
 }
 
 impl<'ast> Visit<'ast> for ModuleScan {
@@ -35,6 +59,7 @@ impl<'ast> Visit<'ast> for ModuleScan {
             return;
         }
         let name = i.ident.unraw().to_string();
+        self.definitions.modules.insert(name.clone());
         match &i.content {
             Some((_, items)) => {
                 self.inline.push(name);
@@ -48,111 +73,159 @@ impl<'ast> Visit<'ast> for ModuleScan {
     }
 
     fn visit_item_trait(&mut self, i: &'ast ItemTrait) {
-        self.traits.insert(i.ident.unraw().to_string());
+        self.definitions.traits.insert(i.ident.unraw().to_string());
         visit::visit_item_trait(self, i);
     }
-}
 
-#[derive(Debug)]
-pub(super) struct TypeNames {
-    raw: Vec<&'static str>,
-    pub(super) found: Vec<(usize, String)>,
-}
+    fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
+        self.definitions.types.insert(i.ident.unraw().to_string());
+        visit::visit_item_struct(self, i);
+    }
 
-impl TypeNames {
-    pub(super) fn new() -> Self {
-        Self {
-            raw: raw_names(),
-            found: Vec::new(),
-        }
+    fn visit_item_enum(&mut self, i: &'ast ItemEnum) {
+        self.definitions.types.insert(i.ident.unraw().to_string());
+        visit::visit_item_enum(self, i);
+    }
+
+    fn visit_item_union(&mut self, i: &'ast ItemUnion) {
+        self.definitions.types.insert(i.ident.unraw().to_string());
+        visit::visit_item_union(self, i);
     }
 }
 
-impl<'ast> Visit<'ast> for TypeNames {
-    fn visit_type_path(&mut self, i: &'ast TypePath) {
-        if let Some(last) = i.path.segments.last() {
-            let name = last.ident.unraw().to_string();
-            if self.raw.contains(&name.as_str()) {
-                self.found.push((last.ident.span().start().line, name));
+#[derive(Debug, Default)]
+pub(super) struct UseScan {
+    prefix: Vec<String>,
+    line: usize,
+    pub(super) imports: BTreeMap<String, Vec<String>>,
+    pub(super) found: Vec<(usize, Rule)>,
+}
+
+impl UseScan {
+    fn tree(&mut self, tree: &UseTree) {
+        match tree {
+            UseTree::Path(path) => {
+                self.prefix.push(path.ident.unraw().to_string());
+                self.tree(&path.tree);
+                self.prefix.pop();
+            }
+            UseTree::Name(name) => {
+                let ident = name.ident.unraw().to_string();
+                let (imported, full) = if ident == "self" {
+                    (self.prefix.last().cloned(), self.prefix.clone())
+                } else {
+                    let mut full = self.prefix.clone();
+                    full.push(ident.clone());
+                    (Some(ident), full)
+                };
+                if let Some(alias) = imported {
+                    self.imports.insert(alias, full);
+                }
+            }
+            UseTree::Rename(rename) => {
+                let alias = rename.rename.unraw().to_string();
+                if alias != "_" {
+                    self.found.push((self.line, Rule::UseRename));
+                    let mut full = self.prefix.clone();
+                    full.push(rename.ident.unraw().to_string());
+                    self.imports.insert(alias, full);
+                }
+            }
+            UseTree::Glob(_) => self.found.push((self.line, Rule::GlobImport)),
+            UseTree::Group(group) => {
+                for item in &group.items {
+                    self.tree(item);
+                }
             }
         }
-        visit::visit_type_path(self, i);
     }
-
-    fn visit_expr(&mut self, _i: &'ast Expr) {}
-
-    fn visit_block(&mut self, _i: &'ast Block) {}
 }
 
-fn plain_last_ident(ty: &Type) -> Option<String> {
+impl<'ast> Visit<'ast> for UseScan {
+    fn visit_item_mod(&mut self, i: &'ast ItemMod) {
+        if is_test_module(&i.attrs).is_none() {
+            visit::visit_item_mod(self, i);
+        }
+    }
+
+    fn visit_item_use(&mut self, i: &'ast ItemUse) {
+        self.line = i.use_token.span.start().line;
+        self.prefix.clear();
+        self.tree(&i.tree);
+    }
+}
+
+pub(super) fn shape(ty: &Type) -> Option<String> {
     if let Type::Path(path) = ty
         && path.qself.is_none()
         && let Some(last) = path.path.segments.last()
-        && last.arguments.is_none()
     {
-        Some(last.ident.unraw().to_string())
-    } else {
-        None
+        let name = last.ident.unraw().to_string();
+        return match &last.arguments {
+            PathArguments::None => Some(name),
+            PathArguments::AngleBracketed(angle) => angle
+                .args
+                .iter()
+                .map(|argument| {
+                    if let GenericArgument::Type(inner) = argument {
+                        shape(inner)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Option<Vec<String>>>()
+                .map(|parts| format!("{name}<{}>", parts.join(", "))),
+            PathArguments::Parenthesized(_) => None,
+        };
     }
+    if let Type::Reference(reference) = ty
+        && reference.mutability.is_none()
+    {
+        return shape(&reference.elem).map(|inner| format!("&{inner}"));
+    }
+    if let Type::Slice(slice) = ty {
+        return shape(&slice.elem).map(|inner| format!("[{inner}]"));
+    }
+    None
 }
 
-fn first_type_argument(arguments: &PathArguments) -> Option<&Type> {
-    if let PathArguments::AngleBracketed(angle) = arguments
-        && let Some(GenericArgument::Type(ty)) = angle.args.first()
-    {
-        Some(ty)
-    } else {
-        None
-    }
-}
-
-fn newtype_field(ty: &Type) -> Option<()> {
-    if let Some(name) = plain_last_ident(ty) {
-        return (name != BOOL_TYPE && raw_names().contains(&name.as_str())).then_some(());
-    }
-    let (container, element) = BYTE_VECTOR;
-    if let Type::Path(path) = ty
-        && path.qself.is_none()
-        && let Some(last) = path.path.segments.last()
-        && last.ident == container
-        && let PathArguments::AngleBracketed(angle) = &last.arguments
-        && angle.args.len() == 1
-        && first_type_argument(&last.arguments)
-            .and_then(plain_last_ident)
-            .is_some_and(|inner| inner == element)
-    {
-        Some(())
-    } else {
-        None
-    }
-}
-
-pub(super) fn newtype_name(item: &ItemStruct) -> Option<String> {
-    if let Fields::Unnamed(fields) = &item.fields
-        && fields.unnamed.len() == 1
-        && let Some(field) = fields.unnamed.first()
-        && matches_inherited(&field.vis).is_some()
-        && newtype_field(&field.ty).is_some()
-    {
-        Some(item.ident.unraw().to_string())
-    } else {
-        None
-    }
-}
-
-const fn matches_inherited(visibility: &syn::Visibility) -> Option<()> {
+const fn inherited(visibility: &syn::Visibility) -> Option<()> {
     match visibility {
         syn::Visibility::Inherited => Some(()),
         syn::Visibility::Public(_) | syn::Visibility::Restricted(_) => None,
     }
 }
 
-#[derive(Debug, Default)]
-pub(super) struct Newtypes {
-    pub(super) names: BTreeSet<String>,
+pub(super) fn newtype_field(item: &ItemStruct, rules: &RawRules) -> Option<(String, String)> {
+    if let Fields::Unnamed(fields) = &item.fields
+        && fields.unnamed.len() == 1
+        && let Some(field) = fields.unnamed.first()
+        && inherited(&field.vis).is_some()
+        && let Some(field_shape) = shape(&field.ty)
+        && rules.newtype_fields.contains(&field_shape)
+    {
+        Some((item.ident.unraw().to_string(), field_shape))
+    } else {
+        None
+    }
 }
 
-impl<'ast> Visit<'ast> for Newtypes {
+#[derive(Debug)]
+pub(super) struct Newtypes<'rules> {
+    rules: &'rules RawRules,
+    pub(super) fields: BTreeMap<String, String>,
+}
+
+impl<'rules> Newtypes<'rules> {
+    pub(super) const fn new(rules: &'rules RawRules) -> Self {
+        Self {
+            rules,
+            fields: BTreeMap::new(),
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for Newtypes<'_> {
     fn visit_item_mod(&mut self, i: &'ast ItemMod) {
         if is_test_module(&i.attrs).is_none() {
             visit::visit_item_mod(self, i);
@@ -160,61 +233,9 @@ impl<'ast> Visit<'ast> for Newtypes {
     }
 
     fn visit_item_struct(&mut self, i: &'ast ItemStruct) {
-        if let Some(name) = newtype_name(i) {
-            self.names.insert(name);
+        if let Some((name, field_shape)) = newtype_field(i, self.rules) {
+            self.fields.insert(name, field_shape);
         }
         visit::visit_item_struct(self, i);
-    }
-}
-
-pub(super) fn type_names(ty: &Type) -> Vec<(usize, String)> {
-    let mut names = TypeNames::new();
-    names.visit_type(ty);
-    names.found
-}
-
-pub(super) fn generics_names(generics: &Generics) -> Vec<(usize, String)> {
-    let mut names = TypeNames::new();
-    names.visit_generics(generics);
-    names.found
-}
-
-pub(super) fn input_names(signature: &Signature) -> Vec<(usize, String)> {
-    signature
-        .inputs
-        .iter()
-        .flat_map(|input| match input {
-            FnArg::Receiver(receiver) => type_names(&receiver.ty),
-            FnArg::Typed(typed) => type_names(&typed.ty),
-        })
-        .collect()
-}
-
-pub(super) fn output_names(signature: &Signature) -> Vec<(usize, String)> {
-    match &signature.output {
-        ReturnType::Default => Vec::new(),
-        ReturnType::Type(_, ty) => type_names(ty),
-    }
-}
-
-pub(super) fn returns_self(signature: &Signature, newtype: &str) -> Option<()> {
-    let ReturnType::Type(_, ty) = &signature.output else {
-        return None;
-    };
-    let names_self = |candidate: &Type| {
-        plain_last_ident(candidate).is_some_and(|name| name == "Self" || name == newtype)
-    };
-    if names_self(ty) {
-        return Some(());
-    }
-    if let Type::Path(path) = ty.as_ref()
-        && path.qself.is_none()
-        && let Some(last) = path.path.segments.last()
-        && super::catalogue::CONSTRUCTOR_WRAPPERS.contains(&last.ident.to_string().as_str())
-        && first_type_argument(&last.arguments).is_some_and(names_self)
-    {
-        Some(())
-    } else {
-        None
     }
 }

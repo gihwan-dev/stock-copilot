@@ -308,9 +308,150 @@ example = "clean-outside-crate.rs"
 crate = "approval-command"
 expect = []
 
+[[source]]
+example = "ffi-c-int.rs"
+crate = "domain"
+expect = ["raw-type:c_int"]
+
+[[source]]
+example = "ffi-c-double.rs"
+crate = "domain"
+expect = ["raw-type:c_double"]
+
+[[source]]
+example = "os-raw-c-char.rs"
+crate = "domain"
+expect = ["raw-type:c_char"]
+
+[[source]]
+example = "raw-fd.rs"
+crate = "domain"
+expect = ["raw-type:RawFd"]
+
+[[source]]
+example = "atomic-bool.rs"
+crate = "domain"
+expect = ["raw-type:AtomicBool"]
+
+[[source]]
+example = "atomic-u64.rs"
+crate = "domain"
+expect = ["raw-type:AtomicU64"]
+
+[[source]]
+example = "duration.rs"
+crate = "domain"
+expect = ["raw-type:Duration"]
+
+[[source]]
+example = "wrapping.rs"
+crate = "domain"
+expect = ["raw-type:Wrapping", "raw-type:u8"]
+
+[[source]]
+example = "ipv4-address.rs"
+crate = "domain"
+expect = ["raw-type:Ipv4Addr"]
+
+[[source]]
+example = "use-rename.rs"
+crate = "domain"
+expect = ["raw-type-use-rename", "raw-type:Text"]
+
+[[source]]
+example = "glob-import.rs"
+crate = "domain"
+expect = ["raw-type-glob-import", "raw-type:HashMap"]
+
+[[source]]
+example = "unknown-name.rs"
+crate = "domain"
+expect = ["raw-type:Mystery"]
+
+[[source]]
+example = "unknown-trait.rs"
+crate = "domain"
+expect = ["raw-type:Read", "raw-type:Any"]
+
+[[source]]
+example = "unit-field.rs"
+crate = "domain"
+expect = ["raw-type-unit"]
+
+[[source]]
+example = "unit-option.rs"
+crate = "domain"
+expect = ["raw-type-unit"]
+
+[[source]]
+example = "unit-result-error.rs"
+crate = "domain"
+expect = ["raw-type-unit"]
+
+[[source]]
+example = "unit-result-both.rs"
+crate = "domain"
+expect = ["raw-type-unit"]
+
+[[source]]
+example = "unit-array.rs"
+crate = "domain"
+expect = ["raw-type-unit"]
+
+[[source]]
+example = "unit-parameter.rs"
+crate = "domain"
+expect = ["raw-type-unit"]
+
+[[source]]
+example = "newtype-constructor-bool.rs"
+crate = "domain"
+expect = ["raw-type:bool"]
+
+[[source]]
+example = "newtype-constructor-map.rs"
+crate = "domain"
+expect = ["raw-type:String", "raw-type:f64"]
+
+[[source]]
+example = "newtype-accessor-tuple.rs"
+crate = "domain"
+expect = ["raw-type:String", "raw-type:f64"]
+
+[[source]]
+example = "newtype-constructor-borrowed-integer.rs"
+crate = "domain"
+expect = ["raw-type:u64"]
+
+[[source]]
+example = "newtype-accessor-other-borrow.rs"
+crate = "domain"
+expect = ["raw-type:u8"]
+
+[[source]]
+example = "clean-newtype-borrowed.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-newtype-fields.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-generics.rs"
+crate = "domain"
+expect = []
+
+[[source]]
+example = "clean-standard-paths.rs"
+crate = "domain"
+expect = []
+
 [[crate]]
 name = "modules"
 roots = ["src/lib.rs"]
+dependencies = []
 expect = [
   "src/flat.rs raw-type:u16",
   "src/nested/mod.rs raw-type:i32",
@@ -319,3 +460,9 @@ expect = [
   "src/shadow.rs raw-type:bool",
   "src/impls.rs raw-type:bool",
 ]
+
+[[crate]]
+name = "uses-dependency"
+roots = ["src/lib.rs"]
+dependencies = ["dependency-domain"]
+expect = ["src/lib.rs raw-type:Missing"]

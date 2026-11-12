@@ -23,6 +23,7 @@ pub(crate) struct Member {
     pub(crate) name: String,
     pub(crate) directory: PathBuf,
     pub(crate) roots: Vec<PathBuf>,
+    pub(crate) dependencies: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +57,15 @@ pub(crate) fn load_members(manifest: Option<&Path>) -> Result<Members, SourceFai
                 .iter()
                 .filter(|target| !target.is_test() && !target.is_bench())
                 .map(|target| target.src_path.as_std_path().to_path_buf())
+                .collect(),
+            dependencies: package
+                .dependencies
+                .iter()
+                .filter(|dependency| {
+                    dependency.path.is_some()
+                        && dependency.kind == cargo_metadata::DependencyKind::Normal
+                })
+                .map(|dependency| dependency.name.clone())
                 .collect(),
         })
         .collect();
