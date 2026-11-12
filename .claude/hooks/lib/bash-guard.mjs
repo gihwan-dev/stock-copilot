@@ -1,10 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { fixedFindings, locate, protectedFinding } from "./paths.mjs";
+import { basename, isAbsolute, join, resolve } from "node:path";
+import {
+  MODE,
+  TEMPORARY_ROOTS,
+  locate,
+  realTarget,
+  writeFindings,
+} from "./paths.mjs";
 import { gitEnvironment } from "./project.mjs";
-import { isSubagent, roleOf } from "./roles.mjs";
+import { ROLE, isSubagent, roleOf } from "./roles.mjs";
 import { parseScript } from "./shell.mjs";
 import { decide } from "./verdict.mjs";
 
@@ -24,6 +30,8 @@ const commandName = (word) => basename(word.text).toLowerCase();
 
 const isOption = (word) =>
   !word.dynamic && word.text.startsWith("-") && word.text !== "-";
+
+const quoteWord = (word) => `'${word.text.replaceAll("'", "'\\''")}'`;
 
 const skipOptions = (args, valued) => {
   let index = 0;
@@ -47,20 +55,49 @@ const assignmentOf = (word) => {
     : { name: match[1], value: literal(word.text.slice(match[0].length)) };
 };
 
-const splitString = (args, index) => {
+const ENV_FLAGS = new Set(["i", "0", "v"]);
+const ENV_VALUED = new Set(["u", "C", "P", "S"]);
+const ENV_LONG_FLAGS = new Set(["--ignore-environment", "--null", "--debug"]);
+const ENV_LONG_VALUED = new Map([
+  ["--unset", "u"],
+  ["--chdir", "C"],
+  ["--split-string", "S"],
+]);
+
+const envOption = (args, index) => {
   const text = args[index].text;
-  const attached = text.startsWith("--split-string=");
-  const value = attached
-    ? literal(text.slice("--split-string=".length))
-    : args[index + 1];
-  if (value === undefined || value.dynamic) {
-    return { problem: "env -S 문자열이 동적이다" };
+  if (text === "-") {
+    return { options: [], next: index + 1 };
   }
-  const split = parseScript(value.text).commands[0] ?? {
-    assignments: [],
-    words: [],
-  };
-  return { split, rest: args.slice(index + (attached ? 1 : 2)) };
+  if (text.startsWith("--")) {
+    const [name, attached] = text.includes("=")
+      ? [text.slice(0, text.indexOf("=")), text.slice(text.indexOf("=") + 1)]
+      : [text, undefined];
+    if (ENV_LONG_FLAGS.has(name)) {
+      return { options: [], next: index + 1 };
+    }
+    const letter = ENV_LONG_VALUED.get(name);
+    if (letter === undefined) {
+      return { problem: `env의 옵션 ${text}를 모른다` };
+    }
+    return attached === undefined
+      ? { options: [{ letter, value: args[index + 1] }], next: index + 2 }
+      : { options: [{ letter, value: literal(attached) }], next: index + 1 };
+  }
+  const cluster = text.slice(1);
+  for (let position = 0; position < cluster.length; position += 1) {
+    const letter = cluster[position];
+    if (ENV_VALUED.has(letter)) {
+      const rest = cluster.slice(position + 1);
+      return rest === ""
+        ? { options: [{ letter, value: args[index + 1] }], next: index + 2 }
+        : { options: [{ letter, value: literal(rest) }], next: index + 1 };
+    }
+    if (!ENV_FLAGS.has(letter)) {
+      return { problem: `env의 옵션 묶음 ${text}를 모른다` };
+    }
+  }
+  return { options: [], next: index + 1 };
 };
 
 const unwrapEnv = (args, invocation) => {
@@ -70,26 +107,36 @@ const unwrapEnv = (args, invocation) => {
     if (word.dynamic) {
       return { problem: "env 인자가 동적이다" };
     }
-    const text = word.text;
-    if (text === "-S" || text.startsWith("--split-string")) {
-      const result = splitString(args, index);
-      if (result.problem !== undefined) {
-        return result;
+    if (word.text === "--") {
+      index += 1;
+      continue;
+    }
+    if (word.text.startsWith("-")) {
+      const parsed = envOption(args, index);
+      if (parsed.problem !== undefined) {
+        return parsed;
       }
-      invocation.env.push(...result.split.assignments);
-      return { args: [...result.split.words, ...result.rest] };
+      for (const option of parsed.options) {
+        if (option.value === undefined || option.value.dynamic) {
+          return { problem: `env -${option.letter}의 값이 없거나 동적이다` };
+        }
+        if (option.letter === "C") {
+          invocation.cwdUnknown = true;
+        }
+        if (option.letter === "S") {
+          const rest = args.slice(parsed.next).map(quoteWord).join(" ");
+          return { script: `${option.value.text} ${rest}`.trim() };
+        }
+      }
+      index = parsed.next;
+      continue;
     }
     const assignment = assignmentOf(word);
-    if (["-u", "-C", "-P", "--unset", "--chdir"].includes(text)) {
-      index += 2;
-    } else if (text.startsWith("-")) {
-      index += 1;
-    } else if (assignment !== undefined) {
-      invocation.env.push(assignment);
-      index += 1;
-    } else {
+    if (assignment === undefined) {
       break;
     }
+    invocation.env.push(assignment);
+    index += 1;
   }
   return { args: args.slice(index) };
 };
@@ -123,6 +170,43 @@ const unwrapCommand = (args, invocation) => {
   return { args: args.slice(start) };
 };
 
+const unwrapScript = (args) => {
+  const start = skipOptions(args, ["-F", "-t"]);
+  return args.length > start + 1
+    ? { args: args.slice(start + 1) }
+    : { self: true };
+};
+
+const unwrapPackageRunner = (args) => {
+  const start = skipOptions(args, ["-p", "--package"]);
+  const options = args.slice(0, start).map((word) => word.text);
+  if (options.some((text) => ["-c", "--call", "--shell-mode"].includes(text))) {
+    return { problem: "패키지 실행기에 셸 문자열을 넘기지 않는다" };
+  }
+  return { args: args.slice(start) };
+};
+
+const unwrapPnpm = (args) => {
+  const start = skipOptions(args, ["-C", "--dir", "--filter", "-F"]);
+  const sub = args[start];
+  if (sub === undefined || sub.dynamic) {
+    return sub === undefined
+      ? { self: true }
+      : { problem: "pnpm 하위 명령이 동적이다" };
+  }
+  return ["exec", "dlx"].includes(sub.text)
+    ? unwrapPackageRunner(args.slice(start + 1))
+    : { self: true };
+};
+
+const unwrapNpm = (args) => {
+  const start = skipOptions(args, ["-w", "--workspace", "--prefix"]);
+  const sub = args[start];
+  return sub !== undefined && !sub.dynamic && sub.text === "exec"
+    ? unwrapPackageRunner(args.slice(start + 1))
+    : { self: true };
+};
+
 const simple = (valued) => (args) => ({
   args: args.slice(skipOptions(args, valued)),
 });
@@ -138,10 +222,15 @@ export const WRAPPERS = {
   sudo: simple(["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U"]),
   doas: simple(["-u", "-C"]),
   xcrun: simple(["--sdk", "--toolchain"]),
+  setsid: simple([]),
   timeout: unwrapTimeout,
   gtimeout: unwrapTimeout,
   arch: unwrapArch,
   env: unwrapEnv,
+  script: unwrapScript,
+  npx: unwrapPackageRunner,
+  pnpm: unwrapPnpm,
+  npm: unwrapNpm,
   xargs: (args, invocation) => {
     invocation.hidden = true;
     return {
@@ -166,7 +255,10 @@ export const RESERVED_PREFIXES = [
   "coproc",
 ];
 
-export const unwrap = (command, definitions) => {
+const watchedName = (word, rules) =>
+  !word.dynamic && rules.watched.includes(commandName(word));
+
+export const unwrap = (command, definitions, rules) => {
   const invocation = {
     name: undefined,
     args: [],
@@ -175,6 +267,9 @@ export const unwrap = (command, definitions) => {
     executes: true,
     command,
     problems: [],
+    cwdUnknown: false,
+    shadows: undefined,
+    script: undefined,
   };
   let words = command.words;
   for (let guard = 0; guard < 32 && words.length > 0; guard += 1) {
@@ -189,20 +284,35 @@ export const unwrap = (command, definitions) => {
       continue;
     }
     if (name === "function" && !head.quoted) {
+      if (words[1] !== undefined && watchedName(words[1], rules)) {
+        invocation.shadows = commandName(words[1]);
+      }
       words = words.slice(2);
       continue;
+    }
+    if (command.defines === true && words.length === 1) {
+      invocation.shadows = watchedName(head, rules) ? name : undefined;
+      invocation.executes = false;
+      return invocation;
     }
     const wrapper = Object.hasOwn(definitions.wrappers, name)
       ? definitions.wrappers[name]
       : undefined;
-    if (wrapper === undefined) {
+    const unwrapped =
+      wrapper === undefined
+        ? { self: true }
+        : wrapper(words.slice(1), invocation);
+    if (unwrapped.self === true) {
       invocation.name = name;
       invocation.args = words.slice(1);
       return invocation;
     }
-    const unwrapped = wrapper(words.slice(1), invocation);
     if (unwrapped.problem !== undefined) {
       invocation.problems.push(unwrapped.problem);
+      return invocation;
+    }
+    if (unwrapped.script !== undefined) {
+      invocation.script = unwrapped.script;
       return invocation;
     }
     if (!invocation.executes) {
@@ -217,7 +327,7 @@ export const unwrap = (command, definitions) => {
   return invocation;
 };
 
-const environmentFindings = (names, rules) =>
+const environmentFindings = (names, rules, rule) =>
   names
     .filter(
       (name) =>
@@ -226,10 +336,21 @@ const environmentFindings = (names, rules) =>
     )
     .map((name) =>
       finding(
-        "environment",
-        `${name} 환경 변수로 훅·git·Rust 검사를 바꾸지 않는다 (docs/harness.md 7.3)`,
+        rule,
+        `${name} 환경 변수로 훅·git·Rust·Node 검사나 설정 위치를 바꾸지 않는다 (docs/harness.md 7.3)`,
       ),
     );
+
+const GIT_VALUED = [
+  "-C",
+  "-c",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+  "--config-env",
+  "--super-prefix",
+  "--attr-source",
+];
 
 const parseGit = (args) => {
   const globals = [];
@@ -246,17 +367,7 @@ const parseGit = (args) => {
     const [option, attached] = text.includes("=")
       ? [text.slice(0, text.indexOf("=")), text.slice(text.indexOf("=") + 1)]
       : [text, undefined];
-    const takesValue = [
-      "-C",
-      "-c",
-      "--git-dir",
-      "--work-tree",
-      "--namespace",
-      "--config-env",
-      "--super-prefix",
-      "--attr-source",
-    ].includes(option);
-    if (takesValue && attached === undefined) {
+    if (GIT_VALUED.includes(option) && attached === undefined) {
       globals.push({ option, value: args[index + 1] });
       index += 2;
     } else {
@@ -301,13 +412,13 @@ const gitOptionWords = (sub, rest, rules) => {
       continue;
     }
     if (word.text.startsWith("--")) {
-      options.push({ long: word.text });
+      options.push({ long: word.text, text: word.text });
       continue;
     }
     const cluster = word.text.slice(1);
     for (let position = 0; position < cluster.length; position += 1) {
       const character = cluster[position];
-      options.push({ short: character });
+      options.push({ short: character, text: word.text });
       if (values.required.includes(character)) {
         if (position === cluster.length - 1) {
           index += 1;
@@ -322,333 +433,108 @@ const gitOptionWords = (sub, rest, rules) => {
   return { options, positionals };
 };
 
+const optionHits = (rule, options) =>
+  options.filter(
+    (option) =>
+      (option.long !== undefined &&
+        rule.long.some((forbidden) => longMatches(option.long, forbidden))) ||
+      (option.short !== undefined && rule.short.includes(option.short)),
+  );
+
+const isAbort = (sub, rest, rules) =>
+  rules.git.abortable.includes(sub) &&
+  rest.length === 1 &&
+  !rest[0].dynamic &&
+  rest[0].text === "--abort";
+
+const implementerMerge = (rest, rules) => {
+  const allowed = rules.git.implementerMerge;
+  const options = rest.filter((word) => isOption(word));
+  const positionals = rest.filter((word) => !isOption(word));
+  return (
+    options.every((word) => allowed.options.includes(word.text)) &&
+    positionals.length === 1 &&
+    !positionals[0].dynamic &&
+    allowed.branches.includes(positionals[0].text)
+  );
+};
+
+const gitParts = (invocation) => {
+  if (invocation.name !== "git") {
+    return undefined;
+  }
+  const parsed = parseGit(invocation.args);
+  return parsed.sub === undefined ? undefined : parsed;
+};
+
 const aliases = new Map();
 
-const gitAlias = (sub, cwd) => {
+const lookupAlias = (sub, cwd) => {
   const key = `${cwd}\0${sub}`;
   if (!aliases.has(key)) {
-    aliases.set(key, lookupAlias(sub, cwd));
+    try {
+      aliases.set(
+        key,
+        execFileSync("git", ["-C", cwd, "config", "--get", `alias.${sub}`], {
+          encoding: "utf8",
+          env: gitEnvironment(),
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim(),
+      );
+    } catch {
+      aliases.set(key, undefined);
+    }
   }
   return aliases.get(key);
 };
 
-const lookupAlias = (sub, cwd) => {
-  try {
-    return execFileSync("git", ["-C", cwd, "config", "--get", `alias.${sub}`], {
-      encoding: "utf8",
-      env: gitEnvironment(),
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return undefined;
+const aliasDirectory = (parsed, invocation, context) => {
+  let directory = invocation.cwdUnknown ? undefined : context.cwd;
+  for (const global of parsed.globals.filter((item) => item.option === "-C")) {
+    if (global.value === undefined || global.value.dynamic) {
+      return undefined;
+    }
+    directory = isAbsolute(global.value.text)
+      ? global.value.text
+      : directory === undefined
+        ? undefined
+        : resolve(directory, global.value.text);
   }
+  return directory;
 };
 
-const quoteWord = (word) => `'${word.text.replaceAll("'", "'\\''")}'`;
+const words = (invocation) =>
+  invocation.args
+    .filter((word) => !word.dynamic)
+    .flatMap((word) => word.text.split(/\s+/u))
+    .filter((token) => token !== "")
+    .map((token) => basename(token).toLowerCase());
 
-export const CHECKS = [
-  {
-    id: "dynamic-command",
-    check: (invocation) =>
-      invocation.problems.map((problem) => finding("dynamic-command", problem)),
-  },
-  {
-    id: "environment",
-    check: (invocation, context) =>
-      environmentFindings(
-        invocation.env.map((assignment) => assignment.name),
-        context.rules,
-      ),
-  },
-  {
-    id: "exporters",
-    check: (invocation, context) => {
-      if (!context.rules.environment.exporters.includes(invocation.name)) {
-        return [];
-      }
-      const operands = invocation.args.filter((word) => !isOption(word));
-      const staticName = (word) =>
-        !word.dynamic || /^[A-Za-z_][A-Za-z0-9_]*\+?=/u.test(word.raw);
-      const dynamic = operands.filter((word) => !staticName(word));
-      const names = operands
-        .filter(staticName)
-        .map((word) => word.text.split(/\+?=/u)[0]);
-      return [
-        ...dynamic.map((word) =>
-          finding(
-            "exporters",
-            `${invocation.name}의 인자가 동적이다: ${word.raw}`,
-          ),
-        ),
-        ...environmentFindings(names, context.rules).map((item) => ({
-          ...item,
-          rule: "exporters",
-        })),
-      ];
-    },
-  },
-  {
-    id: "git-global-options",
-    check: (invocation, context) => {
-      if (invocation.name !== "git") {
-        return [];
-      }
-      const parsed = parseGit(invocation.args);
-      const found = parsed.globals
-        .filter((global) =>
-          context.rules.git.deniedGlobalOptions.includes(global.option),
-        )
-        .filter(
-          (global) =>
-            !(
-              global.option === "-c" &&
-              global.value !== undefined &&
-              !global.value.dynamic &&
-              context.rules.git.allowedConfig.includes(global.value.text)
-            ),
-        )
-        .filter(
-          (global) =>
-            !(global.option === "--exec-path" && global.value === undefined),
-        )
-        .map((global) =>
-          finding(
-            "git-global-options",
-            `git ${global.option}로 git 설정·저장소 위치를 바꾸지 않는다`,
-          ),
-        );
-      return parsed.dynamic
-        ? [
-            ...found,
-            finding(
-              "git-global-options",
-              "git의 전역 인자나 하위 명령이 동적이다",
-            ),
-          ]
-        : found;
-    },
-  },
-  {
-    id: "git-subcommands",
-    check: (invocation, context) => {
-      if (invocation.name !== "git") {
-        return [];
-      }
-      const { sub } = parseGit(invocation.args);
-      if (sub === undefined) {
-        return [];
-      }
-      if (context.rules.git.alwaysDenied.includes(sub)) {
-        return [
-          finding(
-            "git-subcommands",
-            `git ${sub}는 하네스가 막는다 (docs/harness.md 7.3)`,
-          ),
-        ];
-      }
-      if (
-        isSubagent(context.role) &&
-        context.rules.git.subagentDenied.includes(sub)
-      ) {
-        return [
-          finding(
-            "git-subcommands",
-            `서브에이전트는 git ${sub}를 하지 않는다. 푸시와 병합은 메인만 한다 (docs/workflow.md 2장)`,
-          ),
-        ];
-      }
-      return [];
-    },
-  },
-  {
-    id: "git-options",
-    check: (invocation, context) => {
-      if (invocation.name !== "git") {
-        return [];
-      }
-      const { sub, rest } = parseGit(invocation.args);
-      if (sub === undefined) {
-        return [];
-      }
-      const { options, positionals } = gitOptionWords(sub, rest, context.rules);
-      const found = context.rules.git.options
-        .filter((rule) => rule.subcommands.includes(sub))
-        .flatMap((rule) =>
-          options
-            .filter(
-              (option) =>
-                (option.long !== undefined &&
-                  rule.long.some((forbidden) =>
-                    longMatches(option.long, forbidden),
-                  )) ||
-                (option.short !== undefined &&
-                  rule.short.includes(option.short)),
-            )
-            .map((option) =>
-              finding(
-                rule.rule,
-                `git ${sub} ${option.long ?? `-${option.short}`}는 하네스가 막는다 (docs/harness.md 7.3)`,
-              ),
-            ),
-        );
-      const plus = context.rules.git.plusRefspec.includes(sub)
-        ? positionals
-            .filter(({ word }) => !word.dynamic && word.text.startsWith("+"))
-            .map(({ word }) =>
-              finding("git-force-push", `강제 refspec ${word.text}`),
-            )
-        : [];
-      const dynamic = context.rules.git.dynamicSensitive.includes(sub)
-        ? positionals
-            .filter(({ word, ended }) => word.dynamic && !ended)
-            .map(({ word }) =>
-              finding(
-                "git-dynamic-arguments",
-                `git ${sub}의 인자가 동적이다: ${word.raw}`,
-              ),
-            )
-        : [];
-      return [...found, ...plus, ...dynamic];
-    },
-  },
-  {
-    id: "lefthook",
-    check: (invocation, context) => {
-      if (invocation.name !== "lefthook") {
-        return [];
-      }
-      const sub = invocation.args.find((word) => !isOption(word));
-      return sub !== undefined &&
-        (sub.dynamic || context.rules.lefthook.denied.includes(sub.text))
-        ? [
-            finding(
-              "lefthook",
-              `lefthook ${sub.raw}로 git 훅 상태를 바꾸지 않는다`,
-            ),
-          ]
-        : [];
-    },
-  },
-  {
-    id: "denied-commands",
-    check: (invocation, context) =>
-      context.rules.commands.denied.includes(invocation.name)
-        ? [
-            finding(
-              "denied-commands",
-              `${invocation.name}는 하네스가 막는다 (docs/harness.md 7.3)`,
-            ),
-          ]
-        : [],
-  },
-  {
-    id: "rust-flags",
-    check: (invocation, context) => {
-      const rust = context.rules.rust;
-      if (!rust.tools.includes(invocation.name)) {
-        return [];
-      }
-      const texts = invocation.args.map((word) => word.text);
-      const separator = texts.indexOf("--");
-      const before = separator === -1 ? texts : texts.slice(0, separator);
-      const after = separator === -1 ? [] : texts.slice(separator + 1);
-      const anywhere = texts.filter((text) =>
-        rust.anywhere.some(
-          (flag) => text === flag || text.startsWith(`${flag}=`),
-        ),
-      );
-      const cargoOptions =
-        invocation.name === "cargo"
-          ? before.filter(
-              (text) =>
-                rust.cargoOptions.some(
-                  (flag) => text === flag || text.startsWith(`${flag}=`),
-                ) || text.startsWith("+"),
-            )
-          : [];
-      const sub = before.find(
-        (text) => !text.startsWith("-") && !text.startsWith("+"),
-      );
-      const lintTarget =
-        invocation.name === "cargo"
-          ? rust.lintFlagSubcommands.includes(sub)
-            ? after
-            : []
-          : texts;
-      const lint = lintTarget.filter((text) =>
-        rust.lintFlags.some((flag) =>
-          flag.startsWith("--")
-            ? text === flag || text.startsWith(`${flag}=`)
-            : text.startsWith(flag),
-        ),
-      );
-      return [...anywhere, ...cargoOptions, ...lint].map((text) =>
-        finding(
-          "rust-flags",
-          `${invocation.name} ${text}로 Rust 린트·설정을 바꾸지 않는다 (docs/harness.md 7.3)`,
-        ),
-      );
-    },
-  },
-  {
-    id: "hidden-arguments",
-    check: (invocation, context) =>
-      invocation.hidden &&
-      context.rules.hiddenArguments.includes(invocation.name)
-        ? [
-            finding(
-              "hidden-arguments",
-              `xargs·find가 ${invocation.name}에 넘기는 인자를 볼 수 없다`,
-            ),
-          ]
-        : [],
-  },
-  {
-    id: "inline-code",
-    check: (invocation, context) => {
-      const family = interpreterFamily(invocation.name, context.rules);
-      if (family === undefined) {
-        return [];
-      }
-      const codes = inlineCode(invocation, context.rules.interpreters[family]);
-      return codes.flatMap((code) => {
-        if (code.dynamic) {
-          return [
-            finding("inline-code", `${invocation.name}에 넘긴 코드가 동적이다`),
-          ];
-        }
-        const lowered = code.text.toLowerCase();
-        const keywords = [
-          ...context.rules.inlineCodeKeywords.filter((keyword) =>
-            lowered.includes(keyword.toLowerCase()),
-          ),
-          ...[
-            ...context.rules.environment.names,
-            ...context.rules.environment.prefixes,
-          ].filter((name) => code.text.includes(name)),
-        ];
-        return keywords.map((keyword) =>
-          finding(
-            "inline-code",
-            `${invocation.name} 코드에 하네스가 막는 낱말 ${keyword}가 있다`,
-          ),
-        );
-      });
-    },
-  },
-  {
-    id: "write-targets",
-    check: (invocation, context) => {
-      const targets = [
-        ...invocation.command.redirects
-          .filter((item) => !["<", "<&"].includes(item.operator))
-          .map((item) => item.target),
-        ...writeTargets(invocation, context.definitions.writers),
-      ];
-      return targets.flatMap((target) => targetFindings(target, context));
-    },
-  },
-];
+const handledNames = (context) => {
+  const rules = context.rules;
+  return new Set([
+    ...rules.readers,
+    ...Object.keys(context.definitions.writers),
+    ...rules.shells,
+    ...Object.keys(rules.interpreters),
+    ...rules.awk,
+    ...Object.keys(rules.editors),
+    ...rules.rust.tools,
+    ...rules.environment.exporters,
+    ...rules.commands.chmod,
+    "git",
+    "lefthook",
+    "just",
+    "pnpm",
+    "npm",
+    "yarn",
+    "rustup",
+    "find",
+    "eval",
+    "alias",
+    "trap",
+  ]);
+};
 
 const interpreterFamily = (name, rules) => {
   if (name === undefined) {
@@ -687,9 +573,74 @@ const inlineCode = (invocation, flags) => {
   }
   if (codes.length === 0 && !scriptGiven) {
     codes.push(...invocation.command.inputs);
+    if (invocation.command.piped && invocation.command.inputs.length === 0) {
+      codes.push({ ...literal(""), dynamic: true });
+    }
   }
   return codes;
 };
+
+const AWK_WRITES =
+  /system\s*\(|\|\s*getline|\|\s*["$A-Za-z]|>>|[^><=!]>\s*["$A-Za-z(]/u;
+
+const awkCode = (invocation) => {
+  const args = invocation.args;
+  const programs = [];
+  let index = 0;
+  while (index < args.length && isOption(args[index])) {
+    if (args[index].text === "-f") {
+      return [];
+    }
+    index += ["-F", "-v"].includes(args[index].text) ? 2 : 1;
+  }
+  if (args[index] !== undefined) {
+    programs.push(args[index]);
+  }
+  return programs;
+};
+
+const SED_COMMAND =
+  /(^|[;\n{}])\s*(?:[0-9$]+|\/(?:\\.|[^/])*\/)?(?:,(?:[0-9$]+|\/(?:\\.|[^/])*\/))?\s*!?\s*[wWe](\s|$)/u;
+const SED_FLAG = /s(.)(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1[gpIiMm0-9]*[we]/u;
+
+const sedScripts = (args) => {
+  const scripts = args
+    .map((word, index) =>
+      ["-e", "--expression"].includes(word.text) ? args[index + 1] : undefined,
+    )
+    .filter((word) => word !== undefined);
+  if (scripts.length > 0) {
+    return scripts;
+  }
+  const first = args.find(
+    (word) => !isOption(word) && !(word.text === "" && word.quoted),
+  );
+  return first === undefined ? [] : [first];
+};
+
+const keywordFindings = (code, invocation, context) => {
+  const lowered = code.text.toLowerCase();
+  const rules = context.rules;
+  return [
+    ...rules.inlineCodeKeywords.filter((keyword) =>
+      lowered.includes(keyword.toLowerCase()),
+    ),
+    ...[...rules.environment.names, ...rules.environment.prefixes].filter(
+      (name) => code.text.includes(name),
+    ),
+  ].map((keyword) =>
+    finding(
+      "inline-code",
+      `${invocation.name} 코드에 하네스가 막는 낱말 ${keyword}가 있다`,
+    ),
+  );
+};
+
+const subagentCode = (invocation) =>
+  finding(
+    "inline-code",
+    `서브에이전트는 ${invocation.name}에 코드를 직접 넘기지 않는다. 쓸 수 있는 경로에 스크립트 파일로 만들어 실행한다`,
+  );
 
 const operands = (args, valued = []) => {
   const found = [];
@@ -816,52 +767,562 @@ const absoluteTarget = (text, cwd) => {
   if (text === "~" || text.startsWith("~/")) {
     return join(homedir(), text.slice(1));
   }
+  if (text.startsWith("~")) {
+    return undefined;
+  }
   if (isAbsolute(text)) {
     return resolve(text);
   }
   return cwd === undefined ? undefined : resolve(cwd, text);
 };
 
-const realTarget = (path) => {
-  let existing = path;
-  const rest = [];
-  while (!existsSync(existing) && dirname(existing) !== existing) {
-    rest.unshift(basename(existing));
-    existing = dirname(existing);
+const currentDirectory = (invocation, context) =>
+  invocation.cwdUnknown ? undefined : context.cwd;
+
+const targetFindings = (target, invocation, context) => {
+  if (target.dynamic || target.glob) {
+    return [
+      finding(
+        "dynamic-target",
+        `쓰기 대상이 동적이거나 글롭이다: ${target.raw}`,
+      ),
+    ];
   }
-  try {
-    return join(realpathSync.native(existing), ...rest);
-  } catch {
-    return path;
+  const lexical = absoluteTarget(
+    target.text,
+    currentDirectory(invocation, context),
+  );
+  if (lexical === undefined) {
+    return [
+      finding(
+        "cwd-unknown",
+        `현재 폴더를 알 수 없어 상대 경로 쓰기 대상을 풀 수 없다: ${target.raw}`,
+      ),
+    ];
   }
+  return [...new Set([lexical, realTarget(lexical)])].flatMap((path) =>
+    writeFindings(path, context.role, context.project, MODE.shell),
+  );
 };
 
-const targetFindings = (target, context) => {
+const scopedTarget = (target, invocation, context) => {
   if (target.dynamic || target.glob) {
-    return [];
+    return false;
   }
-  const lexical = absoluteTarget(target.text, context.cwd);
-  if (lexical === undefined) {
-    return [];
+  const path = absoluteTarget(
+    target.text,
+    currentDirectory(invocation, context),
+  );
+  if (path === undefined) {
+    return false;
   }
-  const paths = [...new Set([lexical, realTarget(lexical)])];
-  return paths.flatMap((path) => {
-    const fixed = fixedFindings(path.slice(1), context.rules).filter(
-      (item) => item.rule === "forbidden-path",
-    );
-    if (fixed.length > 0) {
-      return fixed;
-    }
-    const located = locate(path, context.project.worktrees);
-    if (located.relative === undefined) {
-      return [];
-    }
-    const nested = fixedFindings(located.relative, context.rules);
-    return nested.length > 0
-      ? nested
-      : protectedFinding(located.relative, context.project.allowlist);
-  });
+  const real = realTarget(path);
+  return [path, real].every((candidate) =>
+    locate(candidate, context.project.worktrees).root === undefined
+      ? TEMPORARY_ROOTS.some(
+          (root) => candidate === root || candidate.startsWith(`${root}/`),
+        )
+      : writeFindings(candidate, context.role, context.project, MODE.shell)
+          .length === 0,
+  );
 };
+
+const hardLinkCreation = (invocation) => {
+  const texts = invocation.args.map((word) => word.text);
+  const options = texts.filter((text) => text.startsWith("-") && text !== "-");
+  const cluster = (letter) =>
+    options.some((text) => /^-[a-zA-Z]+$/u.test(text) && text.includes(letter));
+  if (invocation.name === "ln") {
+    return !(cluster("s") || options.includes("--symbolic"));
+  }
+  if (invocation.name === "cp") {
+    return cluster("l") || options.includes("--link");
+  }
+  if (invocation.name === "rsync") {
+    return options.some((text) => text.startsWith("--link-dest"));
+  }
+  return false;
+};
+
+export const CHECKS = [
+  {
+    id: "dynamic-command",
+    check: (invocation) =>
+      invocation.problems.map((problem) => finding("dynamic-command", problem)),
+  },
+  {
+    id: "environment",
+    check: (invocation, context) =>
+      environmentFindings(
+        invocation.env.map((assignment) => assignment.name),
+        context.rules,
+        "environment",
+      ),
+  },
+  {
+    id: "exporters",
+    check: (invocation, context) => {
+      if (!context.rules.environment.exporters.includes(invocation.name)) {
+        return [];
+      }
+      const staticName = (word) =>
+        !word.dynamic || /^[A-Za-z_][A-Za-z0-9_]*\+?=/u.test(word.raw);
+      const found = invocation.args.filter((word) => !isOption(word));
+      return [
+        ...found
+          .filter((word) => !staticName(word))
+          .map((word) =>
+            finding(
+              "exporters",
+              `${invocation.name}의 인자가 동적이다: ${word.raw}`,
+            ),
+          ),
+        ...environmentFindings(
+          found.filter(staticName).map((word) => word.text.split(/\+?=/u)[0]),
+          context.rules,
+          "exporters",
+        ),
+      ];
+    },
+  },
+  {
+    id: "shadowing",
+    check: (invocation) => {
+      if (invocation.shadows !== undefined) {
+        return [
+          finding(
+            "shadowing",
+            `함수 정의로 ${invocation.shadows}를 가리지 않는다`,
+          ),
+        ];
+      }
+      return invocation.name === "alias" &&
+        invocation.args.some((word) => word.dynamic || word.text.includes("="))
+        ? [finding("shadowing", "alias를 정의하지 않는다")]
+        : [];
+    },
+  },
+  {
+    id: "git-global-options",
+    check: (invocation, context) => {
+      if (invocation.name !== "git") {
+        return [];
+      }
+      const parsed = parseGit(invocation.args);
+      const found = parsed.globals
+        .filter((global) =>
+          context.rules.git.deniedGlobalOptions.includes(global.option),
+        )
+        .filter(
+          (global) =>
+            !(
+              global.option === "-c" &&
+              global.value !== undefined &&
+              !global.value.dynamic &&
+              context.rules.git.allowedConfig.includes(global.value.text)
+            ),
+        )
+        .filter(
+          (global) =>
+            !(global.option === "--exec-path" && global.value === undefined),
+        )
+        .map((global) =>
+          finding(
+            "git-global-options",
+            `git ${global.option}로 git 설정·저장소 위치를 바꾸지 않는다`,
+          ),
+        );
+      return parsed.dynamic
+        ? [
+            ...found,
+            finding(
+              "git-global-options",
+              "git의 전역 인자나 하위 명령이 동적이다",
+            ),
+          ]
+        : found;
+    },
+  },
+  {
+    id: "git-subcommands",
+    check: (invocation, context) => {
+      const parsed = gitParts(invocation);
+      if (parsed === undefined) {
+        return [];
+      }
+      const { sub, rest } = parsed;
+      const git = context.rules.git;
+      if (isAbort(sub, rest, context.rules)) {
+        return [];
+      }
+      if (git.alwaysDenied.includes(sub)) {
+        return [
+          finding(
+            "git-subcommands",
+            `git ${sub}는 하네스가 막는다 (docs/harness.md 7.3)`,
+          ),
+        ];
+      }
+      if (!isSubagent(context.role)) {
+        return [];
+      }
+      const merging =
+        sub === "merge" &&
+        !(
+          context.role === ROLE.implementer &&
+          implementerMerge(rest, context.rules)
+        );
+      return git.subagentDenied.includes(sub) || merging
+        ? [
+            finding(
+              "git-subcommands",
+              `서브에이전트는 git ${sub}를 하지 않는다. 푸시와 병합은 메인만 한다. 구현자는 git merge master만 쓴다 (docs/workflow.md 2장, ADR 0017)`,
+            ),
+          ]
+        : [];
+    },
+  },
+  {
+    id: "git-options",
+    check: (invocation, context) => {
+      const parsed = gitParts(invocation);
+      if (
+        parsed === undefined ||
+        isAbort(parsed.sub, parsed.rest, context.rules)
+      ) {
+        return [];
+      }
+      const { sub, rest } = parsed;
+      const git = context.rules.git;
+      const { options, positionals } = gitOptionWords(sub, rest, context.rules);
+      const rulesFor = [
+        ...git.options,
+        ...(isSubagent(context.role) ? git.subagentOptions : []),
+      ].filter((rule) => rule.subcommands.includes(sub));
+      const found = rulesFor.flatMap((rule) =>
+        optionHits(rule, options).map((option) =>
+          finding(
+            rule.rule,
+            `git ${sub} ${option.long ?? `-${option.short}`}는 하네스가 막는다 (docs/harness.md 7.3, ADR 0017)`,
+          ),
+        ),
+      );
+      const statics = positionals.filter(({ word }) => !word.dynamic);
+      const plus = git.plusRefspec.includes(sub)
+        ? statics
+            .filter(({ word }) => word.text.startsWith("+"))
+            .map(({ word }) =>
+              finding("git-force-push", `강제 refspec ${word.text}`),
+            )
+        : [];
+      const subagent = isSubagent(context.role);
+      const refspec =
+        subagent && sub === "fetch" && git.fetchRefspec
+          ? statics
+              .filter(({ word }) => word.text.includes(":"))
+              .map(({ word }) =>
+                finding(
+                  "git-history",
+                  `서브에이전트는 fetch로 참조를 덮어쓰지 않는다: ${word.text}`,
+                ),
+              )
+          : [];
+      const forced =
+        subagent &&
+        sub === "branch" &&
+        options.some((option) =>
+          git.forcedBranch.options.includes(option.long ?? `-${option.short}`),
+        ) &&
+        statics.some(({ word }) =>
+          git.forcedBranch.branches.includes(word.text),
+        )
+          ? [
+              finding(
+                "git-history",
+                "서브에이전트는 기준 브랜치를 강제로 옮기거나 지우지 않는다",
+              ),
+            ]
+          : [];
+      const dynamic = git.dynamicSensitive.includes(sub)
+        ? positionals
+            .filter(({ word, ended }) => word.dynamic && !ended)
+            .map(({ word }) =>
+              finding(
+                "git-dynamic-arguments",
+                `git ${sub}의 인자가 동적이다: ${word.raw}`,
+              ),
+            )
+        : [];
+      return [...found, ...plus, ...refspec, ...forced, ...dynamic];
+    },
+  },
+  {
+    id: "lefthook",
+    check: (invocation, context) => {
+      if (invocation.name !== "lefthook") {
+        return [];
+      }
+      const sub = invocation.args.find((word) => !isOption(word));
+      return sub !== undefined &&
+        (sub.dynamic || context.rules.lefthook.denied.includes(sub.text))
+        ? [
+            finding(
+              "lefthook",
+              `lefthook ${sub.raw}로 git 훅 상태를 바꾸지 않는다`,
+            ),
+          ]
+        : [];
+    },
+  },
+  {
+    id: "denied-commands",
+    check: (invocation, context) => {
+      const commands = context.rules.commands;
+      const denied =
+        commands.denied.includes(invocation.name) ||
+        (isSubagent(context.role) &&
+          commands.subagentDenied.includes(invocation.name));
+      return denied
+        ? [
+            finding(
+              "denied-commands",
+              `${invocation.name}는 하네스가 막는다 (docs/harness.md 7.3, ADR 0017)`,
+            ),
+          ]
+        : [];
+    },
+  },
+  {
+    id: "tool-settings",
+    check: (invocation, context) => {
+      const tools = context.rules.tools;
+      const text = invocation.args
+        .filter((word) => !isOption(word))
+        .map((word) => word.text)
+        .join(" ");
+      const startsWith = (list) =>
+        list.some((entry) => text === entry || text.startsWith(`${entry} `));
+      const rustup =
+        invocation.name === "rustup" && startsWith(tools.rustup.denied);
+      const packages =
+        tools.packageConfig.commands.includes(invocation.name) &&
+        startsWith(tools.packageConfig.denied);
+      const just =
+        invocation.name === "just" &&
+        invocation.args.some((word) =>
+          tools.just.deniedOptions.some(
+            (option) =>
+              word.text === option || word.text.startsWith(`${option}=`),
+          ),
+        );
+      return rustup || packages || just
+        ? [
+            finding(
+              "tool-settings",
+              `${invocation.name}의 설정·툴체인·레시피 위치를 바꾸지 않는다 (ADR 0017)`,
+            ),
+          ]
+        : [];
+    },
+  },
+  {
+    id: "rust-flags",
+    check: (invocation, context) => {
+      const rust = context.rules.rust;
+      if (!rust.tools.includes(invocation.name)) {
+        return [];
+      }
+      const texts = invocation.args.map((word) => word.text);
+      const separator = texts.indexOf("--");
+      const before = separator === -1 ? texts : texts.slice(0, separator);
+      const after = separator === -1 ? [] : texts.slice(separator + 1);
+      const anywhere = texts.filter((text) =>
+        rust.anywhere.some(
+          (flag) => text === flag || text.startsWith(`${flag}=`),
+        ),
+      );
+      const cargoOptions =
+        invocation.name === "cargo"
+          ? before.filter(
+              (text) =>
+                rust.cargoOptions.some(
+                  (flag) => text === flag || text.startsWith(`${flag}=`),
+                ) || text.startsWith("+"),
+            )
+          : [];
+      const sub = before.find(
+        (text) => !text.startsWith("-") && !text.startsWith("+"),
+      );
+      const lintTarget =
+        invocation.name === "cargo"
+          ? rust.lintFlagSubcommands.includes(sub)
+            ? after
+            : []
+          : texts;
+      const lint = lintTarget.filter((text) =>
+        rust.lintFlags.some((flag) =>
+          flag.startsWith("--")
+            ? text === flag || text.startsWith(`${flag}=`)
+            : text.startsWith(flag),
+        ),
+      );
+      const forwarded =
+        invocation.name === "cargo" && sub === "run"
+          ? after
+              .flatMap((text) => text.split(/\s+/u))
+              .filter((token) =>
+                context.rules.watched.includes(basename(token).toLowerCase()),
+              )
+          : [];
+      return [
+        ...[...anywhere, ...cargoOptions, ...lint].map((text) =>
+          finding(
+            "rust-flags",
+            `${invocation.name} ${text}로 Rust 린트·설정을 바꾸지 않는다 (docs/harness.md 7.3)`,
+          ),
+        ),
+        ...forwarded.map((token) =>
+          finding("watched-argument", `cargo run이 ${token}를 실행할 수 있다`),
+        ),
+      ];
+    },
+  },
+  {
+    id: "hidden-arguments",
+    check: (invocation, context) =>
+      invocation.hidden &&
+      context.rules.hiddenArguments.includes(invocation.name)
+        ? [
+            finding(
+              "hidden-arguments",
+              `xargs·find가 ${invocation.name}에 넘기는 인자를 볼 수 없다`,
+            ),
+          ]
+        : [],
+  },
+  {
+    id: "watched-argument",
+    check: (invocation, context) => {
+      if (
+        invocation.name === undefined ||
+        handledNames(context).has(invocation.name)
+      ) {
+        return [];
+      }
+      const hits = words(invocation).filter((token) =>
+        context.rules.watched.includes(token),
+      );
+      return hits.length > 0
+        ? [
+            finding(
+              "watched-argument",
+              `${invocation.name}가 넘겨받은 ${hits[0]}를 실행할 수 있다. 하네스가 풀지 못하는 실행기는 쓰지 않는다`,
+            ),
+          ]
+        : [];
+    },
+  },
+  {
+    id: "inline-code",
+    check: (invocation, context) => {
+      const rules = context.rules;
+      const subagent = isSubagent(context.role);
+      const family = interpreterFamily(invocation.name, rules);
+      if (family !== undefined) {
+        const codes = inlineCode(invocation, rules.interpreters[family]);
+        if (codes.length === 0) {
+          return [];
+        }
+        if (subagent) {
+          return [subagentCode(invocation)];
+        }
+        return codes.flatMap((code) =>
+          code.dynamic
+            ? [
+                finding(
+                  "inline-code",
+                  `${invocation.name}에 넘긴 코드가 동적이다`,
+                ),
+              ]
+            : keywordFindings(code, invocation, context),
+        );
+      }
+      if (rules.awk.includes(invocation.name)) {
+        const programs = awkCode(invocation);
+        if (
+          subagent &&
+          programs.some((code) => code.dynamic || AWK_WRITES.test(code.text))
+        ) {
+          return [subagentCode(invocation)];
+        }
+        return programs.flatMap((code) =>
+          keywordFindings(code, invocation, context),
+        );
+      }
+      if (invocation.name === "sed") {
+        const scripts = sedScripts(invocation.args);
+        const writes = scripts.some(
+          (code) =>
+            code.dynamic ||
+            SED_COMMAND.test(code.text) ||
+            SED_FLAG.test(code.text),
+        );
+        return subagent && writes ? [subagentCode(invocation)] : [];
+      }
+      const editor = rules.editors[invocation.name];
+      return subagent &&
+        editor !== undefined &&
+        invocation.args.some((word) =>
+          editor.some((option) => word.text.startsWith(option)),
+        )
+        ? [subagentCode(invocation)]
+        : [];
+    },
+  },
+  {
+    id: "write-targets",
+    check: (invocation, context) => {
+      const targets = [
+        ...invocation.command.redirects
+          .filter((item) => !["<", "<&"].includes(item.operator))
+          .map((item) => item.target),
+        ...writeTargets(invocation, context.definitions.writers),
+      ];
+      const linked = hardLinkCreation(invocation)
+        ? [
+            finding(
+              "hard-link",
+              `${invocation.name}로 하드 링크를 만들지 않는다`,
+            ),
+          ]
+        : [];
+      return [
+        ...linked,
+        ...targets.flatMap((target) =>
+          targetFindings(target, invocation, context),
+        ),
+      ];
+    },
+  },
+  {
+    id: "chmod",
+    check: (invocation, context) => {
+      if (!context.rules.commands.chmod.includes(invocation.name)) {
+        return [];
+      }
+      const targets = operands(invocation.args).slice(1);
+      return targets.length > 0 &&
+        targets.every((target) => scopedTarget(target, invocation, context))
+        ? []
+        : [
+            finding(
+              "chmod",
+              "chmod는 임시 폴더나 자기 쓰기 범위의 파일에만 쓴다",
+            ),
+          ];
+    },
+  },
+];
 
 const shellString = (invocation) => {
   const args = invocation.args;
@@ -936,23 +1397,24 @@ export const EXPANDERS = [
       }
       return invocation.args.some((word) => word.dynamic)
         ? { findings: [finding("eval", "eval의 인자가 동적이다")] }
-        : { scripts: [invocation.args.map((word) => word.text).join(" ")] };
+        : {
+            scripts: [invocation.args.map((word) => word.text).join(" ")],
+          };
     },
   },
   {
-    id: "alias",
+    id: "trap",
     expand: (invocation) => {
-      if (invocation.name !== "alias") {
+      if (invocation.name !== "trap") {
         return {};
       }
-      const values = invocation.args.filter((word) => word.text.includes("="));
-      return values.some((word) => word.dynamic)
-        ? { findings: [finding("alias", "alias 정의가 동적이다")] }
-        : {
-            scripts: values.map((word) =>
-              word.text.slice(word.text.indexOf("=") + 1),
-            ),
-          };
+      const action = invocation.args.find((word) => !isOption(word));
+      if (action === undefined) {
+        return {};
+      }
+      return action.dynamic
+        ? { findings: [finding("trap", "trap의 동작이 동적이다")] }
+        : { scripts: [action.text] };
     },
   },
   {
@@ -969,7 +1431,7 @@ export const EXPANDERS = [
             (candidate, position) =>
               position > index && [";", "+"].includes(candidate.text),
           );
-          const words = args
+          const found = args
             .slice(index + 1, end === -1 ? args.length : end)
             .map((item) =>
               item.text.includes("{}") ? { ...item, dynamic: true } : item,
@@ -977,7 +1439,7 @@ export const EXPANDERS = [
           nested.push({
             ...invocation.command,
             assignments: [],
-            words,
+            words: found,
             redirects: [],
             inputs: [],
           });
@@ -989,21 +1451,25 @@ export const EXPANDERS = [
   {
     id: "git-alias",
     expand: (invocation, context) => {
-      if (invocation.name !== "git") {
-        return {};
-      }
-      const parsed = parseGit(invocation.args);
+      const parsed = gitParts(invocation);
       if (
-        parsed.sub === undefined ||
-        context.rules.git.alwaysDenied.includes(parsed.sub) ||
-        context.rules.git.subagentDenied.includes(parsed.sub) ||
-        context.rules.git.options.some((rule) =>
-          rule.subcommands.includes(parsed.sub),
-        )
+        parsed === undefined ||
+        context.rules.git.builtins.includes(parsed.sub)
       ) {
         return {};
       }
-      const alias = gitAlias(parsed.sub, context.cwd);
+      const directory = aliasDirectory(parsed, invocation, context);
+      if (directory === undefined) {
+        return {
+          findings: [
+            finding(
+              "git-alias",
+              `git ${parsed.sub}가 별칭인지 풀 수 없다(-C 경로나 현재 폴더를 모른다)`,
+            ),
+          ],
+        };
+      }
+      const alias = lookupAlias(parsed.sub, directory);
       if (alias === undefined || alias === "") {
         return {};
       }
@@ -1020,44 +1486,94 @@ export const EXPANDERS = [
   },
 ];
 
-const updateDirectory = (invocation, context) => {
-  if (!["cd", "pushd"].includes(invocation.name)) {
-    return;
-  }
-  const target = operands(invocation.args)[0];
-  if (target === undefined) {
-    context.cwd = homedir();
-  } else {
-    context.cwd = target.dynamic
-      ? undefined
-      : absoluteTarget(target.text, context.cwd);
+const isDirectory = (path) => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
   }
 };
 
-const analyzeCommand = (command, context, depth, hidden) => {
-  const invocation = unwrap(command, context.definitions);
+const changeDirectory = (invocation, context, grouped) => {
+  if (invocation.name === "popd") {
+    return undefined;
+  }
+  const target = operands(invocation.args)[0];
+  if (target === undefined) {
+    return homedir();
+  }
+  if (target.dynamic || target.glob || target.text === "-" || grouped) {
+    return undefined;
+  }
+  const path = absoluteTarget(
+    target.text,
+    currentDirectory(invocation, context),
+  );
+  return path !== undefined && isDirectory(path) ? path : undefined;
+};
+
+const nestedContext = (context) => ({ ...context });
+
+const analyzeNested = (script, context, depth) => {
+  const child = nestedContext(context);
+  const found = analyzeScript(script, child, depth);
+  if (child.cwd !== context.cwd) {
+    context.cwd = undefined;
+  }
+  return found;
+};
+
+const scriptFindings = (invocation, context, depth) => {
+  const parsed = parseScript(invocation.script);
+  if (parsed.commands.length !== 1 || parsed.problems.length > 0) {
+    return [finding("env-split", "env -S 문자열이 명령 하나로 풀리지 않는다")];
+  }
+  return analyzeNested(invocation.script, context, depth + 1);
+};
+
+const analyzeCommand = (command, context, depth, hidden, grouped) => {
+  const invocation = unwrap(command, context.definitions, context.rules);
   invocation.hidden ||= hidden;
+  const always = [
+    "dynamic-command",
+    "environment",
+    "write-targets",
+    "shadowing",
+  ];
   const findings = context.definitions.checks.flatMap((item) =>
-    invocation.executes ||
-    ["dynamic-command", "environment", "write-targets"].includes(item.id)
+    invocation.executes || always.includes(item.id)
       ? item.check(invocation, context)
       : [],
   );
+  const scope = invocation.cwdUnknown
+    ? { ...context, cwd: undefined }
+    : context;
+  if (invocation.script !== undefined) {
+    findings.push(...scriptFindings(invocation, scope, depth));
+  }
   if (invocation.executes && invocation.name !== undefined) {
     for (const expander of context.definitions.expanders) {
-      const result = expander.expand(invocation, context);
+      const result = expander.expand(invocation, scope);
       findings.push(...(result.findings ?? []));
       for (const script of result.scripts ?? []) {
-        findings.push(...analyzeScript(script, context, depth + 1));
+        findings.push(...analyzeNested(script, scope, depth + 1));
       }
       for (const nested of result.commands ?? []) {
         findings.push(
-          ...analyzeCommand(nested, context, depth + 1, result.hidden === true),
+          ...analyzeCommand(
+            nested,
+            nestedContext(scope),
+            depth + 1,
+            result.hidden === true,
+            true,
+          ),
         );
       }
     }
   }
-  updateDirectory(invocation, context);
+  if (["cd", "pushd", "popd"].includes(invocation.name)) {
+    context.cwd = changeDirectory(invocation, context, grouped);
+  }
   return findings;
 };
 
@@ -1070,10 +1586,12 @@ export const analyzeScript = (source, context, depth = 0) => {
     finding("unparsable", `명령을 해석하지 못했다: ${problem}`),
   );
   parsed.commands.forEach((command) => {
-    findings.push(...analyzeCommand(command, context, depth, false));
+    findings.push(
+      ...analyzeCommand(command, context, depth, false, parsed.grouped),
+    );
   });
   for (const substitution of parsed.substitutions) {
-    findings.push(...analyzeScript(substitution, context, depth + 1));
+    findings.push(...analyzeNested(substitution, context, depth + 1));
   }
   return findings;
 };

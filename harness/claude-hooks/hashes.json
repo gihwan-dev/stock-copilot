@@ -1,0 +1,19 @@
+{
+  ".claude/hooks/config-change.mjs": "b425c990eab54c59daa42d6508959475589da55ac6622404aa0cbfae95a5d2e0",
+  ".claude/hooks/guard-bash.mjs": "c22437c882e1effef739bd0d8215128b304f1d023c50acb9cd36221d64a67a0b",
+  ".claude/hooks/guard-edit.mjs": "d99f54b8cad26b6142e8c0266071a810f1232f163bb2b4ebcd1facb43c42a445",
+  ".claude/hooks/lib/allowlist.mjs": "dc227119832cd2d3ae5ac75dbde89f2150fbc38b5cbe14182eef2278e19af59c",
+  ".claude/hooks/lib/bash-guard.mjs": "09fcf43f2cd7c7e25ace188d1e5908dd4ea085628fd061165d069de84d569ec8",
+  ".claude/hooks/lib/edit-guard.mjs": "a729de40817cf175d4278301da86c8c7fc718320c9e35836181bd64076c78716",
+  ".claude/hooks/lib/io.mjs": "2b49e6a9852170b55d8dc77afb1753dcd897aba079a600c20ba24ca4c9f75cd3",
+  ".claude/hooks/lib/paths.mjs": "04660ee7130e8d914b85f691be8f023654c78e9d8db6fe0a6df073793e84e68c",
+  ".claude/hooks/lib/post-edit.mjs": "de28825a77a247360f64890449781b10985e239f639c6fee170c4c11a60f528f",
+  ".claude/hooks/lib/project.mjs": "13837156433f7471dfa0cea72e06bb648bd1ab3a9c5f59beb0069e66143198db",
+  ".claude/hooks/lib/roles.mjs": "b32d79289617a4744acb5aba0f9c3c01c22b4e8ff9c3c55596f7687bdc22bf73",
+  ".claude/hooks/lib/shell.mjs": "a081854257f0cc0c56047819e28d727f5445d23fa5dd92b58dcce3a6e4db9185",
+  ".claude/hooks/lib/verdict.mjs": "fb4bcf87891ec12e8a63008a568b91aede0dd270d38e4ad888e59f48cc93200c",
+  ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
+  "harness/agent-writable.txt": "10dc85ce0344881259c9c3f46c1d46079e6628871e004c22f63409510d5c71c4",
+  "harness/claude-hooks/lock.txt": "b470b84cf0cd3189e10615bffea7d5cbd9f61134ba1c2cfd513ddd45b776a5f6",
+  "harness/claude-hooks/rules.json": "a52de02b91b8f321b5051d7aa42b97a2cedf7ba1f35611f9c336934b4c0aae22"
+}

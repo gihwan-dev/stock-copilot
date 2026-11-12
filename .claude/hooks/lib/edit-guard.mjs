@@ -1,4 +1,4 @@
-import { fixedFindings, locate, roleFindings } from "./paths.mjs";
+import { MODE, shapeProblem, writeFindings } from "./paths.mjs";
 import { ROLE, roleOf } from "./roles.mjs";
 import { decide } from "./verdict.mjs";
 
@@ -19,20 +19,17 @@ export const editFindings = (input, project) => {
     ];
   }
   const target = targetOf(input);
-  const located = locate(target, project.worktrees);
-  if (located.problem !== undefined) {
+  const shape = shapeProblem(target);
+  if (shape !== undefined) {
     return [
       {
         rule: "unsafe-path",
         gated: false,
-        message: `${located.problem}: ${target}`,
+        message: `${shape}: ${target}`,
       },
     ];
   }
-  const fixed = fixedFindings(located.relative, project.rules);
-  return fixed.length > 0
-    ? fixed
-    : roleFindings(located.relative, role, project.allowlist, project.rules);
+  return writeFindings(target, role, project, MODE.edit);
 };
 
 export const decideEdit = (input, project) =>

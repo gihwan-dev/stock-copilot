@@ -20,7 +20,7 @@ export const runJustLintFile = (root, path) => {
 export const lintFeedback = (input, project, run = runJustLintFile) => {
   const path = (input.tool_input ?? {}).file_path;
   const located = locate(path, project.worktrees);
-  if (located.relative === undefined) {
+  if (located.problem !== undefined) {
     return undefined;
   }
   const result = run(located.root, path);

@@ -101,9 +101,9 @@ test("the brief's evasion variants each have a denying case", () => {
   ].forEach((command) => assert.ok(commands.has(command), command));
 });
 
-test("removing any rules.json element outside the main role patterns breaks some bash case", () => {
+test("removing any rules.json element outside paths breaks some bash case", () => {
   const surviving = dataVariants(realRules)
-    .filter((variant) => variant.path.join(".") !== "paths.mainPatterns")
+    .filter((variant) => variant.path[0] !== "paths")
     .filter((variant) => {
       const rules = applyVariant(realRules, variant);
       return cases.every((item) => matches(item, rules, DEFINITIONS));

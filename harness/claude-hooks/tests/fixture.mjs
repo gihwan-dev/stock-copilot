@@ -1,13 +1,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  linkSync,
   mkdirSync,
+  rmSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -15,6 +17,7 @@ import {
   gitEnvironment,
   readAllowlist,
   readRules,
+  trackedAdrs,
   worktreesOf,
 } from "../../../.claude/hooks/lib/project.mjs";
 
@@ -56,6 +59,10 @@ const FILES = [
   "docs/harness.md",
   "harness/agent-writable.txt",
   "harness/claude-hooks/lock.txt",
+  "harness/linked-source.txt",
+  "docs/adr/0001-first.md",
+  "docs/adr/0002-second.md",
+  "docs/\uD55C\uAE00.md",
 ];
 
 export const createFixture = () => {
@@ -74,6 +81,13 @@ export const createFixture = () => {
   git(root, "config", "alias.sneak", "!git commit --no-verify");
   symlinkSync("../../../justfile", join(root, "crates/domain/src/link.rs"));
   symlinkSync("crates", join(root, "linked"));
+  linkSync(
+    join(root, "harness/linked-source.txt"),
+    join(root, "docs/linked.txt"),
+  );
+  git(root, "worktree", "add", "--quiet", "-b", "swap", join(base, "wx"));
+  rmSync(join(base, "wx"), { recursive: true, force: true });
+  symlinkSync(join(root, "harness"), join(base, "wx"));
   return {
     base,
     root,
@@ -91,19 +105,33 @@ const cachedWorktrees = (root) => {
   return worktreeCache.get(root);
 };
 
+const adrCache = new Map();
+
+const cachedAdrs = (root, rules) => {
+  const key = `${root}\0${JSON.stringify(rules.paths.adr)}`;
+  if (!adrCache.has(key)) {
+    adrCache.set(key, trackedAdrs(root, rules));
+  }
+  return adrCache.get(key);
+};
+
 export const projectFor = (fixture, overrides = {}) => ({
   root: fixture.root,
   lock: overrides.lock ?? LOCK.off,
   allowlist: overrides.allowlist ?? realAllowlist,
   rules: overrides.rules ?? realRules,
   worktrees: cachedWorktrees(fixture.root),
+  adrs: cachedAdrs(fixture.root, overrides.rules ?? realRules),
 });
 
 export const placeholders = (fixture) => (text) =>
   text
     .replaceAll("{root}", fixture.root)
     .replaceAll("{worktree}", fixture.worktree)
-    .replaceAll("{outside}", fixture.outside);
+    .replaceAll("{outside}", fixture.outside)
+    .replaceAll("{base}", fixture.base)
+    .replaceAll("{home}", homedir())
+    .replaceAll("{tmp}", realpathSync(tmpdir()));
 
 export const roleInput = (role) => {
   if (role === undefined || role === "main") {

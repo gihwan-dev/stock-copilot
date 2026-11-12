@@ -33,12 +33,12 @@ const EXPECTED_SETTINGS = {
     PostToolUse: [
       {
         matcher: "Edit|Write",
-        hooks: [hook("post-edit.mjs", { timeout: 300 })],
+        hooks: [hook("post-edit.mjs", { onFailure: "block", timeout: 300 })],
       },
     ],
     ConfigChange: [
       {
-        matcher: "project_settings|local_settings|skills",
+        matcher: "user_settings|project_settings|local_settings|skills",
         hooks: [hook("config-change.mjs", { onFailure: "block", timeout: 10 })],
       },
     ],

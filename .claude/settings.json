@@ -37,14 +37,15 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit.mjs\"",
-            "timeout": 300
+            "timeout": 300,
+            "onFailure": "block"
           }
         ]
       }
     ],
     "ConfigChange": [
       {
-        "matcher": "project_settings|local_settings|skills",
+        "matcher": "user_settings|project_settings|local_settings|skills",
         "hooks": [
           {
             "type": "command",

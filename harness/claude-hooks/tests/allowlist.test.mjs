@@ -7,6 +7,9 @@ import {
   parseAllowlist,
   patternMatches,
 } from "../../../.claude/hooks/lib/allowlist.mjs";
+import { MODE, writeFindings } from "../../../.claude/hooks/lib/paths.mjs";
+import { loadProject } from "../../../.claude/hooks/lib/project.mjs";
+import { ROLE } from "../../../.claude/hooks/lib/roles.mjs";
 import { readJson, realAllowlist, repoRoot } from "./fixture.mjs";
 
 test("allowlist lines are narrow: whole segments, `**` only at the end, `!` excludes", () => {
@@ -74,18 +77,49 @@ test("lock files and IPC generated files are writable", () => {
   ].forEach((path) => assert.ok(isWritable(realAllowlist, path), path));
 });
 
-test("open-issues and every existing ADR are protected, a new ADR is not", () => {
+test("open-issues and every git-tracked ADR are protected, a new ADR number is not", () => {
+  const project = loadProject(repoRoot);
   const adrs = readdirSync(join(repoRoot, "docs/adr")).map(
     (name) => `docs/adr/${name}`,
   );
   assert.ok(adrs.length >= 18);
-  [
-    "docs/open-issues.md",
-    "docs/harness.md",
-    "docs/workflow.md",
-    ...adrs,
-  ].forEach((path) => assert.ok(!isWritable(realAllowlist, path), path));
-  assert.ok(isWritable(realAllowlist, "docs/adr/0099-future.md"));
+  assert.deepEqual(
+    [...project.adrs].sort(),
+    adrs.filter((path) => project.adrs.includes(path)).sort(),
+  );
+  ["docs/open-issues.md", "docs/harness.md", "docs/workflow.md"].forEach(
+    (path) => assert.ok(!isWritable(realAllowlist, path), path),
+  );
+  project.adrs.forEach((path) =>
+    assert.deepEqual(
+      writeFindings(
+        join(repoRoot, path),
+        ROLE.implementer,
+        project,
+        MODE.edit,
+      ).map((item) => item.rule),
+      ["protected-path"],
+      path,
+    ),
+  );
+  assert.deepEqual(
+    writeFindings(
+      join(repoRoot, "docs/adr/0099-future.md"),
+      ROLE.implementer,
+      project,
+      MODE.edit,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    writeFindings(
+      join(repoRoot, "docs/adr/0003-another.md"),
+      ROLE.implementer,
+      project,
+      MODE.edit,
+    ).map((item) => item.rule),
+    ["adr-number"],
+  );
 });
 
 test("harness 7.1 protected files are outside the allowlist", () => {

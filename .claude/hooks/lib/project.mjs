@@ -1,14 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseAllowlist } from "./allowlist.mjs";
 
-export const HOOKS_PROJECT_ROOT = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "..",
+const realOrSelf = (path) => {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+};
+
+export const HOOKS_PROJECT_ROOT = realOrSelf(
+  resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."),
 );
 
 export const ALLOWLIST_FILE = "harness/agent-writable.txt";
@@ -33,6 +38,18 @@ export const gitEnvironment = () =>
       ([name]) => !GIT_REDIRECTS.includes(name),
     ),
   );
+
+export const git = (cwd, args) => {
+  try {
+    return execFileSync("git", ["-C", cwd, ...args], {
+      encoding: "utf8",
+      env: gitEnvironment(),
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return undefined;
+  }
+};
 
 const readText = (root, relative) => {
   try {
@@ -59,41 +76,81 @@ export const readAllowlist = (root) => {
 export const readRules = (root) =>
   JSON.parse(readFileSync(join(root, RULES_FILE), "utf8"));
 
-const realOrSelf = (path) => {
+const isLink = (path) => {
   try {
-    return realpathSync(path);
+    return lstatSync(path).isSymbolicLink();
   } catch {
-    return path;
+    return true;
   }
 };
 
-export const worktreesOf = (root) => {
-  const listed = (() => {
-    try {
-      return execFileSync(
-        "git",
-        ["-C", root, "worktree", "list", "--porcelain", "-z"],
-        {
-          encoding: "utf8",
-          env: gitEnvironment(),
-          stdio: ["ignore", "pipe", "ignore"],
-        },
-      )
-        .split("\0")
-        .filter((field) => field.startsWith("worktree "))
-        .map((field) => field.slice("worktree ".length));
-    } catch {
-      return [];
-    }
-  })();
-  const roots = [root, ...listed].flatMap((path) => [path, realOrSelf(path)]);
-  return [...new Set(roots)];
+const readTrimmed = (path) => {
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return undefined;
+  }
 };
 
-export const loadProject = (root = HOOKS_PROJECT_ROOT) => ({
-  root,
-  lock: readLock(root),
-  allowlist: readAllowlist(root),
-  rules: readRules(root),
-  worktrees: worktreesOf(root),
-});
+const linkedWorktreeIsGenuine = (path, common) => {
+  if (isLink(path) || realOrSelf(path) !== path) {
+    return false;
+  }
+  const pointer = readTrimmed(join(path, ".git"));
+  if (pointer === undefined || !pointer.startsWith("gitdir: ")) {
+    return false;
+  }
+  const administrative = realOrSelf(pointer.slice("gitdir: ".length));
+  if (dirname(administrative) !== join(common, "worktrees")) {
+    return false;
+  }
+  const back = readTrimmed(join(administrative, "gitdir"));
+  return back !== undefined && realOrSelf(back) === join(path, ".git");
+};
+
+export const worktreesOf = (root) => {
+  const commonText = git(root, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  ]);
+  if (commonText === undefined) {
+    return [root];
+  }
+  const common = realOrSelf(commonText.trim());
+  const listed = (git(root, ["worktree", "list", "--porcelain", "-z"]) ?? "")
+    .split("\0")
+    .filter((field) => field.startsWith("worktree "))
+    .map((field) => field.slice("worktree ".length));
+  const main = dirname(common);
+  const genuine = listed.filter((path) =>
+    path === main
+      ? !isLink(path) && realOrSelf(path) === path
+      : linkedWorktreeIsGenuine(path, common),
+  );
+  return [...new Set([root, ...genuine])];
+};
+
+export const trackedAdrs = (root, rules) =>
+  (
+    git(root, [
+      "ls-tree",
+      "--name-only",
+      rules.paths.adr.reference,
+      `${rules.paths.adr.directory}/`,
+    ]) ?? ""
+  )
+    .split("\n")
+    .filter((line) => line !== "");
+
+export const loadProject = (root = HOOKS_PROJECT_ROOT) => {
+  const rules = readRules(root);
+  return {
+    root,
+    lock: readLock(root),
+    allowlist: readAllowlist(root),
+    rules,
+    worktrees: worktreesOf(root),
+    adrs: trackedAdrs(root, rules),
+  };
+};

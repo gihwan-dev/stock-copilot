@@ -92,9 +92,12 @@ const closing = (source, start, open, close) => {
   return -1;
 };
 
+const NUMERIC_ESCAPE = /^(x|u|U|c|[0-7])/u;
+
 const decodeAnsi = (body) => {
   let text = "";
   let position = 0;
+  let numeric = false;
   while (position < body.length) {
     const character = body[position];
     if (character !== "\\") {
@@ -104,27 +107,15 @@ const decodeAnsi = (body) => {
     }
     const next = body[position + 1] ?? "";
     const known = ANSI_ESCAPES.get(next);
-    const hex = /^x([0-9A-Fa-f]{1,2})/u.exec(body.slice(position + 1));
-    const unicode = /^[uU]([0-9A-Fa-f]{1,8})/u.exec(body.slice(position + 1));
-    const octal = /^0?([0-7]{1,3})/u.exec(body.slice(position + 1));
     if (known !== undefined) {
       text += known;
-      position += 2;
-    } else if (hex !== null) {
-      text += String.fromCodePoint(Number.parseInt(hex[1], 16));
-      position += 1 + hex[0].length;
-    } else if (unicode !== null) {
-      text += String.fromCodePoint(Number.parseInt(unicode[1], 16));
-      position += 1 + unicode[0].length;
-    } else if (octal !== null) {
-      text += String.fromCodePoint(Number.parseInt(octal[1], 8));
-      position += 1 + octal[0].length;
     } else {
+      numeric ||= NUMERIC_ESCAPE.test(next);
       text += `\\${next}`;
-      position += 2;
     }
+    position += 2;
   }
-  return text;
+  return { text, numeric };
 };
 
 const ansiEnd = (source, start) => {
@@ -145,6 +136,7 @@ const createState = (source) => ({
   substitutions: [],
   pending: [],
   current: undefined,
+  grouped: false,
 });
 
 const freshCommand = (piped = false) => ({
@@ -164,7 +156,9 @@ const dollar = (state, word, quoted) => {
     if (end >= source.length) {
       state.problems.push("닫히지 않은 $'…'");
     }
-    word.text += decodeAnsi(source.slice(start + 2, end));
+    const decoded = decodeAnsi(source.slice(start + 2, end));
+    word.text += decoded.text;
+    word.dynamic ||= decoded.numeric;
     word.quoted = true;
     state.index = end + 1;
     return;
@@ -321,7 +315,7 @@ const readWord = (state) => {
       }
       if (
         character === "{" &&
-        /^\{[^}]*,[^}]*\}/u.test(source.slice(state.index))
+        /^\{[^}]*(,|\.\.)[^}]*\}/u.test(source.slice(state.index))
       ) {
         word.dynamic = true;
       }
@@ -487,6 +481,17 @@ const step = (state) => {
       source.startsWith(candidate, state.index),
     );
     if (separator !== undefined) {
+      const defines =
+        separator === "(" &&
+        state.current.words.length === 1 &&
+        state.current.assignments.length === 0 &&
+        /^[ \t]*\)/u.test(source.slice(state.index + 1));
+      if (defines) {
+        state.current.defines = true;
+      }
+      if (["(", ")", "|", "|&", "&"].includes(separator)) {
+        state.grouped = true;
+      }
       finish(state, separator === "|" || separator === "|&");
       state.index += separator.length;
       return;
@@ -518,5 +523,6 @@ export const parseScript = (source) => {
     commands: state.commands,
     problems: state.problems,
     substitutions: state.substitutions,
+    grouped: state.grouped,
   };
 };

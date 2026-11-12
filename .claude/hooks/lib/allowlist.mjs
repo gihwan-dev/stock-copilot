@@ -56,6 +56,11 @@ export const patternMatches = (pattern, relative) => {
   );
 };
 
+export const patternMatchesIgnoringCase = (pattern, relative) =>
+  patternMatches(pattern.toLowerCase(), relative.toLowerCase());
+
 export const isWritable = (allowlist, relative) =>
   allowlist.includes.some((pattern) => patternMatches(pattern, relative)) &&
-  !allowlist.excludes.some((pattern) => patternMatches(pattern, relative));
+  !allowlist.excludes.some((pattern) =>
+    patternMatchesIgnoringCase(pattern, relative),
+  );

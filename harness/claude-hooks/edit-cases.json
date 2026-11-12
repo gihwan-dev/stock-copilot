@@ -1,11 +1,5 @@
 [
   {
-    "path": "{root}/crates/adapters/store-sqlite/migrations/0001_create_holdings.sql",
-    "decision": "allow",
-    "rules": [],
-    "role": "implementer"
-  },
-  {
     "path": "{root}/crates/domain/src/lib.rs",
     "decision": "allow",
     "rules": [],
@@ -43,6 +37,12 @@
   },
   {
     "path": "{root}/crates/adapters/broker-toss/Cargo.toml",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/crates/adapters/store-sqlite/migrations/0001_create_holdings.sql",
     "decision": "allow",
     "rules": [],
     "role": "implementer"
@@ -132,13 +132,7 @@
     "role": "implementer"
   },
   {
-    "path": "{root}/docs/adr/0018-new-decision.md",
-    "decision": "allow",
-    "rules": [],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/reviews/H-15.md",
+    "path": "{root}/docs/adr/0003-new-decision.md",
     "decision": "allow",
     "rules": [],
     "role": "implementer"
@@ -162,6 +156,24 @@
     "role": "implementer"
   },
   {
+    "path": "{root}/target/debug/x.txt",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/node_modules/x/y.js",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/dist/index.html",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
     "path": "{root}/justfile",
     "decision": "warn",
     "rules": ["protected-path"],
@@ -305,19 +317,6 @@
     "lock": "on"
   },
   {
-    "path": "{root}/.claude/settings.local.json",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/.claude/settings.local.json",
-    "decision": "deny",
-    "rules": ["protected-path"],
-    "role": "implementer",
-    "lock": "on"
-  },
-  {
     "path": "{root}/.claude/hooks/guard-edit.mjs",
     "decision": "warn",
     "rules": ["protected-path"],
@@ -377,6 +376,19 @@
   },
   {
     "path": "{root}/harness/claude-hooks/rules.json",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/harness/x/Cargo.toml",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/harness/x/Cargo.toml",
     "decision": "deny",
     "rules": ["protected-path"],
     "role": "implementer",
@@ -487,6 +499,19 @@
     "lock": "on"
   },
   {
+    "path": "{root}/apps/desktop/src/shared/ds/Tokens.ts",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/Tokens.ts",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
     "path": "{root}/apps/desktop/src-tauri/build.rs",
     "decision": "warn",
     "rules": ["protected-path"],
@@ -578,6 +603,19 @@
     "lock": "on"
   },
   {
+    "path": "{root}/apps/desktop/e2e-app/Cargo.toml",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/e2e-app/Cargo.toml",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
     "path": "{root}/apps/desktop/eslint/rules/no-comments.mjs",
     "decision": "warn",
     "rules": ["protected-path"],
@@ -630,13 +668,39 @@
     "lock": "on"
   },
   {
-    "path": "{root}/lefthook-local.yml",
+    "path": "{root}/.npmrc",
     "decision": "warn",
     "rules": ["protected-path"],
     "role": "implementer"
   },
   {
-    "path": "{root}/lefthook-local.yml",
+    "path": "{root}/.npmrc",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/.prettierignore",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/.prettierignore",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/.node-version",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/.node-version",
     "decision": "deny",
     "rules": ["protected-path"],
     "role": "implementer",
@@ -682,26 +746,26 @@
     "lock": "on"
   },
   {
-    "path": "{root}/docs/adr/0003-harness-decisions.md",
+    "path": "{root}/docs/Open-Issues.md",
     "decision": "warn",
     "rules": ["protected-path"],
     "role": "implementer"
   },
   {
-    "path": "{root}/docs/adr/0003-harness-decisions.md",
+    "path": "{root}/docs/Open-Issues.md",
     "decision": "deny",
     "rules": ["protected-path"],
     "role": "implementer",
     "lock": "on"
   },
   {
-    "path": "{root}/docs/adr/0017-claude-code-edit-and-shell-hooks.md",
+    "path": "{root}/docs/adr/0001-first.md",
     "decision": "warn",
     "rules": ["protected-path"],
     "role": "implementer"
   },
   {
-    "path": "{root}/docs/adr/0017-claude-code-edit-and-shell-hooks.md",
+    "path": "{root}/docs/adr/0001-first.md",
     "decision": "deny",
     "rules": ["protected-path"],
     "role": "implementer",
@@ -717,6 +781,19 @@
     "path": "{root}/crates/adapters/store-sqlite/migrations.lock",
     "decision": "deny",
     "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/docs/adr/0001-replacement.md",
+    "decision": "warn",
+    "rules": ["adr-number"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/adr/0002-second-v2.md",
+    "decision": "deny",
+    "rules": ["adr-number"],
     "role": "implementer",
     "lock": "on"
   },
@@ -735,12 +812,285 @@
     "lock": "on"
   },
   {
+    "path": "{base}/wx/docs/x.md",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{base}/wx/docs/x.md",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/reviews/H-15.md",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer"
+  },
+  {
     "path": "{root}/docs/reviews/H-15.md",
     "decision": "allow",
     "rules": []
   },
   {
-    "path": "{root}/docs/notes.md",
+    "path": "{root}/docs/Reviews/H-15.md",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/Reviews/H-15.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "path": "{root}/docs/tasks.md",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/tasks.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "path": "{root}/docs/progress.md",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/progress.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/eslint.config.mjs",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.eslintrc.json",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.prettierrc",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.prettierrc.json",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/prettier.config.js",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.prettierignore",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/tsconfig.json",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/tsconfig.app.json",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/vitest.config.ts",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/vite.config.ts",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/knip.json",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/knip.jsonc",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.npmrc",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.pnpmfile.cjs",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/package.json",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/rustfmt.toml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.rustfmt.toml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/clippy.toml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.clippy.toml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/rust-toolchain",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/rust-toolchain.toml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/Cargo.toml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.gitignore",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.gitattributes",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/lefthook-local.yml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.lefthookrc",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.env",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.env.local",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/justfile",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.justfile",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.editorconfig",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.tool-versions",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.node-version",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/.nvmrc",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/zz/JUSTFILE",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/lefthook-local.yml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/.gitignore",
+    "decision": "deny",
+    "rules": ["misplaced-config"]
+  },
+  {
+    "path": "{root}/docs/reviews/H-15.md",
     "decision": "allow",
     "rules": [],
     "tool": "Edit"
@@ -762,6 +1112,11 @@
     "rules": ["main-docs-only"]
   },
   {
+    "path": "{root}/target/x.txt",
+    "decision": "allow",
+    "rules": []
+  },
+  {
     "path": "{root}/docs/harness.md",
     "decision": "warn",
     "rules": ["protected-path"]
@@ -776,6 +1131,90 @@
     "path": "{root}/justfile",
     "decision": "warn",
     "rules": ["protected-path"]
+  },
+  {
+    "path": "{home}/.claude/projects/p/memory/note.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "path": "{home}/.claude/plans/plan.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "path": "{home}/.claude/projects/p/memory/note.md",
+    "decision": "deny",
+    "rules": ["protected-home"],
+    "role": "implementer"
+  },
+  {
+    "path": "{home}/.gitconfig",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.config/git/config",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.claude/settings.json",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.cargo/config",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.cargo/config.toml",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.rustup/settings.toml",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.npmrc",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{home}/.config/pnpm/rc",
+    "decision": "deny",
+    "rules": ["protected-home"]
+  },
+  {
+    "path": "{tmp}/claude-hooks-probe/x.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "path": "{tmp}/claude-hooks-probe/x.md",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "path": "{outside}/x.rs",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "path": "/etc/hosts",
+    "decision": "deny",
+    "rules": ["unsafe-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "/Users/Shared/claude-hooks-probe.txt",
+    "decision": "deny",
+    "rules": ["unsafe-path"]
   },
   {
     "path": "{root}/docs/notes.md",
@@ -814,6 +1253,12 @@
     "role": "agent-id-only"
   },
   {
+    "path": "{tmp}/r.txt",
+    "decision": "deny",
+    "rules": ["role-without-edits"],
+    "role": "adversarial-reviewer"
+  },
+  {
     "path": "crates/domain/src/lib.rs",
     "decision": "deny",
     "rules": ["unsafe-path"],
@@ -839,18 +1284,6 @@
   },
   {
     "path": "{root}/docs/notes.md/",
-    "decision": "deny",
-    "rules": ["unsafe-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{outside}/x.rs",
-    "decision": "deny",
-    "rules": ["unsafe-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "/etc/hosts",
     "decision": "deny",
     "rules": ["unsafe-path"],
     "role": "implementer"
@@ -904,10 +1337,27 @@
     "role": "implementer"
   },
   {
+    "path": "{root}/docs/한글.md",
+    "decision": "deny",
+    "rules": ["unsafe-path"],
+    "role": "implementer"
+  },
+  {
     "path": null,
     "decision": "deny",
     "rules": ["unsafe-path"],
     "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/linked.txt",
+    "decision": "deny",
+    "rules": ["hard-link"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/linked.txt",
+    "decision": "deny",
+    "rules": ["hard-link"]
   },
   {
     "path": "{root}/.git/hooks/pre-commit",
@@ -940,21 +1390,22 @@
     "role": "implementer"
   },
   {
+    "path": "{root}/.claude/settings.local.json",
+    "decision": "deny",
+    "rules": ["forbidden-path"],
+    "role": "implementer"
+  },
+  {
     "path": "{worktree}/.git",
     "decision": "deny",
     "rules": ["forbidden-path"],
     "role": "implementer"
   },
   {
-    "path": "{root}/crates/domain/src/.gitignore",
+    "path": "{base}/.cargo/config.toml",
     "decision": "deny",
-    "rules": ["nested-root-only-file"],
+    "rules": ["forbidden-path"],
     "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/.gitignore",
-    "decision": "deny",
-    "rules": ["nested-root-only-file"]
   },
   {
     "path": "{root}/crates/domain/src/config.toml",
@@ -964,106 +1415,15 @@
     "lock": "on"
   },
   {
-    "path": "{root}/docs/adr/0000-template.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0001-product-decisions.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0002-architecture-decisions.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0004-rust-workspace-skeleton.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0005-rust-lints-and-third-party-allowlist.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0006-typescript-skeleton-and-formatter.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0007-arch-check-graph-and-source-location.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0008-xtask-source-check.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0009-eslint-rules-and-ts-dependency-allowlist.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0010-raw-types-and-disable-control.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0011-sql-migration-capability-checks.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0012-local-eslint-rules-and-brands.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0013-test-harness-coverage-mutants-network.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0014-ts-boundaries-knip-vitest.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0015-lint-file-git-hooks-and-script-disables.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
-    "path": "{root}/docs/adr/0016-ipc-type-generation.md",
-    "decision": "warn",
-    "rules": ["protected-path"],
-    "role": "implementer"
-  },
-  {
     "path": "{root}/crates/domain/src/config",
     "decision": "allow",
     "rules": [],
     "role": "implementer",
     "lock": "on"
+  },
+  {
+    "path": "{root}/docs/settings.local.json",
+    "decision": "allow",
+    "rules": []
   }
 ]

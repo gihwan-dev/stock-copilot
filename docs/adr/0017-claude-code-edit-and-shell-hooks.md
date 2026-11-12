@@ -5,6 +5,7 @@
 - 결정한 사람: 메인 에이전트(사용자 확인 대기)
 - 관련 작업: H-15
 - 반영한 문서: 없음(이 ADR만 추가. harness.md 7.2·7.3과 다른 점은 아래 "문서와 다른 점"에 모았다)
+- 개정: 2026-11-12 리뷰 반영(아래 "리뷰 반영"이 앞의 결정보다 앞선다)
 
 ## 맥락
 
@@ -48,9 +49,48 @@ harness.md 7.1은 에이전트 쓰기 허용 목록을 `harness/agent-writable.t
 | 그 밖: `chmod`, `chflags`, `xattr`, 중첩 `claude`, `lefthook install|uninstall|add`, `dangerouslyDisableSandbox: true`, `xargs`·`find -exec`가 git·셸·`eval`·`env`·cargo·lefthook·claude에 보이지 않는 인자를 넘기는 것. 인터프리터 인라인 코드(`python -c`, `node -e`, `perl -e`, `ruby -e`, `php -r`, `osascript -e`, `bun -e`, `deno eval`, 인터프리터에 넘긴 here-doc)에 하네스 낱말(`--no-verify`, `hookspath`, `update-index`, `.git/`, `.cargo/config`, `lefthook` 등)이나 금지 환경 변수 이름이 있으면 거부 | harness 7.3 | - | harness 7.3 |
 | 셸 쓰기 대상: 리다이렉트(`>`, `>>`, `>|`, `&>`, `n>`, `>&파일`, `<>`)와 `tee`, `cp`, `mv`, `rm`, `ln`, `install`, `rsync`, `ditto`, `rmdir`, `unlink`, `touch`, `truncate`, `shred`, `mkdir`, `sed -i`, `perl -i`, `dd of=`, `curl -o`, `wget -O`의 대상을 현재 폴더(`cd`를 따라감) 기준으로 풀고 실제 경로도 함께 본다. `.git`·cargo 설정 조각은 어디서든 거부, 하위 `.gitignore`는 거부, 작업 사본 안의 허용 목록 밖은 "보호 경로"(잠금에 따름) | 7.2의 "셸 리다이렉트" 겹을 훅도 맡는다 | - | harness 7.2 |
 | `PostToolUse`(Edit|Write): 편집한 파일이 속한 작업 사본에서 `just lint-file <절대 경로>`를 돌리고 종료 코드가 0이 아니면 `decision: "block"`과 출력 끝 8000자. 작업 사본 밖이면 아무것도 하지 않는다. 제한 시간 300초(xtask를 다시 빌드할 수 있다) | harness 1.1, ADR 0015 | `target/` 산출물 직접 실행 | ADR 0015 |
-| `ConfigChange`(`project_settings|local_settings|skills`): 항상 `decision: "block"` | 실측으로 세션 반영이 막힌다. 파일 자체는 그대로라 다음 세션에 적용된다 | 종료 코드 2 | harness 7.3 |
+| `ConfigChange`(`user_settings|project_settings|local_settings|skills`, 리뷰 반영): 항상 `decision: "block"` | 실측으로 세션 반영이 막힌다. 파일 자체는 그대로라 다음 세션에 적용된다 | 종료 코드 2 | harness 7.3 |
 | 하네스 자체 테스트: `harness/claude-hooks/tests/*.test.mjs`를 `check-ts`에서 `node --test`로 돈다. 예제는 `bash-cases.json`(398개), `edit-cases.json`(규칙 집합과 결정까지 기대). 알려진 빈틈은 `gap` 사유와 함께 "통과"로 적어 두어 나중에 막히면 드러난다. `rules.json`의 원소(배열 원소, `shortValues` 글자, `interpreters` 키), `agent-writable.txt`의 줄, 코드의 검사·확장기·감싸는 명령·쓰기 명령·예약어 목록에서 하나를 빼면 어떤 예제가 실패해야 한다. `.claude/settings.json`은 기대 객체와 같아야 한다. 진입 스크립트는 Claude Code와 같은 JSON을 표준 입력으로 받아 확인하고, 잘못된 입력에서 0이 아닌 종료(= `onFailure: "block"`)를 확인한다 | harness 6.8 | - | harness 6.8 |
 | 훅 스크립트의 형식·린트: `check-ts`의 prettier 대상에 `.claude/hooks`, `.claude/settings.json`을 더하고, `harness/claude-hooks/eslint.config.mjs`(스크립트용 ESLint 설정을 `.claude/hooks/**/*.mjs`에 적용)로 ESLint를 돈다. `harness/lint-file/targets.toml`도 같게 바꿔 편집 훅도 같은 검사를 한다 | 브리프 6 | - | ADR 0015 |
+
+## 리뷰 반영 (2026-11-12)
+
+### 원칙
+
+- 셸 훅은 "해석하지 못하면 거부"로 닫는다. 명령 이름·git 하위 명령·쓰기 대상에 동적 낱말(변수, 명령 치환, 글롭, 중괄호 확장, 숫자 이스케이프가 든 `$'…'`)이 있거나, `env`의 모르는 옵션, `env -S`가 명령 하나로 풀리지 않거나, 현재 폴더를 모르는 상대 경로 쓰기, 하네스가 풀지 못하는 실행기(`watch`, `ssh`, `parallel`, `flock` 등 목록 밖 명령)의 인자에 감시 대상 이름(`git`, `cargo`, `just`, `lefthook`, `rustc`, `rustup`, `claude`, `gh`, `hub`, 셸, `eval`, `env`, `pnpm`, `npm`, `npx`, `node`)이 낱말로 들어 있으면 거부한다.
+- **셸 문자열 검사는 흔한 실수와 알려진 우회를 막는 겹이다. 보호 경로 쓰기의 실제 강제는 샌드박스(H-35)와 CI의 서명 검사(H-26)다.** 훅은 명령 문자열만 보고, 실행된 프로그램이 하는 일은 보지 못한다.
+- 인터프리터 빈틈의 실제 크기: 메인의 `python -c`·`node -e` 등은 낱말 검사만 받으므로 코드는 무엇이든 할 수 있다(파일 쓰기, 프로세스 실행, 네트워크). 서브에이전트는 인라인 코드를 아예 쓸 수 없지만, 쓸 수 있는 경로에 스크립트 파일을 만들어 실행하면(`python3 tools/x.py`, `node x.mjs`, `bash x.sh`) 그 스크립트가 하는 일은 훅이 전혀 보지 못한다. 그 파일은 편집 훅과 린트를 거칠 뿐이다. 이 빈틈은 H-35가 막는다.
+
+### 바꾼 결정
+
+| 결정 | 근거 | 출처 |
+|---|---|---|
+| `$'…'`의 글자 이스케이프(`\n`, `\t` 등)만 풀고, 숫자 이스케이프(`\x`, `\u`, `\U`, 8진수, `\c`)가 있으면 낱말을 동적으로 본다. 따옴표 없는 `{…}`에 `,`나 `..`가 있으면 동적 | bash와 똑같이 풀 수 없으면 거부(리뷰: `\0101`을 bash와 다르게 풀었다) | 리뷰 A-1, A-2 |
+| `env`: 짧은 옵션 묶음을 글자마다 풀고(`-iS`), `S`면 나머지(또는 다음 인자)를 split-string으로, 모르는 글자·긴 옵션은 거부. split-string은 남은 인자와 합쳐 전체 분석을 다시 거치고, 명령이 둘 이상이거나 해석 문제가 있으면 거부. `-C`·`--chdir` 뒤에는 현재 폴더를 모른다 | 리뷰 A-3 | 리뷰 |
+| 현재 폴더: `cd -`, `popd`, 동적 인자(`$OLDPWD`), `~user`, 없는 폴더로의 `cd`, 괄호·파이프·`&`가 있는 명령 안의 `cd`, `eval`·`bash -c`·명령 치환 안에서 바뀐 폴더, `env -C` 뒤는 "모름". `CDPATH` 대입은 거부. 모를 때 상대 경로 쓰기는 거부 | 실패한 `cd`나 하위 셸의 `cd`를 성공으로 보면 실제와 다른 경로를 판정한다 | 리뷰 A-4 |
+| git 별칭은 `-C <경로>`를 따라 그 폴더에서 푼다. 경로나 현재 폴더를 모르면 알려진 내장 하위 명령(`rules.json` `git.builtins`) 밖은 거부 | 리뷰 A-5 | 리뷰 |
+| 감싸는 명령 추가: `setsid`, `script`, `npx`, `pnpm exec|dlx`, `npm exec`(셸 문자열 `-c`는 거부), `trap`의 동작은 스크립트로 다시 분석, `cargo run -- …`의 감시 대상 낱말 거부, `just`의 `--command`·`--shell*`·`--justfile`·`-f`·`--working-directory`·`-d`·`--dotenv-*`·`-E` 거부. 그 밖의 명령은 "읽기 명령 목록(`readers`)" 밖이면 감시 대상 낱말 검사를 받는다 | 리뷰 A-6 | 리뷰 |
+| 하드 링크: `ln`(`-s` 없이), `link`, `cp -l`·`--link`, `rsync --link-dest`는 거부. 편집·셸 쓰기 대상의 링크 수가 1보다 크면 거부 | 리뷰 재현(하드 링크로 잠금 파일 변경) | 리뷰 B-8 |
+| 작업 사본 루트는 `git worktree list`의 경로 중 실제 경로가 그 경로와 같고 심볼릭 링크가 아니며, 그 안의 `.git` 파일이 이 저장소의 `worktrees/<이름>`을 가리키고 그 관리 폴더의 `gitdir`이 다시 그 `.git`을 가리킬 때만 인정한다. 작업 사본 밖 경로는 실제 경로를 다시 판정한다 | 리뷰 재현(지운 작업 사본 자리에 심볼릭 링크) | 리뷰 B-9 |
+| 설정 파일 이름(`rules.json` `paths.configFiles.names`: ESLint·prettier·tsconfig·Vitest·Vite·knip·npm·pnpm·rustfmt·clippy·툴체인·`Cargo.toml`·`.gitignore`·`.gitattributes`·lefthook·`.env*`·justfile·editorconfig·노드 버전 파일)은 정해진 위치(`allowed`) 밖에서 만들 수 없다(잠금과 관계없이 거부). `harness/**`는 예제 묶음이 있어 제외하고 보호 경로 판정을 따른다. `just check`의 `node harness/config-files/check.mjs`가 저장소 전체(`.git`, `node_modules`, `target`, `apps/desktop/dist`, `src-tauri/gen`, `.claude/worktrees` 제외)를 훑어 같은 규칙으로 실패시킨다. 이 규칙이 앞의 "하위 `.gitignore` 거부"를 대신한다 | 리뷰 재현(`src/zz/eslint.config.mjs`) | 리뷰 B-10 |
+| 홈의 설정: `HOME`, `XDG_CONFIG_HOME`, `NODE_OPTIONS`, `NODE_PATH`, `CDPATH`, `npm_config_*`, `PNPM_*`, `ESLINT_*`, `TS_NODE_*` 대입 거부. `~/.gitconfig`, `~/.config/git/**`, `~/.claude/**`, `~/.cargo/config*`, `~/.rustup/**`, `~/.npmrc`, `~/.config/pnpm/**` 쓰기 거부(편집 도구로 메인이 쓰는 `~/.claude/projects/*/memory/**`, `~/.claude/plans/**`만 예외). 작업 사본 밖이라도 `.git`·`.cargo/config*` 조각이 있는 경로 쓰기는 거부. `justfile`이 `NODE_OPTIONS`·`NODE_PATH`를 지운다 | 리뷰 B-11, B-14 | 리뷰 |
+| 서브에이전트가 훅 없이 커밋·참조를 만드는 git 명령: `am`, `apply --index|--cached|--3way|-3`, `reset --soft`, `fetch --update-head-ok|-u`와 `X:Y` 참조 사양, `checkout -B`, `switch -C|--force-create`, `branch -f|--force|-M|-D|-C`의 `master`·`main` 대상, `symbolic-ref`, `send-pack`, `gh`, `hub`를 거부(`commit-tree`, `update-ref`, `replace`, `filter-branch`는 모든 역할에서 거부). 메인은 쓸 수 있다 | 리뷰 B-12 | 리뷰 |
+| 셸 쓰기에도 역할 판정을 적용한다: 리뷰어·비판자·정의 밖 역할은 저장소 안 쓰기 전부 거부, 메인은 `docs/**`만. `docs/reviews/**`, `docs/tasks.md`, `docs/progress.md`는 메인만 쓴다 | 리뷰 B-13, C-22 | 리뷰 |
+| 검사 환경: `rustup override|default|toolchain link|set`, `pnpm|npm|yarn config set|delete`, `npm set`, `alias` 정의(줄을 나눈 것 포함, 목록 보기 `alias`는 통과), 감시 대상 이름의 함수 정의(`git() {…}`, `function cargo {…}`)를 거부 | 리뷰 B-14 | 리뷰 |
+| 인라인 코드: 서브에이전트는 `python -c`, `node -e|--eval|-p`, `perl -e`, `ruby -e`, `php -r`, `osascript -e`, `bun -e`, `deno eval`, 인터프리터에 넘긴 here-doc·파이프 입력, `awk`의 `system`·파일 쓰기·파이프, `sed`의 `w`·`W`·`e` 명령과 `s///w|e`, `vim|vi|nvim -e|-s|-c|+|--headless`, `ed`, `ex`를 쓸 수 없다. 메인은 낱말 검사만 | 리뷰 B-15 | 리뷰 |
+| 내용 해시: `.claude/hooks/**`, `rules.json`, `agent-writable.txt`, `lock.txt`의 SHA-256을 `harness/claude-hooks/hashes.json`과 비교하는 `node harness/claude-hooks/hashes.mjs`를 `just check`가 돈다. 훅 파일을 바꾸면 `--write`로 기대값도 함께 바꿔야 통과한다(기대값 파일은 `harness/**`라 보호 경로) | 리뷰 B-16 | 리뷰 |
+| `ConfigChange` 매처에 `user_settings`를 더한다. `PostToolUse`에도 `onFailure: "block"`. 셸로 `.claude/settings.local.json`에 쓰는 것은 잠금과 관계없이 거부 | 리뷰 C-17 | 리뷰 |
+| 훅 스크립트의 주석 금지: `harness/claude-hooks/eslint.config.mjs`가 `.claude/hooks/**/*.mjs`에 `local/no-comments`를 켜고 끌 수 없는 규칙 목록에 넣는다. 하네스 스크립트(`harness/**/*.mjs`)에 같은 규칙을 거는 것은 `apps/desktop/eslint.scripts.config.mjs` 변경이고 그 기존 테스트의 기대값이 바뀌어 사용자 승인이 필요하다(작업 사본에 둔 변경) | 리뷰 C-19 | 리뷰 |
+| 과잉 거부 해제: 작업 사본의 `target/**`, `node_modules/**`, `apps/desktop/dist/**`와 시스템 임시 폴더(`$TMPDIR`의 실제 경로, `/tmp`, `/private/tmp`, `/var/folders`) 쓰기는 모든 역할에서 통과(실제 경로가 작업 사본 안이면 그 경로로 다시 판정). `chmod`는 대상이 모두 임시 폴더이거나 자기 쓰기 범위일 때만 통과. `git merge|rebase|cherry-pick|revert --abort` 통과. 메인의 편집 도구는 임시 폴더와 Claude Code의 메모리·계획 폴더에 쓸 수 있고, 구현자의 편집 도구는 임시 폴더에 쓸 수 있다. 리뷰어의 편집 도구는 계속 없음 | 리뷰 C-20 | 리뷰 |
+| 병합: 구현자는 `git merge master`(옵션은 `--no-ff`, `--no-edit`만, 인자는 정확히 `master` 하나)로 기준 브랜치를 들여올 수 있다. 병합 커밋은 pre-merge-commit 훅을 거친다. `rebase`는 계속 모든 역할에서 거부. 메인의 `git merge --no-ff <브랜치>`는 통과 | 기준 브랜치를 들여올 길이 없으면 병합 교착이 생긴다 | 리뷰 C-21 |
+| 허용 목록: 새 ADR은 git의 `HEAD`(원본 저장소)에 추적된 `docs/adr/*`에 없는 번호의 파일만 통과한다(같은 번호에 접미사를 붙인 것도 거부, `adr-number`). 기존 ADR을 손으로 적던 제외 줄은 지웠다. 제외 패턴과 메인 전용 패턴은 대소문자를 무시하고 맞춘다(아직 없는 보호 파일을 대소문자만 다르게 선점하는 것 거부) | 리뷰 C-22 | 리뷰 |
+| 하네스 자체 테스트: `bash-cases.json` 832개(서브에이전트 통과 예제 100개 포함), `edit-cases.json` 233개(NFD 경로 예제 포함). 원소 빼기는 `rules.json` 전체(경로 절은 편집 예제, 나머지는 셸 예제), `agent-writable.txt` 줄, 코드의 검사·확장기·감싸는 명령·쓰기 명령·예약어에 대해 한다. `tests/checks.test.mjs`가 설정 파일 위치 검사, 내용 해시, 작업 사본 판정, `justfile`의 `NODE_*` 제거, 훅 주석 금지를 확인한다 | harness 6.8 | - |
+
+### 뒤 작업으로 넘기는 것
+
+- H-35: 샌드박스 `denyWrite`가 `harness/**`, `.claude/{settings*.json,hooks,agents}`, `~/.gitconfig`, `~/.config/git`, `~/.claude`, `~/.rustup/settings.toml`을 포함하고, 하드 링크·인터프리터 쓰기·스크립트 파일 실행·다시 연결한 작업 사본 경로를 통한 보호 경로 쓰기가 실패하는 실측 예제.
+- H-16·H-26: 기준 커밋의 허용 목록으로 경로를 판정, pre-commit이 돌지 않은 커밋(훅 없이 만든 커밋)도 서명 검사로 잡음, `package.json`·`Cargo.toml`은 의존성 절만.
+- H-20: 잠금을 켤 때 훅 파일 해시(`hashes.json`)를 사용자 서명 커밋의 값과 비교.
 
 ## 문서와 다른 점
 
@@ -59,25 +99,23 @@ harness.md 7.1은 에이전트 쓰기 허용 목록을 `harness/agent-writable.t
 - 7.1의 "보호 파일 편집 거부"는 잠금 스위치가 켜졌을 때만 거부이고 지금은 경고다. 7.3이 정한 셸 금지 명령, 린트 훅, 역할 제한(메인의 코드 편집, 리뷰어 편집), 경로 안전 검사, `.git`·cargo 설정·하위 `.gitignore`는 지금도 거부다.
 - 권한 `deny`는 두 항목뿐이다. R-10 3.2의 목록은 H-20에서 넣는다.
 
-## 알려진 빈틈 (훅이 못 막는 것, 샌드박스 H-35와 CI H-16이 맡는다)
+## 알려진 빈틈 (훅이 못 막는 것)
 
 | 빈틈 | 예 | 맡는 곳 |
 |---|---|---|
-| 스크립트 파일 실행 | `bash scripts/x.sh`, `python3 tools/x.py`, `node x.mjs`, `source x` | 샌드박스(쓰기), CI |
-| 인터프리터 코드의 조각 이어 붙이기 | `python3 -c "…['git','commit','-'+'n']"` | 샌드박스, CI |
-| 동적·글롭 쓰기 대상, 목록에 없는 쓰기 명령 | `> "$T"`, `cp x harness/*`, `tar -C harness -x`, `git checkout` | 샌드박스 `denyWrite` |
-| 동적 폴더로 `cd`한 뒤의 상대 경로 | `cd "$D" && echo > justfile` | 샌드박스 |
-| `read`·`printf -v`·`set -a`로 만든 환경 변수 | `set -a; read LEFTHOOK <<< 0` | `just check`의 환경 고정, CI |
+| 스크립트 파일 실행(모든 역할) | `bash scripts/x.sh`, `python3 tools/x.py`, `node x.mjs`, `source x` | 샌드박스 H-35, CI H-26 |
+| 메인의 인터프리터 인라인 코드(낱말 검사뿐, 코드는 무엇이든 한다) | `python3 -c "…['git','commit','-'+'n']"` | H-35, CI |
+| 목록에 없는 쓰기 명령, 프로그램이 내부에서 쓰는 파일 | `tar -C harness -x`, `git checkout -- justfile`, `cargo`·`pnpm`이 쓰는 파일 | H-35 `denyWrite` |
+| 낱말 검사에 걸리지 않는 이름으로 만든 환경 변수 | `set -a; printf -v V 0` | `just check`의 환경 고정, CI |
 | 사용자 셸 설정의 별칭·함수(Claude Code가 불러오는 셸 스냅샷) | 사용자 `~/.zshrc`의 `alias g=git` | 사용자 환경, CI |
-| `PATH` 앞의 가짜 `git`·`cargo`·`just`·`node` | `PATH=/tmp/fake:$PATH just check` | H-35 |
-| 훅 프로세스 자체(`node`가 `PATH`의 것) | `PATH`를 바꾼 Claude Code 실행 | 사용자 환경 |
-| 리눅스 등 대소문자를 구분하는 파일 시스템의 대소문자 판정 | 테스트는 macOS 기준 | harness 1.2(macOS 전용) |
-| `case` 패턴 안의 `)`처럼 해석기가 다르게 읽는 드문 문법 | - | 샌드박스, CI |
+| `PATH` 앞의 가짜 `git`·`cargo`·`just`·`node`, 훅을 실행하는 `node` 자체 | `PATH=/tmp/fake:$PATH just check` | H-35 |
+| 읽기 명령 목록의 명령이 다른 명령을 실행하는 드문 기능 | `less`의 `!`(대화형) | 대화형이 아니므로 낮음 |
+| 대소문자를 구분하는 파일 시스템 | 테스트는 macOS 기준 | harness 1.2 |
 
 ## 결과
 
-- 병합하면 이 저장소에서 연 Claude Code 세션(프로젝트 설정의 훅은 작업 공간 신뢰를 받아들인 뒤에만 돈다)에 바로 적용된다. 메인 에이전트는 `docs/**` 밖을 Write/Edit할 수 없고, 리뷰어·비판자와 정의 밖 서브에이전트(`general-purpose`, `Explore` 등)는 어떤 파일도 편집할 수 없다. 저장소의 작업 사본 밖 경로(scratchpad, 메모리 파일 포함)는 아무도 편집 도구로 쓸 수 없다. `git rebase`, `git config`, 다른 `-c`, 서브에이전트의 `push`·`merge`·`cherry-pick`·`revert`·`pull`이 거부된다. 문서 편집마다 `just lint-file`이 돈다(약 1초, 정리 직후에는 xtask 빌드).
+- 병합하면 이 저장소에서 연 Claude Code 세션(프로젝트 설정의 훅은 작업 공간 신뢰를 받아들인 뒤에만 돈다)에 바로 적용된다. 메인 에이전트는 `docs/**`, 임시 폴더, Claude Code의 메모리·계획 폴더 밖을 편집 도구로 쓸 수 없고 셸로도 저장소의 `docs/**` 밖에 쓸 수 없다. 리뷰어·비판자와 정의 밖 서브에이전트(`general-purpose`, `Explore` 등)는 편집 도구를 쓸 수 없고 셸로는 임시 폴더와 빌드 산출물 폴더에만 쓴다. `git rebase`(`--abort` 제외), `git config`, `commit.gpgsign=false` 밖의 `-c`, `alias` 정의, 서브에이전트의 `push`·`pull`·`cherry-pick`·`revert`·`am`·`gh`와 인라인 인터프리터 코드, 구현자의 `git merge master` 밖의 병합이 거부된다. 하위 폴더의 설정 파일은 편집 훅과 `just check`가 거부한다. 편집마다 `just lint-file`이 돈다(약 1초, 정리 직후에는 xtask 빌드).
 - 보호 경로 편집은 지금 경고만 낸다. H-20이 `lock.txt`를 `on`으로 바꾸면(사용자 서명 커밋) 거부된다. 그때 경로 고정 테스트 파일, `testkit`의 `ScriptedPresence`, UX-6 목록, 시각 회귀 기준 이미지가 생겼으면 제외 줄을 더해야 한다(지금은 파일이 없다).
-- 새 ADR 파일은 쓸 수 있고, 병합된 뒤에는 사람이 제외 줄을 더한다.
+- 새 ADR 파일은 원본 저장소 `HEAD`에 없는 번호일 때만 쓸 수 있고, 병합되면 추적된 파일이라 자동으로 보호된다.
 - 후속: H-25(서브에이전트 훅은 `lib/roles.mjs`, `lib/project.mjs`를 쓴다), H-35(샌드박스, 위 빈틈), H-20(잠금, 긴 `deny`), H-36(Claude Code를 올릴 때 이 ADR의 실측 다시 돌리기). S-17의 대화형 확인은 사용자가 한다.
 - 바뀌면 다시 볼 조건: Claude Code가 훅 입력의 `agent_type`·`agent_id`, `onFailure`, `ConfigChange` 동작, 설정 파일 편집 확인을 바꿀 때.

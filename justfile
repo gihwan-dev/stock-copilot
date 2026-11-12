@@ -37,6 +37,8 @@ unexport GIT_CONFIG_COUNT
 unexport GIT_CONFIG_PARAMETERS
 unexport GIT_DIFF_OPTS
 unexport GIT_ATTR_SOURCE
+unexport NODE_OPTIONS
+unexport NODE_PATH
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
@@ -77,6 +79,8 @@ check-ts: check-node
     node harness/ts-deps/check.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
     node harness/source-tree/check.mjs
+    node harness/config-files/check.mjs
+    node harness/claude-hooks/hashes.mjs
     pnpm -C apps/desktop exec tsc -p .
     pnpm -C apps/desktop exec eslint --max-warnings 0 src
     node harness/eslint-violations/check.mjs
