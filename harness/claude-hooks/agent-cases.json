@@ -1,0 +1,485 @@
+[
+  {
+    "name": "implementer with the base branch tip",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "implementer with an abbreviated tip",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "implementer with a passed target",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "implementer with a branch inline",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, 브랜치 `h-25`\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "implementer with a branch line",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n- 브랜치: h-25",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "implementer with a commit that is neither tip nor passed",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: cccccccccccccccccccccccccccccccccccccccc\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer with an unresolvable commit",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: ddddddd\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer without a base line",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프\n- 손댈 범위: x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer with two bases",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n- 기준 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer with an uppercase base",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer with a branch name",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, 브랜치 `master`\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "implementer with two branches",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, 브랜치 `a`\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n- 브랜치: b",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer with an option-like branch",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, 브랜치 `-x`\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "implementer with a dotted branch",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, 브랜치 `a..b`\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["brief-base"]
+  },
+  {
+    "name": "model argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "model": "haiku"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "isolation argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "isolation": "worktree"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "background argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "review-critic",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "run_in_background": true
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "background false argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "review-critic",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "run_in_background": false
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "effort argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "effort": "max"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "name argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "name": "x"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "mode argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "mode": "bypassPermissions"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "team argument",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d",
+      "team_name": "t"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument"]
+  },
+  {
+    "name": "model with a bad base",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "x",
+      "description": "d",
+      "model": "haiku"
+    },
+    "decision": "deny",
+    "rules": ["agent-argument", "brief-base"]
+  },
+  {
+    "name": "general-purpose",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "general-purpose",
+      "prompt": "x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["agent-type"]
+  },
+  {
+    "name": "Explore",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "Explore",
+      "prompt": "x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["agent-type"]
+  },
+  {
+    "name": "claude-code-guide",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "claude-code-guide",
+      "prompt": "x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["agent-type"]
+  },
+  {
+    "name": "fork type",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "fork",
+      "prompt": "x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["fork"]
+  },
+  {
+    "name": "missing type",
+    "tool": "Agent",
+    "input": {
+      "prompt": "x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["fork"]
+  },
+  {
+    "name": "empty type",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "",
+      "prompt": "x",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["fork"]
+  },
+  {
+    "name": "nested from implementer",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["nested-agent"],
+    "role": "implementer"
+  },
+  {
+    "name": "nested from reviewer",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "review-critic",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["nested-agent"],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "name": "nested from an unknown subagent",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "review-critic",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["nested-agent"],
+    "role": "agent-id-only"
+  },
+  {
+    "name": "SendMessage from main",
+    "tool": "SendMessage",
+    "input": {
+      "to": "a1",
+      "message": "고쳐라"
+    },
+    "decision": "deny",
+    "rules": ["send-message"]
+  },
+  {
+    "name": "SendMessage from implementer",
+    "tool": "SendMessage",
+    "input": {
+      "to": "a1",
+      "message": "x"
+    },
+    "decision": "deny",
+    "rules": ["send-message"],
+    "role": "implementer"
+  },
+  {
+    "name": "reviewer with the brief",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "critic with the brief and findings",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "review-critic",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n## 지적\n1. 차단 crates/domain/src/lib.rs:3",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "name": "reviewer given a done line",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n완료\n",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["implementer-report"]
+  },
+  {
+    "name": "reviewer given a blocked line",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n막힘: 테스트가 틀렸다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["implementer-report"]
+  },
+  {
+    "name": "critic given the harness record",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "review-critic",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n하네스 기록: implementer a1 상태=passed",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["implementer-report"]
+  },
+  {
+    "name": "reviewer given the just check summary heading",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n4. just check 마지막 실행의 요약 줄",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["implementer-report"]
+  },
+  {
+    "name": "reviewer given the evidence heading",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n완료 기준별 충족 근거: 테스트 a",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["implementer-report"]
+  },
+  {
+    "name": "reviewer given a line of a recorded report",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "adversarial-reviewer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 대상 커밋: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n- 가격 정렬은 BTreeMap으로 바꿨고 경계값 테스트를 더했다",
+      "description": "d"
+    },
+    "decision": "deny",
+    "rules": ["implementer-report"]
+  },
+  {
+    "name": "implementer may quote report-like lines",
+    "tool": "Agent",
+    "input": {
+      "subagent_type": "implementer",
+      "prompt": "# 브리프 H-1 예제\n- 기준 커밋: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- 손댈 범위: crates/domain/src/**\n- 막혔을 때: 보고서 첫 줄을 \"막힘:\"으로 시작하고 멈춘다\n완료\n하네스 기록: x",
+      "description": "d"
+    },
+    "decision": "allow",
+    "rules": []
+  }
+]

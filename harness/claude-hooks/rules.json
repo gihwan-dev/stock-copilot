@@ -22,7 +22,8 @@
       "~/.cargo/config.toml",
       "~/.rustup/**",
       "~/.npmrc",
-      "~/.config/pnpm/**"
+      "~/.config/pnpm/**",
+      "~/.local/state/stock-copilot-harness/**"
     ],
     "configFiles": {
       "names": [
