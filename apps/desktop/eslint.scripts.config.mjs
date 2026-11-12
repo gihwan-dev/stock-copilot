@@ -3,6 +3,7 @@ import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import { defineConfig } from "eslint/config";
 import { bans } from "./eslint/bans.mjs";
 import { guard } from "./eslint/guard-plugin.mjs";
+import { local } from "./eslint/local-plugin.mjs";
 
 const nodeGlobals = Object.fromEntries(
   [
@@ -42,11 +43,16 @@ export default defineConfig(
       sourceType: "module",
       globals: nodeGlobals,
     },
-    plugins: { guard, "@eslint-community/eslint-comments": eslintComments },
+    plugins: {
+      guard,
+      local,
+      "@eslint-community/eslint-comments": eslintComments,
+    },
     rules: {
       "no-unused-vars": ["error", { ignoreRestSiblings: true }],
       "guard/no-test-skip": ["error", ...bans["guard/no-test-skip"]],
       "guard/disable-directive-form": "error",
+      "local/no-comments": "error",
       "@eslint-community/eslint-comments/no-use": [
         "error",
         { allow: ["eslint-disable-next-line"] },
@@ -61,6 +67,7 @@ export default defineConfig(
         "error",
         "guard/no-test-skip",
         "guard/disable-directive-form",
+        "local/no-comments",
         "@eslint-community/eslint-comments/no-use",
         "@eslint-community/eslint-comments/require-description",
         "@eslint-community/eslint-comments/no-unlimited-disable",

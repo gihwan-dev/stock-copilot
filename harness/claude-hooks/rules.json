@@ -1,0 +1,493 @@
+{
+  "paths": {
+    "forbiddenSegments": [
+      [".git"],
+      [".cargo", "config"],
+      [".cargo", "config.toml"],
+      [".claude", "settings.local.json"]
+    ],
+    "mainPatterns": ["docs/**"],
+    "mainOnly": ["docs/reviews/**", "docs/tasks.md", "docs/progress.md"],
+    "adr": {
+      "directory": "docs/adr",
+      "reference": "HEAD"
+    },
+    "artifacts": ["target/**", "node_modules/**", "apps/desktop/dist/**"],
+    "claudeFolders": ["~/.claude/projects/*/memory/**", "~/.claude/plans/**"],
+    "protectedHome": [
+      "~/.gitconfig",
+      "~/.config/git/**",
+      "~/.claude/**",
+      "~/.cargo/config",
+      "~/.cargo/config.toml",
+      "~/.rustup/**",
+      "~/.npmrc",
+      "~/.config/pnpm/**"
+    ],
+    "configFiles": {
+      "names": [
+        "eslint.config.*",
+        ".eslintrc*",
+        ".prettierrc*",
+        "prettier.config.*",
+        ".prettierignore",
+        "tsconfig*.json",
+        "vitest.config.*",
+        "vite.config.*",
+        "knip.json*",
+        ".npmrc",
+        ".pnpmfile.*",
+        "package.json",
+        "rustfmt.toml",
+        ".rustfmt.toml",
+        "clippy.toml",
+        ".clippy.toml",
+        "rust-toolchain*",
+        "Cargo.toml",
+        ".gitignore",
+        ".gitattributes",
+        "lefthook*.yml",
+        ".lefthookrc",
+        ".env*",
+        "justfile",
+        ".justfile",
+        ".editorconfig",
+        ".tool-versions",
+        ".node-version",
+        ".nvmrc"
+      ],
+      "allowed": [
+        ".gitignore",
+        ".node-version",
+        ".npmrc",
+        ".prettierignore",
+        "Cargo.toml",
+        "package.json",
+        "justfile",
+        "lefthook.yml",
+        "clippy.toml",
+        "rustfmt.toml",
+        "rust-toolchain.toml",
+        "apps/desktop/package.json",
+        "apps/desktop/eslint.config.mjs",
+        "apps/desktop/tsconfig.json",
+        "apps/desktop/vitest.config.mjs",
+        "apps/desktop/knip.json",
+        "apps/desktop/src-tauri/Cargo.toml",
+        "apps/desktop/e2e-app/Cargo.toml",
+        "crates/*/Cargo.toml",
+        "crates/adapters/*/Cargo.toml"
+      ],
+      "exempt": ["harness/**"]
+    }
+  },
+  "environment": {
+    "names": [
+      "HUSKY",
+      "SKIP",
+      "GIT_CONFIG",
+      "GIT_CONFIG_PARAMETERS",
+      "GIT_CONFIG_COUNT",
+      "GIT_CONFIG_GLOBAL",
+      "GIT_CONFIG_SYSTEM",
+      "GIT_CONFIG_NOSYSTEM",
+      "GIT_DIR",
+      "GIT_WORK_TREE",
+      "GIT_INDEX_FILE",
+      "GIT_OBJECT_DIRECTORY",
+      "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+      "GIT_COMMON_DIR",
+      "GIT_EXEC_PATH",
+      "GIT_TEMPLATE_DIR",
+      "RUSTFLAGS",
+      "CARGO_ENCODED_RUSTFLAGS",
+      "CARGO_BUILD_RUSTFLAGS",
+      "RUSTDOCFLAGS",
+      "CARGO_BUILD_RUSTDOCFLAGS",
+      "CLIPPY_CONF_DIR",
+      "RUSTC_WRAPPER",
+      "RUSTC_WORKSPACE_WRAPPER",
+      "CARGO_BUILD_RUSTC_WRAPPER",
+      "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+      "RUSTC",
+      "CARGO_BUILD_RUSTC",
+      "RUSTC_BOOTSTRAP",
+      "RUSTUP_TOOLCHAIN",
+      "RUSTUP_HOME",
+      "CARGO_HOME",
+      "CARGO_BUILD_TARGET",
+      "CARGO_BUILD_TARGET_DIR",
+      "HOME",
+      "XDG_CONFIG_HOME",
+      "NODE_OPTIONS",
+      "NODE_PATH",
+      "CDPATH"
+    ],
+    "prefixes": [
+      "LEFTHOOK",
+      "GIT_CONFIG_KEY_",
+      "GIT_CONFIG_VALUE_",
+      "CARGO_TARGET_",
+      "npm_config_",
+      "NPM_CONFIG_",
+      "PNPM_",
+      "ESLINT_",
+      "TS_NODE_"
+    ],
+    "exporters": ["export", "declare", "typeset", "local", "readonly"]
+  },
+  "git": {
+    "deniedGlobalOptions": [
+      "-c",
+      "--config-env",
+      "--git-dir",
+      "--work-tree",
+      "--exec-path"
+    ],
+    "allowedConfig": ["commit.gpgsign=false"],
+    "alwaysDenied": [
+      "config",
+      "update-ref",
+      "replace",
+      "filter-branch",
+      "filter-repo",
+      "rebase",
+      "commit-tree"
+    ],
+    "subagentDenied": [
+      "push",
+      "cherry-pick",
+      "revert",
+      "pull",
+      "am",
+      "symbolic-ref",
+      "send-pack"
+    ],
+    "options": [
+      {
+        "rule": "git-no-verify",
+        "subcommands": ["commit", "merge", "push", "am", "pull"],
+        "long": ["--no-verify"],
+        "short": []
+      },
+      {
+        "rule": "git-no-verify",
+        "subcommands": ["commit"],
+        "long": [],
+        "short": ["n"]
+      },
+      {
+        "rule": "git-force-push",
+        "subcommands": ["push"],
+        "long": ["--force"],
+        "short": ["f"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["reset"],
+        "long": ["--hard"],
+        "short": []
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["pull"],
+        "long": ["--rebase"],
+        "short": ["r"]
+      },
+      {
+        "rule": "git-index-flags",
+        "subcommands": ["update-index"],
+        "long": [
+          "--assume-unchanged",
+          "--skip-worktree",
+          "--cacheinfo",
+          "--index-info"
+        ],
+        "short": []
+      }
+    ],
+    "plusRefspec": ["push"],
+    "shortValues": {
+      "commit": {
+        "required": "mFCct",
+        "attached": "Su"
+      },
+      "pull": {
+        "required": "sX",
+        "attached": "S"
+      }
+    },
+    "dynamicSensitive": [
+      "commit",
+      "merge",
+      "push",
+      "am",
+      "pull",
+      "reset",
+      "update-index"
+    ],
+    "abortable": ["merge", "rebase", "cherry-pick", "revert"],
+    "implementerMerge": {
+      "branches": ["master"],
+      "options": ["--no-ff", "--no-edit"]
+    },
+    "subagentOptions": [
+      {
+        "rule": "git-index-only",
+        "subcommands": ["apply"],
+        "long": ["--index", "--cached", "--3way"],
+        "short": ["3"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["reset"],
+        "long": ["--soft"],
+        "short": []
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["fetch"],
+        "long": ["--update-head-ok"],
+        "short": ["u"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["checkout"],
+        "long": [],
+        "short": ["B"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["switch"],
+        "long": ["--force-create"],
+        "short": ["C"]
+      }
+    ],
+    "forcedBranch": {
+      "options": ["-f", "--force", "-M", "-D", "-C"],
+      "branches": ["master", "main"]
+    },
+    "fetchRefspec": true,
+    "builtins": [
+      "status",
+      "log",
+      "diff",
+      "show",
+      "add",
+      "commit",
+      "rev-parse",
+      "ls-files",
+      "worktree",
+      "branch",
+      "fetch",
+      "merge-base",
+      "stash",
+      "checkout",
+      "switch",
+      "restore",
+      "rm",
+      "mv",
+      "grep",
+      "blame",
+      "tag",
+      "cat-file",
+      "init",
+      "clone",
+      "remote",
+      "describe",
+      "reflog",
+      "notes",
+      "rev-list",
+      "show-ref",
+      "ls-tree",
+      "merge",
+      "push",
+      "pull",
+      "reset",
+      "rebase",
+      "cherry-pick",
+      "revert",
+      "apply",
+      "am",
+      "config",
+      "update-index",
+      "update-ref",
+      "help",
+      "version",
+      "clean",
+      "bisect",
+      "format-patch",
+      "hash-object",
+      "for-each-ref",
+      "gc",
+      "fsck",
+      "shortlog",
+      "verify-commit",
+      "check-ignore",
+      "range-diff",
+      "submodule",
+      "sparse-checkout",
+      "symbolic-ref",
+      "send-pack",
+      "replace",
+      "filter-branch",
+      "commit-tree"
+    ]
+  },
+  "lefthook": {
+    "denied": ["install", "uninstall", "add"]
+  },
+  "commands": {
+    "denied": ["chflags", "xattr", "claude", "link"],
+    "subagentDenied": ["gh", "hub", "ed", "ex"],
+    "chmod": ["chmod"]
+  },
+  "rust": {
+    "tools": ["cargo", "rustc", "rustdoc", "clippy-driver", "cargo-clippy"],
+    "anywhere": ["--cap-lints"],
+    "cargoOptions": ["--config"],
+    "lintFlagSubcommands": ["clippy", "rustc", "rustdoc"],
+    "lintFlags": ["-A", "-W", "--allow", "--warn", "--force-warn"]
+  },
+  "hiddenArguments": [
+    "git",
+    "lefthook",
+    "cargo",
+    "eval",
+    "env",
+    "claude",
+    "sh",
+    "bash",
+    "zsh"
+  ],
+  "shells": ["sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "csh", "tcsh"],
+  "interpreters": {
+    "python": ["-c"],
+    "node": ["-e", "--eval", "-p", "--print"],
+    "perl": ["-e", "-E"],
+    "ruby": ["-e"],
+    "php": ["-r"],
+    "osascript": ["-e"],
+    "bun": ["-e", "--eval"],
+    "deno": ["eval"]
+  },
+  "inlineCodeKeywords": [
+    "--no-verify",
+    "hookspath",
+    "update-index",
+    "update-ref",
+    "filter-branch",
+    "commit-tree",
+    "--cap-lints",
+    ".git/",
+    ".cargo/config",
+    "lefthook"
+  ],
+  "tools": {
+    "rustup": {
+      "denied": ["override", "default", "toolchain link", "set"]
+    },
+    "packageConfig": {
+      "commands": ["pnpm", "npm", "yarn"],
+      "denied": ["config set", "config delete", "set"]
+    },
+    "just": {
+      "deniedOptions": [
+        "--command",
+        "--shell",
+        "--shell-arg",
+        "--shell-command",
+        "--justfile",
+        "-f",
+        "--working-directory",
+        "-d",
+        "--dotenv-filename",
+        "--dotenv-path",
+        "-E"
+      ]
+    }
+  },
+  "watched": [
+    "git",
+    "cargo",
+    "just",
+    "lefthook",
+    "rustc",
+    "rustup",
+    "claude",
+    "gh",
+    "hub",
+    "sh",
+    "bash",
+    "zsh",
+    "eval",
+    "env",
+    "pnpm",
+    "npm",
+    "npx",
+    "node"
+  ],
+  "readers": [
+    "echo",
+    "printf",
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "wc",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "ls",
+    "stat",
+    "file",
+    "diff",
+    "cmp",
+    "jq",
+    "test",
+    "[",
+    "true",
+    "false",
+    "which",
+    "type",
+    "whereis",
+    "man",
+    "basename",
+    "dirname",
+    "realpath",
+    "readlink",
+    "pwd",
+    "date",
+    "sleep",
+    "du",
+    "tree",
+    "shasum",
+    "sha256sum",
+    "git-lfs",
+    "column",
+    "nl",
+    "fold",
+    "rev",
+    "tac",
+    "xxd",
+    "od",
+    "cd",
+    "pushd",
+    "popd",
+    "ps",
+    "pgrep",
+    "lsof",
+    "open"
+  ],
+  "editors": {
+    "vim": ["-e", "-s", "-c", "+"],
+    "vi": ["-e", "-s", "-c", "+"],
+    "nvim": ["--headless", "-e", "-s", "-c", "+"]
+  },
+  "awk": ["awk", "gawk", "mawk", "nawk"]
+}

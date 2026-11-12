@@ -37,6 +37,8 @@ unexport GIT_CONFIG_COUNT
 unexport GIT_CONFIG_PARAMETERS
 unexport GIT_DIFF_OPTS
 unexport GIT_ATTR_SOURCE
+unexport NODE_OPTIONS
+unexport NODE_PATH
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
@@ -75,17 +77,21 @@ check-node:
 check-ts: check-node
     pnpm install --frozen-lockfile
     node harness/ts-deps/check.mjs
-    pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml
+    pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
     node harness/source-tree/check.mjs
+    node harness/config-files/check.mjs
+    node harness/claude-hooks/hashes.mjs
     pnpm -C apps/desktop exec tsc -p .
     pnpm -C apps/desktop exec eslint --max-warnings 0 src
     node harness/eslint-violations/check.mjs
     apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config apps/desktop/eslint.scripts.config.mjs apps/desktop/tests apps/desktop/eslint apps/desktop/eslint.config.mjs apps/desktop/eslint.scripts.config.mjs harness
+    apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config harness/claude-hooks/eslint.config.mjs .claude/hooks
     pnpm -C apps/desktop exec vite build
     node harness/tsc-violations/check.mjs
     node harness/knip-check/check.mjs
     node harness/vitest-check/check.mjs
     node --test 'apps/desktop/tests/*.test.mjs'
+    node --test 'harness/claude-hooks/tests/*.test.mjs'
 
 clippy manifest *flags:
     cargo clippy --manifest-path "$1" --workspace --all-targets --locked "${@:2}" -- -D warnings
