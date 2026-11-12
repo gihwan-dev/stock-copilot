@@ -244,7 +244,7 @@ node harness/claude-hooks/hashes.mjs --write
 
 원인: Claude Code 샌드박스가 프로젝트 폴더 안 어느 깊이에서든 `.git/config`와 `.git/hooks/` 아래 파일 쓰기를 거부한다(설정의 `denyWrite`와 무관한 기본 보호). 하네스 테스트와 `hooks-installed`가 `target/harness/` 아래에서 `git init`을 해서 실패했다. 작업 사본(`../stock-copilot-wt/a`)에서 통과한 것은 그곳이 프로젝트 폴더 밖이기 때문이다.
 
-고친 것(ADR 0019): 테스트 임시 저장소의 `.git`을 `$TMPDIR/stock-copilot-harness-git/<해시>`로 가리키는 심볼릭 링크로 만들고, `hooks-installed`의 기대 훅 저장소는 `--separate-git-dir`로 `$TMPDIR/stock-copilot-hooks-installed/<해시>`에 둔다. 작업 트리 경로는 그대로라 pnpm·커버리지·commit-guard 예제는 바뀌지 않는다. 샌드박스 설정과 `fragment.mjs --locked-settings`는 바꿀 것이 없다(`$TMPDIR`는 샌드박스 기본 쓰기 허용). 테스트 모듈의 git 도우미를 바꾸므로 그 부분은 메인이 커밋할 변경이다.
+고친 것(ADR 0019): 테스트 임시 저장소의 `.git`을 시스템 임시 폴더 아래 사용자 전용(0700, 예측할 수 없는 이름) 폴더로 가리키는 심볼릭 링크로 만들고, `hooks-installed`의 기대 훅 저장소는 `--separate-git-dir`로 같은 방식의 폴더에 두고 끝나면 지운다. 작업 트리 경로는 그대로라 pnpm·커버리지·commit-guard 예제는 바뀌지 않는다. 샌드박스 설정과 `fragment.mjs --locked-settings`는 바꿀 것이 없다(`$TMPDIR`는 샌드박스 기본 쓰기 허용). 테스트 모듈의 git 도우미를 바꾸므로 그 부분은 메인이 커밋할 변경이다.
 
 검증(테스트 도우미 변경을 커밋한 복제본, 잠금 설정의 샌드박스, haiku 메인이 스크립트 파일로 실행):
 

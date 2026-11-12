@@ -13,6 +13,7 @@ mod lint_file;
 mod migration_check;
 mod mutants_check;
 mod nextest_list;
+mod private_temp;
 mod raw_types;
 mod source_check;
 mod sql_check;

@@ -5,17 +5,16 @@ mod commit_base_tests;
 #[cfg(test)]
 mod tests;
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 use crate::git_base::{self, REDIRECTING_VARIABLES};
+use crate::private_temp::PrivateDirectory;
 use crate::workspace_sources::load_members;
 
 pub(crate) const HOOK_RULES_FILE: &str = "harness/git-hooks/lefthook.toml";
@@ -180,20 +179,6 @@ fn comparable(path: &Path) -> PathBuf {
     }
 }
 
-fn scratch_git_directory(scratch: &Path) -> Result<PathBuf, String> {
-    let mut hasher = DefaultHasher::new();
-    scratch.hash(&mut hasher);
-    let directory = std::env::temp_dir()
-        .join("stock-copilot-hooks-installed")
-        .join(format!("{:016x}", hasher.finish()));
-    if directory.exists() {
-        fs::remove_dir_all(&directory)
-            .map_err(|error| format!("{}: {error}", directory.display()))?;
-    }
-    fs::create_dir_all(&directory).map_err(|error| format!("{}: {error}", directory.display()))?;
-    Ok(directory)
-}
-
 fn expected_hooks(repository: &Path, scratch: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     if scratch.exists() {
         fs::remove_dir_all(scratch).map_err(|error| format!("{}: {error}", scratch.display()))?;
@@ -204,10 +189,23 @@ fn expected_hooks(repository: &Path, scratch: &Path) -> Result<BTreeMap<String, 
         scratch.join(LEFTHOOK_CONFIG),
     )
     .map_err(|error| format!("{LEFTHOOK_CONFIG}: {error}"))?;
-    let git_directory = scratch_git_directory(scratch)?;
+    let private = PrivateDirectory::create("stock-copilot-hooks-installed")?;
+    let listed = private
+        .child("git")
+        .and_then(|git_directory| installed_hooks(scratch, &git_directory));
+    let removed = private.remove();
+    let hooks = listed?;
+    removed?;
+    Ok(hooks)
+}
+
+fn installed_hooks(
+    scratch: &Path,
+    git_directory: &Path,
+) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut init = isolated("git", scratch);
     init.args(["init", "--quiet", "--separate-git-dir"])
-        .arg(&git_directory);
+        .arg(git_directory);
     stdout_of(init, "git init")?;
     let mut install = isolated("lefthook", scratch);
     install.arg("install");
