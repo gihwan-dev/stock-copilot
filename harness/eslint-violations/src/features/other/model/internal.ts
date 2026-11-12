@@ -1,1 +1,1 @@
-export { otherMarker } from "../index";
+export { otherValue } from "./value";

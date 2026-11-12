@@ -3,6 +3,17 @@ import { projectPath } from "../types.mjs";
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx"];
 
+const outsideFeatureLayout = (path, entries) => {
+  const parts = path.split("/");
+  return (
+    entries !== undefined &&
+    parts.length >= 4 &&
+    parts[0] === "src" &&
+    parts[1] === "features" &&
+    !entries.includes(parts[3])
+  );
+};
+
 const hasSourceExtension = (path) =>
   SOURCE_EXTENSIONS.some((extension) => path.endsWith(extension)) &&
   !path.endsWith(".d.ts");
@@ -32,6 +43,7 @@ export const forbiddenFile = {
               additionalProperties: false,
             },
           },
+          featureEntries: { type: "array", items: { type: "string" } },
         },
         required: ["checkExtension", "placeholders", "folders"],
         additionalProperties: false,
@@ -42,10 +54,13 @@ export const forbiddenFile = {
         "src에는 소문자 확장자 .ts·.tsx 파일만 둔다. 다른 확장자, 대문자 확장자, .d.ts는 금지다.",
       unlisted:
         "허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다.",
+      featureLayout:
+        "features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
     },
   },
   create: (context) => {
-    const [{ checkExtension, placeholders, folders }] = context.options;
+    const [{ checkExtension, placeholders, folders, featureEntries }] =
+      context.options;
     return {
       Program: (node) => {
         const path = projectPath(context, context.filename);
@@ -61,6 +76,9 @@ export const forbiddenFile = {
               path.startsWith(`${folder}/`) && !files.includes(path),
           )
           .forEach(() => context.report({ node, messageId: "unlisted" }));
+        if (outsideFeatureLayout(path, featureEntries)) {
+          context.report({ node, messageId: "featureLayout" });
+        }
       },
     };
   },

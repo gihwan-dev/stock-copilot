@@ -17,6 +17,7 @@ import {
   readCases,
 } from "../../../harness/eslint-violations/lint.mjs";
 import { messageKey } from "../../../harness/eslint-violations/verdict.mjs";
+import { local } from "../eslint/local-plugin.mjs";
 import { desktopRoot } from "./paths.mjs";
 
 const { ESLint } = createRequire(join(desktopRoot, "package.json"))("eslint");
@@ -25,12 +26,17 @@ const { cases } = readCases();
 const documentedDependencies = {
   app: ["feature", "ds", "ipc", "platform", "lib"],
   feature: ["ds", "ipc", "platform", "lib"],
+  "feature-ui": ["ds", "ipc", "platform", "lib"],
+  "feature-model": ["ds", "ipc", "platform", "lib"],
   ds: ["lib"],
   ipc: ["lib"],
   platform: ["ipc", "lib"],
   lib: [],
 };
-const elementTypes = Object.keys(documentedDependencies);
+const elementTypes = Object.keys(documentedDependencies).filter(
+  (type) => !type.startsWith("feature-"),
+);
+const featureParts = "(feature|feature-ui|feature-model)";
 
 const isBoundaryKey = (key) => /^(warning )?boundaries\//.test(key);
 
@@ -95,6 +101,8 @@ test("the boundary tables hold exactly the folder table of architecture 5", () =
     ]),
     [
       ["app", "src/app", false],
+      ["feature-ui", "src/features/*/ui", false],
+      ["feature-model", "src/features/*/model", false],
       ["feature", "src/features/*", false],
       ["ds", "src/shared/ds", false],
       ["ipc", "src/shared/ipc", false],
@@ -103,7 +111,19 @@ test("the boundary tables hold exactly the folder table of architecture 5", () =
     ],
   );
   assert.equal(BOUNDARY_TABLES.ENTRY_FILE, "index.ts");
+  assert.deepEqual(BOUNDARY_TABLES.FEATURE_ENTRIES, [
+    "ui",
+    "model",
+    "index.ts",
+    "messages.ts",
+  ]);
+  assert.deepEqual(BOUNDARY_TABLES.FEATURE_DEPENDENCIES, {
+    feature: { "feature-ui": "**", "feature-model": "**" },
+    "feature-ui": { "feature-model": "**", feature: "messages.ts" },
+    "feature-model": {},
+  });
   assert.deepEqual(BOUNDARY_TABLES.PACKAGE_LOCATIONS, {
+    "react-dom": ["src/app/main.tsx"],
     "@tauri-apps/api": ["src/shared/ipc/**"],
     zod: ["src/shared/ipc/**", "src/shared/lib/brand.ts"],
   });
@@ -133,14 +153,42 @@ test("every forbidden direction of the folder table has a failing case", () => {
           ![...expected].some(
             (key) =>
               typeof key === "string" &&
-              key.startsWith(
-                `boundaries/dependencies :: ${from}에서 ${to}의 index.ts `,
-              ),
+              new RegExp(
+                `^boundaries/dependencies :: ${from === "feature" ? featureParts : from}에서 ${to}의 index\\.ts `,
+              ).test(key),
           ),
       )
       .map((to) => `${from} -> ${to}`),
   );
   assert.deepEqual(missing, []);
+});
+
+test("inside a feature only ui -> model, ui -> messages.ts and index.ts -> ui, model pass", () => {
+  const expected = new Set(
+    Object.values(cases).flatMap((spec) =>
+      Array.isArray(spec.expect) ? spec.expect : [],
+    ),
+  );
+  const forbidden = [
+    "feature-model에서 feature-ui의 ",
+    "feature-model에서 feature의 messages.ts ",
+    "feature-ui에서 feature의 index.ts ",
+    "feature-ui에서 feature-model의 ",
+  ];
+  assert.deepEqual(
+    forbidden.filter(
+      (part) =>
+        ![...expected].some((key) =>
+          key.startsWith(`boundaries/dependencies :: ${part}`),
+        ),
+    ),
+    [],
+  );
+  [
+    "src/features/boundary/ui/to-model.ts",
+    "src/features/boundary/ui/to-messages.ts",
+    "src/features/boundary/index.ts",
+  ].forEach((file) => assert.deepEqual(cases[file].expect, [], file));
 });
 
 test("the light boundary linter reproduces the boundary keys of every case", async () => {
@@ -160,6 +208,32 @@ test("removing any allowed direction, element, package location or the entry fil
           }),
         })),
     ),
+    ...Object.entries(BOUNDARY_TABLES.FEATURE_DEPENDENCIES).flatMap(
+      ([from, targets]) =>
+        Object.keys(targets).map((to) => ({
+          label: `inside a feature ${from} -> ${to}`,
+          tables: withTable("FEATURE_DEPENDENCIES", {
+            ...BOUNDARY_TABLES.FEATURE_DEPENDENCIES,
+            [from]: Object.fromEntries(
+              Object.entries(targets).filter(([other]) => other !== to),
+            ),
+          }),
+        })),
+    ),
+    {
+      label: "zod widened to every shared/lib file",
+      tables: withTable("PACKAGE_LOCATIONS", {
+        ...BOUNDARY_TABLES.PACKAGE_LOCATIONS,
+        zod: ["src/shared/ipc/**", "src/shared/lib/*.ts"],
+      }),
+    },
+    {
+      label: "react-dom widened to every app file",
+      tables: withTable("PACKAGE_LOCATIONS", {
+        ...BOUNDARY_TABLES.PACKAGE_LOCATIONS,
+        "react-dom": ["src/app/**"],
+      }),
+    },
     ...BOUNDARY_TABLES.ELEMENTS.map((element) => ({
       label: `element ${element.type}`,
       tables: withTable(
@@ -341,4 +415,56 @@ test("a deprecated boundaries rule only prints a console warning and passes --ma
     /\[boundaries\]\[warning\]: Rule name "boundaries\/no-unknown" is deprecated/,
   );
   assert.match(run.stdout, /^warnings=0$/m);
+});
+
+const layoutMessage = local.rules["forbidden-file"].meta.messages.featureLayout;
+
+const layoutFailures = async (featureEntries) => {
+  const linter = new ESLint({
+    cwd: here,
+    overrideConfigFile: true,
+    cache: false,
+    overrideConfig: [
+      {
+        files: ["src/**/*.ts", "src/**/*.tsx"],
+        languageOptions: { parser: tseslint.parser },
+        linterOptions: { reportUnusedDisableDirectives: "off" },
+        plugins: { local },
+        rules: {
+          "local/forbidden-file": [
+            "error",
+            {
+              checkExtension: false,
+              placeholders: [],
+              folders: [],
+              featureEntries,
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const results = await linter.lintFiles(boundaryFiles);
+  return results
+    .filter(
+      (result) =>
+        result.messages.some((message) => message.message === layoutMessage) !==
+        cases[result.filePath.slice(here.length + 1)].expect.includes(
+          `local/forbidden-file :: ${layoutMessage}`,
+        ),
+    )
+    .map((result) => result.filePath.slice(here.length + 1));
+};
+
+test("the feature layout check reproduces the cases and every allowed entry is needed", async () => {
+  const entries = BOUNDARY_TABLES.FEATURE_ENTRIES;
+  assert.deepEqual(await layoutFailures(entries), []);
+  const survivors = [];
+  for (const entry of entries)
+    if (
+      (await layoutFailures(entries.filter((other) => other !== entry)))
+        .length === 0
+    )
+      survivors.push(entry);
+  assert.deepEqual(survivors, []);
 });

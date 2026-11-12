@@ -6,6 +6,7 @@ import { noMoneyCoercion } from "./rules/no-money-coercion.mjs";
 import { noPromiseCatch } from "./rules/no-promise-catch.mjs";
 import { noRawTypes } from "./rules/no-raw-types.mjs";
 import { noUiText } from "./rules/no-ui-text.mjs";
+import { testFileBoundary } from "./rules/test-file-boundary.mjs";
 
 export const local = {
   meta: { name: "local" },
@@ -18,6 +19,7 @@ export const local = {
     "no-ui-text": noUiText,
     "no-promise-catch": noPromiseCatch,
     "no-computed-member": noComputedMember,
+    "test-file-boundary": testFileBoundary,
   },
 };
 

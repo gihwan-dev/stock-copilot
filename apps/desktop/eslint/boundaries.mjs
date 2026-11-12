@@ -1,5 +1,15 @@
 export const ELEMENTS = [
   { type: "app", pattern: "src/app" },
+  {
+    type: "feature-ui",
+    pattern: "src/features/*/ui",
+    capture: ["featureName"],
+  },
+  {
+    type: "feature-model",
+    pattern: "src/features/*/model",
+    capture: ["featureName"],
+  },
   { type: "feature", pattern: "src/features/*", capture: ["featureName"] },
   { type: "ds", pattern: "src/shared/ds" },
   { type: "ipc", pattern: "src/shared/ipc" },
@@ -9,16 +19,27 @@ export const ELEMENTS = [
 
 export const ENTRY_FILE = "index.ts";
 
+export const FEATURE_ENTRIES = ["ui", "model", "index.ts", "messages.ts"];
+
 export const ELEMENT_DEPENDENCIES = {
   app: ["feature", "ds", "ipc", "platform", "lib"],
   feature: ["ds", "ipc", "platform", "lib"],
+  "feature-ui": ["ds", "ipc", "platform", "lib"],
+  "feature-model": ["ds", "ipc", "platform", "lib"],
   ds: ["lib"],
   ipc: ["lib"],
   platform: ["ipc", "lib"],
   lib: [],
 };
 
+export const FEATURE_DEPENDENCIES = {
+  feature: { "feature-ui": "**", "feature-model": "**" },
+  "feature-ui": { "feature-model": "**", feature: "messages.ts" },
+  "feature-model": {},
+};
+
 export const PACKAGE_LOCATIONS = {
+  "react-dom": ["src/app/main.tsx"],
   "@tauri-apps/api": ["src/shared/ipc/**"],
   zod: ["src/shared/ipc/**", "src/shared/lib/brand.ts"],
 };
@@ -26,9 +47,23 @@ export const PACKAGE_LOCATIONS = {
 export const BOUNDARY_TABLES = {
   ELEMENTS,
   ENTRY_FILE,
+  FEATURE_ENTRIES,
   ELEMENT_DEPENDENCIES,
+  FEATURE_DEPENDENCIES,
   PACKAGE_LOCATIONS,
 };
+
+const sameFeature = { featureName: "{{ from.element.captured.featureName }}" };
+
+const featurePolicies = (dependencies) =>
+  Object.entries(dependencies).flatMap(([from, targets]) =>
+    Object.entries(targets).map(([to, fileInternalPath]) => ({
+      from: { element: { type: from } },
+      allow: {
+        to: { element: { type: to, captured: sameFeature, fileInternalPath } },
+      },
+    })),
+  );
 
 const elementPolicies = (dependencies, entryFile) =>
   Object.entries(dependencies)
@@ -65,9 +100,11 @@ const packagePolicies = (locations) =>
 export const boundaryPolicies = ({
   ENTRY_FILE: entryFile,
   ELEMENT_DEPENDENCIES: dependencies,
+  FEATURE_DEPENDENCIES: features,
   PACKAGE_LOCATIONS: locations,
 }) => [
   ...elementPolicies(dependencies, entryFile),
+  ...featurePolicies(features),
   { allow: { to: { module: { origin: "external" } } } },
   ...packagePolicies(locations),
   {

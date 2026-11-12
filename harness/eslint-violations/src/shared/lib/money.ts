@@ -5,3 +5,4 @@ export type Money = {
   readonly currency: "KRW" | "USD";
   readonly [moneyKey]: `${number}`;
 };
+export { z as moneyZod } from "zod";

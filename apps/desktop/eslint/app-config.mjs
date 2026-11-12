@@ -22,6 +22,7 @@ const SCREEN = ["src/app", "src/features", "src/shared/ds"].flatMap(
   (folder) => [`${folder}/**/*.ts`, `${folder}/**/*.tsx`],
 );
 const IPC_TESTING = ["src/shared/ipc/testing/**"];
+const SHARED = ["src/shared/**"];
 const FORBIDDEN_FILES = [
   "src/**/*.js",
   "src/**/*.jsx",
@@ -42,6 +43,7 @@ const UNDISABLEABLE_RULES = [
   "local/no-ui-text",
   "local/no-promise-catch",
   "local/no-computed-member",
+  "local/test-file-boundary",
   "boundaries/*",
   "guard/no-effect-hooks",
   "guard/no-sync-external-store",
@@ -61,6 +63,9 @@ const UNDISABLEABLE_RULES = [
   "guard/forbidden-extension",
   "guard/no-dom-globals",
   "guard/disable-directive-form",
+  "guard/no-import-meta",
+  "guard/no-jsx-spread",
+  "guard/no-module-mocks",
   "@typescript-eslint/ban-ts-comment",
   "@typescript-eslint/consistent-type-assertions",
   "@typescript-eslint/no-unsafe-type-assertion",
@@ -194,6 +199,7 @@ export const appConfig = (
               checkExtension: false,
               placeholders: FILE_PLACEHOLDERS,
               folders: FILE_FOLDER_ALLOWLISTS,
+              featureEntries: boundaryTables.FEATURE_ENTRIES,
             },
           ],
           "local/no-raw-types": "error",
@@ -201,6 +207,7 @@ export const appConfig = (
           "local/no-ui-text": ["error", { screen: "off" }],
           "local/no-promise-catch": "error",
           "local/no-computed-member": "error",
+          "local/test-file-boundary": "error",
           "guard/disable-directive-form": "error",
           "@eslint-community/eslint-comments/no-use": [
             "error",
@@ -423,7 +430,11 @@ export const appConfig = (
       }),
       {
         files: IPC_TESTING,
-        rules: off(["guard/no-tauri-mocks"]),
+        rules: off(["guard/no-tauri-mocks", "guard/no-module-mocks"]),
+      },
+      {
+        files: SHARED,
+        rules: off(["guard/no-jsx-spread"]),
       },
       ...whenListed(PLATFORM_FILE_ALLOWLIST, {
         rules: off([
@@ -477,6 +488,7 @@ export const appConfig = (
               checkExtension: true,
               placeholders: FILE_PLACEHOLDERS,
               folders: FILE_FOLDER_ALLOWLISTS,
+              featureEntries: boundaryTables.FEATURE_ENTRIES,
             },
           ],
         },

@@ -170,9 +170,33 @@ export const bans = {
       selector: `:matches(MemberExpression[object.name=${testObjects}][property.name='${name}'], VariableDeclarator[init.name=${testObjects}] > ObjectPattern > Property[key.name='${name}'], ${testOption(name)})`,
       message: `테스트 ${name} 금지: 실패 뒤집기·동시 실행 표시를 쓰지 않는다.`,
     })),
+    ...["each", "for"].map((name) => ({
+      selector: `CallExpression:matches([callee.property.name='${name}'], [callee.property.value='${name}']):not([arguments.0.type='ArrayExpression'][arguments.0.elements.length>0])`,
+      message: `테스트 ${name} 표는 비어 있지 않은 배열 리터럴로만 준다: 빈 표는 테스트를 하나도 만들지 않는다.`,
+    })),
     ...["xit", "xtest", "xdescribe", "fit", "fdescribe"].map((name) => ({
       selector: `Identifier[name='${name}']`,
       message: `${name} 금지: 테스트를 건너뛰거나 골라 돌리지 않는다.`,
+    })),
+  ],
+  "guard/no-import-meta": [
+    {
+      selector: "MetaProperty[meta.name='import']",
+      message:
+        "import.meta 금지: import.meta.glob·env는 경계 검사와 타입 검사 밖에서 파일과 값을 끌어온다.",
+    },
+  ],
+  "guard/no-jsx-spread": [
+    {
+      selector: "JSXSpreadAttribute",
+      message:
+        "JSX 스프레드 속성 금지: children·ref·className을 펼쳐 넘겨 화면 규칙을 피하는 길이다. 속성을 이름으로 넘긴다.",
+    },
+  ],
+  "guard/no-module-mocks": [
+    ...["mock", "doMock", "spyOn"].map((name) => ({
+      selector: `:matches(CallExpression > ${member(name)}.callee, ${destructured(name)})`,
+      message: `vi.${name} 금지: 대상 모듈을 가짜로 바꾸는 것은 shared/ipc/testing에서만 한다.`,
     })),
   ],
   "guard/no-namespace-import": [

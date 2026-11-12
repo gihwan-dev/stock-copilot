@@ -55,6 +55,20 @@ reportAll(
   `case files match cases.json: ${onDisk.length}`,
 );
 reportAll(coverageProblems(rows, cases), "every documented rule has a case");
+reportAll(
+  Object.keys(rows)
+    .filter(
+      (row) =>
+        !Object.values(cases).some(
+          (spec) =>
+            spec.row === row &&
+            Array.isArray(spec.expect) &&
+            spec.expect.length === 0,
+        ),
+    )
+    .map((row) => `row "${row}" has no control case expecting no problem`),
+  "every row has a control case that passes",
+);
 
 const linted = await lintCases(Object.keys(cases));
 reportAll(

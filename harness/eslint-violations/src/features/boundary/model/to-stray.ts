@@ -1,1 +1,1 @@
-export { stray } from "../../misc/stray";
+export { stray } from "../../../misc/stray";

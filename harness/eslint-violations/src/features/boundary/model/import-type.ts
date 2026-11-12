@@ -1,1 +1,1 @@
-export type Seen = typeof import("../other");
+export type Seen = typeof import("../../other");

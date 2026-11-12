@@ -1,1 +1,1 @@
-export { otherMarker } from "../other";
+export { otherMarker } from "../../other";
