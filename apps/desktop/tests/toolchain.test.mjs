@@ -59,12 +59,15 @@ test("every npm dependency is pinned to an exact version", () => {
   assert.deepEqual(loose, []);
 });
 
-test("pnpm is pinned to an exact version", () => {
-  assert.match(rootManifest.packageManager, /^pnpm@\d+\.\d+\.\d+$/);
+test("pnpm is pinned to an exact version with a sha512 integrity hash", () => {
+  const pinned = /^pnpm@(\d+\.\d+\.\d+)\+sha512\.[0-9a-f]{128}$/.exec(
+    rootManifest.packageManager,
+  );
+  assert.notEqual(pinned, null, rootManifest.packageManager);
   const result = spawnSync("pnpm", ["--version"], {
     cwd: repoRoot,
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(`pnpm@${result.stdout.trim()}`, rootManifest.packageManager);
+  assert.equal(result.stdout.trim(), pinned[1]);
 });

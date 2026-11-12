@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
-  lockImporters,
+  fileProblems,
+  lockfileProblems,
   manifestProblems,
 } from "../../../harness/ts-deps/rules.mjs";
 import { repoRoot } from "./paths.mjs";
@@ -58,11 +59,15 @@ test("the repository manifests pass the TypeScript dependency allowlist", () => 
   assert.deepEqual(manifestProblems(manifests, allowlist), []);
 });
 
-test("every allowed package has a reason", () => {
+test("every allowed package has a target and a reason", () => {
   const missing = Object.entries(allowlist.manifests).flatMap(([path, entry]) =>
     ["dependencies", "devDependencies"].flatMap((section) =>
       Object.entries(entry[section] ?? {})
-        .filter(([, reason]) => reason.trim().length === 0)
+        .filter(
+          ([, allowed]) =>
+            allowed.reason.trim().length === 0 ||
+            allowed.target.trim().length === 0,
+        )
         .map(([name]) => `${path} ${section} ${name}`),
     ),
   );
@@ -141,10 +146,198 @@ test("packageManager must equal the protected allowlist value", () => {
   );
 });
 
-test("lockfile importers are read from every importers section", () => {
+const lockfile = readFileSync(join(repoRoot, "pnpm-lock.yaml"), "utf8");
+const byImporter = {
+  ".": manifests["package.json"],
+  "apps/desktop": manifests["apps/desktop/package.json"],
+};
+const fileContents = {
+  "pnpm-workspace.yaml": readFileSync(
+    join(repoRoot, "pnpm-workspace.yaml"),
+    "utf8",
+  ),
+  ".npmrc": readFileSync(join(repoRoot, ".npmrc"), "utf8"),
+};
+
+const withSpec = (path, section, name, spec) => ({
+  ...manifests,
+  [path]: {
+    ...manifests[path],
+    [section]: { ...(manifests[path][section] ?? {}), [name]: spec },
+  },
+});
+
+test("a listed name pointing at another package, a file, git, a URL or the workspace fails", () => {
+  const specs = [
+    "npm:left-pad@1.3.0",
+    "file:../left-pad",
+    "link:../left-pad",
+    "git+https://github.com/x/react.git",
+    "github:x/react",
+    "https://example.com/react.tgz",
+    "workspace:*",
+    "^19.3.1",
+    "latest",
+  ];
+  const targets = [
+    ["package.json", "devDependencies", "prettier"],
+    ["apps/desktop/package.json", "dependencies", "react"],
+    ["apps/desktop/package.json", "devDependencies", "eslint"],
+  ];
+  const passing = targets.flatMap(([path, section, name]) =>
+    specs
+      .filter(
+        (spec) =>
+          manifestProblems(withSpec(path, section, name, spec), allowlist)
+            .length === 0,
+      )
+      .map((spec) => `${path} ${section} ${name} ${spec}`),
+  );
+  assert.deepEqual(passing, []);
+});
+
+test("an npm alias must point at the listed target", () => {
+  assert.notDeepEqual(
+    manifestProblems(
+      withSpec(
+        "apps/desktop/package.json",
+        "devDependencies",
+        "typescript",
+        "npm:typescript@7.0.2",
+      ),
+      allowlist,
+    ),
+    [],
+  );
   assert.deepEqual(
-    lockImporters(readFileSync(join(repoRoot, "pnpm-lock.yaml"), "utf8")),
-    [".", "apps/desktop"],
+    manifestProblems(
+      withSpec(
+        "apps/desktop/package.json",
+        "devDependencies",
+        "typescript",
+        "npm:@typescript/typescript6@6.0.3",
+      ),
+      allowlist,
+    ),
+    [],
+  );
+});
+
+test("packageManager without the sha512 hash fails", () => {
+  assert.notDeepEqual(
+    manifestProblems(
+      {
+        ...manifests,
+        "package.json": {
+          ...manifests["package.json"],
+          packageManager: "pnpm@12.18.0",
+        },
+      },
+      allowlist,
+    ),
+    [],
+  );
+  assert.notDeepEqual(
+    manifestProblems(manifests, {
+      ...allowlist,
+      packageManager: "pnpm@12.18.0",
+    }),
+    [],
+  );
+});
+
+test("pnpm-workspace.yaml keys that change resolution fail", () => {
+  const passing = [
+    "overrides:\n  react: 18.0.0\n",
+    "packageExtensions:\n  react:\n    dependencies:\n      left-pad: 1.3.0\n",
+    "patchedDependencies:\n  react: patches/react.patch\n",
+    "catalog:\n  react: 18.0.0\n",
+    "minimumReleaseAge: 0\n",
+  ].filter(
+    (extra) =>
+      fileProblems(
+        {
+          ...fileContents,
+          "pnpm-workspace.yaml": `${fileContents["pnpm-workspace.yaml"]}${extra}`,
+        },
+        allowlist,
+      ).length === 0,
+  );
+  assert.deepEqual(passing, []);
+});
+
+test("a pnpmfile or a changed .npmrc fails", () => {
+  assert.deepEqual(fileProblems(fileContents, allowlist), []);
+  assert.notDeepEqual(
+    fileProblems({ ...fileContents, ".pnpmfile.cjs": "" }, allowlist),
+    [],
+  );
+  assert.notDeepEqual(
+    fileProblems(
+      {
+        ...fileContents,
+        ".npmrc": `${fileContents[".npmrc"]}registry=https://example.com/\n`,
+      },
+      allowlist,
+    ),
+    [],
+  );
+  assert.notDeepEqual(
+    fileProblems(
+      {
+        ...fileContents,
+        "apps/desktop/.npmrc": "registry=https://example.com/\n",
+      },
+      allowlist,
+    ),
+    [],
+  );
+});
+
+test("the repository lockfile passes", () => {
+  assert.deepEqual(lockfileProblems(lockfile, byImporter, allowlist), []);
+});
+
+test("a lockfile resolution other than a sha512 integrity fails", () => {
+  const integrity = /resolution: \{integrity: sha512-[^}]+\}/;
+  const passing = [
+    "resolution: {tarball: https://example.com/react.tgz}",
+    "resolution: {type: git, repo: https://github.com/x/react.git, commit: abc}",
+    "resolution: {directory: ../react, type: directory}",
+    "resolution: {integrity: sha1-abc=}",
+  ].filter(
+    (replacement) =>
+      lockfileProblems(
+        lockfile.replace(integrity, replacement),
+        byImporter,
+        allowlist,
+      ).length === 0,
+  );
+  assert.deepEqual(passing, []);
+});
+
+test("a lockfile importer specifier that differs from the manifest fails", () => {
+  assert.notDeepEqual(
+    lockfileProblems(
+      lockfile.replace(
+        "      react:\n        specifier: 19.3.1",
+        "      react:\n        specifier: npm:left-pad@1.3.0",
+      ),
+      byImporter,
+      allowlist,
+    ),
+    [],
+  );
+});
+
+test("an unexpected lockfile top-level key fails", () => {
+  assert.notDeepEqual(
+    lockfileProblems(
+      `${lockfile}\noverrides:\n  react: 18.0.0\n`,
+      byImporter,
+      allowlist,
+    ),
+    [],
   );
 });
 

@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isDeepStrictEqual } from "node:util";
 import {
-  lockImporters,
+  fileProblems,
+  lockfileProblems,
   manifestProblems,
   workspacePackages,
 } from "./rules.mjs";
@@ -16,21 +16,34 @@ const allowlist = JSON.parse(
   readFileSync(join(here, "allowlist.json"), "utf8"),
 );
 const packages = workspacePackages(read("pnpm-workspace.yaml"));
-const manifestPaths = [
-  "package.json",
-  ...packages.map((folder) => `${folder}/package.json`),
-];
+const importers = [".", ...packages];
+const manifestPath = (importer) =>
+  importer === "." ? "package.json" : `${importer}/package.json`;
 const manifests = Object.fromEntries(
-  manifestPaths.map((path) => [path, JSON.parse(read(path))]),
+  importers.map((importer) => [
+    manifestPath(importer),
+    JSON.parse(read(manifestPath(importer))),
+  ]),
 );
-const importers = lockImporters(read("pnpm-lock.yaml"));
+const watched = [...Object.keys(allowlist.files), ...allowlist.forbiddenFiles];
+const contents = Object.fromEntries(
+  watched
+    .filter((path) => existsSync(join(root, path)))
+    .map((path) => [path, read(path)]),
+);
 const problems = [
   ...manifestProblems(manifests, allowlist),
-  ...(isDeepStrictEqual(importers, [".", ...packages].sort())
-    ? []
-    : [
-        `pnpm-lock.yaml importers must be the workspace packages; got ${importers.join(", ")}`,
+  ...fileProblems(contents, allowlist),
+  ...lockfileProblems(
+    read("pnpm-lock.yaml"),
+    Object.fromEntries(
+      importers.map((importer) => [
+        importer,
+        manifests[manifestPath(importer)],
       ]),
+    ),
+    allowlist,
+  ),
 ];
 
 problems.forEach((problem) => process.stdout.write(`FAIL ${problem}\n`));
