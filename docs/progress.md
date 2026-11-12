@@ -21,3 +21,12 @@
 
 - `just base=<HEAD 또는 40자리 커밋 ID> check`: 기준은 HEAD의 조상이어야 한다. 병합 확인은 병합 전 `master` 끝을 기준으로 돈다.
 - `just base=<…> check-full`: 전체 변이 테스트와 권고 DB 갱신 포함.
+
+| 작업 | 상태 | 대상 커밋 | 리뷰 기록 | 뒤 작업에 넘긴 것 |
+|---|---|---|---|---|
+| H-30, H-14, H-40(TS) | 완료 | 5e06d24 | [H-30](reviews/H-30.md) | H-15: git 우회 명령 거부, 하위 `.gitignore`. H-35: `node_modules`·`target` 쓰기. H-16: 깨끗한 checkout. H-20: 훅 설정 보호 |
+| H-13 | 진행 | - | - | 1회차 "막힘": tauri-specta 매크로와 생성물이 끌 수 없는 규칙에 걸림. 메인 결정으로 재개(ADR 0016 예정) |
+
+## 훅
+
+`lefthook install`을 실행했다(2026-11-12). 커밋과 병합 커밋마다 `just base=HEAD check`가 돈다(약 3분). 추적하지 않는 파일이나 스테이징하지 않은 변경이 있으면 커밋이 거부된다.
