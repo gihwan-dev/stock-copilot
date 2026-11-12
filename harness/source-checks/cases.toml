@@ -314,6 +314,11 @@ path = "crates/sample/src/lib.rs"
 expect = ["clock-env:vars"]
 
 [[source]]
+example = "env-temp-dir.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["clock-env:temp_dir"]
+
+[[source]]
 example = "env-vars-os.rs"
 path = "crates/sample/src/lib.rs"
 expect = ["clock-env:vars_os"]

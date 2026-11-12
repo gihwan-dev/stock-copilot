@@ -4,6 +4,8 @@ use std::process::Command;
 
 use cargo_metadata::MetadataCommand;
 
+use crate::private_temp::PrivateDirectory;
+
 pub(crate) fn repository_root() -> PathBuf {
     MetadataCommand::new()
         .no_deps()
@@ -21,6 +23,36 @@ pub(crate) fn fresh_directory(root: &Path, name: &str) -> PathBuf {
     }
     fs::create_dir_all(&directory).expect("create harness directory");
     directory
+}
+
+pub(crate) fn outside_git_directory() -> PathBuf {
+    PrivateDirectory::create("stock-copilot-harness-git")
+        .and_then(|private| private.child("git"))
+        .expect("create private git directory")
+}
+
+pub(crate) fn place_git_directory_outside(directory: &Path, arguments: &[&str]) {
+    if arguments.first() != Some(&"init") {
+        return;
+    }
+    let named = arguments
+        .iter()
+        .skip(1)
+        .rfind(|argument| !argument.starts_with('-'));
+    let work = named.map_or_else(|| directory.to_path_buf(), |name| directory.join(name));
+    let link = if arguments.contains(&"--bare") {
+        work
+    } else {
+        work.join(".git")
+    };
+    let target = outside_git_directory();
+    if let Some(parent) = link.parent() {
+        fs::create_dir_all(parent).expect("create repository parent");
+    }
+    if fs::symlink_metadata(&link).is_ok() {
+        fs::remove_file(&link).expect("remove previous git link");
+    }
+    std::os::unix::fs::symlink(&target, &link).expect("link git directory");
 }
 
 pub(crate) fn copy_tree(source: &Path, destination: &Path) {

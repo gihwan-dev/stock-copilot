@@ -2,7 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::harness_workspace_tests::{fresh_directory, repository_root};
+use crate::harness_workspace_tests::{
+    fresh_directory, place_git_directory_outside, repository_root,
+};
 
 use super::{GRAFT_FILE, HEAD, REDIRECTING_VARIABLES, git, git_with, output, resolve_base};
 
@@ -31,6 +33,7 @@ struct Case {
 }
 
 fn plain(directory: &Path, arguments: &[&str]) -> String {
+    place_git_directory_outside(directory, arguments);
     let finished = Command::new("git")
         .arg("-C")
         .arg(directory)
@@ -38,7 +41,11 @@ fn plain(directory: &Path, arguments: &[&str]) -> String {
         .args(arguments)
         .output()
         .expect("run git");
-    assert!(finished.status.success(), "git {arguments:?}");
+    assert!(
+        finished.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
     String::from_utf8_lossy(&finished.stdout).trim().to_owned()
 }
 

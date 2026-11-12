@@ -1,0 +1,827 @@
+{
+  "assignments": {
+    "RUSTC_WORKSPACE_WRAPPER": {
+      "eager": false,
+      "export": true,
+      "name": "RUSTC_WORKSPACE_WRAPPER",
+      "private": false,
+      "value": ""
+    },
+    "RUSTC_WRAPPER": {
+      "eager": false,
+      "export": true,
+      "name": "RUSTC_WRAPPER",
+      "private": false,
+      "value": ""
+    },
+    "RUSTFLAGS": {
+      "eager": false,
+      "export": true,
+      "name": "RUSTFLAGS",
+      "private": false,
+      "value": "-D warnings"
+    },
+    "base": {
+      "eager": false,
+      "export": false,
+      "name": "base",
+      "private": false,
+      "value": ""
+    }
+  },
+  "first": "check",
+  "doc": null,
+  "groups": [],
+  "module_path": "",
+  "modules": {},
+  "aliases": {},
+  "recipes": {
+    "advisory-db-fetch": {
+      "attributes": [],
+      "body": [["cargo deny --locked fetch db"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "advisory-db-fetch",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "advisory-db-fetch",
+      "shebang": false
+    },
+    "arch-check": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- arch-check"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "arch-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "arch-check",
+      "shebang": false
+    },
+    "capability-check": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- capability-check"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "capability-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "capability-check",
+      "shebang": false
+    },
+    "check": {
+      "attributes": [],
+      "body": [
+        ["cargo fmt --all --check"],
+        ["\"", [["call", "just_executable"]], "\" clippy Cargo.toml"],
+        ["\"", [["call", "just_executable"]], "\" deny"],
+        ["\"", [["call", "just_executable"]], "\" arch-check"],
+        ["\"", [["call", "just_executable"]], "\" source-check"],
+        ["\"", [["call", "just_executable"]], "\" sql-check"],
+        ["\"", [["call", "just_executable"]], "\" migration-check"],
+        ["\"", [["call", "just_executable"]], "\" capability-check"],
+        ["node harness/generated-files/check.mjs"],
+        ["\"", [["call", "just_executable"]], "\" raw-types"],
+        ["\"", [["call", "just_executable"]], "\" disable-check"],
+        ["cargo nextest run --workspace --locked"],
+        ["\"", [["call", "just_executable"]], "\" coverage-check"],
+        [
+          "\"",
+          [["call", "just_executable"]],
+          "\" test-diff ",
+          [["call", "quote", ["variable", "base"]]]
+        ],
+        ["\"", [["call", "just_executable"]], "\" disable-report"],
+        [
+          "\"",
+          [["call", "just_executable"]],
+          "\" disable-report-since ",
+          [["call", "quote", ["variable", "base"]]]
+        ],
+        ["\"", [["call", "just_executable"]], "\" hooks-installed"]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "require-base",
+          "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "check-ts",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check",
+      "parameters": [],
+      "priors": 3,
+      "private": false,
+      "quiet": false,
+      "namepath": "check",
+      "shebang": false
+    },
+    "check-full": {
+      "attributes": [],
+      "body": [
+        [
+          "\"",
+          [["call", "just_executable"]],
+          "\" mutants-diff ",
+          [["call", "quote", ["variable", "base"]]]
+        ],
+        ["\"", [["call", "just_executable"]], "\" mutants-all"]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "advisory-db-fetch",
+          "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "check",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check-full",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-full",
+      "shebang": false
+    },
+    "check-node": {
+      "attributes": [],
+      "body": [
+        [
+          "actual=\"$(node --version)\"; pinned=\"v$(cat .node-version)\"; [ \"$actual\" = \"$pinned\" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\\n' \"$actual\" \"$pinned\" >&2; exit 1; }"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "check-node",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-node",
+      "shebang": false
+    },
+    "check-ts": {
+      "attributes": [],
+      "body": [
+        ["pnpm install --frozen-lockfile --ignore-scripts"],
+        ["node harness/ts-deps/check.mjs"],
+        [
+          "pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json"
+        ],
+        ["node harness/source-tree/check.mjs"],
+        ["node harness/config-files/check.mjs"],
+        ["node harness/claude-hooks/hashes.mjs"],
+        ["pnpm -C apps/desktop exec tsc -p ."],
+        ["pnpm -C apps/desktop exec eslint --max-warnings 0 src"],
+        ["node harness/eslint-violations/check.mjs"],
+        [
+          "apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config apps/desktop/eslint.scripts.config.mjs apps/desktop/tests apps/desktop/eslint apps/desktop/eslint.config.mjs apps/desktop/eslint.scripts.config.mjs harness"
+        ],
+        [
+          "apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config harness/claude-hooks/eslint.config.mjs .claude/hooks"
+        ],
+        ["pnpm -C apps/desktop exec vite build"],
+        ["node harness/tsc-violations/check.mjs"],
+        ["node harness/knip-check/check.mjs"],
+        ["node harness/vitest-check/check.mjs"],
+        ["node --test 'apps/desktop/tests/*.test.mjs'"],
+        ["node --test 'harness/claude-hooks/tests/*.test.mjs'"]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check-ts",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-ts",
+      "shebang": false
+    },
+    "claude-regression": {
+      "attributes": [],
+      "body": [["node harness/claude-regression/run.mjs"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "claude-regression",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "claude-regression",
+      "shebang": false
+    },
+    "clippy": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo clippy --manifest-path \"$1\" --workspace --all-targets --locked \"${@:2}\" -- -D warnings"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "clippy",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "manifest",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "star",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "flags",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "clippy",
+      "shebang": false
+    },
+    "commit-base": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --manifest-path \"",
+          [["call", "justfile_directory"]],
+          "/Cargo.toml\" --package xtask -- commit-base"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "commit-base",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "commit-base",
+      "shebang": false
+    },
+    "commit-check": {
+      "attributes": [],
+      "body": [
+        [
+          "base=\"$(\"",
+          [["call", "just_executable"]],
+          "\" commit-base)\"; \"",
+          [["call", "just_executable"]],
+          "\" base=\"$base\" check"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "commit-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "commit-check",
+      "shebang": false
+    },
+    "commit-guard": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --manifest-path \"",
+          [["call", "justfile_directory"]],
+          "/Cargo.toml\" --package xtask -- commit-guard \"$1\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "commit-guard",
+      "parameters": [
+        {
+          "default": "",
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "index",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "commit-guard",
+      "shebang": false
+    },
+    "coverage-check": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- coverage-check"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "coverage-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "coverage-check",
+      "shebang": false
+    },
+    "deny": {
+      "attributes": [],
+      "body": [
+        [
+          "test -d \"${CARGO_HOME:-$HOME/.cargo}/advisory-dbs/advisory-db-3157b0e258782691\" || { printf 'deny: 권고 DB가 없다. 네트워크가 되는 곳에서 just advisory-db-fetch를 한 번 돌린다\\n' >&2; exit 1; }"
+        ],
+        ["cargo deny --locked --offline check"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "deny",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "deny",
+      "shebang": false
+    },
+    "disable-check": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- disable-check"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "disable-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "disable-check",
+      "shebang": false
+    },
+    "disable-report": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- disable-report"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "disable-report",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "disable-report",
+      "shebang": false
+    },
+    "disable-report-since": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- disable-report --since \"$1\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "disable-report-since",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "disable-report-since",
+      "shebang": false
+    },
+    "fresh-build": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "fresh-cargo",
+          "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "fresh-node",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "fresh-build",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "namepath": "fresh-build",
+      "shebang": false
+    },
+    "fresh-cargo": {
+      "attributes": [],
+      "body": [
+        ["cargo clean --locked --workspace"],
+        ["cargo llvm-cov clean --locked --workspace"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "fresh-cargo",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "fresh-cargo",
+      "shebang": false
+    },
+    "fresh-node": {
+      "attributes": [],
+      "body": [["pnpm install --frozen-lockfile --force --ignore-scripts"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "fresh-node",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "fresh-node",
+      "shebang": false
+    },
+    "gen-bindings": {
+      "attributes": [],
+      "body": [["node harness/generated-files/check.mjs --write"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "gen-bindings",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "gen-bindings",
+      "shebang": false
+    },
+    "hooks-installed": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- hooks-installed"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "hooks-installed",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "hooks-installed",
+      "shebang": false
+    },
+    "known-gaps": {
+      "attributes": [],
+      "body": [["node harness/known-gaps/list.mjs"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "known-gaps",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "known-gaps",
+      "shebang": false
+    },
+    "lint-file": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- lint-file \"$1\""]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "lint-file",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "path",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "lint-file",
+      "shebang": false
+    },
+    "migration-check": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- migration-check"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "migration-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "migration-check",
+      "shebang": false
+    },
+    "mutants-all": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- mutants"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-all",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-all",
+      "shebang": false
+    },
+    "mutants-diff": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- mutants --in-diff \"$1\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff",
+      "shebang": false
+    },
+    "push-check": {
+      "attributes": [],
+      "body": [
+        [
+          "base=\"$(cargo run --locked --quiet --package xtask -- push-base)\"; \"",
+          [["call", "just_executable"]],
+          "\" base=\"$base\" check-full"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "push-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "push-check",
+      "shebang": false
+    },
+    "raw-types": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- raw-types"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "raw-types",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "raw-types",
+      "shebang": false
+    },
+    "require-base": {
+      "attributes": [],
+      "body": [
+        [
+          "[ -n ",
+          [["call", "quote", ["variable", "base"]]],
+          " ] || { printf 'base가 필요하다: just base=<HEAD|40자리 커밋 ID> check (커밋 훅은 HEAD, 종료 훅은 브리프의 기준 커밋, 푸시 훅은 푸시 전 원격 커밋)\\n' >&2; exit 1; }"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "require-base",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "require-base",
+      "shebang": false
+    },
+    "source-check": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- source-check"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "source-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "source-check",
+      "shebang": false
+    },
+    "sql-check": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- sql-check"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "sql-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "sql-check",
+      "shebang": false
+    },
+    "test-diff": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- test-diff \"$1\""]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-diff",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "test-diff",
+      "shebang": false
+    }
+  },
+  "settings": {
+    "allow_duplicate_recipes": false,
+    "allow_duplicate_variables": false,
+    "default_list": false,
+    "default_script": false,
+    "dotenv_command": [],
+    "dotenv_filename": null,
+    "dotenv_load": false,
+    "dotenv_override": false,
+    "dotenv_path": null,
+    "dotenv_required": false,
+    "export": false,
+    "fallback": false,
+    "guards": false,
+    "ignore_comments": false,
+    "indentation": null,
+    "lazy": false,
+    "lists": false,
+    "no_cd": false,
+    "no_exit_message": false,
+    "positional_arguments": true,
+    "quiet": false,
+    "shell": {
+      "command": "bash",
+      "arguments": ["-euo", "pipefail", "-c"]
+    },
+    "tempdir": null,
+    "unstable": false,
+    "windows_powershell": false,
+    "windows_shell": null,
+    "working_directory": null
+  },
+  "unexports": [
+    "CARGO_BUILD_RUSTC",
+    "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+    "CARGO_BUILD_RUSTC_WRAPPER",
+    "CARGO_BUILD_RUSTDOCFLAGS",
+    "CARGO_BUILD_RUSTFLAGS",
+    "CARGO_BUILD_TARGET",
+    "CARGO_BUILD_TARGET_DIR",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER",
+    "CARGO_TARGET_DIR",
+    "CLIPPY_CONF_DIR",
+    "ESLINT_PLUGIN_BOUNDARIES_ROOT_PATH",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_ATTR_SOURCE",
+    "GIT_COMMON_DIR",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_DIFF_OPTS",
+    "GIT_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_SHALLOW_FILE",
+    "GIT_WORK_TREE",
+    "NEXTEST_FLAKY_RESULT",
+    "NEXTEST_NO_TESTS",
+    "NEXTEST_PROFILE",
+    "NEXTEST_RETRIES",
+    "NEXTEST_TEST_THREADS",
+    "NEXTEST_USER_CONFIG_FILE",
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "RUSTC",
+    "RUSTC_BOOTSTRAP",
+    "RUSTDOCFLAGS",
+    "RUSTUP_TOOLCHAIN",
+    "TAURI_CONFIG"
+  ],
+  "warnings": []
+}

@@ -6,7 +6,7 @@ use std::process::Command;
 use crate::check_support::{Finding, read_text};
 use crate::git_base::{HEAD, git};
 use crate::harness_workspace_tests::{
-    copy_tree, fresh_directory, generate_lockfile, repository_root,
+    copy_tree, fresh_directory, generate_lockfile, place_git_directory_outside, repository_root,
 };
 
 use super::{Rule, Sources, check, compare_lists, compare_sources};
@@ -154,6 +154,7 @@ fn every_test_diff_rule_has_an_example() {
 }
 
 fn run_git(directory: &Path, arguments: &[&str]) {
+    place_git_directory_outside(directory, arguments);
     let mut command = git(directory);
     command.args([
         "-c",
@@ -164,8 +165,12 @@ fn run_git(directory: &Path, arguments: &[&str]) {
         "commit.gpgsign=false",
     ]);
     command.args(arguments);
-    let status = command.status().expect("run git");
-    assert!(status.success(), "git {arguments:?}");
+    let finished = command.output().expect("run git");
+    assert!(
+        finished.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
 }
 
 fn committed_repository(name: &str) -> (PathBuf, String) {

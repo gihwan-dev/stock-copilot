@@ -4,7 +4,9 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::data_variants_tests::element_variants;
-use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
+use crate::harness_workspace_tests::{
+    fresh_directory, generate_lockfile, place_git_directory_outside, repository_root,
+};
 use crate::lint_file::targets::{Coverage, TARGETS_FILE, Targets};
 
 use super::scoped::in_module;
@@ -296,6 +298,7 @@ fn removing_any_script_rule_element_breaks_some_test() {
 }
 
 fn git(directory: &Path, arguments: &[&str]) -> String {
+    place_git_directory_outside(directory, arguments);
     let finished = Command::new("git")
         .arg("-C")
         .arg(directory)
@@ -312,7 +315,11 @@ fn git(directory: &Path, arguments: &[&str]) -> String {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .output()
         .expect("run git");
-    assert!(finished.status.success(), "git {arguments:?}");
+    assert!(
+        finished.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
     String::from_utf8_lossy(&finished.stdout).trim().to_owned()
 }
 

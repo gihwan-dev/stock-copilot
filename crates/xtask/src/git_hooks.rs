@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
 use crate::git_base::{self, REDIRECTING_VARIABLES};
+use crate::private_temp::PrivateDirectory;
 use crate::workspace_sources::load_members;
 
 pub(crate) const HOOK_RULES_FILE: &str = "harness/git-hooks/lefthook.toml";
@@ -188,13 +189,28 @@ fn expected_hooks(repository: &Path, scratch: &Path) -> Result<BTreeMap<String, 
         scratch.join(LEFTHOOK_CONFIG),
     )
     .map_err(|error| format!("{LEFTHOOK_CONFIG}: {error}"))?;
+    let private = PrivateDirectory::create("stock-copilot-hooks-installed")?;
+    let listed = private
+        .child("git")
+        .and_then(|git_directory| installed_hooks(scratch, &git_directory));
+    let removed = private.remove();
+    let hooks = listed?;
+    removed?;
+    Ok(hooks)
+}
+
+fn installed_hooks(
+    scratch: &Path,
+    git_directory: &Path,
+) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut init = isolated("git", scratch);
-    init.args(["init", "--quiet"]);
+    init.args(["init", "--quiet", "--separate-git-dir"])
+        .arg(git_directory);
     stdout_of(init, "git init")?;
     let mut install = isolated("lefthook", scratch);
     install.arg("install");
     stdout_of(install, "lefthook install")?;
-    let directory = scratch.join(".git").join("hooks");
+    let directory = git_directory.join("hooks");
     let listing =
         fs::read_dir(&directory).map_err(|error| format!("{}: {error}", directory.display()))?;
     let mut hooks = BTreeMap::new();

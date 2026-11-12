@@ -18,6 +18,17 @@ const MAX_DEPTH = 8;
 
 const finding = (rule, message, gated = false) => ({ rule, gated, message });
 
+const remembered = (compute) => {
+  const answers = new Map();
+  return (...inputs) => {
+    const key = inputs.join("\0");
+    if (!answers.has(key)) {
+      answers.set(key, compute(...inputs));
+    }
+    return answers.get(key);
+  };
+};
+
 const literal = (text) => ({
   text,
   dynamic: false,
@@ -851,7 +862,7 @@ const strippedReference = (text) =>
     .replace(/^refs\/+/u, "")
     .replace(/^heads\/+/u, "");
 
-const referenceName = (text) => {
+const referenceName = remembered((text) => {
   const plain = text.replace(/^\+/u, "");
   if (plain === "") {
     return "";
@@ -873,7 +884,7 @@ const referenceName = (text) => {
       ? strippedReference(plain.replace(/\/{2,}/gu, "/"))
       : undefined;
   }
-};
+});
 
 const baseOrUnknown = (text, branches) => {
   const name = referenceName(text);
@@ -883,7 +894,7 @@ const baseOrUnknown = (text, branches) => {
   );
 };
 
-const branchOfDirectory = (directory) => {
+const branchOfDirectory = remembered((directory) => {
   try {
     return execFileSync(
       "git",
@@ -897,7 +908,7 @@ const branchOfDirectory = (directory) => {
   } catch {
     return undefined;
   }
-};
+});
 
 const baseBranchFindings = (
   sub,
@@ -935,25 +946,115 @@ const baseBranchFindings = (
           ),
         )
     : [];
-  const resetting =
-    sub === "reset" &&
-    options.some((option) =>
-      base.resetOptions.includes(option.long ?? `-${option.short}`),
-    );
-  const directory = resetting
-    ? aliasDirectory(parsed, invocation, context)
-    : undefined;
-  const reset =
-    resetting &&
-    (directory === undefined || isBase(branchOfDirectory(directory) ?? ""))
+  const directory = aliasDirectory(parsed, invocation, context);
+  const onBaseOrUnknown = () =>
+    directory === undefined ||
+    context.moves.branch ||
+    isBase(branchOfDirectory(directory) ?? "");
+  const amending =
+    sub === "commit" &&
+    options.some(
+      (option) =>
+        option.long !== undefined &&
+        base.amendOptions.some((amend) => longMatches(option.long, amend)),
+    ) &&
+    onBaseOrUnknown()
       ? [
           finding(
             "git-history",
-            "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git reset으로 브랜치 끝을 옮기지 않는다",
+            "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git commit --amend로 마지막 커밋을 바꿔 쓰지 않는다",
           ),
         ]
       : [];
-  return [...creating, ...refspecs, ...reset];
+  if (sub !== "reset") {
+    return [...creating, ...refspecs, ...amending];
+  }
+  const kinds = statics.map((item) =>
+    resetArgumentKind(item, statics, directory, base),
+  );
+  const ambiguous = kinds.includes(RESET_ARGUMENT.ambiguous)
+    ? [
+        finding(
+          "git-history",
+          "git reset의 인자가 커밋인지 경로인지 풀 수 없다. 경로는 `git reset -- <경로>`로 쓴다",
+        ),
+      ]
+    : [];
+  const committing = kinds.includes(RESET_ARGUMENT.commit);
+  const moving =
+    committing ||
+    options.some((option) =>
+      base.resetOptions.includes(option.long ?? `-${option.short}`),
+    );
+  const reset = kinds.includes(RESET_ARGUMENT.ambiguous)
+    ? []
+    : committing
+      ? [
+          finding(
+            "git-history",
+            "커밋을 받는 git reset으로 브랜치 끝을 옮기지 않는다. 경로만 내릴 때는 `git reset -- <경로>`를 쓴다",
+          ),
+        ]
+      : moving && onBaseOrUnknown()
+        ? [
+            finding(
+              "git-history",
+              "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git reset으로 브랜치 끝을 옮기지 않는다",
+            ),
+          ]
+        : [];
+  return [...creating, ...refspecs, ...ambiguous, ...reset];
+};
+
+const RESET_ARGUMENT = Object.freeze({
+  stay: "stay",
+  path: "path",
+  commit: "commit",
+  ambiguous: "ambiguous",
+});
+
+const resolvesToCommit = remembered((directory, text) => {
+  try {
+    execFileSync(
+      "git",
+      ["-C", directory, "rev-parse", "--verify", "--quiet", `${text}^{commit}`],
+      { env: gitEnvironment(), stdio: ["ignore", "ignore", "ignore"] },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+const existsIn = (directory, text) => {
+  try {
+    statSync(resolve(directory, text));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const resetArgumentKind = (item, statics, directory, base) => {
+  if (item.ended) {
+    return RESET_ARGUMENT.path;
+  }
+  if (base.resetStay.includes(item.word.text)) {
+    return RESET_ARGUMENT.stay;
+  }
+  if (statics.some((other) => other.ended)) {
+    return RESET_ARGUMENT.commit;
+  }
+  if (directory === undefined) {
+    return RESET_ARGUMENT.ambiguous;
+  }
+  const path = existsIn(directory, item.word.text);
+  const commit = resolvesToCommit(directory, item.word.text);
+  return path && commit
+    ? RESET_ARGUMENT.ambiguous
+    : path
+      ? RESET_ARGUMENT.path
+      : RESET_ARGUMENT.commit;
 };
 
 const realOrSelf = (path) => {
@@ -1789,6 +1890,13 @@ const analyzeCommand = (command, context, depth, hidden, grouped) => {
   if (["cd", "pushd", "popd"].includes(invocation.name)) {
     context.cwd = changeDirectory(invocation, context, grouped);
   }
+  const git = gitParts(invocation);
+  if (
+    git !== undefined &&
+    context.rules.git.baseBranch.branchMovers.includes(git.sub)
+  ) {
+    context.moves.branch = true;
+  }
   return findings;
 };
 
@@ -1830,6 +1938,7 @@ export const bashFindings = (input, project, definitions = DEFINITIONS) => {
         ? input.cwd
         : process.cwd(),
     definitions,
+    moves: { branch: false },
   };
   const findings = [];
   if (toolInput.dangerouslyDisableSandbox === true) {

@@ -39,8 +39,9 @@ pub(crate) const ENVIRONMENT_GLOB: &str = "env::*";
 
 pub(crate) const CLOCK_PREFIX: &str = "now";
 
-pub(crate) const CLOCK_AND_ENVIRONMENT_FUNCTIONS: [&str; 6] =
-    ["today", "elapsed", "var", "var_os", "vars", "vars_os"];
+pub(crate) const CLOCK_AND_ENVIRONMENT_FUNCTIONS: [&str; 7] = [
+    "today", "elapsed", "var", "var_os", "vars", "vars_os", "temp_dir",
+];
 
 pub(crate) const CLOCK_METHODS: [&str; 1] = ["elapsed"];
 

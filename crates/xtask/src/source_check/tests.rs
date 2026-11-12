@@ -359,7 +359,9 @@ fn allowlists_hold_only_the_documented_paths() {
         paths("clock-environment"),
         BTreeSet::from([
             String::from("apps/desktop/src-tauri/src/main.rs"),
-            String::from("crates/xtask/src/main.rs")
+            String::from("crates/xtask/src/main.rs"),
+            String::from("crates/xtask/src/network_sandbox_tests.rs"),
+            String::from("crates/xtask/src/private_temp.rs")
         ])
     );
     assert_eq!(

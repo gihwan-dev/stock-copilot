@@ -1,0 +1,364 @@
+{
+  "steps": [
+    {
+      "recipe": "check-node",
+      "command": "actual=\"$(node --version)\"; pinned=\"v$(cat .node-version)\"; [ \"$actual\" = \"$pinned\" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\\n' \"$actual\" \"$pinned\" >&2; exit 1; }",
+      "kind": "check",
+      "cases": "apps/desktop/tests/node-pin.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/node-pin.test.mjs",
+        "name": "just check fails at the Node pin when another Node version is on PATH"
+      }
+    },
+    {
+      "recipe": "require-base",
+      "command": "[ -n {{quote(base)}} ] || { printf 'base가 필요하다: just base=<HEAD|40자리 커밋 ID> check (커밋 훅은 HEAD, 종료 훅은 브리프의 기준 커밋, 푸시 훅은 푸시 전 원격 커밋)\\n' >&2; exit 1; }",
+      "kind": "check",
+      "cases": "crates/xtask/src/test_runner_tests.rs",
+      "test": {
+        "file": "crates/xtask/src/test_runner_tests.rs",
+        "name": "check_refuses_to_run_without_an_explicit_base"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "pnpm install --frozen-lockfile --ignore-scripts",
+      "kind": "setup",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "just check installs the frozen lockfile without lifecycle scripts before any other Node step"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/ts-deps/check.mjs",
+      "kind": "check",
+      "cases": "apps/desktop/tests/ts-deps.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/ts-deps.test.mjs",
+        "name": "adding an unlisted package to package.json makes the check script fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json",
+      "kind": "check",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the prettier step of just check fails on a misformatted file in its paths"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/source-tree/check.mjs",
+      "kind": "check",
+      "cases": "harness/source-tree/tree.mjs",
+      "test": {
+        "file": "apps/desktop/tests/source-tree.test.mjs",
+        "name": "every symbolic link under a source tree is found, files and folders alike"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/config-files/check.mjs",
+      "kind": "check",
+      "cases": "harness/claude-hooks/tests/checks.test.mjs",
+      "test": {
+        "file": "harness/claude-hooks/tests/checks.test.mjs",
+        "name": "a nested ESLint config fails the config-files check of just check"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/claude-hooks/hashes.mjs",
+      "kind": "check",
+      "cases": "harness/claude-hooks/hashes.json",
+      "test": {
+        "file": "harness/claude-hooks/tests/checks.test.mjs",
+        "name": "hook files, rules, allowlist and lock must match the protected hashes"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "pnpm -C apps/desktop exec tsc -p .",
+      "kind": "integrity",
+      "cases": "harness/tsc-violations/expected.json",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "a tsc violation case that stops failing makes the tsc-violations check fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "pnpm -C apps/desktop exec eslint --max-warnings 0 src",
+      "kind": "integrity",
+      "cases": "harness/eslint-violations/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/eslint-violations.test.mjs",
+        "name": "turning off any expected rule makes its cases fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/eslint-violations/check.mjs",
+      "kind": "check",
+      "cases": "harness/eslint-violations/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/eslint-violations.test.mjs",
+        "name": "an extra or missing problem makes a case fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config apps/desktop/eslint.scripts.config.mjs apps/desktop/tests apps/desktop/eslint apps/desktop/eslint.config.mjs apps/desktop/eslint.scripts.config.mjs harness",
+      "kind": "check",
+      "cases": "apps/desktop/tests/eslint-config.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/eslint-config.test.mjs",
+        "name": "test and harness scripts fail on skipped or focused tests"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config harness/claude-hooks/eslint.config.mjs .claude/hooks",
+      "kind": "check",
+      "cases": "harness/claude-hooks/tests/checks.test.mjs",
+      "test": {
+        "file": "harness/claude-hooks/tests/checks.test.mjs",
+        "name": "hook scripts allow no comment except the 2.1 directive form"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "pnpm -C apps/desktop exec vite build",
+      "kind": "setup",
+      "cases": "apps/desktop/tests/skeleton.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/skeleton.test.mjs",
+        "name": "after the vite build step of just check, dist holds the page Tauri embeds"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/tsc-violations/check.mjs",
+      "kind": "check",
+      "cases": "harness/tsc-violations/expected.json",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "a tsc violation case that stops failing makes the tsc-violations check fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/knip-check/check.mjs",
+      "kind": "check",
+      "cases": "harness/knip-check/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/knip.test.mjs",
+        "name": "turning off or excluding any issue type makes its cases fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/vitest-check/check.mjs",
+      "kind": "check",
+      "cases": "harness/vitest-check/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/vitest.test.mjs",
+        "name": "removing any key of the Vitest test options makes some case fail"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node --test 'apps/desktop/tests/*.test.mjs'",
+      "kind": "runner",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the node test runners of just check reach every test file"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node --test 'harness/claude-hooks/tests/*.test.mjs'",
+      "kind": "runner",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the node test runners of just check reach every test file"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "cargo fmt --all --check",
+      "kind": "check",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the cargo fmt step of just check fails on a workspace with a misformatted file"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" clippy Cargo.toml",
+      "kind": "check",
+      "cases": "harness/rust-lints",
+      "test": {
+        "file": "crates/xtask/src/rust_lints_tests.rs",
+        "name": "violation_examples_fail_with_their_lint"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" deny",
+      "kind": "check",
+      "cases": "harness/deny",
+      "test": {
+        "file": "crates/xtask/src/third_party_tests.rs",
+        "name": "unlisted_direct_dependency_fails"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" arch-check",
+      "kind": "check",
+      "cases": "harness/arch-check",
+      "test": {
+        "file": "crates/xtask/src/arch_check_cases_tests.rs",
+        "name": "command_fails_on_violation_and_passes_clean_workspace"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" source-check",
+      "kind": "check",
+      "cases": "harness/source-checks/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/source_check/tests.rs",
+        "name": "source_examples_report_exactly_their_rules"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" sql-check",
+      "kind": "check",
+      "cases": "harness/sql-check/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/sql_check/tests.rs",
+        "name": "statement_cases_report_exactly_their_rules"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" migration-check",
+      "kind": "check",
+      "cases": "harness/migration-check/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/migration_check/tests.rs",
+        "name": "migration_cases_report_exactly_their_rules"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" capability-check",
+      "kind": "check",
+      "cases": "harness/capability-check/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/capability_check/tests.rs",
+        "name": "capability_cases_report_exactly_their_rules"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "node harness/generated-files/check.mjs",
+      "kind": "check",
+      "cases": "harness/generated-files/files.json",
+      "test": {
+        "file": "apps/desktop/tests/generated-files.test.mjs",
+        "name": "a hand edit of any generated file is reported"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" raw-types",
+      "kind": "check",
+      "cases": "harness/raw-types/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/raw_types/tests.rs",
+        "name": "source_examples_report_exactly_their_rules"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" disable-check",
+      "kind": "check",
+      "cases": "harness/disable-control/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/disable_control/tests.rs",
+        "name": "examples_report_exactly_their_rules"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "cargo nextest run --workspace --locked",
+      "kind": "runner",
+      "cases": "crates/xtask/src/test_runner_tests.rs",
+      "test": {
+        "file": "crates/xtask/src/test_runner_tests.rs",
+        "name": "check_runs_nextest_coverage_and_test_diff"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" coverage-check",
+      "kind": "check",
+      "cases": "harness/coverage/cases.toml",
+      "test": {
+        "file": "crates/xtask/src/coverage_check/tests.rs",
+        "name": "lcov_cases_report_exactly_their_findings"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" test-diff {{quote(base)}}",
+      "kind": "check",
+      "cases": "harness/test-diff/repository",
+      "test": {
+        "file": "crates/xtask/src/test_diff/tests.rs",
+        "name": "committed_weakening_fails_against_the_base_commit_but_not_against_head"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" disable-report",
+      "kind": "report",
+      "cases": "apps/desktop/src-tauri/src/main.rs",
+      "test": {
+        "file": "crates/xtask/src/disable_control/tests.rs",
+        "name": "disable_report_lists_the_three_main_rs_expects"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" disable-report-since {{quote(base)}}",
+      "kind": "report",
+      "cases": "crates/xtask/src/disable_control/script_tests.rs",
+      "test": {
+        "file": "crates/xtask/src/disable_control/script_tests.rs",
+        "name": "since_lists_only_disables_added_after_the_base"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "\"{{just_executable()}}\" hooks-installed",
+      "kind": "check",
+      "cases": "harness/git-hooks/lefthook.toml",
+      "test": {
+        "file": "crates/xtask/src/git_hooks/tests.rs",
+        "name": "missing_hooks_fail_in_the_repository_and_its_worktrees"
+      }
+    }
+  ]
+}

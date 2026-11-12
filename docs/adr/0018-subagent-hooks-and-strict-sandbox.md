@@ -229,3 +229,30 @@ node harness/claude-hooks/hashes.mjs --write
 - 그래서 H-20 전까지는: 에이전트의 셸이 홈의 자격 증명·상태 폴더를 읽고 쓸 수 있다(셸 훅의 문자열 검사와 `Read` 거부만 있다). 상태 기록의 위조 방지와 S-03 표의 "막힘"은 H-20부터 적용된다.
 - H-20 전에 풀어야 할 것: 원본 루트에서 샌드박스 안 `just check`와 커밋·병합 훅이 통과해야 한다(위 E4b 실패와 원인 확정). 후보: 하네스 테스트의 임시 git 저장소를 프로젝트 밖으로 옮기면서 pnpm이 저장소의 `packageManager`를 쓰게 하는 것(기존 테스트 변경, 사용자 승인).
 - 설정 폴더 글롭: 실측(헤드리스 1회)으로 `denyRead`의 `~/.claude-*/projects`와 권한 `Read(~/.claude-*/projects/**)`가 `~/.claude-second/projects`의 셸 읽기와 `Read` 도구를 모두 막았다. 둘 다 넣었다.
+
+## 실측 E4c: 원인 확정과 수정 (H-12, 2026-11-13)
+
+환경은 위와 같다. 복제본 루트에서 `fragment.mjs --locked-settings`의 샌드박스 블록을 절대 경로로 바꿔 `--settings`로 주고(복제본의 `.claude/settings.json`에 넣으면 `settings.test.mjs`가 실패하고, `settings.local.json`은 추적하지 않는 파일이라 커밋 훅이 거부한다) 헤드리스로 돌렸다. 헤드리스 실행 4번(진단 1번, 검증 3번 중 앞의 2번은 승인 요구와 `target/` 없음으로 명령이 돌지 않았다).
+
+| 시도(샌드박스 안, 복제본 루트) | 결과 |
+|---|---|
+| `git -C target/harness/probe-a init` | `fatal: cannot copy '…/templates/hooks/commit-msg.sample' to '…/target/harness/probe-a/.git/hooks/commit-msg.sample': Operation not permitted` |
+| 빈 `target/harness/probe-c/.git/config` 만들기 / `.git/hooks` 폴더 만들기 / `.git/HEAD`, `.git/objects/…`, `.git/info/exclude` 만들기 | 거부 / 허용 / 허용 |
+| `git init --separate-git-dir "$TMPDIR/probe-b.git" target/harness/probe-b`와 그 안의 커밋 | 허용 |
+| 같은 규칙을 흉내 낸 `sandbox-exec` 프로필(프로젝트 안 `(.*/)?\.git/config`, `(.*/)?\.git/hooks/` 쓰기 거부)에서 `cargo nextest run --workspace` | 218개 중 42개 실패: git을 쓰는 하네스 테스트 38개 + 프로필이 네트워크를 막지 않아 생긴 4개(`network_sandbox_tests` 3, `nested_sandbox_tests` 1) |
+| `.git`을 프로젝트 밖 폴더로 가리키는 심볼릭 링크로 둔 뒤 `git init`·커밋·`lefthook install`·`git worktree add` | 허용 |
+
+원인: Claude Code 샌드박스가 프로젝트 폴더 안 어느 깊이에서든 `.git/config`와 `.git/hooks/` 아래 파일 쓰기를 거부한다(설정의 `denyWrite`와 무관한 기본 보호). 하네스 테스트와 `hooks-installed`가 `target/harness/` 아래에서 `git init`을 해서 실패했다. 작업 사본(`../stock-copilot-wt/a`)에서 통과한 것은 그곳이 프로젝트 폴더 밖이기 때문이다.
+
+고친 것(ADR 0019): 테스트 임시 저장소의 `.git`을 시스템 임시 폴더 아래 사용자 전용(0700, 예측할 수 없는 이름) 폴더로 가리키는 심볼릭 링크로 만들고, `hooks-installed`의 기대 훅 저장소는 `--separate-git-dir`로 같은 방식의 폴더에 두고 끝나면 지운다. 작업 트리 경로는 그대로라 pnpm·커버리지·commit-guard 예제는 바뀌지 않는다. 샌드박스 설정과 `fragment.mjs --locked-settings`는 바꿀 것이 없다(`$TMPDIR`는 샌드박스 기본 쓰기 허용). 테스트 모듈의 git 도우미를 바꾸므로 그 부분은 메인이 커밋할 변경이다.
+
+검증(테스트 도우미 변경을 커밋한 복제본, 잠금 설정의 샌드박스, haiku 메인이 스크립트 파일로 실행):
+
+| 명령 | 결과 |
+|---|---|
+| `just base=<HEAD> check` | 통과(nextest 218개 통과, `hooks-installed: 위반 없음`) |
+| 브랜치에서 `docs/progress.md`를 고쳐 `git commit -am` (pre-commit: fresh-build, commit-guard, check) | 통과(157초, check 148초) |
+| `master`에서 `git merge --no-ff --no-edit doc-probe` (pre-merge-commit) | 통과(check 153초), 병합 커밋 생성 |
+| 같은 변경을 이 PC의 작업 사본(샌드박스 밖)에 둔 `just check` | `test-diff`(테스트 모듈 지원 항목 변경) 밖의 모든 단계 통과 |
+
+이로써 "H-20 전에 풀어야 할 것"의 E4b는 메인이 테스트 도우미 변경을 커밋하면 풀린다.

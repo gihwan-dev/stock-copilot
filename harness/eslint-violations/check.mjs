@@ -12,6 +12,7 @@ import {
   caseProblems,
   coverageProblems,
   entryCoverageProblems,
+  knownGapProblems,
   listingProblems,
 } from "./verdict.mjs";
 
@@ -82,10 +83,15 @@ for (const [file, spec] of Object.entries(cases)) {
   const keys = linted.get(file)?.keys ?? [];
   const problems = caseProblems(spec.expect, keys);
   if (spec.expect === "KNOWN_GAP") {
-    report(
-      keys.length === 0 ? "GAP " : "GAP?",
-      `${file}: known gap, got [${keys.join(", ")}]`,
-    );
+    const gapProblems = knownGapProblems(spec, keys);
+    if (gapProblems.length === 0) {
+      report(
+        "GAP ",
+        `${file}: known gap, reports exactly [${keys.join(", ")}]`,
+      );
+    } else {
+      gapProblems.forEach((problem) => report("FAIL", `${file}: ${problem}`));
+    }
   } else if (problems.length === 0) {
     report("PASS", file);
   } else {

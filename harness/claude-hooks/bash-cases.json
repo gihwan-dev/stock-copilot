@@ -4664,8 +4664,8 @@
   },
   {
     "command": "git -C {worktree} reset --soft HEAD~1",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-history"]
   },
   {
     "command": "git -C {worktree} reset --soft HEAD~1",
@@ -4827,5 +4827,322 @@
     "command": "node --env-file .env.probe harness/claude-hooks/hashes.mjs --write",
     "decision": "deny",
     "rules": ["harness-write-mode"]
+  },
+  {
+    "command": "git reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset --mixed HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset --keep HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset --merge HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset --hard master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset -q master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset master -- docs/notes.md",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset HEAD~1 --",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset @",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset -- docs/notes.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset docs/notes.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset -q docs/notes.md justfile",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset HEAD -- docs/notes.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset @ docs/notes.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} reset --mixed master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} reset --keep master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C \"$D\" reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C \"$D\" reset docs/notes.md",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C \"$D\" reset -- docs/notes.md",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "cd \"$X\" && git reset docs/notes.md",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git reset --mixed master",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} reset master -- docs/notes.md",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git reset -- docs/notes.md",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git reset docs/notes.md",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git reset HEAD",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git reset",
+    "decision": "allow",
+    "rules": [],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "command": "git reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "command": "git reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} reset --soft",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git reset --hard",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} reset --hard",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "cd {worktree} && git checkout --ignore-other-worktrees master && git reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} checkout --ignore-other-worktrees master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} switch --ignore-other-worktrees master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} switch --ignore-other-worktrees master",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} checkout side && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} switch side && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} worktree list && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} bisect start && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} status && git -C {worktree} reset --soft",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --amend --no-edit",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} commit --amend -m x",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} switch side && git -C {worktree} commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit -m x",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} commit --amend -m x",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} symbolic-ref --short HEAD && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --amen -m x",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --am --no-edit",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git commit --amen -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {root} commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "cd \"$X\" && git commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} commit --am --no-edit",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
   }
 ]
