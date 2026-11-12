@@ -33,6 +33,7 @@ pub(crate) enum Rule {
     NextestConfig,
     Symlink,
     TargetOutsideMember,
+    GlobImport,
 }
 
 impl fmt::Display for Rule {
@@ -64,6 +65,7 @@ impl fmt::Display for Rule {
             Self::NextestConfig => f.write_str("file:nextest-config"),
             Self::Symlink => f.write_str("file:symlink"),
             Self::TargetOutsideMember => f.write_str("file:target-outside-member"),
+            Self::GlobImport => f.write_str("glob-import"),
         }
     }
 }

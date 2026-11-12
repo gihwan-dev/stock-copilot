@@ -23,7 +23,7 @@ pre-commit:
     - name: commit-guard
       run: just commit-guard \"$GIT_INDEX_FILE\"
     - name: check
-      run: just base=HEAD check
+      run: just commit-check
 
 pre-merge-commit:
   piped: true
@@ -33,7 +33,7 @@ pre-merge-commit:
     - name: commit-guard
       run: just commit-guard \"$GIT_INDEX_FILE\"
     - name: check
-      run: just base=HEAD check
+      run: just commit-check
 
 pre-push:
   piped: true
@@ -380,7 +380,10 @@ fn other_lefthook_version_fails() {
     );
 }
 
-const STUB_RECIPES: &str = "fresh-build:
+const STUB_RECIPES: &str = "commit-check:
+    \"{{just_executable()}}\" base=HEAD check
+
+fresh-build:
     printf 'fresh-build\\n' >> hook.log
     [ ! -e fail-fresh ]
 

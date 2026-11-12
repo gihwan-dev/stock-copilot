@@ -15,6 +15,7 @@ use syn::{
 };
 
 use super::allowlist::local_text;
+use super::scoped::{Site, TauriImports, function_sites, local_sites};
 
 const EXPECT: &str = "expect";
 
@@ -116,6 +117,7 @@ pub(crate) struct Collected {
     pub(crate) reason: String,
     pub(crate) target: Target,
     pub(crate) statement: Option<String>,
+    pub(crate) sites: BTreeSet<Site>,
 }
 
 #[derive(Debug)]
@@ -123,6 +125,8 @@ pub(crate) struct ExpectCollector<'rules> {
     rules: &'rules DisableRules,
     handled: BTreeSet<(usize, usize)>,
     pending: Vec<Target>,
+    next_sites: BTreeSet<Site>,
+    imports: TauriImports,
     pub(crate) found: Vec<Collected>,
 }
 
@@ -196,11 +200,13 @@ fn is_block_like(rest: &TokenStream, keywords: &BTreeSet<String>) -> Option<()> 
 }
 
 impl<'rules> ExpectCollector<'rules> {
-    pub(crate) fn new(rules: &'rules DisableRules) -> Self {
+    pub(crate) fn new(rules: &'rules DisableRules, imports: TauriImports) -> Self {
         Self {
             rules,
             handled: BTreeSet::new(),
             pending: Vec::new(),
+            next_sites: BTreeSet::new(),
+            imports,
             found: Vec::new(),
         }
     }
@@ -212,6 +218,8 @@ impl<'rules> ExpectCollector<'rules> {
         statement: Option<&String>,
         inside: Option<()>,
     ) {
+        let sites = self.next_sites.clone();
+        self.next_sites.clear();
         let checked = if holds_one_item(target).is_some() && inside.is_some() {
             Target::NestedItem
         } else {
@@ -237,6 +245,7 @@ impl<'rules> ExpectCollector<'rules> {
                 reason,
                 target: placed,
                 statement: statement.cloned(),
+                sites: sites.clone(),
             });
         }
     }
@@ -288,6 +297,7 @@ impl<'rules> ExpectCollector<'rules> {
                 reason,
                 target: Target::Macro,
                 statement: None,
+                sites: BTreeSet::new(),
             });
         }
     }
@@ -313,6 +323,7 @@ fn source_tokens(expression: &Expr) -> TokenStream {
 
 impl<'ast> Visit<'ast> for ExpectCollector<'_> {
     fn visit_item_fn(&mut self, i: &'ast ItemFn) {
+        self.next_sites = function_sites(i, &self.imports);
         self.record(
             &i.attrs,
             Target::Function,
@@ -354,6 +365,7 @@ impl<'ast> Visit<'ast> for ExpectCollector<'_> {
 
     fn visit_local(&mut self, i: &'ast Local) {
         let statement = local_text(i);
+        self.next_sites = local_sites(i);
         self.record(
             &i.attrs,
             Target::Statement,

@@ -1,0 +1,27 @@
+[[case]]
+example = "glob-top.rs"
+lines = [1]
+
+[[case]]
+example = "glob-nested.rs"
+lines = [1]
+
+[[case]]
+example = "glob-super-in-tests.rs"
+lines = [5]
+
+[[case]]
+example = "glob-in-function.rs"
+lines = [2]
+
+[[case]]
+example = "glob-pub-use.rs"
+lines = [1]
+
+[[case]]
+example = "clean-names.rs"
+lines = []
+
+[[case]]
+example = "clean-glob-in-string.rs"
+lines = []

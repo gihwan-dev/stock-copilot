@@ -1,3 +1,4 @@
+import { ipcTestingBoundary } from "./rules/ipc-testing-boundary.mjs";
 import { emptyParser, forbiddenFile } from "./rules/forbidden-file.mjs";
 import { noBrandCreation } from "./rules/no-brand-creation.mjs";
 import { noComments } from "./rules/no-comments.mjs";
@@ -20,6 +21,7 @@ export const local = {
     "no-promise-catch": noPromiseCatch,
     "no-computed-member": noComputedMember,
     "test-file-boundary": testFileBoundary,
+    "ipc-testing-boundary": ipcTestingBoundary,
   },
 };
 

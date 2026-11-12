@@ -111,6 +111,13 @@ const expectedProductionAllowlist = [
   "files src/shared/lib/messages.ts src/shared/lib/messages.ts",
   "files src/shared/lib/money.ts src/shared/lib/money.ts",
   "files src/shared/lib/result.ts src/shared/lib/result.ts",
+  "dependencies package.json @tauri-apps/api",
+  "files src/shared/ipc/bindings.ts src/shared/ipc/bindings.ts",
+  "files src/shared/ipc/call.ts src/shared/ipc/call.ts",
+  "files src/shared/ipc/schema.ts src/shared/ipc/schema.ts",
+  "files src/shared/ipc/testing/fakes.ts src/shared/ipc/testing/fakes.ts",
+  "files src/shared/ipc/testing/mockBindings.ts src/shared/ipc/testing/mockBindings.ts",
+  "files src/shared/ipc/testing/responses.ts src/shared/ipc/testing/responses.ts",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

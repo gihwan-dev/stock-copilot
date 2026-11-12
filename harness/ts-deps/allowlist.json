@@ -42,6 +42,10 @@
     "apps/desktop/package.json": {
       "keys": ["name", "private", "type", "dependencies", "devDependencies"],
       "dependencies": {
+        "@tauri-apps/api": {
+          "target": "@tauri-apps/api",
+          "reason": "IPC 클라이언트. shared/ipc에서만 쓴다 (architecture 5.2, 3.6)"
+        },
         "react": {
           "target": "react",
           "reason": "UI (architecture 5.2)"

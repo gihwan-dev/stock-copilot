@@ -3,7 +3,7 @@
   "entries": [
     {
       "issue": "dependencies package.json zod",
-      "reason": "Zod는 아직 운영 코드에서 닿지 않는 shared/lib/brand.ts만 쓴다 (U-04, H-13에서 shared/ipc 스키마가 쓴다)"
+      "reason": "Zod는 아직 운영 코드에서 닿지 않는 shared/lib/brand.ts와 shared/ipc/schema.ts만 쓴다 (U-04)"
     },
     {
       "issue": "files src/shared/ds/index.ts src/shared/ds/index.ts",
@@ -11,7 +11,7 @@
     },
     {
       "issue": "files src/shared/ipc/index.ts src/shared/ipc/index.ts",
-      "reason": "IPC 클라이언트가 아직 없다 (U-04, H-13)"
+      "reason": "IPC 공개 API를 가져오는 화면이 아직 없다 (U-04)"
     },
     {
       "issue": "files src/shared/lib/index.ts src/shared/lib/index.ts",
@@ -32,6 +32,34 @@
     {
       "issue": "files src/shared/lib/result.ts src/shared/lib/result.ts",
       "reason": "Result를 돌려주는 운영 코드가 아직 없다. 지금은 테스트(result.test.ts)만 쓴다"
+    },
+    {
+      "issue": "dependencies package.json @tauri-apps/api",
+      "reason": "IPC 호출 어댑터(shared/ipc/call.ts)를 부르는 화면이 아직 없다 (U-04)"
+    },
+    {
+      "issue": "files src/shared/ipc/bindings.ts src/shared/ipc/bindings.ts",
+      "reason": "생성된 IPC 바인딩. 호출 어댑터를 부르는 화면이 아직 없다 (U-04)"
+    },
+    {
+      "issue": "files src/shared/ipc/call.ts src/shared/ipc/call.ts",
+      "reason": "IPC 호출 어댑터를 부르는 화면이 아직 없다 (U-04)"
+    },
+    {
+      "issue": "files src/shared/ipc/schema.ts src/shared/ipc/schema.ts",
+      "reason": "IPC 응답 스키마. 호출 어댑터를 부르는 화면이 아직 없다 (U-04)"
+    },
+    {
+      "issue": "files src/shared/ipc/testing/fakes.ts src/shared/ipc/testing/fakes.ts",
+      "reason": "테스트 전용 가짜 IPC 도우미. 운영 코드는 가져오지 않는다 (harness.md 5장)"
+    },
+    {
+      "issue": "files src/shared/ipc/testing/mockBindings.ts src/shared/ipc/testing/mockBindings.ts",
+      "reason": "테스트 전용 생성물(mockCommands). 운영 코드는 가져오지 않는다 (harness.md 5장)"
+    },
+    {
+      "issue": "files src/shared/ipc/testing/responses.ts src/shared/ipc/testing/responses.ts",
+      "reason": "테스트 전용 생성물(Rust가 기록한 대표 응답). 운영 코드는 가져오지 않는다 (harness.md 5장)"
     }
   ]
 }

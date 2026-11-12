@@ -13,7 +13,9 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
 unmaintained = "all"
 unsound = "all"
-ignore = []
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "paste는 tauri-specta =2.0.0-rc.28의 고정 의존성이다. 유지 중단 권고일 뿐 취약점이 아니고, 빌드 시점 매크로로만 쓰인다 (ADR 0016)" },
+]
 
 [licenses]
 version = 2
@@ -122,6 +124,7 @@ allow = [
   { crate = "idna_adapter", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "indexmap", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "infer", reason = "tauri, tauri-build 전이 의존성" },
+  { crate = "Inflector", reason = "specta-macros 전이 의존성 (tauri-specta, ADR 0016)" },
   { crate = "itoa", reason = "cargo_metadata, tauri, tauri-build 전이 의존성" },
   { crate = "json-patch", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "jsonptr", reason = "tauri, tauri-build 전이 의존성" },
@@ -149,6 +152,7 @@ allow = [
   { crate = "option-ext", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "parking_lot", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "parking_lot_core", reason = "tauri, tauri-build 전이 의존성" },
+  { crate = "paste", reason = "tauri-specta 전이 의존성 (ADR 0016)" },
   { crate = "percent-encoding", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "phf", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "phf_codegen", reason = "tauri, tauri-build 전이 의존성" },
@@ -195,6 +199,11 @@ allow = [
   { crate = "simd-adler32", reason = "tauri 전이 의존성" },
   { crate = "siphasher", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "smallvec", reason = "tauri, tauri-build 전이 의존성" },
+  { crate = "specta", reason = "IPC 타입 생성 (architecture.md 3.6, ADR 0016)" },
+  { crate = "specta-macros", reason = "specta derive (ADR 0016)" },
+  { crate = "specta-serde", reason = "tauri-specta 전이 의존성 (ADR 0016)" },
+  { crate = "specta-typescript", reason = "IPC 타입 생성 (architecture.md 3.6, ADR 0016)" },
+  { crate = "specta-util", reason = "tauri-specta 전이 의존성 (ADR 0016)" },
   { crate = "stable_deref_trait", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "static_vcruntime", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "string_cache", reason = "tauri, tauri-build 전이 의존성" },
@@ -210,6 +219,8 @@ allow = [
   { crate = "tauri-macros", reason = "tauri 전이 의존성" },
   { crate = "tauri-runtime", reason = "tauri 전이 의존성" },
   { crate = "tauri-runtime-wry", reason = "tauri 전이 의존성" },
+  { crate = "tauri-specta", reason = "IPC 타입 생성 (architecture.md 3.6, ADR 0016)" },
+  { crate = "tauri-specta-macros", reason = "tauri-specta 전이 의존성 (ADR 0016)" },
   { crate = "tauri-utils", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "tauri-winres", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "tendril", reason = "tauri, tauri-build 전이 의존성" },
@@ -275,6 +286,7 @@ allow-build-scripts = [
   { crate = "objc2" },
   { crate = "objc2-exception-helper" },
   { crate = "parking_lot_core" },
+  { crate = "paste" },
   { crate = "proc-macro2" },
   { crate = "quote" },
   { crate = "schemars" },
@@ -282,6 +294,7 @@ allow-build-scripts = [
   { crate = "serde" },
   { crate = "serde_core" },
   { crate = "serde_json" },
+  { crate = "specta" },
   { crate = "src-tauri" },
   { crate = "swift-rs" },
   { crate = "tauri" },

@@ -1,6 +1,5 @@
 msrv = "1.99"
 avoid-breaking-exported-api = false
-warn-on-all-wildcard-imports = true
 check-private-items = false
 allow-unwrap-in-tests = false
 allow-expect-in-tests = true

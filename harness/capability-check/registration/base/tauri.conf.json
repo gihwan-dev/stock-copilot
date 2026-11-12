@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stock Copilot",
+  "identifier": "dev.stockcopilot.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "beforeBuildCommand": "pnpm exec vite build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Stock Copilot"
+      }
+    ],
+    "security": {
+      "capabilities": ["main"]
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

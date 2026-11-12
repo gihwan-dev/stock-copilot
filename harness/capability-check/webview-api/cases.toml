@@ -1,0 +1,155 @@
+[[case]]
+name = "clean"
+expect = []
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+pub fn build_app<R: Runtime>(builder: Builder<R>, context: Context<R>) -> Result<App<R>, tauri::Error> {
+    builder
+        .invoke_handler(ipc::registry::specta_builder::<R>().invoke_handler())
+        .build(context)
+}
+'''
+
+[[case.file]]
+path = "src/ipc/registry.rs"
+source = '''
+use tauri_specta::{Builder, collect_commands};
+
+pub fn specta_builder<R: Runtime>() -> Builder<R> {
+    let commands = collect_commands![app_version::app_version::<tauri::Wry>];
+    Builder::<R>::new().commands(commands)
+}
+'''
+
+[[case]]
+name = "generate-handler-alias"
+expect = ["src/lib.rs: capability:webview-api:generate_handler"]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+use tauri::generate_handler as handlers;
+
+pub fn build_app<R: Runtime>(builder: Builder<R>) -> Builder<R> {
+    builder.invoke_handler(handlers![ipc::hidden::hidden])
+}
+'''
+
+[[case]]
+name = "alias-across-files"
+expect = [
+    "src/ipc/registry.rs: capability:webview-api:generate_handler",
+    "src/other.rs: capability:webview-api:generate_handler",
+]
+
+[[case.file]]
+path = "src/ipc/registry.rs"
+source = '''
+pub use tauri::generate_handler as handlers;
+'''
+
+[[case.file]]
+path = "src/other.rs"
+source = '''
+pub fn open<R: Runtime>(builder: Builder<R>) -> Builder<R> {
+    let wired = crate::ipc::registry::handlers![hidden];
+    builder
+}
+'''
+
+[[case]]
+name = "uri-scheme-protocol"
+expect = ["src/lib.rs: capability:webview-api:register_uri_scheme_protocol"]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+pub fn build_app<R: Runtime>(builder: Builder<R>) -> Builder<R> {
+    builder.register_uri_scheme_protocol("bypass", |_context, request| respond(request))
+}
+'''
+
+[[case]]
+name = "raw-identifier"
+expect = ["src/ipc/app_version.rs: capability:webview-api:eval"]
+
+[[case.file]]
+path = "src/ipc/app_version.rs"
+source = '''
+pub fn run(webview: &Webview) -> Result<(), tauri::Error> {
+    webview.r#eval("alert(1)")
+}
+'''
+
+[[case]]
+name = "self-alias-module"
+expect = ["src/ipc/stream.rs: capability:webview-api:Channel"]
+
+[[case.file]]
+path = "src/ipc/stream.rs"
+source = '''
+use tauri::ipc::{self as bridge};
+
+pub fn stream(channel: bridge::Channel<Vec<u8>>) {}
+'''
+
+[[case]]
+name = "collector-outside-registry"
+expect = [
+    "src/lib.rs: capability:webview-api:collect_commands",
+    "src/ipc/registry.rs: capability:webview-api:invoke_handler",
+]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+pub fn more() -> Commands { collect_commands![hidden] }
+'''
+
+[[case.file]]
+path = "src/ipc/registry.rs"
+source = '''
+pub fn wire<R: Runtime>(builder: Builder<R>) -> Builder<R> {
+    builder.invoke_handler(specta().invoke_handler())
+}
+'''
+
+[[case]]
+name = "event-before-u05"
+expect = ["src/lib.rs: capability:webview-api:Emitter", "src/lib.rs: capability:webview-api:emit"]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+use tauri::Emitter;
+
+pub fn notify(app: &AppHandle) -> Result<(), tauri::Error> {
+    app.emit("synced", 1)
+}
+'''
+
+[[case]]
+name = "build-script"
+expect = ["build.rs: capability:webview-api:plugin"]
+
+[[case.file]]
+path = "build.rs"
+source = '''
+fn main() {
+    let plugin = 1;
+}
+'''
+
+[[case]]
+name = "window-builder"
+expect = ["src/lib.rs: capability:webview-api:WebviewWindowBuilder"]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+pub fn open(app: &AppHandle) {
+    tauri::WebviewWindowBuilder::new(app, "second", tauri::WebviewUrl::default());
+}
+'''

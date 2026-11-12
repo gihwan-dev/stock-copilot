@@ -1,3 +1,7 @@
+pub(crate) mod commit_base;
+
+#[cfg(test)]
+mod commit_base_tests;
 #[cfg(test)]
 mod tests;
 

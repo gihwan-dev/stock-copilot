@@ -1,0 +1,53 @@
+[[case]]
+name = "base"
+expect = []
+
+[[case]]
+name = "handler-only"
+overlay = "handler-only"
+expect = ["capability:registration-mismatch"]
+
+[[case]]
+name = "list-only"
+overlay = "list-only"
+expect = ["capability:command-mismatch", "capability:registration-mismatch"]
+
+[[case]]
+name = "set-only"
+overlay = "set-only"
+expect = ["capability:command-mismatch"]
+
+[[case]]
+name = "build-body"
+overlay = "build-body"
+expect = ["capability:build-body"]
+
+[[case]]
+name = "build-missing"
+remove = ["build.rs"]
+expect = ["capability:build-body", "capability:build-not-reading-list"]
+
+[[case]]
+name = "generate-handler"
+overlay = "generate-handler"
+expect = ["capability:hand-written-handler"]
+
+[[case]]
+name = "other-handler"
+overlay = "other-handler"
+expect = ["capability:hand-written-handler"]
+
+[[case]]
+name = "two-collect"
+overlay = "two-collect"
+expect = ["capability:registration-count"]
+
+[[case]]
+name = "no-collect"
+overlay = "no-collect"
+expect = ["capability:registration-count"]
+
+[[case]]
+name = "unparsable-source"
+overlay = "unparsable-source"
+expect = ["capability:registration-count", "capability:unparsable"]

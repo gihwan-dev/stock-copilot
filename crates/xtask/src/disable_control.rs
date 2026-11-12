@@ -1,6 +1,7 @@
 mod allowlist;
 mod expects;
 mod lints;
+mod scoped;
 pub(crate) mod script;
 
 #[cfg(test)]
@@ -25,6 +26,7 @@ use crate::workspace_sources::{
 use allowlist::{ALLOWLIST_FILE, Allowlist};
 use expects::{Collected, DisableRules, ExpectCollector, Target};
 use lints::{LINTS_FILE, LintCatalogue, individually_configured};
+use scoped::tauri_imports;
 use script::{ScriptRules, repository_script_rows, script_rows};
 
 pub(crate) const RUST_EXPECT_KIND: &str = "rust-expect";
@@ -201,6 +203,10 @@ impl Policy {
                     .allowlist
                     .permits(path, collected.statement.as_deref(), lint)
                     .is_none()
+                && self
+                    .allowlist
+                    .permits_scoped(path, &collected.sites, lint)
+                    .is_none()
             {
                 findings.push(finding(Rule::NotDisableable, lint));
             }
@@ -211,7 +217,7 @@ impl Policy {
 
 pub(crate) fn collect(source: &str, rules: &DisableRules) -> Option<Vec<Collected>> {
     let file = syn::parse_file(source).ok()?;
-    let mut collector = ExpectCollector::new(rules);
+    let mut collector = ExpectCollector::new(rules, tauri_imports(&file));
     collector.visit_file(&file);
     Some(collector.found)
 }

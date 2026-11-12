@@ -1,0 +1,11 @@
+[
+  {
+    "kind": "user-fixable"
+  },
+  {
+    "kind": "retryable"
+  },
+  {
+    "kind": "bug"
+  }
+]

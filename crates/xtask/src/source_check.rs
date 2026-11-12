@@ -3,12 +3,15 @@ pub(crate) mod cargo_config;
 mod comments;
 mod failure;
 mod finding;
+mod globs;
 mod manifest;
 mod test_impls;
 mod tokens;
 
 #[cfg(test)]
 mod cargo_config_tests;
+#[cfg(test)]
+mod glob_tests;
 #[cfg(test)]
 mod tests;
 
@@ -26,6 +29,7 @@ use cargo_config::{ConfigFile, NEXTEST_FILE, config_problems};
 use comments::comment_lines;
 use failure::CheckFailure;
 use finding::{Finding, Rule};
+use globs::glob_import_lines;
 use manifest::{ManifestRole, manifest_findings};
 use test_impls::test_module_impl_lines;
 use tokens::{AttributeScope, ClockScope, FloatScope, Scope, token_rules};
@@ -353,6 +357,11 @@ fn entry_text_findings(
         {
             let source = read()?;
             let mut found = check_source(path, &source, allowlists);
+            found.extend(
+                glob_import_lines(&source)
+                    .into_iter()
+                    .map(|line| Finding::at_line(path, line, Rule::GlobImport)),
+            );
             if entry.name == BUILD_SCRIPT_FILE
                 && allowlists.build_script(path) == Membership::Unlisted
             {

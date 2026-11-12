@@ -6,5 +6,6 @@ export default defineConfig({
     allowOnly: false,
     passWithNoTests: true,
     expect: { requireAssertions: true },
+    unstubGlobals: true,
   },
 });

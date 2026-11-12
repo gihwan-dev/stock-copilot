@@ -77,7 +77,8 @@
       "no-eval",
       "no-nested-ternary",
       "no-new-func",
-      "no-restricted-globals"
+      "no-restricted-globals",
+      "guard/no-disposable"
     ],
     "switch": [
       "@typescript-eslint/switch-exhaustiveness-check",
@@ -117,7 +118,8 @@
       "guard/no-module-mocks",
       "guard/no-tauri-mocks",
       "guard/no-test-skip",
-      "local/test-file-boundary"
+      "local/test-file-boundary",
+      "local/ipc-testing-boundary"
     ],
     "전역": ["guard/no-dom-globals", "guard/no-global-object"],
     "허용 목록": [
@@ -3476,15 +3478,21 @@
     },
     "src/shared/ipc/testing/boundary-tauri.ts": {
       "row": "경계",
-      "expect": []
+      "expect": [
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
     },
     "src/shared/ipc/testing/mock-allowed.test.ts": {
       "row": "테스트",
-      "expect": []
+      "expect": [
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
     },
     "src/shared/ipc/testing/tauri-mocks-allowed.ts": {
       "row": "테스트",
-      "expect": []
+      "expect": [
+        "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다."
+      ]
     },
     "src/shared/lib/boundary/tauri.ts": {
       "row": "경계",
@@ -3692,6 +3700,47 @@
       "expect": [
         "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
       ]
+    },
+    "src/shared/ipc/testing/fakes.ts": {
+      "row": "실패 처리",
+      "expect": []
+    },
+    "src/app/disposable/using.ts": {
+      "row": "문법",
+      "expect": [
+        "guard/no-disposable :: Symbol.dispose·Symbol.asyncDispose 금지.",
+        "guard/no-disposable :: using 선언 금지: 자원 해제는 코어(Rust)가 맡는다. esnext.disposable은 @tauri-apps/api 타입 때문에만 켠다.",
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
+      ]
+    },
+    "src/app/disposable/stack.ts": {
+      "row": "문법",
+      "expect": [
+        "guard/no-disposable :: DisposableStack·AsyncDisposableStack 금지."
+      ]
+    },
+    "src/app/disposable/await-using.ts": {
+      "row": "문법",
+      "expect": [
+        "@typescript-eslint/require-await",
+        "guard/no-disposable :: Symbol.dispose·Symbol.asyncDispose 금지.",
+        "guard/no-disposable :: using 선언 금지: 자원 해제는 코어(Rust)가 맡는다. esnext.disposable은 @tauri-apps/api 타입 때문에만 켠다.",
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
+      ]
+    },
+    "src/shared/ipc/production-testing-import.ts": {
+      "row": "테스트",
+      "expect": [
+        "local/ipc-testing-boundary :: shared/ipc/testing은 테스트 파일(*.test.ts·*.test.tsx)과 testing 폴더 안에서만 가져온다."
+      ]
+    },
+    "src/shared/ipc/testing/responses.ts": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ipc/testing/mockBindings.ts": {
+      "row": "허용 목록",
+      "expect": []
     }
   }
 }

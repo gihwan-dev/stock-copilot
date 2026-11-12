@@ -6,7 +6,8 @@
       "passWithNoTests": true,
       "expect": {
         "requireAssertions": true
-      }
+      },
+      "unstubGlobals": true
     }
   },
   "cases": {
@@ -18,6 +19,7 @@
     "empty-file": ["no-tests"],
     "empty-file-beside": ["no-tests"],
     "failing": ["failed", "no-tests"],
+    "global-leak": [],
     "it-skip": ["skipped"],
     "it-todo": ["todo"],
     "no-assertion": ["failed"],

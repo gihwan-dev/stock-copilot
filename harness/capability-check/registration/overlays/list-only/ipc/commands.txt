@@ -1,0 +1,2 @@
+app_status
+app_version

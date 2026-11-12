@@ -52,6 +52,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" sql-check
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
+    node harness/generated-files/check.mjs
     "{{just_executable()}}" raw-types
     "{{just_executable()}}" disable-check
     cargo nextest run --workspace --locked
@@ -135,6 +136,12 @@ fresh-cargo:
 fresh-node:
     pnpm install --frozen-lockfile --force
 
+commit-base:
+    cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-base
+
+commit-check:
+    base="$("{{just_executable()}}" commit-base)"; "{{just_executable()}}" base="$base" check
+
 push-check:
     base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
 
@@ -152,6 +159,9 @@ mutants-all:
 
 advisory-db-fetch:
     cargo deny --locked fetch db
+
+gen-bindings:
+    node harness/generated-files/check.mjs --write
 
 lint-file path:
     cargo run --locked --quiet --package xtask -- lint-file "$1"

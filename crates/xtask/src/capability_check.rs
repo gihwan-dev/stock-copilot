@@ -1,8 +1,14 @@
 mod build_script;
 pub(crate) mod json;
+pub(crate) mod registration;
+pub(crate) mod webview_api;
 
 #[cfg(test)]
+mod registration_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod webview_api_tests;
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -13,6 +19,8 @@ use std::process::ExitCode;
 use crate::check_support::{Finding, read_text, report, workspace_root};
 use build_script::build_script_findings;
 use json::{Json, parse};
+use registration::{EXPECTED_BUILD_SCRIPT_FILE, build_body_findings, registration_findings};
+use webview_api::{WebviewApis, sources, webview_api_findings};
 
 pub(crate) const TAURI_DIRECTORY: &str = "apps/desktop/src-tauri";
 const CONFIG_FILE: &str = "tauri.conf.json";
@@ -66,12 +74,18 @@ pub(crate) enum Rule {
     BuildNotReadingList,
     ExtraConfig,
     Unparsable,
+    RegistrationMismatch,
+    RegistrationCount,
+    HandWrittenHandler,
+    BuildBody,
+    WebviewApi(String),
 }
 
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             Self::Forbidden(pattern) => return write!(f, "capability:forbidden:{pattern}"),
+            Self::WebviewApi(name) => return write!(f, "capability:webview-api:{name}"),
             Self::NotExplicit => "not-explicit",
             Self::ListNotMain => "list-not-main",
             Self::MainMissing => "main-missing",
@@ -90,6 +104,10 @@ impl fmt::Display for Rule {
             Self::BuildNotReadingList => "build-not-reading-list",
             Self::ExtraConfig => "extra-config",
             Self::Unparsable => "unparsable",
+            Self::RegistrationMismatch => "registration-mismatch",
+            Self::RegistrationCount => "registration-count",
+            Self::HandWrittenHandler => "hand-written-handler",
+            Self::BuildBody => "build-body",
         };
         write!(f, "capability:{name}")
     }
@@ -320,6 +338,13 @@ fn command_list(directory: &Path, findings: &mut Findings) -> Vec<String> {
     commands
 }
 
+pub(super) fn command_list_names(directory: &Path) -> Vec<String> {
+    match fs::read_to_string(directory.join(COMMAND_LIST_FILE)) {
+        Ok(text) => text.lines().map(String::from).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 fn command_permission(command: &str) -> String {
     format!("{COMMAND_PERMISSION_PREFIX}{}", command.replace('_', "-"))
 }
@@ -420,14 +445,39 @@ pub(crate) fn check_tauri_directory(
     Ok(findings.items)
 }
 
+pub(crate) fn check_registered_tauri_directory(
+    directory: &Path,
+    allowed: &AllowedPermissions,
+    expected_build_script: &str,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let mut findings = Findings {
+        items: check_tauri_directory(directory, allowed)?,
+    };
+    registration_findings(directory, &mut findings);
+    build_body_findings(directory, expected_build_script, &mut findings);
+    Ok(findings.items)
+}
+
+pub(crate) fn check_webview_apis(directory: &Path, apis: &WebviewApis) -> BTreeSet<Finding<Rule>> {
+    let mut findings = Findings {
+        items: BTreeSet::new(),
+    };
+    webview_api_findings(apis, &sources(directory), &mut findings);
+    findings.items
+}
+
 pub(crate) fn command() -> ExitCode {
     report(
         "capability-check",
         workspace_root().and_then(|root| {
-            check_tauri_directory(
-                &root.join(TAURI_DIRECTORY),
+            let directory = root.join(TAURI_DIRECTORY);
+            let mut found = check_registered_tauri_directory(
+                &directory,
                 &AllowedPermissions::load(&root)?,
-            )
+                &read_text(&root.join(EXPECTED_BUILD_SCRIPT_FILE))?,
+            )?;
+            found.extend(check_webview_apis(&directory, &WebviewApis::load(&root)?));
+            Ok(found)
         }),
     )
 }
