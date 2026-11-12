@@ -33,6 +33,7 @@ check-node:
 
 check-ts: check-node
     pnpm install --frozen-lockfile
+    node harness/ts-deps/check.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml
     pnpm -C apps/desktop exec tsc -p .
     pnpm -C apps/desktop exec eslint --max-warnings 0 src
