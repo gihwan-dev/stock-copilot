@@ -86,77 +86,202 @@ export const fileProblems = (contents, allowlist) => [
     .map((path) => `${path} must not exist`),
 ];
 
+const key = String.raw`(?:'@[A-Za-z0-9@._/+()^~-]+'|[A-Za-z0-9._/+-][A-Za-z0-9@._/+()^~-]*)`;
+const bare = String.raw`[A-Za-z0-9^~][A-Za-z0-9@._/+()^~:<=>-]*(?: \|\| [A-Za-z0-9@._/+()^~:<=>-]+)*`;
+const quoted = String.raw`'[^']*'`;
+const scalar = `(?:${quoted}|${bare})`;
+const flowMap = String.raw`\{(?:[A-Za-z]+: ${scalar})?\}`;
+const flowList = String.raw`\[${scalar}(?:, ${scalar})*\]`;
+const mappingLine = new RegExp(
+  `^((?:  )*)(${key}):(?: (${scalar}|${flowMap}|${flowList}))?$`,
+);
+const listLine = new RegExp(`^((?:  )+)- (${scalar})$`);
+
+const unquote = (text) =>
+  text.startsWith("'") && text.endsWith("'") ? text.slice(1, -1) : text;
+
+export const yamlLines = (text) =>
+  text.split("\n").map((line, index) => {
+    const mapping = mappingLine.exec(line);
+    const item = listLine.exec(line);
+    return line === ""
+      ? { index, kind: "blank" }
+      : line === "---"
+        ? { index, kind: "document" }
+        : mapping !== null
+          ? {
+              index,
+              kind: "mapping",
+              depth: mapping[1].length / 2,
+              key: unquote(mapping[2]),
+              value: mapping[3] === undefined ? undefined : unquote(mapping[3]),
+              raw: mapping[3],
+            }
+          : item !== null
+            ? { index, kind: "item", depth: item[1].length / 2 - 1 }
+            : { index, kind: "unknown", text: line };
+  });
+
+const grammarProblems = (file, lines) =>
+  lines
+    .filter((line) => line.kind === "unknown")
+    .map(
+      (line) =>
+        `${file}: line ${line.index + 1} is not in the accepted line grammar: ${JSON.stringify(line.text)}`,
+    );
+
+export const workspaceProblems = (workspaceYaml) => {
+  const lines = yamlLines(workspaceYaml);
+  return [
+    ...grammarProblems("pnpm-workspace.yaml", lines),
+    ...lines
+      .filter((line) => line.kind === "mapping" || line.kind === "document")
+      .filter(
+        (line) =>
+          !(
+            line.kind === "mapping" &&
+            line.depth === 0 &&
+            line.key === "packages" &&
+            line.value === undefined
+          ),
+      )
+      .map(
+        (line) => `pnpm-workspace.yaml: line ${line.index + 1} is not allowed`,
+      ),
+  ];
+};
+
 export const workspacePackages = (workspaceYaml) =>
   workspaceYaml
     .split("\n")
-    .map((line) => /^\s+-\s+(\S+)\s*$/.exec(line))
+    .map((line) => new RegExp(`^  - (${scalar})$`).exec(line))
     .filter((match) => match !== null)
-    .map((match) => match[1].replace(/^["']|["']$/g, ""));
+    .map((match) => unquote(match[1]));
 
-const unquote = (text) => text.replace(/^["']|["']$/g, "");
-
-export const parseLockfile = (lockfile) =>
-  lockfile.split("\n").reduce(
-    (state, line) => {
-      const top = /^([A-Za-z][\w-]*):/.exec(line);
-      const importer = /^ {2}(\S[^:]*):\s*$/.exec(line);
-      const section = /^ {4}(\w+):(\s*\{\})?\s*$/.exec(line);
-      const name = /^ {6}(\S[^:]*):\s*$/.exec(line);
-      const specifier = /^ {8}specifier: (.+)$/.exec(line);
-      const resolution = /^ {4}resolution: (.+)$/.exec(line);
-      return top !== null
-        ? {
-            ...state,
-            block: top[1],
-            topKeys: [...new Set([...state.topKeys, top[1]])],
-          }
-        : state.block === "importers" && importer !== null
-          ? { ...state, importer: unquote(importer[1]) }
-          : state.block === "importers" && section !== null
-            ? { ...state, section: section[1] }
-            : state.block === "importers" && name !== null
-              ? { ...state, name: unquote(name[1]) }
-              : state.block === "importers" && specifier !== null
-                ? {
-                    ...state,
-                    specifiers: [
-                      ...state.specifiers,
-                      {
-                        importer: state.importer,
-                        section: state.section,
-                        name: state.name,
-                        specifier: unquote(specifier[1]),
-                      },
-                    ],
-                  }
-                : state.block === "packages" && resolution !== null
-                  ? {
-                      ...state,
-                      resolutions: [...state.resolutions, resolution[1]],
-                    }
-                  : state;
-    },
-    {
-      block: "",
-      importer: "",
-      section: "",
-      name: "",
-      topKeys: [],
-      specifiers: [],
-      resolutions: [],
-    },
-  );
+export const parseLockfile = (lockfile) => {
+  const lines = yamlLines(lockfile);
+  const documents = lines.filter((line) => line.kind === "document");
+  const entries = lines.reduce(
+    (state, line) =>
+      line.kind === "document"
+        ? { doc: state.doc + 1, path: [], list: state.list }
+        : line.kind === "mapping"
+          ? {
+              doc: state.doc,
+              path: [...state.path.slice(0, line.depth), line.key],
+              list: [
+                ...state.list,
+                {
+                  doc: state.doc,
+                  path: [...state.path.slice(0, line.depth), line.key],
+                  value: line.value,
+                  raw: line.raw,
+                },
+              ],
+            }
+          : state,
+    { doc: 0, path: [], list: [] },
+  ).list;
+  return { lines, documents, entries };
+};
 
 const integrityOnly = /^\{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$/;
+const registryVersion = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`;
+const lockVersion = new RegExp(
+  `^(?:([^()]+)@)?(${registryVersion})(?:\\(.+\\))*$`,
+);
+
+const importerDependencies = (entries, doc) =>
+  Object.values(
+    entries
+      .filter(
+        (entry) =>
+          entry.doc === doc &&
+          entry.path.length === 5 &&
+          entry.path[0] === "importers",
+      )
+      .reduce((deps, entry) => {
+        const [, importer, section, name, field] = entry.path;
+        const id = `${importer} ${section} ${name}`;
+        return {
+          ...deps,
+          [id]: {
+            importer,
+            section,
+            name,
+            ...(deps[id] ?? {}),
+            [field]: entry.value,
+          },
+        };
+      }, {}),
+  );
+
+const manifestPathOf = (importer) =>
+  importer === "." ? "package.json" : `${importer}/package.json`;
+
+const packageResolutions = (entries) =>
+  entries
+    .filter((entry) => entry.path[0] === "packages" && entry.path.length === 2)
+    .map((entry) => ({
+      key: entry.path[1],
+      doc: entry.doc,
+      resolutions: entries
+        .filter(
+          (other) =>
+            other.doc === entry.doc &&
+            other.path.length === 3 &&
+            other.path[0] === "packages" &&
+            other.path[1] === entry.path[1] &&
+            other.path[2] === "resolution",
+        )
+        .map((other) => other.raw),
+    }));
+
+const versionProblems = (dep, target, packages) => {
+  const match = lockVersion.exec(dep.version ?? "");
+  const where = `pnpm-lock.yaml: ${dep.importer} ${dep.section} ${dep.name}`;
+  if (match === null)
+    return [
+      `${where} version must be an exact registry version; got ${dep.version}`,
+    ];
+  const [, named, version] = match;
+  const expectedName = named ?? dep.name;
+  return [
+    ...(target === undefined || expectedName === target
+      ? []
+      : [`${where} version points at ${expectedName}, expected ${target}`]),
+    ...(target !== undefined && target !== dep.name && named === undefined
+      ? [`${where} version must name the alias target ${target}`]
+      : []),
+    ...(packages.some(
+      (entry) =>
+        entry.key === `${expectedName}@${version}` &&
+        entry.resolutions.length === 1 &&
+        integrityOnly.test(entry.resolutions[0]),
+    )
+      ? []
+      : [
+          `${where} has no packages entry ${expectedName}@${version} with a sha512 integrity`,
+        ]),
+  ];
+};
 
 export const lockfileProblems = (lockfile, manifestsByImporter, allowlist) => {
-  const parsed = parseLockfile(lockfile);
-  const lockDeps = parsed.specifiers
-    .filter((entry) => dependencySections.includes(entry.section))
-    .map(
-      (entry) =>
-        `${entry.importer} ${entry.section} ${entry.name} ${entry.specifier}`,
-    )
+  const { lines, documents, entries } = parseLockfile(lockfile);
+  const packages = packageResolutions(entries);
+  const lastDoc = documents.length;
+  const topKeys = entries
+    .filter((entry) => entry.path.length === 1)
+    .map((entry) => entry.path[0]);
+  const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)\+/.exec(
+    allowlist.packageManager,
+  )?.[1];
+  const firstDocDeps = importerDependencies(entries, 1);
+  const deps = importerDependencies(entries, lastDoc).filter((dep) =>
+    dependencySections.includes(dep.section),
+  );
+  const lockDeps = deps
+    .map((dep) => `${dep.importer} ${dep.section} ${dep.name} ${dep.specifier}`)
     .sort();
   const manifestDeps = Object.entries(manifestsByImporter)
     .flatMap(([importer, manifest]) =>
@@ -168,15 +293,64 @@ export const lockfileProblems = (lockfile, manifestsByImporter, allowlist) => {
     )
     .sort();
   return [
-    ...parsed.topKeys
-      .filter((key) => !allowlist.lockfileTopLevelKeys.includes(key))
-      .map((key) => `pnpm-lock.yaml: top-level key "${key}" is not allowed`),
-    ...parsed.resolutions
-      .filter((resolution) => !integrityOnly.test(resolution))
+    ...grammarProblems("pnpm-lock.yaml", lines),
+    ...(lines[0]?.kind === "document" && documents.length === 2
+      ? []
+      : [
+          `pnpm-lock.yaml must be exactly two documents (package manager, then dependencies); got ${documents.length} separator(s)`,
+        ]),
+    ...topKeys
+      .filter((name) => !allowlist.lockfileTopLevelKeys.includes(name))
+      .map((name) => `pnpm-lock.yaml: top-level key "${name}" is not allowed`),
+    ...entries
+      .filter(
+        (entry) =>
+          entry.doc === 1 &&
+          entry.path[0] === "importers" &&
+          entry.path.length >= 2 &&
+          !(
+            entry.path[1] === "." &&
+            (entry.path.length === 2 ||
+              (entry.path[2] === "configDependencies" &&
+                entry.path.length === 3 &&
+                entry.raw === "{}") ||
+              (entry.path[2] === "packageManagerDependencies" &&
+                (entry.path.length === 3 || entry.path[3] === "pnpm")))
+          ),
+      )
       .map(
-        (resolution) =>
-          `pnpm-lock.yaml: resolution must be a sha512 integrity only; got ${resolution}`,
+        (entry) =>
+          `pnpm-lock.yaml: first document may only pin pnpm itself; got ${entry.path.join(" ")}`,
       ),
+    ...firstDocDeps
+      .filter((dep) => dep.section === "packageManagerDependencies")
+      .flatMap((dep) => [
+        ...(dep.specifier === pnpmVersion && dep.version === pnpmVersion
+          ? []
+          : [
+              `pnpm-lock.yaml: package manager pin must be ${pnpmVersion}; got ${dep.specifier} / ${dep.version}`,
+            ]),
+        ...versionProblems(dep, "pnpm", packages),
+      ]),
+    ...packages
+      .filter(
+        (entry) =>
+          entry.resolutions.length !== 1 ||
+          !integrityOnly.test(entry.resolutions[0]),
+      )
+      .map(
+        (entry) =>
+          `pnpm-lock.yaml: resolution of ${entry.key} must be a sha512 integrity only; got ${entry.resolutions.join(" ") || "none"}`,
+      ),
+    ...deps.flatMap((dep) =>
+      versionProblems(
+        dep,
+        allowlist.manifests[manifestPathOf(dep.importer)]?.[dep.section]?.[
+          dep.name
+        ]?.target,
+        packages,
+      ),
+    ),
     ...(isDeepStrictEqual(lockDeps, manifestDeps)
       ? []
       : [

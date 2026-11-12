@@ -15,6 +15,7 @@ import {
   fileProblems,
   lockfileProblems,
   manifestProblems,
+  workspaceProblems,
 } from "../../../harness/ts-deps/rules.mjs";
 import { repoRoot } from "./paths.mjs";
 
@@ -339,6 +340,101 @@ test("an unexpected lockfile top-level key fails", () => {
     ),
     [],
   );
+});
+
+const reactLock =
+  "      react:\n        specifier: 19.3.1\n        version: 19.3.1\n";
+const withReactVersion = (version) =>
+  lockfile.replace(
+    reactLock,
+    `      react:\n        specifier: 19.3.1\n        version: ${version}\n`,
+  );
+const lockFails = (text) =>
+  lockfileProblems(text, byImporter, allowlist).length > 0;
+
+test("the react importer entry used by the version tests is in the lockfile", () => {
+  assert.ok(lockfile.includes(reactLock));
+});
+
+test("an importer version that is a link, file, URL or git source fails", () => {
+  const passing = [
+    "link:../react",
+    "file:../react",
+    "https://example.com/react.tgz",
+    "git+https://github.com/x/react.git#abc",
+    "github.com/x/react/abc",
+  ].filter((version) => !lockFails(withReactVersion(version)));
+  assert.deepEqual(passing, []);
+});
+
+test("an importer version without a packages entry fails", () => {
+  assert.ok(lockFails(withReactVersion("19.3.2")));
+});
+
+test("an importer version pointing at another package than the allowlist target fails", () => {
+  assert.ok(lockFails(withReactVersion("left-pad@1.3.0")));
+  assert.ok(
+    lockFails(
+      lockfile.replace(
+        "        version: '@typescript/typescript6@6.0.2'\n",
+        "        version: typescript@6.0.3\n",
+      ),
+    ),
+  );
+});
+
+test("an importer version with a peer suffix passes", () => {
+  assert.ok(lockfile.includes("version: 19.3.1(react@19.3.1)"));
+  assert.deepEqual(lockfileProblems(lockfile, byImporter, allowlist), []);
+});
+
+test("lockfile lines outside the accepted grammar fail", () => {
+  const integrity = /resolution: \{integrity: (sha512-[^}]+)\}/;
+  const variants = {
+    flowResolution: lockfile.replace(
+      integrity,
+      "resolution: {integrity: $1, tarball: https://example.com/x.tgz}",
+    ),
+    quotedKey: lockfile.replace("      react:\n", "      'react':\n"),
+    doubleQuotedKey: lockfile.replace("      react:\n", '      "react":\n'),
+    quotedStructuralKey: lockfile.replace("\nimporters:\n", "\n'importers':\n"),
+    anchor: lockfile.replace(
+      "        specifier: 19.3.1\n        version: 19.3.1\n",
+      "        specifier: 19.3.1\n        version: &v 19.3.1\n",
+    ),
+    alias: lockfile.replace(
+      "        specifier: 19.3.1\n        version: 19.3.1\n",
+      "        specifier: 19.3.1\n        version: *v\n",
+    ),
+    tabIndent: lockfile.replace("      react:\n", "\t\t\treact:\n"),
+    oddIndent: lockfile.replace("      react:\n", "       react:\n"),
+    comment: lockfile.replace("      react:\n", "      react: # x\n"),
+    extraDocument: `${lockfile}---\nlockfileVersion: '9.0'\n`,
+    documentEnd: `${lockfile}...\n`,
+    blockScalar: lockfile.replace(
+      "        specifier: 19.3.1\n        version: 19.3.1\n",
+      "        specifier: 19.3.1\n        version: |\n          19.3.1\n",
+    ),
+  };
+  assert.deepEqual(
+    Object.entries(variants)
+      .filter(([, text]) => !lockFails(text))
+      .map(([label]) => label),
+    [],
+  );
+});
+
+test("pnpm-workspace.yaml lines outside the accepted grammar fail", () => {
+  const workspace = fileContents["pnpm-workspace.yaml"];
+  assert.deepEqual(workspaceProblems(workspace), []);
+  const passing = [
+    workspace.replace("  - ", "\t- "),
+    `${workspace}---\npackages: []\n`,
+    "packages: [apps/desktop]\n",
+    workspace.replace("packages:", "'packages':"),
+    `${workspace}catalog: {}\n`,
+  ].filter((text) => workspaceProblems(text).length === 0);
+  assert.deepEqual(passing, []);
 });
 
 test("adding an unlisted package to package.json makes the check script fail", () => {

@@ -57,6 +57,7 @@ harness.md 4.2는 ESLint 규칙을 행별로 정하고 설정 초안을 R-08 7.2
 | 추가 플러그인 버전: `@eslint/js` 10.0.1, `eslint-plugin-react-hooks` 7.1.1, `@eslint-react/eslint-plugin` 5.30.1, `@eslint-community/eslint-plugin-eslint-comments` 4.8.1 | harness 4.3에 없고 R-08 6.1에서 돌린 버전 | 최신판 | R-08 6.1 |
 | TS 의존성 허용 목록 `harness/ts-deps/allowlist.json`(보호 경로), 검사 `harness/ts-deps/check.mjs`. 매니페스트마다 절별로 이름, 설치 대상(`target`), 이유를 적는다. 값은 `x.y.z`(대상이 같은 이름) 또는 `npm:<target>@x.y.z`만 통과하고 `file:`·`link:`·git·URL·`workspace:`·범위는 실패. 최상위 키 목록, `packageManager`(sha512 해시 필수), `pnpm-workspace.yaml`·`.npmrc` 내용 일치, `.pnpmfile.*`·하위 `.npmrc` 없음, 잠금 파일 최상위 키, `packages`의 `resolution`이 sha512 `integrity` 하나, `importers`의 specifier가 매니페스트 값과 정확히 같음 | 이름만 보면 `"react": "npm:left-pad@1.3.0"`이 통과했다(리뷰 2~4번) | 이름만 | 리뷰, harness 2장 |
 | `packageManager`는 `pnpm@12.18.0+sha512.9d78…beb3`(npm `dist.integrity`의 16진수). 기존 테스트 `toolchain.test.mjs`의 단언을 "정확한 버전 + sha512 해시"로 바꿨다(메인 에이전트 승인) | ADR 0006 남은 일 | - | 승인 |
+| 잠금 파일과 `pnpm-workspace.yaml`은 줄 단위 문법(2칸 들여쓰기 매핑, `- ` 목록, 작은따옴표 값, `@`로 시작할 때만 따옴표 친 키, `{}`·한 쌍 흐름 매핑·흐름 목록, `---` 두 번)으로만 읽고, 문법 밖의 줄(탭, 큰따옴표, 앵커·별칭, 주석, 블록 스칼라, 세 번째 문서 등)이 하나라도 있으면 실패한다. `importers`의 `version`은 정확한 레지스트리 버전(peer 접미사 허용)이고 허용 목록의 대상과 맞아야 하며, 그 `packages:` 항목이 sha512 `integrity` 하나를 가져야 한다. 첫 문서는 pnpm 고정만 허용 | 정규식 줄 읽기가 실제 YAML 해석과 어긋나거나 `version: link:` 등이 통과할 수 있었다(자동 보안 리뷰 2건). 모르는 형태는 통과가 아니라 실패로 둔다 | YAML 파서 의존성 추가 | 리뷰 |
 
 ### 끌 수 있는 금지와 끌 수 없는 금지
 

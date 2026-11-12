@@ -5,6 +5,7 @@ import {
   fileProblems,
   lockfileProblems,
   manifestProblems,
+  workspaceProblems,
   workspacePackages,
 } from "./rules.mjs";
 
@@ -34,6 +35,7 @@ const contents = Object.fromEntries(
 const problems = [
   ...manifestProblems(manifests, allowlist),
   ...fileProblems(contents, allowlist),
+  ...workspaceProblems(read("pnpm-workspace.yaml")),
   ...lockfileProblems(
     read("pnpm-lock.yaml"),
     Object.fromEntries(
