@@ -3,6 +3,8 @@ use std::process::Command;
 
 use cargo_metadata::{Metadata, MetadataCommand};
 
+use crate::harness_workspace::repository_root;
+
 const ARCHITECTURE_CRATES: [(&str, &str); 22] = [
     ("domain", "crates/domain"),
     ("application", "crates/application"),
@@ -30,7 +32,7 @@ const ARCHITECTURE_CRATES: [(&str, &str); 22] = [
 
 fn workspace_metadata() -> Metadata {
     MetadataCommand::new()
-        .manifest_path(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml"))
+        .manifest_path(repository_root().join("Cargo.toml"))
         .no_deps()
         .other_options(vec![String::from("--locked")])
         .exec()
@@ -101,7 +103,7 @@ fn src_tauri_splits_into_library_and_two_binaries() {
 fn repository_rustc_is_pinned_release() {
     let output = Command::new("rustc")
         .arg("--version")
-        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+        .current_dir(repository_root())
         .env_remove("RUSTUP_TOOLCHAIN")
         .env_remove("RUSTC")
         .output()
@@ -117,7 +119,7 @@ fn lint_file_output_lines(path: &str) -> Vec<String> {
     let output = Command::new("just")
         .arg("lint-file")
         .arg(path)
-        .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+        .current_dir(repository_root())
         .output()
         .expect("just lint-file");
     let mut text = String::from_utf8(output.stdout).expect("utf-8 stdout");
