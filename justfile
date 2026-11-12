@@ -29,7 +29,7 @@ export RUSTC_WORKSPACE_WRAPPER := ""
 
 base := ""
 
-check: require-base check-ts
+check: check-node require-base check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
     "{{just_executable()}}" deny

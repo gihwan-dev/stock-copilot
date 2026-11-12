@@ -102,7 +102,7 @@ fn check_refuses_to_run_without_an_explicit_base() {
     let check = recipe("check");
     assert_eq!(
         check.first().map(String::as_str),
-        Some("check: require-base check-ts"),
+        Some("check: check-node require-base check-ts"),
         "{check:?}"
     );
 }
