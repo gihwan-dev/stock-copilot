@@ -7,6 +7,7 @@ mod check_support;
 mod coverage_check;
 mod disable_control;
 mod git_base;
+mod git_hooks;
 mod lint_file;
 mod migration_check;
 mod mutants_check;
@@ -32,6 +33,8 @@ fn main() -> ExitCode {
             disable_control::report_command(rest)
         }
         [command, rest @ ..] if command == "lint-file" => lint_file::command(rest),
+        [command] if command == "hooks-installed" => git_hooks::installed_command(),
+        [command] if command == "push-base" => git_hooks::push_base_command(),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),
         _ => arch_check::usage(),

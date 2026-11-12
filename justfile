@@ -46,6 +46,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" test-diff {{quote(base)}}
     "{{just_executable()}}" disable-report
     "{{just_executable()}}" disable-report-since {{quote(base)}}
+    "{{just_executable()}}" hooks-installed
 
 check-full: advisory-db-fetch check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
@@ -105,6 +106,20 @@ disable-report:
 
 disable-report-since commit:
     cargo run --locked --quiet --package xtask -- disable-report --since "$1"
+
+hooks-installed:
+    cargo run --locked --quiet --package xtask -- hooks-installed
+
+commit-guard:
+    git diff --quiet --no-ext-diff -- || { printf 'commit-guard: 스테이징하지 않은 변경이 있다. 커밋 훅은 작업 사본을 검사하므로 커밋할 내용과 작업 사본이 같아야 한다\n' >&2; exit 1; }
+    untracked="$(git ls-files --others --exclude-standard)"; [ -z "$untracked" ] || { printf 'commit-guard: 추적하지 않는 파일이 있다. 커밋하거나 지운 뒤 커밋한다:\n%s\n' "$untracked" >&2; exit 1; }
+
+fresh-build:
+    cargo clean --locked --workspace
+    cargo llvm-cov clean --locked --workspace
+
+push-check:
+    base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
 
 coverage-check:
     cargo run --locked --quiet --package xtask -- coverage-check

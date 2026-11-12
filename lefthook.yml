@@ -1,0 +1,21 @@
+assert_lefthook_installed: true
+min_version: 2.2.2
+
+pre-commit:
+  piped: true
+  jobs:
+    - name: commit-guard
+      run: just commit-guard
+    - name: fresh-build
+      run: just fresh-build
+    - name: check
+      run: just base=HEAD check
+
+pre-push:
+  piped: true
+  jobs:
+    - name: fresh-build
+      run: just fresh-build
+    - name: check-full
+      run: just push-check
+      use_stdin: true
