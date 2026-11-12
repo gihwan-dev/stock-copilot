@@ -13,3 +13,4 @@
 | H-07, H-24, H-10 | 완료 | 4a56501 | [H-07](reviews/H-07.md) | H-08: `.catch` 금지와 허용 목록, `///` 지시문, 대문자 확장자. U-03: CSP와 외부 이동 거부. DS-10: `ref`는 `RefObject`만. H-11: Vitest 건너뛰기 0건. H-38: `~~x`, `x \| 0` |
 | H-31, H-32, H-33 | 완료 | a8b6a70 | [H-31](reviews/H-31.md) | S-20: SQL 검사 구조 바꾸기(파서, 금액 열을 스키마에서). H-13: 등록 명령·명령 목록·권한 묶음 대조, `build.rs` 본문 고정. S 묶음: 마이그레이션 잠금에 올리는 절차 |
 | H-39, H-40(Rust) | 완료 | 7575e7c | [H-39](reviews/H-39.md) | 도메인 작업: `harness/raw-types/rules.toml`에 없는 표준 타입이 필요하면 승인으로 추가. H-40(TS): `disable-report`에 TS 끄기 더하기 |
+| H-08, H-38 | 완료 | e9f0770 | [H-08](reviews/H-08.md) | DS-05: 표시 함수. DS-09·DS-10: JSX 속성 문구, DOM 접근. DS-18: 자유 입력 브랜드. U-04·U-05: IPC 호출 어댑터와 `detach`. 다국어: 보간 있는 문구 |
