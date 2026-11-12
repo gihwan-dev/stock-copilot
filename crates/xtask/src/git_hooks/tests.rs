@@ -4,6 +4,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+use crate::git_base::REDIRECTING_VARIABLES;
 use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 
 use super::{
@@ -18,7 +19,7 @@ pre-commit:
   piped: true
   jobs:
     - name: commit-guard
-      run: just commit-guard
+      run: just commit-guard \"$GIT_INDEX_FILE\"
     - name: fresh-build
       run: just fresh-build
     - name: check
@@ -87,7 +88,7 @@ fn isolated_environment() -> Vec<(String, String)> {
 }
 
 fn isolate(command: &mut Command) {
-    for variable in LEFTHOOK_VARIABLES {
+    for variable in LEFTHOOK_VARIABLES.into_iter().chain(REDIRECTING_VARIABLES) {
         command.env_remove(variable);
     }
     command.envs(isolated_environment());
@@ -369,14 +370,7 @@ fn other_lefthook_version_fails() {
     );
 }
 
-const STUB_JUSTFILE: &str = "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]
-
-base := \"\"
-
-commit-guard:
-    printf 'commit-guard\\n' >> hook.log
-
-fresh-build:
+const STUB_RECIPES: &str = "fresh-build:
     printf 'fresh-build\\n' >> hook.log
     [ ! -e fail-fresh ]
 
@@ -389,6 +383,14 @@ push-check:
     cat >> hook.log
     ! grep -q violation src.txt
 ";
+
+fn stub_justfile() -> String {
+    let real = repository_root().join("justfile");
+    format!(
+        "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nset positional-arguments\n\nbase := \"\"\n\ncommit-guard index=\"\":\n    printf 'commit-guard\\n' >> hook.log\n    just --justfile '{}' --working-directory . commit-guard \"$1\"\n\n{STUB_RECIPES}",
+        real.display()
+    )
+}
 
 fn hook_log(directory: &Path) -> Vec<String> {
     let path = directory.join("hook.log");
@@ -405,13 +407,24 @@ fn commit(directory: &Path, message: &str) -> bool {
         .success()
 }
 
+fn stub_repository(name: &str) -> PathBuf {
+    let directory = repository(name, Hooks::Installed);
+    fs::write(directory.join("justfile"), stub_justfile()).expect("write stub justfile");
+    fs::write(directory.join(".gitignore"), "hook.log\nfail-fresh\n").expect("write ignore");
+    fs::write(directory.join("other.txt"), "other\n").expect("write other");
+    git(&directory, &["add", "--all"]);
+    git(
+        &directory,
+        &["commit", "--quiet", "--no-verify", "-m", "stub"],
+    );
+    directory
+}
+
 #[test]
 fn commit_hook_runs_the_check_and_rejects_violating_commits() {
-    let directory = repository("hooks-commit", Hooks::Installed);
-    fs::write(directory.join("justfile"), STUB_JUSTFILE).expect("write stub justfile");
-    fs::write(directory.join(".gitignore"), "hook.log\nfail-fresh\n").expect("write ignore");
-    git(&directory, &["add", "--all"]);
-    assert!(commit(&directory, "stub"), "clean commit is accepted");
+    let directory = stub_repository("hooks-commit");
+    fs::write(directory.join("src.txt"), "changed\n").expect("change source");
+    assert!(commit(&directory, "clean"), "clean commit is accepted");
     assert_eq!(
         hook_log(&directory),
         ["commit-guard", "fresh-build", "check base=HEAD"],
@@ -437,8 +450,32 @@ fn commit_hook_runs_the_check_and_rejects_violating_commits() {
 }
 
 #[test]
+fn commit_hook_refuses_partial_commits_and_untracked_files() {
+    let directory = stub_repository("hooks-partial");
+    let before = git(&directory, &["rev-parse", "HEAD"]);
+    fs::write(directory.join("src.txt"), "first\n").expect("change source");
+    fs::write(directory.join("other.txt"), "violation\n").expect("change other");
+    let partial = git_output(
+        &directory,
+        &["commit", "--quiet", "-m", "partial", "--", "src.txt"],
+    );
+    assert!(!partial.status.success(), "partial commit is rejected");
+    assert_eq!(hook_log(&directory), ["commit-guard"], "guard stops it");
+    fs::write(directory.join("other.txt"), "other\n").expect("restore other");
+    fs::write(directory.join("new.txt"), "new\n").expect("write untracked");
+    assert!(
+        !commit(&directory, "untracked"),
+        "untracked file is rejected"
+    );
+    assert_eq!(hook_log(&directory), ["commit-guard"], "guard stops it");
+    assert_eq!(git(&directory, &["rev-parse", "HEAD"]), before, "HEAD kept");
+    fs::remove_file(directory.join("new.txt")).expect("remove untracked");
+    assert!(commit(&directory, "all"), "commit --all is accepted");
+}
+
+#[test]
 fn push_hook_runs_check_full_with_the_pushed_refs() {
-    let directory = repository("hooks-push", Hooks::Installed);
+    let directory = stub_repository("hooks-push");
     let remote = directory.parent().expect("parent").join("remote.git");
     git(
         &directory,
@@ -457,13 +494,6 @@ fn push_hook_runs_check_full_with_the_pushed_refs() {
             "origin",
             remote.to_str().expect("utf-8 path"),
         ],
-    );
-    fs::write(directory.join("justfile"), STUB_JUSTFILE).expect("write stub justfile");
-    fs::write(directory.join(".gitignore"), "hook.log\nfail-fresh\n").expect("write ignore");
-    git(&directory, &["add", "--all"]);
-    git(
-        &directory,
-        &["commit", "--quiet", "--no-verify", "-m", "stub"],
     );
     let head = git(&directory, &["rev-parse", "HEAD"]);
     let pushed = git_output(&directory, &["push", "--quiet", "origin", "main"]);
@@ -732,6 +762,44 @@ fn fresh_build_rebuilds_sources_whose_mtime_was_rewound() {
         String::from_utf8_lossy(&cleaned.stderr)
     );
     assert_eq!(run_probe(&work), "new", "fresh-build forces the rebuild");
+}
+
+#[test]
+fn just_drops_git_variables_that_redirect_to_another_repository() {
+    let justfile = fs::read_to_string(repository_root().join("justfile")).expect("read justfile");
+    let unexported: BTreeSet<&str> = justfile
+        .lines()
+        .filter_map(|line| line.strip_prefix("unexport "))
+        .map(str::trim)
+        .collect();
+    for variable in REDIRECTING_VARIABLES {
+        assert!(
+            unexported.contains(variable),
+            "justfile must unexport {variable}"
+        );
+    }
+    let clean = repository("guard-clean", Hooks::Absent);
+    let dirty = repository("guard-dirty", Hooks::Absent);
+    fs::write(dirty.join("src.txt"), "unstaged\n").expect("dirty change");
+    let mut command = Command::new("just");
+    command
+        .arg("--justfile")
+        .arg(repository_root().join("justfile"))
+        .arg("--working-directory")
+        .arg(&clean)
+        .arg("commit-guard")
+        .stdin(Stdio::null());
+    isolate(&mut command);
+    command
+        .env("GIT_DIR", dirty.join(".git"))
+        .env("GIT_WORK_TREE", &dirty)
+        .env("GIT_INDEX_FILE", dirty.join(".git").join("index"));
+    let finished = command.output().expect("run commit-guard");
+    assert!(
+        finished.status.success(),
+        "{}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
 }
 
 fn recipe(name: &str) -> Vec<String> {

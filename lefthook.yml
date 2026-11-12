@@ -5,7 +5,7 @@ pre-commit:
   piped: true
   jobs:
     - name: commit-guard
-      run: just commit-guard
+      run: just commit-guard "$GIT_INDEX_FILE"
     - name: fresh-build
       run: just fresh-build
     - name: check

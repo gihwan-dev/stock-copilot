@@ -24,6 +24,19 @@ unexport NEXTEST_TEST_THREADS
 unexport CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER
 unexport CARGO_BUILD_TARGET
 unexport ESLINT_PLUGIN_BOUNDARIES_ROOT_PATH
+unexport GIT_DIR
+unexport GIT_WORK_TREE
+unexport GIT_INDEX_FILE
+unexport GIT_OBJECT_DIRECTORY
+unexport GIT_ALTERNATE_OBJECT_DIRECTORIES
+unexport GIT_COMMON_DIR
+unexport GIT_SHALLOW_FILE
+unexport GIT_CONFIG_GLOBAL
+unexport GIT_CONFIG_SYSTEM
+unexport GIT_CONFIG_COUNT
+unexport GIT_CONFIG_PARAMETERS
+unexport GIT_DIFF_OPTS
+unexport GIT_ATTR_SOURCE
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
@@ -110,9 +123,9 @@ disable-report-since commit:
 hooks-installed:
     cargo run --locked --quiet --package xtask -- hooks-installed
 
-commit-guard:
-    git diff --quiet --no-ext-diff -- || { printf 'commit-guard: 스테이징하지 않은 변경이 있다. 커밋 훅은 작업 사본을 검사하므로 커밋할 내용과 작업 사본이 같아야 한다\n' >&2; exit 1; }
-    untracked="$(git ls-files --others --exclude-standard)"; [ -z "$untracked" ] || { printf 'commit-guard: 추적하지 않는 파일이 있다. 커밋하거나 지운 뒤 커밋한다:\n%s\n' "$untracked" >&2; exit 1; }
+commit-guard index="":
+    if [ -n "$1" ]; then export GIT_INDEX_FILE="$1"; fi; git diff --quiet --no-ext-diff -- || { printf 'commit-guard: 스테이징하지 않은 변경이 있다. 커밋 훅은 작업 사본을 검사하므로 커밋할 내용과 작업 사본이 같아야 한다\n' >&2; exit 1; }
+    if [ -n "$1" ]; then export GIT_INDEX_FILE="$1"; fi; untracked="$(git ls-files --others --exclude-standard)"; [ -z "$untracked" ] || { printf 'commit-guard: 추적하지 않는 파일이 있다. 커밋하거나 지운 뒤 커밋한다:\n%s\n' "$untracked" >&2; exit 1; }
 
 fresh-build:
     cargo clean --locked --workspace
