@@ -23,6 +23,7 @@ check: check-ts
     "{{just_executable()}}" clippy Cargo.toml
     "{{just_executable()}}" deny
     "{{just_executable()}}" arch-check
+    "{{just_executable()}}" source-check
     cargo nextest run --workspace --locked
 
 check-full: advisory-db-fetch check
@@ -47,6 +48,9 @@ deny:
 
 arch-check:
     cargo run --locked --quiet --package xtask -- arch-check
+
+source-check:
+    cargo run --locked --quiet --package xtask -- source-check
 
 advisory-db-fetch:
     cargo deny --locked fetch db
