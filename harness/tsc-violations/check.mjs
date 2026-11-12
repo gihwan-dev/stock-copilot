@@ -32,11 +32,12 @@ const ownConfig = readJson(join(here, "tsconfig.json"));
 report(
   isDeepStrictEqual(ownConfig, {
     extends: "../../apps/desktop/tsconfig.json",
+    compilerOptions: { rootDir: "." },
     include: ["cases", "support"],
   })
     ? "PASS"
     : "FAIL",
-  "harness/tsc-violations/tsconfig.json only extends the app config",
+  "harness/tsc-violations/tsconfig.json only extends the app config and sets rootDir to itself",
 );
 
 const onDisk = ["cases", "support"]
@@ -82,6 +83,35 @@ for (const compiler of compilers) {
       `${compiler} ${file}: expected [${want.join(" ")}], got [${got.join(" ")}]`,
     );
   }
+}
+
+const rootDirProject = join(here, "root-dir");
+report(
+  isDeepStrictEqual(readJson(join(rootDirProject, "tsconfig.json")), {
+    extends: "../../../apps/desktop/tsconfig.json",
+    compilerOptions: { rootDir: "src" },
+    include: ["src"],
+  })
+    ? "PASS"
+    : "FAIL",
+  "harness/tsc-violations/root-dir/tsconfig.json keeps the app rootDir rule for its own src",
+);
+for (const compiler of compilers) {
+  const run = spawnSync(
+    join(desktop, "node_modules", ".bin", compiler),
+    ["-p", "tsconfig.json", "--pretty", "false"],
+    { cwd: rootDirProject, encoding: "utf8" },
+  );
+  const found = {};
+  for (const line of `${run.stdout}${run.stderr}`.split("\n")) {
+    const match = diagnostic.exec(line);
+    if (match !== null)
+      found[match[1]] = [...new Set([...(found[match[1]] ?? []), match[2]])];
+  }
+  report(
+    isDeepStrictEqual(found, expected.rootDirCase) ? "PASS" : "FAIL",
+    `${compiler} root-dir: expected ${JSON.stringify(expected.rootDirCase)}, got ${JSON.stringify(found)}`,
+  );
 }
 
 process.stdout.write(`tsc-violations: ${failures.length} failure(s)\n`);

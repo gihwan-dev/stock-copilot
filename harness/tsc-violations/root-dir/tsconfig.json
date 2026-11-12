@@ -1,0 +1,7 @@
+{
+  "extends": "../../../apps/desktop/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

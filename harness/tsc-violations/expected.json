@@ -6,7 +6,8 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "noEmit": true
+    "noEmit": true,
+    "rootDir": "src"
   },
   "options": {
     "strict": true,
@@ -68,5 +69,8 @@
     "cases/verbatim-module-syntax.ts": ["TS1484"],
     "support/casing-target.ts": [],
     "support/shape.ts": []
+  },
+  "rootDirCase": {
+    "src/importer.ts": ["TS6059"]
   }
 }
