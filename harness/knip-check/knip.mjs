@@ -39,6 +39,17 @@ export const issueTypes = (report) =>
     ),
   ].sort();
 
+export const issueItems = (report) =>
+  report.issues
+    .flatMap((issue) =>
+      Object.entries(issue)
+        .filter(([, value]) => Array.isArray(value))
+        .flatMap(([type, values]) =>
+          values.map((value) => `${type} ${issue.file} ${value.name}`),
+        ),
+    )
+    .sort();
+
 export const runKnip = (directory, configFile = appConfigFile, flags = []) => {
   const run = spawnSync(
     knipBin,
@@ -58,6 +69,7 @@ export const runKnip = (directory, configFile = appConfigFile, flags = []) => {
   return {
     status: run.status,
     types: parsed === undefined ? ["(no report)"] : issueTypes(parsed),
+    items: parsed === undefined ? ["(no report)"] : issueItems(parsed),
     output: run.stdout + run.stderr,
   };
 };
@@ -69,6 +81,33 @@ export const withConfig = (config, action) => {
   const result = action(file);
   rmSync(scratch, { recursive: true, force: true });
   return result;
+};
+
+export const PRODUCTION_FLAGS = ["--strict"];
+
+export const productionCasesRoot = join(here, "production-cases");
+
+export const productionConfig = (config) => ({
+  ...config,
+  entry: config.entry.filter((pattern) => pattern.endsWith("!")),
+});
+
+export const readProductionAllowlist = () =>
+  JSON.parse(readFileSync(join(here, "production-allowlist.json"), "utf8"));
+
+export const productionFolders = () =>
+  readdirSync(productionCasesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+export const productionCaseVerdict = (
+  name,
+  configFile,
+  flags = PRODUCTION_FLAGS,
+) => {
+  const run = runKnip(join(productionCasesRoot, name), configFile, flags);
+  return { failed: run.status !== 0, types: run.types };
 };
 
 export const caseVerdict = (name, configFile) => {

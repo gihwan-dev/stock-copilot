@@ -3,7 +3,10 @@
     "test": {
       "include": ["src/**/*.test.ts", "src/**/*.test.tsx"],
       "allowOnly": false,
-      "passWithNoTests": true
+      "passWithNoTests": true,
+      "expect": {
+        "requireAssertions": true
+      }
     }
   },
   "cases": {
@@ -11,10 +14,13 @@
     "context-skip": ["skipped"],
     "describe-skip": ["skipped"],
     "describe-todo": ["skipped"],
+    "empty-each": ["no-tests"],
     "empty-file": ["no-tests"],
+    "empty-file-beside": ["no-tests"],
     "failing": ["failed", "no-tests"],
     "it-skip": ["skipped"],
     "it-todo": ["todo"],
+    "no-assertion": ["failed"],
     "no-files": [],
     "only": ["failed", "no-tests", "skipped"],
     "outside-src": [],

@@ -50,12 +50,17 @@ export const verdict = ({ status, report }, testFiles) => {
     report.numFailedTests > 0 ||
     report.numFailedTestSuites > 0 ||
     count((s) => s === "failed") > 0;
-  const passed = count((s) => s === "passed");
+  const passedIn = (file) =>
+    (
+      report.testResults.find((result) => result.name.endsWith(`/${file}`))
+        ?.assertionResults ?? []
+    ).filter((result) => result.status === "passed").length;
+  const emptyFiles = testFiles.filter((file) => passedIn(file) === 0);
   return [
     ...(failed ? ["failed"] : []),
     ...(skipped > 0 ? ["skipped"] : []),
     ...(todo > 0 ? ["todo"] : []),
-    ...(testFiles.length > 0 && passed === 0 ? ["no-tests"] : []),
+    ...(emptyFiles.length > 0 ? ["no-tests"] : []),
   ];
 };
 

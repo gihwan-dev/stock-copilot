@@ -7,8 +7,14 @@ import {
   caseVerdict,
   desktop,
   readAppConfig,
+  PRODUCTION_FLAGS,
+  productionCaseVerdict,
+  productionConfig,
+  productionFolders,
   readCases,
+  readProductionAllowlist,
   runKnip,
+  withConfig,
 } from "./knip.mjs";
 
 const failures = [];
@@ -17,7 +23,8 @@ const report = (status, text) => {
   if (status === "FAIL") failures.push(text);
 };
 
-const { config, withoutCase, addedWithDependencies, cases } = readCases();
+const { config, withoutCase, addedWithDependencies, cases, production } =
+  readCases();
 const appConfig = readAppConfig();
 report(
   isDeepStrictEqual(appConfig, config) ? "PASS" : "FAIL",
@@ -67,6 +74,44 @@ report(
   `apps/desktop: knip reports [${app.types.join(", ")}]`,
 );
 if (app.status !== 0) process.stdout.write(app.output);
+
+const productionNames = productionFolders();
+report(
+  isDeepStrictEqual(productionNames, Object.keys(production).sort())
+    ? "PASS"
+    : "FAIL",
+  `production case folders match cases.json: ${productionNames.length}`,
+);
+withConfig(productionConfig(appConfig), (file) => {
+  for (const [name, expected] of Object.entries(production)) {
+    const problems = caseProblems(expected, productionCaseVerdict(name, file));
+    report(
+      problems.length === 0 ? "PASS" : "FAIL",
+      `production ${name}: expected [${expected.join(", ")}]${problems.length === 0 ? "" : `, got ${problems.join(", ")}`}`,
+    );
+  }
+  const allowed = readProductionAllowlist().entries.map((entry) => entry.issue);
+  const found = runKnip(desktop, file, PRODUCTION_FLAGS).items;
+  const unexpected = found.filter((item) => !allowed.includes(item));
+  const stale = allowed.filter((item) => !found.includes(item));
+  unexpected.forEach((item) =>
+    report(
+      "FAIL",
+      `apps/desktop production: ${item} is not in production-allowlist.json`,
+    ),
+  );
+  stale.forEach((item) =>
+    report(
+      "FAIL",
+      `apps/desktop production: ${item} is allowlisted but no longer reported`,
+    ),
+  );
+  if (unexpected.length === 0 && stale.length === 0)
+    report(
+      "PASS",
+      `apps/desktop production: exactly the ${allowed.length} allowlisted issue(s)`,
+    );
+});
 
 process.stdout.write(`knip-check: ${failures.length} failure(s)\n`);
 process.exitCode = failures.length === 0 ? 0 : 1;

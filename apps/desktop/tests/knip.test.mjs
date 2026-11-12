@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
   APP_FLAGS,
+  PRODUCTION_FLAGS,
+  productionCaseVerdict,
+  productionConfig,
+  readProductionAllowlist,
   caseProblems,
   caseVerdict,
   desktop,
@@ -15,7 +19,7 @@ import {
 import { repoRoot } from "./paths.mjs";
 
 const appConfig = readAppConfig();
-const { cases, addedWithDependencies } = readCases();
+const { cases, addedWithDependencies, production } = readCases();
 
 const casesExpecting = (type) =>
   Object.entries(cases)
@@ -96,4 +100,59 @@ test("just check runs the knip and Vitest checks", () => {
   const justfile = readFileSync(join(repoRoot, "justfile"), "utf8");
   assert.match(justfile, /^ {4}node harness\/knip-check\/check\.mjs$/m);
   assert.match(justfile, /^ {4}node harness\/vitest-check\/check\.mjs$/m);
+});
+
+const expectedProductionAllowlist = [
+  "dependencies package.json zod",
+  "files src/shared/ds/index.ts src/shared/ds/index.ts",
+  "files src/shared/ipc/index.ts src/shared/ipc/index.ts",
+  "files src/shared/lib/index.ts src/shared/lib/index.ts",
+  "files src/shared/lib/brand.ts src/shared/lib/brand.ts",
+  "files src/shared/lib/messages.ts src/shared/lib/messages.ts",
+  "files src/shared/lib/money.ts src/shared/lib/money.ts",
+  "files src/shared/lib/result.ts src/shared/lib/result.ts",
+];
+
+test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {
+  const { entries } = readProductionAllowlist();
+  assert.deepEqual(
+    entries.map((entry) => entry.issue),
+    expectedProductionAllowlist,
+  );
+  assert.deepEqual(
+    entries.filter(
+      (entry) =>
+        typeof entry.reason !== "string" ||
+        entry.reason.length === 0 ||
+        /[*?]/.test(entry.issue),
+    ),
+    [],
+  );
+});
+
+test("the production run drops non-production entries and dropping any production flag makes a case fail", () => {
+  assert.deepEqual(productionConfig(appConfig).entry, []);
+  const survivors = withConfig(productionConfig(appConfig), (file) =>
+    PRODUCTION_FLAGS.filter((flag) =>
+      Object.entries(production).every(
+        ([name, expected]) =>
+          caseProblems(
+            expected,
+            productionCaseVerdict(
+              name,
+              file,
+              PRODUCTION_FLAGS.filter((other) => other !== flag),
+            ),
+          ).length === 0,
+      ),
+    ),
+  );
+  assert.deepEqual(survivors, []);
+});
+
+test("a test-only export in the app source fails the production run", () => {
+  const verdict = withConfig(productionConfig(appConfig), (file) =>
+    productionCaseVerdict("test-only-export", file),
+  );
+  assert.deepEqual(verdict, { failed: true, types: ["exports"] });
 });

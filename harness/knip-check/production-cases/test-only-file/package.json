@@ -1,0 +1,9 @@
+{
+  "name": "knip-case",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  }
+}

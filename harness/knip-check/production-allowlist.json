@@ -1,0 +1,37 @@
+{
+  "until": "첫 사용처가 생길 때까지. 운영 코드(main.tsx에서 닿는 코드)가 처음 가져오면 knip이 더 보고하지 않으므로 항목이 남아 있으면 실패한다",
+  "entries": [
+    {
+      "issue": "dependencies package.json zod",
+      "reason": "Zod는 아직 운영 코드에서 닿지 않는 shared/lib/brand.ts만 쓴다 (U-04, H-13에서 shared/ipc 스키마가 쓴다)"
+    },
+    {
+      "issue": "files src/shared/ds/index.ts src/shared/ds/index.ts",
+      "reason": "디자인 시스템 컴포넌트가 아직 없다 (DS 작업)"
+    },
+    {
+      "issue": "files src/shared/ipc/index.ts src/shared/ipc/index.ts",
+      "reason": "IPC 클라이언트가 아직 없다 (U-04, H-13)"
+    },
+    {
+      "issue": "files src/shared/lib/index.ts src/shared/lib/index.ts",
+      "reason": "shared/lib 공개 API를 가져오는 화면이 아직 없다"
+    },
+    {
+      "issue": "files src/shared/lib/brand.ts src/shared/lib/brand.ts",
+      "reason": "브랜드 타입과 파싱 함수의 첫 사용처(IPC 응답 파싱)가 아직 없다"
+    },
+    {
+      "issue": "files src/shared/lib/messages.ts src/shared/lib/messages.ts",
+      "reason": "화면 문구를 그리는 화면이 아직 없다"
+    },
+    {
+      "issue": "files src/shared/lib/money.ts src/shared/lib/money.ts",
+      "reason": "금액 타입의 첫 사용처(코어가 보낸 값 표시)가 아직 없다"
+    },
+    {
+      "issue": "files src/shared/lib/result.ts src/shared/lib/result.ts",
+      "reason": "Result를 돌려주는 운영 코드가 아직 없다. 지금은 테스트(result.test.ts)만 쓴다"
+    }
+  ]
+}

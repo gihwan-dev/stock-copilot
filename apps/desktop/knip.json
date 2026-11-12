@@ -1,6 +1,6 @@
 {
   "entry": ["src/shared/*/index.ts", "eslint/**/*.mjs", "tests/*.test.mjs"],
-  "project": ["src/**/*.{ts,tsx}"],
+  "project": ["src/**/*.{ts,tsx}!"],
   "include": [
     "files",
     "subpaths",

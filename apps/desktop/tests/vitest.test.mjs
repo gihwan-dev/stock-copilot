@@ -51,25 +51,41 @@ const report = (statuses, extra = {}) => ({
     numPendingTests: 0,
     numPendingTestSuites: 0,
     numTodoTests: 0,
-    testResults: [{ assertionResults: statuses.map((status) => ({ status })) }],
+    testResults: [
+      {
+        name: "/root/src/a.test.ts",
+        assertionResults: statuses.map((status) => ({ status })),
+      },
+    ],
     ...extra,
   },
 });
 
 test("the verdict reads skipped and todo tests from both the results and the totals", () => {
   assert.deepEqual(verdict(report(["passed"]), ["src/a.test.ts"]), []);
-  assert.deepEqual(verdict(report(["passed", "skipped"]), ["x"]), ["skipped"]);
-  assert.deepEqual(verdict(report(["passed", "pending"]), ["x"]), ["skipped"]);
-  assert.deepEqual(verdict(report(["passed", "todo"]), ["x"]), ["todo"]);
-  assert.deepEqual(
-    verdict(report(["passed"], { numPendingTestSuites: 1 }), ["x"]),
-    ["skipped"],
-  );
-  assert.deepEqual(verdict(report(["passed"], { numTodoTests: 1 }), ["x"]), [
+  assert.deepEqual(verdict(report(["passed", "skipped"]), ["src/a.test.ts"]), [
+    "skipped",
+  ]);
+  assert.deepEqual(verdict(report(["passed", "pending"]), ["src/a.test.ts"]), [
+    "skipped",
+  ]);
+  assert.deepEqual(verdict(report(["passed", "todo"]), ["src/a.test.ts"]), [
     "todo",
   ]);
-  assert.deepEqual(verdict(report([]), ["x"]), ["no-tests"]);
+  assert.deepEqual(
+    verdict(report(["passed"], { numPendingTestSuites: 1 }), ["src/a.test.ts"]),
+    ["skipped"],
+  );
+  assert.deepEqual(
+    verdict(report(["passed"], { numTodoTests: 1 }), ["src/a.test.ts"]),
+    ["todo"],
+  );
+  assert.deepEqual(verdict(report([]), ["src/a.test.ts"]), ["no-tests"]);
   assert.deepEqual(verdict(report([]), []), []);
+  assert.deepEqual(
+    verdict(report(["passed"]), ["src/a.test.ts", "src/b.test.ts"]),
+    ["no-tests"],
+  );
   assert.deepEqual(verdict({ status: 1, report: report([]).report }, []), [
     "failed",
   ]);

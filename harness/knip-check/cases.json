@@ -1,7 +1,7 @@
 {
   "config": {
     "entry": ["src/shared/*/index.ts", "eslint/**/*.mjs", "tests/*.test.mjs"],
-    "project": ["src/**/*.{ts,tsx}"],
+    "project": ["src/**/*.{ts,tsx}!"],
     "include": [
       "files",
       "subpaths",
@@ -64,5 +64,11 @@
     "unused-file": ["files"],
     "unused-type": ["types"]
   },
-  "addedWithDependencies": ["devDependencies", "optionalPeerDependencies"]
+  "addedWithDependencies": ["devDependencies", "optionalPeerDependencies"],
+  "production": {
+    "clean": [],
+    "entry-export": ["exports"],
+    "test-only-export": ["exports"],
+    "test-only-file": ["files"]
+  }
 }

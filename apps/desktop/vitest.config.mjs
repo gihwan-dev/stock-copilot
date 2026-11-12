@@ -5,5 +5,6 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     allowOnly: false,
     passWithNoTests: true,
+    expect: { requireAssertions: true },
   },
 });
