@@ -14,7 +14,7 @@
       }
     ],
     "security": {
-      "capabilities": []
+      "capabilities": ["main"]
     }
   },
   "bundle": {

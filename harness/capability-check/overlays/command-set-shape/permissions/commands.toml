@@ -1,0 +1,7 @@
+[[set]]
+identifier = "commands"
+permissions = []
+
+[[permission]]
+identifier = "allow-everything"
+commands.allow = ["approve_order"]

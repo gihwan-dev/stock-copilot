@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "windows": ["main"],
+  "webviews": ["main"],
+  "permissions": ["commands"]
+}

@@ -1,0 +1,14 @@
+{
+  "app": {
+    "windows": [{ "label": "main" }],
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "main",
+          "windows": ["main"],
+          "permissions": ["commands"]
+        }
+      ]
+    }
+  }
+}

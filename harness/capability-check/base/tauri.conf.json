@@ -1,0 +1,8 @@
+{
+  "productName": "Harness",
+  "identifier": "dev.stockcopilot.harness",
+  "app": {
+    "windows": [{ "label": "main", "title": "Harness" }],
+    "security": { "capabilities": ["main"] }
+  }
+}

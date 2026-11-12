@@ -1,0 +1,3 @@
+[[permission]]
+identifier = "allow-get-holdings"
+commands.allow = ["get_holdings"]

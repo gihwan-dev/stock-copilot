@@ -1,0 +1,19 @@
+{
+  "identifier": "main",
+  "windows": ["main"],
+  "permissions": [
+    "commands",
+    "core:default",
+    "core:event:default",
+    "core:event:allow-emit",
+    "core:event:allow-emit-to",
+    "shell:allow-execute",
+    "dialog:allow-open",
+    "opener:default",
+    "fs:allow-read-file",
+    { "identifier": "http:default", "allow": [{ "url": "https://*" }] },
+    "biometric:default",
+    "notification:default",
+    "autostart:allow-enable"
+  ]
+}

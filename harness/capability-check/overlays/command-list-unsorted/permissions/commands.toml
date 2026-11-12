@@ -1,0 +1,3 @@
+[[set]]
+identifier = "commands"
+permissions = ["allow-list-signals", "allow-get-holdings"]

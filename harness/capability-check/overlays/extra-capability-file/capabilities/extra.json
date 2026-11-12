@@ -1,0 +1,5 @@
+{
+  "identifier": "extra",
+  "windows": ["main"],
+  "permissions": ["core:window:allow-close"]
+}

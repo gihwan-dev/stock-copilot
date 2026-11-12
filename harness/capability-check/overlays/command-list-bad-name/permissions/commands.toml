@@ -1,0 +1,3 @@
+[[set]]
+identifier = "commands"
+permissions = ["allow-Get-Holdings"]

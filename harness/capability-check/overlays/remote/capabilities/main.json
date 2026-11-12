@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "windows": ["main"],
+  "remote": { "urls": ["https://example.com"] },
+  "permissions": ["commands"]
+}

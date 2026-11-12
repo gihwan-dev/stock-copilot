@@ -1,0 +1,3 @@
+[[permission]]
+identifier = "allow-anything"
+commands.allow = ["approve_order"]

@@ -1,0 +1,4 @@
+[[set]]
+identifier = "commands"
+description = "harness"
+permissions = ["allow-get-holdings", "allow-list-signals"]
