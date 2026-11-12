@@ -1,0 +1,2291 @@
+{
+  "rows": {
+    "타입": [
+      {
+        "rule": "@typescript-eslint/no-explicit-any"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-argument"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-assignment"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-call"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-declaration-merging"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-enum-assignment"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-enum-comparison"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-function-type"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-member-access"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-return"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-type-assertion"
+      },
+      {
+        "rule": "@typescript-eslint/no-unsafe-unary-minus"
+      },
+      {
+        "rule": "@typescript-eslint/consistent-type-assertions"
+      },
+      {
+        "rule": "@typescript-eslint/no-non-null-assertion"
+      },
+      {
+        "rule": "@typescript-eslint/strict-boolean-expressions"
+      },
+      {
+        "rule": "@typescript-eslint/explicit-function-return-type"
+      },
+      {
+        "rule": "@typescript-eslint/explicit-module-boundary-types"
+      },
+      {
+        "rule": "@typescript-eslint/method-signature-style"
+      }
+    ],
+    "거짓 타입": [
+      {
+        "rule": "no-restricted-syntax",
+        "message": "타입 술어"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "함수 오버로드 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "declare 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "namespace·declare module"
+      }
+    ],
+    "실패 처리": [
+      {
+        "rule": "functional/no-throw-statements"
+      },
+      {
+        "rule": "functional/no-try-statements"
+      },
+      {
+        "rule": "functional/no-promise-reject"
+      },
+      {
+        "rule": "functional/no-expression-statements"
+      },
+      {
+        "rule": "@typescript-eslint/no-floating-promises"
+      },
+      {
+        "rule": "@typescript-eslint/no-misused-promises"
+      },
+      {
+        "rule": "no-void"
+      },
+      {
+        "rule": "@typescript-eslint/no-unused-vars"
+      }
+    ],
+    "불변": [
+      {
+        "rule": "functional/no-let"
+      },
+      {
+        "rule": "no-var"
+      },
+      {
+        "rule": "prefer-const"
+      },
+      {
+        "rule": "functional/immutable-data"
+      },
+      {
+        "rule": "no-param-reassign"
+      },
+      {
+        "rule": "no-plusplus"
+      },
+      {
+        "rule": "functional/type-declaration-immutability"
+      },
+      {
+        "rule": "functional/prefer-immutable-types"
+      },
+      {
+        "rule": "no-restricted-properties",
+        "message": "Object.assign"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "prototype 접근 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "call·apply·bind 금지"
+      },
+      {
+        "rule": "no-restricted-properties",
+        "message": "Object.getOwnPropertySymbols"
+      },
+      {
+        "rule": "no-restricted-properties",
+        "message": "Reflect"
+      },
+      {
+        "rule": "no-restricted-globals",
+        "message": "'Reflect'"
+      }
+    ],
+    "문법": [
+      {
+        "rule": "functional/no-classes"
+      },
+      {
+        "rule": "functional/no-class-inheritance"
+      },
+      {
+        "rule": "functional/no-this-expressions"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "enum 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "namespace·declare module"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "기본 내보내기 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "export * 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "동적 import 금지"
+      },
+      {
+        "rule": "no-nested-ternary"
+      },
+      {
+        "rule": "functional/no-loop-statements"
+      },
+      {
+        "rule": "no-eval"
+      },
+      {
+        "rule": "no-new-func"
+      },
+      {
+        "rule": "no-restricted-globals",
+        "message": "'globalThis'"
+      },
+      {
+        "rule": "no-restricted-globals",
+        "message": "'window'"
+      },
+      {
+        "rule": "max-lines-per-function"
+      },
+      {
+        "rule": "max-lines"
+      },
+      {
+        "rule": "complexity"
+      },
+      {
+        "rule": "max-params"
+      },
+      {
+        "rule": "max-depth"
+      }
+    ],
+    "switch": [
+      {
+        "rule": "@typescript-eslint/switch-exhaustiveness-check"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "default 팔 금지"
+      }
+    ],
+    "React": [
+      {
+        "rule": "no-restricted-imports",
+        "message": "'useEffect' import from 'react' is restricted"
+      },
+      {
+        "rule": "no-restricted-imports",
+        "message": "'useLayoutEffect' import from 'react' is restricted"
+      },
+      {
+        "rule": "no-restricted-imports",
+        "message": "'useInsertionEffect' import from 'react' is restricted"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "useEffect 계열은"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "react는 이름 있는 가져오기만"
+      },
+      {
+        "rule": "no-restricted-imports",
+        "message": "'default' import from 'react' is restricted"
+      },
+      {
+        "rule": "no-restricted-imports",
+        "message": "react 하위 경로 가져오기 금지"
+      },
+      {
+        "rule": "no-restricted-imports",
+        "message": "'useSyncExternalStore' import from 'react' is restricted"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "ref 콜백 함수 금지"
+      },
+      {
+        "rule": "react-hooks/rules-of-hooks"
+      },
+      {
+        "rule": "@eslint-react/no-array-index-key"
+      }
+    ],
+    "주석": [
+      {
+        "rule": null,
+        "message": "Unused eslint-disable directive"
+      },
+      {
+        "rule": null,
+        "message": "Unused inline config"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-use"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/require-description"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-unlimited-disable"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'local/no-comments'"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'local/no-money-coercion'"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'local/forbidden-file'"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'boundaries/dependencies'"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'guard/no-network'"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'guard/no-test-skip'"
+      },
+      {
+        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+        "message": "'@typescript-eslint/ban-ts-comment'"
+      },
+      {
+        "rule": "guard/disable-directive-form"
+      },
+      {
+        "rule": "@typescript-eslint/ban-ts-comment",
+        "message": "@ts-ignore"
+      },
+      {
+        "rule": "@typescript-eslint/ban-ts-comment",
+        "message": "@ts-expect-error"
+      },
+      {
+        "rule": "@typescript-eslint/ban-ts-comment",
+        "message": "@ts-nocheck"
+      },
+      {
+        "rule": "@typescript-eslint/ban-ts-comment",
+        "message": "@ts-check"
+      }
+    ],
+    "숫자": [
+      {
+        "rule": "no-restricted-syntax",
+        "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "Number·BigInt·Math 멤버 사용 금지"
+      },
+      {
+        "rule": "no-restricted-syntax",
+        "message": "단항 + 변환 금지"
+      },
+      {
+        "rule": "@typescript-eslint/restrict-plus-operands"
+      },
+      {
+        "rule": "@typescript-eslint/no-base-to-string"
+      }
+    ],
+    "파일 종류": [
+      {
+        "rule": "guard/forbidden-extension"
+      }
+    ],
+    "네트워크": [
+      {
+        "rule": "guard/no-network"
+      },
+      {
+        "rule": "guard/no-global-object",
+        "message": "'window'"
+      }
+    ],
+    "테스트": [
+      {
+        "rule": "guard/no-test-skip"
+      },
+      {
+        "rule": "no-restricted-imports",
+        "message": "@tauri-apps/api/mocks는 shared/ipc/testing에서만"
+      }
+    ],
+    "허용 목록": []
+  },
+  "cases": {
+    "src/app/comments/allowed-form.ts": {
+      "row": "주석",
+      "expect": "clean"
+    },
+    "src/app/comments/block-disable.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/block-next-line.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/disable-line.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/empty-reason.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/require-description"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/file-disable.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/inline-config-unused.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": null,
+            "message": "Unused inline config"
+          },
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/inline-exported.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/inline-global.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/inline-rule-config.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/no-reason.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/require-description"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/no-rule-name.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-unlimited-disable"
+          },
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/several-rules.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/disable-directive-form"
+          }
+        ]
+      }
+    },
+    "src/app/comments/ts-check.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/ban-ts-comment",
+            "message": "@ts-check"
+          }
+        ]
+      }
+    },
+    "src/app/comments/ts-expect-error.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/ban-ts-comment",
+            "message": "@ts-expect-error"
+          }
+        ]
+      }
+    },
+    "src/app/comments/ts-ignore.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/ban-ts-comment",
+            "message": "@ts-ignore"
+          }
+        ]
+      }
+    },
+    "src/app/comments/ts-nocheck.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/ban-ts-comment",
+            "message": "@ts-nocheck"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-ban-ts-comment.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'@typescript-eslint/ban-ts-comment'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-boundaries.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'boundaries/dependencies'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-comment-rule.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'@eslint-community/eslint-comments/no-use'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-directive-form.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'guard/disable-directive-form'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-forbidden-file.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'local/forbidden-file'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-global-object.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'guard/no-global-object'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-money.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'local/no-money-coercion'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-network.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'guard/no-network'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-no-comments.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'local/no-comments'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/undisableable-test-skip.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
+            "message": "'guard/no-test-skip'"
+          }
+        ]
+      }
+    },
+    "src/app/comments/unlimited-file-disable.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-community/eslint-comments/no-unlimited-disable"
+          },
+          {
+            "rule": "@eslint-community/eslint-comments/no-use"
+          },
+          {
+            "rule": "@eslint-community/eslint-comments/require-description"
+          }
+        ]
+      }
+    },
+    "src/app/comments/unused-disable.ts": {
+      "row": "주석",
+      "expect": {
+        "errors": [
+          {
+            "rule": null,
+            "message": "Unused eslint-disable directive"
+          }
+        ]
+      }
+    },
+    "src/app/failure/floating-promise.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-floating-promises"
+          }
+        ]
+      }
+    },
+    "src/app/failure/floating-thenable.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-floating-promises"
+          }
+        ]
+      }
+    },
+    "src/app/failure/ignored-result-assign.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unused-vars"
+          }
+        ]
+      }
+    },
+    "src/app/failure/ignored-result.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-expression-statements"
+          }
+        ]
+      }
+    },
+    "src/app/failure/misused-promise.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-misused-promises"
+          }
+        ]
+      }
+    },
+    "src/app/failure/promise-reject.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-promise-reject"
+          }
+        ]
+      }
+    },
+    "src/app/failure/throw.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-throw-statements"
+          }
+        ]
+      }
+    },
+    "src/app/failure/throwing-builtin-gap.ts": {
+      "row": "실패 처리",
+      "expect": "KNOWN_GAP"
+    },
+    "src/app/failure/try.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-try-statements"
+          }
+        ]
+      }
+    },
+    "src/app/failure/void-promise.ts": {
+      "row": "실패 처리",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-void"
+          },
+          {
+            "rule": "@typescript-eslint/no-floating-promises"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/asserts.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "타입 술어"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/declare-const.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "declare 금지"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/declare-global.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "declare 금지"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "namespace·declare module"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/declare-module.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "declare 금지"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "namespace·declare module"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/namespace.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "namespace·declare module"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/overload.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "함수 오버로드 금지"
+          }
+        ]
+      }
+    },
+    "src/app/fake-types/type-predicate.ts": {
+      "row": "거짓 타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "타입 술어"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/computed-call.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "call·apply·bind 금지"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/define-property.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-properties",
+            "message": "Object.defineProperty"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/delete.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/immutable-data"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/let.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-let"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/map-set.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/immutable-data"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/method-apply.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "call·apply·bind 금지"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/method-bind.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "call·apply·bind 금지"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/method-call.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "call·apply·bind 금지"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/mutable-param.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/prefer-immutable-types"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/mutable-type.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/type-declaration-immutability"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/object-assign.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-properties",
+            "message": "Object.assign"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/own-descriptors.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-properties",
+            "message": "Object.getOwnPropertyDescriptors"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/own-symbols-destructure.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-properties",
+            "message": "Object.getOwnPropertySymbols"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/own-symbols.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-properties",
+            "message": "Object.getOwnPropertySymbols"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/param-reassign.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-param-reassign"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/plusplus.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-plusplus"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/prefer-const.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "prefer-const"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/prop-assign.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/immutable-data"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/proto-dunder.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "prototype 접근 금지"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/proto-push-call.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "prototype 접근 금지"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "call·apply·bind 금지"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/push.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/immutable-data"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/reflect-alias.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-globals",
+            "message": "'Reflect'"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/reflect-call.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-properties",
+            "message": "Reflect"
+          },
+          {
+            "rule": "no-restricted-globals",
+            "message": "'Reflect'"
+          }
+        ]
+      }
+    },
+    "src/app/immutability/var.ts": {
+      "row": "불변",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-var"
+          }
+        ]
+      }
+    },
+    "src/app/network/computed-fetch.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/network/default-view.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/network/fetch.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/network/send-beacon.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/network/string-eval.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/network/top-window.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-global-object",
+            "message": "'top'"
+          }
+        ]
+      }
+    },
+    "src/app/network/websocket.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/network/window-fetch.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          },
+          {
+            "rule": "guard/no-global-object",
+            "message": "'window'"
+          }
+        ]
+      }
+    },
+    "src/app/network/xhr.ts": {
+      "row": "네트워크",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-network"
+          }
+        ]
+      }
+    },
+    "src/app/numbers/base-to-string.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-base-to-string"
+          }
+        ]
+      }
+    },
+    "src/app/numbers/restrict-plus.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/restrict-plus-operands"
+          }
+        ]
+      }
+    },
+    "src/app/switch/default-case.ts": {
+      "row": "switch",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "default 팔 금지"
+          },
+          {
+            "rule": "@typescript-eslint/switch-exhaustiveness-check"
+          }
+        ]
+      }
+    },
+    "src/app/switch/default-exhaustive.ts": {
+      "row": "switch",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "default 팔 금지"
+          },
+          {
+            "rule": "@typescript-eslint/switch-exhaustiveness-check"
+          }
+        ]
+      }
+    },
+    "src/app/switch/missing-case.ts": {
+      "row": "switch",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/switch-exhaustiveness-check"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/class-expression.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-classes"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/class-inheritance.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-class-inheritance"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/class.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-classes"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/complexity.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "complexity"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/default-export.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "기본 내보내기 금지"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/dynamic-import.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "동적 import 금지"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/enum.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "enum 금지"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/eval.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-eval"
+          },
+          {
+            "rule": "guard/no-global-object",
+            "message": "'eval'"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/export-all.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "export * 금지"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/loop-for.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-loop-statements"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/loop-while.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-loop-statements"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/max-depth.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "max-depth"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/max-lines-per-function.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "max-lines-per-function"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/max-lines.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "max-lines"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/max-params.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "max-params"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/namespace.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "namespace·declare module"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/nested-ternary.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-nested-ternary"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/new-func.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-new-func"
+          },
+          {
+            "rule": "guard/no-global-object",
+            "message": "'Function'"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/restricted-global-this.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-globals",
+            "message": "'globalThis'"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/restricted-global.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-globals",
+            "message": "'window'"
+          }
+        ]
+      }
+    },
+    "src/app/syntax/this.ts": {
+      "row": "문법",
+      "expect": {
+        "errors": [
+          {
+            "rule": "functional/no-this-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/tests/computed-skip.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/tests/describe-skip.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/tests/it-only.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/tests/skip-if.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/tests/tauri-mocks.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "@tauri-apps/api/mocks는 shared/ipc/testing에서만"
+          }
+        ]
+      }
+    },
+    "src/app/tests/test-fails.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/tests/test-todo.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/tests/xit.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/no-test-skip"
+          }
+        ]
+      }
+    },
+    "src/app/types/as-const-allowed.ts": {
+      "row": "타입",
+      "expect": "clean"
+    },
+    "src/app/types/assertion-angle.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/consistent-type-assertions"
+          }
+        ]
+      }
+    },
+    "src/app/types/assertion-as.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/consistent-type-assertions"
+          }
+        ]
+      }
+    },
+    "src/app/types/assertion-double.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/consistent-type-assertions"
+          }
+        ]
+      }
+    },
+    "src/app/types/explicit-any.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-explicit-any"
+          }
+        ]
+      }
+    },
+    "src/app/types/method-shorthand.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/method-signature-style"
+          }
+        ]
+      }
+    },
+    "src/app/types/missing-boundary-type.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/explicit-module-boundary-types"
+          }
+        ]
+      }
+    },
+    "src/app/types/missing-return-type.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/explicit-function-return-type"
+          }
+        ]
+      }
+    },
+    "src/app/types/non-null.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-non-null-assertion"
+          }
+        ]
+      }
+    },
+    "src/app/types/satisfies-allowed.ts": {
+      "row": "타입",
+      "expect": "clean"
+    },
+    "src/app/types/strict-boolean-any.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-nullable-boolean.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-nullable-enum.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-nullable-number.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-nullable-object.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-nullable-string.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-number.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/strict-boolean-string.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/strict-boolean-expressions"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-argument.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-argument"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-assignment.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-assignment"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-call.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-call"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-declaration-merging.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-declaration-merging"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-enum-assignment.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-enum-assignment"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-enum-comparison.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-enum-comparison"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-function-type.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-function-type"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-member-access.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-member-access"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-return.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-return"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-type-assertion.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-type-assertion"
+          }
+        ]
+      }
+    },
+    "src/app/types/unsafe-unary-minus.ts": {
+      "row": "타입",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@typescript-eslint/no-unsafe-unary-minus"
+          }
+        ]
+      }
+    },
+    "src/features/files/ambient.d.ts": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy-disabled.js": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy.cjs": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy.cts": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy.js": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy.jsx": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy.mjs": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/files/legacy.mts": {
+      "row": "파일 종류",
+      "expect": {
+        "errors": [
+          {
+            "rule": "guard/forbidden-extension"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/bigint.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/math.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·BigInt·Math 멤버 사용 금지"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/number-call.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/number-member.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·BigInt·Math 멤버 사용 금지"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/parse-float.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/parse-int.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
+          }
+        ]
+      }
+    },
+    "src/features/numbers/unary-plus.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "단항 + 변환 금지"
+          }
+        ]
+      }
+    },
+    "src/features/react/array-index-key.tsx": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "@eslint-react/no-array-index-key"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-alias.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useEffect' import from 'react' is restricted"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-default-named.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'default' import from 'react' is restricted"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "useEffect 계열은"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-default.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "react는 이름 있는 가져오기만"
+          },
+          {
+            "rule": "no-restricted-imports",
+            "message": "'default' import from 'react' is restricted"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "useEffect 계열은"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-named.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useEffect' import from 'react' is restricted"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-namespace.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "react는 이름 있는 가져오기만"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "useEffect 계열은"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-reexport-alias.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useLayoutEffect' import from 'react' is restricted"
+          }
+        ]
+      }
+    },
+    "src/features/react/effect-reexport.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useEffect' import from 'react' is restricted"
+          }
+        ]
+      }
+    },
+    "src/features/react/hooks-conditional.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "react-hooks/rules-of-hooks"
+          }
+        ]
+      }
+    },
+    "src/features/react/insertion-effect.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useInsertionEffect' import from 'react' is restricted"
+          }
+        ]
+      }
+    },
+    "src/features/react/react-subpath.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "react 하위 경로 가져오기 금지"
+          }
+        ]
+      }
+    },
+    "src/features/react/ref-arrow.tsx": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "ref 콜백 함수 금지"
+          }
+        ]
+      }
+    },
+    "src/features/react/ref-function.tsx": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "ref 콜백 함수 금지"
+          }
+        ]
+      }
+    },
+    "src/features/react/ref-named-gap.tsx": {
+      "row": "React",
+      "expect": "KNOWN_GAP"
+    },
+    "src/features/react/sync-store.ts": {
+      "row": "React",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useSyncExternalStore' import from 'react' is restricted"
+          }
+        ]
+      }
+    },
+    "src/shared/ds/numbers/number-call.ts": {
+      "row": "숫자",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
+          }
+        ]
+      }
+    },
+    "src/shared/ipc/testing/tauri-mocks-allowed.ts": {
+      "row": "테스트",
+      "expect": {
+        "errors": [],
+        "absent": ["no-restricted-imports"]
+      }
+    },
+    "src/shared/lib/money.ts": {
+      "row": "허용 목록",
+      "expect": {
+        "errors": [],
+        "absent": ["no-restricted-syntax"]
+      }
+    },
+    "src/shared/lib/unlisted-predicate.ts": {
+      "row": "허용 목록",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-syntax",
+            "message": "타입 술어"
+          }
+        ]
+      }
+    },
+    "src/shared/platform/unlisted.ts": {
+      "row": "허용 목록",
+      "expect": {
+        "errors": [
+          {
+            "rule": "no-restricted-imports",
+            "message": "'useEffect' import from 'react' is restricted"
+          },
+          {
+            "rule": "no-restricted-syntax",
+            "message": "useEffect 계열은"
+          }
+        ]
+      }
+    },
+    "src/shared/platform/useCoreEvent.ts": {
+      "row": "허용 목록",
+      "expect": {
+        "errors": [],
+        "absent": ["no-restricted-imports", "no-restricted-syntax"]
+      }
+    }
+  }
+}

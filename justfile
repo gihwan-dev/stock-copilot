@@ -36,6 +36,7 @@ check-ts: check-node
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml
     pnpm -C apps/desktop exec tsc -p .
     pnpm -C apps/desktop exec eslint --max-warnings 0 src
+    node harness/eslint-violations/check.mjs
     pnpm -C apps/desktop exec vite build
     node harness/tsc-violations/check.mjs
     node --test 'apps/desktop/tests/*.test.mjs'
