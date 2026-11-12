@@ -5,9 +5,11 @@ mod commit_base_tests;
 #[cfg(test)]
 mod tests;
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -178,6 +180,20 @@ fn comparable(path: &Path) -> PathBuf {
     }
 }
 
+fn scratch_git_directory(scratch: &Path) -> Result<PathBuf, String> {
+    let mut hasher = DefaultHasher::new();
+    scratch.hash(&mut hasher);
+    let directory = std::env::temp_dir()
+        .join("stock-copilot-hooks-installed")
+        .join(format!("{:016x}", hasher.finish()));
+    if directory.exists() {
+        fs::remove_dir_all(&directory)
+            .map_err(|error| format!("{}: {error}", directory.display()))?;
+    }
+    fs::create_dir_all(&directory).map_err(|error| format!("{}: {error}", directory.display()))?;
+    Ok(directory)
+}
+
 fn expected_hooks(repository: &Path, scratch: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     if scratch.exists() {
         fs::remove_dir_all(scratch).map_err(|error| format!("{}: {error}", scratch.display()))?;
@@ -188,13 +204,15 @@ fn expected_hooks(repository: &Path, scratch: &Path) -> Result<BTreeMap<String, 
         scratch.join(LEFTHOOK_CONFIG),
     )
     .map_err(|error| format!("{LEFTHOOK_CONFIG}: {error}"))?;
+    let git_directory = scratch_git_directory(scratch)?;
     let mut init = isolated("git", scratch);
-    init.args(["init", "--quiet"]);
+    init.args(["init", "--quiet", "--separate-git-dir"])
+        .arg(&git_directory);
     stdout_of(init, "git init")?;
     let mut install = isolated("lefthook", scratch);
     install.arg("install");
     stdout_of(install, "lefthook install")?;
-    let directory = scratch.join(".git").join("hooks");
+    let directory = git_directory.join("hooks");
     let listing =
         fs::read_dir(&directory).map_err(|error| format!("{}: {error}", directory.display()))?;
     let mut hooks = BTreeMap::new();
