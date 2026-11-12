@@ -23,7 +23,7 @@ const expectedLists = {
     "src/shared/platform/useDocumentTitle.ts",
   ],
   TYPE_PREDICATE_ALLOWLIST: ["src/shared/lib/money.ts"],
-  THROW_ALLOWLIST: [],
+  THROW_ALLOWLIST: ["src/shared/ipc/testing/fakes.ts"],
   CHART_NUMBER_ALLOWLIST: [],
   RAW_TYPE_ALLOWLIST: [
     "src/shared/lib/brand.ts",

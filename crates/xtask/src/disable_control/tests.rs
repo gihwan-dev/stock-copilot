@@ -9,6 +9,7 @@ use crate::harness_workspace_tests::{fresh_directory, repository_root};
 use super::allowlist::{ALLOWLIST_FILE, Allowlist};
 use super::expects::Target;
 use super::lints::{LINTS_FILE, LintCatalogue};
+use super::scoped::in_module;
 use super::{
     Policy, RULES_FILE, RUST_EXPECT_KIND, Row, Rule, check_source, render_report, repository_rows,
     repository_sources,
@@ -18,6 +19,15 @@ const CASES_FILE: &str = "harness/disable-control/cases.toml";
 const SOURCES_DIRECTORY: &str = "harness/disable-control/sources";
 const MAIN_RS: &str = "apps/desktop/src-tauri/src/main.rs";
 const GENERATE_CONTEXT: &str = "let context = tauri::generate_context!();";
+
+const IPC_MODULE: &str = "apps/desktop/src-tauri/src/ipc";
+
+const IPC_EXPECT_LINTS: [&str; 4] = [
+    "trivial_casts",
+    "clippy::needless_pass_by_value",
+    "clippy::disallowed_macros",
+    "clippy::unnecessary_wraps",
+];
 
 const DISABLEABLE_GROUPS: [&str; 3] = ["clippy::pedantic", "clippy::nursery", "clippy::cargo"];
 
@@ -369,7 +379,10 @@ fn repository_passes_disable_check() {
 #[test]
 fn disable_report_lists_the_three_main_rs_expects() {
     let root = repository_root();
-    let found = repository_rows(&root).expect("collect rows");
+    let (ipc, found): (Vec<Row>, Vec<Row>) = repository_rows(&root)
+        .expect("collect rows")
+        .into_iter()
+        .partition(|row| in_module(IPC_MODULE, &row.path));
     let listed: BTreeSet<(&str, &str, &str)> = found
         .iter()
         .map(|row| (row.kind, row.path.as_str(), row.rule.as_str()))
@@ -385,6 +398,11 @@ fn disable_report_lists_the_three_main_rs_expects() {
             .iter()
             .all(|row| row.line > 0 && row.reason.contains("generate_context!")),
         "{found:#?}"
+    );
+    assert!(
+        ipc.iter()
+            .all(|row| IPC_EXPECT_LINTS.contains(&row.rule.as_str()) && row.line > 0),
+        "{ipc:#?}"
     );
     let report = render_report(&found);
     assert_eq!(

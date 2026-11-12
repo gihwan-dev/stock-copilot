@@ -9,6 +9,7 @@ import {
   violationLinter,
 } from "../../../harness/eslint-violations/lint.mjs";
 import { desktopRoot, repoRoot } from "./paths.mjs";
+import { desktopTypeScriptPaths } from "../../../harness/generated-files/generated.mjs";
 
 const requireFromDesktop = createRequire(join(desktopRoot, "package.json"));
 const { ESLint } = requireFromDesktop("eslint");
@@ -86,6 +87,7 @@ const undisableable = [
   "@typescript-eslint/consistent-type-assertions",
   "@typescript-eslint/no-unsafe-type-assertion",
   "functional/no-throw-statements",
+  "@typescript-eslint/only-throw-error",
   "functional/no-try-statements",
   "functional/no-expression-statements",
   "@eslint-community/eslint-comments/no-use",
@@ -143,7 +145,15 @@ test("typescript-eslint parses with the TypeScript 6 API (I-16)", () => {
 test("violation cases are linted with exactly the app configuration for the same path", async () => {
   const examples = violationLinter(undefined);
   const differing = [];
+  const generated = desktopTypeScriptPaths();
   for (const file of Object.keys(cases)) {
+    if (generated.includes(file)) {
+      assert.equal(
+        await appLinter.isPathIgnored(join(desktopRoot, file)),
+        true,
+      );
+      continue;
+    }
     const app = await appLinter.calculateConfigForFile(join(desktopRoot, file));
     const example = await examples.calculateConfigForFile(file);
     if (
@@ -300,7 +310,7 @@ test("every file under apps/desktop/src is a TypeScript lint target", async () =
       config.rules["guard/forbidden-extension"] === undefined;
     if (!file.endsWith("/.gitkeep") && !typescriptTarget) outside.push(file);
   }
-  assert.deepEqual(outside, []);
+  assert.deepEqual(outside, desktopTypeScriptPaths().sort());
 });
 
 test("just check runs ESLint on src without cache and with zero warnings allowed", () => {

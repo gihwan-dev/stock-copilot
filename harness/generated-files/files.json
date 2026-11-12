@@ -1,0 +1,25 @@
+{
+  "reason": "gen-bindings(apps/desktop/src-tauri/src/bin/gen-bindings.rs)가 만드는 IPC 생성물. 손으로 고치지 않고, just check가 다시 생성해 차이가 나면 실패한다 (harness.md 2장·5장, ADR 0016)",
+  "files": [
+    {
+      "path": "apps/desktop/src-tauri/ipc/commands.txt",
+      "format": "none"
+    },
+    {
+      "path": "apps/desktop/src-tauri/permissions/commands.toml",
+      "format": "none"
+    },
+    {
+      "path": "apps/desktop/src/shared/ipc/bindings.ts",
+      "format": "prettier"
+    },
+    {
+      "path": "apps/desktop/src/shared/ipc/testing/mockBindings.ts",
+      "format": "prettier"
+    },
+    {
+      "path": "apps/desktop/src/shared/ipc/testing/responses.ts",
+      "format": "prettier"
+    }
+  ]
+}

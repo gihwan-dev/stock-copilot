@@ -7,6 +7,8 @@ use crate::data_variants_tests::element_variants;
 use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
 use crate::lint_file::targets::{Coverage, TARGETS_FILE, Targets};
 
+use super::scoped::in_module;
+
 use super::script::{
     COMMENTS_SCRIPT, Comment, DIRECTIVES, SCRIPT_RULES_FILE, ScriptRules, comments_of, keyed_rows,
     repository_script_rows, script_rows,
@@ -15,6 +17,8 @@ use super::{
     RULES_FILE, RUST_EXPECT_KIND, Row, all_rows, new_rows, render_languages, render_new,
     rust_applied_line, unmatched,
 };
+
+const IPC_MODULE: &str = "apps/desktop/src-tauri/src/ipc";
 
 const CASES_FILE: &str = "harness/disable-control/script-cases.toml";
 const SOURCES_DIRECTORY: &str = "harness/disable-control/script-sources";
@@ -187,9 +191,13 @@ fn repository_has_no_script_disables() {
 fn full_report_counts_rust_and_typescript_separately() {
     let root = repository_root();
     let found = all_rows(&root).expect("collect all rows");
+    let ipc = found
+        .iter()
+        .filter(|row| row.kind == RUST_EXPECT_KIND && in_module(IPC_MODULE, &row.path))
+        .count();
     assert_eq!(
         render_languages(&found),
-        "disable-report: Rust 3건, TS 0건",
+        format!("disable-report: Rust {}건, TS 0건", ipc.saturating_add(3)),
         "{found:#?}"
     );
     let rows = [

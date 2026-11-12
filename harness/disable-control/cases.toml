@@ -317,3 +317,73 @@ expect = ["disable:not-disableable"]
 example = "individual-deny-struct-excessive-bools.rs"
 path = "crates/sample/src/lib.rs"
 expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-collector-statement.rs"
+path = "apps/desktop/src-tauri/src/ipc/registry.rs"
+expect = []
+
+[[source]]
+example = "scoped-collector-function.rs"
+path = "apps/desktop/src-tauri/src/ipc/registry.rs"
+expect = []
+
+[[source]]
+example = "scoped-collector-statement.rs"
+path = "apps/desktop/src-tauri/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-collector-business-function.rs"
+path = "apps/desktop/src-tauri/src/ipc/registry.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-collector-other-lint.rs"
+path = "apps/desktop/src-tauri/src/ipc/registry.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-injected-command.rs"
+path = "apps/desktop/src-tauri/src/ipc/app_version.rs"
+expect = []
+
+[[source]]
+example = "scoped-injected-command.rs"
+path = "crates/sample/src/lib.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-command-plain-argument.rs"
+path = "apps/desktop/src-tauri/src/ipc/app_version.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-not-a-command.rs"
+path = "apps/desktop/src-tauri/src/ipc/app_version.rs"
+expect = ["disable:not-disableable"]
+
+[[source]]
+example = "scoped-type-module.rs"
+path = "apps/desktop/src-tauri/src/ipc.rs"
+expect = []
+
+[[source]]
+example = "scoped-type-module.rs"
+path = "apps/desktop/src-tauri/src/other.rs"
+expect = ["disable:not-disableable", "disable:placement:module"]
+
+[[source]]
+example = "scoped-type-module-with-function.rs"
+path = "apps/desktop/src-tauri/src/ipc.rs"
+expect = ["disable:not-disableable", "disable:placement:module"]
+
+[[source]]
+example = "scoped-type-module-other-lint.rs"
+path = "apps/desktop/src-tauri/src/ipc.rs"
+expect = ["disable:not-disableable", "disable:placement:module"]
+
+[[source]]
+example = "scoped-type-module-inline.rs"
+path = "apps/desktop/src-tauri/src/ipc.rs"
+expect = ["disable:not-disableable", "disable:placement:module"]

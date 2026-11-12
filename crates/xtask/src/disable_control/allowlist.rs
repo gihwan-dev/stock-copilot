@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use proc_macro2::TokenStream;
 
+use super::scoped::{ScopedPermit, Site, permits as scoped_permits, scoped_permit};
 use crate::workspace_sources::SourceFailure;
 
 pub(crate) const ALLOWLIST_FILE: &str = "harness/disable-control/allowlist.toml";
@@ -20,6 +21,8 @@ pub(crate) struct Permit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Allowlist {
     permits: BTreeSet<Permit>,
+    scoped: BTreeSet<ScopedPermit>,
+    root: PathBuf,
 }
 
 fn failure(message: &str) -> SourceFailure {
@@ -77,7 +80,10 @@ fn permit(root: &Path, entry: &toml::Value) -> Result<Permit, SourceFailure> {
 
 impl Allowlist {
     pub(crate) fn parse(root: &Path, table: &toml::Table) -> Result<Self, SourceFailure> {
-        if let Some(unknown) = table.keys().find(|key| *key != "expect") {
+        if let Some(unknown) = table
+            .keys()
+            .find(|key| *key != "expect" && *key != "scoped-expect")
+        {
             return Err(failure(&format!("모르는 키 {unknown}")));
         }
         let entries = table
@@ -88,12 +94,39 @@ impl Allowlist {
             .iter()
             .map(|entry| permit(root, entry))
             .collect::<Result<_, _>>()?;
+        let scoped: Vec<ScopedPermit> = match table.get("scoped-expect") {
+            None => Vec::new(),
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| failure("[[scoped-expect]]는 표의 배열이다"))?
+                .iter()
+                .map(|entry| scoped_permit(root, ALLOWLIST_FILE, entry))
+                .collect::<Result<_, _>>()?,
+        };
         let unique: BTreeSet<Permit> = permits.iter().cloned().collect();
-        if unique.len() == permits.len() {
-            Ok(Self { permits: unique })
+        let unique_scoped: BTreeSet<ScopedPermit> = scoped.iter().cloned().collect();
+        if unique.len() == permits.len() && unique_scoped.len() == scoped.len() {
+            Ok(Self {
+                permits: unique,
+                scoped: unique_scoped,
+                root: root.to_path_buf(),
+            })
         } else {
             Err(failure("같은 항목이 두 번 있다"))
         }
+    }
+
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
+    pub(crate) fn permits_scoped(
+        &self,
+        path: &str,
+        sites: &BTreeSet<Site>,
+        lint: &str,
+    ) -> Option<()> {
+        scoped_permits(&self.scoped, path, sites, lint)
     }
 
     pub(crate) fn permits(&self, path: &str, placed: Option<&str>, lint: &str) -> Option<()> {

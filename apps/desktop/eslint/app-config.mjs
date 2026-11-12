@@ -15,6 +15,7 @@ import {
 } from "./boundaries.mjs";
 import { guard } from "./guard-plugin.mjs";
 import { emptyParser, local } from "./local-plugin.mjs";
+import { desktopTypeScriptPaths } from "../../../harness/generated-files/generated.mjs";
 
 const TS_FILES = ["src/**/*.ts", "src/**/*.tsx"];
 const DS = ["src/shared/ds/**"];
@@ -70,6 +71,7 @@ const UNDISABLEABLE_RULES = [
   "@typescript-eslint/consistent-type-assertions",
   "@typescript-eslint/no-unsafe-type-assertion",
   "functional/no-throw-statements",
+  "@typescript-eslint/only-throw-error",
   "functional/no-try-statements",
   "functional/no-expression-statements",
   "@eslint-community/eslint-comments/no-use",
@@ -150,6 +152,10 @@ export const appConfig = (
           "node_modules/**",
           "!src/**/node_modules/",
         ],
+      },
+      {
+        basePath: join(import.meta.dirname, ".."),
+        ignores: desktopTypeScriptPaths(),
       },
       {
         linterOptions: {
@@ -449,7 +455,10 @@ export const appConfig = (
         rules: off(["guard/no-type-predicate"]),
       }),
       ...whenListed(THROW_ALLOWLIST, {
-        rules: off(["functional/no-throw-statements"]),
+        rules: off([
+          "functional/no-throw-statements",
+          "@typescript-eslint/only-throw-error",
+        ]),
       }),
       ...whenListed(PROMISE_REJECTION_ALLOWLIST, {
         rules: off(["local/no-promise-catch"]),

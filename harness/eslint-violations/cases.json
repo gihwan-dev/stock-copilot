@@ -3692,6 +3692,10 @@
       "expect": [
         "boundaries/no-unknown-files :: File does not match any file pattern and does not belong to any known element"
       ]
+    },
+    "src/shared/ipc/testing/fakes.ts": {
+      "row": "실패 처리",
+      "expect": []
     }
   }
 }

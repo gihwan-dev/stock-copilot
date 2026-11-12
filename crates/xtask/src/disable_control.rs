@@ -1,6 +1,7 @@
 mod allowlist;
 mod expects;
 mod lints;
+mod scoped;
 pub(crate) mod script;
 
 #[cfg(test)]
@@ -25,6 +26,7 @@ use crate::workspace_sources::{
 use allowlist::{ALLOWLIST_FILE, Allowlist};
 use expects::{Collected, DisableRules, ExpectCollector, Target};
 use lints::{LINTS_FILE, LintCatalogue, individually_configured};
+use scoped::{Site, module_sites};
 use script::{ScriptRules, repository_script_rows, script_rows};
 
 pub(crate) const RUST_EXPECT_KIND: &str = "rust-expect";
@@ -167,7 +169,27 @@ impl Policy {
         (self.catalogue.disableable.contains(lint) && !self.individual.contains(lint)).then_some(())
     }
 
+    fn sites(&self, path: &str, collected: &Collected) -> BTreeSet<Site> {
+        let mut sites = collected.sites.clone();
+        if let Some(name) = &collected.module {
+            sites.extend(module_sites(self.allowlist.root(), path, name));
+        }
+        sites
+    }
+
+    fn scoped_module(&self, path: &str, collected: &Collected, sites: &BTreeSet<Site>) -> bool {
+        collected.target == Target::Module
+            && sites.contains(&Site::TypeModule)
+            && !collected.lints.is_empty()
+            && collected.lints.iter().all(|lint| {
+                self.allowlist
+                    .permits_scoped(path, &BTreeSet::from([Site::TypeModule]), lint)
+                    .is_some()
+            })
+    }
+
     fn lint_findings(&self, path: &str, collected: &Collected) -> Vec<Finding> {
+        let sites = self.sites(path, collected);
         let finding = |rule: Rule, lint: &str| Finding {
             path: String::from(path),
             line: collected.line,
@@ -175,6 +197,7 @@ impl Policy {
             lint: String::from(lint),
         };
         let mut findings: Vec<Finding> = match collected.target {
+            Target::Module if self.scoped_module(path, collected, &sites) => Vec::new(),
             Target::Function
             | Target::Statement
             | Target::Field
@@ -201,6 +224,7 @@ impl Policy {
                     .allowlist
                     .permits(path, collected.statement.as_deref(), lint)
                     .is_none()
+                && self.allowlist.permits_scoped(path, &sites, lint).is_none()
             {
                 findings.push(finding(Rule::NotDisableable, lint));
             }

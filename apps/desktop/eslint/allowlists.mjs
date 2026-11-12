@@ -7,7 +7,7 @@ export const PLATFORM_FILE_ALLOWLIST = [
 
 export const TYPE_PREDICATE_ALLOWLIST = ["src/shared/lib/money.ts"];
 
-export const THROW_ALLOWLIST = [];
+export const THROW_ALLOWLIST = ["src/shared/ipc/testing/fakes.ts"];
 
 export const CHART_NUMBER_ALLOWLIST = [];
 

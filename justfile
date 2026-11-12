@@ -52,6 +52,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" sql-check
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
+    node harness/generated-files/check.mjs
     "{{just_executable()}}" raw-types
     "{{just_executable()}}" disable-check
     cargo nextest run --workspace --locked
@@ -152,6 +153,9 @@ mutants-all:
 
 advisory-db-fetch:
     cargo deny --locked fetch db
+
+gen-bindings:
+    node harness/generated-files/check.mjs --write
 
 lint-file path:
     cargo run --locked --quiet --package xtask -- lint-file "$1"

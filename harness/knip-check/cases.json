@@ -41,7 +41,12 @@
       "cycles": "error"
     },
     "ignoreDependencies": ["@tauri-apps/cli", "@typescript/native"],
-    "ignoreBinaries": ["just"]
+    "ignoreBinaries": ["just"],
+    "ignoreIssues": {
+      "src/shared/ipc/bindings.ts": ["exports", "types"],
+      "src/shared/ipc/testing/mockBindings.ts": ["exports", "types"],
+      "src/shared/ipc/testing/responses.ts": ["exports", "types"]
+    }
   },
   "withoutCase": ["subpaths"],
   "cases": {

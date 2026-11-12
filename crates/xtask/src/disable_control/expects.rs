@@ -15,6 +15,7 @@ use syn::{
 };
 
 use super::allowlist::local_text;
+use super::scoped::{Site, function_sites, local_sites};
 
 const EXPECT: &str = "expect";
 
@@ -116,6 +117,8 @@ pub(crate) struct Collected {
     pub(crate) reason: String,
     pub(crate) target: Target,
     pub(crate) statement: Option<String>,
+    pub(crate) sites: BTreeSet<Site>,
+    pub(crate) module: Option<String>,
 }
 
 #[derive(Debug)]
@@ -123,6 +126,8 @@ pub(crate) struct ExpectCollector<'rules> {
     rules: &'rules DisableRules,
     handled: BTreeSet<(usize, usize)>,
     pending: Vec<Target>,
+    next_sites: BTreeSet<Site>,
+    next_module: Option<String>,
     pub(crate) found: Vec<Collected>,
 }
 
@@ -201,6 +206,8 @@ impl<'rules> ExpectCollector<'rules> {
             rules,
             handled: BTreeSet::new(),
             pending: Vec::new(),
+            next_sites: BTreeSet::new(),
+            next_module: None,
             found: Vec::new(),
         }
     }
@@ -212,6 +219,10 @@ impl<'rules> ExpectCollector<'rules> {
         statement: Option<&String>,
         inside: Option<()>,
     ) {
+        let sites = self.next_sites.clone();
+        let module = self.next_module.clone();
+        self.next_sites.clear();
+        self.next_module = None;
         let checked = if holds_one_item(target).is_some() && inside.is_some() {
             Target::NestedItem
         } else {
@@ -237,6 +248,8 @@ impl<'rules> ExpectCollector<'rules> {
                 reason,
                 target: placed,
                 statement: statement.cloned(),
+                sites: sites.clone(),
+                module: module.clone(),
             });
         }
     }
@@ -288,6 +301,8 @@ impl<'rules> ExpectCollector<'rules> {
                 reason,
                 target: Target::Macro,
                 statement: None,
+                sites: BTreeSet::new(),
+                module: None,
             });
         }
     }
@@ -313,6 +328,7 @@ fn source_tokens(expression: &Expr) -> TokenStream {
 
 impl<'ast> Visit<'ast> for ExpectCollector<'_> {
     fn visit_item_fn(&mut self, i: &'ast ItemFn) {
+        self.next_sites = function_sites(i);
         self.record(
             &i.attrs,
             Target::Function,
@@ -354,6 +370,7 @@ impl<'ast> Visit<'ast> for ExpectCollector<'_> {
 
     fn visit_local(&mut self, i: &'ast Local) {
         let statement = local_text(i);
+        self.next_sites = local_sites(i);
         self.record(
             &i.attrs,
             Target::Statement,
@@ -534,6 +551,9 @@ impl<'ast> Visit<'ast> for ExpectCollector<'_> {
     }
 
     fn visit_item_mod(&mut self, i: &'ast ItemMod) {
+        if i.content.is_none() {
+            self.next_module = Some(i.ident.to_string());
+        }
         self.record(&i.attrs, Target::Module, None, None);
         visit::visit_item_mod(self, i);
     }
