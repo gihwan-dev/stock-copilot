@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkSteps } from "../../../harness/check-list/list.mjs";
+import { checkSteps, dumpJustfile } from "../../../harness/check-list/list.mjs";
 import { knownGapProblems } from "../../../harness/eslint-violations/verdict.mjs";
 import { gapTable, knownGaps } from "../../../harness/known-gaps/list.mjs";
 import { repoRoot } from "./paths.mjs";
@@ -83,7 +83,7 @@ test("just known-gaps prints the list read-only and is not part of just check", 
     justfile.includes("known-gaps:\n    node harness/known-gaps/list.mjs\n"),
   );
   assert.ok(
-    checkSteps(justfile).every(
+    checkSteps(dumpJustfile(join(repoRoot, "justfile"))).every(
       (step) => !(step.command ?? "").includes("known-gaps"),
     ),
   );
@@ -97,6 +97,22 @@ test("just known-gaps prints the list read-only and is not part of just check", 
   assert.equal(run.stdout, `${gapTable(gaps)}\n`);
   assert.match(
     run.stdout,
-    /known-gaps: \d+건 \(eslint 7건, hook 6건, adr \d+건\)/u,
+    /known-gaps: \d+건 \(eslint 7건, hook 6건, adr \d+건\(문서만\(예제 없음\)\)\)/u,
+  );
+});
+
+test("ADR 0019 states the same gap count as just known-gaps and marks ADR items as document only", () => {
+  const gaps = knownGaps(repoRoot);
+  const summary = gapTable(gaps).split("\n").at(-1);
+  const adr = readFileSync(
+    join(repoRoot, "docs/adr/0019-harness-self-tests-and-claude-regression.md"),
+    "utf8",
+  );
+  assert.ok(adr.includes(summary), summary);
+  assert.ok(
+    gapTable(gaps)
+      .split("\n")
+      .filter((line) => line.startsWith("| adr |"))
+      .every((line) => line.includes("| 문서만(예제 없음) |")),
   );
 });

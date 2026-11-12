@@ -946,10 +946,26 @@ const baseBranchFindings = (
           ),
         )
     : [];
-  if (sub !== "reset") {
-    return [...creating, ...refspecs];
-  }
   const directory = aliasDirectory(parsed, invocation, context);
+  const onBaseOrUnknown = () =>
+    directory === undefined ||
+    context.moves.branch ||
+    isBase(branchOfDirectory(directory) ?? "");
+  const amending =
+    sub === "commit" &&
+    !isSubagent(context.role) &&
+    options.some((option) => base.amendOptions.includes(option.long)) &&
+    onBaseOrUnknown()
+      ? [
+          finding(
+            "git-history",
+            "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git commit --amend로 마지막 커밋을 바꿔 쓰지 않는다",
+          ),
+        ]
+      : [];
+  if (sub !== "reset") {
+    return [...creating, ...refspecs, ...amending];
+  }
   const kinds = statics.map((item) =>
     resetArgumentKind(item, statics, directory, base),
   );
@@ -967,21 +983,23 @@ const baseBranchFindings = (
     options.some((option) =>
       base.resetOptions.includes(option.long ?? `-${option.short}`),
     );
-  const reset =
-    !kinds.includes(RESET_ARGUMENT.ambiguous) &&
-    ((committing && isSubagent(context.role)) ||
-      (moving &&
-        (directory === undefined ||
-          isBase(branchOfDirectory(directory) ?? ""))))
+  const reset = kinds.includes(RESET_ARGUMENT.ambiguous)
+    ? []
+    : committing
       ? [
           finding(
             "git-history",
-            isSubagent(context.role)
-              ? "서브에이전트는 커밋을 받는 git reset으로 브랜치 끝을 옮기지 않는다"
-              : "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git reset으로 브랜치 끝을 옮기지 않는다",
+            "커밋을 받는 git reset으로 브랜치 끝을 옮기지 않는다. 경로만 내릴 때는 `git reset -- <경로>`를 쓴다",
           ),
         ]
-      : [];
+      : moving && onBaseOrUnknown()
+        ? [
+            finding(
+              "git-history",
+              "기준 브랜치가 체크아웃된 곳(또는 알 수 없는 곳)에서 git reset으로 브랜치 끝을 옮기지 않는다",
+            ),
+          ]
+        : [];
   return [...creating, ...refspecs, ...ambiguous, ...reset];
 };
 
@@ -1869,6 +1887,13 @@ const analyzeCommand = (command, context, depth, hidden, grouped) => {
   if (["cd", "pushd", "popd"].includes(invocation.name)) {
     context.cwd = changeDirectory(invocation, context, grouped);
   }
+  const git = gitParts(invocation);
+  if (
+    git !== undefined &&
+    context.rules.git.baseBranch.branchMovers.includes(git.sub)
+  ) {
+    context.moves.branch = true;
+  }
   return findings;
 };
 
@@ -1910,6 +1935,7 @@ export const bashFindings = (input, project, definitions = DEFINITIONS) => {
         ? input.cwd
         : process.cwd(),
     definitions,
+    moves: { branch: false },
   };
   const findings = [];
   if (toolInput.dangerouslyDisableSandbox === true) {

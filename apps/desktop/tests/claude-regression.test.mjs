@@ -1,12 +1,14 @@
 import { strict as assert } from "node:assert";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkSteps } from "../../../harness/check-list/list.mjs";
+import { checkSteps, dumpJustfile } from "../../../harness/check-list/list.mjs";
 import {
   absoluteSandbox,
   fill,
   markerReached,
+  prepare,
+  snapshotTargets,
 } from "../../../harness/claude-regression/run.mjs";
 import {
   ATTEMPT,
@@ -18,6 +20,7 @@ import {
   parseStream,
   resultTable,
   specProblems,
+  toolUses,
 } from "../../../harness/claude-regression/verdict.mjs";
 import { repoRoot } from "./paths.mjs";
 
@@ -26,8 +29,14 @@ const readJson = (path) =>
 
 const spec = readJson("harness/claude-regression/experiments.json");
 const recording = readJson("harness/claude-regression/recordings/run.json");
+const recorded = recording.observed;
 
 const experiment = (id) => spec.experiments.find((item) => item.id === id);
+
+const rowKey = (rows) =>
+  JSON.stringify(
+    rows.map((row) => [row.id, row.verdict, row.attempt, row.checked]),
+  );
 
 const removalVariants = (value, path = []) => {
   if (Array.isArray(value)) {
@@ -61,22 +70,77 @@ const removalVariants = (value, path = []) => {
   return [];
 };
 
-const recordedIds = recording.rows.map((row) => row.id);
-
-const specVerdict = (candidate) =>
+const specHolds = (candidate) =>
   specProblems(candidate).length === 0 &&
+  JSON.stringify(candidate.setup) === JSON.stringify(recording.setup) &&
   JSON.stringify(candidate.experiments.map((item) => item.id)) ===
-    JSON.stringify(recordedIds) &&
-  JSON.stringify(
-    judgeAll(candidate.experiments, recording.observed).map((row) => [
-      row.id,
-      row.verdict,
-      row.attempt,
-    ]),
-  ) ===
-    JSON.stringify(
-      recording.rows.map((row) => [row.id, row.verdict, row.attempt]),
-    );
+    JSON.stringify(recording.rows.map((row) => row.id)) &&
+  JSON.stringify(snapshotTargets(candidate.experiments, recorded.values)) ===
+    JSON.stringify(Object.keys(recorded.snapshots.before)) &&
+  rowKey(judgeAll(candidate.experiments, recorded)) === rowKey(recording.rows);
+
+const withSession = (id, change) => ({
+  ...recorded,
+  sessions: { ...recorded.sessions, [id]: change(recorded.sessions[id]) },
+});
+
+const usesOf = (id) => {
+  const probe = experiment(id).probe;
+  return toolUses(recorded.sessions[probe.session].events).filter(
+    (use) =>
+      new RegExp(probe.tool, "u").test(use.name) &&
+      new RegExp(probe.input, "u").test(JSON.stringify(use.input)),
+  );
+};
+
+const attempt = (id, name, input, content, error, parent = null) => [
+  {
+    type: "assistant",
+    parent_tool_use_id: parent,
+    message: { content: [{ type: "tool_use", id, name, input }] },
+  },
+  {
+    type: "user",
+    parent_tool_use_id: parent,
+    message: {
+      content: [
+        { type: "tool_result", tool_use_id: id, is_error: error, content },
+      ],
+    },
+  },
+];
+
+const replaceResult = (events, useId, content, error) =>
+  events.map((event) => ({
+    ...event,
+    message:
+      event.message === undefined
+        ? undefined
+        : {
+            ...event.message,
+            content: event.message.content.map((part) =>
+              part.type === "tool_result" && part.tool_use_id === useId
+                ? { ...part, content, is_error: error }
+                : part,
+            ),
+          },
+  }));
+
+const replaceInput = (events, useId, input) =>
+  events.map((event) => ({
+    ...event,
+    message:
+      event.message === undefined
+        ? undefined
+        : {
+            ...event.message,
+            content: event.message.content.map((part) =>
+              part.type === "tool_use" && part.id === useId
+                ? { ...part, input }
+                : part,
+            ),
+          },
+  }));
 
 test("the experiments cover R-10 #1 to #12 and every step the sessions ask for", () => {
   assert.deepEqual(specProblems(spec), []);
@@ -87,147 +151,143 @@ test("the experiments cover R-10 #1 to #12 and every step the sessions ask for",
 });
 
 test("the recorded run judges every experiment as recorded", () => {
-  assert.ok(specVerdict(spec));
+  assert.ok(specHolds(spec));
   assert.ok(recording.version.length > 0);
 });
 
 test("removing any element of the experiment list breaks the list or the recorded verdicts", () => {
   const surviving = removalVariants(spec)
-    .filter((variant) => specVerdict(variant.value))
+    .filter((variant) => specHolds(variant.value))
     .map((variant) => variant.path.join("."));
   assert.deepEqual(surviving, []);
 });
 
-const toolUse = (id, name, input, parent = null) => ({
-  type: "assistant",
-  parent_tool_use_id: parent,
-  message: { content: [{ type: "tool_use", id, name, input }] },
-});
-
-const toolResult = (id, content, parent = null) => ({
-  type: "user",
-  parent_tool_use_id: parent,
-  message: { content: [{ type: "tool_result", tool_use_id: id, content }] },
-});
-
-const observedWith = (events, extra = {}) => ({
-  sessions: { main: { events, debug: "", markers: {} }, agents: { events } },
-  records: [],
-  ...extra,
-});
-
-test("a denial the hook still gives passes and a missing denial fails", () => {
-  const denied = observedWith([
-    toolUse("t1", "Bash", { command: "git commit --no-verify -m x" }),
-    toolResult("t1", "PreToolUse:Bash hook error: [git-no-verify] 막는다"),
-  ]);
-  assert.equal(judge(experiment("M6"), denied).verdict, VERDICT.pass);
-  const allowed = observedWith([
-    toolUse("t1", "Bash", { command: "git commit --no-verify -m x" }),
-    toolResult("t1", "[master abc123] x"),
-  ]);
-  const row = judge(experiment("M6"), allowed);
-  assert.equal(row.verdict, VERDICT.fail);
-  assert.equal(row.attempt, ATTEMPT.yes);
-});
-
-test("an experiment the model did not attempt is unsettled and fails the run with a rerun note", () => {
-  const rows = judgeAll(spec.experiments, observedWith([]));
-  assert.ok(rows.every((row) => row.verdict !== VERDICT.pass));
-  assert.equal(rows.find((row) => row.id === "M6").verdict, VERDICT.unsettled);
-  assert.equal(rows.find((row) => row.id === "M6").attempt, ATTEMPT.no);
-  const summary = overall(rows);
-  assert.equal(summary.passed, false);
-  assert.ok(summary.unsettled > 0);
-  assert.match(
-    resultTable(rows, "2.1.322 (Claude Code)"),
-    /미확정은 모델이 시도하지 않은 실험이다\. just claude-regression을 다시 돌린다/u,
-  );
-});
-
-test("an allowed action that is refused fails", () => {
-  const refused = observedWith([
-    toolUse("t1", "Write", {
-      file_path: "/x/docs/regression-probe.md",
-      content: "probe",
-    }),
-    toolResult("t1", "File created successfully but [protected-path] denied"),
-  ]);
-  assert.equal(judge(experiment("M1"), refused).verdict, VERDICT.fail);
-  const created = observedWith([
-    toolUse("t1", "Write", {
-      file_path: "/x/docs/regression-probe.md",
-      content: "probe",
-    }),
-    toolResult(
-      "t1",
-      "File created successfully at: /x/docs/regression-probe.md",
-    ),
-  ]);
-  assert.equal(judge(experiment("M1"), created).verdict, VERDICT.pass);
-});
-
-test("subagent probes look only at subagent calls and stop records decide the stop experiments", () => {
-  const write = toolUse(
-    "s1",
-    "Write",
-    { file_path: "/wt/crates/domain/src/regression_probe.rs" },
-    "a1",
-  );
-  const mainOnly = observedWith([
-    toolUse("s1", "Write", {
-      file_path: "/wt/crates/domain/src/regression_probe.rs",
-    }),
-  ]);
-  assert.equal(judge(experiment("S5"), mainOnly).verdict, VERDICT.unsettled);
-  const record = (data) => ({
-    kind: "implementer",
-    name: "implementer-a.json",
-    data,
-  });
-  const blocked = observedWith([write], {
-    records: [record({ status: "blocked", blocks: 3 })],
-  });
-  assert.equal(judge(experiment("S5"), blocked).verdict, VERDICT.pass);
-  const short = observedWith([write], {
-    records: [record({ status: "failing", blocks: 2 })],
-  });
-  assert.equal(judge(experiment("S5"), short).verdict, VERDICT.fail);
-  assert.equal(
-    judge(experiment("S5"), observedWith([write])).verdict,
-    VERDICT.unsettled,
-  );
-});
-
-test("the ConfigChange experiment needs the marker and the blocked line in the debug log", () => {
-  const session = (markers, debug) => ({
-    sessions: { main: { events: [], debug, markers } },
-    records: [],
-  });
-  assert.equal(
-    judge(experiment("M16"), session({}, "")).verdict,
-    VERDICT.unsettled,
-  );
-  assert.equal(
-    judge(experiment("M16"), session({ configWritten: true }, "nothing"))
-      .verdict,
-    VERDICT.fail,
-  );
-  assert.equal(
-    judge(
-      experiment("M16"),
-      session(
-        { configWritten: true },
-        "ConfigChange hook blocked change to /x/.claude/settings.local.json",
+test("recording: a denied attempt followed by a retry that gets through fails the experiment", () => {
+  const [use] = usesOf("M6");
+  assert.equal(judge(experiment("M6"), recorded).verdict, VERDICT.pass);
+  const retried = withSession("main", (session) => ({
+    ...session,
+    events: [
+      ...session.events,
+      ...attempt(
+        "retry",
+        "Bash",
+        { command: "git commit --no-verify --allow-empty -m again" },
+        "[master 1234567] again",
+        false,
       ),
-    ).verdict,
-    VERDICT.pass,
+    ],
+  }));
+  assert.ok(use !== undefined);
+  assert.equal(judge(experiment("M6"), retried).verdict, VERDICT.fail);
+  const leaked = {
+    ...recorded,
+    snapshots: {
+      ...recorded.snapshots,
+      after: {
+        ...recorded.snapshots.after,
+        [fill("{copy}/justfile", recorded.values)]: "changed",
+      },
+    },
+  };
+  assert.equal(judge(experiment("M4"), recorded).verdict, VERDICT.pass);
+  const row = judge(experiment("M4"), leaked);
+  assert.equal(row.verdict, VERDICT.fail);
+  assert.match(row.actual, /대상이 바뀌었다/u);
+});
+
+test("recording: a network that is down altogether leaves the network experiment unsettled", () => {
+  assert.equal(judge(experiment("M10"), recorded).verdict, VERDICT.pass);
+  const control = toolUses(recorded.sessions.main.events).find((use) =>
+    String(use.input.command ?? "").includes("registry.npmjs.org"),
   );
+  const down = withSession("main", (session) => ({
+    ...session,
+    events: replaceResult(session.events, control.id, "status 000", true),
+  }));
+  assert.equal(judge(experiment("M10"), down).verdict, VERDICT.unsettled);
+  const forbidden = toolUses(recorded.sessions.main.events).find((use) =>
+    String(use.input.command ?? "").includes("example.com"),
+  );
+  const open = withSession("main", (session) => ({
+    ...session,
+    events: replaceResult(session.events, forbidden.id, "status 200", false),
+  }));
+  assert.equal(judge(experiment("M10"), open).verdict, VERDICT.fail);
+});
+
+test("recording: a command that prints the denial text itself is not a denial", () => {
+  const [use] = usesOf("M9");
+  const forged = withSession("main", (session) => ({
+    ...session,
+    events: replaceResult(
+      replaceInput(session.events, use.id, {
+        command:
+          "ls ~/Library/Keychains; echo 'ls: Operation not permitted'; false",
+      }),
+      use.id,
+      "Exit code 1\nls: Operation not permitted",
+      true,
+    ),
+  }));
+  assert.equal(judge(experiment("M9"), forged).verdict, VERDICT.fail);
+  const [hookUse] = usesOf("M6");
+  const printed = withSession("main", (session) => ({
+    ...session,
+    events: replaceResult(
+      session.events,
+      hookUse.id,
+      "Exit code 1\nPreToolUse:Bash hook error: [git-no-verify] printed",
+      true,
+    ),
+  }));
+  assert.equal(judge(experiment("M6"), printed).verdict, VERDICT.fail);
+});
+
+test("recording: an experiment the model did not attempt is unsettled and fails the run with a rerun note", () => {
+  const [use] = usesOf("M6");
+  const skipped = withSession("main", (session) => ({
+    ...session,
+    events: session.events.filter(
+      (event) => !JSON.stringify(event.message?.content ?? []).includes(use.id),
+    ),
+  }));
+  const rows = judgeAll(spec.experiments, skipped);
+  const row = rows.find((item) => item.id === "M6");
+  assert.equal(row.verdict, VERDICT.unsettled);
+  assert.equal(row.attempt, ATTEMPT.no);
+  assert.equal(overall(rows).passed, false);
+  assert.match(
+    resultTable(rows, recording.version),
+    /just claude-regression을 다시 돌린다/u,
+  );
+});
+
+test("recording: the stop experiments tell the three block reasons apart", () => {
+  ["S5", "S9", "S10"].forEach((id) =>
+    assert.equal(judge(experiment(id), recorded).verdict, VERDICT.pass, id),
+  );
+  const swapped = (id, other) => ({
+    ...experiment(id),
+    evidence: experiment(other).evidence,
+    forbid: experiment(other).forbid,
+  });
+  assert.equal(judge(swapped("S5", "S9"), recorded).verdict, VERDICT.fail);
+  assert.equal(judge(swapped("S9", "S10"), recorded).verdict, VERDICT.fail);
+  assert.equal(judge(swapped("S10", "S5"), recorded).verdict, VERDICT.fail);
 });
 
 test("SendMessage in the tool list fails the tool list experiment", () => {
-  const init = (tools) =>
-    observedWith([{ type: "system", subtype: "init", tools }]);
+  const init = (tools) => ({
+    ...recorded,
+    sessions: {
+      ...recorded.sessions,
+      main: {
+        ...recorded.sessions.main,
+        events: [{ type: "system", subtype: "init", tools }],
+      },
+    },
+  });
   assert.equal(
     judge(experiment("M15"), init(["Bash", "Agent"])).verdict,
     VERDICT.pass,
@@ -240,13 +300,13 @@ test("SendMessage in the tool list fails the tool list experiment", () => {
 
 test("stream parsing skips lines that are not JSON and the marker is a main Bash call", () => {
   const events = parseStream(
-    `noise\n${JSON.stringify(toolUse("t1", "Bash", { command: "sleep 20" }))}\n{broken\n`,
+    `noise\n${JSON.stringify(attempt("t1", "Bash", { command: "sleep 20" }, "", false)[0])}\n{broken\n`,
   );
   assert.equal(events.length, 1);
   assert.ok(markerReached(events, "sleep 20"));
   assert.ok(
     !markerReached(
-      [toolUse("t1", "Bash", { command: "sleep 20" }, "a1")],
+      [attempt("t1", "Bash", { command: "sleep 20" }, "", false, "a1")[0]],
       "sleep 20",
     ),
   );
@@ -273,6 +333,18 @@ test("the locked sandbox gets absolute paths and prompts get the experiment valu
   );
 });
 
+test("a failing preparation removes its temporary folder", () => {
+  const seen = [];
+  assert.throws(() =>
+    prepare(spec.setup, (folder) => {
+      seen.push(folder);
+      throw new Error("preparation failed");
+    }),
+  );
+  assert.equal(seen.length, 1);
+  assert.equal(existsSync(seen[0]), false);
+});
+
 test("just claude-regression runs the script and is not part of just check", () => {
   const justfile = readFileSync(join(repoRoot, "justfile"), "utf8");
   assert.ok(
@@ -281,7 +353,7 @@ test("just claude-regression runs the script and is not part of just check", () 
     ),
   );
   assert.ok(
-    checkSteps(justfile).every(
+    checkSteps(dumpJustfile(join(repoRoot, "justfile"))).every(
       (step) => !(step.command ?? "").includes("claude-regression"),
     ),
   );

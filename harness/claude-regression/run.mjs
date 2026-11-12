@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -13,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  fill,
   judgeAll,
   overall,
   parseStream,
@@ -22,8 +24,16 @@ import {
 
 const here = resolve(fileURLToPath(import.meta.url), "..");
 const repoRoot = resolve(here, "..", "..");
-const SESSION_LIMIT_MS = 40 * 60 * 1000;
+const SESSION_LIMIT_MS = 60 * 60 * 1000;
 const CONFIG_PAUSE_MS = 3000;
+const IDENTITY = [
+  "-c",
+  "user.name=regression",
+  "-c",
+  "user.email=regression@example.invalid",
+  "-c",
+  "commit.gpgsign=false",
+];
 
 const run = (command, args, cwd, environment = process.env) =>
   execFileSync(command, args, {
@@ -33,11 +43,7 @@ const run = (command, args, cwd, environment = process.env) =>
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 
-export const fill = (text, values) =>
-  Object.entries(values).reduce(
-    (current, [key, value]) => current.replaceAll(`{${key}}`, value),
-    text,
-  );
+export { fill };
 
 export const absoluteSandbox = (sandbox, copy, experiment) => {
   const absolute = (path) =>
@@ -57,12 +63,52 @@ export const absoluteSandbox = (sandbox, copy, experiment) => {
   };
 };
 
-const prepare = () => {
-  const experiment = realpathSync(
-    mkdtempSync(join(tmpdir(), "stock-copilot-regression-")),
+export const snapshotOf = (target) => {
+  if (target.startsWith("git:")) {
+    const [, directory, reference] = target.split(":");
+    try {
+      return run("git", ["rev-parse", reference], directory);
+    } catch {
+      return "absent";
+    }
+  }
+  return existsSync(target)
+    ? createHash("sha256").update(readFileSync(target)).digest("hex")
+    : "absent";
+};
+
+export const snapshotTargets = (experiments, values) => [
+  ...new Set(
+    experiments.flatMap((experiment) =>
+      (experiment.unchanged ?? []).map((target) => fill(target, values)),
+    ),
+  ),
+];
+
+const snapshot = (targets) =>
+  Object.fromEntries(targets.map((target) => [target, snapshotOf(target)]));
+
+const addWorktree = (copy, experiment, worktree) => {
+  const path = join(experiment, "stock-copilot-wt", worktree.name);
+  run(
+    "git",
+    ["worktree", "add", "--quiet", "-b", worktree.branch, path, worktree.from],
+    copy,
   );
+  if (worktree.commit !== undefined) {
+    writeFileSync(join(path, worktree.commit.path), worktree.commit.content);
+    run("git", ["add", worktree.commit.path], path);
+    run(
+      "git",
+      [...IDENTITY, "commit", "--quiet", "-m", "Regression fixture"],
+      path,
+    );
+  }
+  return path;
+};
+
+const prepareIn = (experiment, setup) => {
   const copy = join(experiment, "stock-copilot");
-  const worktree = join(experiment, "stock-copilot-wt", "a");
   const head = run("git", ["rev-parse", "HEAD"], repoRoot);
   run("git", ["clone", "--quiet", repoRoot, copy], experiment);
   run("git", ["checkout", "--quiet", "-B", "master", head], copy);
@@ -79,30 +125,31 @@ const prepare = () => {
     copy,
   );
   mkdirSync(join(experiment, "stock-copilot-wt"), { recursive: true });
+  const worktrees = setup.worktrees.map((worktree) =>
+    addWorktree(copy, experiment, worktree),
+  );
   run("lefthook", ["install"], copy);
-  run(
-    "git",
-    ["worktree", "add", "--quiet", "-b", "wt-a", worktree, "master"],
-    copy,
-  );
-  const reviewerFile = join(copy, "docs", "regression-reviewer.md");
-  writeFileSync(
-    join(experiment, "reviewer-write.sh"),
-    `printf 'x\\n' > '${reviewerFile}'\n`,
-  );
-  writeFileSync(
-    join(experiment, "reviewer-undo.sh"),
-    `rm -f '${reviewerFile}'\n`,
-  );
-  writeFileSync(
-    join(experiment, "cargo-config-write.sh"),
-    `printf 'x\\n' > '${join(worktree, ".cargo", "config.toml")}'\n`,
-  );
   run(
     "cargo",
     ["build", "--locked", "--quiet", "--package", "xtask"],
-    worktree,
-    { ...process.env, RUSTFLAGS: "-D warnings" },
+    worktrees[0],
+    {
+      ...process.env,
+      RUSTFLAGS: "-D warnings",
+    },
+  );
+  const values = {
+    copy,
+    worktree: worktrees[0],
+    experiment,
+    base: head,
+  };
+  Object.entries(setup.scripts).forEach(([name, content]) =>
+    writeFileSync(join(experiment, name), fill(content, values)),
+  );
+  writeFileSync(
+    join(copy, "harness", "claude-hooks", "lock.txt"),
+    `${setup.lock}\n`,
   );
   const project = JSON.parse(
     readFileSync(join(copy, ".claude", "settings.json"), "utf8"),
@@ -120,11 +167,22 @@ const prepare = () => {
   return {
     experiment,
     copy,
-    worktree,
-    head,
+    values,
     state: join(experiment, "state"),
     sandboxFile: project.sandbox?.enabled === true ? undefined : sandboxFile,
   };
+};
+
+export const prepare = (setup, make = prepareIn) => {
+  const experiment = realpathSync(
+    mkdtempSync(join(tmpdir(), "stock-copilot-regression-")),
+  );
+  try {
+    return make(experiment, setup);
+  } catch (error) {
+    rmSync(experiment, { recursive: true, force: true });
+    throw error;
+  }
 };
 
 export const markerReached = (events, marker) =>
@@ -138,12 +196,7 @@ export const markerReached = (events, marker) =>
 const runSession = (session, prepared) =>
   new Promise((done) => {
     const debugFile = join(prepared.experiment, `${session.id}-debug.log`);
-    const prompt = fill(session.prompt.join("\n"), {
-      copy: prepared.copy,
-      worktree: prepared.worktree,
-      base: prepared.head,
-      experiment: prepared.experiment,
-    });
+    const prompt = fill(session.prompt.join("\n"), prepared.values);
     const args = [
       "-p",
       "--model",
@@ -217,14 +270,21 @@ const readRecords = (state) => {
 const main = async () => {
   const version = run("claude", ["--version"], repoRoot);
   const spec = JSON.parse(readFileSync(join(here, "experiments.json"), "utf8"));
-  const prepared = prepare();
+  const prepared = prepare(spec.setup);
   try {
+    const targets = snapshotTargets(spec.experiments, prepared.values);
+    const before = snapshot(targets);
     const sessions = {};
     for (const session of spec.sessions) {
       process.stdout.write(`claude-regression: 세션 ${session.id} 시작\n`);
       sessions[session.id] = await runSession(session, prepared);
     }
-    const observed = { sessions, records: readRecords(prepared.state) };
+    const observed = {
+      values: prepared.values,
+      snapshots: { before, after: snapshot(targets) },
+      sessions,
+      records: readRecords(prepared.state),
+    };
     const rows = judgeAll(spec.experiments, observed);
     const table = resultTable(rows, version);
     const out = join(

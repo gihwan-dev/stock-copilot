@@ -24,7 +24,7 @@
       "recipe": "check-ts",
       "command": "pnpm install --frozen-lockfile --ignore-scripts",
       "kind": "setup",
-      "cases": "harness/ts-deps",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
       "test": {
         "file": "apps/desktop/tests/check-list.test.mjs",
         "name": "just check installs the frozen lockfile without lifecycle scripts before any other Node step"
@@ -44,10 +44,10 @@
       "recipe": "check-ts",
       "command": "pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json",
       "kind": "check",
-      "cases": "harness/lint-file/cases.toml",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
       "test": {
-        "file": "crates/xtask/src/lint_file/tests.rs",
-        "name": "every_linter_has_a_failing_example"
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the prettier step of just check fails on a misformatted file in its paths"
       }
     },
     {
@@ -174,7 +174,7 @@
       "recipe": "check-ts",
       "command": "node --test 'apps/desktop/tests/*.test.mjs'",
       "kind": "runner",
-      "cases": "apps/desktop/tests",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
       "test": {
         "file": "apps/desktop/tests/check-list.test.mjs",
         "name": "the node test runners of just check reach every test file"
@@ -184,7 +184,7 @@
       "recipe": "check-ts",
       "command": "node --test 'harness/claude-hooks/tests/*.test.mjs'",
       "kind": "runner",
-      "cases": "harness/claude-hooks/tests",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
       "test": {
         "file": "apps/desktop/tests/check-list.test.mjs",
         "name": "the node test runners of just check reach every test file"
@@ -194,10 +194,10 @@
       "recipe": "check",
       "command": "cargo fmt --all --check",
       "kind": "check",
-      "cases": "harness/lint-file/cases.toml",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
       "test": {
-        "file": "crates/xtask/src/lint_file/tests.rs",
-        "name": "examples_apply_and_fail_the_expected_checks"
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the cargo fmt step of just check fails on a workspace with a misformatted file"
       }
     },
     {
@@ -224,7 +224,7 @@
       "recipe": "check",
       "command": "\"{{just_executable()}}\" arch-check",
       "kind": "check",
-      "cases": "harness/arch-check/cases.toml",
+      "cases": "harness/arch-check",
       "test": {
         "file": "crates/xtask/src/arch_check_cases_tests.rs",
         "name": "command_fails_on_violation_and_passes_clean_workspace"
@@ -304,7 +304,7 @@
       "recipe": "check",
       "command": "cargo nextest run --workspace --locked",
       "kind": "runner",
-      "cases": "crates",
+      "cases": "crates/xtask/src/test_runner_tests.rs",
       "test": {
         "file": "crates/xtask/src/test_runner_tests.rs",
         "name": "check_runs_nextest_coverage_and_test_diff"
@@ -324,7 +324,7 @@
       "recipe": "check",
       "command": "\"{{just_executable()}}\" test-diff {{quote(base)}}",
       "kind": "check",
-      "cases": "harness/test-diff/cases.toml",
+      "cases": "harness/test-diff/repository",
       "test": {
         "file": "crates/xtask/src/test_diff/tests.rs",
         "name": "committed_weakening_fails_against_the_base_commit_but_not_against_head"
@@ -334,7 +334,7 @@
       "recipe": "check",
       "command": "\"{{just_executable()}}\" disable-report",
       "kind": "report",
-      "cases": "harness/disable-control/script-cases.toml",
+      "cases": "apps/desktop/src-tauri/src/main.rs",
       "test": {
         "file": "crates/xtask/src/disable_control/tests.rs",
         "name": "disable_report_lists_the_three_main_rs_expects"
@@ -344,7 +344,7 @@
       "recipe": "check",
       "command": "\"{{just_executable()}}\" disable-report-since {{quote(base)}}",
       "kind": "report",
-      "cases": "harness/disable-control/script-cases.toml",
+      "cases": "crates/xtask/src/disable_control/script_tests.rs",
       "test": {
         "file": "crates/xtask/src/disable_control/script_tests.rs",
         "name": "since_lists_only_disables_added_after_the_base"

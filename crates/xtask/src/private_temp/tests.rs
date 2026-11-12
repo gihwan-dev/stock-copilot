@@ -74,3 +74,44 @@ fn a_base_that_is_not_a_directory_fails() {
     PrivateDirectory::create_in(&file, "probe").expect_err("base is a file");
     directory.remove().expect("remove directory");
 }
+
+fn age(path: &std::path::Path, by: std::time::Duration) {
+    let modified = fs::symlink_metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .expect("modified time");
+    fs::File::open(path)
+        .and_then(|file| file.set_modified(modified.checked_sub(by).expect("earlier time")))
+        .expect("age directory");
+}
+
+#[test]
+fn creating_removes_only_stale_private_folders_of_the_same_prefix() {
+    let prefix = "stock-copilot-private-stale-test";
+    let two_hours = std::time::Duration::from_hours(2);
+    let stale = PrivateDirectory::create(prefix).expect("stale");
+    age(&stale.root, two_hours);
+    let recent = PrivateDirectory::create(prefix).expect("recent");
+    let outside = scratch();
+    fs::write(outside.root.join("kept.txt"), "kept\n").expect("write outside file");
+    let parent = stale.root.parent().expect("parent").to_path_buf();
+    let linked = parent.join(format!("{prefix}-planted-link"));
+    symlink(&outside.root, &linked).expect("plant link");
+    let open = parent.join(format!("{prefix}-open-folder"));
+    fs::create_dir_all(&open).expect("open folder");
+    fs::set_permissions(&open, fs::Permissions::from_mode(0o755)).expect("open mode");
+    age(&open, two_hours);
+    let fresh = PrivateDirectory::create(prefix).expect("fresh");
+    fs::symlink_metadata(&stale.root).expect_err("stale folder removed");
+    fs::symlink_metadata(&recent.root).expect("recent folder kept");
+    fs::symlink_metadata(&linked).expect("planted link kept");
+    assert_eq!(
+        fs::read_to_string(outside.root.join("kept.txt")).expect("link target kept"),
+        "kept\n"
+    );
+    fs::symlink_metadata(&open).expect("open folder kept");
+    fs::remove_file(&linked).expect("remove link");
+    fs::remove_dir(&open).expect("remove open folder");
+    recent.remove().expect("remove recent");
+    fresh.remove().expect("remove fresh");
+    outside.remove().expect("remove outside");
+}

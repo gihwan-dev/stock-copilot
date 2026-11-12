@@ -4664,8 +4664,8 @@
   },
   {
     "command": "git -C {worktree} reset --soft HEAD~1",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-history"]
   },
   {
     "command": "git -C {worktree} reset --soft HEAD~1",
@@ -4910,18 +4910,18 @@
   },
   {
     "command": "git -C {worktree} reset HEAD~1",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-history"]
   },
   {
     "command": "git -C {worktree} reset --mixed master",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-history"]
   },
   {
     "command": "git -C {worktree} reset --keep master",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-history"]
   },
   {
     "command": "git -C \"$D\" reset HEAD~1",
@@ -5020,6 +5020,88 @@
   },
   {
     "command": "git -C {worktree} reset --hard",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "cd {worktree} && git checkout --ignore-other-worktrees master && git reset HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} checkout --ignore-other-worktrees master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} switch --ignore-other-worktrees master",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} switch --ignore-other-worktrees master",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} checkout side && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} switch side && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} worktree list && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} bisect start && git -C {worktree} reset --soft",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} status && git -C {worktree} reset --soft",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit --amend --no-edit",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git -C {worktree} commit --amend -m x",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} switch side && git -C {worktree} commit --amend -m x",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git commit -m x",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {worktree} commit --amend -m x",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} symbolic-ref --short HEAD && git -C {worktree} reset --soft",
     "decision": "deny",
     "rules": ["git-history"]
   }

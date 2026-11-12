@@ -7,12 +7,15 @@ use std::io;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 const PRIVATE_MODE: u32 = 0o700;
 
 const PERMISSION_BITS: u32 = 0o777;
 
 const ATTEMPTS: usize = 16;
+
+const STALE_AFTER: Duration = Duration::from_hours(1);
 
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -75,7 +78,9 @@ impl PrivateDirectory {
                 Ok(()) => {
                     let owner = plain_directory(&root)?.uid();
                     private_directory(&root, owner)?;
-                    return Ok(Self { root, owner });
+                    let created = Self { root, owner };
+                    created.remove_stale(&parent, prefix)?;
+                    return Ok(created);
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(format!("{}: {error}", root.display())),
@@ -85,6 +90,36 @@ impl PrivateDirectory {
             "{}: 고유한 임시 폴더 이름을 만들지 못했다",
             parent.display()
         ))
+    }
+
+    fn remove_stale(&self, parent: &Path, prefix: &str) -> Result<(), String> {
+        let fresh = plain_directory(&self.root)?
+            .modified()
+            .map_err(|error| format!("{}: {error}", self.root.display()))?;
+        let start = format!("{prefix}-");
+        let listing =
+            fs::read_dir(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+        for listed in listing {
+            let entry = listed.map_err(|error| format!("{}: {error}", parent.display()))?;
+            let path = entry.path();
+            if path == self.root || !entry.file_name().to_string_lossy().starts_with(&start) {
+                continue;
+            }
+            if private_directory(&path, self.owner).is_err() {
+                continue;
+            }
+            let modified = fs::symlink_metadata(&path)
+                .and_then(|metadata| metadata.modified())
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            let stale = fresh
+                .duration_since(modified)
+                .is_ok_and(|age| age > STALE_AFTER);
+            if stale {
+                fs::remove_dir_all(&path)
+                    .map_err(|error| format!("{}: {error}", path.display()))?;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn child(&self, name: &str) -> Result<PathBuf, String> {

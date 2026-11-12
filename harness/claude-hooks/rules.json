@@ -196,6 +196,12 @@
         "short": ["r"]
       },
       {
+        "rule": "git-history",
+        "subcommands": ["checkout", "switch"],
+        "long": ["--ignore-other-worktrees"],
+        "short": []
+      },
+      {
         "rule": "git-index-flags",
         "subcommands": ["update-index"],
         "long": [
@@ -352,6 +358,14 @@
       ],
       "refspecSubcommands": ["push", "fetch"],
       "resetOptions": ["--soft"],
+      "amendOptions": ["--amend"],
+      "branchMovers": [
+        "checkout",
+        "switch",
+        "worktree",
+        "symbolic-ref",
+        "bisect"
+      ],
       "resetStay": ["HEAD", "@"]
     }
   },

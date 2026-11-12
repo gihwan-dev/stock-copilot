@@ -12,6 +12,10 @@ const ESLINT_CASES = "harness/eslint-violations/cases.json";
 
 const ADR_DIRECTORY = "docs/adr";
 
+export const DOCUMENT_ONLY = "문서만(예제 없음)";
+
+export const WITH_EXAMPLE = "예제 있음(막히면 just check 실패)";
+
 const GAP_HEADING = /^(#{2,4}) .*(알려진 빈틈|남는 한계|남는 빈틈)/u;
 
 const readJson = (root, path) =>
@@ -97,15 +101,16 @@ const cell = (text) => text.replaceAll("|", "\\|").replaceAll("\n", " ");
 
 export const gapTable = (gaps) =>
   [
-    "| 출처 | 위치 | 내용 |",
-    "|---|---|---|",
+    "| 출처 | 위치 | 예제 | 내용 |",
+    "|---|---|---|---|",
     ...gaps.map(
-      (gap) => `| ${gap.source} | ${cell(gap.location)} | ${cell(gap.text)} |`,
+      (gap) =>
+        `| ${gap.source} | ${cell(gap.location)} | ${gap.source === "adr" ? DOCUMENT_ONLY : WITH_EXAMPLE} | ${cell(gap.text)} |`,
     ),
     `known-gaps: ${gaps.length}건 (${["eslint", "hook", "adr"]
       .map(
         (source) =>
-          `${source} ${gaps.filter((gap) => gap.source === source).length}건`,
+          `${source} ${gaps.filter((gap) => gap.source === source).length}건${source === "adr" ? `(${DOCUMENT_ONLY})` : ""}`,
       )
       .join(", ")})`,
   ].join("\n");
