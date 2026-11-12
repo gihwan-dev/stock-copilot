@@ -1,7 +1,14 @@
 prettier-binary = "node_modules/.bin/prettier"
 eslint-binary = "apps/desktop/node_modules/.bin/eslint"
 
-prettier = ["apps/desktop", "harness", "package.json", "pnpm-workspace.yaml"]
+prettier = [
+    "apps/desktop",
+    "harness",
+    "package.json",
+    "pnpm-workspace.yaml",
+    ".claude/hooks",
+    ".claude/settings.json",
+]
 
 [[eslint]]
 directory = "apps/desktop"
@@ -18,3 +25,8 @@ paths = [
     "apps/desktop/eslint.scripts.config.mjs",
     "harness",
 ]
+
+[[eslint]]
+directory = "."
+config = "harness/claude-hooks/eslint.config.mjs"
+paths = [".claude/hooks"]

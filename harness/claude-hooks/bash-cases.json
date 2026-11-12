@@ -1,0 +1,2059 @@
+[
+  {
+    "command": "git status",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git log --oneline -5",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git diff master...HEAD",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -C {root} status",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git add -A",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -m 'fix -n handling'",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -am msg",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git -c commit.gpgsign=false commit -m x",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git reset --soft HEAD~1",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git worktree list",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git --exec-path",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "ls -la",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "echo 'git commit -n'",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "grep -rn -- --no-verify docs",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "rg core.hooksPath docs",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "cargo build --locked",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "cargo clippy --workspace -- -D warnings",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "just base=HEAD check",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "pnpm install --frozen-lockfile",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "echo x > /tmp/claude-hooks-probe.txt",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "echo x > crates/domain/src/new.rs",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "rm crates/domain/src/lib.rs",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "cat justfile 2>&1 | head",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "node --version",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "[ -f justfile ] && echo yes",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "lefthook version",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "python3 -c 'print(1)'",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git push origin h-15",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -m \"$MSG\"",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -mn",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -Fn",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -Cn",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -cn",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -tn",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -Sn",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit -un",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git push -of origin x",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git pull -sr",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git pull -Xr",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git pull -Sr",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit --no-verify",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git merge --no-verify",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git push --no-verify",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git am --no-verify",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git pull --no-verify",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git commit -n -m x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git commit -anm x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git commit --no-ver -m x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git push --force origin master",
+    "decision": "deny",
+    "rules": ["git-force-push"]
+  },
+  {
+    "command": "git push --force-with-lease origin master",
+    "decision": "deny",
+    "rules": ["git-force-push"]
+  },
+  {
+    "command": "git push --force-if-includes origin master",
+    "decision": "deny",
+    "rules": ["git-force-push"]
+  },
+  {
+    "command": "git push --forc origin master",
+    "decision": "deny",
+    "rules": ["git-force-push"]
+  },
+  {
+    "command": "git push -f origin master",
+    "decision": "deny",
+    "rules": ["git-force-push"]
+  },
+  {
+    "command": "git push origin +master",
+    "decision": "deny",
+    "rules": ["git-force-push"]
+  },
+  {
+    "command": "git reset --hard HEAD~1",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git pull --rebase",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git pull -r",
+    "decision": "deny",
+    "rules": ["git-history"]
+  },
+  {
+    "command": "git update-index --assume-unchanged justfile",
+    "decision": "deny",
+    "rules": ["git-index-flags"]
+  },
+  {
+    "command": "git update-index --skip-worktree justfile",
+    "decision": "deny",
+    "rules": ["git-index-flags"]
+  },
+  {
+    "command": "git update-index --cacheinfo 100644,abc,f justfile",
+    "decision": "deny",
+    "rules": ["git-index-flags"]
+  },
+  {
+    "command": "git update-index --index-info justfile",
+    "decision": "deny",
+    "rules": ["git-index-flags"]
+  },
+  {
+    "command": "git -c core.hooksPath=/dev/null commit -m x",
+    "decision": "deny",
+    "rules": ["git-global-options"]
+  },
+  {
+    "command": "git --config-env=core.hooksPath=X commit -m x",
+    "decision": "deny",
+    "rules": ["git-global-options"]
+  },
+  {
+    "command": "git --git-dir=/tmp/x status",
+    "decision": "deny",
+    "rules": ["git-global-options"]
+  },
+  {
+    "command": "git --work-tree=/tmp status",
+    "decision": "deny",
+    "rules": ["git-global-options"]
+  },
+  {
+    "command": "git --exec-path=/tmp/fake commit -m x",
+    "decision": "deny",
+    "rules": ["git-global-options"]
+  },
+  {
+    "command": "git $SUB",
+    "decision": "deny",
+    "rules": ["git-global-options"]
+  },
+  {
+    "command": "git config core.hooksPath /dev/null",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git update-ref refs/heads/master HEAD",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git replace a b",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git filter-branch",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git filter-repo",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git rebase master",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git commit-tree HEAD^{tree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git config --get user.name",
+    "decision": "deny",
+    "rules": ["git-subcommands"]
+  },
+  {
+    "command": "git rebase master",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin h-15",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge master",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git cherry-pick abc",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git revert abc",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git pull",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin h-15",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "command": "git push origin h-15",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "review-critic"
+  },
+  {
+    "command": "git push origin h-15",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "general-purpose"
+  },
+  {
+    "command": "git push origin h-15",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "agent-id-only"
+  },
+  {
+    "command": "git merge --no-ff h-15",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git cherry-pick abc",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git commit $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git merge $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git push $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git am $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git pull $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git reset $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git update-index $FLAGS",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments"]
+  },
+  {
+    "command": "git log $RANGE",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "HUSKY=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "SKIP=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_PARAMETERS=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_COUNT=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_GLOBAL=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_SYSTEM=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_NOSYSTEM=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_DIR=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_WORK_TREE=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_INDEX_FILE=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_OBJECT_DIRECTORY=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_ALTERNATE_OBJECT_DIRECTORIES=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_COMMON_DIR=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_EXEC_PATH=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_TEMPLATE_DIR=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTFLAGS=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_ENCODED_RUSTFLAGS=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_RUSTFLAGS=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTDOCFLAGS=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_RUSTDOCFLAGS=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CLIPPY_CONF_DIR=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTC_WRAPPER=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTC_WORKSPACE_WRAPPER=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_RUSTC_WRAPPER=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTC=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_RUSTC=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTC_BOOTSTRAP=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTUP_TOOLCHAIN=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTUP_HOME=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_HOME=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_TARGET=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_BUILD_TARGET_DIR=1 true",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "LEFTHOOK=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "LEFTHOOK_CONFIG=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "LEFTHOOK_EXCLUDE=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_KEY_0=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "GIT_CONFIG_VALUE_0=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_TARGET_DIR=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS=x git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "LEFTHOOK=0",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "RUSTFLAGS='-A warnings' cargo clippy",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "export LEFTHOOK=0",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "declare -x LEFTHOOK=0",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "typeset -x LEFTHOOK=0",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "local LEFTHOOK=0",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "readonly LEFTHOOK=0",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "export LEFTHOOK",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "export \"$NAME=0\"",
+    "decision": "deny",
+    "rules": ["exporters"]
+  },
+  {
+    "command": "export PATH=/opt/homebrew/bin:$PATH",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "lefthook install",
+    "decision": "deny",
+    "rules": ["lefthook"]
+  },
+  {
+    "command": "lefthook uninstall",
+    "decision": "deny",
+    "rules": ["lefthook"]
+  },
+  {
+    "command": "lefthook add pre-commit",
+    "decision": "deny",
+    "rules": ["lefthook"]
+  },
+  {
+    "command": "chmod +x x.sh",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "chflags uchg justfile",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "xattr -c justfile",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "claude -p hi",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "CLAUDE -p hi",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "cargo build --cap-lints allow",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "rustc x.rs --cap-lints allow",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "rustdoc x.rs --cap-lints allow",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "clippy-driver x.rs --cap-lints allow",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo-clippy clippy --cap-lints allow",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo build --cap-lints=allow",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo --config 'build.rustflags=[\"-Awarnings\"]' build",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo --config=build.rustflags=[] build",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo +nightly clippy",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo clippy -- -A clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo rustc -- -A clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo rustdoc -- -A clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo clippy --workspace -- -W clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo clippy --workspace -- -Aclippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo clippy --workspace -- --allow clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo clippy --workspace -- --warn clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo clippy --workspace -- --force-warn clippy::all",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "rustc -A warnings x.rs",
+    "decision": "deny",
+    "rules": ["rust-flags"]
+  },
+  {
+    "command": "cargo run -p xtask -- -A",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "ls",
+    "decision": "deny",
+    "rules": ["sandbox-escape"],
+    "sandbox": true
+  },
+  {
+    "command": "sh -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "bash -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "zsh -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "dash -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "ksh -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "mksh -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "fish -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "csh -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "tcsh -c 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "bash -lc \"git commit --no-verify\"",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "bash -c \"$SCRIPT\"",
+    "decision": "deny",
+    "rules": ["shell-string"]
+  },
+  {
+    "command": "echo 'git commit -n' | bash",
+    "decision": "deny",
+    "rules": ["shell-string"]
+  },
+  {
+    "command": "bash <<'EOF'\ngit commit -n\nEOF",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "sh <<< 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "bash scripts/check.sh",
+    "decision": "allow",
+    "rules": [],
+    "gap": "스크립트 파일의 내용은 훅이 읽지 않는다"
+  },
+  {
+    "command": "eval 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "eval \"git commit $X\"",
+    "decision": "deny",
+    "rules": ["eval"]
+  },
+  {
+    "command": "alias g='git commit -n'; g -m x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "alias g=\"$X\"",
+    "decision": "deny",
+    "rules": ["alias"]
+  },
+  {
+    "command": "find . -name x -exec git commit -n {} \\;",
+    "decision": "deny",
+    "rules": ["git-dynamic-arguments", "git-no-verify", "hidden-arguments"]
+  },
+  {
+    "command": "find . -name '*.rs' -exec rm {} +",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "git ci -m x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git sneak",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git   commit    -n   -m x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "\"git\" 'commit' \"-n\" -m x",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "g\"i\"t com'mi't -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "g\\it commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "$'\\x67it' commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "X=1 git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "env X=1 git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "env -i PATH=/usr/bin git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "env -S 'git commit -n'",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "env LEFTHOOK=0 git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "env $X git commit",
+    "decision": "deny",
+    "rules": ["dynamic-command"]
+  },
+  {
+    "command": "true; git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "true && git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "false || git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "echo x | git commit -n -F -",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "(git commit -n)",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "echo `git commit -n`",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "echo $(git commit -n)",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "echo \"$(git commit -n)\"",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "cat <(git commit -n)",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "true\ngit commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "true \\\n&& git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "/usr/bin/git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "GIT commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "$(which git) commit -n",
+    "decision": "deny",
+    "rules": ["dynamic-command"]
+  },
+  {
+    "command": "$G commit -n",
+    "decision": "deny",
+    "rules": ["dynamic-command"]
+  },
+  {
+    "command": "gi{t,} commit -n",
+    "decision": "deny",
+    "rules": ["dynamic-command"]
+  },
+  {
+    "command": "g?t commit -n",
+    "decision": "deny",
+    "rules": ["dynamic-command"]
+  },
+  {
+    "command": "git -C /tmp commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "git -C . -c commit.gpgsign=false commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "cat > /tmp/m <<EOF\n$(git commit -n)\nEOF",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "cat > /tmp/m <<'EOF'\n$(git commit -n)\nEOF",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "echo \"unterminated",
+    "decision": "deny",
+    "rules": ["unparsable"]
+  },
+  {
+    "command": "command git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "builtin git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "exec git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "nohup git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "nice -n 5 git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "caffeinate -i git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "stdbuf -oL git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "sudo -u root git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "doas git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "xcrun git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "timeout 5 git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "gtimeout -s KILL 5 git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "arch -arm64 git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "command -v git",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "arch -e LEFTHOOK=0 git commit -m x",
+    "decision": "deny",
+    "rules": ["environment"]
+  },
+  {
+    "command": "echo x | xargs git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify", "hidden-arguments"]
+  },
+  {
+    "command": "xargs git",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs lefthook",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs cargo",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs eval",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs env",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs sh",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs bash",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs zsh",
+    "decision": "deny",
+    "rules": ["hidden-arguments"]
+  },
+  {
+    "command": "xargs claude",
+    "decision": "deny",
+    "rules": ["denied-commands", "hidden-arguments"]
+  },
+  {
+    "command": "echo a | xargs rm",
+    "decision": "allow",
+    "rules": []
+  },
+  {
+    "command": "! git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "{ git commit -n; }",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "if git commit -n; then :; fi",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "if true; then git commit -n; fi",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "if false; then :; else git commit -n; fi",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "if false; then :; elif git commit -n; then :; fi",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "for x in a; do git commit -n; done",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "while git commit -n; do :; done",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "until git commit -n; do :; done",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "time git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "coproc git commit -n",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "function f { git commit -n; }",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "f() { git commit -n; }",
+    "decision": "deny",
+    "rules": ["git-no-verify"]
+  },
+  {
+    "command": "python3 -c \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3.14 -c \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "node -e \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "node --eval \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "node -p \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "node --print \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "nodejs -e \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "perl -e \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "perl -E \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "ruby -e \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "php -r \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "osascript -e \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "bun -e \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "bun --eval \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "deno eval \"import os; os.system('git commit --no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "node --eval=\"x('--no-verify')\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "perl -pe 's/--no-verify//'",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 <<'EOF'\nimport os\nos.system('git commit --no-verify')\nEOF",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"$CODE\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = '--no-verify'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'hookspath'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'update-index'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'update-ref'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'filter-branch'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'commit-tree'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = '--cap-lints'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = '.git/'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = '.cargo/config'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'lefthook'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"x = 'core.hooksPath'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"import os; os.environ['LEFTHOOK'] = '0'\"",
+    "decision": "deny",
+    "rules": ["inline-code"]
+  },
+  {
+    "command": "python3 -c \"import subprocess; subprocess.run(['git', 'commit', '-' + 'n'])\"",
+    "decision": "allow",
+    "rules": [],
+    "gap": "인터프리터 코드는 낱말 검사뿐이라 조각을 이어 붙이면 피한다"
+  },
+  {
+    "command": "python3 tools/run.py",
+    "decision": "allow",
+    "rules": [],
+    "gap": "스크립트 파일의 내용은 훅이 읽지 않는다"
+  },
+  {
+    "command": "echo x > .git/info/exclude",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo x >> .git/hooks/pre-commit",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "tee .git/config",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "cp x .git/hooks/pre-commit",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo x > .GIT/hooks/x",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo x > {worktree}/.git",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo '[build]' > .cargo/config.toml",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo x > .cargo/config",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "cat > ~/.cargo/config.toml",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo x > crates/domain/.cargo/config.toml",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "cd .git && echo x > hooks/pre-commit",
+    "decision": "deny",
+    "rules": ["forbidden-path"]
+  },
+  {
+    "command": "echo x > crates/domain/src/.gitignore",
+    "decision": "deny",
+    "rules": ["nested-root-only-file"]
+  },
+  {
+    "command": "echo x > .gitignore",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x >> justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x >> justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x &> justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x &> justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x >| justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x >| justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "ls 2> justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "ls 2> justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x >&justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x >&justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "tee -a justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "tee -a justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "cp /tmp/a justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "cp /tmp/a justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "cp -t harness /tmp/a",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "cp -t harness /tmp/a",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "ln -s /tmp/a justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "ln -s /tmp/a justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "install /tmp/a justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "install /tmp/a justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "rsync /tmp/a justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "rsync /tmp/a justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "ditto /tmp/a justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "ditto /tmp/a justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "mv justfile /tmp/a",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "mv justfile /tmp/a",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "rm -f justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "rm -f justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "rmdir harness",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "rmdir harness",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "unlink justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "unlink justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "touch justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "touch justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "truncate -s 0 justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "truncate -s 0 justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "shred justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "shred justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "mkdir harness/new",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "mkdir harness/new",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "sed -i '' s/a/b/ justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "sed -i '' s/a/b/ justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "sed -i.bak -e s/a/b/ justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "sed -i.bak -e s/a/b/ justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "perl -pi -e s/a/b/ justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "perl -pi -e s/a/b/ justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "dd if=/dev/zero of=justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "dd if=/dev/zero of=justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "curl -o justfile https://example.invalid",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "curl -o justfile https://example.invalid",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "wget -O justfile https://example.invalid",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "wget -O justfile https://example.invalid",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "wget --output-document=justfile https://example.invalid",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "wget --output-document=justfile https://example.invalid",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "cd harness && touch x.txt",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "cd harness && touch x.txt",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "cd harness/claude-hooks && echo on > lock.txt",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "cd harness/claude-hooks && echo on > lock.txt",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > JUSTFILE",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > JUSTFILE",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > linked/../justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > linked/../justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > crates/domain/src/link.rs",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > crates/domain/src/link.rs",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > .claude/settings.json",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > .claude/settings.json",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > .claude/hooks/guard-bash.mjs",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > .claude/hooks/guard-bash.mjs",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > {worktree}/justfile",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > {worktree}/justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > justfile",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "lock": "on",
+    "role": "implementer"
+  },
+  {
+    "command": "cd \"$D\" && echo x > justfile",
+    "decision": "allow",
+    "rules": [],
+    "gap": "동적 경로로 cd한 뒤의 상대 경로는 풀 수 없다"
+  },
+  {
+    "command": "echo x > \"$TARGET\"",
+    "decision": "allow",
+    "rules": [],
+    "gap": "동적 쓰기 대상은 샌드박스(H-35)가 맡는다",
+    "lock": "on"
+  },
+  {
+    "command": "cp x harness/*",
+    "decision": "allow",
+    "rules": [],
+    "gap": "글롭 쓰기 대상은 샌드박스(H-35)가 맡는다",
+    "lock": "on"
+  },
+  {
+    "command": "tar -xf a.tar -C harness",
+    "decision": "allow",
+    "rules": [],
+    "gap": "목록에 없는 쓰기 명령은 샌드박스(H-35)가 맡는다",
+    "lock": "on"
+  },
+  {
+    "command": "set -a; read LEFTHOOK <<< 0; git commit -m x",
+    "decision": "allow",
+    "rules": [],
+    "gap": "read·printf -v·set -a로 만든 환경 변수는 훅이 보지 못한다"
+  },
+  {
+    "command": "echo x > docs/notes.md",
+    "decision": "allow",
+    "rules": [],
+    "lock": "on"
+  },
+  {
+    "command": "echo x > crates/domain/src/lib.rs",
+    "decision": "allow",
+    "rules": [],
+    "lock": "on",
+    "role": "implementer"
+  },
+  {
+    "command": "echo x > .cargo/mutants.toml",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "command": "echo x > crates/domain/src/config",
+    "decision": "allow",
+    "rules": [],
+    "lock": "on",
+    "role": "implementer"
+  },
+  {
+    "command": "echo x > crates/domain/src/config.toml",
+    "decision": "allow",
+    "rules": [],
+    "lock": "on",
+    "role": "implementer"
+  }
+]

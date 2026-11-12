@@ -1,0 +1,177 @@
+{
+  "paths": {
+    "forbiddenSegments": [
+      [".git"],
+      [".cargo", "config"],
+      [".cargo", "config.toml"]
+    ],
+    "rootOnlyNames": [".gitignore"],
+    "mainPatterns": ["docs/**"]
+  },
+  "environment": {
+    "names": [
+      "HUSKY",
+      "SKIP",
+      "GIT_CONFIG",
+      "GIT_CONFIG_PARAMETERS",
+      "GIT_CONFIG_COUNT",
+      "GIT_CONFIG_GLOBAL",
+      "GIT_CONFIG_SYSTEM",
+      "GIT_CONFIG_NOSYSTEM",
+      "GIT_DIR",
+      "GIT_WORK_TREE",
+      "GIT_INDEX_FILE",
+      "GIT_OBJECT_DIRECTORY",
+      "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+      "GIT_COMMON_DIR",
+      "GIT_EXEC_PATH",
+      "GIT_TEMPLATE_DIR",
+      "RUSTFLAGS",
+      "CARGO_ENCODED_RUSTFLAGS",
+      "CARGO_BUILD_RUSTFLAGS",
+      "RUSTDOCFLAGS",
+      "CARGO_BUILD_RUSTDOCFLAGS",
+      "CLIPPY_CONF_DIR",
+      "RUSTC_WRAPPER",
+      "RUSTC_WORKSPACE_WRAPPER",
+      "CARGO_BUILD_RUSTC_WRAPPER",
+      "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+      "RUSTC",
+      "CARGO_BUILD_RUSTC",
+      "RUSTC_BOOTSTRAP",
+      "RUSTUP_TOOLCHAIN",
+      "RUSTUP_HOME",
+      "CARGO_HOME",
+      "CARGO_BUILD_TARGET",
+      "CARGO_BUILD_TARGET_DIR"
+    ],
+    "prefixes": [
+      "LEFTHOOK",
+      "GIT_CONFIG_KEY_",
+      "GIT_CONFIG_VALUE_",
+      "CARGO_TARGET_"
+    ],
+    "exporters": ["export", "declare", "typeset", "local", "readonly"]
+  },
+  "git": {
+    "deniedGlobalOptions": [
+      "-c",
+      "--config-env",
+      "--git-dir",
+      "--work-tree",
+      "--exec-path"
+    ],
+    "allowedConfig": ["commit.gpgsign=false"],
+    "alwaysDenied": [
+      "config",
+      "update-ref",
+      "replace",
+      "filter-branch",
+      "filter-repo",
+      "rebase",
+      "commit-tree"
+    ],
+    "subagentDenied": ["push", "merge", "cherry-pick", "revert", "pull"],
+    "options": [
+      {
+        "rule": "git-no-verify",
+        "subcommands": ["commit", "merge", "push", "am", "pull"],
+        "long": ["--no-verify"],
+        "short": []
+      },
+      {
+        "rule": "git-no-verify",
+        "subcommands": ["commit"],
+        "long": [],
+        "short": ["n"]
+      },
+      {
+        "rule": "git-force-push",
+        "subcommands": ["push"],
+        "long": ["--force"],
+        "short": ["f"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["reset"],
+        "long": ["--hard"],
+        "short": []
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["pull"],
+        "long": ["--rebase"],
+        "short": ["r"]
+      },
+      {
+        "rule": "git-index-flags",
+        "subcommands": ["update-index"],
+        "long": [
+          "--assume-unchanged",
+          "--skip-worktree",
+          "--cacheinfo",
+          "--index-info"
+        ],
+        "short": []
+      }
+    ],
+    "plusRefspec": ["push"],
+    "shortValues": {
+      "commit": { "required": "mFCct", "attached": "Su" },
+      "pull": { "required": "sX", "attached": "S" },
+      "push": { "required": "o", "attached": "" }
+    },
+    "dynamicSensitive": [
+      "commit",
+      "merge",
+      "push",
+      "am",
+      "pull",
+      "reset",
+      "update-index"
+    ]
+  },
+  "lefthook": { "denied": ["install", "uninstall", "add"] },
+  "commands": { "denied": ["chmod", "chflags", "xattr", "claude"] },
+  "rust": {
+    "tools": ["cargo", "rustc", "rustdoc", "clippy-driver", "cargo-clippy"],
+    "anywhere": ["--cap-lints"],
+    "cargoOptions": ["--config"],
+    "lintFlagSubcommands": ["clippy", "rustc", "rustdoc"],
+    "lintFlags": ["-A", "-W", "--allow", "--warn", "--force-warn"]
+  },
+  "hiddenArguments": [
+    "git",
+    "lefthook",
+    "cargo",
+    "eval",
+    "env",
+    "claude",
+    "sh",
+    "bash",
+    "zsh"
+  ],
+  "shells": ["sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "csh", "tcsh"],
+  "interpreters": {
+    "python": ["-c"],
+    "node": ["-e", "--eval", "-p", "--print"],
+    "perl": ["-e", "-E"],
+    "ruby": ["-e"],
+    "php": ["-r"],
+    "osascript": ["-e"],
+    "bun": ["-e", "--eval"],
+    "deno": ["eval"]
+  },
+  "inlineCodeKeywords": [
+    "--no-verify",
+    "hookspath",
+    "update-index",
+    "update-ref",
+    "filter-branch",
+    "commit-tree",
+    "--cap-lints",
+    ".git/",
+    ".cargo/config",
+    "lefthook"
+  ]
+}

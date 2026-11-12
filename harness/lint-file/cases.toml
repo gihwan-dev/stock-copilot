@@ -161,3 +161,20 @@ path = "crates/domain/.gitignore"
 applied = ["source-check"]
 failed = ["source-check"]
 messages = ["file:nested-gitignore"]
+
+[[case]]
+example = "script-eslint.txt"
+path = ".claude/hooks/probe.mjs"
+applied = ["prettier", "eslint"]
+failed = ["eslint"]
+
+[[case]]
+path = ".claude/hooks/guard-bash.mjs"
+applied = ["prettier", "eslint"]
+failed = []
+
+[[case]]
+example = "json-unformatted.txt"
+path = ".claude/settings.json"
+applied = ["prettier"]
+failed = ["prettier"]
