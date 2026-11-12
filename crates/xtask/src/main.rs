@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 mod arch_check;
 mod check_support;
+mod migration_check;
 mod source_check;
 mod sql_check;
 
@@ -12,6 +13,7 @@ fn main() -> ExitCode {
         [command] if command == "arch-check" => arch_check::command(Path::new("Cargo.toml")),
         [command] if command == "source-check" => source_check::command(),
         [command] if command == "sql-check" => sql_check::command(),
+        [command] if command == "migration-check" => migration_check::command(),
         _ => arch_check::usage(),
     }
 }
