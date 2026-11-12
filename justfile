@@ -33,6 +33,7 @@ check-ts: check-node
     pnpm install --frozen-lockfile
     pnpm -C apps/desktop exec tsc -p .
     pnpm -C apps/desktop exec vite build
+    node harness/tsc-violations/check.mjs
     node --test 'apps/desktop/tests/*.test.mjs'
 
 clippy manifest *flags:
