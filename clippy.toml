@@ -1,0 +1,75 @@
+msrv = "1.99"
+avoid-breaking-exported-api = false
+warn-on-all-wildcard-imports = true
+check-private-items = false
+allow-unwrap-in-tests = false
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-dbg-in-tests = false
+allow-print-in-tests = false
+allow-unwrap-in-consts = false
+allow-expect-in-consts = false
+too-many-lines-threshold = 60
+too-many-arguments-threshold = 5
+cognitive-complexity-threshold = 15
+excessive-nesting-threshold = 4
+max-fn-params-bools = 0
+absolute-paths-max-segments = 3
+min-ident-chars-threshold = 1
+allowed-idents-below-min-chars = ["f"]
+
+disallowed-methods = [
+  { path = "std::process::exit", reason = "종료는 main의 반환값으로" },
+  { path = "std::process::abort", reason = "panic 계열 금지" },
+  { path = "std::thread::sleep", reason = "Clock 포트와 비동기 타이머를 쓴다" },
+  { path = "std::env::set_var", reason = "전역 상태 변경 금지" },
+  { path = "std::vec::Vec::remove", reason = "범위 밖이면 panic. checked 대안을 쓴다" },
+  { path = "std::vec::Vec::insert", reason = "범위 밖이면 panic" },
+  { path = "std::vec::Vec::swap_remove", reason = "범위 밖이면 panic" },
+  { path = "std::vec::Vec::split_off", reason = "범위 밖이면 panic" },
+  { path = "std::vec::Vec::drain", reason = "범위 밖이면 panic" },
+  { path = "slice::split_at", reason = "범위 밖이면 panic. split_at_checked" },
+  { path = "slice::split_at_mut", reason = "범위 밖이면 panic. split_at_mut_checked" },
+  { path = "slice::copy_from_slice", reason = "길이가 다르면 panic" },
+  { path = "slice::chunks", reason = "0이면 panic. NonZero를 받는 래퍼를 쓴다" },
+  { path = "slice::windows", reason = "0이면 panic" },
+  { path = "str::split_at", reason = "경계가 아니면 panic. split_at_checked" },
+  { path = "std::string::String::insert", reason = "경계가 아니면 panic" },
+  { path = "std::string::String::remove", reason = "경계가 아니면 panic" },
+  { path = "std::string::String::truncate", reason = "경계가 아니면 panic" },
+  { path = "std::string::String::drain", reason = "경계가 아니면 panic" },
+  { path = "std::cell::RefCell::borrow", reason = "런타임 panic. try_borrow" },
+  { path = "std::cell::RefCell::borrow_mut", reason = "런타임 panic. try_borrow_mut" },
+  { path = "std::iter::Iterator::step_by", reason = "0이면 panic" },
+  { path = "std::option::Option::unwrap_or_default", reason = "실패를 기본값으로 숨기지 않는다" },
+  { path = "std::result::Result::unwrap_or_default", reason = "오류를 기본값으로 숨기지 않는다" },
+  { path = "std::result::Result::unwrap_or", reason = "오류를 숨기지 않는다. match로 처리" },
+  { path = "std::result::Result::unwrap_or_else", reason = "오류를 숨기지 않는다. match로 처리" },
+  { path = "std::mem::drop", reason = "Result를 버리는 우회로. 스코프로 해제한다" },
+  { path = "std::mem::take", reason = "상태를 몰래 비우지 않는다" },
+  { path = "std::mem::replace", reason = "소비형 토큰 재사용 우회로" },
+  { path = "std::mem::swap", reason = "소비형 토큰 재사용 우회로" },
+  { path = "rust_decimal::Decimal::from_f64_retain", reason = "부동소수점에서 금액을 만들지 않는다", allow-invalid = true },
+  { path = "rust_decimal::Decimal::to_f64", reason = "금액을 부동소수점으로 바꾸지 않는다", allow-invalid = true },
+]
+
+disallowed-macros = [
+  { path = "std::unreachable", reason = "panic 계열 금지" },
+  { path = "std::include", reason = "검사를 피해 코드를 넣는 경로" },
+  { path = "std::include_str", reason = "fixtures는 테스트 로더로 읽는다" },
+  { path = "std::include_bytes", reason = "fixtures는 테스트 로더로 읽는다" },
+  { path = "std::env", reason = "빌드 시점 환경 변수 금지" },
+  { path = "std::option_env", reason = "빌드 시점 환경 변수 금지" },
+  { path = "std::eprint", reason = "로깅 계층으로" },
+  { path = "std::print", reason = "로깅 계층으로" },
+  { path = "std::matches", reason = "와일드카드 분기 우회. match로 모든 변형을 적는다" },
+]
+
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "순회 순서가 비결정적. BTreeMap" },
+  { path = "std::collections::HashSet", reason = "순회 순서가 비결정적. BTreeSet" },
+  { path = "std::cell::RefCell", reason = "런타임 대여 panic" },
+  { path = "std::rc::Rc", reason = "공유 소유는 설계 검토 대상" },
+  { path = "std::sync::Mutex", reason = "poison 처리에서 unwrap을 부른다. 메시지 전달로" },
+]
