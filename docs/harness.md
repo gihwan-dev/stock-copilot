@@ -545,6 +545,8 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 에이전트 하네스 | R-10 "실행 검증 요약"의 실험 12개(보호 경로 쓰기, 셸 우회, 샌드박스 경로 해석, 종료 훅 3회 차단, 리뷰어 원본 오염, `Agent` 인자 거부)를 Claude Code를 올릴 때마다 다시 돈다 |
 | 실제 코드 무결성 | `eslint --max-warnings 0 src`와 `tsc`가 깨끗해야 한다. 규칙이 너무 엄격해 정상 코드를 쓸 수 없는 상태도 이것으로 드러난다 |
 
+위반 예제는 `harness/lint-cases.json` 한 파일이 아니라 검사마다 `harness/<검사>/` 아래에 따로 둔다. 대신 하네스 검사 목록(`harness/check-list/`)이 `just check`의 모든 단계와 그 자체 테스트를 묶는다. `justfile` 전체가 보호된 기대값(`harness/check-list/justfile.json`, just 자신의 해석 결과)과 정확히 같아야 하고, 목록의 각 검사는 실제로 실행되는 자체 테스트를 가져야 한다 (ADR 0019).
+
 ### 6.9 요구사항 고정 테스트
 
 [design.md](design.md) 7장의 요구사항 중 "0건", "항상", "바뀌지 않음"처럼 테스트로 판정할 수 있는 것은 아래 테스트로 고정한다. 해당 작업은 [tasks.md](tasks.md)에 있다. 주문 경로의 단언은 6.5(architecture.md 4.6)가 맡는다.
