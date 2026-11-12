@@ -1,0 +1,30 @@
+[package]
+name = "src-tauri"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+domain = { path = "../../../crates/domain" }
+application = { path = "../../../crates/application" }
+approval-command = { path = "../../../crates/approval-command" }
+broker-toss = { path = "../../../crates/adapters/broker-toss" }
+broker-toss-trade = { path = "../../../crates/adapters/broker-toss-trade" }
+sources = { path = "../../../crates/adapters/sources" }
+ai-claude-code = { path = "../../../crates/adapters/ai-claude-code" }
+ai-codex = { path = "../../../crates/adapters/ai-codex" }
+store-sqlite = { path = "../../../crates/adapters/store-sqlite" }
+secrets-keychain = { path = "../../../crates/adapters/secrets-keychain" }
+platform-macos = { path = "../../../crates/adapters/platform-macos" }
+mcp-server = { path = "../../../crates/mcp-server" }
+scheduler = { path = "../../../crates/scheduler" }
+tauri = { version = "0.1.0" }
+tokio = { version = "0.1.0", features = ["process"] }
+
+[build-dependencies]
+approval-command = { path = "../../../crates/approval-command" }
+broker-toss-trade = { path = "../../../crates/adapters/broker-toss-trade" }
+
+[dev-dependencies]
+testkit = { path = "../../../crates/testkit" }
+trade-fakes = { path = "../../../crates/trade-fakes" }

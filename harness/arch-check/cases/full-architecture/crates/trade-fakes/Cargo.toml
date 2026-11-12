@@ -1,0 +1,16 @@
+[package]
+name = "trade-fakes"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+order-execution = { path = "../order-execution" }
+application = { path = "../application" }
+domain = { path = "../domain" }
+
+[build-dependencies]
+order-execution = { path = "../order-execution" }
+
+[dev-dependencies]
+testkit = { path = "../testkit" }

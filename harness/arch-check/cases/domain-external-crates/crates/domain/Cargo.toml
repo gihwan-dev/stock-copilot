@@ -1,0 +1,10 @@
+[package]
+name = "domain"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+regex = { version = "0.1.0" }
+serde = { version = "0.1.0" }
+rust_decimal = { version = "0.1.0" }

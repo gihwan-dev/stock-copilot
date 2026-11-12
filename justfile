@@ -22,6 +22,7 @@ check: check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
     "{{just_executable()}}" deny
+    "{{just_executable()}}" arch-check
     cargo nextest run --workspace --locked
 
 check-full: advisory-db-fetch check
@@ -43,6 +44,9 @@ clippy manifest *flags:
 deny:
     test -d "${CARGO_HOME:-$HOME/.cargo}/advisory-dbs/advisory-db-3157b0e258782691" || { printf 'deny: 권고 DB가 없다. 네트워크가 되는 곳에서 just advisory-db-fetch를 한 번 돌린다\n' >&2; exit 1; }
     cargo deny --locked --offline check
+
+arch-check:
+    cargo run --locked --quiet --package xtask -- arch-check
 
 advisory-db-fetch:
     cargo deny --locked fetch db

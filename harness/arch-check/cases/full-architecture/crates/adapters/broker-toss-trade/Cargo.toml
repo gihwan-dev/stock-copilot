@@ -1,0 +1,20 @@
+[package]
+name = "broker-toss-trade"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+broker-toss = { path = "../broker-toss" }
+broker-toss-schema = { path = "../broker-toss-schema" }
+order-execution = { path = "../../order-execution" }
+application = { path = "../../application" }
+domain = { path = "../../domain" }
+reqwest = { version = "0.1.0" }
+
+[build-dependencies]
+order-execution = { path = "../../order-execution" }
+broker-toss-schema = { path = "../broker-toss-schema" }
+
+[dev-dependencies]
+testkit = { path = "../../testkit" }

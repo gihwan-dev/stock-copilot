@@ -1,0 +1,9 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/desktop/src-tauri",
+    "crates/adapters/ai-claude-code",
+    "crates/adapters/ai-codex",
+    "crates/testkit",
+    "crates/xtask",
+]

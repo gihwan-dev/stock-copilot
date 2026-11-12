@@ -1,0 +1,11 @@
+[package]
+name = "testkit"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }
+rmcp = { version = "0.1.0", default-features = false, features = ["client"] }
+tokio = { version = "0.1.0", features = ["process"] }

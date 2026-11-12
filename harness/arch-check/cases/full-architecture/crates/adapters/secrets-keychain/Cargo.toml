@@ -1,0 +1,13 @@
+[package]
+name = "secrets-keychain"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+application = { path = "../../application" }
+domain = { path = "../../domain" }
+security-framework = { version = "0.1.0" }
+
+[dev-dependencies]
+testkit = { path = "../../testkit" }

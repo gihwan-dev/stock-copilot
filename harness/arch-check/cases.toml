@@ -1,0 +1,464 @@
+[[case]]
+name = "full-architecture"
+findings = []
+
+[[case]]
+name = "src-tauri-depends-on-order-execution"
+findings = [
+    { rule = "allowed-edge", subject = "src-tauri -> order-execution" },
+    { rule = "direct-dependent", subject = "src-tauri -> order-execution" },
+]
+
+[[case]]
+name = "mcp-server-reaches-broker-toss-trade"
+findings = [
+    { rule = "allowed-edge", subject = "mcp-server -> scheduler" },
+    { rule = "allowed-edge", subject = "scheduler -> broker-toss-trade" },
+    { rule = "direct-dependent", subject = "scheduler -> broker-toss-trade" },
+    { rule = "transitive-dependency", subject = "mcp-server => broker-toss-trade" },
+    { rule = "transitive-dependency", subject = "mcp-server => order-execution" },
+    { rule = "transitive-dependency", subject = "scheduler => broker-toss-trade" },
+    { rule = "transitive-dependency", subject = "scheduler => order-execution" },
+]
+
+[[case]]
+name = "testkit-depends-on-order-execution"
+findings = [
+    { rule = "allowed-edge", subject = "testkit -> order-execution" },
+    { rule = "direct-dependent", subject = "testkit -> order-execution" },
+    { rule = "transitive-dependency", subject = "testkit => order-execution" },
+]
+
+[[case]]
+name = "product-bin-has-trade-fakes"
+findings = [
+    { rule = "allowed-edge", subject = "src-tauri -> trade-fakes" },
+    { rule = "direct-dependent", subject = "src-tauri -> trade-fakes" },
+    { rule = "product-bin-graph", subject = "src-tauri => trade-fakes" },
+]
+
+[[case]]
+name = "product-bin-has-testkit"
+findings = [
+    { rule = "allowed-edge", subject = "src-tauri -> testkit" },
+    { rule = "direct-dependent", subject = "src-tauri -> testkit" },
+    { rule = "product-bin-graph", subject = "src-tauri => testkit" },
+]
+
+[[case]]
+name = "product-bin-has-automation-plugin"
+findings = [
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-playwright" },
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-wdio-webdriver" },
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-webdriver" },
+    { rule = "product-bin-graph", subject = "src-tauri => tauri-plugin-playwright" },
+    { rule = "product-bin-graph", subject = "src-tauri => tauri-plugin-wdio-webdriver" },
+    { rule = "product-bin-graph", subject = "src-tauri => tauri-plugin-webdriver" },
+]
+
+[[case]]
+name = "product-bin-reaches-automation-plugin"
+findings = [
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-wdio-webdriver" },
+    { rule = "product-bin-graph", subject = "src-tauri => tauri-plugin-wdio-webdriver" },
+]
+
+[[case]]
+name = "src-tauri-http-plugins"
+findings = [
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-http" },
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-upload" },
+    { rule = "external-location", subject = "src-tauri => tauri-plugin-websocket" },
+]
+
+[[case]]
+name = "domain-external-crates"
+findings = [
+    { rule = "external-allowlist", subject = "domain -> regex" },
+    { rule = "external-allowlist", subject = "domain -> serde" },
+    { rule = "external-location", subject = "domain => serde" },
+]
+
+[[case]]
+name = "approval-command-dev-depends-on-trade-fakes"
+findings = [
+    { rule = "dev-edge", subject = "approval-command -> trade-fakes" },
+    { rule = "direct-dependent", subject = "approval-command -> trade-fakes" },
+]
+
+[[case]]
+name = "unknown-crate"
+findings = [
+    { rule = "unknown-crate", subject = "helper" },
+]
+
+[[case]]
+name = "http-client-outside-adapters"
+findings = [
+    { rule = "external-location", subject = "mcp-server => reqwest" },
+]
+
+[[case]]
+name = "http-client-through-wrapper"
+findings = [
+    { rule = "external-location", subject = "mcp-server => reqwest" },
+]
+
+[[case]]
+name = "testkit-rmcp-server-features"
+findings = [
+    { rule = "external-feature", subject = "testkit -> rmcp[default]" },
+    { rule = "external-feature", subject = "testkit -> rmcp[server]" },
+]
+
+[[case]]
+name = "tokio-process-outside-allowed-crates"
+findings = [
+    { rule = "external-feature", subject = "mcp-server -> tokio[full]" },
+    { rule = "external-feature", subject = "scheduler -> tokio[process]" },
+]
+
+[[case]]
+name = "scheduler-depends-on-approval-command"
+findings = [
+    { rule = "allowed-edge", subject = "scheduler -> approval-command" },
+    { rule = "direct-dependent", subject = "scheduler -> approval-command" },
+    { rule = "transitive-dependency", subject = "scheduler => approval-command" },
+    { rule = "transitive-dependency", subject = "scheduler => order-execution" },
+]
+
+[[case]]
+name = "sources-depends-on-broker-toss-schema"
+findings = [
+    { rule = "allowed-edge", subject = "sources -> broker-toss-schema" },
+    { rule = "direct-dependent", subject = "sources -> broker-toss-schema" },
+]
+
+[[case]]
+name = "depends-on-mcp-bridge-and-xtask"
+findings = [
+    { rule = "allowed-edge", subject = "scheduler -> mcp-bridge" },
+    { rule = "dev-edge", subject = "scheduler -> xtask" },
+    { rule = "dev-edge", subject = "xtask -> testkit" },
+    { rule = "direct-dependent", subject = "scheduler -> mcp-bridge" },
+    { rule = "direct-dependent", subject = "scheduler -> xtask" },
+    { rule = "external-allowlist", subject = "xtask -> regex" },
+]
+
+[[case]]
+name = "external-crates-outside-their-place"
+findings = [
+    { rule = "external-location", subject = "scheduler => attohttpc" },
+    { rule = "external-location", subject = "scheduler => awc" },
+    { rule = "external-location", subject = "scheduler => cargo_metadata" },
+    { rule = "external-location", subject = "scheduler => curl" },
+    { rule = "external-location", subject = "scheduler => h2" },
+    { rule = "external-location", subject = "scheduler => h3" },
+    { rule = "external-location", subject = "scheduler => hyper" },
+    { rule = "external-location", subject = "scheduler => hyper-rustls" },
+    { rule = "external-location", subject = "scheduler => hyper-tls" },
+    { rule = "external-location", subject = "scheduler => hyper-util" },
+    { rule = "external-location", subject = "scheduler => isahc" },
+    { rule = "external-location", subject = "scheduler => libsqlite3-sys" },
+    { rule = "external-location", subject = "scheduler => native-tls" },
+    { rule = "external-location", subject = "scheduler => objc2-local-authentication" },
+    { rule = "external-location", subject = "scheduler => openssl" },
+    { rule = "external-location", subject = "scheduler => proc-macro2" },
+    { rule = "external-location", subject = "scheduler => ra-ap-rustc_lexer" },
+    { rule = "external-location", subject = "scheduler => reqwest" },
+    { rule = "external-location", subject = "scheduler => rfd" },
+    { rule = "external-location", subject = "scheduler => rmcp" },
+    { rule = "external-location", subject = "scheduler => rusqlite" },
+    { rule = "external-location", subject = "scheduler => rustls" },
+    { rule = "external-location", subject = "scheduler => security-framework" },
+    { rule = "external-location", subject = "scheduler => socket2" },
+    { rule = "external-location", subject = "scheduler => specta" },
+    { rule = "external-location", subject = "scheduler => specta-typescript" },
+    { rule = "external-location", subject = "scheduler => surf" },
+    { rule = "external-location", subject = "scheduler => syn" },
+    { rule = "external-location", subject = "scheduler => tauri" },
+    { rule = "external-location", subject = "scheduler => tauri-plugin-http" },
+    { rule = "external-location", subject = "scheduler => tauri-plugin-notification" },
+    { rule = "external-location", subject = "scheduler => tauri-plugin-upload" },
+    { rule = "external-location", subject = "scheduler => tauri-plugin-websocket" },
+    { rule = "external-location", subject = "scheduler => tauri-specta" },
+    { rule = "external-location", subject = "scheduler => tokio-native-tls" },
+    { rule = "external-location", subject = "scheduler => tokio-rustls" },
+    { rule = "external-location", subject = "scheduler => toml" },
+    { rule = "external-location", subject = "scheduler => ureq" },
+]
+
+[[case]]
+name = "everyone-depends-on-order-execution"
+findings = [
+    { rule = "allowed-edge", subject = "ai-claude-code -> order-execution" },
+    { rule = "allowed-edge", subject = "ai-codex -> order-execution" },
+    { rule = "allowed-edge", subject = "application -> order-execution" },
+    { rule = "allowed-edge", subject = "broker-toss -> order-execution" },
+    { rule = "allowed-edge", subject = "broker-toss-schema -> order-execution" },
+    { rule = "allowed-edge", subject = "domain -> order-execution" },
+    { rule = "allowed-edge", subject = "mcp-bridge -> order-execution" },
+    { rule = "allowed-edge", subject = "mcp-server -> order-execution" },
+    { rule = "allowed-edge", subject = "platform-macos -> order-execution" },
+    { rule = "allowed-edge", subject = "scheduler -> order-execution" },
+    { rule = "allowed-edge", subject = "secrets-keychain -> order-execution" },
+    { rule = "allowed-edge", subject = "sources -> order-execution" },
+    { rule = "allowed-edge", subject = "store-sqlite -> order-execution" },
+    { rule = "allowed-edge", subject = "testkit -> order-execution" },
+    { rule = "allowed-edge", subject = "toss-smoke -> order-execution" },
+    { rule = "allowed-edge", subject = "xtask -> order-execution" },
+    { rule = "direct-dependent", subject = "ai-claude-code -> order-execution" },
+    { rule = "direct-dependent", subject = "ai-codex -> order-execution" },
+    { rule = "direct-dependent", subject = "application -> order-execution" },
+    { rule = "direct-dependent", subject = "broker-toss -> order-execution" },
+    { rule = "direct-dependent", subject = "broker-toss-schema -> order-execution" },
+    { rule = "direct-dependent", subject = "domain -> order-execution" },
+    { rule = "direct-dependent", subject = "mcp-bridge -> order-execution" },
+    { rule = "direct-dependent", subject = "mcp-server -> order-execution" },
+    { rule = "direct-dependent", subject = "platform-macos -> order-execution" },
+    { rule = "direct-dependent", subject = "scheduler -> order-execution" },
+    { rule = "direct-dependent", subject = "secrets-keychain -> order-execution" },
+    { rule = "direct-dependent", subject = "sources -> order-execution" },
+    { rule = "direct-dependent", subject = "store-sqlite -> order-execution" },
+    { rule = "direct-dependent", subject = "testkit -> order-execution" },
+    { rule = "direct-dependent", subject = "toss-smoke -> order-execution" },
+    { rule = "direct-dependent", subject = "xtask -> order-execution" },
+    { rule = "transitive-dependency", subject = "ai-claude-code => order-execution" },
+    { rule = "transitive-dependency", subject = "ai-codex => order-execution" },
+    { rule = "transitive-dependency", subject = "application => order-execution" },
+    { rule = "transitive-dependency", subject = "broker-toss => order-execution" },
+    { rule = "transitive-dependency", subject = "broker-toss-schema => order-execution" },
+    { rule = "transitive-dependency", subject = "domain => order-execution" },
+    { rule = "transitive-dependency", subject = "mcp-bridge => order-execution" },
+    { rule = "transitive-dependency", subject = "mcp-server => order-execution" },
+    { rule = "transitive-dependency", subject = "platform-macos => order-execution" },
+    { rule = "transitive-dependency", subject = "scheduler => order-execution" },
+    { rule = "transitive-dependency", subject = "secrets-keychain => order-execution" },
+    { rule = "transitive-dependency", subject = "sources => order-execution" },
+    { rule = "transitive-dependency", subject = "store-sqlite => order-execution" },
+    { rule = "transitive-dependency", subject = "testkit => order-execution" },
+    { rule = "transitive-dependency", subject = "toss-smoke => order-execution" },
+    { rule = "transitive-dependency", subject = "xtask => order-execution" },
+]
+
+[[case]]
+name = "optional-dependency"
+findings = [
+    { rule = "allowed-edge", subject = "scheduler -> order-execution" },
+    { rule = "direct-dependent", subject = "scheduler -> order-execution" },
+    { rule = "transitive-dependency", subject = "scheduler => order-execution" },
+]
+
+[[case]]
+name = "path-package-excluded"
+findings = [
+    { rule = "path-package", subject = "excluded-helper" },
+]
+
+[[case]]
+name = "path-package-outside-workspace"
+findings = [
+    { rule = "path-package", subject = "outside-helper" },
+]
+
+[[case]]
+name = "reexport-in-approval-command"
+findings = [
+    { rule = "reexport", subject = "crates/approval-command/src/lib.rs" },
+]
+
+[[case]]
+name = "reexport-in-broker-toss-trade"
+findings = [
+    { rule = "reexport", subject = "crates/adapters/broker-toss-trade/src/lib.rs" },
+]
+
+[[case]]
+name = "reexport-in-trade-fakes"
+findings = [
+    { rule = "reexport", subject = "crates/trade-fakes/src/lib.rs" },
+]
+
+[[case]]
+name = "reexport-through-type-alias"
+findings = [
+    { rule = "reexport", subject = "crates/approval-command/src/lib.rs" },
+]
+
+[[case]]
+name = "reexport-in-hidden-package-folder"
+findings = [
+    { rule = "reexport", subject = "crates/approval-command/src/hidden/reexport.rs" },
+]
+
+[[case]]
+name = "reexport-in-target-named-folder"
+findings = [
+    { rule = "reexport", subject = "crates/approval-command/src/target/reexport.rs" },
+]
+
+[[case]]
+name = "user-presence-impl-outside-allowed-crates"
+findings = [
+    { rule = "user-presence-impl", subject = "crates/application/src/lib.rs" },
+    { rule = "user-presence-impl", subject = "crates/scheduler/src/lib.rs" },
+]
+
+[[case]]
+name = "user-presence-impl-inside-macro"
+findings = [
+    { rule = "user-presence-impl", subject = "crates/mcp-server/src/hidden.rs" },
+    { rule = "user-presence-impl", subject = "crates/mcp-server/src/lib.rs" },
+]
+
+[[case]]
+name = "user-presence-renamed-import"
+findings = [
+    { rule = "user-presence-alias", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "user-presence-alias", subject = "crates/testkit/src/lib.rs" },
+]
+
+[[case]]
+name = "user-presence-reexported"
+findings = [
+    { rule = "user-presence-alias", subject = "crates/adapters/platform-macos/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/adapters/platform-macos/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/adapters/store-sqlite/src/lib.rs" },
+]
+
+[[case]]
+name = "user-presence-glob-reexport"
+findings = [
+    { rule = "user-presence-reexport", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/application/src/lib.rs" },
+    { rule = "user-presence-reexport", subject = "crates/mcp-server/src/lib.rs" },
+]
+
+[[case]]
+name = "user-presence-impl-in-allowed-crates-pass"
+findings = []
+
+[[case]]
+name = "toss-order-write-in-broker-toss"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+    { rule = "toss-order-write", subject = "crates/adapters/broker-toss/src/orders.rs" },
+]
+
+[[case]]
+name = "toss-order-write-through-constants"
+findings = [
+    { rule = "toss-order-write", subject = "crates/mcp-server/src/send.rs" },
+]
+
+[[case]]
+name = "toss-order-write-in-toss-smoke"
+findings = [
+    { rule = "toss-order-write", subject = "crates/toss-smoke/src/main.rs" },
+]
+
+[[case]]
+name = "toss-order-write-through-method-constant"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "toss-order-write", subject = "crates/adapters/sources/src/send.rs" },
+]
+
+[[case]]
+name = "toss-token-and-order-lookup-pass"
+findings = []
+
+[[case]]
+name = "toss-order-create-in-broker-toss-trade-pass"
+findings = []
+
+[[case]]
+name = "toss-bypass-query-suffix"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+    { rule = "toss-order-write", subject = "crates/adapters/broker-toss/src/orders.rs" },
+]
+
+[[case]]
+name = "toss-bypass-concat-macro"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+]
+
+[[case]]
+name = "toss-bypass-joined-pieces"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+]
+
+[[case]]
+name = "toss-bypass-method-from-bytes"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
+]
+
+[[case]]
+name = "toss-bypass-path-from-function"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/send.rs" },
+]
+
+[[case]]
+name = "broker-toss-write-means-each"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_00.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_01.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_02.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_03.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_04.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_05.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_06.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_07.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_08.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_09.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_10.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_11.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_12.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_13.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_14.rs" },
+    { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/means_15.rs" },
+]
+
+[[case]]
+name = "sources-write-request"
+findings = [
+    { rule = "http-write-means", subject = "crates/adapters/sources/src/lib.rs" },
+]
+
+[[case]]
+name = "process-spawn-outside-allowed-crates"
+findings = [
+    { rule = "process-spawn", subject = "crates/adapters/platform-macos/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/adapters/secrets-keychain/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/adapters/sources/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/adapters/store-sqlite/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/mcp-server/src/lib.rs" },
+    { rule = "process-spawn", subject = "crates/scheduler/src/lib.rs" },
+]
+
+[[case]]
+name = "process-spawn-in-allowed-crates-pass"
+findings = []
+
+[[case]]
+name = "tossinvest-host-outside-allowed-places"
+findings = [
+    { rule = "toss-host", subject = "apps/desktop/src-tauri/src/lib.rs" },
+    { rule = "toss-host", subject = "crates/adapters/broker-toss/src/endpoint.rs" },
+    { rule = "toss-host", subject = "crates/adapters/sources/fixtures/recorded.json" },
+]
+
+[[case]]
+name = "tossinvest-host-in-main-and-toss-smoke-pass"
+findings = []
+
+[[case]]
+name = "source-that-does-not-parse"
+findings = [
+    { rule = "source-parse", subject = "crates/application/src/lib.rs" },
+]

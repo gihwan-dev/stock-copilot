@@ -1,0 +1,315 @@
+[edges]
+domain = []
+application = ["domain"]
+order-execution = ["application", "domain"]
+approval-command = ["order-execution", "application", "domain"]
+broker-toss-schema = []
+broker-toss = ["broker-toss-schema", "application", "domain"]
+broker-toss-trade = ["broker-toss", "broker-toss-schema", "order-execution", "application", "domain"]
+sources = ["application", "domain"]
+ai-claude-code = ["application", "domain"]
+ai-codex = ["application", "domain"]
+store-sqlite = ["application", "domain"]
+secrets-keychain = ["application", "domain"]
+platform-macos = ["application", "domain"]
+mcp-server = ["application", "domain"]
+mcp-bridge = []
+scheduler = ["application", "domain"]
+testkit = ["application", "domain"]
+trade-fakes = ["order-execution", "application", "domain"]
+src-tauri = [
+    "domain",
+    "application",
+    "approval-command",
+    "broker-toss",
+    "broker-toss-trade",
+    "sources",
+    "ai-claude-code",
+    "ai-codex",
+    "store-sqlite",
+    "secrets-keychain",
+    "platform-macos",
+    "mcp-server",
+    "scheduler",
+]
+e2e-app = ["src-tauri", "testkit", "trade-fakes"]
+toss-smoke = ["broker-toss", "application", "domain"]
+xtask = []
+
+[dev-edges]
+other-crates = ["testkit"]
+
+[dev-edges.crates]
+src-tauri = ["testkit", "trade-fakes"]
+order-execution = ["testkit"]
+xtask = []
+
+[[restricted]]
+target = "order-execution"
+dependents = [
+    { crate = "approval-command", kinds = ["normal", "build"] },
+    { crate = "broker-toss-trade", kinds = ["normal", "build"] },
+    { crate = "trade-fakes", kinds = ["normal", "build"] },
+]
+transitive-forbidden = [
+    "domain",
+    "application",
+    "mcp-server",
+    "mcp-bridge",
+    "scheduler",
+    "ai-claude-code",
+    "ai-codex",
+    "sources",
+    "store-sqlite",
+    "secrets-keychain",
+    "platform-macos",
+    "broker-toss",
+    "broker-toss-schema",
+    "testkit",
+    "toss-smoke",
+    "xtask",
+]
+
+[[restricted]]
+target = "approval-command"
+dependents = [{ crate = "src-tauri", kinds = ["normal", "build"] }]
+transitive-forbidden-all-except = ["src-tauri", "e2e-app"]
+
+[[restricted]]
+target = "broker-toss-trade"
+dependents = [{ crate = "src-tauri", kinds = ["normal", "build"] }]
+transitive-forbidden-all-except = ["src-tauri", "e2e-app"]
+
+[[restricted]]
+target = "trade-fakes"
+dependents = [
+    { crate = "e2e-app", kinds = ["normal"] },
+    { crate = "src-tauri", kinds = ["dev"] },
+]
+
+[[restricted]]
+target = "testkit"
+dependents = [{ crate = "e2e-app", kinds = ["normal"] }]
+any-dependent-kinds = ["dev"]
+
+[[restricted]]
+target = "broker-toss-schema"
+dependents = [
+    { crate = "broker-toss", kinds = ["normal", "build"] },
+    { crate = "broker-toss-trade", kinds = ["normal", "build"] },
+]
+
+[[restricted]]
+target = "mcp-bridge"
+dependents = []
+
+[[restricted]]
+target = "xtask"
+dependents = []
+
+[product-bin]
+package = "src-tauri"
+forbidden = [
+    "testkit",
+    "trade-fakes",
+    "tauri-plugin-wdio-webdriver",
+    "tauri-plugin-playwright",
+    "tauri-plugin-webdriver",
+]
+
+[[external-location]]
+crates = ["tauri", "tauri-specta", "specta", "specta-typescript"]
+prefixes = ["tauri-plugin-"]
+allowed-in = ["src-tauri", "e2e-app"]
+
+[[external-location]]
+crates = ["tauri-plugin-wdio-webdriver", "tauri-plugin-playwright", "tauri-plugin-webdriver"]
+allowed-in = ["e2e-app"]
+
+[[external-location]]
+crates = ["rmcp"]
+allowed-in = ["mcp-server", "testkit"]
+
+[[external-location]]
+crates = ["rusqlite", "libsqlite3-sys"]
+allowed-in = ["store-sqlite"]
+
+[[external-location]]
+crates = ["security-framework"]
+allowed-in = ["secrets-keychain"]
+
+[[external-location]]
+crates = ["objc2-local-authentication", "rfd"]
+allowed-in = ["platform-macos"]
+
+[[external-location]]
+crates = [
+    "reqwest",
+    "hyper",
+    "hyper-util",
+    "hyper-rustls",
+    "hyper-tls",
+    "h2",
+    "h3",
+    "rustls",
+    "native-tls",
+    "tokio-rustls",
+    "tokio-native-tls",
+    "openssl",
+    "socket2",
+    "ureq",
+    "isahc",
+    "surf",
+    "attohttpc",
+    "curl",
+    "awc",
+    "tauri-plugin-http",
+    "tauri-plugin-websocket",
+    "tauri-plugin-upload",
+]
+allowed-in = ["broker-toss", "broker-toss-trade", "sources"]
+
+[[external-location]]
+crates = ["serde"]
+forbidden-in = ["domain"]
+
+[[external-location]]
+crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
+allowed-in = ["xtask"]
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "reqwest"
+through = "tauri"
+reason = "tauri 2.12.5가 Android·iOS 대상에서만 쓰는 의존이다([target.'cfg(any(target_os = \"android\", all(target_vendor = \"apple\", not(target_os = \"macos\"))))'.dependencies]). cargo metadata는 모든 대상을 그래프에 넣는다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "hyper"
+through = "tauri"
+reason = "tauri → reqwest → hyper-util → hyper. reqwest와 같은 Android·iOS 대상 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "hyper-util"
+through = "tauri"
+reason = "tauri → reqwest → hyper-util. reqwest와 같은 Android·iOS 대상 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "socket2"
+through = "tauri"
+reason = "tauri → reqwest → hyper-util → socket2, tauri → tokio → socket2. tokio는 tauri의 비동기 런타임이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "cargo_metadata"
+through = "tauri"
+reason = "tauri → tauri-macros → tauri-codegen → tauri-utils → cargo_metadata. 컴파일 시점 코드 생성이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "cargo_metadata"
+through = "tauri-build"
+reason = "tauri-build → tauri-utils → cargo_metadata. src-tauri/build.rs의 빌드 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "toml"
+through = "tauri"
+reason = "tauri → tauri-macros → tauri-codegen → tauri-utils → cargo_toml → toml, tauri → muda → gtk → system-deps → toml(Linux 대상). 설정 파일 해석이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "toml"
+through = "tauri-build"
+reason = "tauri-build → cargo_toml → toml. src-tauri/build.rs의 빌드 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "syn"
+through = "tauri"
+reason = "tauri가 쓰는 절차 매크로(tauri-macros, serde_derive 등)의 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "syn"
+through = "tauri-build"
+reason = "tauri-build → tauri-utils → 절차 매크로(derive_more-impl, cssparser-macros 등)의 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "proc-macro2"
+through = "tauri"
+reason = "tauri가 쓰는 절차 매크로의 의존이다"
+
+[[external-location-exception]]
+crate = "src-tauri"
+external = "proc-macro2"
+through = "tauri-build"
+reason = "tauri-build → tauri-utils → 절차 매크로의 의존이다"
+
+[[external-allowlist]]
+crate = "domain"
+allowed = ["rust_decimal"]
+
+[[external-allowlist]]
+crate = "xtask"
+allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
+
+[[feature-location]]
+external = "tokio"
+features = ["process", "full"]
+allowed-in = ["ai-claude-code", "ai-codex", "src-tauri", "testkit"]
+
+[[feature-allowlist]]
+external = "rmcp"
+dependent = "testkit"
+default-features = "off"
+features = ["client"]
+
+[source.reexport]
+crates = ["approval-command", "broker-toss-trade", "trade-fakes"]
+
+[source.user-presence]
+trait-name = "UserPresence"
+defining-crate = "application"
+impl-crates = ["platform-macos", "testkit"]
+
+[source.toss-order]
+write-means = [
+    "post",
+    "put",
+    "patch",
+    "delete",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "Method",
+    "method",
+    "method_mut",
+    "request",
+    "Request",
+    "RequestBuilder",
+    "execute",
+    "from_bytes",
+]
+order-words = ["orders"]
+allowed-crates = ["broker-toss-trade"]
+
+[[source.http-write]]
+crate = "broker-toss"
+allowed-files = ["crates/adapters/broker-toss/src/token.rs"]
+
+[[source.http-write]]
+crate = "sources"
+allowed-files = []
+
+[source.process]
+allowed-crates = ["ai-claude-code", "ai-codex", "src-tauri", "testkit", "xtask"]
+
+[source.toss-host]
+needle = "tossinvest.com"
+allowed-crates = ["toss-smoke"]
+allowed-files = ["apps/desktop/src-tauri/src/main.rs"]
