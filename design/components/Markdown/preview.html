@@ -1,0 +1,12 @@
+<!-- @dsCard group="AI" height=380 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Markdown — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h('div', { style: { maxWidth: 384 } }, h(S.Markdown, { source: '## 반도체 비중\n지금 **48.0%**로 상한 40%보다 높아요.\n\n- 삼성전자 38.6%\n- SK하이닉스 9.4%\n\n| 종목 | 비중 |\n|---|---|\n| 삼성전자 | 38.6% |\n| SK하이닉스 | 9.4% |\n\n`005930` 공시는 [DART 원문](https://dart.fss.or.kr)에서 볼 수 있어요.\n\n![실적 그래프](https://example.com/chart.png)\n\n> 숫자는 앱이 계산한 값이에요.' })));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Overlays" height=200 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Popover — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Popover, { defaultOpen: true, label: '기준 시각', trigger: function (t) { return h(S.IconButton, { icon: 'clock', label: '기준 시각', expanded: t.expanded, onClick: t.onClick }); } }, h(S.Text, { variant: 'body-sm' }, '시세 15:30 · 환율 15:30 · 보유 15:31 동기화')));
+</script>
+</body>
+</html>

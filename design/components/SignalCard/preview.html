@@ -1,0 +1,22 @@
+<!-- @dsCard group="Signals" height=1400 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>SignalCard — preview</title></head>
+<body>
+<div id="root" class=""></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  var base = { stock: { name: '삼성전자', ticker: '005930', market: 'KOSPI' }, side: 'buy', horizon: '3개월', horizonEnd: '2027-02-12', time: '09:05', price: '71800', targetPrice: '79000', targetRate: '10.03', stopPrice: '67500', stopRate: '-5.99', quantity: '10', amount: '718000', costs: '108', weightAfter: '64.4', aiProbability: '47', adjustedProbability: '44', baseProbability: '28', buyThreshold: '41', sellThreshold: '18', history: { hitRate: '46', count: '42', judged: true }, reasons: '- 외국인이 5일 연속 순매수했어요.\n- 메모리 가격이 2분기 연속 올랐어요.\n- 다만 다음 주 실적 발표 전이라 변동이 클 수 있어요.', sources: [{ label: '수급 · 토스증권 15:30' }, { label: '반도체 가격 동향 · 언론 보도', href: 'https://example.com' }] };
+  var states = [['default', '기본'], ['ordersOff', '주문 꺼짐'], ['zeroQty', '수량 0'], ['externalOnly', '외부 출처뿐'], ['recordOnly', '기록만'], ['pending', '승인 대기'], ['filled', '체결됨'], ['rejected', '거절·실패']];
+  function Demo() {
+    var st = React.useState('default');
+    var extra = st[0] === 'zeroQty' ? { quantity: '0', amount: '0', costs: '0', reason: '예수금이 부족해서 살 수 있는 수량이 0주예요.' } : st[0] === 'externalOnly' ? { sources: [{ label: '증권사 리포트 요약 · 외부 블로그', href: 'https://example.com' }] } : st[0] === 'filled' ? { doneAt: '09:12' } : st[0] === 'rejected' ? { reason: '장 운영 시간이 아니라서 토스증권이 주문을 받지 않았어요.' } : {};
+    return h('div', { className: 'sc-stack' },
+      h(S.SegmentedControl, { label: '상태', options: states.map(function (s) { return { value: s[0], label: s[1] }; }), value: st[0], onChange: st[1] }),
+      h('div', { style: { maxWidth: 560 } }, h(S.SignalCard, Object.assign({}, base, { state: st[0] }, extra))),
+      h('div', { style: { maxWidth: 560 } }, h(S.SignalCard, Object.assign({}, base, { stock: { name: 'SK하이닉스', ticker: '000660', market: 'KOSPI' }, side: 'sell', horizon: '5일', horizonEnd: '11/19', time: '09:05', price: '176500', targetPrice: '186000', targetRate: '5.38', stopPrice: '171000', stopRate: '-3.12', quantity: '20', amount: '3530000', costs: '7590', weightAfter: '20.4', aiProbability: '19', adjustedProbability: '15', baseProbability: '28', history: { hitRate: '52', count: '12', judged: false }, reasons: '- 반도체 업종 지수가 3일 연속 내렸어요.\n- 손절가까지 3.1%라 목표가보다 먼저 닿기 쉬워요.', sources: [] }))));
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(h(Demo));
+</script>
+</body>
+</html>

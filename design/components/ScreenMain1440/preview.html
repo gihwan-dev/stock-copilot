@@ -1,0 +1,91 @@
+<!-- @dsCard group="Screens" page height=900 width=1440 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ScreenMain1440</title></head>
+<body>
+<div id="root"></div>
+<script>
+
+  var S = window.StockCopilot, h = React.createElement;
+  /* ---- sample data: every number is a string the core already computed and rounded ---- */
+  var HELD = [
+    { id: '005930', name: '삼성전자', ticker: '005930', market: 'KOSPI', currency: 'KRW', qty: '300', avgPrice: '64200', price: '71800', value: '21540000', pl: '2280000', rate: '11.84', weight: '62.3', today: '2.43' },
+    { id: '000660', name: 'SK하이닉스', ticker: '000660', market: 'KOSPI', currency: 'KRW', qty: '60', avgPrice: '182000', price: '176500', value: '10590000', pl: '-330000', rate: '-3.02', weight: '30.6', today: '-1.12' },
+    { id: 'NVDA', name: '엔비디아', ticker: 'NVDA', market: 'NASDAQ', currency: 'USD', qty: '12.5', avgPrice: '118.40', price: '131.92', value: '1649.00', pl: '169.00', rate: '11.42', weight: '6.6', today: '0.84' },
+    { id: 'AAPL', name: '애플', ticker: 'AAPL', market: 'NASDAQ', currency: 'USD', qty: '0.5', avgPrice: '228.10', price: '228.09', value: '114.05', pl: '-0.01', rate: '-0.00', weight: '0.5', today: '-0.00' }];
+  var WATCH = [{ id: '035420', name: 'NAVER', ticker: '035420', today: '1.05' }, { id: 'TSLA', name: '테슬라', ticker: 'TSLA', today: '-3.20' }];
+  var TOTAL = { value: '34565118', pl: '2183416', rate: '6.74', fx: { pair: 'USD/KRW', rate: '1381.20', at: '15:30' } };
+  var SIGNAL = { stock: { name: '삼성전자', ticker: '005930', market: 'KOSPI' }, side: 'buy', horizon: '3개월', horizonEnd: '2027-02-12', time: '09:05', price: '71800', targetPrice: '79000', targetRate: '10.03', stopPrice: '67500', stopRate: '-5.99', quantity: '10', amount: '718000', costs: '108', weightAfter: '64.4', aiProbability: '47', adjustedProbability: '44', baseProbability: '28', buyThreshold: '41', sellThreshold: '18', history: { hitRate: '46', count: '42', judged: true }, reasons: '- 외국인이 5일 연속 순매수했어요.\n- 메모리 가격이 2분기 연속 올랐어요.\n- 다만 다음 주 실적 발표 전이라 변동이 클 수 있어요.', sources: [{ label: '수급 · 토스증권 15:30' }, { label: '반도체 가격 동향 · 언론 보도', href: 'https://example.com' }] };
+  var SELL = { stock: { name: 'SK하이닉스', ticker: '000660', market: 'KOSPI' }, side: 'sell', horizon: '5일', horizonEnd: '11/19', time: '09:05', price: '176500', targetPrice: '186000', targetRate: '5.38', stopPrice: '171000', stopRate: '-3.12', quantity: '20', amount: '3530000', costs: '7590', weightAfter: '20.4', aiProbability: '19', adjustedProbability: '15', baseProbability: '28', buyThreshold: '41', sellThreshold: '18', history: { hitRate: '52', count: '12', judged: false }, reasons: '- 반도체 업종 지수가 3일 연속 내렸어요.\n- 손절가까지 3.1%라 목표가보다 먼저 닿기 쉬워요.', sources: [{ label: '업종 지수 · 토스증권 15:30' }] };
+  var SCORE_ROWS = [{ band: '10–19%', predicted: '15', actual: '13', count: '64', judged: true }, { band: '20–29%', predicted: '25', actual: '27', count: '88', judged: true }, { band: '30–39%', predicted: '35', actual: '31', count: '42', judged: true }, { band: '40–49%', predicted: '45', actual: '38', count: '31', judged: true }, { band: '50–59%', predicted: '55', actual: '61', count: '9', judged: false }];
+  var CANDLES = [['11/3','70100','71300','69800','71200'],['11/4','71200','71900','70800','71500'],['11/5','71500','71600','70400','70900'],['11/6','70900','72000','70700','71800'],['11/7','71800','72600','71500','72100'],['11/10','72100','72300','71200','71600'],['11/11','71600','72800','71400','72400'],['11/12','72400','72500','71500','71800']].map(function (r) { return { label: r[0], open: r[1], high: r[2], low: r[3], close: r[4] }; });
+  var CHAT = [{ role: 'user', content: '반도체에 너무 쏠려 있어?' }, { role: 'assistant', activity: '보유 종목과 자산배분을 확인했어요', content: '반도체 비중이 **92.9%**예요. 직접 정하신 상한 40%보다 높아요.\n\n- 삼성전자 62.3%\n- SK하이닉스 30.6%', sources: [{ label: '보유종목 · 15:31 동기화' }], note: '참고용 의견이에요. 매매 판단은 직접 해주세요.' }];
+  function toList(a) { return a.map(function (x) { return { id: x.id, name: x.name, ticker: x.ticker, rate: x.today }; }); }
+
+  function StateSwitch(p) {
+    return h('div', { className: 'sc-demo-switch' }, h(S.SegmentedControl, { label: '화면 상태 (미리보기 전용)', options: [{ value: 'ok', label: '정상' }, { value: 'loading', label: '로딩' }, { value: 'empty', label: '빈' }, { value: 'error', label: '오류' }], value: p.value, onChange: p.onChange }));
+  }
+  function ChatToggle() {
+    var sh = S.useAppShell();
+    if (sh.chatMode === 'none' || sh.chatOpen) return null;
+    return h(S.IconButton, { icon: 'panel-right-open', label: 'AI 비서 열기', onClick: function () { sh.setChatOpen(true); } });
+  }
+  function Actions(p) {
+    return h(S.Inline, { gap: 'space-1' }, h(S.Button, { size: 'sm', variant: 'ghost', onClick: p.onScore }, h(S.Icon, { name: 'target' }), '성적표'), h(S.IconButton, { icon: 'settings', label: '설정', onClick: p.onSettings }), h(ChatToggle));
+  }
+  function Shell(p) {
+    var st = p.state;
+    return h(S.AppShell, {
+      list: h(S.StockList, { loading: st === 'loading', held: st === 'empty' ? [] : toList(HELD), watch: st === 'empty' ? [] : toList(WATCH), selectedId: p.selectedId, onSelect: p.onSelect }),
+      chat: h(S.ChatPanel, { messages: st === 'empty' ? [] : CHAT, status: st === 'error' ? 'error' : 'idle', disabled: st === 'loading' }),
+      toast: p.toast
+    }, p.children);
+  }
+  function SkelCard(p) { return h(S.Card, { title: p.title }, h(S.Skeleton, p.block ? { variant: 'block', height: p.block } : { lines: p.lines || 3 })); }
+  function FailCard(p) { return h(S.Card, { title: p.title }, h(S.Callout, { tone: 'error', title: p.what + ' 불러오지 못했어요', action: h(S.Button, { size: 'sm' }, '다시 시도') }, '토스 연결이 끊겼어요. 연결되면 자동으로 다시 불러와요.')); }
+
+  function Overview(p) {
+    var st = p.state;
+    var span3 = { narrow: 12, medium: 6, wide: 4 }, spanWide = { narrow: 12, medium: 12, wide: 4 };
+    if (st === 'loading') return h(S.Stack, { gap: 'space-6' },
+      h(S.Section, { title: '현황' }, h(S.Grid, null,
+        h(S.GridItem, { span: span3 }, h(SkelCard, { title: '총 평가', lines: 2 })), h(S.GridItem, { span: span3 }, h(SkelCard, { title: '통화별 평가', lines: 2 })), h(S.GridItem, { span: spanWide }, h(SkelCard, { title: '오늘 손익', lines: 2 })),
+        h(S.GridItem, { span: { narrow: 12, wide: 8 } }, h(SkelCard, { title: '보유 종목', lines: 5 })), h(S.GridItem, { span: { narrow: 12, wide: 4 } }, h(SkelCard, { title: '자산배분', lines: 4 })))),
+      h(S.Section, { title: '오늘' }, h(SkelCard, { title: '신호', lines: 4 })));
+    if (st === 'error') return h(S.Stack, { gap: 'space-6' },
+      h(S.Section, { title: '현황' }, h(S.Grid, null, h(S.GridItem, { span: 12 }, h(FailCard, { title: '보유 종목', what: '보유 종목을' })))),
+      h(S.Section, { title: '오늘' }, h(S.BriefingCard, { kind: 'morning', time: '08:30', summary: '연결이 끊기기 전에 받은 아침 브리핑이에요.\n\n- 반도체가 강하게 출발할 것 같아요.' })));
+    if (st === 'empty') return h(S.Stack, { gap: 'space-6' },
+      h(S.Section, { title: '현황' }, h(S.Card, null, h(S.EmptyState, { icon: 'wallet', title: '보유 종목이 없어요' }, '토스증권에서 종목을 사면 다음 동기화 때 여기에 보여요. 관심 종목을 추가하면 신호를 받을 수 있어요.'))),
+      h(S.Section, { title: '오늘' }, h(S.Card, null, h(S.EmptyState, { icon: 'clock', title: '오늘은 아직 신호·브리핑이 없어요' }, '아침 브리핑은 장 시작 30분 전에 와요.'))));
+    return h(S.Stack, { gap: 'space-6' },
+      h(S.Section, { title: '현황', actions: h(S.Text, { variant: 'caption', as: 'span' }, '15:31 동기화') }, h(S.Grid, null,
+        h(S.GridItem, { span: span3 }, h(S.Card, { title: '총 평가' }, h(S.Metric, { label: '원화 환산', value: '≈ ' + S.format.money(TOTAL.value), display: true, change: { value: TOTAL.pl, rate: TOTAL.rate }, hint: 'USD/KRW 1,381.20 · 15:30 기준 참고 환율' }))),
+        h(S.GridItem, { span: span3 }, h(S.Card, { title: '통화별 평가' }, h(S.Stack, { gap: 'space-3' },
+          h(S.Inline, { justify: 'between' }, h(S.Text, { variant: 'body-sm', tone: 'muted', as: 'span' }, '원화'), h(S.Money, { value: '32130000' })),
+          h(S.Inline, { justify: 'between' }, h(S.Text, { variant: 'body-sm', tone: 'muted', as: 'span' }, '달러'), h(S.Money, { value: '1763.05', currency: 'USD' })),
+          h(S.Divider), h(S.Text, { variant: 'caption' }, '달러는 환산하지 않은 금액이에요.')))),
+        h(S.GridItem, { span: spanWide }, h(S.Card, { title: '오늘 손익' }, h(S.Metric, { label: '원화 환산', value: S.format.money('1240300', 'KRW', true), change: { rate: '3.72' } }), h(S.AreaChart, { labels: ['09:00', '15:30'], values: ['0','120000','80000','310000','560000','820000','1240300'] }))),
+        h(S.GridItem, { span: { narrow: 12, wide: 8 } }, h(S.Card, { title: '보유 종목' }, h(S.HoldingsTable, { rows: HELD, total: TOTAL, selectedId: p.selectedId, onSelect: function (r) { p.onSelect && p.onSelect(r); } }))),
+        h(S.GridItem, { span: { narrow: 12, wide: 4 } }, h(S.Card, { title: '자산배분' }, h(S.AllocationBar, { limitLabel: '상한 40%', items: [{ label: '반도체', weight: '92.9', over: true }, { label: '미국 빅테크', weight: '7.1' }] }), h(S.Text, { variant: 'caption' }, '쏠림 상한은 설정의 고급에서 바꿀 수 있어요.'))))),
+      h(S.Section, { title: '오늘', actions: h(S.Text, { variant: 'caption', as: 'span' }, '최근 것부터') }, h(S.Stack, { gap: 'space-4' },
+        h(S.SignalCard, SIGNAL),
+        h(S.SignalCard, SELL),
+        h(S.DisclosureCard, { stock: { name: '삼성전자' }, title: '분기 배당 결정', kind: '중요 공시', held: true, time: '08:50', summary: '주당 361원, 기준일 12월 31일이에요.', href: 'https://dart.fss.or.kr' }),
+        h(S.BriefingCard, { kind: 'morning', time: '08:30', figures: [{ label: '코스피(전일)', value: h(S.PriceChange, { rate: '0.84', size: 'sm' }) }, { label: '나스닥(전일)', value: h(S.PriceChange, { rate: '-0.42', size: 'sm' }) }], summary: '반도체가 강하게 출발할 것 같아요. 밤사이 메모리 가격 기사가 나왔어요.\n\n- 보유 종목 공시 1건\n- 신호 1건(삼성전자 매수)', sources: [{ label: '시세 · 토스증권 08:30' }] }))));
+  }
+  function statusFor(st) {
+    return st === 'error' ? h(S.StatusBar, { tone: 'error', action: h(S.Button, { size: 'sm' }, '다시 연결') }, '토스에 연결하지 못했어요. 허용 IP가 바뀌었을 수 있어요.') : null;
+  }
+
+
+  function App() {
+    var st = React.useState('ok'), sel = React.useState(null);
+    return h(React.Fragment, null, h(StateSwitch, { value: st[0], onChange: st[1] }),
+      h(Shell, { state: st[0], selectedId: sel[0] }, h(S.Page, { title: '현황', actions: h(Actions), status: statusFor(st[0]) }, h(Overview, { state: st[0], selectedId: sel[0], onSelect: function (r) { sel[1](r.id); } }))));
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Market data" height=64 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Badge — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Badge, null, 'KOSPI'), h(S.Badge, null, 'NASDAQ'), h(S.Badge, { tone: 'primary' }, '앱 계산'), h(S.Badge, { tone: 'up' }, '외국인 순매수'), h(S.Badge, { tone: 'down' }, '기관 순매도'), h(S.Badge, { tone: 'alert' }, '! 장 마감'), h(S.Badge, { mono: true }, '005930')));
+</script>
+</body>
+</html>

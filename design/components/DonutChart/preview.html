@@ -1,0 +1,12 @@
+<!-- @dsCard group="Charts" height=220 width=960 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>DonutChart — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Grid, null, h(S.GridItem, { span: 6 }, h(S.Card, { title: '통화별' }, h(S.DonutChart, { centerValue: '93.4%', centerLabel: '원화', items: [{ label: '원화', weight: '93.4' }, { label: '달러', weight: '6.6' }] }))), h(S.GridItem, { span: 6 }, h(S.Card, { title: '빈 데이터' }, h(S.DonutChart, { items: [] })))));
+</script>
+</body>
+</html>

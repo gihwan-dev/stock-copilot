@@ -1,0 +1,12 @@
+<!-- @dsCard group="Overlays" height=200 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Menu — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Inline, { justify: 'end' }, h(S.Menu, { label: '더 보기', defaultOpen: true, trigger: function (t) { return h(S.IconButton, { icon: 'ellipsis', label: '더 보기', expanded: t.expanded, onClick: t.onClick }); }, items: [{ label: '다시 동기화', icon: 'refresh-cw' }, { label: '토스증권 앱에서 열기', icon: 'external-link' }, { label: '관심 종목에서 빼기', icon: 'minus' }] })));
+</script>
+</body>
+</html>

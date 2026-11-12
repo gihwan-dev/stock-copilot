@@ -1,0 +1,12 @@
+<!-- @dsCard group="Layout" height=220 width=1200 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Grid — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Grid, null, h(S.GridItem, { span: { narrow: 12, medium: 6, wide: 4 } }, h(S.Card, { title: '4 / 6 / 12' }, h(S.Text, { variant: 'caption' }, 'wide 4열 · medium 6열 · narrow 12열'))), h(S.GridItem, { span: { narrow: 12, medium: 6, wide: 4 } }, h(S.Card, { title: '4 / 6 / 12' }, h(S.Text, { variant: 'caption' }, '같은 규칙'))), h(S.GridItem, { span: { narrow: 12, medium: 12, wide: 4 } }, h(S.Card, { title: '4 / 12 / 12' }, h(S.Text, { variant: 'caption' }, 'medium에서 한 줄 전체'))), h(S.GridItem, { span: { narrow: 12, wide: 8 } }, h(S.Card, { title: '8열' }, h(S.Text, { variant: 'caption' }, '보유 표 자리'))), h(S.GridItem, { span: { narrow: 12, wide: 4 } }, h(S.Card, { title: '4열' }, h(S.Text, { variant: 'caption' }, '자산배분 자리')))));
+</script>
+</body>
+</html>

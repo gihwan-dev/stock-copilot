@@ -1,0 +1,12 @@
+<!-- @dsCard group="Layout" height=90 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Divider — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Divider, null), h(S.Inline, { gap: 'space-3' }, h(S.Text, null, '왼쪽'), h(S.Divider, { direction: 'vertical' }), h(S.Text, null, '오른쪽'))));
+</script>
+</body>
+</html>

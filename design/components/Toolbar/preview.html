@@ -1,0 +1,12 @@
+<!-- @dsCard group="Layout" height=80 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Toolbar — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Toolbar, { label: '차트 도구' }, h(S.SegmentedControl, { label: '기간', options: ['1일', '1주', '1개월', '1년'] }), h(S.Divider, { direction: 'vertical' }), h(S.IconButton, { icon: 'refresh-cw', label: '새로고침' })));
+</script>
+</body>
+</html>

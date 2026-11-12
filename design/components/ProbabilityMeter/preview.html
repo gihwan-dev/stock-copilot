@@ -1,0 +1,12 @@
+<!-- @dsCard group="Signals" height=380 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ProbabilityMeter — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.ProbabilityMeter, { probabilityLabel: '목표가에 먼저 닿을 확률', probability: '44', base: '28', buyThreshold: '41', sellThreshold: '18' }), h(S.ProbabilityMeter, { probabilityLabel: '목표가에 먼저 닿을 확률', probability: '15', base: '28', buyThreshold: '41', sellThreshold: '18' }), h('div', { style: { maxWidth: 280 } }, h(S.ProbabilityMeter, { probabilityLabel: '좁은 폭', probability: '44', base: '28', buyThreshold: '41', sellThreshold: '18' })), h(S.ProbabilityMeter, { probabilityLabel: '표시가 붙어 있을 때', probability: '22', base: '21', buyThreshold: '24', sellThreshold: '19' })));
+</script>
+</body>
+</html>

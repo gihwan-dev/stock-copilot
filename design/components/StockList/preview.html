@@ -1,0 +1,13 @@
+<!-- @dsCard group="Portfolio" height=460 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>StockList — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  var LIST = { selectedId: '005930', held: [{ id: '005930', name: '삼성전자', ticker: '005930', rate: '2.43' }, { id: '000660', name: 'SK하이닉스', ticker: '000660', rate: '-1.12' }, { id: 'NVDA', name: '엔비디아', ticker: 'NVDA', rate: '0.84' }, { id: 'AAPL', name: '애플', ticker: 'AAPL', rate: '-0.00' }], watch: [{ id: '035420', name: 'NAVER', ticker: '035420', rate: '1.05' }, { id: 'TSLA', name: '테슬라', ticker: 'TSLA', rate: '-3.20' }] };
+  ReactDOM.createRoot(document.getElementById('root')).render(h('div', { style: { display: 'flex', gap: 24, height: 440 } }, h('div', { className: 'sc-shell-list', style: { height: '100%' } }, h(S.StockList, LIST)), h('div', { className: 'sc-shell-list', style: { height: '100%' } }, h(S.StockList, { held: [], watch: [] }))));
+</script>
+</body>
+</html>

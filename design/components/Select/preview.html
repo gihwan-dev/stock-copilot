@@ -1,0 +1,12 @@
+<!-- @dsCard group="Forms" height=120 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Select — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Select, { label: '종목 분석 모델', defaultValue: 'opus', options: [{ value: 'opus', label: 'Claude Opus' }, { value: 'sonnet', label: 'Claude Sonnet' }, { value: 'haiku', label: 'Claude Haiku' }], hint: '고급 > AI의 작업별 모델에서 써요.' }));
+</script>
+</body>
+</html>

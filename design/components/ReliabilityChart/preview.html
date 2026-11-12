@@ -1,0 +1,12 @@
+<!-- @dsCard group="Charts" height=330 width=960 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ReliabilityChart — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Grid, null, h(S.GridItem, { span: 6 }, h(S.Card, { title: '예측 확률 대비 실제 적중률' }, h(S.ReliabilityChart, { points: [{ predicted: '15', actual: '13', count: '64', judged: true }, { predicted: '25', actual: '27', count: '88', judged: true }, { predicted: '35', actual: '31', count: '42', judged: true }, { predicted: '45', actual: '38', count: '31', judged: true }, { predicted: '55', actual: '61', count: '9', judged: false }] }))), h(S.GridItem, { span: 6 }, h(S.Card, { title: '빈 데이터' }, h(S.ReliabilityChart, { points: [] })))));
+</script>
+</body>
+</html>

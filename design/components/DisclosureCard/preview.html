@@ -1,0 +1,12 @@
+<!-- @dsCard group="Signals" height=200 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>DisclosureCard — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.DisclosureCard, { stock: { name: '삼성전자' }, title: '분기 배당 결정', kind: '중요 공시', held: true, time: '16:02', summary: '주당 361원, 기준일 12월 31일이에요.', href: 'https://dart.fss.or.kr' }));
+</script>
+</body>
+</html>

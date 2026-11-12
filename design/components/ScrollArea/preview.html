@@ -1,0 +1,12 @@
+<!-- @dsCard group="Layout" height=180 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ScrollArea — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h('div', { style: { height: 140, display: 'flex', flexDirection: 'column' } }, h(S.ScrollArea, { direction: 'y', label: '예시 목록' }, h(S.Stack, { gap: 'space-2' }, [1,2,3,4,5,6,7,8].map(function (i) { return h(S.Card, { key: i }, '항목 ' + i); })))));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Basics" height=150 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Icon — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Inline, { gap: 'space-3', wrap: true }, S.icons.map(function (n) { return h(S.Tooltip, { key: n, label: n }, h('span', { tabIndex: 0 }, h(S.Icon, { name: n, size: 'md' }))); })));
+</script>
+</body>
+</html>

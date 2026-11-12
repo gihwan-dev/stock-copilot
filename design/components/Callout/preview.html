@@ -1,0 +1,12 @@
+<!-- @dsCard group="Feedback" height=260 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Callout — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Callout, { tone: 'error', title: '토스에 등록되지 않은 IP예요', action: h(S.Button, { size: 'sm', variant: 'primary' }, '현재 IP 복사') }, '지금 IP(211.234.10.7)가 허용 IP 목록에 없어요. 토스증권 Open API 설정에서 이 IP를 추가해주세요.'), h(S.Callout, { tone: 'warning', title: '반도체 비중이 상한을 넘었어요' }, '48.0%로 정하신 상한 40%보다 8.0%p 높아요.'), h(S.Callout, { title: '어제 장 마감 데이터예요' }, '오늘은 휴장일이라 시세가 갱신되지 않아요.')));
+</script>
+</body>
+</html>

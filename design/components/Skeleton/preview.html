@@ -1,0 +1,12 @@
+<!-- @dsCard group="Feedback" height=200 width=960 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Skeleton — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Grid, null, h(S.GridItem, { span: 6 }, h(S.Card, { title: '불러오는 중' }, h(S.Skeleton, { lines: 3 }))), h(S.GridItem, { span: 6 }, h(S.Card, { title: '차트 자리' }, h(S.Skeleton, { variant: 'block', height: 'chart-height-sm' })))));
+</script>
+</body>
+</html>

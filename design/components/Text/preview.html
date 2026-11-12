@@ -1,0 +1,12 @@
+<!-- @dsCard group="Basics" height=170 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Text — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Text, null, 'body · 반도체 비중이 48.0%예요.'), h(S.Text, { variant: 'body-sm', tone: 'muted' }, 'body-sm muted · 어제 장 마감 기준이에요.'), h(S.Text, { variant: 'label' }, 'label · 평가손익'), h(S.Text, { variant: 'caption' }, 'caption · 출처 토스증권 시세 15:30'), h(S.Text, { variant: 'code' }, 'code · 005930')));
+</script>
+</body>
+</html>

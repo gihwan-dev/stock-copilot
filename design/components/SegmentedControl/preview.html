@@ -1,0 +1,12 @@
+<!-- @dsCard group="Actions" height=64 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>SegmentedControl — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.SegmentedControl, { label: '차트 기간', options: ['1일', '1주', '1개월', '3개월', '1년'], defaultValue: '1개월' }), h(S.SegmentedControl, { label: '보기', options: [{ value: 'sector', label: '섹터' }, { value: 'country', label: '국가' }, { value: 'ccy', label: '통화' }] })));
+</script>
+</body>
+</html>

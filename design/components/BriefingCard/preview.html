@@ -1,0 +1,12 @@
+<!-- @dsCard group="Signals" height=470 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>BriefingCard — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.BriefingCard, { kind: 'morning', time: '08:30', figures: [{ label: '코스피', value: h(S.PriceChange, { rate: '0.84', size: 'sm' }) }, { label: '나스닥(전일)', value: h(S.PriceChange, { rate: '-0.42', size: 'sm' }) }, { label: '원/달러', value: h(S.Money, { value: '1381.20', currency: 'KRW', size: 'sm' }) }], summary: '반도체가 강하게 출발할 것 같아요. 밤사이 메모리 가격 기사가 나왔어요.\n\n- 보유 종목 공시 1건\n- 신호 1건(삼성전자 매수)', sources: [{ label: '시세 · 토스증권 08:30' }] }), h(S.BriefingCard, { kind: 'close', time: '15:45', figures: [{ label: '오늘 손익', value: h(S.Money, { value: '1240300', signed: true, size: 'sm' }) }], summary: '삼성전자가 2.43% 오르며 손익을 이끌었어요.' })));
+</script>
+</body>
+</html>

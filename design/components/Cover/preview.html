@@ -1,0 +1,54 @@
+<!-- @dsCard height=320 -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cover</title>
+<style>
+  html, body { margin: 0; height: 100%; background: var(--bg); }
+  .cv { position: relative; width: 960px; height: 320px; overflow: hidden; background: var(--bg); }
+  .cv svg { position: absolute; inset: 0; }
+  .b-primary { fill: var(--primary); }
+  .b-ink { fill: var(--ink); }
+  .b-up { fill: var(--up); }
+  .b-down { fill: var(--down); }
+  .b-sand { fill: var(--chart-4); }
+  .dot { fill: var(--primary); }
+  .r-lg { rx: var(--radius-lg); ry: var(--radius-lg); }
+  .r-md { rx: var(--radius-md); ry: var(--radius-md); }
+  .txt { position: absolute; left: 40px; bottom: 40px; max-width: 440px; }
+  .name { margin: 0; font-family: var(--font-sans); font-weight: 600; font-size: 96px; line-height: .95; letter-spacing: -2px; color: var(--ink); }
+  .tag { margin: 8px 0 0; font-family: var(--font-sans); font-size: 13px; line-height: 20px; color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="cv">
+  <!--
+    blocks: primary 232x212 (radius-lg), ink 124x132, up 48x72 + down 68x72 (radius-md), chart-4 sand 364x88 (radius-lg)
+    arrangement: flush modular grid on an 8px gap (space-2), bleeding off the top and right edge like a dashboard of cards
+    pattern: dot grid, "precise, technical, numbers first": 4 x 11 primary dots at a 24px pitch (space-6), r=2
+    scales: space-2 gaps, space-6 pitch, radius-lg cards, radius-md signal tiles
+  -->
+  <svg width="960" height="320" viewBox="0 0 960 320" aria-hidden="true">
+    <g id="dots"></g>
+    <rect class="b-primary r-lg" x="608" y="-12" width="232" height="212"/>
+    <rect class="b-ink r-lg" x="848" y="-12" width="124" height="132"/>
+    <rect class="b-up r-md" x="848" y="128" width="48" height="72"/>
+    <rect class="b-down r-md" x="904" y="128" width="68" height="72"/>
+    <rect class="b-sand r-lg" x="608" y="208" width="364" height="88"/>
+  </svg>
+  <div class="txt">
+    <h1 class="name">Stock<br>Copilot</h1>
+    <p class="tag">숫자는 코드가 계산하고, AI는 그 숫자를 해석해요.</p>
+  </div>
+</div>
+<script>
+  var g = document.getElementById('dots'), ns = 'http://www.w3.org/2000/svg';
+  for (var c = 0; c < 4; c++) for (var r = 0; r < 11; r++) {
+    var d = document.createElementNS(ns, 'circle');
+    d.setAttribute('cx', 512 + c * 24); d.setAttribute('cy', 40 + r * 24); d.setAttribute('r', 2);
+    d.setAttribute('class', 'dot'); g.appendChild(d);
+  }
+</script>
+</body>
+</html>

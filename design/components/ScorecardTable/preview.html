@@ -1,0 +1,12 @@
+<!-- @dsCard group="Portfolio" height=260 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ScorecardTable — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.ScorecardTable, { caption: '최근 6개월 · 전체 신호', rows: [{ band: '10–19%', predicted: '15', actual: '13', count: '64', judged: true }, { band: '20–29%', predicted: '25', actual: '27', count: '88', judged: true }, { band: '30–39%', predicted: '35', actual: '31', count: '42', judged: true }, { band: '40–49%', predicted: '45', actual: '38', count: '31', judged: true }, { band: '50–59%', predicted: '55', actual: '61', count: '9', judged: false }] }));
+</script>
+</body>
+</html>

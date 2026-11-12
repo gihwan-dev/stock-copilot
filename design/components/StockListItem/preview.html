@@ -1,0 +1,12 @@
+<!-- @dsCard group="Portfolio" height=170 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>StockListItem — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h('div', { style: { width: 232 } }, h(S.StockListItem, { name: '삼성전자', ticker: '005930', rate: '2.43', selected: true }), h(S.StockListItem, { name: 'SK하이닉스', ticker: '000660', rate: '-1.12' })), h('div', { style: { width: 56 } }, h(S.StockListItem, { compact: true, name: '삼성전자', rate: '2.43' }))));
+</script>
+</body>
+</html>

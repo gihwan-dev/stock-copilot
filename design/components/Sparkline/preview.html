@@ -1,0 +1,12 @@
+<!-- @dsCard group="Market data" height=72 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sparkline — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Sparkline, { data: [100,102,101,104,103,107,109,108,112] }), h(S.Sparkline, { data: [100,98,99,95,96,93,94,90,91] }), h(S.Sparkline, { data: [100,101,99,100,101,100], width: 64, height: 20 })));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Feedback" height=230 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Table — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Table, { caption: '오늘 체결', columns: [{ key: 'name', header: '종목' }, { key: 'side', header: '구분' }, { key: 'qty', header: '수량', kind: 'quantity' }, { key: 'price', header: '체결가', kind: 'money' }, { key: 'time', header: '시각', align: 'end' }], rows: [{ id: 1, name: '삼성전자', side: '매수', qty: '10', price: '71800', time: '09:12' }, { id: 2, name: '엔비디아', side: '매도', qty: '0.5', price: '131.92', currency: 'USD', time: '23:41' }] }), h(S.Table, { columns: [{ key: 'name', header: '종목' }, { key: 'qty', header: '수량', kind: 'quantity' }], rows: [], empty: '오늘 체결된 주문이 없어요' })));
+</script>
+</body>
+</html>

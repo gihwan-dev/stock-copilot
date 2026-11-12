@@ -1,0 +1,18 @@
+<!-- @dsCard group="Layout" height=420 width=1280 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>AppShell — preview</title></head>
+<body>
+<div id="root" class=""></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  function Demo() {
+    return h(S.AppShell, {
+      list: h(S.StockList, { held: [{ id: '005930', name: '삼성전자', ticker: '005930', rate: '2.43' }, { id: '000660', name: 'SK하이닉스', ticker: '000660', rate: '-1.12' }], watch: [{ id: 'NVDA', name: '엔비디아', ticker: 'NVDA', rate: '0.00' }], selectedId: '005930' }),
+      chat: h(S.ChatPanel, { messages: [] })
+    }, h(S.Page, { title: '현황' }, h(S.Card, { title: '본문' }, h(S.Text, { tone: 'muted' }, '본문 영역은 content-max(1200px)를 넘지 않고 가운데 정렬돼요.'))));
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(h(Demo));
+</script>
+</body>
+</html>

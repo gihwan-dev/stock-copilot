@@ -1,0 +1,12 @@
+<!-- @dsCard group="Charts" height=320 width=960 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>LineChart — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Card, { title: '평가금액 추이' }, h(S.LineChart, { labels: ['11/3', '11/12'], series: [{ name: '총 평가', values: ['80120000','81340000','80990000','82450000','83100000','82870000','84312500'] }] })), h(S.Card, { title: '빈 데이터' }, h(S.LineChart, { series: [], height: 'chart-height-sm' }))));
+</script>
+</body>
+</html>

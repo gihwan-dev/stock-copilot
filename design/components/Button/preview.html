@@ -1,0 +1,12 @@
+<!-- @dsCard group="Actions" height=72 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Button — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Button, { variant: 'primary' }, '연결하기'), h(S.Button, null, '다시 연결'), h(S.Button, { variant: 'ghost' }, '취소'), h(S.Button, { variant: 'buy' }, '매수 주문 넣기'), h(S.Button, { variant: 'sell' }, '매도 주문 넣기'), h(S.Button, { variant: 'primary', size: 'sm' }, 'AI에게 묻기'), h(S.Button, { disabled: true }, '장 마감')));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Forms" height=300 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>TextField — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.TextField, { label: '이름', placeholder: '예: 내 계좌' }), h(S.TextField, { label: 'API 키', type: 'secret', defaultValue: 'tsk_live_8f2a91c0', hint: '키는 macOS 키체인에만 저장해요.' }), h(S.TextField, { label: '시크릿', type: 'secret', error: '키 형식이 맞지 않아요. 토스증권에서 복사한 값을 그대로 붙여넣어주세요.' })));
+</script>
+</body>
+</html>

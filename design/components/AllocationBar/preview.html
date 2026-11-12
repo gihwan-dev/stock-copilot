@@ -1,0 +1,12 @@
+<!-- @dsCard group="Portfolio" height=300 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>AllocationBar — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h('div', { className: 'sc-card' }, h(S.AllocationBar, { limitLabel: '상한 40%', items: [ { label: '반도체', weight: '48.0', over: true }, { label: '미국 빅테크', weight: '16.8' }, { label: '2차전지', weight: '14.4' }, { label: '인터넷', weight: '11.6' }, { label: '금융', weight: '5.1' }, { label: '현금', weight: '4.1' } ] })), h('div', { className: 'sc-card' }, h(S.AllocationBar, { items: ['반도체', '미국 빅테크', '2차전지', '인터넷', '금융', '현금', '채권'].map(function (l) { return { label: l, weight: '14.3' }; }) }))));
+</script>
+</body>
+</html>

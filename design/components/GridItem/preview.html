@@ -1,0 +1,12 @@
+<!-- @dsCard group="Layout" height=120 width=1200 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>GridItem — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Grid, null, h(S.GridItem, { span: 3 }, h(S.Card, null, '3')), h(S.GridItem, { span: 9 }, h(S.Card, null, '9'))));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Numbers" height=80 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Quantity — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Inline, { gap: 'space-6' }, h(S.Quantity, { value: '300' }), h(S.Quantity, { value: '0.500000' }), h(S.Quantity, { value: '12.5' })));
+</script>
+</body>
+</html>

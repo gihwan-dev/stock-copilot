@@ -1,0 +1,12 @@
+<!-- @dsCard group="Overlays" height=110 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Tooltip — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Inline, { gap: 'space-6' }, h(S.Tooltip, { label: '앱이 계산한 값이에요', open: true }, h(S.Badge, { tone: 'primary' }, '앱 계산')), h(S.IconButton, { icon: 'info', label: '기준 확률은 지난 3년 같은 기간에 오른 비율이에요' })));
+</script>
+</body>
+</html>

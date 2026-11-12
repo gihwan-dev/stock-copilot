@@ -1,0 +1,12 @@
+<!-- @dsCard group="Portfolio" height=132 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Metric — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h('div', { className: 'sc-card', style: { minWidth: 260 } }, h(S.Metric, { label: '총 평가금액', value: S.format.money('84312500'), display: true, change: { value: '1240300', rate: '1.49' }, hint: '≈ 원화 환산 · 15:30 기준 · 앱 계산' })), h('div', { className: 'sc-card', style: { minWidth: 180 } }, h(S.Metric, { label: '평가손익', value: '+' + S.format.krwShort('6812500'), change: { rate: '8.79' } })), h('div', { className: 'sc-card', style: { minWidth: 160 } }, h(S.Metric, { label: '원/달러 (참고)', value: S.format.num('1381.20'), change: { rate: '-0.31' } }))));
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!-- @dsCard group="Charts" height=240 width=960 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>AreaChart — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Card, { title: '오늘 손익' }, h(S.AreaChart, { labels: ['09:00', '15:30'], values: ['0','120000','80000','310000','560000','820000','1240300'] })), h(S.Card, { title: '빈 데이터' }, h(S.AreaChart, { values: [] }))));
+</script>
+</body>
+</html>

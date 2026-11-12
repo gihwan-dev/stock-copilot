@@ -1,0 +1,12 @@
+<!-- @dsCard group="Feedback" height=200 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Toast — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h(S.Toast, { tone: 'success', title: '삼성전자 매수 체결', onClose: function () {} }, '10주 · 71,800원 · 09:12'), h(S.Toast, { tone: 'error', title: '주문이 나가지 않았어요', onClose: function () {} }, '신호 카드에서 이유를 확인해주세요.')));
+</script>
+</body>
+</html>

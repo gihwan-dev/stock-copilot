@@ -1,0 +1,12 @@
+<!-- @dsCard group="AI" height=300 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>ChatMessage — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h('div', { className: 'sc-card', style: { maxWidth: 384, display: 'flex', flexDirection: 'column', gap: 16 } }, h(S.ChatMessage, { role: 'user' }, '지금 내 포트폴리오 너무 반도체에 쏠려 있어?'), h(S.ChatMessage, { role: 'assistant', activity: '보유 종목과 자산배분을 확인했어요', sources: [{ label: '보유종목 · 15:30 동기화' }, { label: '섹터 분류 · 토스증권' }], note: '참고용 의견이에요. 매매 판단은 직접 해주세요.' }, h('p', null, '반도체 비중이 48.0%예요. 직접 정하신 상한 40%보다 8%p 높아요.'), h('p', null, '줄인다면 SK하이닉스부터 보는 게 좋아요. 지금 평가손실 구간이라 손익 정리 효과도 있어요. 다만 다음 주 실적 발표 전이라 변동이 클 수 있어요.'))));
+</script>
+</body>
+</html>

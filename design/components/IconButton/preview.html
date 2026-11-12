@@ -1,0 +1,12 @@
+<!-- @dsCard group="Basics" height=80 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>IconButton — preview</title></head>
+<body>
+<div id="root" class="sc-row"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Inline, { gap: 'space-2' }, h(S.IconButton, { icon: 'settings', label: '설정' }), h(S.IconButton, { icon: 'panel-right-open', label: '채팅 열기', pressed: false }), h(S.IconButton, { icon: 'panel-right-open', label: '채팅 닫기', pressed: true }), h(S.IconButton, { icon: 'refresh-cw', label: '새로고침', size: 'sm' }), h(S.IconButton, { icon: 'x', label: '닫기', disabled: true })));
+</script>
+</body>
+</html>

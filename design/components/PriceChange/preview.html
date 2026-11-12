@@ -1,0 +1,12 @@
+<!-- @dsCard group="Market data" height=96 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>PriceChange — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(React.Fragment, null, h('div', { className: 'sc-row', style: { padding: 0 } }, h(S.PriceChange, { value: '1700', rate: '2.43' }), h(S.PriceChange, { value: '-850', rate: '-1.12' }), h(S.PriceChange, { rate: '-0.00' }), h(S.PriceChange, { value: '1,700', rate: '2.43' }), h(S.PriceChange, { value: '3.21', rate: '1.48', currency: 'USD' })), h('div', { className: 'sc-row', style: { padding: 0 } }, h(S.PriceChange, { rate: '2.43', pill: true, size: 'sm' }), h(S.PriceChange, { rate: '-1.12', pill: true, size: 'sm' }), h(S.PriceChange, { rate: '0.00', pill: true, size: 'sm' }), h(S.PriceChange, { value: '412300', rate: '5.02', size: 'lg' }))));
+</script>
+</body>
+</html>

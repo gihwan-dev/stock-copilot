@@ -1,0 +1,12 @@
+<!-- @dsCard group="Overlays" height=220 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Disclosure — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h(S.Disclosure, { title: '고급', defaultOpen: true }, h(S.TextField, { label: '쏠림 경고 기준(%)', defaultValue: '40' }), h(S.Switch, { label: '로그인 시 자동 시작', defaultChecked: true })));
+</script>
+</body>
+</html>

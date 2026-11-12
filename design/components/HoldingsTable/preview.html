@@ -1,0 +1,23 @@
+<!-- @dsCard group="Portfolio" height=300 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>HoldingsTable — preview</title></head>
+<body>
+<div id="root" class="sc-stack"></div>
+<script>
+  var S = window.StockCopilot, h = React.createElement;
+  var rows = [
+    { id: '005930', name: '삼성전자', ticker: '005930', market: 'KOSPI', currency: 'KRW', qty: '300', avgPrice: '64200', price: '71800', value: '21540000', pl: '2280000', rate: '11.84', weight: '62.3' },
+    { id: '000660', name: 'SK하이닉스', ticker: '000660', market: 'KOSPI', currency: 'KRW', qty: '60', avgPrice: '182000', price: '176500', value: '10590000', pl: '-330000', rate: '-3.02', weight: '30.6' },
+    { id: 'NVDA', name: '엔비디아', ticker: 'NVDA', market: 'NASDAQ', currency: 'USD', qty: '12.5', avgPrice: '118.40', price: '131.92', value: '1649.00', pl: '169.00', rate: '11.42', weight: '6.6' },
+    { id: 'AAPL', name: '애플', ticker: 'AAPL', market: 'NASDAQ', currency: 'USD', qty: '0.5', avgPrice: '228.10', price: '228.09', value: '114.05', pl: '-0.01', rate: '-0.00', weight: '0.5' }
+  ];
+  function App() {
+    var st = React.useState('005930');
+    return h(S.HoldingsTable, { rows: rows, selectedId: st[0], onSelect: function (r) { st[1](r.id); },
+      total: { value: '34565118', pl: '2183416', rate: '6.74', fx: { pair: 'USD/KRW', rate: '1381.20', at: '15:30' } } });
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
