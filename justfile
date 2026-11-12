@@ -18,13 +18,22 @@ export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
 
-check:
+check: check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
     "{{just_executable()}}" deny
     cargo nextest run --workspace --locked
 
 check-full: advisory-db-fetch check
+
+check-node:
+    actual="$(node --version)"; pinned="v$(cat .node-version)"; [ "$actual" = "$pinned" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\n' "$actual" "$pinned" >&2; exit 1; }
+
+check-ts: check-node
+    pnpm install --frozen-lockfile
+    pnpm -C apps/desktop exec tsc -p .
+    pnpm -C apps/desktop exec vite build
+    node --test 'apps/desktop/tests/*.test.mjs'
 
 clippy manifest *flags:
     cargo clippy --manifest-path "$1" --workspace --all-targets --locked "${@:2}" -- -D warnings

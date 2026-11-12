@@ -3,7 +3,8 @@
   "productName": "Stock Copilot",
   "identifier": "dev.stockcopilot.desktop",
   "build": {
-    "frontendDist": "empty-frontend"
+    "frontendDist": "../dist",
+    "beforeBuildCommand": "pnpm exec vite build"
   },
   "app": {
     "windows": [
