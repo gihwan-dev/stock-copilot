@@ -1,13 +1,67 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { actualKeys } from "./verdict.mjs";
 
 export const here = dirname(fileURLToPath(import.meta.url));
 export const desktop = join(here, "..", "..", "apps", "desktop");
 export const appConfigFile = join(desktop, "eslint.config.mjs");
 
 const { ESLint } = createRequire(join(desktop, "package.json"))("eslint");
+const { guardRuleBase } = await import(
+  pathToFileURL(join(desktop, "eslint", "guard-plugin.mjs")).href
+);
+
+export const listRuleBase = (rule) =>
+  rule.startsWith("guard/") ? guardRuleBase[rule.slice("guard/".length)] : rule;
+
+const listBases = new Set([
+  "no-restricted-syntax",
+  "no-restricted-globals",
+  "no-restricted-properties",
+  "no-restricted-imports",
+]);
+
+const entryMessages = (base, options) =>
+  base === "no-restricted-imports"
+    ? options.flatMap((option) =>
+        typeof option === "string"
+          ? [option]
+          : [...(option.paths ?? []), ...(option.patterns ?? [])].map(
+              (entry) => (typeof entry === "string" ? entry : entry.message),
+            ),
+      )
+    : options.map((entry) =>
+        typeof entry === "string" ? entry : (entry.message ?? entry.name),
+      );
+
+export const listEntriesOf = (config) =>
+  Object.fromEntries(
+    Object.entries(config.rules)
+      .filter(([rule]) => listBases.has(listRuleBase(rule) ?? ""))
+      .map(([rule, entry]) => [
+        rule,
+        entryMessages(
+          listRuleBase(rule),
+          Array.isArray(entry) ? entry.slice(1) : [],
+        ),
+      ]),
+  );
+
+export const mergeEntries = (maps) =>
+  maps.reduce(
+    (merged, map) =>
+      Object.fromEntries(
+        [...new Set([...Object.keys(merged), ...Object.keys(map)])].map(
+          (rule) => [
+            rule,
+            [...new Set([...(merged[rule] ?? []), ...(map[rule] ?? [])])],
+          ],
+        ),
+      ),
+    {},
+  );
 
 export const readCases = () =>
   JSON.parse(readFileSync(join(here, "cases.json"), "utf8"));
@@ -33,11 +87,21 @@ export const violationLinter = (overrideConfig) =>
   });
 
 export const lintCases = async (files, overrideConfig) => {
-  const results = await violationLinter(overrideConfig).lintFiles(files);
-  return new Map(
-    results.map((result) => [
-      relative(here, result.filePath).split(sep).join("/"),
-      result.messages,
-    ]),
+  const linter = violationLinter(overrideConfig);
+  const results = await linter.lintFiles(files);
+  const entries = await Promise.all(
+    results.map(async (result) => {
+      const config = await linter.calculateConfigForFile(result.filePath);
+      const listEntries = listEntriesOf(config);
+      return [
+        relative(here, result.filePath).split(sep).join("/"),
+        {
+          messages: result.messages,
+          listEntries,
+          keys: actualKeys(result.messages, listEntries),
+        },
+      ];
+    }),
   );
+  return new Map(entries);
 };

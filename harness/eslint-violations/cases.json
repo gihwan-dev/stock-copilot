@@ -1,794 +1,345 @@
 {
   "rows": {
     "타입": [
-      {
-        "rule": "@typescript-eslint/no-explicit-any"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-argument"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-assignment"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-call"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-declaration-merging"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-enum-assignment"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-enum-comparison"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-function-type"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-member-access"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-return"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-type-assertion"
-      },
-      {
-        "rule": "@typescript-eslint/no-unsafe-unary-minus"
-      },
-      {
-        "rule": "@typescript-eslint/consistent-type-assertions"
-      },
-      {
-        "rule": "@typescript-eslint/no-non-null-assertion"
-      },
-      {
-        "rule": "@typescript-eslint/strict-boolean-expressions"
-      },
-      {
-        "rule": "@typescript-eslint/explicit-function-return-type"
-      },
-      {
-        "rule": "@typescript-eslint/explicit-module-boundary-types"
-      },
-      {
-        "rule": "@typescript-eslint/method-signature-style"
-      }
+      "@typescript-eslint/consistent-type-assertions",
+      "@typescript-eslint/explicit-function-return-type",
+      "@typescript-eslint/explicit-module-boundary-types",
+      "@typescript-eslint/method-signature-style",
+      "@typescript-eslint/no-explicit-any",
+      "@typescript-eslint/no-non-null-assertion",
+      "@typescript-eslint/no-unsafe-argument",
+      "@typescript-eslint/no-unsafe-assignment",
+      "@typescript-eslint/no-unsafe-call",
+      "@typescript-eslint/no-unsafe-declaration-merging",
+      "@typescript-eslint/no-unsafe-enum-assignment",
+      "@typescript-eslint/no-unsafe-enum-comparison",
+      "@typescript-eslint/no-unsafe-function-type",
+      "@typescript-eslint/no-unsafe-member-access",
+      "@typescript-eslint/no-unsafe-return",
+      "@typescript-eslint/no-unsafe-type-assertion",
+      "@typescript-eslint/no-unsafe-unary-minus",
+      "@typescript-eslint/strict-boolean-expressions",
+      "guard/no-json-parse",
+      "guard/no-throwing-parse"
     ],
     "거짓 타입": [
-      {
-        "rule": "no-restricted-syntax",
-        "message": "타입 술어"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "함수 오버로드 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "declare 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "namespace·declare module"
-      }
+      "guard/no-declare",
+      "guard/no-namespace",
+      "guard/no-overload",
+      "guard/no-type-predicate"
     ],
     "실패 처리": [
-      {
-        "rule": "functional/no-throw-statements"
-      },
-      {
-        "rule": "functional/no-try-statements"
-      },
-      {
-        "rule": "functional/no-promise-reject"
-      },
-      {
-        "rule": "functional/no-expression-statements"
-      },
-      {
-        "rule": "@typescript-eslint/no-floating-promises"
-      },
-      {
-        "rule": "@typescript-eslint/no-misused-promises"
-      },
-      {
-        "rule": "no-void"
-      },
-      {
-        "rule": "@typescript-eslint/no-unused-vars"
-      }
+      "@typescript-eslint/no-floating-promises",
+      "@typescript-eslint/no-misused-promises",
+      "@typescript-eslint/no-unused-vars",
+      "functional/no-expression-statements",
+      "functional/no-promise-reject",
+      "functional/no-throw-statements",
+      "functional/no-try-statements",
+      "no-void"
     ],
     "불변": [
-      {
-        "rule": "functional/no-let"
-      },
-      {
-        "rule": "no-var"
-      },
-      {
-        "rule": "prefer-const"
-      },
-      {
-        "rule": "functional/immutable-data"
-      },
-      {
-        "rule": "no-param-reassign"
-      },
-      {
-        "rule": "no-plusplus"
-      },
-      {
-        "rule": "functional/type-declaration-immutability"
-      },
-      {
-        "rule": "functional/prefer-immutable-types"
-      },
-      {
-        "rule": "no-restricted-properties",
-        "message": "Object.assign"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "prototype 접근 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "call·apply·bind 금지"
-      },
-      {
-        "rule": "no-restricted-properties",
-        "message": "Object.getOwnPropertySymbols"
-      },
-      {
-        "rule": "no-restricted-properties",
-        "message": "Reflect"
-      },
-      {
-        "rule": "no-restricted-globals",
-        "message": "'Reflect'"
-      }
+      "functional/immutable-data",
+      "functional/no-let",
+      "functional/prefer-immutable-types",
+      "functional/type-declaration-immutability",
+      "guard/no-call-apply-bind",
+      "guard/no-object-mutation",
+      "guard/no-own-symbols",
+      "guard/no-prototype",
+      "guard/no-proxy",
+      "guard/no-reflect",
+      "no-param-reassign",
+      "no-plusplus",
+      "no-var",
+      "prefer-const"
     ],
     "문법": [
-      {
-        "rule": "functional/no-classes"
-      },
-      {
-        "rule": "functional/no-class-inheritance"
-      },
-      {
-        "rule": "functional/no-this-expressions"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "enum 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "namespace·declare module"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "기본 내보내기 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "export * 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "동적 import 금지"
-      },
-      {
-        "rule": "no-nested-ternary"
-      },
-      {
-        "rule": "functional/no-loop-statements"
-      },
-      {
-        "rule": "no-eval"
-      },
-      {
-        "rule": "no-new-func"
-      },
-      {
-        "rule": "no-restricted-globals",
-        "message": "'globalThis'"
-      },
-      {
-        "rule": "no-restricted-globals",
-        "message": "'window'"
-      },
-      {
-        "rule": "max-lines-per-function"
-      },
-      {
-        "rule": "max-lines"
-      },
-      {
-        "rule": "complexity"
-      },
-      {
-        "rule": "max-params"
-      },
-      {
-        "rule": "max-depth"
-      }
+      "complexity",
+      "functional/no-class-inheritance",
+      "functional/no-classes",
+      "functional/no-loop-statements",
+      "functional/no-this-expressions",
+      "guard/no-default-export",
+      "guard/no-dynamic-import",
+      "guard/no-enum",
+      "guard/no-export-all",
+      "guard/no-global-object",
+      "guard/no-namespace",
+      "max-depth",
+      "max-lines",
+      "max-lines-per-function",
+      "max-params",
+      "no-eval",
+      "no-nested-ternary",
+      "no-new-func",
+      "no-restricted-globals"
     ],
     "switch": [
-      {
-        "rule": "@typescript-eslint/switch-exhaustiveness-check"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "default 팔 금지"
-      }
+      "@typescript-eslint/switch-exhaustiveness-check",
+      "guard/no-default-case"
     ],
     "React": [
-      {
-        "rule": "no-restricted-imports",
-        "message": "'useEffect' import from 'react' is restricted"
-      },
-      {
-        "rule": "no-restricted-imports",
-        "message": "'useLayoutEffect' import from 'react' is restricted"
-      },
-      {
-        "rule": "no-restricted-imports",
-        "message": "'useInsertionEffect' import from 'react' is restricted"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "useEffect 계열은"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "react는 이름 있는 가져오기만"
-      },
-      {
-        "rule": "no-restricted-imports",
-        "message": "'default' import from 'react' is restricted"
-      },
-      {
-        "rule": "no-restricted-imports",
-        "message": "react 하위 경로 가져오기 금지"
-      },
-      {
-        "rule": "no-restricted-imports",
-        "message": "'useSyncExternalStore' import from 'react' is restricted"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "ref 콜백 함수 금지"
-      },
-      {
-        "rule": "react-hooks/rules-of-hooks"
-      },
-      {
-        "rule": "@eslint-react/no-array-index-key"
-      }
+      "@eslint-react/no-array-index-key",
+      "guard/no-effect-hooks",
+      "guard/no-react-namespace",
+      "guard/no-react-subpath",
+      "guard/no-ref-callback",
+      "guard/no-sync-external-store",
+      "react-hooks/rules-of-hooks"
     ],
     "주석": [
-      {
-        "rule": null,
-        "message": "Unused eslint-disable directive"
-      },
-      {
-        "rule": null,
-        "message": "Unused inline config"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-use"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/require-description"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-unlimited-disable"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'local/no-comments'"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'local/no-money-coercion'"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'local/forbidden-file'"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'boundaries/dependencies'"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'guard/no-network'"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'guard/no-test-skip'"
-      },
-      {
-        "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-        "message": "'@typescript-eslint/ban-ts-comment'"
-      },
-      {
-        "rule": "guard/disable-directive-form"
-      },
-      {
-        "rule": "@typescript-eslint/ban-ts-comment",
-        "message": "@ts-ignore"
-      },
-      {
-        "rule": "@typescript-eslint/ban-ts-comment",
-        "message": "@ts-expect-error"
-      },
-      {
-        "rule": "@typescript-eslint/ban-ts-comment",
-        "message": "@ts-nocheck"
-      },
-      {
-        "rule": "@typescript-eslint/ban-ts-comment",
-        "message": "@ts-check"
-      }
+      "(null) Unused eslint-disable directive",
+      "(null) Unused inline config",
+      "@eslint-community/eslint-comments/no-restricted-disable",
+      "@eslint-community/eslint-comments/no-unlimited-disable",
+      "@eslint-community/eslint-comments/no-use",
+      "@eslint-community/eslint-comments/require-description",
+      "@typescript-eslint/ban-ts-comment",
+      "guard/disable-directive-form"
     ],
     "숫자": [
-      {
-        "rule": "no-restricted-syntax",
-        "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "Number·BigInt·Math 멤버 사용 금지"
-      },
-      {
-        "rule": "no-restricted-syntax",
-        "message": "단항 + 변환 금지"
-      },
-      {
-        "rule": "@typescript-eslint/restrict-plus-operands"
-      },
-      {
-        "rule": "@typescript-eslint/no-base-to-string"
-      }
+      "@typescript-eslint/no-base-to-string",
+      "@typescript-eslint/restrict-plus-operands",
+      "guard/no-number-conversion",
+      "guard/no-unary-plus"
     ],
-    "파일 종류": [
-      {
-        "rule": "guard/forbidden-extension"
-      }
-    ],
-    "네트워크": [
-      {
-        "rule": "guard/no-network"
-      },
-      {
-        "rule": "guard/no-global-object",
-        "message": "'window'"
-      }
-    ],
-    "테스트": [
-      {
-        "rule": "guard/no-test-skip"
-      },
-      {
-        "rule": "no-restricted-imports",
-        "message": "@tauri-apps/api/mocks는 shared/ipc/testing에서만"
-      }
-    ],
-    "허용 목록": []
+    "파일 종류": ["guard/forbidden-extension"],
+    "네트워크": ["guard/no-global-object", "guard/no-network"],
+    "테스트": ["guard/no-tauri-mocks", "guard/no-test-skip"],
+    "전역": ["guard/no-dom-globals", "guard/no-global-object"],
+    "허용 목록": ["guard/no-effect-hooks", "guard/no-type-predicate"]
   },
   "cases": {
     "src/app/comments/allowed-form.ts": {
       "row": "주석",
-      "expect": "clean"
+      "expect": []
     },
     "src/app/comments/block-disable.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-use",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/block-next-line.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": ["guard/disable-directive-form"]
     },
     "src/app/comments/disable-line.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-use",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/empty-reason.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/require-description"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/require-description",
+        "guard/disable-directive-form",
+        "no-console",
+        "no-console --"
+      ]
     },
     "src/app/comments/file-disable.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-use",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/inline-config-unused.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": null,
-            "message": "Unused inline config"
-          },
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "(null) Unused inline config",
+        "@eslint-community/eslint-comments/no-use",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/inline-exported.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-use",
+        "@eslint-community/eslint-comments/require-description",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/inline-global.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-use",
+        "@eslint-community/eslint-comments/require-description",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/inline-rule-config.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-use",
+        "@eslint-community/eslint-comments/require-description",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/no-reason.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/require-description"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/require-description",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/no-rule-name.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-unlimited-disable"
-          },
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "@eslint-community/eslint-comments/no-unlimited-disable",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/several-rules.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/disable-directive-form"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-confusing-void-expression",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/ts-check.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/ban-ts-comment",
-            "message": "@ts-check"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/ban-ts-comment"]
     },
     "src/app/comments/ts-expect-error.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/ban-ts-comment",
-            "message": "@ts-expect-error"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/ban-ts-comment"]
     },
     "src/app/comments/ts-ignore.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/ban-ts-comment",
-            "message": "@ts-ignore"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/ban-ts-comment"]
     },
     "src/app/comments/ts-nocheck.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/ban-ts-comment",
-            "message": "@ts-nocheck"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/ban-ts-comment"]
     },
     "src/app/comments/undisableable-ban-ts-comment.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'@typescript-eslint/ban-ts-comment'"
-          }
-        ]
-      }
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
     },
     "src/app/comments/undisableable-boundaries.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'boundaries/dependencies'"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "boundaries/dependencies"
+      ]
     },
     "src/app/comments/undisableable-comment-rule.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'@eslint-community/eslint-comments/no-use'"
-          }
-        ]
-      }
+      "expect": [
+        "(null) Unused eslint-disable directive",
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "@eslint-community/eslint-comments/no-use",
+        "@eslint-community/eslint-comments/require-description",
+        "guard/disable-directive-form"
+      ]
     },
     "src/app/comments/undisableable-directive-form.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'guard/disable-directive-form'"
-          }
-        ]
-      }
+      "expect": [
+        "(null) Unused eslint-disable directive",
+        "@eslint-community/eslint-comments/no-restricted-disable"
+      ]
     },
     "src/app/comments/undisableable-forbidden-file.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'local/forbidden-file'"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "local/forbidden-file"
+      ]
     },
     "src/app/comments/undisableable-global-object.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'guard/no-global-object'"
-          }
-        ]
-      }
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
     },
     "src/app/comments/undisableable-money.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'local/no-money-coercion'"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "local/no-money-coercion"
+      ]
     },
     "src/app/comments/undisableable-network.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'guard/no-network'"
-          }
-        ]
-      }
+      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
     },
     "src/app/comments/undisableable-no-comments.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'local/no-comments'"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "local/no-comments"
+      ]
     },
     "src/app/comments/undisableable-test-skip.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-restricted-disable",
-            "message": "'guard/no-test-skip'"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "functional/readonly-type"
+      ]
     },
     "src/app/comments/unlimited-file-disable.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-community/eslint-comments/no-unlimited-disable"
-          },
-          {
-            "rule": "@eslint-community/eslint-comments/no-use"
-          },
-          {
-            "rule": "@eslint-community/eslint-comments/require-description"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "@eslint-community/eslint-comments/no-unlimited-disable",
+        "@eslint-community/eslint-comments/no-use",
+        "@eslint-community/eslint-comments/require-description"
+      ]
     },
     "src/app/comments/unused-disable.ts": {
       "row": "주석",
-      "expect": {
-        "errors": [
-          {
-            "rule": null,
-            "message": "Unused eslint-disable directive"
-          }
-        ]
-      }
+      "expect": ["(null) Unused eslint-disable directive"]
+    },
+    "src/app/dom/document.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
     },
     "src/app/failure/floating-promise.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-floating-promises"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-floating-promises",
+        "functional/no-expression-statements"
+      ]
     },
     "src/app/failure/floating-thenable.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-floating-promises"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-floating-promises",
+        "functional/no-expression-statements",
+        "functional/readonly-type"
+      ]
     },
     "src/app/failure/ignored-result-assign.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unused-vars"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/no-unused-vars"]
     },
     "src/app/failure/ignored-result.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-expression-statements"
-          }
-        ]
-      }
+      "expect": ["functional/no-expression-statements"]
     },
     "src/app/failure/misused-promise.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-misused-promises"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-misused-promises",
+        "@typescript-eslint/no-unnecessary-condition",
+        "@typescript-eslint/strict-boolean-expressions"
+      ]
     },
     "src/app/failure/promise-reject.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-promise-reject"
-          }
-        ]
-      }
+      "expect": ["functional/no-promise-reject"]
     },
     "src/app/failure/throw.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-throw-statements"
-          }
-        ]
-      }
+      "expect": ["functional/no-throw-statements"]
     },
     "src/app/failure/throwing-builtin-gap.ts": {
       "row": "실패 처리",
@@ -796,1496 +347,1340 @@
     },
     "src/app/failure/try.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-try-statements"
-          }
-        ]
-      }
+      "expect": ["functional/no-try-statements"]
     },
     "src/app/failure/void-promise.ts": {
       "row": "실패 처리",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-void"
-          },
-          {
-            "rule": "@typescript-eslint/no-floating-promises"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-floating-promises",
+        "functional/no-expression-statements",
+        "no-void"
+      ]
     },
     "src/app/fake-types/asserts.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "타입 술어"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-meaningless-void-operator",
+        "functional/no-expression-statements",
+        "guard/no-type-predicate :: 타입 술어(x is T)와 단언 함수(asserts x) 금지: 스키마 파싱을 쓴다.",
+        "no-void"
+      ]
     },
     "src/app/fake-types/declare-const.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "declare 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다."
+      ]
     },
     "src/app/fake-types/declare-global.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "declare 금지"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "namespace·declare module"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-namespace :: namespace·declare module·declare global 금지."
+      ]
     },
     "src/app/fake-types/declare-module.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "declare 금지"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "namespace·declare module"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-namespace :: namespace·declare module·declare global 금지."
+      ]
     },
     "src/app/fake-types/namespace.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "namespace·declare module"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-namespace",
+        "guard/no-namespace :: namespace·declare module·declare global 금지."
+      ]
     },
     "src/app/fake-types/overload.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "함수 오버로드 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-overload :: 함수 오버로드 금지: 구현 시그니처가 거짓말을 할 수 있다."
+      ]
     },
     "src/app/fake-types/type-predicate.ts": {
       "row": "거짓 타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "타입 술어"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-type-predicate :: 타입 술어(x is T)와 단언 함수(asserts x) 금지: 스키마 파싱을 쓴다."
+      ]
+    },
+    "src/app/immutability/call-destructure.ts": {
+      "row": "불변",
+      "expect": [
+        "@typescript-eslint/unbound-method",
+        "guard/no-call-apply-bind :: call 금지: 다른 this로 변경 함수를 부르는 길이다."
+      ]
     },
     "src/app/immutability/computed-call.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "call·apply·bind 금지"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/dot-notation",
+        "guard/no-call-apply-bind :: call 금지: 다른 this로 변경 함수를 부르는 길이다."
+      ]
+    },
+    "src/app/immutability/define-properties.ts": {
+      "row": "불변",
+      "expect": [
+        "functional/immutable-data",
+        "functional/readonly-type",
+        "guard/no-object-mutation :: Object.defineProperties 금지: 객체를 바꾸지 않고 새로 만든다."
+      ]
     },
     "src/app/immutability/define-property.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-properties",
-            "message": "Object.defineProperty"
-          }
-        ]
-      }
+      "expect": [
+        "functional/immutable-data",
+        "functional/readonly-type",
+        "guard/no-object-mutation :: Object.defineProperty 금지: 객체를 바꾸지 않고 새로 만든다."
+      ]
     },
     "src/app/immutability/delete.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/immutable-data"
-          }
-        ]
-      }
+      "expect": [
+        "functional/immutable-data",
+        "functional/no-expression-statements",
+        "functional/readonly-type"
+      ]
     },
     "src/app/immutability/let.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-let"
-          }
-        ]
-      }
+      "expect": [
+        "functional/no-expression-statements",
+        "functional/no-let",
+        "no-useless-assignment"
+      ]
     },
     "src/app/immutability/map-set.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/immutable-data"
-          }
-        ]
-      }
+      "expect": ["functional/immutable-data"]
     },
     "src/app/immutability/method-apply.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "call·apply·bind 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-call-apply-bind :: apply 금지: 다른 this로 변경 함수를 부르는 길이다."
+      ]
     },
     "src/app/immutability/method-bind.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "call·apply·bind 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-call-apply-bind :: bind 금지: 다른 this로 변경 함수를 부르는 길이다."
+      ]
     },
     "src/app/immutability/method-call.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "call·apply·bind 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-call-apply-bind :: call 금지: 다른 this로 변경 함수를 부르는 길이다."
+      ]
     },
     "src/app/immutability/mutable-param.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/prefer-immutable-types"
-          }
-        ]
-      }
+      "expect": ["functional/prefer-immutable-types"]
     },
     "src/app/immutability/mutable-type.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/type-declaration-immutability"
-          }
-        ]
-      }
+      "expect": ["functional/type-declaration-immutability"]
     },
     "src/app/immutability/object-assign.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-properties",
-            "message": "Object.assign"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-object-mutation :: Object.assign 금지: 객체를 바꾸지 않고 새로 만든다."
+      ]
+    },
+    "src/app/immutability/own-descriptor.ts": {
+      "row": "불변",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-own-symbols :: Object.getOwnPropertyDescriptor 금지: 불투명 금액의 symbol 키를 꺼내는 길이다."
+      ]
     },
     "src/app/immutability/own-descriptors.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-properties",
-            "message": "Object.getOwnPropertyDescriptors"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-own-symbols :: Object.getOwnPropertyDescriptors 금지: 불투명 금액의 symbol 키를 꺼내는 길이다."
+      ]
     },
     "src/app/immutability/own-symbols-destructure.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-properties",
-            "message": "Object.getOwnPropertySymbols"
-          }
-        ]
-      }
+      "expect": [
+        "functional/prefer-tacit",
+        "functional/readonly-type",
+        "guard/no-own-symbols :: Object.getOwnPropertySymbols 금지: 불투명 금액의 symbol 키를 꺼내는 길이다."
+      ]
     },
     "src/app/immutability/own-symbols.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-properties",
-            "message": "Object.getOwnPropertySymbols"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-own-symbols :: Object.getOwnPropertySymbols 금지: 불투명 금액의 symbol 키를 꺼내는 길이다."
+      ]
     },
     "src/app/immutability/param-reassign.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-param-reassign"
-          }
-        ]
-      }
+      "expect": [
+        "functional/immutable-data",
+        "functional/no-expression-statements",
+        "functional/prefer-immutable-types",
+        "no-param-reassign"
+      ]
     },
     "src/app/immutability/plusplus.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-plusplus"
-          }
-        ]
-      }
+      "expect": ["functional/immutable-data", "no-plusplus"]
     },
     "src/app/immutability/prefer-const.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "prefer-const"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/prefer-as-const",
+        "functional/no-let",
+        "prefer-const"
+      ]
     },
     "src/app/immutability/prop-assign.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/immutable-data"
-          }
-        ]
-      }
+      "expect": [
+        "functional/immutable-data",
+        "functional/no-expression-statements",
+        "functional/readonly-type"
+      ]
     },
     "src/app/immutability/proto-dunder.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "prototype 접근 금지"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-prototype :: __proto__ 접근 금지: 불투명 값의 내부와 내장 변경 함수에 닿는 길이다."
+      ]
     },
     "src/app/immutability/proto-push-call.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "prototype 접근 금지"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "call·apply·bind 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-call-apply-bind :: call 금지: 다른 this로 변경 함수를 부르는 길이다.",
+        "guard/no-prototype :: prototype 접근 금지: 불투명 값의 내부와 내장 변경 함수에 닿는 길이다."
+      ]
+    },
+    "src/app/immutability/prototype-destructure.ts": {
+      "row": "불변",
+      "expect": [
+        "guard/no-prototype :: prototype 접근 금지: 불투명 값의 내부와 내장 변경 함수에 닿는 길이다."
+      ]
+    },
+    "src/app/immutability/proxy.ts": {
+      "row": "불변",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-proxy :: Proxy 금지: 값 접근을 가로채는 길이다."
+      ]
     },
     "src/app/immutability/push.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/immutable-data"
-          }
-        ]
-      }
+      "expect": [
+        "functional/immutable-data",
+        "functional/no-expression-statements"
+      ]
     },
     "src/app/immutability/reflect-alias.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-globals",
-            "message": "'Reflect'"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-reflect :: Reflect 금지: 불투명 금액의 symbol 키를 꺼내는 길이다."
+      ]
     },
     "src/app/immutability/reflect-call.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-properties",
-            "message": "Reflect"
-          },
-          {
-            "rule": "no-restricted-globals",
-            "message": "'Reflect'"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-reflect :: Reflect 금지: 불투명 금액의 symbol 키를 꺼내는 길이다."
+      ]
+    },
+    "src/app/immutability/set-prototype-of.ts": {
+      "row": "불변",
+      "expect": [
+        "functional/immutable-data",
+        "functional/readonly-type",
+        "guard/no-object-mutation :: Object.setPrototypeOf 금지: 객체를 바꾸지 않고 새로 만든다."
+      ]
     },
     "src/app/immutability/var.ts": {
       "row": "불변",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-var"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/prefer-as-const", "no-var"]
     },
     "src/app/network/computed-fetch.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/dot-notation",
+        "guard/no-network :: fetch 금지: UI는 IPC로만 통신한다."
+      ]
     },
     "src/app/network/default-view.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
+        "guard/no-network :: defaultView 금지: UI는 IPC로만 통신한다."
+      ]
     },
     "src/app/network/fetch.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": ["guard/no-network :: fetch 금지: UI는 IPC로만 통신한다."]
+    },
+    "src/app/network/global-frames.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-global-object :: frames 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다."
+      ]
+    },
+    "src/app/network/global-open.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-global-object :: open 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다."
+      ]
+    },
+    "src/app/network/global-opener.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-global-object :: opener 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다."
+      ]
+    },
+    "src/app/network/global-parent.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-global-object :: parent 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다."
+      ]
+    },
+    "src/app/network/import-scripts.ts": {
+      "row": "네트워크",
+      "expect": [
+        "@typescript-eslint/no-unsafe-call",
+        "guard/no-network :: importScripts 금지: UI는 IPC로만 통신한다."
+      ]
+    },
+    "src/app/network/new-EventSource.ts": {
+      "row": "네트워크",
+      "expect": ["guard/no-network :: EventSource 금지: UI는 IPC로만 통신한다."]
+    },
+    "src/app/network/new-RTCPeerConnection.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: RTCPeerConnection 금지: UI는 IPC로만 통신한다."
+      ]
+    },
+    "src/app/network/new-SharedWorker.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: SharedWorker 금지: UI는 IPC로만 통신한다."
+      ]
+    },
+    "src/app/network/new-WebTransport.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: WebTransport 금지: UI는 IPC로만 통신한다."
+      ]
+    },
+    "src/app/network/new-Worker.ts": {
+      "row": "네트워크",
+      "expect": ["guard/no-network :: Worker 금지: UI는 IPC로만 통신한다."]
+    },
+    "src/app/network/react-dom-namespace-preload.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom preconnect 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
+    },
+    "src/app/network/react-dom-preconnect.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom preconnect 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
+    },
+    "src/app/network/react-dom-prefetchDNS.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom prefetchDNS 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
+    },
+    "src/app/network/react-dom-preinit.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom preinit 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
+    },
+    "src/app/network/react-dom-preinitModule.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom preinitModule 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
+    },
+    "src/app/network/react-dom-preload.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom preload 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
+    },
+    "src/app/network/react-dom-preloadModule.ts": {
+      "row": "네트워크",
+      "expect": [
+        "guard/no-network :: react-dom preloadModule 금지: 리소스를 미리 받는 네트워크 요청이다."
+      ]
     },
     "src/app/network/send-beacon.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-dom-globals :: navigator 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
+        "guard/no-network :: sendBeacon 금지: UI는 IPC로만 통신한다."
+      ]
     },
     "src/app/network/string-eval.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-implied-eval",
+        "guard/no-network :: fetch 금지: UI는 IPC로만 통신한다."
+      ]
     },
     "src/app/network/top-window.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-global-object",
-            "message": "'top'"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-global-object :: top 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다."
+      ]
     },
     "src/app/network/websocket.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": ["guard/no-network :: WebSocket 금지: UI는 IPC로만 통신한다."]
     },
     "src/app/network/window-fetch.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          },
-          {
-            "rule": "guard/no-global-object",
-            "message": "'window'"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-global-object :: window 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
+        "guard/no-network :: fetch 금지: UI는 IPC로만 통신한다.",
+        "no-restricted-globals :: window 금지: 암묵 전역을 쓰지 않는다."
+      ]
     },
     "src/app/network/xhr.ts": {
       "row": "네트워크",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-network"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-network :: XMLHttpRequest 금지: UI는 IPC로만 통신한다."
+      ]
     },
     "src/app/numbers/base-to-string.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-base-to-string"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-base-to-string",
+        "@typescript-eslint/restrict-template-expressions",
+        "functional/readonly-type"
+      ]
+    },
+    "src/app/numbers/number-call.ts": {
+      "row": "숫자",
+      "expect": [
+        "functional/prefer-tacit",
+        "guard/no-number-conversion :: Number 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/app/numbers/restrict-plus.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/restrict-plus-operands"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/restrict-plus-operands"]
+    },
+    "src/app/parse/json-parse.ts": {
+      "row": "타입",
+      "expect": [
+        "guard/no-json-parse :: JSON.parse 금지: any를 돌려준다. 경계에서 스키마로 파싱한다.",
+        "guard/no-throwing-parse :: parse 금지: 던지는 parse 대신 safeParse로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-async-computed.ts": {
+      "row": "타입",
+      "expect": [
+        "@typescript-eslint/dot-notation",
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parseAsync 금지: 던지는 parseAsync 대신 safeParseAsync로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-async-destructure.ts": {
+      "row": "타입",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parseAsync 금지: 던지는 parseAsync 대신 safeParseAsync로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-async-member.ts": {
+      "row": "타입",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parseAsync 금지: 던지는 parseAsync 대신 safeParseAsync로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-computed.ts": {
+      "row": "타입",
+      "expect": [
+        "@typescript-eslint/dot-notation",
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parse 금지: 던지는 parse 대신 safeParse로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-destructure.ts": {
+      "row": "타입",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parse 금지: 던지는 parse 대신 safeParse로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-member.ts": {
+      "row": "타입",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parse 금지: 던지는 parse 대신 safeParse로 Result를 만든다."
+      ]
+    },
+    "src/app/parse/schema-template.ts": {
+      "row": "타입",
+      "expect": [
+        "@typescript-eslint/dot-notation",
+        "functional/readonly-type",
+        "guard/no-throwing-parse :: parse 금지: 던지는 parse 대신 safeParse로 Result를 만든다."
+      ]
     },
     "src/app/switch/default-case.ts": {
       "row": "switch",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "default 팔 금지"
-          },
-          {
-            "rule": "@typescript-eslint/switch-exhaustiveness-check"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/switch-exhaustiveness-check",
+        "guard/no-default-case :: switch의 default 팔 금지: 모든 경우를 나열한다."
+      ]
     },
     "src/app/switch/default-exhaustive.ts": {
       "row": "switch",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "default 팔 금지"
-          },
-          {
-            "rule": "@typescript-eslint/switch-exhaustiveness-check"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/switch-exhaustiveness-check",
+        "guard/no-default-case :: switch의 default 팔 금지: 모든 경우를 나열한다."
+      ]
     },
     "src/app/switch/missing-case.ts": {
       "row": "switch",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/switch-exhaustiveness-check"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/switch-exhaustiveness-check"]
     },
     "src/app/syntax/class-expression.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-classes"
-          }
-        ]
-      }
+      "expect": ["functional/no-classes"]
     },
     "src/app/syntax/class-inheritance.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-class-inheritance"
-          }
-        ]
-      }
+      "expect": ["functional/no-class-inheritance", "functional/no-classes"]
     },
     "src/app/syntax/class.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-classes"
-          }
-        ]
-      }
+      "expect": ["functional/no-classes"]
     },
     "src/app/syntax/complexity.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "complexity"
-          }
-        ]
-      }
+      "expect": ["complexity"]
     },
     "src/app/syntax/default-export.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "기본 내보내기 금지"
-          }
-        ]
-      }
+      "expect": ["guard/no-default-export :: 기본 내보내기 금지."]
     },
     "src/app/syntax/dynamic-import.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "동적 import 금지"
-          }
-        ]
-      }
+      "expect": ["guard/no-dynamic-import :: 동적 import 금지."]
     },
     "src/app/syntax/enum.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "enum 금지"
-          }
-        ]
-      }
+      "expect": ["guard/no-enum :: enum 금지: 리터럴 유니온을 쓴다."]
     },
     "src/app/syntax/eval.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-eval"
-          },
-          {
-            "rule": "guard/no-global-object",
-            "message": "'eval'"
-          }
-        ]
-      }
+      "expect": [
+        "functional/prefer-tacit",
+        "guard/no-global-object :: eval 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
+        "no-eval"
+      ]
     },
     "src/app/syntax/export-all.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "export * 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-export-all :: export * 금지: 내보낼 이름을 나열한다."
+      ]
+    },
+    "src/app/syntax/global-event.ts": {
+      "row": "문법",
+      "expect": [
+        "no-restricted-globals :: event 금지: 암묵 전역을 쓰지 않는다."
+      ]
+    },
+    "src/app/syntax/global-length.ts": {
+      "row": "문법",
+      "expect": [
+        "no-restricted-globals :: length 금지: 암묵 전역을 쓰지 않는다."
+      ]
+    },
+    "src/app/syntax/global-name.ts": {
+      "row": "문법",
+      "expect": ["no-restricted-globals :: name 금지: 암묵 전역을 쓰지 않는다."]
+    },
+    "src/app/syntax/global-self.ts": {
+      "row": "문법",
+      "expect": [
+        "guard/no-global-object :: self 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
+        "no-restricted-globals :: self 금지: 암묵 전역을 쓰지 않는다."
+      ]
+    },
+    "src/app/syntax/global-status.ts": {
+      "row": "문법",
+      "expect": [
+        "no-restricted-globals :: status 금지: 암묵 전역을 쓰지 않는다."
+      ]
     },
     "src/app/syntax/loop-for.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-loop-statements"
-          }
-        ]
-      }
+      "expect": ["functional/no-loop-statements"]
     },
     "src/app/syntax/loop-while.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-loop-statements"
-          }
-        ]
-      }
+      "expect": ["functional/no-loop-statements"]
     },
     "src/app/syntax/max-depth.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "max-depth"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/no-unnecessary-condition", "max-depth"]
     },
     "src/app/syntax/max-lines-per-function.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "max-lines-per-function"
-          }
-        ]
-      }
+      "expect": ["max-lines-per-function"]
     },
     "src/app/syntax/max-lines.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "max-lines"
-          }
-        ]
-      }
+      "expect": ["max-lines"]
     },
     "src/app/syntax/max-params.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "max-params"
-          }
-        ]
-      }
+      "expect": ["max-params"]
     },
     "src/app/syntax/namespace.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "namespace·declare module"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-namespace",
+        "guard/no-namespace :: namespace·declare module·declare global 금지."
+      ]
     },
     "src/app/syntax/nested-ternary.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-nested-ternary"
-          }
-        ]
-      }
+      "expect": ["no-nested-ternary"]
     },
     "src/app/syntax/new-func.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-new-func"
-          },
-          {
-            "rule": "guard/no-global-object",
-            "message": "'Function'"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-implied-eval",
+        "guard/no-global-object :: Function 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
+        "no-new-func"
+      ]
     },
     "src/app/syntax/restricted-global-this.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-globals",
-            "message": "'globalThis'"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-global-object :: globalThis 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
+        "no-restricted-globals :: globalThis 금지: 암묵 전역을 쓰지 않는다."
+      ]
     },
     "src/app/syntax/restricted-global.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-globals",
-            "message": "'window'"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-global-object :: window 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
+        "no-restricted-globals :: window 금지: 암묵 전역을 쓰지 않는다."
+      ]
     },
     "src/app/syntax/this.ts": {
       "row": "문법",
-      "expect": {
-        "errors": [
-          {
-            "rule": "functional/no-this-expressions"
-          }
-        ]
-      }
+      "expect": ["functional/no-this-expressions"]
     },
     "src/app/tests/computed-skip.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/dot-notation",
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 skip 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/concurrent.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 concurrent 금지: 실패 뒤집기·동시 실행 표시를 쓰지 않는다."
+      ]
     },
     "src/app/tests/describe-skip.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 skip 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/destructure-fails.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 fails 금지: 실패 뒤집기·동시 실행 표시를 쓰지 않는다."
+      ]
+    },
+    "src/app/tests/destructure-skip.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 skip 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/fdescribe.ts": {
+      "row": "테스트",
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: fdescribe 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/fit.ts": {
+      "row": "테스트",
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: fit 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
     },
     "src/app/tests/it-only.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 only 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/option-only.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 only 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/option-skip.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 skip 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/option-todo.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 todo 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/runIf.ts": {
+      "row": "테스트",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 runIf 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
     },
     "src/app/tests/skip-if.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 skipIf 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
     },
     "src/app/tests/tauri-mocks.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "@tauri-apps/api/mocks는 shared/ipc/testing에서만"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-tauri-mocks :: @tauri-apps/api/mocks는 shared/ipc/testing에서만 가져온다."
+      ]
     },
     "src/app/tests/test-fails.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 fails 금지: 실패 뒤집기·동시 실행 표시를 쓰지 않는다."
+      ]
     },
     "src/app/tests/test-todo.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: 테스트 todo 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/xdescribe.ts": {
+      "row": "테스트",
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: xdescribe 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
     },
     "src/app/tests/xit.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/no-test-skip"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: xit 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
+    },
+    "src/app/tests/xtest.ts": {
+      "row": "테스트",
+      "expect": [
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다.",
+        "guard/no-test-skip :: xtest 금지: 테스트를 건너뛰거나 골라 돌리지 않는다."
+      ]
     },
     "src/app/types/as-const-allowed.ts": {
       "row": "타입",
-      "expect": "clean"
+      "expect": []
     },
     "src/app/types/assertion-angle.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/consistent-type-assertions"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-unsafe-type-assertion"
+      ]
     },
     "src/app/types/assertion-as.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/consistent-type-assertions"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-unsafe-type-assertion"
+      ]
     },
     "src/app/types/assertion-double.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/consistent-type-assertions"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-unsafe-type-assertion"
+      ]
     },
     "src/app/types/explicit-any.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-explicit-any"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/explicit-module-boundary-types",
+        "@typescript-eslint/no-explicit-any"
+      ]
     },
     "src/app/types/method-shorthand.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/method-signature-style"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/method-signature-style",
+        "functional/prefer-property-signatures"
+      ]
     },
     "src/app/types/missing-boundary-type.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/explicit-module-boundary-types"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/explicit-function-return-type",
+        "@typescript-eslint/explicit-module-boundary-types",
+        "@typescript-eslint/no-unsafe-return"
+      ]
     },
     "src/app/types/missing-return-type.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/explicit-function-return-type"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/explicit-function-return-type"]
     },
     "src/app/types/non-null.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-non-null-assertion"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/no-non-null-assertion"]
     },
     "src/app/types/satisfies-allowed.ts": {
       "row": "타입",
-      "expect": "clean"
+      "expect": []
     },
     "src/app/types/strict-boolean-any.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/explicit-module-boundary-types",
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/strict-boolean-expressions"
+      ]
     },
     "src/app/types/strict-boolean-nullable-boolean.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/strict-boolean-expressions"]
     },
     "src/app/types/strict-boolean-nullable-enum.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/strict-boolean-expressions",
+        "guard/no-enum :: enum 금지: 리터럴 유니온을 쓴다."
+      ]
     },
     "src/app/types/strict-boolean-nullable-number.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/strict-boolean-expressions"]
     },
     "src/app/types/strict-boolean-nullable-object.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/strict-boolean-expressions",
+        "functional/readonly-type"
+      ]
     },
     "src/app/types/strict-boolean-nullable-string.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/strict-boolean-expressions"]
     },
     "src/app/types/strict-boolean-number.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/strict-boolean-expressions"]
     },
     "src/app/types/strict-boolean-string.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/strict-boolean-expressions"
-          }
-        ]
-      }
+      "expect": ["@typescript-eslint/strict-boolean-expressions"]
     },
     "src/app/types/unsafe-argument.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-argument"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-unsafe-argument",
+        "guard/no-json-parse :: JSON.parse 금지: any를 돌려준다. 경계에서 스키마로 파싱한다.",
+        "guard/no-throwing-parse :: parse 금지: 던지는 parse 대신 safeParse로 Result를 만든다."
+      ]
     },
     "src/app/types/unsafe-assignment.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-assignment"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/no-unsafe-assignment",
+        "guard/no-declare :: declare 금지: 없는 값을 타입으로 꾸며낼 수 있다."
+      ]
     },
     "src/app/types/unsafe-call.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-call"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/no-unsafe-call",
+        "@typescript-eslint/no-unsafe-type-assertion",
+        "functional/readonly-type"
+      ]
     },
     "src/app/types/unsafe-declaration-merging.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-declaration-merging"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-definitions",
+        "@typescript-eslint/no-extraneous-class",
+        "@typescript-eslint/no-unsafe-declaration-merging",
+        "functional/no-classes"
+      ]
     },
     "src/app/types/unsafe-enum-assignment.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-enum-assignment"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-unsafe-enum-assignment",
+        "guard/no-enum :: enum 금지: 리터럴 유니온을 쓴다."
+      ]
     },
     "src/app/types/unsafe-enum-comparison.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-enum-comparison"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-unnecessary-condition",
+        "@typescript-eslint/no-unsafe-enum-comparison",
+        "guard/no-enum :: enum 금지: 리터럴 유니온을 쓴다."
+      ]
     },
     "src/app/types/unsafe-function-type.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-function-type"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-unsafe-function-type",
+        "functional/readonly-type"
+      ]
     },
     "src/app/types/unsafe-member-access.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-member-access"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/no-unsafe-member-access",
+        "@typescript-eslint/no-unsafe-type-assertion",
+        "functional/readonly-type"
+      ]
     },
     "src/app/types/unsafe-return.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-return"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-explicit-any",
+        "@typescript-eslint/no-unsafe-return",
+        "@typescript-eslint/no-unsafe-type-assertion",
+        "functional/readonly-type"
+      ]
     },
     "src/app/types/unsafe-type-assertion.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-type-assertion"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/consistent-type-assertions",
+        "@typescript-eslint/no-unsafe-type-assertion"
+      ]
     },
     "src/app/types/unsafe-unary-minus.ts": {
       "row": "타입",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@typescript-eslint/no-unsafe-unary-minus"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-unsafe-unary-minus",
+        "functional/readonly-type"
+      ]
+    },
+    "src/features/dom/document.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/dom/indexedDB.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: indexedDB 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/dom/localStorage.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: localStorage 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/dom/location.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: location 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/dom/navigator.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: navigator 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/dom/sessionStorage.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: sessionStorage 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
     },
     "src/features/files/ambient.d.ts": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/files/legacy-disabled.js": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다.",
+        "warning (null) noInlineConfig"
+      ]
     },
     "src/features/files/legacy.cjs": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/files/legacy.cts": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/files/legacy.js": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/files/legacy.jsx": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/files/legacy.mjs": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/files/legacy.mts": {
       "row": "파일 종류",
-      "expect": {
-        "errors": [
-          {
-            "rule": "guard/forbidden-extension"
-          }
-        ]
-      }
+      "expect": [
+        "guard/forbidden-extension :: src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다."
+      ]
     },
     "src/features/numbers/bigint.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
-          }
-        ]
-      }
+      "expect": [
+        "functional/prefer-tacit",
+        "guard/no-number-conversion :: BigInt 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
+    },
+    "src/features/numbers/math-destructure.ts": {
+      "row": "숫자",
+      "expect": [
+        "guard/no-number-conversion :: Math 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/features/numbers/math.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·BigInt·Math 멤버 사용 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-number-conversion :: Math 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
+    },
+    "src/features/numbers/number-alias.ts": {
+      "row": "숫자",
+      "expect": [
+        "guard/no-number-conversion :: Number 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/features/numbers/number-call.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
-          }
-        ]
-      }
+      "expect": [
+        "functional/prefer-tacit",
+        "guard/no-number-conversion :: Number 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/features/numbers/number-member.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·BigInt·Math 멤버 사용 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-number-conversion :: Number 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/features/numbers/parse-float.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
-          }
-        ]
-      }
+      "expect": [
+        "functional/prefer-tacit",
+        "guard/no-number-conversion :: parseFloat 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/features/numbers/parse-int.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-number-conversion :: parseInt 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/features/numbers/unary-plus.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "단항 + 변환 금지"
-          }
-        ]
-      }
+      "expect": ["guard/no-unary-plus :: 단항 + 숫자 변환 금지."]
     },
     "src/features/react/array-index-key.tsx": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "@eslint-react/no-array-index-key"
-          }
-        ]
-      }
+      "expect": ["@eslint-react/no-array-index-key", "functional/readonly-type"]
+    },
+    "src/features/react/clean-component.tsx": {
+      "row": "React",
+      "expect": []
     },
     "src/features/react/effect-alias.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useEffect' import from 'react' is restricted"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-react/no-unnecessary-use-prefix",
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
     },
     "src/features/react/effect-default-named.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'default' import from 'react' is restricted"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "useEffect 계열은"
-          }
-        ]
-      }
+      "expect": [
+        "@eslint-react/no-unnecessary-use-prefix",
+        "@typescript-eslint/dot-notation",
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만.",
+        "guard/no-react-namespace :: react의 default를 이름으로 가져오기 금지."
+      ]
     },
     "src/features/react/effect-default.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "react는 이름 있는 가져오기만"
-          },
-          {
-            "rule": "no-restricted-imports",
-            "message": "'default' import from 'react' is restricted"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "useEffect 계열은"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만.",
+        "guard/no-react-namespace :: react 기본·네임스페이스 가져오기 금지: 이름 있는 가져오기만 쓴다."
+      ]
     },
     "src/features/react/effect-named.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useEffect' import from 'react' is restricted"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
     },
     "src/features/react/effect-namespace.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "react는 이름 있는 가져오기만"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "useEffect 계열은"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만.",
+        "guard/no-react-namespace :: react 기본·네임스페이스 가져오기 금지: 이름 있는 가져오기만 쓴다."
+      ]
     },
     "src/features/react/effect-reexport-alias.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useLayoutEffect' import from 'react' is restricted"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useLayoutEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
     },
     "src/features/react/effect-reexport.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useEffect' import from 'react' is restricted"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
     },
     "src/features/react/hooks-conditional.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "react-hooks/rules-of-hooks"
-          }
-        ]
-      }
+      "expect": ["@eslint-react/rules-of-hooks", "react-hooks/rules-of-hooks"]
+    },
+    "src/features/react/imperative-handle.ts": {
+      "row": "React",
+      "expect": [
+        "functional/readonly-type",
+        "guard/no-effect-hooks :: useImperativeHandle 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
     },
     "src/features/react/insertion-effect.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useInsertionEffect' import from 'react' is restricted"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useInsertionEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/react/layout-effect.ts": {
+      "row": "React",
+      "expect": [
+        "guard/no-effect-hooks :: useLayoutEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
+    },
+    "src/features/react/react-dom-subpath.ts": {
+      "row": "React",
+      "expect": [
+        "guard/no-react-subpath :: react-dom 하위 경로 가져오기 금지(react-dom/client만 허용)."
+      ]
     },
     "src/features/react/react-subpath.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "react 하위 경로 가져오기 금지"
-          }
-        ]
-      }
+      "expect": ["guard/no-react-subpath :: react 하위 경로 가져오기 금지."]
     },
     "src/features/react/ref-arrow.tsx": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "ref 콜백 함수 금지"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-meaningless-void-operator",
+        "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
+        "no-void"
+      ]
     },
     "src/features/react/ref-function.tsx": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "ref 콜백 함수 금지"
-          }
-        ]
-      }
+      "expect": [
+        "@typescript-eslint/no-meaningless-void-operator",
+        "functional/no-expression-statements",
+        "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
+        "no-void"
+      ]
     },
     "src/features/react/ref-named-gap.tsx": {
       "row": "React",
       "expect": "KNOWN_GAP"
     },
+    "src/features/react/ref-spread.tsx": {
+      "row": "React",
+      "expect": [
+        "@eslint-react/naming-convention-ref-name",
+        "guard/no-ref-callback :: 스프레드 속성 안의 ref 금지."
+      ]
+    },
+    "src/features/react/ref-ternary.tsx": {
+      "row": "React",
+      "expect": [
+        "@eslint-react/naming-convention-ref-name",
+        "functional/readonly-type",
+        "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다."
+      ]
+    },
+    "src/features/react/ref-use-callback.tsx": {
+      "row": "React",
+      "expect": [
+        "@typescript-eslint/no-meaningless-void-operator",
+        "functional/no-expression-statements",
+        "functional/prefer-immutable-types",
+        "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
+        "no-void",
+        "react-hooks/use-memo"
+      ]
+    },
     "src/features/react/sync-store.ts": {
       "row": "React",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useSyncExternalStore' import from 'react' is restricted"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-sync-external-store :: useSyncExternalStore 금지: shared/platform의 허용 목록 파일에서만."
+      ]
+    },
+    "src/shared/ds/dom/document-allowed.ts": {
+      "row": "전역",
+      "expect": []
+    },
+    "src/shared/ds/dom/open-banned.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-global-object :: open 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다."
+      ]
+    },
+    "src/shared/ds/gaps/concat-key-gap.ts": {
+      "row": "전역",
+      "expect": "KNOWN_GAP"
+    },
+    "src/shared/ds/numbers/math-alias.ts": {
+      "row": "숫자",
+      "expect": [
+        "guard/no-number-conversion :: Math 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
     },
     "src/shared/ds/numbers/number-call.ts": {
       "row": "숫자",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "Number·parseFloat·parseInt·BigInt 호출 금지"
-          }
-        ]
-      }
+      "expect": [
+        "functional/prefer-tacit",
+        "guard/no-number-conversion :: Number 금지: 화면 코드는 숫자를 바꾸거나 계산하지 않는다. 코어가 보낸 표시용 값을 쓴다."
+      ]
+    },
+    "src/shared/ipc/dom-document.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
     },
     "src/shared/ipc/testing/tauri-mocks-allowed.ts": {
       "row": "테스트",
-      "expect": {
-        "errors": [],
-        "absent": ["no-restricted-imports"]
-      }
+      "expect": []
+    },
+    "src/shared/lib/dom-document.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
     },
     "src/shared/lib/money.ts": {
       "row": "허용 목록",
-      "expect": {
-        "errors": [],
-        "absent": ["no-restricted-syntax"]
-      }
+      "expect": []
+    },
+    "src/shared/lib/number-allowed.ts": {
+      "row": "숫자",
+      "expect": []
     },
     "src/shared/lib/unlisted-predicate.ts": {
       "row": "허용 목록",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-syntax",
-            "message": "타입 술어"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-type-predicate :: 타입 술어(x is T)와 단언 함수(asserts x) 금지: 스키마 파싱을 쓴다."
+      ]
+    },
+    "src/shared/platform/unlisted-document.ts": {
+      "row": "전역",
+      "expect": [
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
+      ]
     },
     "src/shared/platform/unlisted.ts": {
       "row": "허용 목록",
-      "expect": {
-        "errors": [
-          {
-            "rule": "no-restricted-imports",
-            "message": "'useEffect' import from 'react' is restricted"
-          },
-          {
-            "rule": "no-restricted-syntax",
-            "message": "useEffect 계열은"
-          }
-        ]
-      }
+      "expect": [
+        "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만."
+      ]
     },
     "src/shared/platform/useCoreEvent.ts": {
       "row": "허용 목록",
-      "expect": {
-        "errors": [],
-        "absent": ["no-restricted-imports", "no-restricted-syntax"]
-      }
+      "expect": []
     }
   }
 }

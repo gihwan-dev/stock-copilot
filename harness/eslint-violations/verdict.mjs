@@ -1,68 +1,81 @@
 import { isDeepStrictEqual } from "node:util";
 
-const matches = (want, message) =>
-  message.ruleId === want.rule &&
-  (want.message === undefined || message.message.includes(want.message));
+const directiveLabels = [
+  [/^Unused eslint-disable directive/, "Unused eslint-disable directive"],
+  [/^Unused inline config/, "Unused inline config"],
+  [/has no effect because you have 'noInlineConfig'/, "noInlineConfig"],
+];
 
-const label = (want) =>
-  want.message === undefined
-    ? `${want.rule}`
-    : `${want.rule} ("${want.message}")`;
+const severityPrefix = (message) => (message.severity === 2 ? "" : "warning ");
 
-export const describeMessages = (messages) =>
-  messages.length === 0
-    ? "nothing"
-    : [
-        ...new Set(
-          messages.map(
-            (message) =>
-              `${message.severity === 2 ? "error" : "warning"} ${message.ruleId ?? `(no rule) ${message.message}`}`,
-          ),
-        ),
-      ]
-        .sort()
-        .join(", ");
+const entryOf = (message, entries) =>
+  entries
+    .filter((entry) => message.message.includes(entry))
+    .sort((a, b) => b.length - a.length)[0];
 
-export const caseProblems = (expect, messages) => {
-  if (expect === "KNOWN_GAP") return [];
-  if (expect === "clean")
-    return messages.length === 0
-      ? []
-      : [`expected no problems, got ${describeMessages(messages)}`];
-  const missing = expect.errors
-    .filter(
-      (want) =>
-        !messages.some(
-          (message) => message.severity === 2 && matches(want, message),
-        ),
-    )
-    .map((want) => `missing error ${label(want)}`);
-  const present = (expect.absent ?? [])
-    .filter((rule) => messages.some((message) => message.ruleId === rule))
-    .map((rule) => `unexpected ${rule}`);
-  return [...missing, ...present];
+export const messageKey = (message, listEntries) => {
+  if (message.ruleId === null) {
+    const label = directiveLabels.find(([pattern]) =>
+      pattern.test(message.message),
+    );
+    return `${severityPrefix(message)}(null) ${label === undefined ? message.message : label[1]}`;
+  }
+  const entries = listEntries[message.ruleId];
+  const entry = entries === undefined ? undefined : entryOf(message, entries);
+  return entries === undefined
+    ? `${severityPrefix(message)}${message.ruleId}`
+    : `${severityPrefix(message)}${message.ruleId} :: ${entry ?? `(no entry) ${message.message}`}`;
 };
 
-export const coverageProblems = (rows, cases) => {
-  const unknownRows = Object.entries(cases)
+export const actualKeys = (messages, listEntries) =>
+  [
+    ...new Set(messages.map((message) => messageKey(message, listEntries))),
+  ].sort();
+
+export const caseProblems = (expect, keys) => {
+  if (expect === "KNOWN_GAP") return [];
+  const want = [...expect].sort();
+  return isDeepStrictEqual(keys, want)
+    ? []
+    : [
+        ...want
+          .filter((key) => !keys.includes(key))
+          .map((key) => `missing ${key}`),
+        ...keys
+          .filter((key) => !want.includes(key))
+          .map((key) => `unexpected ${key}`),
+      ];
+};
+
+const expectedKeysOf = (cases, row) =>
+  Object.values(cases)
+    .filter((spec) => row === undefined || spec.row === row)
+    .flatMap((spec) => (Array.isArray(spec.expect) ? spec.expect : []));
+
+export const coverageProblems = (rows, cases) => [
+  ...Object.entries(cases)
     .filter(([, spec]) => !(spec.row in rows))
-    .map(([file, spec]) => `${file}: row "${spec.row}" is not in rows`);
-  const uncovered = Object.entries(rows).flatMap(([row, wants]) =>
-    wants
+    .map(([file, spec]) => `${file}: row "${spec.row}" is not in rows`),
+  ...Object.entries(rows).flatMap(([row, keys]) =>
+    keys
       .filter(
-        (want) =>
-          !Object.values(cases).some(
-            (spec) =>
-              spec.row === row &&
-              typeof spec.expect === "object" &&
-              spec.expect.errors.some((error) =>
-                isDeepStrictEqual(error, want),
-              ),
+        (key) =>
+          !expectedKeysOf(cases, row).some(
+            (expected) => expected === key || expected.startsWith(`${key} :: `),
           ),
       )
-      .map((want) => `row "${row}": no case expects ${label(want)}`),
+      .map((key) => `row "${row}": no case expects ${key}`),
+  ),
+];
+
+export const entryCoverageProblems = (listEntries, cases) => {
+  const expected = new Set(expectedKeysOf(cases, undefined));
+  return Object.entries(listEntries).flatMap(([rule, entries]) =>
+    entries
+      .map((entry) => `${rule} :: ${entry}`)
+      .filter((key) => !expected.has(key))
+      .map((key) => `no case expects ${key}`),
   );
-  return [...unknownRows, ...uncovered];
 };
 
 export const listingProblems = (onDisk, listed) => {

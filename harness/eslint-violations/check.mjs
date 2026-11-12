@@ -1,11 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { caseFilesOnDisk, here, lintCases, readCases } from "./lint.mjs";
+import {
+  caseFilesOnDisk,
+  here,
+  lintCases,
+  mergeEntries,
+  readCases,
+} from "./lint.mjs";
 import {
   caseProblems,
   coverageProblems,
-  describeMessages,
+  entryCoverageProblems,
   listingProblems,
 } from "./verdict.mjs";
 
@@ -24,11 +30,23 @@ const { rows, cases } = readCases();
 report(
   isDeepStrictEqual(
     JSON.parse(readFileSync(join(here, "tsconfig.json"), "utf8")),
-    { extends: "../../apps/desktop/tsconfig.json", include: ["src"] },
+    {
+      extends: "../../apps/desktop/tsconfig.json",
+      compilerOptions: {
+        rootDir: "src",
+        paths: {
+          "*": [
+            "../../apps/desktop/node_modules/@types/*",
+            "../../apps/desktop/node_modules/*",
+          ],
+        },
+      },
+      include: ["src"],
+    },
   )
     ? "PASS"
     : "FAIL",
-  "harness/eslint-violations/tsconfig.json only extends the app config",
+  "harness/eslint-violations/tsconfig.json extends the app config and only points module lookup at the app",
 );
 
 const onDisk = caseFilesOnDisk();
@@ -39,16 +57,23 @@ reportAll(
 reportAll(coverageProblems(rows, cases), "every documented rule has a case");
 
 const linted = await lintCases(Object.keys(cases));
+reportAll(
+  entryCoverageProblems(
+    mergeEntries([...linted.values()].map((result) => result.listEntries)),
+    cases,
+  ),
+  "every entry of every restricted list has a case",
+);
 for (const [file, spec] of Object.entries(cases)) {
-  const messages = linted.get(file) ?? [];
-  const problems = caseProblems(spec.expect, messages);
+  const keys = linted.get(file)?.keys ?? [];
+  const problems = caseProblems(spec.expect, keys);
   if (spec.expect === "KNOWN_GAP") {
     report(
-      messages.length === 0 ? "GAP " : "GAP?",
-      `${file}: known gap, got ${describeMessages(messages)}`,
+      keys.length === 0 ? "GAP " : "GAP?",
+      `${file}: known gap, got [${keys.join(", ")}]`,
     );
   } else if (problems.length === 0) {
-    report("PASS", `${file}`);
+    report("PASS", file);
   } else {
     problems.forEach((problem) => report("FAIL", `${file}: ${problem}`));
   }

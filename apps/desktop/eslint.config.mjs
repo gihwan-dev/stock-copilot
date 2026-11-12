@@ -5,10 +5,10 @@ import functional from "eslint-plugin-functional";
 import reactHooks from "eslint-plugin-react-hooks";
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
+import { bans, importBans } from "./eslint/bans.mjs";
 import { guard } from "./eslint/guard-plugin.mjs";
 
 const TS_FILES = ["src/**/*.ts", "src/**/*.tsx"];
-const FEATURES = ["src/features/**"];
 const DS = ["src/shared/ds/**"];
 const IPC_TESTING = ["src/shared/ipc/testing/**"];
 const FORBIDDEN_FILES = [
@@ -36,180 +36,42 @@ const UNDISABLEABLE_RULES = [
   "local/no-money-coercion",
   "local/forbidden-file",
   "boundaries/*",
-  "guard/*",
+  "guard/no-effect-hooks",
+  "guard/no-sync-external-store",
+  "guard/no-ref-callback",
+  "guard/no-type-predicate",
+  "guard/no-number-conversion",
+  "guard/no-unary-plus",
+  "guard/no-reflect",
+  "guard/no-prototype",
+  "guard/no-call-apply-bind",
+  "guard/no-own-symbols",
+  "guard/no-network",
+  "guard/no-global-object",
+  "guard/no-test-skip",
+  "guard/forbidden-extension",
+  "guard/no-dom-globals",
+  "guard/disable-directive-form",
   "@typescript-eslint/ban-ts-comment",
-  "@eslint-community/eslint-comments/*",
+  "@eslint-community/eslint-comments/no-use",
+  "@eslint-community/eslint-comments/require-description",
+  "@eslint-community/eslint-comments/no-unlimited-disable",
+  "@eslint-community/eslint-comments/no-restricted-disable",
+  "@eslint-community/eslint-comments/no-duplicate-disable",
 ];
 
-const effectHooks = ["useEffect", "useLayoutEffect", "useInsertionEffect"];
-const effectPattern = "/^use(Layout|Insertion)?Effect$/";
-const networkPattern =
-  "/\\b(fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|defaultView)\\b/";
-const skipNames = "/^(skip|only|todo|skipIf|runIf)$/";
+const banRules = Object.fromEntries([
+  ...Object.entries(bans).map(([rule, entries]) => [
+    rule,
+    ["error", ...entries],
+  ]),
+  ...Object.entries(importBans).map(([rule, options]) => [
+    rule,
+    ["error", options],
+  ]),
+]);
 
-const syntax = {
-  enum: {
-    selector: "TSEnumDeclaration",
-    message: "enum 금지. 문자열 리터럴 유니온을 쓴다.",
-  },
-  namespace: {
-    selector: "TSModuleDeclaration",
-    message: "namespace·declare module·declare global 금지.",
-  },
-  declare: {
-    selector: "[declare=true]",
-    message: "declare 금지. 존재하지 않는 값을 타입으로 꾸며낼 수 있다.",
-  },
-  overload: {
-    selector: "TSDeclareFunction",
-    message: "함수 오버로드 금지. 구현 시그니처가 거짓말을 할 수 있다.",
-  },
-  typePredicate: {
-    selector: "TSTypePredicate",
-    message:
-      "타입 술어(x is T)와 단언 함수(asserts x) 금지. 스키마 파싱을 쓴다.",
-  },
-  defaultCase: {
-    selector: "SwitchCase[test=null]",
-    message: "switch의 default 팔 금지. 모든 경우를 나열한다.",
-  },
-  defaultExport: {
-    selector: "ExportDefaultDeclaration",
-    message: "기본 내보내기 금지.",
-  },
-  exportAll: {
-    selector: "ExportAllDeclaration",
-    message: "export * 금지. 내보낼 이름을 나열한다.",
-  },
-  dynamicImport: {
-    selector: "ImportExpression",
-    message: "동적 import 금지.",
-  },
-  unaryPlus: {
-    selector: "UnaryExpression[operator='+']",
-    message: "단항 + 변환 금지.",
-  },
-  throwingParse: {
-    selector: "CallExpression[callee.property.name=/^(parse|parseAsync)$/]",
-    message: "예외를 던지는 parse 금지. safeParse로 Result를 만든다.",
-  },
-  reactNamespace: {
-    selector:
-      "ImportDeclaration[source.value='react'] > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier)",
-    message: "react는 이름 있는 가져오기만 쓴다.",
-  },
-  prototype: {
-    selector:
-      ":matches(MemberExpression[property.name=/^(prototype|__proto__)$/], MemberExpression[property.value=/^(prototype|__proto__)$/])",
-    message: "prototype 접근 금지.",
-  },
-  callApply: {
-    selector:
-      ":matches(MemberExpression[property.name=/^(call|apply|bind)$/], MemberExpression[property.value=/^(call|apply|bind)$/])",
-    message: "call·apply·bind 금지.",
-  },
-  effectName: {
-    selector: `:matches(Identifier[name=${effectPattern}], Literal[value=${effectPattern}])`,
-    message: "useEffect 계열은 shared/platform의 허용 목록 파일에서만.",
-  },
-  numericCoercion: {
-    selector:
-      ":matches(CallExpression, NewExpression)[callee.name=/^(Number|parseFloat|parseInt|BigInt)$/]",
-    message:
-      "Number·parseFloat·parseInt·BigInt 호출 금지. 코어가 보낸 표시용 값을 쓴다.",
-  },
-  numericMember: {
-    selector: "MemberExpression[object.name=/^(Number|BigInt|Math)$/]",
-    message: "Number·BigInt·Math 멤버 사용 금지. 계산은 코어가 한다.",
-  },
-  refFunction: {
-    selector:
-      "JSXAttribute[name.name='ref'] > JSXExpressionContainer > :matches(ArrowFunctionExpression, FunctionExpression)",
-    message: "ref 콜백 함수 금지. 마운트 효과 우회다.",
-  },
-};
-
-const baseSyntax = [
-  syntax.enum,
-  syntax.namespace,
-  syntax.declare,
-  syntax.overload,
-  syntax.typePredicate,
-  syntax.defaultCase,
-  syntax.defaultExport,
-  syntax.exportAll,
-  syntax.dynamicImport,
-  syntax.unaryPlus,
-  syntax.throwingParse,
-  syntax.reactNamespace,
-  syntax.prototype,
-  syntax.callApply,
-];
-const numberSyntax = [syntax.numericCoercion, syntax.numericMember];
-
-const restrictedSyntax = ({ effects, predicates, numbers, refFunctions }) => [
-  "error",
-  ...baseSyntax.filter(
-    (entry) => predicates === "deny" || entry !== syntax.typePredicate,
-  ),
-  ...(effects === "deny" ? [syntax.effectName] : []),
-  ...(numbers === "deny" ? numberSyntax : []),
-  ...(refFunctions === "deny" ? [syntax.refFunction] : []),
-];
-
-const restrictedImports = ({ effects, tauriMocks }) => [
-  "error",
-  {
-    paths: [
-      {
-        name: "react",
-        importNames: [
-          "default",
-          ...(effects === "deny"
-            ? [...effectHooks, "useSyncExternalStore"]
-            : []),
-        ],
-        message:
-          "react 기본 가져오기 금지. useEffect 계열과 useSyncExternalStore는 shared/platform의 허용 목록 파일에서만.",
-      },
-    ],
-    patterns: [
-      {
-        group: ["react/*", "react-dom/*", "!react-dom/client"],
-        message: "react 하위 경로 가져오기 금지.",
-      },
-      ...(tauriMocks === "deny"
-        ? [
-            {
-              group: ["@tauri-apps/api/mocks", "@tauri-apps/api/mocks/*"],
-              message:
-                "@tauri-apps/api/mocks는 shared/ipc/testing에서만 가져온다.",
-            },
-          ]
-        : []),
-    ],
-  },
-];
-
-const defaults = {
-  effects: "deny",
-  predicates: "deny",
-  numbers: "allow",
-  refFunctions: "allow",
-  tauriMocks: "deny",
-};
-
-const override = (files, changes, extraRules) => {
-  const settings = { ...defaults, ...changes };
-  return {
-    files,
-    rules: {
-      "no-restricted-syntax": restrictedSyntax(settings),
-      "no-restricted-imports": restrictedImports(settings),
-      ...extraRules,
-    },
-  };
-};
+const off = (rules) => Object.fromEntries(rules.map((rule) => [rule, "off"]));
 
 const whenListed = (files, block) =>
   files.length === 0 ? [] : [{ ...block, files }];
@@ -396,20 +258,6 @@ export default warningsAsErrors(
             variables: { enforcement: "None" },
           },
         ],
-        "no-restricted-properties": [
-          "error",
-          { object: "Object", property: "assign" },
-          { object: "Object", property: "defineProperty" },
-          { object: "Object", property: "defineProperties" },
-          { object: "Object", property: "setPrototypeOf" },
-          { object: "Object", property: "getOwnPropertySymbols" },
-          { object: "Object", property: "getOwnPropertyDescriptor" },
-          { object: "Object", property: "getOwnPropertyDescriptors" },
-          { object: "Reflect" },
-          { object: "Proxy" },
-          { object: "JSON", property: "parse" },
-        ],
-
         "functional/no-classes": "error",
         "functional/no-class-inheritance": "error",
         "functional/no-this-expressions": "error",
@@ -425,18 +273,6 @@ export default warningsAsErrors(
         "no-nested-ternary": "error",
         "no-eval": "error",
         "no-new-func": "error",
-        "no-restricted-globals": [
-          "error",
-          "event",
-          "name",
-          "length",
-          "status",
-          "globalThis",
-          "window",
-          "self",
-          "Reflect",
-          "Proxy",
-        ],
         complexity: ["error", 8],
         "max-depth": ["error", 3],
         "max-params": ["error", 3],
@@ -486,69 +322,46 @@ export default warningsAsErrors(
         "react-hooks/rules-of-hooks": "error",
         "react-hooks/exhaustive-deps": "error",
         "@eslint-react/no-array-index-key": "error",
-
-        "guard/no-global-object": [
-          "error",
-          "globalThis",
-          "window",
-          "self",
-          "top",
-          "parent",
-          "frames",
-          "opener",
-          "eval",
-          "Function",
-        ],
-        "guard/no-network": [
-          "error",
-          {
-            selector: `:matches(Identifier[name=${networkPattern}], Literal[value=${networkPattern}], TemplateElement[value.raw=${networkPattern}])`,
-            message:
-              "fetch·XMLHttpRequest·WebSocket 등 네트워크 사용 금지. UI는 IPC로만 통신한다.",
-          },
-        ],
-        "guard/no-test-skip": [
-          "error",
-          {
-            selector: `:matches(MemberExpression[property.name=${skipNames}], MemberExpression[property.value=${skipNames}])`,
-            message: "테스트 건너뛰기·집중 금지.",
-          },
-          {
-            selector:
-              "MemberExpression[object.name=/^(describe|it|test|suite|bench)$/][property.name=/^(fails|concurrent)$/]",
-            message: "테스트 실패 뒤집기·동시 실행 표시 금지.",
-          },
-          {
-            selector:
-              "CallExpression[callee.name=/^(xit|xtest|xdescribe|fit|fdescribe)$/]",
-            message: "테스트 건너뛰기·집중 금지.",
-          },
-        ],
-        "no-restricted-syntax": restrictedSyntax(defaults),
-        "no-restricted-imports": restrictedImports(defaults),
+        ...Object.fromEntries(
+          Object.entries(banRules).filter(
+            ([rule]) => rule !== "guard/forbidden-extension",
+          ),
+        ),
       },
     },
-    override(FEATURES, { numbers: "deny", refFunctions: "deny" }, {}),
-    override(DS, { numbers: "deny" }, {}),
-    ...whenListed(
-      CHART_NUMBER_ALLOWLIST,
-      override([], { numbers: "allow" }, {}),
-    ),
-    override(IPC_TESTING, { tauriMocks: "allow" }, {}),
-    ...whenListed(
-      PLATFORM_FILE_ALLOWLIST,
-      override(
-        [],
-        { effects: "allow", refFunctions: "allow" },
-        { "functional/no-expression-statements": "off" },
-      ),
-    ),
-    ...whenListed(
-      TYPE_PREDICATE_ALLOWLIST,
-      override([], { predicates: "allow" }, {}),
-    ),
+    {
+      files: [
+        "src/shared/lib/**",
+        "src/shared/ipc/**",
+        "src/shared/platform/**",
+      ],
+      rules: off(["guard/no-number-conversion"]),
+    },
+    {
+      files: DS,
+      rules: off(["guard/no-dom-globals", "guard/no-ref-callback"]),
+    },
+    ...whenListed(CHART_NUMBER_ALLOWLIST, {
+      rules: off(["guard/no-number-conversion"]),
+    }),
+    {
+      files: IPC_TESTING,
+      rules: off(["guard/no-tauri-mocks"]),
+    },
+    ...whenListed(PLATFORM_FILE_ALLOWLIST, {
+      rules: off([
+        "guard/no-effect-hooks",
+        "guard/no-sync-external-store",
+        "guard/no-ref-callback",
+        "guard/no-dom-globals",
+        "functional/no-expression-statements",
+      ]),
+    }),
+    ...whenListed(TYPE_PREDICATE_ALLOWLIST, {
+      rules: off(["guard/no-type-predicate"]),
+    }),
     ...whenListed(THROW_ALLOWLIST, {
-      rules: { "functional/no-throw-statements": "off" },
+      rules: off(["functional/no-throw-statements"]),
     }),
     {
       files: FORBIDDEN_FILES,
@@ -556,14 +369,7 @@ export default warningsAsErrors(
       languageOptions: { parser: tseslint.parser },
       plugins: { guard },
       rules: {
-        "guard/forbidden-extension": [
-          "error",
-          {
-            selector: "Program",
-            message:
-              "src에는 .ts·.tsx 파일만 둔다. .js·.jsx·.mjs·.cjs·.mts·.cts·.d.ts는 금지다.",
-          },
-        ],
+        "guard/forbidden-extension": banRules["guard/forbidden-extension"],
       },
     },
   ),
