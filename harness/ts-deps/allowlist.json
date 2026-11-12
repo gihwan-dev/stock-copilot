@@ -49,6 +49,10 @@
         "react-dom": {
           "target": "react-dom",
           "reason": "UI (architecture 5.2)"
+        },
+        "zod": {
+          "target": "zod",
+          "reason": "경계 파싱과 브랜드 (architecture 5.2, harness 4.3)"
         }
       },
       "devDependencies": {
