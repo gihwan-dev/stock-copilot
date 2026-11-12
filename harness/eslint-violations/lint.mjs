@@ -12,6 +12,16 @@ const { ESLint } = createRequire(join(desktop, "package.json"))("eslint");
 const { guardRuleBase } = await import(
   pathToFileURL(join(desktop, "eslint", "guard-plugin.mjs")).href
 );
+const { local } = await import(
+  pathToFileURL(join(desktop, "eslint", "local-plugin.mjs")).href
+);
+
+export const localRuleMessages = Object.fromEntries(
+  Object.entries(local.rules).map(([name, rule]) => [
+    `local/${name}`,
+    Object.values(rule.meta.messages),
+  ]),
+);
 
 export const listRuleBase = (rule) =>
   rule.startsWith("guard/") ? guardRuleBase[rule.slice("guard/".length)] : rule;
@@ -36,9 +46,14 @@ const entryMessages = (base, options) =>
         typeof entry === "string" ? entry : (entry.message ?? entry.name),
       );
 
+const isOn = (entry) => {
+  const severity = Array.isArray(entry) ? entry[0] : entry;
+  return severity !== 0 && severity !== "off";
+};
+
 export const listEntriesOf = (config) =>
-  Object.fromEntries(
-    Object.entries(config.rules)
+  Object.fromEntries([
+    ...Object.entries(config.rules)
       .filter(([rule]) => listBases.has(listRuleBase(rule) ?? ""))
       .map(([rule, entry]) => [
         rule,
@@ -47,7 +62,10 @@ export const listEntriesOf = (config) =>
           Array.isArray(entry) ? entry.slice(1) : [],
         ),
       ]),
-  );
+    ...Object.entries(config.rules)
+      .filter(([rule, entry]) => rule in localRuleMessages && isOn(entry))
+      .map(([rule]) => [rule, localRuleMessages[rule]]),
+  ]);
 
 export const mergeEntries = (maps) =>
   maps.reduce(

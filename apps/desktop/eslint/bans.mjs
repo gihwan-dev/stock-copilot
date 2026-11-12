@@ -175,6 +175,19 @@ export const bans = {
       message: `${name} 금지: 테스트를 건너뛰거나 골라 돌리지 않는다.`,
     })),
   ],
+  "guard/no-promise-catch": [
+    {
+      selector: `:matches(${member("catch")}, ${destructured("catch")})`,
+      message:
+        "catch 금지: 거절을 Result로 바꾸는 곳은 shared/ipc 호출 어댑터와 shared/platform/detach뿐이다.",
+    },
+    {
+      selector:
+        ":matches(CallExpression[callee.property.name='then'], CallExpression[callee.property.value='then'], CallExpression[callee.property.quasis.0.value.raw='then']):matches([arguments.length>1], :has(> SpreadElement))",
+      message:
+        "두 인자 then 금지: 거절 처리기는 shared/ipc 호출 어댑터와 shared/platform/detach에서만 붙인다.",
+    },
+  ],
   "guard/forbidden-extension": [
     {
       selector: "Program",

@@ -2,7 +2,7 @@ import { builtinRules } from "eslint/use-at-your-own-risk";
 
 const singleRule = /^\s*[^\s,]+\s*$/u;
 
-const isAllowedDirective = (directive) =>
+export const isAllowedDirective = (directive) =>
   directive.type === "disable-next-line" &&
   directive.node.type === "Line" &&
   singleRule.test(directive.value) &&
@@ -59,6 +59,7 @@ export const guardRuleBase = {
   "no-overload": "no-restricted-syntax",
   "no-own-symbols": "no-restricted-properties",
   "no-prototype": "no-restricted-syntax",
+  "no-promise-catch": "no-restricted-syntax",
   "no-proxy": "no-restricted-globals",
   "no-react-namespace": "no-restricted-syntax",
   "no-react-subpath": "no-restricted-imports",

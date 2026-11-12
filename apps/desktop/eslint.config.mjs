@@ -5,11 +5,28 @@ import functional from "eslint-plugin-functional";
 import reactHooks from "eslint-plugin-react-hooks";
 import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
+import {
+  CHART_NUMBER_ALLOWLIST,
+  FILE_FOLDER_ALLOWLISTS,
+  FILE_PLACEHOLDERS,
+  MESSAGES_FILES,
+  MONEY_FILE,
+  MONEY_KEY_READERS,
+  PLATFORM_FILE_ALLOWLIST,
+  PROMISE_REJECTION_ALLOWLIST,
+  RAW_TYPE_ALLOWLIST,
+  THROW_ALLOWLIST,
+  TYPE_PREDICATE_ALLOWLIST,
+} from "./eslint/allowlists.mjs";
 import { bans, importBans } from "./eslint/bans.mjs";
 import { guard } from "./eslint/guard-plugin.mjs";
+import { emptyParser, local } from "./eslint/local-plugin.mjs";
 
 const TS_FILES = ["src/**/*.ts", "src/**/*.tsx"];
 const DS = ["src/shared/ds/**"];
+const SCREEN = ["src/app", "src/features", "src/shared/ds"].flatMap(
+  (folder) => [`${folder}/**/*.ts`, `${folder}/**/*.tsx`],
+);
 const IPC_TESTING = ["src/shared/ipc/testing/**"];
 const FORBIDDEN_FILES = [
   "src/**/*.js",
@@ -20,21 +37,15 @@ const FORBIDDEN_FILES = [
   "src/**/*.cts",
   "src/**/*.d.ts",
 ];
-
-const PLATFORM_FILE_ALLOWLIST = [
-  "src/shared/platform/index.ts",
-  "src/shared/platform/detach.ts",
-  "src/shared/platform/useCoreEvent.ts",
-  "src/shared/platform/useDocumentTitle.ts",
-];
-const TYPE_PREDICATE_ALLOWLIST = ["src/shared/lib/money.ts"];
-const THROW_ALLOWLIST = [];
-const CHART_NUMBER_ALLOWLIST = [];
+const OTHER_FILES = ["src/**/*.*", "src/**/.*", "src/**/[!.]*"];
 
 const UNDISABLEABLE_RULES = [
   "local/no-comments",
   "local/no-money-coercion",
   "local/forbidden-file",
+  "local/no-raw-types",
+  "local/no-brand-creation",
+  "local/no-ui-text",
   "boundaries/*",
   "guard/no-effect-hooks",
   "guard/no-sync-external-store",
@@ -49,6 +60,7 @@ const UNDISABLEABLE_RULES = [
   "guard/no-network",
   "guard/no-global-object",
   "guard/no-test-skip",
+  "guard/no-promise-catch",
   "guard/forbidden-extension",
   "guard/no-dom-globals",
   "guard/disable-directive-form",
@@ -70,6 +82,11 @@ const banRules = Object.fromEntries([
     ["error", options],
   ]),
 ]);
+
+const assertionRules = [
+  "@typescript-eslint/consistent-type-assertions",
+  "@typescript-eslint/no-unsafe-type-assertion",
+];
 
 const off = (rules) => Object.fromEntries(rules.map((rule) => [rule, "off"]));
 
@@ -130,9 +147,26 @@ export default warningsAsErrors(
       },
       plugins: {
         guard,
+        local,
         "@eslint-community/eslint-comments": eslintComments,
       },
       rules: {
+        "local/no-comments": "error",
+        "local/no-money-coercion": [
+          "error",
+          { moneyFile: MONEY_FILE, keyReaders: MONEY_KEY_READERS },
+        ],
+        "local/forbidden-file": [
+          "error",
+          {
+            checkExtension: false,
+            placeholders: FILE_PLACEHOLDERS,
+            folders: FILE_FOLDER_ALLOWLISTS,
+          },
+        ],
+        "local/no-raw-types": "error",
+        "local/no-brand-creation": ["error", { mode: "forbid" }],
+        "local/no-ui-text": ["error", { screen: "off" }],
         "guard/disable-directive-form": "error",
         "@eslint-community/eslint-comments/no-use": [
           "error",
@@ -341,6 +375,10 @@ export default warningsAsErrors(
       files: DS,
       rules: off(["guard/no-dom-globals", "guard/no-ref-callback"]),
     },
+    {
+      files: SCREEN,
+      rules: { "local/no-ui-text": ["error", { screen: "on" }] },
+    },
     ...whenListed(CHART_NUMBER_ALLOWLIST, {
       rules: off(["guard/no-number-conversion"]),
     }),
@@ -363,6 +401,22 @@ export default warningsAsErrors(
     ...whenListed(THROW_ALLOWLIST, {
       rules: off(["functional/no-throw-statements"]),
     }),
+    ...whenListed(PROMISE_REJECTION_ALLOWLIST, {
+      rules: off(["guard/no-promise-catch"]),
+    }),
+    ...whenListed(RAW_TYPE_ALLOWLIST, {
+      rules: {
+        ...off(["local/no-raw-types", ...assertionRules]),
+        "local/no-brand-creation": ["error", { mode: "brand-file" }],
+      },
+    }),
+    {
+      files: MESSAGES_FILES,
+      rules: {
+        ...off(["local/no-ui-text", ...assertionRules]),
+        "local/no-brand-creation": ["error", { mode: "messages" }],
+      },
+    },
     {
       files: FORBIDDEN_FILES,
       linterOptions: { noInlineConfig: true },
@@ -370,6 +424,23 @@ export default warningsAsErrors(
       plugins: { guard },
       rules: {
         "guard/forbidden-extension": banRules["guard/forbidden-extension"],
+      },
+    },
+    {
+      files: OTHER_FILES,
+      ignores: [...TS_FILES, ...FORBIDDEN_FILES],
+      linterOptions: { noInlineConfig: true },
+      languageOptions: { parser: emptyParser },
+      plugins: { local },
+      rules: {
+        "local/forbidden-file": [
+          "error",
+          {
+            checkExtension: true,
+            placeholders: FILE_PLACEHOLDERS,
+            folders: FILE_FOLDER_ALLOWLISTS,
+          },
+        ],
       },
     },
   ),
