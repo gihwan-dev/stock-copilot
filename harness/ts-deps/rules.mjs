@@ -87,10 +87,13 @@ export const fileProblems = (contents, allowlist) => [
 ];
 
 const key = String.raw`(?:'@[A-Za-z0-9@._/+()^~-]+'|[A-Za-z0-9._/+-][A-Za-z0-9@._/+()^~-]*)`;
-const bare = String.raw`[A-Za-z0-9^~][A-Za-z0-9@._/+()^~:<=>-]*(?: \|\| [A-Za-z0-9@._/+()^~:<=>-]+)*`;
+const plain = String.raw`[A-Za-z0-9@._/+()^~<=>-]`;
+const token = String.raw`(?:${plain}|:(?=${plain}))*`;
+const bare = String.raw`[A-Za-z0-9^~]${token}(?:(?: ?\|\| ?)[A-Za-z0-9^~<>=]${token}| [<>=^~0-9]${token})*`;
 const quoted = String.raw`'[^']*'`;
 const scalar = `(?:${quoted}|${bare})`;
-const flowMap = String.raw`\{(?:[A-Za-z]+: ${scalar})?\}`;
+const flowPair = String.raw`[A-Za-z]+: ${scalar}`;
+const flowMap = String.raw`\{(?:${flowPair}(?:, ${flowPair})*)?\}`;
 const flowList = String.raw`\[${scalar}(?:, ${scalar})*\]`;
 const mappingLine = new RegExp(
   `^((?:  )*)(${key}):(?: (${scalar}|${flowMap}|${flowList}))?$`,
@@ -294,6 +297,17 @@ export const lockfileProblems = (lockfile, manifestsByImporter, allowlist) => {
     .sort();
   return [
     ...grammarProblems("pnpm-lock.yaml", lines),
+    ...packages
+      .filter(
+        (entry) =>
+          !entry.resolutions.every((resolution) =>
+            integrityOnly.test(resolution),
+          ),
+      )
+      .map(
+        (entry) =>
+          `pnpm-lock.yaml: packages ${entry.key} resolution must be a single sha512 integrity`,
+      ),
     ...(lines[0]?.kind === "document" && documents.length === 2
       ? []
       : [
