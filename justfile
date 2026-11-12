@@ -15,13 +15,21 @@ unexport CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER
 unexport RUSTUP_TOOLCHAIN
 unexport RUSTC_BOOTSTRAP
 unexport TAURI_CONFIG
+unexport NEXTEST_PROFILE
+unexport NEXTEST_RETRIES
+unexport NEXTEST_FLAKY_RESULT
+unexport NEXTEST_NO_TESTS
+unexport NEXTEST_USER_CONFIG_FILE
+unexport NEXTEST_TEST_THREADS
+unexport CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER
+unexport CARGO_BUILD_TARGET
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
 
-base := "HEAD"
+base := ""
 
-check: check-ts
+check: require-base check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
     "{{just_executable()}}" deny
@@ -39,6 +47,10 @@ check: check-ts
 
 check-full: advisory-db-fetch check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
+    "{{just_executable()}}" mutants-all
+
+require-base:
+    [ -n {{quote(base)}} ] || { printf 'base가 필요하다: just base=<HEAD|40자리 커밋 ID> check (커밋 훅은 HEAD, 종료 훅은 브리프의 기준 커밋, 푸시 훅은 푸시 전 원격 커밋)\n' >&2; exit 1; }
 
 check-node:
     actual="$(node --version)"; pinned="v$(cat .node-version)"; [ "$actual" = "$pinned" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\n' "$actual" "$pinned" >&2; exit 1; }

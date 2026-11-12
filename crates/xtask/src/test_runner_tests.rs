@@ -83,3 +83,37 @@ fn check_full_runs_mutation_testing_against_the_base() {
         "{mutants:?}"
     );
 }
+
+#[test]
+fn check_refuses_to_run_without_an_explicit_base() {
+    for arguments in [vec!["check"], vec!["base=", "check"]] {
+        let output = Command::new("just")
+            .args(&arguments)
+            .current_dir(repository_root())
+            .output()
+            .expect("run just");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{arguments:?} ran without a base");
+        assert!(
+            stderr.contains("base가 필요하다"),
+            "{arguments:?}: {stderr}"
+        );
+    }
+    let check = recipe("check");
+    assert_eq!(
+        check.first().map(String::as_str),
+        Some("check: require-base check-ts"),
+        "{check:?}"
+    );
+}
+
+#[test]
+fn check_full_mutates_every_target_crate() {
+    let check_full = recipe("check-full");
+    assert!(
+        check_full
+            .iter()
+            .any(|line| line == "\"{{ just_executable() }}\" mutants-all"),
+        "{check_full:?}"
+    );
+}
