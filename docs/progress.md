@@ -74,7 +74,7 @@ Claude Code 샌드박스는 아직 꺼져 있다. 복사본 실측에서 작업 
 
 | 작업 | 상태 | 대상 커밋 | 리뷰 기록 | 뒤 작업에 넘긴 것 |
 |---|---|---|---|---|
-| H-41 | 완료 | 32aef0b | [H-41](reviews/H-41.md) | 사용자: `just codex-setup` 출력을 Codex 사용자 설정에 반영하고 프로필 선택. 메인: 새 T3 Codex 세션에서 ADR 0021의 1분 적용 확인. H-20: 잠금 전 `prelock --codex-user-config` |
+| H-41 | 완료 | c0f3acb | [H-41](reviews/H-41.md) | 사용자: `just codex-setup` 출력을 Codex 사용자 설정에 반영하고 프로필 선택. 메인: 새 T3 Codex 세션에서 ADR 0021의 1분 적용 확인. H-20: 잠금 전 `prelock --codex-user-config` |
 
 T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않는다.
 
