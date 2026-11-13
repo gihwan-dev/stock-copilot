@@ -7,7 +7,9 @@ import {
   manifestProblems,
   workspaceProblems,
   workspacePackages,
+  installPolicyProblems,
 } from "./rules.mjs";
+import { git } from "../../.claude/hooks/lib/project.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = process.argv[2] ?? join(here, "..", "..");
@@ -32,7 +34,20 @@ const contents = Object.fromEntries(
     .filter((path) => existsSync(join(root, path)))
     .map((path) => [path, read(path)]),
 );
+const tracked = git(root, ["ls-files", "-z"]);
+const policyProblems =
+  tracked === undefined
+    ? ["공급망 정책 검사 대상의 Git 목록을 읽지 못했다"]
+    : installPolicyProblems(
+        Object.fromEntries(
+          tracked
+            .split("\0")
+            .filter((path) => path && !path.startsWith("docs/"))
+            .map((path) => [path, read(path)]),
+        ),
+      );
 const problems = [
+  ...policyProblems,
   ...manifestProblems(manifests, allowlist),
   ...fileProblems(contents, allowlist),
   ...workspaceProblems(read("pnpm-workspace.yaml")),

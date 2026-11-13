@@ -168,3 +168,26 @@ ADR 0018의 H-20 절차 끝(서명 커밋 직전)에 더한다. 사용자가 Cla
 - 커밋 훅의 check가 191초였다(기준 커밋 실측 약 3분 30초의 `just check`와 비슷하다. 새 node 테스트 묶음은 약 8초).
 - 첫 푸시(이 브랜치)의 서명 작업은 기준(`origin/master`)에 검증 스크립트가 없어 비활성으로 통과한다. 이 작업이 `master`에 들어간 뒤부터 기준의 검증 스크립트가 돈다. 잠금 시점이 기록될 때까지는 "잠금 시점 없음"으로 통과한다.
 - 바뀌면 다시 볼 조건: 저장소를 비공개로 돌릴 때(규칙 세트·러너 비용), GitHub가 공개 저장소에 푸시 규칙 세트나 "기본 브랜치의 정의로 도는 필수 작업 흐름"을 열 때(위 첫 빈틈을 닫을 수 있다), cargo-mutants가 arm64 바이너리를 낼 때(sha256 고정 내려받기로 바꾼다), GitHub이 공개 저장소에 필수 작업 흐름을 열 때, DS-15(시각 회귀), U-03·E2E 작업(macOS 작업 내용), 러너 이미지가 `sudo`·`unshare`·`setpriv`를 바꿀 때.
+
+
+## 오프라인 Node 복구 fixture의 고정 입력
+
+2026-11-13에 master 7681ec8의 Linux·macOS CI가 fresh_node_restores_a_replaced_tool에서 실패했다. 기존 fixture는 package.json만 만들고 잠금 없이 오프라인 설치했다. 버전 목록 메타데이터가 있던 환경에서만 통과했다. 과거 캐시가 만들어진 경위는 확인하지 않았다.
+
+macOS와 pnpm 12.18.0에서 평소 저장소를 유지하고 XDG_CACHE_HOME만 빈 임시 폴더로 바꿨다. 오류 경로가 지정한 폴더 아래여서 캐시 격리를 확인했다.
+
+| 입력·조건 | 실측 |
+|---|---|
+| 기존 잠금 없는 fixture, 빈 캐시 | ERR_PNPM_NO_OFFLINE_META |
+| 최소 잠금, frozen-lockfile, 정책 검증 유지, 빈 캐시 | 공급망 정책 검증에서 메타데이터 요구 |
+| 루트에서 생성한 잠금, fixture에만 정책 생략, 빈 캐시·네트워크 차단 | 설치 성공, 종료 0 |
+| 같은 조건에서 prettier integrity만 변조 | ERR_PNPM_NO_OFFLINE_TARBALL, 종료 1. 변조한 주소의 내용은 저장소에 없어 설치되지 않음 |
+| 실제 fresh-node 실행 뒤 | 교체한 실행 shim과 package.json 모두 원래 바이트로 복구, 기존 단언 통과 |
+
+사용자가 이 fixture의 설치에만 --trust-lockfile을 승인했다. 검사 대상은 실행 파일 복구이며 공급망 정책이 아니다. 루트 설치는 계속 정책 검증을 받고 integrity에 따른 저장소 조회도 유지한다. 실제 justfile·CI 도구·훅의 설치 명령은 바꾸지 않는다.
+
+fixture 생성기는 기존 ts-deps 잠금 파서를 재사용한다. 루트 package.json의 prettier·packageManager, pnpm-lock.yaml의 prettier 버전·integrity·실행 파일·독립 snapshot과 도구 잠금 문서를 읽는다. 버전이나 integrity를 별도로 고정하지 않는다. pnpm 12의 packageManagerDependencies 때문에 첫 도구 잠금 문서는 그대로 보존하고 의존성 문서는 prettier만 만든다. prettier가 독립 패키지가 아니게 되면 생성기가 실패한다.
+
+이 컴퓨터의 pnpm 진입 스크립트는 구형 인자 파서를 거쳐 고정 버전으로 위임한다. --version은 12.18.0이지만 새로운 --trust-lockfile 인자를 직접 주면 Unknown option이었다. 동일한 설정인 --config.trust-lockfile=true를 fixture 최초 설치에 사용한다. 복구 레시피는 바꾸지 않고 fixture에서 실행하는 just 자식 프로세스에만 pnpm_config_trust_lockfile=true를 전달한다. 두 설치의 XDG_CACHE_HOME은 같은 빈 fixture 폴더로 한정한다. 전역 환경과 홈 설정은 바꾸지 않는다.
+
+ts-deps의 기존 검사 진입점에서 추적한 실행 파일의 옵션·설정 문자열을 검사한다. docs/**는 설명 자료라 제외하고 하네스의 Markdown 파일도 검사한다. 허용 목록은 crates/xtask/src/git_hooks/tests.rs 하나다. 옵션과 설정의 예제, 허용 항목 제거 변형, 실제 진입점에 금지 설치를 넣는 테스트를 함께 둔다. .npmrc·workspace·매니페스트의 기존 제한도 유지한다. 검색한 다른 오프라인 pnpm 설치는 잠금을 쓰거나 의존성이 없는 fixture여서 같은 변경이 필요하지 않았다.
