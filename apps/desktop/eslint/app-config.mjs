@@ -1,3 +1,4 @@
+import { dsConfigs, DS_RULES, SHARED_RULES } from "./ds-config.mjs";
 import js from "@eslint/js";
 import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslintReact from "@eslint-react/eslint-plugin";
@@ -18,7 +19,6 @@ import { emptyParser, local } from "./local-plugin.mjs";
 import { generatedConfigs } from "./generated.mjs";
 
 const TS_FILES = ["src/**/*.ts", "src/**/*.tsx"];
-const DS = ["src/shared/ds/**"];
 const SCREEN = ["src/app", "src/features", "src/shared/ds"].flatMap(
   (folder) => [`${folder}/**/*.ts`, `${folder}/**/*.tsx`],
 );
@@ -36,6 +36,7 @@ const FORBIDDEN_FILES = [
 const OTHER_FILES = ["src/**/*.*", "src/**/.*", "src/**/[!.]*"];
 
 const UNDISABLEABLE_RULES = [
+  ...new Set([...Object.keys(DS_RULES), ...Object.keys(SHARED_RULES)]),
   "local/no-comments",
   "local/no-money-coercion",
   "local/forbidden-file",
@@ -422,10 +423,7 @@ export const appConfig = (
       ],
       rules: off(["guard/no-number-conversion"]),
     },
-    {
-      files: DS,
-      rules: off(["guard/no-dom-globals", "guard/no-ref-callback"]),
-    },
+
     {
       files: SCREEN,
       rules: { "local/no-ui-text": ["error", { screen: "on" }] },
@@ -445,8 +443,6 @@ export const appConfig = (
       rules: off([
         "guard/no-effect-hooks",
         "guard/no-sync-external-store",
-        "guard/no-ref-callback",
-        "guard/no-dom-globals",
         "functional/no-expression-statements",
       ]),
     }),
@@ -505,6 +501,7 @@ export const appConfig = (
   );
   return warningsAsErrors([
     ...configs,
+    ...dsConfigs(),
     ...generatedConfigs(configs, join(import.meta.dirname, "..")),
   ]);
 };
