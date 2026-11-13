@@ -1,119 +1,109 @@
-# ADR 0021: Codex 호환 하네스와 역할 배분
+# ADR 0021: Codex 호환 하네스와 수정 1차
 
 - 상태: 제안
 - 날짜: 2026-11-13
 - 관련 작업: H-41
-- 기준 커밋: 7ce72918d95d6d4d9ffce082fa361066b2b310c9
-- 이 ADR의 역할·Codex 운영 규칙이 ADR 0017~0020의 Claude 전용 운영 규칙보다 앞선다.
+- 수정 1차 기준: 5ef5dfc
+- 이 결정의 Codex·역할 절차가 ADR 0017~0020의 Claude 전용 절차보다 앞선다.
 
-## 실측
+## 설치 버전과 실제 계약
 
-홈의 설정과 실제 자격 증명 파일은 읽거나 바꾸지 않았다. 모델을 쓰는 실측은 임시 저장소에서 했다.
+Codex CLI 0.168.0을 썼다. 홈 설정과 실제 자격 증명은 읽거나 바꾸지 않았다. 설치 바이너리의 --codex-run-as-apply-patch로 실제 파서를 모델 없이 실행했다.
 
-| 항목 | 명령·방법 | 출력·관찰 |
-|---|---|---|
-| CLI | `codex --version` | `codex-cli 0.168.0` |
-| 기능 | `codex features list` | `hooks stable true`, `shell_snapshot stable true`, `multi_agent_v2 stable false` |
-| 도움말 | `codex --help`, `exec --help`, `sandbox --help`, `debug --help`, `app-server --help` | `exec`, `--ephemeral`, `--ignore-user-config`, `--json`, `--strict-config`, 훅 신뢰 옵션과 권한 프로필 지원 |
-| 설치 문서 | 설치된 `@openai/codex/README.md`, `package.json` | npm 진입점은 native 바이너리를 호출한다. 패키지에 설정 스키마는 없다 |
-| 로컬 스키마 | `codex app-server generate-json-schema --experimental --out <임시 폴더>` | ConfigRead, HooksList, ThreadStart, HookStarted·Completed 스키마 생성 |
-| 샌드박스·승인 선택 | `codex --help`, `exec --help` | read-only·workspace-write·danger-full-access, on-request·never 지원. 프로젝트 프로필은 명시적 sandbox 선택보다 우선하지 않음 |
-| AGENTS 읽기 | 공식 AGENTS 문서 | 시작 때 전역 override 또는 AGENTS, 프로젝트 루트부터 현재 폴더까지 각 폴더의 override·AGENTS·fallback 순서. 기본 32 KiB, 가까운 폴더가 뒤에 붙음 |
-| 역할 기능 | features와 헤드리스 경고 | 내부 서브에이전트 기능 존재. 사용자 역할 정의 중 name 필드 없는 항목은 무시된다는 경고를 관찰. 이번 구현은 내부 역할 정의를 사용하지 않음 |
-| 실행 주체 | `ps`의 실행 파일·부모만 확인 | Codex native 바이너리의 부모가 T3 Code다. 명령 인자에서 app-server 확인 |
-| 현재 T3 세션 | 임시 `.codex/hooks.json`으로 이후 셸 호출 관찰 | 이벤트 기록 없음. 실행 도중 추가한 프로젝트 훅은 이 세션에서 관찰되지 않았다. 시작 당시의 로드 여부까지 증명하는 실험은 아니다 |
-| 권한 | 현재 세션의 제공된 실행 정책 | danger-full-access, 승인 never. 프로젝트의 새 프로필이 현재 세션을 바꾸지 않는다 |
-| 헤드리스 1 | 프로젝트 신뢰를 dotted `-c`로 전달 | 키가 무시됐다는 경고. 프로젝트 설정·훅 미적용. pnpm은 옛 shim으로 실패 |
-| 헤드리스 2 | `-c 'projects={ "/임시/저장소"={trust_level="trusted"} }'`, 검토한 임시 훅에만 `--dangerously-bypass-hook-trust` | SessionStart, Bash 전후, apply_patch 전후, Stop 입력을 기록. Bash·패치 입력은 `tool_input.command` |
-| 셸 환경 | 프로젝트 `shell_environment_policy.set.PATH`와 표식 | `project-loaded`, 독립 설치본 pnpm 경로, `12.18.0` |
-| 회귀 | 임시 git 원본과 작업 사본, 10개 대표 시도 | 첫 실행은 작업 사본 설정 대신 원본 설정이 사용돼 기록기 미적용. 둘째는 두 사본에 같은 실험 훅을 두어 10개 모두 관찰. Update File도 시도로 판정하도록 녹화 판정을 수정 |
-| 설정 검증 | 신뢰를 준 `codex --strict-config ... app-server --print-startup-config` | 종료 0 |
-| 샌드박스 | `codex ... sandbox -P stock-copilot` | workspace 파일 쓰기 성공, example.com HTTPS는 `403`, `x-proxy-error: blocked-by-allowlist` |
-| 시작 검사 | pnpm 설치 → lefthook 설치 → `just base=7ce72918d95d6d4d9ffce082fa361066b2b310c9 check` | 종료 0. Node 306+69+65개, Nextest 239개 통과 |
-
-설정 검색과 신뢰는 [공식 설정 문서](https://learn.chatgpt.com/docs/config-file/config-advanced#hooks), 이벤트와 입출력은 [공식 Hooks 문서](https://learn.chatgpt.com/docs/hooks), 권한 프로필은 [공식 Permissions 문서](https://learn.chatgpt.com/docs/permissions), 지침 검색은 [공식 AGENTS 문서](https://learn.chatgpt.com/docs/agent-configuration/agents-md#how-codex-discovers-guidance)를 확인했다. 공식 문서는 설치 버전보다 앞설 수 있으므로 실제 입력과 종료 코드로 교차 확인한다.
-
-## 결정
-
-| 결정 | 이유 |
+| 입력 | 실제 파서 |
 |---|---|
-| 구현·수정·조사·비판은 새 Codex gpt-6.1-sol, 적대적 리뷰는 새 Claude Opus 5.5 | 사용자 배분. 메인 Claude는 오케스트레이션과 docs 편집 |
-| Codex는 T3의 별도 git worktree에서 시작 | 원본 주 작업 트리와 분리. 역할 이름 대신 git 등록 경로로 메인·구현 담당 구별 |
-| 판정 코어를 옮기거나 복제하지 않는다 | `.claude/hooks/lib`의 기존 편집·셸·경로·결과 코어를 Codex가 가져온다. 기존 원소 빼기 테스트와 공통 예제 비교를 함께 실행 |
-| Claude에 새 오케스트레이션 진입 가드를 둔다 | 내부 implementer·review-critic 호출을 거부. T3 delegate는 codex·gpt-6.1-sol·worktree·기준 브리프를 확인. SendMessage 재개는 계속 거부 |
-| apply_patch 전체 대상을 편집 전에 검사 | 추가·수정·삭제·이동의 전후 대상 모두 검사. 절대 경로의 비정규 조각을 정규화해 숨기지 않는다 |
-| `.codex/**`와 새 하네스는 보호 대상 | 허용 목록 밖, 해시 고정, 잠금 조각, config.toml·hooks.json 위치 검사로 보호 |
-| 권한 프로필은 기존 sandbox 정책에서 생성 | 캐시 쓰기, 홈 자격 증명 읽기 거부, 패키지 도메인 허용을 공유. 지원하지 못하는 경로는 아래에 명시 |
-| 로그인 셸과 셸 스냅숏을 끄고 PATH를 생성 | 사용자 로그인 셸이 PATH를 덮는 차이 제거. 독립 pnpm·실행 중 Node·cargo·Homebrew·시스템 순서. 사용자 홈 설정은 바꾸지 않는다 |
-| `just check-pnpm`은 실제 `pnpm --version`을 packageManager와 비교 | Node 버전 확인만으로는 오래된 Corepack shim을 찾지 못한다. 실패하면 PATH 수정 방법을 출력 |
-| Stop·편집 뒤 린트는 기존 검사 샌드박스 재사용 | 훅 프로세스가 빌드·테스트를 샌드박스 밖에서 실행하지 않게 한다. Stop은 offline fresh 단계 뒤 전체 검사 |
-| 구현 지침 원본은 docs/agents/implementer.md | Claude 안내 파일은 원본을 링크. 내용 이중 관리 방지 |
+| 들여쓴 표시 줄·끝 공백·CRLF·표시 줄 바깥 공백 | 모두 적용 |
+| 앞쪽 임의 텍스트·여러 패치 블록·모르는 표시 줄 | 모두 거부 |
+| 인용한 EOF heredoc 래핑 | 적용 |
 
-## 강제 수준
+가드는 표시 줄을 trim하고 CRLF를 처리한다. 경로의 .·.. 조각은 실제 적용과 같이 정규화한 뒤 세션 범위와 공유 편집 규칙을 검사한다. 경로에 공백·제어 문자가 있으면 적용기의 정규화에 맡기지 않고 거부한다. 모르는 표시와 여러 블록도 거부한다.
 
-| 항목 | Claude | Codex |
+훅의 process.cwd는 세션 루트였다. 도구 workdir=child일 때 입력 cwd만 child로 달라졌다. 실제 관찰한 도구 이름은 Bash·apply_patch다. 역할과 상대 편집 기준은 프로세스 폴더에서 찾은 등록 worktree다. Git 환경 변수로 이를 돌릴 수 없다.
+
+### PreToolUse 종료 형태
+
+첫 계약 실험은 없는 파일의 Update여서 부작용 판정이 미확정이었다. 둘째는 기존 base 내용을 probe로 바꿔 파일 내용으로 확인했다.
+
+| 출력·종료 | 실제 파일 | 판정 |
 |---|---|---|
-| 보호 경로 | 잠금 off 경고, on 거부 | 같은 판정. 권한 프로필의 `.codex` 읽기 전용은 off에도 적용 |
-| 금지 셸 | 같은 코어 | 같은 코어 |
-| 편집 뒤 검사 | Edit·Write 후 lint-file | apply_patch 후 lint-file, 이미 끝난 편집을 되돌리지는 않음 |
-| 설정 변경 | ConfigChange | 전용 이벤트 없음 |
-| 종료 | SubagentStop + 상태 기록 | Stop + 전체 검사. T3 결과에 Claude 상태 기록을 붙일 수 없음 |
-| 훅 실행 실패 | onFailure block, Stop은 예외 | 프로세스 실행 실패·시간 초과를 강제 차단하지 못함 |
-| 샌드박스 | H-20 전 비활성 | 프로필이 선택된 새 세션·sandbox 명령에서 적용. 현재 T3 세션에는 미적용 |
+| 출력 없음, 0 | probe | 허용 |
+| permissionDecision=deny JSON, 0 | base | 거부 |
+| decision=block JSON, 2 | probe | 거부 실패 |
+| stderr만, 2 | base | 이번 실측에서는 거부 |
+| 처리하지 않은 예외 | probe | 거부 실패 |
+| 잘못된 JSON, 0 | probe | 거부 실패 |
 
-## 알려진 빈틈: Codex에서 강제되지 않는 것
+예외는 표준 permissionDecision=deny JSON·종료 0으로 처리하고 stderr에 사유를 쓴다. 예전의 “예외는 exit 2와 거부 JSON” 설명은 틀렸다. 파일 없음·시작 실패·시간 초과는 스크립트가 처리할 수 없어 여전히 차단을 보장하지 못한다.
 
-- 현재 T3 세션에서 새 프로젝트 훅이 실행되는 것은 관찰하지 못했다. 사용자가 신뢰한 뒤 새 세션을 시작하고 실제 차단 시도를 확인해야 한다. 현재 세션에 적용됐다고 보고하지 않는다.
-- 프로젝트 신뢰와 훅 정의 해시 신뢰는 별개다. 신뢰하지 않은 훅은 건너뛴다. 변경 뒤에도 다시 신뢰해야 한다. 프로젝트 파일만으로 사용자 신뢰를 강제할 수 없다.
-- T3가 sandbox_mode나 turn 권한을 덮으면 프로젝트 권한 프로필보다 우선한다. 특히 danger-full-access는 홈 읽기·네트워크 제한을 제거한다. T3 실행 설정을 사용자가 확인해야 한다.
-- ConfigChange 이벤트가 없다. 설정 파일의 세션 반영 거부를 Claude와 같은 방식으로 구현하지 못한다.
-- 훅 실행 파일 누락·시작 실패·시간 초과는 차단을 보장하지 않는다. 정상 실행 중 예외는 exit 2와 거부 JSON으로 처리한다.
-- hosted 도구와 일부 특수 도구는 훅을 거치지 않는다. 임의 MCP나 node REPL의 내부 파일 쓰기는 Bash·apply_patch 판정 밖이다. write_stdin은 새 PreToolUse 없이 이미 시작한 명령에 입력한다.
-- 파일 편집은 apply_patch를 검사한다. 셸로 실행하는 프로그램의 간접 쓰기는 기존 Claude와 마찬가지로 문자열 판정만으로 막지 못한다. 권한 프로필과 CI를 함께 쓴다.
-- 기존 sandbox 정책의 `../stock-copilot-wt`와 그 아래 글롭은 T3의 별도 현재 작업 루트로 대체한다. pnpm `_tmp_*`, `~/.claude-*/projects` 글롭은 생성 프로필에 넣지 않는다. 이 경로에 대한 같은 수준의 허용·거부는 미확인이다.
-- Codex Stop의 기준은 master와 HEAD의 병합 기준이다. T3 브리프 SHA·모델·상태에 결합된 위조 방지 기록은 없다. 메인이 브리프 SHA로 다시 검사하고 실제 대상 HEAD·모델을 확인한다.
-- T3가 쓰는 git worktree의 프로젝트 설정은 원본 공통 저장소의 설정을 사용할 수 있다. 실험에서 작업 사본에만 둔 기록기는 실행되지 않았다. 병합 전 작업 사본 설정만으로 운영 적용을 보장하지 않는다.
-- Codex 비판자의 읽기 전용과 원본 오염 감지는 T3 실행 권한·메인 확인에 맡긴다. 현재 위임 가드는 제공자·모델·격리와 브리프만 검사한다.
-- 회귀 10개는 PreToolUse의 실제 시도와 판정만 확인한다. PostToolUse 린트와 Stop 전체 검사의 생산 설정 끝까지 실행은 별도 검증이 필요하다.
-- 권한 프로필의 공통 git 관리 폴더 쓰기는 추가 실측에서 차단됐다. 별도 작업 사본의 git add·commit은 index.lock, merge는 ORIG_HEAD.lock을 만들지 못해 모두 종료 128이다. 정상 커밋·병합의 샌드박스 호환성은 미해결이다. 샌드박스를 끄는 대안으로 처리하지 않는다.
+## 수정과 근거
 
-## 사용자가 할 일
+| 지적 | 결정 | 테스트 |
+|---|---|---|
+| 1·2 | 표시·블록·경로를 엄격히 검사 | R1 indented CRLF markers, R2 whitespace and controls |
+| 3 | 예외도 표준 deny·종료 0·stderr | R3 dispatch exceptions |
+| 4 | 프로세스 cwd·git-dir/common-dir·등록 경로 확인, 작업 사본 밖 거부 | R4 session role, R4 git environment |
+| 5 | 저장소는 휴대 가능한 정책만, 컴퓨터별 값은 setup 출력 | R5 repository config |
+| 6 | 주 작업 트리의 코드·규칙을 실행·조회. 공유 protectedDenies·ADR 목록으로 worker의 하네스·린트·테스트·도구 설정을 기본 읽기 전용으로 생성 | R6 hook commands, R6 worktree hook tampering |
+| 7 | Bash의 정규화된 실행 파일 이름과 단독 인용 heredoc을 같은 판정·린트에 전달. 인용 연결·이스케이프·대문자 변형도 판정. 동적 입력과 폴더 변경 래퍼·복합 명령 거부 | R7 Bash heredoc |
+| 8 | T3 키·값 허용 목록과 소유 스레드 기록 | R8 T3 launch |
+| 9 | docs/agents를 보호 경로로 | R9 implementer instructions |
+| 10 | 소유 스레드 수정 기준은 등록 worktree 이력. 진행 문서는 메인만 편집 | R10 only owned threads |
+| 11 | Claude 셸 금지·종료 훅 한계·통제·오염 방지 설명 복구 | 현재 Claude 훅과 문서 대조 |
+| 12 | 감시 래퍼 제거. 운영 훅 감사 기록과 실제 파일·실행 표식 비교 | regression requires every actual attempt |
+| 13 | 모르는 도구 기본 거부. 실행 도구는 Bash 판정 | R13 unknown executable tools |
+| 14 | 폴더에서 해시 대상 자동 계산, 고정 대상 폴더도 별도 단언 | R14 new guard files, R14 hash folder coverage |
+| 15 | 하위 AGENTS.md·AGENTS.override.md 위치 검사 | R15 nested guidance |
+| 16 | 서브에이전트 필드 각각 검사, 이동·삭제·상대·공백 예제 | R16 either subagent field, R16 moving deleting |
 
-| 순서 | 일 |
+## 저장소와 컴퓨터별 부분
+
+| 위치 | 내용 |
 |---|---|
-| 1 | 이 작업의 변경과 기존 테스트 기대값을 검토해 메인이 커밋한다. 그 뒤 전체 검사를 다시 통과시킨다 |
-| 2 | 원본 저장소에 병합한 뒤 `node harness/codex-hooks/config.mjs --write`로 현재 컴퓨터 경로를 생성하고 해시·잠금 조각을 다시 만든다. 다른 컴퓨터 경로를 그대로 쓰지 않는다 |
-| 3 | 사용자가 홈의 config.toml에서 `[projects."<원본 절대 경로>"]` 아래 `trust_level = "trusted"`를 설정한다. 에이전트는 홈 설정을 고치지 않는다 |
-| 4 | 원본에서 `codex`를 열고 `/hooks`로 정확한 정의를 검토·신뢰한다. 작업 사본 신뢰가 별도로 필요하면 같은 방식으로 확인한다 |
-| 5 | T3의 Codex 실행 권한이 프로젝트 프로필을 덮지 않는지 확인하고 새 세션을 연다. 로그의 실제 차단을 확인한다 |
-| 6 | Codex 갱신 뒤 `just codex-regression`을 수동 실행한다. 미확정·실패가 하나라도 있으면 완료로 보지 않는다 |
+| 추적하는 .codex/config.toml | 홈 축약 경로·네트워크 도메인·공유 허용 목록에서 계산한 보호 경로 읽기 전용. 사용자 이름·Node 설치·worktree Git 경로 없음 |
+| 추적하는 hooks.json | 환경을 비운 git 질의로 공통 폴더를 찾아 원본 dispatch 실행 |
+| just codex-setup 출력 | PATH·pnpm_config_store_dir와 자기 Git 관리 폴더·objects·브랜치 ref·lock·log 쓰기, 검사 임시 폴더의 Unix 소켓 범위를 가진 stock-copilot-session |
+| just codex-setup --harness 출력 | lock off에서만 사용자 승인 하네스 작업용 stock-copilot-harness 생성 |
+| 홈 설정 | 사용자가 출력 내용을 검토해 반영한다. 에이전트는 자동으로 쓰지 않는다 |
 
-사용자 셸에서 도구 확인:
+컴퓨터별 프로필은 stock-copilot을 상속한다. 사용자가 default_permissions=stock-copilot-session을 명시적으로 선택한다. sandbox 재현은 -P stock-copilot-session이다. 승인한 하네스 작업에서만 --harness로 출력하고 그 프로필을 선택한다. 생성 결과를 커밋하지 않는다.
 
-```sh
-export PATH="$HOME/Library/pnpm:$PATH"
-pnpm --version
-which -a pnpm corepack node just cargo lefthook
-```
+[공식 권한 문서](https://learn.chatgpt.com/docs/permissions#local-and-private-networks)와 실측을 대조했다. 기본 프로필과 localhost 도메인만 추가한 프로필은 TCP bind를 거부했다. 공유 정책의 allowLocalBinding=true를 Codex allow_local_binding에 그대로 반영한다. Unix 소켓은 전부 열지 않고 컴퓨터별 출력에 공유 checkPlaces가 쓰는 실제 임시 폴더만 허용한다. TCP·Unix 자체 서버 연결 성공과 1.1.1.1 직접 연결 EPERM을 확인했다. 이 예외는 검사에 필요한 로컬 통신 범위이며 외부 도메인 허용 목록은 유지한다.
 
-프로젝트 신뢰를 부여한 임시 실험에서는 `codex exec --ignore-user-config --ephemeral --dangerously-bypass-hook-trust -c 'projects={"<임시 절대 경로>"={trust_level="trusted"}}' -m gpt-6.1-sol ...`을 썼다. 훅 신뢰 우회 옵션은 검토한 임시 실험 전용이며 일상 운영에 쓰지 않는다.
+임시 worktree에서 좁은 Git 권한으로 add·commit·merge master가 모두 종료 0이었다. 전체 소스 사본에서는 Lefthook의 fresh-build·commit-guard·전체 check를 모두 켠 commit도 종료 0이고 HEAD가 바뀌었다. hooks·config 쓰기는 모두 거부됐다. 자기 Git 관리 폴더의 commondir·gitdir·config.worktree도 읽기 전용으로 별도 제한했다. 제한 전에는 세 파일 쓰기가 성공했고 제한 후에는 모두 EPERM이었다. add·commit·merge의 성공과 두 부모 병합은 그대로 확인했다. 자동 유지보수는 packed-refs.lock 쓰기 경고를 냈지만 커밋·병합은 성공했다. 다른 브랜치를 바꿀 수 있는 packed-refs 쓰기는 열지 않는다.
+
+## 역할과 T3 흐름
+
+메인은 이 프로젝트에서 시작하고 projectId·environmentId를 넘기지 않는다. 초기 구현은 t3_thread_launch의 현재 프로젝트 상속·provider=codex·model=gpt-6.1-sol·worktree·브리프 기준으로 시작한다. runtimeMode는 생략 또는 approval-required다. options는 생략 또는 effort=high만 허용한다.
+
+PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션 소유 기록에 넣는다. 기록과 등록 worktree가 있는 스레드만 read·wait·send로 접근한다. 수정은 같은 스레드의 send(auto 또는 queue)로 계속한다. 기준은 master 끝의 자손이면서 그 worktree HEAD의 조상이어야 한다. 메인이 앞 구현의 검사·리뷰 결과를 확인한다. Stop 전체 검사 성공과 깨끗한 HEAD는 기존 passedTargets 형식으로 기록한다. 수정 브리프는 소유 스레드 이력을 확인하므로 앞 회차의 Claude 서브에이전트 기록 없이도 이어 간다. 적대적 리뷰는 매번 새 Claude Opus 5.5다. 이전에 시작한 스레드를 자동으로 채택하지 않는다.
+
+## 병합 뒤 메인의 1분 적용 확인
+
+1. 원본에 병합한 뒤 새 T3 Codex worktree 세션을 연다. 프로젝트 신뢰·훅 정의 신뢰·선택된 프로필을 확인한다.
+2. Bash의 workdir를 새 세션 worktree로 명시한 pwd는 그 worktree를 출력해야 한다. /var와 /private/var 같은 실제 경로 별칭은 같은 폴더로 판정한다.
+3. git -c core.hooksPath=/tmp status를 한 번 시도한다. 조회 명령이지만 금지 설정 사유로 거부돼야 한다. 실제 status 출력이면 훅 미적용이다.
+4. 도구 workdir를 원본으로 한 pwd는 세션 범위 사유로 거부돼야 한다.
+5. 자기 worktree의 harness/.h41-profile-probe 생성은 정상 프로필에서 실패하고 파일이 없어야 한다. 생기면 프로필 미적용이며 메인이 이 새 표식만 지운다.
+6. 첫 1분은 적용 확인이다. Stop 전체 검사 성공은 별도로 기다린다. full-access가 프로필을 덮으면 적용됐다고 판정하지 않는다.
+
+## 알려진 빈틈
+
+- 시간 초과·명령 파일 없음·프로세스 시작 실패는 스크립트가 처리할 수 없고 차단을 보장하지 못한다.
+- 프로젝트 신뢰와 훅 정의 신뢰는 별개이며 프로젝트 파일만으로 사용자 신뢰를 강제할 수 없다.
+- T3 full-access가 프로필을 덮을 수 있다. 현재 세션은 새 설정으로 다시 시작하지 않았으므로 적용됐다고 판정하지 않는다.
+- ConfigChange 이벤트가 없어 설정의 세션 반영 거부를 Claude와 같은 방식으로 구현하지 못한다.
+- 일부 hosted·특수 도구는 훅 경로 밖이다. 훅을 거치지 않는 호출은 기본 거부 판정도 받지 않는다.
+- 문자열 검사로 프로그램 내부의 임의 쓰기를 전부 해석하지 못한다. OS 권한과 보호 파일 서명 검사를 함께 쓴다.
+- write_stdin은 이미 허용된 실행의 입력 채널이며 새 PreToolUse가 없다.
+- H-20 전 같은 사용자 권한의 샌드박스 밖 프로세스는 상태 기록을 위조할 수 있다.
+- 모델이 시도하지 않으면 회귀는 미확정이다. 감사 기록 입력 해시와 실제 결과를 함께 확인한다.
+- 운영 회귀는 운영 hooks.json·프로필을 쓰지만 축소 사본이다. 전체 소스 사본의 운영 Stop 성공도 별도로 확인했으나 현재 T3 세션에 재시작 없이 소급 적용되지는 않는다.
+- Git 자동 유지보수의 packed-refs.lock 경고는 남긴다. 전역 ref 쓰기는 열지 않는다.
+- 컴퓨터별 설정은 출력만 한다. 사용자 적용과 새 worktree별 재출력이 필요하다.
+- 읽기 도구 허용 목록은 API에서 확인한 view_image·MCP 자원 조회다. CLI에서 실제 이벤트로 관찰한 이름은 Bash·apply_patch다. 새 도구는 확인 뒤 추가한다.
 
 ## 결과
 
-헤드리스 실측은 총 5회다(기능 조사 2회, 회귀 실행 3회). 마지막 회귀는 10개 모두 통과했다.
+수정 1차 헤드리스는 계약 2회·운영 회귀 2회·전체 소스 Stop 3회로 7회다. 운영 회귀는 마지막 실행도 실제 상태 기준 10/10 통과했다. 첫 전체 Stop에서 테스트의 중첩 샌드박스와 T3 결과 해석 결함을 발견해 수정했다. 둘째 전체 Stop은 status=passed·깨끗한 HEAD를 기록했다. 셋째는 실제 경로 별칭 보정 뒤 pwd 성공·Stop status=passed·깨끗한 HEAD를 함께 확인했다. 패치·Git 권한·HOME 변경 검사는 모델 없이 했다. Codex의 실제 Seatbelt 셸은 CODEX_SANDBOX=seatbelt를 준다. justfile은 이를 기존 SANDBOX_RUNTIME=1 계약에 연결해 중첩 불가 환경을 인식한다. 샌드박스 밖에서는 기존 표식의 값이 유지된다. 실제 OS 권한을 풀거나 테스트 단언을 바꾸지 않는다. pnpm 12 실측에서 npm_config_store_dir·PNPM_STORE_DIR는 적용되지 않고 pnpm_config_store_dir만 적용됐다. 자동 저장소 선택은 프로젝트와 검사 임시 사본에서 서로 다른 폴더를 골라 offline tarball 실패를 냈다. 컴퓨터별 출력에서 이 환경 변수로 허용된 홈 캐시를 고정하고 config get store-dir와 실제 오프라인 도구 복구 테스트로 확인한다. 홈 설정·키·계좌 데이터를 다루지 않았다. 검사 끄기는 추가하지 않았다.
 
-기존 기대값 변경은 메인이 커밋할 변경이다: `harness/claude-hooks/tests/settings.test.mjs`(새 가드와 T3 허용), `apps/desktop/tests/check-list.test.mjs`(pnpm 버전 확인 단계와 순서), `apps/desktop/tests/known-gaps.test.mjs`(현재 빈틈 개수는 새 ADR에 기록). 하네스 잠금은 켜지 않았다. 실제 키·계좌 데이터는 다루지 않았다. 검사 끄기는 추가하지 않았다.
-
-현재 빈틈 목록의 요약:
-
-```
 known-gaps: 63건 (eslint 7건, hook 6건, adr 50건(문서만(예제 없음)))
-```
-
-이전 회차의 전체 검사는 `review-records`에서 H-41의 `진행 중` 상태를 거부해 종료 1이다. 기존 검사는 이 상태를 명시적으로 금지한다. 완료·리뷰 결과를 만들지 않고 멈췄다. 변경 후 마지막 Rust 검사는 실행되지 않았다. 시작 기준의 전체 검사는 통과했다.
-
-후속 수정: `check`의 선언은 기존 `check-node require-base check-ts`로 복원했다. pnpm 확인은 `check-ts`의 선행 단계로 유지한다. 기준이 없으면 pnpm 실행 전에 기준 누락으로 거부한다. Rust의 기존 기준 누락 테스트는 바꾸지 않았다. 진행 표에는 리뷰가 끝난 완료 작업만 넣고 진행 중인 작업은 한 줄 메모로 쓴다.
-
-추가 실측은 헤드리스 0회다. 작업 공간 안에 임시 원본과 worktree를 만들고 `codex sandbox -P stock-copilot -C <worktree>`로 git add·commit·merge를 실행했다. 공통 git 폴더의 잠금 파일 쓰기가 모두 Operation not permitted로 실패했다. 임시 저장소는 지웠다. 생산 설정의 Codex 종료 훅까지의 전체 실측은 계속 미실행이다.
-
-후속 전체 검사: `just base=7ce72918d95d6d4d9ffce082fa361066b2b310c9 check` 종료 0. Node 453개(306+69+13+65), Nextest 239개 통과. 기존 `check_refuses_to_run_without_an_explicit_base`도 통과했다. coverage-check·test-diff·hooks-installed 위반 없음, 새 검사 끄기 0건이다. 커밋하지 않고 모든 변경을 스테이징해 메인에게 넘긴다.

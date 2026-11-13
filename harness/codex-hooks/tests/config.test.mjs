@@ -16,40 +16,40 @@ const policy = JSON.parse(
 
 test("Codex config preserves supported sandbox policy entries and pins the shell PATH", () => {
   const text = configText(policy, "/example", "/node");
-  assert.match(text, /PATH = "\/example\/Library\/pnpm:\/node:/u);
+  assert.doesNotMatch(text, /\/example|\/node/u);
   assert.match(text, /allow_login_shell = false/u);
   assert.match(text, /shell_snapshot = false/u);
-  assert.match(text, /"\/example\/\.ssh" = "deny"/u);
+  assert.match(text, /"~\/\.ssh" = "deny"/u);
   assert.match(text, /network_proxy = true/u);
+  assert.match(text, /allow_local_binding = true/u);
+  const withoutBinding = structuredClone(policy);
+  withoutBinding.base.network.allowLocalBinding = false;
+  assert.match(configText(withoutBinding), /allow_local_binding = false/u);
   for (const domain of policy.base.network.allowedDomains)
     assert.ok(text.includes(`${JSON.stringify(domain)} = "allow"`));
-  const variants = dataVariants(policy).filter(
-    (variant) =>
-      [
-        "network.allowedDomains",
-        "network.allowUnixSockets",
-        "filesystem.allowWrite",
-        "filesystem.denyWrite",
-        "filesystem.denyRead",
-      ].some((key) => variant.path.join(".") === `base.${key}`) &&
-      !String(variant.name).includes("*"),
-  );
-  for (const variant of variants) {
-    const changed = applyVariant(policy, variant);
-    if (JSON.stringify(changed) === JSON.stringify(policy)) continue;
-    const path = variant.name;
-    if (
-      path.includes("../") ||
-      (policy.base.filesystem.denyRead.some((entry) =>
-        path.includes(JSON.stringify(entry)),
-      ) &&
-        policy.base.filesystem.denyWrite.some((entry) =>
-          path.includes(JSON.stringify(entry)),
-        ))
-    )
-      continue;
-    assert.notEqual(configText(changed, "/example", "/node"), text, path);
-  }
+  const variants = dataVariants(policy).filter((variant) => {
+    const name = variant.path.join(".");
+    const removed = JSON.parse(
+      variant.name.slice(variant.name.indexOf("=") + 1),
+    );
+    return (
+      name === "base.network.allowedDomains" ||
+      (name === "base.filesystem.allowWrite" &&
+        removed.startsWith("~/") &&
+        !removed.includes("*")) ||
+      (name === "base.filesystem.denyRead" && !removed.includes("*")) ||
+      (name === "base.filesystem.denyWrite" &&
+        removed.startsWith("~/") &&
+        !removed.includes("*") &&
+        !policy.base.filesystem.denyRead.includes(removed))
+    );
+  });
+  for (const variant of variants)
+    assert.notEqual(
+      configText(applyVariant(policy, variant)),
+      text,
+      variant.name,
+    );
 });
 
 test("Codex hook events cover pre post and stop and all config paths are protected", () => {

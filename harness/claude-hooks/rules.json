@@ -63,7 +63,9 @@
         "dependabot.yaml",
         "CODEOWNERS",
         "*.codex/config.toml",
-        "*.codex/hooks.json"
+        "*.codex/hooks.json",
+        "AGENTS.md",
+        "AGENTS.override.md"
       ],
       "allowed": [
         ".gitignore",
@@ -87,7 +89,8 @@
         "crates/*/Cargo.toml",
         "crates/adapters/*/Cargo.toml",
         ".codex/config.toml",
-        ".codex/hooks.json"
+        ".codex/hooks.json",
+        "AGENTS.md"
       ],
       "exempt": ["harness/**"]
     }

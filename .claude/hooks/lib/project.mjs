@@ -35,7 +35,7 @@ const GIT_REDIRECTS = [
 export const gitEnvironment = () =>
   Object.fromEntries(
     Object.entries(process.env).filter(
-      ([name]) => !GIT_REDIRECTS.includes(name),
+      ([name]) => !name.startsWith("GIT_") && !GIT_REDIRECTS.includes(name),
     ),
   );
 

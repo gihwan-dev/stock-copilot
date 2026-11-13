@@ -1,25 +1,29 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const HASHES_FILE = "harness/claude-hooks/hashes.json";
 
-export const HASHED = [
-  ".codex/config.toml",
-  ".codex/hooks.json",
-  "harness/codex-hooks/adapter.mjs",
-  "harness/codex-hooks/dispatch.mjs",
-  "harness/codex-hooks/config.mjs",
+const NAMED = [
   "harness/claude-hooks/rules.json",
   "harness/agent-writable.txt",
   "harness/claude-hooks/lock.txt",
   "harness/claude-hooks/agent-rules.json",
   "harness/sandbox/lock-fragment.json",
 ];
-
+export const HASH_DIRECTORIES = [
+  ".claude/hooks",
+  ".codex",
+  "harness/codex-hooks",
+  "harness/toolchain",
+  "harness/codex-regression",
+];
 const hooksUnder = (root, relative) =>
-  readdirSync(join(root, relative), { withFileTypes: true }).flatMap((entry) =>
+  (existsSync(join(root, relative))
+    ? readdirSync(join(root, relative), { withFileTypes: true })
+    : []
+  ).flatMap((entry) =>
     entry.isDirectory()
       ? hooksUnder(root, `${relative}/${entry.name}`)
       : [`${relative}/${entry.name}`],
@@ -27,12 +31,17 @@ const hooksUnder = (root, relative) =>
 
 export const currentHashes = (root) =>
   Object.fromEntries(
-    [...hooksUnder(root, ".claude/hooks"), ...HASHED].sort().map((path) => [
-      path,
-      createHash("sha256")
-        .update(readFileSync(join(root, path)))
-        .digest("hex"),
-    ]),
+    [
+      ...HASH_DIRECTORIES.flatMap((path) => hooksUnder(root, path)),
+      ...NAMED.filter((path) => existsSync(join(root, path))),
+    ]
+      .sort()
+      .map((path) => [
+        path,
+        createHash("sha256")
+          .update(readFileSync(join(root, path)))
+          .digest("hex"),
+      ]),
   );
 
 export const hashProblems = (root, expected) => {
@@ -52,6 +61,12 @@ export const hashProblems = (root, expected) => {
 };
 
 const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..", "..");
+export const HASHED = [
+  ...NAMED,
+  ...HASH_DIRECTORIES.filter((path) => path !== ".claude/hooks").flatMap(
+    (path) => hooksUnder(repoRoot, path),
+  ),
+];
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv[2] === "--write") {

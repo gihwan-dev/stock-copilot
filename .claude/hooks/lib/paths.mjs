@@ -321,6 +321,12 @@ export const writeFindings = (path, role, project, mode) => {
       ? []
       : [finding("unsafe-path", `${PATH_PROBLEM.outside}: ${path}`)];
   }
+  if (
+    project.ownedWorktree !== undefined &&
+    located.root !== project.ownedWorktree
+  ) {
+    return [finding("worktree-scope", "세션 작업 사본 밖에는 쓰지 않는다")];
+  }
   const artifact = rules.paths.artifacts.some((pattern) =>
     patternMatches(pattern, located.relative),
   );

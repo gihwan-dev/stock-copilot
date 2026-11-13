@@ -26,6 +26,7 @@ test("Codex denies forbidden shell commands through the shared core", () => {
         tool_input: { command: "git commit --no-verify" },
       },
       projectFor(f),
+      f.worktree,
     ).hookSpecificOutput.permissionDecision,
     "deny",
   );
@@ -42,11 +43,14 @@ test("Codex checks every patch target before any edit and honors the lock", () =
     },
   };
   assert.equal(
-    codexPreTool(input, projectFor(f, { lock: "on" })).hookSpecificOutput
-      .permissionDecision,
+    codexPreTool(input, projectFor(f, { lock: "on" }), f.worktree)
+      .hookSpecificOutput.permissionDecision,
     "deny",
   );
-  assert.match(codexPreTool(input, projectFor(f)).systemMessage, /잠금/);
+  assert.match(
+    codexPreTool(input, projectFor(f), f.worktree).systemMessage,
+    /잠금/,
+  );
 });
 
 test("Codex rejects nested agents and malformed tool inputs", () => {
@@ -57,7 +61,7 @@ test("Codex rejects nested agents and malformed tool inputs", () => {
     { tool_name: "Bash", tool_input: {} },
   ]) {
     assert.equal(
-      codexPreTool({ ...input, cwd: f.worktree }, projectFor(f))
+      codexPreTool({ ...input, cwd: f.worktree }, projectFor(f), f.worktree)
         .hookSpecificOutput.permissionDecision,
       "deny",
     );

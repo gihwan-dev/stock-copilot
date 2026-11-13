@@ -1,82 +1,183 @@
-import { isAbsolute, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { isAbsolute, resolve, basename } from "node:path";
 import { decideBash } from "../../.claude/hooks/lib/bash-guard.mjs";
 import { editFindings } from "../../.claude/hooks/lib/edit-guard.mjs";
 import { locate } from "../../.claude/hooks/lib/paths.mjs";
+import { parseScript } from "../../.claude/hooks/lib/shell.mjs";
 import { decide, preToolUseOutput } from "../../.claude/hooks/lib/verdict.mjs";
 
-const refusal = (message) =>
+export const refusal = (message) =>
   preToolUseOutput({
     decision: "deny",
     findings: [{ rule: "codex-input", message }],
   });
-
 export const patchPaths = (patch) => {
   if (typeof patch !== "string") throw new Error("패치 문자열이 없다");
-  const lines = patch.trim().split("\n");
-  if (lines[0] !== "*** Begin Patch" || lines.at(-1) !== "*** End Patch")
+  let lines = patch.replaceAll("\r\n", "\n").split("\n");
+  while (lines[0]?.trim() === "") lines.shift();
+  while (lines.at(-1)?.trim() === "") lines.pop();
+  if (
+    ["<<EOF", "<<\u0027EOF\u0027", '<<"EOF"'].includes(lines[0]?.trim()) &&
+    lines.at(-1)?.trim() === "EOF"
+  )
+    lines = lines.slice(1, -1);
+  if (
+    lines[0]?.trim() !== "*** Begin Patch" ||
+    lines.at(-1)?.trim() !== "*** End Patch"
+  )
     throw new Error("패치 경계가 잘못됐다");
-  const paths = lines.flatMap((line) => {
+  const paths = [];
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim();
+    if (!line.startsWith("***")) continue;
+    if (
+      (line === "*** Begin Patch" && index === 0) ||
+      (line === "*** End Patch" && index === lines.length - 1) ||
+      line === "*** End of File"
+    )
+      continue;
     const match =
       /^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/u.exec(line);
-    return match === null ? [] : [match[1]];
-  });
+    if (match === null) throw new Error("모르는 패치 표시 줄이다");
+    const rawMatch =
+      /^\s*\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/u.exec(
+        raw,
+      );
+    if (rawMatch === null || /[\s\p{Cc}]/u.test(rawMatch[1]))
+      throw new Error("패치 경로에 공백이나 제어 문자가 있다");
+    paths.push(match[1]);
+  }
   if (paths.length === 0) throw new Error("패치 대상이 없다");
   return [...new Set(paths)];
 };
-
-export const actorInput = (input, project) => {
-  const cwd = input.cwd;
-  if (typeof cwd !== "string" || !isAbsolute(cwd))
-    throw new Error("현재 폴더가 없다");
-  const located = locate(resolve(cwd, ".codex-role-probe"), project.worktrees);
-  if (located.root === undefined) throw new Error("등록된 작업 사본 밖이다");
+export const actorInput = (input, project, sessionCwd = process.cwd()) => {
+  const located = locate(
+    resolve(sessionCwd, ".codex-role-probe"),
+    project.worktrees,
+  );
+  if (located.root === undefined || located.problem !== undefined)
+    throw new Error("등록된 세션 작업 사본이 아니다");
   if (input.agent_id !== undefined || input.agent_type !== undefined)
     throw new Error("Codex 내부 서브에이전트는 쓰지 않는다");
-  return located.root === project.root
-    ? {}
-    : { agent_type: "implementer", agent_id: "codex-worktree" };
+  return {
+    root: located.root,
+    actor:
+      located.root === project.root
+        ? {}
+        : { agent_type: "implementer", agent_id: "codex-worktree" },
+  };
 };
-
-export const codexPreTool = (input, project) => {
-  try {
-    const actor = actorInput(input, project);
-    if (input.tool_name === "Bash") {
-      if (typeof input.tool_input?.command !== "string")
-        return refusal("셸 명령이 없다");
-      return preToolUseOutput(
-        decideBash(
-          {
-            ...input,
-            ...actor,
-            tool_input: { ...input.tool_input, cwd: input.cwd },
-          },
-          project,
-        ),
-      );
-    }
-    if (input.tool_name === "apply_patch") {
-      const findings = patchPaths(input.tool_input?.command).flatMap((path) =>
-        editFindings(
-          {
-            ...actor,
-            tool_input: {
-              file_path: isAbsolute(path) ? path : `${input.cwd}/${path}`,
-            },
-          },
-          project,
-        ),
-      );
-      return preToolUseOutput(decide(findings, project.lock));
-    }
+const patchFindings = (patch, cwd, actor, project, owned) =>
+  patchPaths(patch).flatMap((path) => {
+    const absolute = resolve(cwd, path);
+    if (!absolute.startsWith(`${owned}/`))
+      throw new Error("세션 작업 사본 밖의 편집이다");
+    return editFindings(
+      { ...actor, tool_input: { file_path: absolute } },
+      project,
+    );
+  });
+export const shellPatches = (command) => {
+  const parsed = parseScript(command);
+  const calls = parsed.commands.filter((item) =>
+    item.words.some((word) =>
+      ["apply_patch", "applypatch"].includes(basename(word.text).toLowerCase()),
+    ),
+  );
+  if (!calls.length && !/\bapply_?patch\b/iu.test(command)) return [];
+  if (
+    parsed.problems.length ||
+    parsed.commands.length !== 1 ||
+    calls.length !== 1 ||
+    parsed.substitutions.length ||
+    calls[0].words.length !== 1 ||
+    calls[0].words[0].dynamic
+  )
+    throw new Error("패치 셸 호출을 정적으로 해석하지 못했다");
+  return calls.map((call) => {
+    const inputs = call.inputs;
     if (
-      ["spawn_agent", "Agent", "send_input", "resume_agent"].includes(
+      inputs.length !== 1 ||
+      inputs[0].dynamic ||
+      inputs[0].expand ||
+      inputs[0].kind !== "heredoc" ||
+      call.piped ||
+      call.redirects.length
+    )
+      throw new Error("패치는 인용한 heredoc 본문 하나로만 실행한다");
+    return inputs[0].text;
+  });
+};
+export const toolCommand = (input) => {
+  const value = input.tool_input?.command ?? input.tool_input?.cmd;
+  const command = Array.isArray(value)
+    ? value
+        .map(
+          (word) =>
+            `\u0027${word.replaceAll("\u0027", "\u0027\\\u0027\u0027")}\u0027`,
+        )
+        .join(" ")
+    : value;
+  if (typeof command !== "string") throw new Error("셸 명령이 없다");
+  return command;
+};
+export const READ_ONLY_TOOLS = [
+  "view_image",
+  "list_mcp_resources",
+  "list_mcp_resource_templates",
+  "read_mcp_resource",
+];
+export const codexPreTool = (input, project, sessionCwd = process.cwd()) => {
+  try {
+    const { root, actor } = actorInput(input, project, sessionCwd);
+    const suppliedCwd = input.cwd ?? sessionCwd;
+    if (typeof suppliedCwd !== "string" || !isAbsolute(suppliedCwd))
+      throw new Error("도구 작업 폴더가 절대 경로가 아니다");
+    const cwd = realpathSync(suppliedCwd);
+    if (
+      typeof cwd !== "string" ||
+      !isAbsolute(cwd) ||
+      !(cwd === root || cwd.startsWith(`${root}/`))
+    )
+      throw new Error("도구 작업 폴더가 세션 작업 사본 밖이다");
+    const scoped = { ...project, ownedWorktree: root };
+    if (
+      ["Bash", "exec_command", "shell_command", "shell"].includes(
         input.tool_name,
       )
-    )
-      return refusal(
-        "구현과 비판은 T3가 새 Codex 작업 사본에서 시작한다. 내부 위임과 재개는 쓰지 않는다",
+    ) {
+      const command = toolCommand(input);
+      const verdict = decideBash(
+        {
+          ...input,
+          ...actor,
+          cwd,
+          tool_input: { ...input.tool_input, command },
+        },
+        scoped,
       );
-    return undefined;
+      const findings = shellPatches(command).flatMap((patch) =>
+        patchFindings(patch, cwd, actor, scoped, root),
+      );
+      return preToolUseOutput(
+        decide([...verdict.findings, ...findings], project.lock),
+      );
+    }
+    if (input.tool_name === "apply_patch")
+      return preToolUseOutput(
+        decide(
+          patchFindings(
+            input.tool_input?.command,
+            sessionCwd,
+            actor,
+            scoped,
+            root,
+          ),
+          project.lock,
+        ),
+      );
+    if (READ_ONLY_TOOLS.includes(input.tool_name)) return undefined;
+    return refusal(`허용되지 않은 도구: ${input.tool_name}`);
   } catch (error) {
     return refusal(error.message);
   }

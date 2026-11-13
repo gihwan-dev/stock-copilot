@@ -42,7 +42,7 @@
 | 명령 | 내용 | 누가 부르는가 |
 |---|---|---|
 | `just lint-file <경로>` | 바뀐 파일 하나의 형식과 린트 | `PostToolUse` 편집 훅 |
-| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | `SubagentStop`(implementer), 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
+| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
 | `just check-full` | `just check` + 변이 테스트(기준 브랜치 대비 변경분) + 컨테이너 시각 회귀 + 순환 의존 검사 | 푸시 훅, CI |
 
 `just check`의 공통 규칙:
@@ -649,7 +649,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 |---|---|---|
 | 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 |
 | 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 |
-| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch의 모든 대상에 `just lint-file` |
+| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` |
 | 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 |
 | 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 |
 | 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 |
@@ -658,19 +658,78 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 `just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
 
+셸 훅이 거부하는 것:
+
+| 분류 | 패턴 |
+|---|---|
+| git 훅 건너뛰기 | `git commit --no-verify`, `git commit -n`, `git push --no-verify` |
+| 강제 푸시 | `--force`, `--force-with-lease`, `-f`, `+refspec` |
+| git 설정 | `git -c`, `git config`, `--config-env`, `--git-dir`, `--work-tree`, `core.hooksPath` |
+| 훅·git 환경 변수 | `LEFTHOOK`, `LEFTHOOK_CONFIG`, `LEFTHOOK_EXCLUDE`, `HUSKY`, `SKIP`, `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` |
+| git 훅 상태 | `lefthook install`, `lefthook uninstall` |
+| 이력 조작 | `update-ref`, `replace`, `filter-branch`, `filter-repo`, `rebase`, `reset --hard` |
+| Rust 검사 끄기 | `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, `CARGO_BUILD_RUSTFLAGS`, `RUSTDOCFLAGS`, `CLIPPY_CONF_DIR`, `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER` 설정, `--cap-lints`, `cargo clippy -- -A` (R-09 Q2) |
+| 파일 속성 | `chmod`, `chflags`, `xattr` |
+| 기타 | 중첩 `claude` 실행, `dangerouslyDisableSandbox`, 서브에이전트의 `git push` |
+
+`SubagentStop`의 주의점 (R-10 Q10):
+
+- 내장 연속 차단 상한은 8이다. 이 횟수는 서브에이전트가 도구를 부를 때마다 0으로 돌아가서, 고치려고 계속 도구를 부르면 끝없이 돌 수 있다. 그래서 3회는 훅이 직접 센다. `stop_hook_active`는 "이미 한 번 막혔다"만 알려 준다.
+- 훅이 타임아웃되거나 실패하면 차단되지 않는다. `onFailure`도 `Stop`·`SubagentStop`에는 효과가 없다. 즉 "검사하지 못한 채 종료"가 가능하다. 그래서 메인 쪽 `PostToolUse(Agent)`가 상태 파일을 읽어 `unchecked`를 알린다. 상태 파일이 없으면 `unchecked`다.
+- `continue: false`는 쓰지 않는다. 메인까지 멈추는지 문서에 없다.
+
+메인 에이전트의 종료(`Stop`)에는 검사를 걸지 않는다. 메인은 코드를 쓰지 않고, 막힌 작업을 사용자에게 보고할 수 있어야 한다.
+
+
 ### 7.4 역할과 위임
 
 | 역할 | 실행 | 강제 |
 |---|---|---|
 | 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸 가드 |
-| 구현·수정·조사·비판 | T3의 새 Codex gpt-6.1-sol, 별도 작업 사본 | Claude 위임 가드가 모델·작업 사본·브리프를 확인 |
+| 구현·수정·조사·비판 | T3의 Codex gpt-6.1-sol, 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 모델·작업 사본·브리프를 확인 |
 | 적대적 리뷰 | 새 Claude Opus 5.5 adversarial-reviewer | 기존 리뷰어 편집 거부·격리·오염 감지 |
 
-Codex 내부 서브에이전트와 재개 도구는 거부한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. Claude의 옛 implementer·review-critic 호출은 새 진입 가드가 거부한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+Codex 내부 서브에이전트 도구는 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. Claude의 옛 implementer·review-critic 호출은 새 진입 가드가 거부한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+
+#### Claude 적대적 리뷰어 통제
+
+| 문제 | 사실 (R-10 Q3, 실측) | 막는 방법 |
+|---|---|---|
+| 모델 고정 | 정의 파일의 `model`은 고정이 아니다. 호출할 때 넘기는 `model` 인자가 정의보다 우선한다 | 정의는 `model: claude-opus-5-5`. `PreToolUse(Agent)`가 `model` 인자를 거부한다. `PostToolUse(Agent)`가 `resolvedModel`을 기록하고, 메인은 리뷰 기록에 남긴다 |
+| 포크 | 포크 모드가 기본으로 켜져 있고, 포크는 메인의 대화 전체를 물려받는다 | `CLAUDE_CODE_FORK_SUBAGENT=0`, 권한 거부 `Agent(fork)`, `PreToolUse(Agent)`의 포크 거부 |
+| 재개 | `SendMessage`로 끝난 서브에이전트를 깨우면 이전 대화를 그대로 이어 간다 | 권한 거부 `SendMessage`. Claude 리뷰어 재개를 막는다. Codex 수정은 별도 T3 스레드 가드가 맡는다 |
+| 중첩 | 서브에이전트가 서브에이전트를 띄울 수 있다 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, `PreToolUse(Agent)`가 서브에이전트 안의 호출을 거부 |
+| 백그라운드 | 백그라운드 서브에이전트는 `PostToolUse(Agent)`가 시작 시점에 불려 결과를 받지 못한다 | `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, `run_in_background` 인자 거부 |
+| 허용되지 않은 종류 | `general-purpose`, `Explore` 등 내장 종류로 일을 시킬 수 있다 | `PreToolUse(Agent)`의 종류 허용 목록 |
+| 권한 우회 모드 | - | `permissions.disableBypassPermissionsMode: "disable"` |
+| 정의 파일 오류 | 모르는 필드는 오류 없이 무시된다 | 정의 파일 변경 시 `claude --debug`로 무시된 필드가 없는지 확인 |
+
+- 메인이 `acceptEdits`, `auto`, `bypassPermissions` 모드이면 서브에이전트의 `permissionMode`는 무시된다. 리뷰어는 편집 도구가 없고 편집 훅이 막으므로 영향이 작다.
+- 사용자 전역 플러그인과 훅이 섞이지 않게 개발 세션은 `claude --setting-sources project,local`로 시작한다. `-p`에서는 구독 로그인과 함께 동작했고, 대화형에서는 미확인이다.
+- 프로젝트 설정의 훅은 대화형에서 작업 공간 신뢰를 받아들인 뒤에만 돈다. 신뢰를 거부하면 하네스 훅이 없다. 거부 규칙과 샌드박스는 그대로 적용된다.
+
 
 ### 7.5 리뷰어 격리
 
 Claude 적대적 리뷰어는 기존 `isolation: worktree`와 시작·종료 스냅숏을 쓴다. Codex 비판자는 T3의 별도 작업 사본에서 읽기 전용으로 일한다. T3가 준 권한과 훅 적용을 메인이 확인한다. 위임 역할 이름만으로 읽기 전용을 보장하지 않는다. 원본과 대상 작업 사본의 HEAD·상태를 리뷰 전후 비교한다.
+
+#### Claude 리뷰어의 원본 오염 방지
+
+Claude 적대적 리뷰어는 `isolation: worktree`(정의 파일)로 임시 작업 사본에서 돈다. 첫 단계에서 `git checkout --detach <대상 SHA>`를 한다. 기본 기준(`worktree.baseRef: "fresh"`)은 원격 기본 브랜치라서 그대로는 구현 브랜치를 보지 못한다.
+
+허점: 격리된 리뷰어도 셸로 **원본 작업 사본에 쓸 수 있다** (실측: 절대 경로 python 쓰기 성공). 작업 사본이 원본 안(`.claude/worktrees/`)에 있고 샌드박스 쓰기 영역이 원본이기 때문이다.
+
+보완 (open-issues I-12):
+
+| 보완 | 내용 |
+|---|---|
+| 원본 상태 비교 훅 | `SubagentStart`가 원본의 HEAD와 상태를 저장하고, `SubagentStop`이 다시 비교해 다르면 되돌리게 하고 종료를 막는다 (실측으로 동작함) |
+| 메인의 재확인 | 리뷰어가 되돌리지 않고 내장 상한 8에 걸리면 오염이 남는다. 이때 사용자에게 경고가 보인다. 메인은 리뷰 단계가 끝날 때마다 `git status`와 HEAD를 확인하고, 다르면 다음 단계로 가지 않는다 |
+| `.gitignore` | `.claude/worktrees/`를 넣어 상태 비교에 잡음이 없게 한다 |
+| 좁은 거부 규칙 | `.claude/` 거부 규칙은 하위 경로로 좁게 쓴다 (7.1) |
+
+더 강한 대안(저장소 밖 작업 사본에서 `claude -p --agent`로 따로 띄우기)은 메인이 서브에이전트를 부르는 구조를 바꾸므로 지금은 쓰지 않는다. 감지 훅으로 오염이 실제로 남는 일이 생기면 다시 검토한다.
+
 
 ### 7.6 사람 승인의 위조 방지
 
@@ -698,7 +757,7 @@ Claude 적대적 리뷰어는 기존 `isolation: worktree`와 시작·종료 스
 
 | 검사 | 방법 | 어디서 |
 |---|---|---|
-| 기존 테스트 함수의 삭제·변경 | `xtask test-diff`가 기준 커밋 대비 기존 테스트 함수(Rust `#[test]`, TS 테스트 블록)의 삭제와 본문 변경을 뽑는다. 하나라도 있으면 실패한다. 새 테스트 추가는 허용한다 | `SubagentStop`(implementer), CI |
+| 기존 테스트 함수의 삭제·변경 | `xtask test-diff`가 기준 커밋 대비 기존 테스트 함수(Rust `#[test]`, TS 테스트 블록)의 삭제와 본문 변경을 뽑는다. 하나라도 있으면 실패한다. 새 테스트 추가는 허용한다 | Codex Stop, 커밋 훅, CI |
 | 테스트 수 감소 | `cargo nextest list`와 `vitest list`의 개수를 기준 커밋과 비교 | 같음 |
 | 승인된 변경 | 기존 테스트를 바꾸는 커밋은 사용자 서명 커밋만 CI를 통과한다 (7.6과 같은 검증) | CI |
 | 구현을 베낀 테스트 | 변이 테스트로 드러난다(베낀 테스트는 변이를 죽이지 못한다). 테스트 입력 리터럴을 구현에서 다시 쓰는지 찾는 xtask 검사는 효과가 확인되지 않아 두지 않는다 | `just check-full`, 리뷰 |
@@ -769,3 +828,7 @@ ID는 [open-issues.md](open-issues.md) 4.3의 것이다. 하네스 쪽은 해당
 | `eslint-plugin-boundaries` 폐기 예정 경고를 `--max-warnings 0`이 잡는지 | S-19 | H-09 |
 
 S-21(비공개 저장소의 규칙 세트)은 닫았다. 결론: 쓸 수 없다고 보고 기대지 않는다(7.6).
+
+Codex Seatbelt 셸의 `CODEX_SANDBOX=seatbelt`는 기존 `SANDBOX_RUNTIME=1` 계약으로 전달한다. macOS에서 중첩 샌드박스가 거부되는 경우에도 바깥 권한 프로필 안에서 커밋 검사를 이어 간다. 샌드박스 밖의 일반 검사는 기존대로 자체 샌드박스를 실행한다.
+
+Codex 프로필의 읽기 전용 대상은 기존 `protectedDenies` 계산과 추적된 ADR 목록을 재사용한다. 훅 파일뿐 아니라 ESLint·TS·테스트·도구 설정과 메인 전용 진행 문서도 포함한다. 사용자 승인 하네스 프로필에서만 해당 경로 쓰기를 연다.

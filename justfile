@@ -39,6 +39,7 @@ unexport GIT_DIFF_OPTS
 unexport GIT_ATTR_SOURCE
 unexport NODE_OPTIONS
 unexport NODE_PATH
+export SANDBOX_RUNTIME := if env("CODEX_SANDBOX", "") == "seatbelt" { "1" } else { env("SANDBOX_RUNTIME", "") }
 export RUSTFLAGS := "-D warnings"
 export RUSTC_WRAPPER := ""
 export RUSTC_WORKSPACE_WRAPPER := ""
@@ -207,3 +208,6 @@ linux-test:
 
 codex-regression:
     node harness/codex-regression/run.mjs
+
+codex-setup *flags:
+    node harness/codex-hooks/config.mjs --setup "$@"

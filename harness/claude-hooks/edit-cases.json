@@ -1490,5 +1490,30 @@
     "role": "implementer",
     "decision": "deny",
     "rules": ["protected-home"]
+  },
+  {
+    "path": "{worktree}/docs/agents/implementer.md",
+    "role": "implementer",
+    "lock": "on",
+    "decision": "deny",
+    "rules": ["protected-path"]
+  },
+  {
+    "path": "{worktree}/docs/AGENTS.md",
+    "role": "implementer",
+    "decision": "deny",
+    "rules": ["misplaced-config"]
+  },
+  {
+    "path": "{worktree}/AGENTS.override.md",
+    "role": "implementer",
+    "decision": "deny",
+    "rules": ["misplaced-config"]
+  },
+  {
+    "path": "{worktree}/AGENTS.md",
+    "role": "implementer",
+    "decision": "warn",
+    "rules": ["protected-path"]
   }
 ]

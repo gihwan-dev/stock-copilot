@@ -1,28 +1,34 @@
+import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+import { stateDirectory, writeRecord } from "../../.claude/hooks/lib/state.mjs";
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { codexPreTool, patchPaths } from "./adapter.mjs";
+import { join, resolve } from "node:path";
+import { sessionProject } from "./session.mjs";
+import {
+  codexPreTool,
+  patchPaths,
+  shellPatches,
+  toolCommand,
+  refusal,
+} from "./adapter.mjs";
 import {
   checkPlaces,
   runHarnessCheck,
   runInSandbox,
 } from "../../.claude/hooks/lib/check-sandbox.mjs";
-import { loadProject, git } from "../../.claude/hooks/lib/project.mjs";
+import { git } from "../../.claude/hooks/lib/project.mjs";
 import { lintFeedback } from "../../.claude/hooks/lib/post-edit.mjs";
 
-const mainHook = () => {
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-  const main = git(root, [
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-common-dir",
-  ])?.trim();
-  const project = loadProject(root);
-  project.root = main === undefined ? root : dirname(main);
-  const input = JSON.parse(readFileSync(0, "utf8"));
+export const dispatchEvent = (
+  input,
+  session,
+  runners = { check: runHarnessCheck, lint: runInSandbox },
+  record = writeRecord,
+) => {
+  const { project, common: main, root, cwd } = session;
   const places = checkPlaces({
-    worktree: input.cwd,
+    worktree: root,
     common: main,
     projectRoot: project.root,
     state: join(homedir(), ".local/state/stock-copilot-harness"),
@@ -30,7 +36,7 @@ const mainHook = () => {
       project.lock === "on"
         ? JSON.parse(
             readFileSync(
-              join(root, "harness/sandbox/lock-fragment.json"),
+              join(project.root, "harness/sandbox/lock-fragment.json"),
               "utf8",
             ),
           ).sandbox.filesystem.denyWrite
@@ -40,19 +46,42 @@ const mainHook = () => {
     `(subpath ${JSON.stringify(join(homedir(), ".codex"))})`,
   );
   let output;
-  if (input.hook_event_name === "PreToolUse")
-    output = codexPreTool(input, project);
+  if (input.hook_event_name === "PreToolUse") {
+    output = codexPreTool(input, project, cwd);
+    if (typeof input.tool_use_id === "string")
+      record(
+        stateDirectory(),
+        "codexaudit",
+        createHash("sha256").update(input.tool_use_id).digest("hex"),
+        {
+          event: "PreToolUse",
+          tool: input.tool_name,
+          inputDigest: createHash("sha256")
+            .update(JSON.stringify(input.tool_input))
+            .digest("hex"),
+          decision: output?.hookSpecificOutput?.permissionDecision ?? "allow",
+        },
+      );
+  }
   if (
     input.hook_event_name === "PostToolUse" &&
-    input.tool_name === "apply_patch"
+    ["apply_patch", "Bash", "exec_command", "shell_command", "shell"].includes(
+      input.tool_name,
+    )
   ) {
-    const failed = patchPaths(input.tool_input.command)
+    const patches =
+      input.tool_name === "apply_patch"
+        ? [input.tool_input.command]
+        : shellPatches(toolCommand(input));
+    const directory =
+      input.tool_name === "apply_patch" ? cwd : (input.cwd ?? cwd);
+    const failed = [...new Set(patches.flatMap(patchPaths))]
       .map((path) =>
         lintFeedback(
-          { tool_input: { file_path: resolve(input.cwd, path) } },
+          { tool_input: { file_path: resolve(directory, path) } },
           project,
           (worktree, path) =>
-            runInSandbox(places, worktree, ["just", "lint-file", path]),
+            runners.lint(places, worktree, ["just", "lint-file", path]),
         ),
       )
       .filter((value) => value !== undefined);
@@ -62,19 +91,32 @@ const mainHook = () => {
         reason: failed.map((value) => value.reason).join("\n"),
       };
   }
-  if (input.hook_event_name === "Stop" && input.cwd !== project.root) {
-    const base = git(input.cwd, [
-      "merge-base",
-      "refs/heads/master",
-      "HEAD",
-    ])?.trim();
+  if (input.hook_event_name === "Stop" && root !== project.root) {
+    const base = git(root, ["merge-base", "refs/heads/master", "HEAD"])?.trim();
     if (base === undefined)
       output = {
         decision: "block",
         reason: "기준 커밋을 풀 수 없다. 막힘으로 보고하라",
       };
     else {
-      const check = runHarnessCheck(places, input.cwd, base);
+      const check = runners.check(places, root, base);
+      if (typeof input.session_id === "string") {
+        const head = git(root, ["rev-parse", "HEAD"])?.trim();
+        const clean =
+          git(root, ["status", "--porcelain=v1", "-uall"])?.trim() === "";
+        const id =
+          "codex-" +
+          createHash("sha256").update(input.session_id).digest("hex");
+        record(stateDirectory(), "implementer", id, {
+          agentId: id,
+          kind: "implementer",
+          worktree: root,
+          base,
+          head,
+          status: check.status === 0 && clean ? "passed" : "failing",
+        });
+      }
+
       if (check.status !== 0) {
         const blocked =
           input.stop_hook_active === true &&
@@ -91,13 +133,17 @@ const mainHook = () => {
       }
     }
   }
-  if (output !== undefined) process.stdout.write(`${JSON.stringify(output)}\n`);
+  return output;
 };
-try {
-  mainHook();
-} catch (error) {
-  process.stdout.write(
-    `${JSON.stringify({ decision: "block", reason: `Codex 하네스 오류: ${error.message}` })}\n`,
-  );
-  process.exitCode = 2;
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    const input = JSON.parse(readFileSync(0, "utf8"));
+    const output = dispatchEvent(input, sessionProject());
+    if (output !== undefined)
+      process.stdout.write(JSON.stringify(output) + "\n");
+  } catch (error) {
+    const reason = "Codex 하네스 오류: " + error.message;
+    process.stderr.write(reason + "\n");
+    process.stdout.write(JSON.stringify(refusal(reason)) + "\n");
+  }
 }

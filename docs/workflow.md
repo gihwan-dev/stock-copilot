@@ -21,7 +21,7 @@
 3. 적대적 리뷰  adversarial-reviewer가 지적 목록을 만든다
 4. 비판        review-critic이 지적마다 확정·기각·불확실을 판정한다
 5. 평가        메인이 지적별로 수정·보류·기각을 결정한다
-6. 수정        새 implementer가 수정한다. 차단·중요 등급을 고쳤으면 3으로 돌아간다
+6. 수정        같은 Codex 스레드에서 수정할 수 있다. 차단·중요 등급을 고쳤으면 3으로 돌아간다
 7. 완료        메인이 리뷰 기록과 tasks.md를 갱신하고 푸시한 뒤 사용자에게 보고한다
 ```
 
@@ -140,7 +140,7 @@
 
 ### 2.6 수정과 재검토
 
-- 수정은 새 `implementer`가 한다. 앞의 구현자를 재개하지 않고 T3가 새 Codex 회차를 시작한다.
+- 수정은 같은 T3 Codex 스레드에 새 브리프를 보내 이어 갈 수 있다. 적대적 리뷰어는 매번 새 Claude 서브에이전트다.
 - 수정 브리프에는 원래 브리프, 새 기준 커밋(앞 단계의 대상 SHA), 평가 결과, 고칠 지적을 넣는다.
 - 차단이나 중요 등급을 고쳤으면 3단계부터 다시 한다. 리뷰어와 비판자도 새로 띄운다.
 - 사소 등급만 고쳤으면 메인이 차이와 하네스 기록을 확인하고 끝낸다.
@@ -199,3 +199,14 @@
 - 기존 테스트를 바꿔야 하는 변경은 커밋 훅이 막는다. 사용자 서명 커밋으로만 들어간다.
 - Claude Code를 업그레이드한 뒤에는 `just claude-regression`을 돌린다. "미확정"이 있으면 다시 돌리고, 실패면 결과 폴더(`target/claude-regression/`)와 `claude --version`을 기록한 뒤 하네스 작업으로 넘긴다.
 - Codex를 올린 뒤 `just codex-regression`을 수동으로 돌린다. 구독 사용량을 쓰므로 `just check`에는 넣지 않는다. 알려진 빈틈은 `just known-gaps`로 본다.
+
+## H-41 수정 1차 운영 규칙
+
+- Claude SendMessage는 계속 금지한다. Codex 수정 회차는 T3의 소유 스레드 가드로 통제한다.
+- 메인은 이 프로젝트의 T3 문맥에서 t3_thread_launch로 Codex gpt-6.1-sol을 시작한다. modelSelection은 provider=codex, model=gpt-6.1-sol, options는 생략 또는 effort=high다. workspaceStrategy는 type=worktree, branch=브리프 브랜치, baseRef=브리프 SHA, startFromOrigin=false다.
+- projectId·environmentId·scratch·다른 제공자·권한 확대는 넘기지 않는다. 현재 프로젝트와 환경을 상속한다. runtimeMode는 생략 또는 approval-required다.
+- 실행 결과의 threadId를 메인 세션 소유 기록에 저장한다. 그 기록과 등록된 worktree가 있는 스레드만 t3_thread_read·t3_thread_wait·t3_thread_send로 접근한다. 허용 인자 밖은 거부한다.
+- 수정은 같은 스레드의 t3_thread_send(mode=auto 또는 queue)로 계속할 수 있다. 수정 브리프는 기준 SHA와 기존 브랜치를 포함한다. SHA는 master 끝의 자손이며 해당 작업 사본 HEAD의 조상이어야 한다. 메인이 앞 구현의 전체 검사와 리뷰 판정을 확인한다. Claude의 passedTargets가 없어도 같은 스레드 수정은 가능하다.
+- 적대적 리뷰어는 매번 새 Claude Opus 5.5다. 구현자 보고를 넘기지 않고 격리·오염 감지를 그대로 적용한다.
+- 새 가드 적용 전에 시작된 스레드는 소유 기록이 없다. 자동으로 외부 스레드를 채택하지 않는다. 메인은 새 가드로 시작한 스레드부터 이 절차를 적용한다.
+- 구현 담당은 docs/progress.md를 편집하지 않는다. 진행 상태는 보고서에 쓰고 메인이 한 줄 메모나 완료 행을 반영한다.

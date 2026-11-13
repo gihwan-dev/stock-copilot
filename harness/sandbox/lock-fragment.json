@@ -36,6 +36,7 @@
         "./crates/xtask",
         "./deny.toml",
         "./design",
+        "./docs/agents",
         "./docs/harness.md",
         "./docs/open-issues.md",
         "./docs/workflow.md",

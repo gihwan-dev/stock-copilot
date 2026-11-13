@@ -19,8 +19,6 @@
       "RemoteTrigger",
       "CronCreate",
       "mcp__t3-code__create_threads",
-      "mcp__t3-code__t3_thread_launch",
-      "mcp__t3-code__t3_thread_send",
       "mcp__t3-code__schedule_task",
       "mcp__t3-code__run_scheduled_task_now"
     ]
@@ -50,7 +48,7 @@
         ]
       },
       {
-        "matcher": "Agent|SendMessage|mcp__t3[-_]code__delegate_task",
+        "matcher": "Agent|SendMessage|mcp__t3[-_]code__(delegate_task|t3_thread_launch|t3_thread_send|t3_thread_read|t3_thread_wait)",
         "hooks": [
           {
             "type": "command",
@@ -81,6 +79,17 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/agent-result.mjs\"",
             "onFailure": "block",
             "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__t3[-_]code__(delegate_task|t3_thread_launch)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-orchestration.mjs\"",
+            "onFailure": "block",
+            "timeout": 10
           }
         ]
       }

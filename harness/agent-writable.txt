@@ -28,3 +28,4 @@ pnpm-lock.yaml
 !docs/harness.md
 !docs/workflow.md
 !docs/open-issues.md
+!docs/agents/**
