@@ -1014,4 +1014,28 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn reported_zero_valuation_is_valid_for_zero_quantity() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let report = ReportedHolding::new(
+                money("0", currency),
+                money("0", currency),
+                Ratio::parse(&input("0")).expect("비율"),
+            )
+            .expect("토스 평가 0");
+            let original = holding("A", currency, "0", "0", None);
+            let item = Holding::new(
+                original.instrument().clone(),
+                original.quantity(),
+                original.acquisition_price(),
+                HoldingObservation::new(None, Some(report), time()),
+            )
+            .expect("0주");
+            assert_eq!(item.evaluate().selected(), Ok(money("0", currency)));
+            assert_eq!(
+                item.evaluate().computed().expect("평가").return_rate(),
+                Ok(HoldingReturn::ZeroCost)
+            );
+        }
+    }
 }
