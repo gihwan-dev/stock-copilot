@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then if result=$(node \"${common%/*}/harness/codex-hooks/dispatch.mjs\" '\\''PreToolUse'\\''); then [ -z \"$result\" ] || printf '\\''%s\\n'\\'' \"$result\"; exit 0; fi; fi; printf '\\''%s\\n'\\'' '\\''{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Codex 하네스 시작 실패: Git 또는 Node를 확인하라\"}}'\\''; printf '\\''%s\\n'\\'' '\\''Codex 하네스 시작 실패: Git 또는 Node를 확인하라'\\'' >&2; exit 0'",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then if result=$(node \"${common%/*}/harness/codex-hooks/dispatch.mjs\" '\\''PostToolUse'\\''); then [ -z \"$result\" ] || printf '\\''%s\\n'\\'' \"$result\"; exit 0; fi; fi; printf '\\''%s\\n'\\'' '\\''{\"decision\":\"block\",\"reason\":\"Codex 하네스 시작 실패: Git 또는 Node를 확인하라\"}'\\''; printf '\\''%s\\n'\\'' '\\''Codex 하네스 시작 실패: Git 또는 Node를 확인하라'\\'' >&2; exit 0'",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then if result=$(node \"${common%/*}/harness/codex-hooks/dispatch.mjs\" '\\''Stop'\\''); then [ -z \"$result\" ] || printf '\\''%s\\n'\\'' \"$result\"; exit 0; fi; fi; printf '\\''%s\\n'\\'' '\\''{\"decision\":\"block\",\"reason\":\"Codex 하네스 시작 실패: Git 또는 Node를 확인하라\"}'\\''; printf '\\''%s\\n'\\'' '\\''Codex 하네스 시작 실패: Git 또는 Node를 확인하라'\\'' >&2; exit 0'",
+            "timeout": 3600
+          }
+        ]
+      }
+    ]
+  }
+}

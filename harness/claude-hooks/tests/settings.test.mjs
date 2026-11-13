@@ -32,10 +32,7 @@ const EXPECTED_SETTINGS = {
       "Workflow",
       "RemoteTrigger",
       "CronCreate",
-      "mcp__t3-code__delegate_task",
       "mcp__t3-code__create_threads",
-      "mcp__t3-code__t3_thread_launch",
-      "mcp__t3-code__t3_thread_send",
       "mcp__t3-code__schedule_task",
       "mcp__t3-code__run_scheduled_task_now",
     ],
@@ -51,8 +48,10 @@ const EXPECTED_SETTINGS = {
         hooks: [hook("guard-bash.mjs", { onFailure: "block", timeout: 10 })],
       },
       {
-        matcher: "Agent|SendMessage",
-        hooks: [hook("guard-agent.mjs", { onFailure: "block", timeout: 10 })],
+        matcher: "Agent|SendMessage|mcp__t3[-_]code__.*",
+        hooks: [
+          hook("guard-orchestration.mjs", { onFailure: "block", timeout: 10 }),
+        ],
       },
     ],
     PostToolUse: [
@@ -63,6 +62,12 @@ const EXPECTED_SETTINGS = {
       {
         matcher: "Agent",
         hooks: [hook("agent-result.mjs", { onFailure: "block", timeout: 30 })],
+      },
+      {
+        matcher: "mcp__t3[-_]code__(delegate_task|t3_thread_launch)",
+        hooks: [
+          hook("guard-orchestration.mjs", { onFailure: "block", timeout: 10 }),
+        ],
       },
     ],
     SubagentStart: [
@@ -96,16 +101,17 @@ test(".claude/settings.json is exactly the harness settings", () => {
   assert.deepEqual(readJson(".claude/settings.json"), EXPECTED_SETTINGS);
 });
 
-test("the settings carry exactly the nine documented harness hooks", () => {
+test("the settings carry exactly the ten documented harness hooks", () => {
   const groups = Object.entries(EXPECTED_SETTINGS.hooks).flatMap(
     ([event, list]) => list.map((group) => `${event}(${group.matcher})`),
   );
   assert.deepEqual(groups, [
     "PreToolUse(Edit|Write|NotebookEdit)",
     "PreToolUse(Bash)",
-    "PreToolUse(Agent|SendMessage)",
+    "PreToolUse(Agent|SendMessage|mcp__t3[-_]code__.*)",
     "PostToolUse(Edit|Write)",
     "PostToolUse(Agent)",
+    "PostToolUse(mcp__t3[-_]code__(delegate_task|t3_thread_launch))",
     "SubagentStart(implementer|adversarial-reviewer|review-critic)",
     "SubagentStop(implementer)",
     "SubagentStop(adversarial-reviewer|review-critic)",

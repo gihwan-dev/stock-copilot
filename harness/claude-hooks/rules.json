@@ -23,7 +23,8 @@
       "~/.rustup/**",
       "~/.npmrc",
       "~/.config/pnpm/**",
-      "~/.local/state/stock-copilot-harness/**"
+      "~/.local/state/stock-copilot-harness/**",
+      "~/.codex/**"
     ],
     "configFiles": {
       "names": [
@@ -60,7 +61,11 @@
         "action.yaml",
         "dependabot.yml",
         "dependabot.yaml",
-        "CODEOWNERS"
+        "CODEOWNERS",
+        "*.codex/config.toml",
+        "*.codex/hooks.json",
+        "AGENTS.md",
+        "AGENTS.override.md"
       ],
       "allowed": [
         ".gitignore",
@@ -82,7 +87,10 @@
         "apps/desktop/src-tauri/Cargo.toml",
         "apps/desktop/e2e-app/Cargo.toml",
         "crates/*/Cargo.toml",
-        "crates/adapters/*/Cargo.toml"
+        "crates/adapters/*/Cargo.toml",
+        ".codex/config.toml",
+        ".codex/hooks.json",
+        "AGENTS.md"
       ],
       "exempt": ["harness/**"]
     }
@@ -158,14 +166,15 @@
       "filter-branch",
       "filter-repo",
       "rebase",
-      "commit-tree"
+      "commit-tree",
+      "apply",
+      "am"
     ],
     "subagentDenied": [
       "push",
       "cherry-pick",
       "revert",
       "pull",
-      "am",
       "symbolic-ref",
       "send-pack"
     ],
@@ -378,7 +387,7 @@
     "denied": ["install", "uninstall", "add"]
   },
   "commands": {
-    "denied": ["chflags", "xattr", "claude", "link"],
+    "denied": ["chflags", "xattr", "claude", "link", "codex", "patch", "xargs"],
     "subagentDenied": ["gh", "hub", "ed", "ex"],
     "chmod": ["chmod"]
   },
@@ -553,5 +562,18 @@
     "-C",
     "--conditions",
     "--env-file"
-  ]
+  ],
+  "find": {
+    "deniedActions": [
+      "-fprint",
+      "-fprint0",
+      "-fprintf",
+      "-fls",
+      "-delete",
+      "-exec",
+      "-execdir",
+      "-ok",
+      "-okdir"
+    ]
+  }
 }

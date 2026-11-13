@@ -1,0 +1,378 @@
+[
+  {
+    "kind": "allowWrite",
+    "path": "../stock-copilot-wt",
+    "target": ":workspace_roots",
+    "mode": "write",
+    "scope": "narrower",
+    "reason": "현재 세션 작업 사본만 쓰고 등록된 다른 작업 사본은 읽기 전용이다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "~/.cargo/registry",
+    "target": "~/.cargo/registry",
+    "mode": "write",
+    "scope": "filesystem",
+    "reason": "홈 축약 경로 쓰기를 그대로 적용한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "~/.cargo/advisory-dbs/db.lock",
+    "target": "~/.cargo/advisory-dbs/db.lock",
+    "mode": "write",
+    "scope": "filesystem",
+    "reason": "홈 축약 경로 쓰기를 그대로 적용한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "~/Library/pnpm/store",
+    "target": "~/Library/pnpm/store",
+    "mode": "write",
+    "scope": "filesystem",
+    "reason": "홈 축약 경로 쓰기를 그대로 적용한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "~/Library/pnpm/_tmp_*",
+    "target": "pnpm_config_store_dir",
+    "mode": "read",
+    "scope": "narrower",
+    "reason": "부모 폴더의 임시 쓰기는 열지 않고 고정한 저장소 안에서 설치한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "~/Library/pnpm/_tmp_*/*",
+    "target": "pnpm_config_store_dir",
+    "mode": "read",
+    "scope": "narrower",
+    "reason": "부모 폴더의 임시 쓰기는 열지 않고 고정한 저장소 안에서 설치한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "/private/tmp/pnpm-store-operation-locks-501",
+    "target": ":slash_tmp",
+    "mode": "write",
+    "scope": "inherited",
+    "reason": "Codex 기본 임시 폴더 쓰기가 이 경로를 포함한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "/private/tmp/pnpm-dir-locks-501",
+    "target": ":slash_tmp",
+    "mode": "write",
+    "scope": "inherited",
+    "reason": "Codex 기본 임시 폴더 쓰기가 이 경로를 포함한다"
+  },
+  {
+    "kind": "allowWrite",
+    "path": "/private/tmp/pnpm-modules-swaps-501",
+    "target": ":slash_tmp",
+    "mode": "write",
+    "scope": "inherited",
+    "reason": "Codex 기본 임시 폴더 쓰기가 이 경로를 포함한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "./.cargo/config",
+    "target": ".cargo/config",
+    "mode": "read",
+    "scope": "workspace",
+    "reason": "세션 작업 사본의 상대 경로를 읽기 전용으로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "./.cargo/config.toml",
+    "target": ".cargo/config.toml",
+    "mode": "read",
+    "scope": "workspace",
+    "reason": "세션 작업 사본의 상대 경로를 읽기 전용으로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "../stock-copilot-wt/.cargo",
+    "target": "registered-other-worktrees",
+    "mode": "read",
+    "scope": "narrower",
+    "reason": "다른 작업 사본 전체를 읽기 전용으로 출력한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "../stock-copilot-wt/*/.cargo/config",
+    "target": "registered-other-worktrees",
+    "mode": "read",
+    "scope": "narrower",
+    "reason": "다른 작업 사본 전체를 읽기 전용으로 출력한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "../stock-copilot-wt/*/.cargo/config.toml",
+    "target": "registered-other-worktrees",
+    "mode": "read",
+    "scope": "narrower",
+    "reason": "다른 작업 사본 전체를 읽기 전용으로 출력한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "./.git/info",
+    "target": ".git/info",
+    "mode": "read",
+    "scope": "workspace",
+    "reason": "세션 작업 사본의 상대 경로를 읽기 전용으로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.cargo/registry/src",
+    "target": "~/.cargo/registry/src",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.gitconfig",
+    "target": "~/.gitconfig",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.config/git",
+    "target": "~/.config/git",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.claude",
+    "target": "~/.claude",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.rustup/settings.toml",
+    "target": "~/.rustup/settings.toml",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.cargo/config",
+    "target": "~/.cargo/config",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.cargo/config.toml",
+    "target": "~/.cargo/config.toml",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "~/.local/state/stock-copilot-harness",
+    "target": "~/.local/state/stock-copilot-harness",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "./harness/claude-hooks/hashes.json",
+    "target": "harness/claude-hooks/hashes.json",
+    "mode": "read",
+    "scope": "workspace",
+    "reason": "세션 작업 사본의 상대 경로를 읽기 전용으로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "./harness/claude-hooks/lock.txt",
+    "target": "harness/claude-hooks/lock.txt",
+    "mode": "read",
+    "scope": "workspace",
+    "reason": "세션 작업 사본의 상대 경로를 읽기 전용으로 적용한다"
+  },
+  {
+    "kind": "denyWrite",
+    "path": "./harness/sandbox/lock-fragment.json",
+    "target": "harness/sandbox/lock-fragment.json",
+    "mode": "read",
+    "scope": "workspace",
+    "reason": "세션 작업 사본의 상대 경로를 읽기 전용으로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.ssh",
+    "target": "~/.ssh",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.aws",
+    "target": "~/.aws",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.gnupg",
+    "target": "~/.gnupg",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.config/gh",
+    "target": "~/.config/gh",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.netrc",
+    "target": "~/.netrc",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.npmrc",
+    "target": "~/.npmrc",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.docker",
+    "target": "~/.docker",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.kube",
+    "target": "~/.kube",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Keychains",
+    "target": "~/Library/Keychains",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Cookies",
+    "target": "~/Library/Cookies",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Application Support/Google/Chrome",
+    "target": "~/Library/Application Support/Google/Chrome",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Application Support/BraveSoftware",
+    "target": "~/Library/Application Support/BraveSoftware",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Application Support/Microsoft Edge",
+    "target": "~/Library/Application Support/Microsoft Edge",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Application Support/Firefox",
+    "target": "~/Library/Application Support/Firefox",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Application Support/Arc",
+    "target": "~/Library/Application Support/Arc",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/Library/Safari",
+    "target": "~/Library/Safari",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.claude",
+    "target": "~/.claude",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.claude-*/projects",
+    "target": "~/.claude-*/projects",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "denyRead",
+    "path": "~/.local/state/stock-copilot-harness",
+    "target": "~/.local/state/stock-copilot-harness",
+    "mode": "deny",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "allowRead",
+    "path": "~/.claude/shell-snapshots",
+    "target": "~/.claude/shell-snapshots",
+    "mode": "read",
+    "scope": "filesystem",
+    "reason": "홈 경로와 읽기 차단 glob을 그대로 적용한다"
+  },
+  {
+    "kind": "allowUnixSockets",
+    "path": "/private/tmp/claude-501",
+    "target": "setup:temporary",
+    "mode": "deny",
+    "scope": "narrower",
+    "reason": "Claude 전용 소켓은 열지 않는다. Codex 검사의 임시 소켓 범위는 사용자 설정 출력에서 별도로 지정한다"
+  }
+]

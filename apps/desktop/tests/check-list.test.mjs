@@ -329,8 +329,16 @@ test("just check installs the frozen lockfile without lifecycle scripts before a
   const firstNode = commands.findIndex(
     (command) =>
       /^(node|pnpm|apps\/desktop\/node_modules)/u.test(command) &&
-      command !== "pnpm install --frozen-lockfile --ignore-scripts",
+      command !== "pnpm install --frozen-lockfile --ignore-scripts" &&
+      command !== "node harness/toolchain/pnpm.mjs",
   );
+  const pin = commands.indexOf("node harness/toolchain/pnpm.mjs");
+  assert.equal(
+    commands.filter((command) => command === "node harness/toolchain/pnpm.mjs")
+      .length,
+    1,
+  );
+  assert.ok(pin >= 0 && pin < install);
   assert.ok(install >= 0 && install < firstNode);
 });
 

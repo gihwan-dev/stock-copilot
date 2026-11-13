@@ -505,20 +505,20 @@
   },
   {
     "command": "git apply fix.patch",
-    "decision": "allow",
-    "rules": [],
+    "decision": "deny",
+    "rules": ["git-subcommands"],
     "role": "main"
   },
   {
     "command": "git apply fix.patch",
-    "decision": "allow",
-    "rules": [],
+    "decision": "deny",
+    "rules": ["git-subcommands"],
     "role": "implementer"
   },
   {
     "command": "git apply fix.patch",
-    "decision": "allow",
-    "rules": [],
+    "decision": "deny",
+    "rules": ["git-subcommands"],
     "role": "adversarial-reviewer"
   },
   {
@@ -727,7 +727,7 @@
   {
     "command": "find . -name '*.rs' -exec rm {} +",
     "decision": "deny",
-    "rules": ["dynamic-target"]
+    "rules": ["dynamic-target", "find-actions"]
   },
   {
     "command": "python3 -c 'print(1)'",
@@ -741,8 +741,8 @@
   },
   {
     "command": "git apply --index fix.patch",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-subcommands"]
   },
   {
     "command": "gh pr list",
@@ -971,7 +971,7 @@
   {
     "command": "git am --no-verify",
     "decision": "deny",
-    "rules": ["git-no-verify"]
+    "rules": ["git-no-verify", "git-subcommands"]
   },
   {
     "command": "git pull --no-verify",
@@ -1203,25 +1203,25 @@
   {
     "command": "git apply --index fix.patch",
     "decision": "deny",
-    "rules": ["git-index-only"],
+    "rules": ["git-index-only", "git-subcommands"],
     "role": "implementer"
   },
   {
     "command": "git apply --cached fix.patch",
     "decision": "deny",
-    "rules": ["git-index-only"],
+    "rules": ["git-index-only", "git-subcommands"],
     "role": "implementer"
   },
   {
     "command": "git apply --3way fix.patch",
     "decision": "deny",
-    "rules": ["git-index-only"],
+    "rules": ["git-index-only", "git-subcommands"],
     "role": "implementer"
   },
   {
     "command": "git apply -3 fix.patch",
     "decision": "deny",
-    "rules": ["git-index-only"],
+    "rules": ["git-index-only", "git-subcommands"],
     "role": "implementer"
   },
   {
@@ -1326,7 +1326,7 @@
   {
     "command": "git am $FLAGS",
     "decision": "deny",
-    "rules": ["git-dynamic-arguments"]
+    "rules": ["git-dynamic-arguments", "git-subcommands"]
   },
   {
     "command": "git pull $FLAGS",
@@ -1630,13 +1630,13 @@
   },
   {
     "command": "git -C \"$D\" apply x.patch",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-subcommands"]
   },
   {
     "command": "git -C \"$D\" am x",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["git-subcommands"]
   },
   {
     "command": "git -C \"$D\" config x",
@@ -2396,7 +2396,12 @@
   {
     "command": "find . -name x -exec git commit -n {} \\;",
     "decision": "deny",
-    "rules": ["git-dynamic-arguments", "git-no-verify", "hidden-arguments"]
+    "rules": [
+      "find-actions",
+      "git-dynamic-arguments",
+      "git-no-verify",
+      "hidden-arguments"
+    ]
   },
   {
     "command": "git   commit    -n   -m x",
@@ -2786,47 +2791,47 @@
   {
     "command": "echo x | xargs git commit -n",
     "decision": "deny",
-    "rules": ["git-no-verify", "hidden-arguments"]
+    "rules": ["denied-commands", "git-no-verify", "hidden-arguments"]
   },
   {
     "command": "xargs git",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs lefthook",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs cargo",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs eval",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs env",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs sh",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs bash",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs zsh",
     "decision": "deny",
-    "rules": ["hidden-arguments"]
+    "rules": ["denied-commands", "hidden-arguments"]
   },
   {
     "command": "xargs claude",
@@ -2835,8 +2840,8 @@
   },
   {
     "command": "echo a | xargs rm",
-    "decision": "allow",
-    "rules": []
+    "decision": "deny",
+    "rules": ["denied-commands"]
   },
   {
     "command": "watch git status",
@@ -5144,5 +5149,70 @@
     "decision": "allow",
     "rules": [],
     "role": "implementer"
+  },
+  {
+    "command": "codex --help",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "patch -p1 < p.diff",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "xargs echo",
+    "decision": "deny",
+    "rules": ["denied-commands"]
+  },
+  {
+    "command": "find . -fprint target/probe",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -fprint0 target/probe",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -fprintf target/probe",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -fls target/probe",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -delete",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -exec echo ok \\;",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -execdir echo ok \\;",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -ok echo ok \\;",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -okdir echo ok \\;",
+    "decision": "deny",
+    "rules": ["find-actions"]
+  },
+  {
+    "command": "find . -name '*.rs' -print",
+    "decision": "allow",
+    "rules": []
   }
 ]

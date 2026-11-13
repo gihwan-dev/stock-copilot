@@ -42,7 +42,7 @@
 | 명령 | 내용 | 누가 부르는가 |
 |---|---|---|
 | `just lint-file <경로>` | 바뀐 파일 하나의 형식과 린트 | `PostToolUse` 편집 훅 |
-| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | `SubagentStop`(implementer), 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
+| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
 | `just check-full` | `just check` + 변이 테스트(기준 브랜치 대비 변경분) + 컨테이너 시각 회귀 + 순환 의존 검사 | 푸시 훅, CI |
 
 `just check`의 공통 규칙:
@@ -436,7 +436,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 - 보호하는 생성물: `broker-toss-schema`(주석·속성 검사에서 빠지는 crate), 디자인 토큰 생성물(4.4). IPC 생성물은 보호하지 않는다. 명령 하나를 추가할 때마다 보호 파일을 바꾸는 일을 없애기 위해서다.
 - 프레임워크 오류(알 수 없는 명령, 잘못된 인자, ACL 거부)는 자유 형식 문자열로 거부되므로, UI는 오류 값을 스키마로 다시 파싱하고 가짜에도 이 경우를 넣는다 (R-15 2.2).
 
-## 6. 테스트 기준
+## 6. 테스트와 에이전트 훅
 
 ### 6.1 대상별 기준
 
@@ -610,7 +610,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | Rust 설정 | `Cargo.toml`의 의존성 외 절, `apps/desktop/src-tauri/build.rs`, `tauri.conf.json`과 capability 파일 중 손으로 쓰는 부분(생성되는 명령 허용 항목 밖), `.cargo/`, `clippy.toml`, `rustfmt.toml`, `deny.toml`, `rust-toolchain.toml`, `.config/nextest.toml`, nextest wrapper·`sandbox-exec` 프로필, `.cargo/mutants.toml`, `crates/xtask/` |
 | TS 설정 | `eslint.config.*`, `eslint/`(로컬 규칙), `tsconfig*.json`, `vitest.config.*`, `knip.*`, `.dependency-cruiser.cjs`, stylelint 설정, `package.json`의 스크립트 |
 | 하네스 | `justfile`, `harness/`(위반 예제, 기대 목록, 서명자 목록, 에이전트 쓰기 허용 목록, 검증 스크립트), `lefthook.yml`, `lefthook-local.yml`, `.lefthook-local.yml`, `.github/` |
-| 에이전트 설정 | `.claude/settings.json`, `.claude/settings.local.json`, `.claude/agents/`, `.claude/hooks/`, `.claude/skills/`, `.claude/commands/`, `.mcp.json`, `.worktreeinclude`. `.claude/` 전체가 아니라 하위 경로로 적는다. `.claude/worktrees/`까지 막으면 리뷰어 작업 사본의 쓰기가 막힌다 (R-10 Q11) |
+| 에이전트 설정 | `.codex/**`, `harness/codex-hooks/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/agents/`, `.claude/hooks/`, `.claude/skills/`, `.claude/commands/`, `.mcp.json`, `.worktreeinclude`. `.claude/` 전체가 아니라 하위 경로로 적는다. `.claude/worktrees/`까지 막으면 리뷰어 작업 사본의 쓰기가 막힌다 (R-10 Q11) |
 | 규칙 문서 | `AGENTS.md`, `CLAUDE.md`, `docs/harness.md`, `docs/workflow.md`, `docs/open-issues.md`(사용자 확정 결정), 이미 있는 `docs/adr/*` |
 | 목록 | 의존성 허용 목록, 생성 경로 목록, 변이 생존 허용 목록, 커버리지 예외 목록, ESLint 파일 허용 목록들, Tailwind 숫자 유틸리티 허용 목록, 대비 검사 조합 표, Linux CI 제외 목록(1.2, `harness/ci/linux/exclusions.json`), 현재 시각·환경 변수 허용 파일 목록(3.1), `unsafe` 예외(있으면, 3.1) |
 | 디자인 | `design/` |
@@ -641,21 +641,22 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 - 샌드박스 안에서 `cargo`, `pnpm`, `tauri` 빌드가 깨지지 않는지, `allowWrite`에 캐시 경로가 필요한지는 실측해야 한다 (open-issues S-03). 깨져서 `excludedCommands`가 늘면 그 명령은 샌드박스 밖에서 돈다는 뜻이므로 ADR로 다룬다.
 - 선택 사항: root 소유의 macOS 관리 설정(`/Library/Application Support/ClaudeCode/managed-settings.json`)에 샌드박스 설정을 두면 저장소 설정으로 샌드박스를 느슨하게 할 수 없다. 이 PC의 모든 프로젝트에 적용되므로 사용자가 정한다.
 
-### 7.3 훅
+### 7.3 에이전트 훅
 
-모든 하네스 훅은 `.claude/settings.json`에 둔다. 서브에이전트 정의 파일 안의 훅은 작업 공간 신뢰를 받아들인 뒤에만 돌고 `-p` 실행에서는 돌지 않는다. 설정 파일의 훅은 서브에이전트 안에서도 돌고, 입력의 `agent_type`(정의 파일의 `name`, 메인은 없음)으로 역할을 나눈다 (R-10 Q1, 실측). 차단 훅은 `command` 종류에 `onFailure: "block"`을 붙여 실행 실패도 차단으로 처리한다.
+판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`과 `.codex/config.toml`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
 
-| 훅 | 동작 |
-|---|---|
-| `PreToolUse` (Edit\|Write\|NotebookEdit) | 역할별 허용 목록. 메인은 `docs/**`(보호 문서 제외)만, implementer는 7.1의 쓰기 경로만, 리뷰어·비판자는 편집 없음. 보호 경로면 "우회하지 말고 멈춘 뒤 보고하라"와 함께 거부 |
-| `PreToolUse` (Bash) | 아래 금지 명령을 거부. **문자열 검사라 최선 노력이다.** 스크립트 파일을 만들어 실행하면 피할 수 있다. 쓰기는 샌드박스가, 훅 끄기는 CI가 최종 방어다 |
-| `PreToolUse` (Agent) | 허용 종류(`implementer`, `adversarial-reviewer`, `review-critic`) 밖 거부, `model`·`isolation`·`run_in_background` 인자 거부, 포크 거부, 서브에이전트 안에서의 호출 거부 (7.4) |
-| `PostToolUse` (Edit\|Write) | `just lint-file <경로>`. 실패하면 `decision: "block"`과 출력을 에이전트에게 돌려준다 |
-| `PostToolUse` (Agent) | implementer의 검사 상태(`passed`, `failing`, `blocked`, `unchecked`), 마지막 HEAD, 실제 모델(`resolvedModel`)을 메인 맥락에 붙인다. `passed`가 아니면 완료로 취급하지 않는다 |
-| `SubagentStart` (adversarial-reviewer\|review-critic) | 원본 작업 사본의 HEAD와 `git status --porcelain -uall`을 상태 파일에 저장 (7.5) |
-| `SubagentStop` (implementer) | `just check`(테스트 변경 검사 포함)를 돌린다. 실패하면 `decision: "block"`으로 실패 출력을 돌려준다. `agent_id`별로 직접 세서 3번 막은 뒤에는 "막힘:"으로 시작하는 보고를 쓰게 하고 종료를 허용한다. 결과를 상태 파일에 쓴다 |
-| `SubagentStop` (adversarial-reviewer\|review-critic) | 원본 상태를 다시 비교해 다르면 "네가 만든 변경을 되돌린 뒤 끝내라"로 종료를 막는다 (7.5) |
-| `ConfigChange` (project_settings\|local_settings\|skills) | 세션 중 설정 변경을 거부한다 |
+| 항목 | Claude Code | Codex 0.168.0 |
+|---|---|---|
+| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 |
+| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 |
+| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` |
+| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 |
+| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 |
+| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 |
+| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 |
+| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 |
+
+`just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
 
 셸 훅이 거부하는 것:
 
@@ -679,13 +680,24 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 메인 에이전트의 종료(`Stop`)에는 검사를 걸지 않는다. 메인은 코드를 쓰지 않고, 막힌 작업을 사용자에게 보고할 수 있어야 한다.
 
-### 7.4 서브에이전트 통제
+
+### 7.4 역할과 위임
+
+| 역할 | 실행 | 강제 |
+|---|---|---|
+| 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸 가드 |
+| 구현·수정·조사·비판 | T3의 Codex gpt-6.1-sol, 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 모델·작업 사본·브리프를 확인 |
+| 적대적 리뷰 | 새 Claude Opus 5.5 adversarial-reviewer | 기존 리뷰어 편집 거부·격리·오염 감지 |
+
+Codex 내부 서브에이전트 도구는 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. Claude의 옛 implementer·review-critic 호출은 새 진입 가드가 거부한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+
+#### Claude 적대적 리뷰어 통제
 
 | 문제 | 사실 (R-10 Q3, 실측) | 막는 방법 |
 |---|---|---|
 | 모델 고정 | 정의 파일의 `model`은 고정이 아니다. 호출할 때 넘기는 `model` 인자가 정의보다 우선한다 | 정의는 `model: claude-opus-5-5`. `PreToolUse(Agent)`가 `model` 인자를 거부한다. `PostToolUse(Agent)`가 `resolvedModel`을 기록하고, 메인은 리뷰 기록에 남긴다 |
 | 포크 | 포크 모드가 기본으로 켜져 있고, 포크는 메인의 대화 전체를 물려받는다 | `CLAUDE_CODE_FORK_SUBAGENT=0`, 권한 거부 `Agent(fork)`, `PreToolUse(Agent)`의 포크 거부 |
-| 재개 | `SendMessage`로 끝난 서브에이전트를 깨우면 이전 대화를 그대로 이어 간다 | 권한 거부 `SendMessage`. "수정은 새 implementer"가 이것으로 강제된다 |
+| 재개 | `SendMessage`로 끝난 서브에이전트를 깨우면 이전 대화를 그대로 이어 간다 | 권한 거부 `SendMessage`. Claude 리뷰어 재개를 막는다. Codex 수정은 별도 T3 스레드 가드가 맡는다 |
 | 중첩 | 서브에이전트가 서브에이전트를 띄울 수 있다 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, `PreToolUse(Agent)`가 서브에이전트 안의 호출을 거부 |
 | 백그라운드 | 백그라운드 서브에이전트는 `PostToolUse(Agent)`가 시작 시점에 불려 결과를 받지 못한다 | `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, `run_in_background` 인자 거부 |
 | 허용되지 않은 종류 | `general-purpose`, `Explore` 등 내장 종류로 일을 시킬 수 있다 | `PreToolUse(Agent)`의 종류 허용 목록 |
@@ -696,9 +708,14 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 - 사용자 전역 플러그인과 훅이 섞이지 않게 개발 세션은 `claude --setting-sources project,local`로 시작한다. `-p`에서는 구독 로그인과 함께 동작했고, 대화형에서는 미확인이다.
 - 프로젝트 설정의 훅은 대화형에서 작업 공간 신뢰를 받아들인 뒤에만 돈다. 신뢰를 거부하면 하네스 훅이 없다. 거부 규칙과 샌드박스는 그대로 적용된다.
 
+
 ### 7.5 리뷰어 격리
 
-리뷰어와 비판자는 `isolation: worktree`(정의 파일)로 임시 작업 사본에서 돈다. 첫 단계에서 `git checkout --detach <대상 SHA>`를 한다. 기본 기준(`worktree.baseRef: "fresh"`)은 원격 기본 브랜치라서 그대로는 구현 브랜치를 보지 못한다.
+Claude 적대적 리뷰어는 기존 `isolation: worktree`와 시작·종료 스냅숏을 쓴다. Codex 비판자는 T3의 별도 작업 사본에서 읽기 전용으로 일한다. T3가 준 권한과 훅 적용을 메인이 확인한다. 위임 역할 이름만으로 읽기 전용을 보장하지 않는다. 원본과 대상 작업 사본의 HEAD·상태를 리뷰 전후 비교한다.
+
+#### Claude 리뷰어의 원본 오염 방지
+
+Claude 적대적 리뷰어는 `isolation: worktree`(정의 파일)로 임시 작업 사본에서 돈다. 첫 단계에서 `git checkout --detach <대상 SHA>`를 한다. 기본 기준(`worktree.baseRef: "fresh"`)은 원격 기본 브랜치라서 그대로는 구현 브랜치를 보지 못한다.
 
 허점: 격리된 리뷰어도 셸로 **원본 작업 사본에 쓸 수 있다** (실측: 절대 경로 python 쓰기 성공). 작업 사본이 원본 안(`.claude/worktrees/`)에 있고 샌드박스 쓰기 영역이 원본이기 때문이다.
 
@@ -712,6 +729,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 좁은 거부 규칙 | `.claude/` 거부 규칙은 하위 경로로 좁게 쓴다 (7.1) |
 
 더 강한 대안(저장소 밖 작업 사본에서 `claude -p --agent`로 따로 띄우기)은 메인이 서브에이전트를 부르는 구조를 바꾸므로 지금은 쓰지 않는다. 감지 훅으로 오염이 실제로 남는 일이 생기면 다시 검토한다.
+
 
 ### 7.6 사람 승인의 위조 방지
 
@@ -739,7 +757,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 | 검사 | 방법 | 어디서 |
 |---|---|---|
-| 기존 테스트 함수의 삭제·변경 | `xtask test-diff`가 기준 커밋 대비 기존 테스트 함수(Rust `#[test]`, TS 테스트 블록)의 삭제와 본문 변경을 뽑는다. 하나라도 있으면 실패한다. 새 테스트 추가는 허용한다 | `SubagentStop`(implementer), CI |
+| 기존 테스트 함수의 삭제·변경 | `xtask test-diff`가 기준 커밋 대비 기존 테스트 함수(Rust `#[test]`, TS 테스트 블록)의 삭제와 본문 변경을 뽑는다. 하나라도 있으면 실패한다. 새 테스트 추가는 허용한다 | Codex Stop, 커밋 훅, CI |
 | 테스트 수 감소 | `cargo nextest list`와 `vitest list`의 개수를 기준 커밋과 비교 | 같음 |
 | 승인된 변경 | 기존 테스트를 바꾸는 커밋은 사용자 서명 커밋만 CI를 통과한다 (7.6과 같은 검증) | CI |
 | 구현을 베낀 테스트 | 변이 테스트로 드러난다(베낀 테스트는 변이를 죽이지 못한다). 테스트 입력 리터럴을 구현에서 다시 쓰는지 찾는 xtask 검사는 효과가 확인되지 않아 두지 않는다 | `just check-full`, 리뷰 |
@@ -810,3 +828,11 @@ ID는 [open-issues.md](open-issues.md) 4.3의 것이다. 하네스 쪽은 해당
 | `eslint-plugin-boundaries` 폐기 예정 경고를 `--max-warnings 0`이 잡는지 | S-19 | H-09 |
 
 S-21(비공개 저장소의 규칙 세트)은 닫았다. 결론: 쓸 수 없다고 보고 기대지 않는다(7.6).
+
+Codex Seatbelt 셸의 `CODEX_SANDBOX=seatbelt`는 기존 `SANDBOX_RUNTIME=1` 계약으로 전달한다. macOS에서 중첩 샌드박스가 거부되는 경우에도 바깥 권한 프로필 안에서 커밋 검사를 이어 간다. 샌드박스 밖의 일반 검사는 기존대로 자체 샌드박스를 실행한다.
+
+Codex 프로필의 읽기 전용 대상은 기존 `protectedDenies` 계산과 추적된 ADR 목록을 재사용한다. 훅 파일뿐 아니라 ESLint·TS·테스트·도구 설정과 메인 전용 진행 문서도 포함한다. 사용자 승인 하네스 프로필에서만 해당 경로 쓰기를 연다.
+
+H-41 수정 2차에서 패치는 모든 줄을 분류하고 미분류 줄을 거부한다. 공유 셸 코어는 codex·patch·xargs, git apply·am과 find의 쓰기·삭제·실행을 막는다. 필요한 헤드리스 실험은 검토된 just 레시피로 실행한다. 래퍼는 Git·Node·import 실패에 PreToolUse deny·Stop block과 종료 0을 낸다. Git 관리 폴더 전체 대신 필요한 파일만 쓰고 HEAD 본문은 읽기 전용이다.
+
+정책 대응은 harness/codex-hooks/policy-coverage.json으로 고정한다. 비홈 경로와 glob도 빼지 않는다. 미분류 항목은 실패한다. 해시는 Git 추적 파일만 계산한다. 새 파일은 스테이징한 뒤 생성한다. 하네스 프로필은 작업 뒤 사용자가 지우고 잠금 전 명시적 --codex-user-config prelock을 실행한다. 설정·훅 출처 실측은 ADR 0021 C를 따른다.

@@ -153,7 +153,9 @@ export const fixedFindings = (relative, rules) => {
   const config = rules.paths.configFiles;
   const name = relative.split("/").at(-1);
   if (
-    config.names.some((pattern) => nameMatches(pattern, name)) &&
+    config.names.some((pattern) =>
+      nameMatches(pattern, pattern.includes("/") ? relative : name),
+    ) &&
     !config.allowed.some((pattern) => patternMatches(pattern, relative)) &&
     !config.exempt.some((pattern) => patternMatches(pattern, relative))
   ) {
@@ -318,6 +320,12 @@ export const writeFindings = (path, role, project, mode) => {
     return mode === MODE.shell || claudeFolder || under(path, TEMPORARY_ROOTS)
       ? []
       : [finding("unsafe-path", `${PATH_PROBLEM.outside}: ${path}`)];
+  }
+  if (
+    project.ownedWorktree !== undefined &&
+    located.root !== project.ownedWorktree
+  ) {
+    return [finding("worktree-scope", "세션 작업 사본 밖에는 쓰지 않는다")];
   }
   const artifact = rules.paths.artifacts.some((pattern) =>
     patternMatches(pattern, located.relative),
