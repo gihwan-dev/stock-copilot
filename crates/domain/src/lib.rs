@@ -1,3 +1,11 @@
+mod money;
+pub use money::{Amount, AmountError, AmountInput, Currency, Money, MoneyError};
+mod money_display;
+pub use money_display::{
+    DisplayDigits, DisplayDirection, DisplayMoney, DisplayMoneyChange, DisplayPrecision,
+    DisplayPrecisionError, MoneyChange, display_change, display_money,
+};
+
 mod account_id;
 mod client_order_id;
 mod instrument_id;
@@ -23,6 +31,8 @@ pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
 mod thesis;
 pub use thesis::{
     ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
-    Evidence, HistoryEntry, JudgedClaim, Thesis, ThesisError, ThesisOperation, ThesisStatus,
-    ThesisVersion,
+    CriterionAssessment, CriterionComparison, CriterionKind, CriterionValue, CriterionVerdict,
+    Evidence, EvidenceRef, EvidenceUrl, HistoryAction, HistoryEntry, JudgedClaim, JudgedCriterion,
+    KillCriterion, MachineCondition, ProposedChange, Thesis, ThesisError, ThesisOperation,
+    ThesisPatch, ThesisStatus, ThesisVersion, ToolPurpose, ToolReference, UserDecision, UserReason,
 };
