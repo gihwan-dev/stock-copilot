@@ -42,7 +42,7 @@
 | 명령 | 내용 | 누가 부르는가 |
 |---|---|---|
 | `just lint-file <경로>` | 바뀐 파일 하나의 형식과 린트 | `PostToolUse` 편집 훅 |
-| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | `SubagentStop`(implementer), 커밋 훅, CI 푸시마다 |
+| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | `SubagentStop`(implementer), 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
 | `just check-full` | `just check` + 변이 테스트(기준 브랜치 대비 변경분) + 컨테이너 시각 회귀 + 순환 의존 검사 | 푸시 훅, CI |
 
 `just check`의 공통 규칙:
@@ -63,9 +63,9 @@
 |---|---|---|
 | 에이전트 훅, 커밋 훅 | 로컬 macOS | `just check` |
 | 푸시 훅 | 로컬 macOS | `just check-full` |
-| CI 푸시마다 | Linux arm64 | 보호 경로 서명 검사 (7.6), 플랫폼 중립 crate 묶음의 형식·린트·xtask 검사·테스트, 컨테이너 시각 회귀 |
-| CI `main` 푸시와 밤 | macOS | 전체 `just check`, `src-tauri` 경로 고정 테스트, 앱 빌드, E2E 연기 테스트, WKWebView 스크린샷 보관 (비교하지 않음) |
-| CI 밤 | Linux | 전체 변이 테스트, 오래 걸리는 속성 테스트, AI 고정 자료의 CLI 버전 점검 |
+| CI 푸시마다 | Linux arm64 | 보호 경로 서명 검사 (7.6), 리뷰 기록 검사, 작업 흐름 정책, 플랫폼 중립 crate 묶음의 형식·린트·deny·xtask 검사·테스트(네트워크 이름공간 안). 컨테이너 시각 회귀는 DS-15에서 더한다 (ADR 0020) |
+| CI `master` 푸시와 밤 | macOS | `lefthook install` 뒤 전체 `just check`. `src-tauri` 경로 고정 테스트, 앱 빌드, E2E 연기 테스트, WKWebView 스크린샷 보관(비교하지 않음)은 해당 작업(U-03 등)에서 더한다 |
+| CI 밤 | Linux | Linux 전체 묶음, `just mutants-all`, 권고 DB를 받은 뒤 `deny`. 오래 걸리는 속성 테스트와 AI 고정 자료의 CLI 버전 점검은 해당 작업에서 더한다 |
 
 밤 macOS 작업은 그날 `main`에 변경이 있을 때만 돈다.
 
@@ -77,7 +77,8 @@
 |---|---|---|
 | Rust 툴체인 | `rust-toolchain.toml`에 1.99.1. Tauri 2.12는 1.90 이상이 필요하다 | R-09, R-05 |
 | TypeScript | 타입 검사는 TS 7.0.2(`tsc`), 린트는 TS 6.0 API. npm 별칭으로 함께 설치: `"typescript": "npm:@typescript/typescript6@^6.0.2"`, `"@typescript/native": "npm:typescript@^7.0.2"` (open-issues I-16) | R-08 2.1 |
-| Node | 24.22.0 (리서치 환경). 고정 방법은 H-01에서 정한다 | R-08 6.1 |
+| Node | 24.22.0. `.node-version`으로 고정 | R-08 6.1 |
+| CI 도구 | just 1.59.0, cargo-nextest 0.9.151, cargo-deny 0.20.2, cargo-llvm-cov 0.9.1, cargo-mutants 27.1.0, lefthook 2.2.2, pnpm 12.18.0(`packageManager`). 목록은 `harness/ci/tools.json` | ADR 0020 |
 | `tauri`, `tauri-specta` | `=` 고정 (`tauri::test`가 unstable, tauri-specta가 RC) | R-15 4장 |
 | Tailwind | 정확한 버전 고정. 올릴 때 "생성되는 클래스 목록" 스냅샷을 다시 돈다 | R-14 5장 |
 | `ra-ap-rustc_lexer` | 정확한 버전 고정 (매주 배포되고 `TokenKind`가 바뀐다) | R-09 Q8 |
@@ -611,7 +612,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 하네스 | `justfile`, `harness/`(위반 예제, 기대 목록, 서명자 목록, 에이전트 쓰기 허용 목록, 검증 스크립트), `lefthook.yml`, `lefthook-local.yml`, `.lefthook-local.yml`, `.github/` |
 | 에이전트 설정 | `.claude/settings.json`, `.claude/settings.local.json`, `.claude/agents/`, `.claude/hooks/`, `.claude/skills/`, `.claude/commands/`, `.mcp.json`, `.worktreeinclude`. `.claude/` 전체가 아니라 하위 경로로 적는다. `.claude/worktrees/`까지 막으면 리뷰어 작업 사본의 쓰기가 막힌다 (R-10 Q11) |
 | 규칙 문서 | `AGENTS.md`, `CLAUDE.md`, `docs/harness.md`, `docs/workflow.md`, `docs/open-issues.md`(사용자 확정 결정), 이미 있는 `docs/adr/*` |
-| 목록 | 의존성 허용 목록, 생성 경로 목록, 변이 생존 허용 목록, 커버리지 예외 목록, ESLint 파일 허용 목록들, Tailwind 숫자 유틸리티 허용 목록, 대비 검사 조합 표, Linux CI 제외 목록(1.2), 현재 시각·환경 변수 허용 파일 목록(3.1), `unsafe` 예외(있으면, 3.1) |
+| 목록 | 의존성 허용 목록, 생성 경로 목록, 변이 생존 허용 목록, 커버리지 예외 목록, ESLint 파일 허용 목록들, Tailwind 숫자 유틸리티 허용 목록, 대비 검사 조합 표, Linux CI 제외 목록(1.2, `harness/ci/linux/exclusions.json`), 현재 시각·환경 변수 허용 파일 목록(3.1), `unsafe` 예외(있으면, 3.1) |
 | 디자인 | `design/` |
 | 기타 | `.gitignore` (`.claude/worktrees/` 항목은 사람이 처음에 넣어 둔다) |
 
@@ -721,14 +722,14 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 서명 키 | SSH 서명 키를 Secure Enclave에 두고(Secretive) 쓸 때마다 Touch ID를 요구한다. 키를 내보낼 수 없다 |
 | 저장소 설정 | `gpg.format=ssh`, `user.signingkey=<Secretive 공개키>`, `commit.gpgsign=false`. 사용자가 보호 파일을 바꿀 때만 `git commit -S`로 서명한다. 모든 커밋에 서명을 걸면 에이전트 커밋마다 Touch ID 창이 떠서 습관적으로 승인할 위험이 생긴다 |
 | 검증 | CI가 `git verify-commit`으로 확인한다. 신뢰하는 키는 `gpg.ssh.allowedSignersFile`의 키뿐이다 |
-| 신뢰 자료의 출처 | 허용 서명자 목록(`harness/allowed_signers`), 에이전트 쓰기 허용 목록, 검증 스크립트를 **푸시된 커밋이 아니라 기준 커밋(푸시 이전의 `main`)에서** 읽는다. 같은 푸시에서 서명자 목록을 바꿔 통과하는 길을 막는다 |
+| 신뢰 자료의 출처 | 허용 서명자 목록(`harness/allowed_signers`), 에이전트 쓰기 허용 목록, 검증 스크립트를 **푸시된 커밋이 아니라 기준 커밋(서명 작업이 마지막으로 성공한 `master` 커밋)에서** 읽는다. 같은 푸시에서 서명자 목록을 바꿔 통과하는 길을 막는다. 잠금 시점(`harness/ci/signatures/lock-point.txt`) 이후의 커밋만 검사하고, 잠금 시점이 없는 동안은 "비활성"을 출력하고 통과한다 (ADR 0020) |
 | 워크플로 | 보호 경로 검사는 푸시마다 돈다. 푸시된 코드를 실행하지 않고 git 명령만 쓴다. 푸시 뒤에 도는 사후 탐지이고, 실패하면 알린다 |
 | 푸시 | 메인 에이전트만 한다. 서브에이전트는 하지 않는다(7.3의 셸 훅이 거부). 메인은 새 작업의 브리프를 쓰기 전에 `main`의 CI가 통과 상태인지 확인하고, 실패면 멈추고 사용자에게 보고한다([workflow.md](workflow.md) 2.1) |
-| 원격 강제 수단 | GitHub 규칙 세트와 브랜치 보호에 기대지 않는다. 무료 요금제의 비공개 저장소에서는 쓸 수 없다(open-issues S-21). 에이전트에게 주는 토큰에는 저장소 관리 권한을 주지 않는다 |
+| 원격 강제 수단 | 공개 저장소다. 규칙 세트는 `master` 삭제·강제 푸시 금지만 쓴다(ADR 0020). 상태 검사 필수·PR 필수·서명 필수는 쓰지 않는다. 에이전트에게 주는 토큰에는 저장소 관리 권한을 주지 않는다 |
 
 남는 빈틈:
 
-- 의존성 목록 파일(`Cargo.toml`, `package.json`)에서 "의존성 절만 바뀌었는지" 검사는 기준 커밋의 xtask를 빌드해 돌려야 한다. 리서치의 검증 스크립트에는 없다. H-26에서 만든다.
+- 의존성 목록 파일(`Cargo.toml`, `package.json`)에서 "의존성 절만 바뀌었는지" 검사는 기준 커밋의 xtask를 빌드해 돌린다(H-26에서 만들었다. `xtask manifest-changes`).
 - 원격에서 푸시 자체를 막는 수단이 없다. 서명 없는 보호 경로 변경이 `main`에 들어갈 수 있고, CI가 실패로 알린 뒤 사람이 되돌린다.
 - CI가 생기기 전(H-26 이전)에는 ④겹이 없다. 로컬 겹(H-20)만으로 운용한다.
 
