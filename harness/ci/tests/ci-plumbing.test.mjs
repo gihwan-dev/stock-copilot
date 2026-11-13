@@ -28,13 +28,16 @@ import {
   readTools,
 } from "../tools.mjs";
 import {
+  childEnvironment,
   commit,
   createRepository,
   gitIn,
   removeRepository,
   repoRoot,
   run,
+  runBaseStep,
   scratch,
+  workflowRun,
   write,
 } from "./signature-repo.mjs";
 
@@ -213,6 +216,7 @@ test("tool versions are pinned exactly and match the harness pins and this machi
     const finished = spawnSync(program, args, {
       cwd: repoRoot,
       encoding: "utf8",
+      env: childEnvironment(),
     });
     assert.ok(
       finished.stdout.trim().startsWith(expected),
@@ -431,7 +435,7 @@ const fromBaseCheckout = (made, revision, keysFile) => {
         "--owner-keys",
         keysFile,
       ],
-      { cwd: repoRoot, encoding: "utf8" },
+      { cwd: repoRoot, encoding: "utf8", env: childEnvironment() },
     ),
   };
 };
@@ -562,46 +566,6 @@ test("failure notices reuse the open issue with exactly the same title", () => {
   );
 });
 
-const baseStep = () =>
-  workflow("signatures.yml").jobs.signatures.steps.find(
-    (step) => step.id === "base",
-  ).run;
-
-const runBaseStep = (made, event, runs) => {
-  const temporary = scratch("verified-base-");
-  try {
-    const bin = join(temporary, "bin");
-    write(temporary, "bin/gh", '#!/bin/sh\ncat "$FAKE_RUNS"\n');
-    run(temporary, "chmod", ["+x", join(bin, "gh")]);
-    write(temporary, "runs.txt", runs.map((sha) => `${sha}\n`).join(""));
-    write(temporary, "output.txt", "");
-    const finished = spawnSync("bash", ["-c", baseStep()], {
-      cwd: made.directory,
-      encoding: "utf8",
-      env: {
-        PATH: `${bin}:${process.env.PATH}`,
-        HOME: process.env.HOME,
-        FAKE_RUNS: join(temporary, "runs.txt"),
-        RUNNER_TEMP: temporary,
-        GITHUB_OUTPUT: join(temporary, "output.txt"),
-        GITHUB_REPOSITORY: "owner/repository",
-        ...event,
-      },
-    });
-    return {
-      status: finished.status,
-      output: Object.fromEntries(
-        readFileSync(join(temporary, "output.txt"), "utf8")
-          .split("\n")
-          .filter((line) => line !== "")
-          .map((line) => line.split("=")),
-      ),
-    };
-  } finally {
-    removeRepository(temporary);
-  }
-};
-
 test("the signature base is the newest master commit a successful signature run verified", () => {
   const made = createRepository();
   try {
@@ -651,18 +615,6 @@ test("the signature base is the newest master commit a successful signature run 
     removeRepository(made.directory);
   }
 });
-
-const workflowRun = (made, step, environment) =>
-  spawnSync("bash", ["-c", step.run], {
-    cwd: made.directory,
-    encoding: "utf8",
-    env: {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      GITHUB_WORKSPACE: made.directory,
-      ...environment,
-    },
-  });
 
 test("the workflow passes the base kind from its base step to the verifier, so an unverified base with a lock fails", () => {
   const made = createRepository();

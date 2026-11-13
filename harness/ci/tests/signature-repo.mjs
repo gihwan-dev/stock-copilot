@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
@@ -53,13 +54,82 @@ const PACKAGE_TEXT = `${JSON.stringify(
   2,
 )}\n`;
 
-const environment = () => ({
+export const CHILD_ENVIRONMENT = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "USER",
+  "CARGO_HOME",
+  "RUSTUP_HOME",
+];
+
+export const childEnvironment = (extra = {}) => ({
   ...Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+    Object.entries(process.env).filter(([name]) =>
+      CHILD_ENVIRONMENT.includes(name),
+    ),
   ),
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_CONFIG_GLOBAL: "/dev/null",
+  ...extra,
 });
+
+const environment = () => childEnvironment();
+
+export const workflowSteps = (name, job) =>
+  JSON.parse(readFileSync(join(repoRoot, ".github", "workflows", name), "utf8"))
+    .jobs[job].steps;
+
+export const SHELL_FLAGS = ["--noprofile", "--norc", "-c"];
+
+export const runBaseStep = (made, event, runs) => {
+  const temporary = scratch("verified-base-");
+  try {
+    const bin = join(temporary, "bin");
+    write(temporary, "bin/gh", '#!/bin/sh\ncat "$FAKE_RUNS"\n');
+    chmodSync(join(bin, "gh"), 0o755);
+    write(temporary, "runs.txt", runs.map((sha) => `${sha}\n`).join(""));
+    write(temporary, "output.txt", "");
+    const step = workflowSteps("signatures.yml", "signatures").find(
+      (candidate) => candidate.id === "base",
+    );
+    const finished = spawnSync("bash", [...SHELL_FLAGS, step.run], {
+      cwd: made.directory,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: childEnvironment({
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        HOME: temporary,
+        FAKE_RUNS: join(temporary, "runs.txt"),
+        RUNNER_TEMP: temporary,
+        GITHUB_OUTPUT: join(temporary, "output.txt"),
+        GITHUB_REPOSITORY: "owner/repository",
+        ...event,
+      }),
+    });
+    return {
+      status: finished.status,
+      output: Object.fromEntries(
+        readFileSync(join(temporary, "output.txt"), "utf8")
+          .split("\n")
+          .filter((line) => line !== "")
+          .map((line) => line.split("=")),
+      ),
+    };
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+};
+
+export const workflowRun = (made, step, extra) =>
+  spawnSync("bash", [...SHELL_FLAGS, step.run], {
+    cwd: made.directory,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: childEnvironment({ GITHUB_WORKSPACE: made.directory, ...extra }),
+  });
 
 export const scratch = (prefix) =>
   mkdtempSync(join(realpathSync(tmpdir()), prefix));

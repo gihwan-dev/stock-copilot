@@ -16,7 +16,12 @@ import {
   isKnownState,
   reviewProblems,
 } from "../review-records/check.mjs";
-import { gitIn, repoRoot, scratch } from "./signature-repo.mjs";
+import {
+  childEnvironment,
+  gitIn,
+  repoRoot,
+  scratch,
+} from "./signature-repo.mjs";
 
 const CASES_FILE = "harness/ci/review-records/cases.json";
 
@@ -89,7 +94,7 @@ test("the review record check exits non-zero and names the row when a record is 
   const finished = spawnSync(
     "node",
     ["harness/ci/review-records/check.mjs", fixture.directory],
-    { cwd: repoRoot, encoding: "utf8" },
+    { cwd: repoRoot, encoding: "utf8", env: childEnvironment() },
   );
   assert.equal(finished.status, 1);
   assert.match(finished.stdout, /FAIL docs\/progress\.md:5 H-02/u);
