@@ -74,7 +74,10 @@ require-base:
 check-node:
     actual="$(node --version)"; pinned="v$(cat .node-version)"; [ "$actual" = "$pinned" ] || { printf 'check-node: node %s 사용 중, 고정 버전은 %s (.node-version)\n' "$actual" "$pinned" >&2; exit 1; }
 
-check-ts: check-node
+check-pnpm: check-node
+    node harness/toolchain/pnpm.mjs
+
+check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
@@ -92,6 +95,8 @@ check-ts: check-node
     node harness/vitest-check/check.mjs
     node --test 'apps/desktop/tests/*.test.mjs'
     node --test 'harness/claude-hooks/tests/*.test.mjs'
+    node --test 'harness/codex-hooks/tests/*.test.mjs'
+    node harness/codex-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
     node harness/ci/linux/exclusions.mjs verify
@@ -199,3 +204,6 @@ linux-check: check-node
 
 linux-test:
     cargo nextest run --workspace --locked $(node harness/ci/linux/exclusions.mjs cargo) -E "$(node harness/ci/linux/exclusions.mjs filter)"
+
+codex-regression:
+    node harness/codex-regression/run.mjs

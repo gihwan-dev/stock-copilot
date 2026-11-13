@@ -23,7 +23,8 @@
       "~/.rustup/**",
       "~/.npmrc",
       "~/.config/pnpm/**",
-      "~/.local/state/stock-copilot-harness/**"
+      "~/.local/state/stock-copilot-harness/**",
+      "~/.codex/**"
     ],
     "configFiles": {
       "names": [
@@ -60,7 +61,9 @@
         "action.yaml",
         "dependabot.yml",
         "dependabot.yaml",
-        "CODEOWNERS"
+        "CODEOWNERS",
+        "*.codex/config.toml",
+        "*.codex/hooks.json"
       ],
       "allowed": [
         ".gitignore",
@@ -82,7 +85,9 @@
         "apps/desktop/src-tauri/Cargo.toml",
         "apps/desktop/e2e-app/Cargo.toml",
         "crates/*/Cargo.toml",
-        "crates/adapters/*/Cargo.toml"
+        "crates/adapters/*/Cargo.toml",
+        ".codex/config.toml",
+        ".codex/hooks.json"
       ],
       "exempt": ["harness/**"]
     }

@@ -153,7 +153,9 @@ export const fixedFindings = (relative, rules) => {
   const config = rules.paths.configFiles;
   const name = relative.split("/").at(-1);
   if (
-    config.names.some((pattern) => nameMatches(pattern, name)) &&
+    config.names.some((pattern) =>
+      nameMatches(pattern, pattern.includes("/") ? relative : name),
+    ) &&
     !config.allowed.some((pattern) => patternMatches(pattern, relative)) &&
     !config.exempt.some((pattern) => patternMatches(pattern, relative))
   ) {

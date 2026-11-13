@@ -101,11 +101,11 @@ test("just known-gaps prints the list read-only and is not part of just check", 
   );
 });
 
-test("ADR 0019 states the same gap count as just known-gaps and marks ADR items as document only", () => {
+test("ADR 0021 states the same gap count as just known-gaps and marks ADR items as document only", () => {
   const gaps = knownGaps(repoRoot);
   const summary = gapTable(gaps).split("\n").at(-1);
   const adr = readFileSync(
-    join(repoRoot, "docs/adr/0019-harness-self-tests-and-claude-regression.md"),
+    join(repoRoot, "docs/adr/0021-codex-compatible-harness.md"),
     "utf8",
   );
   assert.ok(adr.includes(summary), summary);

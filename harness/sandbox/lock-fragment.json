@@ -6,6 +6,7 @@
         "./.claude/agents",
         "./.claude/hooks",
         "./.claude/settings.json",
+        "./.codex",
         "./.config",
         "./.github",
         "./.gitignore",

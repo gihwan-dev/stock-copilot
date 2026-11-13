@@ -399,6 +399,36 @@
         "file": "crates/xtask/src/git_hooks/tests.rs",
         "name": "missing_hooks_fail_in_the_repository_and_its_worktrees"
       }
+    },
+    {
+      "recipe": "check-pnpm",
+      "command": "node harness/toolchain/pnpm.mjs",
+      "kind": "check",
+      "cases": "harness/codex-hooks/tests/pnpm.test.mjs",
+      "test": {
+        "file": "harness/codex-hooks/tests/pnpm.test.mjs",
+        "name": "pnpm check rejects an old shim a wrong version and a missing pin"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node --test 'harness/codex-hooks/tests/*.test.mjs'",
+      "kind": "runner",
+      "cases": "harness/codex-hooks/tests/adapter.test.mjs",
+      "test": {
+        "file": "harness/codex-hooks/tests/adapter.test.mjs",
+        "name": "patch targets include additions removals and both sides of moves"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/codex-hooks/config.mjs",
+      "kind": "check",
+      "cases": "harness/codex-hooks/tests/config.test.mjs",
+      "test": {
+        "file": "harness/codex-hooks/tests/config.test.mjs",
+        "name": "Codex config preserves supported sandbox policy entries and pins the shell PATH"
+      }
     }
   ]
 }

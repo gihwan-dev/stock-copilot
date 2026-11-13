@@ -183,6 +183,25 @@
       "namepath": "check-node",
       "shebang": false
     },
+    "check-pnpm": {
+      "attributes": [],
+      "body": [["node harness/toolchain/pnpm.mjs"]],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check-pnpm",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-pnpm",
+      "shebang": false
+    },
     "check-ts": {
       "attributes": [],
       "body": [
@@ -209,6 +228,8 @@
         ["node harness/vitest-check/check.mjs"],
         ["node --test 'apps/desktop/tests/*.test.mjs'"],
         ["node --test 'harness/claude-hooks/tests/*.test.mjs'"],
+        ["node --test 'harness/codex-hooks/tests/*.test.mjs'"],
+        ["node harness/codex-hooks/config.mjs"],
         ["node harness/ci/workflow-policy/check.mjs"],
         ["node harness/ci/review-records/check.mjs"],
         ["node harness/ci/linux/exclusions.mjs verify"],
@@ -219,12 +240,17 @@
           "arguments": [],
           "recipe": "check-node",
           "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "check-pnpm",
+          "star": null
         }
       ],
       "doc": null,
       "name": "check-ts",
       "parameters": [],
-      "priors": 1,
+      "priors": 2,
       "private": false,
       "quiet": false,
       "namepath": "check-ts",
@@ -289,6 +315,19 @@
       "private": false,
       "quiet": false,
       "namepath": "clippy",
+      "shebang": false
+    },
+    "codex-regression": {
+      "attributes": [],
+      "body": [["node harness/codex-regression/run.mjs"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "codex-regression",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "codex-regression",
       "shebang": false
     },
     "commit-base": {

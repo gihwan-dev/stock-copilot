@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 export const HASHES_FILE = "harness/claude-hooks/hashes.json";
 
 export const HASHED = [
+  ".codex/config.toml",
+  ".codex/hooks.json",
+  "harness/codex-hooks/adapter.mjs",
+  "harness/codex-hooks/dispatch.mjs",
+  "harness/codex-hooks/config.mjs",
   "harness/claude-hooks/rules.json",
   "harness/agent-writable.txt",
   "harness/claude-hooks/lock.txt",

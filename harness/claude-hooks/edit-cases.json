@@ -1460,5 +1460,35 @@
     "path": "{home}/.local/state/stock-copilot-harness/records/implementer-a1.json",
     "decision": "deny",
     "rules": ["protected-home"]
+  },
+  {
+    "path": "{worktree}/apps/desktop/src/.codex/config.toml",
+    "role": "implementer",
+    "decision": "deny",
+    "rules": ["misplaced-config"]
+  },
+  {
+    "path": "{worktree}/apps/desktop/src/.codex/hooks.json",
+    "role": "implementer",
+    "decision": "deny",
+    "rules": ["misplaced-config"]
+  },
+  {
+    "path": "{worktree}/.codex/config.toml",
+    "role": "implementer",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "path": "{worktree}/.codex/hooks.json",
+    "role": "implementer",
+    "decision": "warn",
+    "rules": ["protected-path"]
+  },
+  {
+    "path": "{home}/.codex/config.toml",
+    "role": "implementer",
+    "decision": "deny",
+    "rules": ["protected-home"]
   }
 ]

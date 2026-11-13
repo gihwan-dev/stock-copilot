@@ -12,6 +12,7 @@ import { readAllowlistFile, readPolicy, trackedFiles } from "./fragment.mjs";
 export const LOCKED_TREES = [
   "harness",
   ".claude",
+  ".codex",
   "justfile",
   "crates/xtask",
   "lefthook.yml",

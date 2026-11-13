@@ -32,7 +32,6 @@ const EXPECTED_SETTINGS = {
       "Workflow",
       "RemoteTrigger",
       "CronCreate",
-      "mcp__t3-code__delegate_task",
       "mcp__t3-code__create_threads",
       "mcp__t3-code__t3_thread_launch",
       "mcp__t3-code__t3_thread_send",
@@ -51,8 +50,10 @@ const EXPECTED_SETTINGS = {
         hooks: [hook("guard-bash.mjs", { onFailure: "block", timeout: 10 })],
       },
       {
-        matcher: "Agent|SendMessage",
-        hooks: [hook("guard-agent.mjs", { onFailure: "block", timeout: 10 })],
+        matcher: "Agent|SendMessage|mcp__t3[-_]code__delegate_task",
+        hooks: [
+          hook("guard-orchestration.mjs", { onFailure: "block", timeout: 10 }),
+        ],
       },
     ],
     PostToolUse: [
@@ -103,7 +104,7 @@ test("the settings carry exactly the nine documented harness hooks", () => {
   assert.deepEqual(groups, [
     "PreToolUse(Edit|Write|NotebookEdit)",
     "PreToolUse(Bash)",
-    "PreToolUse(Agent|SendMessage)",
+    "PreToolUse(Agent|SendMessage|mcp__t3[-_]code__delegate_task)",
     "PostToolUse(Edit|Write)",
     "PostToolUse(Agent)",
     "SubagentStart(implementer|adversarial-reviewer|review-critic)",

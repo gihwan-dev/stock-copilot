@@ -37,7 +37,7 @@
 
 ## Claude Code 훅
 
-`.claude/settings.json`의 훅은 이 저장소에서 연 Claude Code 세션에만 적용된다. 잠금 스위치(`harness/claude-hooks/lock.txt`)는 `off`다. 꺼진 동안 보호 경로 편집은 경고만 나오고, 금지 셸 명령 거부와 편집 뒤 린트는 동작한다. 그 세션에서 구현은 `implementer` 종류의 서브에이전트만 할 수 있고(다른 종류는 편집 거부), 메인은 `docs/**`만 편집한다.
+`.claude/settings.json`의 훅은 이 저장소에서 연 Claude Code 세션에만 적용된다. 잠금 스위치(`harness/claude-hooks/lock.txt`)는 `off`다. 꺼진 동안 보호 경로 편집은 경고만 나오고, 금지 셸 명령 거부와 편집 뒤 린트는 동작한다. H-41 변경에서는 Claude의 내부 서브에이전트 호출은 적대적 리뷰만 허용하고, 구현·수정·조사·비판은 T3 Codex에 맡긴다. 메인은 `docs/**`만 편집한다.
 
 | 작업 | 상태 | 대상 커밋 | 리뷰 기록 | 뒤 작업에 넘긴 것 |
 |---|---|---|---|---|
@@ -69,3 +69,9 @@ Claude Code 샌드박스는 아직 꺼져 있다. 복사본 실측에서 작업 
 | H-28 서명 키 | 사용자 | Secretive SSH 키, `harness/allowed_signers` |
 | 규칙 세트 | 사용자 | ADR 0020의 `gh api -X POST repos/gihwan-dev/stock-copilot/rulesets` 명령(`master` 삭제·강제 푸시 금지) |
 | H-20 잠금 | 사용자 (Claude Code 밖에서) | ADR 0018의 절차: `node harness/sandbox/prelock.mjs` 확인 → 잠금 설정 생성 → `lock.txt` 켜기 → 해시 다시 쓰기 → 서명 커밋 |
+
+## H-41 Codex 호환 하네스
+
+리뷰 중이다(브랜치 `h-41-codex`, ADR 0021). 리뷰가 끝나면 메인이 표에 행을 더한다. T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않는다.
+
+구현·수정·조사·비판은 T3 Codex `gpt-6.1-sol`, 적대적 리뷰는 Claude Opus 5.5다. 메인은 오케스트레이션과 문서를 맡는다. pnpm은 독립 설치본을 PATH 앞에 두며 `just check-pnpm`이 실제 버전을 확인한다.
