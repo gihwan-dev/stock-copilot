@@ -65,7 +65,7 @@
         },
         {
           "name": "pnpm",
-          "run": "corepack enable"
+          "run": "node harness/ci/tools.mjs pnpm"
         },
         {
           "name": "tools",
@@ -121,7 +121,7 @@
         },
         {
           "name": "pnpm",
-          "run": "corepack enable"
+          "run": "node harness/ci/tools.mjs pnpm"
         },
         {
           "name": "tools",

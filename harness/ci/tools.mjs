@@ -163,7 +163,32 @@ const fetchAll = (root, tools) =>
       }),
   ].reduce((status, step) => (status === 0 ? step() : status), 0);
 
+export const pinnedPackageManager = (root) =>
+  JSON.parse(readFileSync(join(root, "package.json"), "utf8")).packageManager;
+
+export const pnpmSetupCommands = (packageManager) => [
+  ["corepack", ["enable"]],
+  ["corepack", ["install", "--global", packageManager]],
+];
+
+const setupPnpm = (root) => {
+  const packageManager = pinnedPackageManager(root);
+  if (
+    typeof packageManager !== "string" ||
+    !packageManager.startsWith("pnpm@")
+  ) {
+    process.stderr.write("package.json에 pnpm packageManager 고정값이 없다\n");
+    return 1;
+  }
+  return pnpmSetupCommands(packageManager).reduce(
+    (status, [command, args]) =>
+      status === 0 ? run(command, args, { cwd: root }) : status,
+    0,
+  );
+};
+
 const COMMANDS = {
+  pnpm: setupPnpm,
   "install-action": (_, tools) => (
     process.stdout.write(`${installActionSpec(tools)}\n`),
     0
