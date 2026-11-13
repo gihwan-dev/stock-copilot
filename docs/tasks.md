@@ -400,7 +400,7 @@ O 묶음은 E와 함께 개발할 수 있다. 주문 기능 스위치는 처음�
 
 | ID | 작업 | 완료 기준 | 선행 |
 |---|---|---|---|
-| O-01 | 주문 게이트 검증 (사실 수집과 `domain::validate`) | 종목, 장 시간, 통화별 매수가능금액·매도가능수량, 같은 종목 반대 방향 미체결(국내만), 매수 유의사항, 원칙. 항목마다 통과·실패 테스트. 줄 커버리지 100% (design 6.4, harness 6.1) | D-12, D-14, D-26, T-11 |
+| O-01 | 주문 게이트 검증 (사실 수집과 `domain::validate`) | 종목(종목 마스터 조회 결과로만 주문 종목 타입을 만든다, ADR 0032), 장 시간(금액 주문과 소수 수량 매도는 정규장 시작부터 종료 1시간 전까지), 통화별 매수가능금액·매도가능수량, 같은 종목 반대 방향 미체결(국내만), 매수 유의사항, 원칙. 항목마다 통과·실패 테스트. 줄 커버리지 100% (design 6.4, harness 6.1) | D-12, D-14, D-26, T-11 |
 | O-03 | `order-execution` 타입: `BrokerTrade`, `UserApproval`, `ApprovedOrder` | `UserApproval`이 `Proposal<Validated>`를 소유. crate 밖에서 두 타입을 만들거나 복제·`Default`·비공개 메서드 호출하는 코드가 컴파일되지 않음(trybuild). 직렬화·`&mut` 접근자 없음 (architecture 4.3) | A-02, D-14 |
 | O-17 | `approve_and_submit` | `UserPresence::confirm`이 `Confirmed`일 때만 `ApprovedOrder`가 생김. 토큰은 `self` 소비로만 넘어감. Secure Enclave 서명 자리 (architecture 4.3) | O-03, A-04 |
 | O-22 | 주문 횟수 상한 (ORD-6) | 전체 시간당 주문 건수 상한 값 ADR(토스 어뷰징 예보다 충분히 낮게). 넘으면 승인 요청 거부와 이유 한 문장 | A-02, S-10 |
