@@ -25,7 +25,17 @@ import {
   createRepository,
   removeRepository,
   repoRoot,
+  write,
 } from "./signature-repo.mjs";
+
+const VERIFIER_FILES = [
+  "harness/ci/signatures/verify.mjs",
+  "harness/ci/signatures/manifests.mjs",
+  "harness/ci/signatures/lock-point.txt",
+  ".claude/hooks/lib/allowlist.mjs",
+  "harness/agent-writable.txt",
+  "harness/allowed_signers",
+];
 
 const workflow = (name) =>
   JSON.parse(
@@ -375,6 +385,34 @@ test("signatures run from the base commit and say so when the base has no verifi
       `서명 검사 비활성: 기준 커밋 ${made.base}에 ${VERIFIER}가 없다\n`,
     );
     assert.equal(runFromBase(made.directory, "f".repeat(40), head), 1);
+  } finally {
+    removeRepository(made.directory);
+  }
+});
+
+const fromBase = (directory, base, head) =>
+  spawnSync(
+    "node",
+    ["harness/ci/signatures/from-base.mjs", directory, base, head],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+
+test("signatures run the base commit's verifier and fail when it ends without its summary", () => {
+  const made = createRepository();
+  try {
+    VERIFIER_FILES.forEach((path) =>
+      write(made.directory, path, readFileSync(join(repoRoot, path), "utf8")),
+    );
+    const base = commit(made.directory, "verifier");
+    write(made.directory, "harness/ci/signatures/verify.mjs", "");
+    const head = commit(made.directory, "drop the verifier body");
+    const finished = fromBase(made.directory, base, head);
+    assert.equal(finished.status, 0, finished.stderr);
+    assert.match(finished.stdout, /^서명 검사 비활성: 잠금 시점 없음/mu);
+    assert.match(finished.stdout, /^서명 검사: 위반 0건$/mu);
+    const silent = fromBase(made.directory, head, head);
+    assert.equal(silent.status, 1);
+    assert.match(silent.stderr, /요약 줄 없이 끝났다/u);
   } finally {
     removeRepository(made.directory);
   }

@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const VERIFIER = "harness/ci/signatures/verify.mjs";
+
+export const SUMMARY = /^서명 검사: 위반 \d+건$/mu;
 
 export const verifierCommand = (tools, repo, base, head) => [
   "node",
@@ -12,7 +14,7 @@ export const verifierCommand = (tools, repo, base, head) => [
 ];
 
 export const runFromBase = (repo, base, head) => {
-  const scratch = mkdtempSync(join(tmpdir(), "signature-base-"));
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "signature-base-")));
   const tools = join(scratch, "base");
   try {
     const added = spawnSync(
@@ -31,9 +33,18 @@ export const runFromBase = (repo, base, head) => {
       return 0;
     }
     const [program, args] = verifierCommand(tools, repo, base, head);
-    return (
-      spawnSync(program, args, { cwd: tools, stdio: "inherit" }).status ?? 1
-    );
+    const finished = spawnSync(program, args, {
+      cwd: tools,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    process.stdout.write(finished.stdout);
+    process.stderr.write(finished.stderr);
+    if (!SUMMARY.test(finished.stdout)) {
+      process.stderr.write("서명 검사가 요약 줄 없이 끝났다\n");
+      return 1;
+    }
+    return finished.status ?? 1;
   } finally {
     spawnSync("git", ["-C", repo, "worktree", "remove", "--force", tools], {
       stdio: "ignore",
