@@ -91,7 +91,10 @@
   },
   "class-18.tsx": {
     "row": "1-5",
-    "expect": ["better-tailwindcss/no-restricted-classes"]
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "ds/no-style-literals"
+    ]
   },
   "class-19.tsx": {
     "row": "1-5",
@@ -206,7 +209,7 @@
   },
   "object-value.tsx": {
     "row": "6",
-    "expect": ["ds/static-classes"]
+    "expect": ["ds/static-classes", "ds/no-style-object"]
   },
   "spread.tsx": {
     "row": "6",
@@ -218,7 +221,7 @@
   },
   "style-object.tsx": {
     "row": "7",
-    "expect": ["ds/no-inline-style"]
+    "expect": ["ds/no-inline-style", "ds/no-style-object"]
   },
   "literal.tsx": {
     "row": "8",
@@ -231,5 +234,237 @@
   "cn-binding.tsx": {
     "row": "6",
     "expect": ["ds/static-classes"]
+  },
+  "review-dom-0.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-1.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-2.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-3.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-4.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-5.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-6.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-7.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-8.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-9.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-10.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-11.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-12.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-13.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-14.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-dom-15.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-sheet.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-style-tag.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-link-tag.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling"]
+  },
+  "review-ref.tsx": {
+    "row": "review",
+    "expect": ["ds/no-dom-styling", "ds/no-style-literals"]
+  },
+  "review-factory.tsx": {
+    "row": "review",
+    "expect": ["ds/no-element-factory", "ds/no-style-object"]
+  },
+  "review-key-literal.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-object", "ds/static-classes"]
+  },
+  "review-key-class.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-object"]
+  },
+  "review-key-computed.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-object"]
+  },
+  "review-key-concat.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-object"]
+  },
+  "review-entries.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-object"]
+  },
+  "review-prop-fill.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-stroke.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-strokeWidth.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-width.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-height.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-rx.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-ry.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-r.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-opacity.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-fillOpacity.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-strokeOpacity.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-color.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-bgcolor.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-align.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-prop-size.tsx": {
+    "row": "review",
+    "expect": ["ds/no-presentation-props"]
+  },
+  "review-literal-0.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-1.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-2.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-3.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-4.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-5.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-6.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-7.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-8.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-9.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-10.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-11.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-12.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-literal-13.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-assembled-concat.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-assembled-string.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
+  },
+  "review-assembled-template.tsx": {
+    "row": "review",
+    "expect": ["ds/no-style-literals"]
   }
 }

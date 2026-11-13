@@ -1,3 +1,4 @@
+import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
 import tailwind from "eslint-plugin-better-tailwindcss";
 import tseslint from "typescript-eslint";
@@ -29,11 +30,20 @@ export const DS_RULES = {
       ],
     },
   ],
+  "ds/no-dom-styling": "error",
+  "ds/no-element-factory": "error",
+  "ds/no-style-object": "error",
+  "ds/no-presentation-props": "error",
   "ds/static-classes": "error",
   "ds/no-inline-style": "error",
   "ds/no-style-literals": "error",
 };
-export const dsConfigs = (rules = DS_RULES) => [
+export const SHARED_RULES = {
+  "ds/no-shared-jsx": "error",
+  "ds/no-element-factory": "error",
+};
+const listed = (files, rules) => (files.length === 0 ? [] : [{ files, rules }]);
+export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
   {
     files: ["src/shared/ds/**/*.ts", "src/shared/ds/**/*.tsx"],
     languageOptions: {
@@ -49,4 +59,26 @@ export const dsConfigs = (rules = DS_RULES) => [
     },
     rules,
   },
+  {
+    files: ["src/shared/**/*.ts", "src/shared/**/*.tsx"],
+    ignores: ["src/shared/ds/**"],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { ds: dsPlugin },
+    rules: SHARED_RULES,
+  },
+  ...listed(lists.PRICE_COLOR_FILES, {
+    "better-tailwindcss/no-restricted-classes": [
+      "error",
+      {
+        restrict: DS_RULES[
+          "better-tailwindcss/no-restricted-classes"
+        ][1].restrict.slice(0, 2),
+      },
+    ],
+  }),
+  ...listed(lists.INLINE_STYLE_FILES, { "ds/no-inline-style": "off" }),
+  ...listed(lists.DOM_STYLE_FILES, { "ds/no-dom-styling": "off" }),
 ];

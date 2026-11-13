@@ -1,3 +1,5 @@
+import { boundaryRules } from "./ds-boundaries.mjs";
+import { styleLiteral } from "./ds-style-values.mjs";
 const rule = (message, create) => ({
   meta: { type: "problem", schema: [], messages: { forbidden: message } },
   create,
@@ -26,6 +28,7 @@ const report = (ctx, node) => ctx.report({ node, messageId: "forbidden" });
 
 export const dsPlugin = {
   rules: {
+    ...boundaryRules,
     "static-classes": rule(
       "className은 문자열 리터럴 또는 정적인 cn 인자만 받는다.",
       (ctx) => ({
@@ -78,12 +81,7 @@ export const dsPlugin = {
       "색 리터럴과 px 문자열은 토큰으로 바꾼다.",
       (ctx) => {
         const check = (node, text) => {
-          if (
-            /(?:#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|color)\s*\(|\d+(?:\.\d+)?px\b)/iu.test(
-              text,
-            )
-          )
-            report(ctx, node);
+          if (styleLiteral(text)) report(ctx, node);
         };
         return {
           Literal(node) {

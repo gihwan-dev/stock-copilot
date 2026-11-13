@@ -3392,7 +3392,8 @@
       "reports": [
         "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-styling"
       ]
     },
     "src/shared/ds/index.ts": {
@@ -3765,6 +3766,14 @@
     "src/shared/ds/text/literal-allowed.tsx": {
       "row": "React",
       "expect": []
+    },
+    "src/shared/lib/text/spread-allowed.tsx": {
+      "row": "React",
+      "expect": []
+    },
+    "src/shared/lib/text/jsx-spread-boundary.tsx": {
+      "row": "React",
+      "expect": ["ds/no-shared-jsx"]
     }
   }
 }

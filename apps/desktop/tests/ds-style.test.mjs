@@ -3,7 +3,12 @@ import test from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { ESLint } from "eslint";
 import { dsConfigs, DS_RULES } from "../eslint/ds-config.mjs";
-import { cssProblems, snapshot } from "../../../harness/ds-style/check.mjs";
+import {
+  cssBoundaryProblems,
+  snapshot,
+  collectRules,
+  generationProblems,
+} from "../../../harness/ds-style/check.mjs";
 import { desktopRoot, repoRoot } from "./paths.mjs";
 
 const read = (p) => readFileSync(`${repoRoot}/${p}`, "utf8");
@@ -21,7 +26,7 @@ const lint = async (code, rules = DS_RULES) => {
 };
 
 test("DS02 examples match exact rule sets and disabling each enforcing rule loses its witness", async () => {
-  assert.equal(Object.keys(cases).length, 52);
+  assert.equal(Object.keys(cases).length, 110);
   assert.deepEqual(
     readdirSync(`${repoRoot}/harness/ds-style/src/shared/ds`).sort(),
     Object.keys(cases).sort(),
@@ -50,21 +55,35 @@ test("DS02 examples match exact rule sets and disabling each enforcing rule lose
   }
 });
 
-test("DS02 CSS raw values hex and unknown variables each fail while generated variables pass", async () => {
+test("DS02 CSS boundary only permits generated tokens and the fixed theme", () => {
   assert.deepEqual(
-    await cssProblems(
-      ".x { color: var(--color-primary); padding: var(--spacing-space-4); }",
+    cssBoundaryProblems(
+      "theme.css",
+      read("apps/desktop/src/shared/ds/theme.css"),
     ),
     [],
   );
-  for (const code of [
-    ".x { color: #ffffff; }",
-    ".x { padding: 13px; }",
-    ".x { color: var(--missing); }",
-    ".x { color: var(--MISSING); }",
-    ".x { padding: calc(13px); }",
+  assert.deepEqual(cssBoundaryProblems("theme.css", "@plugin custom;"), [
+    "theme entry changed",
+  ]);
+  for (const value of [
+    "rgb()",
+    "rotate()",
+    "theme()",
+    "attr()",
+    "image-set('http://x')",
+    "!important",
+    "@layer",
+    "@source inline",
+    "@config",
+    "@plugin",
+    "@custom-variant",
+    "@media (min-width:13px)",
+    "VAR(--x)",
   ])
-    assert.ok((await cssProblems(code)).length > 0, code);
+    assert.deepEqual(cssBoundaryProblems("custom.css", value), [
+      "handwritten CSS forbidden",
+    ]);
 });
 
 test("DS02 actual Tailwind selector snapshot is stable and reset removal changes it", async () => {
@@ -150,25 +169,49 @@ test("DS02 wrong entryPoint fixtures expose fail-open default classes", async ()
   }
 });
 
-test("DS02 each CSS enforcement removal loses its isolated violation", async () => {
-  const { CSS_CONFIG } = await import("../../../harness/ds-style/check.mjs");
-  for (const [rule, code] of [
-    ["color-no-hex", ".x { color: #fff; }"],
-    ["scale-unlimited/declaration-strict-value", ".x { padding: 13px; }"],
-  ]) {
-    const config = { ...CSS_CONFIG, rules: { [rule]: CSS_CONFIG.rules[rule] } };
-    assert.deepEqual(await cssProblems(code, config), [rule]);
-    assert.deepEqual(
-      await cssProblems(code, { ...config, rules: { [rule]: null } }),
-      [],
+test("DS02 snapshot includes nested variants space utilities and ungenerated candidates", async () => {
+  const { DS_CLASSES, DS_VARIANTS } = await import("../eslint/ds-classes.mjs");
+  const baseline = await snapshot();
+  assert.deepEqual(generationProblems(baseline), []);
+  for (const prefix of [
+    "hover:",
+    "motion-reduce:",
+    "window-md:",
+    "@content-medium:",
+    "space-x-",
+  ])
+    assert.ok(
+      baseline.candidates.some(
+        (r) => r.name.startsWith(prefix) && r.generated === "yes",
+      ),
+      prefix,
+    );
+  assert.ok(
+    baseline.rules.some((r) => r.context.some((c) => c.startsWith("@media"))),
+  );
+  assert.ok(
+    baseline.rules.some((r) =>
+      r.context.some((c) => c.startsWith("@container")),
+    ),
+  );
+  for (const variant of ["print", "dark", "group-hover"])
+    assert.notDeepEqual(
+      await snapshot("normal", DS_CLASSES, [...DS_VARIANTS, variant]),
+      baseline,
+      variant,
+    );
+  for (const name of ["min-h-0", "p-0", "animate-spin"]) {
+    const changed = await snapshot("normal", [...DS_CLASSES, name]);
+    assert.notDeepEqual(changed, baseline, name);
+    assert.ok(
+      generationProblems(changed).some((p) => p.endsWith(`: ${name}`)),
+      name,
     );
   }
   assert.deepEqual(
-    await cssProblems(
-      ".x { color: var(--missing); }",
-      CSS_CONFIG,
-      "--missing: red;",
+    collectRules(
+      "@media print { @container (width > 1px) { .x { color:red } } }",
     ),
-    [],
+    [{ selector: ".x", context: ["@media print", "@container (width > 1px)"] }],
   );
 });

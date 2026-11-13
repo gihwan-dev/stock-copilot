@@ -1,197 +1,67 @@
 # ADR 초안: DS-02 내부 스타일 검사
 
-- 상태: 초안
-- 범위: shared/ds 내부. 화면 금지는 DS-09, 공개 props는 DS-10, 컴포넌트는 DS-03, 넘침의 파일별 예외는 DS-19다.
+- 상태: 적대적 리뷰 수정
+- 기준: b9fc68fe37d8b6496e5f1a0987e6bd790a1e6654
+- 범위: shared/ds 내부, 비화면 shared 폴더의 렌더링 경계. 컴포넌트는 만들지 않는다.
 
-| R-14 # | 금지 | 강제 도구 | 위반 | 통과 |
+## 규칙 대응
+
+| R-14 # | 금지 | 강제 | 위반 | 통과 |
 | --- | --- | --- | --- | --- |
-| 1 | 생성 테마에 없는 클래스 | better-tailwindcss/no-unknown-classes, theme.css 절대 경로 고정 검사 | bg-red-500 | bg-primary |
-| 2 | 임의 값·속성·변형, 변수 축약, 분수·백분율·불투명도·px | no-restricted-classes 닫힌 클래스 집합 | p-(--x), p-[13px], w-1/2 | p-space-4 |
-| 3 | 숫자 직접 입력과 토큰 namespace 혼용 | 같은 닫힌 집합 | border-2, p-sidebar-width, w-space-4 | border-hairline, w-sidebar-width |
-| 4 | dark 변형 | 같은 닫힌 집합, 허용 변형 목록 | dark:bg-primary | hover:bg-primary |
-| 5 | 가격 파일 허용 목록 밖 가격색 | 별도 no-restricted-classes 설정. 초기 파일 목록은 비움 | text-up | text-ink |
-| 6 | 동적 클래스와 검증 불가능한 전달 | 로컬 AST 규칙, no-concatenated-classes | className={value}, cn(value) | className="flex", cn('flex', active && 'block') |
-| 7 | 인라인 style | 별도 로컬 AST 규칙. 초기 허용 파일 없음 | style={value} | className="flex" |
-| 8 | 색·px 문자열 | 별도 로컬 AST 규칙, Literal·TemplateElement | '#fff', '13px' | 'primary' |
-| 15 | CSS 색·길이 직접 입력, 미등록 var | stylelint color-no-hex, declaration-strict-value, 로컬 CSS 검사 | color: red; padding: var(--bad) | color: var(--color-primary) |
+| 1 | 생성 테마 밖 클래스 | no-unknown-classes, cwd·entryPoint 고정 | bg-red-500 | bg-primary |
+| 2 | 임의 값·속성·변형, 변수 축약, 분수·불투명도 | no-restricted-classes의 닫힌 집합 | p-(--x), p-[13px] | p-space-4 |
+| 3 | 숫자 직접 입력, 토큰 의미 혼용 | 같은 집합 | z-50, w-row-height | z-modal, h-row-height |
+| 4 | dark 변형 | no-restricted-classes | dark:bg-primary | hover:bg-primary |
+| 5 | 허용 파일 밖 가격색 | PRICE_COLOR_FILES, 파일별 no-restricted-classes | text-up | text-ink |
+| 6 | 동적 className, 객체 속성·팩터리·DOM 우회 | static-classes, no-concatenated-classes, no-style-object, no-element-factory, no-dom-styling | 변수, 템플릿, JSX spread, createElement, classList | 문자열 className |
+| 7 | 허용 파일 밖 inline style, DOM 스타일 변경 | INLINE_STYLE_FILES, DOM_STYLE_FILES, no-inline-style, no-dom-styling | style prop, el.style | 토큰 className |
+| 8 | 색·단위 리터럴, 소문자 요소의 표현 속성 | no-style-literals, no-presentation-props | red, 1rem, width={13}, stroke | 토큰 className, d, viewBox |
+| 15 | 수기 CSS 파일 | 기존 local/forbidden-file + CSS 파일 경계 검사. 생성물은 gen-tokens --check | custom.css의 모든 내용 | 고정 theme.css, 재생성 동일성 검사를 통과한 tokens.css |
 
-닫힌 집합은 코드용 토큰 입력에서 의미별 접두어를 조합한다. spacing은 간격에만, size/layout 길이는 크기에만 쓴다. 숫자 직접 입력·음수 접두·rounded-full은 금지하고 radius 토큰을 쓴다. flex-1과 w-full은 디자인의 flex:1, width:100%에 대응하는 닫힌 키워드 예외다. absolute, overflow 계열, h-screen은 DS-19가 파일별로 제한해야 하므로 이 작업에서 승인 목록을 만들지 않고 집합 밖에 둔다. 아직 필요한 컴포넌트가 없으며 허용 목록 추가는 후속 작업의 검토 대상이다.
+모든 새 규칙은 끄기 불가 목록에 있다. 가격색·style·DOM 스타일 예외는 ds-allowlists.mjs의 보호된 파일 목록이며 처음에는 모두 비어 있다. 목록에 등록한 파일만 예외가 되고 다른 파일은 계속 실패하는 테스트를 둔다.
 
-className은 문자열 리터럴 또는 직접 cn 호출만 받는다. cn 인자는 문자열, 조건식의 문자열 분기, 논리 AND의 오른쪽 문자열만 받는다. 템플릿, 변수, 객체, 별칭 함수, clsx/cva 및 spread는 전달 형태 자체를 거부한다. 따라서 값 추적의 빈틈을 허용하지 않는다. cn 구현·컴포넌트는 만들지 않는다.
+## DOM과 렌더링 경계
 
-Tailwind는 무한한 임의 값을 생성하므로 전체 가능한 클래스 집합을 유한 스냅샷이라고 부르지 않는다. 검사 입력은 토큰별 의미 조합, 닫힌 키워드, 독립적인 DS-13 인계 반례 집합이다. 실제 컴파일에서 생성되는 선택자 집합을 고정한다. DS-13 utility-cases.json은 생성기의 토큰별 1개 대표 대응 검사이며 이 목록을 스냅샷 입력으로 복사하지 않는다. 스냅샷을 허용 목록으로 역참조하지 않는다.
+shared/ds에서 classList, className, style, setAttribute, setAttributeNS, toggleAttribute, setProperty, cssText, animate, insertAdjacentHTML, innerHTML, outerHTML, adoptedStyleSheets, insertRule, CSSStyleSheet, attributeStyleMap 멤버 접근을 막는다. 리터럴 계산 키와 구조 분해도 본다. 동적 계산 멤버는 기존 no-computed-member에 더해 DS 규칙도 막는다. style·link JSX 태그 및 dangerouslySetInnerHTML은 의도한 DS 규칙으로 금지한다.
 
-생성 tokens.css는 DS-13 재생성 동일성 검사 대상이다. theme.css는 Tailwind 진입 문법 고정 검사 대상이다. 수기 CSS만 stylelint와 var 이름 검사를 적용한다.
+createElement·cloneElement·jsx·jsxs·jsxDEV 참조는 별칭 import와 객체 멤버도 금지한다. 객체의 className·class·style 키는 값이 리터럴이어도 금지한다. 계산 키와 Object.fromEntries도 금지한다. JSX spread는 숨은 className·style 전달 경로여서 DS 안에서는 이전 shared 폴더 예외를 좁힌다. 기존 spread-allowed.tsx가 DS에서 오류를 기대하도록 바꾼 것은 이 결정의 결과다. DS 밖 shared에서는 spread 규칙 자체는 여전히 꺼져 있지만 JSX 렌더링이 별도 규칙으로 금지된다. 비화면 shared의 객체 spread 통과 대조군과, JSX spread가 오직 새 JSX 경계 규칙으로 실패하는 대조군을 둔다.
 
-## 사전 확인
+architecture 5장의 역할에 따라 shared/lib·shared/ipc·shared/platform에서는 JSX와 요소 팩터리를 금지한다. platform의 DOM 구독·Canvas 어댑터는 JSX를 렌더하지 않는다. features·app의 화면 코드 금지는 DS-09다. 그 두 폴더에는 이번 DS 규칙을 적용하지 않으며, DS-09 전에는 DS 전용 금지에 대해 지금은 무방비다.
 
-기준 커밋은 `8b28a27a171d10b5a4bd22dc898ac42ca083594a`, 작업 브랜치는 `ds-02`다. pnpm frozen 설치와 lefthook 설치를 실행했다. 첫 전체 검사 실행 중 의존성 설치가 허용 목록 테스트에 영향을 주었으므로 매니페스트와 잠금 파일을 기준 상태로 복원하고 전체 검사를 다시 실행한다.
+동적 미터 폭을 ref로 넣는 예외는 열지 않는다. 닫힌 단계 유틸리티 또는 코어 좌표를 받는 전용 미터·차트 컴포넌트의 필요와 정책은 DS-03·DS-06에서 정한다. 측정용 파일은 DOM_STYLE_FILES에 사용자 승인으로 추가한다.
 
-설치 실측에서 better-tailwindcss 4.11.0의 peer 범위는 ESLint 10과 Tailwind 4.3.5를 포함한다. 작업 디렉터리가 desktop인 실제 ESLint 실행에서 bg-red-500은 no-unknown-classes 오류, bg-primary는 통과했다. 저장소 루트에서 플러그인을 실행하면 Tailwind를 찾지 못해 규칙이 꺼지는 경고가 나왔다. 검사 실행 디렉터리도 고정해야 한다.
+## 리터럴과 표현 속성
 
-## 실측 결과와 경계
+CSS 이름 색 148개와 transparent·currentColor를 모두 예약한다. 목록은 기존 설치 패키지 color-name 1.1.4(MIT)에 있는 표준 이름 집합으로 확인했다. currentColor의 일반 문자열 예외는 열지 않는다. red라는 문자열을 DS 안의 다른 의미로 재사용하는 것도 실패한다. UI 문구는 UiText/messages 계층의 책임이며 DS에 색 이름을 상태값이나 문구로 겸용하지 않는다. bg-transparent 클래스는 design/components/bundle.css의 ghost 버튼·IconButton·Callout 투명 배경과 일치하므로 닫힌 키워드 예외로 유지한다.
 
-없는 CSS에서는 bg-red-500이 통과한다. reset 없는 CSS에서도 통과한다. tokens.css 단독은 reset을 포함하므로 bg-red-500을 검출한다. 따라서 세 잘못된 경로가 모두 조용히 통과한다는 가정은 채택하지 않는다. 올바른 theme.css와 cwd의 정확한 고정 검사를 별도로 두어 세 설정 모두 변경으로 실패한다.
+CSS 색 함수(rgb·hsl·hwb·lab·lch·oklab·oklch·color·color-mix·light-dark·device-cmyk·contrast-color), CSS 길이·각도·시간·해상도 단위와 calc·min·max·clamp를 검사한다. 단위만 있는 문자열과 템플릿 조각도 검사해 "1"+"3"+"px", String(13)+"px", `${n}px`를 막는다.
 
-전용 예제는 `harness/ds-style/src/shared/ds`의 52개 파일과 `cases.json` 기대 규칙 집합이다. 기존 ESLint 예제의 파일+기대 집합 구조를 따르며 DS 설정 블록을 그대로 가져온다. 타입 인식 전체 앱 설정의 DS 규칙·설정과 동일한지는 별도 테스트로 고정한다. 기존 전체 예제에는 React 통과 대조군을 하나 추가했다. 기존 spread 대조군에는 새 오류 하나만 더했다.
+소문자 HTML·SVG 요소에서는 보호된 PRESENTATION_PROPS의 표현 속성을 값과 무관하게 금지한다. camelCase와 하이픈 표기를 동일하게 본다. fill·stroke·strokeWidth·width·height·rx·ry·r·opacity·색·정렬·글자 모양·transform 등은 클래스만 쓴다. d·viewBox는 경로·좌표계라 허용한다. 대문자 컴포넌트의 size={13} 같은 숫자 props는 지금 이 규칙이 막지 않는다. 공개 props는 DS-10, Recharts stroke·strokeWidth와 좌표 등은 DS-06의 보호된 허용 파일 목록에서 정한다. 간접 데이터의 의미를 DS-02가 추론한다는 주장은 하지 않는다.
 
-규칙 비활성화 검사는 각 예제의 기대 규칙마다 다른 규칙을 끈 격리 설정으로 먼저 검출을 확인하고, 해당 규칙도 끄면 진단이 없어지는 것을 확인한다. 겹치는 규칙이 있으므로 전체 설정에서 규칙 하나를 끄는 것만으로 모든 오류가 사라진다는 주장은 하지 않는다. CSS 두 플러그인 규칙도 격리 설정에서 같은 검사를 한다. CSS var 검사는 등록 목록에 없는 이름으로 실패하고, 등록된 이름은 통과한다.
+## 클래스 의미와 후속 범위
 
-생성 유틸리티 스냅샷은 실제 Tailwind 4.3.5의 4,285개 선택자다. 토큰 의미별 조합, 닫힌 키워드, 닫힌 변형과 DS-13 인계 반례가 입력이다. 무한 문법 전체를 열거한 목록이 아니다. reset 제거가 실제 선택자 집합을 바꾸는 테스트가 있다. 재생성은 `node --input-type=module`에서 `harness/ds-style/check.mjs`의 snapshot을 호출해 utilities.json에 JSON으로 기록하는 방식이며, 허용 목록은 이 출력에 의존하지 않는다. 파일은 harness 보호 범위에 있다.
+크기 토큰의 이름·usage가 폭이면 w/min-w/max-w, 높이면 h/min-h/max-h만 만든다. 아이콘·점은 정사각형이므로 w/h/size를 허용한다. control-pad-sm은 수평 padding, gap-hairline은 padding/gap에만 쓴다. 축이 분류되지 않는 새 크기 토큰은 오류로 드러낸다. w-row-height·h-sidebar-width·w-space-4·p-sidebar-width는 금지다.
 
-알려진 경계: DOM의 classList/setAttribute 같은 직접 조작 경로를 이 작업의 클래스 표현식 분석기로 추적하지 않는다. 기존 불변·DOM·전역 규칙과 후속 DS-09/DS-10 리뷰가 함께 필요하다. cn 구현은 만들지 않았고 다른 도우미나 객체·변수 인자를 허용하지 않는다. 새 클래스나 변형은 닫힌 목록과 스냅샷을 검토해야 한다. CSS는 임의 함수·escape·주석·사용자 변수 선언·fallback을 허용하지 않는다. 공개 props, 화면 코드 금지, 실제 컴포넌트, 파일별 넘침 허용 목록은 구현하지 않았다.
+min-w-0·min-h-0은 reset 뒤 생성되지 않는다. 허용 목록에서는 제거했다. harness 4.4 #26의 자식 래퍼에 필요한 0 최소 크기는 DS-11·DS-19가 생성 정책(@utility 또는 토큰)을 결정해야 한다. 생성기·theme.css를 여기서 바꾸지 않는다.
 
-기존 테스트 변경은 eslint-config.test.mjs의 끌 수 없는 규칙 배열에 여섯 규칙 이름을 추가한 것뿐이다. 기존 예제 기대값에는 ds/static-classes를 추가했다. check-list의 두 보호 목록에는 새 검사 한 줄만 등록했다. test-diff HEAD는 위반 없음이었다. 프로젝트 신뢰 및 네이티브 훅 신뢰의 런타임 적용 여부는 이 세션에서 확인할 수 없었으며 자동 종료 검사에 의존하지 않고 전체 검사를 직접 실행한다.
+길이 토큰 w/h는 DS-02에서 의미 검증까지만 한다. DS-19가 #21의 파일별 길이 제한을 추가해야 하며 그 전에는 전역 허용이다. absolute·overflow는 DS-02에서 필요가 없어 먼저 닫은 상태다. 현재 클래스 집합이 DS-19의 파일별 제한까지 구현했다고 해석하지 않는다.
 
-## 의존성
+className은 문자열 리터럴 또는 정적인 cn 인자만 받는다. 현재 승인된 cn 구현이 없어 로컬 선언·매개변수·import로 바인딩된 cn 호출은 거부한다. 예제의 미해결 cn은 문법 대조군이며 실제 앱에서는 타입 검사도 통과해야 한다.
 
-직접 개발 의존성은 better-tailwindcss 4.11.0(no-unknown-classes, no-restricted-classes, no-concatenated-classes), stylelint 18.0.0(color-no-hex), stylelint-declaration-strict-value 1.13.0(declaration-strict-value)이다. 모두 문서 지정 버전이며 MIT다. better-tailwindcss의 cwd와 entryPoint를 함께 고정한다. stylelint 플러그인의 peer 범위는 >=16 <=18이며 실제 18.0.0에서 실행했다. 아래는 잠금 파일에 새로 추가된 전이 패키지를 포함한 목록이다.
+## 스냅샷과 CSS 검사 축소
 
-| 패키지 | 잠금 버전 | 라이선스 |
-| --- | --- | --- |
-| `@csstools/css-calc` | 3.4.3 | MIT |
-| `@csstools/css-parser-algorithms` | 4.0.2 | MIT |
-| `@csstools/css-syntax-patches-for-csstree` | 1.1.16 | MIT-0 |
-| `@csstools/css-tokenizer` | 4.0.2 | MIT |
-| `@csstools/media-query-list-parser` | 5.0.2 | MIT |
-| `@csstools/selector-resolve-nested` | 4.0.2 | MIT-0 |
-| `@csstools/selector-specificity` | 6.0.1 | MIT-0 |
-| `@dual-bundle/import-meta-resolve` | 4.2.1 | MIT |
-| `@eslint/css-tree` | 4.1.2 | MIT |
-| `@pkgr/core` | 0.3.6 | MIT |
-| `@valibot/to-json-schema` | 1.8.0 | MIT |
-| `argparse` | 3.0.4 | PSF-2.0 |
-| `array-buffer-byte-length` | 1.0.2 | MIT |
-| `arraybuffer.prototype.slice` | 1.0.4 | MIT |
-| `async-function` | 1.0.0 | MIT |
-| `available-typed-arrays` | 1.0.7 | MIT |
-| `call-bind-apply-helpers` | 1.0.2 | MIT |
-| `call-bind` | 1.0.9 | MIT |
-| `call-bound` | 1.0.4 | MIT |
-| `colord` | 2.12.0 | MIT |
-| `cosmiconfig` | 10.0.1 | MIT |
-| `css-tree` | 3.2.1 | MIT |
-| `data-view-buffer` | 1.0.2 | MIT |
-| `data-view-byte-length` | 1.0.2 | MIT |
-| `data-view-byte-offset` | 1.0.1 | MIT |
-| `define-data-property` | 1.1.4 | MIT |
-| `define-properties` | 1.2.1 | MIT |
-| `dunder-proto` | 1.0.1 | MIT |
-| `env-paths` | 2.2.1 | MIT |
-| `es-abstract-get` | 1.0.0 | MIT |
-| `es-abstract` | 1.24.2 | MIT |
-| `es-define-property` | 1.0.1 | MIT |
-| `es-object-atoms` | 1.1.2 | MIT |
-| `es-set-tostringtag` | 2.1.0 | MIT |
-| `es-to-primitive` | 1.3.4 | MIT |
-| `eslint-plugin-better-tailwindcss` | 4.11.0 | MIT |
-| `for-each` | 0.3.5 | MIT |
-| `function.prototype.name` | 1.2.0 | MIT |
-| `functions-have-names` | 1.2.3 | MIT |
-| `generator-function` | 2.0.1 | MIT |
-| `get-intrinsic` | 1.3.0 | MIT |
-| `get-proto` | 1.0.1 | MIT |
-| `get-symbol-description` | 1.1.0 | MIT |
-| `globalthis` | 1.0.4 | MIT |
-| `gopd` | 1.2.0 | MIT |
-| `has-bigints` | 1.1.0 | MIT |
-| `has-property-descriptors` | 1.0.2 | MIT |
-| `has-proto` | 1.2.0 | MIT |
-| `has-symbols` | 1.1.0 | MIT |
-| `has-tostringtag` | 1.0.2 | MIT |
-| `import-meta-resolve` | 4.2.0 | MIT |
-| `internal-slot` | 1.1.0 | MIT |
-| `is-array-buffer` | 3.0.5 | MIT |
-| `is-async-function` | 2.1.1 | MIT |
-| `is-bigint` | 1.1.0 | MIT |
-| `is-boolean-object` | 1.2.2 | MIT |
-| `is-callable` | 1.2.7 | MIT |
-| `is-data-view` | 1.0.2 | MIT |
-| `is-date-object` | 1.1.0 | MIT |
-| `is-document.all` | 1.0.0 | MIT |
-| `is-finalizationregistry` | 1.1.1 | MIT |
-| `is-generator-function` | 1.1.2 | MIT |
-| `is-map` | 2.0.3 | MIT |
-| `is-negative-zero` | 2.0.3 | MIT |
-| `is-number-object` | 1.1.1 | MIT |
-| `is-regex` | 1.2.1 | MIT |
-| `is-set` | 2.0.3 | MIT |
-| `is-shared-array-buffer` | 1.0.4 | MIT |
-| `is-string` | 1.1.1 | MIT |
-| `is-symbol` | 1.1.1 | MIT |
-| `is-typed-array` | 1.1.15 | MIT |
-| `is-weakmap` | 2.0.2 | MIT |
-| `is-weakref` | 1.1.1 | MIT |
-| `is-weakset` | 2.0.4 | MIT |
-| `isarray` | 2.0.5 | MIT |
-| `js-yaml` | 5.5.0 | MIT |
-| `math-intrinsics` | 1.1.0 | MIT |
-| `mdn-data` | 2.27.1 | CC0-1.0 |
-| `mdn-data` | 2.37.2 | CC0-1.0 |
-| `object-inspect` | 1.13.4 | MIT |
-| `object-keys` | 1.1.1 | MIT |
-| `object.assign` | 4.1.7 | MIT |
-| `own-keys` | 1.0.2 | MIT |
-| `possible-typed-array-names` | 1.1.0 | MIT |
-| `postcss-safe-parser` | 7.1.0 | MIT |
-| `postcss-selector-parser` | 7.1.8 | MIT |
-| `postcss-value-parser` | 4.2.0 | MIT |
-| `reflect.getprototypeof` | 1.0.10 | MIT |
-| `regexp.escape` | 2.0.1 | MIT |
-| `regexp.prototype.flags` | 1.5.4 | MIT |
-| `safe-array-concat` | 1.1.4 | MIT |
-| `safe-push-apply` | 1.0.0 | MIT |
-| `safe-regex-test` | 1.1.0 | MIT |
-| `set-function-length` | 1.2.2 | MIT |
-| `set-function-name` | 2.0.2 | MIT |
-| `set-proto` | 1.0.0 | MIT |
-| `side-channel-list` | 1.0.1 | MIT |
-| `side-channel-map` | 1.0.1 | MIT |
-| `side-channel-weakmap` | 1.0.2 | MIT |
-| `side-channel` | 1.1.1 | MIT |
-| `signal-exit` | 4.1.0 | ISC |
-| `stop-iteration-iterator` | 1.1.0 | MIT |
-| `string.prototype.trim` | 1.2.11 | MIT |
-| `string.prototype.trimend` | 1.0.10 | MIT |
-| `string.prototype.trimstart` | 1.0.8 | MIT |
-| `strip-bom` | 3.0.0 | MIT |
-| `stylelint-declaration-strict-value` | 1.13.0 | MIT |
-| `stylelint` | 18.0.0 | MIT |
-| `synckit` | 0.12.3 | MIT |
-| `tailwind-csstree` | 0.3.3 | Apache-2.0 |
-| `tsconfig-paths-webpack-plugin` | 4.2.0 | MIT |
-| `tsconfig-paths` | 4.2.0 | MIT |
-| `typed-array-buffer` | 1.0.3 | MIT |
-| `typed-array-byte-length` | 1.0.3 | MIT |
-| `typed-array-byte-offset` | 1.0.5 | MIT |
-| `typed-array-length` | 1.0.8 | MIT |
-| `unbox-primitive` | 1.1.0 | MIT |
-| `util-deprecate` | 1.0.2 | MIT |
-| `valibot` | 1.5.0 | MIT |
-| `which-boxed-primitive` | 1.1.1 | MIT |
-| `which-builtin-type` | 1.2.1 | MIT |
-| `which-collection` | 1.0.2 | MIT |
-| `which-typed-array` | 1.1.24 | MIT |
-| `write-file-atomic` | 8.0.0 | ISC |
+입력은 코드용 토큰의 의미별 조합, 닫힌 키워드·변형, DS-13 인계 반례다. DS-13 utility-cases.json은 대표 대응 검사이며 이 목록을 복사하지 않는다. 스냅샷 출력을 허용 목록으로 역참조하지 않는다.
 
-## 규칙 비활성화 증거
+실제 Tailwind compile의 결과를 PostCSS로 파싱해 중첩된 모든 규칙 선택자와 부모 선택자·at-rule 문맥을 수집한다. Tailwind 자체 candidatesToCss 결과로 각 후보의 생성됨/안 됨도 고정한다. 허용 후보가 생성되지 않으면 스냅샷 일치와 별개로 실패한다. 반례 후보는 안 만들어져도 그 상태를 기록한다. hover·motion-reduce·window-md·@content-medium·space-x의 생성, print·dark·group-hover 추가와 min-h-0·p-0·animate-spin 추가가 스냅샷 차이로 드러나는 테스트가 있다. 최종 입력은 후보 8,202개, CSS 규칙 8,208개다. 재생성은 check.mjs의 snapshot을 실행해 utilities.json에 기록한다.
 
-`DS02 examples match exact rule sets and disabling each enforcing rule loses its witness`는 아래 예제마다 해당 규칙만 켜면 오류, 해당 규칙도 끄면 진단 0개임을 직접 확인한다. 기대 집합 비교는 켠 상태의 오류가 없어지면 실패한다.
+수기 CSS는 local/forbidden-file이 이미 파일 자체를 거부한다. theme.css는 정확한 진입 문법 검사, tokens.css는 DS-13 gen-tokens --check의 생성물 동일성 검사 대상이다. 이 둘에 일반 스타일 규칙을 억지로 적용하지 않는다. 이전의 cssProblems와 “임의 함수를 막는다”는 주장은 폐기했다. rgb·rotate·theme·attr·image-set·important·Tailwind 지시문 등의 수기 CSS는 내용과 무관하게 파일 경계에서 거부한다. tokens.css 자체가 바뀌는 경우는 기존 DS-13 재생성 비교가 검증한다.
 
-| R-14 # | 대표 예제 | 비활성화한 규칙 | 결과 |
-| --- | --- | --- | --- |
-| 1 | class-0 (bg-red-500) | no-unknown-classes | 진단 0개 |
-| 2 | class-7 (p-(--x)) | no-restricted-classes | 진단 0개 |
-| 3 | class-9 (z-50) | no-restricted-classes | 진단 0개 |
-| 4 | class-21 (dark:bg-primary) | no-restricted-classes | 진단 0개 |
-| 5 | class-29 (text-up) | no-restricted-classes | 진단 0개 |
-| 6 | dynamic-variable / dynamic-template | static-classes / no-concatenated-classes | 각각 진단 0개 |
-| 7 | inline | no-inline-style | 진단 0개 |
-| 8 | literal / literal-template | no-style-literals | 진단 0개 |
-| 15 | CSS #fff / padding:13px | color-no-hex / declaration-strict-value | 각각 진단 0개 |
+stylelint 18.0.0과 stylelint-declaration-strict-value 1.13.0을 제거했다. PostCSS 8.5.32(MIT)는 기존 전이 버전을 정확히 고정해 직접 개발 의존성으로 올렸다. 새 버전의 전이 패키지는 추가하지 않았다. better-tailwindcss 4.11.0은 유지한다. 버전·cwd·entryPoint의 실제 호환성 검사는 유지한다. 없는 진입점과 reset 없는 CSS에서는 bg-red-500이 통과하지만 tokens.css 단독은 검출한다는 실측도 유지한다.
 
-미등록 var는 `--missing`을 등록 목록에 넣는 변형에서 통과한다. 생성 토큰 목록에 없는 var가 실제 정상 설정에서 실패하는 검사를 별도로 둔다.
+## 검증과 알려진 경계
 
-최종 검증의 로그는 작업 사본 `target/ds-02/`에 둔다. 시작 기준 상태 전체 검사는 baseline.log(종료 0), DS 전용 검사는 green7.log(6/6), ESLint 전체 예제는 violations3.log(0 failure), Knip 변형은 knip-test2.log(7/7)이다. 앞선 전체 검사 두 회는 각각 의존성의 동적 로드와 lint 설정 경로의 URL 추적으로 실패했으며, 두 원인은 기존 테스트를 약하게 바꾸지 않고 구현에서 수정했다.
+기존 클래스 예제에 리뷰 반례를 더한 파일+기대 결과 예제는 110개다. 새 경계 규칙별 격리 설정에서 켜면 검출, 끄면 통과를 확인한다. 실제 앱 ESLint 설정을 읽는 임시 프로젝트에서는 원본 tsconfig를 상속하고 TS 7 tsc와 TS 6 API 모두로 리뷰 반례를 타입 검사한다. 같은 코드가 의도한 새 규칙으로 실패하고, 토큰 클래스와 d/viewBox 대조군은 두 검사 모두 통과한다. shared/lib Box를 DS에서 가져오는 우회도 실제 설정에서 실패한다.
 
-cn의 로컬 선언·매개변수·가져오기는 스코프 바인딩 검사로 거부한다. 승인된 cn 구현은 아직 없다. 전용 예제의 미해결 cn은 문법 검사 대조군이며 실제 앱에서는 타입 검사도 통과해야 한다. cn-binding 회귀 예제는 수정 전 실패와 수정 후 통과를 확인한다.
+기존 master 테스트의 단언 삭제·약화는 하지 않는다. eslint-config.test.mjs의 끌 수 없는 규칙 목록에는 새 이름만 추가한다. 기존 concat-key-gap 예제의 정확한 보고 목록에는 새 DOM 규칙 오류를 추가한다. DS의 spread 예제 기대값 추가는 앞 구현의 결정과 이번 승인을 따른다. 대조군은 비화면 shared 경계에서도 따로 검사한다.
+
+아직 구현하지 않은 것은 DS-09 화면 금지, DS-10 공개 props, DS-06 차트 라이브러리 숫자 props의 파일 제한, DS-11·DS-19의 레이아웃 최소 크기 및 파일별 넘침 제한이다. 승인 목록은 전부 비어 있다. 코드의 임의 계산으로 조립한 문자열 의미나 외부 라이브러리 내부 동작까지 분석하지 않는다.
