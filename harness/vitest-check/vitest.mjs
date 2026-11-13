@@ -64,6 +64,24 @@ export const verdict = ({ status, report }, testFiles) => {
   ];
 };
 
+export const VITEST_ENVIRONMENT = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "USER",
+];
+
+export const vitestEnvironment = (source) =>
+  Object.fromEntries(
+    Object.entries(source).filter(([name]) =>
+      VITEST_ENVIRONMENT.includes(name),
+    ),
+  );
+
 export const runVitest = (root, configFile = appConfigFile) => {
   const scratch = mkdtempSync(join(tmpdir(), "vitest-check-"));
   const output = join(scratch, "report.json");
@@ -78,7 +96,7 @@ export const runVitest = (root, configFile = appConfigFile) => {
       "--reporter=json",
       `--outputFile.json=${output}`,
     ],
-    { cwd: root, encoding: "utf8" },
+    { cwd: root, encoding: "utf8", env: vitestEnvironment(process.env) },
   );
   const report = existsSync(output)
     ? JSON.parse(readFileSync(output, "utf8"))
