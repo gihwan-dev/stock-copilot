@@ -1,0 +1,235 @@
+{
+  "class-0.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "better-tailwindcss/no-unknown-classes"
+    ]
+  },
+  "class-1.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "better-tailwindcss/no-unknown-classes"
+    ]
+  },
+  "class-2.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "better-tailwindcss/no-unknown-classes"
+    ]
+  },
+  "class-3.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "ds/no-style-literals"
+    ]
+  },
+  "class-4.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "ds/no-style-literals"
+    ]
+  },
+  "class-5.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "ds/no-style-literals"
+    ]
+  },
+  "class-6.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-7.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-8.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-9.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-10.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-11.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-12.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-13.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-14.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-15.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-16.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-17.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-18.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-19.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-20.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-21.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-22.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-23.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-24.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-25.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-26.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-27.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-28.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-29.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-30.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "class-31.tsx": {
+    "row": "1-5",
+    "expect": [
+      "better-tailwindcss/no-restricted-classes",
+      "better-tailwindcss/no-unknown-classes"
+    ]
+  },
+  "class-32.tsx": {
+    "row": "1-5",
+    "expect": ["better-tailwindcss/no-restricted-classes"]
+  },
+  "allowed.tsx": {
+    "row": "1-5",
+    "expect": []
+  },
+  "condition-allowed.tsx": {
+    "row": "6",
+    "expect": []
+  },
+  "dynamic-variable.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-template.tsx": {
+    "row": "6",
+    "expect": [
+      "ds/static-classes",
+      "better-tailwindcss/no-concatenated-classes",
+      "better-tailwindcss/no-restricted-classes"
+    ]
+  },
+  "dynamic-static-template.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-ternary.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-object.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-helper.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-cn-variable.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-cn-object.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-cn-template.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "dynamic-cn-spread.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "object-value.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "spread.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  },
+  "inline.tsx": {
+    "row": "7",
+    "expect": ["ds/no-inline-style"]
+  },
+  "style-object.tsx": {
+    "row": "7",
+    "expect": ["ds/no-inline-style"]
+  },
+  "literal.tsx": {
+    "row": "8",
+    "expect": ["ds/no-style-literals"]
+  },
+  "literal-template.tsx": {
+    "row": "8",
+    "expect": ["ds/no-style-literals"]
+  },
+  "cn-binding.tsx": {
+    "row": "6",
+    "expect": ["ds/static-classes"]
+  }
+}

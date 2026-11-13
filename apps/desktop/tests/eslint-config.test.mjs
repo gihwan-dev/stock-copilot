@@ -52,6 +52,12 @@ const forbiddenFiles = [
 ];
 
 const undisableable = [
+  "better-tailwindcss/no-unknown-classes",
+  "better-tailwindcss/no-concatenated-classes",
+  "better-tailwindcss/no-restricted-classes",
+  "ds/static-classes",
+  "ds/no-inline-style",
+  "ds/no-style-literals",
   "local/no-comments",
   "local/no-money-coercion",
   "local/forbidden-file",

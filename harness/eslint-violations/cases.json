@@ -3433,7 +3433,7 @@
     },
     "src/shared/ds/text/spread-allowed.tsx": {
       "row": "React",
-      "expect": []
+      "expect": ["ds/static-classes"]
     },
     "src/shared/ipc/bindings.ts": {
       "row": "원시 타입",
@@ -3760,6 +3760,10 @@
     },
     "src/shared/ipc/testing/mockBindings.ts": {
       "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ds/text/literal-allowed.tsx": {
+      "row": "React",
       "expect": []
     }
   }

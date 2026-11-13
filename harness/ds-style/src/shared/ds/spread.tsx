@@ -1,0 +1,1 @@
+const probe = <div {...values} />;

@@ -42,6 +42,16 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/ds-style/check.mjs",
+      "kind": "check",
+      "cases": "apps/desktop/tests/ds-style.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/ds-style.test.mjs",
+        "name": "DS02 actual Tailwind selector snapshot is stable and reset removal changes it"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "node harness/ds-tokens/check.mjs",
       "kind": "check",
       "cases": "apps/desktop/design-tokens/tokens.json",
