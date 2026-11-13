@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 
-use crate::{Amount, MoneyError, Ratio};
+use crate::{Amount, DisplayDirection, MoneyError, Ratio};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RatioQuotient {
@@ -8,13 +8,26 @@ pub enum RatioQuotient {
     Approximate(ApproximateRatio),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ApproximateRatio(Decimal);
 
 impl ApproximateRatio {
     #[must_use]
-    pub fn as_decimal(&self) -> Decimal {
+    pub(crate) fn as_decimal(&self) -> Decimal {
         self.0
+    }
+    #[must_use]
+    pub fn cmp_ratio(&self, other: &Ratio) -> std::cmp::Ordering {
+        self.as_decimal().cmp(&other.as_decimal())
+    }
+
+    #[must_use]
+    pub fn original_direction(&self) -> DisplayDirection {
+        if self.as_decimal().is_sign_negative() {
+            DisplayDirection::Down
+        } else {
+            DisplayDirection::Up
+        }
     }
 }
 
@@ -77,28 +90,29 @@ fn classify_quotient(left: Amount, right: Amount, candidate: Amount) -> Option<R
         if first == second {
             RatioQuotient::Exact(Ratio::new(candidate.as_decimal()))
         } else {
-            RatioQuotient::Approximate(ApproximateRatio(maximum_scale(candidate).as_decimal()))
+            let mut value = maximum_scale(candidate).as_decimal();
+            value.set_sign_negative(
+                left.as_decimal().is_sign_negative() != right.as_decimal().is_sign_negative(),
+            );
+            RatioQuotient::Approximate(ApproximateRatio(value))
         }
     })
 }
 
 fn maximum_scale(value: Amount) -> Amount {
-    let mut coefficient = value.as_decimal().mantissa();
-    let mut scale = value.as_decimal().scale();
+    let mut result = value.as_decimal();
     for next_scale in 1..=28 {
-        if next_scale <= scale {
+        if next_scale <= result.scale() {
             continue;
         }
-        let Some(next) = coefficient
-            .checked_mul(10)
-            .filter(|next| next.unsigned_abs() <= Decimal::MAX.mantissa().unsigned_abs())
-        else {
+        let Some(next) = result.mantissa().checked_mul(10).and_then(|coefficient| {
+            Decimal::try_from_i128_with_scale(coefficient, next_scale).ok()
+        }) else {
             break;
         };
-        coefficient = next;
-        scale = next_scale;
+        result = next;
     }
-    Amount::new(Decimal::from_i128_with_scale(coefficient, scale))
+    Amount::new(result)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,7 +279,7 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     enum Precision {
         Exact,
         Approximate,
@@ -538,6 +552,9 @@ mod tests {
             proptest::strategy::Just(Decimal::MAX),
             proptest::strategy::Just(Decimal::MIN),
             proptest::strategy::Just(Decimal::new(1, 28)),
+            product_samples(ProductTemplate::Small).prop_map(|sample| sample.left),
+            product_samples(ProductTemplate::Trailing).prop_map(|sample| sample.left),
+            terminating_samples().prop_map(|sample| sample.right),
             (
                 any::<u32>(),
                 any::<u32>(),
@@ -674,5 +691,425 @@ mod tests {
         let maximum = super::Magnitude::coefficient(Amount::new(Decimal::MAX));
         assert!(maximum.scaled(super::Scale(56)).is_some());
         assert_eq!(maximum.scaled(super::Scale(128)), None);
+    }
+    fn quotient_value(quotient: RatioQuotient) -> Decimal {
+        match quotient {
+            RatioQuotient::Exact(value) => value.as_decimal(),
+            RatioQuotient::Approximate(value) => value.as_decimal(),
+        }
+    }
+
+    #[test]
+    fn underflow_preserves_the_original_sign() {
+        for (left, right, negative) in [
+            ("-0.0000000000000000000000000001", "3", true),
+            ("0.0000000000000000000000000001", "3", false),
+            ("0.0000000000000000000000000001", "-3", true),
+            ("-0.0000000000000000000000000001", "-3", false),
+            ("0", "3", false),
+        ] {
+            let value = quotient_value(money(left).checked_ratio(&money(right)).expect("몫"));
+            assert!(value.is_zero());
+            assert_eq!(value.is_sign_negative(), negative);
+        }
+    }
+
+    #[test]
+    fn reviewed_maximum_boundaries_remain_valid() {
+        let maximum = money("79228162514264337593543950335");
+        assert_eq!(maximum.checked_mul(&Ratio::new(Decimal::ONE)), Ok(maximum));
+        assert_eq!(
+            maximum.checked_ratio(&money("1")),
+            Ok(RatioQuotient::Exact(Ratio::new(Decimal::MAX)))
+        );
+        assert_quotient(
+            "79228162514264337593543950327",
+            "9999999999999999999999999999",
+            "7.9228162514264337593543950335",
+            Precision::Approximate,
+        );
+    }
+    fn approximate(left: &str, right: &str) -> Option<super::ApproximateRatio> {
+        match money(left).checked_ratio(&money(right)).expect("몫") {
+            RatioQuotient::Exact(_) => None,
+            RatioQuotient::Approximate(value) => Some(value),
+        }
+    }
+
+    #[test]
+    fn approximate_ratios_support_ordering_without_erasing_precision() {
+        let lower = approximate("3", "7").expect("근사");
+        let upper = approximate("4", "7").expect("근사");
+        assert!(lower < upper);
+        assert_eq!(lower.cmp(&upper), std::cmp::Ordering::Less);
+        assert_eq!(lower.cmp_ratio(&ratio("0.5")), std::cmp::Ordering::Less);
+        assert_eq!(upper.cmp_ratio(&ratio("0.5")), std::cmp::Ordering::Greater);
+        assert_eq!(
+            lower.cmp_ratio(&Ratio::new(lower.as_decimal())),
+            std::cmp::Ordering::Equal
+        );
+        assert!(approximate("1", "2").is_none());
+    }
+
+    #[test]
+    fn approximate_direction_uses_the_unrounded_quotient_sign() {
+        for (left, right, expected) in [
+            (
+                "-0.0000000000000000000000000001",
+                "3",
+                crate::DisplayDirection::Down,
+            ),
+            (
+                "0.0000000000000000000000000001",
+                "3",
+                crate::DisplayDirection::Up,
+            ),
+            (
+                "0.0000000000000000000000000001",
+                "-3",
+                crate::DisplayDirection::Down,
+            ),
+            (
+                "-0.0000000000000000000000000001",
+                "-3",
+                crate::DisplayDirection::Up,
+            ),
+            ("-3", "7", crate::DisplayDirection::Down),
+            ("3", "7", crate::DisplayDirection::Up),
+        ] {
+            assert_eq!(
+                approximate(left, right).expect("근사").original_direction(),
+                expected
+            );
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum ProductTemplate {
+        Small,
+        Trailing,
+        Reduced,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum CoverageKind {
+        Small,
+        Trailing,
+        Reduced,
+        Terminating,
+        Constructed,
+        Boundary,
+    }
+
+    #[derive(Debug)]
+    enum Expected {
+        Product,
+        Quotient(Precision, Decimal),
+    }
+
+    #[derive(Debug)]
+    struct Sample {
+        left: Decimal,
+        right: Decimal,
+        expected: Expected,
+    }
+
+    fn signed_coefficient(value: i128, sign: Sign) -> i128 {
+        if sign == Sign::Negative {
+            value.checked_neg().expect("부호")
+        } else {
+            value
+        }
+    }
+
+    fn trailing_decimal(coefficient: i128, zeros: u32, scale: u32) -> Decimal {
+        let factor = 10_i128.checked_pow(zeros).expect("스케일");
+        Decimal::from_i128_with_scale(coefficient.checked_mul(factor).expect("계수"), scale)
+    }
+
+    fn ending_coefficient(seed: i128, digit: i128) -> i128 {
+        seed.checked_mul(10)
+            .expect("계수")
+            .checked_add(digit)
+            .expect("끝자리")
+    }
+
+    fn product_samples(template: ProductTemplate) -> proptest::strategy::BoxedStrategy<Sample> {
+        (
+            1_i128..=9999,
+            1_i128..=9999,
+            0_u32..=12,
+            0_u32..=12,
+            1_u32..=8,
+            14_u32..=20,
+            any::<bool>(),
+        )
+            .prop_map(
+                move |(
+                    first_seed,
+                    second_seed,
+                    first_scale,
+                    second_scale,
+                    zeros,
+                    reduction,
+                    negative,
+                )| {
+                    let magnitude = ending_coefficient(first_seed, 3);
+                    let second = ending_coefficient(second_seed, 7);
+                    let sign = if negative {
+                        Sign::Negative
+                    } else {
+                        Sign::Positive
+                    };
+                    let first = signed_coefficient(magnitude, sign);
+                    let (left, right) = match template {
+                        ProductTemplate::Small => (
+                            Decimal::from_i128_with_scale(first, first_scale),
+                            Decimal::from_i128_with_scale(second, second_scale),
+                        ),
+                        ProductTemplate::Trailing => (
+                            trailing_decimal(
+                                first,
+                                zeros,
+                                zeros.checked_add(first_scale).expect("스케일"),
+                            ),
+                            trailing_decimal(
+                                second,
+                                zeros,
+                                zeros.checked_add(second_scale).expect("스케일"),
+                            ),
+                        ),
+                        ProductTemplate::Reduced => (
+                            trailing_decimal(first, reduction, 28),
+                            trailing_decimal(second, reduction, 28),
+                        ),
+                    };
+                    Sample {
+                        left,
+                        right,
+                        expected: Expected::Product,
+                    }
+                },
+            )
+            .boxed()
+    }
+
+    fn terminating_samples() -> proptest::strategy::BoxedStrategy<Sample> {
+        (
+            1_i128..=9999,
+            1_u32..=12,
+            1_u32..=12,
+            0_u32..=8,
+            any::<bool>(),
+        )
+            .prop_map(|(numerator_seed, twos, fives, scale, negative)| {
+                let magnitude = numerator_seed
+                    .checked_mul(10)
+                    .expect("계수")
+                    .checked_add(3)
+                    .expect("끝자리");
+                let sign = if negative {
+                    Sign::Negative
+                } else {
+                    Sign::Positive
+                };
+                let numerator = signed_coefficient(magnitude, sign);
+                let denominator = 2_i128
+                    .checked_pow(twos)
+                    .expect("2의 거듭제곱")
+                    .checked_mul(5_i128.checked_pow(fives).expect("5의 거듭제곱"))
+                    .expect("분모");
+                let places = twos.max(fives);
+                let coefficient = numerator
+                    .checked_mul(2_i128.checked_pow(places.abs_diff(twos)).expect("계수"))
+                    .and_then(|value| {
+                        value.checked_mul(5_i128.checked_pow(places.abs_diff(fives)).expect("계수"))
+                    })
+                    .expect("분자");
+                Sample {
+                    left: Decimal::from_i128_with_scale(numerator, scale),
+                    right: Decimal::from_i128_with_scale(denominator, 0),
+                    expected: Expected::Quotient(
+                        Precision::Exact,
+                        Decimal::from_i128_with_scale(
+                            coefficient,
+                            scale.checked_add(places).expect("스케일"),
+                        ),
+                    ),
+                }
+            })
+            .boxed()
+    }
+
+    fn constructed_samples() -> proptest::strategy::BoxedStrategy<Sample> {
+        (
+            1_i128..=9999,
+            1_i128..=9999,
+            0_u32..=8,
+            0_u32..=8,
+            any::<bool>(),
+        )
+            .prop_map(
+                |(quotient_seed, denominator_seed, quotient_scale, denominator_scale, negative)| {
+                    let magnitude = quotient_seed
+                        .checked_mul(10)
+                        .expect("계수")
+                        .checked_add(3)
+                        .expect("끝자리");
+                    let sign = if negative {
+                        Sign::Negative
+                    } else {
+                        Sign::Positive
+                    };
+                    let quotient = signed_coefficient(magnitude, sign);
+                    let denominator = denominator_seed
+                        .checked_mul(10)
+                        .expect("계수")
+                        .checked_add(7)
+                        .expect("끝자리");
+                    Sample {
+                        left: Decimal::from_i128_with_scale(
+                            quotient.checked_mul(denominator).expect("정수 곱"),
+                            quotient_scale
+                                .checked_add(denominator_scale)
+                                .expect("스케일"),
+                        ),
+                        right: Decimal::from_i128_with_scale(denominator, denominator_scale),
+                        expected: Expected::Quotient(
+                            Precision::Exact,
+                            Decimal::from_i128_with_scale(quotient, quotient_scale),
+                        ),
+                    }
+                },
+            )
+            .boxed()
+    }
+
+    fn assert_near_half_boundary(maximum: i128, offset: i128, denominator: i128, adjustment: i128) {
+        let residual = maximum
+            .checked_mul(offset)
+            .expect("넓은 정수")
+            .checked_sub(adjustment.checked_mul(denominator).expect("넓은 정수"))
+            .expect("잔차")
+            .unsigned_abs();
+        let unit = u128::try_from(denominator.checked_sub(offset).expect("분모")).expect("양수");
+        assert!(residual.checked_mul(1000).expect("하한") > unit.checked_mul(499).expect("하한"));
+        assert!(residual.checked_mul(2).expect("상한") < unit);
+    }
+
+    fn boundary_samples() -> proptest::strategy::BoxedStrategy<Sample> {
+        (
+            proptest::sample::select(vec![1030_i128, 2507, 149, 1328]),
+            1_u32..=28,
+            any::<bool>(),
+        )
+            .prop_map(|(offset, scale, negative)| {
+                let maximum = Decimal::MAX.mantissa();
+                let denominator_base = 10_i128.checked_pow(28).expect("분모");
+                let adjustment = maximum
+                    .checked_mul(offset)
+                    .expect("넓은 정수")
+                    .checked_add(denominator_base.checked_div(2).expect("절반"))
+                    .expect("올림")
+                    .checked_div(denominator_base)
+                    .expect("분모");
+                let sign = if negative {
+                    Sign::Negative
+                } else {
+                    Sign::Positive
+                };
+                assert_near_half_boundary(maximum, offset, denominator_base, adjustment);
+                let numerator =
+                    signed_coefficient(maximum.checked_sub(adjustment).expect("분자"), sign);
+                Sample {
+                    left: Decimal::from_i128_with_scale(numerator, scale),
+                    right: Decimal::from_i128_with_scale(
+                        denominator_base.checked_sub(offset).expect("분모"),
+                        28,
+                    ),
+                    expected: Expected::Quotient(
+                        Precision::Approximate,
+                        Decimal::from_i128_with_scale(signed_coefficient(maximum, sign), scale),
+                    ),
+                }
+            })
+            .boxed()
+    }
+
+    fn samples(kind: CoverageKind) -> proptest::strategy::BoxedStrategy<Sample> {
+        match kind {
+            CoverageKind::Small => product_samples(ProductTemplate::Small),
+            CoverageKind::Trailing => product_samples(ProductTemplate::Trailing),
+            CoverageKind::Reduced => product_samples(ProductTemplate::Reduced),
+            CoverageKind::Terminating => terminating_samples(),
+            CoverageKind::Constructed => constructed_samples(),
+            CoverageKind::Boundary => boundary_samples(),
+        }
+    }
+
+    fn exercise_sample(sample: &Sample) -> Decimal {
+        let left = Money::new(Amount::new(sample.left), Currency::Usd);
+        match sample.expected {
+            Expected::Product => {
+                let result = left.checked_mul(&Ratio::new(sample.right));
+                assert_eq!(
+                    result,
+                    product_reference(sample.left, sample.right)
+                        .map(|value| Money::new(Amount::new(value), Currency::Usd))
+                );
+                result.expect("정확한 곱").amount().as_decimal()
+            }
+            Expected::Quotient(precision, expected_value) => {
+                assert_quotient_against_integer_bound(sample.left, sample.right);
+                let result =
+                    left.checked_ratio(&Money::new(Amount::new(sample.right), Currency::Usd));
+                let expected = match precision {
+                    Precision::Exact => RatioQuotient::Exact(Ratio::new(expected_value)),
+                    Precision::Approximate => {
+                        RatioQuotient::Approximate(super::ApproximateRatio(expected_value))
+                    }
+                };
+                assert_eq!(result, Ok(expected));
+                quotient_value(result.expect("최대 정밀도 몫"))
+            }
+        }
+    }
+
+    #[test]
+    fn structured_categories_each_reach_4096_nonzero_nonunit_successes() {
+        for kind in [
+            CoverageKind::Small,
+            CoverageKind::Trailing,
+            CoverageKind::Reduced,
+            CoverageKind::Terminating,
+            CoverageKind::Constructed,
+            CoverageKind::Boundary,
+        ] {
+            let successes = std::cell::Cell::new(0_usize);
+            let nonunit_successes = std::cell::Cell::new(0_usize);
+            TestRunner::new(Config::with_cases(4096))
+                .run(&samples(kind), |sample| {
+                    let value = exercise_sample(&sample);
+                    successes.set(
+                        successes
+                            .get()
+                            .checked_add(usize::from(!value.is_zero()))
+                            .expect("성공 수"),
+                    );
+                    let nonunit = !value.is_zero()
+                        && sample.left.abs() != Decimal::ONE
+                        && sample.right.abs() != Decimal::ONE;
+                    nonunit_successes.set(
+                        nonunit_successes
+                            .get()
+                            .checked_add(usize::from(nonunit))
+                            .expect("비단위 성공 수"),
+                    );
+                    Ok(())
+                })
+                .expect("범주별 독립 기준");
+            assert_eq!(successes.get(), 4096);
+            assert_eq!(nonunit_successes.get(), 4096);
+        }
     }
 }

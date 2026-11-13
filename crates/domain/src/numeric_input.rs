@@ -14,7 +14,7 @@ pub enum NumericError {
 
 impl NumericInput {
     pub fn try_new(value: &str) -> Result<Self, NumericError> {
-        if value.len() > 59 {
+        if value.len() > 256 {
             return Err(NumericError::TooLong);
         }
         Ok(Self(value.to_owned()))
@@ -36,13 +36,13 @@ mod tests {
 
     #[test]
     fn input_length_is_bounded_before_copying() {
-        let boundary = "0".repeat(59);
-        let input = NumericInput::try_new(&boundary).expect("59바이트");
+        let boundary = "0".repeat(256);
+        let input = NumericInput::try_new(&boundary).expect("256바이트");
         assert_eq!(
             Ratio::parse(&input).expect("영").as_decimal(),
             Decimal::ZERO
         );
-        for size in [60, 1_000_000] {
+        for size in [257, 1_000_000] {
             assert_eq!(
                 NumericInput::try_new(&"0".repeat(size)),
                 Err(NumericError::TooLong)
@@ -138,5 +138,14 @@ mod tests {
                 },
             )
             .expect("독립 정수 계수 기준");
+    }
+    #[test]
+    fn leading_zero_decimal_input_matches_amount_parser() {
+        let text = format!("{}1.5", "0".repeat(57));
+        let input = NumericInput::try_new(&text).expect("정상 길이 입력");
+        assert_eq!(
+            Ratio::parse(&input).expect("비율").as_decimal(),
+            Decimal::new(15, 1)
+        );
     }
 }

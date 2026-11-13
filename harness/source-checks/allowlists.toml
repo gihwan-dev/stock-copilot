@@ -1,4 +1,3 @@
-
 [[generated]]
 path = "crates/adapters/broker-toss-schema"
 reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 crate (harness.md 5장)"

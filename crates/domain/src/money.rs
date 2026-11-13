@@ -11,7 +11,7 @@ pub struct Amount(Decimal);
 
 impl Amount {
     #[must_use]
-    pub fn new(value: Decimal) -> Self {
+    pub(crate) fn new(value: Decimal) -> Self {
         Self(value)
     }
 

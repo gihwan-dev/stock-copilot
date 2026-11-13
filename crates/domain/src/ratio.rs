@@ -7,7 +7,7 @@ pub struct Ratio(Decimal);
 
 impl Ratio {
     #[must_use]
-    pub fn new(value: Decimal) -> Self {
+    pub(crate) fn new(value: Decimal) -> Self {
         Self(value)
     }
 
