@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
+use super::decimal_methods::DecimalRules;
 use super::failure::CheckFailure;
+use super::finding::Finding;
+use proc_macro2::TokenStream;
 
 pub(crate) const ALLOWLIST_FILE: &str = "harness/source-checks/allowlists.toml";
 
@@ -14,6 +17,7 @@ pub(crate) enum Membership {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Allowlists {
+    decimal: DecimalRules,
     generated: BTreeSet<String>,
     clock_environment: BTreeSet<String>,
     clock_names: BTreeMap<String, BTreeSet<String>>,
@@ -117,6 +121,7 @@ impl Allowlists {
             CheckFailure::Allowlist(format!("{ALLOWLIST_FILE}: {error}"))
         })?;
         Ok(Self {
+            decimal: DecimalRules::parse(&table)?,
             generated: listed_paths(root, &table, "generated")?,
             clock_environment: listed_paths(root, &table, "clock-environment")?,
             clock_names: named_paths(&table, "clock-environment")?,
@@ -126,6 +131,10 @@ impl Allowlists {
                 None => BTreeSet::new(),
             },
         })
+    }
+
+    pub(crate) fn decimal_findings(&self, path: &str, stream: TokenStream) -> Vec<Finding> {
+        self.decimal.findings(path, stream)
     }
 
     pub(crate) fn generated(&self, path: &str) -> Membership {

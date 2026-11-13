@@ -1,6 +1,10 @@
 mod allowlist;
 pub(crate) mod cargo_config;
 mod comments;
+mod decimal_arithmetic;
+mod decimal_methods;
+#[cfg(test)]
+mod decimal_methods_tests;
 mod failure;
 mod finding;
 mod globs;
@@ -128,6 +132,9 @@ pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) ->
                 .map(|(line, rule)| Finding::at_line(path, line, rule)),
         ),
         Err(_) => findings.push(Finding::whole_file(path, Rule::Unparsable)),
+    }
+    if let Ok(stream) = source.parse::<TokenStream>() {
+        findings.extend(allowlists.decimal_findings(path, stream));
     }
     findings.extend(
         test_module_impl_lines(path, source)
