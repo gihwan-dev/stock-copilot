@@ -8,7 +8,7 @@
 
 ## 설치 버전과 실제 계약
 
-Codex CLI 0.168.0을 썼다. 홈 설정과 실제 자격 증명은 읽거나 바꾸지 않았다. 설치 바이너리의 --codex-run-as-apply-patch로 실제 파서를 모델 없이 실행했다.
+Codex CLI 0.168.0을 썼다. 수정 1차의 홈 신뢰 항목 잔류는 수정 3차에서 정정한다. 실제 자격 증명은 다루지 않는다. 설치 바이너리의 --codex-run-as-apply-patch로 실제 파서를 모델 없이 실행했다.
 
 | 입력 | 실제 파서 |
 |---|---|
@@ -67,7 +67,7 @@ Codex CLI 0.168.0을 썼다. 홈 설정과 실제 자격 증명은 읽거나 바
 
 컴퓨터별 프로필은 stock-copilot을 상속한다. 사용자가 default_permissions=stock-copilot-session을 명시적으로 선택한다. sandbox 재현은 -P stock-copilot-session이다. 승인한 하네스 작업에서만 --harness로 출력하고 그 프로필을 선택한다. 생성 결과를 커밋하지 않는다.
 
-[공식 권한 문서](https://learn.chatgpt.com/docs/permissions#local-and-private-networks)와 실측을 대조했다. 기본 프로필과 localhost 도메인만 추가한 프로필은 TCP bind를 거부했다. 공유 정책의 allowLocalBinding=true를 Codex allow_local_binding에 그대로 반영한다. Unix 소켓은 전부 열지 않고 컴퓨터별 출력에 공유 checkPlaces가 쓰는 실제 임시 폴더만 허용한다. TCP·Unix 자체 서버 연결 성공과 1.1.1.1 직접 연결 EPERM을 확인했다. 이 예외는 검사에 필요한 로컬 통신 범위이며 외부 도메인 허용 목록은 유지한다.
+[공식 권한 문서](https://learn.chatgpt.com/docs/permissions#local-and-private-networks)와 실측을 대조했다. 기본 프로필과 localhost 도메인만 추가한 프로필은 TCP bind를 거부했다. 공유 정책의 allowLocalBinding=true를 Codex allow_local_binding에 그대로 반영한다. Unix 소켓은 전부 열지 않고 컴퓨터별 출력에 세션 worktree 전용 검사 임시 폴더만 허용한다. 셸과 checkPlaces의 TMPDIR도 같은 폴더로 고정한다. TCP·Unix 자체 서버 연결 성공과 1.1.1.1 직접 연결 EPERM을 확인했다. 이 예외는 검사에 필요한 로컬 통신 범위이며 외부 도메인 허용 목록은 유지한다.
 
 임시 worktree에서 좁은 Git 권한으로 add·commit·merge master가 모두 종료 0이었다. 전체 소스 사본에서는 Lefthook의 fresh-build·commit-guard·전체 check를 모두 켠 commit도 종료 0이고 HEAD가 바뀌었다. hooks·config 쓰기는 모두 거부됐다. 자기 Git 관리 폴더의 commondir·gitdir·config.worktree도 읽기 전용으로 별도 제한했다. 제한 전에는 세 파일 쓰기가 성공했고 제한 후에는 모두 EPERM이었다. add·commit·merge의 성공과 두 부모 병합은 그대로 확인했다. 자동 유지보수는 packed-refs.lock 쓰기 경고를 냈지만 커밋·병합은 성공했다. 다른 브랜치를 바꿀 수 있는 packed-refs 쓰기는 열지 않는다.
 
@@ -90,7 +90,7 @@ PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션
 
 - 래퍼 자체의 시작 실패·강제 종료·시간 초과는 deny 출력을 보장하지 못한다. Git 질의 실패·Node 실패·모듈 import 실패는 래퍼가 이벤트별 거부 JSON과 종료 0으로 닫는다.
 - 프로젝트 신뢰와 훅 정의 신뢰는 별개이며 프로젝트 파일만으로 사용자 신뢰를 강제할 수 없다.
-- T3 full-access가 프로필을 덮을 수 있다. 현재 세션은 새 설정으로 다시 시작하지 않았으므로 적용됐다고 판정하지 않는다.
+- T3 full-access가 프로필을 덮을 수 있다. 2026-11-13 메인의 새 T3 세션 검증은 훅·프로필 미적용이었다. 프로젝트 신뢰와 실제 적용 확인을 마치기 전에는 강제로 보지 않는다.
 - ConfigChange 이벤트가 없어 설정의 세션 반영 거부를 Claude와 같은 방식으로 구현하지 못한다.
 - 일부 hosted·특수 도구는 훅 경로 밖이다. 훅을 거치지 않는 호출은 기본 거부 판정도 받지 않는다.
 - 문자열 검사로 프로그램 내부의 임의 쓰기를 전부 해석하지 못한다. OS 권한과 보호 파일 서명 검사를 함께 쓴다.
@@ -104,7 +104,7 @@ PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션
 
 ## 결과
 
-수정 1차 헤드리스는 계약 2회·운영 회귀 2회·전체 소스 Stop 3회로 7회다. 운영 회귀는 마지막 실행도 실제 상태 기준 10/10 통과했다. 첫 전체 Stop에서 테스트의 중첩 샌드박스와 T3 결과 해석 결함을 발견해 수정했다. 둘째 전체 Stop은 status=passed·깨끗한 HEAD를 기록했다. 셋째는 실제 경로 별칭 보정 뒤 pwd 성공·Stop status=passed·깨끗한 HEAD를 함께 확인했다. 패치·Git 권한·HOME 변경 검사는 모델 없이 했다. Codex의 실제 Seatbelt 셸은 CODEX_SANDBOX=seatbelt를 준다. justfile은 이를 기존 SANDBOX_RUNTIME=1 계약에 연결해 중첩 불가 환경을 인식한다. 샌드박스 밖에서는 기존 표식의 값이 유지된다. 실제 OS 권한을 풀거나 테스트 단언을 바꾸지 않는다. pnpm 12 실측에서 npm_config_store_dir·PNPM_STORE_DIR는 적용되지 않고 pnpm_config_store_dir만 적용됐다. 자동 저장소 선택은 프로젝트와 검사 임시 사본에서 서로 다른 폴더를 골라 offline tarball 실패를 냈다. 컴퓨터별 출력에서 이 환경 변수로 허용된 홈 캐시를 고정하고 config get store-dir와 실제 오프라인 도구 복구 테스트로 확인한다. 홈 설정·키·계좌 데이터를 다루지 않았다. 검사 끄기는 추가하지 않았다.
+수정 1차 헤드리스는 계약 2회·운영 회귀 2회·전체 소스 Stop 3회로 7회다. 운영 회귀는 마지막 실행도 실제 상태 기준 10/10 통과했다. 첫 전체 Stop에서 테스트의 중첩 샌드박스와 T3 결과 해석 결함을 발견해 수정했다. 둘째 전체 Stop은 status=passed·깨끗한 HEAD를 기록했다. 셋째는 실제 경로 별칭 보정 뒤 pwd 성공·Stop status=passed·깨끗한 HEAD를 함께 확인했다. 패치·Git 권한·HOME 변경 검사는 모델 없이 했다. Codex의 실제 Seatbelt 셸은 CODEX_SANDBOX=seatbelt를 준다. justfile은 이를 기존 SANDBOX_RUNTIME=1 계약에 연결해 중첩 불가 환경을 인식한다. 샌드박스 밖에서는 기존 표식의 값이 유지된다. 실제 OS 권한을 풀거나 테스트 단언을 바꾸지 않는다. pnpm 12 실측에서 npm_config_store_dir·PNPM_STORE_DIR는 적용되지 않고 pnpm_config_store_dir만 적용됐다. 자동 저장소 선택은 프로젝트와 검사 임시 사본에서 서로 다른 폴더를 골라 offline tarball 실패를 냈다. 컴퓨터별 출력에서 이 환경 변수로 허용된 홈 캐시를 고정하고 config get store-dir와 실제 오프라인 도구 복구 테스트로 확인한다. 키·계좌 데이터는 다루지 않았다. 홈 설정을 바꾸지 않았다는 당시 보고는 수정 3차에서 정정한다. 검사 끄기는 추가하지 않았다.
 
 known-gaps: 63건 (eslint 7건, hook 6건, adr 50건(문서만(예제 없음)))
 
@@ -186,3 +186,63 @@ prelock은 명시적 --codex-user-config가 있을 때만 사용자 설정을 �
 policy-coverage.json은 공유 정책의 모든 항목과 대응을 고정한다. 다른 worktree 쓰기·Claude 소켓은 더 좁게 제한한다. pnpm 부모 임시 쓰기 대신 고정 저장소를 쓴다. 상대 denyWrite와 홈 denyRead glob도 반영한다. 새 미분류 항목은 config 검사가 실패한다.
 
 새 가드는 먼저 스테이징하고 해시 쓰기 모드로 생성한다. .DS_Store 등 미추적 파일은 제외한다. 기존 셸 예제의 허용 7건은 거부로 강화했다. 기존 거부를 허용으로 바꾼 것은 없다.
+
+
+## 수정 3차 결정과 실측
+
+대상은 master 7681ec8이다. Codex CLI 0.168.0을 썼다. 세 지적은 재현 테스트에서 모두 실패했고 수정 뒤 통과했다.
+
+| 지적 | 사실과 조치 | 재현 테스트 |
+|---|---|---|
+| 1 | 어댑터에 workdir가 남은 입력은 범위 검사를 빠뜨렸다. 최상위 cwd와 tool_input·action의 작업 폴더를 각각 실제 경로로 검증한다. 명시한 폴더로 셸·패치·린트를 판정한다. 문자열 아님·빈 값·작업 사본 밖·서로 다른 인자는 거부한다 | R3 shell workdir fields cannot escape or override the directory used by the guard |
+| 2 | 원격 경로만 strategy.branch 일치를 빠뜨렸다. 두 경로에서 문자열·브리프 일치와 기존 branchProblem을 함께 검사한다 | R3 remote and local launch branches must match a valid brief branch |
+| 3 | 사용자 임시 폴더 전체의 Unix 소켓을 허용했다. worktree 실제 경로 해시와 UID로 정한 짧은 전용 폴더만 허용한다. 셸 TMPDIR와 종료 검사 TMPDIR가 같다 | R3 setup and hook checks share a dedicated temporary directory rather than the user temp root |
+
+### 작업 폴더 입력
+
+임시 CODEX_HOME과 로컬 가짜 Responses 서버를 썼다. 실제 모델·로그인·자격 증명 없이 설치 CLI가 받은 도구 정의와 PreToolUse 원문을 관찰했다. 헤드리스 호출은 실패한 계약 탐색을 포함해 5회다. 처음 두 호출은 응답 사용량 형식 오류, 셋째는 도구 목록 탐색이었다. 넷째에서 실제 셸을 실행했고 다섯째의 legacy 설정에서는 code-mode host가 비활성이라 실행되지 않았다.
+
+| 노출·시도한 도구 | 도구 인자 | 실제 훅 |
+|---|---|---|
+| functions.exec 안의 tools.exec_command | cmd=pwd, workdir=세션/child | tool_name=Bash, cwd=세션/child, tool_input={command:pwd}. workdir는 tool_input에 남지 않음 |
+| shell·shell_command·local_shell | 이번 세션의 도구 정의에 미노출 | 호출·필드 계약 미확인. local_shell은 기본 거부 유지 |
+| 어댑터 입력 예제의 Bash·exec_command·shell_command·shell | workdir·cwd·working_directory·workingDirectory·working_dir·workingDir·work_dir·workDir·directory, action 안의 같은 필드 | 문자열·실제 경로·세션 범위를 독립 검증. 상대 경로는 훅 프로세스의 세션 폴더 기준 |
+
+최상위 cwd로 정규화되는 현재 네이티브 호출은 기존 검사도 거부했다. 이번 수정은 정규화되지 않은 입력에서도 같은 경계를 강제한다. 역할은 계속 훅 프로세스의 세션 폴더에서 정한다.
+
+### 전용 검사 임시 폴더
+
+macOS에서는 /private/tmp/stock-check-<uid>-<worktree 해시>를 쓴다. Unix 소켓 경로 길이 제한 때문에 긴 worktree·사용자 임시 폴더 아래에 두지 않는다. 한 worktree는 하나의 T3 스레드가 소유하고 수정 회차는 같은 폴더를 쓴다. setup과 훅 진입에서 소유자·0700 권한·심볼릭 링크 아님을 확인한다. Stop 뒤와 회귀 정리 때 지운다. 비정상 종료로 남은 폴더는 세션을 닫은 뒤 사용자가 지운다. 새 생성물과 환경 설정은 저장소에 넣지 않는다.
+
+운영 생성 프로필을 임시 CODEX_HOME에만 넣고 codex sandbox로 모델 없이 확인했다. 전용 폴더의 AF_UNIX bind·listen은 성공했고, 그 밖의 임시 폴더 소켓은 EPERM이었다. 테스트는 TMPDIR와 checkPlaces의 일치, 폴더 권한·심볼릭 링크 치환 거부도 검사한다. 사용자는 기존 컴퓨터별 프로필을 just codex-setup 출력으로 다시 만들어 새 세션에 적용한다.
+
+### 메인의 병합 뒤 적용 확인: 2026-11-13
+
+다음은 메인이 새 T3 Codex 세션에서 확인해 전달한 결과다. 이번 구현 세션의 재실측으로 바꾸어 쓰지 않는다.
+
+| 시도 | 메인이 확인한 결과 |
+|---|---|
+| git -c core.hooksPath=/tmp status | 실행됨. 훅 미적용 |
+| 원본 workdir의 pwd | 실행됨. 세션 범위 가드 미적용 |
+| harness/.h41-profile-probe 생성 | 성공. 보호 경로 프로필 미적용 |
+| CODEX_SANDBOX | 빈 값 |
+| 사용자 Codex 프로젝트 신뢰 | 이 프로젝트의 신뢰 항목 없음 |
+
+프로젝트 신뢰 등록과 훅 정의 신뢰는 사용자가 한다. 생성한 세션 프로필도 선택한 뒤 위 1분 절차를 새 T3 세션에서 반복한다. 신뢰 누락만이 원인이라고 단정하지 않는다. T3의 full-access가 프로필을 덮는지도 다시 확인한다.
+
+### 회귀의 홈 격리
+
+수정 1차 실험이 사용자 설정에 …/target/h41-probe/session 신뢰 항목을 남겼다는 메인의 확인을 반영한다. 홈 설정을 바꾸지 않았다는 당시 보고는 틀렸다. 사용자 설정 자체는 이번 작업에서 읽거나 고치지 않는다. 남은 항목은 사용자가 확인해 제거한다.
+
+--ignore-user-config와 --ephemeral만으로 홈 쓰기를 격리하지 않는다. 회귀 실행기는 명시한 CODEX_HOME이 비공개 임시 폴더인지 먼저 검사하고 없으면 모델 실행 전에 실패한다. 기본 홈·상대 경로·심볼릭 링크·다른 소유자·그룹 및 전체 공개 권한은 허용하지 않는다. 로그인은 사용자가 별도로 한다. 실제 홈의 auth.json을 읽거나 복사·링크하지 않는다. [공식 인증 문서](https://learn.chatgpt.com/docs/auth#credential-storage)의 file 저장 방식을 명시해 이 임시 폴더만 쓴다. 회귀 모델의 도구 샌드박스는 임시 CODEX_HOME 전체도 deny로 두어 그 안의 인증·신뢰 기록을 읽거나 바꾸지 못한다.
+
+사용자가 수동 회귀를 실행할 때의 절차다. 종료하면 로그인과 신뢰 기록을 포함한 임시 홈을 지운다.
+
+```sh
+export CODEX_HOME="$(mktemp -d)"
+trap 'rm -rf "$CODEX_HOME"' EXIT
+codex -c 'cli_auth_credentials_store="file"' login
+just codex-regression
+```
+
+에이전트의 무인 계약 실험은 같은 방식의 빈 임시 CODEX_HOME과 인증이 필요 없는 로컬 가짜 제공자를 쓴다. 실제 모델이 필요하면 사용자가 준비한 임시 홈만 전달받는다. 실험 자료와 회귀 사본은 종료 때 지운다.

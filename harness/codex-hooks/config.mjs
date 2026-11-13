@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, realpathSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -9,6 +9,7 @@ import {
   trackedProtectedDenies,
 } from "../sandbox/fragment.mjs";
 import { policyCoverage } from "./policy.mjs";
+import { sessionTemporary, prepareTemporary } from "./temporary.mjs";
 export { policyCoverage } from "./policy.mjs";
 import {
   git,
@@ -132,7 +133,7 @@ export const setupText = (
   home = homedir(),
   nodeDirectory = dirname(process.execPath),
   harness = "locked",
-  temporary = realpathSync(tmpdir()),
+  temporary,
 ) => {
   const common = git(cwd, [
     "rev-parse",
@@ -141,7 +142,9 @@ export const setupText = (
   ])?.trim();
   const gitdir = git(cwd, ["rev-parse", "--absolute-git-dir"])?.trim();
   const branch = git(cwd, ["symbolic-ref", "--short", "HEAD"])?.trim();
+  const worktree = git(cwd, ["rev-parse", "--show-toplevel"])?.trim();
   if (
+    !worktree ||
     !common ||
     !gitdir ||
     gitdir === common ||
@@ -149,6 +152,7 @@ export const setupText = (
     ["master", "main"].includes(branch)
   )
     throw new Error("설정 출력은 등록된 구현 worktree에서 실행한다");
+  temporary ??= sessionTemporary(worktree);
   if (harness === "harness" && readLock(dirname(common)) !== "off")
     throw new Error("잠금 on에서는 하네스 쓰기를 열지 않는다");
   const paths = [
@@ -191,6 +195,7 @@ export const setupText = (
     "[shell_environment_policy.set]",
     entry("PATH", [...new Set(paths)].join(":")),
     entry("pnpm_config_store_dir", home + "/Library/pnpm/store"),
+    entry("TMPDIR", temporary),
     "[permissions." + profile + "]",
     'extends = "stock-copilot"',
     "[permissions." + profile + ".filesystem]",
@@ -198,11 +203,12 @@ export const setupText = (
       ...new Set([
         dirname(common),
         ...worktreesOf(dirname(common)).filter(
-          (tree) => tree !== realpathSync(cwd),
+          (tree) => tree !== realpathSync(worktree),
         ),
       ]),
     ].map((tree) => entry(tree, "read")),
     entry(common, "read"),
+    entry(temporary, "write"),
     entry(gitdir, "read"),
     ...writable.map((path) => entry(path, "write")),
     entry(gitdir + "/HEAD", "read"),
@@ -223,7 +229,10 @@ export const setupText = (
   ].join("\n");
 };
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv.includes("--setup"))
+  if (process.argv.includes("--setup")) {
+    prepareTemporary(
+      git(process.cwd(), ["rev-parse", "--show-toplevel"])?.trim(),
+    );
     process.stdout.write(
       setupText(
         process.cwd(),
@@ -232,7 +241,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         process.argv.includes("--harness") ? "harness" : "locked",
       ),
     );
-  else
+  } else
     for (const [path, expected] of [
       [".codex/config.toml", configText(readPolicy(root))],
       [

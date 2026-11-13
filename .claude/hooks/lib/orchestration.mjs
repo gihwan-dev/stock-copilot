@@ -92,6 +92,8 @@ export const orchestrationFindings = (input, rules, facts) => {
       return denied("현재 프로젝트를 상속하는 Codex worktree만 시작한다");
     const brief = parseBrief(args.message);
     const strategy = args.workspaceStrategy;
+    if (typeof strategy.branch !== "string" || strategy.branch !== brief.branch)
+      return denied("작업 사본의 브랜치와 브리프가 다르다");
     if (strategy.startFromOrigin === true) {
       const origin = facts.originTip ?? facts.resolveCommit("origin/master");
       if (
@@ -104,10 +106,7 @@ export const orchestrationFindings = (input, rules, facts) => {
     }
     if (strategy.startFromOrigin !== false)
       return denied("로컬·원격 기준 선택을 명시한다");
-    if (
-      args.workspaceStrategy.branch !== brief.branch ||
-      args.workspaceStrategy.baseRef !== brief.commit
-    )
+    if (args.workspaceStrategy.baseRef !== brief.commit)
       return denied("작업 사본의 기준과 브리프가 다르다");
     return briefCheck(args.message, rules, facts);
   }
