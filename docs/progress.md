@@ -53,10 +53,21 @@ Claude Code 샌드박스는 아직 꺼져 있다. 복사본 실측에서 작업 
 | H-12, H-36 | 완료 | 8c745d2 | [H-12](reviews/H-12.md) | - |
 | 샌드박스 안 검사 실패 (H-20 선행 조건) | 해결 | 8c745d2 | [H-12](reviews/H-12.md) | 실제 원본 위치(`~/Documents`)에서의 실측은 H-20에서 사용자가 확인 |
 
+## CI
+
+원격 저장소는 `github.com/gihwan-dev/stock-copilot`(공개)이다. 푸시마다 서명 작업과 Linux 작업이 돌고, `master` 푸시와 밤에 macOS 전체 검사가 돈다. 서명 검사는 잠금 시점(`harness/ci/signatures/lock-point.txt`)이 기록될 때까지 "비활성"을 출력하고 통과한다.
+
+| 작업 | 상태 | 대상 커밋 | 리뷰 기록 | 뒤 작업에 넘긴 것 |
+|---|---|---|---|---|
+| H-16, H-27 | 완료 | 2d3995a | [H-16](reviews/H-16.md) | DS-15: 컨테이너 시각 회귀 단계. AI 어댑터 작업: 밤 작업의 고정 자료 CLI 버전 점검. U-03 등: macOS 작업의 앱 빌드·E2E |
+| H-26 | 일부 완료 | 2d3995a | [H-16](reviews/H-16.md) | H-28·H-20: 서명 키와 잠금 시점을 기록해야 검사가 켜진다(ADR 0020의 절차). 사용자: 규칙 세트(`master` 삭제·강제 푸시 금지) 적용 |
+
+남은 문서 반영: ADR 0020의 "메인이 반영할 문서 변경"(harness.md 1.1·1.2·1.3·7.1·7.6, workflow.md 2.1·3장, tasks.md H-27, open-issues S-21).
+
 ## 남은 하네스 작업
 
 | 작업 | 누가 | 필요한 것 |
 |---|---|---|
 | H-28 서명 키 | 사용자 | Secretive SSH 키, `harness/allowed_signers` |
-| H-16, H-26, H-27 CI | 에이전트 | 원격 저장소(GitHub 비공개 저장소)를 만들지 사용자 결정이 필요하다. 없으면 작업 흐름 파일만 만들고 검증하지 못한다 |
+| 규칙 세트 | 사용자 | ADR 0020의 `gh api -X POST repos/gihwan-dev/stock-copilot/rulesets` 명령(`master` 삭제·강제 푸시 금지) |
 | H-20 잠금 | 사용자 (Claude Code 밖에서) | ADR 0018의 절차: `node harness/sandbox/prelock.mjs` 확인 → 잠금 설정 생성 → `lock.txt` 켜기 → 해시 다시 쓰기 → 서명 커밋 |
