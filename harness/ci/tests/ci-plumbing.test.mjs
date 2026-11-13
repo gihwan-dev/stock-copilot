@@ -340,7 +340,7 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   });
   const signatureSteps = signatures.jobs.signatures.steps;
   assert.deepEqual(signatureSteps[3].with, {
-    ref: "${{ steps.base.outputs.base }}",
+    ref: "${{ steps.base.outputs.tools }}",
     path: "base-tools",
     "fetch-depth": 1,
     "persist-credentials": false,
@@ -350,13 +350,23 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
     [
       [
         "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
-        'node base-tools/harness/ci/signatures/from-base.mjs "$GITHUB_WORKSPACE" "$HEAD"',
+        'node base-tools/harness/ci/signatures/from-base.mjs "$GITHUB_WORKSPACE" "$HEAD" --range-start "$RANGE_START" --base-kind "$BASE_KIND"',
       ],
       [
         "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
         "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
       ],
     ],
+  );
+  assert.deepEqual(signatureSteps[4].env, {
+    GH_TOKEN: "${{ github.token }}",
+    HEAD: "${{ github.event.pull_request.head.sha || github.sha }}",
+    RANGE_START: "${{ steps.base.outputs.base }}",
+    BASE_KIND: "${{ steps.base.outputs.kind }}",
+  });
+  assert.equal(
+    signatures.jobs.notify.steps[0].with.ref,
+    "${{ needs.signatures.outputs.tools }}",
   );
   [ci, nightly, signatures].forEach((file) =>
     assert.match(
@@ -414,6 +424,10 @@ const fromBaseCheckout = (made, revision, keysFile) => {
         join(tools, "harness/ci/signatures/from-base.mjs"),
         made.directory,
         gitIn(made.directory, ["rev-parse", "HEAD"]),
+        "--range-start",
+        revision,
+        "--base-kind",
+        "unverified",
         "--owner-keys",
         keysFile,
       ],
@@ -450,14 +464,53 @@ test("signatures run the verifier of a base checkout and fail when it ends witho
 });
 
 test("the base runner takes the target, and owner keys come from GitHub with the job token", () => {
-  assert.deepEqual(parseArguments(["r", "h", "--owner-keys", "f"]).passed, [
-    "--owner-keys",
-    "f",
-  ]);
-  assert.deepEqual(parseArguments(["r", "h"]).passed, []);
-  [[], ["r"], ["r", "h", "--owner", "me"], ["r", "h", "--owner-keys"]].forEach(
-    (args) =>
-      assert.ok(parseArguments(args).problem !== undefined, args.join(" ")),
+  assert.deepEqual(
+    parseArguments([
+      "r",
+      "h",
+      "--range-start",
+      "s",
+      "--base-kind",
+      "verified",
+      "--owner-keys",
+      "f",
+    ]),
+    {
+      repo: join(process.cwd(), "r"),
+      head: "h",
+      rangeStart: "s",
+      passed: ["--base-kind", "verified", "--owner-keys", "f"],
+    },
+  );
+  [
+    [],
+    ["r"],
+    ["r", "h"],
+    ["r", "h", "--range-start", "s"],
+    ["r", "h", "--base-kind", "verified"],
+    ["r", "h", "--range-start", "s", "--base-kind"],
+    [
+      "r",
+      "h",
+      "--range-start",
+      "s",
+      "--base-kind",
+      "verified",
+      "--owner",
+      "me",
+    ],
+    [
+      "r",
+      "h",
+      "--range-start",
+      "s",
+      "--range-start",
+      "t",
+      "--base-kind",
+      "verified",
+    ],
+  ].forEach((args) =>
+    assert.ok(parseArguments(args).problem !== undefined, args.join(" ")),
   );
   assert.equal(
     ownerKeysUrl("gihwan-dev"),
@@ -565,12 +618,12 @@ test("the signature base is the newest master commit a successful signature run 
       runBaseStep(made, master, ["f".repeat(40), verified, made.base]),
       {
         status: 0,
-        output: { base: verified, kind: "verified" },
+        output: { tools: verified, base: verified, kind: "verified" },
       },
     );
     assert.deepEqual(runBaseStep(made, master, []), {
       status: 0,
-      output: { base: failed, kind: "unverified" },
+      output: { tools: failed, base: failed, kind: "unverified" },
     });
     assert.equal(runBaseStep(made, master, ["f".repeat(40)]).status, 1);
     gitIn(made.directory, [
@@ -588,12 +641,157 @@ test("the signature base is the newest master commit a successful signature run 
     };
     assert.deepEqual(runBaseStep(made, push, [head]), {
       status: 0,
-      output: { base: made.base, kind: "verified" },
+      output: { tools: head, base: made.base, kind: "verified" },
     });
     assert.deepEqual(runBaseStep(made, push, []), {
       status: 0,
-      output: { base: made.base, kind: "unverified" },
+      output: { tools: verified, base: made.base, kind: "unverified" },
     });
+  } finally {
+    removeRepository(made.directory);
+  }
+});
+
+const workflowRun = (made, step, environment) =>
+  spawnSync("bash", ["-c", step.run], {
+    cwd: made.directory,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      GITHUB_WORKSPACE: made.directory,
+      ...environment,
+    },
+  });
+
+test("the workflow passes the base kind from its base step to the verifier, so an unverified base with a lock fails", () => {
+  const made = createRepository();
+  const steps = workflow("signatures.yml").jobs.signatures.steps;
+  const runner = steps.find(
+    (step) => step.name === "signatures from the base checkout",
+  );
+  try {
+    [...VERIFIER_FILES, "harness/ci/signatures/from-base.mjs"].forEach((path) =>
+      write(made.directory, path, readFileSync(join(repoRoot, path), "utf8")),
+    );
+    write(
+      made.directory,
+      "harness/ci/signatures/lock-point.txt",
+      `${made.base}\n`,
+    );
+    write(made.directory, ".gitignore", "base-tools/\n");
+    const locked = commit(made.directory, "verifier and lock");
+    const head = commit(made.directory, "next");
+    const outcome = (runs) => {
+      const based = runBaseStep(
+        made,
+        {
+          EVENT_NAME: "push",
+          REF: "refs/heads/master",
+          BEFORE: locked,
+          HEAD: head,
+        },
+        runs,
+      );
+      removeRepository(join(made.directory, "base-tools"));
+      run(made.directory, "git", [
+        "clone",
+        "--quiet",
+        made.directory,
+        "base-tools",
+      ]);
+      run(join(made.directory, "base-tools"), "git", [
+        "checkout",
+        "--quiet",
+        "--detach",
+        based.output.tools,
+      ]);
+      return workflowRun(made, runner, {
+        HEAD: head,
+        RANGE_START: based.output.base,
+        BASE_KIND: based.output.kind,
+      });
+    };
+    const unverified = outcome([]);
+    assert.equal(unverified.status, 1, unverified.stdout);
+    assert.match(
+      unverified.stdout,
+      /서명 검사가 통과한 master 커밋이 아닌데 잠금 시점이 기록돼 있다/u,
+    );
+    const verified = outcome([locked]);
+    assert.equal(verified.status, 0, verified.stdout + verified.stderr);
+    assert.match(verified.stdout, /^서명 검사: 위반 0건$/mu);
+    const missingKind = workflowRun(made, runner, {
+      HEAD: head,
+      RANGE_START: locked,
+      BASE_KIND: "",
+    });
+    assert.equal(missingKind.status, 1);
+    assert.match(missingKind.stderr, /--base-kind verified\|unverified/u);
+  } finally {
+    removeRepository(made.directory);
+  }
+});
+
+test("a branch grown from before the lock reads trust data from the verified master commit and fails", () => {
+  const made = createRepository();
+  const steps = workflow("signatures.yml").jobs.signatures.steps;
+  const runner = steps.find(
+    (step) => step.name === "signatures from the base checkout",
+  );
+  try {
+    write(made.directory, ".gitignore", "base-tools/\n");
+    const old = commit(made.directory, "old, before the verifier");
+    [...VERIFIER_FILES, "harness/ci/signatures/from-base.mjs"].forEach((path) =>
+      write(made.directory, path, readFileSync(join(repoRoot, path), "utf8")),
+    );
+    write(made.directory, "harness/ci/signatures/lock-point.txt", `${old}\n`);
+    const verified = commit(made.directory, "verifier and lock");
+    gitIn(made.directory, [
+      "update-ref",
+      "refs/remotes/origin/master",
+      verified,
+    ]);
+    gitIn(made.directory, ["checkout", "--quiet", "-b", "attack", made.base]);
+    write(made.directory, "justfile", "check:\n    true\n# changed\n");
+    const branch = commit(
+      made.directory,
+      "unsigned protected change from an old fork",
+    );
+    const based = runBaseStep(
+      made,
+      {
+        EVENT_NAME: "push",
+        REF: "refs/heads/attack",
+        BEFORE: "0".repeat(40),
+        HEAD: branch,
+      },
+      [verified],
+    );
+    assert.deepEqual(based.output, {
+      tools: verified,
+      base: made.base,
+      kind: "verified",
+    });
+    run(made.directory, "git", [
+      "clone",
+      "--quiet",
+      made.directory,
+      "base-tools",
+    ]);
+    run(join(made.directory, "base-tools"), "git", [
+      "checkout",
+      "--quiet",
+      "--detach",
+      verified,
+    ]);
+    const finished = workflowRun(made, runner, {
+      HEAD: branch,
+      RANGE_START: based.output.base,
+      BASE_KIND: based.output.kind,
+    });
+    assert.equal(finished.status, 1, finished.stdout);
+    assert.match(finished.stdout, /의 자손이 아니다/u);
   } finally {
     removeRepository(made.directory);
   }

@@ -57,7 +57,7 @@
     "just linux-check",
     "lefthook install",
     "node base-tools/harness/ci/notify.mjs",
-    "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\"",
+    "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --range-start \"$RANGE_START\" --base-kind \"$BASE_KIND\"",
     "node harness/ci/ci-range.mjs base",
     "node harness/ci/ci-range.mjs changed",
     "node harness/ci/linux/offline.mjs just linux-test",
@@ -65,7 +65,7 @@
     "node harness/ci/tools.mjs cargo-install",
     "node harness/ci/tools.mjs fetch",
     "node harness/ci/tools.mjs lefthook",
-    "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 기준 %s (%s)\\n' \"$base\" \"$kind\"\nprintf 'base=%s\\nkind=%s\\n' \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\""
+    "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 신뢰 자료 %s, 범위 시작 %s (%s)\\n' \"$verified\" \"$base\" \"$kind\"\nprintf 'tools=%s\\nbase=%s\\nkind=%s\\n' \"$verified\" \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\""
   ],
   "expressions": [
     "${{ github.event.before }}",
@@ -79,21 +79,23 @@
     "${{ github.token }}",
     "${{ steps.base.outputs.base }}",
     "${{ steps.base.outputs.kind }}",
+    "${{ steps.base.outputs.tools }}",
     "${{ steps.changed.outputs.changed }}",
     "${{ steps.range.outputs.base }}"
   ],
   "envNames": [
     "BASE",
+    "BASE_KIND",
     "BEFORE",
     "EVENT_NAME",
     "GH_TOKEN",
     "HEAD",
     "PR_BASE",
     "PR_HEAD",
+    "RANGE_START",
     "REF",
     "RUN_URL",
     "SHA",
-    "SIGNATURE_BASE_KIND",
     "TITLE"
   ],
   "inputValues": {
@@ -103,8 +105,8 @@
     "ref": [
       "${{ github.event.before }}",
       "master",
-      "${{ steps.base.outputs.base }}",
-      "${{ needs.signatures.outputs.base }}"
+      "${{ steps.base.outputs.tools }}",
+      "${{ needs.signatures.outputs.tools }}"
     ],
     "path": ["base-tools"]
   },
@@ -542,7 +544,7 @@
             "actions": "read"
           },
           "outputs": {
-            "base": "${{ steps.base.outputs.base }}"
+            "tools": "${{ steps.base.outputs.tools }}"
           },
           "steps": [
             {
@@ -563,7 +565,7 @@
             {
               "name": "verified base",
               "id": "base",
-              "run": "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 기준 %s (%s)\\n' \"$base\" \"$kind\"\nprintf 'base=%s\\nkind=%s\\n' \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
+              "run": "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 신뢰 자료 %s, 범위 시작 %s (%s)\\n' \"$verified\" \"$base\" \"$kind\"\nprintf 'tools=%s\\nbase=%s\\nkind=%s\\n' \"$verified\" \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
               "env": {
                 "GH_TOKEN": "${{ github.token }}",
                 "EVENT_NAME": "${{ github.event_name }}",
@@ -576,7 +578,7 @@
               "name": "base checkout",
               "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
               "with": {
-                "ref": "${{ steps.base.outputs.base }}",
+                "ref": "${{ steps.base.outputs.tools }}",
                 "path": "base-tools",
                 "fetch-depth": 1,
                 "persist-credentials": false
@@ -585,11 +587,12 @@
             {
               "name": "signatures from the base checkout",
               "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
-              "run": "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\"",
+              "run": "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --range-start \"$RANGE_START\" --base-kind \"$BASE_KIND\"",
               "env": {
                 "GH_TOKEN": "${{ github.token }}",
                 "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
-                "SIGNATURE_BASE_KIND": "${{ steps.base.outputs.kind }}"
+                "RANGE_START": "${{ steps.base.outputs.base }}",
+                "BASE_KIND": "${{ steps.base.outputs.kind }}"
               }
             },
             {
@@ -612,7 +615,7 @@
               "name": "base checkout",
               "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
               "with": {
-                "ref": "${{ needs.signatures.outputs.base }}",
+                "ref": "${{ needs.signatures.outputs.tools }}",
                 "path": "base-tools",
                 "fetch-depth": 1,
                 "persist-credentials": false

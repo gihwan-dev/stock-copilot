@@ -8,6 +8,7 @@ import {
   parseLock,
   readTrust,
   signedBy,
+  parseCommandLine,
   signerProblems,
   verify,
 } from "../signatures/verify.mjs";
@@ -442,6 +443,8 @@ test("the command line reads its trust data from its own checkout", () => {
     made.directory,
     made.base,
     made.base,
+    "--base-kind",
+    "verified",
   ]);
   assert.match(outcome, /서명 검사 비활성: 잠금 시점 없음/u);
   assert.match(outcome, /서명 검사: 위반 0건/u);
@@ -657,6 +660,7 @@ test("the owner's keys are fetched only when a lock record is in the pushed rang
     trust: readTrust(repoRoot),
     xtask: () => ({ status: 0, stdout: "", stderr: "" }),
     ownerKeys: provider,
+    baseKind: "verified",
   });
   assert.deepEqual(quiet.failures, []);
   assert.deepEqual(calls, []);
@@ -668,6 +672,7 @@ test("the owner's keys are fetched only when a lock record is in the pushed rang
     trust: readTrust(repoRoot),
     xtask: () => ({ status: 0, stdout: "", stderr: "" }),
     ownerKeys: provider,
+    baseKind: "verified",
   });
   assert.deepEqual(calls, ["called"]);
 });
@@ -750,4 +755,46 @@ test("case variants of manifests, config names and protected folders still need 
       path,
     ),
   );
+});
+
+test("the base kind is required and anything but verified or unverified fails", () => {
+  const made = repository();
+  [undefined, "", "trusted"].forEach((baseKind) =>
+    assert.match(
+      verify({
+        repo: made.directory,
+        base: made.base,
+        head: made.base,
+        trust: readTrust(repoRoot),
+        xtask: () => ({ status: 0, stdout: "", stderr: "" }),
+        baseKind,
+      }).failures.join("\n"),
+      /기준 종류는/u,
+      String(baseKind),
+    ),
+  );
+  assert.ok(parseCommandLine(["r", "b", "h"]).problem !== undefined);
+  assert.ok(
+    parseCommandLine(["r", "b", "h", "--base-kind", "trusted"]).problem !==
+      undefined,
+  );
+  assert.equal(
+    parseCommandLine(["r", "b", "h", "--base-kind", "unverified"]).baseKind,
+    "unverified",
+  );
+});
+
+test("a target that does not descend from the lock point fails", () => {
+  const made = lockedRepository();
+  gitIn(made.directory, ["checkout", "--quiet", "--detach", made.lock]);
+  write(made.directory, "docs/old.md", "old\n");
+  const old = commit(made.directory, "branch from before the lock");
+  const failures = verifyIn({
+    directory: made.directory,
+    base: made.lock,
+    head: old,
+    lock: made.base,
+    signers: signersFor(keys.user),
+  }).failures;
+  assert.match(failures.join("\n"), /잠금 시점 .*의 자손이 아니다/u);
 });

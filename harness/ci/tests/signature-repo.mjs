@@ -185,5 +185,5 @@ export const verifyIn = ({
     xtask: xtaskRunner(repoRoot),
     ownerKeys:
       ownerKeys === undefined ? undefined : () => ({ keys: ownerKeys }),
-    baseKind,
+    baseKind: baseKind ?? "verified",
   });

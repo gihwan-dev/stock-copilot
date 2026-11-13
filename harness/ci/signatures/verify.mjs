@@ -398,6 +398,8 @@ const memoized = (provide) => {
   };
 };
 
+export const BASE_KINDS = ["verified", "unverified"];
+
 export const verify = ({
   repo,
   base,
@@ -405,10 +407,18 @@ export const verify = ({
   trust,
   xtask,
   ownerKeys,
-  baseKind = "verified",
+  baseKind,
 }) => {
   const lines = [];
   const failures = [];
+  if (!BASE_KINDS.includes(baseKind)) {
+    return {
+      lines,
+      failures: [
+        `기준 종류는 ${BASE_KINDS.join(" 또는 ")}여야 한다: ${baseKind}`,
+      ],
+    };
+  }
   if (!COMMIT.test(base) || !COMMIT.test(head)) {
     return {
       lines,
@@ -467,6 +477,12 @@ export const verify = ({
   if (git(repo, ["cat-file", "-e", `${lock}^{commit}`]).status !== 0) {
     return { lines, failures: [`잠금 시점 커밋 ${lock}을 찾지 못했다`] };
   }
+  if (!isAncestor(repo, lock, head)) {
+    return {
+      lines,
+      failures: [`대상 ${head}이 잠금 시점 ${lock}의 자손이 아니다`],
+    };
+  }
   const commits = gitLines(repo, [
     "rev-list",
     "--reverse",
@@ -515,25 +531,30 @@ export const parseCommandLine = (args) => {
   if (repo === undefined || base === undefined || head === undefined) {
     return { problem: "인자 부족" };
   }
-  const options = { repo, base, head, baseKind: "verified" };
-  for (let index = 0; index < rest.length; index += 1) {
-    if (rest[index] === "--owner-keys" && rest[index + 1] !== undefined) {
-      options.ownerKeysFile = rest[index + 1];
-      index += 1;
-    } else if (rest[index] === "--unverified-base") {
-      options.baseKind = "unverified";
+  const options = { repo, base, head };
+  for (let index = 0; index < rest.length; index += 2) {
+    const value = rest[index + 1];
+    if (value === undefined) {
+      return { problem: `${rest[index]}의 값이 없다` };
+    }
+    if (rest[index] === "--owner-keys") {
+      options.ownerKeysFile = value;
+    } else if (rest[index] === "--base-kind" && BASE_KINDS.includes(value)) {
+      options.baseKind = value;
     } else {
-      return { problem: `알 수 없는 인자 ${rest[index]}` };
+      return { problem: `알 수 없는 인자 ${rest[index]} ${value}` };
     }
   }
-  return options;
+  return options.baseKind === undefined
+    ? { problem: "--base-kind verified|unverified가 필요하다" }
+    : options;
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const options = parseCommandLine(process.argv.slice(2));
   if (options.problem !== undefined) {
     process.stderr.write(
-      "사용법: node harness/ci/signatures/verify.mjs <저장소> <기준 커밋> <대상 커밋> [--owner-keys <파일>] [--unverified-base]\n",
+      "사용법: node harness/ci/signatures/verify.mjs <저장소> <범위 시작 커밋> <대상 커밋> --base-kind verified|unverified [--owner-keys <파일>]\n",
     );
     process.exitCode = 2;
   } else {

@@ -8,30 +8,37 @@ export const VERIFIER = "harness/ci/signatures/verify.mjs";
 
 export const SUMMARY = /^서명 검사: 위반 \d+건$/mu;
 
-const FLAGS_WITH_VALUE = ["--owner-keys"];
+const OPTIONS = ["--range-start", "--base-kind", "--owner-keys"];
 
-const FLAGS = [];
+const REQUIRED = ["--range-start", "--base-kind"];
 
 export const parseArguments = (args) => {
   const [repo, head, ...rest] = args;
-  if (repo === undefined || head === undefined) {
+  if (repo === undefined || head === undefined || rest.length % 2 !== 0) {
     return { problem: "인자" };
   }
-  const passed = [];
-  for (let index = 0; index < rest.length; index += 1) {
-    if (FLAGS.includes(rest[index])) {
-      passed.push(rest[index]);
-    } else if (
-      FLAGS_WITH_VALUE.includes(rest[index]) &&
-      rest[index + 1] !== undefined
-    ) {
-      passed.push(rest[index], rest[index + 1]);
-      index += 1;
-    } else {
+  const values = {};
+  for (let index = 0; index < rest.length; index += 2) {
+    if (!OPTIONS.includes(rest[index]) || rest[index] in values) {
       return { problem: "인자" };
     }
+    values[rest[index]] = rest[index + 1];
   }
-  return { repo: resolve(repo), head, passed };
+  if (REQUIRED.some((flag) => values[flag] === undefined)) {
+    return { problem: "인자" };
+  }
+  return {
+    repo: resolve(repo),
+    head,
+    rangeStart: values["--range-start"],
+    passed: [
+      "--base-kind",
+      values["--base-kind"],
+      ...(values["--owner-keys"] === undefined
+        ? []
+        : ["--owner-keys", values["--owner-keys"]]),
+    ],
+  };
 };
 
 const toolsRoot = resolve(
@@ -50,7 +57,7 @@ export const runFromBase = (options) => {
     process.stderr.write("기준 checkout의 커밋을 읽지 못했다\n");
     return 1;
   }
-  const base = based.stdout.trim();
+  const trusted = based.stdout.trim();
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), "signature-base-")));
   const tools = join(scratch, "base");
   try {
@@ -64,13 +71,13 @@ export const runFromBase = (options) => {
         "--quiet",
         "--detach",
         tools,
-        base,
+        trusted,
       ],
       { stdio: "inherit" },
     );
     if (added.status !== 0) {
       process.stderr.write(
-        `기준 커밋 ${base}을 대상 저장소에서 꺼내지 못했다\n`,
+        `검증된 커밋 ${trusted}을 대상 저장소에서 꺼내지 못했다\n`,
       );
       return 1;
     }
@@ -79,7 +86,7 @@ export const runFromBase = (options) => {
       [
         join(tools, VERIFIER),
         options.repo,
-        base,
+        options.rangeStart,
         options.head,
         ...options.passed,
       ],
@@ -108,7 +115,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     options.problem === undefined
       ? runFromBase(options)
       : (process.stderr.write(
-          "사용법: node <기준 checkout>/harness/ci/signatures/from-base.mjs <저장소> <대상 커밋> [--unverified-base] [--owner-keys <파일>]\n",
+          "사용법: node <기준 checkout>/harness/ci/signatures/from-base.mjs <저장소> <대상 커밋> --range-start <커밋> --base-kind verified|unverified [--owner-keys <파일>]\n",
         ),
         2);
 }
