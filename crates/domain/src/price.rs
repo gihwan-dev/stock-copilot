@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 
-use crate::{Currency, Money, NumericError, NumericInput};
+use crate::{Amount, Currency, Money, MoneyError, NumericError, NumericInput, Quantity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Price(Money);
@@ -15,6 +15,11 @@ impl Price {
 
     pub fn parse(input: &NumericInput, currency: Currency) -> Result<Self, NumericError> {
         Self::try_new(Money::new(input.parse_amount()?, currency))
+    }
+
+    pub fn checked_mul(&self, quantity: &Quantity) -> Result<Money, MoneyError> {
+        crate::exact_arithmetic::multiply(self.0.amount(), Amount::new(quantity.as_decimal()))
+            .map(|amount| Money::new(amount, self.0.currency()))
     }
 
     #[must_use]

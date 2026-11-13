@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 
-use crate::{NumericError, NumericInput};
+use crate::{Amount, MoneyError, NumericError, NumericInput};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Ratio(Decimal);
@@ -14,6 +14,18 @@ impl Ratio {
     pub fn parse(input: &NumericInput) -> Result<Self, NumericError> {
         input
             .parse_amount()
+            .map(|amount| Self::new(amount.as_decimal()))
+    }
+
+    pub fn checked_add(&self, other: &Self) -> Result<Self, MoneyError> {
+        Amount::new(self.0)
+            .checked_add(&Amount::new(other.0))
+            .map(|amount| Self::new(amount.as_decimal()))
+    }
+
+    pub fn checked_sub(&self, other: &Self) -> Result<Self, MoneyError> {
+        Amount::new(self.0)
+            .checked_sub(&Amount::new(other.0))
             .map(|amount| Self::new(amount.as_decimal()))
     }
 
