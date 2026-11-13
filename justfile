@@ -82,6 +82,8 @@ check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
     node harness/ds-tokens/check.mjs
+    cargo run --locked --quiet --package xtask -- gen-tokens --check
+    node harness/ds-tokens/contrast.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
     node harness/source-tree/check.mjs
     node harness/config-files/check.mjs
@@ -212,3 +214,9 @@ codex-regression:
 
 codex-setup *flags:
     node harness/codex-hooks/config.mjs --setup "$@"
+
+gen-tokens:
+    cargo run --locked --quiet --package xtask -- gen-tokens
+
+tokens-contrast:
+    node harness/ds-tokens/contrast.mjs

@@ -1,0 +1,192 @@
+[
+  {
+    "foreground": "ink",
+    "background": "bg",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink",
+    "background": "surface",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink",
+    "background": "surface-sunken",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink-muted",
+    "background": "bg",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink-muted",
+    "background": "surface",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink-muted",
+    "background": "surface-sunken",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink-subtle",
+    "background": "bg",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink-subtle",
+    "background": "surface",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "ink-subtle",
+    "background": "surface-sunken",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "up",
+    "background": "bg",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "up",
+    "background": "surface",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "up",
+    "background": "surface-sunken",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "down",
+    "background": "bg",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "down",
+    "background": "surface",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "down",
+    "background": "surface-sunken",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "line-strong",
+    "background": "bg",
+    "minimum": 3
+  },
+  {
+    "foreground": "line-strong",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "line-strong",
+    "background": "surface-sunken",
+    "minimum": 3
+  },
+  {
+    "foreground": "focus-ring",
+    "background": "bg",
+    "minimum": 3
+  },
+  {
+    "foreground": "focus-ring",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "focus-ring",
+    "background": "surface-sunken",
+    "minimum": 3
+  },
+  {
+    "foreground": "on-primary",
+    "background": "primary",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "primary",
+    "background": "primary-soft",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "on-up",
+    "background": "up",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "up",
+    "background": "up-soft",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "on-down",
+    "background": "down",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "down",
+    "background": "down-soft",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "on-alert",
+    "background": "alert",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "alert",
+    "background": "alert-soft",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "on-primary",
+    "background": "primary-hover",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "on-up",
+    "background": "up-hover",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "on-down",
+    "background": "down-hover",
+    "minimum": 4.5
+  },
+  {
+    "foreground": "chart-1",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "chart-2",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "chart-3",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "chart-4",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "chart-5",
+    "background": "surface",
+    "minimum": 3
+  },
+  {
+    "foreground": "chart-6",
+    "background": "surface",
+    "minimum": 3
+  }
+]

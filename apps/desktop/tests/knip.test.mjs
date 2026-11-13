@@ -118,6 +118,7 @@ const expectedProductionAllowlist = [
   "files src/shared/ipc/testing/fakes.ts src/shared/ipc/testing/fakes.ts",
   "files src/shared/ipc/testing/mockBindings.ts src/shared/ipc/testing/mockBindings.ts",
   "files src/shared/ipc/testing/responses.ts src/shared/ipc/testing/responses.ts",
+  "files src/shared/ds/tokens.ts src/shared/ds/tokens.ts",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {
@@ -138,7 +139,9 @@ test("the production allowlist holds exactly the documented skeleton entries, ea
 });
 
 test("the production run drops non-production entries and dropping any production flag makes a case fail", () => {
-  assert.deepEqual(productionConfig(appConfig).entry, []);
+  assert.deepEqual(productionConfig(appConfig).entry, [
+    "src/shared/ds/theme.css!",
+  ]);
   const survivors = withConfig(productionConfig(appConfig), (file) =>
     PRODUCTION_FLAGS.filter((flag) =>
       Object.entries(production).every(

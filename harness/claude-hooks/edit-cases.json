@@ -1515,5 +1515,18 @@
     "role": "implementer",
     "decision": "warn",
     "rules": ["protected-path"]
+  },
+  {
+    "path": "{root}/apps/desktop/vite.config.mjs",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/vite.config.mjs",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
   }
 ]

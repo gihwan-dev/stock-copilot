@@ -83,6 +83,7 @@
         "apps/desktop/eslint.config.mjs",
         "apps/desktop/tsconfig.json",
         "apps/desktop/vitest.config.mjs",
+        "apps/desktop/vite.config.mjs",
         "apps/desktop/knip.json",
         "apps/desktop/src-tauri/Cargo.toml",
         "apps/desktop/e2e-app/Cargo.toml",

@@ -1,7 +1,13 @@
 {
   "config": {
-    "entry": ["src/shared/*/index.ts", "eslint/**/*.mjs", "tests/*.test.mjs"],
-    "project": ["src/**/*.{ts,tsx}!"],
+    "entry": [
+      "src/shared/*/index.ts",
+      "eslint/**/*.mjs",
+      "tests/*.test.mjs",
+      "src/shared/ds/tokens.ts",
+      "src/shared/ds/theme.css!"
+    ],
+    "project": ["src/**/*.{ts,tsx}!", "src/**/*.css"],
     "include": [
       "files",
       "subpaths",

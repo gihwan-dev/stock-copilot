@@ -29,6 +29,7 @@ export const forbiddenFile = {
       {
         type: "object",
         properties: {
+          styles: { type: "array", items: { type: "string" } },
           checkExtension: { type: "boolean" },
           placeholders: { type: "array", items: { type: "string" } },
           folders: {
@@ -59,15 +60,21 @@ export const forbiddenFile = {
     },
   },
   create: (context) => {
-    const [{ checkExtension, placeholders, folders, featureEntries }] =
-      context.options;
+    const [
+      { checkExtension, placeholders, folders, featureEntries, styles = [] },
+    ] = context.options;
     return {
       Program: (node) => {
         const path = projectPath(context, context.filename);
         const placeholder =
           placeholders.includes(basename(path)) &&
           context.sourceCode.text === "";
-        if (checkExtension && !placeholder && !hasSourceExtension(path)) {
+        if (
+          checkExtension &&
+          !placeholder &&
+          !styles.includes(path) &&
+          !hasSourceExtension(path)
+        ) {
           context.report({ node, messageId: "extension" });
         }
         folders

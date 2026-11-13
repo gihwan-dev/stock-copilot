@@ -60,6 +60,10 @@
     {
       "issue": "files src/shared/ipc/testing/responses.ts src/shared/ipc/testing/responses.ts",
       "reason": "테스트 전용 생성물(Rust가 기록한 대표 응답). 운영 코드는 가져오지 않는다 (harness.md 5장)"
+    },
+    {
+      "issue": "files src/shared/ds/tokens.ts src/shared/ds/tokens.ts",
+      "reason": "DS-13 생성 타입. 첫 운영 소비자는 후속 DS-10 컴포넌트다. 사용처가 생기면 이 항목은 stale 검사로 실패한다"
     }
   ]
 }
