@@ -64,6 +64,8 @@ const copyHashed = () => {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     cpSync(join(repoRoot, path), join(root, path));
   });
+  assert.equal(spawnSync("git", ["init", "--quiet"], { cwd: root }).status, 0);
+  assert.equal(spawnSync("git", ["add", "."], { cwd: root }).status, 0);
   return root;
 };
 
@@ -86,6 +88,11 @@ test("hook files, rules, allowlist and lock must match the protected hashes", ()
   });
   const added = copyHashed();
   place(added, ".claude/hooks/lib/extra.mjs");
+  assert.equal(
+    spawnSync("git", ["add", ".claude/hooks/lib/extra.mjs"], { cwd: added })
+      .status,
+    0,
+  );
   assert.deepEqual(hashProblems(added, expected), [
     ".claude/hooks/lib/extra.mjs: 기대값에 없는 파일이다",
   ]);

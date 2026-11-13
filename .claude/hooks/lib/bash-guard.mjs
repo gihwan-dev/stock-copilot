@@ -275,6 +275,7 @@ export const unwrap = (command, definitions, rules) => {
     args: [],
     env: [...command.assignments],
     hidden: false,
+    wrappers: [],
     executes: true,
     command,
     problems: [],
@@ -309,6 +310,7 @@ export const unwrap = (command, definitions, rules) => {
     const wrapper = Object.hasOwn(definitions.wrappers, name)
       ? definitions.wrappers[name]
       : undefined;
+    if (wrapper !== undefined) invocation.wrappers.push(name);
     const unwrapped =
       wrapper === undefined
         ? { self: true }
@@ -1108,6 +1110,23 @@ const nodeScript = (words, consuming) => {
 
 export const CHECKS = [
   {
+    id: "find-actions",
+    check: (invocation, context) =>
+      invocation.name === "find" &&
+      invocation.args.some(
+        (word) =>
+          word.dynamic || context.rules.find.deniedActions.includes(word.text),
+      )
+        ? [
+            finding(
+              "find-actions",
+              "find의 쓰기·삭제·실행 동작은 허용하지 않는다",
+            ),
+          ]
+        : [],
+  },
+
+  {
     id: "harness-write-mode",
     check: (invocation, context) => {
       if (invocation.name !== "node") {
@@ -1396,6 +1415,7 @@ export const CHECKS = [
       const commands = context.rules.commands;
       const denied =
         commands.denied.includes(invocation.name) ||
+        invocation.wrappers.some((name) => commands.denied.includes(name)) ||
         (isSubagent(context.role) &&
           commands.subagentDenied.includes(invocation.name));
       return denied

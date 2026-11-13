@@ -48,8 +48,7 @@ const EXPECTED_SETTINGS = {
         hooks: [hook("guard-bash.mjs", { onFailure: "block", timeout: 10 })],
       },
       {
-        matcher:
-          "Agent|SendMessage|mcp__t3[-_]code__(delegate_task|t3_thread_launch|t3_thread_send|t3_thread_read|t3_thread_wait)",
+        matcher: "Agent|SendMessage|mcp__t3[-_]code__.*",
         hooks: [
           hook("guard-orchestration.mjs", { onFailure: "block", timeout: 10 }),
         ],
@@ -109,7 +108,7 @@ test("the settings carry exactly the ten documented harness hooks", () => {
   assert.deepEqual(groups, [
     "PreToolUse(Edit|Write|NotebookEdit)",
     "PreToolUse(Bash)",
-    "PreToolUse(Agent|SendMessage|mcp__t3[-_]code__(delegate_task|t3_thread_launch|t3_thread_send|t3_thread_read|t3_thread_wait))",
+    "PreToolUse(Agent|SendMessage|mcp__t3[-_]code__.*)",
     "PostToolUse(Edit|Write)",
     "PostToolUse(Agent)",
     "PostToolUse(mcp__t3[-_]code__(delegate_task|t3_thread_launch))",

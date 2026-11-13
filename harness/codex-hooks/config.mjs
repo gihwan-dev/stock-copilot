@@ -8,7 +8,13 @@ import {
   protectedDenies,
   trackedProtectedDenies,
 } from "../sandbox/fragment.mjs";
-import { git, readLock } from "../../.claude/hooks/lib/project.mjs";
+import { policyCoverage } from "./policy.mjs";
+export { policyCoverage } from "./policy.mjs";
+import {
+  git,
+  readLock,
+  worktreesOf,
+} from "../../.claude/hooks/lib/project.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const entry = (path, mode) =>
   JSON.stringify(path) + " = " + JSON.stringify(mode);
@@ -42,7 +48,13 @@ export const PROTECTED = [
   ]),
 ];
 export const configText = (policy) => {
-  const fs = policy.base.filesystem;
+  const rows = policyCoverage(policy);
+  const modes = new Map();
+  for (const row of rows.filter((item) => item.scope === "filesystem"))
+    if (modes.get(row.target) !== "deny") modes.set(row.target, row.mode);
+  const workspace = new Map(PROTECTED.map((path) => [path, "read"]));
+  for (const row of rows.filter((item) => item.scope === "workspace"))
+    workspace.set(row.target, row.mode);
   return [
     'default_permissions = "stock-copilot"',
     'approval_policy = "never"',
@@ -57,23 +69,10 @@ export const configText = (policy) => {
     "[permissions.stock-copilot]",
     'extends = ":workspace"',
     "[permissions.stock-copilot.filesystem]",
-    ...fs.allowWrite
-      .filter((path) => path.startsWith("~/") && !path.includes("*"))
-      .map((path) => entry(path, "write")),
-    ...fs.denyWrite
-      .filter(
-        (path) =>
-          path.startsWith("~/") &&
-          !path.includes("*") &&
-          !fs.denyRead.includes(path),
-      )
-      .map((path) => entry(path, "read")),
-    ...fs.denyRead
-      .filter((path) => !path.includes("*"))
-      .map((path) => entry(path, "deny")),
+    ...[...modes].map(([path, mode]) => entry(path, mode)),
     entry("~/.codex", "deny"),
     '[permissions.stock-copilot.filesystem.":workspace_roots"]',
-    ...PROTECTED.map((path) => entry(path, "read")),
+    ...[...workspace].map(([path, mode]) => entry(path, mode)),
     "[permissions.stock-copilot.network]",
     "enabled = true",
     "allow_local_binding = " +
@@ -85,8 +84,31 @@ export const configText = (policy) => {
     "",
   ].join("\n");
 };
-export const hookCommand =
-  "/bin/sh -c 'common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir) || exit 1; exec node \"${common%/*}/harness/codex-hooks/dispatch.mjs\"'";
+const shellQuote = (text) =>
+  "\u0027" + text.replaceAll("\u0027", "\u0027\\\u0027\u0027") + "\u0027";
+export const eventHookCommand = (event) => {
+  const reason = "Codex 하네스 시작 실패: Git 또는 Node를 확인하라";
+  const output =
+    event === "PreToolUse"
+      ? {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reason,
+          },
+        }
+      : { decision: "block", reason };
+  const body =
+    'if common=$(/usr/bin/env -i GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 /usr/bin/git rev-parse --path-format=absolute --git-common-dir); then if result=$(node "${common%/*}/harness/codex-hooks/dispatch.mjs" ' +
+    shellQuote(event) +
+    '); then [ -z "$result" ] || printf \u0027%s\\n\u0027 "$result"; exit 0; fi; fi; printf \u0027%s\\n\u0027 ' +
+    shellQuote(JSON.stringify(output)) +
+    "; printf \u0027%s\\n\u0027 " +
+    shellQuote(reason) +
+    " >&2; exit 0";
+  return "/bin/sh -c " + shellQuote(body);
+};
+export const hookCommand = eventHookCommand("PreToolUse");
 export const hooksConfig = () => ({
   hooks: Object.fromEntries(
     [
@@ -95,7 +117,13 @@ export const hooksConfig = () => ({
       ["Stop", 3600],
     ].map(([event, timeout]) => [
       event,
-      [{ hooks: [{ type: "command", command: hookCommand, timeout }] }],
+      [
+        {
+          hooks: [
+            { type: "command", command: eventHookCommand(event), timeout },
+          ],
+        },
+      ],
     ]),
   ),
 });
@@ -134,7 +162,24 @@ export const setupText = (
     "/sbin",
   ];
   const writable = [
-    gitdir,
+    ...[
+      "index",
+      "index.lock",
+      "HEAD.lock",
+      "ORIG_HEAD",
+      "ORIG_HEAD.lock",
+      "MERGE_HEAD",
+      "MERGE_MSG",
+      "MERGE_MODE",
+      "MERGE_RR",
+      "MERGE_AUTOSTASH",
+      "AUTO_MERGE",
+      "AUTO_MERGE.lock",
+      "COMMIT_EDITMSG",
+      "SQUASH_MSG",
+      "logs/HEAD",
+      "logs/HEAD.lock",
+    ].map((name) => gitdir + "/" + name),
     common + "/objects",
     common + "/refs/heads/" + branch,
     common + "/refs/heads/" + branch + ".lock",
@@ -149,7 +194,18 @@ export const setupText = (
     "[permissions." + profile + "]",
     'extends = "stock-copilot"',
     "[permissions." + profile + ".filesystem]",
+    ...[
+      ...new Set([
+        dirname(common),
+        ...worktreesOf(dirname(common)).filter(
+          (tree) => tree !== realpathSync(cwd),
+        ),
+      ]),
+    ].map((tree) => entry(tree, "read")),
+    entry(common, "read"),
+    entry(gitdir, "read"),
     ...writable.map((path) => entry(path, "write")),
+    entry(gitdir + "/HEAD", "read"),
     ...["commondir", "gitdir", "config.worktree"].map((name) =>
       entry(gitdir + "/" + name, "read"),
     ),
@@ -179,6 +235,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   else
     for (const [path, expected] of [
       [".codex/config.toml", configText(readPolicy(root))],
+      [
+        "harness/codex-hooks/policy-coverage.json",
+        JSON.stringify(policyCoverage(readPolicy(root)), undefined, 2) + "\n",
+      ],
       [".codex/hooks.json", JSON.stringify(hooksConfig(), undefined, 2) + "\n"],
     ]) {
       if (process.argv[2] === "--write")

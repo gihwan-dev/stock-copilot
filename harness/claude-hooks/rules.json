@@ -166,14 +166,15 @@
       "filter-branch",
       "filter-repo",
       "rebase",
-      "commit-tree"
+      "commit-tree",
+      "apply",
+      "am"
     ],
     "subagentDenied": [
       "push",
       "cherry-pick",
       "revert",
       "pull",
-      "am",
       "symbolic-ref",
       "send-pack"
     ],
@@ -386,7 +387,7 @@
     "denied": ["install", "uninstall", "add"]
   },
   "commands": {
-    "denied": ["chflags", "xattr", "claude", "link"],
+    "denied": ["chflags", "xattr", "claude", "link", "codex", "patch", "xargs"],
     "subagentDenied": ["gh", "hub", "ed", "ex"],
     "chmod": ["chmod"]
   },
@@ -561,5 +562,18 @@
     "-C",
     "--conditions",
     "--env-file"
-  ]
+  ],
+  "find": {
+    "deniedActions": [
+      "-fprint",
+      "-fprint0",
+      "-fprintf",
+      "-fls",
+      "-delete",
+      "-exec",
+      "-execdir",
+      "-ok",
+      "-okdir"
+    ]
+  }
 }

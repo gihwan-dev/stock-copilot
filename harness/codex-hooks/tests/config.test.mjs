@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { configText, hooksConfig } from "../config.mjs";
+import { configText, hooksConfig, policyCoverage } from "../config.mjs";
 import {
   dataVariants,
   applyVariant,
@@ -27,27 +27,18 @@ test("Codex config preserves supported sandbox policy entries and pins the shell
   assert.match(configText(withoutBinding), /allow_local_binding = false/u);
   for (const domain of policy.base.network.allowedDomains)
     assert.ok(text.includes(`${JSON.stringify(domain)} = "allow"`));
-  const variants = dataVariants(policy).filter((variant) => {
-    const name = variant.path.join(".");
-    const removed = JSON.parse(
-      variant.name.slice(variant.name.indexOf("=") + 1),
-    );
-    return (
-      name === "base.network.allowedDomains" ||
-      (name === "base.filesystem.allowWrite" &&
-        removed.startsWith("~/") &&
-        !removed.includes("*")) ||
-      (name === "base.filesystem.denyRead" && !removed.includes("*")) ||
-      (name === "base.filesystem.denyWrite" &&
-        removed.startsWith("~/") &&
-        !removed.includes("*") &&
-        !policy.base.filesystem.denyRead.includes(removed))
-    );
-  });
+  const rendered = (value) =>
+    configText(value) + JSON.stringify(policyCoverage(value));
+  const variants = dataVariants(policy).filter(
+    (variant) =>
+      variant.path.join(".") === "base.network.allowedDomains" ||
+      variant.path.join(".") === "base.network.allowUnixSockets" ||
+      variant.path.slice(0, 2).join(".") === "base.filesystem",
+  );
   for (const variant of variants)
     assert.notEqual(
-      configText(applyVariant(policy, variant)),
-      text,
+      rendered(applyVariant(policy, variant)),
+      rendered(policy),
       variant.name,
     );
 });

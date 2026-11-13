@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { git } from "../../.claude/hooks/lib/project.mjs";
 
 export const HASHES_FILE = "harness/claude-hooks/hashes.json";
 
@@ -19,22 +20,25 @@ export const HASH_DIRECTORIES = [
   "harness/toolchain",
   "harness/codex-regression",
 ];
-const hooksUnder = (root, relative) =>
-  (existsSync(join(root, relative))
-    ? readdirSync(join(root, relative), { withFileTypes: true })
-    : []
-  ).flatMap((entry) =>
-    entry.isDirectory()
-      ? hooksUnder(root, `${relative}/${entry.name}`)
-      : [`${relative}/${entry.name}`],
-  );
-
+const trackedHooks = (root) => {
+  const files = git(root, ["ls-files", "-z"]);
+  if (files === undefined)
+    throw new Error("해시 대상의 Git 추적 목록을 읽지 못했다");
+  return files
+    .split("\0")
+    .filter(
+      (path) =>
+        path &&
+        (NAMED.includes(path) ||
+          HASH_DIRECTORIES.some((directory) =>
+            path.startsWith(directory + "/"),
+          )),
+    );
+};
 export const currentHashes = (root) =>
   Object.fromEntries(
-    [
-      ...HASH_DIRECTORIES.flatMap((path) => hooksUnder(root, path)),
-      ...NAMED.filter((path) => existsSync(join(root, path))),
-    ]
+    trackedHooks(root)
+      .filter((path) => existsSync(join(root, path)))
       .sort()
       .map((path) => [
         path,
@@ -61,12 +65,9 @@ export const hashProblems = (root, expected) => {
 };
 
 const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..", "..");
-export const HASHED = [
-  ...NAMED,
-  ...HASH_DIRECTORIES.filter((path) => path !== ".claude/hooks").flatMap(
-    (path) => hooksUnder(repoRoot, path),
-  ),
-];
+export const HASHED = trackedHooks(repoRoot).filter(
+  (path) => !path.startsWith(".claude/hooks/"),
+);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv[2] === "--write") {

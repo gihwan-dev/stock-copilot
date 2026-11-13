@@ -832,3 +832,7 @@ S-21(비공개 저장소의 규칙 세트)은 닫았다. 결론: 쓸 수 없다�
 Codex Seatbelt 셸의 `CODEX_SANDBOX=seatbelt`는 기존 `SANDBOX_RUNTIME=1` 계약으로 전달한다. macOS에서 중첩 샌드박스가 거부되는 경우에도 바깥 권한 프로필 안에서 커밋 검사를 이어 간다. 샌드박스 밖의 일반 검사는 기존대로 자체 샌드박스를 실행한다.
 
 Codex 프로필의 읽기 전용 대상은 기존 `protectedDenies` 계산과 추적된 ADR 목록을 재사용한다. 훅 파일뿐 아니라 ESLint·TS·테스트·도구 설정과 메인 전용 진행 문서도 포함한다. 사용자 승인 하네스 프로필에서만 해당 경로 쓰기를 연다.
+
+H-41 수정 2차에서 패치는 모든 줄을 분류하고 미분류 줄을 거부한다. 공유 셸 코어는 codex·patch·xargs, git apply·am과 find의 쓰기·삭제·실행을 막는다. 필요한 헤드리스 실험은 검토된 just 레시피로 실행한다. 래퍼는 Git·Node·import 실패에 PreToolUse deny·Stop block과 종료 0을 낸다. Git 관리 폴더 전체 대신 필요한 파일만 쓰고 HEAD 본문은 읽기 전용이다.
+
+정책 대응은 harness/codex-hooks/policy-coverage.json으로 고정한다. 비홈 경로와 glob도 빼지 않는다. 미분류 항목은 실패한다. 해시는 Git 추적 파일만 계산한다. 새 파일은 스테이징한 뒤 생성한다. 하네스 프로필은 작업 뒤 사용자가 지우고 잠금 전 명시적 --codex-user-config prelock을 실행한다. 설정·훅 출처 실측은 ADR 0021 C를 따른다.

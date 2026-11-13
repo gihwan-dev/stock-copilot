@@ -1,4 +1,5 @@
-import { lstatSync } from "node:fs";
+import { lstatSync, readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -58,6 +59,21 @@ export const prelockProblems = (root, reviewed, allowlist, policy) => {
   ];
 };
 
+export const codexUserProfileProblems = (text) =>
+  text.includes("stock-copilot-harness")
+    ? [
+        "Codex 사용자 설정에 하네스 프로필이 남아 있다. 해당 프로필과 선택 값을 지우고 다시 검사하라",
+      ]
+    : [];
+const userProfileProblems = (path) => {
+  try {
+    return existsSync(path)
+      ? codexUserProfileProblems(readFileSync(path, "utf8"))
+      : [];
+  } catch {
+    return ["Codex 사용자 설정을 확인하지 못했다. 사용자가 직접 확인하라"];
+  }
+};
 const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..", "..");
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -71,6 +87,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           readAllowlistFile(repoRoot),
           readPolicy(repoRoot),
         );
+  if (process.argv.includes("--codex-user-config")) {
+    const index = process.argv.indexOf("--codex-user-config");
+    const path =
+      process.argv[index + 1] ??
+      join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "config.toml");
+    problems.push(...userProfileProblems(path));
+  }
   problems.forEach((problem) => process.stdout.write(`FAIL ${problem}\n`));
   process.stdout.write(`prelock: ${problems.length} failure(s)\n`);
   process.exitCode = problems.length === 0 ? 0 : 1;

@@ -11,41 +11,59 @@ export const refusal = (message) =>
     decision: "deny",
     findings: [{ rule: "codex-input", message }],
   });
+const asciiTrim = (line) => line.replace(/^[ \t]+|[ \t]+$/gu, "");
+const forbiddenWhitespace = /[\p{Cc}\p{Zs}\p{Zl}\p{Zp}\uFEFF]/u;
 export const patchPaths = (patch) => {
   if (typeof patch !== "string") throw new Error("패치 문자열이 없다");
   let lines = patch.replaceAll("\r\n", "\n").split("\n");
-  while (lines[0]?.trim() === "") lines.shift();
-  while (lines.at(-1)?.trim() === "") lines.pop();
+  while (lines[0] !== undefined && asciiTrim(lines[0]) === "") lines.shift();
+  while (lines.at(-1) !== undefined && asciiTrim(lines.at(-1)) === "")
+    lines.pop();
   if (
-    ["<<EOF", "<<\u0027EOF\u0027", '<<"EOF"'].includes(lines[0]?.trim()) &&
-    lines.at(-1)?.trim() === "EOF"
+    ["<<EOF", "<<\u0027EOF\u0027", '<<"EOF"'].includes(
+      asciiTrim(lines[0] ?? ""),
+    ) &&
+    asciiTrim(lines.at(-1) ?? "") === "EOF"
   )
     lines = lines.slice(1, -1);
   if (
-    lines[0]?.trim() !== "*** Begin Patch" ||
-    lines.at(-1)?.trim() !== "*** End Patch"
+    asciiTrim(lines[0] ?? "") !== "*** Begin Patch" ||
+    asciiTrim(lines.at(-1) ?? "") !== "*** End Patch"
   )
     throw new Error("패치 경계가 잘못됐다");
   const paths = [];
   for (const [index, raw] of lines.entries()) {
-    const line = raw.trim();
-    if (!line.startsWith("***")) continue;
+    const line = asciiTrim(raw);
     if (
-      (line === "*** Begin Patch" && index === 0) ||
-      (line === "*** End Patch" && index === lines.length - 1) ||
+      (index === 0 && line === "*** Begin Patch") ||
+      (index === lines.length - 1 && line === "*** End Patch") ||
       line === "*** End of File"
     )
       continue;
     const match =
-      /^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/u.exec(line);
-    if (match === null) throw new Error("모르는 패치 표시 줄이다");
-    const rawMatch =
-      /^\s*\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/u.exec(
+      /^[ \t]*\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$/u.exec(
         raw,
       );
-    if (rawMatch === null || /[\s\p{Cc}]/u.test(rawMatch[1]))
-      throw new Error("패치 경로에 공백이나 제어 문자가 있다");
-    paths.push(match[1]);
+    if (match !== null) {
+      if (
+        [...match[1]].some(
+          (character) =>
+            character === " " ||
+            character === "\t" ||
+            forbiddenWhitespace.test(character),
+        )
+      )
+        throw new Error("패치 경로에 공백이나 제어 문자가 있다");
+      paths.push(match[1]);
+      continue;
+    }
+    if (/^(?:[+-]|@@)/u.test(raw)) continue;
+    if (line.includes("***")) throw new Error("엄격한 패치 머리줄이 아니다");
+    const prefix = /^[ \t]*([^\x20-\x7e\t])/u.exec(raw);
+    if (prefix !== null && forbiddenWhitespace.test(prefix[1]))
+      throw new Error("머리줄 후보에 비 ASCII 공백이나 제어 문자가 있다");
+    if (raw.startsWith(" ")) continue;
+    throw new Error("패치 본문 줄을 분류하지 못했다");
   }
   if (paths.length === 0) throw new Error("패치 대상이 없다");
   return [...new Set(paths)];

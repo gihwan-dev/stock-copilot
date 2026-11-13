@@ -87,11 +87,23 @@ export const orchestrationFindings = (input, rules, facts) => {
         "startFromOrigin",
       ]) ||
       args.workspaceStrategy.type !== "worktree" ||
-      args.workspaceStrategy.startFromOrigin !== false ||
       typeof args.message !== "string"
     )
       return denied("현재 프로젝트를 상속하는 Codex worktree만 시작한다");
     const brief = parseBrief(args.message);
+    const strategy = args.workspaceStrategy;
+    if (strategy.startFromOrigin === true) {
+      const origin = facts.originTip ?? facts.resolveCommit("origin/master");
+      if (
+        strategy.baseRef !== "origin/master" ||
+        !origin ||
+        facts.resolveCommit(brief.commit) !== origin
+      )
+        return denied("원격 시작은 origin/master 끝과 같은 브리프만 쓴다");
+      return briefCheck(args.message, rules, { ...facts, baseTip: origin });
+    }
+    if (strategy.startFromOrigin !== false)
+      return denied("로컬·원격 기준 선택을 명시한다");
     if (
       args.workspaceStrategy.branch !== brief.branch ||
       args.workspaceStrategy.baseRef !== brief.commit
@@ -99,6 +111,15 @@ export const orchestrationFindings = (input, rules, facts) => {
       return denied("작업 사본의 기준과 브리프가 다르다");
     return briefCheck(args.message, rules, facts);
   }
+  const readers = {
+    t3_project_list: [],
+    orchestrator_capabilities: [],
+    t3_background_wait: ["timeoutMs", "untilDelegatedWorkSettled"],
+  };
+  if (tool in readers)
+    return keys(args, readers[tool])
+      ? []
+      : denied("읽기·대기 도구의 허용 인자 밖이다");
   const allowed = {
     t3_thread_send: ["threadId", "message", "mode", "clientRequestId"],
     t3_thread_read: [
@@ -128,7 +149,7 @@ export const orchestrationFindings = (input, rules, facts) => {
   if (tool === "t3_thread_send") {
     if (
       typeof args.message !== "string" ||
-      (args.mode !== undefined && !["auto", "queue"].includes(args.mode))
+      (args.mode !== undefined && args.mode !== "auto")
     )
       return denied("수정 메시지 인자가 잘못됐다");
     const brief = parseBrief(args.message);

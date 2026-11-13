@@ -48,7 +48,7 @@
         ]
       },
       {
-        "matcher": "Agent|SendMessage|mcp__t3[-_]code__(delegate_task|t3_thread_launch|t3_thread_send|t3_thread_read|t3_thread_wait)",
+        "matcher": "Agent|SendMessage|mcp__t3[-_]code__.*",
         "hooks": [
           {
             "type": "command",

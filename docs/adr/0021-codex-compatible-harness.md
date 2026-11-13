@@ -1,4 +1,4 @@
-# ADR 0021: Codex 호환 하네스와 수정 1차
+# ADR 0021: Codex 호환 하네스
 
 - 상태: 제안
 - 날짜: 2026-11-13
@@ -88,7 +88,7 @@ PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션
 
 ## 알려진 빈틈
 
-- 시간 초과·명령 파일 없음·프로세스 시작 실패는 스크립트가 처리할 수 없고 차단을 보장하지 못한다.
+- 래퍼 자체의 시작 실패·강제 종료·시간 초과는 deny 출력을 보장하지 못한다. Git 질의 실패·Node 실패·모듈 import 실패는 래퍼가 이벤트별 거부 JSON과 종료 0으로 닫는다.
 - 프로젝트 신뢰와 훅 정의 신뢰는 별개이며 프로젝트 파일만으로 사용자 신뢰를 강제할 수 없다.
 - T3 full-access가 프로필을 덮을 수 있다. 현재 세션은 새 설정으로 다시 시작하지 않았으므로 적용됐다고 판정하지 않는다.
 - ConfigChange 이벤트가 없어 설정의 세션 반영 거부를 Claude와 같은 방식으로 구현하지 못한다.
@@ -99,7 +99,7 @@ PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션
 - 모델이 시도하지 않으면 회귀는 미확정이다. 감사 기록 입력 해시와 실제 결과를 함께 확인한다.
 - 운영 회귀는 운영 hooks.json·프로필을 쓰지만 축소 사본이다. 전체 소스 사본의 운영 Stop 성공도 별도로 확인했으나 현재 T3 세션에 재시작 없이 소급 적용되지는 않는다.
 - Git 자동 유지보수의 packed-refs.lock 경고는 남긴다. 전역 ref 쓰기는 열지 않는다.
-- 컴퓨터별 설정은 출력만 한다. 사용자 적용과 새 worktree별 재출력이 필요하다.
+- 컴퓨터별 설정은 출력만 한다. 사용자 적용과 새 worktree별 재출력이 필요하다. 하네스 프로필은 자동 회수되지 않는다. 종료 후 사용자가 지우고 잠금 전에 명시적 사용자 설정 검사를 한다.
 - 읽기 도구 허용 목록은 API에서 확인한 view_image·MCP 자원 조회다. CLI에서 실제 이벤트로 관찰한 이름은 Bash·apply_patch다. 새 도구는 확인 뒤 추가한다.
 
 ## 결과
@@ -107,3 +107,82 @@ PostToolUse가 시작 결과의 threadId와 브리프 브랜치를 메인 세션
 수정 1차 헤드리스는 계약 2회·운영 회귀 2회·전체 소스 Stop 3회로 7회다. 운영 회귀는 마지막 실행도 실제 상태 기준 10/10 통과했다. 첫 전체 Stop에서 테스트의 중첩 샌드박스와 T3 결과 해석 결함을 발견해 수정했다. 둘째 전체 Stop은 status=passed·깨끗한 HEAD를 기록했다. 셋째는 실제 경로 별칭 보정 뒤 pwd 성공·Stop status=passed·깨끗한 HEAD를 함께 확인했다. 패치·Git 권한·HOME 변경 검사는 모델 없이 했다. Codex의 실제 Seatbelt 셸은 CODEX_SANDBOX=seatbelt를 준다. justfile은 이를 기존 SANDBOX_RUNTIME=1 계약에 연결해 중첩 불가 환경을 인식한다. 샌드박스 밖에서는 기존 표식의 값이 유지된다. 실제 OS 권한을 풀거나 테스트 단언을 바꾸지 않는다. pnpm 12 실측에서 npm_config_store_dir·PNPM_STORE_DIR는 적용되지 않고 pnpm_config_store_dir만 적용됐다. 자동 저장소 선택은 프로젝트와 검사 임시 사본에서 서로 다른 폴더를 골라 offline tarball 실패를 냈다. 컴퓨터별 출력에서 이 환경 변수로 허용된 홈 캐시를 고정하고 config get store-dir와 실제 오프라인 도구 복구 테스트로 확인한다. 홈 설정·키·계좌 데이터를 다루지 않았다. 검사 끄기는 추가하지 않았다.
 
 known-gaps: 63건 (eslint 7건, hook 6건, adr 50건(문서만(예제 없음)))
+
+
+## 수정 2차 결정과 실측
+
+대상은 865b791이다. Codex CLI는 0.168.0이다. 헤드리스 계약 2회와 운영 회귀 1회를 썼다. 패치 적용기·app-server 조회·Git 권한은 모델 없이 확인한다.
+
+| 지적 | 조치 | 재현 테스트 |
+|---|---|---|
+| 1 | ASCII 공백·탭만 trim한다. 모든 줄을 엄격한 머리줄·표시·hunk로 분류하고 나머지는 거부한다 | R2 patch classification rejects every Rust whitespace header disguise and unknown body line |
+| 2 | 래퍼와 dispatcher 예외를 이벤트별 거부 JSON·종료 0으로 닫는다. gitdir 전체 쓰기를 없앤다 | R2 wrapper emits event appropriate closed failure for broken HEAD and module import; R2 session Git writes exclude HEAD and the administrative directory grant |
+| 3 | 공유 코어에서 codex·patch·xargs, git apply·am, find 쓰기·삭제·실행을 거부한다 | R2 shared shell core denies opaque writers and find side effects for both adapters; 셸 예제의 원소 빼기 검사 |
+| 4 | T3 전체 matcher에서 기본 거부한다. send는 auto·생략만 쓴다 | R2 all T3 mutations are gated and queued sends are refused |
+| 5 | 로컬은 SHA·false, 원격은 origin/master·true와 같은 원격 SHA의 브리프를 쓴다 | R2 local unpublished and origin launch bases have distinct enforced modes |
+| 6 | 모든 파일·소켓 정책에 적용·상속·더 좁은 제한을 명시한다. 미분류 항목은 실패한다 | R2 every filesystem and socket policy entry has explicit coverage including non home entries |
+| 7 | git ls-files만 해시한다. 새로 스테이징한 가드는 포함하고 미추적 잡음은 제외한다 | R2 hashes ignore untracked noise but include staged guard files |
+
+Rust 공백은 0..=0x10ffff의 유효 char를 char::is_whitespace로 계산한다. 수동 목록은 없다. 같은 집합으로 직접 패치와 Bash heredoc을 검사한다. 정상 한글 hunk와 +로 시작하는 별표 본문은 허용한다. 실제 적용기에서 NEL을 붙인 첫 보호 대상 머리줄과 정상 둘째 머리줄을 함께 적용하면 두 파일이 바뀌었다. 865b791 어댑터는 이를 허용했고 수정 어댑터는 거부했다.
+
+### 실패 출력의 실제 계약
+
+| 실패 위치 | PreToolUse | Stop |
+|---|---|---|
+| Git rev-parse 실패 | permissionDecision=deny, 종료 0 | decision=block, 종료 0 |
+| Node 실행·모듈 import 실패 | 같은 deny | 같은 block |
+| dispatcher 내부 예외 | 같은 deny | 같은 block |
+| 래퍼 자체 시작·시간 초과 | 출력 보장 못 함 | 출력 보장 못 함 |
+
+임시 원본에서 dispatch 파일을 찾지 못하게 했다. 운영 Stop 래퍼의 block·종료 0은 첫 완료를 막았고 모델은 시작 실패 피드백 뒤 막힘을 보고했다. 실험용 훅만 둘째 Stop을 허용해 끝냈다. 실제 래퍼에는 이 예외가 없다.
+
+### A. 시스템 임시 폴더 밖의 Git 권한
+
+독립 임시 저장소와 두 worktree를 만들었다. worktree는 ~/.t3/worktrees/stock-copilot/ 아래이며 /private/tmp 밖이다. 공통 Git 폴더도 시스템 임시 폴더 밖이다.
+
+| 시도 | 실제 결과 |
+|---|---|
+| add·서명 없는 commit·merge master | 모두 종료 0, 두 부모 병합 |
+| refs/heads/master 이동 | 종료 128, 원래 SHA 유지 |
+| 다른 브랜치 이동·새 브랜치·태그 생성 | 모두 종료 128 |
+| packed-refs 쓰기 | 종료 1 |
+| 다른 worktree 관리 폴더·소스 쓰기 | 모두 종료 1 |
+| 주 작업 트리 파일 쓰기 | 종료 1, 원래 내용 유지 |
+| 자기 HEAD·공통 config·hooks 쓰기 | 모두 종료 1 |
+| 허용된 lock 파일로 HEAD·master를 원자 교체 | 모두 종료 1 |
+
+자기 관리 폴더는 index·lock, HEAD.lock, ORIG_HEAD·lock, MERGE_HEAD·MSG·MODE·RR·AUTOSTASH, AUTO_MERGE·lock, COMMIT_EDITMSG, SQUASH_MSG, logs/HEAD·lock만 쓴다. HEAD.lock이 없으면 commit이, AUTO_MERGE.lock이 없으면 merge가 실패했다. 둘을 추가한 뒤 성공했다. HEAD 본문과 관리 폴더 전체 쓰기는 열지 않는다. 공통 Git 폴더는 objects와 자기 브랜치 ref·lock·log만 쓴다. 실험 뒤 git worktree remove --force로 두 임시 worktree를 지웠다.
+
+### B. 하네스 프로필의 수명
+
+잠금 off는 사용자 승인 자체가 아니다. --harness는 승인한 하네스 작업에서만 쓴다. 생성기는 사용자 설정을 변경하지 않으며 이미 적용한 권한을 자동 회수할 수도 없다.
+
+| 시점 | 사용자가 할 일 |
+|---|---|
+| 시작 | 승인한 worktree에서 just codex-setup --harness 출력을 검토해 적용 |
+| 종료 | 사용자 설정의 stock-copilot-harness 정의·선택 값을 삭제하고 일반 프로필로 새 세션 시작 |
+| 잠금 on 전 | node harness/sandbox/prelock.mjs <검토 SHA> --codex-user-config 직접 실행 |
+| 별도 설정 계층 | --codex-user-config <파일>로 각 유효 파일을 따로 확인 |
+
+prelock은 명시적 --codex-user-config가 있을 때만 사용자 설정을 읽는다. 생성 프로필 이름이 남으면 실패한다. 모듈 import·기본 prelock·just check는 실제 사용자 설정을 읽지 않는다. 테스트는 임시 가짜 설정만 읽는다. 이미 실행 중인 세션의 권한을 회수하는 장치는 아니다.
+
+### C. 설정과 훅 정의의 출처
+
+설치된 app-server의 config/read·hooks/list를 임시 CODEX_HOME에서 실행했다. 실제 홈 설정·자격 증명을 복사하거나 읽지 않았다. 네이티브 CLI 두 번은 임시로 검토한 훅만 신뢰 우회 옵션으로 활성화했다. 사용자 신뢰 저장소는 변경하지 않았다.
+
+| 관찰 | 결과 |
+|---|---|
+| config/read의 프로젝트 계층 | 세션 worktree/.codex, 원본 high 대신 worktree low |
+| 실제 Bash의 설정 환경 변수 | 원본 PRIMARY 대신 WORKER 출력 |
+| hooks/list의 sourcePath·command·hash | 주 작업 트리/.codex/hooks.json의 PRIMARY |
+| worktree 훅을 WORKER_FIRST에서 WORKER_CHANGED로 수정 | 원본 훅 sourcePath·hash 유지 |
+| 실제 PreToolUse·Stop 기록 | 수정 전후 모두 원본 훅 실행, cwd는 worker |
+| 훅 신뢰 | 임시 저장소에서는 untrusted. 프로젝트 신뢰와 별개 |
+
+0.168.0은 설정과 훅 정의의 기준 폴더가 다르다. 원본 훅 정의를 신뢰하고 매 worktree 설정·프로필을 확인한다. 다른 버전에서는 다시 실측한다. [공식 설정 문서](https://learn.chatgpt.com/docs/config-file/config-advanced#hooks)의 일반 설명만으로 worktree 출처를 추정하지 않는다.
+
+### 정책 대응과 해시 생성
+
+policy-coverage.json은 공유 정책의 모든 항목과 대응을 고정한다. 다른 worktree 쓰기·Claude 소켓은 더 좁게 제한한다. pnpm 부모 임시 쓰기 대신 고정 저장소를 쓴다. 상대 denyWrite와 홈 denyRead glob도 반영한다. 새 미분류 항목은 config 검사가 실패한다.
+
+새 가드는 먼저 스테이징하고 해시 쓰기 모드로 생성한다. .DS_Store 등 미추적 파일은 제외한다. 기존 셸 예제의 허용 7건은 거부로 강화했다. 기존 거부를 허용으로 바꾼 것은 없다.

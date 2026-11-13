@@ -48,7 +48,8 @@ test("R14 new guard files cannot disappear with their hash entries", () => {
     const path = "harness/codex-hooks/added.mjs";
     mkdirSync(join(f.root, "harness/codex-hooks"), { recursive: true });
     writeFileSync(join(f.root, path), "export const value = 1;\n");
-    const hashes = currentHashes(repoRoot);
+    assert.equal(spawnSync("git", ["add", path], { cwd: f.root }).status, 0);
+    const hashes = currentHashes(f.root);
     delete hashes[path];
     assert.ok(
       hashProblems(f.root, hashes).some((value) => value.startsWith(path)),

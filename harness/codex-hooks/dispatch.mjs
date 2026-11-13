@@ -136,14 +136,22 @@ export const dispatchEvent = (
   return output;
 };
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  let input;
   try {
-    const input = JSON.parse(readFileSync(0, "utf8"));
+    input = JSON.parse(readFileSync(0, "utf8"));
     const output = dispatchEvent(input, sessionProject());
     if (output !== undefined)
       process.stdout.write(JSON.stringify(output) + "\n");
   } catch (error) {
     const reason = "Codex 하네스 오류: " + error.message;
     process.stderr.write(reason + "\n");
-    process.stdout.write(JSON.stringify(refusal(reason)) + "\n");
+    const event = process.argv[2] ?? input?.hook_event_name ?? "PreToolUse";
+    process.stdout.write(
+      JSON.stringify(
+        event === "PreToolUse"
+          ? refusal(reason)
+          : { decision: "block", reason },
+      ) + "\n",
+    );
   }
 }

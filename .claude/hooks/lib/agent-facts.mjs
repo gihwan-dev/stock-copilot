@@ -59,6 +59,7 @@ export const launchFacts = (root, state, rules) => {
   return {
     resolveCommit: (text) => resolveCommit(root, text),
     baseTip: refTip(root, rules.baseRef),
+    originTip: refTip(root, "refs/remotes/origin/master"),
     passedTargets: passedTargets(state),
     reportDigests: knownReportDigests(state),
     worktreeForBranch: (branch) => locateWorktree(root, worktrees, branch),
