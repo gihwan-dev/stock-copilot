@@ -73,6 +73,27 @@ pub struct KrwValuation {
 
 impl KrwValuation {
     #[must_use]
+    pub(crate) fn zero() -> Self {
+        Self {
+            money: Money::new(
+                crate::Amount::new(rust_decimal::Decimal::ZERO),
+                Currency::Krw,
+            ),
+            rates: Vec::new(),
+        }
+    }
+
+    pub(crate) fn from_native_krw(value: Money) -> Result<Self, FxConversionError> {
+        if value.currency() != Currency::Krw {
+            return Err(FxConversionError::CurrencyMismatch);
+        }
+        Ok(Self {
+            money: value,
+            rates: Vec::new(),
+        })
+    }
+
+    #[must_use]
     pub fn from_component(component: KrwValuationComponent) -> Self {
         match component {
             KrwValuationComponent::Unconverted(value) => Self {
@@ -382,5 +403,31 @@ mod review_tests {
             reverse.convert_for_historical_valuation(money("100", Currency::Krw)),
             Err(FxConversionError::UnsupportedDirection)
         );
+    }
+}
+
+#[cfg(test)]
+mod native_valuation_tests {
+    use crate::{
+        Currency, FxConversionError, KrwValuation, Money, NumericInput, ValuationAccuracy,
+    };
+    #[test]
+    fn internal_native_valuation_preserves_currency_and_never_invents_fx() {
+        let zero = KrwValuation::zero().into_parts();
+        assert_eq!(zero.0, crate::holding::zero(Currency::Krw));
+        assert_eq!(zero.1, []);
+        assert_eq!(zero.2, ValuationAccuracy::Exact);
+        for currency in [Currency::Krw, Currency::Usd] {
+            let money = Money::parse(&NumericInput::try_new("123.45").expect("입력"), currency)
+                .expect("금액");
+            let result = KrwValuation::from_native_krw(money);
+            match currency {
+                Currency::Krw => assert_eq!(
+                    result.expect("원화").into_parts(),
+                    (money, Vec::new(), ValuationAccuracy::Exact)
+                ),
+                Currency::Usd => assert_eq!(result, Err(FxConversionError::CurrencyMismatch)),
+            }
+        }
     }
 }

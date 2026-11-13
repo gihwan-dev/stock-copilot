@@ -82,3 +82,17 @@ pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
 
 pub use order_intent::{OrderIntentError, ResolvedOrderInstrument};
 pub use order_quantity::OrderWireValue;
+
+mod holding;
+mod holding_valuation;
+mod portfolio;
+mod portfolio_valuation;
+pub use holding::{AcquisitionPrice, Holding, HoldingError, HoldingObservation, ReportedHolding};
+pub use holding_valuation::{
+    Comparison, ComputedHolding, EvaluationError, HoldingReturn, HoldingValuation, ValuationSource,
+};
+pub use portfolio::{BuyingPower, Portfolio, PortfolioError};
+pub use portfolio_valuation::{
+    AssetEstimate, CompleteTotal, IncompleteTotal, PortfolioValuation, Total, TotalCompleteness,
+    ValuedHolding,
+};
