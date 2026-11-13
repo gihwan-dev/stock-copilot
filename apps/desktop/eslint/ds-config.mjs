@@ -1,4 +1,3 @@
-import { SCREEN_DOM_BOOTSTRAP } from "./ds-screen-allowlists.mjs";
 import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
 import tailwind from "eslint-plugin-better-tailwindcss";
@@ -39,6 +38,7 @@ export const DS_RULES = {
   "ds/static-classes": "error",
   "ds/no-inline-style": "error",
   "ds/no-style-literals": "error",
+  "ds/no-ui-attributes": "error",
 };
 export const SHARED_RULES = {
   "ds/no-style-literals": "error",
@@ -111,11 +111,13 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     plugins: { ds: dsPlugin },
     rules: SCREEN_RULES,
   },
-  ...listed(
-    SCREEN_DOM_BOOTSTRAP.map((entry) => entry.file),
-    { "ds/no-dom-values": "off" },
-  ),
+  {
+    files: ["src/**/messages.ts"],
+    plugins: { ds: dsPlugin },
+    rules: { "ds/no-message-format": "error" },
+  },
   ...listed(lists.DOM_ACCESS_FILES, {
+    "ds/no-dom-exports": "error",
     "ds/no-dom-values": "off",
     "guard/no-dom-globals": "off",
     "guard/no-ref-callback": "off",

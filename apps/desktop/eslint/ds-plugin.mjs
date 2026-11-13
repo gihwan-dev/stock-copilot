@@ -1,5 +1,6 @@
+import { noMessageFormat } from "./ds-message-format.mjs";
 import { screenRules } from "./ds-screen.mjs";
-import { noDomValues } from "./ds-dom.mjs";
+import { noDomValues, noDomExports } from "./ds-dom.mjs";
 import { boundaryRules, intlOptions } from "./ds-boundaries.mjs";
 import { styleLiteral, assembledStyle } from "./ds-style-values.mjs";
 const rule = (message, create) => ({
@@ -32,7 +33,9 @@ export const dsPlugin = {
   rules: {
     ...boundaryRules,
     ...screenRules,
+    "no-message-format": noMessageFormat,
     "no-dom-values": noDomValues,
+    "no-dom-exports": noDomExports,
     "static-classes": rule(
       "className은 문자열 리터럴 또는 정적인 cn 인자만 받는다.",
       (ctx) => ({

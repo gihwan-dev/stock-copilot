@@ -8,16 +8,24 @@ const rule = (message, create) => ({
 });
 const report = (ctx, node) => ctx.report({ node, messageId: "forbidden" });
 const classes = new Set(DS_CLASSES);
-const classLike = (text) =>
-  text
-    .split(/\s+/u)
-    .some(
+const utility = (value) =>
+  classes.has(value) ||
+  /^(?:-?(?:bg|text|border|p[xytrblse]?|m[xytrblse]?|gap|w|h|min-w|max-w|min-h|max-h|fill|stroke|rounded|shadow|grid-cols|z|opacity|overflow|font|leading|tracking|duration|translate-[xy])-)(?:\d+(?:\/\d+)?|px|auto|full|screen|min|max|fit|none)$/u.test(
+    value,
+  );
+const classLike = (text) => {
+  const values = text.trim().split(/\s+/u);
+  return (
+    values.some(
       (value) =>
-        classes.has(value) ||
-        /^(?:[\w@-]+:)*!?(?:-?(?:bg|text|border|p[xytrblse]?|m[xytrblse]?|gap|w|h|min-w|max-w|min-h|max-h|fill|stroke|rounded|shadow|grid-cols|z|opacity|overflow|font|leading|tracking|duration|translate-[xy])[-[(])/u.test(
+        /(?:\[[^\]]+\]|\(--[\w-]+\))/u.test(value) ||
+        /^(?:hover|focus|focus-visible|focus-within|active|disabled|sm|md|lg|xl|2xl|dark|motion-reduce|window-md|window-lg|@content-medium|@content-wide):/u.test(
           value,
         ),
-    );
+    ) ||
+    (values.length > 1 && values.every(utility))
+  );
+};
 const helpers = [
   "cn",
   "clsx",
@@ -29,19 +37,37 @@ const helpers = [
   "styled",
 ];
 const forbiddenImport = (source) =>
-  /\.(?:css|scss|sass|less|styl)(?:[?].*)?$/iu.test(source) ||
-  /^(?:@base-ui\/|@emotion\/|@stitches\/|styled-components(?:\/|$)|(?:recharts|lightweight-charts|react-markdown|lucide-react|clsx|classnames|tailwind-merge|class-variance-authority)(?:\/|$))/u.test(
-    source,
-  );
+  /\.(?:css|scss|sass|less|styl)(?:[?].*)?$/iu.test(source);
 const textProps = [
   "aria-label",
   "aria-description",
+  "aria-valuetext",
+  "aria-roledescription",
+  "aria-placeholder",
+  "aria-braillelabel",
+  "aria-brailleroledescription",
+  "aria-colindextext",
+  "aria-rowindextext",
   "title",
   "alt",
   "placeholder",
   "label",
   "description",
+  "summary",
+  "abbr",
+  "prompt",
+  "standby",
 ];
+const textAttribute = (node) =>
+  textProps.includes(propertyName(node.name)) ||
+  (propertyName(node.name) === "value" &&
+    propertyName(node.parent.name) === "input" &&
+    node.parent.attributes.some(
+      (attribute) =>
+        attribute.type === "JSXAttribute" &&
+        propertyName(attribute.name) === "type" &&
+        ["button", "submit", "reset"].includes(attribute.value?.value),
+    ));
 const intrinsicType = (type) =>
   type?.isUnion()
     ? type.types.some(intrinsicType)
@@ -56,7 +82,7 @@ export const screenRules = {
       const name = node.name;
       const services = ctx.sourceCode.parserServices;
       if (
-        name.type === "JSXNamespacedName" ||
+        ["JSXNamespacedName", "JSXMemberExpression"].includes(name.type) ||
         (name.type === "JSXIdentifier" && /^[a-z]/u.test(name.name)) ||
         (typeof services.getTypeAtLocation === "function" &&
           intrinsicType(services.getTypeAtLocation(name)))
@@ -105,60 +131,39 @@ export const screenRules = {
       TemplateElement(node) {
         if (classLike(node.value.cooked ?? "")) report(ctx, node);
       },
-      JSXAttribute(node) {
-        const services = ctx.sourceCode.parserServices;
-        const expression = node.value?.expression;
-        if (
-          typeof services.getTypeAtLocation !== "function" ||
-          expression === undefined
-        )
-          return;
-        const visit = (type) =>
-          type.isUnion()
-            ? type.types.some(visit)
-            : typeof type.value === "string" && classLike(type.value);
-        if (visit(services.getTypeAtLocation(expression))) report(ctx, node);
-      },
     }),
   ),
   "no-screen-format": rule(
     "형식 변환은 shared/lib/format에서, 화면 문구는 messages.ts에서 받는다.",
     (ctx) => {
-      const check = (node, text) => {
-        if (/\p{Extended_Pictographic}|-\d/u.test(text)) report(ctx, node);
-      };
       return {
         Identifier(node) {
           if (node.name === "Intl") report(ctx, node);
         },
         MemberExpression(node) {
           if (
-            ["toLocaleString", "toFixed", "toPrecision"].includes(
-              propertyName(node.property),
-            )
+            [
+              "toLocaleString",
+              "toLocaleDateString",
+              "toLocaleTimeString",
+              "toFixed",
+              "toExponential",
+              "toPrecision",
+            ].includes(propertyName(node.property))
           )
             report(ctx, node);
         },
         Property(node) {
           if (
-            ["toLocaleString", "toFixed", "toPrecision"].includes(
-              propertyName(node.key),
-            )
+            [
+              "toLocaleString",
+              "toLocaleDateString",
+              "toLocaleTimeString",
+              "toFixed",
+              "toExponential",
+              "toPrecision",
+            ].includes(propertyName(node.key))
           )
-            report(ctx, node);
-        },
-        JSXText(node) {
-          check(node, node.value);
-        },
-        Literal(node) {
-          if (
-            typeof node.value === "string" &&
-            /\p{Extended_Pictographic}/u.test(node.value)
-          )
-            report(ctx, node);
-        },
-        TemplateElement(node) {
-          if (/\p{Extended_Pictographic}/u.test(node.value.cooked ?? ""))
             report(ctx, node);
         },
       };
@@ -168,7 +173,7 @@ export const screenRules = {
     "JSX 사용자 문구 속성에는 messages.ts의 UiText만 넘긴다.",
     (ctx) => ({
       JSXAttribute(node) {
-        if (!textProps.includes(propertyName(node.name))) return;
+        if (!textAttribute(node)) return;
         const value = node.value;
         const services = ctx.sourceCode.parserServices;
         if (

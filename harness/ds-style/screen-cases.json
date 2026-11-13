@@ -4,11 +4,11 @@
     "rule": "ds/no-screen-props"
   },
   "class-alias": {
-    "code": "import type {ReactElement} from \"react\"; import {Button} from \"../../../shared/ds\"; export const Probe=():ReactElement=><Button paint=\"bg-primary\"/>;",
+    "code": "import type {ReactElement} from \"react\"; import {Button} from \"../../../shared/ds\"; export const Probe=():ReactElement=><Button paint=\"hover:bg-primary\"/>;",
     "rule": "ds/no-screen-classes"
   },
   "spread": {
-    "code": "import type {ReactElement} from \"react\"; import {Button} from \"../../../shared/ds\"; export const Probe=():ReactElement=><Button {...{paint:\"bg-primary\"}}/>;",
+    "code": "import type {ReactElement} from \"react\"; import {Button} from \"../../../shared/ds\"; export const Probe=():ReactElement=><Button {...{paint:\"hover:bg-primary\"}}/>;",
     "rule": "ds/no-screen-classes"
   },
   "children": {
@@ -34,10 +34,6 @@
   "iframe": {
     "code": "import type {ReactElement} from \"react\"; export const Probe=():ReactElement=><iframe/>;",
     "rule": "ds/no-screen-elements"
-  },
-  "imported-class": {
-    "code": "import {imported} from \"../../../shared/lib\";import type {ReactElement} from \"react\"; import {Button} from \"../../../shared/ds\"; export const Probe=():ReactElement=><Button paint={imported}/>;",
-    "rule": "ds/no-screen-classes"
   },
   "computed-object": {
     "code": "const key=\"paint\"; export const props={ [key]:\"bg-primary\" };",

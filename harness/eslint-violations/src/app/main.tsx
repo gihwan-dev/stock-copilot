@@ -1,1 +1,4 @@
-export { createRoot } from "react-dom/client";
+import { StrictMode } from "react";
+import { mountApp } from "../shared/platform";
+
+mountApp(<StrictMode />);

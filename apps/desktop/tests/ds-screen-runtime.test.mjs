@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  rmSync,
-  readFileSync,
-} from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { ESLint } from "eslint";
+import { ESLint, mkdtempSync } from "./ds-runtime-environment.mjs";
 import { desktopRoot, repoRoot } from "./paths.mjs";
 
 const cases = JSON.parse(
@@ -35,11 +29,11 @@ test("DS09 bypasses compile then fail the effective application lint", async () 
   );
   writeFileSync(
     join(folder, "src/shared/ds/index.ts"),
-    'import type {ReactElement,RefObject,MouseEvent} from "react"; export const Button=(props:Readonly<{title?: string; placeholder?:string; paint?:string; className?:string; style?:object; children?:ReactElement; render?:()=>ReactElement; ref?:RefObject<HTMLDivElement|null>|(()=>undefined); onClick?:(event:MouseEvent<HTMLButtonElement>)=>void}>):null=>props ? null : null;',
+    'import type {ReactElement,RefObject,MouseEvent} from "react"; export const Button=(props:Readonly<{title?: string; mode?:"grid"|"list"; placeholder?:string; paint?:string; className?:string; style?:object; children?:ReactElement; render?:()=>ReactElement; ref?:RefObject<HTMLDivElement|null>|(()=>undefined); onClick?:(event:MouseEvent<HTMLButtonElement>)=>void}>):null=>props ? null : null;',
   );
   writeFileSync(
     join(folder, "src/shared/lib/index.ts"),
-    'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export const imported="bg-primary";',
+    'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export const imported="hover:bg-primary";',
   );
   writeFileSync(
     join(folder, "src/shared/ds/internal.ts"),
@@ -93,6 +87,17 @@ test("DS09 bypasses compile then fail the effective application lint", async () 
     );
     assert.equal(validRun.status, 0, validRun.stdout + validRun.stderr);
     assert.deepEqual((await linter.lintFiles([source]))[0].messages, []);
+    writeFileSync(
+      source,
+      'import type {ReactElement} from "react"; import {Button} from "../../../shared/ds"; export const Probe=({mode}:{readonly mode:"grid"|"list"}):ReactElement=><Button mode={mode}/>;',
+    );
+    const modeRun = spawnSync(
+      join(desktopRoot, "node_modules/.bin/tsc"),
+      ["-p", config],
+      { encoding: "utf8" },
+    );
+    assert.equal(modeRun.status, 0, modeRun.stdout + modeRun.stderr);
+    assert.deepEqual((await linter.lintFiles([source]))[0].messages, []);
     const messages = join(folder, "src/features/probe/messages.ts");
     writeFileSync(
       messages,
@@ -111,7 +116,7 @@ test("DS09 bypasses compile then fail the effective application lint", async () 
     for (const result of await linter.lintFiles([source, messages]))
       assert.deepEqual(result.messages, []);
     process.stdout.write(
-      "DS09 KNOWN GAP: composed UiText through arbitrary paint prop passes tsc and screen/messages lint; DS10 contract required\n",
+      "DS09 data transfer passes; DS static-classes forbids consuming this prop as className\n",
     );
     for (const path of [
       "pages/Probe.tsx",

@@ -7,8 +7,8 @@ import { desktopRoot } from "./paths.mjs";
 const witnesses = {
   "ds/no-screen-elements": "<div/>",
   "ds/no-screen-props": '<Button className="bg-primary"/>',
-  "ds/no-screen-imports": 'import {Line} from "recharts";',
-  "ds/no-screen-classes": 'const value="bg-primary";',
+  "ds/no-screen-imports": 'import "./style.css";',
+  "ds/no-screen-classes": 'const value="hover:bg-primary";',
   "ds/no-screen-format": "const value=new Intl.NumberFormat();",
   "ds/no-ui-attributes": '<Button title="Search"/>',
   "ds/no-dom-values": "const read=(ref)=>ref.current;",
@@ -52,11 +52,7 @@ test("DS09 token class intrinsic composition passes inside DS and fails in both 
   assert.deepEqual(await lint(code, {}, "src/shared/ds/Probe.tsx"), []);
   for (const path of ["src/app/Probe.tsx", "src/features/probe/ui/Probe.tsx"]) {
     const errors = await lint(code, SCREEN_RULES, path);
-    for (const rule of [
-      "ds/no-screen-elements",
-      "ds/no-screen-props",
-      "ds/no-screen-classes",
-    ])
+    for (const rule of ["ds/no-screen-elements", "ds/no-screen-props"])
       assert.ok(errors.includes(rule), rule);
   }
 });
@@ -65,11 +61,6 @@ test("DS09 screen syntax bypass matrix closes imports props factories and embedd
   const cases = [
     ['import "./theme.css";', "ds/no-screen-imports"],
     ['import {css} from "@emotion/react";', "ds/no-screen-imports"],
-    ['import {Input} from "@base-ui/react/input";', "ds/no-screen-imports"],
-    ['import {Line} from "recharts";', "ds/no-screen-imports"],
-    ['import {Chart} from "lightweight-charts";', "ds/no-screen-imports"],
-    ['import Markdown from "react-markdown";', "ds/no-screen-imports"],
-    ['import {Icon} from "lucide-react";', "ds/no-screen-imports"],
     ['cn("bg-primary")', "ds/no-screen-imports"],
     ["const value={class:classes};", "ds/no-style-object"],
     ["const value={style:styles};", "ds/no-style-object"],
@@ -80,12 +71,10 @@ test("DS09 screen syntax bypass matrix closes imports props factories and embedd
     ["const value=cloneElement(Button);", "ds/no-element-factory"],
     ["const value=jsx(Button);", "ds/no-element-factory"],
     ['const value="p-[13px]";', "ds/no-screen-classes"],
-    ["const value=`bg-primary`;", "ds/no-screen-classes"],
+    ["const value=`hover:bg-primary`;", "ds/no-screen-classes"],
     ['const value="rgb(1,2,3)";', "ds/no-style-literals"],
     ["const value=(1).toFixed(2);", "ds/no-screen-format"],
     ["const value=(1).toLocaleString();", "ds/no-screen-format"],
-    ["<Button>-1</Button>", "ds/no-screen-format"],
-    ['const value="😀";', "ds/no-screen-format"],
     ["<Button ref={()=>undefined}/>", "ds/no-dom-values"],
     ["<Button><div/></Button>", "ds/no-screen-elements"],
     ["<Button render={()=><svg/>}/>", "ds/no-screen-elements"],

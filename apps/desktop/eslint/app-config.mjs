@@ -46,6 +46,8 @@ const UNDISABLEABLE_RULES = [
     ...Object.keys(SHARED_RULES),
     ...Object.keys(SCREEN_RULES),
   ]),
+  "ds/no-dom-exports",
+  "ds/no-message-format",
   "local/no-comments",
   "local/no-money-coercion",
   "local/forbidden-file",

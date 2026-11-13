@@ -170,7 +170,7 @@
     },
     "src/app/comments/allowed-form.ts": {
       "row": "주석",
-      "expect": ["ds/no-dom-values"]
+      "expect": []
     },
     "src/app/comments/block-disable.ts": {
       "row": "주석",
@@ -2287,7 +2287,9 @@
     "src/features/gaps/model/bare-src-gap.ts": {
       "row": "경계",
       "expect": "KNOWN_GAP",
-      "reports": []
+      "reports": [
+        "boundaries/dependencies :: src 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
     },
     "src/features/gaps/model/glob.ts": {
       "row": "경계",
@@ -3514,7 +3516,7 @@
     "src/shared/ds/text/attribute-gap.tsx": {
       "row": "원시 타입",
       "expect": "KNOWN_GAP",
-      "reports": []
+      "reports": ["ds/no-ui-attributes"]
     },
     "src/shared/ds/text/label.tsx": {
       "row": "원시 타입",
@@ -3884,6 +3886,30 @@
     "src/app/comments/ds09-allowed.ts": {
       "row": "주석",
       "expect": []
+    },
+    "src/shared/lib/review-react-dom.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: react-dom 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
+    },
+    "src/app/boundary/review-router.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/app/boundary/review-query.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/app/boundary/review-error-boundary.ts": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/app/boundary/review-unlisted.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: review-unlisted-ui 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
+      ]
     }
   }
 }

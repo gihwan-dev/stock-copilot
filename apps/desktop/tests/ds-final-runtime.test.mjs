@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { ESLint } from "eslint";
+import { ESLint, mkdtempSync } from "./ds-runtime-environment.mjs";
 import { dsConfigs, DS_RULES } from "../eslint/ds-config.mjs";
 import * as lists from "../eslint/ds-allowlists.mjs";
 import { desktopRoot } from "./paths.mjs";
