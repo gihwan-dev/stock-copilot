@@ -38,3 +38,7 @@ pub use market_session::{
     AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
     MarketSessionError, MarketState, MarketTransition, SessionData, SessionInformation,
 };
+mod probability;
+pub use probability::{
+    AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
+};

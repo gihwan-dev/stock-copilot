@@ -113,7 +113,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 |---|---|---|---|
 | DS-00 | Claude Design으로 화면 디자인 (담당: 사용자) | 산출물이 `design/`에 있음. 주 화면 하나(현황, 카드, 채팅, 종목 목록, 상태 띠)와 보조 화면, 설정 기본·고급이 있음 (design 2.4, 8장). 레이아웃 토큰(architecture 5.1의 추가 요청 목록)이 있음 (open-issues U-05). 화면 작업에 필요한 컴포넌트가 모두 있음: 입력, 대화 상자, 차트, 신호·주문 제안 카드, 마크다운 표시, 채팅 입력, 성적표의 신뢰도 도표(산점도) 등. 목록은 DS-03 ~ DS-06, DS-17, DS-18과 대조한다. "컴포넌트가 비중·손익 계산", "주문 버튼 없음"을 고침 (architecture 5.2) | - |
 | DS-01 | 토큰 추출: 색, 글자, 간격(4px 기준), 반경, 그림자, 레이아웃, 겹침 순서 | `tokens.json`에 라이트·다크 값이 있음. architecture 5.1의 간격·구간·크기 토큰 이름이 모두 있음 | DS-00 |
-| DS-13 | `xtask gen-tokens`, `xtask tokens-contrast` (사용자 승인) | `tokens.json`에서 `tokens.css`·`tokens.ts`를 생성하고 Tailwind `@theme`에 `--*: initial`. 재생성 차이가 있으면 실패. 대비 조합 표를 어기면 실패 (harness 4.4 R-14 #16, #17) | DS-01, H-20 |
+| DS-13 | `xtask gen-tokens`, `just tokens-contrast`(Node 스크립트, ADR 0026) (사용자 승인) | `tokens.json`에서 `tokens.css`·`tokens.ts`를 생성하고 Tailwind `@theme`에 `--*: initial`. 재생성 차이가 있으면 실패. 대비 조합 표를 어기면 실패 (harness 4.4 R-14 #16, #17) | DS-01, H-20 |
 | DS-02 | 디자인 시스템 린트 1: `shared/ds` 내부 (사용자 승인) | harness 4.4 내부 스타일 규칙(R-14 #1~8, 15)마다 위반 예제 실패. `no-unknown-classes`의 `entryPoint`를 틀리게 둔 예제가 실패로 드러남. Tailwind "생성되는 클래스 목록" 스냅샷 | DS-13 |
 | DS-09 | 디자인 시스템 린트 2: 화면 코드 금지 (사용자 승인) | harness 4.4 화면 코드 금지 1~8마다 위반 예제 실패. 같은 코드가 `shared/ds`에서는 통과 화면 코드가 DOM에 닿는 길(`event.currentTarget.ownerDocument`, DOM `ref`의 값으로 계산)이 없음. JSX 속성 문자열 문구(`aria-label`, `title`)는 `UiText`만 (ADR 0012). | H-20 |
 | DS-10 | 디자인 시스템 린트 3: 공개 props (사용자 승인) | harness 4.4 #9~11 위반 예제 실패. 토큰 이름이 사라지면 쓰던 코드가 컴파일 오류 (#10) DS 컴포넌트의 `ref` prop 타입은 `RefObject`만(콜백 ref를 받지 않음, 타입 테스트) (ADR 0009). | DS-09, DS-13 |

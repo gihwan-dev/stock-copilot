@@ -494,6 +494,7 @@ export const appConfig = (
           "error",
           {
             checkExtension: true,
+            styles: ["src/shared/ds/tokens.css", "src/shared/ds/theme.css"],
             placeholders: FILE_PLACEHOLDERS,
             folders: FILE_FOLDER_ALLOWLISTS,
             featureEntries: boundaryTables.FEATURE_ENTRIES,

@@ -217,7 +217,7 @@ xtask가 실패시키는 것 (`proc-macro2` 토큰 트리를 재귀로 돌아서
 | `xtask` 소스·매니페스트·설정 검사 | - | 3.2 |
 | `xtask test-diff` | - | 기존 테스트 삭제·변경 검출 (7.7) |
 | `xtask lint-file` | - | 편집 직후 한 파일 검사 |
-| `xtask gen-tokens`, `xtask tokens-contrast` | - | 디자인 토큰 생성과 대비 검사 (4.4) |
+| `xtask gen-tokens`, `just tokens-contrast` | - | 디자인 토큰 생성과 대비 검사 (4.4). 대비 검사는 Node 스크립트다. Rust 작업 공간이 부동소수점 연산을 금지하기 때문이다 (ADR 0026) |
 | `xtask capability-check` | - | 생성된 명령 목록과 capability의 명령 허용 항목(같은 목록에서 생성)이 같은지. `build.rs`가 명령 목록을 생성 파일에서 읽는지. 위험한 권한은 [architecture.md](architecture.md) 3.6의 목록이고 있으면 실패. `tauri.conf.json`에 `app.security.capabilities` 명시 (R-05) |
 | `xtask migration-check` | - | 적용된 마이그레이션 불변 (R-06) |
 | SQL 검사 | - | `store-sqlite`의 SQL 상수에서 금액 열에 `sum`, `avg`, `ORDER BY`, 산술 금지 (R-06) |
@@ -327,7 +327,7 @@ cargo-vet은 쓰지 않는다. 버전마다 감사 비용이 커서 개인 앱�
 
 목표: 모든 화면이 디자인 시스템 안에서만 만들어진다. `features`와 `app`(화면 코드)은 `shared/ds`의 컴포넌트를 조립만 하고, 모양을 정하는 코드는 `shared/ds`에만 있다.
 
-토큰 방식은 Tailwind v4 `@theme` + `--*: initial`이다. 기본 테마를 지워서 토큰 밖 클래스가 빌드 단계에서 생성되지 않는다 (R-14 2.2). 화면 코드에서는 클래스 자체를 쓸 수 없으므로, R-14 3.2의 클래스 관련 규칙(1~6)은 `shared/ds` 안에만 적용한다.
+토큰 방식은 Tailwind v4 `@theme` + `--*: initial`이다. 기본 테마를 지워서 기본 팔레트·간격 눈금 같은 토큰 밖 **이름**은 빌드 단계에서 생성되지 않는다 (R-14 2.2). 임의 값(`p-[13px]`), 임의 속성(`[color:red]`), 변수 축약(`p-(--x)`), 숫자를 그대로 받는 유틸리티(`z-50`, `opacity-50`, `border-2`), 분수(`w-1/2`), 색 불투명도 수식어(`bg-primary/50`), `dark:` 변형은 여전히 생성된다. 이것들은 린트(DS-02)가 막는다. 실측 표는 ADR 0026에 있다. 화면 코드에서는 클래스 자체를 쓸 수 없으므로, R-14 3.2의 클래스 관련 규칙(1~6)은 `shared/ds` 안에만 적용한다.
 
 **화면 코드(`features/**`, `app/**`)에서 금지**
 
@@ -367,7 +367,7 @@ cargo-vet은 쓰지 않는다. 버전마다 감사 비용이 커서 개인 앱�
 | 8 | 색 리터럴과 `\d+px` 문자열 금지 | `no-restricted-syntax` |
 | 15 | CSS: `color-no-hex`, `declaration-strict-value`, `var()` 이름이 생성 토큰 목록에 있어야 함 | stylelint + xtask |
 | 16 | 생성물(`tokens.css`, `tokens.ts`)과 시각 회귀 기준 이미지는 손으로 고치지 않음 | 보호 경로 + 재생성 차이 검사 |
-| 17 | 토큰 대비 기준 | `xtask tokens-contrast` (필수 조합 표는 보호 파일) |
+| 17 | 토큰 대비 기준 | `just tokens-contrast` (필수 조합 표는 보호 파일. 어느 조합에도 없는 색 토큰은 실패) |
 
 R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 더 엄격하게, 셋 다 보호된 허용 목록으로만 푼다.
 
@@ -608,7 +608,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 분류 | 경로 |
 |---|---|
 | Rust 설정 | `Cargo.toml`의 의존성 외 절, `apps/desktop/src-tauri/build.rs`, `tauri.conf.json`과 capability 파일 중 손으로 쓰는 부분(생성되는 명령 허용 항목 밖), `.cargo/`, `clippy.toml`, `rustfmt.toml`, `deny.toml`, `rust-toolchain.toml`, `.config/nextest.toml`, nextest wrapper·`sandbox-exec` 프로필, `.cargo/mutants.toml`, `crates/xtask/` |
-| TS 설정 | `eslint.config.*`, `eslint/`(로컬 규칙), `tsconfig*.json`, `vitest.config.*`, `knip.*`, `.dependency-cruiser.cjs`, stylelint 설정, `package.json`의 스크립트 |
+| TS 설정 | `eslint.config.*`, `eslint/`(로컬 규칙), `tsconfig*.json`, `vitest.config.*`, `vite.config.*`, `knip.*`, `.dependency-cruiser.cjs`, stylelint 설정, `package.json`의 스크립트 |
 | 하네스 | `justfile`, `harness/`(위반 예제, 기대 목록, 서명자 목록, 에이전트 쓰기 허용 목록, 검증 스크립트), `lefthook.yml`, `lefthook-local.yml`, `.lefthook-local.yml`, `.github/` |
 | 에이전트 설정 | `.codex/**`, `harness/codex-hooks/**`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/agents/`, `.claude/hooks/`, `.claude/skills/`, `.claude/commands/`, `.mcp.json`, `.worktreeinclude`. `.claude/` 전체가 아니라 하위 경로로 적는다. `.claude/worktrees/`까지 막으면 리뷰어 작업 사본의 쓰기가 막힌다 (R-10 Q11) |
 | 규칙 문서 | `AGENTS.md`, `CLAUDE.md`, `docs/harness.md`, `docs/workflow.md`, `docs/open-issues.md`(사용자 확정 결정), 이미 있는 `docs/adr/*` |
