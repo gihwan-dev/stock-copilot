@@ -6,3 +6,9 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+rust_decimal = { version = "=1.43.0", default-features = false }
+
+[dev-dependencies]
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
