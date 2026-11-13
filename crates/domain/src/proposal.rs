@@ -927,4 +927,133 @@ mod tests {
             CheckResult::Passed
         );
     }
+    #[test]
+    fn price_difference_propagates_borrow_across_word_boundaries() {
+        for (base, current, sigma) in [
+            ("42949672.96", "42949672.95", "0.000000001"),
+            ("42949672.95", "42949672.96", "0.000000001"),
+            (
+                "18446744073709551616",
+                "18446744073709551615",
+                "0.000000000000000001",
+            ),
+            (
+                "18446744073709551615",
+                "18446744073709551616",
+                "0.000000000000000001",
+            ),
+            (
+                "0.0000000000000000000000000001",
+                "0.0000000000000000000000000002",
+                "2",
+            ),
+        ] {
+            assert_eq!(
+                range(base, sigma, "1").check(price(current)),
+                CheckResult::Passed
+            );
+        }
+    }
+    #[test]
+    fn multiword_differences_match_independent_rational_reference() {
+        let mut runner = TestRunner::new(Config::with_cases(4096));
+        runner
+            .run(
+                &(64_u32..96, 1_u16..256, 1_u32..17, 0_u8..2),
+                |(bits, delta, numerator, inverted)| {
+                    let anchor = 1_i128.checked_shl(bits).expect("가격 계수");
+                    let lower = anchor.checked_sub(i128::from(delta)).expect("낮은 가격");
+                    let (base, current) = if inverted == 0 {
+                        (anchor, lower)
+                    } else {
+                        (lower, anchor)
+                    };
+                    let sigma_text = format!("0.{numerator:018}");
+                    let actual = range(&base.to_string(), &sigma_text, "1")
+                        .check(price(&current.to_string()));
+                    proptest::prop_assert_eq!(
+                        actual,
+                        independent_range(base, current, ratio(&sigma_text), ratio("1"))
+                    );
+                    Ok(())
+                },
+            )
+            .expect("여러 자리 차이의 유리수 기준");
+    }
+    #[test]
+    fn equal_timestamps_are_valid_for_consumption_and_recheck() {
+        let proposal = draft();
+        let quote = observation("100", 0);
+        let report = passed(&proposal, at(0), &quote);
+        let token = proposal
+            .finish_validation(report, at(0), quote)
+            .expect("검증")
+            .into_execution(at(0), observation("100", 0))
+            .expect("동일 시각 소비");
+        let checked = token
+            .recheck(at(0), observation("101", 0))
+            .expect("동일 시각 재확인");
+        assert_eq!(checked.checked_at(), at(0));
+        assert_eq!(checked.validated_at(), at(0));
+    }
+    #[test]
+    fn both_card_and_estimate_anchors_must_contain_the_current_price() {
+        let separated = ProposalPriceRange::from_estimate_task(
+            estimate_facts(
+                instrument("TEST"),
+                price("110"),
+                ProposalVolatility::try_new(ratio("0.02")).expect("변동성"),
+                TradingDayHorizon::try_new(ratio("4")).expect("기간"),
+            ),
+            observation("100", 0),
+        )
+        .expect("범위");
+        assert_eq!(separated.check(price("100")), CheckResult::Failed);
+        assert_eq!(separated.check(price("110")), CheckResult::Failed);
+        let overlapping = ProposalPriceRange::from_estimate_task(
+            estimate_facts(
+                instrument("TEST"),
+                price("101"),
+                ProposalVolatility::try_new(ratio("0.02")).expect("변동성"),
+                TradingDayHorizon::try_new(ratio("4")).expect("기간"),
+            ),
+            observation("100", 0),
+        )
+        .expect("범위");
+        assert_eq!(overlapping.check(price("100")), CheckResult::Passed);
+        assert_eq!(overlapping.check(price("102")), CheckResult::Passed);
+        assert_eq!(overlapping.check(price("103")), CheckResult::Failed);
+    }
+
+    #[test]
+    fn realistic_krw_prices_preserve_long_volatility_precision() {
+        let instrument = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("005930").expect("종목"),
+            Market::Kr,
+        )
+        .expect("시장");
+        for (base, sigma, horizon) in [
+            ("71234.5", "0.0213456789", "1"),
+            ("1000000", "0.0123456789012345678901234567", "250"),
+            ("71234.5", "0.1", "0.125"),
+        ] {
+            let reference =
+                Price::parse(&NumericInput::try_new(base).expect("입력"), Currency::Krw)
+                    .expect("가격");
+            let facts = estimate_facts(
+                instrument.clone(),
+                reference,
+                ProposalVolatility::try_new(ratio(sigma)).expect("변동성"),
+                TradingDayHorizon::try_new(ratio(horizon)).expect("기간"),
+            );
+            let card = PriceObservation::from_quote_parts(instrument.clone(), reference, at(0))
+                .expect("관측");
+            assert_eq!(
+                ProposalPriceRange::from_estimate_task(facts, card)
+                    .expect("범위")
+                    .check(reference),
+                CheckResult::Passed
+            );
+        }
+    }
 }
