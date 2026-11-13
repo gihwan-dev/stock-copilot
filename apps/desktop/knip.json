@@ -1,6 +1,11 @@
 {
-  "entry": ["src/shared/*/index.ts", "eslint/**/*.mjs", "tests/*.test.mjs"],
-  "project": ["src/**/*.{ts,tsx}!"],
+  "entry": [
+    "src/shared/*/index.ts",
+    "eslint/**/*.mjs",
+    "tests/*.test.mjs",
+    "src/shared/ds/theme.css!"
+  ],
+  "project": ["src/**/*.{ts,tsx}!", "src/**/*.css"],
   "include": [
     "files",
     "subpaths",
@@ -44,6 +49,8 @@
   "ignoreIssues": {
     "src/shared/ipc/bindings.ts": ["exports", "types"],
     "src/shared/ipc/testing/mockBindings.ts": ["exports", "types"],
-    "src/shared/ipc/testing/responses.ts": ["exports", "types"]
+    "src/shared/ipc/testing/responses.ts": ["exports", "types"],
+    "src/shared/ds/tokens.ts": ["files", "exports", "types"],
+    "src/shared/ds/theme.css": ["unlisted"]
   }
 }
