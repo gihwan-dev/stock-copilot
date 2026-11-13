@@ -39,3 +39,7 @@ pub use ratio::Ratio;
 
 mod exact_arithmetic;
 pub use exact_arithmetic::{ApproximateRatio, RatioQuotient};
+mod probability;
+pub use probability::{
+    AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
+};

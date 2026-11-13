@@ -198,16 +198,26 @@ test("the fixed header and runtime of the generator match harness/generated-file
   }
 });
 
-test("knip relaxes only export and type issues and only in the generated TypeScript files", () => {
+test("knip confines exceptions to generated TypeScript and the CSS entry paths", () => {
   const knip = JSON.parse(readFileSync(join(desktopRoot, "knip.json"), "utf8"));
   assert.deepEqual(
     Object.keys(knip.ignoreIssues).sort(),
-    desktopTypeScriptPaths().sort(),
+    [
+      ...desktopTypeScriptPaths(),
+      "src/shared/ds/tokens.ts",
+      "src/shared/ds/theme.css",
+    ].sort(),
   );
   assert.deepEqual(
-    Object.values(knip.ignoreIssues).filter(
-      (types) => JSON.stringify(types) !== JSON.stringify(["exports", "types"]),
-    ),
+    Object.entries(knip.ignoreIssues).filter(([path, types]) => {
+      const expected =
+        path === "src/shared/ds/tokens.ts"
+          ? ["files", "exports", "types"]
+          : path === "src/shared/ds/theme.css"
+            ? ["unlisted"]
+            : ["exports", "types"];
+      return JSON.stringify(types) !== JSON.stringify(expected);
+    }),
     [],
   );
   assert.equal(knip.ignore, undefined);

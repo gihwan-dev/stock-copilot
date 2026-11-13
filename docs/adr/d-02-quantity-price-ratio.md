@@ -34,7 +34,7 @@ architecture 3.4는 Quantity·Price·Ratio와 Probability를 별개 값 타입�
 | Price × Quantity → Money: Price::checked_mul        | 통화를 보존하고 정확히 표현할 수 있을 때만 성공                                               | 실제 절댓값이 MAX 초과면 MoneyError::Overflow, 범위 안의 표현 손실은 PrecisionLoss                              |
 | Money × Ratio → Money: Money::checked_mul           | 음수 금액·비율도 같은 정확 곱셈 정책                                                          | Overflow 또는 PrecisionLoss                                                                                     |
 | Money ÷ Money → RatioQuotient: Money::checked_ratio | 같은 통화만 허용. 최대 정밀도 몫. 정확하면 Exact(Ratio), 아니면 Approximate(ApproximateRatio) | CurrencyMismatch, DivisionByZero, Overflow. 통화 검사를 먼저 하므로 다른 통화의 0으로 나누기도 CurrencyMismatch |
-| Ratio 더하기·빼기: checked_add·checked_sub          | D-01 Amount의 기존 combine 판정을 새 crate 내부 래퍼로 재사용                                 | D-01과 같은 Overflow·PrecisionLoss                                                                              |
+| Ratio 더하기·빼기: checked_add·checked_sub          | exact_arithmetic의 crate 내부 함수에서 D-01 Amount의 기존 combine 판정을 재사용               | D-01과 같은 Overflow·PrecisionLoss                                                                              |
 
 이 밖의 연산은 추가하지 않는다. 금액을 수로 나누어 평단가를 얻는 정책, 통화 환산, 비중 표시 합 100%, 퍼센트 표시는 후속 작업이다.
 

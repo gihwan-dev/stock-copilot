@@ -18,6 +18,14 @@ impl ApproximateRatio {
     }
 }
 
+pub(crate) fn add(left: Amount, right: Amount) -> Result<Amount, MoneyError> {
+    left.checked_add(&right)
+}
+
+pub(crate) fn subtract(left: Amount, right: Amount) -> Result<Amount, MoneyError> {
+    left.checked_sub(&right)
+}
+
 pub(crate) fn multiply(left: Amount, right: Amount) -> Result<Amount, MoneyError> {
     let product = Magnitude::product(left, right);
     let scale = product_scale(left, right);
