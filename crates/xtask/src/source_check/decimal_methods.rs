@@ -11,6 +11,9 @@ pub(crate) struct DecimalRules {
     parsing: BTreeSet<String>,
     exact: BTreeSet<String>,
     generic: BTreeSet<String>,
+    arithmetic: BTreeSet<String>,
+    floats: BTreeSet<String>,
+    arithmetic_files: BTreeSet<String>,
     rounding_files: BTreeSet<String>,
     parsing_files: BTreeSet<String>,
 }
@@ -67,18 +70,31 @@ impl DecimalRules {
             parsing: names(methods, "parsing")?,
             exact: names(methods, "exact-parsing")?,
             generic: names(methods, "generic-parsing")?,
+            arithmetic: names(methods, "arithmetic")?,
+            floats: names(methods, "float-conversion")?,
+            arithmetic_files: paths(table, "decimal-arithmetic")?,
             rounding_files: paths(table, "decimal-rounding")?,
             parsing_files: paths(table, "decimal-parsing")?,
         })
     }
 
     pub(crate) fn findings(&self, path: &str, stream: TokenStream) -> Vec<Finding> {
+        let syntax = syn::parse2::<syn::File>(stream.clone());
         let tokens: Vec<TokenTree> = stream.into_iter().collect();
         let mut aliases = BTreeSet::from([String::from("Decimal")]);
         aliases_in(&tokens, &mut aliases);
         let mut findings = Vec::new();
         self.walk(path, &tokens, &aliases, &mut findings);
+        if let Ok(file) = syntax {
+            findings.extend(super::decimal_arithmetic::findings(
+                self, path, &file, &aliases,
+            ));
+        }
         findings
+    }
+
+    pub(super) fn arithmetic_forbidden(&self, path: &str, method: &str) -> bool {
+        self.arithmetic.contains(method) && !self.arithmetic_files.contains(path)
     }
 
     fn walk(
@@ -110,16 +126,15 @@ impl DecimalRules {
                 TokenTree::Ident(_) | TokenTree::Punct(_) | TokenTree::Literal(_) => false,
             });
             let rounding = self.rounding.contains(&method)
-                && (dot || receiver)
-                && call
+                && ((dot && call) || receiver)
                 && !self.rounding_files.contains(path);
-            let lossy = self.parsing.contains(&method) && receiver && call;
-            let exact = self.exact.contains(&method)
-                && receiver
-                && call
-                && !self.parsing_files.contains(path);
+            let lossy = self.parsing.contains(&method) && receiver;
+            let exact =
+                self.exact.contains(&method) && receiver && !self.parsing_files.contains(path);
             let generic = self.generic.contains(&method) && decimal_turbofish(after, aliases);
-            if rounding || lossy || exact || generic {
+            let arithmetic = receiver && self.arithmetic_forbidden(path, &method);
+            let float_conversion = self.floats.contains(&method) && (receiver || dot);
+            if rounding || lossy || exact || generic || arithmetic || float_conversion {
                 findings.push(Finding::at_line(
                     path,
                     ident.span().start().line,

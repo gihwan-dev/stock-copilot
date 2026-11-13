@@ -93,7 +93,14 @@ fn decimal_policy_examples_and_real_source_check_agree() {
 fn deleting_any_decimal_method_or_allowlisted_file_changes_a_case() {
     let original = policy();
     let cases = examples();
-    for section in ["rounding", "parsing", "exact-parsing", "generic-parsing"] {
+    for section in [
+        "rounding",
+        "parsing",
+        "exact-parsing",
+        "generic-parsing",
+        "arithmetic",
+        "float-conversion",
+    ] {
         let methods = original
             .get("decimal-methods")
             .and_then(|value| value.get(section))
@@ -193,5 +200,71 @@ fn decimal_aliases_qualified_traits_macros_and_generic_calls_are_checked() {
     assert_eq!(
         Rule::DecimalMethod(String::from("round")).to_string(),
         "decimal-method:round"
+    );
+}
+
+#[test]
+fn decimal_function_paths_and_typed_arithmetic_are_rejected() {
+    let rules = DecimalRules::parse(&policy()).expect("policy");
+    for source in [
+        "fn value() { x.as_ref().map(Decimal::trunc); }",
+        "fn value() { opt.and_then(rust_decimal::Decimal::from_f64); }",
+        "fn value() { x.map(<Decimal as core::ops::Mul>::mul); }",
+        "fn value(amount: Decimal) { amount.checked_mul(other); }",
+        "fn value() { let amount = money.amount().as_decimal(); amount.checked_div(other); }",
+        "fn value() { money.amount().as_decimal().checked_rem(other); }",
+        "struct Amount(Decimal); impl Amount { fn bad(&self) { self.0.saturating_mul(other); } }",
+        "fn value() { let amount: rust_decimal::Decimal = source; amount.checked_mul(other); }",
+    ] {
+        assert_eq!(
+            rules
+                .findings(OUTSIDE, source.parse().expect("tokens"))
+                .len(),
+            1,
+            "{source}"
+        );
+    }
+    for source in [
+        "fn value(coefficient: u128) { coefficient.checked_mul(10); }",
+        "fn value(amount: Decimal) { amount.mantissa().checked_mul(10); }",
+        "fn value(amount: Decimal) { { let amount = 1_u128; amount.checked_mul(10); } }",
+    ] {
+        assert!(reported(&rules, OUTSIDE, source).is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn decimal_arithmetic_permission_is_separate_from_display_permission() {
+    let original = policy();
+    let source = "fn value(amount: Decimal) { amount.checked_mul(other); }";
+    let rules = DecimalRules::parse(&original).expect("policy");
+    assert_eq!(
+        rules
+            .findings(DISPLAY, source.parse().expect("tokens"))
+            .len(),
+        1
+    );
+    let mut permitted = original;
+    let entry: toml::Table = format!("path = '{OUTSIDE}'\nreason = 'dedicated exact API'")
+        .parse()
+        .expect("entry");
+    permitted
+        .get_mut("decimal-arithmetic")
+        .and_then(toml::Value::as_array_mut)
+        .expect("arithmetic allowlist")
+        .push(toml::Value::Table(entry));
+    assert!(
+        reported(
+            &DecimalRules::parse(&permitted).expect("policy"),
+            OUTSIDE,
+            source
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        rules
+            .findings(OUTSIDE, source.parse().expect("tokens"))
+            .len(),
+        1
     );
 }

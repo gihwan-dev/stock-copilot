@@ -140,7 +140,7 @@ mod tests {
     use crate::{Amount, AmountInput, Currency, Money};
     use proptest::arbitrary::any;
     use proptest::strategy::Strategy;
-    use proptest::test_runner::TestRunner;
+    use proptest::test_runner::{Config, TestRunner};
     use rust_decimal::Decimal;
 
     #[test]
@@ -218,7 +218,7 @@ mod tests {
             (0_u32..10_u32, 0_u8..=27_u8)
                 .prop_map(|(lo, precision)| (Decimal::from_parts(lo, 0, 0, true, 28), precision))
         ];
-        TestRunner::default()
+        TestRunner::new(Config::with_cases(4096))
             .run(&values, |(value, precision)| {
                 let money = Money::new(Amount::new(value), Currency::Krw);
                 let shown = display_money(
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn sub_half_unit_values_display_as_unsigned_zero() {
-        TestRunner::default()
+        TestRunner::new(Config::with_cases(4096))
             .run(
                 &(0_u8..=27_u8, 0_u32..5_u32, any::<bool>()),
                 |(precision, coefficient, negative)| {
@@ -257,11 +257,12 @@ mod tests {
                         &money,
                         DisplayPrecision::try_new(precision).expect("valid precision"),
                     );
-                    proptest::prop_assert_eq!(
-                        Amount::parse(&AmountInput::new(shown.digits().as_str()))
-                            .expect("display decimal")
-                            .as_decimal(),
-                        Decimal::ZERO
+                    proptest::prop_assert!(
+                        shown
+                            .digits()
+                            .as_str()
+                            .bytes()
+                            .all(|byte| byte == b'0' || byte == b'.')
                     );
                     proptest::prop_assert!(!shown.digits().as_str().starts_with('-'));
                     Ok(())

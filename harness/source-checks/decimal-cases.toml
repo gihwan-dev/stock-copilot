@@ -85,3 +85,59 @@ method = "from_str_exact"
 [[case]]
 file = "generic-parsing-parse.rs"
 method = "parse"
+
+[[case]]
+file = "arithmetic-checked_mul.rs"
+method = "checked_mul"
+
+[[case]]
+file = "arithmetic-checked_div.rs"
+method = "checked_div"
+
+[[case]]
+file = "arithmetic-checked_rem.rs"
+method = "checked_rem"
+
+[[case]]
+file = "arithmetic-saturating_mul.rs"
+method = "saturating_mul"
+
+[[case]]
+file = "arithmetic-saturating_add.rs"
+method = "saturating_add"
+
+[[case]]
+file = "arithmetic-saturating_sub.rs"
+method = "saturating_sub"
+
+[[case]]
+file = "arithmetic-mul.rs"
+method = "mul"
+
+[[case]]
+file = "arithmetic-div.rs"
+method = "div"
+
+[[case]]
+file = "arithmetic-rem.rs"
+method = "rem"
+
+[[case]]
+file = "arithmetic-mul_assign.rs"
+method = "mul_assign"
+
+[[case]]
+file = "arithmetic-div_assign.rs"
+method = "div_assign"
+
+[[case]]
+file = "arithmetic-rem_assign.rs"
+method = "rem_assign"
+
+[[case]]
+file = "float-conversion-to_f32.rs"
+method = "to_f32"
+
+[[case]]
+file = "float-conversion-to_f64.rs"
+method = "to_f64"

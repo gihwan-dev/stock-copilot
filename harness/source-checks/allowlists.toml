@@ -1,3 +1,5 @@
+decimal-arithmetic = []
+
 [[generated]]
 path = "crates/adapters/broker-toss-schema"
 reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 crate (harness.md 5장)"
@@ -38,6 +40,8 @@ rounding = ["round", "round_dp", "round_dp_with_strategy", "round_sf", "round_sf
 parsing = ["from_str", "from_str_radix", "from_scientific", "from_scientific_lossy", "from_f32", "from_f32_retain", "from_f64", "from_f64_retain", "try_from"]
 exact-parsing = ["from_str_exact"]
 generic-parsing = ["parse"]
+arithmetic = ["checked_mul", "checked_div", "checked_rem", "saturating_mul", "saturating_add", "saturating_sub", "mul", "div", "rem", "mul_assign", "div_assign", "rem_assign"]
+float-conversion = ["to_f32", "to_f64"]
 
 [[decimal-rounding]]
 path = "crates/domain/src/money_display.rs"

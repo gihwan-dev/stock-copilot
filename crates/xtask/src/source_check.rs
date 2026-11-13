@@ -1,6 +1,7 @@
 mod allowlist;
 pub(crate) mod cargo_config;
 mod comments;
+mod decimal_arithmetic;
 mod decimal_methods;
 #[cfg(test)]
 mod decimal_methods_tests;
