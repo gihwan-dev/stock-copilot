@@ -220,29 +220,52 @@ export const changeReasons = (context, parent, commit) => {
   return [...new Set([...pathReasons, ...rust])].sort();
 };
 
-export const requiredReasons = (context, commit) => {
-  const parents = gitLines(context.repo, [
-    "rev-list",
-    "--parents",
-    "-n",
-    "1",
-    commit,
-  ])[0]
+const parentsOf = (repo, commit) =>
+  gitLines(repo, ["rev-list", "--parents", "-n", "1", commit])[0]
     .split(" ")
     .slice(1);
-  const sides = (parents.length === 0 ? [EMPTY_TREE] : parents).map((parent) =>
-    changeReasons(context, parent, commit),
+
+const mergeBase = (repo, left, right) => {
+  const run = git(repo, ["merge-base", left, right]);
+  return run.status === 0 ? run.stdout.trim().split("\n")[0] : undefined;
+};
+
+const isAncestor = (repo, ancestor, descendant) =>
+  git(repo, ["merge-base", "--is-ancestor", ancestor, descendant]).status === 0;
+
+const sideIntroduced = (context, from, to, reason) => {
+  const common = mergeBase(context.repo, from, to);
+  return (
+    common !== undefined && changeReasons(context, common, to).includes(reason)
   );
-  return sides.reduce((common, side) =>
-    common.filter((reason) => side.includes(reason)),
+};
+
+export const requiredReasons = (context, commit) => {
+  const parents = parentsOf(context.repo, commit);
+  if (parents.length <= 1) {
+    return changeReasons(context, parents[0] ?? EMPTY_TREE, commit);
+  }
+  const byParent = new Map(
+    parents.map((parent) => [parent, changeReasons(context, parent, commit)]),
+  );
+  const all = [...new Set([...byParent.values()].flat())].sort();
+  return all.filter(
+    (reason) =>
+      !parents.some(
+        (source) =>
+          !byParent.get(source).includes(reason) &&
+          parents
+            .filter(
+              (other) =>
+                other !== source && byParent.get(other).includes(reason),
+            )
+            .every((other) => sideIntroduced(context, other, source, reason)),
+      ),
   );
 };
 
 const subject = (repo, commit) =>
   gitLines(repo, ["log", "-1", "--format=%s", commit])[0] ?? "";
-
-const isAncestor = (repo, ancestor, descendant) =>
-  git(repo, ["merge-base", "--is-ancestor", ancestor, descendant]).status === 0;
 
 const lockRecordings = (repo, base, head) =>
   gitLines(repo, ["rev-list", "--reverse", "--topo-order", head, `^${base}`])
@@ -252,17 +275,58 @@ const lockRecordings = (repo, base, head) =>
     }))
     .filter((entry) => entry.lock.state !== "empty");
 
-const recordingProblems = (repo, recording) => {
+export const SIGNER_LINE =
+  /^[^\s"]+ namespaces="git" (?:ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp256|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,2}(?: [^\s"]+)?$/u;
+
+export const signerProblems = (text) =>
+  text === ""
+    ? []
+    : !text.endsWith("\n")
+      ? [`${SIGNERS_FILE}: 마지막 줄이 줄바꿈으로 끝나지 않는다`]
+      : text
+          .slice(0, -1)
+          .split("\n")
+          .flatMap((line, index) =>
+            SIGNER_LINE.test(line)
+              ? []
+              : [
+                  `${SIGNERS_FILE} ${index + 1}번째 줄은 '<이름> namespaces="git" <키 종류> <키>' 형식만 받는다(만료 옵션·다른 namespace·주석 금지)`,
+                ],
+          );
+
+export const OWNER_KEY =
+  /^(?:ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp256|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,2}$/u;
+
+export const ownerSigners = (ownerKeys) =>
+  ownerKeys
+    .filter((key) => OWNER_KEY.test(key))
+    .map((key) => `owner namespaces="git" ${key}\n`)
+    .join("");
+
+const recordingProblems = (repo, recording, ownerKeys) => {
   if (recording.lock.problem !== undefined) {
     return [`${recording.commit}: ${recording.lock.problem}`];
   }
   const own = blob(repo, recording.commit, SIGNERS_FILE) ?? "";
+  const ownProblems = signerProblems(own).map(
+    (problem) => `${recording.commit}: ${problem}`,
+  );
   return [
-    ...(signedBy(repo, own, recording.commit)
+    ...ownProblems,
+    ...(ownProblems.length === 0 && signedBy(repo, own, recording.commit)
       ? []
       : [
           `${recording.commit}: 잠금 시점을 기록하는 커밋은 그 커밋의 ${SIGNERS_FILE}에 있는 키로 서명해야 한다`,
         ]),
+    ...(ownerKeys === undefined
+      ? [
+          `${recording.commit}: 저장소 소유자의 SSH 서명 키 목록이 없어 판정할 수 없다(CI만 판정한다)`,
+        ]
+      : signedBy(repo, ownerSigners(ownerKeys), recording.commit)
+        ? []
+        : [
+            `${recording.commit}: 잠금 시점을 기록하는 커밋의 서명 키가 저장소 소유자의 GitHub SSH 서명 키에 없다`,
+          ]),
     ...(isAncestor(repo, recording.lock.commit, recording.commit)
       ? []
       : [
@@ -271,7 +335,29 @@ const recordingProblems = (repo, recording) => {
   ];
 };
 
-export const verify = ({ repo, base, head, trust, xtask }) => {
+const lockChangeProblems = (repo, base, lock, commit) => {
+  const text = blob(repo, commit, LOCK_FILE);
+  if (text === blob(repo, base, LOCK_FILE)) {
+    return [];
+  }
+  const recorded = parseLock(text ?? "");
+  if (recorded.state !== "locked") {
+    return [
+      `${commit}: 기록된 잠금 시점을 비우거나 지울 수 없다(서명이 있어도 실패)`,
+    ];
+  }
+  if (recorded.commit === lock) {
+    return [];
+  }
+  return isAncestor(repo, lock, recorded.commit) &&
+    isAncestor(repo, recorded.commit, commit)
+    ? []
+    : [
+        `${commit}: 잠금 시점은 기존 잠금 시점의 자손이고 이 커밋의 조상인 커밋으로만 옮길 수 있다`,
+      ];
+};
+
+export const verify = ({ repo, base, head, trust, xtask, ownerKeys }) => {
   const lines = [];
   const failures = [];
   if (!COMMIT.test(base) || !COMMIT.test(head)) {
@@ -302,9 +388,13 @@ export const verify = ({ repo, base, head, trust, xtask }) => {
     return {
       lines,
       failures: recordings.flatMap((recording) =>
-        recordingProblems(repo, recording),
+        recordingProblems(repo, recording, ownerKeys),
       ),
     };
+  }
+  const signers = signerProblems(trust.signers);
+  if (signers.length > 0) {
+    return { lines, failures: signers };
   }
   const lock = trust.lock.commit;
   if (git(repo, ["cat-file", "-e", `${lock}^{commit}`]).status !== 0) {
@@ -321,8 +411,14 @@ export const verify = ({ repo, base, head, trust, xtask }) => {
   lines.push(
     `서명 검사: 기준 ${base}, 잠금 시점 ${lock}, 대상 ${head}, 커밋 ${commits.length}개`,
   );
-  const context = { repo, base, allowlist: trust.allowlist, xtask };
+  const context = {
+    repo,
+    base,
+    allowlist: trust.allowlist,
+    xtask,
+  };
   commits.forEach((commit) => {
+    failures.push(...lockChangeProblems(repo, base, lock, commit));
     const reasons = requiredReasons(context, commit);
     if (reasons.length === 0) {
       return;
@@ -338,6 +434,12 @@ export const verify = ({ repo, base, head, trust, xtask }) => {
   return { lines, failures };
 };
 
+export const readOwnerKeys = (file) =>
+  readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+
 const toolsRoot = resolve(
   fileURLToPath(import.meta.url),
   "..",
@@ -346,11 +448,22 @@ const toolsRoot = resolve(
   "..",
 );
 
+const ownerKeysArgument = (rest) =>
+  rest.length === 2 && rest[0] === "--owner-keys"
+    ? { keys: readOwnerKeys(rest[1]) }
+    : rest.length === 0
+      ? { keys: undefined }
+      : { problem: "알 수 없는 인자" };
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [repo, base, head] = process.argv.slice(2);
-  if (repo === undefined || base === undefined || head === undefined) {
+  const [repo, base, head, ...rest] = process.argv.slice(2);
+  const owner =
+    repo === undefined || base === undefined || head === undefined
+      ? { problem: "인자 부족" }
+      : ownerKeysArgument(rest);
+  if (owner.problem !== undefined) {
     process.stderr.write(
-      "사용법: node harness/ci/signatures/verify.mjs <저장소> <기준 커밋> <대상 커밋>\n",
+      "사용법: node harness/ci/signatures/verify.mjs <저장소> <기준 커밋> <대상 커밋> [--owner-keys <파일>]\n",
     );
     process.exitCode = 2;
   } else {
@@ -360,6 +473,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       head,
       trust: readTrust(toolsRoot),
       xtask: xtaskRunner(toolsRoot),
+      ownerKeys: owner.keys,
     });
     outcome.lines.forEach((line) => process.stdout.write(`${line}\n`));
     outcome.failures.forEach((failure) =>

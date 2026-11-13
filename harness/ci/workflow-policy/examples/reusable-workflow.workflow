@@ -12,7 +12,8 @@
   },
   "jobs": {
     "build": {
-      "uses": "./.github/workflows/other.yml"
+      "uses": "./.github/workflows/other.yml",
+      "secrets": "inherit"
     }
   }
 }

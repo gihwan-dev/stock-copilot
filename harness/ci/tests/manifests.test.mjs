@@ -63,3 +63,71 @@ test("only Cargo.toml and package.json are dependency manifests", () => {
   assert.equal(manifestKind("Cargo.lock"), undefined);
   assert.equal(manifestKind("crates/domain/src/package.json.rs"), undefined);
 });
+
+test("package specs from outside the registry need a signature", () => {
+  [
+    "^6.0.2",
+    "~1.2.3",
+    "1.2.3-beta.1",
+    "npm:typescript@7.0.2",
+    "npm:@typescript/typescript6@^6.0.2",
+  ].forEach((spec) =>
+    assert.equal(
+      packageChangesOutsideDependencies(
+        text(BASE),
+        text({ ...BASE, dependencies: { zod: spec } }),
+      ),
+      false,
+      spec,
+    ),
+  );
+  [
+    "file:../evil",
+    "link:../evil",
+    "git+https://example.com/evil.git",
+    "https://example.com/evil.tgz",
+    "github:evil/evil",
+    "evil/evil",
+    "workspace:*",
+    "*",
+    "latest",
+    ">=1.0.0",
+    "npm:evil@file:../x",
+  ].forEach((spec) =>
+    assert.equal(
+      packageChangesOutsideDependencies(
+        text(BASE),
+        text({ ...BASE, devDependencies: { zod: spec } }),
+      ),
+      true,
+      spec,
+    ),
+  );
+  assert.equal(
+    packageChangesOutsideDependencies(
+      text(BASE),
+      text({ ...BASE, dependencies: { react: 19 } }),
+    ),
+    true,
+  );
+});
+
+test("overrides, scripts and other package.json fields need a signature", () => {
+  [
+    { pnpm: { overrides: { react: "1.0.0" } } },
+    { overrides: { react: "1.0.0" } },
+    { resolutions: { react: "1.0.0" } },
+    { scripts: { postinstall: "curl example.com" } },
+    { packageManager: "pnpm@1.0.0" },
+    { engines: { node: "1" } },
+  ].forEach((extra) =>
+    assert.equal(
+      packageChangesOutsideDependencies(
+        text(BASE),
+        text({ ...BASE, ...extra }),
+      ),
+      true,
+      JSON.stringify(extra),
+    ),
+  );
+});

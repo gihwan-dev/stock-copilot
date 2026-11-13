@@ -147,6 +147,7 @@ export const createRepository = () => {
   write(directory, PROTECTED, "check:\n    true\n");
   write(directory, PACKAGE, PACKAGE_TEXT);
   write(directory, SCRIPT_TEST, 'test("probe", () => {});\n');
+  write(directory, "harness/ci/signatures/lock-point.txt", "");
   gitIn(directory, ["init", "--quiet", "--initial-branch=master"]);
   const base = commit(directory, "base");
   return { directory, base };
@@ -158,7 +159,9 @@ export const removeRepository = (directory) =>
 export const realAllowlist = () =>
   parseAllowlist(readFileSync(join(repoRoot, ALLOWLIST_FILE), "utf8"));
 
-export const verifyIn = ({ directory, base, head, lock, signers }) =>
+export const ownerKeyOf = (key) => key.public.split(" ").slice(0, 2).join(" ");
+
+export const verifyIn = ({ directory, base, head, lock, signers, ownerKeys }) =>
   verify({
     repo: directory,
     base,
@@ -169,4 +172,5 @@ export const verifyIn = ({ directory, base, head, lock, signers }) =>
       allowlist: realAllowlist(),
     },
     xtask: xtaskRunner(repoRoot),
+    ownerKeys,
   });

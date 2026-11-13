@@ -1,17 +1,112 @@
 {
   "files": [".github/workflows/ci.yml", ".github/workflows/nightly.yml"],
-  "events": ["push", "pull_request", "schedule"],
+  "topKeys": ["name", "on", "permissions", "jobs"],
+  "events": {
+    "push": ["branches"],
+    "pull_request": ["branches"],
+    "schedule": []
+  },
+  "schedules": ["0 18 * * *"],
+  "jobKeys": [
+    "runs-on",
+    "timeout-minutes",
+    "steps",
+    "needs",
+    "if",
+    "permissions",
+    "outputs"
+  ],
+  "requiredJobKeys": ["runs-on", "timeout-minutes", "steps"],
+  "stepKeys": ["name", "id", "uses", "with", "run", "env", "if"],
   "runners": ["ubuntu-24.04-arm", "ubuntu-24.04", "macos-15"],
-  "permissions": { "contents": "read" },
+  "maxTimeout": 180,
+  "permissions": {
+    "contents": "read"
+  },
   "jobPermissions": {
-    ".github/workflows/ci.yml#notify": { "issues": "write" },
-    ".github/workflows/nightly.yml#notify": { "issues": "write" }
+    ".github/workflows/ci.yml#notify": {
+      "issues": "write"
+    },
+    ".github/workflows/nightly.yml#notify": {
+      "issues": "write"
+    }
+  },
+  "conditions": [
+    "failure()",
+    "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'",
+    "github.event_name == 'push' && github.ref == 'refs/heads/master'",
+    "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
+    "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
+    "needs.changes.outputs.changed == 'yes'"
+  ],
+  "commands": [
+    "corepack enable",
+    "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
+    "just advisory-db-fetch",
+    "just base=\"$BASE\" check",
+    "just base=HEAD check",
+    "just linux-check",
+    "lefthook install",
+    "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --owner \"$OWNER\"",
+    "node harness/ci/ci-range.mjs base",
+    "node harness/ci/ci-range.mjs changed",
+    "node harness/ci/linux/offline.mjs just linux-test",
+    "node harness/ci/linux/offline.mjs just mutants-all",
+    "node harness/ci/notify.mjs",
+    "node harness/ci/tools.mjs cargo-install",
+    "node harness/ci/tools.mjs fetch",
+    "node harness/ci/tools.mjs lefthook"
+  ],
+  "expressions": [
+    "${{ github.event.before }}",
+    "${{ github.event.pull_request.base.sha }}",
+    "${{ github.event.pull_request.head.sha || github.sha }}",
+    "${{ github.event.pull_request.head.sha }}",
+    "${{ github.event_name }}",
+    "${{ github.ref }}",
+    "${{ github.repository_owner }}",
+    "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+    "${{ github.sha }}",
+    "${{ github.token }}",
+    "${{ steps.changed.outputs.changed }}",
+    "${{ steps.range.outputs.base }}"
+  ],
+  "envNames": [
+    "BASE",
+    "BEFORE",
+    "EVENT_NAME",
+    "GH_TOKEN",
+    "HEAD",
+    "OWNER",
+    "PR_BASE",
+    "PR_HEAD",
+    "REF",
+    "RUN_URL",
+    "SHA",
+    "TITLE"
+  ],
+  "inputValues": {
+    "fetch-depth": [0, 1],
+    "persist-credentials": [false],
+    "ref": [
+      "${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/master' && github.event.before) || 'master' }}"
+    ],
+    "path": ["base-tools"],
+    "node-version-file": [".node-version"]
   },
   "actions": {
-    "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
-    "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",
-    "actions/cache": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-    "taiki-e/install-action": "cfdb7ed4ccc7c7dce37759eae89dc5674b469b39"
+    "actions/checkout": {
+      "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "inputs": ["fetch-depth", "persist-credentials", "ref", "path"]
+    },
+    "actions/setup-node": {
+      "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "inputs": ["node-version-file"]
+    },
+    "taiki-e/install-action": {
+      "sha": "cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+      "inputs": ["tool"]
+    }
   },
   "checkout": "actions/checkout",
   "toolInstaller": "taiki-e/install-action"

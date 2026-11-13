@@ -29,6 +29,16 @@
           }
         },
         {
+          "name": "base checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/master' && github.event.before) || 'master' }}",
+            "path": "base-tools",
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
           "name": "node",
           "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
           "with": {
@@ -36,25 +46,18 @@
           }
         },
         {
-          "name": "range",
-          "id": "range",
-          "run": "node harness/ci/ci-range.mjs base",
+          "name": "signatures from the base checkout",
+          "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
+          "run": "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --owner \"$OWNER\"",
           "env": {
-            "EVENT_NAME": "${{ github.event_name }}",
-            "REF": "${{ github.ref }}",
-            "BEFORE": "${{ github.event.before }}",
-            "SHA": "${{ github.sha }}",
-            "PR_BASE": "${{ github.event.pull_request.base.sha }}",
-            "PR_HEAD": "${{ github.event.pull_request.head.sha }}"
+            "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "OWNER": "${{ github.repository_owner }}"
           }
         },
         {
-          "name": "signatures from the base commit",
-          "run": "node harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$BASE\" \"$HEAD\"",
-          "env": {
-            "BASE": "${{ steps.range.outputs.base }}",
-            "HEAD": "${{ steps.range.outputs.head }}"
-          }
+          "name": "signatures inactive",
+          "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
+          "run": "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'"
         }
       ]
     },
@@ -66,7 +69,7 @@
           "name": "checkout",
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
-            "fetch-depth": 1,
+            "fetch-depth": 0,
             "persist-credentials": false
           }
         },
@@ -89,32 +92,16 @@
           }
         },
         {
-          "name": "cargo registry cache",
-          "uses": "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-          "with": {
-            "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
-            "key": "cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}"
-          }
-        },
-        {
-          "name": "cargo-mutants cache",
-          "uses": "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-          "with": {
-            "path": "~/.cargo/bin/cargo-mutants\n~/.cargo/.crates.toml\n~/.cargo/.crates2.json",
-            "key": "cargo-mutants-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('harness/ci/tools.json', 'rust-toolchain.toml') }}"
-          }
-        },
-        {
           "name": "cargo-mutants",
           "run": "node harness/ci/tools.mjs cargo-install"
         },
         {
           "name": "lefthook",
-          "run": "node harness/ci/tools.mjs lefthook \"$HOME/.local/harness-bin\" && printf '%s\\n' \"$HOME/.local/harness-bin\" >> \"$GITHUB_PATH\""
+          "run": "node harness/ci/tools.mjs lefthook"
         },
         {
           "name": "fetch",
-          "run": "cargo fetch --locked && node harness/ci/tools.mjs prefetch && pnpm install --frozen-lockfile --ignore-scripts"
+          "run": "node harness/ci/tools.mjs fetch"
         },
         {
           "name": "advisory db",
@@ -162,32 +149,16 @@
           }
         },
         {
-          "name": "cargo registry cache",
-          "uses": "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-          "with": {
-            "path": "~/.cargo/registry/index\n~/.cargo/registry/cache\n~/.cargo/git/db",
-            "key": "cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}"
-          }
-        },
-        {
-          "name": "cargo-mutants cache",
-          "uses": "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-          "with": {
-            "path": "~/.cargo/bin/cargo-mutants\n~/.cargo/.crates.toml\n~/.cargo/.crates2.json",
-            "key": "cargo-mutants-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('harness/ci/tools.json', 'rust-toolchain.toml') }}"
-          }
-        },
-        {
           "name": "cargo-mutants",
           "run": "node harness/ci/tools.mjs cargo-install"
         },
         {
           "name": "lefthook",
-          "run": "node harness/ci/tools.mjs lefthook \"$HOME/.local/harness-bin\" && printf '%s\\n' \"$HOME/.local/harness-bin\" >> \"$GITHUB_PATH\""
+          "run": "node harness/ci/tools.mjs lefthook"
         },
         {
           "name": "fetch",
-          "run": "cargo fetch --locked && node harness/ci/tools.mjs prefetch && pnpm install --frozen-lockfile --ignore-scripts"
+          "run": "node harness/ci/tools.mjs fetch"
         },
         {
           "name": "advisory db",
@@ -233,12 +204,28 @@
       },
       "steps": [
         {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
           "name": "issue",
-          "run": "number=\"$(gh issue list --repo \"$GITHUB_REPOSITORY\" --state open --search \"\\\"$TITLE\\\" in:title\" --json number --jq '.[0].number // empty')\" && if [ -n \"$number\" ]; then gh issue comment \"$number\" --repo \"$GITHUB_REPOSITORY\" --body \"$BODY\"; else gh issue create --repo \"$GITHUB_REPOSITORY\" --title \"$TITLE\" --body \"$BODY\"; fi",
+          "run": "node harness/ci/notify.mjs",
           "env": {
             "GH_TOKEN": "${{ github.token }}",
             "TITLE": "CI 실패: master",
-            "BODY": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} ${{ github.workflow }} ${{ github.sha }}"
+            "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "SHA": "${{ github.sha }}"
           }
         }
       ]

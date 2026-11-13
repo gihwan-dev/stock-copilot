@@ -12,10 +12,12 @@ const MEMBER: &str = "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nbuild =
 
 const ROOT: &str = "[workspace]\nmembers = [\"crates/sample\"]\n\n[workspace.dependencies]\nserde = \"=1.0.229\"\n\n[workspace.lints.rust]\nunsafe_code = \"forbid\"\n";
 
+const DIRECTORY: &str = "crates/sample";
+
 fn judged(before: &str, from: &str, to: &str) -> Verdict {
     assert!(before.contains(from), "{from:?}");
     let after = before.replacen(from, to, 1);
-    verdict(Some(before), Some(after.as_str()))
+    verdict(DIRECTORY, Some(before), Some(after.as_str()))
 }
 
 #[test]
@@ -60,10 +62,10 @@ fn dependency_tables_may_change_without_a_signature() {
         );
     }
     assert_eq!(
-        verdict(Some(MEMBER), Some(MEMBER)),
+        verdict(DIRECTORY, Some(MEMBER), Some(MEMBER)),
         Verdict::DependenciesOnly
     );
-    assert_eq!(verdict(None, None), Verdict::DependenciesOnly);
+    assert_eq!(verdict(DIRECTORY, None, None), Verdict::DependenciesOnly);
 }
 
 #[test]
@@ -101,8 +103,8 @@ fn every_other_table_needs_a_signature() {
     ] {
         assert_eq!(judged(before, from, to), Verdict::Outside, "{to}");
     }
-    assert_eq!(verdict(None, Some(MEMBER)), Verdict::Outside);
-    assert_eq!(verdict(Some(MEMBER), None), Verdict::Outside);
+    assert_eq!(verdict(DIRECTORY, None, Some(MEMBER)), Verdict::Outside);
+    assert_eq!(verdict(DIRECTORY, Some(MEMBER), None), Verdict::Outside);
 }
 
 fn run_git(directory: &Path, arguments: &[&str]) -> String {
@@ -166,4 +168,76 @@ fn manifest_changes_compares_two_commits_of_a_repository() {
         compare(&directory, "HEAD", &build, "Cargo.toml").is_err(),
         "a revision name is rejected"
     );
+}
+
+#[test]
+fn registry_versions_and_workspace_paths_are_plain_dependencies() {
+    for entry in [
+        "rand = \"=0.9.0\"",
+        "rand = { version = \"=0.9.0\", default-features = false, features = [\"std\"], optional = true }",
+        "random = { package = \"rand\", version = \">=0.9, <0.10\" }",
+        "domain = { path = \"../domain\" }",
+        "domain = { path = \"../../crates/domain\", version = \"=0.1.0\" }",
+        "serde = { workspace = true, features = [\"derive\"] }",
+    ] {
+        assert_eq!(
+            judged(MEMBER, "serde = \"=1.0.229\"", entry),
+            Verdict::DependenciesOnly,
+            "{entry}"
+        );
+    }
+}
+
+#[test]
+fn dependencies_from_outside_the_registry_or_the_repository_need_a_signature() {
+    for entry in [
+        "evil = { git = \"https://example.com/evil\" }",
+        "evil = { git = \"https://example.com/evil\", rev = \"abc\" }",
+        "evil = { path = \"../../../outside\" }",
+        "evil = { path = \"/tmp/evil\" }",
+        "evil = { version = \"=1.0.0\", registry = \"other\" }",
+        "evil = { version = \"=1.0.0\", registry-index = \"https://example.com\" }",
+        "evil = \"https://example.com/evil\"",
+        "evil = { workspace = false }",
+        "evil = 1",
+    ] {
+        assert_eq!(
+            judged(MEMBER, "serde = \"=1.0.229\"", entry),
+            Verdict::Outside,
+            "{entry}"
+        );
+    }
+    assert_eq!(
+        judged(
+            ROOT,
+            "serde = \"=1.0.229\"",
+            "serde = { git = \"https://example.com/serde\" }"
+        ),
+        Verdict::Outside
+    );
+}
+
+#[test]
+fn patch_replace_profile_build_and_workspace_changes_need_a_signature() {
+    for (before, from, to) in [
+        (
+            ROOT,
+            "[workspace.lints.rust]",
+            "[replace]\n\"serde:1.0.229\" = { path = \"vendor/serde\" }\n\n[workspace.lints.rust]",
+        ),
+        (
+            ROOT,
+            "[workspace.lints.rust]",
+            "[profile.release]\ndebug = true\n\n[workspace.lints.rust]",
+        ),
+        (
+            ROOT,
+            "members = [\"crates/sample\"]",
+            "members = [\"crates/*\"]",
+        ),
+        (ROOT, "[workspace]", "[workspace]\nresolver = \"2\""),
+        (MEMBER, "build = \"build.rs\"\n", ""),
+    ] {
+        assert_eq!(judged(before, from, to), Verdict::Outside, "{to}");
+    }
 }

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { ZERO, changedRecently, rangeFor } from "../ci-range.mjs";
+import { existingIssue, issueBody } from "../notify.mjs";
 import {
   cargoArgs,
   exclusionProblems,
@@ -12,7 +13,12 @@ import {
   readMetadata,
 } from "../linux/exclusions.mjs";
 import { INNER_SCRIPT, offlineCommand } from "../linux/offline.mjs";
-import { VERIFIER, runFromBase } from "../signatures/from-base.mjs";
+import {
+  OWNER_KEYS_URL,
+  VERIFIER,
+  ownerKeysFromResponse,
+  parseArguments,
+} from "../signatures/from-base.mjs";
 import {
   installActionSpec,
   lefthookAsset,
@@ -23,8 +29,11 @@ import {
 import {
   commit,
   createRepository,
+  gitIn,
   removeRepository,
   repoRoot,
+  run,
+  scratch,
   write,
 } from "./signature-repo.mjs";
 
@@ -319,10 +328,25 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   );
   assert.ok(runs(ci.jobs.macos).includes("lefthook install"));
   assert.ok(runs(ci.jobs.macos).includes('just base="$BASE" check'));
-  assert.ok(
-    runs(ci.jobs.signatures).includes(
-      'node harness/ci/signatures/from-base.mjs "$GITHUB_WORKSPACE" "$BASE" "$HEAD"',
-    ),
+  const signatureSteps = ci.jobs.signatures.steps;
+  assert.deepEqual(signatureSteps[1].with, {
+    ref: "${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/master' && github.event.before) || 'master' }}",
+    path: "base-tools",
+    "fetch-depth": 1,
+    "persist-credentials": false,
+  });
+  assert.deepEqual(
+    signatureSteps.slice(3).map((step) => [step.if, step.run]),
+    [
+      [
+        "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
+        'node base-tools/harness/ci/signatures/from-base.mjs "$GITHUB_WORKSPACE" "$HEAD" --owner "$OWNER"',
+      ],
+      [
+        "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
+        "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
+      ],
+    ],
   );
   assert.deepEqual(nightly.on, { schedule: [{ cron: "0 18 * * *" }] });
   assert.equal(nightly.jobs.macos.if, "needs.changes.outputs.changed == 'yes'");
@@ -356,64 +380,101 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   [ci, nightly].forEach((file) =>
     Object.values(file.jobs)
       .flatMap((job) => job.steps)
-      .filter(
-        (step) =>
-          step.name === "cargo registry cache" ||
-          step.name === "cargo-mutants cache",
-      )
       .forEach((step) =>
-        assert.doesNotMatch(
-          step.with.path,
-          /target|node_modules|registry\/src/u,
-        ),
+        assert.doesNotMatch(String(step.uses ?? ""), /^actions\/cache/u),
       ),
   );
 });
 
-test("signatures run from the base commit and say so when the base has no verifier", () => {
-  const made = createRepository();
-  try {
-    const head = commit(made.directory, "next");
-    const finished = spawnSync(
+const fromBaseCheckout = (made, revision, keysFile) => {
+  const tools = join(scratch("signature-tools-"), "tools");
+  run(made.directory, "git", ["clone", "--quiet", made.directory, tools]);
+  run(tools, "git", ["checkout", "--quiet", "--detach", revision]);
+  return {
+    tools,
+    finished: spawnSync(
       "node",
-      ["harness/ci/signatures/from-base.mjs", made.directory, made.base, head],
+      [
+        join(tools, "harness/ci/signatures/from-base.mjs"),
+        made.directory,
+        gitIn(made.directory, ["rev-parse", "HEAD"]),
+        "--owner-keys",
+        keysFile,
+      ],
       { cwd: repoRoot, encoding: "utf8" },
-    );
-    assert.equal(finished.status, 0);
-    assert.equal(
-      finished.stdout,
-      `서명 검사 비활성: 기준 커밋 ${made.base}에 ${VERIFIER}가 없다\n`,
-    );
-    assert.equal(runFromBase(made.directory, "f".repeat(40), head), 1);
-  } finally {
-    removeRepository(made.directory);
-  }
-});
+    ),
+  };
+};
 
-const fromBase = (directory, base, head) =>
-  spawnSync(
-    "node",
-    ["harness/ci/signatures/from-base.mjs", directory, base, head],
-    { cwd: repoRoot, encoding: "utf8" },
-  );
-
-test("signatures run the base commit's verifier and fail when it ends without its summary", () => {
+test("signatures run the verifier of a base checkout and fail when it ends without its summary", () => {
   const made = createRepository();
+  const cleanup = [made.directory];
   try {
-    VERIFIER_FILES.forEach((path) =>
+    [...VERIFIER_FILES, "harness/ci/signatures/from-base.mjs"].forEach((path) =>
       write(made.directory, path, readFileSync(join(repoRoot, path), "utf8")),
     );
     const base = commit(made.directory, "verifier");
-    write(made.directory, "harness/ci/signatures/verify.mjs", "");
+    write(made.directory, "owner-keys.txt", "");
+    const keysFile = join(made.directory, "owner-keys.txt");
+    write(made.directory, VERIFIER, "");
     const head = commit(made.directory, "drop the verifier body");
-    const finished = fromBase(made.directory, base, head);
-    assert.equal(finished.status, 0, finished.stderr);
-    assert.match(finished.stdout, /^서명 검사 비활성: 잠금 시점 없음/mu);
-    assert.match(finished.stdout, /^서명 검사: 위반 0건$/mu);
-    const silent = fromBase(made.directory, head, head);
-    assert.equal(silent.status, 1);
-    assert.match(silent.stderr, /요약 줄 없이 끝났다/u);
+    const good = fromBaseCheckout(made, base, keysFile);
+    cleanup.push(join(good.tools, ".."));
+    assert.equal(good.finished.status, 0, good.finished.stderr);
+    assert.match(good.finished.stdout, /^서명 검사 비활성: 잠금 시점 없음/mu);
+    assert.match(good.finished.stdout, new RegExp(`기준 커밋 ${base}`, "u"));
+    assert.match(good.finished.stdout, /^서명 검사: 위반 0건$/mu);
+    const silent = fromBaseCheckout(made, head, keysFile);
+    cleanup.push(join(silent.tools, ".."));
+    assert.equal(silent.finished.status, 1);
+    assert.match(silent.finished.stderr, /요약 줄 없이 끝났다/u);
   } finally {
-    removeRepository(made.directory);
+    cleanup.forEach(removeRepository);
   }
+});
+
+test("the base runner takes the target and the owner, and reads GitHub's key list", () => {
+  assert.deepEqual(parseArguments(["r", "h", "--owner", "me"]).owner, "me");
+  assert.deepEqual(
+    parseArguments(["r", "h", "--owner-keys", "f"]).keysFile,
+    "f",
+  );
+  [
+    [],
+    ["r", "h"],
+    ["r", "h", "--other", "x"],
+    ["r", "h", "--owner", "me", "x"],
+  ].forEach((args) =>
+    assert.ok(parseArguments(args).problem !== undefined, args.join(" ")),
+  );
+  assert.equal(
+    OWNER_KEYS_URL("gihwan-dev"),
+    "https://api.github.com/users/gihwan-dev/ssh_signing_keys",
+  );
+  assert.deepEqual(
+    ownerKeysFromResponse(
+      JSON.stringify([
+        { id: 1, key: "ssh-ed25519 AAAA1 title", title: "a" },
+        { id: 2, key: "ecdsa-sha2-nistp256 AAAA2" },
+        { id: 3 },
+      ]),
+    ),
+    { keys: ["ssh-ed25519 AAAA1", "ecdsa-sha2-nistp256 AAAA2"] },
+  );
+  assert.ok(ownerKeysFromResponse("{}").problem !== undefined);
+  assert.ok(ownerKeysFromResponse("<html>").problem !== undefined);
+});
+
+test("failure notices reuse the open issue with exactly the same title", () => {
+  const listing = JSON.stringify([
+    { number: 3, title: "CI 실패: master" },
+    { number: 4, title: "CI 실패: 밤 작업" },
+  ]);
+  assert.equal(existingIssue(listing, "CI 실패: 밤 작업"), "4");
+  assert.equal(existingIssue(listing, "CI 실패"), undefined);
+  assert.equal(existingIssue("not json", "CI 실패: master"), undefined);
+  assert.equal(
+    issueBody("https://example.invalid/run/1", "abc"),
+    "실패한 실행: https://example.invalid/run/1\n커밋: abc\n",
+  );
 });

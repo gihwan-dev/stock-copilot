@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   chmodSync,
   mkdirSync,
   mkdtempSync,
@@ -141,20 +142,48 @@ const prefetch = (root, tools) => {
 
 const repoRoot = resolve(fileURLToPath(import.meta.url), "..", "..", "..");
 
+export const LEFTHOOK_DIRECTORY = ".local/harness-bin";
+
+const installLefthookOnPath = (root, tools) => {
+  const directory = join(process.env.HOME ?? "", LEFTHOOK_DIRECTORY);
+  const status = installLefthook(root, tools, directory);
+  if (status === 0 && process.env.GITHUB_PATH !== undefined) {
+    appendFileSync(process.env.GITHUB_PATH, `${directory}\n`);
+  }
+  return status;
+};
+
+const fetchAll = (root, tools) =>
+  [
+    () => run("cargo", ["fetch", "--locked"], { cwd: root }),
+    () => prefetch(root, tools),
+    () =>
+      run("pnpm", ["install", "--frozen-lockfile", "--ignore-scripts"], {
+        cwd: root,
+      }),
+  ].reduce((status, step) => (status === 0 ? step() : status), 0);
+
+const COMMANDS = {
+  "install-action": (_, tools) => (
+    process.stdout.write(`${installActionSpec(tools)}\n`),
+    0
+  ),
+  lefthook: installLefthookOnPath,
+  "cargo-install": installCrates,
+  prefetch,
+  fetch: fetchAll,
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const tools = readTools(repoRoot);
-  const [command, argument] = process.argv.slice(2);
+  const [command, ...rest] = process.argv.slice(2);
+  const action = Object.hasOwn(COMMANDS, command ?? "")
+    ? COMMANDS[command]
+    : undefined;
   process.exitCode =
-    command === "install-action"
-      ? (process.stdout.write(`${installActionSpec(tools)}\n`), 0)
-      : command === "lefthook" && argument !== undefined
-        ? installLefthook(repoRoot, tools, resolve(argument))
-        : command === "cargo-install"
-          ? installCrates(repoRoot, tools)
-          : command === "prefetch"
-            ? prefetch(repoRoot, tools)
-            : (process.stderr.write(
-                "사용법: node harness/ci/tools.mjs install-action | lefthook <폴더> | cargo-install | prefetch\n",
-              ),
-              2);
+    action === undefined || rest.length > 0
+      ? (process.stderr.write(
+          `사용법: node harness/ci/tools.mjs ${Object.keys(COMMANDS).join(" | ")}\n`,
+        ),
+        2)
+      : action(repoRoot, readTools(repoRoot));
 }

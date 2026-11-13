@@ -10,24 +10,31 @@ export const GITHUB_DIRECTORY = ".github";
 
 export const RULES = [
   "not-canonical-json",
+  "unknown-key",
+  "missing-key",
   "event",
   "permissions",
   "job-permissions",
   "runner",
-  "continue-on-error",
-  "reusable-workflow",
-  "unpinned-action",
+  "timeout",
+  "needs",
+  "condition",
+  "step-shape",
+  "command",
+  "expression",
+  "secrets",
   "unlisted-action",
+  "action-input",
+  "environment",
   "checkout-credentials",
   "tool-versions",
-  "expression-in-run",
-  "secrets",
   "unlisted-file",
   "missing-file",
 ];
 
-const PINNED_ACTION =
-  /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\/[^@]+)?@([0-9a-f]{40})$/u;
+const PINNED_ACTION = /^([^@\s]+)@([0-9a-f]{40})$/u;
+
+const SECRETS = /\bsecrets\b/u;
 
 export const readPolicy = (root) =>
   JSON.parse(readFileSync(join(root, POLICY_FILE), "utf8"));
@@ -35,46 +42,100 @@ export const readPolicy = (root) =>
 const isObject = (value) =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const eventNames = (on) =>
-  typeof on === "string"
-    ? [on]
-    : Array.isArray(on)
-      ? on.map(String)
-      : isObject(on)
-        ? Object.keys(on)
-        : [String(on)];
-
 const finding = (rule, detail) =>
   detail === undefined ? rule : `${rule}:${detail}`;
 
+const keyFindings = (value, allowed, required, where) =>
+  isObject(value)
+    ? [
+        ...Object.keys(value)
+          .filter((key) => !allowed.includes(key))
+          .map((key) => finding("unknown-key", `${where}.${key}`)),
+        ...required
+          .filter((key) => !(key in value))
+          .map((key) => finding("missing-key", `${where}.${key}`)),
+      ]
+    : [finding("missing-key", where)];
+
+const valueFindings = (values, policy, where) =>
+  Object.values(isObject(values) ? values : {}).flatMap((value) =>
+    typeof value === "string" &&
+    (!value.includes("${{") || policy.expressions.includes(value))
+      ? []
+      : typeof value === "number" || typeof value === "boolean"
+        ? []
+        : [finding("expression", where)],
+  );
+
+const eventFindings = (on, policy) => {
+  if (!isObject(on)) {
+    return [finding("event", String(on))];
+  }
+  return Object.entries(on).flatMap(([event, options]) => {
+    const allowed = policy.events[event];
+    if (allowed === undefined) {
+      return [finding("event", event)];
+    }
+    if (event === "schedule") {
+      return Array.isArray(options) &&
+        options.every(
+          (entry) =>
+            isObject(entry) &&
+            Object.keys(entry).length === 1 &&
+            policy.schedules.includes(entry.cron),
+        )
+        ? []
+        : [finding("event", "schedule")];
+    }
+    return keyFindings(options, allowed, [], `on.${event}`);
+  });
+};
+
 const stepFindings = (job, step, policy, toolSpec) => {
+  const where = `jobs.${job}.steps`;
   if (!isObject(step)) {
-    return [];
+    return [finding("step-shape", job)];
   }
-  const found = [];
-  if ("continue-on-error" in step) {
-    found.push(finding("continue-on-error", job));
+  const found = [
+    ...keyFindings(step, policy.stepKeys, ["name"], where),
+    ...("uses" in step === "run" in step ? [finding("step-shape", job)] : []),
+    ...(step.if === undefined || policy.conditions.includes(step.if)
+      ? []
+      : [finding("condition", job)]),
+    ...valueFindings(step.env, policy, job),
+    ...Object.keys(isObject(step.env) ? step.env : {})
+      .filter((name) => !policy.envNames.includes(name))
+      .map(() => finding("environment", job)),
+  ];
+  if ("run" in step && !policy.commands.includes(step.run)) {
+    found.push(finding("command", job));
   }
-  if (typeof step.run === "string" && step.run.includes("${{")) {
-    found.push(finding("expression-in-run", job));
-  }
-  if (step.uses !== undefined) {
+  if ("uses" in step) {
     const pinned = PINNED_ACTION.exec(String(step.uses));
-    if (pinned === null) {
-      found.push(finding("unpinned-action", step.uses));
-    } else if (policy.actions[pinned[1]] !== pinned[2]) {
+    const action = pinned === null ? undefined : policy.actions[pinned[1]];
+    if (action === undefined || action.sha !== pinned[2]) {
       found.push(finding("unlisted-action", step.uses));
     } else {
+      const inputs = isObject(step.with) ? step.with : {};
+      if (
+        Object.entries(inputs).some(
+          ([key, value]) =>
+            !action.inputs.includes(key) ||
+            (key !== "tool" &&
+              !(policy.inputValues[key] ?? []).some((allowed) =>
+                isDeepStrictEqual(allowed, value),
+              )),
+        )
+      ) {
+        found.push(finding("action-input", job));
+      }
       if (
         pinned[1] === policy.checkout &&
-        !(isObject(step.with) && step.with["persist-credentials"] === false)
+        inputs["persist-credentials"] !== false
       ) {
         found.push(finding("checkout-credentials", job));
       }
-      if (
-        pinned[1] === policy.toolInstaller &&
-        !(isObject(step.with) && step.with.tool === toolSpec)
-      ) {
+      if (pinned[1] === policy.toolInstaller && inputs.tool !== toolSpec) {
         found.push(finding("tool-versions", job));
       }
     }
@@ -82,20 +143,32 @@ const stepFindings = (job, step, policy, toolSpec) => {
   return found;
 };
 
-const jobFindings = (path, name, job, policy, toolSpec) => {
+const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   if (!isObject(job)) {
-    return [];
+    return [finding("missing-key", `jobs.${name}`)];
   }
   const expected = policy.jobPermissions[`${path}#${name}`];
+  const timeout = job["timeout-minutes"];
   return [
+    ...keyFindings(job, policy.jobKeys, policy.requiredJobKeys, `jobs.${name}`),
     ...(isDeepStrictEqual(job.permissions, expected)
       ? []
       : [finding("job-permissions", name)]),
     ...(policy.runners.includes(job["runs-on"])
       ? []
       : [finding("runner", name)]),
-    ...("continue-on-error" in job ? [finding("continue-on-error", name)] : []),
-    ...(job.uses === undefined ? [] : [finding("reusable-workflow", name)]),
+    ...(Number.isInteger(timeout) && timeout > 0 && timeout <= policy.maxTimeout
+      ? []
+      : [finding("timeout", name)]),
+    ...(job.needs === undefined ||
+    (Array.isArray(job.needs) &&
+      job.needs.every((other) => other !== name && other in jobs))
+      ? []
+      : [finding("needs", name)]),
+    ...(job.if === undefined || policy.conditions.includes(job.if)
+      ? []
+      : [finding("condition", name)]),
+    ...valueFindings(job.outputs, policy, name),
     ...(Array.isArray(job.steps) ? job.steps : []).flatMap((step) =>
       stepFindings(name, step, policy, toolSpec),
     ),
@@ -116,17 +189,17 @@ export const workflowFindings = (path, text, policy, toolSpec) => {
   ) {
     return [finding("not-canonical-json")];
   }
+  const jobs = isObject(parsed.jobs) ? parsed.jobs : {};
   const found = [
-    ...eventNames(parsed.on)
-      .filter((event) => !policy.events.includes(event))
-      .map((event) => finding("event", event)),
+    ...keyFindings(parsed, policy.topKeys, policy.topKeys, "top"),
+    ...eventFindings(parsed.on, policy),
     ...(isDeepStrictEqual(parsed.permissions, policy.permissions)
       ? []
       : [finding("permissions")]),
-    ...Object.entries(isObject(parsed.jobs) ? parsed.jobs : {}).flatMap(
-      ([name, job]) => jobFindings(path, name, job, policy, toolSpec),
+    ...Object.entries(jobs).flatMap(([name, job]) =>
+      jobFindings(path, name, job, jobs, policy, toolSpec),
     ),
-    ...(text.includes("secrets.") ? [finding("secrets")] : []),
+    ...(SECRETS.test(text) ? [finding("secrets")] : []),
   ];
   return [...new Set(found)].sort();
 };

@@ -15,6 +15,20 @@ const DEPENDENCY_TABLES: [&str; 5] = [
     "build_dependencies",
 ];
 const WORKSPACE_TABLE: &str = "workspace";
+const PLAIN_KEYS: [&str; 8] = [
+    "version",
+    "features",
+    "default-features",
+    "default_features",
+    "optional",
+    "package",
+    "workspace",
+    "path",
+];
+const VERSION_KEY: &str = "version";
+const PATH_KEY: &str = "path";
+const WORKSPACE_KEY: &str = "workspace";
+const FORBIDDEN_IN_VERSION: [char; 3] = [':', '/', '\\'];
 const BLOB_MODES: [&str; 2] = ["100644", "100755"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,14 +48,96 @@ fn outside_dependencies(text: &str) -> Result<toml::Table, String> {
     Ok(table)
 }
 
-pub(crate) fn verdict(before: Option<&str>, after: Option<&str>) -> Verdict {
+fn inside_repository(directory: &str, relative: &str) -> Verdict {
+    if relative.starts_with('/') || relative.contains(['\\', ':']) {
+        return Verdict::Outside;
+    }
+    let mut parts: Vec<&str> = directory
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    for part in relative.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    return Verdict::Outside;
+                }
+            }
+            name => parts.push(name),
+        }
+    }
+    Verdict::DependenciesOnly
+}
+
+fn plain_version(value: &toml::Value) -> Verdict {
+    match value.as_str() {
+        Some(text) if !text.contains(FORBIDDEN_IN_VERSION) => Verdict::DependenciesOnly,
+        Some(_) | None => Verdict::Outside,
+    }
+}
+
+fn plain_entry(directory: &str, value: &toml::Value) -> Verdict {
+    let Some(entry) = value.as_table() else {
+        return plain_version(value);
+    };
+    let unknown = entry.keys().any(|key| !PLAIN_KEYS.contains(&key.as_str()));
+    let version = entry.get(VERSION_KEY).map(plain_version);
+    let path = entry.get(PATH_KEY).map(|path| match path.as_str() {
+        Some(text) => inside_repository(directory, text),
+        None => Verdict::Outside,
+    });
+    let workspace = entry.get(WORKSPACE_KEY).map(|flag| match flag.as_bool() {
+        Some(true) => Verdict::DependenciesOnly,
+        Some(false) | None => Verdict::Outside,
+    });
+    if unknown || [version, path, workspace].contains(&Some(Verdict::Outside)) {
+        Verdict::Outside
+    } else {
+        Verdict::DependenciesOnly
+    }
+}
+
+fn dependency_entries(table: &toml::Table) -> Vec<&toml::Value> {
+    let workspace = table
+        .get(WORKSPACE_TABLE)
+        .and_then(toml::Value::as_table)
+        .and_then(|workspace| workspace.get(DEPENDENCY_TABLES[0]));
+    DEPENDENCY_TABLES
+        .iter()
+        .filter_map(|name| table.get(*name))
+        .chain(workspace)
+        .flat_map(|section| match section.as_table() {
+            Some(entries) => entries.values().collect(),
+            None => vec![section],
+        })
+        .collect()
+}
+
+fn plain_dependencies(directory: &str, text: &str) -> Verdict {
+    match text.parse::<toml::Table>() {
+        Ok(table) => {
+            if dependency_entries(&table)
+                .into_iter()
+                .any(|entry| plain_entry(directory, entry) == Verdict::Outside)
+            {
+                Verdict::Outside
+            } else {
+                Verdict::DependenciesOnly
+            }
+        }
+        Err(_) => Verdict::Outside,
+    }
+}
+
+pub(crate) fn verdict(directory: &str, before: Option<&str>, after: Option<&str>) -> Verdict {
     match (before, after) {
         (None, None) => Verdict::DependenciesOnly,
         (Some(left), Some(right)) if left == right => Verdict::DependenciesOnly,
         (Some(left), Some(right)) => {
             match (outside_dependencies(left), outside_dependencies(right)) {
                 (Ok(kept_left), Ok(kept_right)) if kept_left == kept_right => {
-                    Verdict::DependenciesOnly
+                    plain_dependencies(directory, right)
                 }
                 _ => Verdict::Outside,
             }
@@ -82,7 +178,8 @@ pub(crate) fn compare(
     }
     let before = blob(root, parent, path)?;
     let after = blob(root, commit, path)?;
-    Ok(verdict(before.as_deref(), after.as_deref()))
+    let directory = path.rsplit_once('/').map_or("", |(folder, _)| folder);
+    Ok(verdict(directory, before.as_deref(), after.as_deref()))
 }
 
 pub(crate) fn command(arguments: &[String]) -> ExitCode {

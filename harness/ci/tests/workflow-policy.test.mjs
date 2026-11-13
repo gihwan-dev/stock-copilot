@@ -69,7 +69,7 @@ test("the repository workflows pass the policy", () => {
   assert.deepEqual(repositoryFindings(repoRoot, policy, toolSpec), []);
 });
 
-test("the policy pins the reviewed actions and grants issue writes only to the notify jobs", () => {
+test("the policy is an allowlist that pins the reviewed actions and grants issue writes only to the notify jobs", () => {
   assert.deepEqual(policy.permissions, { contents: "read" });
   assert.deepEqual(Object.keys(policy.jobPermissions).sort(), [
     ".github/workflows/ci.yml#notify",
@@ -78,10 +78,36 @@ test("the policy pins the reviewed actions and grants issue writes only to the n
   Object.values(policy.jobPermissions).forEach((permissions) =>
     assert.deepEqual(permissions, { issues: "write" }),
   );
-  assert.ok(!policy.events.includes("pull_request_target"));
-  assert.ok(!policy.events.includes("workflow_run"));
-  Object.values(policy.actions).forEach((sha) =>
-    assert.match(sha, /^[0-9a-f]{40}$/u),
+  assert.deepEqual(Object.keys(policy.events).sort(), [
+    "pull_request",
+    "push",
+    "schedule",
+  ]);
+  assert.deepEqual(policy.topKeys, ["name", "on", "permissions", "jobs"]);
+  assert.deepEqual(policy.stepKeys, [
+    "name",
+    "id",
+    "uses",
+    "with",
+    "run",
+    "env",
+    "if",
+  ]);
+  Object.values(policy.actions).forEach((action) =>
+    assert.match(action.sha, /^[0-9a-f]{40}$/u),
+  );
+  policy.commands.forEach((command) =>
+    assert.match(
+      command,
+      /^(node (base-tools\/)?harness\/ci\/|just |lefthook install$|corepack enable$|echo '서명 검사 비활성)/u,
+      command,
+    ),
+  );
+  [...policy.expressions, ...policy.conditions].forEach((text) =>
+    assert.doesNotMatch(
+      text,
+      /secrets|github\.event\.(head_commit|pull_request\.(title|body))|inputs\./u,
+    ),
   );
 });
 
