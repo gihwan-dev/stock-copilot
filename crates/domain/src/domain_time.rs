@@ -299,6 +299,16 @@ mod tests {
     }
 
     #[test]
+    fn equal_instants_have_zero_elapsed_time_and_zero_span_preserves_the_instant() {
+        let instant = at(2026, Month::March, 25, (22, 30, 0, 42));
+        let zero = TimeSpan::try_new(SpanSeconds::new(0), Nanosecond::new(0)).expect("0 기간");
+        assert_eq!(instant.elapsed_until(instant), Ok(zero));
+        assert_eq!(instant.checked_add(zero), Ok(instant));
+        assert_eq!(instant.checked_sub(zero), Ok(instant));
+        assert_eq!(date(1, 1, 1).year(), CalendarYear::new(1));
+    }
+
+    #[test]
     fn scalar_components_and_date_distances_round_trip() {
         assert_eq!(*UnixSeconds::new(-1).as_i64(), -1);
         assert_eq!(*Nanosecond::new(42).as_u32(), 42);

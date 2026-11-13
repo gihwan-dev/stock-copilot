@@ -423,6 +423,56 @@ mod tests {
     }
 
     #[test]
+    fn each_date_and_market_adjacency_is_validated_independently() {
+        for (previous, today, next) in [(24, 24, 26), (24, 26, 26), (25, 24, 26), (24, 26, 25)] {
+            assert_eq!(
+                MarketCalendar::try_new(holiday(3, previous), holiday(3, today), holiday(3, next)),
+                Err(MarketCalendarError::DateOrder)
+            );
+        }
+        let kr = |day| {
+            MarketSession::try_new(
+                date(3, day),
+                SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: None,
+                    after_market: None,
+                },
+            )
+            .expect("국내 행")
+        };
+        for (previous, today, next) in [
+            (kr(24), holiday(3, 25), holiday(3, 26)),
+            (holiday(3, 24), holiday(3, 25), kr(26)),
+        ] {
+            assert_eq!(
+                MarketCalendar::try_new(previous, today, next),
+                Err(MarketCalendarError::MarketMismatch)
+            );
+        }
+    }
+
+    #[test]
+    fn auction_markers_allow_both_interval_endpoints() {
+        let start = at(3, 25, 9, 0);
+        let end = at(3, 25, 15, 30);
+        let interval = TimeInterval::try_new(start, end).expect("정규장");
+        for boundary in [
+            AuctionBoundary::StartsAt(start),
+            AuctionBoundary::StartsAt(end),
+            AuctionBoundary::EndsAt(start),
+            AuctionBoundary::EndsAt(end),
+        ] {
+            assert_eq!(
+                SessionData::try_new(interval, Some(boundary))
+                    .expect("구간 경계 표식")
+                    .auction(),
+                Some(boundary)
+            );
+        }
+    }
+
+    #[test]
     fn calendar_selects_by_actual_sessions_including_us_local_previous_evening() {
         let calendar = calendar();
         assert_eq!(calendar.state_at(at(3, 25, 10, 0)), MarketState::DayMarket);
