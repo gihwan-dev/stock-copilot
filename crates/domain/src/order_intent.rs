@@ -31,8 +31,7 @@ pub enum OrderTerms {
     UsMarketSell {
         quantity: SellOrderQuantity,
     },
-    UsMarketAmount {
-        side: OrderSide,
+    UsMarketAmountBuy {
         amount: UsdOrderAmount,
     },
 }
@@ -45,7 +44,7 @@ impl OrderTerms {
             Self::UsLimit { .. }
             | Self::UsMarketBuy { .. }
             | Self::UsMarketSell { .. }
-            | Self::UsMarketAmount { .. } => Market::Us,
+            | Self::UsMarketAmountBuy { .. } => Market::Us,
         }
     }
 
@@ -54,36 +53,71 @@ impl OrderTerms {
         match self {
             Self::KrLimit { side, .. }
             | Self::KrMarket { side, .. }
-            | Self::UsLimit { side, .. }
-            | Self::UsMarketAmount { side, .. } => *side,
-            Self::UsMarketBuy { .. } => OrderSide::Buy,
+            | Self::UsLimit { side, .. } => *side,
+            Self::UsMarketBuy { .. } | Self::UsMarketAmountBuy { .. } => OrderSide::Buy,
             Self::UsMarketSell { .. } => OrderSide::Sell,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderIntentError {
+    UnknownMarket,
+    MarketMismatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedOrderInstrument {
+    symbol: Symbol,
+    market: Market,
+}
+
+impl ResolvedOrderInstrument {
+    pub fn from_master_lookup_result(
+        symbol: Symbol,
+        market: Market,
+    ) -> Result<Self, OrderIntentError> {
+        match market {
+            Market::Kr | Market::Us => Ok(Self { symbol, market }),
+            Market::Unknown(_) => Err(OrderIntentError::UnknownMarket),
+        }
+    }
+
+    #[must_use]
+    pub fn symbol(&self) -> &Symbol {
+        &self.symbol
+    }
+
+    #[must_use]
+    pub fn market(&self) -> Market {
+        self.market.clone()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderIntent {
     account_id: AccountId,
-    symbol: Symbol,
+    instrument: ResolvedOrderInstrument,
     client_order_id: ClientOrderId,
     terms: OrderTerms,
 }
 
 impl OrderIntent {
-    #[must_use]
     pub fn new(
         account_id: AccountId,
-        symbol: Symbol,
+        instrument: ResolvedOrderInstrument,
         client_order_id: ClientOrderId,
         terms: OrderTerms,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, OrderIntentError> {
+        if instrument.market() != terms.market() {
+            return Err(OrderIntentError::MarketMismatch);
+        }
+        Ok(Self {
             account_id,
-            symbol,
+            instrument,
             client_order_id,
             terms,
-        }
+        })
     }
 
     #[must_use]
@@ -93,7 +127,12 @@ impl OrderIntent {
 
     #[must_use]
     pub fn symbol(&self) -> &Symbol {
-        &self.symbol
+        self.instrument.symbol()
+    }
+
+    #[must_use]
+    pub fn instrument(&self) -> &ResolvedOrderInstrument {
+        &self.instrument
     }
 
     #[must_use]
@@ -121,11 +160,11 @@ impl OrderIntent {
 mod tests {
     use super::{
         AccountId, ClientOrderId, KrOrderPrice, Market, OrderIntent, OrderSide, OrderTerms,
-        SellOrderQuantity, Symbol, UsOrderPrice, UsdOrderAmount, WholeOrderQuantity,
+        SellOrderQuantity, Symbol, UsOrderPrice, WholeOrderQuantity,
     };
-    use crate::{Amount, AmountInput, Currency, Money, NumericInput, Price, Quantity};
+    use crate::{Currency, NumericInput, Price, Quantity};
 
-    fn allowed_terms(side: OrderSide) -> [(OrderTerms, Market); 5] {
+    fn allowed_terms(side: OrderSide) -> [(OrderTerms, Market); 4] {
         let quantity = Quantity::parse(&NumericInput::try_new("2").expect("길이")).expect("수량");
         let whole = WholeOrderQuantity::try_new(quantity).expect("정수");
         let sell = SellOrderQuantity::try_new(quantity).expect("매도");
@@ -144,11 +183,6 @@ mod tests {
             )
             .expect("가격"),
         )
-        .expect("달러");
-        let amount = UsdOrderAmount::try_new(Money::new(
-            Amount::parse(&AmountInput::new("100.5")).expect("금액"),
-            Currency::Usd,
-        ))
         .expect("달러");
         [
             (
@@ -174,7 +208,6 @@ mod tests {
                 },
                 Market::Us,
             ),
-            (OrderTerms::UsMarketAmount { side, amount }, Market::Us),
             (
                 match side {
                     OrderSide::Buy => OrderTerms::UsMarketBuy { quantity: whole },
@@ -192,7 +225,17 @@ mod tests {
                 let account = AccountId::new(123_456);
                 let symbol = Symbol::try_new("FAKE").expect("종목");
                 let id = ClientOrderId::try_new("fake-order-001").expect("주문 키");
-                let intent = OrderIntent::new(account.clone(), symbol.clone(), id.clone(), terms);
+                let instrument = crate::ResolvedOrderInstrument::from_master_lookup_result(
+                    symbol.clone(),
+                    market.clone(),
+                )
+                .expect("조회 결과");
+                let intent =
+                    OrderIntent::new(account.clone(), instrument.clone(), id.clone(), terms)
+                        .expect("시장 일치");
+                assert_eq!(intent.instrument(), &instrument);
+                assert_eq!(instrument.symbol(), &symbol);
+                assert_eq!(instrument.market(), market);
                 assert_eq!(intent.account_id(), &account);
                 assert_eq!(intent.symbol(), &symbol);
                 assert_eq!(intent.client_order_id(), &id);
@@ -213,5 +256,99 @@ mod tests {
         };
         assert_eq!(terms.market(), Market::Us);
         assert_eq!(terms.side(), OrderSide::Sell);
+    }
+
+    mod review_regressions {
+        use crate::{
+            AccountId, ClientOrderId, Currency, KrOrderPrice, Market, MarketCode, NumericInput,
+            OrderIntent, OrderIntentError, OrderSide, OrderTerms, Price, Quantity,
+            ResolvedOrderInstrument, Symbol, UsOrderPrice, WholeOrderQuantity,
+        };
+
+        #[test]
+        fn master_lookup_market_must_match_order_terms_and_unknown_is_rejected() {
+            let quantity = WholeOrderQuantity::try_new(
+                Quantity::parse(&NumericInput::try_new("10").expect("입력")).expect("수량"),
+            )
+            .expect("주문");
+            let kr = OrderTerms::KrLimit {
+                side: OrderSide::Buy,
+                quantity,
+                price: KrOrderPrice::try_new(
+                    Price::parse(
+                        &NumericInput::try_new("70000").expect("입력"),
+                        Currency::Krw,
+                    )
+                    .expect("가격"),
+                )
+                .expect("주문"),
+            };
+            let us = OrderTerms::UsLimit {
+                side: OrderSide::Buy,
+                quantity,
+                price: UsOrderPrice::try_new(
+                    Price::parse(
+                        &NumericInput::try_new("70000").expect("입력"),
+                        Currency::Usd,
+                    )
+                    .expect("가격"),
+                )
+                .expect("주문"),
+            };
+            for (symbol, market, terms) in [("AAPL", Market::Us, kr), ("005930", Market::Kr, us)] {
+                let instrument = ResolvedOrderInstrument::from_master_lookup_result(
+                    Symbol::try_new(symbol).expect("종목"),
+                    market,
+                )
+                .expect("조회 결과");
+                assert_eq!(
+                    OrderIntent::new(
+                        AccountId::new(123_456),
+                        instrument,
+                        ClientOrderId::try_new("fake-key").expect("키"),
+                        terms
+                    ),
+                    Err(OrderIntentError::MarketMismatch)
+                );
+            }
+            assert_eq!(
+                ResolvedOrderInstrument::from_master_lookup_result(
+                    Symbol::try_new("FAKE").expect("종목"),
+                    Market::new(MarketCode::try_new("UNKNOWN").expect("코드"))
+                ),
+                Err(OrderIntentError::UnknownMarket)
+            );
+        }
+    }
+    mod amount_buy_tests {
+        use crate::{
+            AccountId, Amount, AmountInput, ClientOrderId, Currency, Market, Money, OrderIntent,
+            OrderSide, OrderTerms, ResolvedOrderInstrument, Symbol, UsdOrderAmount,
+        };
+
+        #[test]
+        fn amount_order_is_us_market_buy_only() {
+            let amount = UsdOrderAmount::try_new(Money::new(
+                Amount::parse(&AmountInput::new("100.50")).expect("금액"),
+                Currency::Usd,
+            ))
+            .expect("주문");
+            let terms = OrderTerms::UsMarketAmountBuy { amount };
+            let instrument = ResolvedOrderInstrument::from_master_lookup_result(
+                Symbol::try_new("AAPL").expect("종목"),
+                Market::Us,
+            )
+            .expect("조회");
+            let intent = OrderIntent::new(
+                AccountId::new(123_456),
+                instrument,
+                ClientOrderId::try_new("fake-amount-key").expect("키"),
+                terms,
+            )
+            .expect("시장");
+            assert_eq!(intent.market(), Market::Us);
+            assert_eq!(intent.side(), OrderSide::Buy);
+            assert_eq!(intent.terms(), &OrderTerms::UsMarketAmountBuy { amount });
+        }
     }
 }

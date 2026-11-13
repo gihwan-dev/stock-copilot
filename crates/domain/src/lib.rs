@@ -71,3 +71,6 @@ mod order_amount;
 pub use order_amount::UsdOrderAmount;
 mod order_intent;
 pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
+
+pub use order_intent::{OrderIntentError, ResolvedOrderInstrument};
+pub use order_quantity::OrderWireValue;

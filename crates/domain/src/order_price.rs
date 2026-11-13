@@ -1,4 +1,5 @@
-use crate::{Currency, OrderValueError, Price};
+use crate::{Amount, Currency, Money, OrderValueError, OrderWireValue, Price};
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KrOrderPrice(Price);
@@ -11,12 +12,22 @@ impl KrOrderPrice {
         if value.as_money().amount().as_decimal().normalize().scale() != 0 {
             return Err(OrderValueError::PricePrecision);
         }
-        Ok(Self(value))
+        Price::try_new(Money::new(
+            Amount::new(value.as_money().amount().as_decimal().normalize()),
+            value.as_money().currency(),
+        ))
+        .map(Self)
+        .map_err(OrderValueError::NumericValue)
     }
 
     #[must_use]
     pub fn price(self) -> Price {
         self.0
+    }
+
+    #[must_use]
+    pub fn wire_value(self) -> OrderWireValue {
+        OrderWireValue::from_amount(self.0.as_money().amount())
     }
 }
 
@@ -28,20 +39,34 @@ impl UsOrderPrice {
         if value.as_money().currency() != Currency::Usd {
             return Err(OrderValueError::CurrencyMismatch);
         }
-        let maximum_scale = if value.as_money().amount().as_decimal() < rust_decimal::Decimal::ONE {
-            4
-        } else {
-            2
+        let maximum_scale = match value
+            .as_money()
+            .amount()
+            .as_decimal()
+            .cmp(&rust_decimal::Decimal::ONE)
+        {
+            Ordering::Less => 4,
+            Ordering::Equal | Ordering::Greater => 2,
         };
         if value.as_money().amount().as_decimal().normalize().scale() > maximum_scale {
             return Err(OrderValueError::PricePrecision);
         }
-        Ok(Self(value))
+        Price::try_new(Money::new(
+            Amount::new(value.as_money().amount().as_decimal().normalize()),
+            value.as_money().currency(),
+        ))
+        .map(Self)
+        .map_err(OrderValueError::NumericValue)
     }
 
     #[must_use]
     pub fn price(self) -> Price {
         self.0
+    }
+
+    #[must_use]
+    pub fn wire_value(self) -> OrderWireValue {
+        OrderWireValue::from_amount(self.0.as_money().amount())
     }
 }
 
@@ -109,5 +134,33 @@ mod tests {
                 Ok(())
             })
             .expect("독립 호가 정밀도 표");
+    }
+
+    mod review_regressions {
+        use crate::{Currency, KrOrderPrice, NumericInput, Price, UsOrderPrice};
+
+        #[test]
+        fn prices_store_normalized_values_and_expose_canonical_wire_strings() {
+            let kr = KrOrderPrice::try_new(
+                Price::parse(
+                    &NumericInput::try_new("70000.000").expect("입력"),
+                    Currency::Krw,
+                )
+                .expect("가격"),
+            )
+            .expect("주문");
+            assert_eq!(kr.price().as_money().amount().as_decimal().scale(), 0);
+            assert_eq!(kr.wire_value().as_str(), "70000");
+            let us = UsOrderPrice::try_new(
+                Price::parse(
+                    &NumericInput::try_new("0.123400").expect("입력"),
+                    Currency::Usd,
+                )
+                .expect("가격"),
+            )
+            .expect("주문");
+            assert_eq!(us.price().as_money().amount().as_decimal().scale(), 4);
+            assert_eq!(us.wire_value().as_str(), "0.1234");
+        }
     }
 }
