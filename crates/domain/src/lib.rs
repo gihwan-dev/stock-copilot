@@ -19,3 +19,10 @@ pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, Rec
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
 pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
+
+mod thesis;
+pub use thesis::{
+    ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
+    Evidence, HistoryEntry, JudgedClaim, Thesis, ThesisError, ThesisOperation, ThesisStatus,
+    ThesisVersion,
+};
