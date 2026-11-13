@@ -63,3 +63,11 @@ mod probability;
 pub use probability::{
     AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
 };
+mod order_quantity;
+pub use order_quantity::{OrderValueError, SellOrderQuantity, WholeOrderQuantity};
+mod order_price;
+pub use order_price::{KrOrderPrice, UsOrderPrice};
+mod order_amount;
+pub use order_amount::UsdOrderAmount;
+mod order_intent;
+pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
