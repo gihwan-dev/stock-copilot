@@ -42,6 +42,16 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/ds-tokens/check.mjs",
+      "kind": "check",
+      "cases": "apps/desktop/design-tokens/tokens.json",
+      "test": {
+        "file": "apps/desktop/tests/ds-tokens.test.mjs",
+        "name": "code tokens preserve the design source and every architecture 5.1 token"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json",
       "kind": "check",
       "cases": "apps/desktop/tests/check-list.test.mjs",

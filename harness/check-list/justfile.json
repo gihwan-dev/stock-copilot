@@ -219,6 +219,7 @@
       "body": [
         ["pnpm install --frozen-lockfile --ignore-scripts"],
         ["node harness/ts-deps/check.mjs"],
+        ["node harness/ds-tokens/check.mjs"],
         [
           "pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json"
         ],
