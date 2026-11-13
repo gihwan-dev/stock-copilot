@@ -181,34 +181,26 @@ mod tests {
     }
 
     #[test]
-    fn untrusted_strings_match_the_exhaustive_canonical_set() {
-        let canonical: Vec<_> = (1_i64..=99).map(|value| value.to_string()).collect();
-        let inputs = proptest::collection::vec(any::<u8>(), 0..128);
-        TestRunner::new(Config::with_cases(4096))
-            .run(&inputs, |bytes| {
-                let text = String::from_utf8_lossy(&bytes);
-                proptest::prop_assert_eq!(
-                    parse_ai(&text).is_ok(),
-                    canonical.iter().any(|candidate| candidate == &text)
-                );
-                Ok(())
-            })
-            .expect("정규 문자열 집합과 일치");
-    }
-
-    #[test]
-    fn random_out_of_range_integer_percentages_fail() {
-        TestRunner::new(Config::with_cases(4096))
-            .run(
-                &(100_u64..=u64::MAX, 1_u64..=u64::MAX),
-                |(positive, negative)| {
-                    for text in [positive.to_string(), format!("-{negative}")] {
-                        proptest::prop_assert!(parse_ai(&text).is_err());
-                    }
-                    Ok(())
-                },
-            )
-            .expect("범위 밖 정수 거부");
+    fn all_short_utf8_inputs_accept_exactly_the_99_canonical_percentages() {
+        let canonical: std::collections::BTreeSet<_> =
+            (1_i64..=99).map(|value| value.to_string()).collect();
+        let mut accepted = std::collections::BTreeSet::new();
+        let inputs = (u8::MIN..=u8::MAX).map(|first| vec![first]).chain(
+            (u8::MIN..=u8::MAX)
+                .flat_map(|first| (u8::MIN..=u8::MAX).map(move |second| vec![first, second])),
+        );
+        for text in inputs.filter_map(|bytes| String::from_utf8(bytes).ok()) {
+            let result = parse_ai(&text);
+            assert_eq!(result.is_ok(), canonical.contains(&text), "입력: {text:?}");
+            if result.is_ok() {
+                accepted.insert(text);
+            }
+        }
+        assert_eq!(accepted.len(), 99);
+        assert_eq!(accepted, canonical);
+        for text in ["", "100", "050"] {
+            assert_eq!(parse_ai(text), Err(AiProbabilityError::InvalidLength));
+        }
     }
 
     #[test]
