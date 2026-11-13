@@ -1,14 +1,15 @@
 mod evidence;
 mod model;
 
-pub use evidence::{Evidence, EvidenceRef, EvidenceUrl, ToolPurpose, ToolReference};
+pub use evidence::{Evidence, EvidenceRef, EvidenceUrl, ToolReference};
 pub use model::{
     ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict, CriterionAssessment,
-    CriterionComparison, CriterionKind, CriterionValue, CriterionVerdict, JudgedClaim,
-    JudgedCriterion, KillCriterion, MachineCondition, UserReason,
+    CriterionComparison, CriterionKind, CriterionMetric, CriterionObservation, CriterionValue,
+    CriterionVerdict, JudgedClaim, JudgedCriterion, KillCriterion, MachineCondition, UserReason,
 };
 
 const HISTORY_LIMIT: ThesisVersion = ThesisVersion(6144);
+const MODEL_HISTORY_LIMIT: ThesisVersion = ThesisVersion(HISTORY_LIMIT.0.saturating_sub(8));
 const WEB_HISTORY_LIMIT: ThesisVersion = ThesisVersion(HISTORY_LIMIT.0.saturating_sub(32));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -48,7 +49,6 @@ pub enum ThesisError {
     TooManySources,
     DuplicateSource,
     ConflictingSource,
-    NoSubstantiveEvidence,
     VersionConflict,
     HistoryFull,
     WebHistoryFull,
@@ -62,6 +62,10 @@ pub enum ThesisError {
     EmptyPatch,
     TooManyOperations,
     AiMachineJudgment,
+    CodeNarrativeJudgment,
+    InvalidMetric,
+    MetricMismatch,
+    UserHistoryReserved,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +79,13 @@ pub enum ThesisOperation {
 enum Target {
     Claim(ClaimId),
     Criterion(ClaimId),
+}
+#[derive(Clone, Copy)]
+enum ValidatedOperation<'operation> {
+    AddClaim(&'operation Claim),
+    Judge(&'operation ClaimId, ClaimVerdict),
+    AddKillCriterion(&'operation KillCriterion),
+    JudgeCriterion(&'operation ClaimId, CriterionVerdict),
 }
 impl ThesisOperation {
     fn target(&self) -> Target {
@@ -256,14 +267,26 @@ impl Thesis {
         Ok(())
     }
     fn append_change(&mut self, change: ProposedChange) -> Result<(), ThesisError> {
-        self.check_base(self.version())?;
-        self.validate(&change.operation)?;
-        let disposition = change.evidence.disposition();
+        if self.version() >= MODEL_HISTORY_LIMIT {
+            return Err(ThesisError::UserHistoryReserved);
+        }
+        let validated = self.validate(&change.operation)?;
+        let disposition = match &change.operation {
+            ThesisOperation::JudgeCriterion(_, CriterionAssessment::Observed(_)) => {
+                ChangeDisposition::Applied
+            }
+            ThesisOperation::AddClaim(_)
+            | ThesisOperation::Judge(_, _)
+            | ThesisOperation::AddKillCriterion(_)
+            | ThesisOperation::JudgeCriterion(_, CriterionAssessment::Ai(_)) => {
+                change.evidence.disposition()
+            }
+        };
         if disposition == ChangeDisposition::NeedsReview {
             self.check_pending_capacity(&change.operation)?;
         }
         if disposition == ChangeDisposition::Applied {
-            self.apply(&change.operation);
+            self.apply(validated);
         }
         self.record(HistoryAction::Change(Box::new(change)), disposition);
         Ok(())
@@ -320,8 +343,8 @@ impl Thesis {
             .ok_or(ThesisError::NotPending)?;
         let operation = original.operation.clone();
         if decision == UserDecision::Confirm {
-            self.validate(&operation)?;
-            self.apply(&operation);
+            let validated = self.validate(&operation)?;
+            self.apply(validated);
         }
         self.record(
             HistoryAction::Decision(pending, decision, reason),
@@ -338,7 +361,10 @@ impl Thesis {
         }
         Ok(())
     }
-    fn validate(&self, operation: &ThesisOperation) -> Result<(), ThesisError> {
+    fn validate<'operation>(
+        &self,
+        operation: &'operation ThesisOperation,
+    ) -> Result<ValidatedOperation<'operation>, ThesisError> {
         match operation {
             ThesisOperation::AddClaim(claim) => {
                 if self
@@ -351,11 +377,13 @@ impl Thesis {
                 if self.claims.len() >= 32 {
                     return Err(ThesisError::TooManyClaims);
                 }
+                Ok(ValidatedOperation::AddClaim(claim))
             }
-            ThesisOperation::Judge(id, _) => {
+            ThesisOperation::Judge(id, verdict) => {
                 if !self.claims.iter().any(|entry| entry.claim.id() == id) {
                     return Err(ThesisError::UnknownTarget);
                 }
+                Ok(ValidatedOperation::Judge(id, *verdict))
             }
             ThesisOperation::AddKillCriterion(criterion) => {
                 if self
@@ -368,6 +396,7 @@ impl Thesis {
                 if self.criteria.len() >= 16 {
                     return Err(ThesisError::TooManyCriteria);
                 }
+                Ok(ValidatedOperation::AddKillCriterion(criterion))
             }
             ThesisOperation::JudgeCriterion(id, assessment) => {
                 let entry = self
@@ -375,10 +404,10 @@ impl Thesis {
                     .iter()
                     .find(|entry| entry.criterion.id() == id)
                     .ok_or(ThesisError::UnknownTarget)?;
-                entry.criterion.validate_assessment(*assessment)?;
+                let verdict = entry.criterion.assess(assessment)?;
+                Ok(ValidatedOperation::JudgeCriterion(id, verdict))
             }
         }
-        Ok(())
     }
     fn record(&mut self, action: HistoryAction, disposition: ChangeDisposition) {
         self.history.push(HistoryEntry {
@@ -387,32 +416,34 @@ impl Thesis {
             disposition,
         });
     }
-    fn apply(&mut self, operation: &ThesisOperation) {
+    fn apply(&mut self, operation: ValidatedOperation<'_>) {
         match operation {
-            ThesisOperation::AddClaim(claim) => self.claims.push(JudgedClaim {
+            ValidatedOperation::AddClaim(claim) => self.claims.push(JudgedClaim {
                 claim: claim.clone(),
                 verdict: ClaimVerdict::Unverifiable,
             }),
-            ThesisOperation::Judge(id, verdict) => {
+            ValidatedOperation::Judge(id, verdict) => {
                 for entry in self
                     .claims
                     .iter_mut()
                     .filter(|entry| entry.claim.id() == id)
                 {
-                    entry.verdict = *verdict;
+                    entry.verdict = verdict;
                 }
             }
-            ThesisOperation::AddKillCriterion(criterion) => self.criteria.push(JudgedCriterion {
-                criterion: criterion.clone(),
-                verdict: CriterionVerdict::Unverifiable,
-            }),
-            ThesisOperation::JudgeCriterion(id, assessment) => {
+            ValidatedOperation::AddKillCriterion(criterion) => {
+                self.criteria.push(JudgedCriterion {
+                    criterion: criterion.clone(),
+                    verdict: CriterionVerdict::Unverifiable,
+                });
+            }
+            ValidatedOperation::JudgeCriterion(id, verdict) => {
                 for entry in self
                     .criteria
                     .iter_mut()
                     .filter(|entry| entry.criterion.id() == id)
                 {
-                    entry.verdict = assessment.verdict();
+                    entry.verdict = verdict;
                 }
             }
         }
@@ -425,8 +456,7 @@ mod tests {
         ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
         CriterionAssessment, CriterionKind, CriterionVerdict, Evidence, EvidenceRef, EvidenceUrl,
         HistoryAction, KillCriterion, ProposedChange, Thesis, ThesisError, ThesisOperation,
-        ThesisPatch, ThesisStatus, ThesisVersion, ToolPurpose, ToolReference, UserDecision,
-        UserReason,
+        ThesisPatch, ThesisStatus, ThesisVersion, ToolReference, UserDecision, UserReason,
     };
     use crate::{DartReceiptNo, Disclosure, NewsSource, NormalizedUrl, ReceiptNo, UntrustedText};
     use proptest::test_runner::Config;
@@ -689,10 +719,7 @@ mod tests {
             Evidence::try_new(vec![reference, web.clone()]),
             Err(ThesisError::ConflictingSource)
         );
-        let quote = EvidenceRef::Tool(
-            ToolReference::try_new("tool:get_quote/1").expect("도구"),
-            ToolPurpose::Quote,
-        );
+        let quote = EvidenceRef::Tool(ToolReference::try_new("tool:get_quote/1").expect("도구"));
         assert_eq!(
             Evidence::try_new(vec![web, quote.clone()])
                 .expect("근거")
@@ -700,8 +727,8 @@ mod tests {
             ChangeDisposition::NeedsReview
         );
         assert_eq!(
-            Evidence::try_new(vec![quote]),
-            Err(ThesisError::NoSubstantiveEvidence)
+            Evidence::try_new(vec![quote]).map(|value| value.disposition()),
+            Ok(ChangeDisposition::NeedsReview)
         );
     }
 
@@ -713,7 +740,10 @@ mod tests {
                 HistoryAction::Change(change) => restored
                     .apply_batch(
                         base,
-                        ThesisPatch::try_new(vec![change.as_ref().clone()]).expect("차분"),
+                        ThesisPatch::try_new(vec![super::state_property_tests::rebuild_change(
+                            change,
+                        )])
+                        .expect("차분"),
                     )
                     .expect("재생"),
                 HistoryAction::Decision(target, UserDecision::Confirm, reason) => restored
@@ -743,7 +773,7 @@ mod tests {
         for entry in original.history() {
             match entry.action() {
                 HistoryAction::Change(change) => {
-                    changes.push(change.as_ref().clone());
+                    changes.push(super::state_property_tests::rebuild_change(change));
                 }
                 HistoryAction::Decision(target, decision, reason) => {
                     flush_replay(&mut restored, &mut changes);
@@ -867,10 +897,10 @@ mod boundary_tests {
     };
     use super::{
         ChangeDisposition, ChangeReason, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
-        CriterionAssessment, CriterionComparison, CriterionKind, CriterionValue, CriterionVerdict,
-        Evidence, EvidenceRef, EvidenceUrl, HistoryAction, KillCriterion, MachineCondition, Thesis,
-        ThesisError, ThesisOperation, ThesisPatch, ThesisStatus, ThesisVersion, ToolPurpose,
-        ToolReference, UserReason,
+        CriterionAssessment, CriterionComparison, CriterionKind, CriterionMetric, CriterionValue,
+        CriterionVerdict, Evidence, EvidenceRef, EvidenceUrl, HistoryAction, KillCriterion,
+        MachineCondition, Thesis, ThesisError, ThesisOperation, ThesisPatch, ThesisStatus,
+        ThesisVersion, ToolReference, UserReason,
     };
     use crate::{DartReceiptNo, Disclosure, NewsSource, NormalizedUrl, ReceiptNo};
     use rust_decimal::Decimal;
@@ -965,9 +995,9 @@ mod boundary_tests {
 
     fn machine(comparison: CriterionComparison) -> MachineCondition {
         MachineCondition::new(
-            ToolReference::try_new("tool:revenue/1").expect("도구"),
+            CriterionMetric::try_new("revenue").expect("지표"),
             comparison,
-            CriterionValue::new(Decimal::from(10)),
+            CriterionValue::new(Decimal::from(10_i32)),
         )
     }
     #[test]
@@ -1000,8 +1030,9 @@ mod boundary_tests {
         ] {
             for (observed, verdict) in [9_i32, 10_i32, 11_i32].into_iter().zip(expected) {
                 assert_eq!(
-                    machine(comparison).evaluate(CriterionValue::new(Decimal::from(observed))),
-                    CriterionAssessment::Code(verdict)
+                    machine(comparison)
+                        .evaluate(&super::final_review_tests::observation(observed, "revenue")),
+                    Ok(verdict)
                 );
             }
         }
@@ -1010,7 +1041,7 @@ mod boundary_tests {
     #[test]
     fn machine_ai_rejection_and_narrative_bounds() {
         let condition = machine(CriterionComparison::AtLeast);
-        assert_eq!(condition.metric().as_str(), "tool:revenue/1");
+        assert_eq!(condition.metric().as_str(), "revenue");
         let created =
             KillCriterion::new(id("k"), CriterionKind::Machine(condition.clone())).expect("조건");
         assert_eq!(created.kind(), &CriterionKind::Machine(condition));
@@ -1036,8 +1067,9 @@ mod boundary_tests {
             &mut thesis,
             ThesisOperation::JudgeCriterion(
                 id("k"),
-                machine(CriterionComparison::AtLeast)
-                    .evaluate(CriterionValue::new(Decimal::from(11_i32))),
+                CriterionAssessment::Observed(super::final_review_tests::observation(
+                    11, "revenue",
+                )),
             ),
             TestSource::News,
         )
@@ -1065,11 +1097,8 @@ mod boundary_tests {
             .expect("길이"),
         )
     }
-    fn tool(purpose: ToolPurpose) -> EvidenceRef {
-        EvidenceRef::Tool(
-            ToolReference::try_new("tool:source/1").expect("도구"),
-            purpose,
-        )
+    fn tool() -> EvidenceRef {
+        EvidenceRef::Tool(ToolReference::try_new("tool:source/1").expect("도구"))
     }
     #[test]
     fn evidence_key_boundaries_and_all_source_combinations_are_explicit() {
@@ -1118,28 +1147,20 @@ mod boundary_tests {
     }
 
     #[test]
-    fn tool_purposes_and_url_source_collisions() {
-        for purpose in [ToolPurpose::Quote, ToolPurpose::Portfolio] {
-            assert_eq!(
-                Evidence::try_new(vec![tool(purpose)]),
-                Err(ThesisError::NoSubstantiveEvidence)
-            );
-            assert_eq!(
-                Evidence::try_new(vec![web_ref(0), tool(purpose)])
-                    .expect("웹과 보조 도구")
-                    .disposition(),
-                ChangeDisposition::NeedsReview
-            );
-        }
+    fn tool_references_never_promote_web_evidence_and_url_sources_do_not_conflict() {
         assert_eq!(
-            Evidence::try_new(vec![web_ref(0), tool(ToolPurpose::Research)])
-                .expect("실질 도구")
-                .disposition(),
-            ChangeDisposition::Applied
+            Evidence::try_new(vec![tool()]).expect("기록").disposition(),
+            ChangeDisposition::NeedsReview
         );
         assert_eq!(
-            Evidence::try_new(vec![tool(ToolPurpose::Research), tool(ToolPurpose::Quote)]),
-            Err(ThesisError::ConflictingSource)
+            Evidence::try_new(vec![web_ref(0), tool()])
+                .expect("웹과 도구")
+                .disposition(),
+            ChangeDisposition::NeedsReview
+        );
+        assert_eq!(
+            Evidence::try_new(vec![tool(), tool()]),
+            Err(ThesisError::DuplicateSource)
         );
         let ref_url =
             EvidenceUrl::try_new(NormalizedUrl::try_new("https://example.com/0").expect("주소"))
@@ -1153,7 +1174,7 @@ mod boundary_tests {
             Err(ThesisError::ConflictingSource)
         );
         assert_eq!(web_ref(0).disclosure_key(), None);
-        assert_eq!(tool(ToolPurpose::Research).disclosure_key(), None);
+        assert_eq!(tool().disclosure_key(), None);
         assert_eq!(
             evidence(TestSource::News).as_items()[0].disclosure_key(),
             None
@@ -1285,7 +1306,9 @@ mod boundary_tests {
                 &mut thesis,
                 ThesisOperation::JudgeCriterion(
                     id("missing"),
-                    CriterionAssessment::Code(CriterionVerdict::Met)
+                    CriterionAssessment::Observed(super::final_review_tests::observation(
+                        11, "revenue"
+                    ))
                 ),
                 TestSource::News
             ),
@@ -1314,13 +1337,14 @@ mod boundary_tests {
         );
     }
 
-    fn fill_history(
+    pub(super) fn fill_history(
         thesis: &mut Thesis,
         target: ThesisVersion,
         claim: &ClaimId,
         verdict: ClaimVerdict,
     ) {
         while thesis.version() < target {
+            let before = thesis.version();
             let count = target
                 .as_usize()
                 .abs_diff(*thesis.version().as_usize())
@@ -1339,6 +1363,10 @@ mod boundary_tests {
                     ThesisPatch::try_new(changes).expect("채움 묶음"),
                 )
                 .expect("이력 채움");
+            assert_eq!(
+                *thesis.version().as_usize(),
+                before.as_usize().saturating_add(count)
+            );
         }
     }
     #[test]
@@ -1352,7 +1380,7 @@ mod boundary_tests {
         .expect("추가");
         fill_history(
             &mut thesis,
-            ThesisVersion::try_new(6143).expect("상한 전"),
+            ThesisVersion::try_new(6135).expect("모델 상한 전"),
             &id("a"),
             ClaimVerdict::Intact,
         );
@@ -1366,11 +1394,43 @@ mod boundary_tests {
                 thesis.version(),
                 ThesisPatch::try_new(vec![change.clone(), change]).expect("차분")
             ),
-            Err(ThesisError::HistoryFull)
+            Err(ThesisError::UserHistoryReserved)
         );
         assert_eq!(thesis, before);
     }
 
+    fn resolve_all_at_model_limit(thesis: &mut Thesis) {
+        let pending = thesis
+            .pending()
+            .into_iter()
+            .map(super::HistoryEntry::sequence)
+            .collect::<Vec<_>>();
+        for target in pending {
+            thesis
+                .reject_by_user(thesis.version(), target, user())
+                .expect("전용 공간 사용자 거절");
+        }
+        assert_eq!(
+            thesis.version(),
+            ThesisVersion::try_new(6144).expect("전체 상한")
+        );
+        assert_eq!(
+            add(
+                thesis,
+                ThesisOperation::Judge(id("root"), ClaimVerdict::Broken),
+                TestSource::News
+            ),
+            Err(ThesisError::HistoryFull)
+        );
+        assert_eq!(
+            thesis.reject_by_user(
+                thesis.version(),
+                ThesisVersion::try_new(1).expect("순번"),
+                user()
+            ),
+            Err(ThesisError::HistoryFull)
+        );
+    }
     #[test]
     fn reserved_history_and_full_history_are_distinct() {
         let mut thesis = Thesis::new();
@@ -1382,21 +1442,23 @@ mod boundary_tests {
             )
             .expect("보류");
         }
-        let pending = thesis.pending()[0].sequence();
-        thesis
-            .confirm_by_user(thesis.version(), pending, user())
-            .expect("확인");
+        add(
+            &mut thesis,
+            ThesisOperation::AddClaim(claim("root", ClaimRole::Core)),
+            TestSource::News,
+        )
+        .expect("현재 주장");
         fill_history(
             &mut thesis,
             ThesisVersion::try_new(6112).expect("웹 예약 경계"),
-            &id("p0"),
+            &id("root"),
             ClaimVerdict::Intact,
         );
         let before = thesis.snapshot();
         assert_eq!(
             add(
                 &mut thesis,
-                ThesisOperation::Judge(id("p0"), ClaimVerdict::Intact),
+                ThesisOperation::Judge(id("root"), ClaimVerdict::Intact),
                 TestSource::Web
             ),
             Err(ThesisError::WebHistoryFull)
@@ -1404,29 +1466,18 @@ mod boundary_tests {
         assert_eq!(thesis, before);
         add(
             &mut thesis,
-            ThesisOperation::Judge(id("p0"), ClaimVerdict::Broken),
+            ThesisOperation::Judge(id("root"), ClaimVerdict::Broken),
             TestSource::News,
         )
-        .expect("예약 공간 실제 신호");
+        .expect("비웹 예약 공간");
         assert_eq!(thesis.status(), ThesisStatus::SuspectedBroken);
         fill_history(
             &mut thesis,
-            ThesisVersion::try_new(6144).expect("이력 상한"),
-            &id("p0"),
+            ThesisVersion::try_new(6136).expect("사용자 예약 경계"),
+            &id("root"),
             ClaimVerdict::Broken,
         );
-        assert_eq!(
-            add(
-                &mut thesis,
-                ThesisOperation::Judge(id("p0"), ClaimVerdict::Broken),
-                TestSource::News
-            ),
-            Err(ThesisError::HistoryFull)
-        );
-        assert_eq!(
-            thesis.reject_by_user(thesis.version(), pending, user()),
-            Err(ThesisError::HistoryFull)
-        );
+        resolve_all_at_model_limit(&mut thesis);
         assert_eq!(replay_batched(&thesis), thesis);
     }
 
@@ -1506,5 +1557,627 @@ mod boundary_tests {
             &HistoryAction::Decision(pending, super::UserDecision::Reject, user())
         );
         assert_eq!(replay(&thesis), thesis);
+    }
+}
+#[cfg(test)]
+mod final_review_tests {
+    use super::tests::{TestSource, add, change, claim, id, reason, text, user};
+    use super::{
+        ChangeDisposition, ClaimRole, ClaimVerdict, CriterionAssessment, CriterionComparison,
+        CriterionKind, CriterionMetric, CriterionObservation, CriterionValue, CriterionVerdict,
+        Evidence, EvidenceRef, EvidenceUrl, HistoryAction, KillCriterion, MachineCondition, Thesis,
+        ThesisError, ThesisOperation, ThesisPatch, ThesisVersion, ToolReference,
+    };
+    use crate::{NewsSource, NormalizedUrl};
+    use rust_decimal::Decimal;
+
+    fn metric(value: &str) -> CriterionMetric {
+        CriterionMetric::try_new(value).expect("지표")
+    }
+    pub(super) fn observation(value: i32, name: &str) -> CriterionObservation {
+        CriterionObservation::new(
+            metric(name),
+            CriterionValue::new(Decimal::from(value)),
+            ToolReference::try_new("tool:fundamentals/call-1").expect("도구 참조"),
+        )
+    }
+    pub(super) fn machine() -> MachineCondition {
+        MachineCondition::new(
+            metric("revenue"),
+            CriterionComparison::AtLeast,
+            CriterionValue::new(Decimal::from(10_i32)),
+        )
+    }
+    fn tool_evidence() -> Evidence {
+        Evidence::try_new(vec![EvidenceRef::Tool(
+            ToolReference::try_new("tool:fundamentals/call-1").expect("도구"),
+        )])
+        .expect("도구 기록")
+    }
+
+    #[test]
+    fn metric_ids_are_bounded_and_preserve_the_canonical_identity() {
+        for value in ["", " ", "metric/name", "metric:call", "지표", "m\n"] {
+            assert_eq!(
+                CriterionMetric::try_new(value),
+                Err(ThesisError::InvalidMetric)
+            );
+        }
+        assert_eq!(
+            CriterionMetric::try_new(&"a".repeat(64))
+                .expect("상한")
+                .as_str(),
+            "a".repeat(64)
+        );
+        assert_eq!(
+            CriterionMetric::try_new(&"a".repeat(65)),
+            Err(ThesisError::InvalidMetric)
+        );
+        assert_eq!(
+            CriterionMetric::try_new("revenue.growth_1-x")
+                .expect("식별자")
+                .as_str(),
+            "revenue.growth_1-x"
+        );
+    }
+    #[test]
+    fn machine_parameters_and_observations_round_trip_through_public_accessors() {
+        let condition = machine();
+        assert_eq!(condition.comparison(), CriterionComparison::AtLeast);
+        assert_eq!(condition.threshold().as_decimal(), Decimal::from(10_i32));
+        assert_eq!(condition.metric().as_str(), "revenue");
+        let restored = MachineCondition::new(
+            CriterionMetric::try_new(condition.metric().as_str()).expect("지표"),
+            condition.comparison(),
+            CriterionValue::new(condition.threshold().as_decimal()),
+        );
+        assert_eq!(restored, condition);
+        let observed = observation(11, "revenue");
+        assert_eq!(observed.metric().as_str(), "revenue");
+        assert_eq!(observed.value().as_decimal(), Decimal::from(11_i32));
+        assert_eq!(observed.source().as_str(), "tool:fundamentals/call-1");
+        let mut thesis = Thesis::new();
+        add(
+            &mut thesis,
+            ThesisOperation::AddKillCriterion(
+                KillCriterion::new(id("machine"), CriterionKind::Machine(restored)).expect("조건"),
+            ),
+            TestSource::News,
+        )
+        .expect("추가");
+        let op =
+            ThesisOperation::JudgeCriterion(id("machine"), CriterionAssessment::Observed(observed));
+        thesis
+            .apply_batch(
+                thesis.version(),
+                ThesisPatch::try_new(vec![super::ProposedChange::new(
+                    op.clone(),
+                    tool_evidence(),
+                    reason(),
+                )])
+                .expect("차분"),
+            )
+            .expect("코드 관측");
+        assert_eq!(thesis.kill_criteria()[0].verdict(), CriterionVerdict::Met);
+        assert_eq!(
+            thesis.history().last().expect("이력").action(),
+            &HistoryAction::Change(Box::new(super::ProposedChange::new(
+                op,
+                tool_evidence(),
+                reason()
+            )))
+        );
+        assert_eq!(super::tests::replay(&thesis), thesis);
+    }
+
+    #[test]
+    fn metric_mismatch_and_both_wrong_judgment_kinds_are_rejected_atomically() {
+        let mut thesis = Thesis::new();
+        add(
+            &mut thesis,
+            ThesisOperation::AddKillCriterion(
+                KillCriterion::new(id("m"), CriterionKind::Machine(machine())).expect("조건"),
+            ),
+            TestSource::News,
+        )
+        .expect("추가");
+        add(
+            &mut thesis,
+            ThesisOperation::AddKillCriterion(
+                KillCriterion::new(id("n"), CriterionKind::Narrative(text("인허가 취소")))
+                    .expect("조건"),
+            ),
+            TestSource::News,
+        )
+        .expect("추가");
+        let before = thesis.snapshot();
+        assert_eq!(
+            add(
+                &mut thesis,
+                ThesisOperation::JudgeCriterion(
+                    id("m"),
+                    CriterionAssessment::Observed(observation(-999, "other"))
+                ),
+                TestSource::News
+            ),
+            Err(ThesisError::MetricMismatch)
+        );
+        assert_eq!(
+            add(
+                &mut thesis,
+                ThesisOperation::JudgeCriterion(
+                    id("m"),
+                    CriterionAssessment::Ai(CriterionVerdict::Met)
+                ),
+                TestSource::News
+            ),
+            Err(ThesisError::AiMachineJudgment)
+        );
+        assert_eq!(
+            add(
+                &mut thesis,
+                ThesisOperation::JudgeCriterion(
+                    id("n"),
+                    CriterionAssessment::Observed(observation(11, "revenue"))
+                ),
+                TestSource::News
+            ),
+            Err(ThesisError::CodeNarrativeJudgment)
+        );
+        assert_eq!(thesis, before);
+    }
+
+    #[test]
+    fn tool_labels_cannot_promote_web_evidence_and_code_observations_are_separate() {
+        let url =
+            EvidenceUrl::try_new(NormalizedUrl::try_new("https://example.com/a").expect("URL"))
+                .expect("길이");
+        let tool = EvidenceRef::Tool(ToolReference::try_new("tool:get_quote/1").expect("도구"));
+        for refs in [
+            vec![tool.clone()],
+            vec![EvidenceRef::Web(url.clone()), tool.clone()],
+        ] {
+            assert_eq!(
+                Evidence::try_new(refs).expect("기록").disposition(),
+                ChangeDisposition::NeedsReview
+            );
+        }
+        assert_eq!(
+            Evidence::try_new(vec![tool, EvidenceRef::News(NewsSource::Hankyung, url)])
+                .expect("뉴스 근거")
+                .disposition(),
+            ChangeDisposition::Applied
+        );
+        assert_eq!(Evidence::try_new(vec![]), Err(ThesisError::EmptyEvidence));
+    }
+
+    fn model_limit_with_pending() -> Thesis {
+        let mut thesis = Thesis::new();
+        for index in 0_usize..8 {
+            add(
+                &mut thesis,
+                ThesisOperation::AddClaim(claim(&format!("p{index}"), ClaimRole::Core)),
+                TestSource::Web,
+            )
+            .expect("보류");
+        }
+        add(
+            &mut thesis,
+            ThesisOperation::AddClaim(claim("root", ClaimRole::Core)),
+            TestSource::News,
+        )
+        .expect("기준 주장");
+        while *thesis.version().as_usize() < 6136 {
+            let before = thesis.version();
+            let count = 6136_usize.abs_diff(*thesis.version().as_usize()).min(16);
+            let changes = (0..count)
+                .map(|_| {
+                    change(
+                        ThesisOperation::Judge(id("root"), ClaimVerdict::Intact),
+                        TestSource::News,
+                    )
+                })
+                .collect();
+            thesis
+                .apply_batch(
+                    thesis.version(),
+                    ThesisPatch::try_new(changes).expect("차분"),
+                )
+                .expect("모델 영역");
+            assert_eq!(
+                *thesis.version().as_usize(),
+                before.as_usize().saturating_add(count)
+            );
+        }
+        thesis
+    }
+    #[test]
+    fn model_changes_cannot_consume_the_eight_user_only_slots() {
+        let mut thesis = model_limit_with_pending();
+        let before = thesis.snapshot();
+        assert_eq!(
+            add(
+                &mut thesis,
+                ThesisOperation::Judge(id("root"), ClaimVerdict::Broken),
+                TestSource::News
+            ),
+            Err(ThesisError::UserHistoryReserved)
+        );
+        assert_eq!(thesis, before);
+        let pending = thesis
+            .pending()
+            .into_iter()
+            .map(super::HistoryEntry::sequence)
+            .collect::<Vec<_>>();
+        for (index, target) in pending.into_iter().enumerate() {
+            if index == 0 {
+                thesis
+                    .confirm_by_user(thesis.version(), target, user())
+                    .expect("사용자 확인");
+            } else {
+                thesis
+                    .reject_by_user(thesis.version(), target, user())
+                    .expect("사용자 거절");
+            }
+        }
+        assert_eq!(
+            thesis.version(),
+            ThesisVersion::try_new(6144).expect("전체 상한")
+        );
+        assert_eq!(thesis.pending().len(), 0);
+        assert_eq!(
+            add(
+                &mut thesis,
+                ThesisOperation::Judge(id("root"), ClaimVerdict::Broken),
+                TestSource::News
+            ),
+            Err(ThesisError::HistoryFull)
+        );
+    }
+}
+#[cfg(test)]
+mod state_property_tests {
+    use super::tests::{TestSource, add, change, claim, id, text, user};
+    use super::{
+        ClaimRole, ClaimVerdict, CriterionAssessment, CriterionComparison, CriterionKind,
+        CriterionMetric, CriterionObservation, CriterionValue, CriterionVerdict, KillCriterion,
+        MachineCondition, ProposedChange, Thesis, ThesisError, ThesisOperation, ThesisPatch,
+        ThesisVersion, UserDecision,
+    };
+    use proptest::test_runner::{Config, TestRunner};
+    use rust_decimal::Decimal;
+
+    fn observed(value: i32, metric: &str) -> CriterionObservation {
+        CriterionObservation::new(
+            CriterionMetric::try_new(metric).expect("지표"),
+            CriterionValue::new(Decimal::from(value)),
+            super::ToolReference::try_new("tool:fundamentals/observation-2").expect("도구"),
+        )
+    }
+    pub(super) fn rebuild_change(change: &ProposedChange) -> ProposedChange {
+        let operation = match change.operation() {
+            ThesisOperation::AddClaim(original) => ThesisOperation::AddClaim(super::Claim::new(
+                id(original.id().as_str()),
+                original.role(),
+                super::ClaimContent::try_new(
+                    original.statement().clone(),
+                    original.metric().clone(),
+                    original.expected().clone(),
+                    original.observe_via().clone(),
+                    original.refutation().clone(),
+                )
+                .expect("주장 복원"),
+            )),
+            ThesisOperation::Judge(target, verdict) => {
+                ThesisOperation::Judge(id(target.as_str()), *verdict)
+            }
+            ThesisOperation::AddKillCriterion(original) => ThesisOperation::AddKillCriterion(
+                KillCriterion::new(id(original.id().as_str()), rebuild_kind(original.kind()))
+                    .expect("조건 복원"),
+            ),
+            ThesisOperation::JudgeCriterion(target, assessment) => {
+                ThesisOperation::JudgeCriterion(id(target.as_str()), rebuild_assessment(assessment))
+            }
+        };
+        let original = change.reason();
+        let reason = super::ChangeReason::try_new(
+            original.reason().clone(),
+            original.model().clone(),
+            original.prompt_version().clone(),
+        )
+        .expect("메타데이터 복원");
+        ProposedChange::new(
+            operation,
+            super::Evidence::try_new(change.evidence().as_items().to_vec()).expect("근거 키"),
+            reason,
+        )
+    }
+    fn rebuild_kind(original: &CriterionKind) -> CriterionKind {
+        match original {
+            CriterionKind::Narrative(value) => CriterionKind::Narrative(value.clone()),
+            CriterionKind::Machine(condition) => CriterionKind::Machine(MachineCondition::new(
+                CriterionMetric::try_new(condition.metric().as_str()).expect("지표 복원"),
+                condition.comparison(),
+                CriterionValue::new(condition.threshold().as_decimal()),
+            )),
+        }
+    }
+    fn rebuild_assessment(original: &CriterionAssessment) -> CriterionAssessment {
+        match original {
+            CriterionAssessment::Ai(verdict) => CriterionAssessment::Ai(*verdict),
+            CriterionAssessment::Observed(value) => {
+                CriterionAssessment::Observed(CriterionObservation::new(
+                    CriterionMetric::try_new(value.metric().as_str()).expect("지표 복원"),
+                    CriterionValue::new(value.value().as_decimal()),
+                    super::ToolReference::try_new(value.source().as_str()).expect("출처 복원"),
+                ))
+            }
+        }
+    }
+    fn initial() -> Thesis {
+        let mut thesis = Thesis::new();
+        let condition = MachineCondition::new(
+            CriterionMetric::try_new("revenue").expect("지표"),
+            CriterionComparison::AtLeast,
+            CriterionValue::new(Decimal::from(10_i32)),
+        );
+        let operations = vec![
+            ThesisOperation::AddClaim(claim("root", ClaimRole::Core)),
+            ThesisOperation::AddKillCriterion(
+                KillCriterion::new(id("machine"), CriterionKind::Machine(condition))
+                    .expect("코드형"),
+            ),
+            ThesisOperation::AddKillCriterion(
+                KillCriterion::new(
+                    id("narrative"),
+                    CriterionKind::Narrative(text("인허가 취소")),
+                )
+                .expect("서술형"),
+            ),
+        ];
+        let changes = operations
+            .into_iter()
+            .map(|op| change(op, TestSource::News))
+            .collect();
+        thesis
+            .apply_batch(
+                thesis.version(),
+                ThesisPatch::try_new(changes).expect("초기 묶음"),
+            )
+            .expect("초기 상태");
+        thesis
+    }
+    fn claim_verdict(value: u8) -> ClaimVerdict {
+        match value % 4 {
+            0 => ClaimVerdict::Intact,
+            1 => ClaimVerdict::Weakened,
+            2 => ClaimVerdict::Broken,
+            _ => ClaimVerdict::Unverifiable,
+        }
+    }
+    fn condition_verdict(value: u8) -> CriterionVerdict {
+        match value % 3 {
+            0 => CriterionVerdict::Met,
+            1 => CriterionVerdict::NotMet,
+            _ => CriterionVerdict::Unverifiable,
+        }
+    }
+    fn make_change(seed: (u8, u8, i16, u8)) -> ProposedChange {
+        let (kind, key, value, flag) = seed;
+        let target = id(&format!("c{key}"));
+        let operation = match kind % 7 {
+            0 => ThesisOperation::AddClaim(claim(
+                target.as_str(),
+                if flag.is_multiple_of(2) {
+                    ClaimRole::Core
+                } else {
+                    ClaimRole::Supporting
+                },
+            )),
+            1 => ThesisOperation::AddKillCriterion(
+                KillCriterion::new(
+                    target,
+                    CriterionKind::Machine(super::final_review_tests::machine()),
+                )
+                .expect("코드형 조건"),
+            ),
+            2 => ThesisOperation::AddKillCriterion(
+                KillCriterion::new(target, CriterionKind::Narrative(text("새 공시 위험")))
+                    .expect("서술형 조건"),
+            ),
+            3 => ThesisOperation::Judge(
+                if flag.is_multiple_of(2) {
+                    id("root")
+                } else {
+                    target
+                },
+                claim_verdict(flag),
+            ),
+            4 => ThesisOperation::JudgeCriterion(
+                if flag.is_multiple_of(2) {
+                    id("narrative")
+                } else {
+                    target
+                },
+                CriterionAssessment::Ai(condition_verdict(flag)),
+            ),
+            5 => ThesisOperation::JudgeCriterion(
+                if flag.is_multiple_of(2) {
+                    id("machine")
+                } else {
+                    target
+                },
+                CriterionAssessment::Observed(observed(i32::from(value), "revenue")),
+            ),
+            _ => ThesisOperation::JudgeCriterion(
+                id("machine"),
+                CriterionAssessment::Observed(observed(i32::from(value), "wrong_metric")),
+            ),
+        };
+        change(
+            operation,
+            if flag.is_multiple_of(2) {
+                TestSource::Web
+            } else {
+                TestSource::News
+            },
+        )
+    }
+    fn check_invariants(before: &Thesis, after: &Thesis, result: &Result<(), ThesisError>) {
+        assert_eq!(&after.history()[..before.history().len()], before.history());
+        if result.is_err() {
+            assert_eq!(after, before);
+        }
+        let restored = super::tests::replay(after);
+        assert_eq!(&restored, after);
+        assert_eq!(restored.pending(), after.pending());
+        assert_eq!(&super::tests::replay_batched(after), after);
+        let applied = after
+            .history()
+            .iter()
+            .skip(before.history().len())
+            .any(|entry| entry.disposition() == super::ChangeDisposition::Applied);
+        if !applied {
+            assert_eq!(after.status(), before.status());
+        }
+    }
+    fn batch(thesis: &mut Thesis, seeds: Vec<(u8, u8, i16, u8)>, version_choice: u8) {
+        let before = thesis.snapshot();
+        let base = if version_choice.is_multiple_of(2) {
+            thesis.version()
+        } else {
+            ThesisVersion::try_new(thesis.version().as_usize().saturating_add(1))
+                .expect("틀린 버전")
+        };
+        let changes = seeds.into_iter().map(make_change).collect();
+        let result = thesis.apply_batch(base, ThesisPatch::try_new(changes).expect("1~16개 차분"));
+        if !version_choice.is_multiple_of(2) {
+            assert_eq!(result, Err(ThesisError::VersionConflict));
+        }
+        check_invariants(&before, thesis, &result);
+    }
+    fn injected_failure(thesis: &mut Thesis, length: usize, failure: usize, value: u8) {
+        let before = thesis.snapshot();
+        let changes = (0..length)
+            .map(|index| {
+                change(
+                    ThesisOperation::Judge(
+                        id(if index == failure { "missing" } else { "root" }),
+                        claim_verdict(value),
+                    ),
+                    TestSource::News,
+                )
+            })
+            .collect();
+        let result = thesis.apply_batch(
+            thesis.version(),
+            ThesisPatch::try_new(changes).expect("실패 위치 차분"),
+        );
+        assert_eq!(result, Err(ThesisError::UnknownTarget));
+        check_invariants(&before, thesis, &result);
+    }
+    fn actual_pending(thesis: &Thesis, selector: u8) -> ThesisVersion {
+        let pending = thesis.pending();
+        if pending.is_empty() {
+            return ThesisVersion::try_new(0).expect("없는 순번");
+        }
+        pending[usize::from(selector)
+            .checked_rem(pending.len())
+            .expect("보류 존재")]
+        .sequence()
+    }
+    fn decide(thesis: &mut Thesis, selector: u8, decision: UserDecision, version_choice: u8) {
+        let before = thesis.snapshot();
+        let target = actual_pending(thesis, selector);
+        let base = if version_choice.is_multiple_of(2) {
+            thesis.version()
+        } else {
+            ThesisVersion::try_new(thesis.version().as_usize().saturating_add(1))
+                .expect("틀린 버전")
+        };
+        let result = match decision {
+            UserDecision::Confirm => thesis.confirm_by_user(base, target, user()),
+            UserDecision::Reject => thesis.reject_by_user(base, target, user()),
+        };
+        if !version_choice.is_multiple_of(2) {
+            assert_eq!(result, Err(ThesisError::VersionConflict));
+        }
+        check_invariants(&before, thesis, &result);
+    }
+    fn superseded(thesis: &mut Thesis, value: u8) {
+        let targets = thesis
+            .pending()
+            .into_iter()
+            .map(super::HistoryEntry::sequence)
+            .collect::<Vec<_>>();
+        for target in targets {
+            thesis
+                .reject_by_user(thesis.version(), target, user())
+                .expect("기존 보류 정리");
+        }
+        add(
+            thesis,
+            ThesisOperation::Judge(id("root"), claim_verdict(value)),
+            TestSource::Web,
+        )
+        .expect("새 보류");
+        let target = thesis.version();
+        add(
+            thesis,
+            ThesisOperation::Judge(id("root"), ClaimVerdict::Intact),
+            TestSource::News,
+        )
+        .expect("보류 대체");
+        let before = thesis.snapshot();
+        let result = thesis.confirm_by_user(thesis.version(), target, user());
+        assert_eq!(result, Err(ThesisError::NotPending));
+        check_invariants(&before, thesis, &result);
+    }
+    #[test]
+    fn generated_batches_observations_decisions_rollback_and_supersession() {
+        let seed = (0_u8..7, 0_u8..8, -20_i16..21, 0_u8..8);
+        let step = (0_u8..6, 0_u8..16, proptest::collection::vec(seed, 1..17));
+        let strategy = (
+            2_usize..17,
+            0_usize..16,
+            0_u8..8,
+            proptest::collection::vec(step, 1..25),
+        );
+        TestRunner::new(Config::with_cases(128))
+            .run(&strategy, |(length, index, value, steps)| {
+                let mut thesis = initial();
+                injected_failure(
+                    &mut thesis,
+                    length,
+                    1_usize.saturating_add(
+                        index
+                            .checked_rem(length.saturating_sub(1))
+                            .expect("길이 2 이상"),
+                    ),
+                    value,
+                );
+                superseded(&mut thesis, value);
+                for (mode, selector, seeds) in steps {
+                    run_step(&mut thesis, mode, selector, seeds);
+                }
+                Ok(())
+            })
+            .expect("혼합 묶음·관측·결정 속성");
+    }
+    fn run_step(thesis: &mut Thesis, mode: u8, selector: u8, seeds: Vec<(u8, u8, i16, u8)>) {
+        match mode {
+            0 | 1 => batch(thesis, seeds, mode),
+            2 => injected_failure(
+                thesis,
+                seeds.len(),
+                usize::from(selector)
+                    .checked_rem(seeds.len())
+                    .expect("묶음 존재"),
+                selector,
+            ),
+            3 => decide(thesis, selector, UserDecision::Confirm, selector),
+            4 => decide(thesis, selector, UserDecision::Reject, selector),
+            _ => superseded(thesis, selector),
+        }
     }
 }

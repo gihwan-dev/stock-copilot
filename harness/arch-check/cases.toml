@@ -606,3 +606,17 @@ name = "broker-toss-function-value-fails"
 findings = [
     { rule = "http-write-means", subject = "crates/adapters/broker-toss/src/orders.rs" },
 ]
+
+[[case]]
+name = "domain-time-features"
+findings = [
+    { rule = "external-feature", subject = "domain -> time[default]" },
+    { rule = "external-feature", subject = "domain -> time[serde]" },
+]
+
+[[case]]
+name = "domain-rust-decimal-features"
+findings = [
+    { rule = "external-feature", subject = "domain -> rust_decimal[default]" },
+    { rule = "external-feature", subject = "domain -> rust_decimal[serde]" },
+]

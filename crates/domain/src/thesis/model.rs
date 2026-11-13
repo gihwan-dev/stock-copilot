@@ -227,17 +227,10 @@ pub enum CriterionVerdict {
     NotMet,
     Unverifiable,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CriterionAssessment {
-    Code(CriterionVerdict),
+    Observed(CriterionObservation),
     Ai(CriterionVerdict),
-}
-impl CriterionAssessment {
-    pub(super) const fn verdict(self) -> CriterionVerdict {
-        match self {
-            Self::Code(value) | Self::Ai(value) => value,
-        }
-    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KillCriterion {
@@ -259,14 +252,22 @@ impl KillCriterion {
     pub const fn kind(&self) -> &CriterionKind {
         &self.kind
     }
-    pub(super) fn validate_assessment(
+    pub(super) fn assess(
         &self,
-        assessment: CriterionAssessment,
-    ) -> Result<(), ThesisError> {
-        if let (CriterionKind::Machine(_), CriterionAssessment::Ai(_)) = (&self.kind, assessment) {
-            return Err(ThesisError::AiMachineJudgment);
+        assessment: &CriterionAssessment,
+    ) -> Result<CriterionVerdict, ThesisError> {
+        match (&self.kind, assessment) {
+            (CriterionKind::Machine(condition), CriterionAssessment::Observed(observation)) => {
+                condition.evaluate(observation)
+            }
+            (CriterionKind::Narrative(_), CriterionAssessment::Ai(verdict)) => Ok(*verdict),
+            (CriterionKind::Machine(_), CriterionAssessment::Ai(_)) => {
+                Err(ThesisError::AiMachineJudgment)
+            }
+            (CriterionKind::Narrative(_), CriterionAssessment::Observed(_)) => {
+                Err(ThesisError::CodeNarrativeJudgment)
+            }
         }
-        Ok(())
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,6 +295,10 @@ impl CriterionValue {
     pub fn new(value: Decimal) -> Self {
         Self(value.normalize())
     }
+    #[must_use]
+    pub const fn as_decimal(&self) -> Decimal {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -304,14 +309,14 @@ pub enum CriterionComparison {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MachineCondition {
-    metric: ToolReference,
+    metric: CriterionMetric,
     comparison: CriterionComparison,
     threshold: CriterionValue,
 }
 impl MachineCondition {
     #[must_use]
     pub const fn new(
-        metric: ToolReference,
+        metric: CriterionMetric,
         comparison: CriterionComparison,
         threshold: CriterionValue,
     ) -> Self {
@@ -322,20 +327,86 @@ impl MachineCondition {
         }
     }
     #[must_use]
-    pub const fn metric(&self) -> &ToolReference {
+    pub const fn metric(&self) -> &CriterionMetric {
         &self.metric
     }
     #[must_use]
-    pub fn evaluate(&self, observed: CriterionValue) -> CriterionAssessment {
+    pub const fn comparison(&self) -> CriterionComparison {
+        self.comparison
+    }
+    #[must_use]
+    pub const fn threshold(&self) -> CriterionValue {
+        self.threshold
+    }
+    pub(super) fn evaluate(
+        &self,
+        observation: &CriterionObservation,
+    ) -> Result<CriterionVerdict, ThesisError> {
+        if &observation.metric != self.metric() {
+            return Err(ThesisError::MetricMismatch);
+        }
+        let observed = observation.value;
         let met = match self.comparison {
             CriterionComparison::AtLeast => observed >= self.threshold,
             CriterionComparison::AtMost => observed <= self.threshold,
             CriterionComparison::Equal => observed == self.threshold,
         };
-        CriterionAssessment::Code(if met {
+        Ok(if met {
             CriterionVerdict::Met
         } else {
             CriterionVerdict::NotMet
         })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CriterionMetric(String);
+impl CriterionMetric {
+    pub fn try_new(value: &str) -> Result<Self, ThesisError> {
+        if value.is_empty()
+            || value.len() > 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+        {
+            return Err(ThesisError::InvalidMetric);
+        }
+        Ok(Self(value.to_owned()))
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CriterionObservation {
+    metric: CriterionMetric,
+    value: CriterionValue,
+    source: ToolReference,
+}
+impl CriterionObservation {
+    #[must_use]
+    pub const fn new(
+        metric: CriterionMetric,
+        value: CriterionValue,
+        source: ToolReference,
+    ) -> Self {
+        Self {
+            metric,
+            value,
+            source,
+        }
+    }
+    #[must_use]
+    pub const fn metric(&self) -> &CriterionMetric {
+        &self.metric
+    }
+    #[must_use]
+    pub const fn value(&self) -> CriterionValue {
+        self.value
+    }
+    #[must_use]
+    pub const fn source(&self) -> &ToolReference {
+        &self.source
     }
 }

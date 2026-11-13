@@ -39,18 +39,12 @@ impl ToolReference {
         &self.0
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolPurpose {
-    Quote,
-    Portfolio,
-    Research,
-}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvidenceRef {
     Web(EvidenceUrl),
     News(NewsSource, EvidenceUrl),
     Disclosure(DisclosureKey, EvidenceUrl),
-    Tool(ToolReference, ToolPurpose),
+    Tool(ToolReference),
 }
 impl EvidenceRef {
     pub fn from_disclosure(item: &Disclosure) -> Result<Self, ThesisError> {
@@ -63,13 +57,13 @@ impl EvidenceRef {
     pub const fn disclosure_key(&self) -> Option<&DisclosureKey> {
         match self {
             Self::Disclosure(key, _) => Some(key),
-            Self::Web(_) | Self::News(_, _) | Self::Tool(_, _) => None,
+            Self::Web(_) | Self::News(_, _) | Self::Tool(_) => None,
         }
     }
     fn url(&self) -> Option<&EvidenceUrl> {
         match self {
             Self::Web(url) | Self::News(_, url) | Self::Disclosure(_, url) => Some(url),
-            Self::Tool(_, _) => None,
+            Self::Tool(_) => None,
         }
     }
     fn compare(&self, other: &Self) -> Result<(), ThesisError> {
@@ -80,11 +74,6 @@ impl EvidenceRef {
             && left == right
         {
             return Err(ThesisError::DuplicateSource);
-        }
-        if let (Self::Tool(left, _), Self::Tool(right, _)) = (self, other)
-            && left == right
-        {
-            return Err(ThesisError::ConflictingSource);
         }
         if let (Some(left), Some(right)) = (self.url(), other.url())
             && left == right
@@ -104,15 +93,6 @@ impl Evidence {
         if items.len() > 8 {
             return Err(ThesisError::TooManySources);
         }
-        if items.iter().all(|item| match item {
-            EvidenceRef::Tool(_, ToolPurpose::Quote | ToolPurpose::Portfolio) => true,
-            EvidenceRef::Tool(_, ToolPurpose::Research)
-            | EvidenceRef::Web(_)
-            | EvidenceRef::News(_, _)
-            | EvidenceRef::Disclosure(_, _) => false,
-        }) {
-            return Err(ThesisError::NoSubstantiveEvidence);
-        }
         for (index, item) in items.iter().enumerate() {
             for previous in items.iter().take(index) {
                 item.compare(previous)?;
@@ -126,11 +106,8 @@ impl Evidence {
     }
     pub(super) fn disposition(&self) -> ChangeDisposition {
         if self.0.iter().any(|item| match item {
-            EvidenceRef::News(_, _)
-            | EvidenceRef::Disclosure(_, _)
-            | EvidenceRef::Tool(_, ToolPurpose::Research) => true,
-            EvidenceRef::Web(_)
-            | EvidenceRef::Tool(_, ToolPurpose::Quote | ToolPurpose::Portfolio) => false,
+            EvidenceRef::News(_, _) | EvidenceRef::Disclosure(_, _) => true,
+            EvidenceRef::Web(_) | EvidenceRef::Tool(_) => false,
         }) {
             ChangeDisposition::Applied
         } else {

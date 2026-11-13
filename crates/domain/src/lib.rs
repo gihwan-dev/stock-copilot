@@ -31,12 +31,23 @@ pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
 mod thesis;
 pub use thesis::{
     ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
-    CriterionAssessment, CriterionComparison, CriterionKind, CriterionValue, CriterionVerdict,
-    Evidence, EvidenceRef, EvidenceUrl, HistoryAction, HistoryEntry, JudgedClaim, JudgedCriterion,
-    KillCriterion, MachineCondition, ProposedChange, Thesis, ThesisError, ThesisOperation,
-    ThesisPatch, ThesisStatus, ThesisVersion, ToolPurpose, ToolReference, UserDecision, UserReason,
+    CriterionAssessment, CriterionComparison, CriterionKind, CriterionMetric, CriterionObservation,
+    CriterionValue, CriterionVerdict, Evidence, EvidenceRef, EvidenceUrl, HistoryAction,
+    HistoryEntry, JudgedClaim, JudgedCriterion, KillCriterion, MachineCondition, ProposedChange,
+    Thesis, ThesisError, ThesisOperation, ThesisPatch, ThesisStatus, ThesisVersion, ToolReference,
+    UserDecision, UserReason,
 };
 
+mod domain_time;
+mod market_session;
+pub use domain_time::{
+    CalendarDate, CalendarDays, CalendarYear, DayNumber, MonthNumber, Nanosecond, OffsetSeconds,
+    SpanSeconds, TimeError, TimeInterval, TimeIntervalError, TimeSpan, Timestamp, UnixSeconds,
+};
+pub use market_session::{
+    AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
+    MarketSessionError, MarketState, MarketTransition, SessionData, SessionInformation,
+};
 mod probability;
 pub use probability::{
     AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
