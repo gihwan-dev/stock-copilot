@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync as readFile } from "node:fs";
+import { resolve } from "node:path";
+import { repoRoot } from "./paths.mjs";
 import test from "node:test";
 import {
   tokenProblems,
@@ -8,6 +10,8 @@ import {
 } from "../../../harness/ds-tokens/check.mjs";
 
 const inputs = () => readInputs();
+const readFileSync = (path, options) =>
+  readFile(resolve(repoRoot, path), options);
 
 test("the closed derivation list contains exactly the three documented spacings and rejects each deletion", () => {
   assert.deepEqual(DERIVED_SPACING, [7, 9, 11]);

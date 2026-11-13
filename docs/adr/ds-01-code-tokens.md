@@ -26,3 +26,35 @@ architecture 5.2의 “design/의 tokens.json에서 생성”과 R-14 2.2의 `de
 ## 메인·사용자에게 넘길 것
 
 디자인의 본문 여백(space-6)과 architecture 5.1의 화면 가장자리(space-8)가 다른 점, 디자인에서 설정을 Dialog로 설명하는 점은 토큰 추출로 결정하지 않는다. 화면 구현은 architecture와 open-issues의 우선순위를 따른다.
+
+## R-14 4.3 빠진 토큰의 현재 상태
+
+2026-11-13의 `design/tokens.json`과 `design/components/bundle.css`를 직접 대조했다. 아래 값은 이번 작업에서 추가하지 않았다.
+
+| 항목 | 현재 상태 |
+|---|---|
+| 움직임 | `duration-fast/base/flash`(120/200/600ms), `ease-out/in`이 추가돼 해결됨 |
+| 2px 틈 | `gap-hairline` 2px로 해결됨. `space-0.5`는 없음 |
+| 작은 컨트롤·촘촘한 행 | `control-height-sm` 28px, `row-height-dense` 32px로 해결됨 |
+| 작은 버튼 좌우 여백 | `control-pad-sm` 8px가 있음. 과거 10px 대신 현재 bundle.css가 이 토큰을 사용 |
+| 막대·점·아이콘 | `bar-height` 12px, `dot-size` 8px, `icon-sm/md/lg` 16/20/24px로 해결됨 |
+| 비활성 불투명도 | `opacity-disabled` 0.45로 해결됨 |
+| 포커스 링 | 제안 이름 대신 `border-focus` 2px, `focus-offset` 2px로 해결됨 |
+| 겹침 순서 | `z-sticky/panel/popover/modal/toast` 10/100/200/300/400으로 해결됨 |
+| 창·채팅 폭 | `window-min-width/height` 960/640px, `chat-width-min/max` 320/560px로 해결됨 |
+| 버튼 글자 스타일 | `button` 복합 스타일은 없음. 현재 CSS는 `text-md`, `weight-semibold`, 단위 없는 줄높이 1을 조합함 |
+| 범례 최소 폭 | `legend-min`은 없음. 현재 CSS 범례는 flex와 줄바꿈을 사용하며 150px 격자 최소 폭은 없음 |
+| 차트 축·눈금 | 전용 `chart-grid`, `chart-axis`는 없음. 현재 CSS가 `line`, `line-strong`, `ink-subtle`로 대신함 |
+| 차트 십자선 | `chart-crosshair`는 여전히 없음 |
+| 차트 선 굵기 | 전용 `stroke-chart`, `stroke-baseline`은 없음. 현재 CSS의 선은 `border-mark` 1.5px, 축·기준선은 `border-hairline` 1px로 대신함 |
+
+## DS-13이 정할 대응 규칙
+
+입력은 `apps/desktop/design-tokens/tokens.json`이다. 다음은 R-14 4.1의 대응표만으로 확정할 수 없으며 DS-13에서 정한다.
+
+- `duration`, `easing`, `zIndex`, `opacity` 그룹의 CSS 변수·Tailwind 이름 대응.
+- `text` 그룹과 `type.groups`의 이름 겹침. 예를 들어 원시 크기 `text-sm`과 복합 스타일 이름을 같은 `--text-*` 공간에 넣을 때의 규칙.
+- `layout`의 창·본문 `bp-*` 구간과 단위 없는 `grid-columns`의 처리.
+- `size`에 섞인 폭·높이·테두리·아이콘과 `bubble-max-width`의 80% 처리. 일괄 px→rem 변환을 적용할 수 없다.
+- `shadow-popover` 이름 자체에 `shadow-`가 있으므로 `--shadow-`와 결합할 때 접두어가 겹치지 않도록 할 규칙, R-14의 테마별 원값 참조 방식.
+- R-14 4.2의 색 값은 현재 원본과 다르다. 예를 들어 라이트 `line-strong`은 보고서의 `#8a8c86` 대신 현재 `#7a7c76`, `chart-1`은 `#0b7258` 대신 `#0b5e49`다. R-14 4.2를 기준값으로 사용하지 않고 현재 디자인 원본과 정확히 일치하는 코드용 추출물을 읽는다.

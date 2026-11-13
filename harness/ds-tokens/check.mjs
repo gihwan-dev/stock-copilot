@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -72,35 +72,107 @@ const formats = {
         : pixel.test(value),
 };
 
-const architectureNames = (architecture, source) => {
-  const section =
-    architecture.split("### 5.1 레이아웃 시스템")[1]?.split("### 5.2")[0] ?? "";
-  const names = [...section.matchAll(/`([a-z][a-z0-9-]*\*?)`/gu)]
-    .map((match) => match[1])
-    .filter((name) =>
-      /^(?:space-|bp-|content-|prose-|grid-columns$|chat-width|sidebar-|dialog-width|toolbar-height$|chart-height|row-height|control-height|window-min-|gap-hairline$)/u.test(
-        name,
-      ),
+const ARCHITECTURE_EXCLUSIONS = Object.freeze([
+  "features",
+  "AppShell",
+  "platform-macos",
+  "narrow",
+  "medium",
+  "wide",
+  "ScrollArea",
+  "shared/ds",
+  "scrollbar-width: none",
+  "html",
+  "body",
+  "Dialog",
+  "Popover",
+  "Menu",
+  "Table",
+  "ChatInput",
+  "overflow: hidden",
+  "clip",
+  "Text",
+  "word-break: keep-all",
+  "overflow-wrap: anywhere",
+  "Heading",
+  "overflow: 'truncate'",
+  "Money",
+  "Percent",
+  "Quantity",
+  "Probability",
+  "PriceChange",
+  "Stack",
+  "Inline",
+  "Split",
+  "GridItem",
+  "min-width: 0",
+  "min-height: 0",
+  "position: absolute",
+  "fixed",
+  "sticky",
+  "Tooltip",
+  "Toast",
+  "vh",
+  "vw",
+  "dvh",
+  "app",
+  "Page",
+  "Section",
+  "Grid",
+  "Card",
+  "Toolbar",
+  "Divider",
+  "design/tokens.json",
+]);
+const Z_ORDER = Object.freeze([
+  "z-sticky",
+  "z-panel",
+  "z-popover",
+  "z-modal",
+  "z-toast",
+]);
+const WILDCARDS = Object.freeze({
+  "z-*": Z_ORDER,
+  "chart-height-*": Object.freeze([
+    "chart-height-sm",
+    "chart-height",
+    "chart-height-lg",
+  ]),
+});
+const ARCHITECTURE_NAME_COUNT = 29;
+
+const architectureNames = (architecture) => {
+  const problems = [];
+  const match =
+    /^### 5\.1 레이아웃 시스템\n([\s\S]*?)^### 5\.2 확정한 라이브러리(?:\r?\n|$)/mu.exec(
+      architecture,
     );
-  const ranges = [...section.matchAll(/`space-(\d+)`~`space-(\d+)`/gu)].flatMap(
-    (match) =>
-      Array.from(
-        { length: Number(match[2]) - Number(match[1]) + 1 },
-        (_, index) => `space-${Number(match[1]) + index}`,
-      ),
-  );
-  return [
-    ...new Set([
-      ...names.flatMap((name) =>
-        name.endsWith("*")
-          ? source.size.tokens
-              .filter((token) => token.name.startsWith(name.slice(0, -1)))
-              .map((token) => token.name)
-          : [name],
-      ),
-      ...ranges,
-    ]),
+  if (match === null)
+    return { names: [], problems: ["architecture 5.1 구간 표지 오류"] };
+  const section = match[1];
+  const names = [
+    ...new Set(
+      [...section.matchAll(/`([^`\n]+)`/gu)]
+        .map((entry) => entry[1])
+        .filter((name) => !ARCHITECTURE_EXCLUSIONS.includes(name)),
+    ),
   ];
+  if (names.length !== ARCHITECTURE_NAME_COUNT)
+    problems.push("architecture 5.1 이름 수 불일치");
+  const range = /`space-1`~`space-12`/u.test(section);
+  if (!range) problems.push("architecture 5.1 간격 범위 표기 오류");
+  const ranges = range
+    ? Array.from({ length: 12 }, (_, index) => `space-${index + 1}`)
+    : [];
+  return {
+    names: [
+      ...new Set([
+        ...names.flatMap((name) => WILDCARDS[name] ?? [name]),
+        ...ranges,
+      ]),
+    ],
+    problems,
+  };
 };
 
 export const tokenProblems = ({ source, tokens, architecture }) => {
@@ -149,10 +221,48 @@ export const tokenProblems = ({ source, tokens, architecture }) => {
       }
     }
   }
-  for (const name of architectureNames(architecture, source)) {
+  const documented = architectureNames(architecture);
+  problems.push(...documented.problems);
+  for (const name of documented.names) {
     if (!names.has(name))
       problems.push(`architecture 5.1 필수 토큰 누락: ${name}`);
   }
+  for (const token of tokens.spacing.tokens) {
+    const match = /^space-(\d+)$/u.exec(token.name);
+    if (
+      match !== null &&
+      ["light", "dark"].some(
+        (theme) => token.value[theme] !== `${Number(match[1]) * 4}px`,
+      )
+    )
+      problems.push(`간격 배율 오류: ${token.name}`);
+  }
+  const order = (group, ordered, message) => {
+    for (const theme of ["light", "dark"]) {
+      const values = ordered.map((name) =>
+        Number(
+          group.tokens
+            .find((token) => token.name === name)
+            ?.value[theme]?.replace(/px$/u, ""),
+        ),
+      );
+      if (
+        values.some(
+          (value, index) =>
+            !Number.isFinite(value) ||
+            (index > 0 && value <= values[index - 1]),
+        )
+      )
+        problems.push(message);
+    }
+  };
+  order(tokens.layout, ["bp-window-md", "bp-window-lg"], "창 구간 순서 오류");
+  order(
+    tokens.layout,
+    ["bp-content-medium", "bp-content-wide"],
+    "본문 구간 순서 오류",
+  );
+  order(tokens.zIndex, Z_ORDER, "겹침 순서 오류");
   for (const group of tokens.type.groups) {
     if (!(group.family in tokens.type.families))
       problems.push(`글꼴 참조 오류: ${group.family}`);
@@ -168,6 +278,8 @@ export const tokenProblems = ({ source, tokens, architecture }) => {
     }
   }
   for (const font of tokens.type.fonts) {
+    if (!existsSync(resolve(ROOT, "design", font.file)))
+      problems.push(`글꼴 파일 없음: ${font.file}`);
     if (
       !/^fonts\/[A-Za-z0-9-]+\.woff2$/u.test(font.file) ||
       !/^[1-9]00$/u.test(font.weight) ||
