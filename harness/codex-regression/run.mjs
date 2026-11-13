@@ -4,6 +4,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -11,9 +12,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { removeTemporary } from "../codex-hooks/temporary.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const digest = (value) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -53,7 +55,34 @@ const toml = (value) =>
         .join(",") +
       "}"
     : JSON.stringify(value);
+export const regressionEnvironment = (environment = process.env) => {
+  const home = environment.CODEX_HOME;
+  const fail = () => {
+    throw new Error(
+      "별도 로그인한 비공개 임시 CODEX_HOME이 필요하다. ADR 0021의 회귀 절차를 따라라",
+    );
+  };
+  if (typeof home !== "string" || !home.startsWith("/")) fail();
+  const path = realpathSync(home);
+  const info = lstatSync(home);
+  const roots = [tmpdir(), "/tmp"].map((value) => realpathSync(value));
+  if (
+    info.isSymbolicLink() ||
+    !info.isDirectory() ||
+    info.uid !== process.getuid() ||
+    (info.mode & 0o077) !== 0 ||
+    path === resolve(homedir(), ".codex") ||
+    !roots.some((root) => path.startsWith(root + "/"))
+  )
+    fail();
+  return { ...environment, CODEX_HOME: path };
+};
+export const regressionPermissions = (environment, state) => ({
+  [state]: "deny",
+  [environment.CODEX_HOME]: "deny",
+});
 const main = () => {
+  const environment = regressionEnvironment();
   const scratch = realpathSync(
     mkdtempSync(join(tmpdir(), "stock-codex-regression-")),
   );
@@ -150,9 +179,12 @@ const main = () => {
         "--ephemeral",
         "--dangerously-bypass-hook-trust",
         "-c",
+        'cli_auth_credentials_store="file"',
+        "-c",
         "projects=" + trust,
         "-c",
-        "permissions.stock-copilot.filesystem=" + toml({ [state]: "deny" }),
+        "permissions.stock-copilot.filesystem=" +
+          toml(regressionPermissions(environment, state)),
         "-m",
         "gpt-6.1-sol",
         "-C",
@@ -164,7 +196,7 @@ const main = () => {
         encoding: "utf8",
         timeout: 600000,
         maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, STOCK_COPILOT_HARNESS_STATE: state },
+        env: { ...environment, STOCK_COPILOT_HARNESS_STATE: state },
       },
     );
     const folder = join(state, "records");
@@ -205,6 +237,7 @@ const main = () => {
     process.exitCode =
       result.status === 0 && rows.every((row) => row.status === "통과") ? 0 : 1;
   } finally {
+    if (existsSync(worktree)) removeTemporary(worktree);
     rmSync(scratch, { recursive: true, force: true });
   }
 };

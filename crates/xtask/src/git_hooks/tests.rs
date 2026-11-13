@@ -1064,24 +1064,40 @@ fn merge_commits_run_the_check_and_reject_violations() {
     );
 }
 
-#[test]
-fn fresh_node_restores_a_replaced_tool() {
-    let work = fresh_directory(&repository_root(), "fresh-node");
+fn install_node_fixture(work: &Path) {
     fs::copy(repository_root().join(".npmrc"), work.join(".npmrc")).expect("copy .npmrc");
-    fs::write(
-        work.join("package.json"),
-        "{\n  \"name\": \"probe\",\n  \"private\": true,\n  \"devDependencies\": { \"prettier\": \"3.9.10\" }\n}\n",
-    )
-    .expect("write package.json");
+    assert!(
+        Command::new("node")
+            .arg(repository_root().join("harness/git-hooks/node-fixture.mjs"))
+            .arg(work)
+            .status()
+            .expect("write pinned Node fixture")
+            .success()
+    );
+    let cache = work.join("cache");
     let mut install = Command::new("pnpm");
     install
-        .args(["install", "--offline", "--silent"])
-        .current_dir(&work)
+        .args([
+            "--config.trust-lockfile=true",
+            "install",
+            "--offline",
+            "--frozen-lockfile",
+            "--silent",
+        ])
+        .env("XDG_CACHE_HOME", &cache)
+        .current_dir(work)
         .stdin(Stdio::null());
     assert!(
         install.status().expect("pnpm install").success(),
         "offline install"
     );
+}
+
+#[test]
+fn fresh_node_restores_a_replaced_tool() {
+    let work = fresh_directory(&repository_root(), "fresh-node");
+    install_node_fixture(&work);
+    let cache = work.join("cache");
     let shim = work.join("node_modules").join(".bin").join("prettier");
     let genuine = fs::read(&shim).expect("read shim");
     fs::remove_file(&shim).expect("unlink shim");
@@ -1093,7 +1109,20 @@ fn fresh_node_restores_a_replaced_tool() {
     let package = fs::read(&module).expect("read prettier package");
     fs::remove_file(&module).expect("unlink prettier package");
     fs::write(&module, "{}\n").expect("replace prettier package");
-    let restored = just_recipe(&work, "fresh-node");
+    let mut restore = Command::new("just");
+    restore
+        .arg("--justfile")
+        .arg(repository_root().join("justfile"))
+        .arg("--working-directory")
+        .arg(&work)
+        .arg("fresh-node")
+        .env("XDG_CACHE_HOME", &cache)
+        .env("pnpm_config_trust_lockfile", "true")
+        .env("pnpm_config_offline", "true")
+        .env("npm_config_offline", "true")
+        .stdin(Stdio::null());
+    isolate(&mut restore);
+    let restored = restore.output().expect("run fresh-node");
     assert!(
         restored.status.success(),
         "{}",
@@ -1109,6 +1138,7 @@ fn fresh_node_restores_a_replaced_tool() {
         package,
         "package file restored"
     );
+    fs::remove_dir_all(&work).expect("remove Node fixture");
 }
 
 #[test]

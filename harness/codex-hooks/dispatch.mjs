@@ -10,8 +10,14 @@ import {
   patchPaths,
   shellPatches,
   toolCommand,
+  toolDirectory,
   refusal,
 } from "./adapter.mjs";
+import {
+  sessionTemporary,
+  prepareTemporary,
+  removeTemporary,
+} from "./temporary.mjs";
 import {
   checkPlaces,
   runHarnessCheck,
@@ -32,6 +38,7 @@ export const dispatchEvent = (
     common: main,
     projectRoot: project.root,
     state: join(homedir(), ".local/state/stock-copilot-harness"),
+    temporary: sessionTemporary(root),
     locked:
       project.lock === "on"
         ? JSON.parse(
@@ -74,7 +81,7 @@ export const dispatchEvent = (
         ? [input.tool_input.command]
         : shellPatches(toolCommand(input));
     const directory =
-      input.tool_name === "apply_patch" ? cwd : (input.cwd ?? cwd);
+      input.tool_name === "apply_patch" ? cwd : toolDirectory(input, root, cwd);
     const failed = [...new Set(patches.flatMap(patchPaths))]
       .map((path) =>
         lintFeedback(
@@ -137,9 +144,12 @@ export const dispatchEvent = (
 };
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let input;
+  let session;
   try {
     input = JSON.parse(readFileSync(0, "utf8"));
-    const output = dispatchEvent(input, sessionProject());
+    session = sessionProject();
+    prepareTemporary(session.root);
+    const output = dispatchEvent(input, session);
     if (output !== undefined)
       process.stdout.write(JSON.stringify(output) + "\n");
   } catch (error) {
@@ -153,5 +163,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           : { decision: "block", reason },
       ) + "\n",
     );
+  } finally {
+    if (session !== undefined && input?.hook_event_name === "Stop")
+      removeTemporary(session.root);
   }
 }

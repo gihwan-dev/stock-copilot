@@ -145,19 +145,53 @@ export const READ_ONLY_TOOLS = [
   "list_mcp_resource_templates",
   "read_mcp_resource",
 ];
+const directoryFields = [
+  "workdir",
+  "cwd",
+  "working_directory",
+  "workingDirectory",
+  "working_dir",
+  "workingDir",
+  "work_dir",
+  "workDir",
+  "directory",
+];
+export const toolDirectory = (input, root, sessionCwd) => {
+  const within = (value, relative) => {
+    if (
+      typeof value !== "string" ||
+      value.length === 0 ||
+      (!relative && !isAbsolute(value))
+    )
+      throw new Error("도구 작업 폴더가 올바른 경로 문자열이 아니다");
+    const path = realpathSync(resolve(sessionCwd, value));
+    if (!(path === root || path.startsWith(`${root}/`)))
+      throw new Error("도구 작업 폴더가 세션 작업 사본 밖이다");
+    return path;
+  };
+  const fallback = within(
+    input.cwd === undefined ? sessionCwd : input.cwd,
+    false,
+  );
+  const explicit = [input.tool_input, input.tool_input?.action].flatMap(
+    (args) =>
+      directoryFields
+        .filter(
+          (field) =>
+            args !== null &&
+            typeof args === "object" &&
+            Object.hasOwn(args, field),
+        )
+        .map((field) => within(args[field], true)),
+  );
+  if (new Set(explicit).size > 1)
+    throw new Error("도구 작업 폴더 인자가 서로 다르다");
+  return explicit[0] ?? fallback;
+};
 export const codexPreTool = (input, project, sessionCwd = process.cwd()) => {
   try {
     const { root, actor } = actorInput(input, project, sessionCwd);
-    const suppliedCwd = input.cwd ?? sessionCwd;
-    if (typeof suppliedCwd !== "string" || !isAbsolute(suppliedCwd))
-      throw new Error("도구 작업 폴더가 절대 경로가 아니다");
-    const cwd = realpathSync(suppliedCwd);
-    if (
-      typeof cwd !== "string" ||
-      !isAbsolute(cwd) ||
-      !(cwd === root || cwd.startsWith(`${root}/`))
-    )
-      throw new Error("도구 작업 폴더가 세션 작업 사본 밖이다");
+    const cwd = toolDirectory(input, root, sessionCwd);
     const scoped = { ...project, ownedWorktree: root };
     if (
       ["Bash", "exec_command", "shell_command", "shell"].includes(

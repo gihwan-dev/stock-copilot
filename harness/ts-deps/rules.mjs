@@ -1,5 +1,24 @@
 import { isDeepStrictEqual } from "node:util";
 
+export const TRUSTED_LOCKFILE_FIXTURES = [
+  "crates/xtask/src/git_hooks/tests.rs",
+];
+export const installPolicyProblems = (
+  contents,
+  allowed = TRUSTED_LOCKFILE_FIXTURES,
+) =>
+  Object.entries(contents)
+    .filter(
+      ([path, text]) =>
+        !allowed.includes(path) &&
+        [
+          "trust-" + "lockfile",
+          "pnpm_config_trust_" + "lockfile",
+          "trustLock" + "file",
+        ].some((token) => text.toLowerCase().includes(token.toLowerCase())),
+    )
+    .map(([path]) => path + ": fixture 밖의 공급망 정책 검증 생략 옵션");
+
 export const dependencySections = [
   "dependencies",
   "devDependencies",
