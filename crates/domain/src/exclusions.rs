@@ -49,7 +49,31 @@ pub enum ExclusionsError {
     DuplicateSecurityType,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExclusionDecision {
+    Excluded,
+    Included,
+}
+
 impl Exclusions {
+    #[must_use]
+    pub fn sector_decision(&self, sector: &SectorId) -> ExclusionDecision {
+        if self.sectors.contains(sector) {
+            ExclusionDecision::Excluded
+        } else {
+            ExclusionDecision::Included
+        }
+    }
+
+    #[must_use]
+    pub fn security_type_decision(&self, security_type: ExcludedSecurityType) -> ExclusionDecision {
+        if self.security_types.contains(&security_type) {
+            ExclusionDecision::Excluded
+        } else {
+            ExclusionDecision::Included
+        }
+    }
+
     pub fn try_new(
         sectors: Vec<SectorId>,
         security_types: Vec<ExcludedSecurityType>,
@@ -187,5 +211,49 @@ mod tests {
                 Ok(())
             })
             .expect("독립 집합 기준");
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use crate::{ExcludedSecurityType, ExclusionDecision, Exclusions, SectorId};
+
+    #[test]
+    fn membership_preserves_case_and_queries_both_exclusion_kinds() {
+        let upper = SectorId::try_new("Energy").expect("섹터");
+        let lower = SectorId::try_new("energy").expect("섹터");
+        let exclusions = Exclusions::try_new(vec![upper.clone()], vec![ExcludedSecurityType::Etf])
+            .expect("제외");
+        assert_eq!(
+            exclusions.sector_decision(&upper),
+            ExclusionDecision::Excluded
+        );
+        assert_eq!(
+            exclusions.sector_decision(&lower),
+            ExclusionDecision::Included
+        );
+        assert_eq!(
+            exclusions.security_type_decision(ExcludedSecurityType::Etf),
+            ExclusionDecision::Excluded
+        );
+        assert_eq!(
+            exclusions.security_type_decision(ExcludedSecurityType::Stock),
+            ExclusionDecision::Included
+        );
+        assert_eq!(
+            Exclusions::default().sector_decision(&upper),
+            ExclusionDecision::Included
+        );
+        assert_eq!(
+            Exclusions::default().security_type_decision(ExcludedSecurityType::Etf),
+            ExclusionDecision::Included
+        );
+        assert_eq!(
+            Exclusions::try_new(vec![upper, lower], vec![])
+                .expect("대소문자 구별")
+                .sectors()
+                .len(),
+            2
+        );
     }
 }

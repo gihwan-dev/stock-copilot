@@ -58,7 +58,22 @@ pub enum WeightCapsError {
     InstrumentExceedsSector,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeightCapChange {
+    Relaxed,
+    NotRelaxed,
+}
+
 impl WeightCaps {
+    #[must_use]
+    pub fn change_from(self, previous: Self) -> WeightCapChange {
+        if self.instrument_cap > previous.instrument_cap || self.sector_cap > previous.sector_cap {
+            WeightCapChange::Relaxed
+        } else {
+            WeightCapChange::NotRelaxed
+        }
+    }
+
     pub fn try_new(
         instrument_cap: ProfileWeight,
         instrument_warning: ProfileWeight,
@@ -260,5 +275,60 @@ mod tests {
                 Ok(())
             })
             .expect("독립 정수 범위");
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use crate::{NumericInput, ProfileWeight, WeightCapChange, WeightCaps};
+    use proptest::test_runner::{Config, TestRunner};
+
+    fn caps(cap: i64, warning: i64, sector: i64) -> WeightCaps {
+        let [cap_value, warning_value, sector_value] = [cap, warning, sector].map(|value| {
+            ProfileWeight::parse_percent(&NumericInput::try_new(&value.to_string()).expect("길이"))
+                .expect("비중")
+        });
+        WeightCaps::try_new(cap_value, warning_value, sector_value).expect("상한 관계")
+    }
+
+    #[test]
+    fn cap_relaxation_checks_each_order_limit_and_not_warning_threshold() {
+        let old = caps(20, 10, 40);
+        for (cap, warning, sector, expected) in [
+            (20, 10, 40, WeightCapChange::NotRelaxed),
+            (20, 15, 40, WeightCapChange::NotRelaxed),
+            (30, 10, 40, WeightCapChange::Relaxed),
+            (20, 10, 50, WeightCapChange::Relaxed),
+            (10, 5, 30, WeightCapChange::NotRelaxed),
+            (30, 10, 30, WeightCapChange::Relaxed),
+            (10, 5, 50, WeightCapChange::Relaxed),
+        ] {
+            assert_eq!(caps(cap, warning, sector).change_from(old), expected);
+        }
+    }
+
+    #[test]
+    fn relaxation_matches_independent_integer_comparison() {
+        TestRunner::new(Config::with_cases(4096))
+            .run(
+                &(1_i64..=100, 1_i64..=100, 1_i64..=100, 1_i64..=100),
+                |(first_old, second_old, first_new, second_new)| {
+                    let (old_cap, old_sector) =
+                        (first_old.min(second_old), first_old.max(second_old));
+                    let (new_cap, new_sector) =
+                        (first_new.min(second_new), first_new.max(second_new));
+                    let expected = if new_cap > old_cap || new_sector > old_sector {
+                        WeightCapChange::Relaxed
+                    } else {
+                        WeightCapChange::NotRelaxed
+                    };
+                    proptest::prop_assert_eq!(
+                        caps(new_cap, 1, new_sector).change_from(caps(old_cap, 1, old_sector)),
+                        expected
+                    );
+                    Ok(())
+                },
+            )
+            .expect("독립 정수 비교");
     }
 }

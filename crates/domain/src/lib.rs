@@ -112,6 +112,13 @@ mod horizon;
 mod investor_profile;
 mod weight_caps;
 pub use exclusions::{ExcludedSecurityType, Exclusions, ExclusionsError, SectorId, SectorIdError};
-pub use horizon::{AdvancedHoursConfirmation, Horizon, HorizonError, HorizonSelection};
-pub use investor_profile::{InvestorProfile, RiskAppetite};
+pub use horizon::{
+    AdvancedHoursConfirmation, Horizon, HorizonSelection, HoursPermission, HoursPermissionState,
+};
+pub use investor_profile::{
+    InvestorProfile, InvestorProfileError, RiskAppetite, SavedInvestorProfile,
+};
 pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsError};
+
+pub use exclusions::ExclusionDecision;
+pub use weight_caps::WeightCapChange;
