@@ -1,4 +1,5 @@
-use crate::{CalendarDate, Currency, InstrumentId, Price, Quantity, Timestamp};
+use crate::quote::{TimeAssessmentError, TimestampAllowance, assess_time};
+use crate::{CalendarDate, ClockAlignment, Currency, InstrumentId, Price, Quantity, Timestamp};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdjustmentBasis(Timestamp);
@@ -21,6 +22,11 @@ pub enum PriceAdjustment {
 pub enum CandlePeriod {
     Daily,
     Minute,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandleStatus {
+    Finalized,
+    InProgress,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CandleError {
@@ -127,6 +133,28 @@ impl CandleTime {
         self.timestamp.offset_calendar_date()
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CandleObservation {
+    collected_at: Timestamp,
+    status: CandleStatus,
+}
+impl CandleObservation {
+    #[must_use]
+    pub const fn new(collected_at: Timestamp, status: CandleStatus) -> Self {
+        Self {
+            collected_at,
+            status,
+        }
+    }
+    #[must_use]
+    pub const fn collected_at(&self) -> Timestamp {
+        self.collected_at
+    }
+    #[must_use]
+    pub const fn status(&self) -> CandleStatus {
+        self.status
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candle {
     instrument: InstrumentId,
@@ -134,6 +162,8 @@ pub struct Candle {
     adjustment: PriceAdjustment,
     values: Ohlcv,
     collected_at: Timestamp,
+    status: CandleStatus,
+    clock_alignment: ClockAlignment,
 }
 impl Candle {
     pub fn try_new(
@@ -141,18 +171,34 @@ impl Candle {
         time: CandleTime,
         adjustment: PriceAdjustment,
         values: Ohlcv,
-        collected_at: Timestamp,
+        observation: CandleObservation,
     ) -> Result<Self, CandleError> {
-        if time.timestamp() > collected_at {
-            return Err(CandleError::FutureTimestamp);
-        }
+        let collected_at = observation.collected_at();
+        let status = observation.status();
+        let allowance = match (time.period(), status) {
+            (CandlePeriod::Minute, CandleStatus::InProgress) => TimestampAllowance::MinuteClose,
+            (CandlePeriod::Daily | CandlePeriod::Minute, CandleStatus::Finalized)
+            | (CandlePeriod::Daily, CandleStatus::InProgress) => TimestampAllowance::Observation,
+        };
+        let clock_alignment = assess_time(time.timestamp(), collected_at, allowance)
+            .map_err(|TimeAssessmentError::TooFarAhead| CandleError::FutureTimestamp)?;
         Ok(Self {
             instrument,
             time,
             adjustment,
             values,
             collected_at,
+            status,
+            clock_alignment,
         })
+    }
+    #[must_use]
+    pub const fn status(&self) -> CandleStatus {
+        self.status
+    }
+    #[must_use]
+    pub const fn clock_alignment(&self) -> ClockAlignment {
+        self.clock_alignment
     }
     #[must_use]
     pub fn instrument(&self) -> &InstrumentId {
@@ -179,7 +225,8 @@ impl Candle {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        AdjustmentBasis, Candle, CandleError, CandlePeriod, CandleTime, Ohlcv, PriceAdjustment,
+        AdjustmentBasis, Candle, CandleError, CandleObservation, CandlePeriod, CandleStatus,
+        CandleTime, Ohlcv, PriceAdjustment,
     };
     use crate::{Currency, InstrumentId, Price, Quantity, Timestamp};
     use crate::{Nanosecond, NumericInput, OffsetSeconds, UnixSeconds};
@@ -220,7 +267,7 @@ pub(crate) mod tests {
                         Quantity::parse(&NumericInput::try_new("0").expect("길이")).expect("수량"),
                     )
                     .expect("OHLCV"),
-                    at(10_001),
+                    CandleObservation::new(at(10_001), CandleStatus::Finalized),
                 )
                 .expect("봉")
             })
@@ -279,7 +326,7 @@ pub(crate) mod tests {
                 candle.time(),
                 PriceAdjustment::Raw,
                 candle.values(),
-                at(-1)
+                CandleObservation::new(at(-1), CandleStatus::Finalized)
             ),
             Err(CandleError::FutureTimestamp)
         );
@@ -368,5 +415,68 @@ pub(crate) mod tests {
             Quantity::parse(&NumericInput::try_new("-1").expect("길이")).is_err(),
             "음수 거래량 거부"
         );
+    }
+    #[test]
+    fn live_minute_close_uses_its_interval_and_preserves_clock_skew() {
+        use crate::{ClockAlignment, SpanSeconds, TimeSpan};
+        let original = series(&["1"]).into_iter().next().expect("봉");
+        let minute = at(0)
+            .checked_add(TimeSpan::try_new(SpanSeconds::new(60), Nanosecond::new(0)).expect("분"))
+            .expect("종료");
+        let time = CandleTime::try_new(minute, CandlePeriod::Minute).expect("분봉");
+        for (seconds, nanos, status, expected) in [
+            (0, 0, CandleStatus::InProgress, Ok(ClockAlignment::Aligned)),
+            (
+                -2,
+                0,
+                CandleStatus::InProgress,
+                Ok(ClockAlignment::AheadWithinTolerance),
+            ),
+            (
+                -3,
+                999_999_999,
+                CandleStatus::InProgress,
+                Err(CandleError::FutureTimestamp),
+            ),
+            (
+                59,
+                0,
+                CandleStatus::Finalized,
+                Ok(ClockAlignment::AheadWithinTolerance),
+            ),
+            (
+                0,
+                0,
+                CandleStatus::Finalized,
+                Err(CandleError::FutureTimestamp),
+            ),
+        ] {
+            let collected = Timestamp::from_parts(
+                UnixSeconds::new(
+                    at(0)
+                        .utc_seconds()
+                        .as_i64()
+                        .checked_add(seconds)
+                        .expect("시각"),
+                ),
+                Nanosecond::new(nanos),
+                OffsetSeconds::new(0),
+            )
+            .expect("시각");
+            let result = Candle::try_new(
+                original.instrument().clone(),
+                time,
+                original.adjustment(),
+                original.values(),
+                CandleObservation::new(collected, status),
+            );
+            assert_eq!(
+                result
+                    .as_ref()
+                    .map(Candle::clock_alignment)
+                    .map_err(|error| *error),
+                expected
+            );
+        }
     }
 }

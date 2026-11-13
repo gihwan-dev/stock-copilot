@@ -7,6 +7,7 @@ pub struct Quote {
     last_price: Option<Price>,
     timestamp: Option<Timestamp>,
     collected_at: Timestamp,
+    clock_alignment: ClockAlignment,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,16 +27,23 @@ impl Quote {
         if last_price.is_some_and(|price| price.as_money().currency() != currency) {
             return Err(QuoteError::CurrencyMismatch);
         }
-        if timestamp.is_some_and(|value| value > collected_at) {
-            return Err(QuoteError::FutureTimestamp);
-        }
+        let clock_alignment = timestamp
+            .map_or(Ok(ClockAlignment::Aligned), |value| {
+                assess_time(value, collected_at, TimestampAllowance::Observation)
+            })
+            .map_err(|TimeAssessmentError::TooFarAhead| QuoteError::FutureTimestamp)?;
         Ok(Self {
             symbol,
             currency,
             last_price,
             timestamp,
             collected_at,
+            clock_alignment,
         })
+    }
+    #[must_use]
+    pub const fn clock_alignment(&self) -> ClockAlignment {
+        self.clock_alignment
     }
     #[must_use]
     pub fn symbol(&self) -> &Symbol {
@@ -57,6 +65,52 @@ impl Quote {
     pub const fn collected_at(&self) -> Timestamp {
         self.collected_at
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClockAlignment {
+    Aligned,
+    AheadWithinTolerance,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum TimestampAllowance {
+    Observation,
+    MinuteClose,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum TimeAssessmentError {
+    TooFarAhead,
+}
+
+pub(crate) fn assess_time(
+    data: Timestamp,
+    collected: Timestamp,
+    allowance: TimestampAllowance,
+) -> Result<ClockAlignment, TimeAssessmentError> {
+    let ordinary_seconds = match allowance {
+        TimestampAllowance::Observation => 0_i64,
+        TimestampAllowance::MinuteClose => 60_i64,
+    };
+    let seconds = data
+        .utc_seconds()
+        .as_i64()
+        .checked_sub(*collected.utc_seconds().as_i64());
+    let position = seconds.map(|value| (value, *data.nanosecond().as_u32()));
+    if position.is_some_and(|value| value <= (ordinary_seconds, *collected.nanosecond().as_u32())) {
+        return Ok(ClockAlignment::Aligned);
+    }
+    let tolerated = ordinary_seconds
+        .checked_add(2)
+        .map(|limit| (limit, *collected.nanosecond().as_u32()));
+    if position
+        .zip(tolerated)
+        .is_some_and(|(value, limit)| value <= limit)
+    {
+        return Ok(ClockAlignment::AheadWithinTolerance);
+    }
+    Err(TimeAssessmentError::TooFarAhead)
 }
 
 #[cfg(test)]
@@ -92,5 +146,32 @@ mod tests {
             Quote::try_new(symbol, Currency::Usd, None, Some(at(2)), at(1)),
             Err(QuoteError::FutureTimestamp)
         );
+    }
+    #[test]
+    fn small_clock_skew_is_preserved_but_two_seconds_is_the_limit() {
+        use crate::{ClockAlignment, Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
+        for (ahead, nanos, expected) in [
+            (0, 0, Ok(ClockAlignment::Aligned)),
+            (0, 1, Ok(ClockAlignment::AheadWithinTolerance)),
+            (1, 999_999_999, Ok(ClockAlignment::AheadWithinTolerance)),
+            (2, 0, Ok(ClockAlignment::AheadWithinTolerance)),
+            (2, 1, Err(QuoteError::FutureTimestamp)),
+        ] {
+            let stamp = Timestamp::from_parts(
+                UnixSeconds::new(at(0).utc_seconds().as_i64().checked_add(ahead).expect("초")),
+                Nanosecond::new(nanos),
+                OffsetSeconds::new(0),
+            )
+            .expect("시각");
+            let result = Quote::try_new(
+                Symbol::try_new("AAPL").expect("심볼"),
+                Currency::Usd,
+                None,
+                Some(stamp),
+                at(0),
+            )
+            .map(|quote| quote.clock_alignment());
+            assert_eq!(result, expected);
+        }
     }
 }

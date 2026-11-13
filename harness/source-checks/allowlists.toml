@@ -55,4 +55,4 @@ reason = "D-02 곱셈의 넓은 정수 정확 판정과 최대 정밀도 비율 
 
 [[decimal-arithmetic]]
 path = "crates/domain/src/volatility_arithmetic.rs"
-reason = "D-11 표본 통계의 근사 연산을 봉인된 ApproximateVolatility로만 반환한다"
+reason = "D-11 표본 통계의 근사 연산을 봉인된 일간·연율·내부 제곱근 타입으로만 반환한다"

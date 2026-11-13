@@ -1,4 +1,7 @@
-use crate::{ApproximateVolatility, Candle, CandlePeriod, PriceAdjustment};
+use crate::{
+    AdjustmentBasis, AnnualVolatility, CalendarDate, Candle, CandlePeriod, CandleStatus,
+    DailyVolatility, InstrumentId, PriceAdjustment,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VolatilitySamples(usize);
@@ -17,11 +20,14 @@ pub enum VolatilityError {
     NotDaily,
     Arithmetic,
     NonConvergence,
+    Unfinalized,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Volatility {
-    daily: ApproximateVolatility,
-    annualized: ApproximateVolatility,
+    daily: DailyVolatility,
+    instrument: InstrumentId,
+    as_of: CalendarDate,
+    adjustment_basis: AdjustmentBasis,
     samples: VolatilitySamples,
 }
 impl Volatility {
@@ -30,10 +36,16 @@ impl Volatility {
         if !(2..=10_000).contains(&remaining.len()) {
             return Err(VolatilityError::SampleCount);
         }
-        if first.adjustment() == PriceAdjustment::Raw {
-            return Err(VolatilityError::Unadjusted);
-        }
+        let adjustment_basis = match first.adjustment() {
+            PriceAdjustment::Raw => return Err(VolatilityError::Unadjusted),
+            PriceAdjustment::Adjusted(basis) => basis,
+        };
+        let mut as_of = first.time().date();
         for candle in candles {
+            if candle.status() != CandleStatus::Finalized {
+                return Err(VolatilityError::Unfinalized);
+            }
+            as_of = candle.time().date();
             if candle.time().period() != CandlePeriod::Daily {
                 return Err(VolatilityError::NotDaily);
             }
@@ -51,20 +63,33 @@ impl Volatility {
                 return Err(VolatilityError::Unordered);
             }
         }
-        let (daily, annualized) = crate::volatility_arithmetic::calculate(candles)?;
+        let daily = crate::volatility_arithmetic::calculate(candles)?;
         Ok(Self {
             daily,
-            annualized,
+            instrument: first.instrument().clone(),
+            as_of,
+            adjustment_basis,
             samples: VolatilitySamples(remaining.len()),
         })
     }
     #[must_use]
-    pub const fn daily(&self) -> ApproximateVolatility {
+    pub const fn daily(&self) -> DailyVolatility {
         self.daily
     }
+    pub fn annualized(&self) -> Result<AnnualVolatility, VolatilityError> {
+        crate::volatility_arithmetic::annualize(self.daily)
+    }
     #[must_use]
-    pub const fn annualized(&self) -> ApproximateVolatility {
-        self.annualized
+    pub fn instrument(&self) -> &InstrumentId {
+        &self.instrument
+    }
+    #[must_use]
+    pub const fn as_of(&self) -> CalendarDate {
+        self.as_of
+    }
+    #[must_use]
+    pub const fn adjustment_basis(&self) -> AdjustmentBasis {
+        self.adjustment_basis
     }
     #[must_use]
     pub const fn samples(&self) -> VolatilitySamples {
@@ -76,7 +101,9 @@ impl Volatility {
 mod tests {
     use super::{Volatility, VolatilityError};
     use crate::candle::tests::series;
-    use crate::{Candle, CandlePeriod, NumericInput, PriceAdjustment, Ratio};
+    use crate::{
+        Candle, CandleObservation, CandlePeriod, CandleStatus, NumericInput, PriceAdjustment, Ratio,
+    };
     use rust_decimal::Decimal;
 
     #[test]
@@ -85,19 +112,14 @@ mod tests {
         let value = Volatility::calculate(&candles).expect("예제 9");
         assert_eq!(value.samples().as_usize(), &7);
         for (actual, expected) in [
-            (value.daily(), "0.033867"),
-            (value.annualized(), "0.537618"),
+            (value.daily().as_decimal(), "0.033867"),
+            (value.annualized().expect("연율").as_decimal(), "0.537618"),
         ] {
             let reference = Ratio::parse(&NumericInput::try_new(expected).expect("길이"))
                 .expect("R-11 숫자")
                 .as_decimal();
             assert!(
-                actual
-                    .as_decimal()
-                    .checked_sub(reference)
-                    .expect("차이")
-                    .abs()
-                    < Decimal::new(5, 7),
+                actual.checked_sub(reference).expect("차이").abs() < Decimal::new(5, 7),
                 "소수 여섯 자리 일치"
             );
         }
@@ -130,12 +152,15 @@ mod tests {
                 *result.samples().as_usize(),
                 count.checked_sub(1).expect("표본")
             );
-            assert_eq!(*result.daily().as_decimal(), Decimal::ZERO);
-            assert_eq!(*result.annualized().as_decimal(), Decimal::ZERO);
+            assert_eq!(result.daily().as_decimal(), Decimal::ZERO);
+            assert_eq!(
+                result.annualized().expect("연율").as_decimal(),
+                Decimal::ZERO
+            );
         }
         let constant_return =
             Volatility::calculate(&series(&["1", "2", "4", "8"])).expect("모두 같은 수익률");
-        assert_eq!(*constant_return.daily().as_decimal(), Decimal::ZERO);
+        assert_eq!(constant_return.daily().as_decimal(), Decimal::ZERO);
     }
 
     fn replace(candles: &[Candle], replacement: Candle, expected: VolatilityError) {
@@ -158,7 +183,7 @@ mod tests {
                 second.time(),
                 adjustment,
                 second.values(),
-                second.collected_at(),
+                CandleObservation::new(second.collected_at(), CandleStatus::Finalized),
             )
             .expect("봉");
             replace(&original, replacement, VolatilityError::MixedSeries);
@@ -168,7 +193,7 @@ mod tests {
             second.time(),
             second.adjustment(),
             second.values(),
-            second.collected_at(),
+            CandleObservation::new(second.collected_at(), CandleStatus::Finalized),
         )
         .expect("봉");
         replace(&original, other, VolatilityError::MixedSeries);
@@ -179,7 +204,7 @@ mod tests {
             second.time(),
             second.adjustment(),
             values,
-            second.collected_at(),
+            CandleObservation::new(second.collected_at(), CandleStatus::Finalized),
         )
         .expect("봉");
         replace(&original, other_currency, VolatilityError::MixedSeries);
@@ -191,7 +216,7 @@ mod tests {
                     candle.time(),
                     PriceAdjustment::Raw,
                     candle.values(),
-                    candle.collected_at(),
+                    CandleObservation::new(candle.collected_at(), CandleStatus::Finalized),
                 )
                 .expect("원주가")
             })
@@ -226,7 +251,7 @@ mod tests {
                 time,
                 second.adjustment(),
                 second.values(),
-                second.collected_at(),
+                CandleObservation::new(second.collected_at(), CandleStatus::Finalized),
             )
             .expect("봉");
             replace(&original, replacement, expected);
@@ -275,7 +300,7 @@ mod tests {
                 CandleTime::try_new(stamp, CandlePeriod::Daily).expect("현지 자정"),
                 original.adjustment(),
                 original.values(),
-                original.collected_at(),
+                CandleObservation::new(original.collected_at(), CandleStatus::Finalized),
             )
             .expect("봉");
             *candles.get_mut(index).expect("봉") = replacement;
@@ -289,5 +314,44 @@ mod tests {
             Volatility::calculate(&candles),
             Err(VolatilityError::Unordered)
         );
+    }
+    #[test]
+    fn provenance_is_preserved_and_any_live_candle_is_rejected() {
+        use crate::candle::tests::at;
+        let original = series(&["100", "101", "99"]);
+        let value = Volatility::calculate(&original).expect("확정");
+        assert_eq!(
+            value.instrument(),
+            original.first().expect("봉").instrument()
+        );
+        assert_eq!(value.as_of(), at(2).offset_calendar_date());
+        assert_eq!(
+            value.adjustment_basis(),
+            crate::AdjustmentBasis::new(at(10_001))
+        );
+        for index in 0..original.len() {
+            let mut changed = original.clone();
+            let candle = changed.get(index).expect("봉");
+            let live = Candle::try_new(
+                candle.instrument().clone(),
+                candle.time(),
+                candle.adjustment(),
+                candle.values(),
+                CandleObservation::new(candle.collected_at(), CandleStatus::InProgress),
+            )
+            .expect("진행 중");
+            *changed.get_mut(index).expect("봉") = live;
+            assert_eq!(
+                Volatility::calculate(&changed),
+                Err(VolatilityError::Unfinalized)
+            );
+        }
+        let extreme =
+            Volatility::calculate(&series(&["1", "200000000000000", "1"])).expect("일간 유효");
+        assert!(
+            extreme.daily().as_decimal() > Decimal::ZERO,
+            "일간은 연율 실패와 독립"
+        );
+        assert_eq!(extreme.annualized(), Err(VolatilityError::Arithmetic));
     }
 }

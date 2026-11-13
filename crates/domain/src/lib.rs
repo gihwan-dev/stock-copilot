@@ -65,6 +65,30 @@ pub use probability::{
     AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
 };
 
+mod settled_row_set;
+mod transaction;
+mod transaction_kind;
+pub use settled_row_set::{
+    Reconciliation, ReconciliationError, RowChange, SettledRowSet, SettlementWindow,
+    StoredTransaction, TransactionBatch,
+};
+pub use transaction::{
+    AssetClass, Cancellation, IsinCode, Settlement, Transaction, TransactionData, TransactionError,
+};
+pub use transaction_kind::{
+    TransactionCode, TransactionCodeError, TransactionKind, UnknownTransactionCode,
+};
+
+mod transaction_order;
+pub use transaction::{
+    AssetClassCode, CalculationEffect, TransactionAnomaly, TransactionPrice, UnknownAssetClassCode,
+};
+
+mod transaction_response;
+pub use settled_row_set::{DisappearanceWarning, ReconciliationNotice, RowCount};
+pub use transaction_response::{
+    CompleteTransactionResponse, CompletionAttestation, TransactionFilter,
+};
 mod fx_rate;
 pub use fx_rate::{FxPair, FxRate, FxRateError, FxRateKind, FxSource, FxValidity};
 mod fx_conversion;
@@ -87,8 +111,11 @@ mod candle;
 mod quote;
 mod volatility_arithmetic;
 pub use candle::{
-    AdjustmentBasis, Candle, CandleError, CandlePeriod, CandleTime, Ohlcv, PriceAdjustment,
+    AdjustmentBasis, Candle, CandleError, CandleObservation, CandlePeriod, CandleStatus,
+    CandleTime, Ohlcv, PriceAdjustment,
 };
-pub use quote::{Quote, QuoteError};
+pub use quote::{ClockAlignment, Quote, QuoteError};
 pub use volatility::{Volatility, VolatilityError, VolatilitySamples};
-pub use volatility_arithmetic::ApproximateVolatility;
+pub use volatility_arithmetic::{AnnualVolatility, DailyVolatility};
+mod volatility_display;
+mod volatility_reference;

@@ -2,11 +2,26 @@ use crate::{Candle, VolatilityError};
 use rust_decimal::Decimal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ApproximateVolatility(Decimal);
-impl ApproximateVolatility {
+pub(crate) struct ApproximateRoot(Decimal);
+impl ApproximateRoot {
     #[must_use]
-    pub const fn as_decimal(&self) -> &Decimal {
-        &self.0
+    pub(crate) const fn as_decimal(&self) -> Decimal {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DailyVolatility(Decimal);
+impl DailyVolatility {
+    pub(crate) const fn as_decimal(&self) -> Decimal {
+        self.0
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AnnualVolatility(Decimal);
+impl AnnualVolatility {
+    pub(crate) const fn as_decimal(&self) -> Decimal {
+        self.0
     }
 }
 
@@ -16,9 +31,7 @@ struct Statistic(Decimal);
 #[derive(Debug, Clone, Copy)]
 struct IterationLimit(u16);
 
-pub(crate) fn calculate(
-    candles: &[Candle],
-) -> Result<(ApproximateVolatility, ApproximateVolatility), VolatilityError> {
+pub(crate) fn calculate(candles: &[Candle]) -> Result<DailyVolatility, VolatilityError> {
     let returns = candles
         .iter()
         .zip(candles.iter().skip(1))
@@ -37,20 +50,21 @@ pub(crate) fn calculate(
     let variance = returns
         .and_then(|values| sample_variance(&values))
         .ok_or(VolatilityError::Arithmetic)?;
-    let annual_variance = variance
-        .0
-        .checked_mul(Decimal::from(252_u32))
-        .map(Statistic)
-        .ok_or(VolatilityError::Arithmetic)?;
-    root_pair(variance, annual_variance)
+    square_root(crate::Ratio::new(variance.0)).map(|value| DailyVolatility(value.as_decimal()))
 }
 
-fn root_pair(
-    daily: Statistic,
-    annual: Statistic,
-) -> Result<(ApproximateVolatility, ApproximateVolatility), VolatilityError> {
-    let daily_root = square_root(daily)?;
-    square_root(annual).map(|annual_root| (daily_root, annual_root))
+pub(crate) fn annualize(daily: DailyVolatility) -> Result<AnnualVolatility, VolatilityError> {
+    let variance = daily
+        .0
+        .checked_mul(daily.0)
+        .and_then(|value| value.checked_mul(Decimal::from(252_u32)))
+        .map(Statistic)
+        .ok_or(VolatilityError::Arithmetic)?;
+    root(variance).map(|value| AnnualVolatility(value.as_decimal()))
+}
+
+pub(crate) fn square_root(value: crate::Ratio) -> Result<ApproximateRoot, VolatilityError> {
+    root(Statistic(value.as_decimal()))
 }
 
 fn sample_variance(values: &[Statistic]) -> Option<Statistic> {
@@ -73,12 +87,12 @@ fn sample_variance(values: &[Statistic]) -> Option<Statistic> {
     .map(Statistic)
 }
 
-fn square_root(value: Statistic) -> Result<ApproximateVolatility, VolatilityError> {
+fn root(value: Statistic) -> Result<ApproximateRoot, VolatilityError> {
     if value.0 < Decimal::ZERO {
         return Err(VolatilityError::Arithmetic);
     }
     if value.0 == Decimal::ZERO {
-        return Ok(ApproximateVolatility(Decimal::ZERO));
+        return Ok(ApproximateRoot(Decimal::ZERO));
     }
     iterate_root(
         value,
@@ -102,7 +116,7 @@ fn iterate_root(
     value: Statistic,
     initial: Statistic,
     limit: IterationLimit,
-) -> Result<ApproximateVolatility, VolatilityError> {
+) -> Result<ApproximateRoot, VolatilityError> {
     let mut estimate = initial;
     for _iteration in 0..limit.0 {
         let step = root_step(value, estimate)
@@ -116,7 +130,7 @@ fn iterate_root(
             .ok_or(VolatilityError::Arithmetic)?;
         let (next, difference, tolerance) = step;
         if difference <= tolerance {
-            return Ok(ApproximateVolatility(next.0));
+            return Ok(ApproximateRoot(next.0));
         }
         estimate = next;
     }
@@ -126,8 +140,8 @@ fn iterate_root(
 #[cfg(test)]
 mod tests {
     use super::{
-        ApproximateVolatility, IterationLimit, Statistic, calculate, iterate_root, root_pair,
-        sample_variance, square_root,
+        ApproximateRoot, DailyVolatility, IterationLimit, Statistic, annualize, calculate,
+        iterate_root, root, sample_variance,
     };
     use crate::{NumericInput, Ratio, VolatilityError};
     use proptest::test_runner::{Config, TestRunner};
@@ -135,18 +149,18 @@ mod tests {
     #[test]
     fn root_matches_independent_square_bounds_and_known_constants() {
         assert_eq!(
-            square_root(Statistic(Decimal::NEGATIVE_ONE)),
+            root(Statistic(Decimal::NEGATIVE_ONE)),
             Err(VolatilityError::Arithmetic)
         );
         assert_eq!(
-            square_root(Statistic(Decimal::ZERO)),
-            Ok(ApproximateVolatility(Decimal::ZERO))
+            root(Statistic(Decimal::ZERO)),
+            Ok(ApproximateRoot(Decimal::ZERO))
         );
         let expected =
             Ratio::parse(&NumericInput::try_new("1.4142135623730950488016887242").expect("길이"))
                 .expect("알려진 루트2")
                 .as_decimal();
-        let actual = square_root(Statistic(Decimal::TWO)).expect("루트2");
+        let actual = root(Statistic(Decimal::TWO)).expect("루트2");
         assert!(
             actual.0.checked_sub(expected).expect("차이").abs() < Decimal::new(1, 24),
             "독립 상수"
@@ -156,22 +170,25 @@ mod tests {
                 &(1_i64..=1_000_000_000, 0_u32..=28),
                 |(coefficient, scale)| {
                     let input = Decimal::new(coefficient, scale);
-                    let root = square_root(Statistic(input)).expect("수렴").0;
-                    let epsilon = root
+                    let result = root(Statistic(input)).expect("수렴").0;
+                    let epsilon = result
                         .max(Decimal::ONE)
                         .checked_mul(Decimal::new(1, 22))
                         .expect("허용 오차");
-                    let lower = root.checked_sub(epsilon).expect("하한").max(Decimal::ZERO);
-                    let upper = root.checked_add(epsilon).expect("상한");
+                    let lower = result
+                        .checked_sub(epsilon)
+                        .expect("하한")
+                        .max(Decimal::ZERO);
+                    let upper = result.checked_add(epsilon).expect("상한");
                     proptest::prop_assert!(lower.checked_mul(lower).expect("하한 제곱") <= input);
                     proptest::prop_assert!(upper.checked_mul(upper).expect("상한 제곱") >= input);
-                    proptest::prop_assert_eq!(square_root(Statistic(input)).expect("반복").0, root);
+                    proptest::prop_assert_eq!(root(Statistic(input)).expect("반복").0, result);
                     Ok(())
                 },
             )
             .expect("독립 제곱 구간과 결정성");
         for input in [Decimal::MAX, Decimal::new(1, 28), Decimal::ONE] {
-            assert!(square_root(Statistic(input)).is_ok(), "극단값 수렴");
+            assert!(root(Statistic(input)).is_ok(), "극단값 수렴");
         }
         assert_eq!(calculate(&[]), Err(VolatilityError::Arithmetic));
     }
@@ -199,14 +216,6 @@ mod tests {
                 Statistic(Decimal::ZERO),
                 IterationLimit(256)
             ),
-            Err(VolatilityError::Arithmetic)
-        );
-        assert_eq!(
-            root_pair(Statistic(Decimal::NEGATIVE_ONE), Statistic(Decimal::ONE)),
-            Err(VolatilityError::Arithmetic)
-        );
-        assert_eq!(
-            root_pair(Statistic(Decimal::ONE), Statistic(Decimal::NEGATIVE_ONE)),
             Err(VolatilityError::Arithmetic)
         );
     }
@@ -238,12 +247,15 @@ mod tests {
                 "합·편차·제곱·제곱합 넘침"
             );
         }
+        let daily = calculate(&crate::candle::tests::series(&[
+            "1",
+            "200000000000000",
+            "1",
+        ]))
+        .expect("일간은 유효");
+        assert_eq!(annualize(daily), Err(VolatilityError::Arithmetic));
         assert_eq!(
-            calculate(&crate::candle::tests::series(&[
-                "1",
-                "200000000000000",
-                "1"
-            ])),
+            annualize(DailyVolatility(Decimal::MAX)),
             Err(VolatilityError::Arithmetic)
         );
         assert_eq!(
@@ -270,7 +282,7 @@ mod tests {
             iterate_root(Statistic(input), Statistic(Decimal::ONE), IterationLimit(1))
                 .expect("허용 오차 경계")
                 .as_decimal(),
-            &expected
+            expected
         );
     }
     fn pairwise_variance(changes: &[Decimal]) -> Decimal {
@@ -317,11 +329,14 @@ mod tests {
                         .collect::<Vec<_>>();
                     let expected = pairwise_variance(&changes);
                     for (sigma, factor) in [
-                        (result.daily(), Decimal::ONE),
-                        (result.annualized(), Decimal::from(252_u32)),
+                        (result.daily().as_decimal(), Decimal::ONE),
+                        (
+                            result.annualized().expect("연율").as_decimal(),
+                            Decimal::from(252_u32),
+                        ),
                     ] {
                         let expected_scaled = expected.checked_mul(factor).expect("연율 분산");
-                        let actual = sigma.0.checked_mul(sigma.0).expect("실제 분산");
+                        let actual = sigma.checked_mul(sigma).expect("실제 분산");
                         proptest::prop_assert!(
                             actual.checked_sub(expected_scaled).expect("오차").abs()
                                 <= expected_scaled
