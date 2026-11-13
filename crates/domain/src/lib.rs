@@ -39,6 +39,16 @@ pub use ratio::Ratio;
 
 mod exact_arithmetic;
 pub use exact_arithmetic::{ApproximateRatio, RatioQuotient};
+mod domain_time;
+mod market_session;
+pub use domain_time::{
+    CalendarDate, CalendarDays, CalendarYear, DayNumber, MonthNumber, Nanosecond, OffsetSeconds,
+    SpanSeconds, TimeError, TimeInterval, TimeIntervalError, TimeSpan, Timestamp, UnixSeconds,
+};
+pub use market_session::{
+    AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
+    MarketSessionError, MarketState, MarketTransition, SessionData, SessionInformation,
+};
 mod probability;
 pub use probability::{
     AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,

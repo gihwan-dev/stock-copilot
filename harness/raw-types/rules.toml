@@ -13,6 +13,9 @@ external-types = []
 external-traits = []
 
 newtype-fields = [
+  "Date",
+  "OffsetDateTime",
+  "SignedDuration",
   "String",
   "char",
   "OsString",

@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-rust_decimal = { version = "0.1.0" }
+rust_decimal = { version = "0.1.0", default-features = false }
 
 [dev-dependencies]
 testkit = { path = "../testkit" }
