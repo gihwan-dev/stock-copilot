@@ -125,8 +125,17 @@ pub enum MoneyError {
 
 impl Money {
     #[must_use]
-    pub fn new(amount: Amount, currency: Currency) -> Self {
+    pub(crate) fn new(amount: Amount, currency: Currency) -> Self {
         Self { amount, currency }
+    }
+
+    pub fn parse(
+        input: &crate::NumericInput,
+        currency: Currency,
+    ) -> Result<Self, crate::NumericError> {
+        input
+            .parse_amount()
+            .map(|amount| Self::new(amount, currency))
     }
 
     #[must_use]

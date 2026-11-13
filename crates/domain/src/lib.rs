@@ -63,3 +63,11 @@ mod probability;
 pub use probability::{
     AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
 };
+
+mod fx_rate;
+pub use fx_rate::{FxPair, FxRate, FxRateError, FxRateKind, FxSource, FxValidity};
+mod fx_conversion;
+pub use fx_conversion::{
+    ConvertedMoney, FxConversionError, KrwValuation, KrwValuationComponent, MidConvertedMoney,
+    UnconvertedKrw, ValuationAccuracy,
+};
