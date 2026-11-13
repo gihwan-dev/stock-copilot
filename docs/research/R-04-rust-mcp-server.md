@@ -2,7 +2,7 @@
 
 - 조사일: 2026-11-11 (모든 출처의 확인 날짜도 같다)
 - 로컬 환경: macOS (Darwin 25.5.0), rustc 1.88.0, Claude Code 2.1.322, Codex CLI 0.167.1
-- 실험 코드: `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-04/mcp-demo/` (저장소 밖)
+- 실험 코드: `<세션 임시 폴더>/research/R-04/mcp-demo/` (저장소 밖)
 
 ## 1. 요약
 

@@ -7,7 +7,7 @@
   - 로컬 검증: `codex --help`, `codex exec --help`, `codex features list`, `codex debug models`, `codex app-server generate-json-schema`/`generate-ts`(프로토콜 스키마 생성).
   - **가짜 모델 제공자 실험**: 127.0.0.1에 Responses API 흉내 서버를 띄웠다. `-c model_provider=fake`로 Codex를 거기에 붙여, CLI가 모델에 보내는 요청 본문(도구 목록 포함)을 그대로 잡았다. 비용은 0이고 계정을 쓰지 않는다. 이 서버로 도구 호출도 흉내 내어, 각 도구가 실제로 실행되는지 확인했다.
   - 실제 구독(ChatGPT Pro)으로 대화 실행은 **두 번만** 했다. `account/rateLimits/read`와 `model/list` 조회도 한 번 했다. 이 조회는 모델을 부르지 않는다.
-- 실험 파일: `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-03/` (저장소 밖). 사용자 전역 설정(`~/.codex`)은 읽기만 했다.
+- 실험 파일: `<세션 임시 폴더>/research/R-03/` (저장소 밖). 사용자 전역 설정(`~/.codex`)은 읽기만 했다.
 - 실험 환경: `~/.codex`에 훅(9종 이벤트), 사용자 스킬(`~/.codex/skills`, `~/.agents/skills`), 에이전트 정의 14개, 메모리, 플러그인이 있는 계정.
 
 ## 1. 요약

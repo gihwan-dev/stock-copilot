@@ -3,7 +3,7 @@
 - 조사일: 2026-11-11 (아래 "확인" 날짜는 모두 이 날이다)
 - 조사 환경: macOS (Apple Silicon), Node 24.22.0 (ICU 78.3, CLDR 48.0), Playwright 1.65.0 WebKit (UA `Version/27.2 Safari/605.1.15`)
 - 조사 대상 산출물: 사용자가 Claude Design으로 만든 "Stock Copilot" 디자인 시스템 첫 버전(2026-11-11). `README.md`, `design-system.json`, `tokens.json`, `components/bundle.css`, `components/bundle.js`, `components/index.d.ts`, `components/*/README.md`
-- 실험 코드: `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-14/` (저장소 밖. `scripts/`에 생성기·대비 검사·Intl 검사, `exp/`에 Tailwind·ESLint·stylelint·WebKit 실험, `headless/`에 무스타일 라이브러리 소스 검사, `font/`에 글꼴 검사)
+- 실험 코드: `<세션 임시 폴더>/research/R-14/` (저장소 밖. `scripts/`에 생성기·대비 검사·Intl 검사, `exp/`에 Tailwind·ESLint·stylelint·WebKit 실험, `headless/`에 무스타일 라이브러리 소스 검사, `font/`에 글꼴 검사)
 - 방법: `anthropic-skills:deep-research` 스킬은 조사 서브에이전트를 띄우는 방식이라 이번 작업의 "서브에이전트 금지" 제약과 맞지 않았다. 그래서 웹 검색·공식 문서 읽기·npm 레지스트리 조회·로컬 실험을 직접 했다.
 - 버전은 2026-11-11에 `npm view`로 레지스트리에서 확인했다. 표의 날짜는 그 버전이 게시된 날이다.
 

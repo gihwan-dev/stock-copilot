@@ -2,7 +2,7 @@
 
 - 조사일: 2026-11-11 (KST). 따로 적지 않았으면 모든 "확인"은 이날 한 것이다.
 - 실측 환경: macOS, `curl`, Python 3 표준 라이브러리. 요청 머리말은 일반 브라우저형 `User-Agent`(`Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) rss-check`)만 썼고 개인 정보는 보내지 않았다. DART·네이버·FRED 키는 쓰지 않았다. SEC EDGAR 데이터 API는 호출하지 않았다(문서만 읽음).
-- 실험 스크립트와 받은 원본은 `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-07/`에 있다(저장소 밖).
+- 실험 스크립트와 받은 원본은 `<세션 임시 폴더>/research/R-07/`에 있다(저장소 밖).
 - 법령 해석은 조사 결과일 뿐 법률 자문이 아니다. 최종 판단은 R-13에서 한다.
 
 ## 1. 요약
@@ -345,7 +345,7 @@
 
 ## 부록. 실행한 실험
 
-스크립트는 모두 `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-07/`에 있다.
+스크립트는 모두 `<세션 임시 폴더>/research/R-07/`에 있다.
 
 | 스크립트 | 내용 | 결과 |
 |---|---|---|

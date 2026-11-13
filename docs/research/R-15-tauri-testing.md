@@ -2,7 +2,7 @@
 
 - 조사일: 2026-11-11 (출처의 "확인" 날짜는 모두 이 날이다)
 - 조사 환경: macOS 26.5.2 (Apple Silicon), Rust 1.95.0 (`cargo +1.95.0`), Node 24.22.0, Docker 29.2.1 (colima, aarch64)
-- 실험 코드: `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-15/` (저장소 밖)
+- 실험 코드: `<세션 임시 폴더>/research/R-15/` (저장소 밖)
   - `exp/`: Tauri 목 런타임 경로 고정 테스트, 가짜 AI CLI 재생, 네트워크 차단 (Rust 테스트 11개)
   - `visual/`: 스크린샷 재현성 실험 (호스트 Chromium과 Docker Chromium 비교)
 - 실제 토스 주소, 실제 계좌, API 키, 실제 `claude` CLI는 호출하지 않았다. 네트워크 차단 실험의 대상은 `example.com`이다.

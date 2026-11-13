@@ -521,7 +521,7 @@ Q3 표 참고. 추천은 (가) 현재 IP 등록 + REL-1 안내이고, IP가 한 
 
 ## 7. 직접 실행한 것
 
-실험 파일 위치: `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-01/`
+실험 파일 위치: `<세션 임시 폴더>/research/R-01/`
 
 | 실험 | 결과 |
 |---|---|

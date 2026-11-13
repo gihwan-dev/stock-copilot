@@ -311,7 +311,7 @@ React 공식 문서 "You Might Not Need an Effect"의 기준은 "외부 시스�
 
 ## 6. 실행 검증
 
-예제 위치: `/private/tmp/claude-501/-Users-choegihwan--t3-worktrees-sure-t3-7f34ca39-5542c437df4f301a/d672a99d-9dd8-4133-b4ab-9b52494be3de/scratchpad/research/R-08/proj` (임시 폴더. 저장소에는 넣지 않았다).
+예제 위치: `<세션 임시 폴더>/research/R-08/proj` (임시 폴더. 저장소에는 넣지 않았다).
 
 ### 6.1 설치한 버전 (`package.json`)
 
