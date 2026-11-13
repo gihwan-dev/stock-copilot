@@ -106,3 +106,12 @@ pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
 
 pub use order_intent::{OrderIntentError, ResolvedOrderInstrument};
 pub use order_quantity::OrderWireValue;
+
+mod exclusions;
+mod horizon;
+mod investor_profile;
+mod weight_caps;
+pub use exclusions::{ExcludedSecurityType, Exclusions, ExclusionsError, SectorId, SectorIdError};
+pub use horizon::{AdvancedHoursConfirmation, Horizon, HorizonError, HorizonSelection};
+pub use investor_profile::{InvestorProfile, RiskAppetite};
+pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsError};
