@@ -1,6 +1,6 @@
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransactionCode(String);
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TransactionCodeError {
     InvalidCode,
 }
@@ -19,9 +19,9 @@ impl TransactionCode {
         &self.0
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UnknownTransactionCode(TransactionCode);
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TransactionKind {
     Buy,
     Sell,
@@ -70,5 +70,68 @@ impl TransactionKind {
             Self::Fee => String::from("FEE"),
             Self::Unknown(code) => return code.0.clone(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        IsinCode, TransactionCode, TransactionCodeError, TransactionError, TransactionKind,
+    };
+    #[test]
+    fn kind_codes_are_sealed_and_all_codes_round_trip() {
+        for code in [
+            "BUY",
+            "SELL",
+            "SECURITIES_TRANSFER_IN",
+            "SECURITIES_TRANSFER_OUT",
+            "DEPOSIT",
+            "WITHDRAWAL",
+            "EXCHANGE_IN",
+            "EXCHANGE_OUT",
+            "DIVIDEND",
+            "INTEREST",
+            "FEE",
+            "FUTURE",
+            "buy",
+        ] {
+            let kind = TransactionKind::new(TransactionCode::try_new(code).expect("코드"));
+            assert_eq!(kind.as_code().as_str(), code);
+            match kind {
+                TransactionKind::Unknown(_) => assert!(["FUTURE", "buy"].contains(&code)),
+                TransactionKind::Buy
+                | TransactionKind::Sell
+                | TransactionKind::SecuritiesTransferIn
+                | TransactionKind::SecuritiesTransferOut
+                | TransactionKind::Deposit
+                | TransactionKind::Withdrawal
+                | TransactionKind::ExchangeIn
+                | TransactionKind::ExchangeOut
+                | TransactionKind::Dividend
+                | TransactionKind::Interest
+                | TransactionKind::Fee => assert!(!["FUTURE", "buy"].contains(&code)),
+            }
+        }
+        for value in ["", " ", "A\n", "한글"] {
+            assert_eq!(
+                TransactionCode::try_new(value),
+                Err(TransactionCodeError::InvalidCode)
+            );
+            assert_eq!(IsinCode::try_new(value), Err(TransactionError::InvalidIsin));
+        }
+        let maximum = "A".repeat(64);
+        assert_eq!(
+            TransactionCode::try_new(&maximum).expect("상한").as_str(),
+            maximum
+        );
+        assert_eq!(IsinCode::try_new(&maximum).expect("상한").as_str(), maximum);
+        assert_eq!(
+            TransactionCode::try_new(&"A".repeat(65)),
+            Err(TransactionCodeError::InvalidCode)
+        );
+        assert_eq!(
+            IsinCode::try_new(&"A".repeat(65)),
+            Err(TransactionError::InvalidIsin)
+        );
     }
 }

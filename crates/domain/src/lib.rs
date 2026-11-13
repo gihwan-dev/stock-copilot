@@ -77,3 +77,14 @@ pub use transaction::{
 pub use transaction_kind::{
     TransactionCode, TransactionCodeError, TransactionKind, UnknownTransactionCode,
 };
+
+mod transaction_order;
+pub use transaction::{
+    AssetClassCode, CalculationEffect, TransactionAnomaly, TransactionPrice, UnknownAssetClassCode,
+};
+
+mod transaction_response;
+pub use settled_row_set::{DisappearanceWarning, ReconciliationNotice, RowCount};
+pub use transaction_response::{
+    CompleteTransactionResponse, CompletionAttestation, TransactionFilter,
+};
