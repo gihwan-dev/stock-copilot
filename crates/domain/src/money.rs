@@ -11,7 +11,7 @@ pub struct Amount(Decimal);
 
 impl Amount {
     #[must_use]
-    pub fn new(value: Decimal) -> Self {
+    pub(crate) fn new(value: Decimal) -> Self {
         Self(value)
     }
 
@@ -40,6 +40,14 @@ impl Amount {
         Decimal::from_str_exact(&input.0)
             .map(Self::new)
             .map_err(|_error| AmountError::NotRepresentable)
+    }
+
+    pub(crate) fn checked_add(&self, other: &Self) -> Result<Self, MoneyError> {
+        self.combine(other, Arithmetic::Add)
+    }
+
+    pub(crate) fn checked_sub(&self, other: &Self) -> Result<Self, MoneyError> {
+        self.combine(other, Arithmetic::Subtract)
     }
 
     fn combine(&self, other: &Self, operation: Arithmetic) -> Result<Self, MoneyError> {
@@ -112,6 +120,7 @@ pub enum MoneyError {
     CurrencyMismatch,
     Overflow,
     PrecisionLoss,
+    DivisionByZero,
 }
 
 impl Money {
@@ -128,6 +137,18 @@ impl Money {
     #[must_use]
     pub fn currency(&self) -> Currency {
         self.currency
+    }
+
+    pub fn checked_mul(&self, ratio: &crate::Ratio) -> Result<Self, MoneyError> {
+        crate::exact_arithmetic::multiply(self.amount, Amount::new(ratio.as_decimal()))
+            .map(|amount| Self::new(amount, self.currency))
+    }
+
+    pub fn checked_ratio(&self, other: &Self) -> Result<crate::RatioQuotient, MoneyError> {
+        if self.currency != other.currency {
+            return Err(MoneyError::CurrencyMismatch);
+        }
+        crate::exact_arithmetic::divide(self.amount, other.amount)
     }
 
     pub fn checked_add(&self, other: &Self) -> Result<Self, MoneyError> {
