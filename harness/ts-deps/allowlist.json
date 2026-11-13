@@ -131,6 +131,14 @@
         "tailwindcss": {
           "target": "tailwindcss",
           "reason": "Tailwind 4.3.5 토큰 테마와 Vite 컴파일 (R-14, DS-13)"
+        },
+        "eslint-plugin-better-tailwindcss": {
+          "target": "eslint-plugin-better-tailwindcss",
+          "reason": "DS-02 내부 스타일 검사 (harness 4.3, R-14)"
+        },
+        "postcss": {
+          "target": "postcss",
+          "reason": "DS-02 적대적 리뷰: 중첩 선택자와 at-rule을 CSS 파서로 검사. 기존 전이 버전 8.5.32 고정"
         }
       }
     }

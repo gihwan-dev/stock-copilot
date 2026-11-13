@@ -88,3 +88,21 @@ pub use settled_row_set::{DisappearanceWarning, ReconciliationNotice, RowCount};
 pub use transaction_response::{
     CompleteTransactionResponse, CompletionAttestation, TransactionFilter,
 };
+mod fx_rate;
+pub use fx_rate::{FxPair, FxRate, FxRateError, FxRateKind, FxSource, FxValidity};
+mod fx_conversion;
+pub use fx_conversion::{
+    ConvertedMoney, FxConversionError, KrwValuation, KrwValuationComponent, MidConvertedMoney,
+    UnconvertedKrw, ValuationAccuracy,
+};
+mod order_quantity;
+pub use order_quantity::{OrderValueError, SellOrderQuantity, WholeOrderQuantity};
+mod order_price;
+pub use order_price::{KrOrderPrice, UsOrderPrice};
+mod order_amount;
+pub use order_amount::UsdOrderAmount;
+mod order_intent;
+pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
+
+pub use order_intent::{OrderIntentError, ResolvedOrderInstrument};
+pub use order_quantity::OrderWireValue;

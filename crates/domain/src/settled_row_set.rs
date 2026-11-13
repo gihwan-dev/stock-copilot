@@ -605,19 +605,19 @@ mod tests {
         #![proptest_config(ProptestConfig::with_cases(256))]
         #[test]
         fn mixed_windows_filters_pending_and_missing_history_match_independent_counts(
-            old in collection::vec((1_u8..29, 0_u8..4, proptest::bool::ANY), 0..24),
-            new in collection::vec((1_u8..29, 0_u8..4, proptest::bool::ANY), 0..24),
-            bounds in (1_u8..29, 1_u8..29), selected in proptest::bool::ANY
+            old in collection::vec((1_u8..29, 0_u8..12, proptest::bool::ANY), 0..24),
+            new in collection::vec((1_u8..29, 0_u8..12, proptest::bool::ANY), 0..24),
+            bounds in (1_u8..29, 1_u8..29), selected in proptest::bool::ANY, selection in collection::btree_set(0_u8..12,1..=12)
         ) {
-            let codes = ["BUY", "SELL", "DEPOSIT", "DIVIDEND"];
+            let codes = ["BUY", "SELL", "SECURITIES_TRANSFER_IN", "SECURITIES_TRANSFER_OUT", "DEPOSIT", "WITHDRAWAL", "EXCHANGE_IN", "EXCHANGE_OUT", "DIVIDEND", "INTEREST", "FEE", "FUTURE"];
             let make = |values: &[(u8,u8,bool)]| values.iter().map(|(day, kind, pending)| row(*day, codes.get(usize::from(*kind)).expect("종류"), if *pending {Settlement::Pending} else {Settlement::Settled})).collect::<Vec<_>>();
             let initial = apply(&SettledRowSet::new(AccountId::new(1)), make(&old), 10);
             let tombstones = apply(initial.state(), vec![], 20);
             let restored = apply(tombstones.state(), make(&old), 30);
             let from = bounds.0.min(bounds.1); let to = bounds.0.max(bounds.1);
-            let included = |kind: u8| !selected || kind == 0;
+            let included = |kind: u8| !selected || selection.contains(&kind);
             let received = new.iter().copied().filter(|(day,kind,pending)| included(*kind) && (*pending || (*day >= from && *day <= to))).collect::<Vec<_>>();
-            let filter = if selected {TransactionFilter::only(vec![TransactionKind::Buy]).expect("필터")} else {TransactionFilter::all()};
+            let filter = if selected {TransactionFilter::only(selection.iter().map(|kind| TransactionKind::new(TransactionCode::try_new(codes.get(usize::from(*kind)).expect("종류")).expect("코드"))).collect()).expect("필터")} else {TransactionFilter::all()};
             let result = restored.state().reconcile(&response(make(&received), from, to, filter.clone()), time(40)).expect("대조");
             let mut expected = old.iter().copied().filter(|(day,kind,pending)| !*pending && (!included(*kind) || *day < from || *day > to)).collect::<Vec<_>>();
             expected.extend(received.iter().copied().filter(|(_,_,pending)| !*pending)); expected.sort_unstable();
@@ -788,8 +788,11 @@ mod tests {
                 vec![value.clone(); 1_000_001],
                 TransactionBatch::try_new(vec![]).expect("임시"),
                 Some(time(10))
-            ),
-            Err(ReconciliationError::TooMuchHistory)
+            )
+            .as_ref()
+            .map(SettledRowSet::history_rows)
+            .map(<[crate::StoredTransaction]>::len),
+            Err(&ReconciliationError::TooMuchHistory)
         );
         let saved = SettledRowSet::try_restore(
             AccountId::new(1),
@@ -799,16 +802,21 @@ mod tests {
         )
         .expect("이력 상한");
         assert_eq!(
-            saved.reconcile(
-                &response(
-                    vec![row(1, "BUY", Settlement::Settled)],
-                    1,
-                    14,
-                    TransactionFilter::all()
-                ),
-                time(20)
-            ),
-            Err(ReconciliationError::TooMuchHistory)
+            saved
+                .reconcile(
+                    &response(
+                        vec![row(1, "BUY", Settlement::Settled)],
+                        1,
+                        14,
+                        TransactionFilter::all()
+                    ),
+                    time(20)
+                )
+                .as_ref()
+                .map(super::Reconciliation::state)
+                .map(SettledRowSet::history_rows)
+                .map(<[crate::StoredTransaction]>::len),
+            Err(&ReconciliationError::TooMuchHistory)
         );
         assert_eq!(saved.history_rows().len(), 1_000_000);
     }

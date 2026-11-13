@@ -81,6 +81,7 @@ check-pnpm: check-node
 check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
+    node harness/ds-style/check.mjs
     node harness/ds-tokens/check.mjs
     cargo run --locked --quiet --package xtask -- gen-tokens --check
     node harness/ds-tokens/contrast.mjs

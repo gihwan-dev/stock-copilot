@@ -3375,7 +3375,9 @@
       "row": "전역",
       "expect": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values",
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
       ]
     },
     "src/shared/ds/dom/open-banned.ts": {
@@ -3383,7 +3385,8 @@
       "expect": [
         "guard/no-global-object :: open 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/shared/ds/gaps/concat-key-gap.ts": {
@@ -3392,7 +3395,9 @@
       "reports": [
         "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values",
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
       ]
     },
     "src/shared/ds/index.ts": {
@@ -3429,11 +3434,11 @@
     "src/shared/ds/text/library-props-gap.tsx": {
       "row": "원시 타입",
       "expect": "KNOWN_GAP",
-      "reports": []
+      "reports": ["ds/no-dom-values"]
     },
     "src/shared/ds/text/spread-allowed.tsx": {
       "row": "React",
-      "expect": []
+      "expect": ["ds/static-classes", "ds/no-dom-styling"]
     },
     "src/shared/ipc/bindings.ts": {
       "row": "원시 타입",
@@ -3483,7 +3488,8 @@
       "expect": [
         "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/shared/ipc/index.ts": {
@@ -3565,7 +3571,8 @@
       "expect": [
         "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/shared/lib/format.ts": {
@@ -3681,7 +3688,8 @@
         "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: 허용 목록이 있는 폴더(shared/platform)에는 목록에 있는 파일만 둔다. 폴더로 옮겨 규칙을 피할 수 없다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/shared/platform/unlisted.ts": {
@@ -3695,7 +3703,9 @@
       "row": "허용 목록",
       "expect": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values",
+        "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만."
       ]
     },
     "src/shared/platform/useCoreEventCatch.ts": {
@@ -3760,6 +3770,22 @@
     },
     "src/shared/ipc/testing/mockBindings.ts": {
       "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ds/text/literal-allowed.tsx": {
+      "row": "React",
+      "expect": []
+    },
+    "src/shared/lib/text/spread-allowed.tsx": {
+      "row": "React",
+      "expect": []
+    },
+    "src/shared/lib/text/jsx-spread-boundary.tsx": {
+      "row": "React",
+      "expect": ["ds/no-shared-jsx"]
+    },
+    "src/shared/ds/dom/no-dom-allowed.ts": {
+      "row": "전역",
       "expect": []
     }
   }
