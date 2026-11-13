@@ -63,3 +63,17 @@ mod probability;
 pub use probability::{
     AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
 };
+
+mod settled_row_set;
+mod transaction;
+mod transaction_kind;
+pub use settled_row_set::{
+    Reconciliation, ReconciliationError, RowChange, SettledRowSet, SettlementWindow,
+    StoredTransaction, TransactionBatch,
+};
+pub use transaction::{
+    AssetClass, Cancellation, IsinCode, Settlement, Transaction, TransactionData, TransactionError,
+};
+pub use transaction_kind::{
+    TransactionCode, TransactionCodeError, TransactionKind, UnknownTransactionCode,
+};
