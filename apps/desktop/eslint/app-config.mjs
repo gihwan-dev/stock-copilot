@@ -1,4 +1,9 @@
-import { dsConfigs, DS_RULES, SHARED_RULES } from "./ds-config.mjs";
+import {
+  dsConfigs,
+  DS_RULES,
+  SHARED_RULES,
+  SCREEN_RULES,
+} from "./ds-config.mjs";
 import js from "@eslint/js";
 import eslintComments from "@eslint-community/eslint-plugin-eslint-comments";
 import eslintReact from "@eslint-react/eslint-plugin";
@@ -36,7 +41,13 @@ const FORBIDDEN_FILES = [
 const OTHER_FILES = ["src/**/*.*", "src/**/.*", "src/**/[!.]*"];
 
 const UNDISABLEABLE_RULES = [
-  ...new Set([...Object.keys(DS_RULES), ...Object.keys(SHARED_RULES)]),
+  ...new Set([
+    ...Object.keys(DS_RULES),
+    ...Object.keys(SHARED_RULES),
+    ...Object.keys(SCREEN_RULES),
+  ]),
+  "ds/no-dom-exports",
+  "ds/no-message-format",
   "local/no-comments",
   "local/no-money-coercion",
   "local/forbidden-file",

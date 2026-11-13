@@ -1,2 +1,2 @@
-import { rootElement } from "../../platform/index";
-export const seen = rootElement;
+import { mountApp } from "../../platform/index";
+export const seen = mountApp;

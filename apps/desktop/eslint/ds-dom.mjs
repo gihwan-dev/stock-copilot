@@ -145,3 +145,43 @@ export const noDomValues = {
     };
   },
 };
+
+export const noDomExports = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      forbidden: "DOM 접근 허용 파일은 DOM 값을 공개 API로 내보내지 않는다.",
+    },
+  },
+  create(ctx) {
+    const services = ctx.sourceCode.parserServices;
+    const checker = services.program?.getTypeChecker();
+    const leaks = (type, seen = new Set()) => {
+      if (seen.has(type)) return false;
+      seen.add(type);
+      if (domType(checker, type)) return true;
+      if ((type.flags & ts.TypeFlags.Object) === 0) return false;
+      return (
+        type
+          .getCallSignatures()
+          .some((signature) => leaks(signature.getReturnType(), seen)) ||
+        checker
+          .getPropertiesOfType(type)
+          .some((property) => leaks(checker.getTypeOfSymbol(property), seen))
+      );
+    };
+    return {
+      "Program:exit"(node) {
+        if (checker === undefined) return;
+        const source = services.esTreeNodeToTSNodeMap.get(node);
+        const symbol = checker.getSymbolAtLocation(source);
+        if (symbol === undefined) return;
+        for (const exported of checker.getExportsOfModule(symbol)) {
+          if (leaks(checker.getTypeOfSymbolAtLocation(exported, source)))
+            ctx.report({ node, messageId: "forbidden" });
+        }
+      },
+    };
+  },
+};

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { ESLint } from "eslint";
-import { dsConfigs, DS_RULES } from "../eslint/ds-config.mjs";
+import { dsConfigs, DS_RULES, SCREEN_RULES } from "../eslint/ds-config.mjs";
 import {
   cssBoundaryProblems,
   snapshot,
@@ -112,7 +112,10 @@ test("DS02 fixes plugin cwd and entryPoint in the effective application config",
     "src/features/home/ui/Probe.tsx",
   );
   for (const rule of Object.keys(DS_RULES))
-    assert.equal(screen.rules[rule], undefined);
+    assert.deepEqual(
+      screen.rules[rule],
+      rule in SCREEN_RULES ? [2] : undefined,
+    );
 });
 
 test("DS02 wrong entryPoint fixtures expose fail-open default classes", async () => {

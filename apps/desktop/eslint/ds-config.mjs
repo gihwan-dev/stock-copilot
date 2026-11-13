@@ -38,6 +38,7 @@ export const DS_RULES = {
   "ds/static-classes": "error",
   "ds/no-inline-style": "error",
   "ds/no-style-literals": "error",
+  "ds/no-ui-attributes": "error",
 };
 export const SHARED_RULES = {
   "ds/no-style-literals": "error",
@@ -45,6 +46,29 @@ export const SHARED_RULES = {
   "ds/no-dom-styling": "error",
   "ds/no-shared-jsx": "error",
   "ds/no-element-factory": "error",
+};
+export const SCREEN_RULES = {
+  ...Object.fromEntries(
+    Object.entries(DS_RULES).filter(([name]) =>
+      [
+        "ds/no-dom-values",
+        "ds/no-dom-styling",
+        "ds/no-element-factory",
+        "ds/no-style-object",
+        "ds/no-style-literals",
+      ].includes(name),
+    ),
+  ),
+  ...Object.fromEntries(
+    [
+      "no-screen-elements",
+      "no-screen-props",
+      "no-screen-imports",
+      "no-screen-classes",
+      "no-screen-format",
+      "no-ui-attributes",
+    ].map((name) => [`ds/${name}`, "error"]),
+  ),
 };
 const listed = (files, rules) => (files.length === 0 ? [] : [{ files, rules }]);
 export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
@@ -73,7 +97,27 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     plugins: { ds: dsPlugin },
     rules: SHARED_RULES,
   },
+  {
+    files: [
+      "src/features/**/*.ts",
+      "src/features/**/*.tsx",
+      "src/app/**/*.ts",
+      "src/app/**/*.tsx",
+    ],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { ds: dsPlugin },
+    rules: SCREEN_RULES,
+  },
+  {
+    files: ["src/**/messages.ts"],
+    plugins: { ds: dsPlugin },
+    rules: { "ds/no-message-format": "error" },
+  },
   ...listed(lists.DOM_ACCESS_FILES, {
+    "ds/no-dom-exports": "error",
     "ds/no-dom-values": "off",
     "guard/no-dom-globals": "off",
     "guard/no-ref-callback": "off",

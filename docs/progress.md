@@ -102,6 +102,7 @@ T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않�
 |---|---|---|---|---|
 | DS-01 | 완료 | be83f1a | [DS-01](reviews/DS-01.md) | DS-13: 입력 경로 `apps/desktop/design-tokens/tokens.json`, `@theme` 대응 규칙이 없는 그룹, 글꼴 경로는 `design/` 기준, R-14 4.2의 색 값은 기준으로 쓰지 않음. 사용자: `space-6` 대 `space-8`, 설정 Dialog 차이 |
 | DS-02 | 완료 | 1194101 | [DS-02](reviews/DS-02.md) | DS-09: `features`·`app`의 클래스·스타일 금지. DS-03: 아이콘 컴포넌트와 아이콘 경로 허용 파일, 동적 폭의 닫힌 단계 값. DS-10·DS-06: 대문자 컴포넌트와 차트의 숫자 props. DS-11·DS-19: `min-w-0`·`min-h-0`, 파일별 길이·넘침. 사용자: `eslint-plugin-better-tailwindcss` 추가 확인 |
+| DS-09 | 완료 | ac10ff3 | [DS-09](reviews/DS-09.md) | DS-10: 공개 props의 className·style·rest 금지, 토큰 이름 유니온, 이벤트 객체를 prop으로 내보내지 않기. DS-03: 실제 컴포넌트. DS-11: 배치 컴포넌트. DS-19: 스크롤과 넘침. 화면 외부 패키지를 더하려면 허용 목록과 문서 근거가 필요 |
 | DS-13 | 완료 | 4917955 | [DS-13](reviews/DS-13.md) | DS-02: 임의 값·변수 축약·숫자 유틸리티·`dark:` 금지(ADR 0026의 실측 표). DS-03 이후: flash 애니메이션, 차트 선 굵기. 사용자: 다크 테마 대비 미달 두 조합, `tailwindcss` 추가 확인. 하네스: 스크립트의 심볼릭 경로 실행 |
 
 H-20 잠금 전에 도메인과 디자인 시스템 작업을 시작했다. 잠금 전에는 구현 담당이 생성물(`.codex/config.toml`, 해시 목록, 잠금 조각)을 기존 스크립트로 다시 만든다.

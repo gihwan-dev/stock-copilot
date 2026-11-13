@@ -39,10 +39,17 @@ export const FEATURE_DEPENDENCIES = {
 };
 
 export const PACKAGE_LOCATIONS = {
-  "react-dom": ["src/app/main.tsx"],
+  "react-dom": ["src/shared/platform/index.ts"],
   "@tauri-apps/api": ["src/shared/ipc/**"],
   zod: ["src/shared/ipc/**", "src/shared/lib/brand.ts"],
 };
+
+export const SCREEN_EXTERNAL_PACKAGES = [
+  "react",
+  "@tanstack/react-router",
+  "@tanstack/react-query",
+  "react-error-boundary",
+];
 
 export const BOUNDARY_TABLES = {
   ELEMENTS,
@@ -107,6 +114,32 @@ export const boundaryPolicies = ({
   ...featurePolicies(features),
   { allow: { to: { module: { origin: "external" } } } },
   ...packagePolicies(locations),
+  {
+    from: {
+      element: { types: ["app", "feature", "feature-ui", "feature-model"] },
+    },
+    disallow: { to: { module: { origin: "external" } } },
+    message: BOUNDARY_MESSAGES.package,
+  },
+  {
+    from: {
+      file: {
+        path: [
+          "src/app/**/*.test.ts",
+          "src/app/**/*.test.tsx",
+          "src/features/**/*.test.ts",
+          "src/features/**/*.test.tsx",
+        ],
+      },
+    },
+    allow: { to: { module: { origin: "external", source: "vitest" } } },
+  },
+  ...SCREEN_EXTERNAL_PACKAGES.map((source) => ({
+    from: {
+      element: { types: ["app", "feature", "feature-ui", "feature-model"] },
+    },
+    allow: { to: { module: { origin: "external", source } } },
+  })),
   {
     disallow: { to: { module: { origin: "core" } } },
     message: BOUNDARY_MESSAGES.core,
