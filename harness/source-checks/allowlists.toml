@@ -52,3 +52,7 @@ reason = "D-01 Amount 문자열 생성자가 정규형 검사 후 from_str_exact
 [[decimal-arithmetic]]
 path = "crates/domain/src/exact_arithmetic.rs"
 reason = "D-02 곱셈의 넓은 정수 정확 판정과 최대 정밀도 비율 몫만 제공한다"
+
+[[decimal-arithmetic]]
+path = "crates/domain/src/volatility_arithmetic.rs"
+reason = "D-11 표본 통계의 근사 연산을 봉인된 ApproximateVolatility로만 반환한다"

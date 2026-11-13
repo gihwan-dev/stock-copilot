@@ -1,4 +1,5 @@
 mod money;
+mod volatility;
 pub use money::{Amount, AmountError, AmountInput, Currency, Money, MoneyError};
 mod money_display;
 pub use money_display::{
@@ -82,3 +83,12 @@ pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
 
 pub use order_intent::{OrderIntentError, ResolvedOrderInstrument};
 pub use order_quantity::OrderWireValue;
+mod candle;
+mod quote;
+mod volatility_arithmetic;
+pub use candle::{
+    AdjustmentBasis, Candle, CandleError, CandlePeriod, CandleTime, Ohlcv, PriceAdjustment,
+};
+pub use quote::{Quote, QuoteError};
+pub use volatility::{Volatility, VolatilityError, VolatilitySamples};
+pub use volatility_arithmetic::ApproximateVolatility;
