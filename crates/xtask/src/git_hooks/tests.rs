@@ -1075,6 +1075,7 @@ fn install_node_fixture(work: &Path) {
             .success()
     );
     let cache = work.join("cache");
+    assert!(!cache.exists(), "pnpm metadata cache starts empty");
     let mut install = Command::new("pnpm");
     install
         .args([
@@ -1084,7 +1085,8 @@ fn install_node_fixture(work: &Path) {
             "--frozen-lockfile",
             "--silent",
         ])
-        .env("XDG_CACHE_HOME", &cache)
+        .env("pnpm_config_cache_dir", &cache)
+        .env("npm_config_cache_dir", &cache)
         .current_dir(work)
         .stdin(Stdio::null());
     assert!(
@@ -1116,7 +1118,8 @@ fn fresh_node_restores_a_replaced_tool() {
         .arg("--working-directory")
         .arg(&work)
         .arg("fresh-node")
-        .env("XDG_CACHE_HOME", &cache)
+        .env("pnpm_config_cache_dir", &cache)
+        .env("npm_config_cache_dir", &cache)
         .env("pnpm_config_trust_lockfile", "true")
         .env("pnpm_config_offline", "true")
         .env("npm_config_offline", "true")

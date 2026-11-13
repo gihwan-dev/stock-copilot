@@ -191,3 +191,22 @@ fixture 생성기는 기존 ts-deps 잠금 파서를 재사용한다. 루트 pac
 이 컴퓨터의 pnpm 진입 스크립트는 구형 인자 파서를 거쳐 고정 버전으로 위임한다. --version은 12.18.0이지만 새로운 --trust-lockfile 인자를 직접 주면 Unknown option이었다. 동일한 설정인 --config.trust-lockfile=true를 fixture 최초 설치에 사용한다. 복구 레시피는 바꾸지 않고 fixture에서 실행하는 just 자식 프로세스에만 pnpm_config_trust_lockfile=true를 전달한다. 두 설치의 XDG_CACHE_HOME은 같은 빈 fixture 폴더로 한정한다. 전역 환경과 홈 설정은 바꾸지 않는다.
 
 ts-deps의 기존 검사 진입점에서 추적한 실행 파일의 옵션·설정 문자열을 검사한다. docs/**는 설명 자료라 제외하고 하네스의 Markdown 파일도 검사한다. 허용 목록은 crates/xtask/src/git_hooks/tests.rs 하나다. 옵션과 설정의 예제, 허용 항목 제거 변형, 실제 진입점에 금지 설치를 넣는 테스트를 함께 둔다. .npmrc·workspace·매니페스트의 기존 제한도 유지한다. 검색한 다른 오프라인 pnpm 설치는 잠금을 쓰거나 의존성이 없는 fixture여서 같은 변경이 필요하지 않았다.
+
+
+### 두 번째 CI 실패: Corepack 캐시의 동반 격리
+
+2026-11-13, fixture 수정 c0f3acb가 포함된 master 14e017c의 Linux·macOS CI가 같은 테스트에서 다시 실패했다. Corepack이 pnpm 12.18.0을 다시 내려받으려 했고 오프라인 환경에서 DNS 오류가 났다.
+
+Corepack 0.36.0의 설치 코드는 COREPACK_HOME이 없으면 XDG_CACHE_HOME/node/corepack을 사용한다. fixture의 XDG_CACHE_HOME 변경이 준비된 도구 캐시도 이동시킨 것이 원인이다. 명시적 COREPACK_HOME을 둔 실험만으로는 CI의 기본 경로 조건을 검증하지 못한다.
+
+임시 HOME·Corepack 사본·심 전용 PATH에서 node harness/ci/tools.mjs pnpm을 실행했다. 준비할 때의 COREPACK_HOME은 임시 홈의 기본 경로로 두고 테스트에서는 환경 변수를 제거했다. 별도 임시 pnpm 저장소에 의존성을 준비한 뒤 COREPACK_ENABLE_NETWORK=0과 macOS의 network 차단 샌드박스에서 실제 테스트 바이너리를 실행했다. 사용자 홈의 설정·캐시는 변경하지 않았다.
+
+| 조건 | 결과 |
+|---|---|
+| 수정 전, 준비된 Corepack 심, fixture가 XDG_CACHE_HOME 변경 | pnpm 재다운로드 시도, Network access disabled, 테스트 종료 101 |
+| 수정 후, 같은 Corepack 심·임시 홈·오프라인 조건 | 복구 테스트 종료 0 |
+| 수정 후, 독립 설치 pnpm 진입점·고정 도구 사본을 가진 임시 PNPM_HOME·오프라인 조건 | 복구 테스트 종료 0 |
+| 두 pnpm cache-dir 환경 설정을 준 config get cache-dir | 지정한 임시 pnpm 전용 폴더 반환 |
+| Linux offline.mjs를 macOS에서 실행 | 플랫폼 검사로 종료 2. Linux 네트워크 이름공간 실행은 이번 로컬 검증에서 미실시 |
+
+XDG_CACHE_HOME은 바꾸지 않는다. 최초 설치와 just fresh-node 자식 프로세스에만 pnpm_config_cache_dir·npm_config_cache_dir을 같은 fixture/cache 경로로 지정한다. 구형 진입 스크립트와 고정 pnpm 모두의 설정을 한정하고 COREPACK_HOME·HOME·전역 환경을 유지한다. 첫 설치 전 그 캐시 경로가 없음을 단언한다. 기존 shim·패키지 파일 복구 단언과 오프라인·integrity 조건은 유지한다. 임시 홈·도구·저장소는 실험 뒤 지운다.
