@@ -1,11 +1,12 @@
 use crate::{
-    ConvertedMoney, Currency, FxConversionError, Money, NumericError, NumericInput, Price,
-    Timestamp,
+    ConvertedMoney, Currency, FxConversionError, MidConvertedMoney, Money, NumericError,
+    NumericInput, Price, TimeInterval, Timestamp,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FxPair {
     UsdKrw,
+    KrwUsd,
 }
 
 impl FxPair {
@@ -13,6 +14,7 @@ impl FxPair {
     pub const fn base(self) -> Currency {
         match self {
             Self::UsdKrw => Currency::Usd,
+            Self::KrwUsd => Currency::Krw,
         }
     }
 
@@ -20,6 +22,7 @@ impl FxPair {
     pub const fn quote(self) -> Currency {
         match self {
             Self::UsdKrw => Currency::Krw,
+            Self::KrwUsd => Currency::Usd,
         }
     }
 }
@@ -47,7 +50,7 @@ pub struct FxRate {
     quote_per_base: Price,
     pair: FxPair,
     kind: FxRateKind,
-    as_of: Timestamp,
+    validity: TimeInterval,
     source: FxSource,
 }
 
@@ -56,7 +59,7 @@ impl FxRate {
         input: &NumericInput,
         pair: FxPair,
         kind: FxRateKind,
-        as_of: Timestamp,
+        validity: TimeInterval,
         source: FxSource,
     ) -> Result<Self, FxRateError> {
         let quote_per_base = Price::parse(input, pair.quote()).map_err(|error| match error {
@@ -70,7 +73,7 @@ impl FxRate {
             quote_per_base,
             pair,
             kind,
-            as_of,
+            validity,
             source,
         })
     }
@@ -85,7 +88,7 @@ impl FxRate {
     }
     #[must_use]
     pub const fn as_of(self) -> Timestamp {
-        self.as_of
+        self.validity.start()
     }
     #[must_use]
     pub const fn source(self) -> FxSource {
@@ -96,7 +99,51 @@ impl FxRate {
         self.quote_per_base
     }
 
-    pub fn convert(self, money: Money) -> Result<ConvertedMoney, FxConversionError> {
+    #[must_use]
+    pub const fn valid_until(self) -> Timestamp {
+        self.validity.end()
+    }
+
+    #[must_use]
+    pub fn validity_at(self, at: Timestamp) -> FxValidity {
+        if at >= self.as_of() && at < self.valid_until() {
+            FxValidity::Valid
+        } else {
+            FxValidity::OutsideInterval
+        }
+    }
+
+    pub fn conservative_with(self, other: Self) -> Result<Self, FxConversionError> {
+        if self.pair != other.pair {
+            return Err(FxConversionError::PairMismatch);
+        }
+        if self.quote_per_base.as_money().amount().as_decimal()
+            < other.quote_per_base.as_money().amount().as_decimal()
+        {
+            Ok(other)
+        } else {
+            Ok(self)
+        }
+    }
+
+    pub fn convert_for_order(
+        self,
+        money: Money,
+        at: Timestamp,
+    ) -> Result<ConvertedMoney, FxConversionError> {
+        if self.validity_at(at) != FxValidity::Valid {
+            return Err(FxConversionError::OutsideValidity);
+        }
+        self.convert_for_historical_valuation(money)
+    }
+
+    pub fn convert_for_historical_valuation(
+        self,
+        money: Money,
+    ) -> Result<ConvertedMoney, FxConversionError> {
+        if self.pair != FxPair::UsdKrw {
+            return Err(FxConversionError::UnsupportedDirection);
+        }
         if money.currency() != self.pair.base() {
             return Err(FxConversionError::CurrencyMismatch);
         }
@@ -110,19 +157,26 @@ impl FxRate {
     pub fn convert_for_aggregation(
         self,
         money: Money,
-    ) -> Result<ConvertedMoney, FxConversionError> {
+    ) -> Result<MidConvertedMoney, FxConversionError> {
         if self.kind != FxRateKind::Mid {
             return Err(FxConversionError::MidRequired);
         }
-        self.convert(money)
+        self.convert_for_historical_valuation(money)
+            .map(MidConvertedMoney::from_mid_conversion)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FxValidity {
+    Valid,
+    OutsideInterval,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         Amount, AmountInput, Currency, FxConversionError, FxPair, FxRate, FxRateError, FxRateKind,
         FxSource, Money, MoneyError, Nanosecond, NumericError, NumericInput, OffsetSeconds,
-        Timestamp, UnixSeconds, ValuationAccuracy,
+        TimeInterval, Timestamp, UnixSeconds, ValuationAccuracy,
     };
     use proptest::test_runner::{Config, TestRunner};
     use rust_decimal::Decimal;
@@ -141,7 +195,11 @@ mod tests {
             &NumericInput::try_new(text).expect("길이"),
             FxPair::UsdKrw,
             kind,
-            timestamp(seconds),
+            TimeInterval::try_new(
+                timestamp(seconds),
+                timestamp(seconds.checked_add(60).expect("유효 종료")),
+            )
+            .expect("구간"),
             FxSource::TossOpenApi,
         )
         .expect("환율")
@@ -162,7 +220,7 @@ mod tests {
                     &NumericInput::try_new(text).expect("길이"),
                     FxPair::UsdKrw,
                     FxRateKind::Mid,
-                    timestamp(0),
+                    TimeInterval::try_new(timestamp(0), timestamp(60)).expect("구간"),
                     FxSource::TossOpenApi
                 ),
                 Err(FxRateError::NonPositive)
@@ -191,7 +249,7 @@ mod tests {
                     &NumericInput::try_new(text).expect("길이"),
                     FxPair::UsdKrw,
                     FxRateKind::Mid,
-                    timestamp(0),
+                    TimeInterval::try_new(timestamp(0), timestamp(60)).expect("구간"),
                     FxSource::TossOpenApi
                 ),
                 Err(FxRateError::InvalidInput(error))
@@ -227,22 +285,26 @@ mod tests {
         let converted = fx
             .convert_for_aggregation(money("5000.00", Currency::Usd))
             .expect("환산");
-        assert_eq!(converted.rate(), fx);
-        assert_eq!(converted.accuracy(), ValuationAccuracy::Approximate);
-        let total = converted
-            .checked_add_krw(money("10000000", Currency::Krw))
-            .expect("합산");
+        assert_eq!(converted.into_parts().1, fx);
+        assert_eq!(converted.into_parts().2, ValuationAccuracy::Approximate);
+        let total =
+            crate::KrwValuation::from_component(crate::KrwValuationComponent::Converted(converted))
+                .checked_add(&crate::KrwValuation::from_component(
+                    crate::KrwValuationComponent::Unconverted(
+                        crate::UnconvertedKrw::parse(
+                            &NumericInput::try_new("10000000").expect("입력"),
+                        )
+                        .expect("원화"),
+                    ),
+                ))
+                .expect("합산");
         assert_eq!(
             total.into_parts(),
             (
                 money("16875000", Currency::Krw),
-                fx,
+                vec![fx],
                 ValuationAccuracy::Approximate
             )
-        );
-        assert_eq!(
-            converted.checked_add_krw(money("1", Currency::Usd)),
-            Err(FxConversionError::Arithmetic(MoneyError::CurrencyMismatch))
         );
     }
 
@@ -255,7 +317,7 @@ mod tests {
             Err(FxConversionError::MidRequired)
         );
         let converted = fx
-            .convert(money("2", Currency::Usd))
+            .convert_for_historical_valuation(money("2", Currency::Usd))
             .expect("명시적 매수 환율");
         assert_eq!(
             converted.into_parts(),
@@ -268,7 +330,7 @@ mod tests {
         for kind in [FxRateKind::Mid, FxRateKind::Buy] {
             let checked_rate = rate("1375", kind, 0);
             assert_eq!(
-                checked_rate.convert(money("100", Currency::Krw)),
+                checked_rate.convert_for_historical_valuation(money("100", Currency::Krw)),
                 Err(FxConversionError::CurrencyMismatch)
             );
             assert_eq!(
@@ -289,25 +351,18 @@ mod tests {
             ("79228162514264337593543950335", "2", MoneyError::Overflow),
         ] {
             assert_eq!(
-                rate(fx, FxRateKind::Mid, 0).convert(money(value, Currency::Usd)),
+                rate(fx, FxRateKind::Mid, 0)
+                    .convert_for_historical_valuation(money(value, Currency::Usd)),
                 Err(FxConversionError::Arithmetic(expected))
             );
         }
-        let fx = rate("1375", FxRateKind::Mid, 0);
-        let huge = fx
-            .convert(money("57620481828555881886213782", Currency::Usd))
-            .expect("범위 안");
-        assert_eq!(
-            huge.checked_add_krw(money("79228162514264337593543950335", Currency::Krw)),
-            Err(FxConversionError::Arithmetic(MoneyError::Overflow))
-        );
     }
 
     #[test]
     fn realistic_eight_decimal_inputs_and_signed_zero_are_exact() {
         let fx = rate("1375.12345678", FxRateKind::Mid, 123);
         assert_eq!(
-            fx.convert(money("123456789.12345678", Currency::Usd))
+            fx.convert_for_historical_valuation(money("123456789.12345678", Currency::Usd))
                 .expect("정확")
                 .into_parts()
                 .0,
@@ -315,7 +370,7 @@ mod tests {
         );
         for (input, expected) in [("0", "0"), ("-0.00", "0"), ("-2", "-2750.24691356")] {
             assert_eq!(
-                fx.convert(money(input, Currency::Usd))
+                fx.convert_for_historical_valuation(money(input, Currency::Usd))
                     .expect("정확")
                     .into_parts(),
                 (
@@ -364,7 +419,9 @@ mod tests {
                         )),
                         Currency::Krw,
                     );
-                    let result = fx.convert(input).expect("정확한 정수 기준 곱");
+                    let result = fx
+                        .convert_for_historical_valuation(input)
+                        .expect("정확한 정수 기준 곱");
                     proptest::prop_assert_eq!(result.rate(), fx);
                     proptest::prop_assert_eq!(
                         result.into_parts(),

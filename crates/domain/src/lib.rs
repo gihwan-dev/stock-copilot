@@ -65,6 +65,9 @@ pub use probability::{
 };
 
 mod fx_rate;
-pub use fx_rate::{FxPair, FxRate, FxRateError, FxRateKind, FxSource};
+pub use fx_rate::{FxPair, FxRate, FxRateError, FxRateKind, FxSource, FxValidity};
 mod fx_conversion;
-pub use fx_conversion::{ConvertedMoney, FxConversionError, ValuationAccuracy};
+pub use fx_conversion::{
+    ConvertedMoney, FxConversionError, KrwValuation, KrwValuationComponent, MidConvertedMoney,
+    UnconvertedKrw, ValuationAccuracy,
+};
