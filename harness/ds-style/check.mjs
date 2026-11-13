@@ -1,3 +1,8 @@
+import { surfaceProblems } from "../../apps/desktop/eslint/ds-surfaces.mjs";
+import {
+  themeSource,
+  designUtilities,
+} from "../../apps/desktop/eslint/ds-design-usage.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -19,8 +24,8 @@ const {
 } = require("tailwindcss");
 const read = (p) => readFileSync(join(root, p), "utf8");
 const generated = read("apps/desktop/src/shared/ds/tokens.css");
-const theme =
-  '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@source "../../";\n';
+const tokens = JSON.parse(read("apps/desktop/design-tokens/tokens.json"));
+const theme = themeSource(tokens);
 export const cssBoundaryProblems = (name, source) =>
   name === "theme.css"
     ? source === theme
@@ -38,7 +43,11 @@ export const snapshot = async (
     mode === "without-reset"
       ? generated.replace("--*: initial;", "")
       : generated;
-  const source = `${read("apps/desktop/node_modules/tailwindcss/theme.css")}\n${css}\n@tailwind utilities;`;
+  const source = `${read("apps/desktop/node_modules/tailwindcss/theme.css")}\n${css}\n${designUtilities(
+    tokens,
+  )
+    .map(([n, p, v]) => `@utility ${n} { ${p}: ${v}; }`)
+    .join("\n")}\n@tailwind utilities;`;
   const builder = await compile(source);
   const design = await loadDesignSystem(source);
   const allowed = [
@@ -72,7 +81,13 @@ const cssFiles = (folder) =>
   );
 export const check = async () => {
   const value = await snapshot();
-  const problems = [...generationProblems(value)];
+  const problems = [
+    ...generationProblems(value),
+    ...surfaceProblems(
+      read("apps/desktop/index.html"),
+      read("apps/desktop/vite.config.mjs"),
+    ),
+  ];
   if (
     JSON.stringify(value) !==
     JSON.stringify(JSON.parse(read("harness/ds-style/utilities.json")))

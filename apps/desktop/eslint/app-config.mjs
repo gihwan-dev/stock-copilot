@@ -19,7 +19,6 @@ import { emptyParser, local } from "./local-plugin.mjs";
 import { generatedConfigs } from "./generated.mjs";
 
 const TS_FILES = ["src/**/*.ts", "src/**/*.tsx"];
-const DS = ["src/shared/ds/**"];
 const SCREEN = ["src/app", "src/features", "src/shared/ds"].flatMap(
   (folder) => [`${folder}/**/*.ts`, `${folder}/**/*.tsx`],
 );
@@ -424,10 +423,7 @@ export const appConfig = (
       ],
       rules: off(["guard/no-number-conversion"]),
     },
-    {
-      files: DS,
-      rules: off(["guard/no-dom-globals", "guard/no-ref-callback"]),
-    },
+
     {
       files: SCREEN,
       rules: { "local/no-ui-text": ["error", { screen: "on" }] },
@@ -447,8 +443,6 @@ export const appConfig = (
       rules: off([
         "guard/no-effect-hooks",
         "guard/no-sync-external-store",
-        "guard/no-ref-callback",
-        "guard/no-dom-globals",
         "functional/no-expression-statements",
       ]),
     }),

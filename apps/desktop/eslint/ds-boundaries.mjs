@@ -14,6 +14,15 @@ export const propertyName = (node) => {
       : `${propertyName(node.left)}${propertyName(node.right)}`;
   return undefined;
 };
+export const intlOptions = (node) => {
+  const call = node.parent?.parent;
+  return (
+    ["NewExpression", "CallExpression"].includes(call?.type) &&
+    call.callee?.type === "MemberExpression" &&
+    call.callee.object.name === "Intl" &&
+    call.callee.property.name === "NumberFormat"
+  );
+};
 const report = (ctx, node) => ctx.report({ node, messageId: "forbidden" });
 export const DOM_STYLE_MEMBERS = [
   "classList",
@@ -129,7 +138,25 @@ export const boundaryRules = {
           report(ctx, node);
       },
       JSXOpeningElement(node) {
-        if (["style", "link"].includes(propertyName(node.name)))
+        if (
+          [
+            "style",
+            "link",
+            "animate",
+            "animateTransform",
+            "animateMotion",
+            "set",
+            "font",
+            "center",
+            "b",
+            "i",
+            "u",
+            "iframe",
+            "object",
+            "embed",
+            "foreignObject",
+          ].includes(propertyName(node.name))
+        )
           report(ctx, node);
       },
     }),
@@ -157,7 +184,8 @@ export const boundaryRules = {
       Property(node) {
         if (
           node.parent.type === "ObjectExpression" &&
-          (node.computed || reservedObject.includes(propertyName(node.key)))
+          (node.computed || reservedObject.includes(propertyName(node.key))) &&
+          !(propertyName(node.key) === "style" && intlOptions(node))
         )
           report(ctx, node);
       },
@@ -172,24 +200,71 @@ export const boundaryRules = {
       },
     }),
   ),
-  "no-presentation-props": rule(
-    "표현 속성 대신 토큰 클래스를 쓴다.",
-    (ctx) => ({
-      JSXAttribute(node) {
-        const tag = node.parent.name;
-        if (
-          tag.type === "JSXIdentifier" &&
-          /^[a-z]/u.test(tag.name) &&
-          PRESENTATION_PROPS.some(
-            (p) =>
-              p.replaceAll("-", "").toLowerCase() ===
-              propertyName(node.name)?.replaceAll("-", "").toLowerCase(),
-          )
-        )
-          report(ctx, node);
+  "no-presentation-props": {
+    meta: {
+      type: "problem",
+      schema: [
+        {
+          type: "object",
+          properties: { geometry: { enum: ["allow", "forbid"] } },
+          additionalProperties: false,
+        },
+      ],
+      messages: {
+        forbidden:
+          "표현 속성은 토큰 클래스만, 기하는 보호된 아이콘 경로 파일에서만 쓴다.",
       },
-    }),
-  ),
+    },
+    create(ctx) {
+      return {
+        JSXAttribute(node) {
+          const tag = node.parent.name;
+          if (tag.type !== "JSXIdentifier" || !/^[a-z]/u.test(tag.name)) return;
+          const key = propertyName(node.name);
+          const geometry =
+            [
+              "d",
+              "viewBox",
+              "points",
+              "x",
+              "y",
+              "cx",
+              "cy",
+              "r",
+              "rx",
+              "ry",
+              "x1",
+              "y1",
+              "x2",
+              "y2",
+            ].includes(key) ||
+            (["rect", "circle", "ellipse", "line"].includes(tag.name) &&
+              ["width", "height"].includes(key));
+          if (geometry && ctx.options[0]?.geometry === "allow") {
+            const v = node.value;
+            const valid = ["d", "viewBox", "points"].includes(key)
+              ? v?.type === "Literal" && typeof v.value === "string"
+              : v?.type === "JSXExpressionContainer" &&
+                ((v.expression.type === "Literal" &&
+                  typeof v.expression.value === "number") ||
+                  (v.expression.type === "UnaryExpression" &&
+                    v.expression.operator === "-" &&
+                    typeof v.expression.argument.value === "number"));
+            if (valid) return;
+          }
+          if (
+            geometry ||
+            PRESENTATION_PROPS.some(
+              (p) =>
+                p.replaceAll("-", "").toLowerCase() ===
+                key?.replaceAll("-", "").toLowerCase(),
+            )
+          )
+            report(ctx, node);
+        },
+      };
+    },
+  },
   "no-shared-jsx": rule(
     "shared/ds 밖의 shared는 JSX를 렌더하지 않는다.",
     (ctx) => ({

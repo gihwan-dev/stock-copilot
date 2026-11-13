@@ -1,5 +1,6 @@
-import { boundaryRules } from "./ds-boundaries.mjs";
-import { styleLiteral } from "./ds-style-values.mjs";
+import { noDomValues } from "./ds-dom.mjs";
+import { boundaryRules, intlOptions } from "./ds-boundaries.mjs";
+import { styleLiteral, assembledStyle } from "./ds-style-values.mjs";
 const rule = (message, create) => ({
   meta: { type: "problem", schema: [], messages: { forbidden: message } },
   create,
@@ -29,6 +30,7 @@ const report = (ctx, node) => ctx.report({ node, messageId: "forbidden" });
 export const dsPlugin = {
   rules: {
     ...boundaryRules,
+    "no-dom-values": noDomValues,
     "static-classes": rule(
       "className은 문자열 리터럴 또는 정적인 cn 인자만 받는다.",
       (ctx) => ({
@@ -73,7 +75,8 @@ export const dsPlugin = {
           if (name(node.name) === "style") report(ctx, node);
         },
         Property(node) {
-          if (name(node.key) === "style") report(ctx, node);
+          if (name(node.key) === "style" && !intlOptions(node))
+            report(ctx, node);
         },
       }),
     ),
@@ -85,10 +88,21 @@ export const dsPlugin = {
         };
         return {
           Literal(node) {
-            if (typeof node.value === "string") check(node, node.value);
+            if (
+              typeof node.value === "string" &&
+              !(
+                node.parent?.type === "JSXAttribute" &&
+                ["href", "xlinkHref"].includes(node.parent.name.name) &&
+                node.value.startsWith("#")
+              )
+            )
+              check(node, node.value);
           },
-          TemplateElement(node) {
-            check(node, node.value.raw);
+          TemplateLiteral(node) {
+            check(node, assembledStyle(node));
+          },
+          BinaryExpression(node) {
+            if (node.operator === "+") check(node, assembledStyle(node));
           },
         };
       },

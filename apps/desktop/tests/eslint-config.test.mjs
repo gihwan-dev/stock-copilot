@@ -55,6 +55,7 @@ const undisableable = [
   "better-tailwindcss/no-unknown-classes",
   "better-tailwindcss/no-concatenated-classes",
   "better-tailwindcss/no-restricted-classes",
+  "ds/no-dom-values",
   "ds/no-dom-styling",
   "ds/no-element-factory",
   "ds/no-style-object",
@@ -242,7 +243,7 @@ test("every undisableable guard rule exists and no rule family is undisableable 
   );
 });
 
-test("browser globals are banned outside shared/ds and the platform allowlist", async () => {
+test("browser globals are banned outside the protected DOM access list", async () => {
   const banned = [
     "src/app/main.tsx",
     "src/features/home/ui/HomeScreen.tsx",
@@ -250,7 +251,8 @@ test("browser globals are banned outside shared/ds and the platform allowlist", 
     "src/shared/ipc/client.ts",
     "src/shared/platform/unlisted.ts",
   ];
-  const allowed = ["src/shared/ds/Button.tsx", "src/shared/platform/index.ts"];
+  banned.push("src/shared/ds/Button.tsx");
+  const allowed = ["src/shared/platform/index.ts"];
   for (const file of banned)
     assert.equal(await severityIn(file, "guard/no-dom-globals"), 2, file);
   for (const file of allowed)

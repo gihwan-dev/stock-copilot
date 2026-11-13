@@ -1,3 +1,4 @@
+import { designLengthClasses, iconUtilities } from "./ds-design-usage.mjs";
 import { readFileSync } from "node:fs";
 
 const tokens = JSON.parse(
@@ -10,6 +11,9 @@ const combine = (prefixes, names) =>
   prefixes.flatMap((p) => names.map((n) => `${p}-${n}`));
 const names = (group) => tokens[group].tokens.map((t) => t.name);
 export const DS_KEYWORDS = [
+  "fill-none",
+  "stroke-current",
+  ...iconUtilities.map(([name]) => name),
   "block",
   "inline-block",
   "flex",
@@ -101,26 +105,7 @@ export const DS_CLASSES = [
       ],
       names("spacing"),
     ),
-    ...[...tokens.size.tokens, ...tokens.layout.tokens].flatMap((t) => {
-      if (
-        /^(?:border-|focus-offset|bp-|grid-columns|control-pad-sm|gap-hairline)/u.test(
-          t.name,
-        )
-      )
-        return [];
-      const prefixes = /^(?:icon-|dot-size)/u.test(t.name)
-        ? ["w", "h", "size"]
-        : /height/u.test(t.name) || /높이/u.test(t.usage)
-          ? ["h", "min-h", "max-h"]
-          : /width/u.test(t.name) || /폭/u.test(t.usage)
-            ? ["w", "min-w", "max-w"]
-            : [];
-      if (prefixes.length === 0)
-        throw new Error(`크기 토큰 축을 분류해야 한다: ${t.name}`);
-      return combine(prefixes, [t.name]);
-    }),
-    ...combine(["px", "pl", "pr", "ps", "pe"], ["control-pad-sm"]),
-    ...combine(["p", "gap", "gap-x", "gap-y"], ["gap-hairline"]),
+    ...designLengthClasses(tokens).map((r) => r.name),
     ...combine(
       ["rounded", "rounded-t", "rounded-b", "rounded-l", "rounded-r"],
       names("radius").map((n) => n.replace(/^radius-/u, "")),

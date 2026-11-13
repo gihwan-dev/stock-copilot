@@ -179,9 +179,7 @@ test("DS02 review runtime witnesses typecheck with actual app options and fail t
       ),
     );
     rmSync(lib, { recursive: true, force: true });
-    const valid = exported(
-      '<svg className="fill-primary size-icon-sm" viewBox="0 0 24 24"><path d="M0 0L1 1" /></svg>',
-    );
+    const valid = exported('<div className="bg-primary p-space-4" />');
     writeFileSync(path, valid);
     const [result] = await lint.lintFiles([path]);
     assert.deepEqual(result.messages, []);

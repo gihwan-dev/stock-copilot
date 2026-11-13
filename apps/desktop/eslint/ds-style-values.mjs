@@ -153,14 +153,34 @@ export const CSS_COLOR_NAMES = [
 
 const units =
   "px|rem|em|%|vi|vb|dvi|dvb|svi|svb|lvi|lvb|vh|vw|dvh|dvw|svh|svw|lvh|lvw|vmin|vmax|pt|ch|ex|cm|mm|in|pc|fr|deg|rad|grad|turn|ms|s|cap|rcap|rch|rex|ric|ic|lh|rlh|cqw|cqh|cqi|cqb|cqmin|cqmax|q|dpi|dpcm|dppx";
+
 const dimension = new RegExp(
-  `(?:\\d|\\})\\s*(?:${units})(?![a-z])|^(?:${units})$`,
+  `^[-+]?(?:\\d*\\.)?\\d+(?:e[-+]?\\d+)?(?:${units})$`,
   "iu",
 );
 const functions =
-  /\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|device-cmyk|contrast-color|calc|min|max|clamp)\s*\(/iu;
-export const styleLiteral = (text) =>
-  CSS_COLOR_NAMES.includes(text.toLowerCase()) ||
-  /#[\da-f]{3,8}\b/iu.test(text) ||
-  dimension.test(text) ||
-  functions.test(text);
+  /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|device-cmyk|contrast-color|calc|min|max|clamp)\([\s\S]*\)$/iu;
+const atom = (v) =>
+  CSS_COLOR_NAMES.includes(v.toLowerCase()) ||
+  /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/iu.test(v) ||
+  dimension.test(v);
+export const styleLiteral = (text) => {
+  const value = text.trim();
+  if (value === "") return false;
+  if (functions.test(value) || value.split(/\s+/u).every(atom)) return true;
+  const declaration =
+    /^(?:padding|margin|width|height|color|background(?:-color)?|font-size)\s*:\s*(.+?);?$/iu.exec(
+      value,
+    );
+  return declaration !== null && styleLiteral(declaration[1]);
+};
+export const assembledStyle = (node) => {
+  if (node.type === "Literal") return String(node.value);
+  if (node.type === "BinaryExpression" && node.operator === "+")
+    return assembledStyle(node.left) + assembledStyle(node.right);
+  if (node.type === "TemplateLiteral")
+    return node.quasis.map((q) => q.value.cooked ?? "").join("0");
+  if (node.type === "CallExpression" && node.callee.name === "String")
+    return node.arguments.map(assembledStyle).join("");
+  return "0";
+};

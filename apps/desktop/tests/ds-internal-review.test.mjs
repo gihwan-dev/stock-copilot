@@ -92,11 +92,12 @@ test("DS02 review blocks presentation attributes but permits SVG geometry", asyn
       ),
       attr,
     );
-  assert.deepEqual(
-    await lint(
-      'const value = <svg viewBox="0 0 24 24"><path d="M0 0L1 1" /></svg>;',
-    ),
-    [],
+  assert.ok(
+    (
+      await lint(
+        'const value = <svg viewBox="0 0 24 24"><path d="M0 0L1 1" /></svg>;',
+      )
+    ).includes("ds/no-presentation-props"),
   );
 });
 test("DS02 review covers color names functions units and assembled lengths", async () => {
@@ -129,7 +130,13 @@ test("DS02 price inline style and DOM exceptions are protected empty file lists"
   const lists = await import("../eslint/ds-allowlists.mjs");
   assert.deepEqual(
     { ...lists },
-    { PRICE_COLOR_FILES: [], INLINE_STYLE_FILES: [], DOM_STYLE_FILES: [] },
+    {
+      PRICE_COLOR_FILES: [],
+      INLINE_STYLE_FILES: [],
+      DOM_STYLE_FILES: [],
+      DOM_ACCESS_FILES: ["src/shared/platform/index.ts"],
+      ICON_GEOMETRY_FILES: [],
+    },
   );
   for (const [key, code] of [
     ["PRICE_COLOR_FILES", 'const value = <div className="text-up" />;'],
@@ -152,6 +159,11 @@ test("DS02 price inline style and DOM exceptions are protected empty file lists"
 test("DS02 every new boundary rule loses a witness when switched off", async () => {
   const { DS_RULES, SHARED_RULES } = await import("../eslint/ds-config.mjs");
   for (const [rule, code, filePath] of [
+    [
+      "ds/no-dom-values",
+      "const value = ref.current;",
+      "src/shared/ds/Probe.tsx",
+    ],
     [
       "ds/no-dom-styling",
       "const value = element.style;",

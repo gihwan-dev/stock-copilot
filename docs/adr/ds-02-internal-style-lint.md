@@ -1,69 +1,204 @@
 # ADR 초안: DS-02 내부 스타일 검사
 
-- 상태: 적대적 리뷰 수정
-- 기준: b9fc68fe37d8b6496e5f1a0987e6bd790a1e6654
-- 범위: shared/ds 내부, 비화면 shared 폴더의 렌더링 경계. 컴포넌트는 만들지 않는다.
+- 상태: 마지막 리뷰 수정
+- 기준: f5296086e036d5415090d18be14e7f12f482aa04
+- 범위: shared/ds 스타일, shared의 DOM·렌더링 경계, HTML·CSS 빌드 진입점. 실제 컴포넌트는 DS-03 이후다.
 
 ## 규칙 대응
 
-| R-14 # | 금지 | 강제 | 위반 | 통과 |
-| --- | --- | --- | --- | --- |
-| 1 | 생성 테마 밖 클래스 | no-unknown-classes, cwd·entryPoint 고정 | bg-red-500 | bg-primary |
-| 2 | 임의 값·속성·변형, 변수 축약, 분수·불투명도 | no-restricted-classes의 닫힌 집합 | p-(--x), p-[13px] | p-space-4 |
-| 3 | 숫자 직접 입력, 토큰 의미 혼용 | 같은 집합 | z-50, w-row-height | z-modal, h-row-height |
-| 4 | dark 변형 | no-restricted-classes | dark:bg-primary | hover:bg-primary |
-| 5 | 허용 파일 밖 가격색 | PRICE_COLOR_FILES, 파일별 no-restricted-classes | text-up | text-ink |
-| 6 | 동적 className, 객체 속성·팩터리·DOM 우회 | static-classes, no-concatenated-classes, no-style-object, no-element-factory, no-dom-styling | 변수, 템플릿, JSX spread, createElement, classList | 문자열 className |
-| 7 | 허용 파일 밖 inline style, DOM 스타일 변경 | INLINE_STYLE_FILES, DOM_STYLE_FILES, no-inline-style, no-dom-styling | style prop, el.style | 토큰 className |
-| 8 | 색·단위 리터럴, 소문자 요소의 표현 속성 | no-style-literals, no-presentation-props | red, 1rem, width={13}, stroke | 토큰 className, d, viewBox |
-| 15 | 수기 CSS 파일 | 기존 local/forbidden-file + CSS 파일 경계 검사. 생성물은 gen-tokens --check | custom.css의 모든 내용 | 고정 theme.css, 재생성 동일성 검사를 통과한 tokens.css |
+| R-14 # | 강제 | 위반 | 통과 |
+| --- | --- | --- | --- |
+| 1 | no-unknown-classes, cwd·entryPoint 고정 | bg-red-500 | bg-primary |
+| 2 | no-restricted-classes의 닫힌 집합 | p-(--x), p-[13px] | p-space-4 |
+| 3 | 같은 집합 + 디자인 사용 속성으로 유도한 길이 클래스 | z-50 | z-modal, w-control-height |
+| 4 | dark 변형 금지 | dark:bg-primary | hover:bg-primary |
+| 5 | 보호된 가격색 파일 목록 | text-up | text-ink |
+| 6 | 정적 클래스·객체 키·팩터리·DOM 타입 경계 | 변수 className, 객체 props, 함수형 ref | 리터럴 className, RefObject 전달 |
+| 7 | 보호된 인라인 style·DOM 스타일 예외 | style prop, DOM 변경 | 토큰 className |
+| 8 | 전체 CSS 값 리터럴, 표현 속성과 보호된 아이콘 기하 파일 | red, 13px, 일반 DS의 width={13} | lang=fr, 앵커 #add, 승인 아이콘 경로의 숫자 기하 |
+| 15 | CSS 파일 경계, theme 정확 비교, DS-13 재생성 동일성 | 수기 CSS | 검증된 theme.css·tokens.css |
 
-모든 새 규칙은 끄기 불가 목록에 있다. 가격색·style·DOM 스타일 예외는 ds-allowlists.mjs의 보호된 파일 목록이며 처음에는 모두 비어 있다. 목록에 등록한 파일만 예외가 되고 다른 파일은 계속 실패하는 테스트를 둔다.
+## DOM: 이름 목록에서 값 접근 경계로
 
-## DOM과 렌더링 경계
+shared/ds에서 guard/no-dom-globals·guard/no-ref-callback을 다시 켠다. shared/platform 전체 예외에서도 이 두 규칙을 빼고 DOM_ACCESS_FILES의 파일별 예외로 대체한다. 타입 인식 ds/no-dom-values는 shared 전체에 적용한다.
 
-shared/ds에서 classList, className, style, setAttribute, setAttributeNS, toggleAttribute, setProperty, cssText, animate, insertAdjacentHTML, innerHTML, outerHTML, adoptedStyleSheets, insertRule, CSSStyleSheet, attributeStyleMap 멤버 접근을 막는다. 리터럴 계산 키와 구조 분해도 본다. 동적 계산 멤버는 기존 타입 인식 no-computed-member가 검사한다. 프로젝트 객체의 메시지 키와 DOM 객체를 구분하는 기존 규칙을 유지한다. style·link JSX 태그 및 dangerouslySetInnerHTML은 의도한 DS 규칙으로 금지한다.
+실제 TypeScript lib.dom 선언에 속한 전역 값·생성자를 금지한다. DOM 타입과 그 유니온·제네릭의 멤버 접근 및 DOM 객체 구조 분해를 금지한다. RefObject.current, 이벤트의 currentTarget·target·nativeEvent도 이 경계에 걸린다. 구조적 타입 좁히기로 DOM 타입 이름을 지운 ref·이벤트 우회도 회귀로 막는다. DOM 값의 식별자 읽기·다른 타입으로의 재전달도 금지하고 RefObject를 JSX ref로 전달하는 자리만 구별한다. 계산 키와 구조 분해도 같은 진입 경계로 검사한다. current 읽기는 금지하고, target 계열은 원시 데이터 값인 경우만 허용해 업무 데이터의 target 문자열과 구분한다. 함수형 ref는 인라인·로컬 식별자·가져온 함수 모두 금지하고, 식별자로 전달하는 비호출 RefObject만 허용한다. 공개 ref props 계약은 DS-10에서도 확인한다.
 
-createElement·cloneElement·jsx·jsxs·jsxDEV 참조는 별칭 import와 객체 멤버도 금지한다. 객체의 className·class·style 키는 값이 리터럴이어도 금지한다. 계산 키와 Object.fromEntries도 금지한다. JSX spread는 숨은 className·style 전달 경로여서 DS 안에서는 이전 shared 폴더 예외를 좁힌다. 기존 spread-allowed.tsx가 DS에서 오류를 기대하도록 바꾼 것은 이 결정의 결과다. DS 밖 shared에서는 spread 규칙 자체는 여전히 꺼져 있지만 JSX 렌더링이 별도 규칙으로 금지된다. 비화면 shared의 객체 spread 통과 대조군과, JSX spread가 오직 새 JSX 경계 규칙으로 실패하는 대조군을 둔다.
+따라서 setHTMLUnsafe, Range/createContextualFragment, DOMParser, attachShadow, createElementNS, CSSStyleSheet 삭제·교체, Animation/KeyframeEffect, removeAttribute, part.add를 하나씩 이름 목록에 더하지 않는다. 기존 no-dom-styling의 클래스·스타일·HTML 멤버 목록은 2차 방어로 유지한다. window·globalThis 같은 기존 전역 금지도 유지한다.
 
-architecture 5장의 역할에 따라 shared/lib·shared/ipc·shared/platform에서는 JSX와 요소 팩터리를 금지한다. platform의 DOM 구독·Canvas 어댑터는 JSX를 렌더하지 않는다. features·app의 화면 코드 금지는 DS-09다. 그 두 폴더에는 이번 DS 규칙을 적용하지 않으며, DS-09 전에는 DS 전용 금지에 대해 지금은 무방비다.
+새 DS DOM 접근 예외는 비어 있다. 현재 DOM_ACCESS_FILES의 유일한 파일은 src/shared/platform/index.ts다. 이 파일의 rootElement는 document.getElementById로 부팅 루트를 찾는 기존 어댑터다. architecture 5장 및 ADR 0009에서 app의 DOM 전역 접근을 이 파일로 옮긴 결정에 해당하므로 존치한다. 그 밖의 기존 shared 파일에는 새 DOM 접근 예외가 필요하지 않았다.
 
-동적 미터 폭을 ref로 넣는 예외는 열지 않는다. 닫힌 단계 유틸리티 또는 코어 좌표를 받는 전용 미터·차트 컴포넌트의 필요와 정책은 DS-03·DS-06에서 정한다. 측정용 파일은 DOM_STYLE_FILES에 사용자 승인으로 추가한다.
+포커스·측정의 새 요구는 보호된 파일 목록 변경을 승인받아야 한다. 폴더 예외를 만들거나 새 파일이 자동으로 권한을 상속하게 하지 않는다. 동적 미터 폭은 ref로 스타일을 넣는 예외를 열지 않고 DS-03·DS-06에서 닫힌 단계 값이나 전용 컴포넌트 계약으로 결정한다.
 
-## 리터럴과 표현 속성
+## 요소와 렌더링 경계
 
-CSS 이름 색 148개와 transparent·currentColor를 모두 예약한다. 목록은 기존 설치 패키지 color-name 1.1.4(MIT)에 있는 표준 이름 집합으로 확인했다. currentColor의 일반 문자열 예외는 열지 않는다. red라는 문자열을 DS 안의 다른 의미로 재사용하는 것도 실패한다. UI 문구는 UiText/messages 계층의 책임이며 DS에 색 이름을 상태값이나 문구로 겸용하지 않는다. bg-transparent 클래스는 design/components/bundle.css의 ghost 버튼·IconButton·Callout 투명 배경과 일치하므로 닫힌 키워드 예외로 유지한다.
+shared/ds 밖 shared에서는 JSX와 요소 팩터리를 금지한다. DS에서도 createElement·cloneElement·jsx 직접 참조, 계산 키와 fromEntries로 만든 스타일 props, JSX spread를 막는다. spread로 className·style이 숨어 들어오므로 DS의 이전 shared 예외를 좁힌 결정이다. 비화면 shared의 객체 spread는 계속 허용한다.
 
-CSS 색 함수(rgb·hsl·hwb·lab·lch·oklab·oklch·color·color-mix·light-dark·device-cmyk·contrast-color), CSS 길이·각도·시간·해상도 단위와 calc·min·max·clamp를 검사한다. 단위만 있는 문자열과 템플릿 조각도 검사해 "1"+"3"+"px", String(13)+"px", `${n}px`를 막는다.
+SMIL animate·animateTransform·animateMotion·set, style·link, font·center·b·i·u, iframe·object·embed·foreignObject를 금지한다. design/components의 실제 컴포넌트에서 이 렌더링 요소는 쓰이지 않는다. Cover preview의 style은 보호된 디자인 문서이며 앱 코드가 아니다. em·strong·s는 의미 요소로 구별하고 금지하지 않는다. dangerouslySetInnerHTML도 금지한다.
 
-소문자 HTML·SVG 요소에서는 보호된 PRESENTATION_PROPS의 표현 속성을 값과 무관하게 금지한다. camelCase와 하이픈 표기를 동일하게 본다. fill·stroke·strokeWidth·width·height·rx·ry·r·opacity·색·정렬·글자 모양·transform 등은 클래스만 쓴다. d·viewBox는 경로·좌표계라 허용한다. 대문자 컴포넌트의 size={13} 같은 숫자 props는 지금 이 규칙이 막지 않는다. 공개 props는 DS-10, Recharts stroke·strokeWidth와 좌표 등은 DS-06의 보호된 허용 파일 목록에서 정한다. 간접 데이터의 의미를 DS-02가 추론한다는 주장은 하지 않는다.
+features·app의 화면 코드 금지는 DS-09다. 이 두 폴더에 DS 전용 규칙이 아직 적용되지 않았다는 범위는 유지한다.
 
-## 클래스 의미와 후속 범위
+## 아이콘: 스타일과 기하
 
-크기 토큰의 이름·usage가 폭이면 w/min-w/max-w, 높이면 h/min-h/max-h만 만든다. 아이콘·점은 정사각형이므로 w/h/size를 허용한다. control-pad-sm은 수평 padding, gap-hairline은 padding/gap에만 쓴다. 축이 분류되지 않는 새 크기 토큰은 오류로 드러낸다. w-row-height·h-sidebar-width·w-space-4·p-sidebar-width는 금지다.
+Icons README의 Lucide 24×24 격자·2px 선·currentColor와 실제 SVG 규약을 기준으로 한다.
 
-min-w-0·min-h-0은 reset 뒤 생성되지 않는다. 허용 목록에서는 제거했다. harness 4.4 #26의 자식 래퍼에 필요한 0 최소 크기는 DS-11·DS-19가 생성 정책(@utility 또는 토큰)을 결정해야 한다. 생성기·theme.css를 여기서 바꾸지 않는다.
+| 구분 | 정책 |
+| --- | --- |
+| 색·선 스타일 | 닫힌 fill-none, stroke-current, stroke-icon, stroke-linecap-round, stroke-linejoin-round 클래스 |
+| 선 굵기 | stroke-icon은 생성 토큰 --border-width-focus를 참조한다. 현재 값 2px이며 두 테마에서 Lucide의 2px와 일치하는지 별도 검사한다. 일치하지 않으면 DS-03에서 전용 토큰을 결정해야 한다. 숫자 stroke-2는 열지 않는다 |
+| 경로 | d·points·viewBox 문자열은 보호된 아이콘 경로 파일에서만 |
+| 위치·반경 | x/y/cx/cy/r/rx/ry, x1/y1/x2/y2는 같은 파일에서 숫자 리터럴만 |
+| 도형 크기 | rect/circle/ellipse/line의 width·height는 같은 파일에서 숫자 리터럴만 |
+| 일반 DS 파일 | 기하 속성을 포함해 표현 속성 금지. 토큰 클래스만 사용 |
 
-길이 토큰 w/h는 DS-02에서 의미 검증까지만 한다. DS-19가 #21의 파일별 길이 제한을 추가해야 하며 그 전에는 전역 허용이다. absolute·overflow는 DS-02에서 필요가 없어 먼저 닫은 상태다. 현재 클래스 집합이 DS-19의 파일별 제한까지 구현했다고 해석하지 않는다.
+ICON_GEOMETRY_FILES는 현재 비어 있다. 통과 예제는 임시 프로젝트에 경로 파일을 지정해 아이콘 하나를 그리고 실제 ESLint와 tsc를 통과한다. 앱의 아이콘 컴포넌트와 실제 승인 파일 추가는 DS-03이다. theme.css에는 토큰 선 굵기와 round 선 스타일의 정적 utility 및 디자인에서 사용한 특수 길이 조합만 둔다. 정확한 내용은 themeSource와 기존 진입점 테스트로 고정한다.
 
-className은 문자열 리터럴 또는 정적인 cn 인자만 받는다. 현재 승인된 cn 구현이 없어 로컬 선언·매개변수·import로 바인딩된 cn 호출은 거부한다. 예제의 미해결 cn은 문법 대조군이며 실제 앱에서는 타입 검사도 통과해야 한다.
+## 디자인으로 유도하는 축
 
-## 스냅샷과 CSS 검사 축소
+bundle.css를 PostCSS로 읽어 모든 var(--token) 사용의 속성·선택자를 수집한다. 길이 속성에서 클래스의 축을 유도하고, 같은 선택자가 같은 토큰으로 width와 height를 지정하면 size를 허용한다. 이름이나 한국어 usage의 추측으로 허용 축을 정하지 않는다.
 
-입력은 코드용 토큰의 의미별 조합, 닫힌 키워드·변형, DS-13 인계 반례다. DS-13 utility-cases.json은 대표 대응 검사이며 이 목록을 복사하지 않는다. 스냅샷 출력을 허용 목록으로 역참조하지 않는다.
+따라서 w-control-height·size-control-height·min-w-gap-hairline을 포함해 실제 디자인이 쓰는 길이 조합을 허용한다. padding·margin 같은 축약 속성은 해당 계열의 축 클래스들로 펼친다. border 길이처럼 Tailwind spacing namespace에 없는 값은 생성 토큰 변수를 참조하는 닫힌 정적 utility로 만든다. 각 유도 클래스가 허용 목록에 있으며 실제 Tailwind에서 생성되는지 검사한다. 아래 표는 같은 추출기로 생성한 전체 var 사용 표다. 글자·색·그림자 및 복합 transform 등은 길이 축 유도 대상과 구분한다.
 
-실제 Tailwind compile의 결과를 PostCSS로 파싱해 중첩된 모든 규칙 선택자와 부모 선택자·at-rule 문맥을 수집한다. Tailwind 자체 candidatesToCss 결과로 각 후보의 생성됨/안 됨도 고정한다. 허용 후보가 생성되지 않으면 스냅샷 일치와 별개로 실패한다. 반례 후보는 안 만들어져도 그 상태를 기록한다. hover·motion-reduce·window-md·@content-medium·space-x의 생성, print·dark·group-hover 추가와 min-h-0·p-0·animate-spin 추가가 스냅샷 차이로 드러나는 테스트가 있다. 최종 입력은 후보 8,202개, CSS 규칙 8,208개다. 재생성은 check.mjs의 snapshot을 실행해 utilities.json에 기록한다.
+min-w-0·min-h-0의 생성 정책은 DS-11·DS-19에 남긴다. DS-19가 파일별 길이·배치·넘침 제한을 추가하기 전까지 이 집합은 토큰 의미와 실제 생성 여부를 검증하는 범위다.
 
-수기 CSS는 local/forbidden-file이 이미 파일 자체를 거부한다. theme.css는 정확한 진입 문법 검사, tokens.css는 DS-13 gen-tokens --check의 생성물 동일성 검사 대상이다. 이 둘에 일반 스타일 규칙을 억지로 적용하지 않는다. 이전의 cssProblems와 “임의 함수를 막는다”는 주장은 폐기했다. rgb·rotate·theme·attr·image-set·important·Tailwind 지시문 등의 수기 CSS는 내용과 무관하게 파일 경계에서 거부한다. tokens.css 자체가 바뀌는 경우는 기존 DS-13 재생성 비교가 검증한다.
+## 값 검사와 오탐 처리
 
-stylelint 18.0.0과 stylelint-declaration-strict-value 1.13.0을 제거했다. PostCSS 8.5.32(MIT)는 기존 전이 버전을 정확히 고정해 직접 개발 의존성으로 올렸다. 새 버전의 전이 패키지는 추가하지 않았다. better-tailwindcss 4.11.0은 유지한다. 버전·cwd·entryPoint의 실제 호환성 검사는 유지한다. 없는 진입점과 reset 없는 CSS에서는 bg-red-500이 통과하지만 tokens.css 단독은 검출한다는 실측도 유지한다.
+값을 trim한 뒤 전체 CSS 색·길이·각도·시간·해상도 값 또는 공백 구분 값 목록과 일치시킨다. hex는 정확히 3·4·6·8자리 전체 값만이다. CSS 함수도 값 전체와 맞춘다. 템플릿은 raw 대신 cooked 값을 사용하고, 리터럴 + 및 String(리터럴)의 단위 조합도 검사한다.
 
-## 검증과 알려진 경계
+fr·span·em·s·PT1S는 CSS 숫자+단위 값이 아니므로 허용한다. href/xlinkHref의 #add는 앵커 문맥이므로 허용한다. 문맥 없는 #add는 실제 3자리 hex와 구별할 수 없어 색으로 본다. 앞뒤 공백의 red 및 이스케이프된 red/13px는 금지한다. Intl.NumberFormat의 직접 옵션 객체는 style 키 금지에서 구별한다. 실제 형식 변환은 shared/lib/format으로 유도한다.
 
-기존 클래스 예제에 리뷰 반례를 더한 파일+기대 결과 예제는 110개다. 새 경계 규칙별 격리 설정에서 켜면 검출, 끄면 통과를 확인한다. 실제 앱 ESLint 설정을 읽는 임시 프로젝트에서는 원본 tsconfig를 상속하고 TS 7 tsc와 TS 6 API 모두로 리뷰 반례를 타입 검사한다. 같은 코드가 의도한 새 규칙으로 실패하고, 토큰 클래스와 d/viewBox 대조군은 두 검사 모두 통과한다. shared/lib Box를 DS에서 가져오는 우회도 실제 설정에서 실패한다.
+concat·fromCharCode·atob 등 임의 계산의 결과는 분석하지 않는다. 그렇더라도 className 동적 전달과 DOM 값 접근은 별도 경계가 막는다. 외부 차트 컴포넌트의 숫자·간접 데이터 props는 DS-06·DS-10의 보호된 계약에서 정한다.
 
-기존 master 테스트의 단언 삭제·약화는 하지 않는다. eslint-config.test.mjs의 끌 수 없는 규칙 목록에는 새 이름만 추가한다. DS의 spread 예제 기대값 추가는 앞 구현의 결정과 이번 승인을 따른다. 대조군은 비화면 shared 경계에서도 따로 검사한다.
+## HTML·CSS·빌드 진입점
 
-아직 구현하지 않은 것은 DS-09 화면 금지, DS-10 공개 props, DS-06 차트 라이브러리 숫자 props의 파일 제한, DS-11·DS-19의 레이아웃 최소 크기 및 파일별 넘침 제한이다. 승인 목록은 전부 비어 있다. 코드의 임의 계산으로 조립한 문자열 의미나 외부 라이브러리 내부 동작까지 분석하지 않는다.
+index.html의 doctype·요소·속성·유일한 theme 링크·module script를 정확한 문자열로 고정한다. style·외부 stylesheet 링크·속성이 추가되면 실패한다. index.html은 agent-writable 밖이고 생성된 Codex 권한에서도 읽기 전용인 기존 보호 경로다.
 
-추가 회귀에서 shared/lib의 paint 함수를 ref로 넘기면 실제 tsc와 ESLint가 모두 통과함을 확인했다. 이 경로 때문에 DOM 스타일 멤버 금지는 shared/ds뿐 아니라 비화면 shared에도 적용한다. 별도 회귀는 수정 전 ESLint 진단이 0개여서 실패하고 수정 후 no-dom-styling을 검출한다. 수기 CSS 경계는 이름이 같은 중첩 tokens.css도 예외로 취급하지 않는다.
+Vite default export는 defineConfig의 정적 객체여야 하고 CSS/postcss 키·계산 키·객체 spread로 CSS 설정을 주입할 수 없다. 기존 Tailwind Vite 플러그인과 글꼴 라이선스 번들은 유지한다.
+
+수기 CSS는 파일 자체를 금지한다. theme는 검증된 utility 정의를 포함한 정확 비교, tokens.css는 DS-13 gen-tokens --check다. stylelint 의존성은 다시 들이지 않는다. PostCSS 8.5.32와 better-tailwindcss 4.11.0을 유지한다.
+
+스냅샷은 디자인 유도 클래스·닫힌 키워드·변형·DS-13 반례를 입력으로 실제 Tailwind를 컴파일한다. 중첩된 모든 CSS 규칙·at-rule 문맥 및 후보별 생성 여부를 고정한다. 허용 후보의 미생성은 스냅샷 일치와 별개로 실패한다. DS-13 utility-cases.json이나 스냅샷 출력을 허용 목록으로 역참조하지 않는다.
+
+## 검증·기존 테스트 변경
+
+리뷰의 DOM API 반례와 ref/이벤트 경로는 실제 앱 ESLint 설정을 읽는 임시 프로젝트에서 tsc를 통과한 뒤 새 DOM 규칙으로 실패한다. RefObject 전달·아이콘 경로·언어/태그 유니온·앵커·Intl 옵션은 같은 설정에서 통과한다. 각 규칙의 격리 비활성화 검사는 유지한다.
+
+기존 eslint-config 테스트의 DS DOM 허용 기대를 금지 기대로 강화한다. ds-generation의 정확한 theme 기대값에는 검증된 utility 정의를 추가한다. 기존 예제의 추가 오류를 기대 목록에 더한다. 기존 테스트의 삭제·약화나 검사 끄기는 없다.
+
+## 전체 디자인 var 사용과 유도 클래스
+
+| 토큰 | 실제 CSS 속성 | 유도한 길이 클래스 |
+| --- | --- | --- |
+| alert | background, border, border-bottom, border-color, color | 길이 축 아님 |
+| alert-soft | background | 길이 축 아님 |
+| bar-height | height | h-bar-height |
+| bg | background | 길이 축 아님 |
+| border-focus | border, border-left, border-width, outline, outline-offset, width | w-border-focus |
+| border-hairline | border, border-bottom, border-left, border-right, border-top, bottom, box-shadow, height, left, margin-left, stroke-width, top, width | bottom-border-hairline, h-border-hairline, left-border-hairline, ml-border-hairline, size-border-hairline, top-border-hairline, w-border-hairline |
+| border-mark | border, stroke-width | 길이 축 아님 |
+| bubble-max-width | max-width | max-w-bubble-max-width |
+| chart-1 | background, fill, stroke | 길이 축 아님 |
+| chart-2 | background, fill, stroke | 길이 축 아님 |
+| chart-3 | background, fill, stroke | 길이 축 아님 |
+| chart-4 | background, fill, stroke | 길이 축 아님 |
+| chart-5 | background, fill, stroke | 길이 축 아님 |
+| chart-6 | background, fill, stroke | 길이 축 아님 |
+| chat-input-max | max-height | max-h-chat-input-max |
+| chat-input-min | min-height | min-h-chat-input-min |
+| chat-width | width | w-chat-width |
+| chat-width-max | max-width | max-w-chat-width-max |
+| chat-width-min | min-width, width | min-w-chat-width-min, w-chat-width-min |
+| content-max | max-width | max-w-content-max |
+| content-min | min-width | min-w-content-min |
+| control-height | height, min-height, width | h-control-height, min-h-control-height, size-control-height, w-control-height |
+| control-height-sm | height, width | h-control-height-sm, size-control-height-sm, w-control-height-sm |
+| control-pad-sm | padding | p-control-pad-sm, pb-control-pad-sm, pe-control-pad-sm, pl-control-pad-sm, pr-control-pad-sm, ps-control-pad-sm, pt-control-pad-sm, px-control-pad-sm, py-control-pad-sm |
+| dialog-width | max-width | max-w-dialog-width |
+| dialog-width-wide | max-width | max-w-dialog-width-wide |
+| dot-size | height, width | h-dot-size, size-dot-size, w-dot-size |
+| down | background, color, fill, stroke | 길이 축 아님 |
+| down-hover | background | 길이 축 아님 |
+| down-soft | background, fill | 길이 축 아님 |
+| duration-fast | transition | 길이 축 아님 |
+| duration-flash | animation | 길이 축 아님 |
+| ease-out | animation, transition | 길이 축 아님 |
+| focus-offset | outline-offset | 길이 축 아님 |
+| focus-ring | outline | 길이 축 아님 |
+| font-mono | font-family | 길이 축 아님 |
+| font-sans | font-family | 길이 축 아님 |
+| gap-hairline | gap, letter-spacing, margin, min-width, padding, stroke-dasharray, stroke-width, text-underline-offset, transform, width | gap-gap-hairline, gap-x-gap-hairline, gap-y-gap-hairline, m-gap-hairline, mb-gap-hairline, me-gap-hairline, min-w-gap-hairline, ml-gap-hairline, mr-gap-hairline, ms-gap-hairline, mt-gap-hairline, mx-gap-hairline, my-gap-hairline, p-gap-hairline, pb-gap-hairline, pe-gap-hairline, pl-gap-hairline, pr-gap-hairline, ps-gap-hairline, pt-gap-hairline, px-gap-hairline, py-gap-hairline, w-gap-hairline |
+| grid-columns | grid-template-columns | 길이 축 아님 |
+| icon-lg | grid-template-columns, height, width | h-icon-lg, size-icon-lg, w-icon-lg |
+| icon-md | height, transform, width | h-icon-md, size-icon-md, w-icon-md |
+| icon-sm | height, width | h-icon-sm, size-icon-sm, w-icon-sm |
+| ink | background, color, fill | 길이 축 아님 |
+| ink-muted | background, border-left, color, fill, stroke | 길이 축 아님 |
+| ink-subtle | color, fill | 길이 축 아님 |
+| leading-3xl | line-height | 길이 축 아님 |
+| leading-base | line-height | 길이 축 아님 |
+| leading-lg | line-height | 길이 축 아님 |
+| leading-md | height, line-height | 길이 축 아님 |
+| leading-sm | line-height | 길이 축 아님 |
+| leading-xl | line-height | 길이 축 아님 |
+| leading-xs | line-height, margin-bottom, top | 길이 축 아님 |
+| line | border, border-bottom, border-bottom-color, border-left, border-right, border-top, box-shadow, stroke | 길이 축 아님 |
+| line-strong | border, border-color, border-left, stroke | 길이 축 아님 |
+| list-item-height | height | h-list-item-height |
+| meter-height | height | h-meter-height |
+| on-alert | color | 길이 축 아님 |
+| on-down | color | 길이 축 아님 |
+| on-primary | background, border, color | 길이 축 아님 |
+| on-up | color | 길이 축 아님 |
+| opacity-area | fill-opacity | 길이 축 아님 |
+| opacity-disabled | opacity | 길이 축 아님 |
+| overlay | background | 길이 축 아님 |
+| popover-min-width | grid-template-columns, min-width | min-w-popover-min-width |
+| primary | background, border, border-color, border-right-color, border-top-color, color | 길이 축 아님 |
+| primary-hover | background | 길이 축 아님 |
+| primary-soft | background | 길이 축 아님 |
+| prose-max | max-width | max-w-prose-max |
+| radius-lg | border-radius | 길이 축 아님 |
+| radius-md | border-radius | 길이 축 아님 |
+| radius-pill | border-radius | 길이 축 아님 |
+| radius-sm | border-radius | 길이 축 아님 |
+| row-height | height | h-row-height |
+| row-height-dense | height | h-row-height-dense |
+| shadow-popover | box-shadow | 길이 축 아님 |
+| sidebar-collapsed | left, width | left-sidebar-collapsed, w-sidebar-collapsed |
+| sidebar-width | width | w-sidebar-width |
+| space-1 | bottom, gap, height, left, margin-left, margin-top, padding, stroke-dasharray, text-underline-offset, top | bottom-space-1, gap-space-1, gap-x-space-1, gap-y-space-1, h-space-1, left-space-1, ml-space-1, mt-space-1, p-space-1, pb-space-1, pe-space-1, pl-space-1, pr-space-1, ps-space-1, pt-space-1, px-space-1, py-space-1, top-space-1 |
+| space-10 | padding | p-space-10, pb-space-10, pe-space-10, pl-space-10, pr-space-10, ps-space-10, pt-space-10, px-space-10, py-space-10 |
+| space-2 | gap, margin, margin-top, padding, padding-top, right, top, width | gap-space-2, gap-x-space-2, gap-y-space-2, m-space-2, mb-space-2, me-space-2, ml-space-2, mr-space-2, ms-space-2, mt-space-2, mx-space-2, my-space-2, p-space-2, pb-space-2, pe-space-2, pl-space-2, pr-space-2, ps-space-2, pt-space-2, px-space-2, py-space-2, right-space-2, top-space-2, w-space-2 |
+| space-3 | gap, margin, margin-top, padding, padding-bottom, padding-left | gap-space-3, gap-x-space-3, gap-y-space-3, m-space-3, mb-space-3, me-space-3, ml-space-3, mr-space-3, ms-space-3, mt-space-3, mx-space-3, my-space-3, p-space-3, pb-space-3, pe-space-3, pl-space-3, pr-space-3, ps-space-3, pt-space-3, px-space-3, py-space-3 |
+| space-4 | gap, margin, padding | gap-space-4, gap-x-space-4, gap-y-space-4, m-space-4, mb-space-4, me-space-4, ml-space-4, mr-space-4, ms-space-4, mt-space-4, mx-space-4, my-space-4, p-space-4, pb-space-4, pe-space-4, pl-space-4, pr-space-4, ps-space-4, pt-space-4, px-space-4, py-space-4 |
+| space-5 | gap, margin, margin-bottom, margin-top, padding, padding-left | gap-space-5, gap-x-space-5, gap-y-space-5, m-space-5, mb-space-5, me-space-5, ml-space-5, mr-space-5, ms-space-5, mt-space-5, mx-space-5, my-space-5, p-space-5, pb-space-5, pe-space-5, pl-space-5, pr-space-5, ps-space-5, pt-space-5, px-space-5, py-space-5 |
+| space-6 | bottom, gap, max-width, padding, right | bottom-space-6, gap-space-6, gap-x-space-6, gap-y-space-6, max-w-space-6, p-space-6, pb-space-6, pe-space-6, pl-space-6, pr-space-6, ps-space-6, pt-space-6, px-space-6, py-space-6, right-space-6 |
+| space-8 | padding | p-space-8, pb-space-8, pe-space-8, pl-space-8, pr-space-8, ps-space-8, pt-space-8, px-space-8, py-space-8 |
+| surface | background, color, fill, stroke | 길이 축 아님 |
+| surface-raised | background | 길이 축 아님 |
+| surface-sunken | background, fill | 길이 축 아님 |
+| text-2xl | font-size | 길이 축 아님 |
+| text-3xl | font-size | 길이 축 아님 |
+| text-base | font-size | 길이 축 아님 |
+| text-lg | font-size | 길이 축 아님 |
+| text-md | font-size | 길이 축 아님 |
+| text-sm | font-size, height | 길이 축 아님 |
+| text-xl | font-size | 길이 축 아님 |
+| text-xs | font-size | 길이 축 아님 |
+| toolbar-height | height, min-height | h-toolbar-height, min-h-toolbar-height |
+| tooltip-max-width | max-width | max-w-tooltip-max-width |
+| tracking-display | letter-spacing | 길이 축 아님 |
+| up | background, color, fill, stroke | 길이 축 아님 |
+| up-hover | background | 길이 축 아님 |
+| up-soft | background, fill | 길이 축 아님 |
+| weight-bold | font-weight | 길이 축 아님 |
+| weight-medium | font-weight | 길이 축 아님 |
+| weight-regular | font-weight | 길이 축 아님 |
+| weight-semibold | font-weight | 길이 축 아님 |
+| window-min-height | min-height | min-h-window-min-height |
+| window-min-width | min-width | min-w-window-min-width |
+| z-modal | z-index | 길이 축 아님 |
+| z-panel | z-index | 길이 축 아님 |
+| z-popover | z-index | 길이 축 아님 |
+| z-sticky | z-index | 길이 축 아님 |
+| z-toast | z-index | 길이 축 아님 |

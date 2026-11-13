@@ -28,6 +28,27 @@ pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
 pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
 
+mod thesis;
+pub use thesis::{
+    ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
+    CriterionAssessment, CriterionComparison, CriterionKind, CriterionMetric, CriterionObservation,
+    CriterionValue, CriterionVerdict, Evidence, EvidenceRef, EvidenceUrl, HistoryAction,
+    HistoryEntry, JudgedClaim, JudgedCriterion, KillCriterion, MachineCondition, ProposedChange,
+    Thesis, ThesisError, ThesisOperation, ThesisPatch, ThesisStatus, ThesisVersion, ToolReference,
+    UserDecision, UserReason,
+};
+
+mod numeric_input;
+mod price;
+mod quantity;
+mod ratio;
+pub use numeric_input::{NumericError, NumericInput};
+pub use price::Price;
+pub use quantity::Quantity;
+pub use ratio::Ratio;
+
+mod exact_arithmetic;
+pub use exact_arithmetic::{ApproximateRatio, RatioQuotient};
 mod domain_time;
 mod market_session;
 pub use domain_time::{

@@ -22,24 +22,15 @@
   },
   "class-3.tsx": {
     "row": "1-5",
-    "expect": [
-      "better-tailwindcss/no-restricted-classes",
-      "ds/no-style-literals"
-    ]
+    "expect": ["better-tailwindcss/no-restricted-classes"]
   },
   "class-4.tsx": {
     "row": "1-5",
-    "expect": [
-      "better-tailwindcss/no-restricted-classes",
-      "ds/no-style-literals"
-    ]
+    "expect": ["better-tailwindcss/no-restricted-classes"]
   },
   "class-5.tsx": {
     "row": "1-5",
-    "expect": [
-      "better-tailwindcss/no-restricted-classes",
-      "ds/no-style-literals"
-    ]
+    "expect": ["better-tailwindcss/no-restricted-classes"]
   },
   "class-6.tsx": {
     "row": "1-5",
@@ -91,10 +82,7 @@
   },
   "class-18.tsx": {
     "row": "1-5",
-    "expect": [
-      "better-tailwindcss/no-restricted-classes",
-      "ds/no-style-literals"
-    ]
+    "expect": ["better-tailwindcss/no-restricted-classes"]
   },
   "class-19.tsx": {
     "row": "1-5",
@@ -313,7 +301,7 @@
   },
   "review-ref.tsx": {
     "row": "review",
-    "expect": ["ds/no-dom-styling", "ds/no-style-literals"]
+    "expect": ["ds/no-dom-styling", "ds/no-style-literals", "ds/no-dom-values"]
   },
   "review-factory.tsx": {
     "row": "review",

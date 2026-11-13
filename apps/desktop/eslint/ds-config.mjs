@@ -30,6 +30,7 @@ export const DS_RULES = {
       ],
     },
   ],
+  "ds/no-dom-values": "error",
   "ds/no-dom-styling": "error",
   "ds/no-element-factory": "error",
   "ds/no-style-object": "error",
@@ -39,6 +40,8 @@ export const DS_RULES = {
   "ds/no-style-literals": "error",
 };
 export const SHARED_RULES = {
+  "ds/no-style-literals": "error",
+  "ds/no-dom-values": "error",
   "ds/no-dom-styling": "error",
   "ds/no-shared-jsx": "error",
   "ds/no-element-factory": "error",
@@ -70,6 +73,11 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     plugins: { ds: dsPlugin },
     rules: SHARED_RULES,
   },
+  ...listed(lists.DOM_ACCESS_FILES, {
+    "ds/no-dom-values": "off",
+    "guard/no-dom-globals": "off",
+    "guard/no-ref-callback": "off",
+  }),
   ...listed(lists.PRICE_COLOR_FILES, {
     "better-tailwindcss/no-restricted-classes": [
       "error",
@@ -81,5 +89,8 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     ],
   }),
   ...listed(lists.INLINE_STYLE_FILES, { "ds/no-inline-style": "off" }),
+  ...listed(lists.ICON_GEOMETRY_FILES, {
+    "ds/no-presentation-props": ["error", { geometry: "allow" }],
+  }),
   ...listed(lists.DOM_STYLE_FILES, { "ds/no-dom-styling": "off" }),
 ];
