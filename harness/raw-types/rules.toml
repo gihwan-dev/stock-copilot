@@ -13,6 +13,8 @@ external-types = []
 external-traits = []
 
 newtype-fields = [
+  "Date",
+  "OffsetDateTime",
   "String",
   "char",
   "OsString",

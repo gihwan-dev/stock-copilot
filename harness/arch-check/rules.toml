@@ -249,7 +249,7 @@ reason = "serde_json → serde(derive) → serde_derive의 절차 매크로 의�
 
 [[external-allowlist]]
 crate = "domain"
-allowed = ["rust_decimal"]
+allowed = ["rust_decimal", "time"]
 
 [[external-allowlist]]
 crate = "xtask"
@@ -348,3 +348,9 @@ crates = ["domain"]
 externals = ["syn", "proc-macro2"]
 through = "proptest"
 reason = "D-01 개발 의존 proptest → bitflags → serde_core → serde_derive의 절차 매크로. 작업 공간 기능 통합으로 생기는 메타데이터 경로이며 domain은 serde 기능을 켜지 않는다"
+
+[[external-location-exception]]
+crates = ["domain"]
+externals = ["syn", "proc-macro2"]
+through = "time"
+reason = "D-10 time → serde_core → serde_derive의 절차 매크로. Tauri 전이 time과의 작업 공간 기능 통합으로 생기는 메타데이터 경로이며 domain은 serde 기능을 직접 켜지 않는다"
