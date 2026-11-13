@@ -140,5 +140,5 @@ harness.md 6.8의 ESLint 행("`harness/lint-cases.json`")은 `harness/check-list
 `just known-gaps`의 마지막 줄(이 ADR의 빈틈 절 포함):
 
 ```
-known-gaps: 39건 (eslint 7건, hook 6건, adr 26건(문서만(예제 없음)))
+known-gaps: 50건 (eslint 7건, hook 6건, adr 37건(문서만(예제 없음)))
 ```
