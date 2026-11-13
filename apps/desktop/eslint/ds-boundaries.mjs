@@ -111,12 +111,7 @@ export const boundaryRules = {
     "DOM으로 스타일을 읽거나 바꾸는 경로는 허용 파일 밖에서 금지다.",
     (ctx) => ({
       MemberExpression(node) {
-        if (
-          DOM_STYLE_MEMBERS.includes(propertyName(node.property)) ||
-          (node.computed &&
-            (node.property.type === "Identifier" ||
-              propertyName(node.property) === undefined))
-        )
+        if (DOM_STYLE_MEMBERS.includes(propertyName(node.property)))
           report(ctx, node);
       },
       Property(node) {

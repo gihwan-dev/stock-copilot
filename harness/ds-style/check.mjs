@@ -81,7 +81,9 @@ export const check = async () => {
   for (const file of cssFiles(join(desktop, "src/shared/ds")))
     problems.push(
       ...cssBoundaryProblems(
-        file.slice(file.lastIndexOf("/") + 1),
+        ["tokens.css", "theme.css"].find(
+          (n) => file === join(desktop, "src/shared/ds", n),
+        ) ?? file,
         readFileSync(file, "utf8"),
       ).map((p) => `${file}: ${p}`),
     );

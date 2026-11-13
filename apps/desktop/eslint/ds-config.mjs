@@ -39,6 +39,7 @@ export const DS_RULES = {
   "ds/no-style-literals": "error",
 };
 export const SHARED_RULES = {
+  "ds/no-dom-styling": "error",
   "ds/no-shared-jsx": "error",
   "ds/no-element-factory": "error",
 };

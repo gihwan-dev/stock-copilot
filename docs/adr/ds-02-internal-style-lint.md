@@ -22,7 +22,7 @@
 
 ## DOM과 렌더링 경계
 
-shared/ds에서 classList, className, style, setAttribute, setAttributeNS, toggleAttribute, setProperty, cssText, animate, insertAdjacentHTML, innerHTML, outerHTML, adoptedStyleSheets, insertRule, CSSStyleSheet, attributeStyleMap 멤버 접근을 막는다. 리터럴 계산 키와 구조 분해도 본다. 동적 계산 멤버는 기존 no-computed-member에 더해 DS 규칙도 막는다. style·link JSX 태그 및 dangerouslySetInnerHTML은 의도한 DS 규칙으로 금지한다.
+shared/ds에서 classList, className, style, setAttribute, setAttributeNS, toggleAttribute, setProperty, cssText, animate, insertAdjacentHTML, innerHTML, outerHTML, adoptedStyleSheets, insertRule, CSSStyleSheet, attributeStyleMap 멤버 접근을 막는다. 리터럴 계산 키와 구조 분해도 본다. 동적 계산 멤버는 기존 타입 인식 no-computed-member가 검사한다. 프로젝트 객체의 메시지 키와 DOM 객체를 구분하는 기존 규칙을 유지한다. style·link JSX 태그 및 dangerouslySetInnerHTML은 의도한 DS 규칙으로 금지한다.
 
 createElement·cloneElement·jsx·jsxs·jsxDEV 참조는 별칭 import와 객체 멤버도 금지한다. 객체의 className·class·style 키는 값이 리터럴이어도 금지한다. 계산 키와 Object.fromEntries도 금지한다. JSX spread는 숨은 className·style 전달 경로여서 DS 안에서는 이전 shared 폴더 예외를 좁힌다. 기존 spread-allowed.tsx가 DS에서 오류를 기대하도록 바꾼 것은 이 결정의 결과다. DS 밖 shared에서는 spread 규칙 자체는 여전히 꺼져 있지만 JSX 렌더링이 별도 규칙으로 금지된다. 비화면 shared의 객체 spread 통과 대조군과, JSX spread가 오직 새 JSX 경계 규칙으로 실패하는 대조군을 둔다.
 
@@ -62,6 +62,8 @@ stylelint 18.0.0과 stylelint-declaration-strict-value 1.13.0을 제거했다. P
 
 기존 클래스 예제에 리뷰 반례를 더한 파일+기대 결과 예제는 110개다. 새 경계 규칙별 격리 설정에서 켜면 검출, 끄면 통과를 확인한다. 실제 앱 ESLint 설정을 읽는 임시 프로젝트에서는 원본 tsconfig를 상속하고 TS 7 tsc와 TS 6 API 모두로 리뷰 반례를 타입 검사한다. 같은 코드가 의도한 새 규칙으로 실패하고, 토큰 클래스와 d/viewBox 대조군은 두 검사 모두 통과한다. shared/lib Box를 DS에서 가져오는 우회도 실제 설정에서 실패한다.
 
-기존 master 테스트의 단언 삭제·약화는 하지 않는다. eslint-config.test.mjs의 끌 수 없는 규칙 목록에는 새 이름만 추가한다. 기존 concat-key-gap 예제의 정확한 보고 목록에는 새 DOM 규칙 오류를 추가한다. DS의 spread 예제 기대값 추가는 앞 구현의 결정과 이번 승인을 따른다. 대조군은 비화면 shared 경계에서도 따로 검사한다.
+기존 master 테스트의 단언 삭제·약화는 하지 않는다. eslint-config.test.mjs의 끌 수 없는 규칙 목록에는 새 이름만 추가한다. DS의 spread 예제 기대값 추가는 앞 구현의 결정과 이번 승인을 따른다. 대조군은 비화면 shared 경계에서도 따로 검사한다.
 
 아직 구현하지 않은 것은 DS-09 화면 금지, DS-10 공개 props, DS-06 차트 라이브러리 숫자 props의 파일 제한, DS-11·DS-19의 레이아웃 최소 크기 및 파일별 넘침 제한이다. 승인 목록은 전부 비어 있다. 코드의 임의 계산으로 조립한 문자열 의미나 외부 라이브러리 내부 동작까지 분석하지 않는다.
+
+추가 회귀에서 shared/lib의 paint 함수를 ref로 넘기면 실제 tsc와 ESLint가 모두 통과함을 확인했다. 이 경로 때문에 DOM 스타일 멤버 금지는 shared/ds뿐 아니라 비화면 shared에도 적용한다. 별도 회귀는 수정 전 ESLint 진단이 0개여서 실패하고 수정 후 no-dom-styling을 검출한다. 수기 CSS 경계는 이름이 같은 중첩 tokens.css도 예외로 취급하지 않는다.

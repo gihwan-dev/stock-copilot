@@ -193,3 +193,66 @@ test("DS02 review runtime witnesses typecheck with actual app options and fail t
     rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test("DS02 shared lib cannot hide DOM styling behind an imported ref callback", async () => {
+  const folder = mkdtempSync(join(desktopRoot, ".ds-runtime-"));
+  const dir = (s) => join(folder, "src/shared", s);
+  mkdirSync(dir("lib"), { recursive: true });
+  mkdirSync(dir("ds"), { recursive: true });
+  const configPath = join(folder, "tsconfig.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      extends: join(desktopRoot, "tsconfig.json"),
+      compilerOptions: { rootDir: "src" },
+      include: ["src"],
+    }),
+  );
+  writeFileSync(
+    dir("lib/paint.ts"),
+    'export const paint = (element: Readonly<HTMLDivElement> | null): void => element?.style.setProperty("width", "50%");',
+  );
+  writeFileSync(dir("lib/index.ts"), 'export { paint } from "./paint";');
+  writeFileSync(
+    dir("ds/Probe.tsx"),
+    'import { paint } from "../lib/index";\n' +
+      exported('<div className="h-meter-height bg-primary" ref={paint} />'),
+  );
+  try {
+    const native = spawnSync(
+      join(desktopRoot, "node_modules/.bin/tsc"),
+      ["-p", configPath],
+      { encoding: "utf8" },
+    );
+    assert.equal(native.status, 0, native.stdout + native.stderr);
+    const lint = new ESLint({
+      cwd: folder,
+      overrideConfigFile: join(desktopRoot, "eslint.config.mjs"),
+      overrideConfig: [
+        {
+          languageOptions: {
+            parserOptions: {
+              projectService: false,
+              project: configPath,
+              tsconfigRootDir: folder,
+            },
+          },
+          settings: { "boundaries/root-path": folder },
+        },
+      ],
+    });
+    const results = await lint.lintFiles([
+      dir("lib/paint.ts"),
+      dir("lib/index.ts"),
+      dir("ds/Probe.tsx"),
+    ]);
+    assert.ok(
+      results.some((r) =>
+        r.messages.some((m) => m.ruleId === "ds/no-dom-styling"),
+      ),
+      JSON.stringify(results.flatMap((r) => r.messages)),
+    );
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
