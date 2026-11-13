@@ -34,6 +34,6 @@
   "harness/agent-writable.txt": "10dc85ce0344881259c9c3f46c1d46079e6628871e004c22f63409510d5c71c4",
   "harness/claude-hooks/agent-rules.json": "083f56b11c43377855d5487e9c2deffd061cc9d02b95712fd92110bce083b7fe",
   "harness/claude-hooks/lock.txt": "b470b84cf0cd3189e10615bffea7d5cbd9f61134ba1c2cfd513ddd45b776a5f6",
-  "harness/claude-hooks/rules.json": "9a9ed140735647e990666907698e94b4165203cafc986bc7878eb9f72a572d7e",
-  "harness/sandbox/lock-fragment.json": "4109f741e42832721a01068b17d43e957057c870fe2b64c049ac5e7417649e40"
+  "harness/claude-hooks/rules.json": "00d8856158e0cc6147e65ce97cca0384b6a4d7711e5dea2bfa2f08c7b5f28377",
+  "harness/sandbox/lock-fragment.json": "3368dbaa680c32210500f7a20992702397cc00dd9887e3fc5f0c6b3c52e857ac"
 }

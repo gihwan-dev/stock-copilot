@@ -1,0 +1,134 @@
+{
+  "cases": [
+    {
+      "name": "clean",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/clean.workflow",
+      "rules": []
+    },
+    {
+      "name": "yaml-text",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/yaml-text.workflow",
+      "rules": ["not-canonical-json"]
+    },
+    {
+      "name": "target-event",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/target-event.workflow",
+      "rules": ["event:pull_request_target"]
+    },
+    {
+      "name": "workflow-run-event",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/workflow-run-event.workflow",
+      "rules": ["event:workflow_run"]
+    },
+    {
+      "name": "write-all",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/write-all.workflow",
+      "rules": ["permissions"]
+    },
+    {
+      "name": "missing-permissions",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/missing-permissions.workflow",
+      "rules": ["permissions"]
+    },
+    {
+      "name": "job-permissions",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/job-permissions.workflow",
+      "rules": ["job-permissions:build"]
+    },
+    {
+      "name": "listed-job-permissions",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/listed-job-permissions.workflow",
+      "rules": []
+    },
+    {
+      "name": "other-runner",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/other-runner.workflow",
+      "rules": ["runner:build"]
+    },
+    {
+      "name": "job-continue-on-error",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/job-continue-on-error.workflow",
+      "rules": ["continue-on-error:build"]
+    },
+    {
+      "name": "step-continue-on-error",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/step-continue-on-error.workflow",
+      "rules": ["continue-on-error:build"]
+    },
+    {
+      "name": "reusable-workflow",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/reusable-workflow.workflow",
+      "rules": ["reusable-workflow:build", "runner:build"]
+    },
+    {
+      "name": "tag-pinned",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/tag-pinned.workflow",
+      "rules": ["unpinned-action:actions/checkout@v7"]
+    },
+    {
+      "name": "local-action",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/local-action.workflow",
+      "rules": ["unpinned-action:./.github/actions/setup"]
+    },
+    {
+      "name": "unlisted-sha",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/unlisted-sha.workflow",
+      "rules": [
+        "unlisted-action:actions/checkout@0000000000000000000000000000000000000000"
+      ]
+    },
+    {
+      "name": "unlisted-action",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/unlisted-action.workflow",
+      "rules": [
+        "unlisted-action:someone/action@3d3c42e5aac5ba805825da76410c181273ba90b1"
+      ]
+    },
+    {
+      "name": "persisted-credentials",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/persisted-credentials.workflow",
+      "rules": ["checkout-credentials:build"]
+    },
+    {
+      "name": "tool-versions",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/tool-versions.workflow",
+      "rules": ["tool-versions:build"]
+    },
+    {
+      "name": "expression-in-run",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/expression-in-run.workflow",
+      "rules": ["expression-in-run:build"]
+    },
+    {
+      "name": "secrets",
+      "path": ".github/workflows/ci.yml",
+      "example": "harness/ci/workflow-policy/examples/secrets.workflow",
+      "rules": ["secrets"]
+    },
+    {
+      "name": "nightly-path-permissions",
+      "path": ".github/workflows/other.yml",
+      "example": "harness/ci/workflow-policy/examples/nightly-path-permissions.workflow",
+      "rules": ["job-permissions:notify"]
+    }
+  ]
+}

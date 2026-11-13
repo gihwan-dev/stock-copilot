@@ -1,0 +1,33 @@
+{
+  "installAction": {
+    "tools": {
+      "just": "1.59.0",
+      "cargo-nextest": "0.9.151",
+      "cargo-deny": "0.20.2",
+      "cargo-llvm-cov": "0.9.1"
+    }
+  },
+  "cargoInstall": {
+    "cargo-mutants": "27.1.0"
+  },
+  "lefthook": {
+    "version": "2.2.2",
+    "assets": {
+      "Linux-ARM64": {
+        "file": "lefthook_2.2.2_Linux_aarch64",
+        "sha256": "a4d4bf78d902af1a148bf0662af08e13b791061e46e6e2183b0660eed96b43f6"
+      },
+      "Linux-X64": {
+        "file": "lefthook_2.2.2_Linux_x86_64",
+        "sha256": "4fbf89eb7748c6aed84d833ee1a29edac48fae614468ca9a82896ec32f2800b6"
+      },
+      "macOS-ARM64": {
+        "file": "lefthook_2.2.2_MacOS_arm64",
+        "sha256": "049c648578c056a180519c4d8c31d5436dbb9df74369b2e29611aae99d7e9b36"
+      }
+    }
+  },
+  "prefetch": {
+    "source": "crates/xtask/src/rust_lints_tests.rs"
+  }
+}
