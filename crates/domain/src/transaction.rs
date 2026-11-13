@@ -537,4 +537,23 @@ mod tests {
         );
         assert_eq!(pair.into_iter().collect::<BTreeSet<_>>().len(), 1);
     }
+    #[test]
+    fn normal_us_and_domestic_cancellation_do_not_raise_non_domestic_anomaly() {
+        let mut domestic = data();
+        domestic.cancellation = Cancellation::Cancelled;
+        let cancelled = Transaction::try_new(domestic).expect("국내 취소 보존");
+        assert_eq!(cancelled.anomalies(), []);
+        assert_eq!(cancelled.calculation_effect(), CalculationEffect::NoEffect);
+        let mut normal_us = data();
+        normal_us.market = Market::Us;
+        normal_us.currency = Currency::Usd;
+        normal_us.commission = money("0", Currency::Usd);
+        normal_us.tax = money("0", Currency::Usd);
+        let regular = Transaction::try_new(normal_us).expect("미국 일반 거래");
+        assert_eq!(regular.anomalies(), []);
+        assert_eq!(
+            regular.calculation_effect(),
+            CalculationEffect::SettledTransaction
+        );
+    }
 }

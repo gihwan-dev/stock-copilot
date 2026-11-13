@@ -903,4 +903,24 @@ mod tests {
         assert_eq!(result.notices(), []);
         assert_eq!(result.state().active_settled_for_calculation().count(), 1);
     }
+    #[test]
+    fn simultaneous_first_observation_and_disappearance_are_valid_on_restore() {
+        let stored = crate::StoredTransaction::try_restore(
+            row(1, "BUY", Settlement::Settled),
+            time(10),
+            Some(time(10)),
+        )
+        .expect("동시각 관측과 사라짐");
+        assert_eq!(stored.first_seen(), time(10));
+        assert_eq!(stored.disappeared_at(), Some(time(10)));
+        let restored = SettledRowSet::try_restore(
+            AccountId::new(1),
+            vec![stored],
+            TransactionBatch::try_new(vec![]).expect("임시"),
+            Some(time(10)),
+        )
+        .expect("동시각 복원");
+        assert_eq!(restored.active_settled_for_calculation().count(), 0);
+        assert_eq!(restored.history_rows().len(), 1);
+    }
 }
