@@ -36,3 +36,8 @@ pub use thesis::{
     KillCriterion, MachineCondition, ProposedChange, Thesis, ThesisError, ThesisOperation,
     ThesisPatch, ThesisStatus, ThesisVersion, ToolPurpose, ToolReference, UserDecision, UserReason,
 };
+
+mod probability;
+pub use probability::{
+    AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
+};

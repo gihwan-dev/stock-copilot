@@ -439,6 +439,26 @@
         "file": "harness/codex-hooks/tests/config.test.mjs",
         "name": "Codex config preserves supported sandbox policy entries and pins the shell PATH"
       }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "cargo run --locked --quiet --package xtask -- gen-tokens --check",
+      "kind": "check",
+      "cases": "apps/desktop/tests/ds-generation.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/ds-generation.test.mjs",
+        "name": "generation check rejects hand edits to either output and input without regeneration"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/ds-tokens/contrast.mjs",
+      "kind": "check",
+      "cases": "harness/ds-tokens/contrast-pairs.json",
+      "test": {
+        "file": "apps/desktop/tests/ds-contrast.test.mjs",
+        "name": "contrast pairs are the complete protected contract and removing any pair fails"
+      }
     }
   ]
 }

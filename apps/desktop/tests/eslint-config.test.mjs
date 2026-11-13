@@ -311,7 +311,14 @@ test("every file under apps/desktop/src is a TypeScript lint target", async () =
       config.rules["guard/forbidden-extension"] === undefined;
     if (!file.endsWith("/.gitkeep") && !typescriptTarget) outside.push(file);
   }
-  assert.deepEqual(outside, desktopTypeScriptPaths().sort());
+  assert.deepEqual(
+    outside,
+    [
+      ...desktopTypeScriptPaths(),
+      "src/shared/ds/theme.css",
+      "src/shared/ds/tokens.css",
+    ].sort(),
+  );
 });
 
 test("just check runs ESLint on src without cache and with zero warnings allowed", () => {

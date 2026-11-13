@@ -220,6 +220,8 @@
         ["pnpm install --frozen-lockfile --ignore-scripts"],
         ["node harness/ts-deps/check.mjs"],
         ["node harness/ds-tokens/check.mjs"],
+        ["cargo run --locked --quiet --package xtask -- gen-tokens --check"],
+        ["node harness/ds-tokens/contrast.mjs"],
         [
           "pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json"
         ],
@@ -607,6 +609,19 @@
       "namepath": "gen-bindings",
       "shebang": false
     },
+    "gen-tokens": {
+      "attributes": [],
+      "body": [["cargo run --locked --quiet --package xtask -- gen-tokens"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "gen-tokens",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "gen-tokens",
+      "shebang": false
+    },
     "hooks-installed": {
       "attributes": [],
       "body": [
@@ -887,6 +902,19 @@
       "private": false,
       "quiet": false,
       "namepath": "test-diff",
+      "shebang": false
+    },
+    "tokens-contrast": {
+      "attributes": [],
+      "body": [["node harness/ds-tokens/contrast.mjs"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "tokens-contrast",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "tokens-contrast",
       "shebang": false
     }
   },

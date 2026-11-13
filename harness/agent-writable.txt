@@ -23,6 +23,7 @@ pnpm-lock.yaml
 !crates/trade-fakes/**
 !crates/adapters/broker-toss-schema/**
 !apps/desktop/src/shared/ds/index.ts
+!apps/desktop/src/shared/ds/theme.css
 !apps/desktop/src/shared/ds/tokens.css
 !apps/desktop/src/shared/ds/tokens.ts
 !docs/harness.md
