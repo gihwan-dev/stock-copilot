@@ -27,3 +27,7 @@ pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, Rec
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
 pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
+mod probability;
+pub use probability::{
+    AiProbability, AiProbabilityError, AiProbabilityInput, Probability, ProbabilityError,
+};
