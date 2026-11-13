@@ -895,6 +895,7 @@ mod tests {
     #[test]
     fn empty_cash_only_and_sum_overflow_remain_explicit() {
         let empty = portfolio(vec![], "0", "0").evaluate(None);
+        assert_eq!(empty.differing_holding_count().as_usize(), 0);
         assert_eq!(
             complete(empty.valuation()).accuracy(),
             ValuationAccuracy::Exact
