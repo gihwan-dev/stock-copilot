@@ -30,5 +30,11 @@ pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
 
 mod domain_time;
 mod market_session;
-pub use domain_time::{CalendarDate, TimeInterval, TimeIntervalError, Timestamp};
-pub use market_session::{MarketSession, MarketSessionError, MarketState, SessionInformation};
+pub use domain_time::{
+    CalendarDate, CalendarDays, CalendarYear, DayNumber, MonthNumber, Nanosecond, OffsetSeconds,
+    SpanSeconds, TimeError, TimeInterval, TimeIntervalError, TimeSpan, Timestamp, UnixSeconds,
+};
+pub use market_session::{
+    AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
+    MarketSessionError, MarketState, MarketTransition, SessionData, SessionInformation,
+};

@@ -354,3 +354,15 @@ crates = ["domain"]
 externals = ["syn", "proc-macro2"]
 through = "time"
 reason = "D-10 time → serde_core → serde_derive의 절차 매크로. Tauri 전이 time과의 작업 공간 기능 통합으로 생기는 메타데이터 경로이며 domain은 serde 기능을 직접 켜지 않는다"
+
+[[feature-allowlist]]
+external = "time"
+dependent = "domain"
+default-features = "off"
+features = []
+
+[[feature-allowlist]]
+external = "rust_decimal"
+dependent = "domain"
+default-features = "off"
+features = []
