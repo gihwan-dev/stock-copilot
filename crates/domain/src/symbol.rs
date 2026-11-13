@@ -32,8 +32,11 @@ impl Symbol {
 pub enum Market {
     Kr,
     Us,
-    Unknown(MarketCode),
+    Unknown(UnknownMarketCode),
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnknownMarketCode(MarketCode);
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarketCode(String);
@@ -45,7 +48,10 @@ pub enum MarketError {
 
 impl MarketCode {
     pub fn try_new(value: &str) -> Result<Self, MarketError> {
-        if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_graphic()) {
+        if value.is_empty()
+            || value.len() > 32
+            || !value.bytes().all(|byte| byte.is_ascii_graphic())
+        {
             return Err(MarketError::Unsupported);
         }
         Ok(Self(value.to_owned()))
@@ -63,7 +69,7 @@ impl Market {
         match value.as_str() {
             "KR" => Self::Kr,
             "US" => Self::Us,
-            _ => Self::Unknown(value),
+            _ => Self::Unknown(UnknownMarketCode(value)),
         }
     }
 
@@ -72,7 +78,7 @@ impl Market {
         match self {
             Self::Kr => MarketCode(String::from("KR")),
             Self::Us => MarketCode(String::from("US")),
-            Self::Unknown(value) => value.clone(),
+            Self::Unknown(value) => value.0.clone(),
         }
     }
 }
@@ -142,6 +148,41 @@ mod tests {
     }
 
     #[test]
+    fn markets_always_send_known_codes_to_the_known_variants() {
+        for (value, expected) in [("KR", Market::Kr), ("US", Market::Us)] {
+            let code = MarketCode::try_new(value).expect("알려진 시장 코드");
+            assert_eq!(
+                Market::new(code),
+                expected,
+                "알려진 코드는 항상 알려진 변형이다"
+            );
+            assert_eq!(
+                Market::new(expected.as_code()),
+                expected,
+                "접근자 왕복에서도 표현이 하나다"
+            );
+        }
+    }
+
+    #[test]
+    fn market_codes_enforce_the_length_boundary_and_reject_large_inputs() {
+        let accepted = "A".repeat(32);
+        let code = MarketCode::try_new(&accepted).expect("32자리 외부 코드");
+        assert_eq!(
+            Market::new(code).as_code().as_str(),
+            accepted,
+            "32자리는 그대로 보존한다"
+        );
+        for value in ["A".repeat(33), "A".repeat(10_000_000)] {
+            assert_eq!(
+                MarketCode::try_new(&value),
+                Err(MarketError::Unsupported),
+                "상한을 초과하면 거부한다"
+            );
+        }
+    }
+
+    #[test]
     fn markets_use_exhaustive_variants_and_preserve_unknown_country_codes() {
         for (value, expected) in [("KR", Market::Kr), ("US", Market::Us)] {
             let market = Market::new(MarketCode::try_new(value).expect("시장 코드"));
@@ -151,11 +192,17 @@ mod tests {
         for value in ["kr", "NYSE", "JP"] {
             let code = MarketCode::try_new(value).expect("모르는 외부 코드");
             let market = Market::new(code.clone());
-            assert_eq!(
+            assert_ne!(
                 market,
-                Market::Unknown(code),
-                "모르는 코드를 알려진 시장으로 바꾸지 않는다"
+                Market::Kr,
+                "모르는 코드를 국내 시장으로 바꾸지 않는다"
             );
+            assert_ne!(
+                market,
+                Market::Us,
+                "모르는 코드를 미국 시장으로 바꾸지 않는다"
+            );
+            assert_eq!(market.as_code(), code, "모르는 코드도 원문을 보존한다");
             assert_eq!(
                 market.as_code().as_str(),
                 value,
