@@ -32,3 +32,17 @@ reason = "typify 생성물이 맨 앞에 내는 #![allow(…)] (R-09 Q11)"
 [[generated-attribute]]
 name = "doc"
 reason = "typify 생성물이 스키마 설명으로 내는 #[doc]와 문서 주석 (R-09 Q11)"
+
+[decimal-methods]
+rounding = ["round", "round_dp", "round_dp_with_strategy", "round_sf", "round_sf_with_strategy", "trunc", "trunc_with_scale", "floor", "ceil", "rescale", "set_scale"]
+parsing = ["from_str", "from_str_radix", "from_scientific", "from_scientific_lossy", "from_f32", "from_f32_retain", "from_f64", "from_f64_retain", "try_from"]
+exact-parsing = ["from_str_exact"]
+generic-parsing = ["parse"]
+
+[[decimal-rounding]]
+path = "crates/domain/src/money_display.rs"
+reason = "D-01 표시 전용 반올림 함수만 Decimal 자릿수를 바꾼다"
+
+[[decimal-parsing]]
+path = "crates/domain/src/money.rs"
+reason = "D-01 Amount 문자열 생성자가 정규형 검사 후 from_str_exact만 쓴다"

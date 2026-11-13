@@ -1,0 +1,87 @@
+[[case]]
+file = "rounding-round.rs"
+method = "round"
+
+[[case]]
+file = "rounding-round_dp.rs"
+method = "round_dp"
+
+[[case]]
+file = "rounding-round_dp_with_strategy.rs"
+method = "round_dp_with_strategy"
+
+[[case]]
+file = "rounding-round_sf.rs"
+method = "round_sf"
+
+[[case]]
+file = "rounding-round_sf_with_strategy.rs"
+method = "round_sf_with_strategy"
+
+[[case]]
+file = "rounding-trunc.rs"
+method = "trunc"
+
+[[case]]
+file = "rounding-trunc_with_scale.rs"
+method = "trunc_with_scale"
+
+[[case]]
+file = "rounding-floor.rs"
+method = "floor"
+
+[[case]]
+file = "rounding-ceil.rs"
+method = "ceil"
+
+[[case]]
+file = "rounding-rescale.rs"
+method = "rescale"
+
+[[case]]
+file = "rounding-set_scale.rs"
+method = "set_scale"
+
+[[case]]
+file = "parsing-from_str.rs"
+method = "from_str"
+
+[[case]]
+file = "parsing-from_str_radix.rs"
+method = "from_str_radix"
+
+[[case]]
+file = "parsing-from_scientific.rs"
+method = "from_scientific"
+
+[[case]]
+file = "parsing-from_scientific_lossy.rs"
+method = "from_scientific_lossy"
+
+[[case]]
+file = "parsing-from_f32.rs"
+method = "from_f32"
+
+[[case]]
+file = "parsing-from_f32_retain.rs"
+method = "from_f32_retain"
+
+[[case]]
+file = "parsing-from_f64.rs"
+method = "from_f64"
+
+[[case]]
+file = "parsing-from_f64_retain.rs"
+method = "from_f64_retain"
+
+[[case]]
+file = "parsing-try_from.rs"
+method = "try_from"
+
+[[case]]
+file = "exact-parsing-from_str_exact.rs"
+method = "from_str_exact"
+
+[[case]]
+file = "generic-parsing-parse.rs"
+method = "parse"

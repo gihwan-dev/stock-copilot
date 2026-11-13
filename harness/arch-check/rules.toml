@@ -342,3 +342,9 @@ module-paths = [
 needle = "tossinvest.com"
 allowed-crates = ["toss-smoke"]
 allowed-files = ["apps/desktop/src-tauri/src/main.rs"]
+
+[[external-location-exception]]
+crates = ["domain"]
+externals = ["syn", "proc-macro2"]
+through = "proptest"
+reason = "D-01 개발 의존 proptest → bitflags → serde_core → serde_derive의 절차 매크로. 작업 공간 기능 통합으로 생기는 메타데이터 경로이며 domain은 serde 기능을 켜지 않는다"
