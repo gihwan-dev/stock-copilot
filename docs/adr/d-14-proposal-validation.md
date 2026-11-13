@@ -88,3 +88,13 @@ Proposal의 사용자 정의 Debug는 ID와 생성·만료 시각만 출력하�
 대표 소비 실험은 `fn probe(p: Proposal<Validated>, t: Timestamp, c: Price) { let _first = p.into_execution(t,c); let _second = p.into_execution(t,c); }`이다. 새 trait 구현이나 필드 공개를 막는 영속 compile-fail 하네스는 ADR 0022와 동일하게 별도 하네스 작업의 범위다. 이번 외부 실험은 실행한 스냅샷 증거이며 just check에 자동 등록한 회귀는 아니다.
 
 새 의존성·검사 끄기·실제 키·계좌 접근은 없다. 프로젝트 설정 hooks=true와 Git 훅 설치는 확인했으나 현재 세션의 프로젝트·훅 신뢰 적용 여부는 확정하지 못했다. 직접 검사와 커밋 훅의 실제 결과를 사용한다.
+
+## 마지막 변이 실행과 보완
+
+`b662b5d6facadb2e83b74913f861d575353fe4a4`에서 `just mutants-diff 6a6acdc12a5ed53ee522fffab2a3833cf2a9a461`를 한 번 실행했다. 하네스의 변경분 범위는 수정된 crate 전체이므로 654개를 검사했다. 377개 검출, 276개 컴파일 불가, 1개 생존, 타임아웃 0개였다. 생존은 Proposal Debug를 `Ok(Default::default())`로 바꾸는 변이였다. 계좌 키가 없다는 기존 단언만으로는 빈 출력을 잡지 못했다.
+
+새 회귀 debug_exposes_identity_and_times_but_not_account는 타입명·제안 ID·생성 시각·만료 시각이 출력되고 계좌 키는 없는지 검사한다. 동일한 빈 출력 변이를 수동 주입해 해당 테스트가 `rendered.contains("Proposal")` 단언에서 실패(exit 100)하는 것을 확인했다. 변이를 복구하면 같은 테스트가 통과(exit 0)한다. 경고를 낮추지 않고 컴파일하기 위해 수동 변이는 self·formatter 참조를 지역 변수로 받았으며 출력 동작은 원래 생존 변이와 동일하다. 제품 Debug 구현은 바꾸지 않았다.
+
+전체 cargo-mutants는 지시대로 재실행하지 않았다. 따라서 전체 실행의 측정값은 생존 1개이고, 그 한 개를 추가 회귀의 수동 red/green으로 차단했다는 근거를 구분한다. 변이 결과를 최종 SHA의 전체 재측정 생존 0개로 보고하지 않는다.
+
+변이 실행 중 master에 D-08이 병합되어 최종 정리에서 `d4ab5a2287b04757ca63066afa8e57c8bd232622`를 병합했다. lib.rs의 양쪽 모듈을 모두 보존했고 생성물 충돌은 쓰기 스크립트로 다시 만들었다. D-08 제품 코드와 기존 테스트는 수정하지 않았다. 최종 병합 트리는 커밋 훅 전체 검사로 검증한다. 위 654개 변이 결과에 새로 병합된 D-08 코드는 포함되지 않는다.

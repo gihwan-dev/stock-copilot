@@ -277,6 +277,19 @@ mod tests {
         report
     }
     #[test]
+    fn debug_exposes_identity_and_times_but_not_account() {
+        let proposal = draft();
+        let rendered = format!("{proposal:?}");
+        assert!(rendered.contains("Proposal"));
+        assert!(rendered.contains("proposal-1"));
+        assert!(rendered.contains("created_at"));
+        assert!(rendered.contains(&format!("{:?}", proposal.created_at())));
+        assert!(rendered.contains("expires_at"));
+        assert!(rendered.contains(&format!("{:?}", proposal.expires_at())));
+        assert!(!rendered.contains("987654321"));
+    }
+
+    #[test]
     fn expiry_boundary_and_clock_rollback_are_closed() {
         let proposal = draft();
         for (now, expected) in [
