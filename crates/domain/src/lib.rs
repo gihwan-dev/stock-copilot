@@ -117,5 +117,22 @@ pub use candle::{
 pub use quote::{ClockAlignment, Quote, QuoteError};
 pub use volatility::{Volatility, VolatilityError, VolatilitySamples};
 pub use volatility_arithmetic::{AnnualVolatility, DailyVolatility};
+mod proposal;
 mod volatility_display;
 mod volatility_reference;
+pub use proposal::{
+    CheckResult, Draft, Proposal, ProposalError, ProposalExecutionError, Validated,
+    ValidationCheck, ValidationReport,
+};
+mod proposal_id;
+pub use proposal_id::ProposalId;
+mod proposal_range;
+pub use proposal_range::{
+    ProposalPriceRange, ProposalRangeError, ProposalVolatility, TradingDayHorizon,
+};
+
+mod proposal_facts;
+pub use proposal::ExecutionToken;
+pub use proposal_facts::{
+    EstimateRangeFacts, PriceObservation, ProposalLifetime, ProposalLifetimeError,
+};

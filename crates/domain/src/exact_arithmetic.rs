@@ -211,6 +211,126 @@ fn split_word(value: Word) -> (Limb, Limb) {
     )
 }
 
+#[derive(Clone, Copy)]
+struct ProposalMagnitude([Limb; 32]);
+impl ProposalMagnitude {
+    fn coefficient(value: Amount) -> Self {
+        let mut result = Self([Limb(0); 32]);
+        for (target, digit) in result.0.iter_mut().zip(Magnitude::coefficient(value).0) {
+            *target = digit;
+        }
+        result
+    }
+    fn scaled(mut self, scale: Scale) -> Self {
+        for _place in 0..scale.0 {
+            let mut carry = Limb(0);
+            for digit in &mut self.0 {
+                let total = u64::from(digit.0)
+                    .wrapping_mul(10)
+                    .wrapping_add(u64::from(carry.0));
+                let (low, high) = split_word(Word(total));
+                *digit = low;
+                carry = high;
+            }
+        }
+        self
+    }
+    fn product(self, right: Self) -> Self {
+        let mut result = Self([Limb(0); 32]);
+        for (index, left) in self.0.iter().enumerate() {
+            let mut carry = Limb(0);
+            for (target, digit) in result.0.iter_mut().skip(index).zip(right.0) {
+                let total = u64::from(left.0)
+                    .wrapping_mul(u64::from(digit.0))
+                    .wrapping_add(u64::from(target.0))
+                    .wrapping_add(u64::from(carry.0));
+                let (low, high) = split_word(Word(total));
+                *target = low;
+                carry = high;
+            }
+        }
+        result
+    }
+    fn cmp(&self, right: &Self) -> std::cmp::Ordering {
+        self.0
+            .iter()
+            .rev()
+            .map(|digit| digit.0)
+            .cmp(right.0.iter().rev().map(|digit| digit.0))
+    }
+    fn distance(self, right: Self) -> Self {
+        let (mut high, low) = if self.cmp(&right).is_lt() {
+            (right, self)
+        } else {
+            (self, right)
+        };
+        let mut borrow = false;
+        for (target, digit) in high.0.iter_mut().zip(low.0) {
+            let (difference, first) = target.0.overflowing_sub(digit.0);
+            let (value, second) = difference.overflowing_sub(u32::from(borrow));
+            *target = Limb(value);
+            borrow = first || second;
+        }
+        high
+    }
+}
+pub(crate) fn proposal_price_range(
+    reference: crate::Price,
+    current: crate::Price,
+    sigma: Ratio,
+    horizon: Ratio,
+) -> crate::CheckResult {
+    let base = reference.as_money();
+    let quote = current.as_money();
+    if base.currency() != quote.currency() {
+        return crate::CheckResult::Failed;
+    }
+    let base_amount = base.amount();
+    let quote_amount = quote.amount();
+    let common_scale = base_amount
+        .as_decimal()
+        .scale()
+        .max(quote_amount.as_decimal().scale());
+    let aligned_base = ProposalMagnitude::coefficient(base_amount).scaled(Scale(
+        common_scale.saturating_sub(base_amount.as_decimal().scale()),
+    ));
+    let aligned_quote = ProposalMagnitude::coefficient(quote_amount).scaled(Scale(
+        common_scale.saturating_sub(quote_amount.as_decimal().scale()),
+    ));
+    let difference = aligned_quote.distance(aligned_base);
+    let left = difference
+        .product(difference)
+        .product(ProposalMagnitude::coefficient(Amount::new(Decimal::from(
+            4_i32,
+        ))))
+        .scaled(Scale(
+            sigma
+                .as_decimal()
+                .scale()
+                .saturating_mul(2)
+                .saturating_add(horizon.as_decimal().scale()),
+        ));
+    let volatility = ProposalMagnitude::coefficient(Amount::new(sigma.as_decimal()));
+    let reference_coefficient = ProposalMagnitude::coefficient(base_amount);
+    let right = volatility
+        .product(volatility)
+        .product(ProposalMagnitude::coefficient(Amount::new(
+            horizon.as_decimal(),
+        )))
+        .product(reference_coefficient)
+        .product(reference_coefficient)
+        .scaled(Scale(
+            common_scale
+                .saturating_sub(base_amount.as_decimal().scale())
+                .saturating_mul(2),
+        ));
+    if left.cmp(&right).is_le() {
+        crate::CheckResult::Passed
+    } else {
+        crate::CheckResult::Failed
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
