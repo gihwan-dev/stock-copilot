@@ -17,3 +17,5 @@ pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
 pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, ReceiptNoError};
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
+
+pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};

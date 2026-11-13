@@ -11,10 +11,14 @@ pub struct Cluster {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClusterError {
     DuplicateUrl,
+    TooManyMembers,
 }
 
 impl Cluster {
     pub fn try_new(representative: NewsItem, members: Vec<NewsItem>) -> Result<Self, ClusterError> {
+        if members.len() > 255 {
+            return Err(ClusterError::TooManyMembers);
+        }
         let mut urls = BTreeSet::from([representative.collected().url()]);
         for member in &members {
             if !urls.insert(member.collected().url()) {
@@ -88,6 +92,38 @@ mod tests {
         assert_eq!(
             Cluster::try_new(representative, vec![member.clone(), member]),
             Err(ClusterError::DuplicateUrl)
+        );
+    }
+    #[test]
+    fn cluster_enforces_the_total_member_limit_before_grouping() {
+        let leader = NewsItem::new(
+            NewsSource::Hankyung,
+            NormalizedUrl::try_new("https://example.com/leader").expect("주소"),
+            UntrustedText::try_new("대표").expect("제목"),
+            None,
+        );
+        let members = (0_u16..255)
+            .map(|index| {
+                NewsItem::new(
+                    NewsSource::Maekyung,
+                    NormalizedUrl::try_new(&format!("https://example.com/{index}")).expect("주소"),
+                    UntrustedText::try_new("제목").expect("제목"),
+                    None,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            Cluster::try_new(leader.clone(), members.clone())
+                .expect("256개 항목")
+                .members()
+                .len(),
+            255
+        );
+        let mut excessive = members;
+        excessive.push(leader.clone());
+        assert_eq!(
+            Cluster::try_new(leader, excessive),
+            Err(ClusterError::TooManyMembers)
         );
     }
 }

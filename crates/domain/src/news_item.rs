@@ -45,13 +45,20 @@ struct UrlAuthority(String);
 
 impl UrlAuthority {
     fn try_new(value: &str) -> Result<Self, UrlError> {
+        let final_label = value
+            .rsplit('.')
+            .next()
+            .unwrap_or(value)
+            .to_ascii_lowercase();
         if value.len() > 253
-            || value
-                .rsplit('.')
-                .next()
-                .is_some_and(|label| label.bytes().all(|byte| byte.is_ascii_digit()))
+            || !value.contains('.')
+            || final_label
+                .strip_prefix("0x")
+                .is_some_and(|digits| digits.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            || final_label.bytes().all(|byte| byte.is_ascii_digit())
             || value.split('.').any(|label| {
-                label.is_empty()
+                label.to_ascii_lowercase().starts_with("xn--")
+                    || label.is_empty()
                     || label.len() > 63
                     || label.starts_with('-')
                     || label.ends_with('-')
@@ -71,14 +78,11 @@ struct UrlSuffix(String);
 
 impl UrlSuffix {
     fn try_new(value: &str) -> Result<Self, UrlError> {
-        if value.split('%').skip(1).any(|part| {
-            part.len() < 2 || !part.bytes().take(2).all(|byte| byte.is_ascii_hexdigit())
-        }) {
-            return Err(UrlError::InvalidFormat);
-        }
-        let (before_fragment, fragment) = value
+        let encoded = PercentEncoded::try_new(value)?;
+        let before_fragment = encoded
+            .0
             .split_once('#')
-            .map_or((value, None), |(head, tail)| (head, Some(tail)));
+            .map_or(encoded.0.as_str(), |(head, _)| head);
         let (path, query) = before_fragment
             .split_once('?')
             .map_or((before_fragment, None), |(head, tail)| (head, Some(tail)));
@@ -95,6 +99,7 @@ impl UrlSuffix {
         if let Some(query_text) = query {
             let retained = query_text
                 .split('&')
+                .filter(|part| !part.is_empty())
                 .filter(|part| {
                     let name = part.split_once('=').map_or(*part, |(name, _)| name);
                     ![
@@ -112,9 +117,24 @@ impl UrlSuffix {
                 normalized.push_str(&retained.join("&"));
             }
         }
-        if let Some(fragment_text) = fragment {
-            normalized.push('#');
-            normalized.push_str(fragment_text);
+        Ok(Self(normalized))
+    }
+}
+
+#[derive(Debug)]
+struct PercentEncoded(String);
+
+impl PercentEncoded {
+    fn try_new(value: &str) -> Result<Self, UrlError> {
+        let mut parts = value.split('%');
+        let mut normalized = parts.next().unwrap_or("").to_owned();
+        for part in parts {
+            if part.len() < 2 || !part.bytes().take(2).all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(UrlError::InvalidFormat);
+            }
+            normalized.push('%');
+            normalized.extend(part.chars().take(2).flat_map(char::to_uppercase));
+            normalized.extend(part.chars().skip(2));
         }
         Ok(Self(normalized))
     }
@@ -143,7 +163,7 @@ impl NewsItem {
         title: UntrustedText,
         body: Option<UntrustedText>,
     ) -> Self {
-        Self(CollectedItem::new(
+        Self(CollectedItem::from_source(
             InformationSource::News(source),
             url,
             title,
@@ -164,7 +184,7 @@ mod tests {
 
     #[test]
     fn normalization_preserves_article_identity_and_removes_bounded_tracking_family() {
-        let expected = "https://www.mk.co.kr/news/stock/1?id=7&ref=keep#section";
+        let expected = "https://www.mk.co.kr/news/stock/1?id=7&ref=keep";
         assert_eq!(
             NormalizedUrl::try_new(
                 "https://www.mk.co.kr/news/stock/1?id=7&utm_source=rss&ref=keep#section"
@@ -179,7 +199,6 @@ mod tests {
             "https://www.mk.co.kr/news/stock/2?id=7&ref=keep#section",
             "https://www.mk.co.kr/news/stock/1?id=8&ref=keep#section",
             "https://www.mk.co.kr/news/stock/1?ref=keep&id=7#section",
-            "https://www.mk.co.kr/news/stock/1?id=7&ref=keep#other",
         ] {
             assert_ne!(
                 NormalizedUrl::try_new(other).expect("다른 주소").as_str(),
@@ -278,6 +297,7 @@ article",
             "https://example.com/%",
             "https://example.com/%A",
             "https://example.com/%GG",
+            "https://example.com/%2G",
             "https://example.com/../a",
             "https://example.com/%2e/a",
             "https://example.com/.%2e/a",
@@ -332,7 +352,7 @@ article",
             ("HTTPS://Example.COM", "https://example.com/"),
             (
                 "http://example.com?utm_source=rss#part",
-                "http://example.com/#part",
+                "http://example.com/",
             ),
             (
                 "https://example.com/a?utm_source=rss",
@@ -347,7 +367,7 @@ article",
                 "https://example.com/a",
             ),
             ("https://example.com/a?utm_source", "https://example.com/a"),
-            ("https://example.com/a?", "https://example.com/a?"),
+            ("https://example.com/a?", "https://example.com/a"),
             (
                 "https://example.com/a?id=1&id=2",
                 "https://example.com/a?id=1&id=2",
@@ -358,12 +378,171 @@ article",
             ),
             (
                 "https://example.com/a%2Fb?x=a%26b%3Dc#utm_source=rss",
-                "https://example.com/a%2Fb?x=a%26b%3Dc#utm_source=rss",
+                "https://example.com/a%2Fb?x=a%26b%3Dc",
             ),
         ] {
             let url = NormalizedUrl::try_new(input).expect("정규화");
             assert_eq!(url.as_str(), expected);
             assert_eq!(NormalizedUrl::try_new(url.as_str()).expect("멱등"), url);
         }
+    }
+    #[test]
+    fn review_numeric_single_label_and_punycode_hosts_are_rejected() {
+        for input in [
+            "http://0x7f000001/",
+            "https://127.0.0.0x1/",
+            "https://1.2.3.0x4/",
+            "http://0x7f/",
+            "https://a.0x/",
+            "https://example.0X1F/",
+            "http://localhost/",
+            "https://xn--zz.com/",
+            "https://a.XN--zz/",
+            "https://example.0X/",
+            "https://example.123/",
+        ] {
+            assert_eq!(
+                NormalizedUrl::try_new(input),
+                Err(UrlError::InvalidFormat),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn review_all_encoded_dot_segments_are_rejected() {
+        for path in ["/%2e%2e/", "/%2E%2E/", "/%2E/", "/.%2E/"] {
+            let input = format!("https://example.com{path}");
+            assert_eq!(
+                NormalizedUrl::try_new(&input),
+                Err(UrlError::InvalidFormat),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn review_host_terminators_and_query_boundaries_are_accepted() {
+        for (input, expected) in [
+            ("https://example.com#x", "https://example.com/"),
+            ("https://123.example.com/", "https://123.example.com/"),
+            ("https://a.b1/", "https://a.b1/"),
+            ("https://example.com?a=/../", "https://example.com/?a=/../"),
+            (
+                "https://example.com/a?next=/%2e%2e/",
+                "https://example.com/a?next=/%2E%2E/",
+            ),
+            ("https://example.0xg/", "https://example.0xg/"),
+        ] {
+            assert_eq!(
+                NormalizedUrl::try_new(input).expect("통과 주소").as_str(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn every_news_source_survives_construction() {
+        for source in [
+            NewsSource::Hankyung,
+            NewsSource::Maekyung,
+            NewsSource::Yonhap,
+            NewsSource::Edaily,
+            NewsSource::BankOfKorea,
+            NewsSource::FederalReserve,
+            NewsSource::GoogleNews,
+            NewsSource::YahooFinance,
+        ] {
+            let item = NewsItem::new(
+                source.clone(),
+                NormalizedUrl::try_new("https://example.com/a").expect("주소"),
+                UntrustedText::try_new("제목").expect("제목"),
+                None,
+            );
+            assert_eq!(
+                item.collected().source(),
+                &crate::InformationSource::News(source)
+            );
+        }
+    }
+
+    #[test]
+    fn review_empty_tracking_tails_percent_case_and_fragments_have_one_key() {
+        let expected = "https://example.com/a%2Fb?id=1&next=%3F";
+        for input in [
+            "https://example.com/a%2fb?id=1&next=%3f",
+            "https://example.com/a%2Fb?id=1&next=%3F#one",
+            "https://example.com/a%2fb?id=1&next=%3f&utm_source=x&",
+            "https://example.com/a%2fb?id=1&next=%3f&&utm_source=x&&#two",
+        ] {
+            let normalized = NormalizedUrl::try_new(input).expect("같은 기사");
+            assert_eq!(normalized.as_str(), expected);
+            assert_eq!(
+                NormalizedUrl::try_new(normalized.as_str()).expect("멱등"),
+                normalized
+            );
+        }
+        for input in [
+            "https://example.com/a?utm_source=x&",
+            "https://example.com/a?&",
+            "https://example.com/a?#x",
+        ] {
+            assert_eq!(
+                NormalizedUrl::try_new(input).expect("빈 쿼리").as_str(),
+                "https://example.com/a"
+            );
+        }
+        for input in [
+            "https://example.com/a/b?id=1&next=%3F",
+            "https://example.com/a%2Fb?id=2&next=%3F",
+            "https://example.com/a%2Fb?id=1&next=?",
+            "https://example.com/a%2Fb?id=1&next=%3F&UTM_SOURCE=x&fbclid=x&gclid=x&utm_id=x",
+        ] {
+            assert_ne!(
+                NormalizedUrl::try_new(input).expect("다른 기사").as_str(),
+                expected
+            );
+        }
+    }
+    #[test]
+    fn broad_source_and_url_corpus_preserves_meaningful_path_and_query_data() {
+        for input in [
+            "https://kind.krx.co.kr/disclosure/rsstodaydistribute.do?method=searchRssTodayDistribute&currentPageSize=100",
+            "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261111800749",
+            "https://www.yna.co.kr/view/AKR20261111157200030?input=1195m",
+            "https://www.yna.co.kr/view/AKR20261111157200030?input=1179m",
+            "https://www.hankyung.com/article/202611110253i",
+            "https://www.mk.co.kr/news/stock/12205485",
+            "http://www.edaily.co.kr/news/newspath.asp?newsid=05362806645644736",
+            "https://news.google.com/rss/articles/CBMi?hl=ko&gl=KR",
+            "https://feeds.finance.yahoo.com/rss/2.0/headline?s=AAPL&region=US&lang=en-US",
+            "https://www.bok.or.kr/portal/bbs/B0000552/news.rss?menuNo=200690",
+            "https://www.federalreserve.gov/feeds/press_all.xml",
+            "https://example.com/a%ABz?encoded=%00",
+            "https://a-b.example.com/a_b/c.d/~x?x=1+2",
+            "https://0x1.example.com/a",
+            "https://example.0xg/a",
+            "https://example.com/a?input=1&input=2",
+            "https://example.com/a?empty=&next=%2F..%2F",
+            "https://example.com/a?value=utm_source%3Dx",
+            "https://example.com/a?utm_source_id=x",
+            "https://example.com/a?UTM_SOURCE=x&fbclid=x&gclid=x&utm_id=x",
+            "https://example.com/a%252f?value=%252e",
+            "https://example.com/a//b?case=A",
+        ] {
+            let normalized = NormalizedUrl::try_new(input).expect("출처 주소");
+            assert_eq!(normalized.as_str(), input);
+            assert_eq!(
+                NormalizedUrl::try_new(normalized.as_str()).expect("멱등"),
+                normalized
+            );
+        }
+        let first =
+            NormalizedUrl::try_new("https://www.yna.co.kr/view/AKR20261111157200030?input=1195m")
+                .expect("마켓");
+        let second =
+            NormalizedUrl::try_new("https://www.yna.co.kr/view/AKR20261111157200030?input=1179m")
+                .expect("경제");
+        assert_ne!(first, second);
     }
 }
