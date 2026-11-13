@@ -15,6 +15,7 @@
         "./.prettierignore",
         "./AGENTS.md",
         "./CLAUDE.md",
+        "./apps/desktop/design-tokens",
         "./apps/desktop/e2e-app",
         "./apps/desktop/eslint",
         "./apps/desktop/eslint.config.mjs",

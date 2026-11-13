@@ -81,6 +81,7 @@ check-pnpm: check-node
 check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
+    node harness/ds-tokens/check.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
     node harness/source-tree/check.mjs
     node harness/config-files/check.mjs
