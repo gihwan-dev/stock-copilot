@@ -1,3 +1,4 @@
+import { SCREEN_DOM_BOOTSTRAP } from "./ds-screen-allowlists.mjs";
 import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
 import tailwind from "eslint-plugin-better-tailwindcss";
@@ -46,6 +47,29 @@ export const SHARED_RULES = {
   "ds/no-shared-jsx": "error",
   "ds/no-element-factory": "error",
 };
+export const SCREEN_RULES = {
+  ...Object.fromEntries(
+    Object.entries(DS_RULES).filter(([name]) =>
+      [
+        "ds/no-dom-values",
+        "ds/no-dom-styling",
+        "ds/no-element-factory",
+        "ds/no-style-object",
+        "ds/no-style-literals",
+      ].includes(name),
+    ),
+  ),
+  ...Object.fromEntries(
+    [
+      "no-screen-elements",
+      "no-screen-props",
+      "no-screen-imports",
+      "no-screen-classes",
+      "no-screen-format",
+      "no-ui-attributes",
+    ].map((name) => [`ds/${name}`, "error"]),
+  ),
+};
 const listed = (files, rules) => (files.length === 0 ? [] : [{ files, rules }]);
 export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
   {
@@ -73,6 +97,24 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     plugins: { ds: dsPlugin },
     rules: SHARED_RULES,
   },
+  {
+    files: [
+      "src/features/**/*.ts",
+      "src/features/**/*.tsx",
+      "src/app/**/*.ts",
+      "src/app/**/*.tsx",
+    ],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { ds: dsPlugin },
+    rules: SCREEN_RULES,
+  },
+  ...listed(
+    SCREEN_DOM_BOOTSTRAP.map((entry) => entry.file),
+    { "ds/no-dom-values": "off" },
+  ),
   ...listed(lists.DOM_ACCESS_FILES, {
     "ds/no-dom-values": "off",
     "guard/no-dom-globals": "off",

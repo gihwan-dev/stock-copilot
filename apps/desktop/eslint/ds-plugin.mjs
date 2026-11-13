@@ -1,3 +1,4 @@
+import { screenRules } from "./ds-screen.mjs";
 import { noDomValues } from "./ds-dom.mjs";
 import { boundaryRules, intlOptions } from "./ds-boundaries.mjs";
 import { styleLiteral, assembledStyle } from "./ds-style-values.mjs";
@@ -30,6 +31,7 @@ const report = (ctx, node) => ctx.report({ node, messageId: "forbidden" });
 export const dsPlugin = {
   rules: {
     ...boundaryRules,
+    ...screenRules,
     "no-dom-values": noDomValues,
     "static-classes": rule(
       "className은 문자열 리터럴 또는 정적인 cn 인자만 받는다.",

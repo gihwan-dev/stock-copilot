@@ -64,6 +64,13 @@ const undisableable = [
   "ds/no-inline-style",
   "ds/no-style-literals",
   "ds/no-shared-jsx",
+  "ds/no-screen-elements",
+  "ds/no-screen-props",
+  "ds/no-screen-imports",
+  "ds/no-screen-classes",
+  "ds/no-screen-format",
+  "ds/no-ui-attributes",
+
   "local/no-comments",
   "local/no-money-coercion",
   "local/forbidden-file",

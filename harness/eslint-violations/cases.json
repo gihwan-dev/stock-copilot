@@ -170,21 +170,23 @@
     },
     "src/app/comments/allowed-form.ts": {
       "row": "주석",
-      "expect": []
+      "expect": ["ds/no-dom-values"]
     },
     "src/app/comments/block-disable.ts": {
       "row": "주석",
       "expect": [
         "@eslint-community/eslint-comments/no-use",
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/block-next-line.ts": {
       "row": "주석",
       "expect": [
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/disable-line.ts": {
@@ -192,7 +194,8 @@
       "expect": [
         "@eslint-community/eslint-comments/no-use",
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/empty-reason.ts": {
@@ -202,7 +205,8 @@
         "guard/disable-directive-form",
         "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
         "no-console",
-        "no-console --"
+        "no-console --",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/file-disable.ts": {
@@ -210,7 +214,8 @@
       "expect": [
         "@eslint-community/eslint-comments/no-use",
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/inline-config-unused.ts": {
@@ -248,7 +253,8 @@
         "@eslint-community/eslint-comments/no-use",
         "@eslint-community/eslint-comments/require-description",
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/no-reason.ts": {
@@ -256,7 +262,8 @@
       "expect": [
         "@eslint-community/eslint-comments/require-description",
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/no-rule-name.ts": {
@@ -273,7 +280,8 @@
       "expect": [
         "@typescript-eslint/no-confusing-void-expression",
         "guard/disable-directive-form",
-        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다."
+        "local/no-comments :: 주석 금지: 설명은 이름, 타입, 테스트, docs/에 쓴다. 허용하는 것은 `// eslint-disable-next-line <규칙 하나> -- <이유>` 한 줄뿐이다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/ts-check.ts": {
@@ -382,7 +390,8 @@
       "expect": [
         "@eslint-community/eslint-comments/no-restricted-disable",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/undisableable-import-meta.ts": {
@@ -391,7 +400,11 @@
     },
     "src/app/comments/undisableable-jsx-spread.tsx": {
       "row": "주석",
-      "expect": ["@eslint-community/eslint-comments/no-restricted-disable"]
+      "expect": [
+        "@eslint-community/eslint-comments/no-restricted-disable",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
+      ]
     },
     "src/app/comments/undisableable-module-mocks.test.ts": {
       "row": "주석",
@@ -417,7 +430,8 @@
       "expect": [
         "@eslint-community/eslint-comments/no-restricted-disable",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/comments/undisableable-no-comments.ts": {
@@ -498,7 +512,8 @@
       "expect": [
         "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/failure/floating-promise.ts": {
@@ -545,7 +560,8 @@
       "expect": "KNOWN_GAP",
       "reports": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/failure/try.ts": {
@@ -926,7 +942,8 @@
         "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "guard/no-network :: defaultView 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/fetch.ts": {
@@ -934,7 +951,8 @@
       "expect": [
         "guard/no-network :: fetch 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/global-frames.ts": {
@@ -942,7 +960,8 @@
       "expect": [
         "guard/no-global-object :: frames 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/global-open.ts": {
@@ -950,7 +969,8 @@
       "expect": [
         "guard/no-global-object :: open 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/global-opener.ts": {
@@ -958,7 +978,8 @@
       "expect": [
         "guard/no-global-object :: opener 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/global-parent.ts": {
@@ -966,7 +987,8 @@
       "expect": [
         "guard/no-global-object :: parent 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/import-scripts.ts": {
@@ -983,7 +1005,8 @@
       "expect": [
         "guard/no-network :: EventSource 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/new-RTCPeerConnection.ts": {
@@ -991,7 +1014,8 @@
       "expect": [
         "guard/no-network :: RTCPeerConnection 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/new-SharedWorker.ts": {
@@ -999,7 +1023,8 @@
       "expect": [
         "guard/no-network :: SharedWorker 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/new-WebTransport.ts": {
@@ -1007,7 +1032,8 @@
       "expect": [
         "guard/no-network :: WebTransport 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/new-Worker.ts": {
@@ -1015,7 +1041,8 @@
       "expect": [
         "guard/no-network :: Worker 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/react-dom-namespace-preload.ts": {
@@ -1073,7 +1100,8 @@
         "guard/no-dom-globals :: navigator 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "guard/no-network :: sendBeacon 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/string-eval.ts": {
@@ -1082,7 +1110,8 @@
         "@typescript-eslint/no-implied-eval",
         "guard/no-network :: fetch 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/top-window.ts": {
@@ -1090,7 +1119,8 @@
       "expect": [
         "guard/no-global-object :: top 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/websocket.ts": {
@@ -1098,7 +1128,8 @@
       "expect": [
         "guard/no-network :: WebSocket 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/window-fetch.ts": {
@@ -1108,7 +1139,8 @@
         "guard/no-network :: fetch 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: window 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: window 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/network/xhr.ts": {
@@ -1116,7 +1148,8 @@
       "expect": [
         "guard/no-network :: XMLHttpRequest 금지: UI는 IPC로만 통신한다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/numbers/base-to-string.ts": {
@@ -1310,7 +1343,8 @@
       "expect": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: event 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: event 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/global-length.ts": {
@@ -1318,7 +1352,8 @@
       "expect": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: length 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: length 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/global-name.ts": {
@@ -1326,7 +1361,8 @@
       "expect": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: name 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: name 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/global-self.ts": {
@@ -1335,7 +1371,8 @@
         "guard/no-global-object :: self 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: self 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: self 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/global-status.ts": {
@@ -1343,7 +1380,8 @@
       "expect": [
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: status 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: status 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/loop-for.ts": {
@@ -1407,7 +1445,8 @@
         "guard/no-global-object :: globalThis 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: globalThis 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: globalThis 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/restricted-global.ts": {
@@ -1416,7 +1455,8 @@
         "guard/no-global-object :: window 금지: 전역 객체와 문자열 실행으로 네트워크 금지를 우회할 수 있다.",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
-        "no-restricted-globals :: window 금지: 암묵 전역을 쓰지 않는다."
+        "no-restricted-globals :: window 금지: 암묵 전역을 쓰지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/app/syntax/this.ts": {
@@ -2105,7 +2145,8 @@
         "guard/no-dom-globals :: document 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/dom/indexedDB.ts": {
@@ -2114,7 +2155,8 @@
         "guard/no-dom-globals :: indexedDB 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/dom/localStorage.ts": {
@@ -2123,7 +2165,8 @@
         "guard/no-dom-globals :: localStorage 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/dom/location.ts": {
@@ -2132,7 +2175,8 @@
         "guard/no-dom-globals :: location 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/dom/navigator.ts": {
@@ -2141,7 +2185,8 @@
         "guard/no-dom-globals :: navigator 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/dom/sessionStorage.ts": {
@@ -2150,7 +2195,8 @@
         "guard/no-dom-globals :: sessionStorage 금지: 브라우저 전역은 shared/ds와 shared/platform 허용 목록 파일에서만.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/files/.gitkeep": {
@@ -2249,7 +2295,8 @@
         "@typescript-eslint/no-unsafe-assignment",
         "@typescript-eslint/no-unsafe-call",
         "guard/no-import-meta :: import.meta 금지: import.meta.glob·env는 경계 검사와 타입 검사 밖에서 파일과 값을 끌어온다.",
-        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/gaps/model/import-equals.ts": {
@@ -2342,12 +2389,14 @@
     },
     "src/features/greeting/ui/clean.tsx": {
       "row": "원시 타입",
-      "expect": []
+      "expect": ["ds/no-dom-styling", "ds/no-screen-elements"]
     },
     "src/features/greeting/ui/spread.tsx": {
       "row": "React",
       "expect": [
-        "guard/no-jsx-spread :: JSX 스프레드 속성 금지: children·ref·className을 펼쳐 넘겨 화면 규칙을 피하는 길이다. 속성을 이름으로 넘긴다."
+        "guard/no-jsx-spread :: JSX 스프레드 속성 금지: children·ref·className을 펼쳐 넘겨 화면 규칙을 피하는 길이다. 속성을 이름으로 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/home/messages.ts": {
@@ -2516,7 +2565,8 @@
       "expect": [
         "boundaries/dependencies :: feature에서 lib의 money.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-money-coercion :: 금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다."
+        "local/no-money-coercion :: 금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다.",
+        "ds/no-dom-values"
       ]
     },
     "src/features/money/subtract.ts": {
@@ -2844,7 +2894,10 @@
     "src/features/raw/library-allowed.tsx": {
       "row": "원시 타입",
       "expect": [
-        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장)."
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
+        "ds/no-dom-styling",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/raw/library-error.ts": {
@@ -2940,7 +2993,9 @@
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
         "local/no-raw-types :: 이 타입은 풀면 원시 타입이나 열린 타입이 된다(별칭, typeof, keyof, 템플릿 리터럴, 매핑·조건부 타입 포함). 브랜드나 리터럴 유니온을 쓴다.",
-        "local/no-raw-types :: 컴포넌트 props에 원시 타입이 남아 있다."
+        "local/no-raw-types :: 컴포넌트 props에 원시 타입이 남아 있다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/raw/react-node.tsx": {
@@ -3001,7 +3056,11 @@
     },
     "src/features/raw/ui/library-allowed.tsx": {
       "row": "원시 타입",
-      "expect": []
+      "expect": [
+        "ds/no-dom-styling",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
+      ]
     },
     "src/features/raw/union-member.ts": {
       "row": "원시 타입",
@@ -3033,7 +3092,8 @@
         "@eslint-react/no-array-index-key",
         "functional/readonly-type",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/clean-component.tsx": {
@@ -3041,7 +3101,8 @@
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "local/no-ui-text :: 한글 문구는 messages.ts에만 둔다. 화면에는 UiText를 넘긴다.",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/effect-alias.ts": {
@@ -3158,7 +3219,9 @@
         "@typescript-eslint/no-meaningless-void-operator",
         "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "no-void"
+        "no-void",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/ref-function.tsx": {
@@ -3168,7 +3231,9 @@
         "functional/no-expression-statements",
         "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "no-void"
+        "no-void",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/ref-named-gap.tsx": {
@@ -3176,7 +3241,9 @@
       "expect": "KNOWN_GAP",
       "reports": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다."
+        "local/no-raw-types :: 타입 자리에 string·number·bigint·boolean·true·false·unknown·any·object·{}를 쓰지 않는다. shared/lib/brand의 브랜드나 리터럴 유니온을 쓴다.",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/ref-spread.tsx": {
@@ -3185,7 +3252,9 @@
         "@eslint-react/naming-convention-ref-name",
         "guard/no-jsx-spread :: JSX 스프레드 속성 금지: children·ref·className을 펼쳐 넘겨 화면 규칙을 피하는 길이다. 속성을 이름으로 넘긴다.",
         "guard/no-ref-callback :: 스프레드 속성 안의 ref 금지.",
-        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장)."
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/ref-ternary.tsx": {
@@ -3194,7 +3263,9 @@
         "@eslint-react/naming-convention-ref-name",
         "functional/readonly-type",
         "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
-        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장)."
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/ref-use-callback.tsx": {
@@ -3206,7 +3277,9 @@
         "guard/no-ref-callback :: ref에는 식별자만 넘긴다: 함수·호출·조건식 ref는 마운트 효과 우회다.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
         "no-void",
-        "react-hooks/use-memo"
+        "react-hooks/use-memo",
+        "ds/no-dom-values",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/react/sync-store.ts": {
@@ -3228,63 +3301,81 @@
       "row": "원시 타입",
       "expect": [
         "boundaries/dependencies :: feature에서 feature의 messages.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
-        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장)."
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-array.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-concat.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-conditional.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-from-char-code.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-hangul.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 한글 문구는 messages.ts에만 둔다. 화면에는 UiText를 넘긴다."
+        "local/no-ui-text :: 한글 문구는 messages.ts에만 둔다. 화면에는 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-literal.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-template.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/jsx-text.tsx": {
       "row": "원시 타입",
       "expect": [
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다."
+        "local/no-ui-text :: 화면 코드와 shared/ds에 JSX 글자를 직접 쓰지 않는다. messages.ts의 UiText를 넘긴다.",
+        "ds/no-dom-styling",
+        "ds/no-screen-elements"
       ]
     },
     "src/features/text/messages.ts": {
@@ -3740,7 +3831,8 @@
       "expect": [
         "guard/no-disposable :: Symbol.dispose·Symbol.asyncDispose 금지.",
         "guard/no-disposable :: using 선언 금지: 자원 해제는 코어(Rust)가 맡는다. esnext.disposable은 @tauri-apps/api 타입 때문에만 켠다.",
-        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
+        "ds/no-style-object"
       ]
     },
     "src/app/disposable/stack.ts": {
@@ -3755,7 +3847,8 @@
         "@typescript-eslint/require-await",
         "guard/no-disposable :: Symbol.dispose·Symbol.asyncDispose 금지.",
         "guard/no-disposable :: using 선언 금지: 자원 해제는 코어(Rust)가 맡는다. esnext.disposable은 @tauri-apps/api 타입 때문에만 켠다.",
-        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다."
+        "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
+        "ds/no-style-object"
       ]
     },
     "src/shared/ipc/production-testing-import.ts": {
@@ -3786,6 +3879,10 @@
     },
     "src/shared/ds/dom/no-dom-allowed.ts": {
       "row": "전역",
+      "expect": []
+    },
+    "src/app/comments/ds09-allowed.ts": {
+      "row": "주석",
       "expect": []
     }
   }
