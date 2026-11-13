@@ -8,7 +8,10 @@ pub enum InstrumentIdError {
 
 impl InstrumentId {
     pub fn try_new(value: &str) -> Result<Self, InstrumentIdError> {
-        if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_graphic()) {
+        if value.is_empty()
+            || value.len() > 64
+            || !value.bytes().all(|byte| byte.is_ascii_graphic())
+        {
             return Err(InstrumentIdError::InvalidFormat);
         }
         Ok(Self(value.to_owned()))
@@ -52,6 +55,23 @@ mod tests {
                 InstrumentId::try_new(value),
                 Err(InstrumentIdError::InvalidFormat),
                 "안전하지 않은 내부 식별자"
+            );
+        }
+    }
+
+    #[test]
+    fn instrument_ids_enforce_the_length_boundary_and_reject_large_inputs() {
+        let accepted = "A".repeat(64);
+        assert_eq!(
+            InstrumentId::try_new(&accepted).expect("64자리").as_str(),
+            accepted,
+            "64자리를 보존한다"
+        );
+        for value in ["A".repeat(65), "A".repeat(10_000_000)] {
+            assert_eq!(
+                InstrumentId::try_new(&value),
+                Err(InstrumentIdError::InvalidFormat),
+                "상한 초과 입력은 거부한다"
             );
         }
     }

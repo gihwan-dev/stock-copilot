@@ -8,7 +8,11 @@ pub enum SymbolError {
 
 impl Symbol {
     pub fn try_new(value: &str) -> Result<Self, SymbolError> {
-        if value.is_empty()
+        if value
+            .bytes()
+            .next()
+            .is_none_or(|byte| !byte.is_ascii_alphanumeric())
+            || value.len() > 32
             || !value
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
@@ -25,16 +29,23 @@ impl Symbol {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Market(String);
+pub enum Market {
+    Kr,
+    Us,
+    Unknown(MarketCode),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MarketCode(String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarketError {
     Unsupported,
 }
 
-impl Market {
+impl MarketCode {
     pub fn try_new(value: &str) -> Result<Self, MarketError> {
-        if value != "KR" && value != "US" {
+        if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_graphic()) {
             return Err(MarketError::Unsupported);
         }
         Ok(Self(value.to_owned()))
@@ -46,9 +57,29 @@ impl Market {
     }
 }
 
+impl Market {
+    #[must_use]
+    pub fn new(value: MarketCode) -> Self {
+        match value.as_str() {
+            "KR" => Self::Kr,
+            "US" => Self::Us,
+            _ => Self::Unknown(value),
+        }
+    }
+
+    #[must_use]
+    pub fn as_code(&self) -> MarketCode {
+        match self {
+            Self::Kr => MarketCode(String::from("KR")),
+            Self::Us => MarketCode(String::from("US")),
+            Self::Unknown(value) => value.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Market, MarketError, Symbol, SymbolError};
+    use super::{Market, MarketCode, MarketError, Symbol, SymbolError};
 
     #[test]
     fn symbols_accept_alphanumeric_and_ticker_punctuation_without_fixed_length() {
@@ -61,6 +92,7 @@ mod tests {
             "BRK.B",
             "BRK-B",
             "LONG1234567",
+            "AAPL261218C00150000",
         ] {
             assert_eq!(
                 Symbol::try_new(value).expect("유효한 종목 코드").as_str(),
@@ -84,17 +116,55 @@ mod tests {
     }
 
     #[test]
-    fn markets_accept_only_supported_country_codes() {
-        for value in ["KR", "US"] {
+    fn symbols_reject_path_segments_and_non_alphanumeric_prefixes() {
+        for value in [".", "..", "...", "-", "-.-", ".A", "-A"] {
             assert_eq!(
-                Market::try_new(value).expect("지원 시장").as_str(),
-                value,
-                "시장 코드를 보존한다"
+                Symbol::try_new(value),
+                Err(SymbolError::InvalidFormat),
+                "경로를 바꾸는 코드는 거부한다"
             );
         }
-        for value in ["", "kr", "NYSE", "JP", "US ", "KR\n"] {
+    }
+
+    #[test]
+    fn symbols_enforce_the_length_boundary() {
+        let accepted = "A".repeat(32);
+        assert_eq!(
+            Symbol::try_new(&accepted).expect("32자리").as_str(),
+            accepted,
+            "32자리는 보존한다"
+        );
+        assert_eq!(
+            Symbol::try_new(&"A".repeat(33)),
+            Err(SymbolError::InvalidFormat),
+            "33자리는 거부한다"
+        );
+    }
+
+    #[test]
+    fn markets_use_exhaustive_variants_and_preserve_unknown_country_codes() {
+        for (value, expected) in [("KR", Market::Kr), ("US", Market::Us)] {
+            let market = Market::new(MarketCode::try_new(value).expect("시장 코드"));
+            assert_eq!(market, expected, "알려진 시장은 명시 변형으로 만든다");
+            assert_eq!(market.as_code().as_str(), value, "시장 코드를 보존한다");
+        }
+        for value in ["kr", "NYSE", "JP"] {
+            let code = MarketCode::try_new(value).expect("모르는 외부 코드");
+            let market = Market::new(code.clone());
             assert_eq!(
-                Market::try_new(value),
+                market,
+                Market::Unknown(code),
+                "모르는 코드를 알려진 시장으로 바꾸지 않는다"
+            );
+            assert_eq!(
+                market.as_code().as_str(),
+                value,
+                "모르는 코드도 대소문자를 보존한다"
+            );
+        }
+        for value in ["", "US ", "KR\n", "KR\0", "시장"] {
+            assert_eq!(
+                MarketCode::try_new(value),
                 Err(MarketError::Unsupported),
                 "지원하지 않는 시장"
             );
