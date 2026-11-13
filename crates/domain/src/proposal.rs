@@ -266,6 +266,21 @@ pub struct ExecutionToken {
     execution_observation: PriceObservation,
 }
 impl ExecutionToken {
+    pub fn recheck(
+        self,
+        now: Timestamp,
+        current: PriceObservation,
+    ) -> Result<Self, ProposalExecutionError> {
+        if now < self.checked_at {
+            return Err(ProposalExecutionError::ClockRollback);
+        }
+        self.proposal.into_execution(now, current)
+    }
+    #[must_use]
+    pub fn expires_at(&self) -> Timestamp {
+        self.proposal.expires_at()
+    }
+
     #[must_use]
     pub fn intent(&self) -> &OrderIntent {
         self.proposal.intent()
@@ -432,6 +447,40 @@ mod tests {
         let rendered = format!("{token:?}");
         assert!(rendered.contains("proposal-1"));
         assert!(!rendered.contains("987654321"));
+    }
+    fn execution_token() -> crate::ExecutionToken {
+        let proposal = draft();
+        let current = observation("100", 0);
+        let report = passed(&proposal, at(0), &current);
+        proposal
+            .finish_validation(report, at(0), current)
+            .expect("검증")
+            .into_execution(at(2), observation("100", 2))
+            .expect("소비")
+    }
+    #[test]
+    fn token_recheck_consumes_without_extracting_order_and_enforces_deadline() {
+        let token = execution_token();
+        let original = token.intent().clone();
+        assert_eq!(token.expires_at(), at(600));
+        let checked = token.recheck(at(3), observation("101", 3)).expect("재확인");
+        assert_eq!(checked.intent(), &original);
+        assert_eq!(checked.checked_at(), at(3));
+        assert_eq!(checked.validation_observation(), &observation("100", 0));
+        assert_eq!(checked.execution_observation(), &observation("101", 3));
+        assert_eq!(
+            execution_token()
+                .recheck(at(1), observation("100", 1))
+                .expect_err("소비 이후 역행"),
+            ProposalExecutionError::ClockRollback
+        );
+        assert_eq!(
+            execution_token()
+                .recheck(at(600), observation("100", 600))
+                .expect_err("전송 전 만료"),
+            ProposalExecutionError::Expired
+        );
+        let _maximum = ProposalLifetime::try_new(SpanSeconds::new(600)).expect("설정 상한");
     }
     #[test]
     fn expiry_settings_and_observation_boundaries_fail_closed() {

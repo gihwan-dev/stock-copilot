@@ -16,7 +16,7 @@
 
 **OrderIntent 값은 실행 경로의 입력이 될 수 없다.** O-03의 승인 타입과 실행 crate는 ExecutionToken만 받아야 한다. O-17/O-18은 본인 확인(순서 6), 잔고·시장 등 전체 재확인(7), 소비·전송 전 기록(8)을 거친 뒤 ApprovedOrder를 만들고 전송(9)한다. domain의 into_execution은 순서 7의 시간·가격 부분만 담당하며 승인 권한 자체가 아니다. 전송까지 지연되면 보관된 관측과 시각으로 다시 확인해야 한다.
 
-ExecutionToken의 공개 API는 `intent() -> &OrderIntent`, `id() -> &ProposalId`, `validated_at() -> Timestamp`, `checked_at() -> Timestamp`, `validation_observation() -> &PriceObservation`, `execution_observation() -> &PriceObservation`뿐이다. 생성자·값 추출·가변 접근자가 없고 Clone·Copy·Default·직렬화·역직렬화도 없다. 토큰은 Proposal<Validated> 전체를 비공개로 소유한다. 읽은 OrderIntent를 clone해도 ExecutionToken이 아니므로 실행 입력으로 넘길 수 없다. 검증 시점과 소비 시점의 관측을 함께 보존한다.
+ExecutionToken의 공개 API는 `intent() -> &OrderIntent`, `id() -> &ProposalId`, `validated_at() -> Timestamp`, `checked_at() -> Timestamp`, `validation_observation() -> &PriceObservation`, `execution_observation() -> &PriceObservation`, `expires_at() -> Timestamp`와 소비형 `recheck(self, now, observation) -> Result<ExecutionToken, ProposalExecutionError>`다. recheck는 이전 소비 시각 이후의 관측으로 저장된 제안을 다시 확인하며 동일한 주문을 보존한다. O-18은 지연 후 전송 전에 이 경로로 재확인한다. 생성자·값 추출·가변 접근자가 없고 Clone·Copy·Default·직렬화·역직렬화도 없다. 토큰은 Proposal<Validated> 전체를 비공개로 소유한다. 읽은 OrderIntent를 clone해도 ExecutionToken이 아니므로 실행 입력으로 넘길 수 없다. 검증 시점과 소비 시점의 관측을 함께 보존한다.
 
 Validated도 비공개 필드이며 복제·Default·직렬화·복원 경로가 없다. 공개 validate는 외부 보고서를 받지 않는다. 비공개 finish_validation만 타입을 만들고, 단위 테스트는 동일 모듈에서 결과를 구성해 허용 전이를 검증한다. 테스트용 공개 생성자는 없다.
 
