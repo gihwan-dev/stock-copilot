@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,62 +8,30 @@ export const VERIFIER = "harness/ci/signatures/verify.mjs";
 
 export const SUMMARY = /^서명 검사: 위반 \d+건$/mu;
 
-export const OWNER_KEYS_URL = (owner) =>
-  `https://api.github.com/users/${encodeURIComponent(owner)}/ssh_signing_keys`;
+const FLAGS_WITH_VALUE = ["--owner-keys"];
 
-export const ownerKeysFromResponse = (text) => {
-  try {
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed)
-      ? {
-          keys: parsed
-            .map((entry) =>
-              typeof entry?.key === "string"
-                ? entry.key.trim().split(/\s+/u).slice(0, 2).join(" ")
-                : "",
-            )
-            .filter((key) => key !== ""),
-        }
-      : { problem: "소유자 키 응답이 배열이 아니다" };
-  } catch {
-    return { problem: "소유자 키 응답을 읽지 못했다" };
-  }
-};
-
-const fetchOwnerKeys = (owner) => {
-  const finished = spawnSync(
-    "curl",
-    [
-      "-sSfL",
-      "--max-time",
-      "30",
-      "-H",
-      "Accept: application/vnd.github+json",
-      OWNER_KEYS_URL(owner),
-    ],
-    { encoding: "utf8" },
-  );
-  return finished.status === 0
-    ? ownerKeysFromResponse(finished.stdout)
-    : { problem: `소유자 키를 가져오지 못했다: ${finished.stderr.trim()}` };
-};
+const FLAGS = [];
 
 export const parseArguments = (args) => {
-  const [repo, head, flag, value, ...rest] = args;
-  if (
-    repo === undefined ||
-    head === undefined ||
-    value === undefined ||
-    rest.length > 0 ||
-    !["--owner", "--owner-keys"].includes(flag)
-  ) {
+  const [repo, head, ...rest] = args;
+  if (repo === undefined || head === undefined) {
     return { problem: "인자" };
   }
-  return {
-    repo: resolve(repo),
-    head,
-    [flag === "--owner" ? "owner" : "keysFile"]: value,
-  };
+  const passed = [];
+  for (let index = 0; index < rest.length; index += 1) {
+    if (FLAGS.includes(rest[index])) {
+      passed.push(rest[index]);
+    } else if (
+      FLAGS_WITH_VALUE.includes(rest[index]) &&
+      rest[index + 1] !== undefined
+    ) {
+      passed.push(rest[index], rest[index + 1]);
+      index += 1;
+    } else {
+      return { problem: "인자" };
+    }
+  }
+  return { repo: resolve(repo), head, passed };
 };
 
 const toolsRoot = resolve(
@@ -86,18 +54,6 @@ export const runFromBase = (options) => {
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), "signature-base-")));
   const tools = join(scratch, "base");
   try {
-    const keys =
-      options.keysFile === undefined
-        ? fetchOwnerKeys(options.owner)
-        : { file: options.keysFile };
-    if (keys.problem !== undefined) {
-      process.stderr.write(`${keys.problem}\n`);
-      return 1;
-    }
-    const keysFile = keys.file ?? join(scratch, "owner-keys.txt");
-    if (keys.file === undefined) {
-      writeFileSync(keysFile, keys.keys.map((key) => `${key}\n`).join(""));
-    }
     const added = spawnSync(
       "git",
       [
@@ -125,8 +81,7 @@ export const runFromBase = (options) => {
         options.repo,
         base,
         options.head,
-        "--owner-keys",
-        keysFile,
+        ...options.passed,
       ],
       { cwd: tools, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
@@ -153,7 +108,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     options.problem === undefined
       ? runFromBase(options)
       : (process.stderr.write(
-          "사용법: node <기준 checkout>/harness/ci/signatures/from-base.mjs <저장소> <대상 커밋> (--owner <소유자> | --owner-keys <파일>)\n",
+          "사용법: node <기준 checkout>/harness/ci/signatures/from-base.mjs <저장소> <대상 커밋> [--unverified-base] [--owner-keys <파일>]\n",
         ),
         2);
 }

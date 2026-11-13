@@ -15,7 +15,13 @@ export const ROUND_DONE_STATE = /^완료 \(\d+회차까지\)$/u;
 
 export const OPEN_STATES = ["해결"];
 
-export const WAIVER_DECIDERS = ["사용자", "메인 에이전트"];
+export const WAIVER_DECIDERS = ["사용자"];
+
+export const ROUND_CELL = /^\d+(?: \(.+\))?$/u;
+
+export const EMPTY_CELLS = [""];
+
+export const PLACEHOLDER_CELLS = ["", "-"];
 
 export const WAIVER_REASON_MINIMUM = 20;
 
@@ -28,6 +34,7 @@ export const SECTIONS = [
     table: ["회차", "기준 SHA", "대상 SHA"],
     filled: [0],
     commits: [1, 2],
+    round: 0,
   },
   {
     name: "리뷰 표",
@@ -91,6 +98,7 @@ export const progressRows = (text) => {
       progress: isHeader(header, TABLE_HEADER),
       tasks: row[0] ?? "",
       state: row[1] ?? "",
+      target: row[2] ?? "",
       record: row[3] ?? "",
     });
   });
@@ -137,32 +145,71 @@ const tableRows = (lines, header) => {
   return rows;
 };
 
-export const commitExists = (root, cell) => {
+const commitOf = (root, cell) => {
   const match = COMMIT_CELL.exec(cell);
-  return (
-    match !== null &&
-    spawnSync("git", ["-C", root, "cat-file", "-e", `${match[1]}^{commit}`], {
-      stdio: "ignore",
-    }).status === 0
+  if (match === null) {
+    return undefined;
+  }
+  const run = spawnSync(
+    "git",
+    ["-C", root, "rev-parse", "--verify", "--quiet", `${match[1]}^{commit}`],
+    { encoding: "utf8" },
   );
+  return run.status === 0 ? run.stdout.trim() : undefined;
 };
+
+const strictAncestor = (root, older, newer) =>
+  older !== newer &&
+  spawnSync("git", ["-C", root, "merge-base", "--is-ancestor", older, newer], {
+    stdio: "ignore",
+  }).status === 0;
 
 const tableProblems = (root, section, rows) => {
   if (rows === undefined || rows.length === 0) {
     return [`${section.name}에 행이 없다`];
   }
-  return rows.flatMap((row, index) => [
-    ...(section.filled.every((position) => (row[position] ?? "") !== "")
+  const meaningful = rows.some((row) =>
+    section.filled.every(
+      (position) => !PLACEHOLDER_CELLS.includes(row[position] ?? ""),
+    ),
+  );
+  return [
+    ...(meaningful
       ? []
-      : [`${section.name} ${index + 1}번째 행에 빈 칸이 있다`]),
-    ...section.commits
-      .filter((position) => !commitExists(root, row[position] ?? ""))
-      .map(
-        (position) =>
-          `${section.name} ${index + 1}번째 행의 ${section.table[position]}가 저장소에 있는 커밋(7~40자리 16진수)이 아니다: ${row[position] ?? ""}`,
-      ),
-  ]);
+      : [`${section.name}에 내용이 있는 행이 없다('-'·빈 칸뿐)`]),
+    ...rowProblems(root, section, rows),
+  ];
 };
+
+const rowProblems = (root, section, rows) =>
+  rows.flatMap((row, index) => {
+    const label = `${section.name} ${index + 1}번째 행`;
+    const commits = section.commits.map((position) =>
+      commitOf(root, row[position] ?? ""),
+    );
+    return [
+      ...(section.filled.every(
+        (position) => !EMPTY_CELLS.includes(row[position] ?? ""),
+      )
+        ? []
+        : [`${label}에 빈 칸이 있다`]),
+      ...(section.round === undefined ||
+      ROUND_CELL.test(row[section.round] ?? "")
+        ? []
+        : [`${label}의 회차는 숫자로 시작한다: ${row[section.round] ?? ""}`]),
+      ...section.commits
+        .filter((_, slot) => commits[slot] === undefined)
+        .map(
+          (position) =>
+            `${label}의 ${section.table[position]}가 저장소에 있는 커밋(7~40자리 16진수)이 아니다: ${row[position] ?? ""}`,
+        ),
+      ...(commits.length === 2 &&
+      commits.every((commit) => commit !== undefined) &&
+      !strictAncestor(root, commits[0], commits[1])
+        ? [`${label}의 기준 SHA가 대상 SHA의 조상이 아니다`]
+        : []),
+    ];
+  });
 
 export const waiverProblems = (lines) => {
   if (lines === undefined) {
@@ -218,7 +265,7 @@ export const recordProblems = (root, text, tasks) => {
   ];
 };
 
-const rowProblems = (root, row) => {
+const progressRowProblems = (root, row) => {
   const where = `${PROGRESS_FILE}:${row.line} ${row.tasks}`;
   if (!row.progress) {
     return TASK_LIST.test(row.tasks)
@@ -232,6 +279,9 @@ const rowProblems = (root, row) => {
   }
   if (!isDone(row.state)) {
     return [];
+  }
+  if (commitOf(root, row.target) === undefined) {
+    return [`${where}: 대상 커밋이 저장소에 있는 커밋이 아니다: ${row.target}`];
   }
   const link = LINK.exec(row.record);
   if (link === null) {
@@ -262,7 +312,7 @@ export const reviewProblems = (root) => {
   if (!rows.some((row) => row.progress)) {
     return [`${PROGRESS_FILE}에 진행 표가 없다`];
   }
-  return rows.flatMap((row) => rowProblems(root, row));
+  return rows.flatMap((row) => progressRowProblems(root, row));
 };
 
 const repoRoot = resolve(

@@ -1,5 +1,4 @@
 {
-  "files": [".github/workflows/ci.yml", ".github/workflows/nightly.yml"],
   "topKeys": ["name", "on", "permissions", "jobs"],
   "events": {
     "push": ["branches"],
@@ -29,12 +28,21 @@
     },
     ".github/workflows/nightly.yml#notify": {
       "issues": "write"
+    },
+    ".github/workflows/signatures.yml#notify": {
+      "issues": "write"
+    },
+    ".github/workflows/signatures.yml#signatures": {
+      "contents": "read",
+      "actions": "read"
     }
   },
   "conditions": [
     "failure()",
     "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'",
     "github.event_name == 'push' && github.ref == 'refs/heads/master'",
+    "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+    "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
     "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
     "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
     "needs.changes.outputs.changed == 'yes'"
@@ -42,20 +50,22 @@
   "commands": [
     "corepack enable",
     "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
+    "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'",
     "just advisory-db-fetch",
     "just base=\"$BASE\" check",
     "just base=HEAD check",
     "just linux-check",
     "lefthook install",
-    "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --owner \"$OWNER\"",
+    "node base-tools/harness/ci/notify.mjs",
+    "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\"",
     "node harness/ci/ci-range.mjs base",
     "node harness/ci/ci-range.mjs changed",
     "node harness/ci/linux/offline.mjs just linux-test",
     "node harness/ci/linux/offline.mjs just mutants-all",
-    "node harness/ci/notify.mjs",
     "node harness/ci/tools.mjs cargo-install",
     "node harness/ci/tools.mjs fetch",
-    "node harness/ci/tools.mjs lefthook"
+    "node harness/ci/tools.mjs lefthook",
+    "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 기준 %s (%s)\\n' \"$base\" \"$kind\"\nprintf 'base=%s\\nkind=%s\\n' \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\""
   ],
   "expressions": [
     "${{ github.event.before }}",
@@ -64,10 +74,11 @@
     "${{ github.event.pull_request.head.sha }}",
     "${{ github.event_name }}",
     "${{ github.ref }}",
-    "${{ github.repository_owner }}",
     "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
     "${{ github.sha }}",
     "${{ github.token }}",
+    "${{ steps.base.outputs.base }}",
+    "${{ steps.base.outputs.kind }}",
     "${{ steps.changed.outputs.changed }}",
     "${{ steps.range.outputs.base }}"
   ],
@@ -77,22 +88,25 @@
     "EVENT_NAME",
     "GH_TOKEN",
     "HEAD",
-    "OWNER",
     "PR_BASE",
     "PR_HEAD",
     "REF",
     "RUN_URL",
     "SHA",
+    "SIGNATURE_BASE_KIND",
     "TITLE"
   ],
   "inputValues": {
     "fetch-depth": [0, 1],
     "persist-credentials": [false],
+    "node-version-file": [".node-version", "base-tools/.node-version"],
     "ref": [
-      "${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/master' && github.event.before) || 'master' }}"
+      "${{ github.event.before }}",
+      "master",
+      "${{ steps.base.outputs.base }}",
+      "${{ needs.signatures.outputs.base }}"
     ],
-    "path": ["base-tools"],
-    "node-version-file": [".node-version"]
+    "path": ["base-tools"]
   },
   "actions": {
     "actions/checkout": {
@@ -109,5 +123,527 @@
     }
   },
   "checkout": "actions/checkout",
-  "toolInstaller": "taiki-e/install-action"
+  "toolInstaller": "taiki-e/install-action",
+  "expected": {
+    ".github/workflows/ci.yml": {
+      "name": "ci",
+      "on": {
+        "push": {
+          "branches": ["**"]
+        },
+        "pull_request": {
+          "branches": ["master"]
+        }
+      },
+      "permissions": {
+        "contents": "read"
+      },
+      "jobs": {
+        "linux": {
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 60,
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "corepack enable"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "advisory db",
+              "run": "just advisory-db-fetch"
+            },
+            {
+              "name": "linux check",
+              "run": "just linux-check"
+            },
+            {
+              "name": "linux tests without network",
+              "run": "node harness/ci/linux/offline.mjs just linux-test"
+            }
+          ]
+        },
+        "macos": {
+          "if": "github.event_name == 'push' && github.ref == 'refs/heads/master'",
+          "runs-on": "macos-15",
+          "timeout-minutes": 90,
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "corepack enable"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "advisory db",
+              "run": "just advisory-db-fetch"
+            },
+            {
+              "name": "hooks",
+              "run": "lefthook install"
+            },
+            {
+              "name": "range",
+              "id": "range",
+              "run": "node harness/ci/ci-range.mjs base",
+              "env": {
+                "EVENT_NAME": "${{ github.event_name }}",
+                "REF": "${{ github.ref }}",
+                "BEFORE": "${{ github.event.before }}",
+                "SHA": "${{ github.sha }}",
+                "PR_BASE": "${{ github.event.pull_request.base.sha }}",
+                "PR_HEAD": "${{ github.event.pull_request.head.sha }}"
+              }
+            },
+            {
+              "name": "just check",
+              "run": "just base=\"$BASE\" check",
+              "env": {
+                "BASE": "${{ steps.range.outputs.base }}"
+              }
+            }
+          ]
+        },
+        "notify": {
+          "needs": ["linux", "macos"],
+          "if": "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'",
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 10,
+          "permissions": {
+            "issues": "write"
+          },
+          "steps": [
+            {
+              "name": "base checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "ref": "${{ github.event.before }}",
+                "path": "base-tools",
+                "fetch-depth": 1,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": "base-tools/.node-version"
+              }
+            },
+            {
+              "name": "issue",
+              "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+              "run": "node base-tools/harness/ci/notify.mjs",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}",
+                "TITLE": "CI 실패: master",
+                "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "SHA": "${{ github.sha }}"
+              }
+            },
+            {
+              "name": "no notifier",
+              "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+              "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
+            }
+          ]
+        }
+      }
+    },
+    ".github/workflows/nightly.yml": {
+      "name": "nightly",
+      "on": {
+        "schedule": [
+          {
+            "cron": "0 18 * * *"
+          }
+        ]
+      },
+      "permissions": {
+        "contents": "read"
+      },
+      "jobs": {
+        "changes": {
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 10,
+          "outputs": {
+            "changed": "${{ steps.changed.outputs.changed }}"
+          },
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 1,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "changed",
+              "id": "changed",
+              "run": "node harness/ci/ci-range.mjs changed"
+            }
+          ]
+        },
+        "macos": {
+          "needs": ["changes"],
+          "if": "needs.changes.outputs.changed == 'yes'",
+          "runs-on": "macos-15",
+          "timeout-minutes": 90,
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "corepack enable"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "advisory db",
+              "run": "just advisory-db-fetch"
+            },
+            {
+              "name": "hooks",
+              "run": "lefthook install"
+            },
+            {
+              "name": "just check",
+              "run": "just base=HEAD check"
+            }
+          ]
+        },
+        "linux": {
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 180,
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "corepack enable"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "advisory db",
+              "run": "just advisory-db-fetch"
+            },
+            {
+              "name": "linux check",
+              "run": "just linux-check"
+            },
+            {
+              "name": "linux tests without network",
+              "run": "node harness/ci/linux/offline.mjs just linux-test"
+            },
+            {
+              "name": "mutants without network",
+              "run": "node harness/ci/linux/offline.mjs just mutants-all"
+            }
+          ]
+        },
+        "notify": {
+          "needs": ["changes", "macos", "linux"],
+          "if": "failure()",
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 10,
+          "permissions": {
+            "issues": "write"
+          },
+          "steps": [
+            {
+              "name": "base checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "ref": "master",
+                "path": "base-tools",
+                "fetch-depth": 1,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": "base-tools/.node-version"
+              }
+            },
+            {
+              "name": "issue",
+              "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+              "run": "node base-tools/harness/ci/notify.mjs",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}",
+                "TITLE": "CI 실패: 밤 작업",
+                "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "SHA": "${{ github.sha }}"
+              }
+            },
+            {
+              "name": "no notifier",
+              "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+              "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
+            }
+          ]
+        }
+      }
+    },
+    ".github/workflows/signatures.yml": {
+      "name": "signatures",
+      "on": {
+        "push": {
+          "branches": ["**"]
+        },
+        "pull_request": {
+          "branches": ["master"]
+        }
+      },
+      "permissions": {
+        "contents": "read"
+      },
+      "jobs": {
+        "signatures": {
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 30,
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "outputs": {
+            "base": "${{ steps.base.outputs.base }}"
+          },
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "verified base",
+              "id": "base",
+              "run": "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 기준 %s (%s)\\n' \"$base\" \"$kind\"\nprintf 'base=%s\\nkind=%s\\n' \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}",
+                "EVENT_NAME": "${{ github.event_name }}",
+                "REF": "${{ github.ref }}",
+                "BEFORE": "${{ github.event.before }}",
+                "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}"
+              }
+            },
+            {
+              "name": "base checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "ref": "${{ steps.base.outputs.base }}",
+                "path": "base-tools",
+                "fetch-depth": 1,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "signatures from the base checkout",
+              "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
+              "run": "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\"",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}",
+                "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
+                "SIGNATURE_BASE_KIND": "${{ steps.base.outputs.kind }}"
+              }
+            },
+            {
+              "name": "signatures inactive",
+              "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
+              "run": "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'"
+            }
+          ]
+        },
+        "notify": {
+          "needs": ["signatures"],
+          "if": "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'",
+          "runs-on": "ubuntu-24.04",
+          "timeout-minutes": 10,
+          "permissions": {
+            "issues": "write"
+          },
+          "steps": [
+            {
+              "name": "base checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "ref": "${{ needs.signatures.outputs.base }}",
+                "path": "base-tools",
+                "fetch-depth": 1,
+                "persist-credentials": false
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": "base-tools/.node-version"
+              }
+            },
+            {
+              "name": "issue",
+              "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+              "run": "node base-tools/harness/ci/notify.mjs",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}",
+                "TITLE": "CI 실패: 서명 검사",
+                "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "SHA": "${{ github.sha }}"
+              }
+            },
+            {
+              "name": "no notifier",
+              "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+              "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
+            }
+          ]
+        }
+      }
+    }
+  }
 }

@@ -14,10 +14,14 @@ const ROOT: &str = "[workspace]\nmembers = [\"crates/sample\"]\n\n[workspace.dep
 
 const DIRECTORY: &str = "crates/sample";
 
+fn members() -> Vec<String> {
+    vec![String::from("crates/sample"), String::from("crates/domain")]
+}
+
 fn judged(before: &str, from: &str, to: &str) -> Verdict {
     assert!(before.contains(from), "{from:?}");
     let after = before.replacen(from, to, 1);
-    verdict(DIRECTORY, Some(before), Some(after.as_str()))
+    verdict(DIRECTORY, &members(), Some(before), Some(after.as_str()))
 }
 
 #[test]
@@ -62,10 +66,13 @@ fn dependency_tables_may_change_without_a_signature() {
         );
     }
     assert_eq!(
-        verdict(DIRECTORY, Some(MEMBER), Some(MEMBER)),
+        verdict(DIRECTORY, &members(), Some(MEMBER), Some(MEMBER)),
         Verdict::DependenciesOnly
     );
-    assert_eq!(verdict(DIRECTORY, None, None), Verdict::DependenciesOnly);
+    assert_eq!(
+        verdict(DIRECTORY, &members(), None, None),
+        Verdict::DependenciesOnly
+    );
 }
 
 #[test]
@@ -103,8 +110,14 @@ fn every_other_table_needs_a_signature() {
     ] {
         assert_eq!(judged(before, from, to), Verdict::Outside, "{to}");
     }
-    assert_eq!(verdict(DIRECTORY, None, Some(MEMBER)), Verdict::Outside);
-    assert_eq!(verdict(DIRECTORY, Some(MEMBER), None), Verdict::Outside);
+    assert_eq!(
+        verdict(DIRECTORY, &members(), None, Some(MEMBER)),
+        Verdict::Outside
+    );
+    assert_eq!(
+        verdict(DIRECTORY, &members(), Some(MEMBER), None),
+        Verdict::Outside
+    );
 }
 
 fn run_git(directory: &Path, arguments: &[&str]) -> String {
@@ -153,19 +166,19 @@ fn manifest_changes_compares_two_commits_of_a_repository() {
         "build",
     );
     assert_eq!(
-        compare(&directory, &first, &dependency, "Cargo.toml"),
+        compare(&directory, &first, &first, &dependency, "Cargo.toml"),
         Ok(Verdict::DependenciesOnly)
     );
     assert_eq!(
-        compare(&directory, &dependency, &build, "Cargo.toml"),
+        compare(&directory, &first, &dependency, &build, "Cargo.toml"),
         Ok(Verdict::Outside)
     );
     assert_eq!(
-        compare(&directory, &first, &build, "missing/Cargo.toml"),
+        compare(&directory, &first, &first, &build, "missing/Cargo.toml"),
         Ok(Verdict::DependenciesOnly)
     );
     assert!(
-        compare(&directory, "HEAD", &build, "Cargo.toml").is_err(),
+        compare(&directory, &first, "HEAD", &build, "Cargo.toml").is_err(),
         "a revision name is rejected"
     );
 }
@@ -195,6 +208,8 @@ fn dependencies_from_outside_the_registry_or_the_repository_need_a_signature() {
         "evil = { git = \"https://example.com/evil\", rev = \"abc\" }",
         "evil = { path = \"../../../outside\" }",
         "evil = { path = \"/tmp/evil\" }",
+        "evil = { path = \"../../fixtures/evil\" }",
+        "evil = { path = \"../sample/../../fixtures\" }",
         "evil = { version = \"=1.0.0\", registry = \"other\" }",
         "evil = { version = \"=1.0.0\", registry-index = \"https://example.com\" }",
         "evil = \"https://example.com/evil\"",
@@ -240,4 +255,21 @@ fn patch_replace_profile_build_and_workspace_changes_need_a_signature() {
     ] {
         assert_eq!(judged(before, from, to), Verdict::Outside, "{to}");
     }
+}
+
+#[test]
+fn workspace_members_come_from_the_root_manifest() {
+    assert_eq!(
+        super::workspace_members(Some(ROOT)),
+        vec![String::from("crates/sample")]
+    );
+    assert_eq!(
+        super::workspace_members(Some("[workspace]\nmembers = [\"a/\", \"b\"]\n")),
+        vec![String::from("a"), String::from("b")]
+    );
+    assert!(super::workspace_members(None).is_empty(), "no manifest");
+    assert!(
+        super::workspace_members(Some("[package]\nname = \"x\"\n")).is_empty(),
+        "no workspace"
+    );
 }

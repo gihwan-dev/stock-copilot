@@ -9,6 +9,7 @@ import {
   readTrust,
   signedBy,
   signerProblems,
+  verify,
 } from "../signatures/verify.mjs";
 import {
   EXTRA_TESTS,
@@ -582,4 +583,171 @@ test("moving the lock point forward needs a signature, emptying or moving it bac
     /자손이고 이 커밋의 조상인/u,
   );
   assert.ok(older === made.lock);
+});
+
+test("a merge whose parents have more than one merge base needs a signature for protected content", () => {
+  const made = lockedRepository();
+  write(made.directory, "docs/x1.md", "x1\n");
+  const x1 = commit(made.directory, "x1");
+  gitIn(made.directory, ["checkout", "--quiet", "--detach", made.base]);
+  write(made.directory, "docs/x2.md", "x2\n");
+  const x2 = commit(made.directory, "x2");
+  gitIn(made.directory, ["checkout", "--quiet", "--detach", x1]);
+  gitIn(made.directory, ["merge", "--quiet", "--no-ff", "--no-edit", x2]);
+  const q1 = gitIn(made.directory, ["rev-parse", "HEAD"]);
+  gitIn(made.directory, ["checkout", "--quiet", "--detach", x2]);
+  gitIn(made.directory, ["merge", "--quiet", "--no-ff", "--no-edit", x1]);
+  write(made.directory, PROTECTED, "check:\n    false\n");
+  const signed = commit(made.directory, "signed protected", keys.user);
+  assert.equal(
+    gitIn(made.directory, ["merge-base", "--all", q1, signed]).split("\n")
+      .length,
+    2,
+  );
+  gitIn(made.directory, ["checkout", "--quiet", "--detach", q1]);
+  gitIn(made.directory, ["merge", "--quiet", "--no-ff", "--no-edit", signed]);
+  const merged = gitIn(made.directory, ["rev-parse", "HEAD"]);
+  assert.equal(read(made.directory, PROTECTED), "check:\n    false\n");
+  const failures = checkLocked(made, merged);
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], new RegExp(`^${merged} .*보호 경로 justfile`, "u"));
+});
+
+test("the first lock point must be the recording commit's first parent", () => {
+  const made = repository();
+  write(made.directory, "docs/a.md", "a\n");
+  commit(made.directory, "between");
+  write(made.directory, SIGNERS_FILE, signersFor(keys.user));
+  write(made.directory, LOCK_FILE, `${made.base}\n`);
+  const grandparent = commit(made.directory, "record an older lock", keys.user);
+  const owner = [ownerKeyOf(keys.user)];
+  assert.match(
+    inactive(made, grandparent, owner).failures.join("\n"),
+    /첫 부모여야 한다/u,
+  );
+  const parent = gitIn(made.directory, ["rev-parse", "HEAD"]);
+  write(made.directory, LOCK_FILE, `${parent}\n`);
+  const fresh = commit(made.directory, "record the parent", keys.user);
+  assert.match(
+    inactive(made, fresh, owner).failures.join("\n"),
+    new RegExp(`${grandparent}: 처음 기록하는 잠금 시점은`, "u"),
+  );
+  const clean = repository();
+  write(clean.directory, "docs/a.md", "a\n");
+  const tip = commit(clean.directory, "between");
+  write(clean.directory, SIGNERS_FILE, signersFor(keys.user));
+  write(clean.directory, LOCK_FILE, `${tip}\n`);
+  const recorded = commit(clean.directory, "record the parent", keys.user);
+  assert.deepEqual(inactive(clean, recorded, owner).failures, []);
+});
+
+test("the owner's keys are fetched only when a lock record is in the pushed range", () => {
+  const made = repository();
+  write(made.directory, PROTECTED, "check:\n    false\n");
+  const head = commit(made.directory, "unrelated");
+  const calls = [];
+  const provider = () => {
+    calls.push("called");
+    return { keys: [ownerKeyOf(keys.user)] };
+  };
+  const quiet = verify({
+    repo: made.directory,
+    base: made.base,
+    head,
+    trust: readTrust(repoRoot),
+    xtask: () => ({ status: 0, stdout: "", stderr: "" }),
+    ownerKeys: provider,
+  });
+  assert.deepEqual(quiet.failures, []);
+  assert.deepEqual(calls, []);
+  const recorded = recordLock(made, keys.user);
+  verify({
+    repo: made.directory,
+    base: made.base,
+    head: recorded,
+    trust: readTrust(repoRoot),
+    xtask: () => ({ status: 0, stdout: "", stderr: "" }),
+    ownerKeys: provider,
+  });
+  assert.deepEqual(calls, ["called"]);
+});
+
+test("a locked check refuses a base that no successful signature run verified", () => {
+  const made = lockedRepository();
+  write(made.directory, "docs/a.md", "a\n");
+  const head = commit(made.directory, "docs");
+  assert.match(
+    verifyIn({
+      directory: made.directory,
+      base: made.base,
+      head,
+      lock: made.lock,
+      signers: signersFor(keys.user),
+      baseKind: "unverified",
+    }).failures.join("\n"),
+    /서명 검사가 통과한 master 커밋이 아닌데/u,
+  );
+});
+
+test("case variants of manifests, config names and protected folders still need a signature", () => {
+  const made = lockedRepository();
+  write(
+    made.directory,
+    "fixtures/evil/cargo.toml",
+    '[package]\nname = "evil"\nversion = "0.0.0"\nbuild = "build.rs"\n',
+  );
+  write(made.directory, "fixtures/evil/build.rs", "fn main() {}\n");
+  const manifest = commit(made.directory, "lowercase manifest");
+  edit(
+    made.directory,
+    MEMBER_MANIFEST,
+    "publish = false\n",
+    'publish = false\n\n[dependencies]\nevil = { path = "../../fixtures/evil" }\n',
+  );
+  const pathDependency = commit(
+    made.directory,
+    "path dependency outside the members",
+  );
+  write(made.directory, "fixtures/x/TSConfig.json", "{}\n");
+  const config = commit(made.directory, "config name");
+  const protectedPaths = [
+    "Harness/x.txt",
+    ".GitHub/workflows/x.yml",
+    "crates/XTask/src/x.rs",
+    "docs/HARNESS.md",
+  ].map((path) => {
+    write(made.directory, "blob.txt", "x\n");
+    const object = gitIn(made.directory, ["hash-object", "-w", "blob.txt"]);
+    gitIn(made.directory, [
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `100644,${object},${path}`,
+    ]);
+    gitIn(made.directory, ["commit", "--quiet", "-m", `case ${path}`]);
+    return [path, gitIn(made.directory, ["rev-parse", "HEAD"])];
+  });
+  const failures = checkLocked(made, protectedPaths.at(-1)[1]).join("\n");
+  assert.match(
+    failures,
+    new RegExp(
+      `${manifest} .*의존성 절 밖 변경 fixtures/evil/cargo\\.toml`,
+      "u",
+    ),
+  );
+  assert.match(
+    failures,
+    new RegExp(`${pathDependency} .*의존성 절 밖 변경 ${MEMBER_MANIFEST}`, "u"),
+  );
+  assert.match(
+    failures,
+    new RegExp(`${config} .*설정 파일 이름 fixtures/x/TSConfig\\.json`, "u"),
+  );
+  protectedPaths.forEach(([path, sha]) =>
+    assert.match(
+      failures,
+      new RegExp(`${sha} .*보호 경로 ${path.replace(/\./gu, "\\.")}`, "u"),
+      path,
+    ),
+  );
 });

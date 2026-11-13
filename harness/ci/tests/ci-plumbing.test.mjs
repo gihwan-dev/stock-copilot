@@ -13,12 +13,13 @@ import {
   readMetadata,
 } from "../linux/exclusions.mjs";
 import { INNER_SCRIPT, offlineCommand } from "../linux/offline.mjs";
+import { VERIFIER, parseArguments } from "../signatures/from-base.mjs";
 import {
-  OWNER_KEYS_URL,
-  VERIFIER,
+  fetchedOwnerKeys,
   ownerKeysFromResponse,
-  parseArguments,
-} from "../signatures/from-base.mjs";
+  ownerKeysRequest,
+  ownerKeysUrl,
+} from "../signatures/owner-keys.mjs";
 import {
   installActionSpec,
   lefthookAsset,
@@ -40,6 +41,9 @@ import {
 const VERIFIER_FILES = [
   "harness/ci/signatures/verify.mjs",
   "harness/ci/signatures/manifests.mjs",
+  "harness/ci/signatures/owner-keys.mjs",
+  "harness/ci/signatures/owner.txt",
+  "harness/claude-hooks/rules.json",
   "harness/ci/signatures/lock-point.txt",
   ".claude/hooks/lib/allowlist.mjs",
   "harness/agent-writable.txt",
@@ -315,7 +319,7 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
     pull_request: { branches: ["master"] },
   });
   assert.equal(ci.jobs.linux.if, undefined);
-  assert.equal(ci.jobs.signatures.if, undefined);
+  assert.equal(ci.jobs.signatures, undefined);
   assert.equal(
     ci.jobs.macos.if,
     "github.event_name == 'push' && github.ref == 'refs/heads/master'",
@@ -328,25 +332,37 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   );
   assert.ok(runs(ci.jobs.macos).includes("lefthook install"));
   assert.ok(runs(ci.jobs.macos).includes('just base="$BASE" check'));
-  const signatureSteps = ci.jobs.signatures.steps;
-  assert.deepEqual(signatureSteps[1].with, {
-    ref: "${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/master' && github.event.before) || 'master' }}",
+  const signatures = workflow("signatures.yml");
+  assert.deepEqual(signatures.on, ci.on);
+  assert.deepEqual(signatures.jobs.signatures.permissions, {
+    contents: "read",
+    actions: "read",
+  });
+  const signatureSteps = signatures.jobs.signatures.steps;
+  assert.deepEqual(signatureSteps[3].with, {
+    ref: "${{ steps.base.outputs.base }}",
     path: "base-tools",
     "fetch-depth": 1,
     "persist-credentials": false,
   });
   assert.deepEqual(
-    signatureSteps.slice(3).map((step) => [step.if, step.run]),
+    signatureSteps.slice(4).map((step) => [step.if, step.run]),
     [
       [
         "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
-        'node base-tools/harness/ci/signatures/from-base.mjs "$GITHUB_WORKSPACE" "$HEAD" --owner "$OWNER"',
+        'node base-tools/harness/ci/signatures/from-base.mjs "$GITHUB_WORKSPACE" "$HEAD"',
       ],
       [
         "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
         "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
       ],
     ],
+  );
+  [ci, nightly, signatures].forEach((file) =>
+    assert.match(
+      file.jobs.notify.steps[2].run,
+      /^node base-tools\/harness\/ci\/notify\.mjs$/u,
+    ),
   );
   assert.deepEqual(nightly.on, { schedule: [{ cron: "0 18 * * *" }] });
   assert.equal(nightly.jobs.macos.if, "needs.changes.outputs.changed == 'yes'");
@@ -373,7 +389,7 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
         ),
     );
   });
-  [ci, nightly].forEach((file) => {
+  [ci, nightly, workflow("signatures.yml")].forEach((file) => {
     assert.match(file.jobs.notify.if, /^failure\(\)/u);
     assert.deepEqual(file.jobs.notify.permissions, { issues: "write" });
   });
@@ -433,23 +449,37 @@ test("signatures run the verifier of a base checkout and fail when it ends witho
   }
 });
 
-test("the base runner takes the target and the owner, and reads GitHub's key list", () => {
-  assert.deepEqual(parseArguments(["r", "h", "--owner", "me"]).owner, "me");
-  assert.deepEqual(
-    parseArguments(["r", "h", "--owner-keys", "f"]).keysFile,
+test("the base runner takes the target, and owner keys come from GitHub with the job token", () => {
+  assert.deepEqual(parseArguments(["r", "h", "--owner-keys", "f"]).passed, [
+    "--owner-keys",
     "f",
-  );
-  [
-    [],
-    ["r", "h"],
-    ["r", "h", "--other", "x"],
-    ["r", "h", "--owner", "me", "x"],
-  ].forEach((args) =>
-    assert.ok(parseArguments(args).problem !== undefined, args.join(" ")),
+  ]);
+  assert.deepEqual(parseArguments(["r", "h"]).passed, []);
+  [[], ["r"], ["r", "h", "--owner", "me"], ["r", "h", "--owner-keys"]].forEach(
+    (args) =>
+      assert.ok(parseArguments(args).problem !== undefined, args.join(" ")),
   );
   assert.equal(
-    OWNER_KEYS_URL("gihwan-dev"),
+    ownerKeysUrl("gihwan-dev"),
     "https://api.github.com/users/gihwan-dev/ssh_signing_keys",
+  );
+  const [program, args] = ownerKeysRequest("gihwan-dev", "t0ken");
+  assert.equal(program, "curl");
+  assert.ok(args.includes("Authorization: Bearer t0ken"));
+  assert.equal(
+    args.at(-1),
+    "https://api.github.com/users/gihwan-dev/ssh_signing_keys",
+  );
+  assert.ok(
+    !ownerKeysRequest("gihwan-dev", "")[1].some((arg) =>
+      arg.startsWith("Authorization"),
+    ),
+  );
+  assert.ok(fetchedOwnerKeys("", "t")().problem !== undefined);
+  assert.ok(fetchedOwnerKeys("a/b", "t")().problem !== undefined);
+  assert.equal(
+    readFileSync(join(repoRoot, "harness/ci/signatures/owner.txt"), "utf8"),
+    "gihwan-dev\n",
   );
   assert.deepEqual(
     ownerKeysFromResponse(
@@ -477,4 +507,94 @@ test("failure notices reuse the open issue with exactly the same title", () => {
     issueBody("https://example.invalid/run/1", "abc"),
     "실패한 실행: https://example.invalid/run/1\n커밋: abc\n",
   );
+});
+
+const baseStep = () =>
+  workflow("signatures.yml").jobs.signatures.steps.find(
+    (step) => step.id === "base",
+  ).run;
+
+const runBaseStep = (made, event, runs) => {
+  const temporary = scratch("verified-base-");
+  try {
+    const bin = join(temporary, "bin");
+    write(temporary, "bin/gh", '#!/bin/sh\ncat "$FAKE_RUNS"\n');
+    run(temporary, "chmod", ["+x", join(bin, "gh")]);
+    write(temporary, "runs.txt", runs.map((sha) => `${sha}\n`).join(""));
+    write(temporary, "output.txt", "");
+    const finished = spawnSync("bash", ["-c", baseStep()], {
+      cwd: made.directory,
+      encoding: "utf8",
+      env: {
+        PATH: `${bin}:${process.env.PATH}`,
+        HOME: process.env.HOME,
+        FAKE_RUNS: join(temporary, "runs.txt"),
+        RUNNER_TEMP: temporary,
+        GITHUB_OUTPUT: join(temporary, "output.txt"),
+        GITHUB_REPOSITORY: "owner/repository",
+        ...event,
+      },
+    });
+    return {
+      status: finished.status,
+      output: Object.fromEntries(
+        readFileSync(join(temporary, "output.txt"), "utf8")
+          .split("\n")
+          .filter((line) => line !== "")
+          .map((line) => line.split("=")),
+      ),
+    };
+  } finally {
+    removeRepository(temporary);
+  }
+};
+
+test("the signature base is the newest master commit a successful signature run verified", () => {
+  const made = createRepository();
+  try {
+    const verified = commit(made.directory, "verified");
+    const failed = commit(made.directory, "failed push");
+    const head = commit(made.directory, "next push");
+    const master = {
+      EVENT_NAME: "push",
+      REF: "refs/heads/master",
+      BEFORE: failed,
+      HEAD: head,
+    };
+    assert.deepEqual(
+      runBaseStep(made, master, ["f".repeat(40), verified, made.base]),
+      {
+        status: 0,
+        output: { base: verified, kind: "verified" },
+      },
+    );
+    assert.deepEqual(runBaseStep(made, master, []), {
+      status: 0,
+      output: { base: failed, kind: "unverified" },
+    });
+    assert.equal(runBaseStep(made, master, ["f".repeat(40)]).status, 1);
+    gitIn(made.directory, [
+      "update-ref",
+      "refs/remotes/origin/master",
+      verified,
+    ]);
+    gitIn(made.directory, ["checkout", "--quiet", "-b", "feature", made.base]);
+    const branch = commit(made.directory, "branch work");
+    const push = {
+      EVENT_NAME: "push",
+      REF: "refs/heads/feature",
+      BEFORE: "0".repeat(40),
+      HEAD: branch,
+    };
+    assert.deepEqual(runBaseStep(made, push, [head]), {
+      status: 0,
+      output: { base: made.base, kind: "verified" },
+    });
+    assert.deepEqual(runBaseStep(made, push, []), {
+      status: 0,
+      output: { base: made.base, kind: "unverified" },
+    });
+  } finally {
+    removeRepository(made.directory);
+  }
 });

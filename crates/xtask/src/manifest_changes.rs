@@ -28,6 +28,8 @@ const PLAIN_KEYS: [&str; 8] = [
 const VERSION_KEY: &str = "version";
 const PATH_KEY: &str = "path";
 const WORKSPACE_KEY: &str = "workspace";
+const MEMBERS_KEY: &str = "members";
+const ROOT_MANIFEST: &str = "Cargo.toml";
 const FORBIDDEN_IN_VERSION: [char; 3] = [':', '/', '\\'];
 const BLOB_MODES: [&str; 2] = ["100644", "100755"];
 
@@ -48,7 +50,7 @@ fn outside_dependencies(text: &str) -> Result<toml::Table, String> {
     Ok(table)
 }
 
-fn inside_repository(directory: &str, relative: &str) -> Verdict {
+fn member_path(directory: &str, relative: &str, members: &[String]) -> Verdict {
     if relative.starts_with('/') || relative.contains(['\\', ':']) {
         return Verdict::Outside;
     }
@@ -67,7 +69,32 @@ fn inside_repository(directory: &str, relative: &str) -> Verdict {
             name => parts.push(name),
         }
     }
-    Verdict::DependenciesOnly
+    let target = parts.join("/");
+    if members.iter().any(|member| member == &target) {
+        Verdict::DependenciesOnly
+    } else {
+        Verdict::Outside
+    }
+}
+
+pub(crate) fn workspace_members(text: Option<&str>) -> Vec<String> {
+    let listed = text
+        .and_then(|manifest| manifest.parse::<toml::Table>().ok())
+        .and_then(|table| {
+            table
+                .get(WORKSPACE_TABLE)
+                .and_then(toml::Value::as_table)
+                .and_then(|workspace| workspace.get(MEMBERS_KEY))
+                .and_then(toml::Value::as_array)
+                .map(|members| {
+                    members
+                        .iter()
+                        .filter_map(toml::Value::as_str)
+                        .map(|member| member.trim_end_matches('/').to_owned())
+                        .collect::<Vec<String>>()
+                })
+        });
+    listed.into_iter().flatten().collect()
 }
 
 fn plain_version(value: &toml::Value) -> Verdict {
@@ -77,14 +104,14 @@ fn plain_version(value: &toml::Value) -> Verdict {
     }
 }
 
-fn plain_entry(directory: &str, value: &toml::Value) -> Verdict {
+fn plain_entry(directory: &str, members: &[String], value: &toml::Value) -> Verdict {
     let Some(entry) = value.as_table() else {
         return plain_version(value);
     };
     let unknown = entry.keys().any(|key| !PLAIN_KEYS.contains(&key.as_str()));
     let version = entry.get(VERSION_KEY).map(plain_version);
     let path = entry.get(PATH_KEY).map(|path| match path.as_str() {
-        Some(text) => inside_repository(directory, text),
+        Some(text) => member_path(directory, text, members),
         None => Verdict::Outside,
     });
     let workspace = entry.get(WORKSPACE_KEY).map(|flag| match flag.as_bool() {
@@ -114,12 +141,12 @@ fn dependency_entries(table: &toml::Table) -> Vec<&toml::Value> {
         .collect()
 }
 
-fn plain_dependencies(directory: &str, text: &str) -> Verdict {
+fn plain_dependencies(directory: &str, members: &[String], text: &str) -> Verdict {
     match text.parse::<toml::Table>() {
         Ok(table) => {
             if dependency_entries(&table)
                 .into_iter()
-                .any(|entry| plain_entry(directory, entry) == Verdict::Outside)
+                .any(|entry| plain_entry(directory, members, entry) == Verdict::Outside)
             {
                 Verdict::Outside
             } else {
@@ -130,14 +157,19 @@ fn plain_dependencies(directory: &str, text: &str) -> Verdict {
     }
 }
 
-pub(crate) fn verdict(directory: &str, before: Option<&str>, after: Option<&str>) -> Verdict {
+pub(crate) fn verdict(
+    directory: &str,
+    members: &[String],
+    before: Option<&str>,
+    after: Option<&str>,
+) -> Verdict {
     match (before, after) {
         (None, None) => Verdict::DependenciesOnly,
         (Some(left), Some(right)) if left == right => Verdict::DependenciesOnly,
         (Some(left), Some(right)) => {
             match (outside_dependencies(left), outside_dependencies(right)) {
                 (Ok(kept_left), Ok(kept_right)) if kept_left == kept_right => {
-                    plain_dependencies(directory, right)
+                    plain_dependencies(directory, members, right)
                 }
                 _ => Verdict::Outside,
             }
@@ -169,24 +201,31 @@ fn blob(root: &Path, commit: &str, path: &str) -> Result<Option<String>, String>
 
 pub(crate) fn compare(
     root: &Path,
+    base: &str,
     parent: &str,
     commit: &str,
     path: &str,
 ) -> Result<Verdict, String> {
-    if !(is_commit_id(parent) && is_commit_id(commit)) {
+    if !(is_commit_id(base) && is_commit_id(parent) && is_commit_id(commit)) {
         return Err(String::from("manifest-changes는 40자리 커밋 ID만 받는다"));
     }
+    let members = workspace_members(blob(root, base, ROOT_MANIFEST)?.as_deref());
     let before = blob(root, parent, path)?;
     let after = blob(root, commit, path)?;
     let directory = path.rsplit_once('/').map_or("", |(folder, _)| folder);
-    Ok(verdict(directory, before.as_deref(), after.as_deref()))
+    Ok(verdict(
+        directory,
+        &members,
+        before.as_deref(),
+        after.as_deref(),
+    ))
 }
 
 pub(crate) fn command(arguments: &[String]) -> ExitCode {
     let outcome = match arguments {
-        [root, parent, commit, path] => compare(Path::new(root), parent, commit, path),
+        [root, base, parent, commit, path] => compare(Path::new(root), base, parent, commit, path),
         _ => Err(String::from(
-            "사용법: xtask manifest-changes <저장소> <부모 커밋> <커밋> <경로>",
+            "사용법: xtask manifest-changes <저장소> <기준 커밋> <부모 커밋> <커밋> <경로>",
         )),
     };
     let (line, code) = match outcome {

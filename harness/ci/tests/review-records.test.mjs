@@ -29,13 +29,30 @@ const fixture = {};
 before(() => {
   fixture.directory = scratch("review-records-");
   gitIn(fixture.directory, ["init", "--quiet"]);
-  gitIn(fixture.directory, ["commit", "--quiet", "--allow-empty", "-m", "x"]);
-  fixture.commit = gitIn(fixture.directory, ["rev-parse", "--short=7", "HEAD"]);
+  gitIn(fixture.directory, [
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "base",
+  ]);
+  fixture.base = gitIn(fixture.directory, ["rev-parse", "--short=7", "HEAD"]);
+  gitIn(fixture.directory, [
+    "commit",
+    "--quiet",
+    "--allow-empty",
+    "-m",
+    "target",
+  ]);
+  fixture.commit = gitIn(fixture.directory, ["rev-parse", "HEAD"]);
 });
 
 after(() => rmSync(fixture.directory, { recursive: true, force: true }));
 
-const filled = (text) => text.replaceAll("{commit}", fixture.commit);
+const filled = (text) =>
+  text
+    .replaceAll("{commit}", fixture.commit)
+    .replaceAll("{base}", fixture.base);
 
 const problemsOf = (entry) => {
   rmSync(join(fixture.directory, "docs"), { recursive: true, force: true });
@@ -82,7 +99,7 @@ test("states are an exact list and only the done ones need a record", () => {
   assert.deepEqual(TABLE_HEADER, ["작업", "상태", "대상 커밋", "리뷰 기록"]);
   assert.deepEqual(DONE_STATES, ["완료", "일부 완료"]);
   assert.deepEqual(OPEN_STATES, ["해결"]);
-  assert.deepEqual(WAIVER_DECIDERS, ["사용자", "메인 에이전트"]);
+  assert.deepEqual(WAIVER_DECIDERS, ["사용자"]);
   assert.equal(WAIVER_REASON_MINIMUM, 20);
   ["완료", "일부 완료", "완료 (3회차까지)", "완료 (12회차까지)"].forEach(
     (state) => assert.equal(isDone(state), true, state),

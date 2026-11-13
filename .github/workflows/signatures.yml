@@ -1,0 +1,131 @@
+{
+  "name": "signatures",
+  "on": {
+    "push": {
+      "branches": [
+        "**"
+      ]
+    },
+    "pull_request": {
+      "branches": [
+        "master"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "signatures": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 30,
+      "permissions": {
+        "contents": "read",
+        "actions": "read"
+      },
+      "outputs": {
+        "base": "${{ steps.base.outputs.base }}"
+      },
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "verified base",
+          "id": "base",
+          "run": "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 기준 %s (%s)\\n' \"$base\" \"$kind\"\nprintf 'base=%s\\nkind=%s\\n' \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}",
+            "EVENT_NAME": "${{ github.event_name }}",
+            "REF": "${{ github.ref }}",
+            "BEFORE": "${{ github.event.before }}",
+            "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}"
+          }
+        },
+        {
+          "name": "base checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ steps.base.outputs.base }}",
+            "path": "base-tools",
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "signatures from the base checkout",
+          "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
+          "run": "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\"",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}",
+            "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "SIGNATURE_BASE_KIND": "${{ steps.base.outputs.kind }}"
+          }
+        },
+        {
+          "name": "signatures inactive",
+          "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
+          "run": "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'"
+        }
+      ]
+    },
+    "notify": {
+      "needs": [
+        "signatures"
+      ],
+      "if": "failure() && github.event_name == 'push' && github.ref == 'refs/heads/master'",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "permissions": {
+        "issues": "write"
+      },
+      "steps": [
+        {
+          "name": "base checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ needs.signatures.outputs.base }}",
+            "path": "base-tools",
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": "base-tools/.node-version"
+          }
+        },
+        {
+          "name": "issue",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+          "run": "node base-tools/harness/ci/notify.mjs",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}",
+            "TITLE": "CI 실패: 서명 검사",
+            "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "SHA": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "no notifier",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+          "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
+        }
+      ]
+    }
+  }
+}

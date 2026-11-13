@@ -47,12 +47,24 @@ const packageOutsideDependencies = (text) => {
 };
 
 export const manifestKind = (path) => {
-  const name = path.split("/").at(-1);
-  return name === "Cargo.toml"
+  const name = (path.split("/").at(-1) ?? "").toLowerCase();
+  return name === "cargo.toml"
     ? "cargo"
     : name === "package.json"
       ? "package"
       : undefined;
+};
+
+const escapedPiece = (piece) => piece.replace(/[.+?^${}()|[\]\\]/gu, "\\$&");
+
+export const configNameMatches = (names, path) => {
+  const name = (path.split("/").at(-1) ?? "").toLowerCase();
+  return names.some((pattern) =>
+    new RegExp(
+      `^${pattern.toLowerCase().split("*").map(escapedPiece).join(".*")}$`,
+      "u",
+    ).test(name),
+  );
 };
 
 export const packageChangesOutsideDependencies = (before, after) => {

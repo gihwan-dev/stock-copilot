@@ -161,7 +161,15 @@ export const realAllowlist = () =>
 
 export const ownerKeyOf = (key) => key.public.split(" ").slice(0, 2).join(" ");
 
-export const verifyIn = ({ directory, base, head, lock, signers, ownerKeys }) =>
+export const verifyIn = ({
+  directory,
+  base,
+  head,
+  lock,
+  signers,
+  ownerKeys,
+  baseKind,
+}) =>
   verify({
     repo: directory,
     base,
@@ -170,7 +178,12 @@ export const verifyIn = ({ directory, base, head, lock, signers, ownerKeys }) =>
       lock: parseLock(lock === undefined ? "" : `${lock}\n`),
       signers,
       allowlist: realAllowlist(),
+      configNames: JSON.parse(
+        readFileSync(join(repoRoot, "harness/claude-hooks/rules.json"), "utf8"),
+      ).paths.configFiles.names,
     },
     xtask: xtaskRunner(repoRoot),
-    ownerKeys,
+    ownerKeys:
+      ownerKeys === undefined ? undefined : () => ({ keys: ownerKeys }),
+    baseKind,
   });

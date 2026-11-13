@@ -52,7 +52,7 @@
       "steps": [
         {
           "name": "issue",
-          "run": "node harness/ci/notify.mjs",
+          "run": "node base-tools/harness/ci/notify.mjs",
           "env": {
             "GH_TOKEN": "${{ github.token }}"
           }

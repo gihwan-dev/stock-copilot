@@ -14,6 +14,12 @@ import {
   parseAllowlist,
 } from "../../../.claude/hooks/lib/allowlist.mjs";
 import {
+  fetchedOwnerKeys,
+  fileOwnerKeys,
+  missingOwnerKeys,
+} from "./owner-keys.mjs";
+import {
+  configNameMatches,
   manifestKind,
   packageChangesOutsideDependencies,
 } from "./manifests.mjs";
@@ -101,6 +107,19 @@ export const parseLock = (text) =>
             problem: `${LOCK_FILE}는 비어 있거나 40자리 커밋 ID 한 줄이어야 한다`,
           };
 
+export const RULES_FILE = "harness/claude-hooks/rules.json";
+
+export const OWNER_FILE = "harness/ci/signatures/owner.txt";
+
+const configNamesOf = (text) => {
+  try {
+    const names = JSON.parse(text).paths.configFiles.names;
+    return Array.isArray(names) ? names : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export const readTrust = (root) => {
   const read = (path) =>
     existsSync(join(root, path))
@@ -110,6 +129,8 @@ export const readTrust = (root) => {
     lock: parseLock(read(LOCK_FILE)),
     signers: read(SIGNERS_FILE) ?? "",
     allowlist: parseAllowlist(read(ALLOWLIST_FILE) ?? ""),
+    configNames: configNamesOf(read(RULES_FILE) ?? ""),
+    owner: (read(OWNER_FILE) ?? "").trim(),
   };
 };
 
@@ -170,10 +191,11 @@ const testChangeReasons = (xtask, repo, base, parent, commit) => {
     : [`기존 테스트 판정 실패: ${run.stderr.trim() || run.stdout.trim()}`];
 };
 
-const manifestReason = (xtask, repo, parent, commit, path) => {
+const manifestReason = (context, parent, commit, path) => {
+  const { xtask, repo, base } = context;
   const kind = manifestKind(path);
   if (kind === "cargo") {
-    const run = xtask(["manifest-changes", repo, parent, commit, path]);
+    const run = xtask(["manifest-changes", repo, base, parent, commit, path]);
     return run.status === 0 ? [] : [`의존성 절 밖 변경 ${path}`];
   }
   if (kind === "package") {
@@ -204,13 +226,19 @@ export const changeReasons = (context, parent, commit) => {
     if (!isWritable(allowlist, path)) {
       return [`보호 경로 ${path}`];
     }
+    const kind = manifestKind(path);
+    const config =
+      kind === undefined && configNameMatches(context.configNames, path)
+        ? [`설정 파일 이름 ${path}`]
+        : [];
     const testScript =
-      path.endsWith(TEST_SCRIPT_SUFFIX) &&
+      path.toLowerCase().endsWith(TEST_SCRIPT_SUFFIX) &&
       blob(repo, parent, path) !== undefined
         ? [`기존 테스트 변경 ${path}`]
         : [];
     return [
-      ...manifestReason(xtask, repo, parent, commit, path),
+      ...manifestReason(context, parent, commit, path),
+      ...config,
       ...testScript,
     ];
   });
@@ -225,18 +253,20 @@ const parentsOf = (repo, commit) =>
     .split(" ")
     .slice(1);
 
-const mergeBase = (repo, left, right) => {
-  const run = git(repo, ["merge-base", left, right]);
-  return run.status === 0 ? run.stdout.trim().split("\n")[0] : undefined;
+const mergeBases = (repo, left, right) => {
+  const run = git(repo, ["merge-base", "--all", left, right]);
+  return run.status === 0
+    ? run.stdout.split("\n").filter((line) => line !== "")
+    : [];
 };
 
 const isAncestor = (repo, ancestor, descendant) =>
   git(repo, ["merge-base", "--is-ancestor", ancestor, descendant]).status === 0;
 
 const sideIntroduced = (context, from, to, reason) => {
-  const common = mergeBase(context.repo, from, to);
+  const bases = mergeBases(context.repo, from, to);
   return (
-    common !== undefined && changeReasons(context, common, to).includes(reason)
+    bases.length === 1 && changeReasons(context, bases[0], to).includes(reason)
   );
 };
 
@@ -318,19 +348,20 @@ const recordingProblems = (repo, recording, ownerKeys) => {
       : [
           `${recording.commit}: 잠금 시점을 기록하는 커밋은 그 커밋의 ${SIGNERS_FILE}에 있는 키로 서명해야 한다`,
         ]),
-    ...(ownerKeys === undefined
-      ? [
-          `${recording.commit}: 저장소 소유자의 SSH 서명 키 목록이 없어 판정할 수 없다(CI만 판정한다)`,
-        ]
-      : signedBy(repo, ownerSigners(ownerKeys), recording.commit)
-        ? []
-        : [
-            `${recording.commit}: 잠금 시점을 기록하는 커밋의 서명 키가 저장소 소유자의 GitHub SSH 서명 키에 없다`,
-          ]),
-    ...(isAncestor(repo, recording.lock.commit, recording.commit)
+    ...(() => {
+      const owner = ownerKeys();
+      return owner.problem !== undefined
+        ? [`${recording.commit}: ${owner.problem}`]
+        : signedBy(repo, ownerSigners(owner.keys), recording.commit)
+          ? []
+          : [
+              `${recording.commit}: 잠금 시점을 기록하는 커밋의 서명 키가 저장소 소유자의 GitHub SSH 서명 키에 없다`,
+            ];
+    })(),
+    ...(parentsOf(repo, recording.commit)[0] === recording.lock.commit
       ? []
       : [
-          `${recording.commit}: 잠금 시점 ${recording.lock.commit}이 이 커밋의 조상이 아니다`,
+          `${recording.commit}: 처음 기록하는 잠금 시점은 이 커밋의 첫 부모여야 한다(기록: ${recording.lock.commit})`,
         ]),
   ];
 };
@@ -357,7 +388,25 @@ const lockChangeProblems = (repo, base, lock, commit) => {
       ];
 };
 
-export const verify = ({ repo, base, head, trust, xtask, ownerKeys }) => {
+const memoized = (provide) => {
+  const cache = [];
+  return () => {
+    if (cache.length === 0) {
+      cache.push(provide());
+    }
+    return cache[0];
+  };
+};
+
+export const verify = ({
+  repo,
+  base,
+  head,
+  trust,
+  xtask,
+  ownerKeys,
+  baseKind = "verified",
+}) => {
   const lines = [];
   const failures = [];
   if (!COMMIT.test(base) || !COMMIT.test(head)) {
@@ -375,6 +424,12 @@ export const verify = ({ repo, base, head, trust, xtask, ownerKeys }) => {
   if (trust.lock.problem !== undefined) {
     return { lines, failures: [trust.lock.problem] };
   }
+  if (!Array.isArray(trust.configNames)) {
+    return {
+      lines,
+      failures: [`${RULES_FILE}의 설정 파일 이름 목록을 읽지 못했다`],
+    };
+  }
   if (trust.lock.state === "empty") {
     const recordings = lockRecordings(repo, base, head);
     lines.push(
@@ -388,8 +443,20 @@ export const verify = ({ repo, base, head, trust, xtask, ownerKeys }) => {
     return {
       lines,
       failures: recordings.flatMap((recording) =>
-        recordingProblems(repo, recording, ownerKeys),
+        recordingProblems(
+          repo,
+          recording,
+          memoized(ownerKeys ?? missingOwnerKeys),
+        ),
       ),
+    };
+  }
+  if (baseKind !== "verified") {
+    return {
+      lines,
+      failures: [
+        `기준 ${base}은 서명 검사가 통과한 master 커밋이 아닌데 잠금 시점이 기록돼 있다`,
+      ],
     };
   }
   const signers = signerProblems(trust.signers);
@@ -415,6 +482,7 @@ export const verify = ({ repo, base, head, trust, xtask, ownerKeys }) => {
     repo,
     base,
     allowlist: trust.allowlist,
+    configNames: trust.configNames,
     xtask,
   };
   commits.forEach((commit) => {
@@ -434,12 +502,6 @@ export const verify = ({ repo, base, head, trust, xtask, ownerKeys }) => {
   return { lines, failures };
 };
 
-export const readOwnerKeys = (file) =>
-  readFileSync(file, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
-
 const toolsRoot = resolve(
   fileURLToPath(import.meta.url),
   "..",
@@ -448,32 +510,45 @@ const toolsRoot = resolve(
   "..",
 );
 
-const ownerKeysArgument = (rest) =>
-  rest.length === 2 && rest[0] === "--owner-keys"
-    ? { keys: readOwnerKeys(rest[1]) }
-    : rest.length === 0
-      ? { keys: undefined }
-      : { problem: "알 수 없는 인자" };
+export const parseCommandLine = (args) => {
+  const [repo, base, head, ...rest] = args;
+  if (repo === undefined || base === undefined || head === undefined) {
+    return { problem: "인자 부족" };
+  }
+  const options = { repo, base, head, baseKind: "verified" };
+  for (let index = 0; index < rest.length; index += 1) {
+    if (rest[index] === "--owner-keys" && rest[index + 1] !== undefined) {
+      options.ownerKeysFile = rest[index + 1];
+      index += 1;
+    } else if (rest[index] === "--unverified-base") {
+      options.baseKind = "unverified";
+    } else {
+      return { problem: `알 수 없는 인자 ${rest[index]}` };
+    }
+  }
+  return options;
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [repo, base, head, ...rest] = process.argv.slice(2);
-  const owner =
-    repo === undefined || base === undefined || head === undefined
-      ? { problem: "인자 부족" }
-      : ownerKeysArgument(rest);
-  if (owner.problem !== undefined) {
+  const options = parseCommandLine(process.argv.slice(2));
+  if (options.problem !== undefined) {
     process.stderr.write(
-      "사용법: node harness/ci/signatures/verify.mjs <저장소> <기준 커밋> <대상 커밋> [--owner-keys <파일>]\n",
+      "사용법: node harness/ci/signatures/verify.mjs <저장소> <기준 커밋> <대상 커밋> [--owner-keys <파일>] [--unverified-base]\n",
     );
     process.exitCode = 2;
   } else {
+    const trust = readTrust(toolsRoot);
     const outcome = verify({
-      repo: resolve(repo),
-      base,
-      head,
-      trust: readTrust(toolsRoot),
+      repo: resolve(options.repo),
+      base: options.base,
+      head: options.head,
+      trust,
       xtask: xtaskRunner(toolsRoot),
-      ownerKeys: owner.keys,
+      ownerKeys:
+        options.ownerKeysFile === undefined
+          ? fetchedOwnerKeys(trust.owner, process.env.GH_TOKEN ?? "")
+          : fileOwnerKeys(options.ownerKeysFile),
+      baseKind: options.baseKind,
     });
     outcome.lines.forEach((line) => process.stdout.write(`${line}\n`));
     outcome.failures.forEach((failure) =>

@@ -16,51 +16,6 @@
     "contents": "read"
   },
   "jobs": {
-    "signatures": {
-      "runs-on": "ubuntu-24.04-arm",
-      "timeout-minutes": 30,
-      "steps": [
-        {
-          "name": "checkout",
-          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "with": {
-            "fetch-depth": 0,
-            "persist-credentials": false
-          }
-        },
-        {
-          "name": "base checkout",
-          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-          "with": {
-            "ref": "${{ github.event.pull_request.base.sha || (github.ref == 'refs/heads/master' && github.event.before) || 'master' }}",
-            "path": "base-tools",
-            "fetch-depth": 1,
-            "persist-credentials": false
-          }
-        },
-        {
-          "name": "node",
-          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
-          "with": {
-            "node-version-file": ".node-version"
-          }
-        },
-        {
-          "name": "signatures from the base checkout",
-          "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') != ''",
-          "run": "node base-tools/harness/ci/signatures/from-base.mjs \"$GITHUB_WORKSPACE\" \"$HEAD\" --owner \"$OWNER\"",
-          "env": {
-            "HEAD": "${{ github.event.pull_request.head.sha || github.sha }}",
-            "OWNER": "${{ github.repository_owner }}"
-          }
-        },
-        {
-          "name": "signatures inactive",
-          "if": "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
-          "run": "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'"
-        }
-      ]
-    },
     "linux": {
       "runs-on": "ubuntu-24.04-arm",
       "timeout-minutes": 60,
@@ -192,7 +147,6 @@
     },
     "notify": {
       "needs": [
-        "signatures",
         "linux",
         "macos"
       ],
@@ -204,9 +158,11 @@
       },
       "steps": [
         {
-          "name": "checkout",
+          "name": "base checkout",
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
+            "ref": "${{ github.event.before }}",
+            "path": "base-tools",
             "fetch-depth": 1,
             "persist-credentials": false
           }
@@ -215,18 +171,24 @@
           "name": "node",
           "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
           "with": {
-            "node-version-file": ".node-version"
+            "node-version-file": "base-tools/.node-version"
           }
         },
         {
           "name": "issue",
-          "run": "node harness/ci/notify.mjs",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+          "run": "node base-tools/harness/ci/notify.mjs",
           "env": {
             "GH_TOKEN": "${{ github.token }}",
             "TITLE": "CI 실패: master",
             "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
             "SHA": "${{ github.sha }}"
           }
+        },
+        {
+          "name": "no notifier",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+          "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
         }
       ]
     }

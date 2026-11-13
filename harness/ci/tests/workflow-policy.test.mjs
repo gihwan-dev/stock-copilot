@@ -59,7 +59,8 @@ test("every workflow policy rule has a case or a repository example", () => {
   assert.deepEqual(
     RULES.filter(
       (rule) =>
-        !seen.has(rule) && !["unlisted-file", "missing-file"].includes(rule),
+        !seen.has(rule) &&
+        !["unlisted-file", "missing-file", "expected"].includes(rule),
     ),
     [],
   );
@@ -71,13 +72,15 @@ test("the repository workflows pass the policy", () => {
 
 test("the policy is an allowlist that pins the reviewed actions and grants issue writes only to the notify jobs", () => {
   assert.deepEqual(policy.permissions, { contents: "read" });
-  assert.deepEqual(Object.keys(policy.jobPermissions).sort(), [
-    ".github/workflows/ci.yml#notify",
-    ".github/workflows/nightly.yml#notify",
-  ]);
-  Object.values(policy.jobPermissions).forEach((permissions) =>
-    assert.deepEqual(permissions, { issues: "write" }),
-  );
+  assert.deepEqual(policy.jobPermissions, {
+    ".github/workflows/ci.yml#notify": { issues: "write" },
+    ".github/workflows/nightly.yml#notify": { issues: "write" },
+    ".github/workflows/signatures.yml#notify": { issues: "write" },
+    ".github/workflows/signatures.yml#signatures": {
+      contents: "read",
+      actions: "read",
+    },
+  });
   assert.deepEqual(Object.keys(policy.events).sort(), [
     "pull_request",
     "push",
@@ -99,7 +102,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
   policy.commands.forEach((command) =>
     assert.match(
       command,
-      /^(node (base-tools\/)?harness\/ci\/|just |lefthook install$|corepack enable$|echo '서명 검사 비활성)/u,
+      /^(node (base-tools\/)?harness\/ci\/|just |lefthook install$|corepack enable$|echo '(서명 검사 비활성|알림 없음)|set -euo pipefail\ngh api "repos\/\$GITHUB_REPOSITORY\/actions\/workflows\/signatures\.yml\/runs)/u,
       command,
     ),
   );
@@ -197,4 +200,84 @@ test("an unlisted file under .github and a missing workflow fail the repository 
 
 test("the policy file is the one the check reads", () => {
   assert.equal(POLICY_FILE, "harness/ci/workflow-policy/policy.json");
+});
+
+const writtenVariant = (path, change) => {
+  const directory = scratch("workflow-variant-");
+  cpSync(join(repoRoot, ".github"), join(directory, ".github"), {
+    recursive: true,
+  });
+  const workflow = JSON.parse(readFileSync(join(directory, path), "utf8"));
+  change(workflow);
+  writeFileSync(
+    join(directory, path),
+    `${JSON.stringify(workflow, undefined, 2)}\n`,
+  );
+  try {
+    return repositoryFindings(directory, policy, toolSpec)
+      .filter((item) => item.path === path)
+      .map((item) => item.rule);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+test("every workflow file must equal the protected expectation exactly", () => {
+  const signatures = ".github/workflows/signatures.yml";
+  const ci = ".github/workflows/ci.yml";
+  const job = (workflow) => workflow.jobs.signatures.steps;
+  [
+    [
+      signatures,
+      (w) => {
+        job(w)[4].env.HEAD = "0".repeat(40);
+      },
+    ],
+    [
+      signatures,
+      (w) => {
+        job(w)[4].env.OWNER = "someone-else";
+      },
+    ],
+    [
+      signatures,
+      (w) => {
+        [job(w)[4].if, job(w)[5].if] = [job(w)[5].if, job(w)[4].if];
+      },
+    ],
+    [
+      signatures,
+      (w) => {
+        delete w.jobs.signatures;
+        w.jobs.notify.needs = [];
+      },
+    ],
+    [
+      signatures,
+      (w) => {
+        job(w)[0].with.path = "base-tools";
+      },
+    ],
+    [
+      signatures,
+      (w) => {
+        w.jobs.signatures.steps = [job(w)[5]];
+      },
+    ],
+    [
+      ci,
+      (w) => {
+        w.jobs.linux.steps = [{ name: "pnpm", run: "corepack enable" }];
+      },
+    ],
+  ].forEach(([path, change], index) =>
+    assert.ok(
+      writtenVariant(path, change).includes("expected"),
+      `variant ${index}`,
+    ),
+  );
+  assert.deepEqual(
+    writtenVariant(ci, () => undefined),
+    [],
+  );
 });

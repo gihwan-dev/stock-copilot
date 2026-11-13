@@ -28,6 +28,7 @@ export const RULES = [
   "environment",
   "checkout-credentials",
   "tool-versions",
+  "expected",
   "unlisted-file",
   "missing-file",
 ];
@@ -213,26 +214,30 @@ const filesUnder = (root, relative) =>
   );
 
 export const repositoryFindings = (root, policy, toolSpec) => {
+  const files = Object.keys(policy.expected).sort();
   const present = existsSync(join(root, GITHUB_DIRECTORY))
     ? filesUnder(root, GITHUB_DIRECTORY).sort()
     : [];
   return [
     ...present
-      .filter((path) => !policy.files.includes(path))
+      .filter((path) => !files.includes(path))
       .map((path) => ({ path, rule: finding("unlisted-file") })),
-    ...policy.files
+    ...files
       .filter((path) => !present.includes(path))
       .map((path) => ({ path, rule: finding("missing-file") })),
-    ...policy.files
+    ...files
       .filter((path) => present.includes(path))
-      .flatMap((path) =>
-        workflowFindings(
-          path,
-          readFileSync(join(root, path), "utf8"),
-          policy,
-          toolSpec,
-        ).map((rule) => ({ path, rule })),
-      ),
+      .flatMap((path) => {
+        const text = readFileSync(join(root, path), "utf8");
+        const expected = `${JSON.stringify(policy.expected[path], undefined, 2)}\n`;
+        return [
+          ...workflowFindings(path, text, policy, toolSpec),
+          ...workflowFindings(path, expected, policy, toolSpec).map(
+            (rule) => `policy-expected:${rule}`,
+          ),
+          ...(text === expected ? [] : [finding("expected")]),
+        ].map((rule) => ({ path, rule }));
+      }),
   ];
 };
 

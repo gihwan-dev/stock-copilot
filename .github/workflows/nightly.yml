@@ -174,9 +174,11 @@
       },
       "steps": [
         {
-          "name": "checkout",
+          "name": "base checkout",
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
+            "ref": "master",
+            "path": "base-tools",
             "fetch-depth": 1,
             "persist-credentials": false
           }
@@ -185,18 +187,24 @@
           "name": "node",
           "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
           "with": {
-            "node-version-file": ".node-version"
+            "node-version-file": "base-tools/.node-version"
           }
         },
         {
           "name": "issue",
-          "run": "node harness/ci/notify.mjs",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+          "run": "node base-tools/harness/ci/notify.mjs",
           "env": {
             "GH_TOKEN": "${{ github.token }}",
             "TITLE": "CI 실패: 밤 작업",
             "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
             "SHA": "${{ github.sha }}"
           }
+        },
+        {
+          "name": "no notifier",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+          "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
         }
       ]
     }
