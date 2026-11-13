@@ -28,6 +28,16 @@ pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
 pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};
 
+mod thesis;
+pub use thesis::{
+    ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
+    CriterionAssessment, CriterionComparison, CriterionKind, CriterionMetric, CriterionObservation,
+    CriterionValue, CriterionVerdict, Evidence, EvidenceRef, EvidenceUrl, HistoryAction,
+    HistoryEntry, JudgedClaim, JudgedCriterion, KillCriterion, MachineCondition, ProposedChange,
+    Thesis, ThesisError, ThesisOperation, ThesisPatch, ThesisStatus, ThesisVersion, ToolReference,
+    UserDecision, UserReason,
+};
+
 mod numeric_input;
 mod price;
 mod quantity;
