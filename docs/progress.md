@@ -55,7 +55,7 @@ Claude Code 샌드박스는 아직 꺼져 있다. 복사본 실측에서 작업 
 
 ## CI
 
-원격 저장소는 `github.com/gihwan-dev/stock-copilot`(공개)이다. 푸시마다 서명 작업과 Linux 작업이 돌고, `master` 푸시와 밤에 macOS 전체 검사가 돈다. 서명 검사는 잠금 시점(`harness/ci/signatures/lock-point.txt`)이 기록될 때까지 "비활성"을 출력하고 통과한다.
+원격 저장소는 `github.com/gihwan-dev/stock-copilot`(공개)이다. 푸시마다 서명 작업과 Linux 작업이 돌고, `master` 푸시와 밤에 macOS 전체 검사가 돈다. 서명 검사는 잠금 시점(`harness/ci/signatures/lock-point.txt`)이 기록될 때까지 "비활성"을 출력하고 통과한다. 2026-11-13에 `master`(299c20d)에서 세 작업이 모두 성공했다.
 
 | 작업 | 상태 | 대상 커밋 | 리뷰 기록 | 뒤 작업에 넘긴 것 |
 |---|---|---|---|---|
