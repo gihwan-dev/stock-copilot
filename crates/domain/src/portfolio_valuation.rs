@@ -61,15 +61,19 @@ impl<T> Total<T> {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValuedHolding {
-    instrument: ResolvedOrderInstrument,
+    holding: crate::Holding,
     valuation: HoldingValuation,
     currency_sum: Result<(), EvaluationError>,
     conversion: Result<(), EvaluationError>,
 }
 impl ValuedHolding {
     #[must_use]
+    pub fn holding(&self) -> &crate::Holding {
+        &self.holding
+    }
+    #[must_use]
     pub fn instrument(&self) -> &ResolvedOrderInstrument {
-        &self.instrument
+        self.holding.instrument()
     }
     #[must_use]
     pub const fn valuation(&self) -> HoldingValuation {
@@ -85,27 +89,148 @@ impl ValuedHolding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssetEstimate {
     valuation: KrwValuation,
-    accuracy: ValuationAccuracy,
 }
 impl AssetEstimate {
     #[must_use]
-    pub const fn accuracy(&self) -> ValuationAccuracy {
-        self.accuracy
+    pub fn into_parts(self) -> (Money, Vec<FxRate>, ValuationAccuracy) {
+        let (money, rates, _accuracy) = self.valuation.into_parts();
+        (money, rates, ValuationAccuracy::Approximate)
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetricTotal {
+    selected: Total<Money>,
+    items: Total<Money>,
+    source: crate::ValuationSource,
+    comparison: crate::Comparison,
+}
+impl MetricTotal {
+    fn new(currency: Currency) -> Self {
+        Self {
+            selected: Total::new(crate::holding::zero(currency)),
+            items: Total::new(crate::holding::zero(currency)),
+            source: crate::ValuationSource::Calculated,
+            comparison: crate::Comparison::NotProvided,
+        }
+    }
+    fn add(&mut self, value: Result<Money, EvaluationError>) -> Result<(), EvaluationError> {
+        match value.and_then(|money| {
+            self.items
+                .current()
+                .checked_add(&money)
+                .map_err(EvaluationError::Arithmetic)
+        }) {
+            Ok(sum) => {
+                self.items.update(sum);
+                Ok(())
+            }
+            Err(error) => {
+                self.items.exclude();
+                Err(error)
+            }
+        }
+    }
+    fn select(&mut self, reported: Option<Money>) {
+        match reported {
+            Some(value) => {
+                self.comparison = match &self.items {
+                    Total::Complete(sum) => {
+                        crate::holding_valuation::compare_money(*sum.value(), value)
+                    }
+                    Total::Incomplete(_) => crate::Comparison::Unavailable,
+                };
+                self.selected = Total::new(value);
+                self.source = crate::ValuationSource::TossOpenApi;
+            }
+            None => {
+                self.selected = self.items.clone();
+            }
+        }
     }
     #[must_use]
-    pub fn into_parts(self) -> (KrwValuation, ValuationAccuracy) {
-        (self.valuation, self.accuracy)
+    pub fn selected(&self) -> &Total<Money> {
+        &self.selected
+    }
+    #[must_use]
+    pub fn items_total(&self) -> &Total<Money> {
+        &self.items
+    }
+    #[must_use]
+    pub const fn source(&self) -> crate::ValuationSource {
+        self.source
+    }
+    #[must_use]
+    pub const fn comparison(&self) -> crate::Comparison {
+        self.comparison
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrencyEvaluation {
+    valuation: MetricTotal,
+    purchase: MetricTotal,
+    profit: MetricTotal,
+}
+impl CurrencyEvaluation {
+    fn new(currency: Currency) -> Self {
+        Self {
+            valuation: MetricTotal::new(currency),
+            purchase: MetricTotal::new(currency),
+            profit: MetricTotal::new(currency),
+        }
+    }
+    fn observe(&mut self, value: HoldingValuation) -> Result<(), EvaluationError> {
+        let valuation = self.valuation.add(value.selected());
+        let _purchase = self
+            .purchase
+            .add(value.computed().map(crate::ComputedHolding::purchase));
+        let _profit = self
+            .profit
+            .add(value.selected_profit().map(crate::SelectedValue::value));
+        valuation
+    }
+    fn select(&mut self, reported: Option<crate::ReportedPortfolio>, currency: Currency) {
+        self.valuation
+            .select(reported.map(|value| value.valuation().resolved(currency)));
+        self.purchase
+            .select(reported.map(|value| value.purchase().resolved(currency)));
+        self.profit
+            .select(reported.map(|value| value.profit().resolved(currency)));
+    }
+    #[must_use]
+    pub const fn valuation(&self) -> &MetricTotal {
+        &self.valuation
+    }
+    #[must_use]
+    pub const fn purchase(&self) -> &MetricTotal {
+        &self.purchase
+    }
+    #[must_use]
+    pub const fn profit(&self) -> &MetricTotal {
+        &self.profit
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HoldingCount(usize);
+impl HoldingCount {
+    #[must_use]
+    pub const fn as_usize(&self) -> usize {
+        self.0
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortfolioValuation {
     holdings: Vec<ValuedHolding>,
-    krw: Total<Money>,
-    usd: Total<Money>,
+    krw: CurrencyEvaluation,
+    usd: CurrencyEvaluation,
     valuation: Total<KrwValuation>,
+    purchase: Total<KrwValuation>,
+    profit: Total<KrwValuation>,
     assets: Total<AssetEstimate>,
-    assets_accuracy: ValuationAccuracy,
     buying_power_errors: Vec<(Currency, EvaluationError)>,
+    differing_holdings: Vec<ResolvedOrderInstrument>,
+    reported: Option<crate::ReportedPortfolio>,
+    krw_buying_power: crate::BuyingPower,
+    usd_buying_power: crate::BuyingPower,
 }
 impl PortfolioValuation {
     #[must_use]
@@ -114,6 +239,10 @@ impl PortfolioValuation {
     }
     #[must_use]
     pub fn currency_total(&self, currency: Currency) -> &Total<Money> {
+        self.currency_summary(currency).valuation().selected()
+    }
+    #[must_use]
+    pub const fn currency_summary(&self, currency: Currency) -> &CurrencyEvaluation {
         match currency {
             Currency::Krw => &self.krw,
             Currency::Usd => &self.usd,
@@ -124,57 +253,87 @@ impl PortfolioValuation {
         &self.valuation
     }
     #[must_use]
-    pub fn assets(&self) -> &Total<AssetEstimate> {
-        &self.assets
+    pub fn total_purchase(&self) -> &Total<KrwValuation> {
+        &self.purchase
     }
     #[must_use]
-    pub const fn assets_accuracy(&self) -> ValuationAccuracy {
-        self.assets_accuracy
+    pub fn total_profit(&self) -> &Total<KrwValuation> {
+        &self.profit
+    }
+    #[must_use]
+    pub fn assets(&self) -> &Total<AssetEstimate> {
+        &self.assets
     }
     #[must_use]
     pub fn buying_power_errors(&self) -> &[(Currency, EvaluationError)] {
         &self.buying_power_errors
     }
-
+    #[must_use]
+    pub fn differing_holdings(&self) -> &[ResolvedOrderInstrument] {
+        &self.differing_holdings
+    }
+    #[must_use]
+    pub fn differing_holding_count(&self) -> HoldingCount {
+        HoldingCount(self.differing_holdings.len())
+    }
+    #[must_use]
+    pub const fn reported(&self) -> Option<crate::ReportedPortfolio> {
+        self.reported
+    }
+    #[must_use]
+    pub fn daily_profit_loss(&self) -> Option<crate::PortfolioDailyProfitLoss> {
+        self.reported
+            .and_then(crate::ReportedPortfolio::daily_profit_loss)
+    }
+    #[must_use]
+    pub const fn buying_power(&self, currency: Currency) -> crate::BuyingPower {
+        match currency {
+            Currency::Krw => self.krw_buying_power,
+            Currency::Usd => self.usd_buying_power,
+        }
+    }
     pub(crate) fn evaluate(portfolio: &Portfolio, rate: Option<FxRate>) -> Self {
-        let mut krw = Total::new(crate::holding::zero(Currency::Krw));
-        let mut usd = Total::new(crate::holding::zero(Currency::Usd));
-        let mut valuation = Total::new(KrwValuation::zero());
+        let mut krw = CurrencyEvaluation::new(Currency::Krw);
+        let mut usd = CurrencyEvaluation::new(Currency::Usd);
+        let mut item_valuation = Total::new(KrwValuation::zero());
         let mut holdings = Vec::new();
+        let mut differing_holdings = Vec::new();
         for holding in portfolio.holdings() {
             let evaluated = holding.evaluate();
-            let sum = match holding.currency() {
+            let summary = match holding.currency() {
                 Currency::Krw => &mut krw,
                 Currency::Usd => &mut usd,
             };
-            let currency_sum = match evaluated.selected().and_then(|value| {
-                sum.current()
-                    .checked_add(&value)
-                    .map_err(EvaluationError::Arithmetic)
-            }) {
-                Ok(value) => {
-                    sum.update(value);
-                    Ok(())
-                }
-                Err(error) => {
-                    sum.exclude();
-                    Err(error)
-                }
-            };
-            let conversion = append(&mut valuation, evaluated.selected(), rate);
+            let currency_sum = summary.observe(evaluated);
+            let conversion = append(&mut item_valuation, evaluated.selected(), rate);
+            if evaluated.comparison() == crate::Comparison::Different {
+                differing_holdings.push(holding.instrument().clone());
+            }
             holdings.push(ValuedHolding {
-                instrument: holding.instrument().clone(),
+                holding: holding.clone(),
                 valuation: evaluated,
                 currency_sum,
                 conversion,
             });
         }
+        krw.select(portfolio.reported(), Currency::Krw);
+        usd.select(portfolio.reported(), Currency::Usd);
+        let valuation = if portfolio.reported().is_some() {
+            aggregate(krw.valuation().selected(), usd.valuation().selected(), rate)
+        } else {
+            item_valuation
+        };
+        let purchase = aggregate(krw.purchase().selected(), usd.purchase().selected(), rate);
+        let profit = aggregate(krw.profit().selected(), usd.profit().selected(), rate);
         let mut assets = valuation.clone();
         let mut buying_power_errors = Vec::new();
         for currency in [Currency::Krw, Currency::Usd] {
             if let Err(error) = append(
                 &mut assets,
-                Ok(portfolio.buying_power(currency).money()),
+                portfolio
+                    .buying_power(currency)
+                    .money()
+                    .map_err(EvaluationError::BuyingPower),
                 rate,
             ) {
                 buying_power_errors.push((currency, error));
@@ -185,23 +344,35 @@ impl PortfolioValuation {
             krw,
             usd,
             valuation,
+            purchase,
+            profit,
             assets: estimate_assets(assets),
-            assets_accuracy: ValuationAccuracy::Approximate,
             buying_power_errors,
+            differing_holdings,
+            reported: portfolio.reported(),
+            krw_buying_power: portfolio.buying_power(Currency::Krw),
+            usd_buying_power: portfolio.buying_power(Currency::Usd),
         }
     }
 }
-
+fn aggregate(krw: &Total<Money>, usd: &Total<Money>, rate: Option<FxRate>) -> Total<KrwValuation> {
+    let mut total = Total::new(KrwValuation::zero());
+    for value in [krw, usd] {
+        if value.completeness() == TotalCompleteness::Incomplete {
+            total.exclude();
+        }
+        let _result = append(&mut total, Ok(*value.current()), rate);
+    }
+    total
+}
 fn estimate_assets(assets: Total<KrwValuation>) -> Total<AssetEstimate> {
     match assets {
-        Total::Complete(value) => Total::Complete(CompleteTotal(AssetEstimate {
-            valuation: value.0,
-            accuracy: ValuationAccuracy::Approximate,
-        })),
-        Total::Incomplete(value) => Total::Incomplete(IncompleteTotal(AssetEstimate {
-            valuation: value.0,
-            accuracy: ValuationAccuracy::Approximate,
-        })),
+        Total::Complete(value) => {
+            Total::Complete(CompleteTotal(AssetEstimate { valuation: value.0 }))
+        }
+        Total::Incomplete(value) => {
+            Total::Incomplete(IncompleteTotal(AssetEstimate { valuation: value.0 }))
+        }
     }
 }
 
@@ -318,8 +489,8 @@ mod tests {
     fn portfolio(holdings: Vec<Holding>, krw: &str, usd: &str) -> Portfolio {
         Portfolio::new(
             holdings,
-            BuyingPower::new(money(krw, Currency::Krw), time()).expect("원화"),
-            BuyingPower::new(money(usd, Currency::Usd), time()).expect("달러"),
+            BuyingPower::new(money(krw, Currency::Krw), time()),
+            BuyingPower::new(money(usd, Currency::Usd), time()),
         )
         .expect("포트폴리오")
     }
@@ -332,9 +503,9 @@ mod tests {
         total.current().clone()
     }
     fn asset_amount(total: crate::AssetEstimate) -> Money {
-        let (valuation, accuracy) = total.into_parts();
+        let (valuation, _rates, accuracy) = total.into_parts();
         assert_eq!(accuracy, ValuationAccuracy::Approximate);
-        amount(valuation)
+        valuation
     }
     fn amount(total: KrwValuation) -> Money {
         total.into_parts().0
@@ -380,7 +551,7 @@ mod tests {
             assert_eq!(computed.purchase(), money(purchase, currency));
             assert_eq!(computed.profit(), money(profit, currency));
             assert_eq!(evaluated.selected(), Ok(money(expected, currency)));
-            assert_eq!(evaluated.source(), ValuationSource::Calculated);
+            assert_eq!(evaluated.source(), Some(ValuationSource::Calculated));
             assert_eq!(evaluated.comparison(), Comparison::NotProvided);
         }
     }
@@ -413,7 +584,6 @@ mod tests {
             asset_amount(complete(result.assets())),
             money("16879325", Currency::Krw)
         );
-        assert_eq!(result.assets_accuracy(), ValuationAccuracy::Approximate);
         assert_eq!(result.buying_power_errors(), []);
         assert_eq!(book.buying_power(Currency::Krw).observed_at(), time());
         for row in result.holdings() {
@@ -424,31 +594,16 @@ mod tests {
                     .iter()
                     .any(|item| item.instrument() == row.instrument())
             );
-            assert_eq!(row.valuation().source(), ValuationSource::Calculated);
+            assert_eq!(row.valuation().source(), Some(ValuationSource::Calculated));
         }
     }
     #[test]
     fn reported_values_are_authoritative_and_discrepancies_are_visible() {
         let item = holding("A", Currency::Usd, "2", "3", Some("4"));
         for (valuation, profit, rate_text, comparison) in [
-            (
-                "8",
-                "2",
-                "0.3333333333333333333333333333",
-                Comparison::Matches,
-            ),
-            (
-                "9",
-                "2",
-                "0.3333333333333333333333333333",
-                Comparison::Different,
-            ),
-            (
-                "8",
-                "3",
-                "0.3333333333333333333333333333",
-                Comparison::Different,
-            ),
+            ("8", "2", "0.33", Comparison::Matches),
+            ("10", "2", "0.33", Comparison::Different),
+            ("8", "4", "0.33", Comparison::Different),
             ("8", "2", "0.5", Comparison::Different),
         ] {
             let report = ReportedHolding::new(
@@ -467,7 +622,7 @@ mod tests {
             .expect("보유");
             assert_eq!(reported_item.observed_at(), time());
             let result = reported_item.evaluate();
-            assert_eq!(result.source(), ValuationSource::TossOpenApi);
+            assert_eq!(result.source(), Some(ValuationSource::TossOpenApi));
             assert_eq!(result.comparison(), comparison);
             assert_eq!(result.selected(), Ok(money(valuation, Currency::Usd)));
             assert_eq!(
@@ -505,10 +660,7 @@ mod tests {
         )
         .expect("시세 없음");
         assert_eq!(missing.evaluate().comparison(), Comparison::Unavailable);
-        assert_eq!(
-            missing.evaluate().selected(),
-            Err(EvaluationError::MissingPrice)
-        );
+        assert_eq!(missing.evaluate().selected(), Ok(money("6", Currency::Krw)));
     }
     #[test]
     fn free_acquisition_zero_quantity_and_approximate_return_are_distinct() {
@@ -528,12 +680,7 @@ mod tests {
             .evaluate()
             .computed()
             .expect("평가");
-        assert_eq!(
-            repeating.return_rate(),
-            money("1", Currency::Usd)
-                .checked_ratio(&money("3", Currency::Usd))
-                .map(HoldingReturn::Defined)
-        );
+        assert_independent_rate(repeating, 1, 3);
         let zero_report = ReportedHolding::new(
             money("15", Currency::Krw),
             money("15", Currency::Krw),
@@ -548,7 +695,7 @@ mod tests {
             HoldingObservation::new(original.current_price(), Some(zero_report), time()),
         )
         .expect("무상");
-        assert_eq!(reported.evaluate().comparison(), Comparison::Different);
+        assert_eq!(reported.evaluate().comparison(), Comparison::Unavailable);
     }
     #[test]
     fn invalid_inputs_and_resource_limits_are_rejected_without_echoing_inputs() {
@@ -628,10 +775,10 @@ mod tests {
     #[test]
     fn portfolio_limits_and_cash_boundaries() {
         let item = holding("A", Currency::Krw, "1", "1", Some("1"));
-        let krw = BuyingPower::new(money("0", Currency::Krw), time()).expect("원화");
-        let usd = BuyingPower::new(money("0", Currency::Usd), time()).expect("달러");
+        let krw = BuyingPower::new(money("0", Currency::Krw), time());
+        let usd = BuyingPower::new(money("0", Currency::Usd), time());
         assert_eq!(
-            BuyingPower::new(money("-1", Currency::Krw), time()),
+            BuyingPower::new(money("-1", Currency::Krw), time()).money(),
             Err(PortfolioError::NegativeBuyingPower)
         );
         assert_eq!(
@@ -756,9 +903,8 @@ mod tests {
             asset_amount(complete(empty.assets())),
             money("0", Currency::Krw)
         );
-        assert_eq!(empty.assets_accuracy(), ValuationAccuracy::Approximate);
         assert_eq!(
-            complete(empty.assets()).accuracy(),
+            complete(empty.assets()).into_parts().2,
             ValuationAccuracy::Approximate
         );
         let cash = portfolio(vec![], "10", "2").evaluate(Some(rate("1375", FxRateKind::Mid)));
@@ -1037,5 +1183,537 @@ mod tests {
                 Ok(HoldingReturn::ZeroCost)
             );
         }
+    }
+    fn assert_selected_reported_rate(item: &Holding, rate_text: &str, currency: Currency) {
+        let selected_rate = item.evaluate().selected_return().expect("율");
+        assert_eq!(selected_rate.source(), ValuationSource::TossOpenApi);
+        assert_eq!(
+            selected_rate.value().rate(),
+            HoldingReturn::Defined(crate::RatioQuotient::Exact(
+                Ratio::parse(&input(rate_text)).expect("토스 율")
+            ))
+        );
+        assert_eq!(
+            item.evaluate()
+                .selected_return()
+                .expect("율")
+                .value()
+                .basis(),
+            crate::ReturnBasis::TradingCurrency(currency)
+        );
+    }
+    #[test]
+    fn review_toss_rounding_examples_match_and_real_differences_remain_visible() {
+        for (currency, quantity, average, current, valuation, profit, rate_text) in [
+            (
+                Currency::Krw,
+                "100",
+                "65000",
+                "72000",
+                "7200000",
+                "700000",
+                "0.1077",
+            ),
+            (
+                Currency::Usd,
+                "0.123456",
+                "190",
+                "190.11",
+                "23.47",
+                "0.01",
+                "0.0006",
+            ),
+        ] {
+            let original = holding("A", currency, quantity, average, Some(current));
+            let report = ReportedHolding::new(
+                money(valuation, currency),
+                money(profit, currency),
+                Ratio::parse(&input(rate_text)).expect("율"),
+            )
+            .expect("토스");
+            let item = Holding::new(
+                original.instrument().clone(),
+                original.quantity(),
+                original.acquisition_price(),
+                HoldingObservation::new(original.current_price(), Some(report), time()),
+            )
+            .expect("보유");
+            assert_eq!(
+                item.evaluate().comparisons().valuation(),
+                Comparison::Matches
+            );
+            assert_eq!(
+                item.evaluate().comparisons().return_rate(),
+                Comparison::Matches
+            );
+            assert_eq!(
+                item.evaluate().selected_profit().expect("손익").value(),
+                money(profit, currency)
+            );
+            assert_eq!(
+                item.evaluate().selected_profit().expect("손익").source(),
+                ValuationSource::TossOpenApi
+            );
+            assert_selected_reported_rate(&item, rate_text, currency);
+        }
+    }
+    #[test]
+    fn review_summary_is_authoritative_when_a_quote_is_missing() {
+        let missing = holding("A", Currency::Krw, "100", "65000", None);
+        let sums = crate::ReportedPortfolio::new(
+            crate::CurrencyAmounts::new(money("7200000", Currency::Krw), None).expect("평가"),
+            crate::CurrencyAmounts::new(money("6500000", Currency::Krw), None).expect("원금"),
+            crate::CurrencyAmounts::new(money("700000", Currency::Krw), None).expect("손익"),
+            time(),
+        );
+        let result = portfolio(vec![missing], "0", "0")
+            .with_reported(sums)
+            .evaluate(None);
+        assert_eq!(
+            complete(result.currency_total(Currency::Krw)),
+            money("7200000", Currency::Krw)
+        );
+        assert_eq!(
+            result
+                .currency_summary(Currency::Krw)
+                .valuation()
+                .comparison(),
+            Comparison::Unavailable
+        );
+        assert_eq!(
+            amount(complete(result.valuation())),
+            money("7200000", Currency::Krw)
+        );
+        assert_eq!(
+            amount(complete(result.total_profit())),
+            money("700000", Currency::Krw)
+        );
+        assert_eq!(
+            amount(complete(result.total_purchase())),
+            money("6500000", Currency::Krw)
+        );
+    }
+    #[test]
+    fn review_reported_holding_survives_missing_quote_and_daily_values_are_retained() {
+        let daily = crate::DailyProfitLoss::new(
+            money("10", Currency::Usd),
+            Ratio::parse(&input("0.01")).expect("율"),
+        );
+        let report = ReportedHolding::new(
+            money("100", Currency::Usd),
+            money("20", Currency::Usd),
+            Ratio::parse(&input("0.25")).expect("율"),
+        )
+        .expect("토스")
+        .with_daily_profit_loss(daily)
+        .expect("일간");
+        let original = holding("A", Currency::Usd, "1", "80", None);
+        let item = Holding::new(
+            original.instrument().clone(),
+            original.quantity(),
+            original.acquisition_price(),
+            HoldingObservation::new(None, Some(report), time()),
+        )
+        .expect("보유");
+        let result = portfolio(vec![item], "0", "0").evaluate(Some(rate("1375", FxRateKind::Mid)));
+        let row = result.holdings().first().expect("행");
+        assert_eq!(row.valuation().selected(), Ok(money("100", Currency::Usd)));
+        assert_eq!(
+            row.valuation().comparisons().valuation(),
+            Comparison::Unavailable
+        );
+        assert_eq!(row.valuation().daily_profit_loss(), Some(daily));
+        assert_eq!(row.holding().observed_at(), time());
+        assert_eq!(
+            amount(complete(result.valuation())),
+            money("137500", Currency::Krw)
+        );
+    }
+    fn reported_sums(krw: &str, usd: Option<&str>) -> crate::CurrencyAmounts {
+        crate::CurrencyAmounts::new(
+            money(krw, Currency::Krw),
+            usd.map(|value| money(value, Currency::Usd)),
+        )
+        .expect("통화 합")
+    }
+    #[test]
+    fn review_one_unit_tolerance_includes_boundary_but_not_two_units() {
+        for (computed, reported, expected) in [
+            ("1.01", "1.00", Comparison::Matches),
+            ("0.99", "1.00", Comparison::Matches),
+            ("1.0101", "1.00", Comparison::Different),
+            ("1.02", "1.00", Comparison::Different),
+            ("-1.01", "-1.00", Comparison::Matches),
+            ("-0.01", "0.00", Comparison::Matches),
+            (
+                "79228162514264337593543950335",
+                "0.0000000000000000000000000001",
+                Comparison::Different,
+            ),
+        ] {
+            assert_eq!(
+                crate::holding_valuation::compare_money(
+                    money(computed, Currency::Usd),
+                    money(reported, Currency::Usd)
+                ),
+                expected
+            );
+        }
+        assert_eq!(
+            crate::holding_valuation::compare_money(
+                money("1", Currency::Krw),
+                money("1", Currency::Usd)
+            ),
+            Comparison::Different
+        );
+    }
+    #[test]
+    fn review_huge_toss_value_is_selected_and_portfolio_warns_with_the_instrument() {
+        let original = holding("A", Currency::Krw, "100", "65000", Some("72000"));
+        let report = ReportedHolding::new(
+            money("999900000000", Currency::Krw),
+            money("700002", Currency::Krw),
+            Ratio::parse(&input("0.1079")).expect("율"),
+        )
+        .expect("토스");
+        let item = Holding::new(
+            original.instrument().clone(),
+            original.quantity(),
+            original.acquisition_price(),
+            HoldingObservation::new(original.current_price(), Some(report), time()),
+        )
+        .expect("보유");
+        let result = portfolio(vec![item], "0", "0").evaluate(None);
+        assert_eq!(
+            amount(complete(result.valuation())),
+            money("999900000000", Currency::Krw)
+        );
+        assert_eq!(
+            result.differing_holdings(),
+            &[original.instrument().clone()]
+        );
+        assert_eq!(result.differing_holding_count().as_usize(), 1);
+        let comparisons = result
+            .holdings()
+            .first()
+            .expect("행")
+            .valuation()
+            .comparisons();
+        assert_eq!(comparisons.valuation(), Comparison::Different);
+        assert_eq!(comparisons.profit(), Comparison::Different);
+        assert_eq!(comparisons.return_rate(), Comparison::Different);
+    }
+    #[test]
+    fn review_summary_values_daily_values_and_sources_are_directly_readable() {
+        let daily = crate::PortfolioDailyProfitLoss::new(
+            reported_sums("20", Some("2")),
+            Ratio::parse(&input("0.01")).expect("일간 율"),
+        );
+        let reported = crate::ReportedPortfolio::new(
+            reported_sums("100", Some("3")),
+            reported_sums("80", Some("2")),
+            reported_sums("20", Some("1")),
+            time(),
+        )
+        .with_daily_profit_loss(daily)
+        .with_return_rate(Ratio::parse(&input("0.2")).expect("요약 율"));
+        let result = portfolio(
+            vec![holding("A", Currency::Krw, "1", "50", Some("90"))],
+            "0",
+            "0",
+        )
+        .with_reported(reported)
+        .evaluate(Some(rate("1000", FxRateKind::Mid)));
+        assert_eq!(result.reported(), Some(reported));
+        assert_eq!(reported.observed_at(), time());
+        assert_eq!(
+            reported.return_rate().expect("율").basis(),
+            crate::ReturnBasis::KrwConverted
+        );
+        assert_eq!(result.daily_profit_loss(), Some(daily));
+        assert_eq!(
+            daily.amounts().amount(Currency::Usd),
+            Some(money("2", Currency::Usd))
+        );
+        assert_eq!(daily.rate(), Ratio::parse(&input("0.01")).expect("율"));
+        assert_eq!(daily.basis(), crate::ReturnBasis::KrwConverted);
+        let summary = result.currency_summary(Currency::Krw);
+        for (metric, expected, item) in [
+            (summary.valuation(), "100", "90"),
+            (summary.purchase(), "80", "50"),
+            (summary.profit(), "20", "40"),
+        ] {
+            assert_eq!(complete(metric.selected()), money(expected, Currency::Krw));
+            assert_eq!(complete(metric.items_total()), money(item, Currency::Krw));
+            assert_eq!(metric.source(), ValuationSource::TossOpenApi);
+            assert_eq!(metric.comparison(), Comparison::Different);
+        }
+        assert_eq!(
+            amount(complete(result.valuation())),
+            money("3100", Currency::Krw)
+        );
+        assert_eq!(
+            amount(complete(result.total_purchase())),
+            money("2080", Currency::Krw)
+        );
+        assert_eq!(
+            amount(complete(result.total_profit())),
+            money("1020", Currency::Krw)
+        );
+        assert_eq!(result.buying_power(Currency::Krw).observed_at(), time());
+        assert_eq!(result.buying_power(Currency::Usd).observed_at(), time());
+    }
+    #[test]
+    fn review_optional_daily_and_invalid_currency_boundaries() {
+        assert_eq!(
+            crate::CurrencyAmounts::new(money("1", Currency::Usd), None),
+            Err(PortfolioError::CurrencyMismatch)
+        );
+        assert_eq!(
+            crate::CurrencyAmounts::new(money("1", Currency::Krw), Some(money("1", Currency::Krw))),
+            Err(PortfolioError::CurrencyMismatch)
+        );
+        let daily = crate::DailyProfitLoss::new(
+            money("2", Currency::Usd),
+            Ratio::parse(&input("0.01")).expect("율"),
+        );
+        assert_eq!(daily.rate(), Ratio::parse(&input("0.01")).expect("율"));
+        assert_eq!(
+            daily.basis(),
+            crate::ReturnBasis::TradingCurrency(Currency::Usd)
+        );
+        let report = ReportedHolding::new(
+            money("10", Currency::Krw),
+            money("1", Currency::Krw),
+            Ratio::parse(&input("0.1")).expect("율"),
+        )
+        .expect("보고");
+        assert_eq!(
+            report.with_daily_profit_loss(daily),
+            Err(HoldingError::CurrencyMismatch)
+        );
+        let result = portfolio(
+            vec![holding("A", Currency::Krw, "1", "1", Some("2"))],
+            "0",
+            "0",
+        )
+        .evaluate(None);
+        let row = result.holdings().first().expect("행").valuation();
+        assert_eq!(
+            row.selected_valuation().expect("평가").source(),
+            ValuationSource::Calculated
+        );
+        assert_eq!(
+            row.selected_profit().expect("손익").value(),
+            money("1", Currency::Krw)
+        );
+        assert_eq!(
+            row.selected_return().expect("율").value().rate(),
+            HoldingReturn::Defined(crate::RatioQuotient::Exact(
+                Ratio::parse(&input("1")).expect("율")
+            ))
+        );
+        assert_eq!(row.daily_profit_loss(), None);
+        assert_eq!(result.daily_profit_loss(), None);
+        assert_eq!(
+            result.currency_summary(Currency::Krw).valuation().source(),
+            ValuationSource::Calculated
+        );
+        assert_eq!(
+            holding("B", Currency::Krw, "1", "1", None)
+                .evaluate()
+                .source(),
+            None
+        );
+    }
+    #[test]
+    fn review_negative_cash_excludes_only_that_currency_from_assets() {
+        let result = portfolio(
+            vec![holding("A", Currency::Krw, "1", "1", Some("2"))],
+            "10",
+            "-100",
+        )
+        .evaluate(Some(rate("1000", FxRateKind::Mid)));
+        assert_eq!(
+            asset_amount(partial(result.assets())),
+            money("12", Currency::Krw)
+        );
+        assert_eq!(
+            result.buying_power_errors(),
+            &[(
+                Currency::Usd,
+                EvaluationError::BuyingPower(PortfolioError::NegativeBuyingPower)
+            )]
+        );
+        assert_eq!(
+            result.buying_power(Currency::Usd).money(),
+            Err(PortfolioError::NegativeBuyingPower)
+        );
+        let reverse = portfolio(vec![], "-1", "2").evaluate(Some(rate("1000", FxRateKind::Mid)));
+        assert_eq!(
+            asset_amount(partial(reverse.assets())),
+            money("2000", Currency::Krw)
+        );
+        assert_eq!(
+            complete(reverse.valuation()).into_parts().0,
+            money("0", Currency::Krw)
+        );
+    }
+    fn decimal_text(coefficient: i128, scale: u32) -> String {
+        let divisor = 10_u128.checked_pow(scale).expect("작은 스케일");
+        let absolute = coefficient.unsigned_abs();
+        format!(
+            "{}{}.{:0width$}",
+            if coefficient < 0 { "-" } else { "" },
+            absolute.checked_div(divisor).expect("정수 몫"),
+            absolute.checked_rem(divisor).expect("정수 나머지"),
+            width = usize::try_from(scale).expect("스케일")
+        )
+    }
+    fn assert_independent_rate(value: crate::ComputedHolding, profit: i128, purchase: i128) {
+        match value.return_rate().expect("율") {
+            HoldingReturn::ZeroCost => assert_eq!(purchase, 0),
+            HoldingReturn::Defined(quotient) => {
+                let (decimal, limit) = match quotient {
+                    crate::RatioQuotient::Exact(rate) => (rate.as_decimal(), 0_u128),
+                    crate::RatioQuotient::Approximate(rate) => {
+                        (rate.as_decimal(), purchase.unsigned_abs())
+                    }
+                };
+                let scaled = profit
+                    .checked_mul(10_i128.checked_pow(decimal.scale()).expect("스케일"))
+                    .expect("독립 분자");
+                let residual = decimal
+                    .mantissa()
+                    .checked_mul(purchase)
+                    .expect("독립 곱")
+                    .abs_diff(scaled);
+                assert!(residual.checked_mul(2).expect("잔차") <= limit);
+            }
+        }
+    }
+    fn generated_report(valuation: i128, profit: i128) -> ReportedHolding {
+        ReportedHolding::new(
+            money(
+                &decimal_text(valuation.checked_div(1000).expect("센트"), 2),
+                Currency::Usd,
+            ),
+            money(
+                &decimal_text(profit.checked_div(1000).expect("센트"), 2),
+                Currency::Usd,
+            ),
+            Ratio::parse(&input("0.00")).expect("보고 율"),
+        )
+        .expect("보고")
+    }
+    fn assert_review_generated_case(
+        (quantity, average, current, fx, reported): (u32, u32, u32, u32, bool),
+    ) {
+        let purchase = i128::from(quantity)
+            .checked_mul(i128::from(average))
+            .expect("원가");
+        let valuation = i128::from(quantity)
+            .checked_mul(i128::from(current))
+            .expect("평가");
+        let profit = valuation.checked_sub(purchase).expect("손익");
+        let original = holding(
+            "US",
+            Currency::Usd,
+            &decimal_text(i128::from(quantity), 3),
+            &decimal_text(i128::from(average), 2),
+            Some(&decimal_text(i128::from(current), 2)),
+        );
+        let report = generated_report(valuation, profit);
+        let item = Holding::new(
+            original.instrument().clone(),
+            original.quantity(),
+            original.acquisition_price(),
+            HoldingObservation::new(original.current_price(), reported.then_some(report), time()),
+        )
+        .expect("보유");
+        let evaluated = item.evaluate();
+        let computed = evaluated.computed().expect("계산");
+        assert_eq!(
+            computed.purchase(),
+            money(&decimal_text(purchase, 5), Currency::Usd)
+        );
+        assert_eq!(
+            computed.valuation(),
+            money(&decimal_text(valuation, 5), Currency::Usd)
+        );
+        assert_eq!(
+            computed.profit(),
+            money(&decimal_text(profit, 5), Currency::Usd)
+        );
+        assert_independent_rate(computed, profit, purchase);
+        let selected = if reported {
+            report.valuation()
+        } else {
+            money(&decimal_text(valuation, 5), Currency::Usd)
+        };
+        assert_eq!(evaluated.selected(), Ok(selected));
+        let result = portfolio(vec![item], "0", "0").evaluate(Some(rate(
+            &decimal_text(i128::from(fx), 2),
+            FxRateKind::Mid,
+        )));
+        let (coefficient, scale) = if reported {
+            (valuation.checked_div(1000).expect("센트"), 4)
+        } else {
+            (valuation, 7)
+        };
+        let expected = coefficient
+            .checked_mul(i128::from(fx))
+            .expect("원화 정수 곱");
+        assert_eq!(
+            amount(complete(result.valuation())),
+            money(&decimal_text(expected, scale), Currency::Krw)
+        );
+    }
+    #[test]
+    fn review_generated_fractional_quantity_cost_report_and_fx_match_independent_integers() {
+        TestRunner::new(Config::with_cases(4096))
+            .run(
+                &(
+                    0_u32..1000,
+                    1_u32..1000,
+                    1_u32..1000,
+                    100_000_u32..200_000,
+                    proptest::arbitrary::any::<bool>(),
+                ),
+                |case| {
+                    assert_review_generated_case(case);
+                    Ok(())
+                },
+            )
+            .expect("4096 독립 기준");
+    }
+    #[test]
+    fn review_assets_flatten_all_context_and_return_comparison_handles_missing_values() {
+        let fx = rate("1375", FxRateKind::Mid);
+        let result = portfolio(vec![], "5", "2").evaluate(Some(fx));
+        assert_eq!(
+            complete(result.assets()).into_parts(),
+            (
+                money("2755", Currency::Krw),
+                vec![fx],
+                ValuationAccuracy::Approximate
+            )
+        );
+        let native = portfolio(vec![], "5", "0").evaluate(None);
+        assert_eq!(
+            complete(native.assets()).into_parts(),
+            (
+                money("5", Currency::Krw),
+                vec![],
+                ValuationAccuracy::Approximate
+            )
+        );
+        assert_eq!(
+            crate::holding_valuation::compare_return(
+                Err(MoneyError::DivisionByZero),
+                Ratio::parse(&input("0")).expect("율")
+            ),
+            Comparison::Unavailable
+        );
     }
 }

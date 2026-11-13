@@ -96,3 +96,8 @@ pub use portfolio_valuation::{
     AssetEstimate, CompleteTotal, IncompleteTotal, PortfolioValuation, Total, TotalCompleteness,
     ValuedHolding,
 };
+
+pub use holding::{DailyProfitLoss, ReturnBasis};
+pub use holding_valuation::{HoldingComparisons, ReturnObservation, SelectedValue};
+pub use portfolio::{CurrencyAmounts, PortfolioDailyProfitLoss, ReportedPortfolio};
+pub use portfolio_valuation::{CurrencyEvaluation, HoldingCount, MetricTotal};

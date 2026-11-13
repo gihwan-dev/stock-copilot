@@ -32,10 +32,40 @@ impl AcquisitionPrice {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnBasis {
+    TradingCurrency(Currency),
+    KrwConverted,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DailyProfitLoss {
+    amount: Money,
+    rate: Ratio,
+}
+impl DailyProfitLoss {
+    #[must_use]
+    pub const fn new(amount: Money, rate: Ratio) -> Self {
+        Self { amount, rate }
+    }
+    #[must_use]
+    pub const fn amount(self) -> Money {
+        self.amount
+    }
+    #[must_use]
+    pub const fn rate(self) -> Ratio {
+        self.rate
+    }
+    #[must_use]
+    pub fn basis(self) -> ReturnBasis {
+        ReturnBasis::TradingCurrency(self.amount.currency())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReportedHolding {
     valuation: Money,
     profit: Money,
     return_rate: Ratio,
+    daily_profit_loss: Option<DailyProfitLoss>,
 }
 
 impl ReportedHolding {
@@ -50,7 +80,19 @@ impl ReportedHolding {
             valuation,
             profit,
             return_rate,
+            daily_profit_loss: None,
         })
+    }
+    pub fn with_daily_profit_loss(mut self, daily: DailyProfitLoss) -> Result<Self, HoldingError> {
+        if daily.amount().currency() != self.valuation.currency() {
+            return Err(HoldingError::CurrencyMismatch);
+        }
+        self.daily_profit_loss = Some(daily);
+        Ok(self)
+    }
+    #[must_use]
+    pub const fn daily_profit_loss(self) -> Option<DailyProfitLoss> {
+        self.daily_profit_loss
     }
     #[must_use]
     pub const fn valuation(self) -> Money {

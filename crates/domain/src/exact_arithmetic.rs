@@ -211,6 +211,27 @@ fn split_word(value: Word) -> (Limb, Limb) {
     )
 }
 
+pub(crate) fn compare_reported(computed: Amount, reported: Amount) -> crate::Comparison {
+    let left = computed.as_decimal();
+    let right = reported.as_decimal();
+    let scale = left.scale().max(right.scale());
+    let left_coefficient = left
+        .mantissa()
+        .checked_mul(10_i128.saturating_pow(scale.abs_diff(left.scale())));
+    let right_coefficient = right
+        .mantissa()
+        .checked_mul(10_i128.saturating_pow(scale.abs_diff(right.scale())));
+    let distance = left_coefficient
+        .zip(right_coefficient)
+        .and_then(|(first, second)| first.checked_sub(second));
+    let unit = 10_u128.saturating_pow(scale.abs_diff(right.scale()));
+    if distance.is_some_and(|difference| difference.unsigned_abs() <= unit) {
+        crate::Comparison::Matches
+    } else {
+        crate::Comparison::Different
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
