@@ -55,7 +55,12 @@
         ".editorconfig",
         ".tool-versions",
         ".node-version",
-        ".nvmrc"
+        ".nvmrc",
+        "action.yml",
+        "action.yaml",
+        "dependabot.yml",
+        "dependabot.yaml",
+        "CODEOWNERS"
       ],
       "allowed": [
         ".gitignore",

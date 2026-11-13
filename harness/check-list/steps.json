@@ -191,6 +191,46 @@
       }
     },
     {
+      "recipe": "check-ts",
+      "command": "node harness/ci/workflow-policy/check.mjs",
+      "kind": "check",
+      "cases": "harness/ci/workflow-policy/cases.json",
+      "test": {
+        "file": "harness/ci/tests/workflow-policy.test.mjs",
+        "name": "every workflow policy case reports exactly its rules"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/ci/review-records/check.mjs",
+      "kind": "check",
+      "cases": "harness/ci/review-records/cases.json",
+      "test": {
+        "file": "harness/ci/tests/review-records.test.mjs",
+        "name": "every review record case reports exactly its problems"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/ci/linux/exclusions.mjs verify",
+      "kind": "check",
+      "cases": "harness/ci/linux/exclusions.json",
+      "test": {
+        "file": "harness/ci/tests/ci-plumbing.test.mjs",
+        "name": "a stale or open exclusion list fails its verification"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node --test 'harness/ci/tests/*.test.mjs'",
+      "kind": "runner",
+      "cases": "apps/desktop/tests/check-list.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/check-list.test.mjs",
+        "name": "the node test runners of just check reach every test file"
+      }
+    },
+    {
       "recipe": "check",
       "command": "cargo fmt --all --check",
       "kind": "check",

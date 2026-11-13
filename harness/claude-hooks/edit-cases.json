@@ -875,6 +875,36 @@
     "role": "implementer"
   },
   {
+    "path": "{root}/crates/domain/src/action.yml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/crates/domain/src/action.yaml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/dependabot.yml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/dependabot.yaml",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/docs/CODEOWNERS",
+    "decision": "deny",
+    "rules": ["misplaced-config"],
+    "role": "implementer"
+  },
+  {
     "path": "{root}/apps/desktop/src/zz/.eslintrc.json",
     "decision": "deny",
     "rules": ["misplaced-config"],

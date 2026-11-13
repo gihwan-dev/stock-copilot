@@ -208,7 +208,11 @@
         ["node harness/knip-check/check.mjs"],
         ["node harness/vitest-check/check.mjs"],
         ["node --test 'apps/desktop/tests/*.test.mjs'"],
-        ["node --test 'harness/claude-hooks/tests/*.test.mjs'"]
+        ["node --test 'harness/claude-hooks/tests/*.test.mjs'"],
+        ["node harness/ci/workflow-policy/check.mjs"],
+        ["node harness/ci/review-records/check.mjs"],
+        ["node harness/ci/linux/exclusions.mjs verify"],
+        ["node --test 'harness/ci/tests/*.test.mjs'"]
       ],
       "dependencies": [
         {
@@ -579,6 +583,60 @@
       "private": false,
       "quiet": false,
       "namepath": "lint-file",
+      "shebang": false
+    },
+    "linux-check": {
+      "attributes": [],
+      "body": [
+        ["node harness/ci/linux/exclusions.mjs verify"],
+        ["cargo fmt --all --check"],
+        [
+          "\"",
+          [["call", "just_executable"]],
+          "\" clippy Cargo.toml $(node harness/ci/linux/exclusions.mjs cargo)"
+        ],
+        ["\"", [["call", "just_executable"]], "\" deny"],
+        ["\"", [["call", "just_executable"]], "\" arch-check"],
+        ["\"", [["call", "just_executable"]], "\" source-check"],
+        ["\"", [["call", "just_executable"]], "\" sql-check"],
+        ["\"", [["call", "just_executable"]], "\" migration-check"],
+        ["\"", [["call", "just_executable"]], "\" capability-check"],
+        ["\"", [["call", "just_executable"]], "\" raw-types"],
+        ["\"", [["call", "just_executable"]], "\" disable-check"],
+        ["node harness/ci/workflow-policy/check.mjs"],
+        ["node harness/ci/review-records/check.mjs"]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "linux-check",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "linux-check",
+      "shebang": false
+    },
+    "linux-test": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo nextest run --workspace --locked $(node harness/ci/linux/exclusions.mjs cargo) -E \"$(node harness/ci/linux/exclusions.mjs filter)\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "linux-test",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "linux-test",
       "shebang": false
     },
     "migration-check": {

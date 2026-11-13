@@ -1,0 +1,32 @@
+{
+  "crates": [
+    {
+      "name": "src-tauri",
+      "reason": "Tauri의 wry가 Linux에서 webkit2gtk와 glib 개발 패키지를 요구한다. 앱은 macOS 전용이라 Linux 빌드를 맞추지 않는다 (실측: glib-sys 빌드 스크립트 실패)"
+    },
+    {
+      "name": "e2e-app",
+      "reason": "src-tauri에 의존하는 macOS E2E 전용 앱 (architecture.md 3.1)"
+    },
+    {
+      "name": "platform-macos",
+      "reason": "LocalAuthentication과 네이티브 창을 쓰는 macOS 전용 어댑터"
+    },
+    {
+      "name": "secrets-keychain",
+      "reason": "macOS 데이터 보호 키체인 어댑터"
+    }
+  ],
+  "tests": [
+    {
+      "package": "xtask",
+      "module": "network_sandbox_tests",
+      "reason": "nextest wrapper의 sandbox-exec 네트워크 차단은 macOS에만 있다. Linux는 네트워크 이름공간으로 막는다"
+    },
+    {
+      "package": "xtask",
+      "module": "nested_sandbox_tests",
+      "reason": "sandbox-exec 중첩 동작은 macOS에만 있다"
+    }
+  ]
+}

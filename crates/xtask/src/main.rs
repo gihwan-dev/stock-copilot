@@ -10,6 +10,7 @@ mod disable_control;
 mod git_base;
 mod git_hooks;
 mod lint_file;
+mod manifest_changes;
 mod migration_check;
 mod mutants_check;
 mod nextest_list;
@@ -41,6 +42,8 @@ fn main() -> ExitCode {
         [command, rest @ ..] if command == "commit-guard" => commit_guard::command(rest),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),
+        [command, rest @ ..] if command == "test-changes" => test_diff::changes_command(rest),
+        [command, rest @ ..] if command == "manifest-changes" => manifest_changes::command(rest),
         _ => arch_check::usage(),
     }
 }
@@ -59,6 +62,8 @@ mod nested_sandbox_tests;
 mod network_sandbox_tests;
 #[cfg(test)]
 mod rust_lints_tests;
+#[cfg(test)]
+mod test_changes_tests;
 #[cfg(test)]
 mod test_runner_tests;
 #[cfg(test)]

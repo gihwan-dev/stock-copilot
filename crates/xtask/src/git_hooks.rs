@@ -3,6 +3,8 @@ pub(crate) mod commit_base;
 #[cfg(test)]
 mod commit_base_tests;
 #[cfg(test)]
+mod push_base_tests;
+#[cfg(test)]
 mod tests;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -370,9 +372,35 @@ fn new_branch_base(root: &Path, local: &str) -> Result<String, String> {
     }
 }
 
+pub(crate) const REMOTE_BASE_BRANCH: &str = "refs/remotes/origin/master";
+
+fn branch_fork_point(root: &Path, remote_ref: &str, local: &str) -> Result<Option<String>, String> {
+    if remote_ref == commit_base::BASE_BRANCH {
+        return Ok(None);
+    }
+    let mut known = git_base::git(root);
+    known.args([
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        &format!("{REMOTE_BASE_BRANCH}^{{commit}}"),
+    ]);
+    if single_line(known, "rev-parse").is_err() {
+        return Ok(None);
+    }
+    let mut fork = git_base::git(root);
+    fork.args(["merge-base", local, REMOTE_BASE_BRANCH]);
+    match single_line(fork, "merge-base")?.as_slice() {
+        [only] => Ok(Some(only.clone())),
+        [] | [_, _, ..] => Err(String::from(
+            "origin/master와의 분기점을 하나로 정할 수 없다",
+        )),
+    }
+}
+
 fn update_base(root: &Path, head: &str, line: &str) -> Result<Option<String>, String> {
     let fields: Vec<&str> = line.split_whitespace().collect();
-    let [local_ref, local, _, remote] = fields.as_slice() else {
+    let [local_ref, local, remote_ref, remote] = fields.as_slice() else {
         return Err(format!("pre-push 입력 줄의 형식이 다르다: {line}"));
     };
     if *local == ZERO_COMMIT {
@@ -383,10 +411,10 @@ fn update_base(root: &Path, head: &str, line: &str) -> Result<Option<String>, St
             "{local_ref}({local})는 HEAD가 아니다. 커밋 훅·푸시 훅은 작업 사본을 검사하므로 HEAD만 푸시한다"
         ));
     }
-    let base = if *remote == ZERO_COMMIT {
-        new_branch_base(root, local)?
-    } else {
-        String::from(*remote)
+    let base = match branch_fork_point(root, remote_ref, local)? {
+        Some(fork) => fork,
+        None if *remote == ZERO_COMMIT => new_branch_base(root, local)?,
+        None => String::from(*remote),
     };
     git_base::resolve_base(root, &base).map(Some)
 }

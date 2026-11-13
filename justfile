@@ -92,6 +92,10 @@ check-ts: check-node
     node harness/vitest-check/check.mjs
     node --test 'apps/desktop/tests/*.test.mjs'
     node --test 'harness/claude-hooks/tests/*.test.mjs'
+    node harness/ci/workflow-policy/check.mjs
+    node harness/ci/review-records/check.mjs
+    node harness/ci/linux/exclusions.mjs verify
+    node --test 'harness/ci/tests/*.test.mjs'
 
 clippy manifest *flags:
     cargo clippy --manifest-path "$1" --workspace --all-targets --locked "${@:2}" -- -D warnings
@@ -177,3 +181,21 @@ known-gaps:
 
 claude-regression:
     node harness/claude-regression/run.mjs
+
+linux-check: check-node
+    node harness/ci/linux/exclusions.mjs verify
+    cargo fmt --all --check
+    "{{just_executable()}}" clippy Cargo.toml $(node harness/ci/linux/exclusions.mjs cargo)
+    "{{just_executable()}}" deny
+    "{{just_executable()}}" arch-check
+    "{{just_executable()}}" source-check
+    "{{just_executable()}}" sql-check
+    "{{just_executable()}}" migration-check
+    "{{just_executable()}}" capability-check
+    "{{just_executable()}}" raw-types
+    "{{just_executable()}}" disable-check
+    node harness/ci/workflow-policy/check.mjs
+    node harness/ci/review-records/check.mjs
+
+linux-test:
+    cargo nextest run --workspace --locked $(node harness/ci/linux/exclusions.mjs cargo) -E "$(node harness/ci/linux/exclusions.mjs filter)"

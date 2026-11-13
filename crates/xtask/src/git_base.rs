@@ -68,7 +68,7 @@ pub(crate) fn output(mut command: Command, label: &str) -> Result<Vec<u8>, Strin
     }
 }
 
-fn is_commit_id(text: &str) -> bool {
+pub(crate) fn is_commit_id(text: &str) -> bool {
     text.len() == COMMIT_WIDTH
         && text
             .chars()

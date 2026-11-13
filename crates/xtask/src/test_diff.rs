@@ -370,6 +370,56 @@ pub(crate) fn check(root: &Path, base: &str) -> Result<BTreeSet<Finding<Rule>>, 
     Ok(findings)
 }
 
+fn existed_at_base(base_files: &Files, base: &Scan, finding: &Finding<Rule>) -> bool {
+    match &finding.rule {
+        Rule::Removed(id) | Rule::Modified(id) => base.tests.contains_key(id),
+        Rule::SupportRemoved(_) | Rule::SupportModified(_) | Rule::Shadowing(_) => base
+            .modules
+            .get(&finding.path)
+            .is_some_and(|record| record.testing),
+        Rule::Unreachable(path) => base_files.contains_key(path),
+        Rule::NotListed(_) | Rule::CountDecreased { .. } => true,
+    }
+}
+
+pub(crate) fn commit_changes(
+    root: &Path,
+    base: &str,
+    parent: &str,
+    commit: &str,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let named: Vec<&str> = [base, parent, commit]
+        .into_iter()
+        .filter(|name| !crate::git_base::is_commit_id(name))
+        .collect();
+    if !named.is_empty() {
+        return Err(format!(
+            "test-changes는 40자리 커밋 ID만 받는다: {}",
+            named.join(", ")
+        ));
+    }
+    let at_base = base_files(root, base)?;
+    let existing = scan(&at_base);
+    let before = texts(&base_files(root, parent)?);
+    let after = texts(&base_files(root, commit)?);
+    Ok(compare_sources(&before, &after)
+        .into_iter()
+        .filter(|finding| existed_at_base(&at_base, &existing, finding))
+        .collect())
+}
+
+pub(crate) fn changes_command(arguments: &[String]) -> ExitCode {
+    report(
+        "test-changes",
+        match arguments {
+            [root, base, parent, commit] => commit_changes(Path::new(root), base, parent, commit),
+            _ => Err(String::from(
+                "사용법: xtask test-changes <저장소> <기준 커밋> <부모 커밋> <커밋>",
+            )),
+        },
+    )
+}
+
 pub(crate) fn command(arguments: &[String]) -> ExitCode {
     report(
         "test-diff",
