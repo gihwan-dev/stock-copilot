@@ -1,3 +1,51 @@
 @import "tailwindcss" source(none);
 @import "./tokens.css";
 @source "../../";
+
+@utility stroke-icon {
+  stroke-width: var(--border-width-focus);
+}
+
+@utility stroke-linecap-round {
+  stroke-linecap: round;
+}
+
+@utility stroke-linejoin-round {
+  stroke-linejoin: round;
+}
+
+@utility bottom-border-hairline {
+  bottom: var(--border-width-hairline);
+}
+
+@utility h-border-hairline {
+  height: var(--border-width-hairline);
+}
+
+@utility left-border-hairline {
+  left: var(--border-width-hairline);
+}
+
+@utility ml-border-hairline {
+  margin-left: var(--border-width-hairline);
+}
+
+@utility size-border-hairline {
+  width: var(--border-width-hairline);
+}
+
+@utility size-border-hairline {
+  height: var(--border-width-hairline);
+}
+
+@utility top-border-hairline {
+  top: var(--border-width-hairline);
+}
+
+@utility w-border-focus {
+  width: var(--border-width-focus);
+}
+
+@utility w-border-hairline {
+  width: var(--border-width-hairline);
+}
