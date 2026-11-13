@@ -8,11 +8,14 @@ pub use model::{
     JudgedCriterion, KillCriterion, MachineCondition, UserReason,
 };
 
+const HISTORY_LIMIT: ThesisVersion = ThesisVersion(6144);
+const WEB_HISTORY_LIMIT: ThesisVersion = ThesisVersion(HISTORY_LIMIT.0.saturating_sub(32));
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ThesisVersion(usize);
 impl ThesisVersion {
     pub fn try_new(value: usize) -> Result<Self, ThesisError> {
-        if value > 256 {
+        if value > HISTORY_LIMIT.0 {
             return Err(ThesisError::InvalidVersion);
         }
         Ok(Self(value))
@@ -266,7 +269,7 @@ impl Thesis {
         Ok(())
     }
     fn check_pending_capacity(&self, operation: &ThesisOperation) -> Result<(), ThesisError> {
-        if self.history.len() >= 224 {
+        if self.version() >= WEB_HISTORY_LIMIT {
             return Err(ThesisError::WebHistoryFull);
         }
         let pending = self
@@ -330,7 +333,7 @@ impl Thesis {
         if self.version() != base {
             return Err(ThesisError::VersionConflict);
         }
-        if self.history.len() >= 256 {
+        if self.version() >= HISTORY_LIMIT {
             return Err(ThesisError::HistoryFull);
         }
         Ok(())
@@ -592,7 +595,7 @@ mod tests {
         )
         .expect("보류");
         let pending = thesis.version();
-        for _ in 0_usize..4095 {
+        for _ in 0_usize..12287 {
             assert_eq!(
                 add(
                     &mut thesis,
@@ -660,9 +663,12 @@ mod tests {
         );
         assert_eq!(thesis.history(), []);
         assert_eq!(thesis.claims(), []);
-        assert_eq!(*ThesisVersion::try_new(256).expect("상한").as_usize(), 256);
         assert_eq!(
-            ThesisVersion::try_new(257),
+            *ThesisVersion::try_new(6144).expect("상한").as_usize(),
+            6144
+        );
+        assert_eq!(
+            ThesisVersion::try_new(6145),
             Err(ThesisError::InvalidVersion)
         );
     }
@@ -721,6 +727,43 @@ mod tests {
         restored
     }
 
+    fn flush_replay(restored: &mut Thesis, changes: &mut Vec<ProposedChange>) {
+        if changes.is_empty() {
+            return;
+        }
+        let patch = ThesisPatch::try_new(changes.clone()).expect("재생 묶음");
+        changes.clear();
+        restored
+            .apply_batch(restored.version(), patch)
+            .expect("묶음 재생");
+    }
+    pub(super) fn replay_batched(original: &Thesis) -> Thesis {
+        let mut restored = Thesis::new();
+        let mut changes = Vec::new();
+        for entry in original.history() {
+            match entry.action() {
+                HistoryAction::Change(change) => {
+                    changes.push(change.as_ref().clone());
+                }
+                HistoryAction::Decision(target, decision, reason) => {
+                    flush_replay(&mut restored, &mut changes);
+                    match decision {
+                        UserDecision::Confirm => restored
+                            .confirm_by_user(restored.version(), *target, reason.clone())
+                            .expect("확인 재생"),
+                        UserDecision::Reject => restored
+                            .reject_by_user(restored.version(), *target, reason.clone())
+                            .expect("거절 재생"),
+                    }
+                }
+            }
+            if changes.len() == 16 {
+                flush_replay(&mut restored, &mut changes);
+            }
+        }
+        flush_replay(&mut restored, &mut changes);
+        restored
+    }
     fn generated_step(thesis: &mut Thesis, operation: u8, key: u8) -> Result<(), ThesisError> {
         let target = id(&format!("c{key}"));
         match operation {
@@ -763,7 +806,7 @@ mod tests {
             6 => thesis.confirm_by_user(thesis.version(), version(usize::from(key)), user()),
             7 => thesis.reject_by_user(thesis.version(), version(usize::from(key)), user()),
             8 => thesis.apply_batch(
-                version(256),
+                version(6144),
                 single_patch(change(
                     ThesisOperation::AddClaim(claim(target.as_str(), ClaimRole::Core)),
                     TestSource::News,
@@ -798,12 +841,13 @@ mod tests {
         let restored = replay(thesis);
         assert_eq!(restored.pending(), thesis.pending());
         assert_eq!(&restored, thesis);
+        assert_eq!(&replay_batched(thesis), thesis);
     }
 
     #[test]
     fn mixed_history_prefix_failure_atomicity_replay_and_pending_isolation() {
         let strategy = proptest::collection::vec((0_u8..10, 0_u8..8), 0..64);
-        TestRunner::new(Config::with_cases(64))
+        TestRunner::new(Config::with_cases(256))
             .run(&strategy, |steps| {
                 let mut thesis = Thesis::new();
                 for (operation, key) in steps {
@@ -818,7 +862,8 @@ mod tests {
 #[cfg(test)]
 mod boundary_tests {
     use super::tests::{
-        TestSource, add, change, claim, criterion, evidence, id, reason, replay, text, user,
+        TestSource, add, change, claim, criterion, evidence, id, reason, replay, replay_batched,
+        text, user,
     };
     use super::{
         ChangeDisposition, ChangeReason, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
@@ -1269,6 +1314,33 @@ mod boundary_tests {
         );
     }
 
+    fn fill_history(
+        thesis: &mut Thesis,
+        target: ThesisVersion,
+        claim: &ClaimId,
+        verdict: ClaimVerdict,
+    ) {
+        while thesis.version() < target {
+            let count = target
+                .as_usize()
+                .abs_diff(*thesis.version().as_usize())
+                .min(16);
+            let changes = (0..count)
+                .map(|_| {
+                    change(
+                        ThesisOperation::Judge(claim.clone(), verdict),
+                        TestSource::News,
+                    )
+                })
+                .collect();
+            thesis
+                .apply_batch(
+                    thesis.version(),
+                    ThesisPatch::try_new(changes).expect("채움 묶음"),
+                )
+                .expect("이력 채움");
+        }
+    }
     #[test]
     fn batch_crossing_history_cap_rolls_back_all_intermediate_entries() {
         let mut thesis = Thesis::new();
@@ -1278,14 +1350,12 @@ mod boundary_tests {
             TestSource::News,
         )
         .expect("추가");
-        for _ in 1_usize..255 {
-            add(
-                &mut thesis,
-                ThesisOperation::Judge(id("a"), ClaimVerdict::Intact),
-                TestSource::News,
-            )
-            .expect("상한 전");
-        }
+        fill_history(
+            &mut thesis,
+            ThesisVersion::try_new(6143).expect("상한 전"),
+            &id("a"),
+            ClaimVerdict::Intact,
+        );
         let before = thesis.snapshot();
         let change = change(
             ThesisOperation::Judge(id("a"), ClaimVerdict::Broken),
@@ -1316,14 +1386,12 @@ mod boundary_tests {
         thesis
             .confirm_by_user(thesis.version(), pending, user())
             .expect("확인");
-        while *thesis.version().as_usize() < 224 {
-            add(
-                &mut thesis,
-                ThesisOperation::Judge(id("p0"), ClaimVerdict::Intact),
-                TestSource::News,
-            )
-            .expect("공간 사용");
-        }
+        fill_history(
+            &mut thesis,
+            ThesisVersion::try_new(6112).expect("웹 예약 경계"),
+            &id("p0"),
+            ClaimVerdict::Intact,
+        );
         let before = thesis.snapshot();
         assert_eq!(
             add(
@@ -1341,14 +1409,12 @@ mod boundary_tests {
         )
         .expect("예약 공간 실제 신호");
         assert_eq!(thesis.status(), ThesisStatus::SuspectedBroken);
-        while *thesis.version().as_usize() < 256 {
-            add(
-                &mut thesis,
-                ThesisOperation::Judge(id("p0"), ClaimVerdict::Broken),
-                TestSource::News,
-            )
-            .expect("이력 상한");
-        }
+        fill_history(
+            &mut thesis,
+            ThesisVersion::try_new(6144).expect("이력 상한"),
+            &id("p0"),
+            ClaimVerdict::Broken,
+        );
         assert_eq!(
             add(
                 &mut thesis,
@@ -1361,7 +1427,7 @@ mod boundary_tests {
             thesis.reject_by_user(thesis.version(), pending, user()),
             Err(ThesisError::HistoryFull)
         );
-        assert_eq!(replay(&thesis), thesis);
+        assert_eq!(replay_batched(&thesis), thesis);
     }
 
     #[test]
