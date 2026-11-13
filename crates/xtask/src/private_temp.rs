@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod vanished_tests;
 
 use std::fs::{self, DirBuilder, Metadata};
 use std::hash::{BuildHasher, Hasher, RandomState};
@@ -7,7 +9,7 @@ use std::io;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const PRIVATE_MODE: u32 = 0o700;
 
@@ -56,6 +58,22 @@ fn private_directory(path: &Path, owner: u32) -> Result<(), String> {
         return Err(format!("{}: 권한이 0700이 아니다", path.display()));
     }
     Ok(())
+}
+
+pub(crate) fn modified_unless_gone(path: &Path) -> Result<Option<SystemTime>, String> {
+    match fs::symlink_metadata(path).and_then(|metadata| metadata.modified()) {
+        Ok(modified) => Ok(Some(modified)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("{}: {error}", path.display())),
+    }
+}
+
+pub(crate) fn remove_unless_gone(path: &Path) -> Result<(), String> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("{}: {error}", path.display())),
+    }
 }
 
 fn create_private(path: &Path) -> io::Result<()> {
@@ -108,15 +126,14 @@ impl PrivateDirectory {
             if private_directory(&path, self.owner).is_err() {
                 continue;
             }
-            let modified = fs::symlink_metadata(&path)
-                .and_then(|metadata| metadata.modified())
-                .map_err(|error| format!("{}: {error}", path.display()))?;
+            let Some(modified) = modified_unless_gone(&path)? else {
+                continue;
+            };
             let stale = fresh
                 .duration_since(modified)
                 .is_ok_and(|age| age > STALE_AFTER);
             if stale {
-                fs::remove_dir_all(&path)
-                    .map_err(|error| format!("{}: {error}", path.display()))?;
+                remove_unless_gone(&path)?;
             }
         }
         Ok(())

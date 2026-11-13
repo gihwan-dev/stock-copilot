@@ -102,3 +102,97 @@ test("CI installs the pinned pnpm as corepack's global default before any pnpm s
       });
   });
 });
+
+test("runner variables, a BASH_ENV and a hostile shell profile do not change the base step's verdict", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { chmodSync, readFileSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const {
+    commit,
+    createRepository,
+    removeRepository,
+    runBaseStep,
+    scratch,
+    write,
+  } = await import("./signature-repo.mjs");
+  const hostile = scratch("hostile-runner-");
+  const made = createRepository();
+  const names = [
+    "HOME",
+    "BASH_ENV",
+    "GITHUB_OUTPUT",
+    "GITHUB_REPOSITORY",
+    "GITHUB_SHA",
+    "GITHUB_REF",
+    "GITHUB_EVENT_NAME",
+    "RUNNER_TEMP",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "CI",
+    "GITHUB_ACTIONS",
+  ];
+  const saved = Object.fromEntries(
+    names.map((name) => [name, process.env[name]]),
+  );
+  try {
+    write(hostile, "bin/gh", "#!/bin/sh\nexit 4\n");
+    chmodSync(join(hostile, "bin/gh"), 0o755);
+    const prepend = `export PATH=${join(hostile, "bin")}:$PATH\ngh() { exit 4; }\n`;
+    write(hostile, ".bashrc", prepend);
+    write(hostile, ".bash_profile", prepend);
+    write(hostile, "bash-env.sh", prepend);
+    write(hostile, "runner-output.txt", "");
+    const head = commit(made.directory, "head");
+    Object.assign(process.env, {
+      HOME: hostile,
+      BASH_ENV: join(hostile, "bash-env.sh"),
+      GITHUB_OUTPUT: join(hostile, "runner-output.txt"),
+      GITHUB_REPOSITORY: "someone/else",
+      GITHUB_SHA: head,
+      GITHUB_REF: "refs/heads/master",
+      GITHUB_EVENT_NAME: "push",
+      RUNNER_TEMP: hostile,
+      GH_TOKEN: "x",
+      GITHUB_TOKEN: "x",
+      CI: "true",
+      GITHUB_ACTIONS: "true",
+    });
+    const plain = spawnSync("bash", ["-c", "type -t gh"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    });
+    assert.equal(
+      plain.stdout.trim(),
+      "function",
+      "the hostile shell setup is effective",
+    );
+    assert.deepEqual(
+      runBaseStep(
+        made,
+        {
+          EVENT_NAME: "push",
+          REF: "refs/heads/master",
+          BEFORE: made.base,
+          HEAD: head,
+        },
+        [made.base],
+      ),
+      {
+        status: 0,
+        output: { tools: made.base, base: made.base, kind: "verified" },
+      },
+    );
+    assert.equal(readFileSync(join(hostile, "runner-output.txt"), "utf8"), "");
+  } finally {
+    Object.entries(saved).forEach(([name, value]) => {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+    removeRepository(made.directory);
+    rmSync(hostile, { recursive: true, force: true });
+  }
+});

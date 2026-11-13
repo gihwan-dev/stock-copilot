@@ -17,7 +17,7 @@ import {
   repositoryFindings,
   workflowFindings,
 } from "../workflow-policy/check.mjs";
-import { repoRoot, scratch } from "./signature-repo.mjs";
+import { childEnvironment, repoRoot, scratch } from "./signature-repo.mjs";
 
 const CASES_FILE = "harness/ci/workflow-policy/cases.json";
 
@@ -186,7 +186,7 @@ test("an unlisted file under .github and a missing workflow fail the repository 
     const finished = spawnSync(
       "node",
       ["harness/ci/workflow-policy/check.mjs", directory],
-      { cwd: repoRoot, encoding: "utf8" },
+      { cwd: repoRoot, encoding: "utf8", env: childEnvironment() },
     );
     assert.equal(finished.status, 1);
     assert.match(
