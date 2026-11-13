@@ -117,3 +117,9 @@ mod proposal_range;
 pub use proposal_range::{
     ProposalPriceRange, ProposalRangeError, ProposalVolatility, TradingDayHorizon,
 };
+
+mod proposal_facts;
+pub use proposal::ExecutionToken;
+pub use proposal_facts::{
+    EstimateRangeFacts, PriceObservation, ProposalLifetime, ProposalLifetimeError,
+};

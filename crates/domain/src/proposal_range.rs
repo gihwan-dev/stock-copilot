@@ -25,41 +25,37 @@ impl TradingDayHorizon {
         Ok(Self(value))
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposalPriceRange {
-    card_reference: Price,
-    estimate_reference: Price,
-    volatility: ProposalVolatility,
-    horizon: TradingDayHorizon,
+    facts: crate::EstimateRangeFacts,
+    card: crate::PriceObservation,
 }
 impl ProposalPriceRange {
-    #[must_use]
-    pub fn new(
-        card_reference: Price,
-        estimate_reference: Price,
-        volatility: ProposalVolatility,
-        horizon: TradingDayHorizon,
-    ) -> Self {
-        Self {
-            card_reference,
-            estimate_reference,
-            volatility,
-            horizon,
+    pub fn from_estimate_task(
+        facts: crate::EstimateRangeFacts,
+        card: crate::PriceObservation,
+    ) -> Result<Self, crate::ProposalError> {
+        if facts.instrument() != card.instrument() {
+            return Err(crate::ProposalError::InstrumentMismatch);
         }
+        if facts.reference().as_money().currency() != card.price().as_money().currency() {
+            return Err(crate::ProposalError::CurrencyMismatch);
+        }
+        Ok(Self { facts, card })
     }
     #[must_use]
     pub fn check(&self, current: Price) -> CheckResult {
         let card = crate::exact_arithmetic::proposal_price_range(
-            self.card_reference,
+            self.card.price(),
             current,
-            self.volatility.0,
-            self.horizon.0,
+            self.facts.volatility().0,
+            self.facts.horizon().0,
         );
         let estimate = crate::exact_arithmetic::proposal_price_range(
-            self.estimate_reference,
+            self.facts.reference(),
             current,
-            self.volatility.0,
-            self.horizon.0,
+            self.facts.volatility().0,
+            self.facts.horizon().0,
         );
         if card == CheckResult::Passed && estimate == CheckResult::Passed {
             CheckResult::Passed
@@ -67,11 +63,10 @@ impl ProposalPriceRange {
             CheckResult::Failed
         }
     }
-    pub(crate) fn currency(&self) -> Result<crate::Currency, crate::ProposalError> {
-        let currency = self.card_reference.as_money().currency();
-        if currency != self.estimate_reference.as_money().currency() {
-            return Err(crate::ProposalError::CurrencyMismatch);
-        }
-        Ok(currency)
+    pub(crate) fn instrument(&self) -> &crate::ResolvedOrderInstrument {
+        self.facts.instrument()
+    }
+    pub(crate) fn currency(&self) -> crate::Currency {
+        self.facts.reference().as_money().currency()
     }
 }

@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { ESLint } from "eslint";
+import { ESLint, mkdtempSync } from "./ds-runtime-environment.mjs";
 import ts from "typescript";
 import { desktopRoot } from "./paths.mjs";
 
