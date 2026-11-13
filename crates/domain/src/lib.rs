@@ -82,3 +82,14 @@ pub use order_intent::{OrderIntent, OrderSide, OrderTerms};
 
 pub use order_intent::{OrderIntentError, ResolvedOrderInstrument};
 pub use order_quantity::OrderWireValue;
+mod proposal;
+pub use proposal::{
+    CheckResult, Draft, Proposal, ProposalError, ProposalExecutionError, Validated,
+    ValidationCheck, ValidationReport,
+};
+mod proposal_id;
+pub use proposal_id::ProposalId;
+mod proposal_range;
+pub use proposal_range::{
+    ProposalPriceRange, ProposalRangeError, ProposalVolatility, TradingDayHorizon,
+};

@@ -211,6 +211,38 @@ fn split_word(value: Word) -> (Limb, Limb) {
     )
 }
 
+pub(crate) fn proposal_price_range(
+    reference: crate::Price,
+    current: crate::Price,
+    sigma: Ratio,
+    horizon: Ratio,
+) -> crate::CheckResult {
+    fn squared_range(
+        reference: crate::Price,
+        current: crate::Price,
+        sigma: Ratio,
+        horizon: Ratio,
+    ) -> Result<std::cmp::Ordering, MoneyError> {
+        let difference = current
+            .as_money()
+            .checked_sub(&reference.as_money())?
+            .amount();
+        let distance_squared = multiply(difference, difference)?;
+        let sigma_amount = Amount::new(sigma.as_decimal());
+        let scaled_sigma = multiply(sigma_amount, Amount::new(Decimal::new(5, 1)))?;
+        let variance = multiply(scaled_sigma, scaled_sigma)?;
+        let time_variance = multiply(variance, Amount::new(horizon.as_decimal()))?;
+        let reference_squared =
+            multiply(reference.as_money().amount(), reference.as_money().amount())?;
+        let bound = multiply(time_variance, reference_squared)?;
+        Ok(distance_squared.as_decimal().cmp(&bound.as_decimal()))
+    }
+    match squared_range(reference, current, sigma, horizon) {
+        Ok(ordering) if ordering.is_le() => crate::CheckResult::Passed,
+        Ok(_) | Err(_) => crate::CheckResult::Failed,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
