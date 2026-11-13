@@ -41,6 +41,16 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow-workspace = true
 allow = [
+  { crate = "num-traits", reason = "rust_decimal·proptest → num-traits: 십진수·수 생성" },
+  { crate = "arrayvec", reason = "rust_decimal → arrayvec: 십진수 내부 버퍼" },
+  { crate = "chacha20", reason = "proptest → chacha20: 테스트 난수 생성" },
+  { crate = "core_detect", reason = "proptest → core_detect: 테스트 실행 기능 탐지" },
+  { crate = "proptest", reason = "D-01 domain 개발 의존: 속성 테스트" },
+  { crate = "rand", reason = "proptest → rand: 테스트 난수 생성" },
+  { crate = "rand_core", reason = "proptest → rand·rand_xorshift·chacha20 → rand_core" },
+  { crate = "rand_xorshift", reason = "proptest → rand_xorshift: 테스트 난수 생성" },
+  { crate = "rust_decimal", reason = "D-01 domain 일반 의존: 정확 십진수 금액" },
+  { crate = "unarray", reason = "proptest → unarray: 테스트 배열 생성" },
   { crate = "adler2", reason = "tauri 전이 의존성" },
   { crate = "aho-corasick", reason = "tauri, tauri-build 전이 의존성" },
   { crate = "anyhow", reason = "tauri, tauri-build 전이 의존성" },
@@ -270,6 +280,8 @@ skip-tree = []
 
 [bans.build]
 allow-build-scripts = [
+  { crate = "num-traits" },
+  { crate = "rust_decimal" },
   { crate = "anyhow" },
   { crate = "camino" },
   { crate = "cookie" },

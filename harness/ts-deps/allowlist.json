@@ -57,10 +57,6 @@
         "zod": {
           "target": "zod",
           "reason": "경계 파싱과 브랜드 (architecture 5.2, harness 4.3)"
-        },
-        "tailwindcss": {
-          "target": "tailwindcss",
-          "reason": "Tailwind 4.3.5 토큰 테마와 Vite 컴파일 (R-14, DS-13)"
         }
       },
       "devDependencies": {
@@ -130,6 +126,10 @@
         },
         "@tailwindcss/vite": {
           "target": "@tailwindcss/vite",
+          "reason": "Tailwind 4.3.5 토큰 테마와 Vite 컴파일 (R-14, DS-13)"
+        },
+        "tailwindcss": {
+          "target": "tailwindcss",
           "reason": "Tailwind 4.3.5 토큰 테마와 Vite 컴파일 (R-14, DS-13)"
         }
       }

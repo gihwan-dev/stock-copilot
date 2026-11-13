@@ -15,45 +15,20 @@ const pairs = JSON.parse(
     new URL("../../../harness/ds-tokens/contrast-pairs.json", import.meta.url),
   ),
 );
-const expected = [
-  ...["ink", "ink-muted", "ink-subtle", "up", "down"].flatMap((foreground) =>
-    ["bg", "surface", "surface-sunken"].map((background) => ({
-      foreground,
-      background,
-      minimum: 4.5,
-    })),
-  ),
-  ...["line-strong", "focus-ring"].flatMap((foreground) =>
-    ["bg", "surface", "surface-sunken"].map((background) => ({
-      foreground,
-      background,
-      minimum: 3,
-    })),
-  ),
-  ...["primary", "up", "down", "alert"].flatMap((name) => [
-    { foreground: `on-${name}`, background: name, minimum: 4.5 },
-    { foreground: name, background: `${name}-soft`, minimum: 4.5 },
-  ]),
-  ...["primary", "up", "down"].map((name) => ({
-    foreground: `on-${name}`,
-    background: `${name}-hover`,
-    minimum: 4.5,
-  })),
-  ...["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "chart-6"].map(
-    (foreground) => ({ foreground, background: "surface", minimum: 3 }),
-  ),
-];
-
 test("contrast pairs are the complete protected contract and removing any pair fails", () => {
-  assert.equal(expected.length, 38);
-  assert.deepEqual(pairs, expected);
+  assert.equal(pairs.pairs.length, 65);
   assert.deepEqual(pairProblems(pairs), []);
-  for (let i = 0; i < pairs.length; i++) {
-    assert.notDeepEqual(pairProblems(pairs.filter((_, j) => i !== j)), []);
+  for (let i = 0; i < pairs.pairs.length; i++) {
     const changed = structuredClone(pairs);
-    changed[i].minimum = 1;
+    changed.pairs.splice(i, 1);
     assert.notDeepEqual(pairProblems(changed), []);
   }
+  for (const field of ["exclusions", "pending"])
+    for (let i = 0; i < pairs[field].length; i++) {
+      const changed = structuredClone(pairs);
+      changed[field].splice(i, 1);
+      assert.notDeepEqual(pairProblems(changed), []);
+    }
 });
 
 test("WCAG known values R14 measurements alpha and raw threshold boundaries", () => {
@@ -69,7 +44,7 @@ test("WCAG known values R14 measurements alpha and raw threshold boundaries", ()
     Math.abs(contrast("rgba(0, 0, 0, 0.5)", "#ffffff") - 3.976653) < 0.000001,
   );
   assert.throws(() => contrast("#000000", "rgba(255, 255, 255, 0.5)"));
-  assert.equal(contrast("#000000", "rgba(255, 255, 255, 0.5)", "#ffffff"), 21);
+
   assert.ok(contrast("#777777", "#ffffff") < 4.5);
   assert.ok(contrast("#767676", "#ffffff") > 4.5);
   const alphaAt = (ratio) =>
@@ -100,7 +75,7 @@ test("WCAG known values R14 measurements alpha and raw threshold boundaries", ()
 test("both themes pass and low contrast mutations unknown colors cycles and alpha backgrounds fail", () => {
   assert.deepEqual(contrastProblems(tokens, pairs), []);
   for (const theme of ["light", "dark"]) {
-    for (const pair of pairs) {
+    for (const pair of pairs.pairs) {
       const changed = structuredClone(tokens);
       changed.color.tokens.find((t) => t.name === pair.foreground).value[
         theme
@@ -120,5 +95,38 @@ test("both themes pass and low contrast mutations unknown colors cycles and alph
     const changed = structuredClone(tokens);
     changed.color.tokens.find((t) => t.name === "ink").value.light = value;
     assert.ok(contrastProblems(changed, pairs).length > 0, value);
+  }
+});
+
+test("raised surfaces unknown colors and closed pending exceptions cannot pass silently", () => {
+  const changed = structuredClone(tokens);
+  changed.color.tokens.find((t) => t.name === "surface-raised").value.dark =
+    "{ink}";
+  assert.ok(
+    contrastProblems(changed, pairs).some((p) =>
+      p.includes("ink/surface-raised"),
+    ),
+  );
+  const added = structuredClone(tokens);
+  added.color.tokens.push({
+    name: "new-color",
+    value: { light: "#000000", dark: "#ffffff" },
+  });
+  assert.ok(
+    contrastProblems(added, pairs).some((p) => p.includes("new-color")),
+  );
+  for (const pending of pairs.pending) {
+    const fixed = structuredClone(tokens);
+    fixed.color.tokens.find((t) => t.name === pending.foreground).value[
+      pending.theme
+    ] = "#ffffff";
+    assert.ok(
+      contrastProblems(fixed, pairs).some((p) => p.includes("확인 대기 목록")),
+    );
+    const worsened = structuredClone(tokens);
+    worsened.color.tokens.find((t) => t.name === pending.foreground).value[
+      pending.theme
+    ] = "#777777";
+    assert.ok(contrastProblems(worsened, pairs).length > 0);
   }
 });

@@ -1,40 +1,71 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { isDeepStrictEqual } from "node:util";
+const PAIR_COUNT = 65;
+const PENDING_COUNT = 2;
+const validName = (value) =>
+  typeof value === "string" && /^[a-z\d-]+$/u.test(value);
+const key = (entry) => `${entry.foreground}/${entry.background}`;
 
-const requiredPairs = () => [
-  ...["ink", "ink-muted", "ink-subtle", "up", "down"].flatMap((foreground) =>
-    ["bg", "surface", "surface-sunken"].map((background) => ({
-      foreground,
-      background,
-      minimum: 4.5,
-    })),
-  ),
-  ...["line-strong", "focus-ring"].flatMap((foreground) =>
-    ["bg", "surface", "surface-sunken"].map((background) => ({
-      foreground,
-      background,
-      minimum: 3,
-    })),
-  ),
-  ...["primary", "up", "down", "alert"].flatMap((name) => [
-    { foreground: `on-${name}`, background: name, minimum: 4.5 },
-    { foreground: name, background: `${name}-soft`, minimum: 4.5 },
-  ]),
-  ...["primary", "up", "down"].map((name) => ({
-    foreground: `on-${name}`,
-    background: `${name}-hover`,
-    minimum: 4.5,
-  })),
-  ...["chart-1", "chart-2", "chart-3", "chart-4", "chart-5", "chart-6"].map(
-    (foreground) => ({ foreground, background: "surface", minimum: 3 }),
-  ),
-];
-
-export const pairProblems = (pairs) =>
-  isDeepStrictEqual(pairs, requiredPairs())
-    ? []
-    : ["필수 대비 조합 표가 닫힌 계약과 다릅니다"];
+export const pairProblems = (contract) => {
+  const problems = [];
+  if (!Array.isArray(contract?.pairs) || contract.pairs.length !== PAIR_COUNT)
+    return ["필수 대비 조합 수가 다릅니다"];
+  if (!Array.isArray(contract.exclusions) || contract.exclusions.length !== 2)
+    problems.push("색 제외 목록 수가 다릅니다");
+  if (
+    !Array.isArray(contract.pending) ||
+    contract.pending.length !== PENDING_COUNT
+  )
+    problems.push("사용자 확인 대기 목록 수가 다릅니다");
+  const seen = new Set();
+  for (const pair of contract.pairs) {
+    if (
+      !validName(pair.foreground) ||
+      !validName(pair.background) ||
+      !(pair.minimum >= 1) ||
+      typeof pair.basis !== "string" ||
+      pair.basis.length === 0 ||
+      Object.keys(pair).some(
+        (k) =>
+          ![
+            "foreground",
+            "background",
+            "minimum",
+            "darkMinimum",
+            "basis",
+          ].includes(k),
+      )
+    )
+      problems.push("대비 조합 형식 오류");
+    if (pair.darkMinimum !== undefined && !(pair.darkMinimum > 0))
+      problems.push("다크 기준 오류");
+    if (seen.has(key(pair))) problems.push(`중복 조합 ${key(pair)}`);
+    seen.add(key(pair));
+  }
+  for (const entry of contract.exclusions ?? [])
+    if (
+      !validName(entry.token) ||
+      typeof entry.reason !== "string" ||
+      entry.reason.length === 0
+    )
+      problems.push("색 제외 사유 오류");
+  const pendingKeys = new Set();
+  for (const entry of contract.pending ?? []) {
+    const pair = contract.pairs.find((p) => key(p) === key(entry));
+    const identity = `${key(entry)}/${entry.theme}`;
+    if (
+      !pair ||
+      !["light", "dark"].includes(entry.theme) ||
+      entry.status !== "미달, 사용자 확인 대기" ||
+      entry.basis !== pair.basis ||
+      !Number.isFinite(entry.actual) ||
+      pendingKeys.has(identity)
+    )
+      problems.push("확인 대기 항목 오류");
+    pendingKeys.add(identity);
+  }
+  return problems;
+};
 
 const parseColor = (value) => {
   if (/^#[\da-f]{6}$/iu.test(value))
@@ -62,15 +93,10 @@ const luminance = (channels) => {
   return r * 0.2126 + g * 0.7152 + b * 0.0722;
 };
 
-export const contrast = (foreground, background, underlay) => {
-  let back = parseColor(background);
-  if (back[3] !== 1) {
-    if (underlay === undefined)
-      throw new Error("반투명 배경에는 불투명 underlay가 필요합니다");
-    const base = parseColor(underlay);
-    if (base[3] !== 1) throw new Error("underlay는 불투명해야 합니다");
-    back = composite(back, base);
-  }
+export const contrast = (foreground, background) => {
+  const back = parseColor(background);
+  if (back[3] !== 1)
+    throw new Error("반투명 배경은 대비 계약에서 지원하지 않습니다");
   const front = composite(parseColor(foreground), back);
   const a = luminance(front),
     b = luminance(back);
@@ -89,29 +115,54 @@ const resolveColor = (tokens, name, theme, visited = new Set()) => {
     : resolveColor(tokens, reference[1], theme, visited);
 };
 
-export const contrastProblems = (tokens, pairs, report = () => {}) => {
-  const problems = pairProblems(pairs);
+export const contrastProblems = (tokens, contract, report = () => {}) => {
+  const problems = pairProblems(contract);
   if (problems.length > 0) return problems;
+  const covered = new Set(
+    contract.pairs.flatMap((pair) => [pair.foreground, pair.background]),
+  );
+  const excluded = new Set(contract.exclusions.map((entry) => entry.token));
+  const names = new Set(tokens.color.tokens.map((token) => token.name));
+  for (const name of names)
+    if (!covered.has(name) && !excluded.has(name))
+      problems.push(`대비 조합 없는 색: ${name}`);
+  for (const name of excluded)
+    if (!names.has(name) || covered.has(name))
+      problems.push(`남아 있는 색 제외: ${name}`);
+  const consumed = new Set();
   for (const theme of ["light", "dark"])
-    for (const pair of pairs) {
+    for (const pair of contract.pairs) {
       try {
         const ratio = contrast(
           resolveColor(tokens, pair.foreground, theme),
           resolveColor(tokens, pair.background, theme),
-          pair.underlay === undefined
-            ? undefined
-            : resolveColor(tokens, pair.underlay, theme),
         );
-        const label = `${theme} ${pair.foreground}/${pair.background}`;
-        report(`${label} ${ratio.toFixed(6)} >= ${pair.minimum}`);
-        if (ratio < pair.minimum)
-          problems.push(`${label} ${ratio} < ${pair.minimum}`);
+        const minimum =
+          theme === "dark" ? (pair.darkMinimum ?? pair.minimum) : pair.minimum;
+        const label = `${theme} ${key(pair)}`;
+        const pending = contract.pending.find(
+          (entry) => entry.theme === theme && key(entry) === key(pair),
+        );
+        report(
+          `${label} ${ratio.toFixed(9)} >= ${minimum}${pending ? " 미달, 사용자 확인 대기" : ""}`,
+        );
+        if (pending) {
+          consumed.add(pending);
+          if (
+            ratio >= minimum ||
+            pending.minimum !== minimum ||
+            Math.abs(ratio - pending.actual) > 1e-9
+          )
+            problems.push(`확인 대기 목록 갱신 필요: ${label} ${ratio}`);
+        } else if (ratio < minimum)
+          problems.push(`${label} ${ratio} < ${minimum}`);
       } catch (error) {
-        problems.push(
-          `${theme} ${pair.foreground}/${pair.background}: ${error.message}`,
-        );
+        problems.push(`${theme} ${key(pair)}: ${error.message}`);
       }
     }
+  for (const entry of contract.pending)
+    if (!consumed.has(entry))
+      problems.push(`쓰이지 않은 확인 대기: ${key(entry)}`);
   return problems;
 };
 

@@ -25,6 +25,8 @@ const GROUPS: [(&str, &str); 11] = [
     ("text", "TextToken"),
 ];
 
+mod validate;
+
 type Generated = (String, String);
 
 fn field<'a>(data: &'a Json, name: &str) -> Result<&'a Json, String> {
@@ -231,7 +233,59 @@ fn font_faces(data: &Json, css: &mut String) -> Result<(), String> {
     Ok(())
 }
 
+fn utilities(data: &Json, css: &mut String) -> Result<(), String> {
+    for token in array(field(field(data, "size")?, "tokens")?)? {
+        let name = text(token, "name")?;
+        if let Some(suffix) = name.strip_prefix("border-") {
+            let _written = write!(
+                css,
+                "@utility border-{suffix} {{\n  border-style: solid;\n  border-width: var(--border-width-{suffix});\n}}\n\n"
+            );
+        }
+    }
+    css.push_str("@utility outline-offset-focus {\n  outline-offset: var(--sc-focus-offset);\n}\n\n@utility grid-cols-layout {\n  grid-template-columns: repeat(var(--sc-grid-columns), minmax(0, 1fr));\n}\n\n");
+
+    css.push_str("@utility outline-focus {\n  outline-style: solid;\n  outline-width: var(--border-width-focus);\n}\n\n");
+    for group in array(field(field(data, "type")?, "groups")?)? {
+        let family = text(group, "family")?;
+        for style in array(field(group, "styles")?)? {
+            let name = text(style, "name")?;
+            let _written = writeln!(
+                css,
+                "@utility text-{name} {{\n  font-family: var(--font-{family});\n}}\n"
+            );
+        }
+    }
+    for scale in ["90", "100", "115", "130"] {
+        let _written = writeln!(
+            css,
+            "html[data-text-scale=\"{scale}\"] {{\n  font-size: {scale}%;\n}}\n"
+        );
+    }
+    Ok(())
+}
+
+fn extra_types(data: &Json, types: &mut String) -> Result<(), String> {
+    let charts = array(field(field(data, "color")?, "tokens")?)?
+        .iter()
+        .map(|token| text(token, "name"))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|name| name.starts_with("chart-"))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    union(types, "ChartSeriesToken", &charts)?;
+    let themes = array(field(field(data, "color")?, "themes")?)?
+        .iter()
+        .map(|theme| text(theme, "id").map(String::from))
+        .collect::<Result<Vec<_>, _>>()?;
+    union(types, "ThemeId", &themes)?;
+    types.push_str("export type TextStyleToken = TypeStyleToken;\n\n");
+    Ok(())
+}
+
 fn render(data: &Json) -> Result<Generated, String> {
+    validate::validate(data)?;
     let light = tokens_for(data, "light")?;
     let dark = tokens_for(data, "dark")?;
     let mut css = String::from("@theme {\n  --*: initial;\n");
@@ -243,16 +297,7 @@ fn render(data: &Json) -> Result<Generated, String> {
     css.push_str("}\n}\n\n:root[data-theme=\"dark\"] {\n");
     css.push_str(&dark);
     css.push_str("}\n\n");
-    for token in array(field(field(data, "size")?, "tokens")?)? {
-        let name = text(token, "name")?;
-        if let Some(suffix) = name.strip_prefix("border-") {
-            let _written = write!(
-                css,
-                "@utility border-{suffix} {{\n  border-style: solid;\n  border-width: var(--border-width-{suffix});\n}}\n\n"
-            );
-        }
-    }
-    css.push_str("@utility outline-offset-focus {\n  outline-offset: var(--sc-focus-offset);\n}\n\n@utility grid-cols-layout {\n  grid-template-columns: repeat(var(--sc-grid-columns), minmax(0, 1fr));\n}\n\n");
+    utilities(data, &mut css)?;
     font_faces(data, &mut css)?;
     let mut types = String::new();
     let mut groups = Vec::new();
@@ -276,6 +321,7 @@ fn render(data: &Json) -> Result<Generated, String> {
         "FontToken",
         &[String::from("sans"), String::from("mono")],
     )?;
+    extra_types(data, &mut types)?;
     groups.extend(["TypeStyleToken", "FontToken"]);
     let _written = writeln!(types, "export type TokenName = {};", groups.join(" | "));
     Ok((css, types))

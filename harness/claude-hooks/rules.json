@@ -65,7 +65,8 @@
         "*.codex/config.toml",
         "*.codex/hooks.json",
         "AGENTS.md",
-        "AGENTS.override.md"
+        "AGENTS.override.md",
+        "theme.css"
       ],
       "allowed": [
         ".gitignore",
@@ -91,7 +92,8 @@
         "crates/adapters/*/Cargo.toml",
         ".codex/config.toml",
         ".codex/hooks.json",
-        "AGENTS.md"
+        "AGENTS.md",
+        "apps/desktop/src/shared/ds/theme.css"
       ],
       "exempt": ["harness/**"]
     }

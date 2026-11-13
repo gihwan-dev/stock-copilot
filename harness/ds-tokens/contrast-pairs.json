@@ -1,192 +1,429 @@
-[
-  {
-    "foreground": "ink",
-    "background": "bg",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink",
-    "background": "surface",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink",
-    "background": "surface-sunken",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink-muted",
-    "background": "bg",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink-muted",
-    "background": "surface",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink-muted",
-    "background": "surface-sunken",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink-subtle",
-    "background": "bg",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink-subtle",
-    "background": "surface",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "ink-subtle",
-    "background": "surface-sunken",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "up",
-    "background": "bg",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "up",
-    "background": "surface",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "up",
-    "background": "surface-sunken",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "down",
-    "background": "bg",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "down",
-    "background": "surface",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "down",
-    "background": "surface-sunken",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "line-strong",
-    "background": "bg",
-    "minimum": 3
-  },
-  {
-    "foreground": "line-strong",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "line-strong",
-    "background": "surface-sunken",
-    "minimum": 3
-  },
-  {
-    "foreground": "focus-ring",
-    "background": "bg",
-    "minimum": 3
-  },
-  {
-    "foreground": "focus-ring",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "focus-ring",
-    "background": "surface-sunken",
-    "minimum": 3
-  },
-  {
-    "foreground": "on-primary",
-    "background": "primary",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "primary",
-    "background": "primary-soft",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "on-up",
-    "background": "up",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "up",
-    "background": "up-soft",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "on-down",
-    "background": "down",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "down",
-    "background": "down-soft",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "on-alert",
-    "background": "alert",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "alert",
-    "background": "alert-soft",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "on-primary",
-    "background": "primary-hover",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "on-up",
-    "background": "up-hover",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "on-down",
-    "background": "down-hover",
-    "minimum": 4.5
-  },
-  {
-    "foreground": "chart-1",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "chart-2",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "chart-3",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "chart-4",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "chart-5",
-    "background": "surface",
-    "minimum": 3
-  },
-  {
-    "foreground": "chart-6",
-    "background": "surface",
-    "minimum": 3
-  }
-]
+{
+  "pairs": [
+    {
+      "foreground": "ink",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink-muted",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink-muted",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink-muted",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "up",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "up",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "up",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "down",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "down",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "down",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle 및 가격 방향 up·down; bg·surface·surface-sunken 위 4.5:1 이상"
+    },
+    {
+      "foreground": "line-strong",
+      "background": "bg",
+      "minimum": 3,
+      "basis": "design/README.md 색: 입력창·스위치·체크박스·확률 막대 테두리는 line-strong(3:1 이상)"
+    },
+    {
+      "foreground": "line-strong",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "design/README.md 색: 입력창·스위치·체크박스·확률 막대 테두리는 line-strong(3:1 이상)"
+    },
+    {
+      "foreground": "line-strong",
+      "background": "surface-sunken",
+      "minimum": 3,
+      "basis": "design/README.md 색: 입력창·스위치·체크박스·확률 막대 테두리는 line-strong(3:1 이상)"
+    },
+    {
+      "foreground": "focus-ring",
+      "background": "bg",
+      "minimum": 3,
+      "basis": "tokens.json focus-ring.usage: 키보드 포커스 링 2px 실선. bg·surface 위; README 상태와 움직임: 클릭할 수 있는 것은 모두 키보드로도 가능"
+    },
+    {
+      "foreground": "focus-ring",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json focus-ring.usage: 키보드 포커스 링 2px 실선. bg·surface 위; README 상태와 움직임: 클릭할 수 있는 것은 모두 키보드로도 가능"
+    },
+    {
+      "foreground": "focus-ring",
+      "background": "surface-sunken",
+      "minimum": 3,
+      "basis": "tokens.json focus-ring.usage: 키보드 포커스 링 2px 실선. bg·surface 위; README 상태와 움직임: 클릭할 수 있는 것은 모두 키보드로도 가능"
+    },
+    {
+      "foreground": "on-primary",
+      "background": "primary",
+      "minimum": 4.5,
+      "basis": "tokens.json on-primary.usage: primary 바탕 위 글자; primary usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "primary",
+      "background": "primary-soft",
+      "minimum": 4.5,
+      "basis": "tokens.json primary-soft.usage: 위 글자는 primary"
+    },
+    {
+      "foreground": "on-up",
+      "background": "up",
+      "minimum": 4.5,
+      "basis": "tokens.json on-up.usage: up 바탕 위 글자; up usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "up",
+      "background": "up-soft",
+      "minimum": 4.5,
+      "basis": "tokens.json up-soft.usage: 위 글자는 up"
+    },
+    {
+      "foreground": "on-down",
+      "background": "down",
+      "minimum": 4.5,
+      "basis": "tokens.json on-down.usage: down 바탕 위 글자; down usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "down",
+      "background": "down-soft",
+      "minimum": 4.5,
+      "basis": "tokens.json down-soft.usage: 위 글자는 down"
+    },
+    {
+      "foreground": "on-alert",
+      "background": "alert",
+      "minimum": 4.5,
+      "basis": "tokens.json on-alert.usage: alert 바탕 위 글자; alert usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "alert",
+      "background": "alert-soft",
+      "minimum": 4.5,
+      "basis": "tokens.json alert-soft.usage: 위 글자는 alert"
+    },
+    {
+      "foreground": "on-primary",
+      "background": "primary-hover",
+      "minimum": 4.5,
+      "basis": "tokens.json on-primary.usage: primary 바탕 위 글자; primary-hover usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "on-up",
+      "background": "up-hover",
+      "minimum": 4.5,
+      "basis": "tokens.json on-up.usage: up 바탕 위 글자; up-hover usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "on-down",
+      "background": "down-hover",
+      "minimum": 4.5,
+      "basis": "tokens.json on-down.usage: down 바탕 위 글자; down-hover usage: 버튼 hover·pressed"
+    },
+    {
+      "foreground": "chart-1",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json color.chart-1.usage: surface 위 3.6:1 이상; WCAG 비텍스트 최소 3:1"
+    },
+    {
+      "foreground": "chart-2",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json color.chart-2.usage: surface 위 3.6:1 이상; WCAG 비텍스트 최소 3:1"
+    },
+    {
+      "foreground": "chart-3",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json color.chart-3.usage: surface 위 3.6:1 이상; WCAG 비텍스트 최소 3:1"
+    },
+    {
+      "foreground": "chart-4",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json color.chart-4.usage: surface 위 3.6:1 이상; WCAG 비텍스트 최소 3:1"
+    },
+    {
+      "foreground": "chart-5",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json color.chart-5.usage: surface 위 3.6:1 이상; WCAG 비텍스트 최소 3:1"
+    },
+    {
+      "foreground": "chart-6",
+      "background": "surface",
+      "minimum": 3,
+      "basis": "tokens.json color.chart-6.usage: surface 위 3.6:1 이상; WCAG 비텍스트 최소 3:1"
+    },
+    {
+      "foreground": "ink",
+      "background": "surface-raised",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 팝오버·대화 상자는 surface-raised; 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle; Text README: default·muted·subtle 제공"
+    },
+    {
+      "foreground": "ink-muted",
+      "background": "surface-raised",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 팝오버·대화 상자는 surface-raised; 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle; Text README: default·muted·subtle 제공"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "surface-raised",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 팝오버·대화 상자는 surface-raised; 본문 ink, 라벨 ink-muted, 시각·출처 ink-subtle; Text README: default·muted·subtle 제공"
+    },
+    {
+      "foreground": "primary",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: primary는 주요 액션·선택·링크; Text README tone primary·alert 제공; bg는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "primary",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: primary는 주요 액션·선택·링크; Text README tone primary·alert 제공; surface는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "primary",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: primary는 주요 액션·선택·링크; Text README tone primary·alert 제공; surface-sunken는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "primary",
+      "background": "surface-raised",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: primary는 주요 액션·선택·링크; Text README tone primary·alert 제공; surface-raised는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "alert",
+      "background": "bg",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 경고와 오류는 alert; Text README tone primary·alert 제공; bg는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "alert",
+      "background": "surface",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 경고와 오류는 alert; Text README tone primary·alert 제공; surface는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "alert",
+      "background": "surface-sunken",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 경고와 오류는 alert; Text README tone primary·alert 제공; surface-sunken는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "alert",
+      "background": "surface-raised",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 경고와 오류는 alert; Text README tone primary·alert 제공; surface-raised는 앱·카드·입력·팝오버의 면"
+    },
+    {
+      "foreground": "ink",
+      "background": "primary-soft",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json primary-soft.usage: 선택된 행 바탕; Text README의 default·muted·subtle을 선택된 행의 본문·보조 글자에 조합하는 일반 글자 요구 (구성에서 유도)"
+    },
+    {
+      "foreground": "ink",
+      "background": "alert-soft",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json alert-soft.usage: Callout(alert) 바탕, 글자는 alert 또는 ink; Text README의 default·muted·subtle을 Callout README children(왜·어떻게 고치는지)에 조합하는 일반 글자 요구 (구성에서 유도)"
+    },
+    {
+      "foreground": "ink-muted",
+      "background": "primary-soft",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json primary-soft.usage: 선택된 행 바탕; Text README의 default·muted·subtle을 선택된 행의 본문·보조 글자에 조합하는 일반 글자 요구 (구성에서 유도)"
+    },
+    {
+      "foreground": "ink-muted",
+      "background": "alert-soft",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json alert-soft.usage: Callout(alert) 바탕, 글자는 alert 또는 ink; Text README의 default·muted·subtle을 Callout README children(왜·어떻게 고치는지)에 조합하는 일반 글자 요구 (구성에서 유도)"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "primary-soft",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json primary-soft.usage: 선택된 행 바탕; Text README의 default·muted·subtle을 선택된 행의 본문·보조 글자에 조합하는 일반 글자 요구 (구성에서 유도)"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "alert-soft",
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json alert-soft.usage: Callout(alert) 바탕, 글자는 alert 또는 ink; Text README의 default·muted·subtle을 Callout README children(왜·어떻게 고치는지)에 조합하는 일반 글자 요구 (구성에서 유도)"
+    },
+    {
+      "foreground": "up",
+      "background": "primary-soft",
+      "minimum": 4.5,
+      "basis": "tokens.json primary-soft.usage: 선택된 행 바탕; README 가격 방향 up·down; StockListItem README: 이름·코드와 오늘 등락률, selected 제공"
+    },
+    {
+      "foreground": "down",
+      "background": "primary-soft",
+      "minimum": 4.5,
+      "basis": "tokens.json primary-soft.usage: 선택된 행 바탕; README 가격 방향 up·down; StockListItem README: 이름·코드와 오늘 등락률, selected 제공"
+    },
+    {
+      "foreground": "primary",
+      "background": "alert-soft",
+      "minimum": 4.5,
+      "basis": "README primary는 링크; alert-soft는 주의·실패 바탕; Callout README children 왜·어떻게 고치는지, Text README primary 제공"
+    },
+    {
+      "foreground": "chart-1",
+      "background": "chart-2",
+      "minimum": 2,
+      "basis": "tokens.json chart-N.usage: 이웃 계열이 밝기로 2:1(라이트)·1.8:1(다크) 이상 차이",
+      "darkMinimum": 1.8
+    },
+    {
+      "foreground": "chart-2",
+      "background": "chart-3",
+      "minimum": 2,
+      "basis": "tokens.json chart-N.usage: 이웃 계열이 밝기로 2:1(라이트)·1.8:1(다크) 이상 차이",
+      "darkMinimum": 1.8
+    },
+    {
+      "foreground": "chart-3",
+      "background": "chart-4",
+      "minimum": 2,
+      "basis": "tokens.json chart-N.usage: 이웃 계열이 밝기로 2:1(라이트)·1.8:1(다크) 이상 차이",
+      "darkMinimum": 1.8
+    },
+    {
+      "foreground": "chart-4",
+      "background": "chart-5",
+      "minimum": 2,
+      "basis": "tokens.json chart-N.usage: 이웃 계열이 밝기로 2:1(라이트)·1.8:1(다크) 이상 차이",
+      "darkMinimum": 1.8
+    },
+    {
+      "foreground": "chart-5",
+      "background": "chart-6",
+      "minimum": 2,
+      "basis": "tokens.json chart-N.usage: 이웃 계열이 밝기로 2:1(라이트)·1.8:1(다크) 이상 차이",
+      "darkMinimum": 1.8
+    },
+    {
+      "foreground": "focus-ring",
+      "background": "surface-raised",
+      "minimum": 3,
+      "basis": "README 상태와 움직임: 클릭할 수 있는 것은 모두 키보드로도 가능; README 색: 팝오버·대화 상자는 surface-raised"
+    },
+    {
+      "foreground": "line-strong",
+      "background": "surface-raised",
+      "minimum": 3,
+      "basis": "README 색: 팝오버·대화 상자는 surface-raised, 입력창·스위치·체크박스 테두리는 line-strong(3:1 이상)"
+    }
+  ],
+  "exclusions": [
+    {
+      "token": "line",
+      "reason": "tokens.json line.usage: 장식용이라 대비 기준 없음"
+    },
+    {
+      "token": "overlay",
+      "reason": "tokens.json overlay.usage: 모달·설정 시트 뒤 딤. 글자·식별 가능한 컨트롤의 직접 배경이 아님"
+    }
+  ],
+  "pending": [
+    {
+      "foreground": "ink-subtle",
+      "background": "primary-soft",
+      "theme": "dark",
+      "actual": 4.451944073961445,
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json primary-soft.usage: 선택된 행 바탕; Text README의 default·muted·subtle을 선택된 행의 본문·보조 글자에 조합하는 일반 글자 요구 (구성에서 유도)",
+      "status": "미달, 사용자 확인 대기"
+    },
+    {
+      "foreground": "ink-subtle",
+      "background": "alert-soft",
+      "theme": "dark",
+      "actual": 4.420657113909118,
+      "minimum": 4.5,
+      "basis": "design/README.md 색: 본문 ink·라벨 ink-muted·시각과 출처 ink-subtle; tokens.json alert-soft.usage: Callout(alert) 바탕, 글자는 alert 또는 ink; Text README의 default·muted·subtle을 Callout README children(왜·어떻게 고치는지)에 조합하는 일반 글자 요구 (구성에서 유도)",
+      "status": "미달, 사용자 확인 대기"
+    }
+  ]
+}

@@ -118,7 +118,6 @@ const expectedProductionAllowlist = [
   "files src/shared/ipc/testing/fakes.ts src/shared/ipc/testing/fakes.ts",
   "files src/shared/ipc/testing/mockBindings.ts src/shared/ipc/testing/mockBindings.ts",
   "files src/shared/ipc/testing/responses.ts src/shared/ipc/testing/responses.ts",
-  "files src/shared/ds/tokens.ts src/shared/ds/tokens.ts",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

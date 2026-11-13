@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { compile } from "tailwindcss";
 import ts from "typescript";
+import { verifyIndependent } from "./ds-independent.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -97,6 +98,10 @@ test("generation check rejects hand edits to either output and input without reg
     writeFileSync(join(scratch, inputPath), read(inputPath));
     const run = generator(scratch);
     assert.equal(run.status, 0, run.stderr);
+    verifyIndependent(
+      readFileSync(join(scratch, cssPath), "utf8"),
+      JSON.parse(read(inputPath)),
+    );
     assert.equal(generator(scratch, ["--check"]).status, 0);
     for (const path of [cssPath, tsPath]) {
       const original = readFileSync(join(scratch, path), "utf8");
@@ -151,7 +156,7 @@ test("removing a token name makes a typed consumer fail to compile", () => {
 test("CSS entry is confined to DS and Vite bundles the six protected fonts with OFL", () => {
   assert.equal(
     read("apps/desktop/src/shared/ds/theme.css"),
-    '@import "tailwindcss";\n@import "./tokens.css";\n',
+    '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@source "../../";\n',
   );
   assert.match(
     read("apps/desktop/index.html"),

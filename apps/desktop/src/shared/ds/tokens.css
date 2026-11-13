@@ -704,6 +704,75 @@
   grid-template-columns: repeat(var(--sc-grid-columns), minmax(0, 1fr));
 }
 
+@utility outline-focus {
+  outline-style: solid;
+  outline-width: var(--border-width-focus);
+}
+
+@utility text-num-display {
+  font-family: var(--font-sans);
+}
+
+@utility text-num-lg {
+  font-family: var(--font-sans);
+}
+
+@utility text-num-md {
+  font-family: var(--font-sans);
+}
+
+@utility text-num-sm {
+  font-family: var(--font-sans);
+}
+
+@utility text-title-lg {
+  font-family: var(--font-sans);
+}
+
+@utility text-title-md {
+  font-family: var(--font-sans);
+}
+
+@utility text-title-sm {
+  font-family: var(--font-sans);
+}
+
+@utility text-body {
+  font-family: var(--font-sans);
+}
+
+@utility text-body-sm {
+  font-family: var(--font-sans);
+}
+
+@utility text-label {
+  font-family: var(--font-sans);
+}
+
+@utility text-caption {
+  font-family: var(--font-sans);
+}
+
+@utility text-code {
+  font-family: var(--font-mono);
+}
+
+html[data-text-scale="90"] {
+  font-size: 90%;
+}
+
+html[data-text-scale="100"] {
+  font-size: 100%;
+}
+
+html[data-text-scale="115"] {
+  font-size: 115%;
+}
+
+html[data-text-scale="130"] {
+  font-size: 130%;
+}
+
 @font-face {
   font-family: "IBM Plex Sans KR";
   src: url("../../../../../design/fonts/IBMPlexSansKR-Regular.woff2")
