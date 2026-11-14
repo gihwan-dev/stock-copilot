@@ -5,6 +5,7 @@ pub enum PortfolioError {
     DuplicateInstrument,
     CurrencyMismatch,
     NegativeBuyingPower,
+    CashLookupFailed(crate::CashObservationFailure),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuyingPower {
@@ -221,5 +222,20 @@ impl ReportedPortfolio {
     #[must_use]
     pub const fn observed_at(self) -> Timestamp {
         self.observed_at
+    }
+}
+
+pub(crate) fn buying_power_from_observation(observation: crate::CashObservation) -> BuyingPower {
+    match observation {
+        crate::CashObservation::Observed(value) => value,
+        crate::CashObservation::Failed {
+            currency,
+            reason,
+            observed_at,
+        } => BuyingPower {
+            money: Err(PortfolioError::CashLookupFailed(reason)),
+            currency,
+            observed_at,
+        },
     }
 }

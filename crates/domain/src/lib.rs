@@ -307,6 +307,13 @@ pub use valuation_snapshot_calendar::{
 };
 pub use valuation_snapshot_cash::{SnapshotCashBasis, SnapshotLedgers};
 
+mod broker_account;
+pub use broker_account::{
+    BrokerAccountKind, BrokerAccountRow, BrokerAccountSelection, BrokerAccountTypeCode,
+    UnknownBrokerAccountKind, select_brokerage_account,
+};
+mod cash_observation;
+pub use cash_observation::{CashObservation, portfolio_from_cash_observations};
 mod scorecard;
 mod scorecard_arithmetic;
 pub use scorecard::{
@@ -345,6 +352,16 @@ mod performance_risk;
 pub use performance_risk::{
     BetaMetric, PerformanceBeta, PerformanceRisk, RiskMetric, performance_beta,
     performance_volatility,
+};
+mod cash_observation_failure;
+pub use broker_account::{
+    BrokerAccountKeySelection, BrokerAccountNumberInput, BrokerAccountRows, BrokerAccountRowsError,
+    select_brokerage_account_by_id,
+};
+pub use cash_observation_failure::{
+    CashAccessDenial, CashMissingData, CashObservationFailure, CashObservationFailures,
+    CashReadCapability, CashRequestRejection, CashResponseMismatch, CashRetryDelay,
+    CashUnavailableCause, cash_observation_failures,
 };
 mod known_market;
 mod master_instrument;
