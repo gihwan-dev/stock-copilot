@@ -193,3 +193,10 @@ pub use calibration::{
     CalibrationOutcome, CalibrationReadiness, CalibrationTable, ConservativeCalibration,
     EligibleCalibration, ModelIdentityPart,
 };
+
+mod concentration;
+pub use concentration::{
+    Concentration, ConcentrationDisplay, ConcentrationError, ConcentrationHhi,
+    ConcentrationMetrics, ConcentrationStatus, ConcentrationWarning, ConcentrationWeight,
+    EffectiveInstrumentCount,
+};

@@ -1374,3 +1374,11 @@ mod tests {
         }
     }
 }
+
+pub(crate) fn concentration_square(value: Amount) -> Result<Amount, MoneyError> {
+    value
+        .as_decimal()
+        .checked_mul(value.as_decimal())
+        .map(Amount::new)
+        .ok_or(MoneyError::Overflow)
+}

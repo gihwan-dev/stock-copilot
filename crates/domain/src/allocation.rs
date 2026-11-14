@@ -68,6 +68,9 @@ impl AllocationValue {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AssetWeight(AllocationValue);
 impl AssetWeight {
+    pub(crate) fn concentration_input(&self) -> Amount {
+        self.0.amount()
+    }
     #[must_use]
     pub fn cmp_profile_weight(&self, limit: &ProfileWeight) -> Ordering {
         self.0

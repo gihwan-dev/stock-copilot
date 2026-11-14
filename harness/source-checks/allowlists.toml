@@ -61,3 +61,7 @@ reason = "D-11 표본 통계의 근사 연산을 봉인된 일간·연율·내�
 path = "crates/xtask/src/mutants_check/environment.rs"
 names = ["clock-env:var"]
 reason = "H-42 변이 병렬 수를 낮추는 환경 변수 하나를 읽는 하네스 경계. 값 검증과 기본 상한은 순수 함수가 유지한다"
+
+[[decimal-rounding]]
+path = "crates/domain/src/concentration.rs"
+reason = "D-07 봉인된 근사 지표를 R-11 예제 자릿수의 표시 문자열로만 반올림한다"
