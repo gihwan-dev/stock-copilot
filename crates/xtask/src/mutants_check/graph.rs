@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use proc_macro2::{TokenStream, TokenTree};
+use super::macro_tokens;
+use proc_macro2::TokenStream;
 use syn::visit::Visit;
 
 pub(super) type Sources = BTreeMap<String, String>;
@@ -10,17 +11,6 @@ type Names = BTreeMap<String, BTreeSet<String>>;
 pub(super) struct Graph {
     edges: BTreeMap<String, BTreeSet<String>>,
     uncertain: BTreeSet<String>,
-}
-
-fn identifiers(tokens: TokenStream) -> BTreeSet<String> {
-    tokens
-        .into_iter()
-        .flat_map(|token| match token {
-            TokenTree::Ident(name) => BTreeSet::from([name.to_string()]),
-            TokenTree::Group(group) => identifiers(group.stream()),
-            TokenTree::Literal(_) | TokenTree::Punct(_) => BTreeSet::new(),
-        })
-        .collect()
 }
 
 fn definition(item: &syn::Item) -> Option<String> {
@@ -98,22 +88,20 @@ impl<'ast> Visit<'ast> for Uncertainty {
     fn visit_item_use(&mut self, i: &'ast syn::ItemUse) {
         let mut imports = Imports::default();
         imports.tree(&i.tree);
-        if imports.uncertain {
+        let exported = match i.vis {
+            syn::Visibility::Public(_) | syn::Visibility::Restricted(_) => true,
+            syn::Visibility::Inherited => false,
+        };
+        if imports.uncertain && exported {
             self.structural = true;
         }
         syn::visit::visit_item_use(self, i);
     }
 
-    fn visit_macro(&mut self, _i: &'ast syn::Macro) {
-        self.found = true;
-    }
     fn visit_attribute(&mut self, i: &'ast syn::Attribute) {
         if i.path().is_ident("path") {
             self.structural = true;
-        } else if !["cfg", "test", "repr"]
-            .iter()
-            .any(|name| i.path().is_ident(name))
-        {
+        } else if i.path().is_ident("proptest_config") || !macro_tokens::attribute_known(&i.meta) {
             self.found = true;
         }
         syn::visit::visit_attribute(self, i);
@@ -221,9 +209,20 @@ impl<'ast> Visit<'ast> for RootedPaths<'_> {
 
 fn collect_imports(file: &syn::File, imports: &mut Imports) {
     for item in &file.items {
-        if let syn::Item::Use(import) = item {
+        if let syn::Item::Use(import) = item
+            && !contains_glob(&import.tree)
+        {
             imports.tree(&import.tree);
         }
+    }
+}
+
+fn contains_glob(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Glob(_) => true,
+        syn::UseTree::Path(path) => contains_glob(&path.tree),
+        syn::UseTree::Group(group) => group.items.iter().any(contains_glob),
+        syn::UseTree::Name(_) | syn::UseTree::Rename(_) => false,
     }
 }
 
@@ -258,6 +257,10 @@ impl Graph {
         if imports.uncertain || !graph.uncertain.is_empty() {
             return Err(String::from("glob or macro may hide an incoming reference"));
         }
+        let macros = macro_tokens::Macros::read(&parsed, sources)?;
+        for (name, owners) in macros.owners() {
+            names.entry(name).or_default().extend(owners);
+        }
         resolve_aliases(&mut names, &imports.aliases);
         validate_aliases(&names, &imports)?;
 
@@ -270,7 +273,7 @@ impl Graph {
             if paths.unresolved {
                 graph.uncertain.insert(path.clone());
             }
-            let ids = identifiers(
+            let ids = macros.expanded_ids(
                 source
                     .parse::<TokenStream>()
                     .map_err(|error| error.to_string())?,
@@ -281,18 +284,6 @@ impl Graph {
                 .flatten()
                 .cloned()
                 .collect();
-            if ids.contains("super") {
-                let parent = std::path::Path::new(path)
-                    .parent()
-                    .and_then(|folder| folder.to_str())
-                    .ok_or("parent module")?;
-                edges.extend(
-                    sources
-                        .keys()
-                        .filter(|candidate| candidate.starts_with(parent))
-                        .cloned(),
-                );
-            }
             edges.remove(path);
             graph.edges.insert(path.clone(), edges);
         }
@@ -306,7 +297,7 @@ impl Graph {
         }
     }
 
-    pub(super) fn selected(&self, seeds: &BTreeSet<String>) -> Result<BTreeSet<String>, String> {
+    pub(super) fn outward(&self, seeds: &BTreeSet<String>) -> Result<BTreeSet<String>, String> {
         let mut closure = seeds.clone();
         loop {
             if !closure.is_disjoint(&self.uncertain) {
@@ -326,6 +317,11 @@ impl Graph {
                 break;
             }
         }
+        Ok(closure)
+    }
+
+    pub(super) fn selected(&self, seeds: &BTreeSet<String>) -> Result<BTreeSet<String>, String> {
+        let mut closure = self.outward(seeds)?;
         let incoming = self
             .edges
             .iter()

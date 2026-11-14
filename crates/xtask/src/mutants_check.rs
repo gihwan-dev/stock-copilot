@@ -1,5 +1,8 @@
 mod environment;
 mod graph;
+mod macro_tokens;
+#[cfg(test)]
+mod macros_tests;
 mod scope;
 use scope::{diff_scope, jobs_for};
 
