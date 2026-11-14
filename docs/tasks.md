@@ -104,6 +104,7 @@ O 주문 개발 (E와 함께 진행, 스위치는 꺼진 채) ┤
 | H-28 | 사람 승인용 서명 키 (담당: 사용자). 다른 작업을 막지 않는다 | Secretive SSH 키(Touch ID), 저장소 `gpg.format=ssh`·`commit.gpgsign=false`, `harness/allowed_signers`에 공개키 (harness 7.6) | - |
 | H-20 | 로컬 잠금 (사용자 승인) | `agent-writable.txt` 기준으로 권한 `deny`·편집 훅·샌드박스가 켜짐. 에이전트의 보호 경로 편집과 셸 쓰기가 거부됨. 에이전트의 `Cargo.lock`·`pnpm-lock.yaml`·IPC 생성물 쓰기는 통과. GitHub 규칙 세트와 CI에 기대지 않음 (harness 7.2, 7.6) `lefthook.yml`, 모든 폴더의 `.gitignore`, `.git/hooks`의 삭제·변경 거부 (ADR 0015). 잠금을 켤 때(`harness/claude-hooks/lock.txt`) 훅 파일 해시를 사용자 서명 커밋의 값과 비교 (ADR 0017). 잠그기 전에 풀 것: 원본 루트에서 샌드박스 안의 `just check`와 커밋·병합 훅이 통과해야 함(실측 E4b에서 실패. 원인 후보는 하네스 테스트가 프로젝트 폴더 안에 임시 git 저장소를 만드는 것). 잠금 절차는 `harness/sandbox/prelock.mjs` 확인 → 잠금 설정 생성 → `lock.txt` 켜기 → 해시 다시 쓰기 → 서명 커밋 (ADR 0018). | H-01 ~ H-15, H-17 ~ H-19, H-21 ~ H-25, H-29 ~ H-40 |
 | H-41 | Codex 호환 하네스 | 판정 코어 공유, Codex 훅·권한 프로필·pnpm 버전 확인, 토큰 없는 자체 테스트와 수동 회귀 10개, 역할 배분과 ADR 0021 | H-12, H-15, H-25, H-35 |
+| H-42 | 변이 검사 범위와 병렬 실행 | 푸시 훅은 변경분 변이만 돌고 전체는 밤 CI의 독립 작업이 돎. `cargo mutants`가 병렬로 돎. 다른 파일을 거쳐 테스트를 약하게 하는 변경에서도 영향받는 파일이 선택됨(회귀 테스트) (ADR 0042) | H-13 |
 
 ## DS. 디자인 시스템
 

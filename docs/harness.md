@@ -491,7 +491,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
 | 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 주문 게이트 모듈 |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
-| 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). CI 밤: 전체 |
+| 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 변경 전·후 참조 그래프에서 변경 파일이 쓰는 파일은 전이적으로, 변경 파일을 쓰는 파일은 직접 한 단계까지 고르고, 해석할 수 없으면 crate 전체로 넓힌다. CI 밤: 전체를 독립된 네 조각으로 (ADR 0042) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
 | 코드로 건너뛰기 | `#[mutants::skip]`, `cfg_attr` 형태 모두 xtask가 실패시킨다 |
 

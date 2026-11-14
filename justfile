@@ -67,7 +67,6 @@ check: check-node require-base check-ts
 
 check-full: advisory-db-fetch check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
-    "{{just_executable()}}" mutants-all
 
 require-base:
     [ -n {{quote(base)}} ] || { printf 'base가 필요하다: just base=<HEAD|40자리 커밋 ID> check (커밋 훅은 HEAD, 종료 훅은 브리프의 기준 커밋, 푸시 훅은 푸시 전 원격 커밋)\n' >&2; exit 1; }
@@ -221,3 +220,6 @@ gen-tokens:
 
 tokens-contrast:
     node harness/ds-tokens/contrast.mjs
+
+mutants-shard shard:
+    cargo run --locked --quiet --package xtask -- mutants --shard "$1"

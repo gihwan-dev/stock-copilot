@@ -108,10 +108,10 @@ fn check_refuses_to_run_without_an_explicit_base() {
 }
 
 #[test]
-fn check_full_mutates_every_target_crate() {
+fn check_full_does_not_repeat_nightly_mutation_testing() {
     let check_full = recipe("check-full");
     assert!(
-        check_full
+        !check_full
             .iter()
             .any(|line| line == "\"{{ just_executable() }}\" mutants-all"),
         "{check_full:?}"

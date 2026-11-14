@@ -1,0 +1,313 @@
+{
+  "name": "nightly",
+  "on": {
+    "schedule": [
+      {
+        "cron": "0 18 * * *"
+      }
+    ]
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "changes": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 10,
+      "outputs": {
+        "changed": "${{ steps.changed.outputs.changed }}"
+      },
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "changed",
+          "id": "changed",
+          "run": "node harness/ci/ci-range.mjs changed"
+        }
+      ]
+    },
+    "macos": {
+      "needs": [
+        "changes"
+      ],
+      "if": "needs.changes.outputs.changed == 'yes'",
+      "runs-on": "macos-15",
+      "timeout-minutes": 90,
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "pnpm",
+          "run": "node harness/ci/tools.mjs pnpm"
+        },
+        {
+          "name": "tools",
+          "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+          "with": {
+            "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+          }
+        },
+        {
+          "name": "cargo-mutants",
+          "run": "node harness/ci/tools.mjs cargo-install"
+        },
+        {
+          "name": "lefthook",
+          "run": "node harness/ci/tools.mjs lefthook"
+        },
+        {
+          "name": "fetch",
+          "run": "node harness/ci/tools.mjs fetch"
+        },
+        {
+          "name": "advisory db",
+          "run": "just advisory-db-fetch"
+        },
+        {
+          "name": "hooks",
+          "run": "lefthook install"
+        },
+        {
+          "name": "just check",
+          "run": "just base=HEAD check"
+        }
+      ]
+    },
+    "linux": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 180,
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "pnpm",
+          "run": "node harness/ci/tools.mjs pnpm"
+        },
+        {
+          "name": "tools",
+          "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+          "with": {
+            "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+          }
+        },
+        {
+          "name": "cargo-mutants",
+          "run": "node harness/ci/tools.mjs cargo-install"
+        },
+        {
+          "name": "lefthook",
+          "run": "node harness/ci/tools.mjs lefthook"
+        },
+        {
+          "name": "fetch",
+          "run": "node harness/ci/tools.mjs fetch"
+        },
+        {
+          "name": "advisory db",
+          "run": "just advisory-db-fetch"
+        },
+        {
+          "name": "linux check",
+          "run": "just linux-check"
+        },
+        {
+          "name": "linux tests without network",
+          "run": "node harness/ci/linux/offline.mjs just linux-test"
+        }
+      ]
+    },
+    "notify": {
+      "needs": [
+        "changes",
+        "macos",
+        "linux"
+      ],
+      "if": "failure()",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "permissions": {
+        "issues": "write"
+      },
+      "steps": [
+        {
+          "name": "base checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "master",
+            "path": "base-tools",
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": "base-tools/.node-version"
+          }
+        },
+        {
+          "name": "issue",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+          "run": "node base-tools/harness/ci/notify.mjs",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}",
+            "TITLE": "CI 실패: 밤 작업",
+            "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "SHA": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "no notifier",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+          "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
+        }
+      ]
+    },
+    "mutants": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 120,
+      "strategy": {
+        "fail-fast": true,
+        "matrix": {
+          "shard": [
+            "0/4",
+            "1/4",
+            "2/4",
+            "3/4"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "pnpm",
+          "run": "node harness/ci/tools.mjs pnpm"
+        },
+        {
+          "name": "tools",
+          "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+          "with": {
+            "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+          }
+        },
+        {
+          "name": "cargo-mutants",
+          "run": "node harness/ci/tools.mjs cargo-install"
+        },
+        {
+          "name": "lefthook",
+          "run": "node harness/ci/tools.mjs lefthook"
+        },
+        {
+          "name": "fetch",
+          "run": "node harness/ci/tools.mjs fetch"
+        },
+        {
+          "name": "mutants without network",
+          "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}"
+        }
+      ]
+    },
+    "notify-mutants": {
+      "needs": [
+        "mutants"
+      ],
+      "if": "failure()",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "permissions": {
+        "issues": "write"
+      },
+      "steps": [
+        {
+          "name": "base checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "master",
+            "path": "base-tools",
+            "fetch-depth": 1,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": "base-tools/.node-version"
+          }
+        },
+        {
+          "name": "issue",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') != ''",
+          "run": "node base-tools/harness/ci/notify.mjs",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}",
+            "TITLE": "밤 변이 검사 실패",
+            "RUN_URL": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "SHA": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "no notifier",
+          "if": "hashFiles('base-tools/harness/ci/notify.mjs') == ''",
+          "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
+        }
+      ]
+    }
+  }
+}

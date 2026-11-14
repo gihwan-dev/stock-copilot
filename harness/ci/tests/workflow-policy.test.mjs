@@ -75,6 +75,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
   assert.deepEqual(policy.jobPermissions, {
     ".github/workflows/ci.yml#notify": { issues: "write" },
     ".github/workflows/nightly.yml#notify": { issues: "write" },
+    ".github/workflows/nightly.yml#notify-mutants": { issues: "write" },
     ".github/workflows/signatures.yml#notify": { issues: "write" },
     ".github/workflows/signatures.yml#signatures": {
       contents: "read",
