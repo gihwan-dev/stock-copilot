@@ -223,3 +223,13 @@ pub use calibration::{
     CalibrationOutcome, CalibrationReadiness, CalibrationTable, ConservativeCalibration,
     EligibleCalibration, ModelIdentityPart,
 };
+
+mod valuation_snapshot;
+pub use valuation_snapshot::{
+    SnapshotCalendar, SnapshotCashInput, SnapshotDates, SnapshotError, SnapshotInstrumentHistory,
+    SnapshotObservation, SnapshotPosition, SnapshotSource, ValuationSnapshot,
+};
+mod daily_profit;
+pub use daily_profit::{
+    DailyCurrencyProfit, DailyPortfolioProfit, SnapshotExternalFlows, SnapshotPrevious,
+};
