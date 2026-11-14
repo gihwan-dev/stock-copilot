@@ -269,6 +269,10 @@ impl TimeInterval {
     }
 }
 
+pub(crate) fn performance_weekday(date: CalendarDate) -> DayNumber {
+    DayNumber(date.0.weekday().number_from_monday())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

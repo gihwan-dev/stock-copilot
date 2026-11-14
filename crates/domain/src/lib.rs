@@ -339,6 +339,20 @@ pub use signal_submission::{
 mod signal_timing;
 pub use signal_timing::SignalTiming;
 
+mod performance;
+mod performance_arithmetic;
+pub use performance::{
+    Performance, PerformanceCurrency, PerformanceError, PerformancePeriod, TwrMethod,
+};
+pub use performance_arithmetic::PerformanceValue;
+mod benchmark;
+pub use benchmark::{BenchmarkDividends, BenchmarkKind, BenchmarkObservation, BenchmarkSeries};
+mod performance_contract;
+mod performance_risk;
+pub use performance_risk::{
+    BetaMetric, PerformanceBeta, PerformanceRisk, RiskMetric, performance_beta,
+    performance_volatility,
+};
 mod cash_observation_failure;
 pub use broker_account::{
     BrokerAccountKeySelection, BrokerAccountNumberInput, BrokerAccountRows, BrokerAccountRowsError,
@@ -375,3 +389,6 @@ pub use buy_minimum_unit::MinimumBuyUnit;
 pub use buy_plan_price::{
     BuyPlanOrderPrice, BuyPlanOrderPriceKind, PriceBoundBuyPlan, check_buy_plan_order_price,
 };
+
+pub use benchmark::BenchmarkWeights;
+pub use performance_risk::PerformanceWeeks;
