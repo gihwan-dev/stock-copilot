@@ -167,3 +167,31 @@ fn check_requires_all_three_generated_files_in_the_index() {
     let error = generate(&copy, Mode::Check).expect_err("untracked generated file");
     assert!(error.contains("추적 파일 집합"));
 }
+
+#[test]
+fn schema_check_ignores_redirecting_git_environment() {
+    let root = repository_root();
+    let directory = fresh_directory(&root, "t01-git-environment");
+    let output = std::process::Command::new("cargo")
+        .args([
+            "run",
+            "--locked",
+            "--offline",
+            "--quiet",
+            "--package",
+            "xtask",
+            "--",
+            "gen-schema",
+            "--check",
+        ])
+        .current_dir(&root)
+        .env("GIT_INDEX_FILE", directory.join("fake-index"))
+        .env("GIT_DIR", directory.join("fake-git"))
+        .output()
+        .expect("schema CLI");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

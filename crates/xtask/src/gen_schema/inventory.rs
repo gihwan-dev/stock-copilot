@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 pub(super) const DIRECTORY: &str = "crates/adapters/broker-toss-schema";
 pub(super) const FILES: [&str; 3] = ["Cargo.toml", "src/lib.rs", "src/types.rs"];
@@ -42,9 +41,7 @@ pub(super) fn check(root: &Path, mode: super::Mode) -> Result<(), String> {
 }
 
 fn tracked(root: &Path, mode: super::Mode) -> Result<(), String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
+    let output = crate::git_base::git(root)
         .args(["ls-files", "--cached", "-z", "--", DIRECTORY])
         .output()
         .map_err(|error| error.to_string())?;
