@@ -228,6 +228,17 @@ mod cash_ledger;
 mod external_flow;
 pub use cash_ledger::{
     CashComparison, CashDifference, CashLedger, CashLedgerInput, CashLedgerState, CashUnavailable,
-    ComparisonCash, LedgerEvidence,
+    ComparisonCash,
 };
-pub use external_flow::{ExternalFlow, ExternalFlows, FlowDirection};
+pub use external_flow::{
+    ConfirmedFlowDay, ConfirmedFlowPeriod, ExternalFlow, ExternalFlows, FlowCalendar, FlowDay,
+    FlowDirection, FlowPeriod, FlowUncertainty,
+};
+
+mod cash_ledger_evidence;
+pub use cash_ledger_evidence::LedgerEvidence;
+mod external_flow_classification;
+pub use external_flow_classification::{
+    TransferClassification, TransferClassificationError, TransferClassificationKind,
+    TransferOccurrence, UserTransferConfirmation,
+};
