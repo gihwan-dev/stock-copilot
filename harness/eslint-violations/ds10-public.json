@@ -1,0 +1,219 @@
+[
+  [
+    "className",
+    "export const Probe=(props:Readonly<{className?:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "alias",
+    "type Props=Readonly<{style?:Text}>;export const Probe=(props:Props):null=>props ? null : null;"
+  ],
+  [
+    "intersection",
+    "export const Probe=(props:Readonly<{label:Text}> & Pick<ComponentProps<\"div\">,\"className\">):null=>props ? null : null;"
+  ],
+  [
+    "omit",
+    "export const Probe=(props:Omit<ComponentProps<\"div\">,\"id\">):null=>props ? null : null;"
+  ],
+  [
+    "index",
+    "export const Probe=(props:Readonly<{[key:string]:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "generic",
+    "export const Probe=<T extends Readonly<{className:Text}>>(props:T):null=>props ? null : null;"
+  ],
+  [
+    "event",
+    "export const Probe=(props:Readonly<{onChange:(event:MouseEvent<HTMLButtonElement>)=>void}>):null=>props ? null : null;"
+  ],
+  [
+    "nested DOM",
+    "export const Probe=(props:Readonly<{value:Readonly<{node:HTMLDivElement}>}>):null=>props ? null : null;"
+  ],
+  [
+    "callback ref",
+    "export const Probe=(props:Readonly<{ref?:Ref<HTMLDivElement>}>):null=>props ? null : null;"
+  ],
+  [
+    "structural ref",
+    "export const Probe=(props:Readonly<{ref?:Readonly<{current:HTMLDivElement|null}>}>):null=>props ? null : null;"
+  ],
+  [
+    "free spacing",
+    "export const Probe=(props:Readonly<{gap:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "copied token",
+    "export const Probe=(props:Readonly<{gap:\"space-1\"|\"space-2\"}>):null=>props ? null : null;"
+  ],
+  [
+    "number",
+    "export const Probe=(props:Readonly<{width:number}>):null=>props ? null : null;"
+  ],
+  [
+    "rest",
+    "export const Probe=({...props}:Readonly<{label:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "assertion",
+    "export const Probe=(props:Readonly<{className:Text}>):null=>props ? null : null;export const Alias=Probe as typeof Probe;"
+  ],
+  [
+    "forwardRef",
+    "import {forwardRef} from \"react\"; export const Probe=forwardRef<HTMLDivElement,Readonly<{label:Text}>>((props,ref)=>props && ref ? null : null);"
+  ],
+  [
+    "token union widening",
+    "export const Probe=(props:Readonly<{gap:SpacingToken|\"custom\"}>):null=>props ? null : null;"
+  ],
+  [
+    "Pick style",
+    "export const Probe=(props:Pick<ComponentProps<\"div\">,\"style\">):null=>props ? null : null;"
+  ],
+  [
+    "spread",
+    "const passthrough={}; export const Probe=()=> <div {...passthrough}/>;"
+  ],
+  [
+    "chart numbers",
+    "const Chart=(props:Readonly<{count:number}>):null=>props ? null : null; export const Probe=()=> <Chart count={1}/>;"
+  ],
+  [
+    "money string",
+    "export const Probe=(props:Readonly<{amount:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "event Pick",
+    "export const Probe=(props:Readonly<{onChange:(event:Pick<MouseEvent<HTMLButtonElement>,\"type\">)=>void}>):null=>props ? null : null;"
+  ],
+  [
+    "event alias",
+    "type EventAlias=MouseEvent<HTMLButtonElement>; export const Probe=(props:Readonly<{onChange:(event:EventAlias)=>void}>):null=>props ? null : null;"
+  ],
+  [
+    "inherited HTML",
+    "interface Props extends ComponentProps<\"div\"> {} export const Probe=(props:Props):null=>props ? null : null;"
+  ],
+  [
+    "asserted type export",
+    "const internal=(props:Readonly<{className:Text}>):null=>props ? null : null; export const Probe=internal as typeof internal;"
+  ],
+  [
+    "fontFamily",
+    "export const Probe=(props:Readonly<{fontFamily:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "columnGap",
+    "export const Probe=(props:Readonly<{columnGap:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "paddingInline",
+    "export const Probe=(props:Readonly<{paddingInline:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "borderColor",
+    "export const Probe=(props:Readonly<{borderColor:Text}>):null=>props ? null : null;"
+  ],
+  [
+    "chart string size",
+    "const Chart=(props:Readonly<{width:string}>):null=>props ? null : null; export const Probe=()=> <Chart width=\"13\"/>;"
+  ],
+  [
+    "member chart numeric",
+    "const Chart=(props:Readonly<{count:number}>):null=>props ? null : null; const UI={Chart}; export const Probe=()=> <UI.Chart count={13}/>;"
+  ],
+  [
+    "compound",
+    "const X=(p:{className:Text}):null=>p ? null:null; export const P={Item:X};"
+  ],
+  [
+    "assigned compound",
+    "const G=():null=>null;const B=(p:{style:Text}):null=>p ? null:null;export const P=Object.assign(G,{Item:B});"
+  ],
+  [
+    "nested compound",
+    "const X=(p:{className:Text}):null=>p ? null:null;export const P={Group:{Item:X}};"
+  ],
+  [
+    "generic entire",
+    "export const Probe=<T extends object={className:Text},>(props:Readonly<T>):null=>props ? null:null;"
+  ],
+  [
+    "promise DOM",
+    "export const Probe=(p:{onSubmit:()=>Promise<HTMLElement>}):null=>p ? null:null;"
+  ],
+  [
+    "set event",
+    "export const Probe=(p:{selected:ReadonlySet<MouseEvent<never,never>>}):null=>p ? null:null;"
+  ],
+  [
+    "FC style",
+    "export const Probe=(p:{icon:import(\"react\").FC<{className:Text}>}):null=>p ? null:null;"
+  ],
+  [
+    "return DOM",
+    "export const Probe=(p:{callback:()=>HTMLElement}):null=>p ? null:null;"
+  ],
+  [
+    "array event",
+    "export const Probe=(p:{items:readonly import(\"react\").SyntheticEvent<never,never>[]}):null=>p ? null:null;"
+  ],
+  [
+    "nested index",
+    "export const Probe=(p:{v:{[k:string]:Text}}):null=>p ? null:null;"
+  ],
+  [
+    "generic event constraint",
+    "export const Probe=<E extends Event,>(p:{item:E}):null=>p ? null:null;"
+  ],
+  ["DOM node", "export const Probe=(p:{n:Node}):null=>p ? null:null;"],
+  [
+    "React event branch",
+    "export const Probe=(p:{event:import(\"react\").AnimationEvent<never>}):null=>p ? null:null;"
+  ],
+  [
+    "forwardRef branch",
+    "import {forwardRef} from \"react\";const Inner=forwardRef<never,{}>(()=>null);export const helper=():typeof Inner=>Inner;export const Probe=():null=>null;"
+  ],
+  [
+    "nested gap",
+    "export const Probe=(p:{layout:{gap:Text}}):null=>p ? null:null;"
+  ],
+  [
+    "array gap",
+    "export const Probe=(p:{layouts:readonly {gap:Text}[]}):null=>p ? null:null;"
+  ],
+  ["textColor", "export const Probe=(p:{textColor:Text}):null=>p ? null:null;"],
+  ["bg", "export const Probe=(p:{bg:Text}):null=>p ? null:null;"],
+  ["tone", "export const Probe=(p:{tone:Text}):null=>p ? null:null;"],
+  [
+    "wrong token category",
+    "export const Probe=(p:{color:SpacingToken}):null=>p ? null:null;"
+  ],
+  ["broad span", "export const Probe=(p:{span:number}):null=>p ? null:null;"],
+  [
+    "invalid columns",
+    "export const Probe=(p:{columns:{narrow:3|5;wide:12}}):null=>p ? null:null;"
+  ],
+  [
+    "generic attribute",
+    "export const Probe=<T,>(p:{item:T})=><div data-item={p.item}/>;"
+  ],
+  [
+    "fake ref",
+    "export const Probe=(p:{ref:{current:Text}}):null=>p ? null:null;"
+  ],
+  [
+    "broad number",
+    "export const Probe=(p:{value:number}):null=>p ? null:null;"
+  ],
+  [
+    "generic props intersection",
+    "export const Probe=<T extends object,>(p:Readonly<T & {label:Text}>):null=>p ? null:null;"
+  ],
+  [
+    "widened number union",
+    "export const Probe=(p:{value:1|2|number}):null=>p ? null:null;"
+  ]
+]
