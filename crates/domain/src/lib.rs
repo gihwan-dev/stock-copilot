@@ -307,6 +307,13 @@ pub use valuation_snapshot_calendar::{
 };
 pub use valuation_snapshot_cash::{SnapshotCashBasis, SnapshotLedgers};
 
+mod broker_account;
+pub use broker_account::{
+    BrokerAccountKind, BrokerAccountRow, BrokerAccountSelection, BrokerAccountTypeCode,
+    UnknownBrokerAccountKind, select_brokerage_account,
+};
+mod cash_observation;
+pub use cash_observation::{CashObservation, portfolio_from_cash_observations};
 mod scorecard;
 mod scorecard_arithmetic;
 pub use scorecard::{
@@ -331,6 +338,17 @@ pub use signal_submission::{
 };
 mod signal_timing;
 pub use signal_timing::SignalTiming;
+
+mod cash_observation_failure;
+pub use broker_account::{
+    BrokerAccountKeySelection, BrokerAccountNumberInput, BrokerAccountRows, BrokerAccountRowsError,
+    select_brokerage_account_by_id,
+};
+pub use cash_observation_failure::{
+    CashAccessDenial, CashMissingData, CashObservationFailure, CashObservationFailures,
+    CashReadCapability, CashRequestRejection, CashResponseMismatch, CashRetryDelay,
+    CashUnavailableCause, cash_observation_failures,
+};
 mod known_market;
 mod master_instrument;
 pub use known_market::{KnownMarket, UnknownKnownMarket};
@@ -356,3 +374,19 @@ pub use broker_order_set::{
 };
 mod stock_warnings;
 pub use stock_warnings::{StockWarning, StockWarningDecision, StockWarnings, check_stock_warnings};
+mod buy_quantity;
+mod buy_quantity_arithmetic;
+mod buy_signal_history;
+mod concentration_policy;
+pub use buy_quantity::{
+    BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,
+    calculate_buy_quantity,
+};
+pub use buy_signal_history::BuySignalRecord;
+pub use concentration_policy::concentration_for_policy;
+mod buy_minimum_unit;
+mod buy_plan_price;
+pub use buy_minimum_unit::MinimumBuyUnit;
+pub use buy_plan_price::{
+    BuyPlanOrderPrice, BuyPlanOrderPriceKind, PriceBoundBuyPlan, check_buy_plan_order_price,
+};

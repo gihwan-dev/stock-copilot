@@ -80,7 +80,10 @@ pub struct AccountLookupDisplayRow {
 }
 impl AccountLookupDisplayRow {
     #[must_use]
-    pub fn from_broker_account_result(account: AccountId, suffix: MaskedAccountNumber) -> Self {
+    pub(crate) fn from_broker_account_result(
+        account: AccountId,
+        suffix: MaskedAccountNumber,
+    ) -> Self {
         Self { account, suffix }
     }
 }
@@ -98,7 +101,7 @@ pub struct AccountDisplayFact {
 }
 impl AccountDisplayFact {
     #[must_use]
-    pub fn from_account_lookup_result(row: AccountLookupDisplayRow) -> Self {
+    pub(crate) fn from_account_lookup_result(row: AccountLookupDisplayRow) -> Self {
         Self {
             account: row.account,
             suffix: row.suffix,

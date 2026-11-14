@@ -131,6 +131,13 @@ fn display_digits(amount: Amount, precision: DisplayPrecision) -> DisplayDigits 
     DisplayDigits(digits)
 }
 
+pub(crate) fn buy_minimum_money_display(money: Money) -> DisplayMoney {
+    display_money(
+        &crate::trade_cost_arithmetic::ceil_fee(money),
+        DisplayPrecision(0),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
