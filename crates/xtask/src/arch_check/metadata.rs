@@ -12,6 +12,7 @@ use super::{CheckFailure, CrateName};
 pub(crate) struct MemberPackage {
     pub(crate) name: CrateName,
     pub(crate) directory: PathBuf,
+    pub(crate) schema_names: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +123,18 @@ fn member_packages(metadata: &Metadata) -> Vec<MemberPackage> {
                 .map(|directory| MemberPackage {
                     name: CrateName::new(&package.name),
                     directory: directory.as_std_path().to_path_buf(),
+                    schema_names: package
+                        .dependencies
+                        .iter()
+                        .filter(|dependency| dependency.name == "broker-toss-schema")
+                        .map(|dependency| {
+                            dependency
+                                .rename
+                                .as_deref()
+                                .map_or(dependency.name.as_str(), |name| name)
+                                .replace('-', "_")
+                        })
+                        .collect(),
                 })
         })
         .collect()

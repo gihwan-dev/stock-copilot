@@ -469,6 +469,16 @@
         "file": "apps/desktop/tests/ds-contrast.test.mjs",
         "name": "contrast pairs are the complete protected contract and removing any pair fails"
       }
+    },
+    {
+      "recipe": "check",
+      "command": "cargo run --locked --quiet --package xtask -- gen-schema --check",
+      "kind": "check",
+      "cases": "docs/toss-openapi-1.2.28.json",
+      "test": {
+        "file": "crates/xtask/src/gen_schema_tests.rs",
+        "name": "every_component_has_a_committed_generated_type"
+      }
     }
   ]
 }

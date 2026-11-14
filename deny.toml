@@ -41,6 +41,9 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow-workspace = true
 allow = [
+  { crate = "regress", reason = "typify 생성 문자열의 패턴 검증: 생성 도구와 생성 타입이 사용" },
+  { crate = "typify", reason = "xtask의 OpenAPI 스키마 생성 진입점, 기본 macro 기능 끔" },
+  { crate = "typify-impl", reason = "typify의 생성 엔진 전이 의존성, 제품 crate에 사용 금지" },
   { crate = "num-traits", reason = "rust_decimal·proptest → num-traits: 십진수·수 생성" },
   { crate = "arrayvec", reason = "rust_decimal → arrayvec: 십진수 내부 버퍼" },
   { crate = "chacha20", reason = "proptest → chacha20: 테스트 난수 생성" },
