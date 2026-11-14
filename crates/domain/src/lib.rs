@@ -175,7 +175,12 @@ pub use weight_caps::WeightCapChange;
 mod allocation;
 mod sector_assignment;
 pub use allocation::{
-    Allocation, AllocationBasis, AllocationCurrency, AllocationDisplay, AllocationEntry,
-    AllocationError, AllocationWeight, AllocationWeights,
+    Allocation, AllocationCurrency, AllocationDisplay, AllocationDisplayRange,
+    AllocationDisplayUnits, AllocationEntry, AllocationError, AssetAllocation, AssetAllocations,
+    AssetCountry, AssetInstrument, AssetWeight, CompositionWeight, HoldingsAllocations,
+    HoldingsComposition,
 };
-pub use sector_assignment::{AllocationInstrument, AllocationSector, SectorAssignment};
+pub use sector_assignment::{
+    AllocationInstrument, AllocationSector, InstrumentClassification, SectorAssignment,
+    SectorAssignments, SectorAssignmentsError,
+};

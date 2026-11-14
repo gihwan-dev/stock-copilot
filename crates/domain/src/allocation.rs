@@ -1,9 +1,12 @@
 use crate::{
-    AllocationInstrument, AllocationSector, Currency, FxRate, Market, Money, MoneyError,
-    PortfolioValuation, RatioQuotient, SectorAssignment, Total, TotalCompleteness,
+    AllocationInstrument, AllocationSector, Amount, Currency, FxRate, Market, Money, MoneyError,
+    PortfolioValuation, ProfileWeight, RatioQuotient, SectorAssignments, Total, TotalCompleteness,
     ValuationAccuracy,
 };
-use std::collections::BTreeMap;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AllocationCurrency {
@@ -25,58 +28,117 @@ impl AllocationCurrency {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AssetInstrument {
+    Holding(AllocationInstrument),
+    Cash(AllocationCurrency),
+}
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AssetCountry {
+    Market(Market),
+    Cash,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AllocationError {
     Incomplete,
     ZeroTotal,
     NegativeValue,
-    DuplicateAssignment,
+    NegativeCash(Currency),
+    TotalMismatch,
     MissingFx,
     Arithmetic(MoneyError),
     Conversion(crate::FxConversionError),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AllocationBasis {
-    Holdings,
-    HoldingsAndBuyingPower,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AllocationWeight {
+struct AllocationValue {
     quotient: RatioQuotient,
     accuracy: ValuationAccuracy,
 }
-impl AllocationWeight {
+impl AllocationValue {
+    fn amount(self) -> Amount {
+        match self.quotient {
+            RatioQuotient::Exact(value) => Amount::new(value.as_decimal()),
+            RatioQuotient::Approximate(value) => Amount::new(value.as_decimal()),
+        }
+    }
+    fn compare(self, other: Self) -> Ordering {
+        self.amount().as_decimal().cmp(&other.amount().as_decimal())
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AssetWeight(AllocationValue);
+impl AssetWeight {
     #[must_use]
-    pub const fn quotient(self) -> RatioQuotient {
-        self.quotient
+    pub fn cmp_profile_weight(&self, limit: &ProfileWeight) -> Ordering {
+        self.0
+            .amount()
+            .as_decimal()
+            .cmp(&limit.as_ratio().as_decimal())
     }
     #[must_use]
-    pub const fn accuracy(self) -> ValuationAccuracy {
-        self.accuracy
+    pub fn compare(&self, other: &Self) -> Ordering {
+        self.0.compare(other.0)
+    }
+    #[must_use]
+    pub const fn accuracy(&self) -> ValuationAccuracy {
+        self.0.accuracy
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompositionWeight(AllocationValue);
+impl CompositionWeight {
+    #[must_use]
+    pub fn compare(&self, other: &Self) -> Ordering {
+        self.0.compare(other.0)
+    }
+    #[must_use]
+    pub const fn accuracy(&self) -> ValuationAccuracy {
+        self.0.accuracy
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AllocationDisplay(u32);
-impl AllocationDisplay {
+pub struct AllocationDisplayUnits(u32);
+impl AllocationDisplayUnits {
     #[must_use]
-    pub const fn as_units(&self) -> u32 {
+    pub const fn as_u32(&self) -> u32 {
         self.0
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AllocationDisplayRange {
+    Zero,
+    BelowUnit,
+    AtLeastUnit,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AllocationEntry<K> {
+pub struct AllocationDisplay {
+    units: AllocationDisplayUnits,
+    range: AllocationDisplayRange,
+}
+impl AllocationDisplay {
+    #[must_use]
+    pub const fn units(&self) -> &AllocationDisplayUnits {
+        &self.units
+    }
+    #[must_use]
+    pub const fn range(&self) -> AllocationDisplayRange {
+        self.range
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AllocationEntry<K, W> {
     key: K,
-    weight: AllocationWeight,
+    weight: W,
     display: AllocationDisplay,
 }
-impl<K> AllocationEntry<K> {
+impl<K, W> AllocationEntry<K, W> {
     #[must_use]
     pub const fn key(&self) -> &K {
         &self.key
     }
     #[must_use]
-    pub const fn weight(&self) -> AllocationWeight {
-        self.weight
+    pub const fn weight(&self) -> &W {
+        &self.weight
     }
     #[must_use]
     pub const fn display(&self) -> &AllocationDisplay {
@@ -84,36 +146,99 @@ impl<K> AllocationEntry<K> {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AllocationWeights<K> {
-    entries: Vec<AllocationEntry<K>>,
-    basis: AllocationBasis,
+struct Weights<K, W> {
+    entries: Vec<AllocationEntry<K, W>>,
     accuracy: ValuationAccuracy,
 }
-impl<K> AllocationWeights<K> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetAllocation<K>(Weights<K, AssetWeight>);
+impl<K> AssetAllocation<K> {
     #[must_use]
-    pub fn entries(&self) -> &[AllocationEntry<K>] {
-        &self.entries
-    }
-    #[must_use]
-    pub const fn basis(&self) -> AllocationBasis {
-        self.basis
+    pub fn entries(&self) -> &[AllocationEntry<K, AssetWeight>] {
+        &self.0.entries
     }
     #[must_use]
     pub const fn accuracy(&self) -> ValuationAccuracy {
-        self.accuracy
+        self.0.accuracy
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HoldingsComposition<K>(Weights<K, CompositionWeight>);
+impl<K> HoldingsComposition<K> {
+    #[must_use]
+    pub fn entries(&self) -> &[AllocationEntry<K, CompositionWeight>] {
+        &self.0.entries
+    }
+    #[must_use]
+    pub const fn accuracy(&self) -> ValuationAccuracy {
+        self.0.accuracy
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetAllocations {
+    instruments: Result<AssetAllocation<AssetInstrument>, AllocationError>,
+    sectors: Result<AssetAllocation<AllocationSector>, AllocationError>,
+    countries: Result<AssetAllocation<AssetCountry>, AllocationError>,
+    currencies: Result<AssetAllocation<AllocationCurrency>, AllocationError>,
+}
+impl AssetAllocations {
+    #[must_use]
+    pub const fn instruments(&self) -> &Result<AssetAllocation<AssetInstrument>, AllocationError> {
+        &self.instruments
+    }
+    #[must_use]
+    pub const fn sectors(&self) -> &Result<AssetAllocation<AllocationSector>, AllocationError> {
+        &self.sectors
+    }
+    #[must_use]
+    pub const fn countries(&self) -> &Result<AssetAllocation<AssetCountry>, AllocationError> {
+        &self.countries
+    }
+    #[must_use]
+    pub const fn currencies(
+        &self,
+    ) -> &Result<AssetAllocation<AllocationCurrency>, AllocationError> {
+        &self.currencies
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HoldingsAllocations {
+    instruments: Result<HoldingsComposition<AllocationInstrument>, AllocationError>,
+    sectors: Result<HoldingsComposition<AllocationSector>, AllocationError>,
+    countries: Result<HoldingsComposition<Market>, AllocationError>,
+    currencies: Result<HoldingsComposition<AllocationCurrency>, AllocationError>,
+}
+impl HoldingsAllocations {
+    #[must_use]
+    pub const fn instruments(
+        &self,
+    ) -> &Result<HoldingsComposition<AllocationInstrument>, AllocationError> {
+        &self.instruments
+    }
+    #[must_use]
+    pub const fn sectors(&self) -> &Result<HoldingsComposition<AllocationSector>, AllocationError> {
+        &self.sectors
+    }
+    #[must_use]
+    pub const fn countries(&self) -> &Result<HoldingsComposition<Market>, AllocationError> {
+        &self.countries
+    }
+    #[must_use]
+    pub const fn currencies(
+        &self,
+    ) -> &Result<HoldingsComposition<AllocationCurrency>, AllocationError> {
+        &self.currencies
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Allocation {
     valuation: PortfolioValuation,
-    instruments: Result<AllocationWeights<AllocationInstrument>, AllocationError>,
-    sectors: Result<AllocationWeights<AllocationSector>, AllocationError>,
-    countries: Result<AllocationWeights<Market>, AllocationError>,
-    currencies: Result<AllocationWeights<AllocationCurrency>, AllocationError>,
+    assets: AssetAllocations,
+    holdings: HoldingsAllocations,
 }
 impl Allocation {
     #[must_use]
-    pub fn new(valuation: &PortfolioValuation, assignments: &[SectorAssignment]) -> Self {
+    pub fn new(valuation: &PortfolioValuation, assignments: &SectorAssignments) -> Self {
         let rates = match valuation.assets() {
             Total::Complete(value) => value.value().clone(),
             Total::Incomplete(value) => value.subtotal().clone(),
@@ -121,28 +246,15 @@ impl Allocation {
         .into_parts()
         .1;
         let holdings = valued_holdings(valuation, &rates);
-        let instruments = holdings
-            .clone()
-            .and_then(|value| weights(value, AllocationBasis::Holdings));
-        let sectors = holdings
-            .clone()
-            .and_then(|value| sector_weights(value, assignments));
-        let countries = holdings.clone().and_then(|items| {
-            weights(
-                items
-                    .into_iter()
-                    .map(|(key, value)| (key.market().clone(), value))
-                    .collect(),
-                AllocationBasis::Holdings,
-            )
-        });
-        let currencies = holdings.and_then(|value| currency_weights(value, valuation, &rates));
         Self {
             valuation: valuation.clone(),
-            instruments,
-            sectors,
-            countries,
-            currencies,
+            assets: build_assets(
+                holdings
+                    .clone()
+                    .and_then(|values| asset_values(values, valuation, &rates)),
+                assignments,
+            ),
+            holdings: build_holdings(holdings, assignments),
         }
     }
     #[must_use]
@@ -150,25 +262,24 @@ impl Allocation {
         &self.valuation
     }
     #[must_use]
-    pub const fn instruments(
-        &self,
-    ) -> &Result<AllocationWeights<AllocationInstrument>, AllocationError> {
-        &self.instruments
+    pub const fn assets(&self) -> &AssetAllocations {
+        &self.assets
     }
     #[must_use]
-    pub const fn sectors(&self) -> &Result<AllocationWeights<AllocationSector>, AllocationError> {
-        &self.sectors
+    pub const fn holdings(&self) -> &HoldingsAllocations {
+        &self.holdings
     }
-    #[must_use]
-    pub const fn countries(&self) -> &Result<AllocationWeights<Market>, AllocationError> {
-        &self.countries
-    }
-    #[must_use]
-    pub const fn currencies(
-        &self,
-    ) -> &Result<AllocationWeights<AllocationCurrency>, AllocationError> {
-        &self.currencies
-    }
+}
+#[derive(Debug, Clone)]
+struct HoldingValue {
+    instrument: AllocationInstrument,
+    value: Money,
+    currency: AllocationCurrency,
+}
+#[derive(Debug, Clone)]
+struct AssetValues {
+    holdings: Vec<HoldingValue>,
+    cash: Vec<(AllocationCurrency, Money)>,
 }
 fn converted(value: Money, rates: &[FxRate]) -> Result<Money, AllocationError> {
     if value.currency() == Currency::Krw {
@@ -187,7 +298,7 @@ fn converted(value: Money, rates: &[FxRate]) -> Result<Money, AllocationError> {
 fn valued_holdings(
     valuation: &PortfolioValuation,
     rates: &[FxRate],
-) -> Result<Vec<(AllocationInstrument, Money)>, AllocationError> {
+) -> Result<Vec<HoldingValue>, AllocationError> {
     if valuation.valuation().completeness() == TotalCompleteness::Incomplete {
         return Err(AllocationError::Incomplete);
     }
@@ -199,74 +310,160 @@ fn valued_holdings(
                 .valuation()
                 .selected()
                 .map_err(|_error| AllocationError::Incomplete)?;
-            let converted = converted(money, rates)?;
+            let value = converted(money, rates)?;
             row.conversion()
                 .map_err(|_error| AllocationError::Incomplete)?;
-            Ok((AllocationInstrument::new(row.instrument()), converted))
+            Ok(HoldingValue {
+                instrument: AllocationInstrument::new(row.instrument()),
+                value,
+                currency: AllocationCurrency::new(row.holding().currency()),
+            })
         })
         .collect()
 }
-fn sector_weights(
-    values: Vec<(AllocationInstrument, Money)>,
-    assignments: &[SectorAssignment],
-) -> Result<AllocationWeights<AllocationSector>, AllocationError> {
-    let mut mapping = BTreeMap::new();
-    for assignment in assignments {
-        if mapping
-            .insert(assignment.instrument(), assignment.sector())
-            .is_some()
-        {
-            return Err(AllocationError::DuplicateAssignment);
-        }
-    }
-    weights(
-        values
-            .into_iter()
-            .map(|(key, value)| {
-                let sector = mapping
-                    .get(&key)
-                    .map_or(AllocationSector::Unclassified, |id| {
-                        AllocationSector::Classified((*id).clone())
-                    });
-                (sector, value)
-            })
-            .collect(),
-        AllocationBasis::Holdings,
-    )
-}
-fn currency_weights(
-    values: Vec<(AllocationInstrument, Money)>,
+fn asset_values(
+    holdings: Vec<HoldingValue>,
     valuation: &PortfolioValuation,
     rates: &[FxRate],
-) -> Result<AllocationWeights<AllocationCurrency>, AllocationError> {
-    let mut currencies: Vec<_> = values
-        .into_iter()
-        .map(|(key, value)| {
-            (
-                match key.market() {
-                    Market::Kr => AllocationCurrency::Krw,
-                    Market::Us | Market::Unknown(_) => AllocationCurrency::Usd,
-                },
-                value,
-            )
-        })
-        .collect();
+) -> Result<AssetValues, AllocationError> {
+    let mut cash = Vec::new();
     for currency in [Currency::Krw, Currency::Usd] {
-        let cash = valuation
+        let value = valuation
             .buying_power(currency)
             .money()
-            .map_err(|_error| AllocationError::Incomplete)?;
-        currencies.push((AllocationCurrency::new(currency), converted(cash, rates)?));
+            .map_err(|_error| AllocationError::NegativeCash(currency))?;
+        cash.push((AllocationCurrency::new(currency), converted(value, rates)?));
     }
-    if valuation.assets().completeness() == TotalCompleteness::Incomplete {
-        return Err(AllocationError::Incomplete);
+    let expected = match valuation.assets() {
+        Total::Complete(value) => value.value().clone().into_parts().0,
+        Total::Incomplete(_) => return Err(AllocationError::Incomplete),
+    };
+    let mut values: Vec<_> = holdings
+        .iter()
+        .map(|row| row.value)
+        .chain(cash.iter().map(|(_, value)| *value))
+        .collect();
+    values.sort_by_key(|value| value.amount().as_decimal());
+    let total = values
+        .iter()
+        .try_fold(crate::holding::zero(Currency::Krw), |sum, value| {
+            sum.checked_add(value)
+        })
+        .map_err(AllocationError::Arithmetic)?;
+    if total != expected {
+        return Err(AllocationError::TotalMismatch);
     }
-    weights(currencies, AllocationBasis::HoldingsAndBuyingPower)
+    Ok(AssetValues { holdings, cash })
 }
-pub(crate) fn weights<K: Ord + Clone>(
+fn build_holdings(
+    values: Result<Vec<HoldingValue>, AllocationError>,
+    assignments: &SectorAssignments,
+) -> HoldingsAllocations {
+    HoldingsAllocations {
+        instruments: values.clone().and_then(|rows| {
+            composition_weights(
+                rows.into_iter()
+                    .map(|row| (row.instrument, row.value))
+                    .collect(),
+            )
+        }),
+        sectors: values.clone().and_then(|rows| {
+            composition_weights(
+                rows.into_iter()
+                    .map(|row| (assignments.sector(&row.instrument), row.value))
+                    .collect(),
+            )
+        }),
+        countries: values.clone().and_then(|rows| {
+            composition_weights(
+                rows.into_iter()
+                    .map(|row| (row.instrument.market().clone(), row.value))
+                    .collect(),
+            )
+        }),
+        currencies: values.and_then(|rows| {
+            composition_weights(
+                rows.into_iter()
+                    .map(|row| (row.currency, row.value))
+                    .collect(),
+            )
+        }),
+    }
+}
+fn build_assets(
+    values: Result<AssetValues, AllocationError>,
+    assignments: &SectorAssignments,
+) -> AssetAllocations {
+    AssetAllocations {
+        instruments: values.clone().and_then(|rows| {
+            asset_weights(
+                rows.holdings
+                    .into_iter()
+                    .map(|row| (AssetInstrument::Holding(row.instrument), row.value))
+                    .chain(
+                        rows.cash
+                            .into_iter()
+                            .map(|(currency, value)| (AssetInstrument::Cash(currency), value)),
+                    )
+                    .collect(),
+            )
+        }),
+        sectors: values.clone().and_then(|rows| {
+            asset_weights(
+                rows.holdings
+                    .into_iter()
+                    .map(|row| (assignments.sector(&row.instrument), row.value))
+                    .chain(
+                        rows.cash
+                            .into_iter()
+                            .map(|(_, value)| (AllocationSector::Cash, value)),
+                    )
+                    .collect(),
+            )
+        }),
+        countries: values.clone().and_then(|rows| {
+            asset_weights(
+                rows.holdings
+                    .into_iter()
+                    .map(|row| {
+                        (
+                            AssetCountry::Market(row.instrument.market().clone()),
+                            row.value,
+                        )
+                    })
+                    .chain(
+                        rows.cash
+                            .into_iter()
+                            .map(|(_, value)| (AssetCountry::Cash, value)),
+                    )
+                    .collect(),
+            )
+        }),
+        currencies: values.and_then(|rows| {
+            asset_weights(
+                rows.holdings
+                    .into_iter()
+                    .map(|row| (row.currency, row.value))
+                    .chain(rows.cash)
+                    .collect(),
+            )
+        }),
+    }
+}
+fn asset_weights<K: Ord + Clone>(
     values: Vec<(K, Money)>,
-    basis: AllocationBasis,
-) -> Result<AllocationWeights<K>, AllocationError> {
+) -> Result<AssetAllocation<K>, AllocationError> {
+    weights(values, AssetWeight).map(AssetAllocation)
+}
+fn composition_weights<K: Ord + Clone>(
+    values: Vec<(K, Money)>,
+) -> Result<HoldingsComposition<K>, AllocationError> {
+    weights(values, CompositionWeight).map(HoldingsComposition)
+}
+fn weights<K: Ord + Clone, W>(
+    values: Vec<(K, Money)>,
+    make_weight: fn(AllocationValue) -> W,
+) -> Result<Weights<K, W>, AllocationError> {
     let (total, grouped) = grouped_values(values)?;
     if grouped.is_empty() {
         return Err(AllocationError::ZeroTotal);
@@ -275,15 +472,25 @@ pub(crate) fn weights<K: Ord + Clone>(
     let mut remainders = Vec::new();
     let mut remaining = 10000_u32;
     for (key, value) in grouped {
-        let weight = calculation_weight(value, total)?;
+        let weight = make_weight(calculated_weight(value, total)?);
         let (units, remainder) =
             crate::exact_arithmetic::allocation_parts(value.amount(), total.amount());
+        let range = if value.amount().as_decimal().is_zero() {
+            AllocationDisplayRange::Zero
+        } else if units.as_units() == 0 {
+            AllocationDisplayRange::BelowUnit
+        } else {
+            AllocationDisplayRange::AtLeastUnit
+        };
         remaining = remaining.saturating_sub(units.as_units());
         remainders.push((key.clone(), remainder));
         entries.push(AllocationEntry {
             key,
             weight,
-            display: AllocationDisplay(units.as_units()),
+            display: AllocationDisplay {
+                units: AllocationDisplayUnits(units.as_units()),
+                range,
+            },
         });
     }
     remainders.sort_by(|(left_key, left_remainder), (right_key, right_remainder)| {
@@ -291,25 +498,22 @@ pub(crate) fn weights<K: Ord + Clone>(
             .cmp(left_remainder)
             .then_with(|| left_key.cmp(right_key))
     });
-    let winners: std::collections::BTreeSet<_> = remainders
+    let winners: BTreeSet<_> = remainders
         .into_iter()
         .zip(0_u32..)
         .take_while(|(_, index)| *index < remaining)
-        .map(|(value, _)| value)
-        .map(|(key, _)| key)
+        .map(|((key, _), _)| key)
         .collect();
     for entry in &mut entries {
         if winners.contains(&entry.key) {
-            entry.display.0 = entry.display.0.saturating_add(1);
+            entry.display.units.0 = entry.display.units.0.saturating_add(1);
         }
     }
-    Ok(AllocationWeights {
+    Ok(Weights {
         entries,
-        basis,
         accuracy: ValuationAccuracy::Approximate,
     })
 }
-
 fn grouped_values<K: Ord>(
     mut values: Vec<(K, Money)>,
 ) -> Result<(Money, BTreeMap<K, Money>), AllocationError> {
@@ -324,8 +528,7 @@ fn grouped_values<K: Ord>(
     let mut grouped = BTreeMap::new();
     let mut total = crate::holding::zero(Currency::Krw);
     for (key, value) in values {
-        if value.amount().as_decimal().is_sign_negative() && !value.amount().as_decimal().is_zero()
-        {
+        if value.amount().as_decimal() < rust_decimal::Decimal::ZERO {
             return Err(AllocationError::NegativeValue);
         }
         total = total
@@ -340,14 +543,10 @@ fn grouped_values<K: Ord>(
     }
     Ok((total, grouped))
 }
-
-pub(crate) fn calculation_weight(
-    value: Money,
-    total: Money,
-) -> Result<AllocationWeight, AllocationError> {
+fn calculated_weight(value: Money, total: Money) -> Result<AllocationValue, AllocationError> {
     value
         .checked_ratio(&total)
-        .map(|quotient| AllocationWeight {
+        .map(|quotient| AllocationValue {
             quotient,
             accuracy: ValuationAccuracy::Approximate,
         })
@@ -361,16 +560,20 @@ pub(crate) fn calculation_weight(
 
 #[cfg(test)]
 mod tests {
+    use super::{asset_weights, calculated_weight, composition_weights, converted};
     use crate::{
-        AcquisitionPrice, Allocation, AllocationBasis, AllocationError, AllocationSector,
-        BuyingPower, Currency, CurrencyAmounts, DisplayDirection, ExclusionDecision, Exclusions,
-        FxPair, FxRate, FxRateKind, FxSource, Holding, HoldingObservation, Market, Money,
-        MoneyError, Nanosecond, NumericInput, OffsetSeconds, Portfolio, PortfolioValuation, Price,
-        Quantity, RatioQuotient, ReportedPortfolio, ResolvedOrderInstrument, SectorAssignment,
-        SectorId, Symbol, TimeInterval, Timestamp, TotalCompleteness, UnixSeconds,
-        ValuationAccuracy, allocation, exact_arithmetic,
+        AcquisitionPrice, Allocation, AllocationCurrency, AllocationDisplayRange, AllocationEntry,
+        AllocationError, AllocationInstrument, AllocationSector, AssetCountry, AssetInstrument,
+        BuyingPower, Currency, CurrencyAmounts, ExclusionDecision, Exclusions, FxPair, FxRate,
+        FxRateKind, FxSource, Holding, HoldingObservation, InstrumentClassification, Market, Money,
+        MoneyError, Nanosecond, NumericInput, OffsetSeconds, Portfolio, PortfolioValuation,
+        ProfileWeight, Quantity, Ratio, ReportedHolding, ReportedPortfolio,
+        ResolvedOrderInstrument, SectorAssignment, SectorAssignments, SectorAssignmentsError,
+        SectorId, Symbol, TimeInterval, Timestamp, UnixSeconds, ValuationAccuracy,
     };
     use proptest::test_runner::{Config, TestRunner};
+    use rust_decimal::Decimal;
+    use std::{cmp::Ordering, collections::BTreeMap, fmt::Debug};
 
     fn input(value: &str) -> NumericInput {
         NumericInput::try_new(value).expect("입력")
@@ -387,305 +590,33 @@ mod tests {
         .expect("시각")
     }
     fn holding(symbol: &str, value: Option<&str>, currency: Currency) -> Holding {
-        Holding::new(
-            ResolvedOrderInstrument::from_master_lookup_result(
-                Symbol::try_new(symbol).expect("심볼"),
-                match currency {
-                    Currency::Krw => Market::Kr,
-                    Currency::Usd => Market::Us,
-                },
+        let instrument = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new(symbol).expect("심볼"),
+            match currency {
+                Currency::Krw => Market::Kr,
+                Currency::Usd => Market::Us,
+            },
+        )
+        .expect("종목");
+        let report = value.map(|text| {
+            ReportedHolding::new(
+                money(text, currency),
+                money("0", currency),
+                Ratio::parse(&input("0")).expect("율"),
             )
-            .expect("종목"),
+            .expect("보고 평가")
+        });
+        Holding::new(
+            instrument,
             Quantity::parse(&input("1")).expect("수량"),
-            AcquisitionPrice::try_new(money("1", currency)).expect("원가"),
-            HoldingObservation::new(
-                value.map(|text| Price::parse(&input(text), currency).expect("시세")),
-                None,
-                time(),
-            ),
+            AcquisitionPrice::try_new(money("0", currency)).expect("원가"),
+            HoldingObservation::new(None, report, time()),
         )
         .expect("보유")
     }
-    fn portfolio(items: Vec<Holding>, cash: &str) -> PortfolioValuation {
-        Portfolio::new(
-            items,
-            BuyingPower::new(money(cash, Currency::Krw), time()),
-            BuyingPower::new(money("0", Currency::Usd), time()),
-        )
-        .expect("포트폴리오")
-        .evaluate(None)
-    }
-    #[test]
-    fn allocation_three_equal_ties_and_cash_basis_are_explicit() {
-        let value = portfolio(
-            vec![
-                holding("C", Some("1"), Currency::Krw),
-                holding("A", Some("1"), Currency::Krw),
-                holding("B", Some("1"), Currency::Krw),
-            ],
-            "3",
-        );
-        let allocation = Allocation::new(&value, &[]);
-        let rows = allocation.instruments().as_ref().expect("종목");
-        assert_eq!(
-            rows.entries()
-                .iter()
-                .map(|remainder| remainder.display().as_units())
-                .collect::<Vec<_>>(),
-            vec![3334, 3333, 3333]
-        );
-        assert_eq!(rows.basis(), AllocationBasis::Holdings);
-        assert_eq!(rows.accuracy(), ValuationAccuracy::Approximate);
-        assert_eq!(
-            allocation.currencies().as_ref().expect("통화").basis(),
-            AllocationBasis::HoldingsAndBuyingPower
-        );
-        assert_eq!(
-            allocation
-                .sectors()
-                .as_ref()
-                .expect("섹터")
-                .entries()
-                .first()
-                .expect("행")
-                .key(),
-            &AllocationSector::Unclassified
-        );
-        assert_eq!(allocation.valuation(), &value);
-    }
-    #[test]
-    fn allocation_incomplete_empty_and_cash_errors_never_make_complete_weights() {
-        let missing = portfolio(vec![holding("A", None, Currency::Krw)], "0");
-        assert_eq!(
-            Allocation::new(&missing, &[]).instruments(),
-            &Err(AllocationError::Incomplete)
-        );
-        let empty = portfolio(vec![], "1");
-        assert_eq!(
-            Allocation::new(&empty, &[]).countries(),
-            &Err(AllocationError::ZeroTotal)
-        );
-        assert!(Allocation::new(&empty, &[]).currencies().is_ok());
-        let bad = portfolio(vec![holding("A", Some("1"), Currency::Krw)], "-1");
-        assert!(Allocation::new(&bad, &[]).instruments().is_ok());
-        assert_eq!(
-            Allocation::new(&bad, &[]).currencies(),
-            &Err(AllocationError::Incomplete)
-        );
-    }
-    #[test]
-    fn allocation_independent_integer_reference_and_permutations() {
-        TestRunner::new(Config::with_cases(4096))
-            .run(&proptest::collection::vec(1_u32..10000, 1..40), |values| {
-                let mut amounts: Vec<_> = values
-                    .iter()
-                    .enumerate()
-                    .map(|(index, value)| (index, money(&value.to_string(), Currency::Krw)))
-                    .collect();
-                let expected_total: u128 = values.iter().map(|value| u128::from(*value)).sum();
-                let actual =
-                    allocation::weights(amounts.clone(), AllocationBasis::Holdings).expect("배분");
-                let sum: u32 = actual
-                    .entries()
-                    .iter()
-                    .map(|row| row.display().as_units())
-                    .sum();
-                assert_eq!(sum, 10000);
-                let reference = integer_reference(&values, expected_total);
-                for (row, (index, quotient, _)) in actual.entries().iter().zip(reference) {
-                    assert_eq!(row.key(), &index);
-                    assert_eq!(u128::from(row.display().as_units()), quotient);
-                    let numerator = u128::from(values.get(index).copied().expect("값"))
-                        .checked_mul(10000)
-                        .expect("분자");
-                    assert!(
-                        quotient
-                            .checked_mul(expected_total)
-                            .expect("표시")
-                            .abs_diff(numerator)
-                            < expected_total
-                    );
-                    assert_eq!(row.weight().accuracy(), ValuationAccuracy::Approximate);
-                    assert!(match row.weight().quotient() {
-                        RatioQuotient::Exact(ratio) =>
-                            ratio.as_decimal() >= rust_decimal::Decimal::ZERO,
-                        RatioQuotient::Approximate(ratio) =>
-                            ratio.original_direction() == DisplayDirection::Up,
-                    });
-                }
-                amounts.reverse();
-                assert_eq!(
-                    allocation::weights(amounts, AllocationBasis::Holdings).expect("역순"),
-                    actual
-                );
-                Ok(())
-            })
-            .expect("4096 독립 기준");
-    }
-
-    fn integer_reference(values: &[u32], expected_total: u128) -> Vec<(usize, u128, u128)> {
-        let mut reference: Vec<_> = values
-            .iter()
-            .enumerate()
-            .map(|(index, value)| {
-                let scaled = u128::from(*value).checked_mul(10000).expect("곱");
-                (
-                    index,
-                    scaled.checked_div(expected_total).expect("몫"),
-                    scaled.checked_rem(expected_total).expect("나머지"),
-                )
-            })
-            .collect();
-        let floor_sum: u128 = reference.iter().map(|(_, quotient, _)| *quotient).sum();
-        reference.sort_by_key(|(index, _, remainder)| (std::cmp::Reverse(*remainder), *index));
-        for (_, quotient, _) in reference
-            .iter_mut()
-            .take(usize::try_from(10000_u128.checked_sub(floor_sum).expect("잔여")).expect("개수"))
-        {
-            *quotient = quotient.checked_add(1).expect("배분");
-        }
-        reference.sort_by_key(|(index, _, _)| *index);
-        reference
-    }
-    #[test]
-    fn allocation_sector_identity_duplicates_and_exclusions_agree() {
-        let item = holding("A", Some("2"), Currency::Krw);
-        let sector = SectorId::try_new("Tech").expect("섹터");
-        let assignment = SectorAssignment::new(item.instrument(), sector.clone());
-        assert_eq!(assignment.sector(), &sector);
-        assert_eq!(assignment.instrument().symbol(), item.instrument().symbol());
-        assert_eq!(assignment.instrument().market(), &Market::Kr);
-        let value = portfolio(vec![item], "0");
-        let allocated = Allocation::new(&value, std::slice::from_ref(&assignment));
-        assert_eq!(
-            allocated
-                .sectors()
-                .as_ref()
-                .expect("섹터")
-                .entries()
-                .first()
-                .expect("행")
-                .key(),
-            &AllocationSector::Classified(sector.clone())
-        );
-        assert_eq!(
-            Allocation::new(&value, &[assignment.clone(), assignment]).sectors(),
-            &Err(AllocationError::DuplicateAssignment)
-        );
-        let exclusions = Exclusions::try_new(vec![sector.clone()], vec![]).expect("제외");
-        assert_eq!(
-            exclusions.sector_decision(&sector),
-            ExclusionDecision::Excluded
-        );
-        assert_eq!(
-            exclusions.sector_decision(&SectorId::try_new("tech").expect("소문자")),
-            ExclusionDecision::Included
-        );
-    }
-    #[test]
-    fn allocation_zero_negative_extremes_and_many_small_residuals() {
-        let zero = money("0", Currency::Krw);
-        assert_eq!(
-            allocation::weights(vec![(0_u32, zero)], AllocationBasis::Holdings),
-            Err(AllocationError::ZeroTotal)
-        );
-        assert_eq!(
-            allocation::weights(
-                vec![(0_u32, money("-1", Currency::Krw))],
-                AllocationBasis::Holdings
-            ),
-            Err(AllocationError::NegativeValue)
-        );
-        assert_eq!(
-            allocation::weights(
-                vec![(0_u32, money("1", Currency::Usd))],
-                AllocationBasis::Holdings
-            ),
-            Err(AllocationError::Arithmetic(MoneyError::CurrencyMismatch))
-        );
-        let maximum = money("79228162514264337593543950335", Currency::Krw);
-        assert_eq!(
-            allocation::weights(
-                vec![(0_u32, maximum), (1_u32, maximum)],
-                AllocationBasis::Holdings
-            ),
-            Err(AllocationError::Arithmetic(MoneyError::Overflow))
-        );
-        for amount in [
-            maximum,
-            money("0.0000000000000000000000000001", Currency::Krw),
-        ] {
-            let single = allocation::weights(vec![(0_u32, amount)], AllocationBasis::Holdings)
-                .expect("한 항목");
-            assert_eq!(
-                single.entries().first().expect("행").display().as_units(),
-                10000
-            );
-        }
-    }
-    #[test]
-    fn allocation_many_small_residuals_and_grouping() {
-        let zero = money("0", Currency::Krw);
-        let tiny = allocation::weights(
-            (0_u32..4096)
-                .map(|index| {
-                    (
-                        index,
-                        money("0.0000000000000000000000000001", Currency::Krw),
-                    )
-                })
-                .collect(),
-            AllocationBasis::Holdings,
-        )
-        .expect("작은 비중 다수");
-        assert_eq!(
-            tiny.entries()
-                .iter()
-                .map(|row| row.display().as_units())
-                .sum::<u32>(),
-            10000
-        );
-        assert_eq!(
-            tiny.entries().first().expect("첫 행").display().as_units(),
-            3
-        );
-        assert_eq!(
-            tiny.entries().last().expect("끝 행").display().as_units(),
-            2
-        );
-        let thirds = allocation::weights(
-            vec![
-                (0_u32, money("1", Currency::Krw)),
-                (1_u32, money("2", Currency::Krw)),
-            ],
-            AllocationBasis::Holdings,
-        )
-        .expect("셋");
-        assert_eq!(
-            thirds
-                .entries()
-                .iter()
-                .map(|row| row.display().as_units())
-                .collect::<Vec<_>>(),
-            vec![3333, 6667]
-        );
-        let grouped = allocation::weights(
-            vec![
-                (0_u32, money("1", Currency::Krw)),
-                (0_u32, money("1", Currency::Krw)),
-                (1_u32, zero),
-            ],
-            AllocationBasis::Holdings,
-        )
-        .expect("그룹");
-        assert_eq!(
-            grouped.entries().last().expect("0 행").display().as_units(),
-            0
-        );
-    }
-    fn fx() -> FxRate {
+    fn rate(value: &str) -> FxRate {
         FxRate::parse(
-            &input("1375"),
+            &input(value),
             FxPair::UsdKrw,
             FxRateKind::Mid,
             TimeInterval::try_new(
@@ -702,156 +633,21 @@ mod tests {
         )
         .expect("환율")
     }
-    #[test]
-    fn allocation_r11_currency_country_and_cash_use_krw_values() {
-        let original = Portfolio::new(
-            vec![
-                holding("KR", Some("10000000"), Currency::Krw),
-                holding("US", Some("5000"), Currency::Usd),
-            ],
-            BuyingPower::new(money("0", Currency::Krw), time()),
-            BuyingPower::new(money("0", Currency::Usd), time()),
-        )
-        .expect("혼합");
-        let evaluated = original.evaluate(Some(fx()));
-        let allocation = Allocation::new(&evaluated, &[]);
-        let currencies = allocation.currencies().as_ref().expect("통화");
-        assert_eq!(
-            currencies
-                .entries()
-                .iter()
-                .map(|row| (row.key().as_currency(), row.display().as_units()))
-                .collect::<Vec<_>>(),
-            vec![(Currency::Krw, 5926), (Currency::Usd, 4074)]
-        );
-        assert_eq!(
-            allocation
-                .countries()
-                .as_ref()
-                .expect("국가")
-                .entries()
-                .iter()
-                .map(|row| row.key().clone())
-                .collect::<Vec<_>>(),
-            vec![Market::Kr, Market::Us]
-        );
-        assert_eq!(
-            Allocation::new(&original.evaluate(None), &[]).instruments(),
-            &Err(AllocationError::Incomplete)
-        );
-        let cash = Portfolio::new(
-            vec![],
-            BuyingPower::new(money("0", Currency::Krw), time()),
-            BuyingPower::new(money("1", Currency::Usd), time()),
-        )
-        .expect("달러 현금")
-        .evaluate(Some(fx()));
-        let cash_allocation = Allocation::new(&cash, &[]);
-        assert_eq!(
-            cash_allocation
-                .currencies()
-                .as_ref()
-                .expect("통화")
-                .entries()
-                .last()
-                .expect("달러")
-                .display()
-                .as_units(),
-            10000
-        );
-    }
-    #[test]
-    fn allocation_reported_complete_total_cannot_hide_missing_constituent() {
-        let amounts = CurrencyAmounts::new(money("20", Currency::Krw), None).expect("요약");
-        let original = Portfolio::new(
-            vec![holding("A", None, Currency::Krw)],
-            BuyingPower::new(money("0", Currency::Krw), time()),
-            BuyingPower::new(money("0", Currency::Usd), time()),
+    fn portfolio(
+        items: Vec<Holding>,
+        krw: &str,
+        usd: &str,
+        fx: Option<FxRate>,
+    ) -> PortfolioValuation {
+        Portfolio::new(
+            items,
+            BuyingPower::new(money(krw, Currency::Krw), time()),
+            BuyingPower::new(money(usd, Currency::Usd), time()),
         )
         .expect("포트폴리오")
-        .with_reported(ReportedPortfolio::new(amounts, amounts, amounts, time()));
-        let value = original.evaluate(None);
-        assert_eq!(
-            value.valuation().completeness(),
-            TotalCompleteness::Complete
-        );
-        assert_eq!(
-            Allocation::new(&value, &[]).instruments(),
-            &Err(AllocationError::Incomplete)
-        );
+        .evaluate(fx)
     }
-
-    #[test]
-    fn allocation_wide_remainders_order_and_mixed_scales_match_integer_fractions() {
-        let total = money("3", Currency::Krw).amount();
-        let first = exact_arithmetic::allocation_parts(money("1", Currency::Krw).amount(), total).1;
-        let second =
-            exact_arithmetic::allocation_parts(money("2", Currency::Krw).amount(), total).1;
-        assert_eq!(first.partial_cmp(&second), Some(std::cmp::Ordering::Less));
-        let rows = allocation::weights(
-            vec![
-                (0_u32, money("0.01", Currency::Krw)),
-                (1_u32, money("0.0200", Currency::Krw)),
-                (2_u32, money("0.03", Currency::Krw)),
-            ],
-            AllocationBasis::Holdings,
-        )
-        .expect("다른 스케일");
-        assert_eq!(
-            rows.entries()
-                .iter()
-                .map(|row| row.display().as_units())
-                .collect::<Vec<_>>(),
-            vec![1667, 3333, 5000]
-        );
-        let wide = allocation::weights(
-            vec![
-                (0_u32, money("10000000000000000000000000000", Currency::Krw)),
-                (1_u32, money("1", Currency::Krw)),
-            ],
-            AllocationBasis::Holdings,
-        )
-        .expect("큰 계수");
-        assert_eq!(
-            wide.entries()
-                .iter()
-                .map(|row| row.display().as_units())
-                .collect::<Vec<_>>(),
-            vec![10000, 0]
-        );
-    }
-
-    #[test]
-    fn allocation_arithmetic_errors_preserve_independent_boundaries() {
-        assert_eq!(
-            allocation::calculation_weight(money("1", Currency::Krw), money("0", Currency::Krw)),
-            Err(AllocationError::ZeroTotal)
-        );
-        assert_eq!(
-            allocation::weights(
-                vec![
-                    (0_u32, money("0.4", Currency::Krw)),
-                    (1_u32, money("0.6", Currency::Krw)),
-                    (1_u32, money("10000000000000000000000000000", Currency::Krw))
-                ],
-                AllocationBasis::Holdings
-            ),
-            Err(AllocationError::Arithmetic(MoneyError::PrecisionLoss))
-        );
-        let cash = Portfolio::new(
-            vec![],
-            BuyingPower::new(money("0", Currency::Krw), time()),
-            BuyingPower::new(money("1", Currency::Usd), time()),
-        )
-        .expect("현금")
-        .evaluate(None);
-        assert_eq!(
-            Allocation::new(&cash, &[]).currencies(),
-            &Err(AllocationError::MissingFx)
-        );
-    }
-
-    fn reported_valuation(items: Vec<Holding>, cash: &str, summary: &str) -> PortfolioValuation {
+    fn reported(items: Vec<Holding>, cash: &str, summary: &str) -> PortfolioValuation {
         let amounts = CurrencyAmounts::new(money(summary, Currency::Krw), None).expect("요약");
         Portfolio::new(
             items,
@@ -862,50 +658,974 @@ mod tests {
         .with_reported(ReportedPortfolio::new(amounts, amounts, amounts, time()))
         .evaluate(None)
     }
+    fn units<K, W>(rows: &[AllocationEntry<K, W>]) -> Vec<u32> {
+        rows.iter()
+            .map(|row| row.display().units().as_u32())
+            .collect()
+    }
     #[test]
-    fn allocation_reported_totals_do_not_hide_fx_accumulation_or_asset_failures() {
-        let foreign = reported_valuation(vec![holding("US", Some("1"), Currency::Usd)], "0", "1");
+    fn asset_policy_denominator_and_holdings_composition_are_separate() {
+        let valuation = portfolio(
+            vec![
+                holding("KR", Some("1"), Currency::Krw),
+                holding("US", Some("1"), Currency::Usd),
+            ],
+            "1000000",
+            "0",
+            Some(rate("1375")),
+        );
+        let allocation = Allocation::new(&valuation, &SectorAssignments::default());
+        assert_eq!(allocation.valuation(), &valuation);
+        let assets = allocation.assets().instruments().as_ref().expect("총자산");
+        assert_eq!(units(assets.entries()), vec![0, 14, 9986, 0]);
+        let composition = allocation
+            .holdings()
+            .instruments()
+            .as_ref()
+            .expect("구성비");
+        assert_eq!(units(composition.entries()), vec![7, 9993]);
+        let cap = ProfileWeight::parse(&input("0.2")).expect("상한");
+        let krw = assets.entries().first().expect("원화");
+        let usd = assets.entries().get(1).expect("달러");
+        assert_eq!(usd.weight().cmp_profile_weight(&cap), Ordering::Less);
+        assert_eq!(krw.weight().compare(usd.weight()), Ordering::Less);
         assert_eq!(
-            Allocation::new(&foreign, &[]).instruments(),
+            composition
+                .entries()
+                .first()
+                .expect("첫 구성")
+                .weight()
+                .compare(composition.entries().get(1).expect("둘째 구성").weight()),
+            Ordering::Less
+        );
+        assert_eq!(assets.accuracy(), ValuationAccuracy::Approximate);
+        assert_eq!(composition.accuracy(), ValuationAccuracy::Approximate);
+        assert_eq!(usd.weight().accuracy(), ValuationAccuracy::Approximate);
+        assert_eq!(
+            composition
+                .entries()
+                .first()
+                .expect("첫 구성")
+                .weight()
+                .accuracy(),
+            ValuationAccuracy::Approximate
+        );
+        assert_eq!(krw.display().range(), AllocationDisplayRange::BelowUnit);
+        assert_eq!(
+            assets
+                .entries()
+                .last()
+                .expect("빈 달러 현금")
+                .display()
+                .range(),
+            AllocationDisplayRange::Zero
+        );
+        assert_currency_keys(&allocation);
+    }
+    fn assert_currency_keys(allocation: &Allocation) {
+        assert_eq!(
+            allocation
+                .assets()
+                .currencies()
+                .as_ref()
+                .expect("통화")
+                .entries()
+                .iter()
+                .map(|row| row.key().as_currency())
+                .collect::<Vec<_>>(),
+            vec![Currency::Krw, Currency::Usd]
+        );
+    }
+    #[test]
+    fn finite_quotients_from_fx_remain_approximate_and_compare_with_caps() {
+        let valuation = portfolio(
+            vec![
+                holding("KR", Some("1375"), Currency::Krw),
+                holding("US", Some("1"), Currency::Usd),
+            ],
+            "0",
+            "0",
+            Some(rate("1375")),
+        );
+        let allocation = Allocation::new(&valuation, &SectorAssignments::default());
+        let rows = allocation
+            .assets()
+            .instruments()
+            .as_ref()
+            .expect("자산")
+            .entries();
+        assert_eq!(
+            rows.first()
+                .expect("원화")
+                .weight()
+                .cmp_profile_weight(&ProfileWeight::parse(&input("0.5")).expect("상한")),
+            Ordering::Equal
+        );
+        assert_eq!(
+            rows.first()
+                .expect("원화")
+                .weight()
+                .compare(rows.get(1).expect("달러").weight()),
+            Ordering::Equal
+        );
+        assert_eq!(
+            rows.first()
+                .expect("원화")
+                .weight()
+                .cmp_profile_weight(&ProfileWeight::parse(&input("0.2")).expect("상한")),
+            Ordering::Greater
+        );
+        assert_eq!(
+            rows.first().expect("원화").weight().accuracy(),
+            ValuationAccuracy::Approximate
+        );
+    }
+    #[test]
+    fn sectors_include_etf_cash_and_unclassified_with_validated_assignments() {
+        let items = vec![
+            holding("A", Some("1"), Currency::Krw),
+            holding("B", Some("1"), Currency::Krw),
+            holding("C", Some("1"), Currency::Krw),
+            holding("D", Some("1"), Currency::Krw),
+        ];
+        let sector = SectorId::try_new("Tech").expect("섹터");
+        let first = SectorAssignment::new(
+            items.first().expect("종목").instrument(),
+            InstrumentClassification::Sector(sector.clone()),
+        );
+        assert_eq!(
+            first.classification(),
+            &InstrumentClassification::Sector(sector.clone())
+        );
+        assert_eq!(
+            first.instrument().symbol(),
+            items.first().expect("종목").instrument().symbol()
+        );
+        assert_eq!(first.instrument().market(), &Market::Kr);
+        assert_eq!(
+            SectorAssignments::try_new(vec![first.clone(), first.clone()]),
+            Err(SectorAssignmentsError::DuplicateInstrument)
+        );
+        let assignments = SectorAssignments::try_new(vec![
+            first,
+            SectorAssignment::new(
+                items.get(1).expect("ETF").instrument(),
+                InstrumentClassification::EtfFund,
+            ),
+            SectorAssignment::new(
+                items.get(2).expect("미분류").instrument(),
+                InstrumentClassification::Unclassified,
+            ),
+        ])
+        .expect("대응");
+        let valuation = portfolio(items, "4", "0", None);
+        let allocation = Allocation::new(&valuation, &assignments);
+        let rows = allocation
+            .assets()
+            .sectors()
+            .as_ref()
+            .expect("자산 섹터")
+            .entries();
+        assert_eq!(
+            rows.iter().map(|row| row.key().clone()).collect::<Vec<_>>(),
+            vec![
+                AllocationSector::Classified(sector),
+                AllocationSector::EtfFund,
+                AllocationSector::Cash,
+                AllocationSector::Unclassified
+            ]
+        );
+        assert_eq!(units(rows), vec![1250, 1250, 5000, 2500]);
+    }
+    #[test]
+    fn sector_identity_and_unheld_duplicates_are_validated_at_the_boundary() {
+        let sector = SectorId::try_new("Tech").expect("섹터");
+        let exclusions = Exclusions::try_new(vec![sector.clone()], vec![]).expect("제외");
+        assert_eq!(
+            exclusions.sector_decision(&sector),
+            ExclusionDecision::Excluded
+        );
+        assert_eq!(
+            exclusions.sector_decision(&SectorId::try_new("tech").expect("소문자")),
+            ExclusionDecision::Included
+        );
+        let absent = holding("ABSENT", Some("1"), Currency::Krw);
+        let duplicate =
+            SectorAssignment::new(absent.instrument(), InstrumentClassification::EtfFund);
+        assert_eq!(
+            SectorAssignments::try_new(vec![duplicate.clone(), duplicate]),
+            Err(SectorAssignmentsError::DuplicateInstrument)
+        );
+    }
+    #[test]
+    fn zero_cash_only_and_negative_cash_have_explicit_denominator_results() {
+        let assignments = SectorAssignments::default();
+        for currency in [Currency::Krw, Currency::Usd] {
+            let (krw, usd) = match currency {
+                Currency::Krw => ("-1", "0"),
+                Currency::Usd => ("0", "-1"),
+            };
+            let valuation = portfolio(
+                vec![holding("A", Some("1"), Currency::Krw)],
+                krw,
+                usd,
+                Some(rate("1375")),
+            );
+            let allocation = Allocation::new(&valuation, &assignments);
+            assert_eq!(
+                allocation.assets().currencies(),
+                &Err(AllocationError::NegativeCash(currency))
+            );
+            assert!(allocation.holdings().currencies().is_ok());
+        }
+    }
+    #[test]
+    fn cash_only_empty_and_zero_holdings_have_explicit_results() {
+        let assignments = SectorAssignments::default();
+        let cash = Allocation::new(
+            &portfolio(vec![], "1", "1", Some(rate("1375"))),
+            &assignments,
+        );
+        assert_eq!(
+            cash.holdings().instruments(),
+            &Err(AllocationError::ZeroTotal)
+        );
+        assert_eq!(
+            units(cash.assets().sectors().as_ref().expect("현금").entries()),
+            vec![10000]
+        );
+        assert_eq!(
+            units(
+                cash.assets()
+                    .countries()
+                    .as_ref()
+                    .expect("현금 국가")
+                    .entries()
+            ),
+            vec![10000]
+        );
+        assert_eq!(
+            cash.assets()
+                .countries()
+                .as_ref()
+                .expect("국가")
+                .entries()
+                .first()
+                .expect("현금")
+                .key(),
+            &AssetCountry::Cash
+        );
+        let zero = Allocation::new(
+            &portfolio(vec![holding("Z", Some("0"), Currency::Usd)], "0", "0", None),
+            &assignments,
+        );
+        assert_eq!(
+            zero.assets().instruments(),
+            &Err(AllocationError::ZeroTotal)
+        );
+        assert_eq!(
+            zero.holdings().instruments(),
+            &Err(AllocationError::ZeroTotal)
+        );
+        assert_eq!(
+            Allocation::new(&portfolio(vec![], "0", "0", None), &assignments)
+                .holdings()
+                .instruments(),
+            &Err(AllocationError::ZeroTotal)
+        );
+    }
+    #[test]
+    fn incomplete_valuation_and_summary_mismatch_never_leak_asset_weights() {
+        let assignments = SectorAssignments::default();
+        for valuation in [
+            portfolio(vec![holding("A", None, Currency::Krw)], "0", "0", None),
+            reported(vec![holding("A", None, Currency::Krw)], "0", "1"),
+        ] {
+            let allocation = Allocation::new(&valuation, &assignments);
+            assert_eq!(
+                allocation.assets().instruments(),
+                &Err(AllocationError::Incomplete)
+            );
+            assert_eq!(
+                allocation.holdings().instruments(),
+                &Err(AllocationError::Incomplete)
+            );
+        }
+        let mismatch = Allocation::new(
+            &reported(vec![holding("A", Some("1"), Currency::Krw)], "0", "20"),
+            &assignments,
+        );
+        assert_eq!(
+            mismatch.assets().instruments(),
+            &Err(AllocationError::TotalMismatch)
+        );
+        assert!(mismatch.holdings().instruments().is_ok());
+        let maximum = "79228162514264337593543950335";
+        let assets = Allocation::new(&reported(vec![], "1", maximum), &assignments);
+        assert_eq!(
+            assets.assets().instruments(),
+            &Err(AllocationError::Incomplete)
+        );
+        let overflow = Allocation::new(
+            &reported(vec![holding("A", Some(maximum), Currency::Krw)], "1", "1"),
+            &assignments,
+        );
+        assert_eq!(
+            overflow.assets().instruments(),
+            &Err(AllocationError::Arithmetic(MoneyError::Overflow))
+        );
+        let rows = vec![
+            holding("A", Some(maximum), Currency::Krw),
+            holding("B", Some("1"), Currency::Krw),
+        ];
+        assert_eq!(
+            Allocation::new(&reported(rows, "0", "1"), &assignments)
+                .holdings()
+                .instruments(),
+            &Err(AllocationError::Incomplete)
+        );
+    }
+    #[test]
+    fn missing_fx_in_incomplete_total_is_not_a_partial_composition() {
+        let assignments = SectorAssignments::default();
+        let missing_fx = Allocation::new(
+            &portfolio(
+                vec![holding("US", Some("1"), Currency::Usd)],
+                "0",
+                "0",
+                None,
+            ),
+            &assignments,
+        );
+        assert_eq!(
+            missing_fx.holdings().instruments(),
+            &Err(AllocationError::Incomplete)
+        );
+    }
+    #[test]
+    fn fx_absence_conversion_precision_and_reported_failures_remain_visible() {
+        let assignments = SectorAssignments::default();
+        let missing = Allocation::new(&portfolio(vec![], "0", "1", None), &assignments);
+        assert_eq!(
+            missing.assets().currencies(),
             &Err(AllocationError::MissingFx)
         );
-        let overflow = reported_valuation(
+        let foreign = Allocation::new(
+            &reported(vec![holding("US", Some("1"), Currency::Usd)], "0", "1"),
+            &assignments,
+        );
+        assert_eq!(
+            foreign.holdings().instruments(),
+            &Err(AllocationError::MissingFx)
+        );
+        let precision = Allocation::new(
+            &portfolio(
+                vec![holding("US", Some("1"), Currency::Usd)],
+                "0",
+                "0.0000000000000000000000000001",
+                Some(rate("0.0000000000000000000000000001")),
+            ),
+            &assignments,
+        );
+        assert_eq!(
+            precision.assets().currencies(),
+            &Err(AllocationError::Conversion(
+                crate::FxConversionError::Arithmetic(MoneyError::PrecisionLoss)
+            ))
+        );
+        assert_eq!(
+            converted(money("1", Currency::Usd), &[]),
+            Err(AllocationError::MissingFx)
+        );
+    }
+    #[test]
+    fn display_ranges_preserve_positive_tiny_values_and_exact_unit_sum() {
+        let valuation = portfolio(
             vec![
-                holding("A", Some("79228162514264337593543950335"), Currency::Krw),
+                holding("A", Some("0.0000000000000000000000000001"), Currency::Krw),
                 holding("B", Some("1"), Currency::Krw),
             ],
             "0",
-            "1",
+            "0",
+            None,
+        );
+        let allocation = Allocation::new(&valuation, &SectorAssignments::default());
+        let rows = allocation
+            .holdings()
+            .instruments()
+            .as_ref()
+            .expect("구성")
+            .entries();
+        assert_eq!(units(rows), vec![0, 10000]);
+        assert_eq!(
+            rows.first().expect("미소 비중").display().range(),
+            AllocationDisplayRange::BelowUnit
         );
         assert_eq!(
-            Allocation::new(&overflow, &[]).instruments(),
-            &Err(AllocationError::Incomplete)
+            rows.get(1).expect("큰 비중").display().range(),
+            AllocationDisplayRange::AtLeastUnit
         );
-        let assets = reported_valuation(vec![], "1", "79228162514264337593543950335");
-        assert_eq!(
-            Allocation::new(&assets, &[]).currencies(),
-            &Err(AllocationError::Incomplete)
+        let equal = Allocation::new(
+            &portfolio(
+                vec![
+                    holding("C", Some("1"), Currency::Krw),
+                    holding("A", Some("1"), Currency::Krw),
+                    holding("B", Some("1"), Currency::Krw),
+                ],
+                "0",
+                "0",
+                None,
+            ),
+            &SectorAssignments::default(),
         );
         assert_eq!(
-            allocation::calculation_weight(money("1", Currency::Usd), money("1", Currency::Krw)),
+            units(
+                equal
+                    .holdings()
+                    .instruments()
+                    .as_ref()
+                    .expect("동률")
+                    .entries()
+            ),
+            vec![3334, 3333, 3333]
+        );
+        let empty = Allocation::new(
+            &portfolio(vec![], "0", "0", None),
+            &SectorAssignments::default(),
+        );
+        assert_public_axes(&empty, &[], 0, 0);
+        let total = money("3", Currency::Krw).amount();
+        let first =
+            crate::exact_arithmetic::allocation_parts(money("1", Currency::Krw).amount(), total).1;
+        let second =
+            crate::exact_arithmetic::allocation_parts(money("2", Currency::Krw).amount(), total).1;
+        assert_eq!(first.partial_cmp(&second), Some(Ordering::Less));
+    }
+    #[test]
+    fn extreme_and_many_small_holdings_keep_allocation_contracts() {
+        for value in [
+            "79228162514264337593543950335",
+            "0.0000000000000000000000000001",
+        ] {
+            let allocation = Allocation::new(
+                &portfolio(
+                    vec![holding("A", Some(value), Currency::Krw)],
+                    "0",
+                    "0",
+                    None,
+                ),
+                &SectorAssignments::default(),
+            );
+            assert_eq!(
+                units(
+                    allocation
+                        .holdings()
+                        .instruments()
+                        .as_ref()
+                        .expect("극값")
+                        .entries()
+                ),
+                vec![10000]
+            );
+            assert_eq!(
+                units(
+                    allocation
+                        .assets()
+                        .instruments()
+                        .as_ref()
+                        .expect("자산 극값")
+                        .entries()
+                ),
+                vec![10000, 0, 0]
+            );
+        }
+        let items = (0_u32..4096)
+            .map(|index| {
+                holding(
+                    &format!("S{index:04}"),
+                    Some("0.0000000000000000000000000001"),
+                    Currency::Krw,
+                )
+            })
+            .collect();
+        let allocation = Allocation::new(
+            &portfolio(items, "0", "0", None),
+            &SectorAssignments::default(),
+        );
+        let rows = allocation
+            .holdings()
+            .instruments()
+            .as_ref()
+            .expect("미소 비중 다수")
+            .entries();
+        assert_eq!(units(rows).iter().sum::<u32>(), 10000);
+        assert_eq!(rows.first().expect("첫 행").display().units().as_u32(), 3);
+        assert_eq!(rows.last().expect("끝 행").display().units().as_u32(), 2);
+    }
+    #[test]
+    fn arithmetic_validation_rejects_negative_currency_overflow_and_precision_loss() {
+        assert_eq!(
+            composition_weights(vec![(0_u32, money("-1", Currency::Krw))]),
+            Err(AllocationError::NegativeValue)
+        );
+        assert_eq!(
+            asset_weights(vec![(0_u32, money("1", Currency::Usd))]),
             Err(AllocationError::Arithmetic(MoneyError::CurrencyMismatch))
         );
+        assert_eq!(
+            calculated_weight(money("1", Currency::Usd), money("1", Currency::Krw)),
+            Err(AllocationError::Arithmetic(MoneyError::CurrencyMismatch))
+        );
+        assert_eq!(
+            composition_weights(vec![
+                (0_u32, money("0.4", Currency::Krw)),
+                (1_u32, money("0.6", Currency::Krw)),
+                (1_u32, money("10000000000000000000000000000", Currency::Krw))
+            ]),
+            Err(AllocationError::Arithmetic(MoneyError::PrecisionLoss))
+        );
     }
-
-    #[test]
-    fn allocation_integer_floor_is_independent_of_residual_distribution() {
-        for (value, total, expected) in [
-            ("0", "3", 0),
-            ("1", "3", 3333),
-            ("2", "3", 6666),
-            ("3", "3", 10000),
-            ("1", "6", 1666),
-        ] {
-            let (units, _) = exact_arithmetic::allocation_parts(
-                money(value, Currency::Krw).amount(),
-                money(total, Currency::Krw).amount(),
-            );
-            assert_eq!(units.as_units(), expected);
+    #[derive(Clone)]
+    struct ReferenceHolding {
+        instrument: AllocationInstrument,
+        market: Market,
+        currency: AllocationCurrency,
+        sector: AllocationSector,
+        coefficient: u128,
+    }
+    struct ReferenceAxes<I, C> {
+        instruments: Vec<(I, u128)>,
+        sectors: Vec<(AllocationSector, u128)>,
+        countries: Vec<(C, u128)>,
+        currencies: Vec<(AllocationCurrency, u128)>,
+    }
+    fn composition_reference(
+        rows: &[ReferenceHolding],
+    ) -> ReferenceAxes<AllocationInstrument, Market> {
+        ReferenceAxes {
+            instruments: rows
+                .iter()
+                .map(|row| (row.instrument.clone(), row.coefficient))
+                .collect(),
+            sectors: rows
+                .iter()
+                .map(|row| (row.sector.clone(), row.coefficient))
+                .collect(),
+            countries: rows
+                .iter()
+                .map(|row| (row.market.clone(), row.coefficient))
+                .collect(),
+            currencies: rows
+                .iter()
+                .map(|row| (row.currency, row.coefficient))
+                .collect(),
         }
+    }
+    fn asset_reference(
+        rows: &[ReferenceHolding],
+        krw: u128,
+        usd: u128,
+    ) -> ReferenceAxes<AssetInstrument, AssetCountry> {
+        let mut result = ReferenceAxes {
+            instruments: rows
+                .iter()
+                .map(|row| {
+                    (
+                        AssetInstrument::Holding(row.instrument.clone()),
+                        row.coefficient,
+                    )
+                })
+                .collect(),
+            sectors: rows
+                .iter()
+                .map(|row| (row.sector.clone(), row.coefficient))
+                .collect(),
+            countries: rows
+                .iter()
+                .map(|row| (AssetCountry::Market(row.market.clone()), row.coefficient))
+                .collect(),
+            currencies: rows
+                .iter()
+                .map(|row| (row.currency, row.coefficient))
+                .collect(),
+        };
+        for (currency, value) in [
+            (AllocationCurrency::Krw, krw),
+            (AllocationCurrency::Usd, usd),
+        ] {
+            result
+                .instruments
+                .push((AssetInstrument::Cash(currency), value));
+            result.sectors.push((AllocationSector::Cash, value));
+            result.countries.push((AssetCountry::Cash, value));
+            result.currencies.push((currency, value));
+        }
+        result
+    }
+    fn reference<K: Ord + Clone>(values: Vec<(K, u128)>) -> Vec<(K, u128, u128)> {
+        let mut groups = BTreeMap::new();
+        for (key, value) in values {
+            let current = groups.entry(key).or_insert(0_u128);
+            *current = current.checked_add(value).expect("독립 합");
+        }
+        let total: u128 = groups.values().sum();
+        let mut rows: Vec<_> = groups
+            .into_iter()
+            .map(|(key, value)| {
+                let numerator = value.checked_mul(10000).expect("독립 분자");
+                (
+                    key,
+                    numerator.checked_div(total).expect("독립 몫"),
+                    numerator.checked_rem(total).expect("독립 잔여"),
+                )
+            })
+            .collect();
+        let floor: u128 = rows.iter().map(|(_, value, _)| *value).sum();
+        rows.sort_by(
+            |(left_key, _, left_remainder), (right_key, _, right_remainder)| {
+                right_remainder
+                    .cmp(left_remainder)
+                    .then_with(|| left_key.cmp(right_key))
+            },
+        );
+        for (_, value, _) in rows.iter_mut().take(
+            usize::try_from(10000_u128.checked_sub(floor).expect("독립 잔여 수")).expect("수"),
+        ) {
+            *value = value.checked_add(1).expect("독립 배분");
+        }
+        rows.sort_by(|(left, _, _), (right, _, _)| left.cmp(right));
+        rows
+    }
+    fn assert_rows<K: Ord + Clone + Debug, W>(
+        actual: &[AllocationEntry<K, W>],
+        expected: Vec<(K, u128)>,
+    ) {
+        let total: u128 = expected.iter().map(|(_, value)| *value).sum();
+        let reference = reference(expected.clone());
+        let mut coefficients = BTreeMap::new();
+        for (key, value) in expected {
+            let current = coefficients.entry(key).or_insert(0_u128);
+            *current = current.checked_add(value).expect("독립 그룹 합");
+        }
+        assert_eq!(actual.len(), reference.len());
+        assert_eq!(units(actual).iter().sum::<u32>(), 10000);
+        for (row, (key, value, _)) in actual.iter().zip(reference) {
+            assert_eq!(row.key(), &key);
+            assert_eq!(u128::from(row.display().units().as_u32()), value);
+            let numerator = coefficients
+                .get(&key)
+                .expect("원시 그룹")
+                .checked_mul(10000)
+                .expect("참값 분자");
+            assert!(
+                value
+                    .checked_mul(total)
+                    .expect("표시 분자")
+                    .abs_diff(numerator)
+                    < total
+            );
+            assert_eq!(
+                row.display().range(),
+                if numerator == 0 {
+                    AllocationDisplayRange::Zero
+                } else if numerator < total {
+                    AllocationDisplayRange::BelowUnit
+                } else {
+                    AllocationDisplayRange::AtLeastUnit
+                }
+            );
+        }
+    }
+    fn assert_public_axes(
+        allocation: &Allocation,
+        rows: &[ReferenceHolding],
+        krw: u128,
+        usd: u128,
+    ) {
+        assert_composition_axes(allocation, rows);
+        assert_asset_axes(allocation, rows, krw, usd);
+    }
+    fn assert_composition_axes(allocation: &Allocation, rows: &[ReferenceHolding]) {
+        let composition = composition_reference(rows);
+        if rows.iter().map(|row| row.coefficient).sum::<u128>() == 0 {
+            assert_eq!(
+                allocation.holdings().instruments(),
+                &Err(AllocationError::ZeroTotal)
+            );
+            assert_eq!(
+                allocation.holdings().sectors(),
+                &Err(AllocationError::ZeroTotal)
+            );
+            assert_eq!(
+                allocation.holdings().countries(),
+                &Err(AllocationError::ZeroTotal)
+            );
+            assert_eq!(
+                allocation.holdings().currencies(),
+                &Err(AllocationError::ZeroTotal)
+            );
+        } else {
+            assert_rows(
+                allocation
+                    .holdings()
+                    .instruments()
+                    .as_ref()
+                    .expect("구성 종목")
+                    .entries(),
+                composition.instruments,
+            );
+            assert_rows(
+                allocation
+                    .holdings()
+                    .sectors()
+                    .as_ref()
+                    .expect("구성 섹터")
+                    .entries(),
+                composition.sectors,
+            );
+            assert_rows(
+                allocation
+                    .holdings()
+                    .countries()
+                    .as_ref()
+                    .expect("구성 국가")
+                    .entries(),
+                composition.countries,
+            );
+            assert_rows(
+                allocation
+                    .holdings()
+                    .currencies()
+                    .as_ref()
+                    .expect("구성 통화")
+                    .entries(),
+                composition.currencies,
+            );
+        }
+    }
+    fn assert_asset_axes(allocation: &Allocation, rows: &[ReferenceHolding], krw: u128, usd: u128) {
+        let assets = asset_reference(rows, krw, usd);
+        let total: u128 = assets.instruments.iter().map(|(_, value)| *value).sum();
+        if total == 0 {
+            assert_eq!(
+                allocation.assets().instruments(),
+                &Err(AllocationError::ZeroTotal)
+            );
+            assert_eq!(
+                allocation.assets().sectors(),
+                &Err(AllocationError::ZeroTotal)
+            );
+            assert_eq!(
+                allocation.assets().countries(),
+                &Err(AllocationError::ZeroTotal)
+            );
+            assert_eq!(
+                allocation.assets().currencies(),
+                &Err(AllocationError::ZeroTotal)
+            );
+        } else {
+            assert_rows(
+                allocation
+                    .assets()
+                    .instruments()
+                    .as_ref()
+                    .expect("자산 종목")
+                    .entries(),
+                assets.instruments,
+            );
+            assert_rows(
+                allocation
+                    .assets()
+                    .sectors()
+                    .as_ref()
+                    .expect("자산 섹터")
+                    .entries(),
+                assets.sectors,
+            );
+            assert_rows(
+                allocation
+                    .assets()
+                    .countries()
+                    .as_ref()
+                    .expect("자산 국가")
+                    .entries(),
+                assets.countries,
+            );
+            assert_rows(
+                allocation
+                    .assets()
+                    .currencies()
+                    .as_ref()
+                    .expect("자산 통화")
+                    .entries(),
+                assets.currencies,
+            );
+        }
+    }
+    fn generated_rows(
+        samples: &[(u32, u32, u64, u8)],
+    ) -> (Vec<Holding>, SectorAssignments, Vec<ReferenceHolding>) {
+        let mut holdings = Vec::new();
+        let mut assignments = Vec::new();
+        let mut references = Vec::new();
+        for (index, (coefficient, scale, _, market)) in samples.iter().enumerate() {
+            let currency = if *market == 0 {
+                Currency::Krw
+            } else {
+                Currency::Usd
+            };
+            let decimal_text =
+                Decimal::from_i128_with_scale(i128::from(*coefficient), *scale).to_string();
+            let item = holding(&format!("S{index:04}"), Some(&decimal_text), currency);
+            let classification = match index.checked_rem(4).expect("네 분류") {
+                0 => Some(InstrumentClassification::Sector(
+                    SectorId::try_new("Tech").expect("섹터"),
+                )),
+                1 => Some(InstrumentClassification::EtfFund),
+                2 => Some(InstrumentClassification::Unclassified),
+                _ => None,
+            };
+            let sector = classification
+                .as_ref()
+                .map_or(AllocationSector::Unclassified, |value| match value {
+                    InstrumentClassification::Sector(id) => {
+                        AllocationSector::Classified(id.clone())
+                    }
+                    InstrumentClassification::EtfFund => AllocationSector::EtfFund,
+                    InstrumentClassification::Unclassified => AllocationSector::Unclassified,
+                });
+            if let Some(value) = classification {
+                assignments.push(SectorAssignment::new(item.instrument(), value));
+            }
+            let normalized = u128::from(*coefficient)
+                .checked_mul(
+                    10_u128
+                        .checked_pow(6_u32.checked_sub(*scale).expect("스케일"))
+                        .expect("스케일 계수"),
+                )
+                .expect("정수 정렬");
+            let converted = normalized
+                .checked_mul(if *market == 0 { 1 } else { 1375 })
+                .expect("독립 환산");
+            references.push(ReferenceHolding {
+                instrument: AllocationInstrument::new(item.instrument()),
+                market: item.instrument().market(),
+                currency: if *market == 0 {
+                    AllocationCurrency::Krw
+                } else {
+                    AllocationCurrency::Usd
+                },
+                sector,
+                coefficient: converted,
+            });
+            holdings.push(item);
+        }
+        (
+            holdings,
+            SectorAssignments::try_new(assignments).expect("대응"),
+            references,
+        )
+    }
+    fn assert_generated_case(samples: &[(u32, u32, u64, u8)], krw: u32, usd: u32) {
+        let (holdings, assignments, references) = generated_rows(samples);
+        let original = Allocation::new(
+            &portfolio(
+                holdings.clone(),
+                &krw.to_string(),
+                &usd.to_string(),
+                Some(rate("1375")),
+            ),
+            &assignments,
+        );
+        let mut shuffled: Vec<_> = holdings
+            .into_iter()
+            .zip(samples.iter().map(|(_, _, order, _)| *order))
+            .collect();
+        shuffled.sort_by_key(|(_, order)| *order);
+        let permutation = Allocation::new(
+            &portfolio(
+                shuffled.into_iter().map(|(item, _)| item).collect(),
+                &krw.to_string(),
+                &usd.to_string(),
+                Some(rate("1375")),
+            ),
+            &assignments,
+        );
+        assert_eq!(permutation, original);
+        assert_public_axes(
+            &original,
+            &references,
+            u128::from(krw).checked_mul(1_000_000).expect("원화 정렬"),
+            u128::from(usd)
+                .checked_mul(1_375_000_000)
+                .expect("달러 환산"),
+        );
+    }
+    fn assert_extreme_case(extreme: u8) {
+        let value = if extreme == 0 {
+            "79228162514264337593543950335"
+        } else {
+            "0.0000000000000000000000000001"
+        };
+        let allocation = Allocation::new(
+            &portfolio(
+                vec![holding("EXTREME", Some(value), Currency::Krw)],
+                "0",
+                "0",
+                None,
+            ),
+            &SectorAssignments::default(),
+        );
+        assert_eq!(
+            units(
+                allocation
+                    .assets()
+                    .instruments()
+                    .as_ref()
+                    .expect("극값 자산")
+                    .entries()
+            ),
+            vec![10000, 0, 0]
+        );
+        assert_eq!(
+            units(
+                allocation
+                    .holdings()
+                    .instruments()
+                    .as_ref()
+                    .expect("극값 구성")
+                    .entries()
+            ),
+            vec![10000]
+        );
+    }
+    #[test]
+    fn generated_public_allocations_match_independent_integers_and_arbitrary_permutations() {
+        TestRunner::new(Config::with_cases(4096))
+            .run(
+                &(
+                    proptest::collection::vec(
+                        (
+                            0_u32..1000,
+                            0_u32..=6,
+                            proptest::arbitrary::any::<u64>(),
+                            0_u8..2,
+                        ),
+                        0..30,
+                    ),
+                    0_u32..1000,
+                    0_u32..1000,
+                    0_u8..10,
+                ),
+                |(samples, krw, usd, extreme)| {
+                    match extreme.cmp(&2) {
+                        Ordering::Less => assert_extreme_case(extreme),
+                        Ordering::Equal => assert_generated_case(&[], 0, 0),
+                        Ordering::Greater => assert_generated_case(&samples, krw, usd),
+                    }
+                    Ok(())
+                },
+            )
+            .expect("4096 공개 경로 독립 정수 대조");
     }
 }
