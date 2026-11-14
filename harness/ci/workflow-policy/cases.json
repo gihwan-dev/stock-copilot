@@ -296,6 +296,12 @@
       "path": ".github/workflows/other.yml",
       "example": "harness/ci/workflow-policy/examples/nightly-path-permissions.workflow",
       "rules": ["job-permissions:notify"]
+    },
+    {
+      "name": "mutation-fail-fast",
+      "path": ".github/workflows/nightly.yml",
+      "example": "harness/ci/workflow-policy/examples/mutation-fail-fast.workflow",
+      "rules": ["strategy:mutants"]
     }
   ]
 }

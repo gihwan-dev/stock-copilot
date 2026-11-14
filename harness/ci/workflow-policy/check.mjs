@@ -17,6 +17,7 @@ export const RULES = [
   "job-permissions",
   "runner",
   "timeout",
+  "strategy",
   "needs",
   "condition",
   "step-shape",
@@ -151,7 +152,19 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   const expected = policy.jobPermissions[`${path}#${name}`];
   const timeout = job["timeout-minutes"];
   return [
-    ...keyFindings(job, policy.jobKeys, policy.requiredJobKeys, `jobs.${name}`),
+    ...keyFindings(
+      job,
+      path === ".github/workflows/nightly.yml" && name === "mutants"
+        ? [...policy.jobKeys, "strategy"]
+        : policy.jobKeys,
+      policy.requiredJobKeys,
+      `jobs.${name}`,
+    ),
+    ...(path !== ".github/workflows/nightly.yml" ||
+    name !== "mutants" ||
+    isDeepStrictEqual(job.strategy, policy.mutationStrategy)
+      ? []
+      : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)
       ? []
       : [finding("job-permissions", name)]),

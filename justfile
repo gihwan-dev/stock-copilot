@@ -220,3 +220,6 @@ gen-tokens:
 
 tokens-contrast:
     node harness/ds-tokens/contrast.mjs
+
+mutants-shard shard:
+    cargo run --locked --quiet --package xtask -- mutants --shard "$1"

@@ -382,8 +382,8 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   assert.equal(nightly.jobs.macos.if, "needs.changes.outputs.changed == 'yes'");
   assert.ok(runs(nightly.jobs.macos).includes("just base=HEAD check"));
   assert.ok(
-    runs(nightly.jobs.linux).includes(
-      "node harness/ci/linux/offline.mjs just mutants-all",
+    runs(nightly.jobs.mutants).includes(
+      "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
     ),
   );
   assert.ok(runs(nightly.jobs.linux).includes("just advisory-db-fetch"));

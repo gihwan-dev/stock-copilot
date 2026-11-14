@@ -19,42 +19,6 @@ pub(super) fn matches_target(glob: &str, file: &str) -> bool {
     )
 }
 
-struct References<'a> {
-    names: &'a BTreeSet<String>,
-    found: bool,
-}
-
-impl<'ast> syn::visit::Visit<'ast> for References<'_> {
-    fn visit_path(&mut self, i: &'ast syn::Path) {
-        if i.segments.len() > 1
-            && i.segments
-                .iter()
-                .any(|segment| self.names.contains(&segment.ident.to_string()))
-        {
-            self.found = true;
-        }
-        syn::visit::visit_path(self, i);
-    }
-    fn visit_use_tree(&mut self, i: &'ast syn::UseTree) {
-        let ident = match i {
-            syn::UseTree::Path(path) => Some(&path.ident),
-            syn::UseTree::Name(name) => Some(&name.ident),
-            syn::UseTree::Rename(rename) => Some(&rename.ident),
-            syn::UseTree::Group(_) | syn::UseTree::Glob(_) => None,
-        };
-        if ident.is_some_and(|name| self.names.contains(&name.to_string())) {
-            self.found = true;
-        }
-        syn::visit::visit_use_tree(self, i);
-    }
-    fn visit_item_mod(&mut self, i: &'ast syn::ItemMod) {
-        if self.names.contains(&i.ident.to_string()) {
-            self.found = true;
-        }
-        syn::visit::visit_item_mod(self, i);
-    }
-}
-
 fn without_exports(source: &str) -> Option<String> {
     let parsed = syn::parse_file(source).ok()?;
     let mut remaining = source.as_bytes().to_vec();
@@ -103,34 +67,6 @@ fn test_support(path: &str, source: &str) -> bool {
         || syn::parse_file(source).is_ok_and(|file| !file.attrs.is_empty())
 }
 
-struct ExternalTestModule<'a> {
-    path: &'a str,
-    found: bool,
-}
-
-impl<'ast> syn::visit::Visit<'ast> for ExternalTestModule<'_> {
-    fn visit_item_mod(&mut self, i: &'ast syn::ItemMod) {
-        if i.content.is_none()
-            && !i.attrs.is_empty()
-            && self
-                .path
-                .split('/')
-                .any(|part| i.ident == part.trim_end_matches(".rs"))
-        {
-            self.found = true;
-        }
-        syn::visit::visit_item_mod(self, i);
-    }
-}
-
-fn external_support(parsed: &syn::File, files: &BTreeSet<String>) -> bool {
-    files.iter().any(|path| {
-        let mut support = ExternalTestModule { path, found: false };
-        syn::visit::Visit::visit_file(&mut support, parsed);
-        support.found
-    })
-}
-
 fn narrow_crate(
     root: &Path,
     base: &str,
@@ -152,7 +88,7 @@ fn narrow_crate(
         {
             return Err(String::from("crate 전체"));
         }
-        if globs.iter().any(|glob| matches_target(glob, path)) {
+        if Path::new(path).extension().is_some_and(|ext| ext == "rs") {
             if path.contains(['*', '?', '[', ']', '{', '}']) {
                 return Err(String::from("glob path"));
             }
@@ -162,32 +98,65 @@ fn narrow_crate(
             return Err(String::from("support file"));
         }
     }
-    if files.is_empty() {
-        return Ok(files);
-    }
-    let names: BTreeSet<String> = files
-        .iter()
-        .filter_map(|path| Path::new(path).file_stem()?.to_str().map(String::from))
-        .collect();
-    for path in listed_paths(root)? {
-        if path.starts_with(&prefix) && Path::new(&path).extension().is_some_and(|ext| ext == "rs")
-        {
-            let source = read_text(&root.join(&path))?;
-            let parsed = syn::parse_file(&source).map_err(|error| error.to_string())?;
-            if external_support(&parsed, &files) {
-                return Err(String::from("external test module"));
-            }
-            let mut references = References {
-                names: &names,
-                found: false,
-            };
-            syn::visit::Visit::visit_file(&mut references, &parsed);
-            if references.found && globs.iter().any(|glob| matches_target(glob, &path)) {
-                files.insert(path);
-            }
+    let mut graph = super::graph::Graph::read(&snapshot(root, directory, None)?)?;
+    graph.extend(super::graph::Graph::read(&snapshot(
+        root,
+        directory,
+        Some(base),
+    )?)?);
+    graph.selected(&files).map(|selected| {
+        selected
+            .into_iter()
+            .filter(|path| globs.iter().any(|glob| matches_target(glob, path)))
+            .collect()
+    })
+}
+
+fn snapshot(
+    root: &Path,
+    directory: &str,
+    base: Option<&str>,
+) -> Result<super::graph::Sources, String> {
+    let paths = match base {
+        None => listed_paths(root)?,
+        Some(commit) => {
+            let mut command = git(root);
+            command.args([
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "-z",
+                commit,
+                "--",
+                directory,
+            ]);
+            String::from_utf8(output(command, "ls-tree")?)
+                .map_err(|error| error.to_string())?
+                .split('\0')
+                .filter(|path| !path.is_empty())
+                .map(String::from)
+                .collect()
         }
-    }
-    Ok(files)
+    };
+    paths
+        .into_iter()
+        .filter(|path| {
+            path.starts_with(&format!("{directory}/"))
+                && Path::new(path).extension().is_some_and(|ext| ext == "rs")
+        })
+        .map(|path| {
+            let source = match base {
+                None => read_text(&root.join(&path))?,
+                Some(commit) => {
+                    let mut command = git(root);
+                    command.args(["show", &format!("{commit}:{path}")]);
+                    String::from_utf8(output(command, "show")?)
+                        .map_err(|error| error.to_string())?
+                }
+            };
+            Ok((path, source))
+        })
+        .collect()
 }
 
 pub(super) fn diff_scope(
@@ -226,11 +195,13 @@ pub(super) fn jobs_for(cores: usize, override_value: Option<&str>) -> Result<usi
     match override_value {
         None => Ok(maximum),
         Some(value) => value
-            .parse::<usize>()
-            .ok()
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+            .then_some(value)
+            .and_then(|digits| digits.parse::<usize>().ok())
             .filter(|jobs| (1..=maximum).contains(jobs))
             .ok_or_else(|| {
-                format!("STOCK_COPILOT_MUTANTS_JOBS는 1..={maximum}이어야 한다: {value}")
+                format!("STOCK_COPILOT_MUTANTS_JOBS는 ASCII 정수 1..={maximum}이어야 한다: {value}")
             }),
     }
 }

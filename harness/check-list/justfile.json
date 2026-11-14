@@ -796,6 +796,37 @@
       "namepath": "mutants-diff",
       "shebang": false
     },
+    "mutants-shard": {
+      "attributes": [],
+      "body": [
+        ["cargo run --locked --quiet --package xtask -- mutants --shard \"$1\""]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-shard",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "shard",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-shard",
+      "shebang": false
+    },
     "push-check": {
       "attributes": [],
       "body": [

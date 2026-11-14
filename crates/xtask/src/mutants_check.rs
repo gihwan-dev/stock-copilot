@@ -1,4 +1,5 @@
 mod environment;
+mod graph;
 mod scope;
 use scope::{diff_scope, jobs_for};
 
@@ -60,6 +61,7 @@ pub(crate) struct Survivor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Scope {
     Everything,
+    Sharded(String),
     Crates(BTreeSet<String>),
     Files(BTreeSet<String>),
 }
@@ -194,7 +196,7 @@ pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
     globs
         .iter()
         .filter(|glob| match scope {
-            Scope::Everything => true,
+            Scope::Everything | Scope::Sharded(_) => true,
             Scope::Files(_) => false,
             Scope::Crates(crates) => crates.contains(&crate_of(glob)),
         })
@@ -309,6 +311,9 @@ pub(crate) fn run(
         .arg(&output)
         .stdin(Stdio::null());
     configure_parallelism(&mut command, workspace, &globs)?;
+    if let Scope::Sharded(shard) = scope {
+        command.arg("--shard").arg(shard);
+    }
     for glob in &globs {
         command.arg("--file").arg(glob);
     }
@@ -332,13 +337,18 @@ pub(crate) fn run(
 fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
     match arguments {
         [] => Ok(Scope::Everything),
+        [flag, shard]
+            if flag == "--shard" && ["0/4", "1/4", "2/4", "3/4"].contains(&shard.as_str()) =>
+        {
+            Ok(Scope::Sharded(shard.clone()))
+        }
         [flag, base] if flag == "--in-diff" => {
             let commit = resolve_base(root, base)?;
             let changed = changed_paths(root, &commit)?;
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
         _ => Err(String::from(
-            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID>]",
+            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/4|1/4|2/4|3/4>]",
         )),
     }
 }
