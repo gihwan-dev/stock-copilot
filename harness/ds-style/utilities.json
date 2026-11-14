@@ -3616,6 +3616,16 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:transition-none",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:w-border-focus",
       "kind": "allowed",
       "generated": "yes"
@@ -7322,6 +7332,16 @@
     },
     {
       "name": "@content-wide:transition-colors",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:transition-none",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11042,6 +11062,16 @@
     },
     {
       "name": "active:transition-colors",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:transition-none",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15331,6 +15361,16 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:transition-none",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:w-border-focus",
       "kind": "allowed",
       "generated": "yes"
@@ -19261,6 +19301,16 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:transition-none",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:w-border-focus",
       "kind": "allowed",
       "generated": "yes"
@@ -22967,6 +23017,16 @@
     },
     {
       "name": "focus:transition-colors",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:transition-none",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27002,6 +27062,16 @@
     },
     {
       "name": "hover:transition-colors",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:transition-none",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31181,6 +31251,16 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:transition-none",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:w-border-focus",
       "kind": "allowed",
       "generated": "yes"
@@ -33412,6 +33492,16 @@
     },
     {
       "name": "transition-colors",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "transition-none",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -37107,6 +37197,16 @@
     },
     {
       "name": "window-lg:transition-colors",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:transition-none",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -40821,6 +40921,16 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:transition-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:transition-none",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:w-border-focus",
       "kind": "allowed",
       "generated": "yes"
@@ -43761,6 +43871,14 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:transition-disclosure",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:transition-none",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:w-border-focus",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -46630,6 +46748,14 @@
     },
     {
       "selector": ".\\@content-wide\\:transition-colors",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:transition-disclosure",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:transition-none",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -49510,6 +49636,14 @@
     },
     {
       "selector": ".active\\:transition-colors:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:transition-disclosure:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:transition-none:active",
       "context": []
     },
     {
@@ -52841,6 +52975,14 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:transition-disclosure:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:transition-none:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:w-border-focus:disabled",
       "context": []
     },
@@ -55889,6 +56031,14 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:transition-disclosure:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:transition-none:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:w-border-focus:focus-visible",
       "context": []
     },
@@ -58758,6 +58908,14 @@
     },
     {
       "selector": ".focus\\:transition-colors:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:transition-disclosure:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:transition-none:focus",
       "context": []
     },
     {
@@ -61890,6 +62048,14 @@
     },
     {
       "selector": ".hover\\:transition-colors:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:transition-disclosure:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:transition-none:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -65137,6 +65303,14 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:transition-disclosure",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:transition-none",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:w-border-focus",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -66818,6 +66992,14 @@
     },
     {
       "selector": ".transition-colors",
+      "context": []
+    },
+    {
+      "selector": ".transition-disclosure",
+      "context": []
+    },
+    {
+      "selector": ".transition-none",
       "context": []
     },
     {
@@ -69678,6 +69860,14 @@
     },
     {
       "selector": ".window-lg\\:transition-colors",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:transition-disclosure",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:transition-none",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -72550,6 +72740,14 @@
     },
     {
       "selector": ".window-md\\:transition-colors",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:transition-disclosure",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:transition-none",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

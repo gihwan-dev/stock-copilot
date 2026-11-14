@@ -50,6 +50,8 @@ export const DS_KEYWORDS = [
   "tabular-nums",
   "select-none",
   "transition-colors",
+  "transition-disclosure",
+  "transition-none",
   "outline-solid",
   "@container",
 ];

@@ -131,6 +131,9 @@ test("Disclosure rotates one glyph and Enter/Space relate the advanced panel", a
     exact: true,
   });
   const glyph = trigger.querySelector("svg").innerHTML;
+  const arrow = trigger.querySelector("svg").parentElement;
+  assert.ok(arrow.classList.contains("transition-disclosure"));
+  assert.ok(arrow.classList.contains("motion-reduce:transition-none"));
   assert.equal(trigger.getAttribute("aria-expanded"), "false");
   await action(w, () => w.user.tab());
   await action(w, () => w.user.keyboard("{Enter}"));
@@ -142,6 +145,7 @@ test("Disclosure rotates one glyph and Enter/Space relate the advanced panel", a
   await action(w, () => w.user.keyboard(" "));
   assert.equal(trigger.getAttribute("aria-expanded"), "false");
   assert.deepEqual(calls(w), ["open", "closed"]);
+  assert.ok(arrow.classList.contains("transition-disclosure"));
 });
 test("TextField values, exact name, errors, disabled and IME submission guard", async () => {
   const w = fixture.open();

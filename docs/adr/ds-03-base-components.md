@@ -38,7 +38,7 @@
 
 ADR 0040의 JSX 문맥 타입 검사만 좁힌다. 실제 선언이 `node_modules/@base-ui/react`인 내부 콜백의 라이브러리 문맥 이벤트 인자는 공개 props가 아니다. 공개 컴포넌트 props의 이벤트·DOM·중첩·토큰 분류·ref·rest 검사와 일반 컴포넌트의 JSX 문맥 검사는 유지한다.
 
-추가로 내부 Base UI 콜백의 매개변수를 가공 없이 공개 콜백에 그대로 전달하면 거부한다. `props.onPick(details)`와 값/콜백의 단순 별칭·구조 분해 전달을 검사한다. `details.reason`처럼 추출한 닫힌 값은 통과한다. `base-checkbox`, `base-switch`, `base-disclosure`, `base-segment`, `base-input`에 세부 객체 전달 위반 예제를 붙였다. 기존 아홉 통과 대조군과 DS-10 손 변형 15개의 검출을 유지한다. 클래스 조건식의 모든 리터럴 분기 검사도 유지한다.
+추가로 내부 Base UI 콜백의 매개변수를 가공 없이 공개 콜백에 그대로 전달하면 거부한다. `props.onPick(details)`와 값/콜백의 단순 별칭·구조 분해 전달을 검사한다. Base UI에 넘긴 지역 콜백 변수·객체 멤버·구조 분해된 콜백·조건식의 각 분기도 원래 함수로 따라가서 같은 검사를 한다. 실제 Base UI 선언에서 온 콜백 문맥도 함수 본문에서 검사하므로 React useCallback·useMemo를 거쳐도 적용한다. 콜백 수신자의 지역 객체 별칭과 조건식, 인자를 객체·배열로 포장하거나 펼친 형태도 검사한다. `details.reason`처럼 추출한 원시 값·닫힌 유니온과 그 값으로 새로 만든 닫힌 객체는 통과한다. `base-checkbox`, `base-switch`, `base-disclosure`, `base-segment`, `base-input`에 세부 객체 전달 위반 예제를 붙였다. 기존 아홉 통과 대조군과 DS-10 손 변형 15개의 검출을 유지한다. 클래스 조건식의 모든 리터럴 분기 검사도 유지한다.
 
 ## DOM 경계와 누출 검사
 
@@ -68,7 +68,7 @@ DOM 접근·platform 파일 허용 목록에 input.ts 정확한 경로 하나를
 
 - design README·design-system.json·글자 산출물에 keep-all·anywhere 명시가 없어 break-keep·wrap-anywhere는 추가하지 않는다. 이 간극은 후속 디자인 결정으로 남긴다.
 - 기존 border-transparent, w-switch, border-t-hairline은 bundle.css의 투명 테두리·토큰 복합 폭·상단 테두리에서 왔다.
-- Disclosure README의 90도 회전과 bundle.css 236행에 따라 rotate-disclosure 고정 유틸리티 하나를 추가한다. 아이콘 자체를 교체하지 않고 같은 chevron-right를 회전한다. 회전은 즉시 바뀌므로 움직임 줄이기에서도 애니메이션이 없다. 실제 전환 시간의 표현은 DS-15 검증 때 평가한다.
+- Disclosure README의 90도 회전과 bundle.css 236행에 따라 rotate-disclosure 고정 유틸리티 하나를 추가한다. 아이콘 자체를 교체하지 않고 같은 chevron-right를 회전한다. bundle.css 235행의 전환을 transition-disclosure 유틸리티로 만들고 생성 duration-fast·ease-out 변수를 쓴다. 양 상태에 전환 클래스를 유지하여 펼치기와 접기 모두 같은 전환을 쓴다. bundle.css 419행과 같이 motion-reduce:transition-none으로 움직임 줄이기에서는 즉시 바뀐다. 실제 모션 표시의 브라우저 검증은 DS-15가 맡는다.
 - themeSource로 theme.css와 생성 클래스 스냅샷을 맞춘다. @theme·토큰 JSON·라이트/다크 값은 바꾸지 않는다. 토큰 정의·대비는 기존 독립 검사로 검증한다.
 - 아이콘의 45개 기하는 산출물 bundle.js의 Lucide 경로다. ISC 고지는 public/Icons-LICENSE.txt에 둔다. 기하 허용 파일 네 개는 유지한다.
 
@@ -87,7 +87,7 @@ DS-15에 넘기는 검증: 실제 CSS의 hover·focus 링 표시, 두 테마의 
 - ds-public-props: 내부 콜백의 무가공 공개 전달 거부. 공개 props 규칙·DS-10 위반·변형은 유지.
 - 허용 목록: input.ts의 platform·DOM·원시 입력 타입·거절 변환, Button 가격색 예외 삭제. 검사 끄기 없음.
 - boundaries.test.mjs: 옵션 제거 변형 목록에 checkInternals 한 항목 추가.
-- ds-generation.test.mjs: 고정 theme 문자열에 rotate-disclosure 선언만 추가.
+- ds-generation.test.mjs: 고정 theme 문자열에 rotate-disclosure와 transition-disclosure 선언만 추가.
 - ds-internal-review.test.mjs: PRICE_COLOR_FILES를 다시 빈 목록으로, DOM_ACCESS_FILES에 input.ts만 추가.
 - ds-screen-bootstrap.test.mjs: index의 mountApp 단독 기대 복구, input의 세 반환형을 모두 검사하도록 추가. 기존 DOM·화면 금지 단언 유지.
 - local-allowlists.test.mjs: platform·raw에 input.ts 추가, promise 예외를 index.ts에서 input.ts로 이동.
@@ -140,6 +140,6 @@ jsdom·user-event는 안정판을 정확히 고정한다. 추가 기능·설치 
 
 ## 검사 기록과 미해결
 
-입력/공개 계약/반환 타입 회귀, 아홉 내부 대조군과 다섯 무가공 전달 위반, 컴포넌트 타입, DS-10 손 변형 15개와 jsdom 동작 검사를 실행한다. 실제 브라우저 검증은 위 후속 범위다. 수용한 로컬 master는 `1cd405c9f7ff11be0a26d1eb892766463aaf722a`다. 병합 커밋을 만들기 전에도 조상인 리뷰 대상 `13a86d78dc73be83dd672d92ba48bbfd67e49529`를 전체 검사 기준으로 쓴다. master의 crates/domain 소스와 이번 병합 소스의 차이는 없다.
+입력/공개 계약/반환 타입 회귀, 아홉 내부 대조군과 다섯 무가공 전달 위반, 컴포넌트 타입, DS-10 손 변형 15개와 jsdom 동작 검사를 실행한다. 실제 브라우저 검증은 위 후속 범위다. 수용한 로컬 master는 `f9f0c5f0b7dff04ad4a184aadf882f4af1fee376`다. 병합 커밋을 만들기 전에도 조상인 리뷰 대상 `13a86d78dc73be83dd672d92ba48bbfd67e49529`를 전체 검사 기준으로 쓴다. master의 crates/domain 소스와 이번 병합 소스의 차이는 없다.
 
 남은 제품 결정은 한글 줄바꿈 산출물의 부재다. SignalCard 전용 매수·매도 버튼, Storybook 실행 환경, 실제 시각·넘침·WKWebView 검증은 각 후속 DS 작업 범위이며 이번 공개 API에 미완성 대체 기능을 남기지 않는다.

@@ -86,6 +86,62 @@ test("DS03 Base UI callbacks stay internal while public event and DOM forwarding
         null,
       ],
       [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const forward:NonNullable<Checkbox.Root.Props["onCheckedChange"]>=(next,details):void=>{if(next)props.onPick(details);};return <Checkbox.Root onCheckedChange={forward}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const handlers:{readonly change:NonNullable<Checkbox.Root.Props["onCheckedChange"]>}={change:(next,details):void=>{if(next)props.onPick(details);}};return <Checkbox.Root onCheckedChange={handlers.change}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly mode:"first"|"second";readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const forward:NonNullable<Checkbox.Root.Props["onCheckedChange"]>=(next,details):void=>{if(next)props.onPick(details);};return <Checkbox.Root onCheckedChange={props.mode==="first"?forward:forward}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:"none")=>void}):ReactElement=>{const handlers:{readonly change:NonNullable<Checkbox.Root.Props["onCheckedChange"]>}={change:(next,details):void=>{if(next)props.onPick(details.reason);}};return <Checkbox.Root onCheckedChange={handlers.change}/>;};',
+        null,
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";import{useCallback}from"react";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const forward=useCallback<NonNullable<Checkbox.Root.Props["onCheckedChange"]>>((next,details):void=>{if(next)props.onPick(details);},[props]);return <Checkbox.Root onCheckedChange={forward}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";import{useMemo}from"react";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const forward=useMemo<NonNullable<Checkbox.Root.Props["onCheckedChange"]>>(()=>{return(next,details):void=>{if(next)props.onPick(details);};},[props]);return <Checkbox.Root onCheckedChange={forward}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";import{useMemo}from"react";export const Probe=(props:{readonly onPick:(value:"none")=>void}):ReactElement=>{const forward=useMemo<NonNullable<Checkbox.Root.Props["onCheckedChange"]>>(()=>(next,details):void=>{if(next)props.onPick(details.reason);},[props]);return <Checkbox.Root onCheckedChange={forward}/>;};',
+        null,
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly mode:"first"|"second";readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const handlers:{readonly safe:NonNullable<Checkbox.Root.Props["onCheckedChange"]>;readonly unsafe:NonNullable<Checkbox.Root.Props["onCheckedChange"]>}={safe:(next,details):void=>{if(next)props.onPick({reason:details.reason});},unsafe:(next,details):void=>{if(next)props.onPick(details);}};return <Checkbox.Root onCheckedChange={props.mode==="first"?handlers.safe:handlers.unsafe}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const receivers={pick:props.onPick};return <Checkbox.Root onCheckedChange={(next,details):void=>{if(next)receivers.pick(details);}}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly mode:"first"|"second";readonly onPick:(value:{readonly reason:"none"})=>void;readonly onOther:(value:{readonly reason:"none"})=>void}):ReactElement=>{const receive=props.mode==="first"?props.onPick:props.onOther;return <Checkbox.Root onCheckedChange={(next,details):void=>{if(next)receive(details);}}/>;};',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=><Checkbox.Root onCheckedChange={(next,details):void=>{const wrapped={value:details};if(next)props.onPick(wrapped.value);}}/>;',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=><Checkbox.Root onCheckedChange={(next,details):void=>{if(next)props.onPick({...details});}}/>;',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=><Checkbox.Root onCheckedChange={(next,details):void=>{if(next)props.onPick({reason:details.reason});}}/>;',
+        null,
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"})=>void}):ReactElement=>{const handlers:{readonly change:NonNullable<Checkbox.Root.Props["onCheckedChange"]>}={change:(next,details):void=>{if(next)props.onPick(details);}};const {change:forward}=handlers;return <Checkbox.Root onCheckedChange={forward}/>;};',
+        "ds/public-props",
+      ],
+      [
         'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"|"input-change"})=>void}):ReactElement=>{const {onPick}=props;return <Checkbox.Root onCheckedChange={(_next,details):void=>{onPick(details);}}/>;};',
         "ds/public-props",
       ],
