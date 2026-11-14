@@ -314,6 +314,23 @@ pub use broker_account::{
 };
 mod cash_observation;
 pub use cash_observation::{CashObservation, portfolio_from_cash_observations};
+mod scorecard;
+mod scorecard_arithmetic;
+pub use scorecard::{
+    Scorecard, ScorecardBin, ScorecardComparisonCount, ScorecardDisplay, ScorecardError,
+    ScorecardMetrics, ScorecardPending, ScorecardPoint,
+};
+
+mod scorecard_input;
+
+mod scorecard_deferred;
+pub use scorecard_deferred::{
+    ScorecardDeferredBin, ScorecardDeferredBrier, ScorecardDeferredCount, ScorecardDeferredDisplay,
+    ScorecardDeferredNumber, ScorecardDeferredPoint,
+};
+pub use scorecard_input::{
+    ScorecardCount, ScorecardCounts, ScorecardObservation, ScorecardPromptId, Scorecards,
+};
 mod signal_submission;
 pub use signal_submission::{
     SignalSubmission, SignalSubmissionError, SignalTaskKey, SubmittedCalibration,
@@ -332,3 +349,13 @@ pub use cash_observation_failure::{
     CashReadCapability, CashRequestRejection, CashResponseMismatch, CashRetryDelay,
     CashUnavailableCause, cash_observation_failures,
 };
+mod known_market;
+mod master_instrument;
+pub use known_market::{KnownMarket, UnknownKnownMarket};
+pub use master_instrument::{
+    CommonShare, KoreanMasterDetail, LiquidationTrading, ListingStatus, MasterCode,
+    MasterInstrument, MasterInstrumentError, MasterInstrumentFacts, MasterInstrumentRow,
+    MasterSecurityType, NxtTrading, QuoteInstrument, SecurityTypeKnowledge, TradingSuspension,
+};
+mod master_order_gate;
+pub use master_order_gate::{MasterOrderGateFacts, NxtSupport};

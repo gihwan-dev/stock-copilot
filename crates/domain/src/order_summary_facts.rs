@@ -63,7 +63,7 @@ pub struct InstrumentNameFact {
 }
 impl InstrumentNameFact {
     #[must_use]
-    pub fn from_master_lookup_result(
+    pub(crate) fn from_master_lookup_result(
         instrument: ResolvedOrderInstrument,
         name: DisplayInstrumentName,
     ) -> Self {
