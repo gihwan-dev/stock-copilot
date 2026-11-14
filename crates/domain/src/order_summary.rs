@@ -22,6 +22,7 @@ pub enum OrderSummaryError {
     FeeCurrencyMismatch,
     NegativeFee,
     Arithmetic(MoneyError),
+    FeeCalculation(crate::TradeCostError),
 }
 #[derive(Debug, PartialEq, Eq)]
 pub struct OrderSummary {
@@ -51,6 +52,23 @@ impl PendingOrderConfirmation {
     ) -> Result<Self, OrderSummaryError> {
         let summary = OrderSummary::build(&token, instrument, account, fee, rates)?;
         Ok(Self { token, summary })
+    }
+    pub fn from_execution_with_commission(
+        token: ExecutionToken,
+        instrument: InstrumentNameFact,
+        account: AccountDisplayFact,
+        commission: Option<&crate::CommissionRateFact>,
+        rates: OrderFxRates,
+    ) -> Result<Self, OrderSummaryError> {
+        let fee = commission
+            .map(|fact| {
+                fact.estimate_order_fee(&token)
+                    .map(EstimatedOrderFee::Confirmed)
+            })
+            .transpose()
+            .map_err(OrderSummaryError::FeeCalculation)?
+            .unwrap_or(EstimatedOrderFee::Unknown);
+        Self::from_execution(token, instrument, account, fee, rates)
     }
     #[must_use]
     pub fn summary(&self) -> &OrderSummary {
@@ -161,7 +179,7 @@ impl OrderSummary {
         &self.client_order_prefix
     }
 }
-fn order_values(
+pub(crate) fn order_values(
     token: &ExecutionToken,
 ) -> Result<
     (
@@ -1205,5 +1223,121 @@ pub(crate) mod tests {
         )
         .expect_err("다른 계좌");
         assert_eq!(error, OrderSummaryError::AccountMismatch);
+    }
+    fn pending_with_rate(
+        token: ExecutionToken,
+        commission: Option<&crate::CommissionRateFact>,
+    ) -> Result<PendingOrderConfirmation, OrderSummaryError> {
+        let instrument = InstrumentNameFact::from_master_lookup_result(
+            token.intent().instrument().clone(),
+            test_name(),
+        );
+        let account = AccountDisplayFact::from_account_lookup_result(
+            AccountLookupDisplayRow::from_broker_account_result(
+                token.intent().account_id().clone(),
+                test_suffix(),
+            ),
+        );
+        PendingOrderConfirmation::from_execution_with_commission(
+            token,
+            instrument,
+            account,
+            commission,
+            OrderFxRates::missing(),
+        )
+    }
+    fn commission(
+        market: Market,
+        validity: crate::CommissionValidity,
+    ) -> crate::CommissionRateFact {
+        crate::CommissionRateFact::from_commissions_result(
+            market,
+            crate::CostRate::try_new(
+                crate::Ratio::parse(&NumericInput::try_new("0.00015").expect("입력"))
+                    .expect("요율"),
+            )
+            .expect("범위"),
+            validity,
+        )
+    }
+    #[test]
+    fn commission_is_computed_from_the_same_consumed_execution_token() {
+        let rate = commission(
+            Market::Kr,
+            crate::CommissionValidity::try_new(None, None).expect("기간"),
+        );
+        let pending =
+            pending_with_rate(kr_limit("10000000", OrderSide::Buy), Some(&rate)).expect("요약");
+        assert_eq!(
+            pending.summary().expected_fee(),
+            &EstimatedOrderFee::Confirmed(ConfirmedOrderFee(
+                ClientOrderId::try_new("abcdefgh-extra").expect("키"),
+                money("1500", Currency::Krw)
+            ))
+        );
+        let market = token(
+            OrderTerms::KrMarket {
+                side: OrderSide::Buy,
+                quantity: quantity("3"),
+            },
+            "100",
+        );
+        let market_pending = pending_with_rate(market, Some(&rate)).expect("시장가 요약");
+        assert_eq!(
+            market_pending.summary().expected_amount().basis(),
+            OrderAmountBasis::Estimated
+        );
+        assert_eq!(
+            market_pending.summary().expected_fee(),
+            &EstimatedOrderFee::Confirmed(ConfirmedOrderFee(
+                ClientOrderId::try_new("abcdefgh-extra").expect("키"),
+                money("1", Currency::Krw)
+            ))
+        );
+        assert_eq!(
+            pending_with_rate(kr_limit("100", OrderSide::Buy), None)
+                .expect("미확인")
+                .summary()
+                .expected_fee(),
+            &EstimatedOrderFee::Unknown
+        );
+    }
+    #[test]
+    fn commission_rejects_wrong_market_expired_rate_and_amount_overflow() {
+        let validity = crate::CommissionValidity::try_new(None, None).expect("기간");
+        let wrong = commission(Market::Us, validity);
+        assert_eq!(
+            pending_with_rate(kr_limit("100", OrderSide::Buy), Some(&wrong))
+                .expect_err("다른 시장"),
+            OrderSummaryError::FeeCalculation(crate::TradeCostError::MarketMismatch)
+        );
+        let future = crate::CalendarDate::from_parts(
+            crate::CalendarYear::new(2000),
+            crate::MonthNumber::new(1),
+            crate::DayNumber::new(1),
+        )
+        .expect("날짜");
+        let dated = commission(
+            Market::Kr,
+            crate::CommissionValidity::try_new(Some(future), None).expect("기간"),
+        );
+        assert_eq!(
+            pending_with_rate(kr_limit("100", OrderSide::Buy), Some(&dated)).expect_err("적용 전"),
+            OrderSummaryError::FeeCalculation(crate::TradeCostError::UnknownComponent)
+        );
+        let large = token(
+            OrderTerms::KrLimit {
+                side: OrderSide::Buy,
+                quantity: quantity("2"),
+                price: KrOrderPrice::try_new(price("79228162514264337593543950335", Currency::Krw))
+                    .expect("가격"),
+            },
+            "100",
+        );
+        assert_eq!(
+            pending_with_rate(large, Some(&commission(Market::Kr, validity)))
+                .expect_err("금액 넘침"),
+            OrderSummaryError::FeeCalculation(crate::TradeCostError::OrderAmountUnavailable)
+        );
     }
 }
