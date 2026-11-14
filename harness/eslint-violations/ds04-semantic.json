@@ -184,5 +184,19 @@
     "code": "type Tone=\"quiet\"|\"urgent\";const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=>{const a=b??p.tone;const b=a??p.tone;return <span className={styles[a]}/>;};",
     "expected": ["ds/public-props", "ds/static-classes"],
     "files": {}
+  },
+  {
+    "name": "nested DS type file",
+    "code": "import type {Tone} from \"./types/semantic\";const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={styles[p.tone]}/>;",
+    "expected": [],
+    "files": {
+      "types/semantic.ts": "export type Tone=\"quiet\"|\"urgent\";"
+    }
+  },
+  {
+    "name": "template token selector",
+    "code": "import type {ColorToken} from \"./tokens\";type Tone=Extract<ColorToken,`prim${\"ary\"}`>;export const Probe=(p:{readonly tone:Tone}):null=>p?null:null;",
+    "expected": ["ds/public-props"],
+    "files": {}
   }
 ]

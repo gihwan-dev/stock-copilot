@@ -2,7 +2,7 @@ import ts from "typescript";
 import { DS_CLASSES, DS_VARIANTS } from "./ds-classes.mjs";
 const cache = new WeakMap();
 const dsFile = (node) =>
-  /\/src\/shared\/ds\/[^/]+\.tsx?$/u.test(node.getSourceFile().fileName);
+  /\/src\/shared\/ds\/.+\.tsx?$/u.test(node.getSourceFile().fileName);
 const generated = (node) =>
   /\/src\/shared\/ds\/tokens\.ts$/u.test(node.getSourceFile().fileName);
 export const semanticName = (name) =>
@@ -93,7 +93,10 @@ export const semanticVariants = (ctx) => {
       ["Extract", "Exclude"].includes(node.typeName.getText()) &&
       node.typeArguments?.length === 2
     )
-      return tokenOnly(node.typeArguments[0], seen);
+      return (
+        tokenOnly(node.typeArguments[0], seen) &&
+        closed(node.typeArguments[1], node.getSourceFile())
+      );
     return aliases(node).some((d) => tokenOnly(d.type, new Set(seen)));
   };
   const classNames = new Set(DS_CLASSES),

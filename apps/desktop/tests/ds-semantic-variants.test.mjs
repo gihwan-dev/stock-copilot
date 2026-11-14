@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cpSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  mkdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ESLint, mkdtempSync } from "./ds-runtime-environment.mjs";
@@ -65,8 +71,11 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
       ],
     });
     for (const entry of cases) {
-      for (const [name, code] of Object.entries(entry.files))
-        writeFileSync(join(folder, "src/shared/ds", name), code);
+      for (const [name, code] of Object.entries(entry.files)) {
+        const file = join(folder, "src/shared/ds", name);
+        mkdirSync(join(file, ".."), { recursive: true });
+        writeFileSync(file, code);
+      }
       writeFileSync(
         source,
         'import type {ReactElement} from "react";' + entry.code,

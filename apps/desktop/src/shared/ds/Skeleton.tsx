@@ -11,7 +11,7 @@ type Props =
     };
 const variantClasses = {
   text: "flex flex-col gap-space-2",
-  block: "rounded-md bg-surface-sunken",
+  block: "rounded-md bg-surface-sunken h-chart-height-sm",
 } as const;
 export const Skeleton = (props: Props): ReactElement => {
   const variant = props.variant ?? "text";
@@ -30,12 +30,7 @@ export const Skeleton = (props: Props): ReactElement => {
           className="rounded-md bg-surface-sunken h-chart-height-lg"
         />
       );
-    return (
-      <div
-        aria-hidden="true"
-        className="rounded-md bg-surface-sunken h-chart-height-sm"
-      />
-    );
+    return <div aria-hidden="true" className={variantClasses[variant]} />;
   }
   const lines =
     props.lines === 6
