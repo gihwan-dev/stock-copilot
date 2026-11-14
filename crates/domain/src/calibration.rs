@@ -172,7 +172,7 @@ pub struct CalibrationEstimate {
 }
 impl CalibrationEstimate {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         id: CalibrationEstimateId,
         instrument: InstrumentId,
         key: CalibrationKey,
@@ -219,7 +219,7 @@ pub struct CalibrationFact {
 }
 impl CalibrationFact {
     #[must_use]
-    pub fn new(estimate: CalibrationEstimate, outcome: CalibrationOutcome) -> Self {
+    pub(crate) fn new(estimate: CalibrationEstimate, outcome: CalibrationOutcome) -> Self {
         Self { estimate, outcome }
     }
     #[must_use]

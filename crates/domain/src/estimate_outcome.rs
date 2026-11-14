@@ -7,26 +7,87 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutcomeCorporateAction {
+    instrument: InstrumentId,
+    action: crate::CorporateAction,
+}
+impl OutcomeCorporateAction {
+    #[must_use]
+    pub const fn new(instrument: InstrumentId, action: crate::CorporateAction) -> Self {
+        Self { instrument, action }
+    }
+    #[must_use]
+    pub const fn instrument(&self) -> &InstrumentId {
+        &self.instrument
+    }
+    #[must_use]
+    pub const fn action(&self) -> &crate::CorporateAction {
+        &self.action
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutcomeAdjustment {
     instrument: InstrumentId,
     reference_at: Timestamp,
     basis: AdjustmentBasis,
-    ratio: ShareRatio,
+    ratios: Vec<ShareRatio>,
 }
 impl OutcomeAdjustment {
-    #[must_use]
-    pub const fn new(
-        instrument: InstrumentId,
-        reference_at: Timestamp,
+    pub fn from_actions(
+        task: &EstimateTask,
         basis: AdjustmentBasis,
-        ratio: ShareRatio,
-    ) -> Self {
-        Self {
-            instrument,
+        actions: &[OutcomeCorporateAction],
+    ) -> Result<Self, OutcomeUnavailable> {
+        let reference_at = task.reference().observed_at();
+        if *basis.as_timestamp() < reference_at {
+            return Err(OutcomeUnavailable::Adjustment);
+        }
+        if local_market_offset(task, basis.as_timestamp().offset_seconds())
+            != crate::CheckResult::Passed
+        {
+            return Err(OutcomeUnavailable::Adjustment);
+        }
+        let end = basis.as_timestamp().offset_calendar_date();
+        let mut sorted = actions.iter().collect::<Vec<_>>();
+        sorted.sort_by(|left, right| {
+            left.action
+                .date()
+                .cmp(&right.action.date())
+                .then_with(|| left.action.id().cmp(right.action.id()))
+        });
+        let mut seen = std::collections::BTreeSet::new();
+        let mut ratios = Vec::new();
+        for fact in sorted {
+            if fact.instrument != *task.volatility().instrument() {
+                return Err(OutcomeUnavailable::Adjustment);
+            }
+            if fact.action.date() <= reference_at.offset_calendar_date() || fact.action.date() > end
+            {
+                continue;
+            }
+            if !seen.insert(fact.action.id()) {
+                return Err(OutcomeUnavailable::Adjustment);
+            }
+            match fact.action.kind() {
+                crate::CorporateActionKind::Split(ratio)
+                | crate::CorporateActionKind::ReverseSplit(ratio) => ratios.push(*ratio),
+                crate::CorporateActionKind::BonusIssue { .. }
+                | crate::CorporateActionKind::StockDividend { .. }
+                | crate::CorporateActionKind::SymbolChange { .. }
+                | crate::CorporateActionKind::Delisting
+                | crate::CorporateActionKind::Merger
+                | crate::CorporateActionKind::Demerger
+                | crate::CorporateActionKind::Exchange => {
+                    return Err(OutcomeUnavailable::Adjustment);
+                }
+            }
+        }
+        Ok(Self {
+            instrument: task.volatility().instrument().clone(),
             reference_at,
             basis,
-            ratio,
-        }
+            ratios,
+        })
     }
     #[must_use]
     pub const fn basis(&self) -> AdjustmentBasis {
@@ -41,8 +102,8 @@ impl OutcomeAdjustment {
         self.reference_at
     }
     #[must_use]
-    pub const fn ratio(&self) -> ShareRatio {
-        self.ratio
+    pub fn ratios(&self) -> &[ShareRatio] {
+        &self.ratios
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,6 +234,7 @@ struct Schedule {
     rows: Vec<MarketSession>,
     interval: TimeInterval,
     horizon: Horizon,
+    start_day: crate::CalendarDate,
 }
 fn regular(row: &MarketSession) -> Option<TimeInterval> {
     row.sessions()
@@ -186,13 +248,16 @@ fn schedule(
 ) -> Result<Schedule, OutcomeUnavailable> {
     let start = task.reference().observed_at();
     let mut rows = calendar_rows(task, calendars)?;
-    let first = rows
-        .first()
-        .and_then(regular)
+    let (start_day, first) = rows
+        .iter()
+        .find_map(|row| {
+            regular(row)
+                .filter(|session| session.end() > start)
+                .map(|session| (row.date(), session))
+        })
         .ok_or(OutcomeUnavailable::Calendar)?;
-    if start < first.start() || start >= first.end() {
-        return Err(OutcomeUnavailable::Calendar);
-    }
+    rows.retain(|row| regular(row).is_some_and(|session| session.end() > start));
+    let evaluation_start = start.max(first.start());
     let days = task.horizon().as_ratio().as_decimal();
     let (selection, count) = if days == rust_decimal::Decimal::new(25, 2) {
         (HorizonSelection::Hours, 0_usize)
@@ -204,7 +269,7 @@ fn schedule(
         (HorizonSelection::HalfYearOrMore, 126)
     };
     let endpoint = if selection == HorizonSelection::Hours {
-        hours_end(&rows, first, start)
+        hours_end(&rows, first, evaluation_start)
     } else {
         rows.iter()
             .skip(1)
@@ -220,6 +285,7 @@ fn schedule(
             rows,
             interval,
             horizon: Horizon::new(selection),
+            start_day,
         })
         .map_err(OutcomeUnavailable::from)
 }
@@ -261,6 +327,38 @@ fn resolved(
     }
 }
 
+fn next_minute_seconds(point: Timestamp) -> crate::UnixSeconds {
+    let seconds = *point.utc_seconds().as_i64();
+    crate::UnixSeconds::new(
+        seconds
+            .wrapping_sub(seconds.rem_euclid(60))
+            .wrapping_add(60),
+    )
+}
+fn unresolved_minutes(
+    evidence: &OutcomeEvidence,
+    session: TimeInterval,
+    now: Timestamp,
+    at: Timestamp,
+) -> EstimateOutcome {
+    if now < session.end().min(evidence.interval.end()) {
+        EstimateOutcome::Ongoing(OutcomePending(evidence.clone()))
+    } else {
+        resolved(
+            evidence.clone(),
+            at,
+            Some(CandlePeriod::Minute),
+            Resolution::Failure(OutcomeFailure::Ambiguous),
+        )
+    }
+}
+fn observation_resolution(candle: &Candle, boundaries: &OutcomeBoundaries) -> Option<Resolution> {
+    match touch(candle, boundaries) {
+        Touch::Neither => None,
+        Touch::Stop => Some(Resolution::Failure(OutcomeFailure::Stop)),
+        Touch::Target | Touch::Both => Some(Resolution::Failure(OutcomeFailure::Ambiguous)),
+    }
+}
 fn minutes(
     evidence: &OutcomeEvidence,
     session: TimeInterval,
@@ -278,45 +376,29 @@ fn minutes(
             && bar.time().timestamp() <= limit
     }) {
         let end = candle.time().timestamp();
-        if *cursor.nanosecond().as_u32() != 0
-            || end
-                .utc_seconds()
-                .as_i64()
-                .wrapping_sub(*cursor.utc_seconds().as_i64())
-                != 60
-        {
-            return Some(resolved(
-                evidence.clone(),
-                cursor,
-                Some(CandlePeriod::Minute),
-                Resolution::Failure(OutcomeFailure::Ambiguous),
-            ));
+        if end.utc_seconds() != next_minute_seconds(cursor) {
+            return Some(unresolved_minutes(evidence, session, now, cursor));
         }
-        let state = candle_resolution(candle, boundaries);
-        if let Some(decision) = state {
+        let partial =
+            *cursor.nanosecond().as_u32() != 0 || cursor.utc_seconds().as_i64().rem_euclid(60) != 0;
+        let decision = if partial {
+            observation_resolution(candle, boundaries)
+        } else {
+            candle_resolution(candle, boundaries)
+        };
+        if let Some(state) = decision {
             return Some(resolved(
                 evidence.clone(),
                 end,
                 Some(CandlePeriod::Minute),
-                decision,
+                state,
             ));
         }
         cursor = end;
     }
-    if cursor < limit
-        && (now >= terminal
-            || limit
-                .utc_seconds()
-                .as_i64()
-                .wrapping_sub(*cursor.utc_seconds().as_i64())
-                >= 60)
-    {
-        return Some(resolved(
-            evidence.clone(),
-            cursor,
-            Some(CandlePeriod::Minute),
-            Resolution::Failure(OutcomeFailure::Ambiguous),
-        ));
+    let required = next_minute_seconds(cursor);
+    if required.as_i64() <= limit.utc_seconds().as_i64() && cursor < limit {
+        return Some(unresolved_minutes(evidence, session, now, cursor));
     }
     None
 }
@@ -339,9 +421,9 @@ fn evaluate(
         task.reference().price(),
         task.target(),
         task.stop(),
-        adjustment.ratio(),
+        adjustment.ratios(),
     );
-    let bars = validated_candles(task, adjustment, candles, schedule.interval)?;
+    let bars = validated_candles(task, adjustment, candles, &schedule)?;
     let evidence = OutcomeEvidence {
         instrument: adjustment.instrument.clone(),
         interval: schedule.interval,
@@ -461,13 +543,26 @@ fn validated_candles<'data>(
     task: &EstimateTask,
     adjustment: &OutcomeAdjustment,
     candles: &'data [Candle],
-    interval: TimeInterval,
+    schedule: &Schedule,
 ) -> Result<Vec<&'data Candle>, OutcomeUnavailable> {
-    let mut bars = candles
+    let interval = schedule.interval;
+    let finalized = candles
         .iter()
+        .filter(|bar| bar.status() == CandleStatus::Finalized)
+        .collect::<Vec<_>>();
+    if finalized.iter().any(|bar| {
+        bar.time().period() == CandlePeriod::Daily
+            && local_daily_offset(task, bar) != crate::CheckResult::Passed
+    }) {
+        return Err(OutcomeUnavailable::InvalidCandle);
+    }
+    let mut bars = finalized
+        .into_iter()
         .filter(|bar| {
             bar.time().date() >= interval.start().offset_calendar_date()
                 && bar.time().date() <= interval.end().offset_calendar_date()
+                && (bar.time().period() != CandlePeriod::Daily
+                    || bar.time().date() >= schedule.start_day)
         })
         .collect::<Vec<_>>();
     bars.sort_by_key(|bar| {
@@ -480,7 +575,6 @@ fn validated_candles<'data>(
         if left.time() == right.time()
             && (left.values() != right.values()
                 || left.adjustment() != right.adjustment()
-                || left.status() != right.status()
                 || left.instrument() != right.instrument()
                 || left.time().date() != right.time().date())
         {
@@ -490,7 +584,14 @@ fn validated_candles<'data>(
     for bar in &bars {
         if bar.instrument() != adjustment.instrument()
             || bar.values().currency() != task.reference().price().as_money().currency()
-            || bar.status() != CandleStatus::Finalized
+        {
+            return Err(OutcomeUnavailable::InvalidCandle);
+        }
+        if bar.time().period() == CandlePeriod::Daily
+            && !schedule
+                .rows
+                .iter()
+                .any(|row| row.date() == bar.time().date())
         {
             return Err(OutcomeUnavailable::InvalidCandle);
         }
@@ -500,6 +601,24 @@ fn validated_candles<'data>(
     }
     bars.dedup_by(|left, right| left.time() == right.time());
     Ok(bars)
+}
+
+fn local_market_offset(task: &EstimateTask, value: crate::OffsetSeconds) -> crate::CheckResult {
+    let offset = *value.as_i32();
+    let local = if task.reference().instrument().market() == crate::Market::Kr {
+        offset == 32_400_i32
+    } else {
+        offset == -18_000_i32 || offset == -14_400_i32
+    };
+    if local {
+        crate::CheckResult::Passed
+    } else {
+        crate::CheckResult::Failed
+    }
+}
+
+fn local_daily_offset(task: &EstimateTask, candle: &Candle) -> crate::CheckResult {
+    local_market_offset(task, candle.time().timestamp().offset_seconds())
 }
 
 fn scan_rows(
@@ -517,7 +636,7 @@ fn scan_rows(
         if session.start() >= now {
             break;
         }
-        let reference_day = row.date() == schedule.interval.start().offset_calendar_date();
+        let reference_day = row.date() == schedule.start_day;
         let hours = schedule.horizon.selection() == HorizonSelection::Hours;
         if reference_day || hours || now < session.end() {
             if let Some(result) = minutes(evidence, session, boundaries, bars, now) {
@@ -659,16 +778,39 @@ mod tests {
             })
             .collect()
     }
-    fn adjustment(old: u64, new: u64) -> OutcomeAdjustment {
-        OutcomeAdjustment::new(
-            InstrumentId::try_new("sample").expect("식별자"),
-            instant(61, 900),
-            AdjustmentBasis::new(instant(66, 904)),
-            crate::ShareRatio::new(
-                crate::ShareCount::try_new(old).expect("구주"),
-                crate::ShareCount::try_new(new).expect("신주"),
-            ),
+    fn action_fact(
+        old: u64,
+        new: u64,
+        date: crate::CalendarDate,
+        identity: &str,
+    ) -> crate::OutcomeCorporateAction {
+        let ratio = crate::ShareRatio::new(
+            crate::ShareCount::try_new(old).expect("구주"),
+            crate::ShareCount::try_new(new).expect("신주"),
+        );
+        let kind = if new > old {
+            crate::CorporateActionKind::Split(ratio)
+        } else {
+            crate::CorporateActionKind::ReverseSplit(ratio)
+        };
+        crate::OutcomeCorporateAction::new(
+            InstrumentId::try_new("sample").expect("종목"),
+            crate::CorporateAction::try_new(
+                crate::CorporateActionId::new(InstrumentId::try_new(identity).expect("행사 ID")),
+                date,
+                kind,
+            )
+            .expect("행사"),
         )
+    }
+    fn adjustment(old: u64, new: u64) -> OutcomeAdjustment {
+        let actions = if old == new {
+            vec![]
+        } else {
+            vec![action_fact(old, new, row(62).date(), "split")]
+        };
+        OutcomeAdjustment::from_actions(&task(), AdjustmentBasis::new(instant(66, 904)), &actions)
+            .expect("행사 환산")
     }
     fn candle(
         day: i64,
@@ -1036,12 +1178,6 @@ mod tests {
                 OutcomeUnavailable::Adjustment,
             ),
             (
-                factor.instrument().clone(),
-                sample.adjustment(),
-                CandleStatus::InProgress,
-                OutcomeUnavailable::InvalidCandle,
-            ),
-            (
                 InstrumentId::try_new("other").expect("ID"),
                 sample.adjustment(),
                 CandleStatus::Finalized,
@@ -1065,12 +1201,8 @@ mod tests {
     #[test]
     fn adjustment_reference_and_calendar_gaps_are_unavailable() {
         let factor = adjustment(1, 1);
-        let mismatch = OutcomeAdjustment::new(
-            factor.instrument().clone(),
-            instant(61, 901),
-            factor.basis(),
-            factor.ratio(),
-        );
+        let different = task_at(instant(61, 901), crate::HorizonSelection::FewDays);
+        let mismatch = identity_for(&different);
         assert_eq!(
             judge(&[], &mismatch).state(),
             OutcomeState::Unavailable(OutcomeUnavailable::Adjustment)
@@ -1134,7 +1266,6 @@ mod tests {
     #[test]
     fn hours_cross_closed_time_without_counting_it() {
         let original = task();
-        let factor = adjustment(1, 1);
         let late_reference = PriceObservation::from_identified_quote_parts(
             original.volatility().instrument().clone(),
             original.reference().instrument().clone(),
@@ -1150,12 +1281,7 @@ mod tests {
             RiskAppetite::Neutral,
         )
         .expect("시간 과제");
-        let late_adjustment = OutcomeAdjustment::new(
-            factor.instrument().clone(),
-            late.reference().observed_at(),
-            factor.basis(),
-            factor.ratio(),
-        );
+        let late_adjustment = identity_for(&late);
         assert_eq!(
             EstimateOutcome::evaluate(
                 &late,
@@ -1248,8 +1374,15 @@ mod tests {
         )
         .expect("이른 과제");
         assert_eq!(
-            EstimateOutcome::evaluate(&early, &full, &factor, &[], instant(70, 904)).state(),
-            OutcomeState::Unavailable(OutcomeUnavailable::Calendar)
+            EstimateOutcome::evaluate(
+                &early,
+                &full,
+                &identity_for(&early),
+                &[],
+                early.created_at()
+            )
+            .state(),
+            OutcomeState::Ongoing
         );
     }
     #[test]
@@ -1346,11 +1479,6 @@ mod tests {
                 CandleStatus::Finalized,
             ),
             (
-                factor.instrument().clone(),
-                sample.adjustment(),
-                CandleStatus::InProgress,
-            ),
-            (
                 InstrumentId::try_new("other").expect("ID"),
                 sample.adjustment(),
                 CandleStatus::Finalized,
@@ -1428,12 +1556,7 @@ mod tests {
                 .expect("휴장 달력")
             })
             .collect::<Vec<_>>();
-        let adjustment = OutcomeAdjustment::new(
-            original.volatility().instrument().clone(),
-            hours.reference().observed_at(),
-            AdjustmentBasis::new(instant(66, 904)),
-            adjustment(1, 1).ratio(),
-        );
+        let adjustment = identity_for(&hours);
         let result =
             EstimateOutcome::evaluate(&hours, &calendars, &adjustment, &[], instant(70, 904));
         assert_eq!(
@@ -1604,7 +1727,7 @@ mod tests {
         let forward = judge(&bars, &factor);
         assert_eq!(
             forward.state(),
-            OutcomeState::Unavailable(OutcomeUnavailable::ConflictingCandles)
+            OutcomeState::Unavailable(OutcomeUnavailable::InvalidCandle)
         );
         bars.reverse();
         assert_eq!(judge(&bars, &factor), forward);
@@ -1644,5 +1767,615 @@ mod tests {
             }
         }
         OutcomeState::Failure(OutcomeFailure::Expired)
+    }
+    fn task_at(observed: Timestamp, selection: crate::HorizonSelection) -> EstimateTask {
+        let original = task();
+        let reference = PriceObservation::from_identified_quote_parts(
+            original.volatility().instrument().clone(),
+            original.reference().instrument().clone(),
+            original.reference().price(),
+            observed,
+        )
+        .expect("관측");
+        EstimateTask::create(
+            EstimateContext::new(reference, observed),
+            original.volatility().clone(),
+            Horizon::new(selection),
+            HoursPermission::restore_from_saved_state(crate::HoursPermissionState::Enabled),
+            RiskAppetite::Neutral,
+        )
+        .expect("과제")
+    }
+    fn identity_for(value: &EstimateTask) -> OutcomeAdjustment {
+        OutcomeAdjustment::from_actions(value, AdjustmentBasis::new(instant(66, 904)), &[])
+            .expect("환산")
+    }
+    #[test]
+    fn partial_observation_minute_has_four_conservative_outcomes() {
+        let value = task_at(
+            instant(61, 902)
+                .checked_add(half_minute())
+                .expect("관측 분 중간"),
+            crate::HorizonSelection::FewDays,
+        );
+        let factor = identity_for(&value);
+        for (prices, expected) in [
+            (
+                ("100", "100"),
+                OutcomeState::Failure(OutcomeFailure::Expired),
+            ),
+            (("100", "1"), OutcomeState::Failure(OutcomeFailure::Stop)),
+            (
+                ("200", "100"),
+                OutcomeState::Failure(OutcomeFailure::Ambiguous),
+            ),
+            (
+                ("200", "1"),
+                OutcomeState::Failure(OutcomeFailure::Ambiguous),
+            ),
+        ] {
+            let mut bars = flat(&factor, "100");
+            bars.retain(|bar| bar.time().timestamp() != instant(61, 903));
+            bars.push(candle(61, 903, CandlePeriod::Minute, prices, &factor));
+            assert_eq!(
+                EstimateOutcome::evaluate(&value, &calendars(), &factor, &bars, instant(70, 904))
+                    .state(),
+                expected
+            );
+        }
+    }
+    #[test]
+    fn pre_observation_minute_high_is_never_an_outcome() {
+        let value = task_at(instant(61, 902), crate::HorizonSelection::FewDays);
+        let factor = identity_for(&value);
+        let mut bars = flat(&factor, "100");
+        bars.retain(|bar| bar.time().timestamp() != instant(61, 901));
+        bars.push(candle(
+            61,
+            901,
+            CandlePeriod::Minute,
+            ("200", "100"),
+            &factor,
+        ));
+        assert_eq!(
+            EstimateOutcome::evaluate(&value, &calendars(), &factor, &bars, instant(70, 904))
+                .state(),
+            OutcomeState::Failure(OutcomeFailure::Expired)
+        );
+    }
+    #[test]
+    fn partial_live_day_missing_minutes_stays_pending_until_close() {
+        let factor = adjustment(1, 1);
+        let bars = [candle(
+            61,
+            902,
+            CandlePeriod::Minute,
+            ("200", "100"),
+            &factor,
+        )];
+        assert_eq!(
+            EstimateOutcome::evaluate(&task(), &calendars(), &factor, &bars, instant(61, 902))
+                .state(),
+            OutcomeState::Ongoing
+        );
+    }
+    #[test]
+    fn outside_regular_observation_starts_at_next_regular_open() {
+        let value = task_at(instant(61, 899), crate::HorizonSelection::FewDays);
+        let factor = identity_for(&value);
+        assert_eq!(
+            EstimateOutcome::evaluate(
+                &value,
+                &calendars(),
+                &factor,
+                &[candle(
+                    61,
+                    901,
+                    CandlePeriod::Minute,
+                    ("200", "100"),
+                    &factor
+                )],
+                instant(70, 904)
+            )
+            .state(),
+            OutcomeState::Success
+        );
+    }
+    #[test]
+    fn kst_labeled_us_daily_is_unavailable() {
+        let factor = adjustment(1, 1);
+        let sample = candle(62, 0, CandlePeriod::Daily, ("200", "100"), &factor);
+        let at_kst = Timestamp::from_parts(
+            instant(61, 900).utc_seconds(),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(32400),
+        )
+        .expect("한국 자정");
+        let shifted = Candle::try_new(
+            sample.instrument().clone(),
+            CandleTime::try_new(at_kst, CandlePeriod::Daily).expect("일봉"),
+            sample.adjustment(),
+            sample.values(),
+            CandleObservation::new(sample.collected_at(), CandleStatus::Finalized),
+        )
+        .expect("KST 일봉");
+        let mut bars = flat(&factor, "100");
+        bars.retain(|bar| bar.time().date() != row(62).date());
+        bars.push(shifted);
+        assert_eq!(
+            judge(&bars, &factor).state(),
+            OutcomeState::Unavailable(OutcomeUnavailable::InvalidCandle)
+        );
+    }
+    #[test]
+    fn unfinished_later_day_uses_minutes_instead_of_its_daily_high() {
+        let factor = adjustment(1, 1);
+        let mut bars = flat(&factor, "100");
+        bars.retain(|bar| bar.time().date() != row(62).date());
+        bars.push(candle(62, 0, CandlePeriod::Daily, ("200", "100"), &factor));
+        bars.extend(
+            (901..=902)
+                .map(|minute| candle(62, minute, CandlePeriod::Minute, ("100", "100"), &factor)),
+        );
+        assert_eq!(
+            EstimateOutcome::evaluate(&task(), &calendars(), &factor, &bars, instant(62, 902))
+                .state(),
+            OutcomeState::Ongoing
+        );
+    }
+    #[test]
+    fn action_derivation_filters_dates_and_rejects_identity_kind_and_duplicates() {
+        let value = task();
+        let basis = adjustment(1, 1).basis();
+        let earlier = action_fact(1, 2, row(61).date(), "earlier");
+        let future = action_fact(1, 2, row(67).date(), "future");
+        let split = action_fact(1, 2, row(62).date(), "split");
+        let merge = action_fact(2, 1, row(66).date(), "merge");
+        let facts = [earlier, future, split.clone(), merge];
+        let derived = OutcomeAdjustment::from_actions(&value, basis, &facts).expect("행사 구간");
+        assert_eq!(derived.ratios().len(), 2);
+        assert_eq!(derived.instrument(), value.volatility().instrument());
+        assert_eq!(split.instrument(), value.volatility().instrument());
+        assert_eq!(split.action().date(), row(62).date());
+        let mut reverse = facts.to_vec();
+        reverse.reverse();
+        assert_eq!(
+            OutcomeAdjustment::from_actions(&value, basis, &reverse),
+            Ok(derived)
+        );
+        let wrong = crate::OutcomeCorporateAction::new(
+            InstrumentId::try_new("other").expect("다른 종목"),
+            split.action().clone(),
+        );
+        let unsupported = crate::OutcomeCorporateAction::new(
+            value.volatility().instrument().clone(),
+            crate::CorporateAction::try_new(
+                crate::CorporateActionId::new(InstrumentId::try_new("dividend").expect("행사")),
+                row(62).date(),
+                crate::CorporateActionKind::Merger,
+            )
+            .expect("비분할 행사"),
+        );
+        for invalid_facts in [vec![wrong], vec![unsupported], vec![split.clone(), split]] {
+            assert_eq!(
+                OutcomeAdjustment::from_actions(&value, basis, &invalid_facts),
+                Err(OutcomeUnavailable::Adjustment)
+            );
+        }
+        assert_eq!(
+            OutcomeAdjustment::from_actions(&value, AdjustmentBasis::new(instant(60, 900)), &[]),
+            Err(OutcomeUnavailable::Adjustment)
+        );
+    }
+    #[test]
+    fn live_candles_and_future_prices_do_not_change_finalized_evidence() {
+        let factor = adjustment(1, 1);
+        let mut bars = flat(&factor, "100");
+        let sample = candle(61, 901, CandlePeriod::Minute, ("200", "1"), &factor);
+        bars.push(
+            Candle::try_new(
+                sample.instrument().clone(),
+                sample.time(),
+                PriceAdjustment::Raw,
+                sample.values(),
+                CandleObservation::new(sample.collected_at(), CandleStatus::InProgress),
+            )
+            .expect("진행 봉"),
+        );
+        assert_eq!(
+            judge(&bars, &factor).state(),
+            OutcomeState::Failure(OutcomeFailure::Expired)
+        );
+        assert_eq!(
+            EstimateOutcome::evaluate(
+                &task(),
+                &calendars(),
+                &factor,
+                &[candle(
+                    61,
+                    903,
+                    CandlePeriod::Minute,
+                    ("200", "100"),
+                    &factor
+                )],
+                instant(61, 900)
+            )
+            .state(),
+            OutcomeState::Ongoing
+        );
+    }
+    #[test]
+    fn after_close_observation_uses_next_session_as_the_horizon_anchor() {
+        let value = task_at(instant(61, 905), crate::HorizonSelection::FewDays);
+        let factor = identity_for(&value);
+        let result =
+            EstimateOutcome::evaluate(&value, &full_calendars(), &factor, &[], instant(61, 905));
+        assert_eq!(result.state(), OutcomeState::Ongoing);
+        assert_eq!(
+            result.evidence().expect("구간").interval().start(),
+            instant(61, 905)
+        );
+        assert_eq!(
+            result.evidence().expect("구간").interval().end(),
+            instant(67, 904)
+        );
+    }
+    fn wide_calendars() -> Vec<MarketCalendar> {
+        let wide = |day| {
+            crate::MarketSession::try_new(
+                row(day).date(),
+                SessionInformation::Us {
+                    day_market: None,
+                    pre_market: None,
+                    regular_market: Some(
+                        SessionData::try_new(
+                            TimeInterval::try_new(instant(day, 900), instant(day, 1290))
+                                .expect("390분"),
+                            None,
+                        )
+                        .expect("장"),
+                    ),
+                    after_market: None,
+                },
+            )
+            .expect("시장 일자")
+        };
+        (61_i64..=66)
+            .map(|day| {
+                MarketCalendar::try_new(
+                    wide(day.checked_sub(1).expect("전일")),
+                    wide(day),
+                    wide(day.checked_add(1).expect("익일")),
+                )
+                .expect("달력")
+            })
+            .collect()
+    }
+    #[test]
+    fn ninety_seven_and_half_minutes_expire_without_using_the_final_partial_candle() {
+        let value = task_at(instant(61, 900), crate::HorizonSelection::Hours);
+        let factor = identity_for(&value);
+        let mut bars = (901..=997)
+            .map(|minute| candle(61, minute, CandlePeriod::Minute, ("100", "100"), &factor))
+            .collect::<Vec<_>>();
+        bars.push(candle(61, 998, CandlePeriod::Minute, ("200", "1"), &factor));
+        let result =
+            EstimateOutcome::evaluate(&value, &wide_calendars(), &factor, &bars, instant(70, 904));
+        assert_eq!(
+            result.state(),
+            OutcomeState::Failure(OutcomeFailure::Expired)
+        );
+        assert_eq!(
+            result.evidence().expect("만기").interval().end(),
+            instant(61, 997).checked_add(half_minute()).expect("97.5분")
+        );
+    }
+    fn independent_edges(value: &EstimateTask) -> (crate::Price, crate::Price) {
+        let one = rust_decimal::Decimal::ONE;
+        let reference = value.reference().price().as_money();
+        let target = reference
+            .checked_mul(&crate::Ratio::new(
+                one.checked_add(value.target().as_decimal()).expect("T"),
+            ))
+            .expect("목표");
+        let stop = reference
+            .checked_mul(&crate::Ratio::new(
+                one.checked_sub(value.stop().as_decimal()).expect("S"),
+            ))
+            .expect("손절");
+        (
+            crate::Price::try_new(target).expect("목표가"),
+            crate::Price::try_new(stop).expect("손절가"),
+        )
+    }
+    fn edge_prices(value: &EstimateTask, code: u8) -> (crate::Price, crate::Price) {
+        let (target, stop) = independent_edges(value);
+        let neutral = value.reference().price();
+        let tick = crate::Money::new(
+            crate::Amount::new(rust_decimal::Decimal::new(1, 26)),
+            Currency::Usd,
+        );
+        match code {
+            1 => (
+                crate::Price::try_new(target.as_money().checked_sub(&tick).expect("목표 아래"))
+                    .expect("가격"),
+                neutral,
+            ),
+            2 => (target, neutral),
+            3 => (
+                crate::Price::try_new(target.as_money().checked_add(&tick).expect("목표 위"))
+                    .expect("가격"),
+                neutral,
+            ),
+            4 => (
+                neutral,
+                crate::Price::try_new(stop.as_money().checked_add(&tick).expect("손절 위"))
+                    .expect("가격"),
+            ),
+            5 => (neutral, stop),
+            6 => (
+                neutral,
+                crate::Price::try_new(stop.as_money().checked_sub(&tick).expect("손절 아래"))
+                    .expect("가격"),
+            ),
+            7 => (target, stop),
+            _ => (neutral, neutral),
+        }
+    }
+    fn edge_bar(value: &EstimateTask, minute: i64, code: u8, factor: &OutcomeAdjustment) -> Candle {
+        let (high, low) = edge_prices(value, code);
+        let neutral = value.reference().price();
+        let sample = candle(61, minute, CandlePeriod::Minute, ("100", "100"), factor);
+        Candle::try_new(
+            sample.instrument().clone(),
+            sample.time(),
+            sample.adjustment(),
+            Ohlcv::try_new(neutral, high, low, neutral, sample.values().volume()).expect("경계 봉"),
+            CandleObservation::new(sample.collected_at(), CandleStatus::Finalized),
+        )
+        .expect("분봉")
+    }
+    fn independent_minute_reference(
+        value: &EstimateTask,
+        bars: &[Candle],
+        deadline: Timestamp,
+    ) -> OutcomeState {
+        let (target, stop) = independent_edges(value);
+        let observation = value.reference().observed_at();
+        let mut sorted = bars
+            .iter()
+            .filter(|bar| {
+                bar.time().period() == CandlePeriod::Minute
+                    && bar.time().timestamp() > observation
+                    && bar.time().timestamp() <= deadline
+            })
+            .collect::<Vec<_>>();
+        sorted.sort_by_key(|bar| bar.time().timestamp());
+        for bar in sorted {
+            let above = bar.values().high().as_money().amount().as_decimal()
+                >= target.as_money().amount().as_decimal();
+            let below = bar.values().low().as_money().amount().as_decimal()
+                <= stop.as_money().amount().as_decimal();
+            let first_partial = bar
+                .time()
+                .timestamp()
+                .utc_seconds()
+                .as_i64()
+                .wrapping_sub(*observation.utc_seconds().as_i64())
+                < 60;
+            if above && (below || first_partial) {
+                return OutcomeState::Failure(OutcomeFailure::Ambiguous);
+            }
+            if below {
+                return OutcomeState::Failure(OutcomeFailure::Stop);
+            }
+            if above {
+                return OutcomeState::Success;
+            }
+        }
+        OutcomeState::Failure(OutcomeFailure::Expired)
+    }
+    fn independent_deadline(observation: Timestamp, hours: u8) -> Timestamp {
+        if hours == 0 {
+            return instant(66, 904);
+        }
+        let remaining = instant(61, 904)
+            .utc_seconds()
+            .as_i64()
+            .checked_sub(*observation.utc_seconds().as_i64())
+            .expect("잔여 초");
+        let (base, seconds) = if remaining >= 60 {
+            (observation, 60)
+        } else {
+            (
+                instant(62, 900),
+                60_i64.checked_sub(remaining).expect("다음 장 잔여"),
+            )
+        };
+        base.checked_add(
+            crate::TimeSpan::try_new(
+                crate::SpanSeconds::new(u64::try_from(seconds).expect("초")),
+                crate::Nanosecond::new(0),
+            )
+            .expect("기간"),
+        )
+        .expect("만기")
+    }
+    proptest! {
+        #![proptest_config(Config::with_cases(4096))]
+        #[test]
+        fn intraminute_observations_and_near_boundary_paths_match_independent_reference(minute in 900_i64..904,second in 0_u64..60,codes in proptest::collection::vec(0_u8..8,4),hours in 0_u8..2,salt in any::<i64>()) {
+            let observation=instant(61,minute).checked_add(crate::TimeSpan::try_new(crate::SpanSeconds::new(second),crate::Nanosecond::new(0)).expect("초")).expect("관측");
+            let selection=if hours==0 {crate::HorizonSelection::FewDays} else {crate::HorizonSelection::Hours};
+            let value=task_at(observation,selection);let factor=identity_for(&value);
+            let mut bars=flat(&factor,"100");bars.retain(|bar|bar.time().period()!=CandlePeriod::Minute);
+            bars.extend(codes.iter().enumerate().map(|(index,code)|edge_bar(&value,901_i64.checked_add(i64::try_from(index).expect("분")).expect("분"),*code,&factor)));
+            let expected=independent_minute_reference(&value,&bars,independent_deadline(observation,hours));
+            let actual=EstimateOutcome::evaluate(&value,&calendars(),&factor,&bars,instant(70,904));
+            prop_assert_eq!(actual.state(),expected);
+            bars.sort_by_key(|bar|bar.time().timestamp().utc_seconds().as_i64().wrapping_mul(salt));
+            prop_assert_eq!(EstimateOutcome::evaluate(&value,&calendars(),&factor,&bars,instant(70,904)),actual);
+        }
+    }
+    fn domestic_task() -> EstimateTask {
+        let original = task();
+        let observed = Timestamp::from_parts(
+            instant(61, 900).utc_seconds(),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(32400),
+        )
+        .expect("국내 관측");
+        let reference = PriceObservation::from_identified_quote_parts(
+            original.volatility().instrument().clone(),
+            ResolvedOrderInstrument::from_master_lookup_result(
+                Symbol::try_new("005930").expect("심볼"),
+                Market::Kr,
+            )
+            .expect("종목"),
+            price("100", Currency::Krw),
+            observed,
+        )
+        .expect("관측");
+        EstimateTask::create(
+            EstimateContext::new(reference, observed),
+            original.volatility().clone(),
+            Horizon::new(crate::HorizonSelection::FewDays),
+            HoursPermission::default(),
+            RiskAppetite::Neutral,
+        )
+        .expect("국내 과제")
+    }
+    #[test]
+    fn domestic_daily_offset_and_adjustment_projection_are_checked() {
+        let value = domestic_task();
+        let basis = Timestamp::from_parts(
+            instant(66, 904).utc_seconds(),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(32400),
+        )
+        .expect("국내 수정 기준");
+        let factor = OutcomeAdjustment::from_actions(&value, AdjustmentBasis::new(basis), &[])
+            .expect("국내 환산");
+        let source = candle(62, 0, CandlePeriod::Daily, ("100", "100"), &factor);
+        let at_kst = Timestamp::from_parts(
+            instant(61, 900).utc_seconds(),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(32400),
+        )
+        .expect("국내 자정");
+        let local = Candle::try_new(
+            source.instrument().clone(),
+            CandleTime::try_new(at_kst, CandlePeriod::Daily).expect("자정"),
+            source.adjustment(),
+            source.values(),
+            CandleObservation::new(source.collected_at(), CandleStatus::Finalized),
+        )
+        .expect("일봉");
+        assert_eq!(
+            super::local_daily_offset(&value, &local),
+            crate::CheckResult::Passed
+        );
+        assert_eq!(
+            super::local_daily_offset(&value, &source),
+            crate::CheckResult::Failed
+        );
+        let maximum = Timestamp::from_parts(
+            crate::UnixSeconds::new(253_402_300_799),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(0),
+        )
+        .expect("최대 일자");
+        assert_eq!(
+            OutcomeAdjustment::from_actions(&value, AdjustmentBasis::new(maximum), &[]),
+            Err(OutcomeUnavailable::Adjustment)
+        );
+    }
+    #[test]
+    fn holiday_daily_has_no_matching_regular_session() {
+        let contextual = |day| {
+            if day == 62 {
+                crate::MarketSession::try_new(
+                    row(day).date(),
+                    SessionInformation::Us {
+                        day_market: None,
+                        pre_market: None,
+                        regular_market: None,
+                        after_market: None,
+                    },
+                )
+                .expect("휴장")
+            } else {
+                row(day)
+            }
+        };
+        let calendars = (61_i64..=67)
+            .map(|day| {
+                MarketCalendar::try_new(
+                    contextual(day.checked_sub(1).expect("전일")),
+                    contextual(day),
+                    contextual(day.checked_add(1).expect("익일")),
+                )
+                .expect("달력")
+            })
+            .collect::<Vec<_>>();
+        let factor = adjustment(1, 1);
+        assert_eq!(
+            EstimateOutcome::evaluate(
+                &task(),
+                &calendars,
+                &factor,
+                &[candle(62, 0, CandlePeriod::Daily, ("200", "100"), &factor)],
+                instant(70, 904)
+            )
+            .state(),
+            OutcomeState::Unavailable(OutcomeUnavailable::InvalidCandle)
+        );
+    }
+    #[test]
+    fn subsecond_observation_with_flat_first_minute_is_not_a_failure() {
+        let observed = instant(61, 902)
+            .checked_add(
+                crate::TimeSpan::try_new(crate::SpanSeconds::new(0), crate::Nanosecond::new(1))
+                    .expect("나노초"),
+            )
+            .expect("관측");
+        let value = task_at(observed, crate::HorizonSelection::FewDays);
+        let factor = identity_for(&value);
+        assert_eq!(
+            EstimateOutcome::evaluate(
+                &value,
+                &calendars(),
+                &factor,
+                &flat(&factor, "100"),
+                instant(70, 904)
+            )
+            .state(),
+            OutcomeState::Failure(OutcomeFailure::Expired)
+        );
+    }
+    #[test]
+    fn adjustment_cutoff_uses_its_own_market_offset_across_dst() {
+        let value = task();
+        let cutoff = Timestamp::from_parts(
+            instant(100, 270).utc_seconds(),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(-14400),
+        )
+        .expect("EDT 00시 30분");
+        let event = action_fact(1, 2, cutoff.offset_calendar_date(), "dst-split");
+        let adjustment =
+            OutcomeAdjustment::from_actions(&value, AdjustmentBasis::new(cutoff), &[event])
+                .expect("수정 계수");
+        assert_eq!(adjustment.ratios().len(), 1);
+        let wrong = Timestamp::from_parts(
+            cutoff.utc_seconds(),
+            crate::Nanosecond::new(0),
+            OffsetSeconds::new(32400),
+        )
+        .expect("KST 표현");
+        assert_eq!(
+            OutcomeAdjustment::from_actions(&value, AdjustmentBasis::new(wrong), &[]),
+            Err(OutcomeUnavailable::Adjustment)
+        );
     }
 }

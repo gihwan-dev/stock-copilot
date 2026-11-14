@@ -129,16 +129,19 @@ impl OutcomeBoundaries {
         reference: Price,
         target: EstimateDistance,
         stop: EstimateDistance,
-        ratio: ShareRatio,
+        ratios: &[ShareRatio],
     ) -> Self {
-        let base = Fraction::amount(reference.as_money().amount()).times(&Fraction {
-            numerator: Natural::coefficient(Amount::new(rust_decimal::Decimal::from(
-                *ratio.old_shares().as_u64(),
-            ))),
-            denominator: Natural::coefficient(Amount::new(rust_decimal::Decimal::from(
-                *ratio.new_shares().as_u64(),
-            ))),
-        });
+        let mut base = Fraction::amount(reference.as_money().amount());
+        for ratio in ratios {
+            base = base.times(&Fraction {
+                numerator: Natural::coefficient(Amount::new(rust_decimal::Decimal::from(
+                    *ratio.old_shares().as_u64(),
+                ))),
+                denominator: Natural::coefficient(Amount::new(rust_decimal::Decimal::from(
+                    *ratio.new_shares().as_u64(),
+                ))),
+            });
+        }
         let up = Fraction::amount(Amount::new(target.as_decimal()));
         let down = Fraction::amount(Amount::new(stop.as_decimal()));
         Self {
