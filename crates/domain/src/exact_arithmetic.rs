@@ -12,6 +12,9 @@ pub enum RatioQuotient {
 pub struct ApproximateRatio(Decimal);
 
 impl ApproximateRatio {
+    pub(crate) const fn new(value: Decimal) -> Self {
+        Self(value)
+    }
     #[must_use]
     pub(crate) fn as_decimal(&self) -> Decimal {
         self.0
@@ -1373,12 +1376,4 @@ mod tests {
             assert_eq!(nonunit_successes.get(), 4096);
         }
     }
-}
-
-pub(crate) fn concentration_square(value: Amount) -> Result<Amount, MoneyError> {
-    value
-        .as_decimal()
-        .checked_mul(value.as_decimal())
-        .map(Amount::new)
-        .ok_or(MoneyError::Overflow)
 }
