@@ -257,3 +257,12 @@ pub use external_flow_classification::{
     TransferClassification, TransferClassificationError, TransferClassificationKind,
     TransferOccurrence, UserTransferConfirmation,
 };
+
+mod concentration;
+pub use concentration::{
+    Concentration, ConcentrationArithmeticError, ConcentrationDisplay, ConcentrationError,
+    ConcentrationErrorKind, ConcentrationHhi, ConcentrationKind, ConcentrationMetrics,
+    ConcentrationStatus, ConcentrationThreshold, ConcentrationThresholdError, ConcentrationWarning,
+    ConcentrationWeight, EffectiveInstrumentCount,
+};
+mod concentration_arithmetic;

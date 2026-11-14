@@ -49,10 +49,16 @@ pub enum AllocationError {
     Arithmetic(MoneyError),
     Conversion(crate::FxConversionError),
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 struct AllocationValue {
     quotient: RatioQuotient,
     accuracy: ValuationAccuracy,
+    concentration: crate::concentration_arithmetic::CompositionInput,
+}
+impl PartialEq for AllocationValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.quotient == other.quotient && self.accuracy == other.accuracy
+    }
 }
 impl AllocationValue {
     fn amount(self) -> Amount {
@@ -87,6 +93,12 @@ impl AssetWeight {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompositionWeight(AllocationValue);
 impl CompositionWeight {
+    pub(crate) const fn concentration_statistics_input(
+        &self,
+    ) -> crate::concentration_arithmetic::CompositionInput {
+        self.0.concentration
+    }
+
     #[must_use]
     pub fn compare(&self, other: &Self) -> Ordering {
         self.0.compare(other.0)
@@ -547,6 +559,9 @@ fn calculated_weight(value: Money, total: Money) -> Result<AllocationValue, Allo
     value
         .checked_ratio(&total)
         .map(|quotient| AllocationValue {
+            concentration: crate::concentration_arithmetic::CompositionInput::from_evaluation(
+                value, total, quotient,
+            ),
             quotient,
             accuracy: ValuationAccuracy::Approximate,
         })
