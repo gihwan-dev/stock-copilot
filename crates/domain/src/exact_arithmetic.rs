@@ -379,8 +379,8 @@ pub(crate) fn allocation_parts(
     let divisor = allocation_scaled(total, &AllocationUnits(1));
     let mut lower = 0_u32;
     let mut upper = 10001_u32;
-    while upper.saturating_sub(lower) > 1 {
-        let middle = lower.saturating_add(upper) >> 1_u32;
+    while upper.saturating_sub(lower) != 1 {
+        let middle = lower.midpoint(upper);
         let candidate = allocation_multiple(divisor, &AllocationUnits(middle));
         if candidate.cmp(&numerator).is_gt() {
             upper = middle;
