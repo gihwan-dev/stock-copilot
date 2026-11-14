@@ -558,6 +558,17 @@ fn calculated_weight(value: Money, total: Money) -> Result<AllocationValue, Allo
         })
 }
 
+pub(crate) fn policy_krw_holding_values(
+    valuation: &PortfolioValuation,
+    rates: &[FxRate],
+) -> Result<Vec<(AllocationInstrument, Money)>, AllocationError> {
+    valued_holdings(valuation, rates).map(|rows| {
+        rows.into_iter()
+            .map(|row| (row.instrument, row.value))
+            .collect()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{asset_weights, calculated_weight, composition_weights, converted};
