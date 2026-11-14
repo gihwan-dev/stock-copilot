@@ -228,3 +228,10 @@ mod base_probability;
 mod estimate_task;
 pub use base_probability::{BaseProbability, EstimateDistance};
 pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask};
+
+mod thresholds;
+mod thresholds_arithmetic;
+mod trade_cost;
+mod trade_cost_arithmetic;
+pub use thresholds::{Margin, NoThresholds, ThresholdDisplay, ThresholdKind, Thresholds};
+pub use trade_cost::{CommissionRateFact, CostRate, TradeCost, TradeCostError, TradeTaxFact};
