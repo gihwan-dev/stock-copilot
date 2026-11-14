@@ -86,3 +86,6 @@ pub trait MarketInfo: Send + Sync {
     ) -> impl Future<Output = Result<FxRate, PortError>> + Send;
     fn order_fx_rates(&self) -> impl Future<Output = Result<OrderFxRates, PortError>> + Send;
 }
+
+mod error_class;
+pub use error_class::{BugDiagnostic, ErrorClass, FalliblePort, UserAction, classify_port_error};
