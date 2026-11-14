@@ -314,3 +314,18 @@ pub use signal_submission::{
 };
 mod signal_timing;
 pub use signal_timing::SignalTiming;
+
+mod performance;
+mod performance_arithmetic;
+pub use performance::{
+    Performance, PerformanceCurrency, PerformanceError, PerformancePeriod, TwrMethod,
+};
+pub use performance_arithmetic::PerformanceValue;
+mod benchmark;
+pub use benchmark::{BenchmarkDividends, BenchmarkKind, BenchmarkObservation, BenchmarkSeries};
+mod performance_contract;
+mod performance_risk;
+pub use performance_risk::{
+    BetaMetric, PerformanceBeta, PerformanceRisk, RiskMetric, performance_beta,
+    performance_volatility,
+};

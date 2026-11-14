@@ -41,6 +41,14 @@ generic-parsing = ["parse"]
 arithmetic = ["checked_mul", "checked_div", "checked_rem", "inv", "saturating_mul", "saturating_add", "saturating_sub", "mul", "div", "rem", "mul_assign", "div_assign", "rem_assign"]
 float-conversion = ["to_f32", "to_f64"]
 
+[[decimal-arithmetic]]
+path = "crates/domain/src/performance_arithmetic.rs"
+reason = "D-09 봉인된 근사 성과와 checked 십진 이분법만 계산한다"
+
+[[decimal-rounding]]
+path = "crates/domain/src/performance_arithmetic.rs"
+reason = "D-09 봉인된 근사 성과의 소수 여섯 자리 표시만 반올림한다"
+
 [[decimal-rounding]]
 path = "crates/domain/src/money_display.rs"
 reason = "D-01 표시 전용 반올림 함수만 Decimal 자릿수를 바꾼다"
