@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { semanticName, semanticVariants } from "./ds-semantic-variants.mjs";
 import { propertyName } from "./ds-boundaries.mjs";
 import { CHART_NUMBER_ALLOWLIST } from "./allowlists.mjs";
 
@@ -51,6 +52,7 @@ export const publicProps = {
     const services = ctx.sourceCode.parserServices;
     const checker = services.program?.getTypeChecker();
     if (checker === undefined) return {};
+    const semantics = semanticVariants(ctx);
     const report = (node) => ctx.report({ node, messageId: "forbidden" });
     const tokenNames = new Set();
     if (checker !== undefined)
@@ -133,6 +135,13 @@ export const publicProps = {
             (t.flags & ts.TypeFlags.Undefined) === 0 &&
             !reactType(t, ["RefObject"]),
         );
+      if (semanticName(p.name)) {
+        const token = (p.declarations ?? []).every((d) =>
+          semantics.tokenOnly(d.type),
+        );
+        if (!token) return !semantics.contract(p);
+        if (p.name !== "tone") return !tokenValue(value);
+      }
       if (tokenProperty.test(p.name)) {
         const category = categoryNames.get(tokenCategory(p.name));
         const values = value.isUnion() ? value.types : [value];
@@ -581,12 +590,27 @@ export const publicProps = {
           CHART_NUMBER_ALLOWLIST.some((file) => filename.endsWith("/" + file))
         )
           return;
+        if (semanticName(node.name.name)) {
+          const tag = services.esTreeNodeToTSNodeMap.get(node.parent.name);
+          const type = checker.getTypeAtLocation(tag);
+          for (const signature of type.getCallSignatures()) {
+            const props = signature.getParameters()[0];
+            if (props === undefined) continue;
+            const property = checker.getPropertyOfType(
+              checker.getTypeOfSymbolAtLocation(props, tag),
+              node.name.name,
+            );
+            if (property !== undefined && propertyBad(property, new Set(), 0))
+              return report(node);
+          }
+        }
         if (
           node.value?.type === "Literal" &&
           typeof node.value.value === "string"
         ) {
           if (
             tokenProperty.test(node.name.name) &&
+            !semanticName(node.name.name) &&
             !tokenNames.has(node.value.value)
           )
             report(node);
@@ -600,7 +624,11 @@ export const publicProps = {
         const type = services.getTypeAtLocation(expression);
         if (["columns", "span"].includes(node.name.name) && layoutValue(type))
           return;
-        if (tokenProperty.test(node.name.name) && !tokenValue(type))
+        if (
+          tokenProperty.test(node.name.name) &&
+          !semanticName(node.name.name) &&
+          !tokenValue(type)
+        )
           return report(node);
         const tag = services.esTreeNodeToTSNodeMap.get(node.parent.name);
         const symbol = checker.getSymbolAtLocation(tag);
