@@ -313,6 +313,13 @@ stock-copilot/
 - 스트림 이벤트 `AiEvent`: `TextDelta`, `ToolCall{server, tool, args, result, status}`, `WebSearch{query, action}`, `TokenUsage`, `Quota`, `RateLimited{resets_at}`, `ModelRerouted`, `McpUnavailable`, 그리고 모르는 type을 담는 명시 변형 `Unknown`(R-02, R-03). 녹화한 스트림을 테스트 고정 자료로 쓴다.
 - 뉴스 소스와 예약 작업은 레지스트리에 등록한다. 새 소스나 작업은 구현 하나와 등록 한 줄로 추가된다. 경로 고정 테스트는 이 레지스트리에서 대상 목록을 가져온다(4.6).
 
+#### 읽기 포트의 메서드 계약 (ADR 0055)
+
+현재 `BrokerRead`는 `accounts`, `holdings`, `transactions`, `quotes`, `candles`, `buying_power`를, `MarketInfo`는 `fx_rate`, `order_fx_rates`를 정의한다. 입출력은 domain 타입이고 오류는 본문과 비밀을 담지 않는 `PortError`(닫힌 원인, 메서드별 엔드포인트, HTTP 상태 분류, 재시도 대기 시간)다. 보유와 현금은 따로 조회하고 `Portfolio` 조립은 A-06이 맡는다. 거래내역은 완전 증거 또는 받은 행과 격리 원문을 보존한 불완전 결과를, 시세는 종목별 결과(한 번에 1~200개)를 돌려준다. 페이지, 재시도, 속도 제한은 어댑터 안의 일이다. 포트는 `Send + Sync`이고 메서드는 `Send` Future를 돌려주며 `dyn`을 지원하지 않는다. 조립 루트가 제네릭으로 주입한다.
+
+매도가능수량, 주문 조회, 매수 유의사항, 종목 마스터, 호가, 가격 제한, 수수료율, 지수, 랭킹, 수급, 섹터, 시장을 닫힌 값으로 받는 `calendar`는 **정의 대기**다. domain 타입을 만드는 선행 작업(D-33~D-37) 뒤에 A-20이 더한다. 그때까지 `quotes`와 `candles`의 종목 입력, `accounts`의 계좌 행은 임시 계약이다.
+
+
 ### 3.4 도메인 모델
 
 | 묶음 | 주요 타입 |
