@@ -8,6 +8,9 @@ pub enum ProposalRangeError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProposalVolatility(Ratio);
 impl ProposalVolatility {
+    pub(crate) fn from_daily(value: crate::DailyVolatility) -> Self {
+        Self(Ratio::new(value.as_decimal()))
+    }
     pub fn try_new(value: Ratio) -> Result<Self, ProposalRangeError> {
         if value.as_decimal() <= Decimal::ZERO {
             return Err(ProposalRangeError::NonPositive);
@@ -18,6 +21,18 @@ impl ProposalVolatility {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TradingDayHorizon(Ratio);
 impl TradingDayHorizon {
+    pub(crate) fn from_estimate_policy(value: crate::HorizonSelection) -> Self {
+        Self(Ratio::new(match value {
+            crate::HorizonSelection::Hours => Decimal::new(25, 2),
+            crate::HorizonSelection::FewDays => Decimal::from(5_u32),
+            crate::HorizonSelection::WeeksToMonths => Decimal::from(40_u32),
+            crate::HorizonSelection::HalfYearOrMore => Decimal::from(126_u32),
+        }))
+    }
+    #[must_use]
+    pub fn as_ratio(self) -> Ratio {
+        self.0
+    }
     pub fn try_new(value: Ratio) -> Result<Self, ProposalRangeError> {
         if value.as_decimal() <= Decimal::ZERO {
             return Err(ProposalRangeError::NonPositive);

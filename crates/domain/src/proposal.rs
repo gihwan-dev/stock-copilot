@@ -308,6 +308,53 @@ impl ExecutionToken {
 }
 
 #[cfg(test)]
+pub(crate) mod summary_tests {
+    use super::{
+        CheckResult, ExecutionToken, Nanosecond, OrderIntent, PriceObservation, Proposal,
+        ProposalId, ProposalLifetime, ProposalPriceRange, Timestamp,
+    };
+    pub(crate) fn token(intent: OrderIntent, price: crate::Price) -> ExecutionToken {
+        let at = Timestamp::from_parts(
+            crate::UnixSeconds::new(1),
+            Nanosecond::new(0),
+            crate::OffsetSeconds::new(0),
+        )
+        .expect("시각");
+        let observation =
+            PriceObservation::from_quote_parts(intent.instrument().clone(), price, at)
+                .expect("관측");
+        let ratio =
+            crate::Ratio::parse(&crate::NumericInput::try_new("1").expect("입력")).expect("비율");
+        let facts = crate::EstimateRangeFacts {
+            instrument: intent.instrument().clone(),
+            reference: price,
+            volatility: crate::ProposalVolatility::try_new(ratio).expect("변동성"),
+            horizon: crate::TradingDayHorizon::try_new(ratio).expect("기간"),
+        };
+        let range =
+            ProposalPriceRange::from_estimate_task(facts, observation.clone()).expect("범위");
+        let id = ProposalId::new(intent.client_order_id().clone());
+        let draft =
+            Proposal::new(id, intent, at, range, ProposalLifetime::default()).expect("제안");
+        let mut report = draft.report(at, &observation);
+        report.instrument = CheckResult::Passed;
+        report.market_hours = CheckResult::Passed;
+        report.available_funds_or_quantity = CheckResult::Passed;
+        report.opposite_pending_order = CheckResult::Passed;
+        report.buy_warnings = CheckResult::Passed;
+        report.principles = CheckResult::Passed;
+        report.order_price = CheckResult::Passed;
+        report.market_order_permission = CheckResult::Passed;
+        report.account_match = CheckResult::Passed;
+        draft
+            .finish_validation(report, at, observation.clone())
+            .expect("검증")
+            .into_execution(at, observation)
+            .expect("토큰")
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::{
         CheckResult, Draft, Proposal, ProposalError, ProposalExecutionError, ValidationCheck,
