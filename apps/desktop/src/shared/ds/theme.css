@@ -2,6 +2,22 @@
 @import "./tokens.css";
 @source "../../";
 
+@utility dialog-overlay {
+  position: fixed;
+}
+
+@utility dialog-overlay {
+  inset: 0;
+}
+
+@utility skeleton-line {
+  height: var(--text-size-sm);
+}
+
+@utility border-b-hairline {
+  border-bottom-width: var(--border-width-hairline);
+}
+
 @utility transition-disclosure {
   transition: transform var(--transition-duration-fast) var(--ease-out);
 }

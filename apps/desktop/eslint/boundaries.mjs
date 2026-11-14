@@ -117,7 +117,11 @@ export const boundaryPolicies = ({
   {
     from: {
       file: {
-        path: ["src/shared/ds/TextField.tsx", "src/shared/ds/Select.tsx"],
+        path: [
+          "src/shared/ds/TextField.tsx",
+          "src/shared/ds/Select.tsx",
+          "src/shared/ds/Dialog.tsx",
+        ],
       },
     },
     allow: { to: { file: { path: "src/shared/platform/input.ts" } } },

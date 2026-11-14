@@ -3,6 +3,8 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "ds.close": { ko: "닫기" as UiText },
+  "ds.tableEmpty": { ko: "표시할 항목이 없어요" as UiText },
   "ds.day": { ko: "하루" as UiText },
   "ds.month": { ko: "한 달" as UiText },
   "ds.year": { ko: "일 년" as UiText },
