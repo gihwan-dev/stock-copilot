@@ -184,3 +184,12 @@ pub use sector_assignment::{
     AllocationInstrument, AllocationSector, InstrumentClassification, SectorAssignment,
     SectorAssignments, SectorAssignmentsError,
 };
+
+mod calibration;
+pub use calibration::{
+    CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
+    CalibrationError, CalibrationEstimate, CalibrationEstimateId, CalibrationEvidence,
+    CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey, CalibrationModel,
+    CalibrationOutcome, CalibrationReadiness, CalibrationTable, ConservativeCalibration,
+    EligibleCalibration, ModelIdentityPart,
+};
