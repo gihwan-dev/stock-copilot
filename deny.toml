@@ -41,6 +41,10 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow-workspace = true
 allow = [
+  { crate = "chrono", reason = "T-01 typify 스키마 생성 및 시간 파싱에 필요한 의존성" },
+  { crate = "regress", reason = "T-01 typify 스키마 생성 및 시간 파싱에 필요한 의존성" },
+  { crate = "typify", reason = "T-01 typify 스키마 생성 및 시간 파싱에 필요한 의존성" },
+  { crate = "typify-impl", reason = "T-01 typify 스키마 생성 및 시간 파싱에 필요한 의존성" },
   { crate = "num-traits", reason = "rust_decimal·proptest → num-traits: 십진수·수 생성" },
   { crate = "arrayvec", reason = "rust_decimal → arrayvec: 십진수 내부 버퍼" },
   { crate = "chacha20", reason = "proptest → chacha20: 테스트 난수 생성" },

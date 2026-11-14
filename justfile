@@ -83,6 +83,7 @@ check-ts: check-node check-pnpm
     node harness/ds-style/check.mjs
     node harness/ds-tokens/check.mjs
     cargo run --locked --quiet --package xtask -- gen-tokens --check
+    cargo run --locked --quiet --package xtask -- gen-schema --check
     node harness/ds-tokens/contrast.mjs
     pnpm exec prettier --check apps/desktop harness package.json pnpm-workspace.yaml .claude/hooks .claude/settings.json
     node harness/source-tree/check.mjs

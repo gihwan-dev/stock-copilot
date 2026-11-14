@@ -620,3 +620,10 @@ findings = [
     { rule = "external-feature", subject = "domain -> rust_decimal[default]" },
     { rule = "external-feature", subject = "domain -> rust_decimal[serde]" },
 ]
+
+[[case]]
+name = "schema-cannot-use-generator"
+findings = [
+    { rule = "external-location", subject = "broker-toss-schema => typify" },
+    { rule = "external-location", subject = "broker-toss-schema => typify-impl" },
+]
