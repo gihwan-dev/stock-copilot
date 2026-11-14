@@ -81,3 +81,6 @@ reason = "D-22 봉인된 근사 임계값의 표시 전용 반올림"
 [[decimal-rounding]]
 path = "crates/domain/src/trade_cost_arithmetic.rs"
 reason = "D-22 정확 수수료 곱을 사용자에게 불리한 통화 최소 단위로 올리는 주문 전 추정 정책"
+[[decimal-arithmetic]]
+path = "crates/domain/src/concentration_arithmetic.rs"
+reason = "D-07 보유 구성비의 봉인된 근사 통계만 checked 연산하고 표시와 경계는 정확 정수 비율로 검증한다"
