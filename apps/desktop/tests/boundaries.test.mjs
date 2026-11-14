@@ -298,7 +298,12 @@ test("removing any policy or rule option, or lowering any boundary rule, makes s
         ],
       },
     })),
-    ...["checkAllOrigins", "checkUnknownLocals", "message"].map((key) => ({
+    ...[
+      "checkAllOrigins",
+      "checkUnknownLocals",
+      "checkInternals",
+      "message",
+    ].map((key) => ({
       label: `option ${key}`,
       rules: {
         ...rules,

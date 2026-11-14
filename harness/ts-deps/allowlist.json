@@ -57,6 +57,10 @@
         "zod": {
           "target": "zod",
           "reason": "경계 파싱과 브랜드 (architecture 5.2, harness 4.3)"
+        },
+        "@base-ui/react": {
+          "target": "@base-ui/react",
+          "reason": "DS-03 기반 컴포넌트 (architecture 5.2 Base UI 1.9.0)"
         }
       },
       "devDependencies": {
@@ -139,6 +143,18 @@
         "postcss": {
           "target": "postcss",
           "reason": "DS-02 적대적 리뷰: 중첩 선택자와 at-rule을 CSS 파서로 검사. 기존 전이 버전 8.5.32 고정"
+        },
+        "@testing-library/react": {
+          "target": "@testing-library/react",
+          "reason": "DS-03 컴포넌트 상태 검증 (harness 4.3 Testing Library, architecture 5.2 Playwright)"
+        },
+        "jsdom": {
+          "target": "jsdom",
+          "reason": "DS-03 브라우저 없는 컴포넌트 DOM 환경 (R-15 2.4, harness 4.3·6.6, 사용자 리뷰 결정 4)"
+        },
+        "@testing-library/user-event": {
+          "target": "@testing-library/user-event",
+          "reason": "Testing Library 키보드·포커스 상호작용 (harness 4.3 Testing Library, 사용자 리뷰 결정 4)"
         }
       }
     }

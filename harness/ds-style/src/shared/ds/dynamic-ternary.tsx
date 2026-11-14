@@ -1,1 +1,2 @@
-const probe = <div className={active ? "flex" : "block"} />;
+const paint = "bg-primary";
+const v = <div className={flag ? paint : "bg-surface"} />;

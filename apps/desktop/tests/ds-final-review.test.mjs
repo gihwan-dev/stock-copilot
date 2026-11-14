@@ -67,7 +67,12 @@ test("DS02 final review permits Intl style options and restricts icon geometry t
   assert.deepEqual(await lint('const v=<a href="#add" lang="fr"/>;'), []);
   const { ICON_GEOMETRY_FILES, ...base } =
     await import("../eslint/ds-allowlists.mjs");
-  assert.deepEqual(ICON_GEOMETRY_FILES, []);
+  assert.deepEqual(ICON_GEOMETRY_FILES, [
+    "src/shared/ds/Icon.tsx",
+    "src/shared/ds/icon-paths-0.tsx",
+    "src/shared/ds/icon-paths-1.tsx",
+    "src/shared/ds/icon-paths-2.tsx",
+  ]);
   const code =
     'const v=<svg className="fill-none stroke-current stroke-icon stroke-linecap-round stroke-linejoin-round" viewBox="0 0 24 24"><rect width={18} height={18} x={3} y={3} rx={2}/><circle cx={12} cy={12} r={4}/></svg>;';
   assert.deepEqual(

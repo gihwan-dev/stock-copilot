@@ -1,5 +1,6 @@
 export const PLATFORM_FILE_ALLOWLIST = [
   "src/shared/platform/index.ts",
+  "src/shared/platform/input.ts",
   "src/shared/platform/detach.ts",
   "src/shared/platform/useCoreEvent.ts",
   "src/shared/platform/useDocumentTitle.ts",
@@ -18,6 +19,7 @@ export const THROW_ALLOWLIST = ["src/shared/ipc/testing/fakes.ts"];
 export const CHART_NUMBER_ALLOWLIST = [];
 
 export const RAW_TYPE_ALLOWLIST = [
+  "src/shared/platform/input.ts",
   "src/shared/lib/brand.ts",
   "src/shared/lib/money.ts",
   "src/shared/lib/format.ts",
@@ -26,6 +28,7 @@ export const RAW_TYPE_ALLOWLIST = [
 ];
 
 export const PROMISE_REJECTION_ALLOWLIST = [
+  "src/shared/platform/input.ts",
   "src/shared/ipc/call.ts",
   "src/shared/platform/detach.ts",
 ];
