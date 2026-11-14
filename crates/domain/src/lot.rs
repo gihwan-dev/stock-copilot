@@ -119,6 +119,11 @@ impl Lot {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FractionalSettlement {
+    RetainShares,
+    CashInLieu,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LotBook {
     identity: LotIdentity,
@@ -360,13 +365,17 @@ impl LotBook {
             return Err(LotError::InvalidReceipt);
         }
         match action.kind() {
-            CorporateActionKind::Split(ratio) | CorporateActionKind::ReverseSplit(ratio) => {
-                self.scale(*ratio)?;
+            CorporateActionKind::Split(ratio) => {
+                self.scale(*ratio, FractionalSettlement::RetainShares)?;
+            }
+            CorporateActionKind::ReverseSplit(ratio) => {
+                self.scale(*ratio, FractionalSettlement::CashInLieu)?;
             }
             CorporateActionKind::BonusIssue { ratio, receipt } => {
                 let one = Ratio::new(rust_decimal::Decimal::ONE);
                 let before = self.quantity()?;
-                let after = self.scale(one.checked_add(ratio)?)?;
+                let after =
+                    self.scale(one.checked_add(ratio)?, FractionalSettlement::RetainShares)?;
                 if let Some(observed) = receipt
                     && quantity_sub(after, before)? != positive_quantity(observed)?
                 {
@@ -422,7 +431,11 @@ impl LotBook {
         }
         Ok(cost)
     }
-    fn scale(&mut self, ratio: Ratio) -> Result<Quantity, LotError> {
+    fn scale(
+        &mut self,
+        ratio: Ratio,
+        treatment: FractionalSettlement,
+    ) -> Result<Quantity, LotError> {
         for lot in &mut self.lots {
             lot.quantity = scaled_quantity(lot.quantity, ratio)?;
         }
@@ -430,8 +443,7 @@ impl LotBook {
         Quantity::try_new(total.as_decimal().fract())
             .map_err(LotError::from)
             .map(|fraction| {
-                if !fraction.as_decimal().is_zero()
-                    && ratio.as_decimal() < rust_decimal::Decimal::ONE
+                if !fraction.as_decimal().is_zero() && treatment == FractionalSettlement::CashInLieu
                 {
                     self.fractional.push(FractionalEntitlement::new(fraction));
                 }
@@ -503,7 +515,7 @@ fn calculation_rows<'a>(
     });
     for [left, right] in rows.array_windows::<2>() {
         if left.data().settlement_date == right.data().settlement_date
-            && left.data().kind != right.data().kind
+            && left != right
             && (left.data().transaction_time.is_none()
                 || left.data().transaction_time == right.data().transaction_time)
         {
@@ -1979,6 +1991,183 @@ mod tests {
                 ]
             ),
             Err(LotError::InvalidReceipt)
+        );
+    }
+    fn stamped(transaction: &Transaction, second: i64) -> Transaction {
+        let mut data = transaction.data().clone();
+        data.transaction_time = Some(
+            Timestamp::from_parts(
+                UnixSeconds::new(second),
+                Nanosecond::new(0),
+                OffsetSeconds::new(0),
+            )
+            .expect("시각"),
+        );
+        Transaction::try_new(data).expect("시각 있는 거래")
+    }
+    #[test]
+    fn same_day_different_buys_require_an_observed_order() {
+        let first = row(1, TransactionKind::Buy, "1", Some("100"));
+        let second = row(1, TransactionKind::Buy, "1", Some("200"));
+        for transactions in [
+            vec![first.clone(), second.clone()],
+            vec![stamped(&first, 1), stamped(&second, 1)],
+        ] {
+            assert_eq!(
+                book(transactions, CostBasisMethod::Fifo, &[]),
+                Err(LotError::AmbiguousOrder)
+            );
+        }
+    }
+    #[test]
+    fn indistinguishable_multiset_rows_preserve_multiplicity() {
+        for method in [CostBasisMethod::Fifo, CostBasisMethod::MovingAverage] {
+            let buy = row(1, TransactionKind::Buy, "1", Some("100"));
+            let result = book(
+                vec![
+                    buy.clone(),
+                    buy,
+                    row(2, TransactionKind::Sell, "1", Some("300")),
+                ],
+                method,
+                &[],
+            )
+            .expect("동일한 두 행");
+            assert_eq!(result.quantity().expect("수량"), quantity("1"));
+            assert_eq!(
+                result.total_cost().expect("잔여 원가"),
+                LotCost::Known(money("100"))
+            );
+            assert_eq!(result.realized_gain(), LotCost::Known(money("200")));
+        }
+    }
+    #[test]
+    fn same_day_distinct_times_determine_fifo_independent_of_input_order() {
+        let old = stamped(&row(1, TransactionKind::Buy, "1", Some("200")), 1);
+        let recent = stamped(&row(1, TransactionKind::Buy, "1", Some("100")), 2);
+        let result = book(
+            vec![recent, old, row(2, TransactionKind::Sell, "1", Some("300"))],
+            CostBasisMethod::Fifo,
+            &[],
+        )
+        .expect("관측한 시각 순서");
+        assert_eq!(
+            result.total_cost().expect("잔여 원가"),
+            LotCost::Known(money("100"))
+        );
+        assert_eq!(result.realized_gain(), LotCost::Known(money("100")));
+    }
+    #[test]
+    fn as_of_date_is_inclusive_for_actions_and_transactions() {
+        let event = action(31, "today", CorporateActionKind::Delisting);
+        let result = book(
+            vec![row(1, TransactionKind::Buy, "1", Some("1"))],
+            CostBasisMethod::Fifo,
+            &[event],
+        )
+        .expect("오늘 행사");
+        assert_eq!(result.listing(), LotListing::Delisted);
+        assert_eq!(
+            book(
+                vec![row(31, TransactionKind::Buy, "1", Some("1"))],
+                CostBasisMethod::Fifo,
+                &[]
+            )
+            .expect("오늘 결제")
+            .quantity()
+            .expect("수량"),
+            quantity("1")
+        );
+    }
+    #[test]
+    fn ordinary_and_unknown_acquisitions_keep_distinct_tax_status() {
+        for (kind, expected) in [
+            (TransactionKind::Buy, LotTaxStatus::Ordinary),
+            (
+                TransactionKind::SecuritiesTransferIn,
+                LotTaxStatus::NeedsConfirmation,
+            ),
+        ] {
+            let result = book(
+                vec![row(1, kind, "1", Some("100"))],
+                CostBasisMethod::Fifo,
+                &[],
+            )
+            .expect("취득");
+            assert_eq!(result.lots().first().expect("로트").tax_status(), expected);
+        }
+    }
+    #[test]
+    fn calculation_filters_exclude_foreign_assets_symbols_and_future_rows() {
+        let mut foreign = row(1, TransactionKind::Buy, "1", None).data().clone();
+        foreign.market = Market::Us;
+        foreign.currency = Currency::Usd;
+        foreign.commission = Money::new(money("0").amount(), Currency::Usd);
+        foreign.tax = foreign.commission;
+        let mut bond = row(1, TransactionKind::Buy, "1", Some("1")).data().clone();
+        bond.asset_class = Some(AssetClass::Bond);
+        let mut other = row(1, TransactionKind::Buy, "1", Some("1")).data().clone();
+        other.symbol = Some(Symbol::try_new("000660").expect("다른 종목"));
+        for data in [foreign, bond, other] {
+            assert_eq!(
+                book(
+                    vec![Transaction::try_new(data).expect("행")],
+                    CostBasisMethod::Fifo,
+                    &[]
+                )
+                .expect("대상 아님")
+                .lots(),
+                []
+            );
+        }
+        let input = rows(vec![row(31, TransactionKind::Buy, "1", Some("1"))]);
+        let result = LotBook::from_settled(
+            &input,
+            LotIdentity::new(instrument(), symbol(), Market::Kr, Currency::Krw),
+            CostBasisMethod::Fifo,
+            &[],
+            date(30),
+        )
+        .expect("미래 결제 제외");
+        assert_eq!(result.lots(), []);
+    }
+    #[test]
+    fn splits_and_bonus_issues_retain_fractional_shares() {
+        for kind in [
+            CorporateActionKind::Split(ratio("3")),
+            CorporateActionKind::BonusIssue {
+                ratio: ratio("2"),
+                receipt: None,
+            },
+        ] {
+            let result = book(
+                vec![row(1, TransactionKind::Buy, "0.5", Some("100"))],
+                CostBasisMethod::Fifo,
+                &[action(2, "increase", kind)],
+            )
+            .expect("소수 주식 증가");
+            assert_eq!(result.quantity().expect("수량"), quantity("1.5"));
+            assert_eq!(result.fractional_entitlements(), []);
+        }
+    }
+    #[test]
+    fn reverse_split_rejects_quantity_underflow_without_erasing_the_lot() {
+        assert_eq!(
+            book(
+                vec![row(
+                    1,
+                    TransactionKind::Buy,
+                    "0.0000000000000000000000000001",
+                    Some("0")
+                )],
+                CostBasisMethod::Fifo,
+                &[action(
+                    2,
+                    "underflow",
+                    CorporateActionKind::ReverseSplit(ratio("0.5"))
+                )]
+            ),
+            Err(LotError::Arithmetic(MoneyError::PrecisionLoss))
         );
     }
 }
