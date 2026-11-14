@@ -260,6 +260,7 @@ fn any_change_in_a_target_crate_mutates_its_whole_scope() {
     assert_eq!(
         application,
         vec![
+            String::from("crates/application/src/error_class.rs"),
             String::from("crates/application/src/order_gate.rs"),
             String::from("crates/application/src/order_gate/**/*.rs"),
         ]
