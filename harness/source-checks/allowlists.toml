@@ -92,3 +92,7 @@ reason = "D-22 정확 수수료 곱을 사용자에게 불리한 통화 최소 �
 [[decimal-arithmetic]]
 path = "crates/domain/src/concentration_arithmetic.rs"
 reason = "D-07 보유 구성비의 봉인된 근사 통계만 checked 연산하고 표시와 경계는 정확 정수 비율로 검증한다"
+
+[[decimal-arithmetic]]
+path = "crates/domain/src/bootstrap.rs"
+reason = "D-29 날짜 묶음 재표본과 독립 정수 유리수 기준값의 성과 비율 검사. 금액으로 반환하지 않는다"

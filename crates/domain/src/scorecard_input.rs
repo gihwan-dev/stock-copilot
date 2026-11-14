@@ -293,6 +293,56 @@ fn calibration_error(_error: CalibrationError) -> ScorecardError {
     ScorecardError::InvalidCalibration
 }
 
+pub(crate) fn scorecard_edge_facts(
+    input: &[ScorecardObservation],
+    key: &CalibrationKey,
+    as_of: Timestamp,
+) -> Result<(Scorecards, Vec<ScorecardObservation>), ScorecardError> {
+    let cards = Scorecards::calculate(input, as_of)?;
+    if cards.select(key).is_none() {
+        return Err(ScorecardError::MismatchedCombination);
+    }
+    input
+        .iter()
+        .filter(|record| &record.key == key)
+        .map(|record| classify(record, as_of))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|facts| {
+            facts
+                .into_iter()
+                .filter_map(|state| match state {
+                    Classified::Judged(fact) => Some(fact),
+                    Classified::BeforeMaturity | Classified::Ongoing | Classified::Unavailable => {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .and_then(|judged| Calibration::try_new(key.clone(), &judged).map_err(calibration_error))
+        .map(|calibration| {
+            let table = calibration.for_combination(key);
+            let selected = table
+                .selected_facts()
+                .iter()
+                .map(|fact| fact.estimate().id())
+                .collect::<std::collections::BTreeSet<_>>();
+            let records = input
+                .iter()
+                .filter(|record| &record.key == key && selected.contains(&record.id))
+                .map(|record| (record.id.clone(), record.clone()))
+                .collect::<BTreeMap<_, _>>()
+                .into_values()
+                .collect();
+            (cards, records)
+        })
+}
+
+pub(crate) fn scorecard_return_identity(
+    record: &ScorecardObservation,
+) -> (&CalibrationEstimateId, &CalibrationKey, &EstimateOutcome) {
+    (&record.id, &record.key, &record.outcome)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     pub(crate) fn counts_from_table(table: &crate::CalibrationTable) -> super::ScorecardCounts {

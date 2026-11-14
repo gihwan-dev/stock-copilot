@@ -392,3 +392,30 @@ pub use buy_plan_price::{
 
 pub use benchmark::BenchmarkWeights;
 pub use performance_risk::PerformanceWeeks;
+
+mod signal_return_contract;
+
+mod bootstrap;
+pub use bootstrap::{BootstrapInterval, BootstrapSeed, EdgeDirection, EdgeInterval};
+
+mod virtual_exit;
+pub use virtual_exit::{VirtualExit, VirtualExitFill, virtual_exit};
+
+mod signal_return;
+pub use signal_return::{ScorecardEdge, SignalReturnCount};
+pub use signal_return::{
+    SignalReturn, SignalReturnCost, SignalReturnError, scorecard_edge, signal_return,
+};
+pub use trade_cost::signal_return_cost;
+
+mod signal_return_scenarios;
+pub use virtual_exit::{MaturityExit, StopExit, TargetExit};
+pub use virtual_exit::{VirtualExitSignal, VirtualExitSignalError};
+
+pub use estimate_outcome::virtual_exit_adjustment;
+
+mod signal_benchmark;
+pub use signal_benchmark::SignalBenchmark;
+pub use signal_return::ScorecardReturnObservation;
+
+mod signal_return_boundaries;

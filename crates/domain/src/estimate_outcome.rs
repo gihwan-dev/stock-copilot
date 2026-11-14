@@ -712,6 +712,100 @@ pub(crate) fn buy_signal_interval_from(
     schedule_at(task, start, calendars).map(|value| value.interval)
 }
 
+pub fn virtual_exit_adjustment(
+    signal: &crate::VirtualExitSignal,
+    basis: AdjustmentBasis,
+    actions: &[OutcomeCorporateAction],
+) -> Result<OutcomeAdjustment, OutcomeUnavailable> {
+    let task = signal.task();
+    let reference_at = signal.entry().observed_at();
+    if *basis.as_timestamp() < reference_at {
+        return Err(OutcomeUnavailable::Adjustment);
+    }
+    if local_market_offset(task, basis.as_timestamp().offset_seconds())
+        != crate::CheckResult::Passed
+    {
+        return Err(OutcomeUnavailable::Adjustment);
+    }
+    let end = basis.as_timestamp().offset_calendar_date();
+    let mut sorted = actions.iter().collect::<Vec<_>>();
+    sorted.sort_by(|left, right| {
+        left.action
+            .date()
+            .cmp(&right.action.date())
+            .then_with(|| left.action.id().cmp(right.action.id()))
+    });
+    let mut seen = std::collections::BTreeSet::new();
+    let mut ratios = Vec::new();
+    for fact in sorted {
+        if fact.instrument != *task.volatility().instrument() {
+            return Err(OutcomeUnavailable::Adjustment);
+        }
+        if fact.action.date() <= reference_at.offset_calendar_date() || fact.action.date() > end {
+            continue;
+        }
+        if !seen.insert(fact.action.id()) {
+            return Err(OutcomeUnavailable::Adjustment);
+        }
+        match fact.action.kind() {
+            crate::CorporateActionKind::Split(ratio)
+            | crate::CorporateActionKind::ReverseSplit(ratio) => ratios.push(*ratio),
+            crate::CorporateActionKind::BonusIssue { .. }
+            | crate::CorporateActionKind::StockDividend { .. }
+            | crate::CorporateActionKind::SymbolChange { .. }
+            | crate::CorporateActionKind::Delisting
+            | crate::CorporateActionKind::Merger
+            | crate::CorporateActionKind::Demerger
+            | crate::CorporateActionKind::Exchange => {
+                return Err(OutcomeUnavailable::Adjustment);
+            }
+        }
+    }
+    Ok(OutcomeAdjustment {
+        instrument: task.volatility().instrument().clone(),
+        reference_at,
+        basis,
+        ratios,
+    })
+}
+pub(crate) fn virtual_exit_inputs<'a>(
+    signal: &crate::VirtualExitSignal,
+    calendars: &[MarketCalendar],
+    adjustment: &OutcomeAdjustment,
+    candles: &'a [Candle],
+) -> Result<
+    (
+        TimeInterval,
+        Vec<crate::virtual_exit::VirtualExitSession>,
+        Vec<&'a Candle>,
+    ),
+    OutcomeUnavailable,
+> {
+    let task = signal.task();
+    let schedule = schedule_at(task, signal.entry().observed_at(), calendars)?;
+    if schedule.interval.end() != signal.maturity() {
+        return Err(OutcomeUnavailable::Calendar);
+    }
+    let bars = validated_candles(task, adjustment, candles, &schedule)?;
+    if bars
+        .iter()
+        .any(|bar| bar.values().volume().as_decimal().is_zero())
+    {
+        return Err(OutcomeUnavailable::MissingCandles);
+    }
+    let sessions = schedule
+        .rows
+        .iter()
+        .filter_map(|row| {
+            regular(row).map(|interval| crate::virtual_exit::VirtualExitSession {
+                date: row.date(),
+                interval,
+            })
+        })
+        .collect();
+    Ok((schedule.interval, sessions, bars))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::candle::tests::{at, price, series};
