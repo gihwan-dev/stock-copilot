@@ -227,4 +227,4 @@ pub use calibration::{
 mod base_probability;
 mod estimate_task;
 pub use base_probability::{BaseProbability, EstimateDistance};
-pub use estimate_task::{EstimateContext, EstimateInstrument, EstimateTask, NoEstimateTask};
+pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask};

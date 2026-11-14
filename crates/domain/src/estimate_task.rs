@@ -1,40 +1,19 @@
 use crate::{
-    BaseProbability, CalendarDate, CheckResult, EstimateDistance, EstimateRangeFacts, Horizon,
-    HorizonSelection, HoursPermission, HoursPermissionState, InstrumentId, PriceObservation,
-    ProposalVolatility, ResolvedOrderInstrument, RiskAppetite, Timestamp, TradingDayHorizon,
-    Volatility,
+    BaseProbability, CheckResult, EstimateDistance, EstimateRangeFacts, Horizon, HorizonSelection,
+    HoursPermission, HoursPermissionState, PriceObservation, ProposalVolatility, RiskAppetite,
+    Timestamp, TradingDayHorizon, Volatility,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EstimateInstrument {
-    id: InstrumentId,
-    order: ResolvedOrderInstrument,
-}
-impl EstimateInstrument {
-    #[must_use]
-    pub fn from_master_lookup(id: InstrumentId, order: ResolvedOrderInstrument) -> Self {
-        Self { id, order }
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateContext {
-    instrument: EstimateInstrument,
     reference: PriceObservation,
-    latest_closed_day: CalendarDate,
     created_at: Timestamp,
 }
 impl EstimateContext {
     #[must_use]
-    pub fn new(
-        instrument: EstimateInstrument,
-        reference: PriceObservation,
-        latest_closed_day: CalendarDate,
-        created_at: Timestamp,
-    ) -> Self {
+    pub fn new(reference: PriceObservation, created_at: Timestamp) -> Self {
         Self {
-            instrument,
             reference,
-            latest_closed_day,
             created_at,
         }
     }
@@ -45,8 +24,10 @@ pub enum NoEstimateTask {
     InsufficientSamples,
     InstrumentMismatch,
     StaleVolatility,
+    FutureVolatility,
     InvalidReference,
     NumericalDomain,
+    CoefficientRegression,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimateTask {
@@ -73,15 +54,15 @@ impl EstimateTask {
         if *volatility.samples().as_usize() < 60 {
             return Err(NoEstimateTask::InsufficientSamples);
         }
-        if volatility.instrument() != &context.instrument.id
-            || context.reference.instrument() != &context.instrument.order
-        {
+        if context.reference.instrument_id() != Some(volatility.instrument()) {
             return Err(NoEstimateTask::InstrumentMismatch);
         }
-        if volatility.as_of() != context.latest_closed_day {
-            return Err(NoEstimateTask::StaleVolatility);
-        }
-        let expected_currency = if context.instrument.order.market() == crate::Market::Kr {
+        let observed_day = context.reference.observed_at().offset_calendar_date();
+        let created_day = context
+            .created_at
+            .date_at_offset(context.reference.observed_at().offset_seconds())
+            .or(Err(NoEstimateTask::InvalidReference))?;
+        let expected_currency = if context.reference.instrument().market() == crate::Market::Kr {
             crate::Currency::Krw
         } else {
             crate::Currency::Usd
@@ -89,16 +70,24 @@ impl EstimateTask {
         if context.reference.price().as_money().currency() != expected_currency
             || context
                 .reference
-                .check(&context.instrument.order, context.created_at)
+                .check(context.reference.instrument(), context.created_at)
                 != CheckResult::Passed
         {
             return Err(NoEstimateTask::InvalidReference);
         }
+        if volatility.as_of() > observed_day || observed_day > created_day {
+            return Err(NoEstimateTask::FutureVolatility);
+        }
+        volatility
+            .as_of()
+            .days_until(created_day)
+            .ok()
+            .filter(|elapsed| (0..=7).contains(elapsed.as_i64()))
+            .ok_or(NoEstimateTask::StaleVolatility)?;
         let trading_horizon = TradingDayHorizon::from_estimate_policy(horizon.selection());
         let days_ratio = trading_horizon.as_ratio();
         let (target, stop, base_probability) =
-            crate::base_probability::distances(appetite, volatility.daily(), days_ratio)
-                .ok_or(NoEstimateTask::NumericalDomain)?;
+            crate::base_probability::distances(appetite, volatility.daily(), days_ratio)?;
         Ok(Self {
             context,
             volatility,
@@ -139,7 +128,7 @@ impl EstimateTask {
     #[must_use]
     pub fn range_facts(&self) -> EstimateRangeFacts {
         EstimateRangeFacts {
-            instrument: self.context.instrument.order.clone(),
+            instrument: self.context.reference.instrument().clone(),
             reference: self.reference().price(),
             volatility: ProposalVolatility::from_daily(self.volatility.daily()),
             horizon: self.horizon,
@@ -149,7 +138,7 @@ impl EstimateTask {
 
 #[cfg(test)]
 mod tests {
-    use super::{EstimateContext, EstimateInstrument, EstimateTask, NoEstimateTask};
+    use super::{EstimateContext, EstimateTask, NoEstimateTask};
     use crate::candle::tests::{at, price, series};
     use crate::{
         CheckResult, Horizon, HorizonSelection, HoursPermission, HoursPermissionState,
@@ -159,6 +148,280 @@ mod tests {
     use crate::{Currency, Market, Ratio, Symbol};
     use proptest::test_runner::{Config, TestRunner};
     use rust_decimal::Decimal;
+    fn local_at(day: i64, market: &Market) -> Timestamp {
+        let offset = if *market == Market::Kr {
+            32_400_i32
+        } else {
+            -18_000_i32
+        };
+        Timestamp::from_parts(
+            at(day).utc_seconds(),
+            at(day).nanosecond(),
+            crate::OffsetSeconds::new(offset),
+        )
+        .expect("현지 시각")
+    }
+    fn dated_context(context: &EstimateContext, day: i64) -> EstimateContext {
+        let at = local_at(day, &context.reference.instrument().market());
+        EstimateContext::new(
+            PriceObservation::from_identified_quote_parts(
+                InstrumentId::try_new("sample").expect("ID"),
+                context.reference.instrument().clone(),
+                context.reference.price(),
+                at,
+            )
+            .expect("현지 관측"),
+            at,
+        )
+    }
+    #[test]
+    fn volatility_dates_reject_3700_day_age_and_future_information() {
+        let (context, volatility) = facts(61);
+        assert_eq!(
+            make(dated_context(&context, 3761), volatility.clone()),
+            Err(NoEstimateTask::StaleVolatility)
+        );
+        assert_eq!(
+            make(dated_context(&context, 60), volatility),
+            Err(NoEstimateTask::FutureVolatility)
+        );
+    }
+    #[test]
+    fn seven_calendar_days_pass_and_eight_days_fail() {
+        let (context, volatility) = facts(61);
+        assert_eq!(
+            make(dated_context(&context, 68), volatility.clone())
+                .expect("7일 허용")
+                .volatility(),
+            &volatility
+        );
+        assert_eq!(
+            make(dated_context(&context, 69), volatility),
+            Err(NoEstimateTask::StaleVolatility)
+        );
+    }
+    #[test]
+    fn quote_identity_must_be_present_in_the_observation_fact() {
+        let (mut context, volatility) = facts(61);
+        context.reference = PriceObservation::from_quote_parts(
+            context.reference.instrument().clone(),
+            context.reference.price(),
+            context.reference.observed_at(),
+        )
+        .expect("기존 D-14 관측");
+        assert_eq!(
+            make(context, volatility),
+            Err(NoEstimateTask::InstrumentMismatch)
+        );
+    }
+    const LOCAL_MIDNIGHT_CASES: [(Market, &str, Currency, i64, u64, i32); 3] = [
+        (
+            Market::Kr,
+            "005930",
+            Currency::Krw,
+            67,
+            54_000_u64,
+            32_400_i32,
+        ),
+        (
+            Market::Us,
+            "ABC",
+            Currency::Usd,
+            68,
+            18_000_u64,
+            -18_000_i32,
+        ),
+        (
+            Market::Us,
+            "ABC",
+            Currency::Usd,
+            68,
+            14_400_u64,
+            -14_400_i32,
+        ),
+    ];
+    #[test]
+    fn market_local_midnight_keeps_seven_day_boundary_for_kr_est_and_edt() {
+        let (context, volatility) = facts(61);
+        for (market, symbol, currency, day, seconds, offset) in LOCAL_MIDNIGHT_CASES {
+            let order = ResolvedOrderInstrument::from_master_lookup_result(
+                Symbol::try_new(symbol).expect("심볼"),
+                market,
+            )
+            .expect("시장");
+            let midnight = at(day)
+                .checked_add(
+                    crate::TimeSpan::try_new(
+                        crate::SpanSeconds::new(seconds),
+                        crate::Nanosecond::new(0),
+                    )
+                    .expect("초"),
+                )
+                .expect("경계");
+            for (instant, expected) in [
+                (
+                    midnight
+                        .checked_sub(crate::TimeSpan::NANOSECOND)
+                        .expect("직전"),
+                    CheckResult::Passed,
+                ),
+                (midnight, CheckResult::Failed),
+            ] {
+                let local = Timestamp::from_parts(
+                    instant.utc_seconds(),
+                    instant.nanosecond(),
+                    crate::OffsetSeconds::new(offset),
+                )
+                .expect("현지 표현");
+                let observation = PriceObservation::from_identified_quote_parts(
+                    volatility.instrument().clone(),
+                    order.clone(),
+                    price("100", currency),
+                    local,
+                )
+                .expect("정규화 관측");
+                let result = make(
+                    EstimateContext::new(observation, instant),
+                    volatility.clone(),
+                );
+                assert_eq!(
+                    result.map_or(CheckResult::Failed, |_task| CheckResult::Passed),
+                    expected
+                );
+            }
+        }
+        assert_eq!(
+            make(context, volatility.clone())
+                .expect("과제")
+                .volatility(),
+            &volatility
+        );
+    }
+    const LOCAL_OFFSET_CASES: [(Market, &str, Currency, i32, CheckResult); 6] = [
+        (
+            Market::Kr,
+            "005930",
+            Currency::Krw,
+            32_400_i32,
+            CheckResult::Passed,
+        ),
+        (
+            Market::Kr,
+            "005930",
+            Currency::Krw,
+            0_i32,
+            CheckResult::Failed,
+        ),
+        (
+            Market::Kr,
+            "005930",
+            Currency::Krw,
+            -18_000_i32,
+            CheckResult::Failed,
+        ),
+        (
+            Market::Us,
+            "ABC",
+            Currency::Usd,
+            -18_000_i32,
+            CheckResult::Passed,
+        ),
+        (
+            Market::Us,
+            "ABC",
+            Currency::Usd,
+            -14_400_i32,
+            CheckResult::Passed,
+        ),
+        (
+            Market::Us,
+            "ABC",
+            Currency::Usd,
+            32_400_i32,
+            CheckResult::Failed,
+        ),
+    ];
+    #[test]
+    fn identified_observation_requires_market_local_offset_and_preserves_identity() {
+        let (context, volatility) = facts(61);
+        for (market, symbol, currency, offset, expected) in LOCAL_OFFSET_CASES {
+            let order = ResolvedOrderInstrument::from_master_lookup_result(
+                Symbol::try_new(symbol).expect("심볼"),
+                market,
+            )
+            .expect("시장");
+            let at = Timestamp::from_parts(
+                context.created_at.utc_seconds(),
+                context.created_at.nanosecond(),
+                crate::OffsetSeconds::new(offset),
+            )
+            .expect("시각");
+            let result = PriceObservation::from_identified_quote_parts(
+                volatility.instrument().clone(),
+                order,
+                price("100", currency),
+                at,
+            );
+            assert_eq!(
+                result.map_or(CheckResult::Failed, |value| {
+                    assert_eq!(value.instrument_id(), Some(volatility.instrument()));
+                    assert_eq!(
+                        value.observed_at().offset_seconds(),
+                        crate::OffsetSeconds::new(offset)
+                    );
+                    CheckResult::Passed
+                }),
+                expected
+            );
+        }
+    }
+    #[test]
+    fn market_local_projection_range_errors_are_invalid_reference() {
+        let (mut context, volatility) = facts(61);
+        let first = time::Date::from_calendar_date(1, time::Month::January, 1)
+            .expect("최초 날짜")
+            .midnight()
+            .assume_utc();
+        context.created_at = Timestamp::from_parts(
+            crate::UnixSeconds::new(first.unix_timestamp()),
+            crate::Nanosecond::new(0),
+            crate::OffsetSeconds::new(0),
+        )
+        .expect("UTC 시각");
+        assert_eq!(
+            make(context, volatility),
+            Err(NoEstimateTask::InvalidReference)
+        );
+    }
+    #[test]
+    fn identified_observation_propagates_time_range_failure() {
+        let (_, volatility) = facts(61);
+        let final_utc = time::Date::from_calendar_date(9999, time::Month::December, 31)
+            .expect("날짜")
+            .with_hms(14, 59, 58)
+            .expect("시각")
+            .assume_utc();
+        let local = Timestamp::from_parts(
+            crate::UnixSeconds::new(final_utc.unix_timestamp()),
+            crate::Nanosecond::new(0),
+            crate::OffsetSeconds::new(32_400_i32),
+        )
+        .expect("범위 끝");
+        let order = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("005930").expect("심볼"),
+            Market::Kr,
+        )
+        .expect("시장");
+        assert_eq!(
+            PriceObservation::from_identified_quote_parts(
+                volatility.instrument().clone(),
+                order,
+                price("100", Currency::Krw),
+                local,
+            ),
+            Err(crate::TimeError::Overflow)
+        );
+    }
     fn facts(count: usize) -> (EstimateContext, Volatility) {
         let texts = (0..count)
             .map(|index| if index % 2 == 0 { "100" } else { "102" })
@@ -169,18 +432,14 @@ mod tests {
             Market::Us,
         )
         .expect("종목");
-        let reference =
-            PriceObservation::from_quote_parts(order.clone(), price("100", Currency::Usd), at(61))
-                .expect("관측");
-        let context = EstimateContext::new(
-            EstimateInstrument::from_master_lookup(
-                InstrumentId::try_new("sample").expect("id"),
-                order,
-            ),
-            reference,
-            volatility.as_of(),
-            at(61),
-        );
+        let reference = PriceObservation::from_identified_quote_parts(
+            volatility.instrument().clone(),
+            order,
+            price("100", Currency::Usd),
+            local_at(61, &Market::Us),
+        )
+        .expect("관측");
+        let context = EstimateContext::new(reference, local_at(61, &Market::Us));
         (context, volatility)
     }
     fn make(
@@ -222,18 +481,16 @@ mod tests {
         );
         let (context, volatility) = facts(61);
         let mut identity = context.clone();
-        identity.instrument.id = InstrumentId::try_new("other").expect("id");
+        identity.reference = PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("other").expect("id"),
+            context.reference.instrument().clone(),
+            context.reference.price(),
+            context.reference.observed_at(),
+        )
+        .expect("다른 종목 사실");
         assert_eq!(
             make(identity, volatility.clone()),
             Err(NoEstimateTask::InstrumentMismatch)
-        );
-        let mut date = context.clone();
-        date.latest_closed_day = at(59)
-            .date_at_offset(crate::OffsetSeconds::new(0))
-            .expect("날짜");
-        assert_eq!(
-            make(date, volatility.clone()),
-            Err(NoEstimateTask::StaleVolatility)
         );
         let mut expired = context.clone();
         expired.created_at = at(62);
@@ -259,7 +516,8 @@ mod tests {
         )
         .expect("종목");
         let mut identity = context.clone();
-        identity.reference = PriceObservation::from_quote_parts(
+        identity.reference = PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("other").expect("식별자"),
             other,
             context.reference.price(),
             context.reference.observed_at(),
@@ -270,8 +528,9 @@ mod tests {
             Err(NoEstimateTask::InstrumentMismatch)
         );
         let mut currency = context.clone();
-        currency.reference = PriceObservation::from_quote_parts(
-            context.instrument.order.clone(),
+        currency.reference = PriceObservation::from_identified_quote_parts(
+            volatility.instrument().clone(),
+            context.reference.instrument().clone(),
             price("100", Currency::Krw),
             context.reference.observed_at(),
         )
@@ -306,11 +565,11 @@ mod tests {
             Market::Kr,
         )
         .expect("종목");
-        context.instrument.order = order.clone();
-        context.reference = PriceObservation::from_quote_parts(
+        context.reference = PriceObservation::from_identified_quote_parts(
+            volatility.instrument().clone(),
             order,
             price("100", Currency::Krw),
-            context.created_at,
+            local_at(61, &Market::Kr),
         )
         .expect("시세");
         assert_eq!(
