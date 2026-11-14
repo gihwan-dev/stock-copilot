@@ -1,4 +1,4 @@
-use crate::{Margin, NoThresholds, ThresholdDisplay};
+use crate::{NoThresholds, ThresholdDisplay, ThresholdKind};
 use rust_decimal::{Decimal, RoundingStrategy};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -7,12 +7,16 @@ impl ThresholdNumber {
     pub(crate) fn new(value: Decimal) -> Self {
         Self(value)
     }
-    pub(crate) fn percent(self) -> Result<ThresholdDisplay, NoThresholds> {
+    pub(crate) fn percent(self, kind: ThresholdKind) -> Result<ThresholdDisplay, NoThresholds> {
         let percent = self
             .as_decimal()
             .checked_mul(Decimal::from(100_i32))
             .ok_or(NoThresholds::NumericalDomain)?;
-        let rounded = percent.round_dp_with_strategy(1, RoundingStrategy::MidpointAwayFromZero);
+        let strategy = match kind {
+            ThresholdKind::Buy | ThresholdKind::Breakeven => RoundingStrategy::ToPositiveInfinity,
+            ThresholdKind::Sell => RoundingStrategy::ToNegativeInfinity,
+        };
+        let rounded = percent.round_dp_with_strategy(1, strategy);
         Ok(ThresholdDisplay::new(format!("≈{rounded:.1}%")))
     }
     pub(crate) fn as_decimal(&self) -> Decimal {
@@ -21,10 +25,7 @@ impl ThresholdNumber {
 }
 impl std::fmt::Debug for ThresholdNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let rounded = self
-            .0
-            .round_dp_with_strategy(4, RoundingStrategy::MidpointAwayFromZero);
-        write!(f, "≈{rounded:.4}")
+        f.write_str("ThresholdNumber(..)")
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,13 +35,11 @@ pub(crate) struct ThresholdValues {
     pub(crate) sell: ThresholdNumber,
 }
 
-pub(crate) fn calculate(
-    base: ThresholdNumber,
+pub(crate) fn cost_delta(
     target: ThresholdNumber,
     stop: ThresholdNumber,
     cost: ThresholdNumber,
-    margin: Margin,
-) -> Result<ThresholdValues, NoThresholds> {
+) -> Result<ThresholdNumber, NoThresholds> {
     let sum = target
         .0
         .checked_add(stop.0)
@@ -56,10 +55,17 @@ pub(crate) fn calculate(
     if scaled_cost > sum {
         return Err(NoThresholds::ExcessiveCost);
     }
-    let values = base.0.checked_add(delta).and_then(|breakeven| {
+    Ok(ThresholdNumber(delta))
+}
+pub(crate) fn calculate_values(
+    base: ThresholdNumber,
+    delta: ThresholdNumber,
+    margins: crate::thresholds::SideMargins,
+) -> Result<ThresholdValues, NoThresholds> {
+    let values = base.0.checked_add(delta.0).and_then(|breakeven| {
         breakeven
-            .checked_add(margin.ratio().as_decimal())
-            .zip(base.0.checked_sub(margin.ratio().as_decimal()))
+            .checked_add(margins.buy.ratio().as_decimal())
+            .zip(base.0.checked_sub(margins.sell.ratio().as_decimal()))
             .map(|(buy, sell)| ThresholdValues {
                 breakeven: ThresholdNumber(breakeven),
                 buy: ThresholdNumber(buy),
@@ -67,4 +73,18 @@ pub(crate) fn calculate(
             })
     });
     values.ok_or(NoThresholds::NumericalDomain)
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) fn document_rounding(value: super::ThresholdNumber) -> crate::ThresholdDisplay {
+        let percent = value
+            .as_decimal()
+            .checked_mul(rust_decimal::Decimal::from(100_i32))
+            .expect("표시 범위");
+        crate::ThresholdDisplay::new(format!(
+            "≈{:.1}%",
+            percent.round_dp_with_strategy(1, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
+        ))
+    }
 }

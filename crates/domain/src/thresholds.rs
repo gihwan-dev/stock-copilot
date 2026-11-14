@@ -13,6 +13,7 @@ pub enum NoThresholds {
     MarketMismatch,
     HorizonMismatch,
     CalibrationMismatch,
+    CostPeriodMismatch,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Margin(Ratio);
@@ -31,15 +32,60 @@ impl Margin {
             RiskAppetite::Aggressive => Decimal::new(10, 2),
         }))
     }
-    #[must_use]
-    pub fn for_calibration(self, calibration: &CalibratedProbability) -> Self {
+    fn for_calibration(self, calibration: &CalibratedProbability) -> SideMargins {
         match calibration {
-            CalibratedProbability::InsufficientSamples(_) => Self(Ratio::new(Decimal::new(15, 2))),
-            CalibratedProbability::EligibleBeforeE91(_) => self,
+            CalibratedProbability::InsufficientSamples(_) => SideMargins {
+                buy: Self(Ratio::new(self.0.as_decimal().max(Decimal::new(15, 2)))),
+                sell: Self(Ratio::new(Decimal::new(15, 2))),
+            },
+            CalibratedProbability::EligibleBeforeE91(_) => SideMargins {
+                buy: self,
+                sell: self,
+            },
         }
     }
     pub(crate) fn ratio(self) -> Ratio {
         self.0
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SideMargins {
+    pub(crate) buy: Margin,
+    pub(crate) sell: Margin,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalCondition {
+    Met,
+    Unmet,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct CostEligibleTask {
+    task: EstimateTask,
+    delta: ThresholdNumber,
+}
+impl CostEligibleTask {
+    pub fn assess(task: EstimateTask, cost: &TradeCost) -> Result<Self, NoThresholds> {
+        if task.reference().instrument().market() != cost.market() {
+            return Err(NoThresholds::MarketMismatch);
+        }
+        if cost.period().task() != &task {
+            return Err(NoThresholds::CostPeriodMismatch);
+        }
+        let delta = crate::thresholds_arithmetic::cost_delta(
+            ThresholdNumber::new(task.target().as_decimal()),
+            ThresholdNumber::new(task.stop().as_decimal()),
+            ThresholdNumber::new(cost.rate().as_decimal()),
+        )?;
+        Ok(Self { task, delta })
+    }
+    #[must_use]
+    pub fn task(&self) -> &EstimateTask {
+        &self.task
+    }
+}
+impl std::fmt::Debug for CostEligibleTask {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CostEligibleTask(..)")
     }
 }
 impl Default for Margin {
@@ -64,10 +110,15 @@ impl ThresholdDisplay {
         &self.0
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Thresholds {
     values: ThresholdValues,
     source: CalibratedProbability,
+}
+impl std::fmt::Debug for Thresholds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Thresholds(..)")
+    }
 }
 fn evidence(calibration: &CalibratedProbability) -> &CalibrationEvidence {
     match calibration {
@@ -77,33 +128,49 @@ fn evidence(calibration: &CalibratedProbability) -> &CalibrationEvidence {
 }
 impl Thresholds {
     pub fn create(
-        task: &EstimateTask,
-        cost: &TradeCost,
+        eligible: &CostEligibleTask,
         calibration: &CalibratedProbability,
         margin: Margin,
     ) -> Result<Self, NoThresholds> {
-        if task.reference().instrument().market() != cost.market() {
-            return Err(NoThresholds::MarketMismatch);
-        }
-        let key = evidence(calibration).key();
+        let task = eligible.task();
         if task.horizon()
-            != crate::TradingDayHorizon::from_estimate_policy(key.horizon().selection())
+            != crate::TradingDayHorizon::from_estimate_policy(
+                evidence(calibration).key().horizon().selection(),
+            )
         {
             return Err(NoThresholds::HorizonMismatch);
         }
-        let values = crate::thresholds_arithmetic::calculate(
+        crate::thresholds_arithmetic::calculate_values(
             ThresholdNumber::new(task.base_probability().as_decimal()),
-            ThresholdNumber::new(task.target().as_decimal()),
-            ThresholdNumber::new(task.stop().as_decimal()),
-            ThresholdNumber::new(cost.rate().as_decimal()),
+            eligible.delta,
             margin.for_calibration(calibration),
-        )?;
-        Ok(Self {
+        )
+        .map(|values| Self {
             values,
             source: calibration.clone(),
         })
     }
-    pub fn compare(
+    pub fn buy_condition(
+        &self,
+        calibration: &CalibratedProbability,
+    ) -> Result<SignalCondition, NoThresholds> {
+        self.compare(calibration, ThresholdKind::Buy)
+            .map(|ordering| match ordering {
+                Ordering::Less => SignalCondition::Unmet,
+                Ordering::Equal | Ordering::Greater => SignalCondition::Met,
+            })
+    }
+    pub fn sell_condition(
+        &self,
+        calibration: &CalibratedProbability,
+    ) -> Result<SignalCondition, NoThresholds> {
+        self.compare(calibration, ThresholdKind::Sell)
+            .map(|ordering| match ordering {
+                Ordering::Greater => SignalCondition::Unmet,
+                Ordering::Equal | Ordering::Less => SignalCondition::Met,
+            })
+    }
+    pub(crate) fn compare(
         &self,
         calibration: &CalibratedProbability,
         kind: ThresholdKind,
@@ -115,7 +182,7 @@ impl Thresholds {
         Ok(ThresholdNumber::new(input.probability().as_decimal()).cmp(&self.value(kind)))
     }
     pub fn display(&self, kind: ThresholdKind) -> Result<ThresholdDisplay, NoThresholds> {
-        self.value(kind).percent()
+        self.value(kind).percent(kind)
     }
     fn value(&self, kind: ThresholdKind) -> ThresholdNumber {
         match kind {
@@ -127,12 +194,33 @@ impl Thresholds {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::thresholds_arithmetic::{ThresholdNumber, calculate};
+pub(crate) mod tests {
+    use crate::thresholds_arithmetic::ThresholdNumber;
     use crate::{Margin, NoThresholds, NumericInput, Ratio};
     use proptest::test_runner::{Config, TestRunner};
     use rust_decimal::Decimal;
 
+    fn calculate(
+        base: ThresholdNumber,
+        target: ThresholdNumber,
+        stop: ThresholdNumber,
+        cost: ThresholdNumber,
+        margin: Margin,
+    ) -> Result<crate::thresholds_arithmetic::ThresholdValues, NoThresholds> {
+        let delta = crate::thresholds_arithmetic::cost_delta(target, stop, cost)?;
+        crate::thresholds_arithmetic::calculate_values(
+            base,
+            delta,
+            super::SideMargins {
+                buy: margin,
+                sell: margin,
+            },
+        )
+    }
+    pub(crate) fn cost_period() -> crate::EstimateCostPeriod {
+        crate::EstimateCostPeriod::from_calendar_result(&task(), crate::candle::tests::at(121))
+            .expect("캘린더 만기")
+    }
     fn number(value: i64, scale: u32) -> ThresholdNumber {
         ThresholdNumber::new(Decimal::new(value, scale))
     }
@@ -142,6 +230,9 @@ mod tests {
     }
 
     fn calibrated(count: usize) -> crate::CalibratedProbability {
+        calibrated_at(count, 50)
+    }
+    fn calibrated_at(count: usize, percent: i64) -> crate::CalibratedProbability {
         use crate::{
             AiProbability, AiProbabilityInput, Calibration, CalibrationEstimate,
             CalibrationEstimateId, CalibrationFact, CalibrationKey, CalibrationModel,
@@ -153,7 +244,8 @@ mod tests {
             Horizon::default(),
         );
         let base =
-            AiProbability::parse(&AiProbabilityInput::try_new("50").expect("입력")).expect("확률");
+            AiProbability::parse(&AiProbabilityInput::try_new(&percent.to_string()).expect("입력"))
+                .expect("확률");
         let facts = (0..count)
             .map(|index| {
                 CalibrationFact::new(
@@ -185,15 +277,15 @@ mod tests {
             .run(&(5_i64..=25), |setting| {
                 let configured = margin(&Decimal::new(setting, 2).to_string());
                 proptest::prop_assert_eq!(
-                    configured.for_calibration(&insufficient),
-                    margin("0.15")
+                    configured.for_calibration(&insufficient).buy,
+                    margin(&Decimal::new(setting.max(15), 2).to_string())
                 );
-                proptest::prop_assert_eq!(configured.for_calibration(&eligible), configured);
+                proptest::prop_assert_eq!(configured.for_calibration(&eligible).buy, configured);
                 Ok(())
             })
             .expect("29/30 경계와 설정 강제");
         assert_eq!(
-            margin("0.25").for_calibration(&calibrated(0)),
+            margin("0.25").for_calibration(&calibrated(0)).sell,
             margin("0.15")
         );
         for value in ["0.049", "0.251"] {
@@ -326,15 +418,17 @@ mod tests {
                 Some((be, buy, sell)) => {
                     let values = result.expect("과제");
                     assert_eq!(
-                        values.breakeven.percent().expect("표시").as_str(),
+                        crate::thresholds_arithmetic::tests::document_rounding(values.breakeven)
+                            .as_str(),
                         format!("≈{be}%")
                     );
                     assert_eq!(
-                        values.buy.percent().expect("표시").as_str(),
+                        crate::thresholds_arithmetic::tests::document_rounding(values.buy).as_str(),
                         format!("≈{buy}%")
                     );
                     assert_eq!(
-                        values.sell.percent().expect("표시").as_str(),
+                        crate::thresholds_arithmetic::tests::document_rounding(values.sell)
+                            .as_str(),
                         format!("≈{sell}%")
                     );
                 }
@@ -342,10 +436,13 @@ mod tests {
         }
     }
 
-    fn task() -> crate::EstimateTask {
+    pub(crate) fn task() -> crate::EstimateTask {
+        task_for(crate::Horizon::default())
+    }
+    pub(crate) fn task_for(horizon: crate::Horizon) -> crate::EstimateTask {
         use crate::{
-            Currency, EstimateContext, EstimateTask, Horizon, HoursPermission, Market,
-            PriceObservation, ResolvedOrderInstrument, RiskAppetite, Symbol, Volatility,
+            Currency, EstimateContext, EstimateTask, HoursPermission, Market, PriceObservation,
+            ResolvedOrderInstrument, RiskAppetite, Symbol, Volatility,
         };
         let texts = (0_i32..61_i32)
             .map(|index| if index % 2_i32 == 0_i32 { "100" } else { "102" })
@@ -374,7 +471,7 @@ mod tests {
         EstimateTask::create(
             EstimateContext::new(reference, at),
             volatility,
-            Horizon::default(),
+            horizon,
             HoursPermission::default(),
             RiskAppetite::Neutral,
         )
@@ -392,12 +489,19 @@ mod tests {
             Some(CommissionRateFact::from_commissions_result(
                 Market::Kr,
                 zero,
+                crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
             )),
             Some(TradeTaxFact::from_schedule_result(Market::Kr, zero, zero)),
+            cost_period(),
         )
         .expect("비용");
         let cal = calibrated(29);
-        let thresholds = Thresholds::create(&task(), &cost, &cal, margin("0.10")).expect("임계값");
+        let thresholds = Thresholds::create(
+            &crate::CostEligibleTask::assess(task(), &cost).expect("비용 적격"),
+            &cal,
+            margin("0.10"),
+        )
+        .expect("임계값");
         for kind in [
             ThresholdKind::Buy,
             ThresholdKind::Sell,
@@ -465,10 +569,10 @@ mod tests {
             Err(NoThresholds::NumericalDomain)
         );
         assert_eq!(
-            ThresholdNumber::new(Decimal::MAX).percent(),
+            ThresholdNumber::new(Decimal::MAX).percent(crate::ThresholdKind::Buy),
             Err(NoThresholds::NumericalDomain)
         );
-        assert_eq!(format!("{:?}", number(12345, 5)), "≈0.1235");
+        assert_eq!(format!("{:?}", number(12345, 5)), "ThresholdNumber(..)");
     }
 
     fn free_cost(market: crate::Market) -> crate::TradeCost {
@@ -477,10 +581,12 @@ mod tests {
             Some(crate::CommissionRateFact::from_commissions_result(
                 market.clone(),
                 zero,
+                crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
             )),
             Some(crate::TradeTaxFact::from_schedule_result(
                 market, zero, zero,
             )),
+            cost_period(),
         )
         .expect("비용 사실")
     }
@@ -492,15 +598,18 @@ mod tests {
             HorizonSelection, Market, ThresholdKind, Thresholds,
         };
         let source = calibrated(30);
-        let thresholds =
-            Thresholds::create(&task(), &free_cost(Market::Kr), &source, margin("0.10"))
-                .expect("임계값");
+        let thresholds = Thresholds::create(
+            &crate::CostEligibleTask::assess(task(), &free_cost(Market::Kr)).expect("비용 적격"),
+            &source,
+            margin("0.10"),
+        )
+        .expect("임계값");
         assert_eq!(
             thresholds.compare(&calibrated(29), ThresholdKind::Buy),
             Err(NoThresholds::CalibrationMismatch)
         );
         assert_eq!(
-            Thresholds::create(&task(), &free_cost(Market::Us), &source, margin("0.10")),
+            crate::CostEligibleTask::assess(task(), &free_cost(Market::Us)),
             Err(NoThresholds::MarketMismatch)
         );
         let key = super::evidence(&source).key().clone();
@@ -512,7 +621,12 @@ mod tests {
             .expect("자료")
             .calibrate(&other_key, probability);
         assert_eq!(
-            Thresholds::create(&task(), &free_cost(Market::Kr), &other, margin("0.10")),
+            Thresholds::create(
+                &crate::CostEligibleTask::assess(task(), &free_cost(Market::Kr))
+                    .expect("비용 적격"),
+                &other,
+                margin("0.10")
+            ),
             Err(NoThresholds::HorizonMismatch)
         );
     }
@@ -524,16 +638,18 @@ mod tests {
             Some(crate::CommissionRateFact::from_commissions_result(
                 crate::Market::Kr,
                 one,
+                crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
             )),
             Some(crate::TradeTaxFact::from_schedule_result(
                 crate::Market::Kr,
                 zero,
                 zero,
             )),
+            cost_period(),
         )
         .expect("비용");
         assert_eq!(
-            crate::Thresholds::create(&task(), &cost, &calibrated(30), margin("0.15")),
+            crate::CostEligibleTask::assess(task(), &cost),
             Err(NoThresholds::ExcessiveCost)
         );
     }
@@ -555,5 +671,149 @@ mod tests {
             ),
             Err(NoThresholds::NumericalDomain)
         );
+    }
+    fn independent_conditions(
+        task: &crate::EstimateTask,
+        setting: i64,
+        count: usize,
+        percent: i64,
+    ) -> (crate::SignalCondition, crate::SignalCondition) {
+        let buy_margin = if count < 30 { setting.max(15) } else { setting };
+        let sell_margin = if count < 30 { 15 } else { setting };
+        let probability = Decimal::new(percent, 2);
+        let base = task.base_probability().as_decimal();
+        let buy = if probability
+            >= base
+                .checked_add(Decimal::new(buy_margin, 2))
+                .expect("독립 기준 합")
+        {
+            crate::SignalCondition::Met
+        } else {
+            crate::SignalCondition::Unmet
+        };
+        let sell = if probability
+            <= (base
+                .checked_sub(Decimal::new(sell_margin, 2))
+                .expect("독립 기준 차"))
+            .max(Decimal::new(5, 2))
+        {
+            crate::SignalCondition::Met
+        } else {
+            crate::SignalCondition::Unmet
+        };
+        (buy, sell)
+    }
+    #[test]
+    fn public_creation_enforces_side_specific_margins_against_independent_reference() {
+        let task = task();
+        let eligible = crate::CostEligibleTask::assess(task.clone(), &free_cost(crate::Market::Kr))
+            .expect("비용 적격");
+        TestRunner::new(Config::with_cases(4096))
+            .run(&(5_i64..=25, 1_i64..=99), |(setting, percent)| {
+                for count in [29_usize, 30_usize] {
+                    let calibrated = calibrated_at(count, percent);
+                    let result = crate::Thresholds::create(
+                        &eligible,
+                        &calibrated,
+                        margin(&Decimal::new(setting, 2).to_string()),
+                    )
+                    .expect("임계값");
+                    let (buy_expected, sell_expected) =
+                        independent_conditions(&task, setting, count, percent);
+                    proptest::prop_assert_eq!(
+                        result.buy_condition(&calibrated).expect("매수 판정"),
+                        buy_expected
+                    );
+                    proptest::prop_assert_eq!(
+                        result.sell_condition(&calibrated).expect("매도 판정"),
+                        sell_expected
+                    );
+                }
+                Ok(())
+            })
+            .expect("실제 생성 경로의 29/30건 여유분");
+    }
+    #[test]
+    fn table_row_kind_routing_and_both_sides_of_each_boundary() {
+        use crate::{SignalCondition, ThresholdKind};
+        for (kind, shown, lower, upper) in [
+            (ThresholdKind::Breakeven, "≈31.3%", 31_i64, 32_i64),
+            (ThresholdKind::Buy, "≈41.3%", 41, 42),
+            (ThresholdKind::Sell, "≈17.5%", 17, 18),
+        ] {
+            for (percent, expected) in [
+                (lower, std::cmp::Ordering::Less),
+                (upper, std::cmp::Ordering::Greater),
+            ] {
+                let source = calibrated_at(30, percent);
+                let thresholds = super::Thresholds {
+                    values: crate::thresholds_arithmetic::ThresholdValues {
+                        breakeven: number(31_252_745_751, 11),
+                        buy: number(41_252_745_751, 11),
+                        sell: number(17_525_965_789, 11),
+                    },
+                    source: source.clone(),
+                };
+                assert_eq!(thresholds.display(kind).expect("표시").as_str(), shown);
+                assert_eq!(thresholds.compare(&source, kind).expect("비교"), expected);
+            }
+        }
+        let source = calibrated_at(30, 40);
+        let thresholds = super::Thresholds {
+            values: crate::thresholds_arithmetic::ThresholdValues {
+                breakeven: number(40, 2),
+                buy: number(40, 2),
+                sell: number(40, 2),
+            },
+            source: source.clone(),
+        };
+        assert_eq!(thresholds.buy_condition(&source), Ok(SignalCondition::Met));
+        assert_eq!(thresholds.sell_condition(&source), Ok(SignalCondition::Met));
+        assert_eq!(format!("{thresholds:?}"), "Thresholds(..)");
+    }
+    #[test]
+    fn eligibility_is_bound_to_the_calendar_task_and_hides_debug_values() {
+        let original = task();
+        let cost = free_cost(crate::Market::Kr);
+        let different = task_for(crate::Horizon::new(crate::HorizonSelection::FewDays));
+        assert_eq!(
+            crate::CostEligibleTask::assess(different, &cost),
+            Err(NoThresholds::CostPeriodMismatch)
+        );
+        let eligible = crate::CostEligibleTask::assess(original, &cost).expect("비용 적격");
+        assert_eq!(format!("{eligible:?}"), "CostEligibleTask(..)");
+        let source = calibrated(30);
+        let thresholds =
+            crate::Thresholds::create(&eligible, &source, margin("0.10")).expect("임계값");
+        assert_eq!(
+            thresholds.buy_condition(&calibrated(29)),
+            Err(NoThresholds::CalibrationMismatch)
+        );
+        assert_eq!(
+            thresholds.sell_condition(&calibrated(29)),
+            Err(NoThresholds::CalibrationMismatch)
+        );
+    }
+    #[test]
+    fn displayed_boundaries_round_toward_the_signal_condition() {
+        let source = calibrated_at(30, 40);
+        let thresholds = super::Thresholds {
+            values: crate::thresholds_arithmetic::ThresholdValues {
+                breakeven: number(3131, 4),
+                buy: number(4131, 4),
+                sell: number(1759, 4),
+            },
+            source,
+        };
+        for (kind, expected) in [
+            (crate::ThresholdKind::Breakeven, "≈31.4%"),
+            (crate::ThresholdKind::Buy, "≈41.4%"),
+            (crate::ThresholdKind::Sell, "≈17.5%"),
+        ] {
+            assert_eq!(
+                thresholds.display(kind).expect("방향 반올림").as_str(),
+                expected
+            );
+        }
     }
 }

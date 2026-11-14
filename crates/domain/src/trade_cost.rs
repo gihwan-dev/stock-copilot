@@ -9,6 +9,8 @@ pub enum TradeCostError {
     CurrencyMismatch,
     NegativeAmount,
     Arithmetic(MoneyError),
+    InvalidPeriod,
+    OrderAmountUnavailable,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CostRate(Ratio);
@@ -28,13 +30,39 @@ impl CostRate {
 pub struct CommissionRateFact {
     market: Market,
     rate: CostRate,
+    validity: crate::CommissionValidity,
 }
 impl CommissionRateFact {
     #[must_use]
-    pub fn from_commissions_result(market: Market, rate: CostRate) -> Self {
-        Self { market, rate }
+    pub fn from_commissions_result(
+        market: Market,
+        rate: CostRate,
+        validity: crate::CommissionValidity,
+    ) -> Self {
+        Self {
+            market,
+            rate,
+            validity,
+        }
     }
     pub fn estimate_order_fee(
+        &self,
+        token: &crate::ExecutionToken,
+    ) -> Result<ConfirmedOrderFee, TradeCostError> {
+        if self.market != token.intent().market() {
+            return Err(TradeCostError::MarketMismatch);
+        }
+        if self.validity.covers(token.checked_at(), token.checked_at())
+            != crate::CheckResult::Passed
+        {
+            return Err(TradeCostError::UnknownComponent);
+        }
+        let amount = crate::order_summary::order_values(token)
+            .map(|(_, _, amount, _)| amount)
+            .map_err(|_error| TradeCostError::OrderAmountUnavailable)?;
+        self.estimate_amount(token.intent().client_order_id().clone(), amount)
+    }
+    pub(crate) fn estimate_amount(
         &self,
         order: ClientOrderId,
         amount: Money,
@@ -75,11 +103,13 @@ impl TradeTaxFact {
 pub struct TradeCost {
     market: Market,
     rate: Ratio,
+    period: crate::EstimateCostPeriod,
 }
 impl TradeCost {
     pub fn from_facts(
         commission_input: Option<CommissionRateFact>,
         tax_input: Option<TradeTaxFact>,
+        period: crate::EstimateCostPeriod,
     ) -> Result<Self, TradeCostError> {
         let commission = commission_input.ok_or(TradeCostError::UnknownComponent)?;
         let tax = tax_input.ok_or(TradeCostError::UnknownComponent)?;
@@ -87,6 +117,13 @@ impl TradeCost {
             || matches_known_market(&commission.market) != crate::CheckResult::Passed
         {
             return Err(TradeCostError::MarketMismatch);
+        }
+        if commission
+            .validity
+            .covers(period.interval().start(), period.interval().end())
+            != crate::CheckResult::Passed
+        {
+            return Err(TradeCostError::UnknownComponent);
         }
         commission
             .rate
@@ -97,12 +134,16 @@ impl TradeCost {
             .map(|rate| Self {
                 market: commission.market,
                 rate,
+                period,
             })
             .map_err(TradeCostError::Arithmetic)
     }
     #[must_use]
     pub fn rate(&self) -> Ratio {
         self.rate
+    }
+    pub(crate) fn period(&self) -> &crate::EstimateCostPeriod {
+        &self.period
     }
     pub(crate) fn market(&self) -> Market {
         self.market.clone()
@@ -129,17 +170,29 @@ mod tests {
     }
     #[test]
     fn complete_costs_and_unknown_components_are_distinct() {
-        let commission = CommissionRateFact::from_commissions_result(Market::Kr, rate("0.00025"));
+        let commission = CommissionRateFact::from_commissions_result(
+            Market::Kr,
+            rate("0.00025"),
+            crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
+        );
         let tax = TradeTaxFact::from_schedule_result(Market::Kr, rate("0"), rate("0.002"));
-        let cost =
-            TradeCost::from_facts(Some(commission.clone()), Some(tax.clone())).expect("왕복 비용");
+        let cost = TradeCost::from_facts(
+            Some(commission.clone()),
+            Some(tax.clone()),
+            crate::thresholds::tests::cost_period(),
+        )
+        .expect("왕복 비용");
         assert_eq!(cost.rate().as_decimal(), Decimal::new(25, 4));
         assert_eq!(
-            TradeCost::from_facts(None, Some(tax)),
+            TradeCost::from_facts(None, Some(tax), crate::thresholds::tests::cost_period()),
             Err(TradeCostError::UnknownComponent)
         );
         assert_eq!(
-            TradeCost::from_facts(Some(commission.clone()), None),
+            TradeCost::from_facts(
+                Some(commission.clone()),
+                None,
+                crate::thresholds::tests::cost_period()
+            ),
             Err(TradeCostError::UnknownComponent)
         );
         assert_eq!(
@@ -149,7 +202,8 @@ mod tests {
                     Market::Us,
                     rate("0"),
                     rate("0.0000206")
-                ))
+                )),
+                crate::thresholds::tests::cost_period()
             ),
             Err(TradeCostError::MarketMismatch)
         );
@@ -168,12 +222,16 @@ mod tests {
             (Currency::Krw, Market::Kr, "10001", "2"),
             (Currency::Usd, Market::Us, "100.01", "0.02"),
         ] {
-            let fact = CommissionRateFact::from_commissions_result(market, rate("0.00015"));
+            let fact = CommissionRateFact::from_commissions_result(
+                market,
+                rate("0.00015"),
+                crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
+            );
             let id = ClientOrderId::try_new("cost-test").expect("키");
             let amount =
                 Money::parse(&NumericInput::try_new(value).expect("입력"), currency).expect("금액");
             let result = fact
-                .estimate_order_fee(id.clone(), amount)
+                .estimate_amount(id.clone(), amount)
                 .expect("예상 수수료");
             assert_eq!(result.0, id);
             assert_eq!(
@@ -186,30 +244,38 @@ mod tests {
 
     #[test]
     fn fee_rejects_negative_wrong_currency_unknown_market_and_inexact_product() {
-        let fact = CommissionRateFact::from_commissions_result(Market::Kr, rate("0.1"));
+        let fact = CommissionRateFact::from_commissions_result(
+            Market::Kr,
+            rate("0.1"),
+            crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
+        );
         let key = ClientOrderId::try_new("fee").expect("키");
         let money = |text, currency| {
             Money::parse(&NumericInput::try_new(text).expect("입력"), currency).expect("금액")
         };
         assert_eq!(
-            fact.estimate_order_fee(key.clone(), money("-1", Currency::Krw)),
+            fact.estimate_amount(key.clone(), money("-1", Currency::Krw)),
             Err(TradeCostError::NegativeAmount)
         );
         assert_eq!(
-            fact.estimate_order_fee(key.clone(), money("1", Currency::Usd)),
+            fact.estimate_amount(key.clone(), money("1", Currency::Usd)),
             Err(TradeCostError::CurrencyMismatch)
         );
         assert_eq!(
-            fact.estimate_order_fee(
+            fact.estimate_amount(
                 key.clone(),
                 money("0.0000000000000000000000000001", Currency::Krw)
             ),
             Err(TradeCostError::Arithmetic(crate::MoneyError::PrecisionLoss))
         );
         let unknown = Market::new(crate::MarketCode::try_new("OTHER").expect("시장"));
-        let unknown_fact = CommissionRateFact::from_commissions_result(unknown.clone(), rate("0"));
+        let unknown_fact = CommissionRateFact::from_commissions_result(
+            unknown.clone(),
+            rate("0"),
+            crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
+        );
         assert_eq!(
-            unknown_fact.estimate_order_fee(key, money("1", Currency::Krw)),
+            unknown_fact.estimate_amount(key, money("1", Currency::Krw)),
             Err(TradeCostError::MarketMismatch)
         );
         assert_eq!(
@@ -219,7 +285,8 @@ mod tests {
                     unknown,
                     rate("0"),
                     rate("0")
-                ))
+                )),
+                crate::thresholds::tests::cost_period()
             ),
             Err(TradeCostError::MarketMismatch)
         );
@@ -227,7 +294,11 @@ mod tests {
 
     #[test]
     fn both_tax_legs_and_zero_commission_are_preserved() {
-        let fact = CommissionRateFact::from_commissions_result(Market::Us, rate("0"));
+        let fact = CommissionRateFact::from_commissions_result(
+            Market::Us,
+            rate("0"),
+            crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
+        );
         let cost = TradeCost::from_facts(
             Some(fact.clone()),
             Some(TradeTaxFact::from_schedule_result(
@@ -235,11 +306,12 @@ mod tests {
                 rate("0.001"),
                 rate("0.002"),
             )),
+            crate::thresholds::tests::cost_period(),
         )
         .expect("각 방향 비용");
         assert_eq!(cost.rate(), rate("0.003").ratio());
         let fee = fact
-            .estimate_order_fee(
+            .estimate_amount(
                 ClientOrderId::try_new("zero").expect("키"),
                 Money::parse(&NumericInput::try_new("100").expect("입력"), Currency::Usd)
                     .expect("금액"),
@@ -265,12 +337,10 @@ mod tests {
                             market,
                             CostRate::try_new(Ratio::new(Decimal::new(numerator, 5)))
                                 .expect("요율"),
+                            crate::CommissionValidity::try_new(None, None).expect("적용 기간"),
                         );
                         let fee = fact
-                            .estimate_order_fee(
-                                ClientOrderId::try_new("oracle").expect("키"),
-                                amount,
-                            )
+                            .estimate_amount(ClientOrderId::try_new("oracle").expect("키"), amount)
                             .expect("수수료");
                         let expected = Decimal::new(
                             (units * numerator + 99_999)

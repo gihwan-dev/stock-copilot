@@ -235,3 +235,7 @@ mod trade_cost;
 mod trade_cost_arithmetic;
 pub use thresholds::{Margin, NoThresholds, ThresholdDisplay, ThresholdKind, Thresholds};
 pub use trade_cost::{CommissionRateFact, CostRate, TradeCost, TradeCostError, TradeTaxFact};
+
+mod trade_cost_period;
+pub use thresholds::{CostEligibleTask, SignalCondition};
+pub use trade_cost_period::{CommissionValidity, EstimateCostPeriod};
