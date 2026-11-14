@@ -171,3 +171,10 @@ pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsE
 
 pub use exclusions::ExclusionDecision;
 pub use weight_caps::WeightCapChange;
+
+mod calibration;
+pub use calibration::{
+    CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
+    CalibrationError, CalibrationFact, CalibrationKey, CalibrationModel, CalibrationOutcome,
+    CalibrationReadiness, CalibrationStatus, CalibrationTable, ModelIdentityPart,
+};
