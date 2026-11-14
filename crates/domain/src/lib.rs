@@ -307,6 +307,23 @@ pub use valuation_snapshot_calendar::{
 };
 pub use valuation_snapshot_cash::{SnapshotCashBasis, SnapshotLedgers};
 
+mod scorecard;
+mod scorecard_arithmetic;
+pub use scorecard::{
+    Scorecard, ScorecardBin, ScorecardComparisonCount, ScorecardDisplay, ScorecardError,
+    ScorecardMetrics, ScorecardPending, ScorecardPoint,
+};
+
+mod scorecard_input;
+
+mod scorecard_deferred;
+pub use scorecard_deferred::{
+    ScorecardDeferredBin, ScorecardDeferredBrier, ScorecardDeferredCount, ScorecardDeferredDisplay,
+    ScorecardDeferredNumber, ScorecardDeferredPoint,
+};
+pub use scorecard_input::{
+    ScorecardCount, ScorecardCounts, ScorecardObservation, ScorecardPromptId, Scorecards,
+};
 mod signal_submission;
 pub use signal_submission::{
     SignalSubmission, SignalSubmissionError, SignalTaskKey, SubmittedCalibration,
@@ -325,3 +342,9 @@ pub use buy_quantity::{
 };
 pub use buy_signal_history::BuySignalRecord;
 pub use concentration_policy::concentration_for_policy;
+mod buy_minimum_unit;
+mod buy_plan_price;
+pub use buy_minimum_unit::MinimumBuyUnit;
+pub use buy_plan_price::{
+    BuyPlanOrderPrice, BuyPlanOrderPriceKind, PriceBoundBuyPlan, check_buy_plan_order_price,
+};

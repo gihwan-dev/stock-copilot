@@ -23,7 +23,7 @@ impl BuySignalRecord {
         crate::SignalTiming::new(raised_at, calendars)
             .check(task, signal.facts().submission().submitted_at())
             .or(Err(NoBuyQuantity::Indeterminate))?;
-        crate::estimate_outcome::signal_task_interval(task, calendars)
+        crate::estimate_outcome::buy_signal_interval_from(task, raised_at, calendars)
             .or(Err(NoBuyQuantity::Indeterminate))
             .map(|interval| Self {
                 instrument: task.reference().instrument().clone(),
