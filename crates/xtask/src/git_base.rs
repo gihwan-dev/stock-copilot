@@ -75,7 +75,33 @@ pub(crate) fn is_commit_id(text: &str) -> bool {
             .all(|next| next.is_ascii_digit() || ('a'..='f').contains(&next))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BaseUse {
+    Ancestor,
+    Commit,
+}
+
+impl BaseUse {
+    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "ancestor" => Ok(Self::Ancestor),
+            "commit" => Ok(Self::Commit),
+            _ => Err(format!(
+                "기준 종류는 ancestor 또는 commit이어야 한다: {value}"
+            )),
+        }
+    }
+}
+
 pub(crate) fn resolve_base(root: &Path, base: &str) -> Result<String, String> {
+    resolve_base_for(root, base, BaseUse::Ancestor)
+}
+
+pub(crate) fn resolve_base_for(
+    root: &Path,
+    base: &str,
+    base_use: BaseUse,
+) -> Result<String, String> {
     if base != HEAD && !is_commit_id(base) {
         return Err(format!(
             "기준 커밋은 HEAD 또는 40자리 커밋 ID여야 한다(브랜치·태그 이름은 받지 않는다): {base}"
@@ -99,17 +125,12 @@ pub(crate) fn resolve_base(root: &Path, base: &str) -> Result<String, String> {
     if status.success() {
         Ok(resolved)
     } else {
-        match crate::git_hooks::commit_base::merge_base_kind(root)? {
-            crate::git_hooks::commit_base::MergeBase::IncomingDefault(incoming)
-                if incoming == resolved =>
-            {
-                Ok(resolved)
-            }
-            crate::git_hooks::commit_base::MergeBase::ForkPoint
-            | crate::git_hooks::commit_base::MergeBase::IncomingDefault(_) => {
-                Err(format!("기준 커밋 {resolved}이 HEAD의 조상이 아니다"))
-            }
+        if base_use == BaseUse::Commit
+            && crate::git_hooks::commit_base::commit_base(root)? == resolved
+        {
+            return Ok(resolved);
         }
+        Err(format!("기준 커밋 {resolved}이 HEAD의 조상이 아니다"))
     }
 }
 

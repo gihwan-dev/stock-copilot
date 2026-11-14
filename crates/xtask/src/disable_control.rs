@@ -490,7 +490,15 @@ pub(crate) fn unmatched(current: Vec<(Row, String)>, previous: Vec<(Row, String)
 }
 
 pub(crate) fn new_rows(root: &Path, base: &str) -> Result<(String, Vec<Row>), SourceFailure> {
-    let resolved = git_base::resolve_base(root, base).map_err(SourceFailure)?;
+    new_rows_for(root, base, git_base::BaseUse::Ancestor)
+}
+
+pub(crate) fn new_rows_for(
+    root: &Path,
+    base: &str,
+    base_use: git_base::BaseUse,
+) -> Result<(String, Vec<Row>), SourceFailure> {
+    let resolved = git_base::resolve_base_for(root, base, base_use).map_err(SourceFailure)?;
     let changed = git_base::changed_paths(root, &resolved).map_err(SourceFailure)?;
     let paths: BTreeSet<String> = all_rows(root)?
         .into_iter()
@@ -526,7 +534,7 @@ pub(crate) fn render_new(base: &str, found: &[Row]) -> String {
     lines.join("\n")
 }
 
-fn report_text(arguments: &[String]) -> Result<String, SourceFailure> {
+fn report_text(arguments: &[String], base_use: git_base::BaseUse) -> Result<String, SourceFailure> {
     let root = repository_root()?;
     match arguments {
         [] => {
@@ -538,7 +546,10 @@ fn report_text(arguments: &[String]) -> Result<String, SourceFailure> {
             ))
         }
         [flag, base] if flag == "--since" => {
-            let (resolved, found) = new_rows(&root, base)?;
+            let (resolved, found) = match base_use {
+                git_base::BaseUse::Ancestor => new_rows(&root, base)?,
+                git_base::BaseUse::Commit => new_rows_for(&root, base, base_use)?,
+            };
             Ok(render_new(&resolved, &found))
         }
         _ => Err(SourceFailure(String::from(
@@ -547,8 +558,8 @@ fn report_text(arguments: &[String]) -> Result<String, SourceFailure> {
     }
 }
 
-pub(crate) fn report_command(arguments: &[String]) -> ExitCode {
-    let written = match report_text(arguments) {
+pub(crate) fn report_command(arguments: &[String], base_use: git_base::BaseUse) -> ExitCode {
+    let written = match report_text(arguments, base_use) {
         Ok(text) => writeln!(io::stdout().lock(), "{text}").map(|()| ExitCode::SUCCESS),
         Err(failure) => {
             writeln!(io::stderr().lock(), "disable-report: {failure}").map(|()| ExitCode::FAILURE)

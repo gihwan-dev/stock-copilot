@@ -8,8 +8,8 @@ reason = "조립 지점. 실제 어댑터를 만들 때 시계와 환경 값을 
 
 [[clock-environment]]
 path = "crates/xtask/src/main.rs"
-names = ["test-awareness:env::args"]
-reason = "xtask 자신의 조립 지점. 하네스 명령 이름을 명령줄 인자로 받는다. 시각과 다른 환경 값 읽기는 이 파일에서도 실패한다"
+names = ["test-awareness:env::args", "clock-env:var:STOCK_COPILOT_BASE_USE"]
+reason = "xtask 자신의 조립 지점. 하네스 명령 인자와 커밋 검사 기준 종류를 조립한다. 기준 종류는 닫힌 열거형으로 해석하며 푸시 기준에는 사용하지 않는다"
 
 [[clock-environment]]
 path = "crates/xtask/src/private_temp.rs"
