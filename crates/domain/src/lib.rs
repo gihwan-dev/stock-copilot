@@ -136,3 +136,22 @@ pub use proposal::ExecutionToken;
 pub use proposal_facts::{
     EstimateRangeFacts, PriceObservation, ProposalLifetime, ProposalLifetimeError,
 };
+
+mod holding;
+mod holding_valuation;
+mod portfolio;
+mod portfolio_valuation;
+pub use holding::{AcquisitionPrice, Holding, HoldingError, HoldingObservation, ReportedHolding};
+pub use holding_valuation::{
+    Comparison, ComputedHolding, EvaluationError, HoldingReturn, HoldingValuation, ValuationSource,
+};
+pub use portfolio::{BuyingPower, Portfolio, PortfolioError};
+pub use portfolio_valuation::{
+    AssetEstimate, CompleteTotal, IncompleteTotal, PortfolioValuation, Total, TotalCompleteness,
+    ValuedHolding,
+};
+
+pub use holding::{DailyProfitLoss, ReturnBasis};
+pub use holding_valuation::{HoldingComparisons, ReturnObservation, SelectedValue};
+pub use portfolio::{CurrencyAmounts, PortfolioDailyProfitLoss, ReportedPortfolio};
+pub use portfolio_valuation::{CurrencyEvaluation, HoldingCount, MetricTotal};
