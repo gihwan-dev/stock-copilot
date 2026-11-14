@@ -4,18 +4,13 @@ use crate::{Amount, Money, MoneyError, Price};
 pub struct TickSize(Price);
 impl TickSize {
     #[must_use]
-    pub const fn from_response(price: Price) -> Self {
+    pub(crate) const fn from_response(price: Price) -> Self {
         Self(price)
     }
     #[must_use]
     pub const fn price(&self) -> Price {
         self.0
     }
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TickSizeAvailability {
-    Unavailable,
-    Reported(TickSize),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TickAlignment {
@@ -30,10 +25,14 @@ pub enum TickRounding {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TickSizeError {
     CurrencyMismatch,
+    DifferentInstrument,
+    Unavailable,
+    BelowFirstTick,
+    NumericValue(crate::NumericError),
     Arithmetic(MoneyError),
 }
 
-pub fn tick_alignment(price: Price, tick: TickSize) -> Result<TickAlignment, TickSizeError> {
+pub(crate) fn align_fixed(price: Price, tick: TickSize) -> Result<TickAlignment, TickSizeError> {
     let remainder = tick_remainder(price, tick)?;
     Ok(if remainder.as_decimal().is_zero() {
         TickAlignment::OnTick
@@ -41,7 +40,7 @@ pub fn tick_alignment(price: Price, tick: TickSize) -> Result<TickAlignment, Tic
         TickAlignment::OffTick
     })
 }
-pub fn round_to_tick(
+pub(crate) fn round_fixed(
     price: Price,
     tick: TickSize,
     direction: TickRounding,
@@ -100,10 +99,11 @@ fn tick_remainder(price: Price, tick: TickSize) -> Result<Amount, TickSizeError>
 
 #[cfg(test)]
 mod tests {
+    use super::{align_fixed, round_fixed};
     use crate::orderbook::tests::price;
     use crate::{
         Amount, Currency, Money, MoneyError, NumericInput, Price, TickAlignment, TickRounding,
-        TickSize, TickSizeError, round_to_tick, tick_alignment,
+        TickSize, TickSizeError,
     };
     use proptest::test_runner::{Config, TestRunner};
     #[test]
@@ -115,34 +115,34 @@ mod tests {
             ("1.25", "1.25", "1.25", TickAlignment::OnTick),
         ] {
             let candidate = price(input, Currency::Usd);
-            assert_eq!(tick_alignment(candidate, tick), Ok(alignment));
+            assert_eq!(align_fixed(candidate, tick), Ok(alignment));
             assert_eq!(
-                round_to_tick(candidate, tick, TickRounding::Down),
+                round_fixed(candidate, tick, TickRounding::Down),
                 Ok(price(down, Currency::Usd).as_money())
             );
             assert_eq!(
-                round_to_tick(candidate, tick, TickRounding::Up),
+                round_fixed(candidate, tick, TickRounding::Up),
                 Ok(price(up, Currency::Usd).as_money())
             );
         }
         let below = price("0.01", Currency::Usd);
         assert_eq!(
-            round_to_tick(below, tick, TickRounding::Down),
+            round_fixed(below, tick, TickRounding::Down),
             Ok(
                 Money::parse(&NumericInput::try_new("0").expect("입력"), Currency::Usd)
                     .expect("영")
             )
         );
         assert_eq!(
-            round_to_tick(below, tick, TickRounding::Up),
+            round_fixed(below, tick, TickRounding::Up),
             Ok(tick.price().as_money())
         );
         assert_eq!(
-            tick_alignment(price("1", Currency::Krw), tick),
+            align_fixed(price("1", Currency::Krw), tick),
             Err(TickSizeError::CurrencyMismatch)
         );
         assert_eq!(
-            round_to_tick(price("1", Currency::Krw), tick, TickRounding::Down),
+            round_fixed(price("1", Currency::Krw), tick, TickRounding::Down),
             Err(TickSizeError::CurrencyMismatch)
         );
     }
@@ -150,25 +150,22 @@ mod tests {
     fn extreme_scales_and_overflow_never_silently_round() {
         let tiny = TickSize::from_response(price("0.0000000000000000000000000001", Currency::Usd));
         let maximum = price("79228162514264337593543950335", Currency::Usd);
-        assert_eq!(tick_alignment(maximum, tiny), Ok(TickAlignment::OnTick));
+        assert_eq!(align_fixed(maximum, tiny), Ok(TickAlignment::OnTick));
         let huge = TickSize::from_response(maximum);
+        assert_eq!(align_fixed(tiny.price(), huge), Ok(TickAlignment::OffTick));
         assert_eq!(
-            tick_alignment(tiny.price(), huge),
-            Ok(TickAlignment::OffTick)
-        );
-        assert_eq!(
-            round_to_tick(tiny.price(), huge, TickRounding::Up),
+            round_fixed(tiny.price(), huge, TickRounding::Up),
             Ok(maximum.as_money())
         );
         let two = TickSize::from_response(price("2", Currency::Usd));
         assert_eq!(
-            round_to_tick(maximum, two, TickRounding::Up),
+            round_fixed(maximum, two, TickRounding::Up),
             Err(TickSizeError::Arithmetic(MoneyError::Overflow))
         );
         let awkward =
             TickSize::from_response(price("0.0000000000000000000000000002", Currency::Usd));
         assert_eq!(
-            round_to_tick(maximum, awkward, TickRounding::Down),
+            round_fixed(maximum, awkward, TickRounding::Down),
             Ok(maximum.as_money())
         );
     }
@@ -178,7 +175,7 @@ mod tests {
         let tick = TickSize::from_response(price("0.0000000000000000000000000011", Currency::Usd));
         for direction in [TickRounding::Down, TickRounding::Up] {
             assert_eq!(
-                round_to_tick(candidate, tick, direction),
+                round_fixed(candidate, tick, direction),
                 Err(TickSizeError::Arithmetic(MoneyError::PrecisionLoss))
             );
         }
@@ -218,7 +215,7 @@ mod tests {
                         .expect("단위"),
                     );
                     proptest::prop_assert_eq!(
-                        tick_alignment(candidate, tick),
+                        align_fixed(candidate, tick),
                         Ok(if residue == 0 {
                             TickAlignment::OnTick
                         } else {
@@ -228,7 +225,7 @@ mod tests {
                     for (direction, expected) in
                         [(TickRounding::Down, lower), (TickRounding::Up, upper)]
                     {
-                        let result = round_to_tick(candidate, tick, direction).expect("정확 격자");
+                        let result = round_fixed(candidate, tick, direction).expect("정확 격자");
                         proptest::prop_assert_eq!(
                             result.amount().as_decimal(),
                             rust_decimal::Decimal::from_i128_with_scale(
@@ -280,7 +277,7 @@ mod tests {
                     for (direction, expected) in
                         [(TickRounding::Down, down), (TickRounding::Up, up)]
                     {
-                        let result = round_to_tick(candidate, tick, direction).expect("격자 가격");
+                        let result = round_fixed(candidate, tick, direction).expect("격자 가격");
                         proptest::prop_assert_eq!(
                             result.amount().as_decimal(),
                             rust_decimal::Decimal::from_i128_with_scale(

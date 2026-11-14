@@ -24,6 +24,7 @@ pub enum PriceLimitCheck {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PriceLimitsError {
     CurrencyMismatch,
+    DifferentInstrument,
     MissingLimits,
     UnexpectedLimits,
     ReversedLimits,
@@ -91,7 +92,14 @@ impl PriceLimits {
             clock_alignment,
         })
     }
-    pub fn check(&self, price: Price) -> Result<PriceLimitCheck, PriceLimitsError> {
+    pub fn check(
+        &self,
+        instrument: &QuoteInstrument,
+        price: Price,
+    ) -> Result<PriceLimitCheck, PriceLimitsError> {
+        if instrument != &self.instrument {
+            return Err(PriceLimitsError::DifferentInstrument);
+        }
         if price.as_money().currency() != self.instrument.currency() {
             return Err(PriceLimitsError::CurrencyMismatch);
         }
@@ -163,10 +171,13 @@ mod tests {
             ("130", PriceLimitCheck::Within),
             ("131", PriceLimitCheck::AboveUpper),
         ] {
-            assert_eq!(value.check(price(candidate, Currency::Krw)), Ok(expected));
+            assert_eq!(
+                value.check(value.instrument(), price(candidate, Currency::Krw)),
+                Ok(expected)
+            );
         }
         assert_eq!(
-            value.check(price("80", Currency::Usd)),
+            value.check(value.instrument(), price("80", Currency::Usd)),
             Err(PriceLimitsError::CurrencyMismatch)
         );
     }
@@ -212,7 +223,10 @@ mod tests {
             collected_at: at(0),
         })
         .expect("같은 경계");
-        assert_eq!(same.check(candidate), Ok(PriceLimitCheck::Within));
+        assert_eq!(
+            same.check(same.instrument(), candidate),
+            Ok(PriceLimitCheck::Within)
+        );
     }
     #[test]
     fn inconsistent_currencies_us_shapes_and_future_time_are_rejected() {
@@ -271,7 +285,10 @@ mod tests {
         })
         .expect("제한 없음");
         assert_eq!(unlimited.range(), PriceLimitRange::Unlimited);
-        assert_eq!(unlimited.check(usd), Ok(PriceLimitCheck::Unlimited));
+        assert_eq!(
+            unlimited.check(unlimited.instrument(), usd),
+            Ok(PriceLimitCheck::Unlimited)
+        );
         assert_eq!(
             unlimited.clock_alignment(),
             ClockAlignment::AheadWithinTolerance
@@ -286,6 +303,68 @@ mod tests {
                 collected_at: at(0)
             }),
             Err(PriceLimitsError::FutureTimestamp)
+        );
+    }
+
+    #[test]
+    fn limits_reject_another_instrument_even_in_the_same_currency() {
+        let query = instrument(KnownMarket::Kr);
+        let candidate = price("100", Currency::Krw);
+        let value = PriceLimits::try_new(PriceLimitsInput {
+            instrument: query.clone(),
+            currency: Currency::Krw,
+            lower: Some(price("50", Currency::Krw)),
+            upper: Some(price("130", Currency::Krw)),
+            timestamp: at(0),
+            collected_at: at(0),
+        })
+        .expect("제한");
+        let foreign = crate::orderbook::tests::master(KnownMarket::Kr, "STOCK", "other")
+            .quote_instrument()
+            .expect("다른 종목");
+        assert_eq!(
+            value.check(&foreign, candidate),
+            Err(PriceLimitsError::DifferentInstrument)
+        );
+        assert_eq!(value.check(&query, candidate), Ok(PriceLimitCheck::Within));
+    }
+    #[test]
+    fn korean_instrument_with_usd_response_and_both_usd_bounds_is_rejected() {
+        let usd = price("1", Currency::Usd);
+        assert_eq!(
+            PriceLimits::try_new(PriceLimitsInput {
+                instrument: instrument(KnownMarket::Kr),
+                currency: Currency::Usd,
+                lower: Some(usd),
+                upper: Some(usd),
+                timestamp: at(0),
+                collected_at: at(0),
+            }),
+            Err(PriceLimitsError::CurrencyMismatch)
+        );
+    }
+    #[test]
+    fn unlimited_limits_also_require_the_same_us_instrument() {
+        let query = instrument(KnownMarket::Us);
+        let value = PriceLimits::try_new(PriceLimitsInput {
+            instrument: query.clone(),
+            currency: Currency::Usd,
+            lower: None,
+            upper: None,
+            timestamp: at(0),
+            collected_at: at(0),
+        })
+        .expect("제한 없음");
+        let foreign = crate::orderbook::tests::master(KnownMarket::Us, "STOCK", "other")
+            .quote_instrument()
+            .expect("다른 종목");
+        assert_eq!(
+            value.check(&foreign, price("1", Currency::Usd)),
+            Err(PriceLimitsError::DifferentInstrument)
+        );
+        assert_eq!(
+            value.check(&query, price("1", Currency::Usd)),
+            Ok(PriceLimitCheck::Unlimited)
         );
     }
 }

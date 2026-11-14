@@ -393,13 +393,16 @@ pub use buy_plan_price::{
 pub use benchmark::BenchmarkWeights;
 pub use performance_risk::PerformanceWeeks;
 mod orderbook;
-pub use orderbook::{BestQuote, Orderbook, OrderbookError, OrderbookInput, OrderbookLevel};
-mod tick_size;
-pub use tick_size::{
-    TickAlignment, TickRounding, TickSize, TickSizeAvailability, TickSizeError, round_to_tick,
-    tick_alignment,
+pub use orderbook::{
+    BestQuote, Orderbook, OrderbookError, OrderbookInput, OrderbookInputOrder, OrderbookLevel,
+    OrderbookLevelInput, OrderbookTimeAlignment,
 };
+mod tick_size;
+pub use tick_size::{TickAlignment, TickRounding, TickSize, TickSizeError};
 mod price_limits;
 pub use price_limits::{
     PriceLimitCheck, PriceLimitRange, PriceLimits, PriceLimitsError, PriceLimitsInput,
 };
+
+mod tick_size_table;
+pub use tick_size_table::{TickTable, TickTableSource, round_to_tick, tick_alignment};
