@@ -22,6 +22,7 @@
         "./apps/desktop/eslint.scripts.config.mjs",
         "./apps/desktop/index.html",
         "./apps/desktop/knip.json",
+        "./apps/desktop/public",
         "./apps/desktop/src/shared/ds/index.ts",
         "./apps/desktop/src/shared/ds/theme.css",
         "./apps/desktop/src/shared/ds/tokens.css",

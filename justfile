@@ -56,6 +56,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     node harness/generated-files/check.mjs
+    cargo run --locked --quiet --package xtask -- gen-schema --check
     "{{just_executable()}}" raw-types
     "{{just_executable()}}" disable-check
     cargo nextest run --workspace --locked

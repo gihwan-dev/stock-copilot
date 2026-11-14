@@ -42,7 +42,7 @@ format 계열의 암시적 `{NAME}` 캡처도 문자열의 중괄호 안에서 �
 
 기존 H-42 회귀 (a)(b)는 변경 없이 유지한다. 새 weakened_macro_only_tests_keep_the_referenced_module은 assert_eq!, proptest!, matches! 안에만 있는 다른 모듈 참조를 지운 변경에서 기준 판의 간선이 남는지 검사한다.
 
-actual_portfolio_boundary_deletion_reaches_exact_arithmetic_through_graph는 실제 domain 소스를 읽고 portfolio_valuation.rs의 1.01/0.99/-1.01/-0.01 경계 행 네 개를 사본에서 삭제한다. 기준·삭제 후 양쪽 Graph::read가 성공해야 하며, fallback 없이 outward 결과에 exact_arithmetic.rs가 있어야 한다. 실제 작업 파일과 기존 테스트는 고치지 않는다.
+초기 H-43 커밋 77e22a0의 실제 domain 소스에서 portfolio_valuation.rs의 1.01/0.99/-1.01/-0.01 경계 행 네 개를 삭제한 사본을 측정했을 때, 기준·삭제 후 양쪽 Graph::read와 fallback 없는 outward 폐쇄가 성공했고 exact_arithmetic.rs가 포함됐다. 이는 해당 판의 측정 기록이다. 최신 domain 구조가 항상 같다는 테스트 전제로 사용하지 않는다. 회귀는 아래 병합 후 검증의 고정 소스로 옮겼다.
 
 ## 범위 실측(추가 전용 규칙 도입 전)
 
@@ -121,7 +121,7 @@ syn으로 기준·현재 판을 파싱하고 파싱한 항목 자체를 토큰 �
 
 기존 타입의 inherent 메서드·연관 상수·trait impl, 기존 함수 본문 한 글자 변경, 기존 테스트 삭제/변경, 기존 항목/파일 속성 변경, glob use, 다른 모듈에 이미 있는 이름, 공개 이름 재수출 충돌, 새 macro_rules와 매크로 호출 항목, 기존 impl 내부 메서드 추가, 테스트를 cfg(test) 밖으로 이동, 기존 타입을 가리키는 새 type alias impl, trait 재수출 별칭, 새 항목에서 사용하지 않는 import를 거부 예로 고정한다. 이름 충돌 없는 함수·상수·타입·새 타입 impl, 기존 테스트 모듈 내부의 새 테스트, 안전한 내부 데이터 import와 별칭, 새 파일+등록, 혼합 합집합은 통과 예로 고정한다.
 
-H-42의 weakened_portfolio_boundary_selects_exact_arithmetic, removed_holding_reference_keeps_baseline_exact_arithmetic와 H-43의 실제 domain 경계 삭제 회귀는 그대로 유지한다. 추가 전용 분기로 들어가지 않고 기준·현재 그래프에서 exact_arithmetic에 닿아야 한다. master의 기존 테스트는 수정하지 않는다.
+H-42의 weakened_portfolio_boundary_selects_exact_arithmetic, removed_holding_reference_keeps_baseline_exact_arithmetic는 그대로 유지한다. H-43의 portfolio_boundary_deletion_reaches_exact_arithmetic_through_graph와 removed_compare_call_keeps_baseline_dependency_through_graph는 고정 소스로 같은 경로를 검증한다. 추가 전용 분기로 들어가지 않고 기준·현재 그래프에서 exact_arithmetic에 닿아야 한다.
 
 ### 가림 공격 실험
 
@@ -284,3 +284,23 @@ weak_test_example_leaves_surviving_mutants는 수정 전 전체 검사에서 16.
 최종 코드에서 손 변형 42개 모두 컴파일 후 테스트 실패(종료 100)로 검출했다. 리뷰에서 살아남은 내부 import, Data만 허용, cfg 경로/payload, 헤더, 속성 개수 조건을 포함한다. AST 동일성, 공개 use 제거, raw 이름 정의/참조/파일 경로, 전체 prelude/표준 루트, 외부 crate·별칭·원래 이름·경로, 위치 의존, 대상 밖 입력, blanket/dyn, trait 구현 소유, test-diff 키·참조·연결, 비ASCII 불확실성, 혼합 합집합, 기준 그래프, 외향 폐쇄도 각각 변형했다. 컴파일 오류를 검출 성공으로 세지 않았다. trait 이름 색인의 경우 다른 경로 식별자만으로 구현에 도달하는 약한 예제를 발견하여 trait을 별도 파일에 두고 super 경로로 사용하는 회귀로 교체한 뒤 재검출했다. 표본의 기대값을 구현 출력에서 복사하지 않았다. 원본은 target/h43-review/manual.json과 manual-*.log다.
 
 로컬 master의 진행분 f9f0c5f0b7dff04ad4a184aadf882f4af1fee376을 끝에 병합했다. 생성물 .codex/config.toml·harness/claude-hooks/hashes.json의 충돌은 기존 쓰기 스크립트로 재생성했다. 기존 master 테스트 본문을 수정하지 않았다. 최종 커밋은 일반 커밋 훅의 fresh-build·commit-guard·전체 check를 통과해야 반영한다.
+
+
+### master 4c9428d 병합 후 고정 fixture와 실제 소스 대조
+
+로컬 master 4c9428d790553d1d253c27e962b949bc8b229814(D-27·D-31·T-01)을 병합한 상태에서 기존 actual_portfolio_boundary_deletion_reaches_exact_arithmetic_through_graph의 panic을 재현했다. 경계 테스트 행 네 개의 원문은 그대로였다. 새 valuation_snapshot.rs:2537의 `#[should_panic(expected = "확정")]`가 기존 매크로/속성 표에 없어서 Graph::read가 `glob or macro may hide an incoming reference`를 반환했다. 스코프 선택기는 이를 crate 전체로 넓히지만 테스트는 실제 domain에서 fallback이 없다고 단정하고 있었다. 진단용 사본에서 이 속성 하나만 제거하면 Graph::read가 성공하고 portfolio 외향 폐쇄는 81파일이며 exact_arithmetic을 포함했다. 속성 허용 표나 실제 domain 코드는 바꾸지 않았다.
+
+회귀 입력은 테스트 안의 고정된 5파일 Sources(lib, portfolio_valuation, holding_valuation, exact_arithmetic, unrelated)로 옮겼다. portfolio의 네 경계 호출은 assert_eq! 토큰 안에만 있고 루트 재수출을 거쳐 holding에서 exact로 이어진다. 경계 호출을 지운 뒤의 그래프만으로는 exact에 도달하지 못하며 기준 그래프를 합치면 도달해야 한다. 무관한 파일과 lib가 외향 폐쇄에 포함되지 않는 것도 단언하여 전체 fallback으로 통과할 수 없게 했다. 두 번째 고정 회귀는 holding의 exact 호출을 내용이 같은 지역 함수로 교체하여 기준 판 간선이 필요한 (b)도 검증한다. 기존 scope_tests의 (a)(b)는 변경하지 않았다.
+
+mutants_check 아래에서 실제 제품 crate의 소스를 그래프 입력으로 읽는 도우미는 domain_sources 한 곳이었다. 이를 제거했고 나머지 범위/추가 전용/매크로/리뷰 회귀는 문자열 Sources 또는 독립 임시 저장소를 사용한다. environment.rs 호출 개수를 검사하는 기존 테스트는 허용 목록의 실제 사용을 제한하는 정책 검사이며 그래프 입력 fixture가 아니다. 이 검사를 고정 문자열로 바꿔 실제 경계 검사를 잃지는 않았다. justfile·변이 허용 목록·하네스 예제에 대한 정책 검사도 유지했다.
+
+병합된 실제 domain 83파일에서 다음 대조를 일회성으로 실행했다. 작업 사본에서 한 파일씩 임시 변경하고 실제 diff_scope에 master 전체 SHA를 기준으로 전달한 뒤 원복했다. 감사용 테스트 코드는 커밋에 남기지 않는다.
+
+| 재현 | 실제 임시 변경 | 선택 결과 | exact_arithmetic 포함 |
+|---|---|---|---|
+| (a) | portfolio 경계 행 1.01/0.99/-1.01/-0.01 삭제 | 미등록 should_panic으로 domain 전체 글롭, 83/83파일 | 예 |
+| (b) | holding compare_money의 exact 호출을 같은 본문의 local_compare_reported 호출로 대체 | 같은 보수적 fallback, 83/83파일 | 예 |
+
+따라서 현재 판은 넓게 선택하며 두 공격의 exact 파일을 놓치지 않았다. 현재 실제 domain이 좁은 그래프로 선택된다는 결과로 해석하지 않는다. 제품 소스의 임시 변경은 모두 원복하여 master와 domain 차이가 0임을 확인했다. 재현·원인 분리·선택 로그는 target/h43-merge-fix/manual-domain.log다.
+
+검사 중 master가 A-01과 DS-03을 포함한 503261f48fe530378274307dfda375c0eba2b9f4로 전진하여 최종 통합 기준은 그 판으로 고정했다. 4c9428d와 503261f 사이 domain 변경은 0이므로 위 실제 소스 대조의 입력은 동일하다. 4c9428d 병합 상태의 전체 check는 881개 테스트와 커버리지·test-diff·훅 설치 확인까지 통과했으며, 최종 병합 상태는 일반 커밋 훅에서 다시 전체 검사한다.

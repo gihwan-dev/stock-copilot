@@ -7,6 +7,7 @@ mod check_support;
 mod commit_guard;
 mod coverage_check;
 mod disable_control;
+mod gen_schema;
 mod gen_tokens;
 mod git_base;
 mod git_hooks;
@@ -26,6 +27,7 @@ mod workspace_sources;
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     match arguments.as_slice() {
+        [command, rest @ ..] if command == "gen-schema" => gen_schema::command(rest),
         [command, rest @ ..] if command == "gen-tokens" => gen_tokens::command(rest),
         [command] if command == "arch-check" => arch_check::command(Path::new("Cargo.toml")),
         [command] if command == "source-check" => source_check::command(),
@@ -73,3 +75,6 @@ mod test_runner_tests;
 mod third_party_tests;
 #[cfg(test)]
 mod workspace_layout_tests;
+
+#[cfg(test)]
+mod gen_schema_tests;

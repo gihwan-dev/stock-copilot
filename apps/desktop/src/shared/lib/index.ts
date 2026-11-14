@@ -1,4 +1,11 @@
-export type { BrandError, Count, EntityId, Ticker, Timestamp } from "./brand";
+export type {
+  BrandError,
+  Count,
+  EntityId,
+  Ticker,
+  Timestamp,
+  UiText,
+} from "./brand";
 export {
   parseCount,
   parseEntityId,
@@ -25,3 +32,5 @@ export {
 } from "./money";
 export type { Err, Ok, Result } from "./result";
 export { err, ok } from "./result";
+export type { InputValue } from "./brand";
+export { emptyInputValue, parseInputValue } from "./brand";

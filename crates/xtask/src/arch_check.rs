@@ -40,6 +40,7 @@ pub(crate) enum Rule {
     HttpSocketMeans,
     ProcessSpawn,
     SourceParse,
+    SchemaSurface,
 }
 
 impl Rule {
@@ -66,6 +67,7 @@ impl Rule {
             Self::HttpSocketMeans => "http-socket-means",
             Self::ProcessSpawn => "process-spawn",
             Self::SourceParse => "source-parse",
+            Self::SchemaSurface => "schema-surface",
         }
     }
 }

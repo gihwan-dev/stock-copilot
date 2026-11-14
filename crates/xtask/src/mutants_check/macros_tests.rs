@@ -76,45 +76,87 @@ fn unknown_derives_remain_uncertain() {
     .expect("standard derives");
 }
 
-fn domain_sources() -> Sources {
-    let root = crate::harness_workspace_tests::repository_root();
-    crate::git_base::listed_paths(&root)
-        .expect("paths")
-        .into_iter()
-        .filter(|path| {
-            path.starts_with("crates/domain/src/")
-                && std::path::Path::new(path)
-                    .extension()
-                    .is_some_and(|extension| extension == "rs")
-        })
-        .map(|path| {
-            let source = std::fs::read_to_string(root.join(&path)).expect("domain source");
-            (path, source)
-        })
-        .collect()
+fn portfolio_sources() -> Sources {
+    [
+        (
+            "lib",
+            "mod portfolio_valuation; mod holding_valuation; mod exact_arithmetic; mod unrelated; pub use holding_valuation::compare_money;",
+        ),
+        (
+            "portfolio_valuation",
+            "#[cfg(test)] mod tests {
+                #[test] fn boundary() {
+                    assert_eq!(crate::compare_money(101, 100), true);
+                    assert_eq!(crate::compare_money(99, 100), true);
+                    assert_eq!(crate::compare_money(-101, -100), true);
+                    assert_eq!(crate::compare_money(-1, 0), true);
+                }
+            }",
+        ),
+        (
+            "holding_valuation",
+            "pub fn compare_money(computed: i64, reported: i64) -> bool { crate::exact_arithmetic::compare_reported(computed, reported) }",
+        ),
+        (
+            "exact_arithmetic",
+            "pub fn compare_reported(computed: i64, reported: i64) -> bool { computed.abs_diff(reported) <= 1 }",
+        ),
+        ("unrelated", "pub fn untouched() {}"),
+    ]
+    .into_iter()
+    .map(|(module, source)| (format!("crates/domain/src/{module}.rs"), String::from(source)))
+    .collect()
 }
 
 #[test]
-fn actual_portfolio_boundary_deletion_reaches_exact_arithmetic_through_graph() {
-    let before = domain_sources();
+fn portfolio_boundary_deletion_reaches_exact_arithmetic_through_graph() {
+    let before = portfolio_sources();
     let mut after = before.clone();
     let file = String::from("crates/domain/src/portfolio_valuation.rs");
-    let source = after.get_mut(&file).expect("portfolio source");
+    let source = after.get_mut(&file).expect("portfolio fixture");
     for row in [
-        "            (\"1.01\", \"1.00\", Comparison::Matches),\n",
-        "            (\"0.99\", \"1.00\", Comparison::Matches),\n",
-        "            (\"-1.01\", \"-1.00\", Comparison::Matches),\n",
-        "            (\"-0.01\", \"0.00\", Comparison::Matches),\n",
+        "assert_eq!(crate::compare_money(101, 100), true);",
+        "assert_eq!(crate::compare_money(99, 100), true);",
+        "assert_eq!(crate::compare_money(-101, -100), true);",
+        "assert_eq!(crate::compare_money(-1, 0), true);",
     ] {
         assert!(source.contains(row), "{row}");
         *source = source.replacen(row, "", 1);
     }
-    let mut graph = Graph::read(&before).expect("baseline domain graph, no fallback");
-    graph.extend(Graph::read(&after).expect("weakened domain graph, no fallback"));
-    let selected = graph
-        .outward(&BTreeSet::from([file]))
-        .expect("outgoing graph closure");
+    let seeds = BTreeSet::from([file]);
+    let mut graph = Graph::read(&after).expect("weakened fixture graph, no fallback");
+    assert!(
+        !graph
+            .outward(&seeds)
+            .expect("current closure")
+            .contains("crates/domain/src/exact_arithmetic.rs")
+    );
+    graph.extend(Graph::read(&before).expect("baseline fixture graph, no fallback"));
+    let selected = graph.outward(&seeds).expect("outgoing graph closure");
+    assert!(selected.contains("crates/domain/src/holding_valuation.rs"));
     assert!(selected.contains("crates/domain/src/exact_arithmetic.rs"));
+    assert!(!selected.contains("crates/domain/src/unrelated.rs"));
+    assert!(!selected.contains("crates/domain/src/lib.rs"));
+}
+
+#[test]
+fn removed_compare_call_keeps_baseline_dependency_through_graph() {
+    let before = portfolio_sources();
+    let mut after = before.clone();
+    let file = String::from("crates/domain/src/holding_valuation.rs");
+    after.insert(file.clone(), String::from("pub fn compare_money(computed: i64, reported: i64) -> bool { local_compare(computed, reported) } fn local_compare(computed: i64, reported: i64) -> bool { computed.abs_diff(reported) <= 1 }"));
+    let seeds = BTreeSet::from([file]);
+    let mut graph = Graph::read(&after).expect("replacement fixture graph, no fallback");
+    assert!(
+        !graph
+            .outward(&seeds)
+            .expect("current closure")
+            .contains("crates/domain/src/exact_arithmetic.rs")
+    );
+    graph.extend(Graph::read(&before).expect("baseline fixture graph, no fallback"));
+    let selected = graph.outward(&seeds).expect("outgoing graph closure");
+    assert!(selected.contains("crates/domain/src/exact_arithmetic.rs"));
+    assert!(!selected.contains("crates/domain/src/unrelated.rs"));
 }
 
 #[test]
