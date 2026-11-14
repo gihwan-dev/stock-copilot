@@ -172,6 +172,35 @@ pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsE
 pub use exclusions::ExclusionDecision;
 pub use weight_caps::WeightCapChange;
 
+mod allocation;
+mod sector_assignment;
+pub use allocation::{
+    Allocation, AllocationCurrency, AllocationDisplay, AllocationDisplayRange,
+    AllocationDisplayUnits, AllocationEntry, AllocationError, AssetAllocation, AssetAllocations,
+    AssetCountry, AssetInstrument, AssetWeight, CompositionWeight, HoldingsAllocations,
+    HoldingsComposition,
+};
+pub use sector_assignment::{
+    AllocationInstrument, AllocationSector, InstrumentClassification, SectorAssignment,
+    SectorAssignments, SectorAssignmentsError,
+};
+mod corporate_action;
+mod cost_basis;
+mod lot;
+pub use corporate_action::{
+    CorporateAction, CorporateActionId, CorporateActionKind, DividendBasis, FractionalEntitlement,
+    LotListing, LotTaxStatus,
+};
+pub use cost_basis::{CostBasisMethod, LotCost, LotUnitPrice};
+pub use lot::{Lot, LotBook, LotCostCurrency, LotError, LotIdentity};
+mod cost_basis_arithmetic;
+pub use cost_basis_arithmetic::{IntegerText, QuantityShape, ShareQuantity};
+
+pub use corporate_action::{ShareCount, ShareRatio};
+
+pub use corporate_action::{CorporateDelivery, DeliveryStatus};
+pub use lot::{CostPool, LotAssumption, LotRealization};
+
 mod calibration;
 pub use calibration::{
     CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
