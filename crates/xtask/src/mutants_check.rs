@@ -1,5 +1,14 @@
+mod addition_symbols;
+#[cfg(test)]
+mod addition_tests;
+mod additions;
 mod environment;
 mod graph;
+mod macro_tokens;
+#[cfg(test)]
+mod macros_tests;
+#[cfg(test)]
+mod review_tests;
 mod scope;
 use scope::{diff_scope, jobs_for};
 
@@ -353,12 +362,34 @@ fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
     }
 }
 
+fn checked_scope(root: &Path, arguments: &[String]) -> Result<Scope, String> {
+    let [flag, base] = arguments else {
+        return scope_for(root, arguments);
+    };
+    if flag != "--in-diff" {
+        return scope_for(root, arguments);
+    }
+    let commit = resolve_base(root, base)?;
+    let findings = crate::test_diff::check(root, &commit)?;
+    if !findings.is_empty() {
+        return Err(format!(
+            "추가 전용 범위의 전제인 test-diff 실패:\n{}",
+            findings
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+    scope_for(root, &[flag.clone(), commit])
+}
+
 pub(crate) fn command(arguments: &[String]) -> ExitCode {
     report(
         "mutants",
         workspace_root().and_then(|root| {
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
-            let scope = scope_for(&root, arguments)?;
+            let scope = checked_scope(&root, arguments)?;
             let outcomes = run(&root, &scope, IgnoreFiles::Respected)?;
             evaluate(&outcomes, &survivors)
         }),

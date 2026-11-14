@@ -18,6 +18,7 @@ const allFiles = Object.keys(cases);
 const expectedLists = {
   PLATFORM_FILE_ALLOWLIST: [
     "src/shared/platform/index.ts",
+    "src/shared/platform/input.ts",
     "src/shared/platform/detach.ts",
     "src/shared/platform/useCoreEvent.ts",
     "src/shared/platform/useDocumentTitle.ts",
@@ -31,6 +32,7 @@ const expectedLists = {
   THROW_ALLOWLIST: ["src/shared/ipc/testing/fakes.ts"],
   CHART_NUMBER_ALLOWLIST: [],
   RAW_TYPE_ALLOWLIST: [
+    "src/shared/platform/input.ts",
     "src/shared/lib/brand.ts",
     "src/shared/lib/money.ts",
     "src/shared/lib/format.ts",
@@ -38,6 +40,7 @@ const expectedLists = {
     "src/shared/ipc/bindings.ts",
   ],
   PROMISE_REJECTION_ALLOWLIST: [
+    "src/shared/platform/input.ts",
     "src/shared/ipc/call.ts",
     "src/shared/platform/detach.ts",
   ],

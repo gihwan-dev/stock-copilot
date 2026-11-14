@@ -2,6 +2,22 @@
 @import "./tokens.css";
 @source "../../";
 
+@utility transition-disclosure {
+  transition: transform var(--transition-duration-fast) var(--ease-out);
+}
+
+@utility rotate-disclosure {
+  transform: rotate(90deg);
+}
+
+@utility w-switch {
+  width: calc(var(--spacing-icon-md) * 2);
+}
+
+@utility border-t-hairline {
+  border-top-width: var(--border-width-hairline);
+}
+
 @utility stroke-icon {
   stroke-width: var(--border-width-focus);
 }

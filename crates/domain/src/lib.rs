@@ -284,6 +284,12 @@ pub use concentration::{
     ConcentrationWeight, EffectiveInstrumentCount,
 };
 mod concentration_arithmetic;
+
+mod signal_decision;
+pub use signal_decision::{
+    BuySignal, NoSignalReason, RaisedSignal, SellSignal, SignalContext, SignalDecision,
+    SignalEstimate, SignalOperation, SignalPreparationError, SignalSourceLedger, SignalUnavailable,
+};
 mod daily_profit;
 mod daily_profit_account;
 mod valuation_snapshot;
@@ -318,3 +324,10 @@ pub use scorecard_deferred::{
 pub use scorecard_input::{
     ScorecardCount, ScorecardCounts, ScorecardObservation, ScorecardPromptId, Scorecards,
 };
+mod signal_submission;
+pub use signal_submission::{
+    SignalSubmission, SignalSubmissionError, SignalTaskKey, SubmittedCalibration,
+    calibrate_signal_submission,
+};
+mod signal_timing;
+pub use signal_timing::SignalTiming;

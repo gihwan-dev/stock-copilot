@@ -155,20 +155,14 @@ impl Thresholds {
         calibration: &CalibratedProbability,
     ) -> Result<SignalCondition, NoThresholds> {
         self.compare(calibration, ThresholdKind::Buy)
-            .map(|ordering| match ordering {
-                Ordering::Less => SignalCondition::Unmet,
-                Ordering::Equal | Ordering::Greater => SignalCondition::Met,
-            })
+            .map(buy_condition_from_order)
     }
     pub fn sell_condition(
         &self,
         calibration: &CalibratedProbability,
     ) -> Result<SignalCondition, NoThresholds> {
         self.compare(calibration, ThresholdKind::Sell)
-            .map(|ordering| match ordering {
-                Ordering::Greater => SignalCondition::Unmet,
-                Ordering::Equal | Ordering::Less => SignalCondition::Met,
-            })
+            .map(sell_condition_from_order)
     }
     pub(crate) fn compare(
         &self,
@@ -191,6 +185,28 @@ impl Thresholds {
             ThresholdKind::Breakeven => self.values.breakeven,
         }
     }
+}
+
+fn buy_condition_from_order(ordering: Ordering) -> SignalCondition {
+    match ordering {
+        Ordering::Less => SignalCondition::Unmet,
+        Ordering::Equal | Ordering::Greater => SignalCondition::Met,
+    }
+}
+fn sell_condition_from_order(ordering: Ordering) -> SignalCondition {
+    match ordering {
+        Ordering::Greater => SignalCondition::Unmet,
+        Ordering::Equal | Ordering::Less => SignalCondition::Met,
+    }
+}
+pub(crate) fn bound_signal_conditions(
+    thresholds: &Thresholds,
+) -> (SignalCondition, SignalCondition) {
+    let probability = ThresholdNumber::new(evidence(&thresholds.source).probability().as_decimal());
+    (
+        buy_condition_from_order(probability.cmp(&thresholds.value(ThresholdKind::Buy))),
+        sell_condition_from_order(probability.cmp(&thresholds.value(ThresholdKind::Sell))),
+    )
 }
 
 #[cfg(test)]

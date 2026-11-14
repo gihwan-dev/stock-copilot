@@ -691,6 +691,13 @@ pub(crate) fn scorecard_outcome_horizon(value: &EstimateOutcome) -> Option<Horiz
     value.evidence().map(|evidence| evidence.horizon)
 }
 
+pub(crate) fn signal_task_interval(
+    task: &EstimateTask,
+    calendars: &[MarketCalendar],
+) -> Result<TimeInterval, OutcomeUnavailable> {
+    schedule(task, calendars).map(|value| value.interval)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::candle::tests::{at, price, series};
