@@ -46,12 +46,34 @@ mod tests {
         Money::parse(&NumericInput::try_new("0").expect("숫자"), currency).expect("금액")
     }
     fn instrument() -> ResolvedOrderInstrument {
-        ResolvedOrderInstrument::from_master_lookup_result(
+        master_instrument(
             Symbol::try_new("AAPL").expect("종목"),
-            Market::Us,
+            domain::InstrumentId::try_new("fixture-aapl").expect("고정 자료 키"),
         )
+    }
+    fn master_instrument(
+        symbol: Symbol,
+        instrument_id: domain::InstrumentId,
+    ) -> ResolvedOrderInstrument {
+        domain::MasterInstrument::try_new(domain::MasterInstrumentRow {
+            listing_market: domain::MasterCode::try_new("NASDAQ").expect("시장"),
+            instrument_id,
+            symbol,
+            name: domain::DisplayInstrumentName::try_new("고정 자료 종목").expect("이름"),
+            security_type: domain::MasterSecurityType::from_code(
+                domain::MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency: Currency::Usd,
+            listing_status: domain::ListingStatus::Active,
+            common_share: domain::CommonShare::Common,
+            korean_detail: None,
+            observed_at: instant(),
+        })
+        .expect("마스터")
+        .order_instrument()
         .expect("종목 사실")
     }
+
     fn fx(kind: FxRateKind) -> FxRate {
         FxRate::parse(
             &NumericInput::try_new("1375").expect("환율"),
@@ -375,11 +397,10 @@ mod tests {
     #[test]
     fn quote_batch_has_individual_results_and_caller_splits_above_two_hundred() {
         let port = FakeBroker(Scenario::Complete);
-        let missing = ResolvedOrderInstrument::from_master_lookup_result(
+        let missing = master_instrument(
             Symbol::try_new("MSFT").expect("종목"),
-            Market::Us,
-        )
-        .expect("종목 사실");
+            domain::InstrumentId::try_new("fixture-msft").expect("고정 자료 키"),
+        );
         let batch = ready(port.quotes(&[instrument(), missing.clone()])).expect("종목별 결과");
         assert_eq!(
             batch
