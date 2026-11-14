@@ -155,3 +155,19 @@ pub use holding::{DailyProfitLoss, ReturnBasis};
 pub use holding_valuation::{HoldingComparisons, ReturnObservation, SelectedValue};
 pub use portfolio::{CurrencyAmounts, PortfolioDailyProfitLoss, ReportedPortfolio};
 pub use portfolio_valuation::{CurrencyEvaluation, HoldingCount, MetricTotal};
+
+mod exclusions;
+mod horizon;
+mod investor_profile;
+mod weight_caps;
+pub use exclusions::{ExcludedSecurityType, Exclusions, ExclusionsError, SectorId, SectorIdError};
+pub use horizon::{
+    AdvancedHoursConfirmation, Horizon, HorizonSelection, HoursPermission, HoursPermissionState,
+};
+pub use investor_profile::{
+    InvestorProfile, InvestorProfileError, RiskAppetite, SavedInvestorProfile,
+};
+pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsError};
+
+pub use exclusions::ExclusionDecision;
+pub use weight_caps::WeightCapChange;
