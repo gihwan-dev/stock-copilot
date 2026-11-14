@@ -224,7 +224,7 @@ xtask가 실패시키는 것 (`proc-macro2` 토큰 트리를 재귀로 돌아서
 | 문자열 위치 검사 | - | `tossinvest.com`은 조립 루트와 `toss-smoke`에만 (6.2). 공개 IP 확인 서비스 주소는 조립 루트에만 (design 5.1, 서비스는 U-07에서 정함). 토스 주문 경로는 문자열이 아니라 HTTP 메서드와 경로의 조합으로 본다: 쓰기 메서드와 주문·조건주문의 생성·정정·취소 경로는 `broker-toss-trade`에만, 예외는 토큰 발급 (architecture.md 3.2) |
 | 시각·환경 변수 검사 | - | 현재 시각 함수(서드파티 포함)와 `env::var`·`env::var_os` 계열이 보호된 파일 허용 목록 밖에 있으면 실패 (3.1) |
 
-xtask의 외부 의존은 `cargo_metadata`, `syn`, `proc-macro2`, `ra-ap-rustc_lexer`, `toml`이다(R-09 6.3). 작업 공간 crate에는 의존하지 않는다(architecture.md 3.2).
+xtask의 외부 의존은 `cargo_metadata`, `syn`, `proc-macro2`, `ra-ap-rustc_lexer`, `toml`(R-09 6.3)과 스키마 생성에 쓰는 `typify`(기본 기능 끔), `schemars`, `serde_json`, `quote`, `sha2`다(ADR 0053). 작업 공간 crate에는 의존하지 않는다(architecture.md 3.2).
 
 cargo-vet은 쓰지 않는다. 버전마다 감사 비용이 커서 개인 앱에 맞지 않는다 (R-09 Q10).
 

@@ -240,6 +240,12 @@ mod estimate_task;
 pub use base_probability::{BaseProbability, EstimateDistance};
 pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask};
 
+mod estimate_outcome;
+mod estimate_outcome_arithmetic;
+pub use estimate_outcome::{
+    EstimateOutcome, OutcomeAdjustment, OutcomeCorporateAction, OutcomeEvidence, OutcomeFailed,
+    OutcomeFailure, OutcomePending, OutcomeState, OutcomeSuccess, OutcomeUnavailable,
+};
 mod thresholds;
 mod thresholds_arithmetic;
 mod trade_cost;
@@ -284,3 +290,19 @@ pub use signal_decision::{
     BuySignal, NoSignalReason, RaisedSignal, SellSignal, SignalBuyAdjustment, SignalContext,
     SignalDecision, SignalEstimate, SignalOperation, SignalSourceLedger, SignalUnavailable,
 };
+mod daily_profit;
+mod daily_profit_account;
+mod valuation_snapshot;
+mod valuation_snapshot_calendar;
+mod valuation_snapshot_cash;
+pub use daily_profit::{
+    HoldingsDailyCurrency, HoldingsDailyOrigin, HoldingsDailyProfit, HoldingsDailySelection,
+    SnapshotPrevious,
+};
+pub use daily_profit_account::{AccountChange, AccountCurrencyChange, AccountKrwChange};
+pub use valuation_snapshot::{SnapshotInstrumentHistory, SnapshotPosition, ValuationSnapshot};
+pub use valuation_snapshot_calendar::{
+    SnapshotCalendar, SnapshotDates, SnapshotError, SnapshotObservation, SnapshotPriceBasis,
+    SnapshotSource,
+};
+pub use valuation_snapshot_cash::{SnapshotCashBasis, SnapshotLedgers};

@@ -853,3 +853,8 @@ expect = ["file:nested-gitignore"]
 name = "nested-gitignore-outside"
 overlay = "nested-gitignore-outside"
 expect = ["file:nested-gitignore"]
+
+[[source]]
+example = "attribute-allow.rs"
+path = "crates/adapters/broker-toss-schema-extra/src/generated.rs"
+expect = ["attribute:allow"]
