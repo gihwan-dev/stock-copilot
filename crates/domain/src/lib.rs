@@ -307,6 +307,23 @@ pub use valuation_snapshot_calendar::{
 };
 pub use valuation_snapshot_cash::{SnapshotCashBasis, SnapshotLedgers};
 
+mod scorecard;
+mod scorecard_arithmetic;
+pub use scorecard::{
+    Scorecard, ScorecardBin, ScorecardComparisonCount, ScorecardDisplay, ScorecardError,
+    ScorecardMetrics, ScorecardPending, ScorecardPoint,
+};
+
+mod scorecard_input;
+
+mod scorecard_deferred;
+pub use scorecard_deferred::{
+    ScorecardDeferredBin, ScorecardDeferredBrier, ScorecardDeferredCount, ScorecardDeferredDisplay,
+    ScorecardDeferredNumber, ScorecardDeferredPoint,
+};
+pub use scorecard_input::{
+    ScorecardCount, ScorecardCounts, ScorecardObservation, ScorecardPromptId, Scorecards,
+};
 mod signal_submission;
 pub use signal_submission::{
     SignalSubmission, SignalSubmissionError, SignalTaskKey, SubmittedCalibration,
