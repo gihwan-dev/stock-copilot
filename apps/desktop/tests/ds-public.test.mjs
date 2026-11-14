@@ -119,6 +119,20 @@ test("DS10 public contracts reject bypasses with actual app types and cannot be 
       "Readonly<{columns:3|4|6|8|9|12}>",
       'Readonly<{gap:Extract<SpacingToken,"space-1"|"space-2">}>',
       "Readonly<{ref?:RefObject<HTMLDivElement|null>}>",
+      "Readonly<{onSubmit:(v:Text)=>Promise<void>}>",
+      "Readonly<{selected:ReadonlySet<Id>}>",
+      "Readonly<{values:ReadonlyMap<Id,Text>}>",
+      'Readonly<{icon:import("react").FC<{label:Text}>}>',
+      'Readonly<{icon:import("react").ComponentType<{label:Text}>}>',
+      "Readonly<{items:ReadonlyArray<Text>}>",
+      "Readonly<{result:Promise<Text>}>",
+      "Readonly<{result:Promise<readonly Text[]>}>",
+      "Readonly<{groups:ReadonlyMap<Id,ReadonlySet<Text>>}>",
+      "Readonly<{callback:()=>Promise<void>}>",
+      "Readonly<{columns:{narrow:3|4|6;wide:12}}>",
+      "Readonly<{span:3|4|6|12;level:1|2|3}>",
+      "Readonly<{layout:{gap:SpacingToken;color:ColorToken}}>",
+      "Readonly<{layouts:readonly {gap:SpacingToken}[]}>",
     ]) {
       writeFileSync(source, prefix + component(props));
       assert.deepEqual(
@@ -127,6 +141,18 @@ test("DS10 public contracts reject bypasses with actual app types and cannot be 
         props,
       );
     }
+    writeFileSync(
+      source,
+      prefix +
+        "export const Probe=<T,>(p:{items:readonly T[]}):null=>p ? null:null;",
+    );
+    assert.deepEqual((await isolated.lintFiles([source]))[0].messages, []);
+    writeFileSync(
+      source,
+      prefix +
+        "const Grid=(p:{columns:{narrow:3|4|6;wide:12};span:3|4|6|12;level:1|2|3}):null=>p ? null:null; export const Probe=(p:{columns:{narrow:3|4|6;wide:12};span:3|4|6|12})=><Grid columns={p.columns} span={p.span} level={1}/>;",
+    );
+    assert.deepEqual((await isolated.lintFiles([source]))[0].messages, []);
     writeFileSync(
       source,
       prefix +
@@ -213,6 +239,22 @@ test("DS10 generated token deletion and callback refs fail both TypeScript compi
       const ref = compile(binary);
       assert.notEqual(ref.status, 0);
       assert.match(ref.stdout, /2322|2820/);
+      writeFileSync(
+        file,
+        valid +
+          "export const Level=(p:{readonly level:1|2|3}):null=>p ? null:null;export const computed=<Level level={1+1}/>;",
+      );
+      const computed = compile(binary);
+      assert.notEqual(computed.status, 0);
+      assert.match(computed.stdout, /2322/);
+      writeFileSync(
+        file,
+        valid +
+          "export const Grid=(p:{readonly span:3|4|6|8|9|12}):null=>p ? null:null;export const invalid=<Grid span={5}/>;",
+      );
+      const invalid = compile(binary);
+      assert.notEqual(invalid.status, 0);
+      assert.match(invalid.stdout, /2322/);
     }
   } finally {
     rmSync(folder, { recursive: true, force: true });
