@@ -1,6 +1,5 @@
-use crate::performance::value;
 use crate::performance_arithmetic::{
-    Number, annualize, benchmark_weight, blended_return, linked, price_return,
+    Number, benchmark_weight, blended_return, linked, price_return,
 };
 use crate::{
     CalendarDate, Candle, CandlePeriod, CandleStatus, Currency, Performance, PerformanceCurrency,
@@ -111,47 +110,19 @@ impl BenchmarkSeries {
     pub fn mixed(
         kr: &Self,
         us: &Self,
-        snapshots: &[ValuationSnapshot],
+        performance: &Performance,
     ) -> Result<Self, PerformanceError> {
-        if kr.dates != us.dates
-            || kr.currency != PerformanceCurrency::ConvertedKrw
-            || us.currency != kr.currency
-            || kr.kind != BenchmarkKind::Kospi
-            || us.kind != BenchmarkKind::Sp500Etf
-        {
-            return Err(PerformanceError::BenchmarkMismatch);
+        alignment(kr, performance)?;
+        mixed_snapshots(kr, us, performance.snapshots())
+    }
+    #[must_use]
+    pub const fn weights(&self) -> BenchmarkWeights {
+        match self.kind {
+            BenchmarkKind::Mixed => BenchmarkWeights::StocksExcludingCash,
+            BenchmarkKind::Kospi | BenchmarkKind::Kosdaq | BenchmarkKind::Sp500Etf => {
+                BenchmarkWeights::NotMixed
+            }
         }
-        let mut ordered = snapshots.iter().collect::<Vec<_>>();
-        ordered.sort_by_key(|snapshot| snapshot.valuation_at());
-        if ordered
-            .iter()
-            .map(|snapshot| snapshot.settlement_date())
-            .collect::<Vec<_>>()
-            != kr.dates
-        {
-            return Err(PerformanceError::BenchmarkMismatch);
-        }
-        let returns = kr
-            .returns
-            .iter()
-            .zip(&us.returns)
-            .zip(ordered)
-            .map(|((domestic, foreign), snapshot)| {
-                let native = value(snapshot, PerformanceCurrency::Native(Currency::Krw))
-                    .map_err(PerformanceError::Snapshot)?;
-                let total = value(snapshot, PerformanceCurrency::ConvertedKrw)
-                    .map_err(PerformanceError::Snapshot)?;
-                let weight = benchmark_weight(native, total)?;
-                verify_equity_allocation(snapshot)?;
-                blended_return(weight, domestic.number(), foreign.number())
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self {
-            kind: BenchmarkKind::Mixed,
-            currency: kr.currency,
-            dates: kr.dates.clone(),
-            returns,
-        })
     }
     #[must_use]
     pub const fn kind(&self) -> BenchmarkKind {
@@ -184,7 +155,7 @@ impl BenchmarkSeries {
         performance: &Performance,
     ) -> Result<PerformanceValue, PerformanceError> {
         alignment(self, performance)?;
-        let benchmark = annualize(linked(&self.returns)?, performance.duration)?;
+        let benchmark = linked(&self.returns)?;
         performance
             .twr()
             .number()
@@ -193,14 +164,58 @@ impl BenchmarkSeries {
     }
 }
 
-fn verify_equity_allocation(snapshot: &ValuationSnapshot) -> Result<(), PerformanceError> {
-    if [Currency::Krw, Currency::Usd]
-        .into_iter()
-        .any(|unit| snapshot.account_value(unit) != snapshot.stock_value(unit))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BenchmarkWeights {
+    NotMixed,
+    StocksExcludingCash,
+}
+fn mixed_snapshots(
+    kr: &BenchmarkSeries,
+    us: &BenchmarkSeries,
+    snapshots: &[ValuationSnapshot],
+) -> Result<BenchmarkSeries, PerformanceError> {
+    if kr.dates != us.dates
+        || kr.currency != PerformanceCurrency::ConvertedKrw
+        || us.currency != kr.currency
+        || kr.kind != BenchmarkKind::Kospi
+        || us.kind != BenchmarkKind::Sp500Etf
     {
-        return Err(PerformanceError::UnsupportedCashBenchmark);
+        return Err(PerformanceError::BenchmarkMismatch);
     }
-    Ok(())
+    let mut ordered = snapshots.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|snapshot| snapshot.valuation_at());
+    if ordered
+        .iter()
+        .map(|snapshot| snapshot.settlement_date())
+        .collect::<Vec<_>>()
+        != kr.dates
+    {
+        return Err(PerformanceError::BenchmarkMismatch);
+    }
+    let returns = kr
+        .returns
+        .iter()
+        .zip(&us.returns)
+        .zip(ordered)
+        .map(|((domestic, foreign), snapshot)| {
+            let native = snapshot
+                .stock_value(Currency::Krw)
+                .map(|money| Number::new(money.amount().as_decimal()))
+                .map_err(PerformanceError::Snapshot)?;
+            let total = snapshot
+                .stock_krw_value()
+                .map(|value| Number::new(value.clone().into_parts().0.amount().as_decimal()))
+                .map_err(PerformanceError::Snapshot)?;
+            let weight = benchmark_weight(native, total)?;
+            blended_return(weight, domestic.number(), foreign.number())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(BenchmarkSeries {
+        kind: BenchmarkKind::Mixed,
+        currency: kr.currency,
+        dates: kr.dates.clone(),
+        returns,
+    })
 }
 fn candle_prices(
     candles: &[Candle],
@@ -374,7 +389,7 @@ mod tests {
         )
         .expect("미국");
         assert_eq!(us.returns.first().expect("수익률").to_string(), "0.007010");
-        let mixed = BenchmarkSeries::mixed(&kr, &us, &snapshots).expect("혼합");
+        let mixed = super::mixed_snapshots(&kr, &us, &snapshots).expect("혼합");
         assert_eq!(
             mixed.returns.first().expect("수익률").to_string(),
             "0.008804"
@@ -386,7 +401,7 @@ mod tests {
             SettlementWindow::try_new(date(2), date(5)).expect("기간"),
         );
         assert_eq!(
-            BenchmarkSeries::mixed(
+            super::mixed_snapshots(
                 &kr,
                 &us,
                 &[
@@ -394,7 +409,7 @@ mod tests {
                     snapshot(&cash, 5, &[], "1002")
                 ]
             ),
-            Err(crate::PerformanceError::UnsupportedCashBenchmark)
+            Err(crate::PerformanceError::NonPositiveCapital)
         );
         let point = mixed.observations().next().expect("수익률 관측");
         assert_eq!(point.start(), date(2));
@@ -404,6 +419,7 @@ mod tests {
         assert_eq!(mixed.dividends(), super::BenchmarkDividends::Unverified);
         assert_eq!(us.dividends(), super::BenchmarkDividends::Unverified);
         assert_eq!(kr.dividends(), super::BenchmarkDividends::Excluded);
+        assert_eq!(kr.weights(), crate::BenchmarkWeights::NotMixed);
         assert_eq!(mixed.currency(), PerformanceCurrency::ConvertedKrw);
         let performance = Performance::calculate(
             &snapshots,
@@ -617,11 +633,11 @@ mod tests {
             ..kr.clone()
         };
         assert_eq!(
-            BenchmarkSeries::mixed(&kr, &us, &[]),
+            super::mixed_snapshots(&kr, &us, &[]),
             Err(PerformanceError::BenchmarkMismatch)
         );
         assert_eq!(
-            BenchmarkSeries::mixed(&us, &kr, &[]),
+            super::mixed_snapshots(&us, &kr, &[]),
             Err(PerformanceError::BenchmarkMismatch)
         );
         assert_eq!(
@@ -648,7 +664,7 @@ mod tests {
             ..domestic.clone()
         };
         assert_eq!(
-            BenchmarkSeries::mixed(&domestic, &foreign, &snapshots),
+            super::mixed_snapshots(&domestic, &foreign, &snapshots),
             Err(PerformanceError::NonPositiveCapital)
         );
     }
@@ -838,10 +854,8 @@ mod tests {
             crate::valuation_snapshot::tests::observed(5, "100", "100"),
         ];
         assert_eq!(
-            BenchmarkSeries::mixed(&domestic, &foreign, &invalid),
-            Err(PerformanceError::Snapshot(
-                crate::SnapshotError::WrongCashBasis
-            ))
+            super::mixed_snapshots(&domestic, &foreign, &invalid),
+            Err(PerformanceError::NonPositiveCapital)
         );
         let partial = snapshots
             .iter()
@@ -859,8 +873,8 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(
-            BenchmarkSeries::mixed(&domestic, &foreign, &partial),
-            Err(PerformanceError::Snapshot(crate::SnapshotError::MissingFx))
+            super::mixed_snapshots(&domestic, &foreign, &partial),
+            Err(PerformanceError::NonPositiveCapital)
         );
     }
     #[test]
@@ -891,8 +905,8 @@ mod tests {
     }
     #[test]
     fn benchmark_annualization_cannot_publish_an_uncertified_root() {
+        use crate::PerformanceValue;
         use crate::performance_arithmetic::Number;
-        use crate::{PerformanceError, PerformanceValue};
         let mut performance = crate::performance::tests::series(366);
         performance.returns =
             vec![PerformanceValue::from_number(Number::new(rust_decimal::Decimal::ZERO)); 366];
@@ -908,13 +922,15 @@ mod tests {
             returns,
         };
         assert_eq!(
-            benchmark.excess_return(&performance),
-            Err(PerformanceError::InsufficientPrecision)
+            benchmark
+                .excess_return(&performance)
+                .expect("누적 초과")
+                .to_string(),
+            "0.981866"
         );
     }
     #[test]
     fn partially_covered_weeks_never_claim_full_period_beta() {
-        use crate::{BetaMetric, PerformanceError};
         let trailing = crate::performance::tests::series(365);
         let benchmark = BenchmarkSeries {
             kind: BenchmarkKind::Kospi,
@@ -922,10 +938,14 @@ mod tests {
             dates: trailing.dates.clone(),
             returns: trailing.returns.clone(),
         };
+        let result =
+            beta_value(crate::performance_beta(&trailing, &benchmark)).expect("충분한 주간 표본");
+        assert_eq!(result.weeks().to_string(), "52");
         assert_eq!(
-            crate::performance_beta(&trailing, &benchmark),
-            BetaMetric::Unavailable(PerformanceError::InvalidPeriod)
+            result.start(),
+            trailing.dates.get(1).copied().expect("시작")
         );
+        assert_eq!(result.end(), trailing.end());
         let mut gap = crate::performance::tests::series(378);
         let joined = crate::performance_arithmetic::linked(&[
             *gap.returns.get(6).expect("전"),
@@ -957,9 +977,194 @@ mod tests {
             dates: gap.dates.clone(),
             returns: gap.returns.clone(),
         };
-        assert_eq!(
-            crate::performance_beta(&gap, &missing),
-            BetaMetric::Unavailable(PerformanceError::InvalidPeriod)
+        let gap_result =
+            beta_value(crate::performance_beta(&gap, &missing)).expect("충분한 주간 표본");
+        assert_eq!(gap_result.weeks().to_string(), "54");
+    }
+    #[test]
+    fn public_mixed_uses_only_its_performance_equities_even_with_cash() {
+        let stock = equity_fixture();
+        let rows = stock
+            .rows
+            .active_settled_rows()
+            .map(crate::StoredTransaction::transaction)
+            .cloned()
+            .collect();
+        let data = fixture_window(
+            rows,
+            ("30000", "30"),
+            ("30000", "30"),
+            SettlementWindow::try_new(date(2), date(5)).expect("기간"),
         );
+        let snapshots = equity_snapshots(&data);
+        let kr = BenchmarkSeries::from_candles(
+            BenchmarkKind::Kospi,
+            &candles(Currency::Krw, &["100", "100", "100", "101"]),
+            &snapshots,
+            PerformanceCurrency::ConvertedKrw,
+        )
+        .expect("국내");
+        let us = BenchmarkSeries::from_candles(
+            BenchmarkKind::Sp500Etf,
+            &candles(Currency::Usd, &["100", "100", "100", "100.5"]),
+            &snapshots,
+            PerformanceCurrency::ConvertedKrw,
+        )
+        .expect("미국");
+        let performance = Performance::calculate(
+            &snapshots,
+            (&data.kp, &data.up),
+            &[],
+            PerformanceCurrency::ConvertedKrw,
+        )
+        .expect("성과");
+        let mixed = BenchmarkSeries::mixed(&kr, &us, &performance).expect("현금 제외");
+        assert_eq!(
+            mixed
+                .observations()
+                .next()
+                .expect("구간")
+                .value()
+                .to_string(),
+            "0.008804"
+        );
+        assert_eq!(
+            mixed.weights(),
+            crate::BenchmarkWeights::StocksExcludingCash
+        );
+        let native = Performance::calculate(
+            &snapshots,
+            (&data.kp, &data.up),
+            &[],
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("원통화");
+        assert_eq!(
+            BenchmarkSeries::mixed(&kr, &us, &native),
+            Err(crate::PerformanceError::BenchmarkMismatch)
+        );
+    }
+    fn beta_value(metric: crate::BetaMetric) -> Option<crate::PerformanceBeta> {
+        match metric {
+            crate::BetaMetric::Value(value) => Some(value),
+            crate::BetaMetric::InsufficientSamples | crate::BetaMetric::Unavailable(_) => None,
+        }
+    }
+    #[test]
+    fn unavailable_beta_has_no_numeric_payload() {
+        assert_eq!(beta_value(crate::BetaMetric::InsufficientSamples), None);
+        assert_eq!(
+            beta_value(crate::BetaMetric::Unavailable(
+                crate::PerformanceError::InvalidPeriod
+            )),
+            None
+        );
+    }
+    fn matching_series(performance: &Performance) -> BenchmarkSeries {
+        BenchmarkSeries {
+            kind: BenchmarkKind::Kospi,
+            currency: performance.currency(),
+            dates: performance.dates.clone(),
+            returns: performance.returns.clone(),
+        }
+    }
+    #[test]
+    fn end_anchored_years_expose_the_actual_fifty_two_week_range() {
+        for (count, start_day) in [(365, 6), (366, 7)] {
+            let performance = crate::performance::tests::series(count);
+            let value = beta_value(crate::performance_beta(
+                &performance,
+                &matching_series(&performance),
+            ))
+            .expect("주간 표본");
+            assert_eq!(value.weeks().to_string(), "52");
+            assert_eq!(value.start(), date(start_day));
+            assert_eq!(value.end(), performance.end());
+            assert_eq!(value.beta().to_string(), "1.000000");
+        }
+    }
+    #[test]
+    fn an_empty_week_does_not_bridge_two_weeks_into_one_sample() {
+        let mut performance = crate::performance::tests::series(392);
+        let kept = (0..=392)
+            .filter(|index| !(8..=14).contains(index))
+            .collect::<Vec<_>>();
+        let returns = kept
+            .iter()
+            .zip(kept.iter().skip(1))
+            .map(|(start, end)| {
+                crate::performance_arithmetic::linked(
+                    &performance
+                        .returns
+                        .iter()
+                        .skip(*start)
+                        .take(end.wrapping_sub(*start))
+                        .copied()
+                        .collect::<Vec<_>>(),
+                )
+                .expect("재묶음")
+            })
+            .collect();
+        performance.dates = kept
+            .iter()
+            .map(|index| *performance.dates.get(*index).expect("날짜"))
+            .collect();
+        performance.offsets = kept
+            .iter()
+            .map(|index| *performance.offsets.get(*index).expect("간격"))
+            .collect();
+        performance.returns = returns;
+        let value = beta_value(crate::performance_beta(
+            &performance,
+            &matching_series(&performance),
+        ))
+        .expect("주간 표본");
+        assert_eq!(value.weeks().to_string(), "54");
+        assert_eq!(value.start(), performance.start());
+        assert_eq!(value.end(), performance.end());
+    }
+    #[test]
+    fn missing_stock_history_cannot_be_used_for_mixed_weights() {
+        let source = equity_fixture();
+        for unit in [None, Some(Currency::Usd)] {
+            let rows = source
+                .rows
+                .active_settled_rows()
+                .map(crate::StoredTransaction::transaction)
+                .filter(|row| unit.is_none_or(|expected| row.data().currency == expected))
+                .cloned()
+                .collect();
+            let data = fixture_window(
+                rows,
+                ("0", "0"),
+                ("0", "0"),
+                SettlementWindow::try_new(date(2), date(5)).expect("기간"),
+            );
+            let missing = [
+                snapshot(&data, 2, &[], "1000"),
+                snapshot(&data, 5, &[], "1000"),
+            ];
+            let good = equity_snapshots(&data);
+            let kr = BenchmarkSeries::from_candles(
+                BenchmarkKind::Kospi,
+                &candles(Currency::Krw, &["1"; 4]),
+                &good,
+                PerformanceCurrency::ConvertedKrw,
+            )
+            .expect("국내");
+            let us = BenchmarkSeries::from_candles(
+                BenchmarkKind::Sp500Etf,
+                &candles(Currency::Usd, &["1"; 4]),
+                &good,
+                PerformanceCurrency::ConvertedKrw,
+            )
+            .expect("미국");
+            assert_eq!(
+                super::mixed_snapshots(&kr, &us, &missing),
+                Err(crate::PerformanceError::Snapshot(
+                    crate::SnapshotError::MissingHistory
+                ))
+            );
+        }
     }
 }

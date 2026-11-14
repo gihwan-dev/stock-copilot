@@ -18,11 +18,11 @@ pub enum PerformanceError {
     AmbiguousOrMissingRoot,
     RootOutsideRange,
     NonConvergence,
+    NotAnnualized,
     InsufficientPrecision,
     TooManyInputs,
     BenchmarkMismatch,
     InvalidBenchmark,
-    UnsupportedCashBenchmark,
     Snapshot(SnapshotError),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,11 +54,20 @@ pub struct Performance {
     method: TwrMethod,
     twr: PerformanceValue,
     mwr: Result<PerformanceValue, PerformanceError>,
+    annual_twr: Result<PerformanceValue, PerformanceError>,
+    snapshots: PerformanceSnapshots,
     pub(crate) duration: Days,
     pub(crate) offsets: Vec<Days>,
     pub(crate) returns: Vec<PerformanceValue>,
     pub(crate) dates: Vec<CalendarDate>,
     pub(crate) daily_samples: Vec<DailySample>,
+}
+#[derive(Clone, PartialEq, Eq)]
+struct PerformanceSnapshots(Vec<ValuationSnapshot>);
+impl std::fmt::Debug for PerformanceSnapshots {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PerformanceSnapshots([REDACTED])")
+    }
 }
 struct Context<'a> {
     periods: [&'a ConfirmedFlowPeriod; 2],
@@ -115,22 +124,22 @@ impl Performance {
         }
         cash.push((duration, values.last));
         let (period, output_days) = output_period(duration);
+        let cumulative = linked(&returns)?;
         Ok(Self {
             start: first.settlement_date(),
             end: last.settlement_date(),
             currency,
             period,
             method,
-            twr: annualize(linked(&returns)?, duration)?,
+            twr: cumulative,
             mwr: mwr(&cash, duration, output_days),
+            annual_twr: annual_result(cumulative, duration),
+            snapshots: retained_snapshots(&ordered),
             duration,
             offsets: values.offsets(),
             daily_samples: snapshot_daily_samples(&ordered, currency),
             returns,
-            dates: ordered
-                .iter()
-                .map(|snapshot| snapshot.settlement_date())
-                .collect(),
+            dates: snapshot_dates(&ordered),
         })
     }
     #[must_use]
@@ -157,9 +166,33 @@ impl Performance {
     pub const fn twr(&self) -> PerformanceValue {
         self.twr
     }
+    pub const fn annual_twr(&self) -> Result<PerformanceValue, PerformanceError> {
+        self.annual_twr
+    }
+    pub(crate) fn snapshots(&self) -> &[ValuationSnapshot] {
+        &self.snapshots.0
+    }
     pub const fn mwr(&self) -> Result<PerformanceValue, PerformanceError> {
         self.mwr
     }
+}
+fn annual_result(
+    value: PerformanceValue,
+    days: Days,
+) -> Result<PerformanceValue, PerformanceError> {
+    if *days.as_u32() < 365 {
+        return Err(PerformanceError::NotAnnualized);
+    }
+    annualize(value, days)
+}
+fn retained_snapshots(ordered: &[&ValuationSnapshot]) -> PerformanceSnapshots {
+    PerformanceSnapshots(ordered.iter().map(|snapshot| (*snapshot).clone()).collect())
+}
+fn snapshot_dates(ordered: &[&ValuationSnapshot]) -> Vec<CalendarDate> {
+    ordered
+        .iter()
+        .map(|snapshot| snapshot.settlement_date())
+        .collect()
 }
 fn snapshot_daily_samples(
     ordered: &[&ValuationSnapshot],
@@ -180,10 +213,10 @@ pub(crate) fn daily_sample(
         PerformanceCurrency::Native(unit) => vec![unit],
         PerformanceCurrency::ConvertedKrw => vec![Currency::Krw, Currency::Usd],
     };
-    if units.into_iter().any(|unit| {
-        old.price_basis(unit) != crate::SnapshotPriceBasis::CurrentSession
-            || today.price_basis(unit) != crate::SnapshotPriceBasis::CurrentSession
-    }) {
+    if units
+        .into_iter()
+        .any(|unit| today.price_date(unit) < old.price_date(unit))
+    {
         return DailySample::Unverified;
     }
     DailySample::Trading
@@ -299,6 +332,7 @@ impl<'a> Context<'a> {
     ) -> Result<(Vec<(Days, Number)>, TwrMethod), PerformanceError> {
         let mut flows = Vec::new();
         let mut kind = TwrMethod::LinkedValuations;
+        let mut status = Ok(());
         for (flow, time) in self
             .periods
             .iter()
@@ -316,13 +350,13 @@ impl<'a> Context<'a> {
                 FlowDirection::Inflow => amount,
                 FlowDirection::Outflow => amount.neg(),
             };
-            if time != today.valuation_at() {
-                kind = TwrMethod::LinkedModifiedDietz;
-            }
-            flows.push((flow_elapsed(old, time), signed));
+            status = status.and_then(|()| {
+                append_weighted_flow((old, today), time, signed, &mut flows, &mut kind)
+            });
         }
-        self.exchanges(old, today, &mut flows, &mut kind);
-        Ok((flows, kind))
+        self.exchanges(old, today, &mut flows, &mut kind)
+            .and(status)
+            .map(|()| (flows, kind))
     }
     fn exchanges(
         &self,
@@ -330,10 +364,11 @@ impl<'a> Context<'a> {
         today: &ValuationSnapshot,
         flows: &mut Vec<(Days, Number)>,
         kind: &mut TwrMethod,
-    ) {
+    ) -> Result<(), PerformanceError> {
         let PerformanceCurrency::Native(unit) = self.currency else {
-            return;
+            return Ok(());
         };
+        let mut status = Ok(());
         for (row, time, settled) in today
             .exchanges()
             .iter()
@@ -354,13 +389,47 @@ impl<'a> Context<'a> {
             } else {
                 native
             };
-            flows.push((flow_elapsed(old, time), amount));
-            *kind = TwrMethod::LinkedModifiedDietz;
+            status =
+                status.and_then(|()| append_weighted_flow((old, today), time, amount, flows, kind));
         }
+        status
     }
 }
-fn flow_elapsed(old: &ValuationSnapshot, time: crate::Timestamp) -> Days {
-    crate::domain_time::performance_flow_days(old.valuation_at(), time)
+fn append_weighted_flow(
+    endpoints: (&ValuationSnapshot, &ValuationSnapshot),
+    time: crate::Timestamp,
+    amount: Number,
+    flows: &mut Vec<(Days, Number)>,
+    kind: &mut TwrMethod,
+) -> Result<(), PerformanceError> {
+    let (old, today) = endpoints;
+    flow_elapsed(old, time)
+        .ok()
+        .zip(flow_elapsed(old, today.valuation_at()).ok())
+        .map(|(offset, span)| {
+            if offset != span {
+                *kind = TwrMethod::LinkedModifiedDietz;
+            }
+            flows.push((offset, amount));
+        })
+        .ok_or(PerformanceError::InvalidPeriod)
+}
+fn flow_elapsed(old: &ValuationSnapshot, time: crate::Timestamp) -> Result<Days, PerformanceError> {
+    timestamp_days(old.valuation_at(), time)
+}
+pub(crate) fn timestamp_days(
+    start: crate::Timestamp,
+    end: crate::Timestamp,
+) -> Result<Days, PerformanceError> {
+    if end < start {
+        return Err(PerformanceError::InvalidPeriod);
+    }
+    let (first, last) = start
+        .date_at_offset(crate::OffsetSeconds::new(32400))
+        .ok()
+        .zip(end.date_at_offset(crate::OffsetSeconds::new(32400)).ok())
+        .ok_or(PerformanceError::InvalidPeriod)?;
+    days(first, last)
 }
 
 fn profit(
@@ -390,10 +459,12 @@ fn profit(
     .map_err(PerformanceError::Snapshot)
 }
 pub(crate) fn days(start: CalendarDate, end: CalendarDate) -> Result<Days, PerformanceError> {
-    let span = crate::domain_time::performance_day_difference(start, end);
-    u32::try_from(*span.as_i64())
+    start
+        .days_until(end)
+        .ok()
+        .and_then(|span| u32::try_from(*span.as_i64()).ok())
         .map(Days::new)
-        .map_err(|_cause| PerformanceError::InvalidPeriod)
+        .ok_or(PerformanceError::InvalidPeriod)
 }
 pub(crate) fn value(
     snapshot: &ValuationSnapshot,
@@ -459,17 +530,16 @@ fn ordered_snapshots(
     ordered.sort_by_key(|snapshot| snapshot.valuation_at());
     let first = *ordered.first().ok_or(PerformanceError::InvalidPeriod)?;
     let last = ordered.last().copied().unwrap_or(first);
-    let duration =
-        crate::domain_time::performance_flow_days(first.valuation_at(), last.valuation_at());
-    if *duration.as_u32() == 0 || *duration.as_u32() > 4096 {
-        return Err(PerformanceError::InvalidPeriod);
-    }
-    Ok(OrderedSnapshots {
-        snapshots: ordered,
-        first,
-        last,
-        duration,
-    })
+    timestamp_days(first.valuation_at(), last.valuation_at())
+        .ok()
+        .filter(|duration| *duration.as_u32() != 0 && *duration.as_u32() <= 4096)
+        .map(|duration| OrderedSnapshots {
+            snapshots: ordered,
+            first,
+            last,
+            duration,
+        })
+        .ok_or(PerformanceError::InvalidPeriod)
 }
 
 fn output_period(duration: Days) -> (PerformancePeriod, Days) {
@@ -503,7 +573,7 @@ pub(crate) mod tests {
                 }))
             })
             .collect::<Vec<_>>();
-        let twr = super::annualize(super::linked(&returns).expect("연결"), duration).expect("기간");
+        let twr = super::linked(&returns).expect("연결");
         Performance {
             daily_samples: vec![super::DailySample::Trading; count],
             duration,
@@ -517,6 +587,8 @@ pub(crate) mod tests {
             method: TwrMethod::LinkedValuations,
             twr,
             mwr: Ok(twr),
+            annual_twr: super::annual_result(twr, duration),
+            snapshots: super::PerformanceSnapshots(vec![]),
             returns,
             dates,
         }
@@ -670,8 +742,7 @@ pub(crate) mod tests {
         );
         let old_dates = enough.dates.clone();
         for (target, origin) in enough.dates.iter_mut().zip(old_dates) {
-            let elapsed =
-                *crate::domain_time::performance_day_difference(enough.start, origin).as_i64();
+            let elapsed = *enough.start.days_until(origin).expect("기간").as_i64();
             *target = crate::valuation_snapshot::tests::date(
                 5_i64
                     .checked_add(elapsed.checked_mul(7).expect("주간"))

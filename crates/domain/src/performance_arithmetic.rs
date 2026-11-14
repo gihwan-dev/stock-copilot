@@ -101,6 +101,9 @@ pub(crate) fn dietz(
     flows: &[(Days, Number)],
     duration: Days,
 ) -> Result<PerformanceValue, PerformanceError> {
+    if start.0 <= Decimal::ZERO {
+        return Err(PerformanceError::NonPositiveCapital);
+    }
     if duration.0 == 0 {
         return Err(PerformanceError::InvalidPeriod);
     }
@@ -1122,6 +1125,10 @@ mod precision_tests {
         let tiny = number("0.0000000000000000000000000001");
         let zero = number("0");
         assert_eq!(
+            dietz(one, one, &[(Days(0), number("-2"))], Days(1)),
+            Err(PerformanceError::NonPositiveCapital)
+        );
+        assert_eq!(
             dietz(one, number("-2"), &[], Days(1)),
             Err(PerformanceError::NonPositiveCapital)
         );
@@ -1239,5 +1246,49 @@ mod precision_tests {
         );
         let excess = [(Days(0), number("1.0000000000000000000000000001")); 8];
         assert_eq!(canonical_cash(&excess), Err(PerformanceError::Arithmetic));
+    }
+}
+
+#[cfg(test)]
+mod review_precision_tests {
+    use super::{Days, Number, certify_return, mwr};
+    use crate::{NumericInput, PerformanceError, Ratio};
+    fn number(text: &str) -> Number {
+        Number::new(
+            Ratio::parse(&NumericInput::try_new(text).expect("입력"))
+                .expect("십진")
+                .as_decimal(),
+        )
+    }
+    #[test]
+    fn certificate_boundary_and_positive_initial_cash_are_closed() {
+        let cash = [(Days::new(0), number("-1")), (Days::new(1), number("1"))];
+        let _certified = certify_return(
+            &cash,
+            Days::new(1),
+            Days::new(1),
+            number("1.0000000000000000124"),
+        )
+        .expect("경계 아래 인증");
+        assert_eq!(
+            certify_return(
+                &cash,
+                Days::new(1),
+                Days::new(1),
+                number("1.0000000000000000126")
+            ),
+            Err(PerformanceError::InsufficientPrecision)
+        );
+        assert_eq!(
+            mwr(
+                &[
+                    (Days::new(0), number("100")),
+                    (Days::new(1), number("-101"))
+                ],
+                Days::new(1),
+                Days::new(1)
+            ),
+            Err(PerformanceError::AmbiguousOrMissingRoot)
+        );
     }
 }

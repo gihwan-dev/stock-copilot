@@ -418,8 +418,8 @@ mod calendar_tests {
             let start=at(2,7); let end=at(day,hour);
             let first=start.date_at_offset(OffsetSeconds::new(32400)).expect("KST");
             let last=end.date_at_offset(OffsetSeconds::new(32400)).expect("KST");
-            let expected=first.days_until(last).expect("날짜 차이").as_i64().unsigned_abs();
-            prop_assert_eq!(u64::from(*crate::domain_time::performance_flow_days(start,end).as_u32()),expected);
+            if end<start { prop_assert_eq!(crate::performance::timestamp_days(start,end),Err(crate::PerformanceError::InvalidPeriod)); }
+            else { let span=first.days_until(last).expect("날짜 차이"); let expected=u64::try_from(*span.as_i64()).expect("정순"); prop_assert_eq!(u64::from(*crate::performance::timestamp_days(start,end).expect("기간").as_u32()),expected); }
         }
     }
 }
@@ -564,7 +564,7 @@ mod boundary_flow_tests {
     fn endpoint_flow_foreign_currency_and_exchange_subperiods_are_distinct() {
         let window = SettlementWindow::try_new(date(2), date(5)).expect("기간");
         let exact = fixture_window(
-            vec![tx(TransactionKind::Deposit, Currency::Krw, 3, 7, "10")],
+            vec![tx(TransactionKind::Deposit, Currency::Krw, 3, 1, "10")],
             ("100", "100"),
             ("110", "100"),
             window,
@@ -679,15 +679,18 @@ mod annual_precision_tests {
             )
             .expect("평가")
         });
+        let value = Performance::calculate(
+            &snapshots,
+            (&data.kp, &data.up),
+            &[],
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("누적 성과");
         assert_eq!(
-            Performance::calculate(
-                &snapshots,
-                (&data.kp, &data.up),
-                &[],
-                PerformanceCurrency::Native(Currency::Krw)
-            ),
+            value.annual_twr(),
             Err(PerformanceError::InsufficientPrecision)
         );
+        assert_eq!(value.twr().to_string(), "-1.000000");
     }
 }
 
@@ -769,7 +772,7 @@ mod holiday_sample_tests {
                 &holiday,
                 PerformanceCurrency::Native(Currency::Krw)
             ),
-            DailySample::Unverified
+            DailySample::Trading
         );
         assert_eq!(
             daily_sample(&holiday, &current, PerformanceCurrency::ConvertedKrw),
@@ -822,6 +825,251 @@ mod exact_window_tests {
                     PerformanceCurrency::Native(Currency::Krw)
                 ),
                 Err(PerformanceError::OutsideConfirmedPeriod)
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod review_regression_tests {
+    use crate::valuation_snapshot::tests::{Fixture, at, calendar, date, fx, ledgers, money, tx};
+    use crate::{
+        BuyingPower, CashLedger, CashLedgerInput, Currency, ExternalFlows, Performance,
+        PerformanceCurrency, SettlementWindow, SnapshotObservation, Transaction, TransactionKind,
+        TwrMethod, ValuationSnapshot,
+    };
+    fn data(transactions: Vec<Transaction>, opening: &str, closing: &str, end: i64) -> Fixture {
+        let rows = crate::cash_ledger::tests::set(transactions);
+        let window = SettlementWindow::try_new(date(2), date(end)).expect("기간");
+        let ledger = |unit, first, last| {
+            CashLedger::reconstruct(
+                &rows,
+                CashLedgerInput {
+                    window,
+                    currency: unit,
+                    opening: Some(money(first, unit)),
+                    evidence: Some(crate::cash_ledger::tests::evidence(&rows, window)),
+                    reported: Some(BuyingPower::new(money(last, unit), at(400, 0))),
+                },
+            )
+        };
+        let kr = ledger(Currency::Krw, opening, closing);
+        let us = ledger(Currency::Usd, "0", "0");
+        let period = |record: &CashLedger| match record.external_flows(&[]) {
+            ExternalFlows::Reconciled(value) => value.period(window),
+            ExternalFlows::Unavailable(_) => panic!("확정 흐름"),
+        };
+        let kp = period(&kr);
+        let up = period(&us);
+        Fixture {
+            rows,
+            kr,
+            us,
+            kp,
+            up,
+        }
+    }
+    fn build(data: &Fixture, day: i64) -> ValuationSnapshot {
+        ValuationSnapshot::recalculate(
+            &calendar(day),
+            &data.rows,
+            &[],
+            Some(ledgers(data)),
+            SnapshotObservation::new(at(day, 7), at(400, 0), Some(fx(at(day, 7), "1000"))),
+        )
+        .expect("평가")
+    }
+    #[test]
+    fn research_one_through_sealed_inputs_keeps_later_flow_offset_and_endpoint() {
+        let data = data(
+            vec![
+                tx(TransactionKind::Dividend, Currency::Krw, 181, 1, "1000000"),
+                tx(TransactionKind::Deposit, Currency::Krw, 182, 7, "5000000"),
+                tx(TransactionKind::Fee, Currency::Krw, 364, 1, "600000"),
+            ],
+            "10000000",
+            "15400000",
+            365,
+        );
+        let snapshots = [2, 100, 182, 365].map(|day| build(&data, day));
+        let value = Performance::calculate(
+            &snapshots,
+            (&data.kp, &data.up),
+            &[],
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("성과");
+        assert!(format!("{value:?}").contains("PerformanceSnapshots([REDACTED])"));
+        assert_eq!(value.twr().to_string(), "0.058750");
+        assert_eq!(value.mwr().expect("MWR").to_string(), "0.031997");
+        assert_eq!(value.method(), TwrMethod::LinkedValuations);
+        assert_eq!(
+            value.annual_twr(),
+            Err(crate::PerformanceError::NotAnnualized)
+        );
+    }
+    #[test]
+    fn outgoing_exchange_with_income_keeps_investor_cash_sign() {
+        let data = data(
+            vec![
+                tx(TransactionKind::ExchangeOut, Currency::Krw, 3, 1, "10"),
+                tx(TransactionKind::Dividend, Currency::Krw, 4, 1, "1"),
+            ],
+            "100",
+            "91",
+            5,
+        );
+        let value = Performance::calculate(
+            &[build(&data, 2), build(&data, 5)],
+            (&data.kp, &data.up),
+            &[],
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("성과");
+        assert_eq!(value.twr().to_string(), "0.010714");
+        assert_eq!(value.mwr().expect("MWR").to_string(), "0.010713");
+    }
+    #[test]
+    fn full_withdrawal_and_reinvestment_do_not_hide_a_zero_middle_valuation() {
+        let data = data(
+            vec![
+                tx(TransactionKind::Withdrawal, Currency::Krw, 3, 1, "100"),
+                tx(TransactionKind::Deposit, Currency::Krw, 4, 1, "100"),
+            ],
+            "100",
+            "100",
+            5,
+        );
+        assert_eq!(
+            Performance::calculate(
+                &[build(&data, 2), build(&data, 3), build(&data, 5)],
+                (&data.kp, &data.up),
+                &[],
+                PerformanceCurrency::Native(Currency::Krw)
+            ),
+            Err(crate::PerformanceError::NonPositiveCapital)
+        );
+    }
+    #[test]
+    fn bad_cash_evidence_cannot_mint_a_fixture_period() {
+        assert!(std::panic::catch_unwind(|| data(vec![], "100", "200", 5)).is_err());
+    }
+    #[test]
+    fn same_calendar_day_flows_have_zero_weight_and_reverse_times_are_errors() {
+        let data = data(
+            vec![
+                tx(TransactionKind::ExchangeOut, Currency::Krw, 3, 1, "10"),
+                tx(TransactionKind::Dividend, Currency::Krw, 3, 2, "1"),
+            ],
+            "100",
+            "91",
+            3,
+        );
+        let value = Performance::calculate(
+            &[build(&data, 2), build(&data, 3)],
+            (&data.kp, &data.up),
+            &[],
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("당일 환전");
+        assert_eq!(value.method(), TwrMethod::LinkedValuations);
+        assert_eq!(value.twr().to_string(), "0.010000");
+        assert_eq!(value.mwr().expect("MWR").to_string(), "0.010000");
+        assert_eq!(
+            crate::performance::timestamp_days(at(3, 7), at(3, 1)),
+            Err(crate::PerformanceError::InvalidPeriod)
+        );
+        let limit = crate::Timestamp::from_parts(
+            crate::UnixSeconds::new(253_402_300_799),
+            crate::Nanosecond::new(0),
+            crate::OffsetSeconds::new(0),
+        )
+        .expect("최대 시각");
+        assert_eq!(
+            crate::performance::timestamp_days(at(2, 7), limit),
+            Err(crate::PerformanceError::InvalidPeriod)
+        );
+    }
+}
+
+#[cfg(test)]
+mod awaiting_session_tests {
+    use crate::valuation_snapshot::tests::{at, date, fixture_window, fx, ledgers};
+    use crate::{
+        Currency, MarketCalendar, MarketSession, PerformanceCurrency, SessionData,
+        SessionInformation, SettlementWindow, SnapshotCalendar, SnapshotObservation,
+        SnapshotPriceBasis, TimeInterval, ValuationSnapshot,
+    };
+    fn snapshot(day: i64) -> ValuationSnapshot {
+        let session = |session_day, unit| {
+            let (open, close) = match unit {
+                Currency::Krw => (0, 6),
+                Currency::Usd => (17, 21),
+            };
+            let data = Some(
+                SessionData::try_new(
+                    TimeInterval::try_new(at(session_day, open), at(session_day, close))
+                        .expect("시간"),
+                    None,
+                )
+                .expect("장"),
+            );
+            let information = match unit {
+                Currency::Krw => SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: data,
+                    after_market: None,
+                },
+                Currency::Usd => SessionInformation::Us {
+                    day_market: None,
+                    pre_market: None,
+                    regular_market: data,
+                    after_market: None,
+                },
+            };
+            MarketSession::try_new(date(session_day), information).expect("세션")
+        };
+        let market = |unit| {
+            MarketCalendar::try_new(
+                session(day.wrapping_sub(1), unit),
+                session(day, unit),
+                session(day.wrapping_add(1), unit),
+            )
+            .expect("달력")
+        };
+        let calendar =
+            SnapshotCalendar::new(&market(Currency::Krw), &market(Currency::Usd)).expect("달력");
+        let data = fixture_window(
+            vec![],
+            ("100", "100"),
+            ("100", "100"),
+            SettlementWindow::try_new(date(2), date(5)).expect("기간"),
+        );
+        ValuationSnapshot::recalculate(
+            &calendar,
+            &data.rows,
+            &[],
+            Some(ledgers(&data)),
+            SnapshotObservation::new(at(day, 7), at(20, 0), Some(fx(at(day, 7), "1000"))),
+        )
+        .expect("16시 평가")
+    }
+    #[test]
+    fn kst_sixteen_uses_confirmed_previous_us_close_as_a_daily_sample() {
+        let old = snapshot(3);
+        let today = snapshot(4);
+        assert_eq!(
+            today.price_basis(Currency::Usd),
+            SnapshotPriceBasis::AwaitingSession
+        );
+        assert_eq!(today.price_date(Currency::Usd), date(3));
+        for unit in [
+            PerformanceCurrency::Native(Currency::Usd),
+            PerformanceCurrency::ConvertedKrw,
+        ] {
+            assert_eq!(
+                crate::performance::daily_sample(&old, &today, unit),
+                crate::performance::DailySample::Trading
             );
         }
     }

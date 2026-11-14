@@ -73,7 +73,7 @@ pub struct ResolvedOrderInstrument {
 }
 
 impl ResolvedOrderInstrument {
-    pub fn from_master_lookup_result(
+    pub(crate) fn from_master_lookup_result(
         symbol: Symbol,
         market: Market,
     ) -> Result<Self, OrderIntentError> {

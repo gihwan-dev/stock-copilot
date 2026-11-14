@@ -24,10 +24,32 @@ impl PerformanceRisk {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PerformanceBeta {
+    start: crate::CalendarDate,
+    end: crate::CalendarDate,
+    weeks: PerformanceWeeks,
     beta: PerformanceValue,
     r_squared: PerformanceValue,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PerformanceWeeks(usize);
+impl std::fmt::Display for PerformanceWeeks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
 impl PerformanceBeta {
+    #[must_use]
+    pub const fn start(self) -> crate::CalendarDate {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(self) -> crate::CalendarDate {
+        self.end
+    }
+    #[must_use]
+    pub const fn weeks(self) -> PerformanceWeeks {
+        self.weeks
+    }
     #[must_use]
     pub const fn beta(self) -> PerformanceValue {
         self.beta
@@ -77,27 +99,31 @@ pub fn performance_beta(performance: &Performance, benchmark: &BenchmarkSeries) 
         Err(cause) => BetaMetric::Unavailable(cause),
     }
 }
-#[derive(PartialEq, Eq)]
-enum WeekCoverage {
-    Whole,
-    Missing,
-}
 struct WeeklyReturns {
     portfolio: Vec<PerformanceValue>,
     market: Vec<PerformanceValue>,
-    coverage: WeekCoverage,
+    start: crate::CalendarDate,
+    end: crate::CalendarDate,
 }
 fn beta_from_weekly(samples: &WeeklyReturns) -> BetaMetric {
     if samples.portfolio.len() < 52 {
         return BetaMetric::InsufficientSamples;
     }
-    if samples.coverage == WeekCoverage::Missing {
-        return BetaMetric::Unavailable(PerformanceError::InvalidPeriod);
-    }
     match covariance_beta(&samples.portfolio, &samples.market) {
-        Ok(value) => BetaMetric::Value(value),
+        Ok(value) => BetaMetric::Value(PerformanceBeta {
+            beta: value.beta,
+            r_squared: value.r_squared,
+            start: samples.start,
+            end: samples.end,
+            weeks: PerformanceWeeks(samples.portfolio.len()),
+        }),
         Err(cause) => BetaMetric::Unavailable(cause),
     }
+}
+#[derive(Debug, PartialEq, Eq)]
+struct BetaCoefficients {
+    beta: PerformanceValue,
+    r_squared: PerformanceValue,
 }
 
 fn metric(value: Result<PerformanceValue, PerformanceError>) -> RiskMetric {
@@ -132,7 +158,7 @@ fn variance(values: &[PerformanceValue]) -> Result<Number, PerformanceError> {
 fn covariance_beta(
     portfolio: &[PerformanceValue],
     market: &[PerformanceValue],
-) -> Result<PerformanceBeta, PerformanceError> {
+) -> Result<BetaCoefficients, PerformanceError> {
     let port_mean = mean(portfolio)?;
     let market_mean = mean(market)?;
     let covariance = portfolio
@@ -148,7 +174,7 @@ fn covariance_beta(
         .div(Number::new(Decimal::from(portfolio.iter().skip(1).count())))?;
     let port_var = variance(portfolio)?;
     let market_var = variance(market)?;
-    Ok(PerformanceBeta {
+    Ok(BetaCoefficients {
         beta: PerformanceValue::from_number(covariance.div(market_var)?),
         r_squared: PerformanceValue::from_number(
             covariance.mul(covariance)?.div(port_var.mul(market_var)?)?,
@@ -183,47 +209,60 @@ fn weekly(
     performance: &Performance,
     market: &[PerformanceValue],
 ) -> Result<WeeklyReturns, PerformanceError> {
-    let boundaries = performance
-        .offsets
-        .iter()
-        .enumerate()
-        .filter(|(_, offset)| offset.as_u32().wrapping_rem(7) == 0)
-        .collect::<Vec<_>>();
-    let mut coverage = if performance.duration.as_u32().wrapping_rem(7) == 0 {
-        WeekCoverage::Whole
-    } else {
-        WeekCoverage::Missing
-    };
+    let total = *performance.duration.as_u32();
+    let weeks = total.wrapping_div(7);
+    let remainder = total.wrapping_rem(7);
     let mut portfolio = Vec::new();
     let mut benchmark = Vec::new();
-    for ((start_index, start_offset), (end_index, end_offset)) in
-        boundaries.iter().zip(boundaries.iter().skip(1))
-    {
-        if end_offset.as_u32().wrapping_sub(*start_offset.as_u32()) != 7 {
-            coverage = WeekCoverage::Missing;
-            continue;
+    let mut first = performance.start();
+    let mut last = performance.start();
+    let boundaries = (0..=weeks)
+        .map(|index| {
+            let boundary = remainder.wrapping_add(index.wrapping_mul(7));
+            performance
+                .offsets
+                .iter()
+                .zip(&performance.dates)
+                .enumerate()
+                .rev()
+                .find(|(_, (offset, _))| {
+                    let day = *offset.as_u32();
+                    day <= boundary && boundary.wrapping_sub(day) < 7
+                })
+                .map(|(position, (_, date))| (position, *date))
+        })
+        .collect::<Vec<_>>();
+    for (old, today) in boundaries.iter().zip(boundaries.iter().skip(1)) {
+        if let (Some((start, start_date)), Some((end, end_date))) = (old, today) {
+            let count = end.wrapping_sub(*start);
+            if portfolio.is_empty() {
+                first = *start_date;
+            }
+            last = *end_date;
+            portfolio.push(linked(
+                &performance
+                    .returns
+                    .iter()
+                    .skip(*start)
+                    .take(count)
+                    .copied()
+                    .collect::<Vec<_>>(),
+            )?);
+            benchmark.push(linked(
+                &market
+                    .iter()
+                    .skip(*start)
+                    .take(count)
+                    .copied()
+                    .collect::<Vec<_>>(),
+            )?);
         }
-        let count = end_index.wrapping_sub(*start_index);
-        let port = performance
-            .returns
-            .iter()
-            .skip(*start_index)
-            .take(count)
-            .copied()
-            .collect::<Vec<_>>();
-        let bench = market
-            .iter()
-            .skip(*start_index)
-            .take(count)
-            .copied()
-            .collect::<Vec<_>>();
-        portfolio.push(linked(&port)?);
-        benchmark.push(linked(&bench)?);
     }
     Ok(WeeklyReturns {
         portfolio,
         market: benchmark,
-        coverage,
+        start: first,
+        end: last,
     })
 }
 
@@ -269,8 +308,8 @@ mod tests {
             "0.537618"
         );
         let result = covariance_beta(&portfolio, &market).expect("베타");
-        assert_eq!(result.beta().to_string(), "1.993821");
-        assert_eq!(result.r_squared().to_string(), "0.999919");
+        assert_eq!(result.beta.to_string(), "1.993821");
+        assert_eq!(result.r_squared.to_string(), "0.999919");
         assert_eq!(mean(&[]), Err(PerformanceError::Arithmetic));
         assert_eq!(variance(&[]), Err(PerformanceError::Arithmetic));
         assert_eq!(

@@ -493,6 +493,11 @@ fn selection_order(left: &CalibrationFact, right: &CalibrationFact) -> std::cmp:
         )
         .then(left.estimate.id.cmp(&right.estimate.id))
 }
+
+pub(crate) const fn scorecard_calibration_key(value: &Calibration) -> &CalibrationKey {
+    &value.key
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

@@ -224,6 +224,7 @@ impl Timestamp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimeSpan(SignedDuration);
+pub(crate) const BUYING_POWER_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 pub(crate) const SIGNAL_HOLDING_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 impl TimeSpan {
     pub const DAY: Self = Self(SignedDuration::seconds(86400));
@@ -268,33 +269,10 @@ impl TimeInterval {
     }
 }
 
-pub(crate) fn performance_day_difference(start: CalendarDate, end: CalendarDate) -> CalendarDays {
-    CalendarDays(i64::from(
-        end.0.to_julian_day().wrapping_sub(start.0.to_julian_day()),
-    ))
-}
 pub(crate) fn performance_weekday(date: CalendarDate) -> DayNumber {
     DayNumber(date.0.weekday().number_from_monday())
 }
 
-pub(crate) fn performance_flow_days(
-    start: Timestamp,
-    end: Timestamp,
-) -> crate::performance_arithmetic::Days {
-    let first = start
-        .utc_seconds()
-        .as_i64()
-        .wrapping_add(32400)
-        .wrapping_div_euclid(86400);
-    let last = end
-        .utc_seconds()
-        .as_i64()
-        .wrapping_add(32400)
-        .wrapping_div_euclid(86400);
-    let [low0, low1, low2, low3, _, _, _, _] =
-        last.wrapping_sub(first).unsigned_abs().to_le_bytes();
-    crate::performance_arithmetic::Days::new(u32::from_le_bytes([low0, low1, low2, low3]))
-}
 #[cfg(test)]
 mod tests {
     use super::{
