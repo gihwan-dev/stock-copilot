@@ -1,7 +1,7 @@
 use super::graph::Sources;
 use proc_macro2::{Ident, TokenStream};
 use std::collections::{BTreeMap, BTreeSet};
-use syn::{spanned::Spanned, visit::Visit};
+use syn::visit::Visit;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Kind {
@@ -21,6 +21,7 @@ pub(super) struct Import {
     pub(super) bound: String,
     pub(super) original: String,
     pub(super) internal: bool,
+    origin: String,
 }
 
 fn flatten(
@@ -32,7 +33,7 @@ fn flatten(
 ) -> Option<()> {
     match tree {
         syn::UseTree::Path(path) => {
-            prefix.push(path.ident.to_string());
+            prefix.push(crate::rust_names::ident(&path.ident));
             flatten(&path.tree, prefix, root_modules, lib, found)?;
             prefix.pop();
         }
@@ -42,14 +43,20 @@ fn flatten(
             }
         }
         syn::UseTree::Name(name) => binding(
-            (name.ident.to_string(), name.ident.to_string()),
+            (
+                crate::rust_names::ident(&name.ident),
+                crate::rust_names::ident(&name.ident),
+            ),
             prefix,
             root_modules,
             lib,
             found,
         ),
         syn::UseTree::Rename(name) => binding(
-            (name.rename.to_string(), name.ident.to_string()),
+            (
+                crate::rust_names::ident(&name.rename),
+                crate::rust_names::ident(&name.ident),
+            ),
             prefix,
             root_modules,
             lib,
@@ -71,10 +78,12 @@ fn binding(
         ["crate", "self", "super"].contains(&root.as_str())
             || (lib == Location::Root && modules.contains(root))
     });
+    let origin = prefix.first().cloned().unwrap_or_else(|| original.clone());
     found.push(Import {
         bound,
         original,
         internal,
+        origin,
     });
 }
 
@@ -93,7 +102,7 @@ pub(super) fn modules(file: &syn::File) -> BTreeSet<String> {
         .iter()
         .filter_map(|item| {
             if let syn::Item::Mod(module) = item {
-                Some(module.ident.to_string())
+                Some(crate::rust_names::ident(&module.ident))
             } else {
                 None
             }
@@ -123,42 +132,25 @@ pub(super) fn named(item: &syn::Item) -> Option<&Ident> {
     }
 }
 
-pub(super) fn tokens(item: &impl Spanned, source: &str) -> Option<String> {
-    let span = item.span();
-    slice_tokens(source, span.start(), span.end())
+pub(super) fn stream(item: &syn::Item) -> TokenStream {
+    syn::parse_quote!(#item)
 }
 
-pub(super) fn slice_tokens(
-    source: &str,
-    start: proc_macro2::LineColumn,
-    end: proc_macro2::LineColumn,
-) -> Option<String> {
-    let offset = |position: proc_macro2::LineColumn| {
-        source
-            .split_inclusive('\n')
-            .take(position.line.saturating_sub(1))
-            .map(str::len)
-            .sum::<usize>()
-            .checked_add(position.column)
-    };
-    source
-        .get(offset(start)?..offset(end)?)?
-        .parse::<TokenStream>()
-        .ok()
-        .map(|stream| stream.to_string())
+pub(super) fn tokens(item: &syn::Item) -> String {
+    stream(item).to_string()
 }
 
 #[derive(Default)]
 pub(super) struct Symbols {
     kinds: BTreeMap<String, BTreeSet<Kind>>,
     globbed: bool,
+    reserved: BTreeSet<String>,
 }
 
 struct Collector<'a> {
     symbols: &'a mut Symbols,
     pending: Vec<Import>,
     root_modules: BTreeSet<String>,
-    lib: bool,
     depth: usize,
 }
 
@@ -172,7 +164,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             };
             self.symbols
                 .kinds
-                .entry(name.to_string())
+                .entry(crate::rust_names::ident(name))
                 .or_default()
                 .insert(kind);
         }
@@ -181,12 +173,33 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_mod(&mut self, i: &'ast syn::ItemMod) {
         self.symbols
             .kinds
-            .entry(i.ident.to_string())
+            .entry(crate::rust_names::ident(&i.ident))
             .or_default()
             .insert(Kind::Data);
         self.depth = self.depth.saturating_add(1);
         syn::visit::visit_item_mod(self, i);
         self.depth = self.depth.saturating_sub(1);
+    }
+    fn visit_path(&mut self, i: &'ast syn::Path) {
+        if i.segments.len() > 1
+            && let Some(first) = i.segments.first()
+        {
+            let name = crate::rust_names::ident(&first.ident);
+            if !["crate", "self", "super"].contains(&name.as_str()) {
+                self.symbols.reserved.insert(name);
+            }
+        }
+        syn::visit::visit_path(self, i);
+    }
+    fn visit_item_extern_crate(&mut self, i: &'ast syn::ItemExternCrate) {
+        self.symbols
+            .reserved
+            .insert(crate::rust_names::ident(&i.ident));
+        if let Some((_, alias)) = &i.rename {
+            self.symbols
+                .reserved
+                .insert(crate::rust_names::ident(alias));
+        }
     }
     fn visit_macro(&mut self, i: &'ast syn::Macro) {
         if super::macro_tokens::identifiers(i.tokens.clone()).contains("use") {
@@ -197,7 +210,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         if let Some(found) = imports(
             i,
             &self.root_modules,
-            if self.lib && self.depth == 0 {
+            if self.depth == 0 {
                 Location::Root
             } else {
                 Location::Nested
@@ -214,13 +227,12 @@ impl Symbols {
     pub(super) fn read(sources: &Sources) -> Option<Self> {
         let mut symbols = Self::default();
         let mut pending = Vec::new();
-        for (path, source) in sources {
+        for source in sources.values() {
             let file = syn::parse_file(source).ok()?;
             let mut collector = Collector {
                 symbols: &mut symbols,
                 pending: Vec::new(),
                 root_modules: modules(&file),
-                lib: path.ends_with("/lib.rs"),
                 depth: 0,
             };
             collector.visit_file(&file);
@@ -228,6 +240,11 @@ impl Symbols {
         }
         for import in &pending {
             if !import.internal {
+                symbols.reserved.extend([
+                    import.origin.clone(),
+                    import.original.clone(),
+                    import.bound.clone(),
+                ]);
                 symbols
                     .kinds
                     .entry(import.bound.clone())
@@ -265,6 +282,11 @@ impl Symbols {
                     .extend(kinds);
             }
         }
+    }
+    pub(super) fn reserved(&self) -> BTreeSet<String> {
+        let mut names = crate::rust_names::prelude();
+        names.extend(self.reserved.iter().cloned());
+        names
     }
     pub(super) fn has_globs(&self) -> bool {
         self.globbed

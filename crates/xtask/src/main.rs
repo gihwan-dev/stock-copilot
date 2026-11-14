@@ -17,6 +17,7 @@ mod mutants_check;
 mod nextest_list;
 mod private_temp;
 mod raw_types;
+mod rust_names;
 mod source_check;
 mod sql_check;
 mod test_diff;

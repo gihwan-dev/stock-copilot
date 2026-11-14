@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use proc_macro2::TokenStream;
-use syn::spanned::Spanned;
 
 use crate::check_support::read_text;
 use crate::git_base::{git, listed_paths, output};
@@ -20,31 +19,20 @@ pub(super) fn matches_target(glob: &str, file: &str) -> bool {
 }
 
 fn without_exports(source: &str) -> Option<String> {
-    let parsed = syn::parse_file(source).ok()?;
-    let mut remaining = source.as_bytes().to_vec();
-    for declaration in parsed.items {
-        if let syn::Item::Use(item) = declaration
-            && let syn::Visibility::Public(_) = item.vis
-            && item.attrs.is_empty()
-        {
-            let span = item.span();
-            let offset = |position: proc_macro2::LineColumn| {
-                source
-                    .split_inclusive('\n')
-                    .take(position.line.saturating_sub(1))
-                    .map(str::len)
-                    .sum::<usize>()
-                    .saturating_add(position.column)
-            };
-            remaining
-                .get_mut(offset(span.start())..offset(span.end()))?
-                .fill(b' ');
-        }
+    let mut parsed = syn::parse_file(source).ok()?;
+    parsed.items.retain(|item| !removable_export(item));
+    let tokens: TokenStream = syn::parse_quote!(#parsed);
+    Some(tokens.to_string())
+}
+
+fn removable_export(item: &syn::Item) -> bool {
+    let syn::Item::Use(import) = item else {
+        return false;
+    };
+    match &import.vis {
+        syn::Visibility::Public(_) => import.attrs.is_empty(),
+        syn::Visibility::Restricted(_) | syn::Visibility::Inherited => false,
     }
-    String::from_utf8(remaining)
-        .ok()
-        .and_then(|text| text.parse::<TokenStream>().ok())
-        .map(|tokens| tokens.to_string())
 }
 
 fn test_support(path: &str, source: &str) -> bool {
@@ -77,6 +65,11 @@ pub(super) fn select_sources(
         .filter(|path| path.starts_with(&prefix))
         .collect();
     for path in &touched {
+        if !path.starts_with(&format!("{directory}/src/"))
+            || (!before.contains_key(*path) && !globs.iter().any(|glob| matches_target(glob, path)))
+        {
+            return Err(String::from("non-target crate input"));
+        }
         let source = after
             .get(*path)
             .ok_or("missing, deleted, or non-Rust input")?;

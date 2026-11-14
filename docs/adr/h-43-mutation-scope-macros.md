@@ -62,9 +62,11 @@ actual_portfolio_boundary_deletion_reaches_exact_arithmetic_through_graph는 실
 
 money 계열은 공용 계산, 테스트 도우미와 동명 항목의 후보 합집합 때문에 크게 연결된다. macro fallback이 아니라 실제 그래프 선택이다. 이번 결과를 전반적인 큰 범위 절감으로 포장하지 않는다.
 
-## 독립 커버리지 대조
+## 독립 커버리지 대조(최초 H-43 측정)
 
 구현 전에 파일별 테스트만 독립 실행했다. 명령은 각 이름에 대해 `CARGO_LLVM_COV_TARGET_DIR=$PWD/target/h43/coverage cargo llvm-cov nextest --locked --package domain --json --output-path target/h43/coverage-<이름>.json -E 'test(/^<이름>::/)'`다. no-clean과 기존 프로필 재사용 없이 매번 도구의 기본 정리를 수행했다. 성공한 테스트 실행의 LLVM JSON에서 count>0이고 hasCount인 segment가 있는 domain 파일을 관측 집합으로 삼았다. holding_valuation에는 테스트가 없어 종료 4였으므로 표본에서 빼고 테스트가 있는 파일 열 개를 골랐다. 테스트 0개를 통과로 바꾸지 않았다.
+
+이 표본 열 개 중 여덟 개의 외향 닫힘은 50/52파일(96.15%)로 사실상 crate 전체였다. 누락 0은 이 큰 집합에 대한 포함 결과이며, 좁게 선택할 때의 증거로는 약하다. 다음 리뷰 보완의 빠진 파일 변이 대조가 그 약점을 보완한다. 이 표는 최초 H-43의 관측으로, 아래 수정 뒤의 새 범위 수치라고 주장하지 않는다.
 
 대조 대상은 내향 파일을 더하기 전 **Graph::outward**다. 각 관측 집합이 그 집합에 포함되는지 검사했고 누락은 0이다. 이 실행 표본의 포함 검증이며 모든 미래 입력/동적 호출의 건전성 증명은 아니다.
 
@@ -100,7 +102,7 @@ money 계열은 공용 계산, 테스트 도우미와 동명 항목의 후보 �
 
 후속 기준은 h-43의 77e22a07a90f879f4dd6de1e273cb39c65bc03a7이다. 기존 항목과 테스트가 그대로이고 이름·메서드 해석을 바꾸지 않는 추가라면 기존 변이가 새로 생존하지 않는다는 조건으로 선택을 줄인다. 단순히 텍스트 줄이 더해졌다는 사실은 충분하지 않다. 아래 가림 공격에서 실제 반례를 찾았으므로 브리프의 무조건적인 새 파일 허용과 새 trait 가져오기를 좁힌다.
 
-syn으로 기준·현재 판을 파싱하고 각 항목의 span에서 토큰 열을 다시 읽는다. 기존 항목·속성·순서가 모두 유지되는 부분 수열인지 확인한다. 기존 cfg(test) 모듈은 헤더가 동일하고 내부의 모든 기존 항목이 동일한 토큰과 순서로 남아야 한다. 공백만 달라 토큰이 같은 변경은 보수적으로 기존 그래프에 맡긴다. 주석은 도입하지 않으며 기존 주석 금지 검사도 유지한다.
+syn으로 기준·현재 판을 파싱하고 파싱한 항목 자체를 토큰 열로 출력해 비교한다. 원문 span 슬라이싱은 사용하지 않는다. 기존 항목·속성·순서가 모두 유지되는 부분 수열인지 확인한다. 기존 cfg(test) 모듈은 헤더가 동일하고 내부의 모든 기존 항목이 동일한 토큰과 순서로 남아야 한다. 공백만 달라 토큰이 같은 변경은 보수적으로 기존 그래프에 맡긴다. 주석은 도입하지 않으며 기존 주석 금지 검사도 유지한다.
 
 | 변경 | 판정과 선택 |
 |---|---|
@@ -166,10 +168,119 @@ D-23은 jobs=6, timeout-multiplier=30으로 89개를 308.49초에 완료했다: 
 추가 전용은 Rust의 모든 이름·메서드 해석을 증명하는 일반 분석기가 아니다. 외부/trait import, 기존 타입 impl, 매크로 정의와 모듈 구조 변경을 거부하고 알려지지 않은 형식은 그래프로 돌린다. 이 때문에 안전한 추가도 범위가 크게 잡힐 수 있다. 식별자 신선함을 과도하게 잡은 경우와 새 테스트 모듈 신설이 대표적이다. 다른 crate·외부 생성 코드·동시 소스 변경에 관한 앞 절의 한계는 유지한다. 가림 반례를 새로 찾으면 그 형태를 추가 전용에서 제외하고 회귀 테스트를 더한다. 밤 전체 검사와 실패 이슈를 다음 병합 전에 해결하는 운영 규칙도 그대로 유지한다.
 
 
-### 후속 자체 검증
+### 후속 자체 검증(78e5ad5 당시)
 
 scope·graph·새 판정의 손 변형 28개를 각각 적용해 컴파일한 뒤 관련 테스트가 종료 100으로 실패하는 것을 확인했다. 새 파일 검증 제거, 등록 단축 제거, 파일 속성 비교 제거, 항목 토큰 비교 뒤집기, 기존 항목 삭제 허용, 기존 테스트 모듈 토큰 비교 무시, 전역 이름 충돌 무시, 기존 타입 impl 허용, 중첩 impl 허용, trait import 허용, 미사용 import 허용, 공개 이름 충돌 허용, glob 가져오기 허용, 별칭 종류 전파 제거, 단일 파일 선택 제거, 혼합 그래프 합집합 제거, 추가 파일의 그래프 불확실성 무시, 기준 그래프 간선 제거, 외향 전이 제거, test-diff 차단 제거에 더해 명목 타입의 실제 범위, impl의 실제 범위, self 이름의 generic 가림, cfg 명목 타입, 기존 glob, 불투명 매크로 안의 항목/import, 루트 절대 경로의 거부 분기를 제거한 변형도 검출했다. 컴파일 실패를 검출 성공으로 세지 않았다. 기록은 target/h43-additions/manual.json과 manual-*.log다.
 
 손 변형은 매번 원본으로 복구했고 최종 코드에서 다시 형식·Clippy·관련 52개 테스트가 통과함을 확인했다. 기존 master 테스트·보호 정책·글롭·허용 목록·의존성은 바꾸지 않았다. 일반 커밋 훅의 전체 검사도 생략하지 않는다.
 
 최종 추가 제한을 적용한 뒤 이력 여섯 건의 선택 파일 목록을 다시 계산해 앞 측정과 바이트 단위로 일치함을 확인했다. 실제 가림 fixture 여덟 건은 RUSTFLAGS="-D warnings"에서도 [0, 100, 0, 0]을 재확인했다. glob 사례는 기존 BorrowMut 사용을 유지해 unused import 경고로 우연히 막히는 사례가 아니게 했다. 원본 소스를 그대로 읽은 임시 분류 감사에서도 여덟 건 모두 Graph, 기존 변이가 계속 잡히는 IntoIterator 대조만 OnlyFile이었다(attack-classifications-final.log). 감사용 테스트는 제거했다.
+
+
+## 78e5ad5 적대적 리뷰 보완
+
+### 추가 전용의 전제와 강제 범위
+
+| 전제 | 강제 방법과 한계 |
+|---|---|
+| 기존 항목의 토큰 동일성이 정확하다 | syn AST를 `syn::parse_quote!(#item)`으로 proc_macro2::TokenStream에 보간한 뒤 문자열을 비교한다. 이 공용 매크로의 보간이 ToTokens를 사용한다. 항목·속성·테스트 모듈 헤더·공개 use 제거 뒤 lib 비교에서 모두 원문 위치 슬라이싱을 없앴다. quote 직접 의존성을 추가하지 않았다 |
+| 이름 동일성이 정확하다 | 공통 rust_names에서 모든 식별자 색인의 r# 접두를 제거한다. 추가 판정, use/별칭/재수출, 그래프 정의·참조·매크로, test-diff 이름/참조/가림에 적용한다. ASCII가 아닌 식별자는 NFC를 임의로 추정하지 않고 추가 전용 거부·crate 전체 또는 test-diff 가림으로 처리한다. 한글 문자열 리터럴은 이 제한에 해당하지 않는다 |
+| 암시적 이름 해석이 바뀌지 않는다 | Rust 2021/2024 prelude, 확인한 std/core/alloc 루트 이름, primitive 이름, 기준 판의 외부 use 원래 이름·별칭·루트·외부 경로와 extern crate 이름을 예약한다. fn drop, struct Some, raw Option/Iterator와 mod core/std/time, raw 재수출 등도 추가 전용에서 제외한다 |
+| 기존 테스트와 지원 코드가 유지된다 | mutants --in-diff가 같은 확정 SHA로 test-diff를 먼저 실행하고 오류·발견 사항이 있으면 변이를 시작하지 않는다. 이를 끄는 옵션·환경 변수는 없다. 테스트 열거도 성공해야 한다 |
+| Rust가 아닌 실행 입력이 유지된다 | 매니페스트·잠금·알려진 전역 설정은 전체 검사, 대상 crate 안의 src 밖 입력과 새 대상 밖 입력은 crate 전체다. build.rs/examples/benches도 포함한다. 임의의 crate 밖 파일·환경·다른 crate가 제공하는 입력까지 동일함을 증명하는 기능은 없으며, 이 전제가 깨지면 추가 전용 논증을 적용할 수 없다 |
+| 위치 의존 매크로의 값이 유지된다 | 기준 crate에서 file/line/module_path 식별자를 발견하면 기존 파일과 lib 등록의 추가 전용 판정을 중지한다. 별칭·로컬 매크로 전달도 놓치지 않도록 crate 단위로 보수적으로 처리하여 같은 이름의 일반 변수도 과선택할 수 있다 |
+| impl과 메서드 해석이 유지된다 | 기존 타입/외부 타입·generic self 가림·cfg 별칭·중첩 범위 impl을 추가 전용에서 제외한다. 그래프는 trait 경로 이름에도 구현 파일을 색인한다. self가 타입 매개변수인 blanket impl과 trait 객체는 정적 호출 소유를 확정하지 않고 crate 전체로 넓힌다. Proposal<State>의 Debug처럼 명목 타입에 대한 generic impl은 trait 이름 색인을 사용한다 |
+| 검사 중 입력과 도구가 고정된다 | 두 판은 같은 고정 Cargo.lock·툴체인·동일한 nextest 패키지/프로필·샌드박스로 비교한다. 작업 사본의 동시 편집은 허용하지 않는다. 새 의존성·허용 목록·대상 글롭·시간 초과 통과는 추가하지 않았다 |
+
+근거: [syn 2.0.119 parse_quote의 보간](https://docs.rs/syn/2.0.119/syn/macro.parse_quote.html), [Rust 2021 core prelude](https://doc.rust-lang.org/core/prelude/rust_2021/index.html), [Rust 2024 core prelude](https://doc.rust-lang.org/core/prelude/rust_2024/index.html), [std v1 prelude](https://doc.rust-lang.org/std/prelude/v1/index.html), [std](https://doc.rust-lang.org/std/index.html)·[core](https://doc.rust-lang.org/core/index.html)·[alloc](https://doc.rust-lang.org/alloc/index.html) 루트 목록. 이름 표는 고정 툴체인 1.99.1의 prelude와 확인한 표준 루트의 보수적 상위 집합이다. 툴체인·외부 매크로·가져오기를 바꾸면 다시 검토한다.
+
+### Unicode 재현과 회귀
+
+`pub const LIMIT: usize = "가".len() + 17;`을 +18로 바꾸고 새 함수를 더한 재현은 이제 Graph이며 consumer가 선택된다. 한글·이모지·결합 문자·여러 줄 문자열·raw 문자열 다섯 가지 모두 고정했다. 독립 fixture에서도 기존 consumer의 >를 >=로 바꾼 같은 변이는 기준 판에서 테스트 실패, 상수 변경 뒤에는 생존했다. RUSTFLAGS="-D warnings"에서 다섯 경우 모두 [기준 0, 기준 변이 100, 변경 0, 변경 변이 0]을 확인했다. 판정은 그 생존을 선택에서 숨기지 않아야 한다. 위치 슬라이싱으로 이를 놓치던 78e5ad5의 추가 전용 판정은 잘못이었다.
+
+회귀 이름은 unicode_changes_cannot_be_hidden_by_item_additions, unicode_exports_do_not_erase_changes_to_other_items, raw_and_plain_prelude_names_are_never_fresh, raw_definition_and_reference_spellings_share_root_owners, test_diff_raw_calls_and_new_names_share_shadow_identity, test_diff_raw_support_names_keep_the_same_support_key, external_aliases_and_fully_qualified_roots_are_not_modules, prelude_reexports_cannot_replace_implicit_names, existing_location_macros_disable_addition_shortcuts, blanket_impls_and_trait_objects_expand_uncertain_dispatch, trait_names_reach_their_implementation_files다.
+
+리뷰에서 살아남은 다섯 조건은 import_origin_and_data_only_guards_are_observable, registration_import_origin_and_mixed_kinds_are_observable, only_exact_test_modules_may_extend_unchanged_headers에 분리된 반례를 더해 고정했다. 테스트 모듈은 경로가 cfg이고 payload가 정확히 test이고 속성이 하나여야 하며, visibility를 포함한 헤더 토큰이 같아야 한다. non_target_additions_expand_the_crate_without_other_checks, new_non_target_rust_files_expand_partial_crate_targets, existing_build_scripts_are_non_rust_execution_inputs는 다른 검사 없이 범위를 넓히는지 검증한다.
+
+### 좁게 선택된 이력에서 빠진 변이 대조
+
+D-20은 8da33c4c6a1515cc47cf4c56b8493fb1a48f6ccc → af70b46fc6c62a0d1a7b036c9977b3d2f3d47366, D-23은 5eec80d7e15b9b2645b94742eeba8a898f299a25 → 6e417f0796ab8f58cbcd96f335dec169312e6947이다. 실제 첫 부모를 각각 별도 git archive에 풀었다. 공통 seed 0x483433으로 우선 공통 파일 20개에서 각 5개를 뽑고, seed 0x483434로 빠진 나머지 모든 생성 가능 파일의 표본을 보충했다. 변이가 5개 미만이면 전수 검사했다. 선택 파일을 다시 변이한 수치가 아니다.
+
+각 판에서 cargo mutants 27.1.0 --no-config --gitignore=false --manifest-path crates/domain/Cargo.toml --list의 동일한 이름을 무작위로 선택했고, --file과 --re를 함께 사용해 실제 열거 집합을 확인했다. --re만 사용하면 새 투자 프로필의 Self 필드 삭제 변이 세 개가 추가로 열거되는 동작을 관측했으므로 파일 교집합도 확인했다. 각 실행은 --test-tool=nextest --cap-lints=true --jobs 2 --timeout-multiplier 30 --no-shuffle이다. 각 배치의 변이 없는 baseline도 성공했다. 샤드·baseline skip·iterate·시간 초과 통과는 쓰지 않았다.
+
+| 이력 | 좁은 선택 | 빠진 파일 중 변이 생성 파일 | 표본 | 기준/변경 검출 | 기준/변경 컴파일 불가 | 결과 차이 | 새 생존 | 시간(기준/변경) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| D20 | 4파일 | 45 | 217 | 107/107 | 110/110 | 0 | 0 | 485.75s/491.99s |
+| D23 | 1파일 | 49 | 236 | 114/114 | 122/122 | 0 | 0 | 953.12s/944.39s |
+
+D-20의 빠진 47파일 중 45파일, D-23의 빠진 51파일 중 49파일에서 변이가 생성됐다. lib.rs와 thesis.rs에는 변이가 0개여서 실행 표본을 만들 수 없다. proposal_id는 1개, ratio는 4개, volatility_display는 2개이며 D-23의 horizon도 4개뿐이어서 모두 전수 실행했다. 나머지 파일은 각각 5개 이상이다. 컴파일 불가 110/122개를 검출 성공으로 합치지 않았다. 실제 테스트로 검출된 표본은 각 107/114개이며, 전체 표본의 상태가 판 사이에 모두 같았다. 이 결과는 표본과 고정된 두 이력에 대한 증거이며 모든 미래 추가의 증명은 아니다.
+
+| 빠진 파일(src/ 아래) | D20 표본/검출/컴파일 불가(기준=변경) | D23 표본/검출/컴파일 불가(기준=변경) | 새 생존 |
+|---|---:|---:|---:|
+| account_id.rs | 5/4/1 | 5/5/0 | 0 |
+| candle.rs | 5/1/4 | 5/1/4 | 0 |
+| client_order_id.rs | 5/5/0 | 5/5/0 | 0 |
+| cluster.rs | 5/4/1 | 5/3/2 | 0 |
+| collected_item.rs | 5/3/2 | 5/0/5 | 0 |
+| disclosure.rs | 5/5/0 | 5/4/1 | 0 |
+| domain_time.rs | 5/0/5 | 5/0/5 | 0 |
+| exact_arithmetic.rs | 5/2/3 | 5/2/3 | 0 |
+| exclusions.rs | 선택 파일 | 5/3/2 | 0 |
+| fx_conversion.rs | 5/0/5 | 5/0/5 | 0 |
+| fx_rate.rs | 5/1/4 | 5/1/4 | 0 |
+| holding.rs | 5/1/4 | 5/1/4 | 0 |
+| holding_valuation.rs | 5/1/4 | 5/0/5 | 0 |
+| horizon.rs | 선택 파일 | 4/3/1 | 0 |
+| instrument_id.rs | 5/4/1 | 5/4/1 | 0 |
+| investor_profile.rs | 선택 파일 | 5/5/0 | 0 |
+| market_session.rs | 5/5/0 | 5/5/0 | 0 |
+| money.rs | 5/2/3 | 5/1/4 | 0 |
+| money_display.rs | 5/1/4 | 5/3/2 | 0 |
+| news_item.rs | 5/5/0 | 5/4/1 | 0 |
+| numeric_input.rs | 5/3/2 | 5/3/2 | 0 |
+| order_amount.rs | 5/3/2 | 5/3/2 | 0 |
+| order_intent.rs | 5/0/5 | 5/0/5 | 0 |
+| order_price.rs | 5/4/1 | 5/4/1 | 0 |
+| order_quantity.rs | 5/2/3 | 5/0/5 | 0 |
+| portfolio.rs | 5/1/4 | 5/0/5 | 0 |
+| portfolio_valuation.rs | 5/0/5 | 5/0/5 | 0 |
+| price.rs | 5/1/4 | 5/1/4 | 0 |
+| probability.rs | 5/3/2 | 5/4/1 | 0 |
+| proposal.rs | 5/3/2 | 5/3/2 | 0 |
+| proposal_facts.rs | 5/2/3 | 5/4/1 | 0 |
+| proposal_id.rs | 1/0/1 | 1/0/1 | 0 |
+| proposal_range.rs | 5/2/3 | 5/2/3 | 0 |
+| quantity.rs | 5/4/1 | 5/3/2 | 0 |
+| quote.rs | 5/2/3 | 5/2/3 | 0 |
+| ratio.rs | 4/1/3 | 4/1/3 | 0 |
+| settled_row_set.rs | 5/3/2 | 5/3/2 | 0 |
+| symbol.rs | 5/5/0 | 5/5/0 | 0 |
+| thesis.rs | 5/4/1 | 5/4/1 | 0 |
+| thesis/evidence.rs | 5/4/1 | 5/4/1 | 0 |
+| thesis/model.rs | 5/2/3 | 5/2/3 | 0 |
+| transaction.rs | 5/3/2 | 5/3/2 | 0 |
+| transaction_kind.rs | 5/3/2 | 5/3/2 | 0 |
+| transaction_order.rs | 5/1/4 | 5/1/4 | 0 |
+| transaction_response.rs | 5/1/4 | 5/1/4 | 0 |
+| volatility.rs | 5/4/1 | 5/2/3 | 0 |
+| volatility_arithmetic.rs | 5/0/5 | 5/0/5 | 0 |
+| volatility_display.rs | 2/2/0 | 2/2/0 | 0 |
+| weight_caps.rs | 선택 파일 | 5/4/1 | 0 |
+
+표본 원본, 명령, outcome JSON, 파일별 비교는 target/h43-review/sample-selection.json, D20-extra-selection.json, D23-extra-selection.json, sample-comparison.json, sample-*/mutants.out, extra-*/mutants.out에 남겼다. 총 변이 실행은 두 이력의 217/236개를 각 두 판에서 실행한 906개다. 실제 Cargo-mutants의 caught/unviable/missed/timeout 상태를 이름으로 맞춰 비교했다.
+
+### 실제 cargo-mutants를 호출하는 기존 테스트의 실패 조사
+
+weak_test_example_leaves_surviving_mutants는 수정 전 전체 검사에서 16.599초에 통과했고, 수정 후 관련 검사에서도 7.868초·11.672초·8.908초에 통과했다. 78e5ad5를 별도 archive에서 빌드한 원본 테스트도 단독 실행 성공(빌드 포함 49.99초), 같은 작업 사본에서 두 nextest 명령을 겹친 대조도 모두 성공(12.34/23.76초)이었다. 부하를 추가한 현재 표본 실험 중에도 시간 초과를 재현하지 못했다. 리뷰어의 실패 원본 로그가 없어 부하인지 기존 fixture 공유인지 변경 때문인지 단정할 수 없다. 기존 master 테스트와 생존 기대값은 바꾸지 않았다. weak-diagnosis.json과 weak-baseline-*.log에 기록했다.
+
+### 남는 구멍과 운영
+
+확장 그래프와 추가 전용 판정은 Rust 전체의 이름 해석·I/O·빌드 환경을 증명하는 분석기가 아니다. crate 밖 testkit/설정 파일이나 환경이 domain의 기존 테스트 의미를 바꾸는 경우, 새로운 외부 매크로 허용 표의 오류, 컴파일러·툴체인 변경은 별도 검토가 필요하다. 알려진 입력 경로를 제외한 임의의 외부 입력은 이 판정만으로 불변임을 증명하지 못한다. 그런 변경을 추가 전용의 근거로 승인하면 안 된다. blanket/dyn, 위치 의존, 비ASCII 이름과 불투명 입력은 일부 안전한 변경까지 전체 또는 그래프로 넓혀 성능 절감이 작아질 수 있다. 밤 전체 검사와 실패 이슈의 다음 병합 전 해결 규칙을 유지한다.
+
+### 최종 분류와 손 변형
+
+외부 prelude 수집에서 비-lib 파일의 명시적인 하위 모듈 재수출도 내부 이름으로 해석하도록 바로잡았다. thesis.rs의 `mod evidence; pub use evidence::Evidence`를 외부 crate evidence로 오인하면 calibration의 새 테스트 도우미 evidence를 잘못 거부한다. 선언된 자식 모듈이라는 구조적 근거가 있는 현재 파일 최상위 import만 내부로 인정하며, 그 밖의 불명확한 이름은 여전히 거부한다. declared_child_module_imports_are_not_external_preludes가 이를 고정한다. 최종 코드로 실제 여섯 이력을 다시 분류했고 D-20은 4파일, D-23은 1파일을 유지했다(final-history-scope2.log). 두 이력의 기존 테스트 변경 검사도 위반 0이었다(D20-test-changes.log, D23-test-changes.log).
+
+최종 코드에서 손 변형 42개 모두 컴파일 후 테스트 실패(종료 100)로 검출했다. 리뷰에서 살아남은 내부 import, Data만 허용, cfg 경로/payload, 헤더, 속성 개수 조건을 포함한다. AST 동일성, 공개 use 제거, raw 이름 정의/참조/파일 경로, 전체 prelude/표준 루트, 외부 crate·별칭·원래 이름·경로, 위치 의존, 대상 밖 입력, blanket/dyn, trait 구현 소유, test-diff 키·참조·연결, 비ASCII 불확실성, 혼합 합집합, 기준 그래프, 외향 폐쇄도 각각 변형했다. 컴파일 오류를 검출 성공으로 세지 않았다. trait 이름 색인의 경우 다른 경로 식별자만으로 구현에 도달하는 약한 예제를 발견하여 trait을 별도 파일에 두고 super 경로로 사용하는 회귀로 교체한 뒤 재검출했다. 표본의 기대값을 구현 출력에서 복사하지 않았다. 원본은 target/h43-review/manual.json과 manual-*.log다.
+
+로컬 master의 진행분 f9f0c5f0b7dff04ad4a184aadf882f4af1fee376을 끝에 병합했다. 생성물 .codex/config.toml·harness/claude-hooks/hashes.json의 충돌은 기존 쓰기 스크립트로 재생성했다. 기존 master 테스트 본문을 수정하지 않았다. 최종 커밋은 일반 커밋 훅의 fresh-build·commit-guard·전체 check를 통과해야 반영한다.

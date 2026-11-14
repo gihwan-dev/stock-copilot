@@ -6,6 +6,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceObservation {
     instrument: ResolvedOrderInstrument,
+    instrument_id: Option<crate::InstrumentId>,
     price: Price,
     observed_at: Timestamp,
     fresh_until: Timestamp,
@@ -20,10 +21,34 @@ impl PriceObservation {
             .and_then(|span| observed_at.checked_add(span))?;
         Ok(Self {
             instrument,
+            instrument_id: None,
             price,
             observed_at,
             fresh_until,
         })
+    }
+    pub fn from_identified_quote_parts(
+        instrument_id: crate::InstrumentId,
+        instrument: ResolvedOrderInstrument,
+        price: Price,
+        market_local_at: Timestamp,
+    ) -> Result<Self, TimeError> {
+        let offset = market_local_at.offset_seconds();
+        let allowed_offsets = if instrument.market() == crate::Market::Kr {
+            [32_400_i32, 32_400_i32]
+        } else {
+            [-18_000_i32, -14_400_i32]
+        };
+        if !allowed_offsets.contains(offset.as_i32()) {
+            return Err(TimeError::InvalidComponent);
+        }
+        let mut observation = Self::from_quote_parts(instrument, price, market_local_at)?;
+        observation.instrument_id = Some(instrument_id);
+        Ok(observation)
+    }
+    #[must_use]
+    pub fn instrument_id(&self) -> Option<&crate::InstrumentId> {
+        self.instrument_id.as_ref()
     }
     #[must_use]
     pub fn instrument(&self) -> &ResolvedOrderInstrument {

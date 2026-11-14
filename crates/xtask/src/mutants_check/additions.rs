@@ -4,7 +4,7 @@ use super::{
     macro_tokens,
 };
 use std::collections::BTreeSet;
-use syn::{spanned::Spanned, visit::Visit};
+use syn::visit::Visit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Change {
@@ -18,17 +18,26 @@ pub(super) struct Additions<'a> {
     after: &'a Sources,
     prior_ids: BTreeSet<String>,
     symbols: Symbols,
+    reserved: BTreeSet<String>,
+    location_sensitive: bool,
 }
 
 impl<'a> Additions<'a> {
     pub(super) fn read(before: &'a Sources, after: &'a Sources) -> Option<Self> {
         let mut prior_ids = BTreeSet::new();
+        let mut location_sensitive = false;
         for source in before.values() {
-            prior_ids.extend(macro_tokens::identifiers(source.parse().ok()?));
+            let names = macro_tokens::identifiers(source.parse().ok()?);
+            location_sensitive |= ["file", "line", "module_path"]
+                .iter()
+                .any(|name| names.contains(*name));
+            prior_ids.extend(names);
         }
         Some(Self {
             before,
             after,
+            reserved: Symbols::read(before)?.reserved(),
+            location_sensitive,
             prior_ids,
             symbols: Symbols::read(after)?,
         })
@@ -43,24 +52,17 @@ impl<'a> Additions<'a> {
             return self.safe_new_file(&after).then_some(Change::OnlyFile);
         };
         let before = syn::parse_file(previous).ok()?;
-        if self.symbols.has_globs() {
+        if self.symbols.has_globs() || self.location_sensitive {
             return None;
         }
-        if attrs(&before.attrs, previous)? != attrs(&after.attrs, current)? {
+        if attrs(&before.attrs) != attrs(&after.attrs) {
             return None;
         }
-        if path.ends_with("/lib.rs")
-            && self.registration(path, (&before, previous), (&after, current))?
-        {
+        if path.ends_with("/lib.rs") && self.registration(path, &before, &after)? {
             return Some(Change::Registration);
         }
         let mut added = Vec::new();
-        sequence(
-            (&before.items, previous),
-            (&after.items, current),
-            &mut added,
-            TestItems::Extend,
-        )?;
+        sequence(&before.items, &after.items, &mut added, TestItems::Extend)?;
         if added.is_empty() {
             return None;
         }
@@ -74,12 +76,11 @@ impl<'a> Additions<'a> {
         let references = added
             .iter()
             .filter(|item| !is_use(item))
-            .filter_map(|item| symbols::tokens(*item, current))
-            .filter_map(|text| text.parse().ok())
-            .flat_map(macro_tokens::identifiers)
+            .flat_map(|item| macro_tokens::identifiers(symbols::stream(item)))
             .collect();
         let validator = Validator {
             prior_ids: &self.prior_ids,
+            reserved: &self.reserved,
             nominal: &nominal,
             old_ids: &old_ids,
             references: &references,
@@ -100,6 +101,7 @@ impl<'a> Additions<'a> {
         validate(
             Validator {
                 prior_ids: &self.prior_ids,
+                reserved: &self.reserved,
                 nominal: &nominal,
                 old_ids: &empty,
                 references: &empty,
@@ -112,19 +114,9 @@ impl<'a> Additions<'a> {
             &file.items,
         )
     }
-    fn registration(
-        &self,
-        path: &str,
-        (before, previous): (&syn::File, &str),
-        (after, current): (&syn::File, &str),
-    ) -> Option<bool> {
+    fn registration(&self, path: &str, before: &syn::File, after: &syn::File) -> Option<bool> {
         let mut added = Vec::new();
-        sequence(
-            (&before.items, previous),
-            (&after.items, current),
-            &mut added,
-            TestItems::Fixed,
-        )?;
+        sequence(&before.items, &after.items, &mut added, TestItems::Fixed)?;
         if added.is_empty() {
             return Some(false);
         }
@@ -145,8 +137,11 @@ impl<'a> Additions<'a> {
         Some(true)
     }
     fn registration_module(&self, parent: &str, module: &syn::ItemMod) -> bool {
-        let file = format!("{parent}/{}.rs", module.ident);
-        module.content.is_none()
+        let name = crate::rust_names::ident(&module.ident);
+        let file = format!("{parent}/{name}.rs");
+        name.is_ascii()
+            && !self.reserved.contains(&name)
+            && module.content.is_none()
             && module.attrs.is_empty()
             && !self.before.contains_key(&file)
             && self.after.contains_key(&file)
@@ -163,7 +158,9 @@ impl<'a> Additions<'a> {
             symbols::imports(import, modules, Location::Root)?
                 .iter()
                 .all(|binding| {
-                    binding.bound != "_"
+                    binding.bound.is_ascii()
+                        && !self.reserved.contains(&binding.bound)
+                        && binding.bound != "_"
                         && !self.prior_ids.contains(&binding.bound)
                         && binding.internal
                         && self.symbols.data(&binding.original)
@@ -199,11 +196,21 @@ fn is_use(item: &syn::Item) -> bool {
         | _ => false,
     }
 }
-fn attrs(items: &[syn::Attribute], source: &str) -> Option<Vec<String>> {
+fn attrs(items: &[syn::Attribute]) -> Vec<String> {
     items
         .iter()
-        .map(|item| symbols::tokens(item, source))
+        .map(|item| {
+            let tokens: proc_macro2::TokenStream = syn::parse_quote!(#item);
+            tokens.to_string()
+        })
         .collect()
+}
+
+fn module_header(module: &syn::ItemMod) -> String {
+    let mut header = module.clone();
+    header.content = None;
+    header.semi = Some(syn::token::Semi::default());
+    symbols::tokens(&syn::Item::Mod(header))
 }
 
 fn test_module(item: &syn::Item) -> Option<&syn::ItemMod> {
@@ -216,39 +223,23 @@ fn test_module(item: &syn::Item) -> Option<&syn::ItemMod> {
     let syn::Meta::List(cfg) = &module.attrs.first()?.meta else {
         return None;
     };
-    (cfg.path.is_ident("cfg") && cfg.tokens.to_string() == "test").then_some(module)
+    (crate::rust_names::path_is(&cfg.path, "cfg") && cfg.tokens.to_string() == "test")
+        .then_some(module)
 }
 
 fn nested<'a>(
     before: &syn::Item,
-    previous: &str,
     after: &'a syn::Item,
-    current: &str,
     added: &mut Vec<&'a syn::Item>,
 ) -> Option<()> {
     let left = test_module(before)?;
     let right = test_module(after)?;
-    let (left_brace, left_items) = left.content.as_ref()?;
-    let (right_brace, right_items) = right.content.as_ref()?;
-    let left_header = symbols::slice_tokens(
-        previous,
-        left.span().start(),
-        left_brace.span.open().start(),
-    )?;
-    let right_header = symbols::slice_tokens(
-        current,
-        right.span().start(),
-        right_brace.span.open().start(),
-    )?;
-    if left_header != right_header {
+    let (_, left_items) = left.content.as_ref()?;
+    let (_, right_items) = right.content.as_ref()?;
+    if module_header(left) != module_header(right) {
         return None;
     }
-    sequence(
-        (left_items, previous),
-        (right_items, current),
-        added,
-        TestItems::Fixed,
-    )
+    sequence(left_items, right_items, added, TestItems::Fixed)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -258,15 +249,15 @@ enum TestItems {
 }
 
 fn sequence<'a>(
-    (before, previous): (&[syn::Item], &str),
-    (after, current): (&'a [syn::Item], &str),
+    before: &[syn::Item],
+    after: &'a [syn::Item],
     added: &mut Vec<&'a syn::Item>,
     tests: TestItems,
 ) -> Option<()> {
     let mut old = before.iter().peekable();
     for item in after {
         if let Some(prior) = old.peek() {
-            if symbols::tokens(*prior, previous)? == symbols::tokens(item, current)? {
+            if symbols::tokens(prior) == symbols::tokens(item) {
                 old.next();
                 continue;
             }
@@ -274,7 +265,7 @@ fn sequence<'a>(
                 && test_module(prior).is_some()
                 && test_module(item).is_some()
             {
-                nested(prior, previous, item, current, added)?;
+                nested(prior, item, added)?;
                 old.next();
                 continue;
             }
@@ -310,11 +301,15 @@ fn nominal_names(items: &[&syn::Item]) -> BTreeSet<String> {
 }
 
 fn unconditional_name(name: &proc_macro2::Ident, attrs: &[syn::Attribute]) -> Option<String> {
-    (!attrs.iter().any(|attr| attr.path().is_ident("cfg"))).then(|| name.to_string())
+    (!attrs
+        .iter()
+        .any(|attr| crate::rust_names::path_is(attr.path(), "cfg")))
+    .then(|| crate::rust_names::ident(name))
 }
 
 struct Validator<'a> {
     prior_ids: &'a BTreeSet<String>,
+    reserved: &'a BTreeSet<String>,
     nominal: &'a BTreeSet<String>,
     old_ids: &'a BTreeSet<String>,
     references: &'a BTreeSet<String>,
@@ -358,12 +353,35 @@ fn validate(mut validator: Validator<'_>, items: &[&syn::Item], roots: &[syn::It
     validator.safe
 }
 
+impl Validator<'_> {
+    fn owns_impl(&self, implementation: &syn::ItemImpl) -> bool {
+        let syn::Type::Path(target) = implementation.self_ty.as_ref() else {
+            return false;
+        };
+        if target.qself.is_some()
+            || target.path.leading_colon.is_some()
+            || target.path.segments.len() != 1
+        {
+            return false;
+        }
+        let Some(segment) = target.path.segments.first() else {
+            return false;
+        };
+        let name = crate::rust_names::ident(&segment.ident);
+        self.nominal.contains(&name)
+            && !implementation
+                .generics
+                .type_params()
+                .any(|parameter| crate::rust_names::ident(&parameter.ident) == name)
+    }
+}
+
 impl<'ast> Visit<'ast> for Validator<'_> {
     fn visit_attribute(&mut self, i: &'ast syn::Attribute) {
         if !macro_tokens::attribute_known(&i.meta)
             || ["macro_export", "macro_use", "proptest_config"]
                 .iter()
-                .any(|name| i.path().is_ident(name))
+                .any(|name| crate::rust_names::path_is(i.path(), name))
         {
             self.safe = false;
         }
@@ -377,10 +395,12 @@ impl<'ast> Visit<'ast> for Validator<'_> {
             | syn::Item::Enum(_)
             | syn::Item::Type(_)
             | syn::Item::Trait(_) => {
-                if !self.fresh_file
-                    && symbols::named(i)
-                        .is_none_or(|name| self.prior_ids.contains(&name.to_string()))
-                {
+                if symbols::named(i).is_none_or(|identifier| {
+                    let name = crate::rust_names::ident(identifier);
+                    !name.is_ascii()
+                        || self.reserved.contains(&name)
+                        || (!self.fresh_file && self.prior_ids.contains(&name))
+                }) {
                     self.safe = false;
                 }
             }
@@ -401,20 +421,7 @@ impl<'ast> Visit<'ast> for Validator<'_> {
         syn::visit::visit_item(self, i);
     }
     fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
-        let valid = if let syn::Type::Path(target) = i.self_ty.as_ref() {
-            target.qself.is_none()
-                && target.path.leading_colon.is_none()
-                && target.path.segments.len() == 1
-                && target.path.segments.first().is_some_and(|segment| {
-                    self.nominal.contains(&segment.ident.to_string())
-                        && !i
-                            .generics
-                            .type_params()
-                            .any(|parameter| parameter.ident == segment.ident)
-                })
-        } else {
-            false
-        };
+        let valid = self.owns_impl(i);
         if !valid || !self.root_impl {
             self.safe = false;
         }
@@ -439,7 +446,9 @@ impl<'ast> Visit<'ast> for Validator<'_> {
         };
         if !self.fresh_file
             && bindings.iter().any(|binding| {
-                binding.bound == "_"
+                !binding.bound.is_ascii()
+                    || self.reserved.contains(&binding.bound)
+                    || binding.bound == "_"
                     || self.old_ids.contains(&binding.bound)
                     || !self.references.contains(&binding.bound)
                     || !binding.internal

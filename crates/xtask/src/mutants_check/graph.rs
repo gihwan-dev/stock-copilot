@@ -15,15 +15,15 @@ pub(super) struct Graph {
 
 fn definition(item: &syn::Item) -> Option<String> {
     match item {
-        syn::Item::Const(value) => Some(value.ident.to_string()),
-        syn::Item::Enum(value) => Some(value.ident.to_string()),
-        syn::Item::Fn(value) => Some(value.sig.ident.to_string()),
-        syn::Item::Static(value) => Some(value.ident.to_string()),
-        syn::Item::Struct(value) => Some(value.ident.to_string()),
-        syn::Item::Trait(value) => Some(value.ident.to_string()),
-        syn::Item::TraitAlias(value) => Some(value.ident.to_string()),
-        syn::Item::Type(value) => Some(value.ident.to_string()),
-        syn::Item::Union(value) => Some(value.ident.to_string()),
+        syn::Item::Const(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::Enum(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::Fn(value) => Some(crate::rust_names::ident(&value.sig.ident)),
+        syn::Item::Static(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::Struct(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::Trait(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::TraitAlias(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::Type(value) => Some(crate::rust_names::ident(&value.ident)),
+        syn::Item::Union(value) => Some(crate::rust_names::ident(&value.ident)),
         syn::Item::ExternCrate(_)
         | syn::Item::ForeignMod(_)
         | syn::Item::Impl(_)
@@ -46,7 +46,7 @@ impl Imports {
     fn tree(&mut self, tree: &syn::UseTree) {
         match tree {
             syn::UseTree::Path(path) => {
-                self.prefix.push(path.ident.to_string());
+                self.prefix.push(crate::rust_names::ident(&path.ident));
                 self.tree(&path.tree);
                 self.prefix.pop();
             }
@@ -57,13 +57,15 @@ impl Imports {
             }
             syn::UseTree::Name(name) => {
                 let mut names: BTreeSet<String> = self.prefix.iter().cloned().collect();
-                names.insert(name.ident.to_string());
-                self.aliases.push((name.ident.to_string(), names));
+                names.insert(crate::rust_names::ident(&name.ident));
+                self.aliases
+                    .push((crate::rust_names::ident(&name.ident), names));
             }
             syn::UseTree::Rename(rename) => {
                 let mut names: BTreeSet<String> = self.prefix.iter().cloned().collect();
-                names.insert(rename.ident.to_string());
-                self.aliases.push((rename.rename.to_string(), names));
+                names.insert(crate::rust_names::ident(&rename.ident));
+                self.aliases
+                    .push((crate::rust_names::ident(&rename.rename), names));
             }
             syn::UseTree::Glob(_) => {
                 self.uncertain = true;
@@ -98,14 +100,41 @@ impl<'ast> Visit<'ast> for Uncertainty {
         syn::visit::visit_item_use(self, i);
     }
 
+    fn visit_type_trait_object(&mut self, i: &'ast syn::TypeTraitObject) {
+        self.structural = true;
+        syn::visit::visit_type_trait_object(self, i);
+    }
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        self.structural |= blanket_impl(i);
+        syn::visit::visit_item_impl(self, i);
+    }
     fn visit_attribute(&mut self, i: &'ast syn::Attribute) {
-        if i.path().is_ident("path") {
+        if crate::rust_names::path_is(i.path(), "path") {
             self.structural = true;
-        } else if i.path().is_ident("proptest_config") || !macro_tokens::attribute_known(&i.meta) {
+        } else if crate::rust_names::path_is(i.path(), "proptest_config")
+            || !macro_tokens::attribute_known(&i.meta)
+        {
             self.found = true;
         }
         syn::visit::visit_attribute(self, i);
     }
+}
+
+fn blanket_impl(implementation: &syn::ItemImpl) -> bool {
+    if implementation.trait_.is_none() {
+        return false;
+    }
+    let syn::Type::Path(target) = implementation.self_ty.as_ref() else {
+        return false;
+    };
+    let Some(first) = target.path.segments.first() else {
+        return true;
+    };
+    let name = crate::rust_names::ident(&first.ident);
+    implementation
+        .generics
+        .type_params()
+        .any(|parameter| crate::rust_names::ident(&parameter.ident) == name)
 }
 
 fn impl_owners(item: &syn::Item, path: &str, names: &mut Names) -> Result<(), String> {
@@ -113,9 +142,17 @@ fn impl_owners(item: &syn::Item, path: &str, names: &mut Names) -> Result<(), St
         let syn::Type::Path(target) = implementation.self_ty.as_ref() else {
             return Err(String::from("complex impl target"));
         };
+        if let Some((_, trait_path, _)) = &implementation.trait_ {
+            for segment in &trait_path.segments {
+                names
+                    .entry(crate::rust_names::ident(&segment.ident))
+                    .or_default()
+                    .insert(String::from(path));
+            }
+        }
         for segment in &target.path.segments {
             names
-                .entry(segment.ident.to_string())
+                .entry(crate::rust_names::ident(&segment.ident))
                 .or_default()
                 .insert(String::from(path));
         }
@@ -149,12 +186,22 @@ fn names_for(sources: &Sources) -> Result<(Names, BTreeMap<String, syn::File>), 
             return Err(String::from("mod.rs module"));
         }
         let file = syn::parse_file(source).map_err(|error| error.to_string())?;
+        if macro_tokens::identifiers(
+            source
+                .parse()
+                .map_err(|error: proc_macro2::LexError| error.to_string())?,
+        )
+        .iter()
+        .any(|name| !name.is_ascii())
+        {
+            return Err(String::from("non-ASCII identifier normalization"));
+        }
         let stem = std::path::Path::new(path)
             .file_stem()
             .and_then(|name| name.to_str())
             .ok_or("module name")?;
         names
-            .entry(String::from(stem))
+            .entry(crate::rust_names::normalize(stem))
             .or_default()
             .insert(path.clone());
         item_names(&file.items, path, &mut names)?;
@@ -191,13 +238,13 @@ impl<'ast> Visit<'ast> for RootedPaths<'_> {
         let rooted = i.segments.first().is_some_and(|segment| {
             ["crate", "self", "super"]
                 .iter()
-                .any(|prefix| segment.ident == *prefix)
+                .any(|prefix| crate::rust_names::ident(&segment.ident) == *prefix)
         });
         if rooted
             && i.segments.len() > 1
             && !i.segments.iter().any(|segment| {
                 self.names
-                    .get(&segment.ident.to_string())
+                    .get(&crate::rust_names::ident(&segment.ident))
                     .is_some_and(|owners| !owners.is_empty())
             })
         {

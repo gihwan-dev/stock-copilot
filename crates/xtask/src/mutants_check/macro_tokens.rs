@@ -50,14 +50,17 @@ const DERIVES: &[&str] = &[
 ];
 
 pub(super) fn attribute_known(meta: &syn::Meta) -> bool {
-    if meta.path().is_ident("derive") {
+    if crate::rust_names::path_is(meta.path(), "derive") {
         let syn::Meta::List(list) = meta else {
             return false;
         };
         let parser = syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated;
         return parser.parse2(list.tokens.clone()).is_ok_and(|paths| {
             paths.iter().all(|path| {
-                path.segments.len() == 1 && DERIVES.iter().any(|name| path.is_ident(name))
+                path.segments.len() == 1
+                    && DERIVES
+                        .iter()
+                        .any(|name| crate::rust_names::path_is(path, name))
             })
         });
     }
@@ -72,14 +75,14 @@ pub(super) fn attribute_known(meta: &syn::Meta) -> bool {
         "proptest_config",
     ]
     .iter()
-    .any(|name| meta.path().is_ident(name))
+    .any(|name| crate::rust_names::path_is(meta.path(), name))
 }
 
 pub(super) fn identifiers(tokens: TokenStream) -> BTreeSet<String> {
     tokens
         .into_iter()
         .flat_map(|token| match token {
-            TokenTree::Ident(name) => BTreeSet::from([name.to_string()]),
+            TokenTree::Ident(name) => BTreeSet::from([crate::rust_names::ident(&name)]),
             TokenTree::Group(group) => identifiers(group.stream()),
             TokenTree::Literal(literal) => captures(&literal.to_string()),
             TokenTree::Punct(_) => BTreeSet::new(),
@@ -123,7 +126,7 @@ impl Collector {
     fn import(&mut self, tree: &syn::UseTree) {
         match tree {
             syn::UseTree::Path(path) => {
-                self.prefix.push(path.ident.to_string());
+                self.prefix.push(crate::rust_names::ident(&path.ident));
                 self.import(&path.tree);
                 self.prefix.pop();
             }
@@ -133,10 +136,16 @@ impl Collector {
                 }
             }
             syn::UseTree::Name(name) => {
-                self.binding(name.ident.to_string(), name.ident.to_string());
+                self.binding(
+                    crate::rust_names::ident(&name.ident),
+                    crate::rust_names::ident(&name.ident),
+                );
             }
             syn::UseTree::Rename(name) => {
-                self.binding(name.rename.to_string(), name.ident.to_string());
+                self.binding(
+                    crate::rust_names::ident(&name.rename),
+                    crate::rust_names::ident(&name.ident),
+                );
             }
             syn::UseTree::Glob(_) => {
                 self.imports.push((String::from("*"), self.origins()));
@@ -163,7 +172,7 @@ impl<'ast> Visit<'ast> for Collector {
         syn::visit::visit_item_use(self, i);
     }
     fn visit_item_macro(&mut self, i: &'ast syn::ItemMacro) {
-        if i.mac.path.is_ident("macro_rules")
+        if crate::rust_names::path_is(&i.mac.path, "macro_rules")
             && let Some(name) = &i.ident
         {
             let ids = identifiers(i.mac.tokens.clone());
@@ -176,7 +185,10 @@ impl<'ast> Visit<'ast> for Collector {
             {
                 self.unsupported = true;
             }
-            let definition = self.definitions.entry(name.to_string()).or_default();
+            let definition = self
+                .definitions
+                .entry(crate::rust_names::ident(name))
+                .or_default();
             definition.owners.insert(self.owner.clone());
             definition.ids.extend(ids);
         }
@@ -469,7 +481,7 @@ fn preceding_path(tokens: &[TokenTree], end: usize) -> Vec<String> {
     while let Some(TokenTree::Ident(name)) =
         cursor.checked_sub(1).and_then(|index| tokens.get(index))
     {
-        path.push(name.to_string());
+        path.push(crate::rust_names::ident(name));
         cursor = cursor.saturating_sub(1);
         if cursor < 2
             || tokens
