@@ -75,6 +75,17 @@ pub(crate) fn calculate_values(
     values.ok_or(NoThresholds::NumericalDomain)
 }
 
+pub(crate) fn signal_probability_display(
+    probability: ThresholdNumber,
+) -> Result<ThresholdDisplay, NoThresholds> {
+    let percent = probability
+        .as_decimal()
+        .checked_mul(Decimal::from(100_i32))
+        .ok_or(NoThresholds::NumericalDomain)?;
+    let rounded = percent.round_dp_with_strategy(1, RoundingStrategy::MidpointAwayFromZero);
+    Ok(ThresholdDisplay::new(format!("≈{rounded:.1}%")))
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     pub(crate) fn document_rounding(value: super::ThresholdNumber) -> crate::ThresholdDisplay {
