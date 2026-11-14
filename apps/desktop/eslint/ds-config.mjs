@@ -39,6 +39,7 @@ export const DS_RULES = {
   "ds/no-inline-style": "error",
   "ds/no-style-literals": "error",
   "ds/no-ui-attributes": "error",
+  "ds/public-props": "error",
 };
 export const SHARED_RULES = {
   "ds/no-style-literals": "error",
