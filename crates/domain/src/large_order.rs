@@ -9,9 +9,21 @@ pub enum LargeOrderConfirmation {
     NotRequired,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OrderFxRates {
+pub struct OrderFxRates(OrderFxObservation);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OrderFxObservation {
     Missing,
     Observed { rate: FxRate, mid_rate: FxRate },
+}
+impl OrderFxRates {
+    #[must_use]
+    pub fn missing() -> Self {
+        Self(OrderFxObservation::Missing)
+    }
+    #[must_use]
+    pub fn from_broker_fx_result(rate: FxRate, mid_rate: FxRate) -> Self {
+        Self(OrderFxObservation::Observed { rate, mid_rate })
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderFxUnavailable {
@@ -72,7 +84,7 @@ impl OrderExpectedAmount {
             OrderKrwEstimate::Converted(converted) => converted.into_parts().0,
             OrderKrwEstimate::Unavailable(_) => return LargeOrderConfirmation::Required,
         };
-        if money.amount().as_decimal() >= rust_decimal::Decimal::from(80_000_000) {
+        if money.amount().as_decimal() > rust_decimal::Decimal::from(79_999_999) {
             LargeOrderConfirmation::Required
         } else {
             LargeOrderConfirmation::NotRequired
@@ -81,7 +93,7 @@ impl OrderExpectedAmount {
 }
 
 fn convert(money: Money, rates: OrderFxRates, at: Timestamp) -> OrderKrwEstimate {
-    let OrderFxRates::Observed { rate, mid_rate } = rates else {
+    let OrderFxObservation::Observed { rate, mid_rate } = rates.0 else {
         return OrderKrwEstimate::Unavailable(OrderFxUnavailable::Missing);
     };
     if rate.pair() != FxPair::UsdKrw
@@ -93,6 +105,9 @@ fn convert(money: Money, rates: OrderFxRates, at: Timestamp) -> OrderKrwEstimate
     {
         return OrderKrwEstimate::Unavailable(OrderFxUnavailable::InvalidRates);
     }
+    if plausible_rates(rate, mid_rate).is_err() {
+        return OrderKrwEstimate::Unavailable(OrderFxUnavailable::InvalidRates);
+    }
     match rate
         .conservative_with(mid_rate)
         .and_then(|selected| selected.convert_for_order(money, at))
@@ -100,4 +115,28 @@ fn convert(money: Money, rates: OrderFxRates, at: Timestamp) -> OrderKrwEstimate
         Ok(converted) => OrderKrwEstimate::Converted(converted),
         Err(error) => OrderKrwEstimate::Unavailable(OrderFxUnavailable::Conversion(error)),
     }
+}
+
+fn plausible_rates(rate: FxRate, mid_rate: FxRate) -> Result<(), OrderFxUnavailable> {
+    let left = rate.quote_per_base().as_money();
+    let right = mid_rate.quote_per_base().as_money();
+    let minimum = rust_decimal::Decimal::from(500_i32);
+    let maximum = rust_decimal::Decimal::from(5_000_i32);
+    for value in [left, right] {
+        if value.amount().as_decimal() < minimum || value.amount().as_decimal() > maximum {
+            return Err(OrderFxUnavailable::InvalidRates);
+        }
+    }
+    let (smaller, larger) = if left.amount().as_decimal() <= right.amount().as_decimal() {
+        (left, right)
+    } else {
+        (right, left)
+    };
+    let limit = smaller
+        .checked_mul(&crate::Ratio::new(rust_decimal::Decimal::new(12, 1)))
+        .map_err(|_error| OrderFxUnavailable::InvalidRates)?;
+    if larger.amount().as_decimal() > limit.amount().as_decimal() {
+        return Err(OrderFxUnavailable::InvalidRates);
+    }
+    Ok(())
 }

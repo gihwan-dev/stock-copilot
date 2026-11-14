@@ -1,3 +1,4 @@
+import { publicProps } from "./ds-public-props.mjs";
 import { noMessageFormat } from "./ds-message-format.mjs";
 import { screenRules } from "./ds-screen.mjs";
 import { noDomValues, noDomExports } from "./ds-dom.mjs";
@@ -31,6 +32,7 @@ const report = (ctx, node) => ctx.report({ node, messageId: "forbidden" });
 
 export const dsPlugin = {
   rules: {
+    "public-props": publicProps,
     ...boundaryRules,
     ...screenRules,
     "no-message-format": noMessageFormat,

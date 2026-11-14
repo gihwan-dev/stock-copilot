@@ -179,8 +179,10 @@ pub use large_order::{
     LargeOrderConfirmation, OrderAmountBasis, OrderExpectedAmount, OrderFxRates,
     OrderFxUnavailable, OrderKrwEstimate,
 };
-pub use order_summary::{OrderSummary, OrderSummaryError, SummaryLimitPrice, SummaryQuantity};
+pub use order_summary::{
+    OrderSummary, OrderSummaryError, PendingOrderConfirmation, SummaryLimitPrice, SummaryQuantity,
+};
 pub use order_summary_facts::{
-    AccountDisplayFact, ClientOrderPrefix, ConfirmedOrderFee, DisplayInstrumentName,
-    DisplayInstrumentNameError, EstimatedOrderFee, InstrumentNameFact,
+    AccountDisplayFact, AccountLookupDisplayRow, ClientOrderPrefix, ConfirmedOrderFee,
+    DisplayInstrumentName, DisplayInstrumentNameError, EstimatedOrderFee, InstrumentNameFact,
 };

@@ -23,7 +23,7 @@ pub enum OrderSummaryError {
     NegativeFee,
     Arithmetic(MoneyError),
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct OrderSummary {
     instrument_name: DisplayInstrumentName,
     symbol: Symbol,
@@ -36,8 +36,45 @@ pub struct OrderSummary {
     account_suffix: MaskedAccountNumber,
     client_order_prefix: ClientOrderPrefix,
 }
-impl OrderSummary {
+#[derive(Debug)]
+pub struct PendingOrderConfirmation {
+    token: ExecutionToken,
+    summary: OrderSummary,
+}
+impl PendingOrderConfirmation {
     pub fn from_execution(
+        token: ExecutionToken,
+        instrument: InstrumentNameFact,
+        account: AccountDisplayFact,
+        fee: EstimatedOrderFee,
+        rates: OrderFxRates,
+    ) -> Result<Self, OrderSummaryError> {
+        let summary = OrderSummary::build(&token, instrument, account, fee, rates)?;
+        Ok(Self { token, summary })
+    }
+    #[must_use]
+    pub fn summary(&self) -> &OrderSummary {
+        &self.summary
+    }
+    pub fn recheck(
+        self,
+        now: crate::Timestamp,
+        observation: crate::PriceObservation,
+    ) -> Result<Self, crate::ProposalExecutionError> {
+        let (token, summary) = self.into_execution_parts();
+        let checked = token.recheck(now, observation)?;
+        Ok(Self {
+            token: checked,
+            summary,
+        })
+    }
+    pub(crate) fn into_execution_parts(self) -> (ExecutionToken, OrderSummary) {
+        (self.token, self.summary)
+    }
+}
+
+impl OrderSummary {
+    fn build(
         token: &ExecutionToken,
         instrument: InstrumentNameFact,
         account: AccountDisplayFact,
@@ -218,11 +255,20 @@ mod field_tests {
         assert_eq!(side, OrderSide::Buy);
         assert_eq!(
             quantity,
-            crate::order_summary::tests::field_test_summary(&token).quantity()
+            crate::SummaryQuantity::Specified(
+                crate::Quantity::parse(&crate::NumericInput::try_new("1").expect("입력"))
+                    .expect("수량")
+            )
         );
         assert_eq!(
             limit_price,
-            crate::order_summary::tests::field_test_summary(&token).limit_price()
+            crate::SummaryLimitPrice::Specified(
+                crate::Price::parse(
+                    &crate::NumericInput::try_new("100").expect("입력"),
+                    crate::Currency::Krw
+                )
+                .expect("가격")
+            )
         );
         assert_eq!(
             expected_amount.confirmation(),
@@ -236,16 +282,17 @@ mod field_tests {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::PendingOrderConfirmation;
     use crate::{
-        AccountDisplayFact, AccountId, ClientOrderId, ConfirmedOrderFee, Currency,
-        DisplayInstrumentName, DisplayInstrumentNameError, EstimatedOrderFee, ExecutionToken,
-        FxConversionError, FxPair, FxRate, FxRateKind, FxSource, InstrumentNameFact, KrOrderPrice,
-        LargeOrderConfirmation, Market, MaskedAccountNumber, Money, MoneyError, Nanosecond,
-        NumericInput, OffsetSeconds, OrderAmountBasis, OrderFxRates, OrderFxUnavailable,
-        OrderIntent, OrderKrwEstimate, OrderSide, OrderSummary, OrderSummaryError, OrderTerms,
-        Price, Quantity, ResolvedOrderInstrument, SellOrderQuantity, SummaryLimitPrice,
-        SummaryQuantity, Symbol, TimeInterval, Timestamp, UnixSeconds, UsOrderPrice,
-        UsdOrderAmount, WholeOrderQuantity,
+        AccountDisplayFact, AccountId, AccountLookupDisplayRow, ClientOrderId, ConfirmedOrderFee,
+        Currency, DisplayInstrumentName, DisplayInstrumentNameError, EstimatedOrderFee,
+        ExecutionToken, FxConversionError, FxPair, FxRate, FxRateKind, FxSource,
+        InstrumentNameFact, KrOrderPrice, LargeOrderConfirmation, Market, MaskedAccountNumber,
+        Money, MoneyError, Nanosecond, NumericInput, OffsetSeconds, OrderAmountBasis, OrderFxRates,
+        OrderFxUnavailable, OrderIntent, OrderKrwEstimate, OrderSide, OrderSummary,
+        OrderSummaryError, OrderTerms, Price, Quantity, ResolvedOrderInstrument, SellOrderQuantity,
+        SummaryLimitPrice, SummaryQuantity, Symbol, TimeInterval, Timestamp, UnixSeconds,
+        UsOrderPrice, UsdOrderAmount, WholeOrderQuantity,
     };
     use proptest::prop_assert_eq;
     use proptest::test_runner::{Config, TestRunner};
@@ -293,15 +340,17 @@ pub(crate) mod tests {
         token: &ExecutionToken,
         rates: OrderFxRates,
     ) -> Result<OrderSummary, OrderSummaryError> {
-        OrderSummary::from_execution(
+        OrderSummary::build(
             token,
             InstrumentNameFact::from_master_lookup_result(
                 token.intent().instrument().clone(),
                 test_name(),
             ),
             AccountDisplayFact::from_account_lookup_result(
-                token.intent().account_id().clone(),
-                test_suffix(),
+                AccountLookupDisplayRow::from_broker_account_result(
+                    token.intent().account_id().clone(),
+                    test_suffix(),
+                ),
             ),
             EstimatedOrderFee::Unknown,
             rates,
@@ -344,7 +393,7 @@ pub(crate) mod tests {
                 ("100000001", LargeOrderConfirmation::Required),
             ] {
                 let token = kr_limit(value, side);
-                let result = summary(&token, OrderFxRates::Missing).expect("요약");
+                let result = summary(&token, OrderFxRates::missing()).expect("요약");
                 assert_eq!(result.expected_amount().confirmation(), expected);
                 assert_eq!(
                     result.expected_amount().money(),
@@ -377,7 +426,7 @@ pub(crate) mod tests {
             .run(&(0_u64..200_000_000), |offset| {
                 let amount = offset + 1;
                 let token = kr_limit(&amount.to_string(), OrderSide::Buy);
-                let result = summary(&token, OrderFxRates::Missing).expect("요약");
+                let result = summary(&token, OrderFxRates::missing()).expect("요약");
                 prop_assert_eq!(
                     result.expected_amount().confirmation(),
                     if amount >= 80_000_000 {
@@ -405,10 +454,10 @@ pub(crate) mod tests {
             );
             let result = summary(
                 &token,
-                OrderFxRates::Observed {
-                    rate: rate(buy, FxRateKind::Buy),
-                    mid_rate: rate(mid, FxRateKind::Mid),
-                },
+                OrderFxRates::from_broker_fx_result(
+                    rate(buy, FxRateKind::Buy),
+                    rate(mid, FxRateKind::Mid),
+                ),
             )
             .expect("요약");
             assert_eq!(result.quantity(), SummaryQuantity::Absent);
@@ -434,7 +483,7 @@ pub(crate) mod tests {
         kr_limit("100", OrderSide::Buy)
     }
     pub(crate) fn field_test_summary(token: &ExecutionToken) -> OrderSummary {
-        summary(token, OrderFxRates::Missing).expect("요약")
+        summary(token, OrderFxRates::missing()).expect("요약")
     }
 
     #[test]
@@ -454,7 +503,7 @@ pub(crate) mod tests {
             },
         ] {
             let token = token(terms, "123.456");
-            let result = summary(&token, OrderFxRates::Missing).expect("요약");
+            let result = summary(&token, OrderFxRates::missing()).expect("요약");
             assert_eq!(
                 result.expected_amount().basis(),
                 OrderAmountBasis::Estimated
@@ -484,7 +533,7 @@ pub(crate) mod tests {
             },
             "99",
         );
-        let result = summary(&token, OrderFxRates::Missing).expect("요약");
+        let result = summary(&token, OrderFxRates::missing()).expect("요약");
         assert_eq!(
             result.expected_amount().money(),
             money("37.02", Currency::Usd)
@@ -510,8 +559,10 @@ pub(crate) mod tests {
         };
         let account = || {
             AccountDisplayFact::from_account_lookup_result(
-                token.intent().account_id().clone(),
-                MaskedAccountNumber::try_new("123456789012").expect("번호"),
+                AccountLookupDisplayRow::from_broker_account_result(
+                    token.intent().account_id().clone(),
+                    MaskedAccountNumber::try_new("123456789012").expect("번호"),
+                ),
             )
         };
         for wrong in [
@@ -523,7 +574,7 @@ pub(crate) mod tests {
             instrument(Market::Us),
         ] {
             assert_eq!(
-                OrderSummary::from_execution(
+                OrderSummary::build(
                     &token,
                     InstrumentNameFact::from_master_lookup_result(
                         wrong,
@@ -531,22 +582,24 @@ pub(crate) mod tests {
                     ),
                     account(),
                     EstimatedOrderFee::Unknown,
-                    OrderFxRates::Missing
+                    OrderFxRates::missing()
                 ),
                 Err(OrderSummaryError::InstrumentMismatch)
             );
         }
         let wrong_account = AccountDisplayFact::from_account_lookup_result(
-            AccountId::new(123),
-            MaskedAccountNumber::try_new("123456789012").expect("번호"),
+            AccountLookupDisplayRow::from_broker_account_result(
+                AccountId::new(123),
+                MaskedAccountNumber::try_new("123456789012").expect("번호"),
+            ),
         );
         assert_eq!(
-            OrderSummary::from_execution(
+            OrderSummary::build(
                 &token,
                 name(),
                 wrong_account,
                 EstimatedOrderFee::Unknown,
-                OrderFxRates::Missing
+                OrderFxRates::missing()
             ),
             Err(OrderSummaryError::AccountMismatch)
         );
@@ -566,8 +619,10 @@ pub(crate) mod tests {
         };
         let account = || {
             AccountDisplayFact::from_account_lookup_result(
-                token.intent().account_id().clone(),
-                test_suffix(),
+                AccountLookupDisplayRow::from_broker_account_result(
+                    token.intent().account_id().clone(),
+                    test_suffix(),
+                ),
             )
         };
         for (id, amount, currency, expected) in [
@@ -596,12 +651,12 @@ pub(crate) mod tests {
                 ClientOrderId::try_new(id).expect("키"),
                 money(amount, currency),
             ));
-            let result = OrderSummary::from_execution(
+            let result = OrderSummary::build(
                 &token,
                 name(),
                 account(),
                 fee.clone(),
-                OrderFxRates::Missing,
+                OrderFxRates::missing(),
             );
             if let Some(error) = expected {
                 assert_eq!(result, Err(error));
@@ -650,7 +705,7 @@ pub(crate) mod tests {
         .expect("의도");
         let token = crate::proposal::summary_tests::token(intent, price("1", Currency::Krw));
         assert_eq!(
-            summary(&token, OrderFxRates::Missing)
+            summary(&token, OrderFxRates::missing())
                 .expect("요약")
                 .client_order_prefix()
                 .as_str(),
@@ -683,7 +738,7 @@ pub(crate) mod tests {
             ),
         ] {
             assert_eq!(
-                summary(&token(terms, observed), OrderFxRates::Missing),
+                summary(&token(terms, observed), OrderFxRates::missing()),
                 Err(OrderSummaryError::Arithmetic(error))
             );
         }
@@ -722,14 +777,8 @@ pub(crate) mod tests {
                 valid_mid,
             ),
         ] {
-            let result = summary(
-                &token,
-                OrderFxRates::Observed {
-                    rate: buy,
-                    mid_rate: mid,
-                },
-            )
-            .expect("요약");
+            let result =
+                summary(&token, OrderFxRates::from_broker_fx_result(buy, mid)).expect("요약");
             assert_eq!(
                 result.expected_amount().krw_estimate(),
                 OrderKrwEstimate::Unavailable(OrderFxUnavailable::InvalidRates)
@@ -749,7 +798,11 @@ pub(crate) mod tests {
             let interval = TimeInterval::try_new(at(start), at(end)).expect("기간");
             for stale_slot in [FxRateKind::Buy, FxRateKind::Mid] {
                 let stale = FxRate::parse(
-                    &NumericInput::try_new("1").expect("입력"),
+                    &NumericInput::try_new(match stale_slot {
+                        FxRateKind::Buy => "1300",
+                        FxRateKind::Mid => "1400",
+                    })
+                    .expect("입력"),
                     FxPair::UsdKrw,
                     stale_slot,
                     interval,
@@ -760,14 +813,8 @@ pub(crate) mod tests {
                     FxRateKind::Buy => (stale, valid_mid),
                     FxRateKind::Mid => (valid_buy, stale),
                 };
-                let result = summary(
-                    &token,
-                    OrderFxRates::Observed {
-                        rate: buy,
-                        mid_rate: mid,
-                    },
-                )
-                .expect("요약");
+                let result =
+                    summary(&token, OrderFxRates::from_broker_fx_result(buy, mid)).expect("요약");
                 assert_eq!(
                     result.expected_amount().confirmation(),
                     if valid {
@@ -782,7 +829,7 @@ pub(crate) mod tests {
     #[test]
     fn missing_and_overflowing_fx_are_required() {
         let token = token_amount("1");
-        let missing = summary(&token, OrderFxRates::Missing).expect("요약");
+        let missing = summary(&token, OrderFxRates::missing()).expect("요약");
         assert_eq!(
             missing.expected_amount().krw_estimate(),
             OrderKrwEstimate::Unavailable(OrderFxUnavailable::Missing)
@@ -794,10 +841,10 @@ pub(crate) mod tests {
         let huge = token_amount("79228162514264337593543950335");
         let overflow = summary(
             &huge,
-            OrderFxRates::Observed {
-                rate: rate("2", FxRateKind::Buy),
-                mid_rate: rate("1", FxRateKind::Mid),
-            },
+            OrderFxRates::from_broker_fx_result(
+                rate("500", FxRateKind::Buy),
+                rate("500", FxRateKind::Mid),
+            ),
         )
         .expect("요약");
         assert_eq!(
@@ -819,20 +866,22 @@ pub(crate) mod tests {
     fn usd_threshold_matches_independent_integer_product() {
         TestRunner::new(Config::with_cases(4096))
             .run(
-                &(1_u64..100_000, 1_u64..3000, 1_u64..3000),
+                &(1_u64..100_000, 500_u64..3000, 500_u64..3000),
                 |(dollars, buy, mid)| {
                     let token = token_amount(&dollars.to_string());
                     let result = summary(
                         &token,
-                        OrderFxRates::Observed {
-                            rate: rate(&buy.to_string(), FxRateKind::Buy),
-                            mid_rate: rate(&mid.to_string(), FxRateKind::Mid),
-                        },
+                        OrderFxRates::from_broker_fx_result(
+                            rate(&buy.to_string(), FxRateKind::Buy),
+                            rate(&mid.to_string(), FxRateKind::Mid),
+                        ),
                     )
                     .expect("요약");
                     prop_assert_eq!(
                         result.expected_amount().confirmation(),
-                        if dollars * buy.max(mid) >= 80_000_000 {
+                        if buy.max(mid) * 100 > buy.min(mid) * 120
+                            || dollars * buy.max(mid) >= 80_000_000
+                        {
                             LargeOrderConfirmation::Required
                         } else {
                             LargeOrderConfirmation::NotRequired
@@ -857,11 +906,8 @@ pub(crate) mod tests {
                 let token = token_amount(&dollars.to_string());
                 let invalid = rate("1", FxRateKind::Mid);
                 let rates = match failure {
-                    0 => OrderFxRates::Missing,
-                    1 => OrderFxRates::Observed {
-                        rate: invalid,
-                        mid_rate: invalid,
-                    },
+                    0 => OrderFxRates::missing(),
+                    1 => OrderFxRates::from_broker_fx_result(invalid, invalid),
                     _ => {
                         let future = FxRate::parse(
                             &NumericInput::try_new("1").expect("입력"),
@@ -871,10 +917,7 @@ pub(crate) mod tests {
                             FxSource::TossOpenApi,
                         )
                         .expect("환율");
-                        OrderFxRates::Observed {
-                            rate: future,
-                            mid_rate: invalid,
-                        }
+                        OrderFxRates::from_broker_fx_result(future, invalid)
                     }
                 };
                 let result = summary(&token, rates).expect("요약");
@@ -887,21 +930,280 @@ pub(crate) mod tests {
             .expect("판정 불가 안전 경로");
     }
     #[test]
-    fn fractional_krw_conversion_stays_below_threshold_without_rounding() {
-        for (dollars, expected) in [
-            ("79999999.99", LargeOrderConfirmation::NotRequired),
-            ("80000000", LargeOrderConfirmation::Required),
+    fn fractional_krw_conversion_rounds_up_only_for_confirmation() {
+        for (fx, expected) in [
+            ("799.99999", LargeOrderConfirmation::NotRequired),
+            ("799.9999999", LargeOrderConfirmation::Required),
+            ("800", LargeOrderConfirmation::Required),
         ] {
-            let token = token_amount(dollars);
+            let token = token_amount("100000");
             let result = summary(
                 &token,
-                OrderFxRates::Observed {
-                    rate: rate("1", FxRateKind::Buy),
-                    mid_rate: rate("1", FxRateKind::Mid),
-                },
+                OrderFxRates::from_broker_fx_result(
+                    rate(fx, FxRateKind::Buy),
+                    rate(fx, FxRateKind::Mid),
+                ),
             )
             .expect("요약");
             assert_eq!(result.expected_amount().confirmation(), expected);
         }
+    }
+
+    struct SummaryCase {
+        terms: OrderTerms,
+        market: Market,
+        side: OrderSide,
+        quantity: SummaryQuantity,
+        limit: SummaryLimitPrice,
+        money: Money,
+    }
+    fn kr_field_cases() -> [SummaryCase; 2] {
+        let whole = quantity("3");
+        [
+            SummaryCase {
+                terms: OrderTerms::KrLimit {
+                    side: OrderSide::Buy,
+                    quantity: whole,
+                    price: KrOrderPrice::try_new(price("1000", Currency::Krw)).expect("가격"),
+                },
+                market: Market::Kr,
+                side: OrderSide::Buy,
+                quantity: SummaryQuantity::Specified(whole.quantity()),
+                limit: SummaryLimitPrice::Specified(price("1000", Currency::Krw)),
+                money: money("3000", Currency::Krw),
+            },
+            SummaryCase {
+                terms: OrderTerms::KrMarket {
+                    side: OrderSide::Sell,
+                    quantity: whole,
+                },
+                market: Market::Kr,
+                side: OrderSide::Sell,
+                quantity: SummaryQuantity::Specified(whole.quantity()),
+                limit: SummaryLimitPrice::Absent,
+                money: money("370.368", Currency::Krw),
+            },
+        ]
+    }
+    fn us_field_cases() -> [SummaryCase; 4] {
+        let whole = quantity("3");
+        let fractional = SellOrderQuantity::try_new(
+            Quantity::parse(&NumericInput::try_new("0.125").expect("입력")).expect("수량"),
+        )
+        .expect("매도");
+        [
+            SummaryCase {
+                terms: OrderTerms::UsLimit {
+                    side: OrderSide::Sell,
+                    quantity: whole,
+                    price: UsOrderPrice::try_new(price("12.34", Currency::Usd)).expect("가격"),
+                },
+                market: Market::Us,
+                side: OrderSide::Sell,
+                quantity: SummaryQuantity::Specified(whole.quantity()),
+                limit: SummaryLimitPrice::Specified(price("12.34", Currency::Usd)),
+                money: money("37.02", Currency::Usd),
+            },
+            SummaryCase {
+                terms: OrderTerms::UsMarketBuy { quantity: whole },
+                market: Market::Us,
+                side: OrderSide::Buy,
+                quantity: SummaryQuantity::Specified(whole.quantity()),
+                limit: SummaryLimitPrice::Absent,
+                money: money("370.368", Currency::Usd),
+            },
+            SummaryCase {
+                terms: OrderTerms::UsMarketSell {
+                    quantity: fractional,
+                },
+                market: Market::Us,
+                side: OrderSide::Sell,
+                quantity: SummaryQuantity::Specified(fractional.quantity()),
+                limit: SummaryLimitPrice::Absent,
+                money: money("15.432", Currency::Usd),
+            },
+            SummaryCase {
+                terms: OrderTerms::UsMarketAmountBuy {
+                    amount: UsdOrderAmount::try_new(money("50000", Currency::Usd)).expect("금액"),
+                },
+                market: Market::Us,
+                side: OrderSide::Buy,
+                quantity: SummaryQuantity::Absent,
+                limit: SummaryLimitPrice::Absent,
+                money: money("50000", Currency::Usd),
+            },
+        ]
+    }
+    #[test]
+    fn all_six_variants_match_independent_order_fields() {
+        for case in kr_field_cases().into_iter().chain(us_field_cases()) {
+            let token = token(case.terms, "123.456");
+            let result = summary(&token, OrderFxRates::missing()).expect("요약");
+            assert_eq!(result.market(), case.market);
+            assert_eq!(result.side(), case.side);
+            assert_eq!(result.quantity(), case.quantity);
+            assert_eq!(result.limit_price(), case.limit);
+            assert_eq!(result.expected_amount().money(), case.money);
+            assert_eq!(
+                result.expected_amount().money().currency(),
+                case.money.currency()
+            );
+        }
+    }
+    #[test]
+    fn implausible_rates_and_large_spreads_require_confirmation() {
+        for (buy, mid, expected) in [
+            ("1", "1", LargeOrderConfirmation::Required),
+            ("499.9999", "500", LargeOrderConfirmation::Required),
+            ("500", "499.9999", LargeOrderConfirmation::Required),
+            ("5000.0001", "5000", LargeOrderConfirmation::Required),
+            ("5000", "5000.0001", LargeOrderConfirmation::Required),
+            ("500", "500", LargeOrderConfirmation::NotRequired),
+            ("5000", "5000", LargeOrderConfirmation::NotRequired),
+            ("600", "500", LargeOrderConfirmation::NotRequired),
+            ("500", "600", LargeOrderConfirmation::NotRequired),
+            ("600.0001", "500", LargeOrderConfirmation::Required),
+            ("500", "600.0001", LargeOrderConfirmation::Required),
+            (
+                "500.00000000000000000000000001",
+                "500.00000000000000000000000001",
+                LargeOrderConfirmation::Required,
+            ),
+        ] {
+            let token = token_amount("1");
+            let result = summary(
+                &token,
+                OrderFxRates::from_broker_fx_result(
+                    rate(buy, FxRateKind::Buy),
+                    rate(mid, FxRateKind::Mid),
+                ),
+            )
+            .expect("요약");
+            assert_eq!(
+                result.expected_amount().confirmation(),
+                expected,
+                "{buy}, {mid}"
+            );
+        }
+        let large = token_amount("1000000");
+        assert_eq!(
+            summary(
+                &large,
+                OrderFxRates::from_broker_fx_result(
+                    rate("1", FxRateKind::Buy),
+                    rate("1", FxRateKind::Mid)
+                )
+            )
+            .expect("요약")
+            .expected_amount()
+            .confirmation(),
+            LargeOrderConfirmation::Required
+        );
+    }
+    #[test]
+    fn display_names_reject_invisible_and_directional_characters() {
+        for code in [
+            0x00ad, 0x0600, 0x0605, 0x061c, 0x06dd, 0x070f, 0x0890, 0x0891, 0x08e2, 0x180e, 0x200b,
+            0x200f, 0x202a, 0x202e, 0x2060, 0x2064, 0x2066, 0x206f, 0xfeff, 0xfff9, 0xfffb,
+            0x110bd, 0x110cd, 0x13430, 0x1343f, 0x1bca0, 0x1bca3, 0x1d173, 0x1d17a, 0xe0001,
+            0xe0020, 0xe007f, 0x034f, 0x115f, 0x1160, 0x17b4, 0x17b5, 0x180b, 0x180f, 0x2028,
+            0x2029, 0x2065, 0x3164, 0xfe00, 0xfe0f, 0xffa0, 0xe0100, 0xe01ef,
+        ] {
+            let value = format!("이름{}끝", char::from_u32(code).expect("코드 포인트"));
+            assert_eq!(
+                DisplayInstrumentName::try_new(&value),
+                Err(DisplayInstrumentNameError::InvalidName),
+                "U+{code:04X}"
+            );
+        }
+    }
+    fn pending(token: ExecutionToken) -> PendingOrderConfirmation {
+        let name = InstrumentNameFact::from_master_lookup_result(
+            token.intent().instrument().clone(),
+            test_name(),
+        );
+        let row = AccountLookupDisplayRow::from_broker_account_result(
+            token.intent().account_id().clone(),
+            test_suffix(),
+        );
+        PendingOrderConfirmation::from_execution(
+            token,
+            name,
+            AccountDisplayFact::from_account_lookup_result(row),
+            EstimatedOrderFee::Unknown,
+            OrderFxRates::missing(),
+        )
+        .expect("확인 대기 주문")
+    }
+    #[test]
+    fn pending_confirmation_keeps_the_same_order_and_summary_through_recheck() {
+        let token = field_test_token();
+        let expected_id = token.intent().client_order_id().clone();
+        let observation = crate::PriceObservation::from_quote_parts(
+            token.intent().instrument().clone(),
+            price("100", Currency::Krw),
+            at(2),
+        )
+        .expect("관측");
+        let ready = pending(token);
+        assert_eq!(
+            ready.summary().expected_amount().money(),
+            money("100", Currency::Krw)
+        );
+        let checked = ready.recheck(at(2), observation).expect("재확인");
+        assert_eq!(
+            checked.summary().expected_amount().money(),
+            money("100", Currency::Krw)
+        );
+        let (original, summary) = checked.into_execution_parts();
+        assert_eq!(original.intent().client_order_id(), &expected_id);
+        assert_eq!(original.checked_at(), at(2));
+        assert_eq!(summary.client_order_prefix().as_str(), "abcdefgh");
+    }
+    #[test]
+    fn invalid_pending_recheck_produces_no_token_or_summary() {
+        let token = field_test_token();
+        let observation = crate::PriceObservation::from_quote_parts(
+            token.intent().instrument().clone(),
+            price("100", Currency::Krw),
+            at(0),
+        )
+        .expect("관측");
+        assert_eq!(
+            pending(token)
+                .recheck(at(0), observation)
+                .expect_err("시각 역행"),
+            crate::ProposalExecutionError::ClockRollback
+        );
+    }
+    #[test]
+    fn lookup_row_debug_keeps_only_masked_account_number() {
+        let row = AccountLookupDisplayRow::from_broker_account_result(
+            AccountId::new(987_654_321),
+            test_suffix(),
+        );
+        let debug = format!("{row:?}");
+        assert!(debug.contains("1234"));
+        assert!(!debug.contains("987654321"));
+        assert!(!debug.contains("123456781234"));
+    }
+    #[test]
+    fn pending_confirmation_rejects_mismatched_lookup_row() {
+        let token = field_test_token();
+        let name = InstrumentNameFact::from_master_lookup_result(
+            token.intent().instrument().clone(),
+            test_name(),
+        );
+        let row =
+            AccountLookupDisplayRow::from_broker_account_result(AccountId::new(1), test_suffix());
+        let error = PendingOrderConfirmation::from_execution(
+            token,
+            name,
+            AccountDisplayFact::from_account_lookup_result(row),
+            EstimatedOrderFee::Unknown,
+            OrderFxRates::missing(),
+        )
+        .expect_err("다른 계좌");
+        assert_eq!(error, OrderSummaryError::AccountMismatch);
     }
 }
