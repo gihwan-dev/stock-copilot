@@ -339,6 +339,20 @@ pub use signal_submission::{
 mod signal_timing;
 pub use signal_timing::SignalTiming;
 
+mod performance;
+mod performance_arithmetic;
+pub use performance::{
+    Performance, PerformanceCurrency, PerformanceError, PerformancePeriod, TwrMethod,
+};
+pub use performance_arithmetic::PerformanceValue;
+mod benchmark;
+pub use benchmark::{BenchmarkDividends, BenchmarkKind, BenchmarkObservation, BenchmarkSeries};
+mod performance_contract;
+mod performance_risk;
+pub use performance_risk::{
+    BetaMetric, PerformanceBeta, PerformanceRisk, RiskMetric, performance_beta,
+    performance_volatility,
+};
 mod cash_observation_failure;
 pub use broker_account::{
     BrokerAccountKeySelection, BrokerAccountNumberInput, BrokerAccountRows, BrokerAccountRowsError,
@@ -359,6 +373,9 @@ pub use master_instrument::{
 };
 mod master_order_gate;
 pub use master_order_gate::{MasterOrderGateFacts, NxtSupport};
+
+mod domain_event;
+pub use domain_event::{DomainEvent, DomainEventKind};
 mod buy_quantity;
 mod buy_quantity_arithmetic;
 mod buy_signal_history;
@@ -374,4 +391,27 @@ mod buy_plan_price;
 pub use buy_minimum_unit::MinimumBuyUnit;
 pub use buy_plan_price::{
     BuyPlanOrderPrice, BuyPlanOrderPriceKind, PriceBoundBuyPlan, check_buy_plan_order_price,
+};
+
+pub use benchmark::BenchmarkWeights;
+pub use performance_risk::PerformanceWeeks;
+
+mod sellable_quantity;
+pub use sellable_quantity::{
+    SellableQuantityDecision, SellableQuantityError, SellableQuantityFact, check_sellable_quantity,
+};
+mod broker_order_status;
+pub use broker_order_status::{BrokerOrderStatus, OrderOpenState};
+mod broker_order;
+pub use broker_order::{BrokerOrder, BrokerOrderError, BrokerOrderId, BrokerOrderRow};
+mod broker_order_set;
+pub use broker_order_set::{
+    BrokerOrderSet, OpenOrderCoverage, OppositeOpenOrder, opposite_open_order,
+};
+mod stock_warnings;
+pub use stock_warnings::{StockWarning, StockWarningDecision, StockWarnings, check_stock_warnings};
+mod broker_order_fields;
+pub use broker_order_fields::{
+    BrokerOrderMoney, BrokerOrderPrice, BrokerOrderSize, BrokerOrderTime, BrokerOrderType,
+    BrokerTimeInForce, UnfilledQuantity,
 };
