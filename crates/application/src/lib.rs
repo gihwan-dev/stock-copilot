@@ -88,4 +88,6 @@ pub trait MarketInfo: Send + Sync {
 }
 
 mod error_class;
-pub use error_class::{BugDiagnostic, ErrorClass, FalliblePort, UserAction, classify_port_error};
+pub use error_class::{
+    BugDiagnostic, ClassifiedError, ErrorClass, UserAction, classify_port_error,
+};

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AccessDenial, BrokerCapability, BugDiagnostic, ErrorClass, FalliblePort, HttpStatus,
+        AccessDenial, BrokerCapability, BugDiagnostic, ClassifiedError, ErrorClass, HttpStatus,
         MissingData, PortError, PortErrorKind, ReadEndpoint, RequestRejection, ResponseMismatch,
         RetryDelay, UnavailableCause, UserAction, classify_port_error,
     };
@@ -51,7 +51,7 @@ mod tests {
             ),
             (
                 PortErrorKind::AccessDenied(AccessDenial::LoginUserNotFound),
-                ErrorClass::UserAction(UserAction::Reauthenticate),
+                ErrorClass::UserAction(UserAction::CheckCredentials),
             ),
             (
                 PortErrorKind::Unavailable {
@@ -122,14 +122,14 @@ mod tests {
                     cause: UnavailableCause::ExpiredToken,
                     retry: RetryDelay::Unknown,
                 },
-                ErrorClass::UserAction(UserAction::Reauthenticate),
+                ErrorClass::Wait(RetryDelay::Unknown),
             ),
             (
                 PortErrorKind::Unavailable {
                     cause: UnavailableCause::ExpiredToken,
                     retry: RetryDelay::Known(delay()),
                 },
-                ErrorClass::UserAction(UserAction::Reauthenticate),
+                ErrorClass::Wait(RetryDelay::Known(delay())),
             ),
         ]
     }
@@ -137,15 +137,15 @@ mod tests {
         vec![
             (
                 PortErrorKind::NotFound(MissingData::Stock),
-                ErrorClass::UserAction(UserAction::CheckData(MissingData::Stock)),
+                ErrorClass::NoData(MissingData::Stock),
             ),
             (
                 PortErrorKind::NotFound(MissingData::ExchangeRate),
-                ErrorClass::UserAction(UserAction::CheckData(MissingData::ExchangeRate)),
+                ErrorClass::NoData(MissingData::ExchangeRate),
             ),
             (
                 PortErrorKind::NotFound(MissingData::Sector),
-                ErrorClass::UserAction(UserAction::CheckData(MissingData::Sector)),
+                ErrorClass::NoData(MissingData::Sector),
             ),
             (
                 PortErrorKind::InvalidResponse(ResponseMismatch::Schema),
@@ -226,11 +226,99 @@ mod tests {
         ]
     }
 
+    fn expected_class(kind: PortErrorKind) -> ErrorClass {
+        match kind {
+            PortErrorKind::AccessDenied(value) => expected_access(value),
+            PortErrorKind::Unavailable { cause, retry } => expected_wait(cause, retry),
+            PortErrorKind::NotFound(value) => expected_no_data(value),
+            PortErrorKind::InvalidResponse(value) => expected_response(value),
+            PortErrorKind::Unsupported(value) => {
+                ErrorClass::Bug(BugDiagnostic::UnsupportedCapability(value))
+            }
+            PortErrorKind::InvalidRequest(value) => expected_request(value),
+        }
+    }
+
+    fn expected_access(cause: AccessDenial) -> ErrorClass {
+        match cause {
+            AccessDenial::InvalidCredentials | AccessDenial::LoginUserNotFound => {
+                ErrorClass::UserAction(UserAction::CheckCredentials)
+            }
+            AccessDenial::IpNotAllowed => ErrorClass::UserAction(UserAction::CheckIpAllowlist),
+            AccessDenial::TokenRevokedRepeated => {
+                ErrorClass::UserAction(UserAction::StopCompetingKeyUse)
+            }
+            AccessDenial::AccountNotFound => ErrorClass::UserAction(UserAction::CheckAccount),
+            AccessDenial::Forbidden => ErrorClass::UserAction(UserAction::CheckPermissions),
+        }
+    }
+
+    fn expected_wait(cause: UnavailableCause, retry: RetryDelay) -> ErrorClass {
+        match cause {
+            UnavailableCause::RateLimited
+            | UnavailableCause::Maintenance
+            | UnavailableCause::ServerError
+            | UnavailableCause::Network
+            | UnavailableCause::ExpiredToken => ErrorClass::Wait(retry),
+        }
+    }
+
+    fn expected_no_data(cause: MissingData) -> ErrorClass {
+        match cause {
+            MissingData::Stock => ErrorClass::NoData(MissingData::Stock),
+            MissingData::ExchangeRate => ErrorClass::NoData(MissingData::ExchangeRate),
+            MissingData::Sector => ErrorClass::NoData(MissingData::Sector),
+        }
+    }
+
+    fn expected_response(cause: ResponseMismatch) -> ErrorClass {
+        match cause {
+            ResponseMismatch::Schema => {
+                ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Schema))
+            }
+            ResponseMismatch::Validation => {
+                ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Validation))
+            }
+        }
+    }
+
+    fn expected_request(cause: RequestRejection) -> ErrorClass {
+        match cause {
+            RequestRejection::MalformedRequest => {
+                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::MalformedRequest))
+            }
+            RequestRejection::MissingAccountHeader => ErrorClass::Bug(BugDiagnostic::Request(
+                RequestRejection::MissingAccountHeader,
+            )),
+            RequestRejection::InvalidToken => {
+                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::InvalidToken))
+            }
+            RequestRejection::EdgeBlocked => {
+                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::EdgeBlocked))
+            }
+            RequestRejection::UnsupportedQuery => {
+                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::UnsupportedQuery))
+            }
+            RequestRejection::UnsupportedContentType => ErrorClass::Bug(BugDiagnostic::Request(
+                RequestRejection::UnsupportedContentType,
+            )),
+            RequestRejection::BatchLimitExceeded => {
+                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::BatchLimitExceeded))
+            }
+        }
+    }
+
     #[test]
     fn every_leaf_matches_the_decision_table() {
         for (kind, expected) in cases() {
             let error = PortError::new(ReadEndpoint::Quotes, HttpStatus::NotReceived, kind);
-            assert_eq!(classify_port_error(error), expected, "{kind:?}");
+            assert_eq!(expected_class(kind), expected, "문서 표: {kind:?}");
+            assert_eq!(
+                classify_port_error(error),
+                expected_class(kind),
+                "분류: {kind:?}"
+            );
+            assert_eq!(class_of(&error), expected_class(kind), "trait: {kind:?}");
         }
     }
 
@@ -298,48 +386,109 @@ mod tests {
     }
 
     #[test]
-    fn formatting_contains_only_the_closed_fields() {
-        for (kind, expected) in cases() {
+    fn debug_has_exactly_the_closed_port_fields() {
+        for (kind, _) in cases() {
             let error = PortError::new(ReadEndpoint::Quotes, HttpStatus::NotReceived, kind);
             assert_eq!(
                 format!("{error:?}"),
                 format!("PortError {{ endpoint: Quotes, status: NotReceived, kind: {kind:?} }}")
             );
-            let class = classify_port_error(error);
-            let label = match expected {
-                ErrorClass::UserAction(_) => "UserAction",
-                ErrorClass::Wait(_) => "Wait",
-                ErrorClass::Bug(_) => "Bug",
-            };
-            assert_eq!(format!("{class}"), label);
-            for secret in [
-                "fixture-client-secret",
-                "Bearer fixture-token",
-                "12345678901234",
-                "{\"response\":",
-                "Authorization:",
-            ] {
-                assert!(!format!("{error:?} {class:?} {class}").contains(secret));
+            require_type::<ReadEndpoint>(error.endpoint());
+            require_type::<HttpStatus>(error.status());
+            require_type::<PortErrorKind>(error.kind());
+            assert_eq!(
+                (error.endpoint(), error.status(), error.kind()),
+                (ReadEndpoint::Quotes, HttpStatus::NotReceived, kind)
+            );
+        }
+    }
+
+    fn require_copy<T: Copy>() {}
+
+    #[test]
+    fn port_and_classification_types_are_copy() {
+        require_copy::<PortError>();
+        require_copy::<PortErrorKind>();
+        require_copy::<ReadEndpoint>();
+        require_copy::<HttpStatus>();
+        require_copy::<AccessDenial>();
+        require_copy::<UnavailableCause>();
+        require_copy::<MissingData>();
+        require_copy::<ResponseMismatch>();
+        require_copy::<RequestRejection>();
+        require_copy::<BrokerCapability>();
+        require_copy::<RetryDelay>();
+        require_copy::<TimeSpan>();
+        require_copy::<ErrorClass>();
+        require_copy::<UserAction>();
+        require_copy::<BugDiagnostic>();
+    }
+
+    fn require_type<T>(_: T) {}
+
+    fn check_retry_fields(retry: RetryDelay) {
+        match retry {
+            RetryDelay::Unknown => (),
+            RetryDelay::Known(duration) => require_type::<TimeSpan>(duration),
+        }
+    }
+
+    fn check_diagnostic_fields(diagnostic: BugDiagnostic) {
+        match diagnostic {
+            BugDiagnostic::Response(value) => require_type::<ResponseMismatch>(value),
+            BugDiagnostic::Request(value) => require_type::<RequestRejection>(value),
+            BugDiagnostic::UnsupportedCapability(value) => require_type::<BrokerCapability>(value),
+        }
+    }
+
+    fn check_class_fields(class: ErrorClass) {
+        match class {
+            ErrorClass::UserAction(action) => match action {
+                UserAction::CheckCredentials
+                | UserAction::CheckIpAllowlist
+                | UserAction::StopCompetingKeyUse
+                | UserAction::CheckAccount
+                | UserAction::CheckPermissions => require_type::<UserAction>(action),
+            },
+            ErrorClass::Wait(retry) => check_retry_fields(retry),
+            ErrorClass::Bug(diagnostic) => check_diagnostic_fields(diagnostic),
+            ErrorClass::NoData(data) => require_type::<MissingData>(data),
+        }
+    }
+
+    #[test]
+    fn classification_fields_are_closed_enums_or_time_span() {
+        for (kind, _) in cases() {
+            check_class_fields(expected_class(kind));
+            check_class_fields(classify_port_error(PortError::new(
+                ReadEndpoint::Quotes,
+                HttpStatus::NotReceived,
+                kind,
+            )));
+        }
+    }
+
+    enum OtherPortError {
+        TemporarilyUnavailable,
+    }
+
+    impl ClassifiedError for OtherPortError {
+        fn class(&self) -> ErrorClass {
+            match self {
+                Self::TemporarilyUnavailable => ErrorClass::Wait(RetryDelay::Unknown),
             }
         }
     }
 
-    struct FuturePort;
-    impl FalliblePort for FuturePort {
-        type Error = PortError;
+    fn class_of<E: ClassifiedError>(error: &E) -> ErrorClass {
+        error.class()
     }
-    fn classify_future_failure<P: FalliblePort>(error: P::Error) -> ErrorClass {
-        classify_port_error(error.into())
-    }
+
     #[test]
-    fn future_port_boundary_requires_conversion_to_the_closed_error() {
+    fn another_port_error_classifies_without_conversion_to_a_broker_error() {
         assert_eq!(
-            classify_future_failure::<FuturePort>(PortError::new(
-                ReadEndpoint::Accounts,
-                HttpStatus::Forbidden,
-                PortErrorKind::AccessDenied(AccessDenial::Forbidden)
-            )),
-            ErrorClass::UserAction(UserAction::CheckPermissions)
+            class_of(&OtherPortError::TemporarilyUnavailable),
+            ErrorClass::Wait(RetryDelay::Unknown)
         );
     }
 }
