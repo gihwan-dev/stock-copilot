@@ -181,3 +181,10 @@ pub use corporate_action::{
 };
 pub use cost_basis::{CostBasisMethod, LotCost, LotUnitPrice};
 pub use lot::{Lot, LotBook, LotCostCurrency, LotError, LotIdentity};
+mod cost_basis_arithmetic;
+pub use cost_basis_arithmetic::{IntegerText, QuantityShape, ShareQuantity};
+
+pub use corporate_action::{ShareCount, ShareRatio};
+
+pub use corporate_action::{CorporateDelivery, DeliveryStatus};
+pub use lot::{CostPool, LotAssumption, LotRealization};

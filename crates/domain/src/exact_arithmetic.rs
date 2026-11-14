@@ -12,6 +12,9 @@ pub enum RatioQuotient {
 pub struct ApproximateRatio(Decimal);
 
 impl ApproximateRatio {
+    pub(crate) const fn new(value: Decimal) -> Self {
+        Self(value)
+    }
     #[must_use]
     pub(crate) fn as_decimal(&self) -> Decimal {
         self.0
