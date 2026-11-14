@@ -5,7 +5,7 @@ use crate::{
     MoneyError, PortfolioValuation, PriceAdjustment, SettledRowSet, Timestamp, Total,
     TotalCompleteness,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -137,6 +137,39 @@ impl SnapshotInstrumentHistory {
             candles,
         })
     }
+    fn reconstruct_book(
+        &self,
+        rows: &SettledRowSet,
+        day: CalendarDate,
+    ) -> Result<LotBook, LotError> {
+        let identity = self.historical_identity(day)?;
+        let actions = self
+            .actions
+            .iter()
+            .filter(|action| action.date() <= day)
+            .cloned()
+            .collect::<Vec<_>>();
+        LotBook::from_settled(rows, identity, CostBasisMethod::Fifo, &actions, day)
+    }
+    fn historical_identity(&self, day: CalendarDate) -> Result<LotIdentity, LotError> {
+        let mut changes = BTreeMap::new();
+        for action in self.actions.iter().filter(|action| action.date() > day) {
+            if let crate::CorporateActionKind::SymbolChange { from, to } = action.kind()
+                && changes.insert(to.clone(), from.clone()).is_some()
+            {
+                return Err(LotError::AmbiguousOrder);
+            }
+        }
+        let mut symbol = self.identity.symbol().clone();
+        let mut visited = BTreeSet::new();
+        while let Some(previous) = changes.get(&symbol) {
+            if !visited.insert(symbol.clone()) {
+                return Err(LotError::InvalidIdentity);
+            }
+            symbol = previous.clone();
+        }
+        Ok(self.identity.with_historical_symbol(symbol))
+    }
     #[must_use]
     pub const fn identity(&self) -> &LotIdentity {
         &self.identity
@@ -233,25 +266,16 @@ impl ValuationSnapshot {
         for history in ordered {
             let currency = history.identity.currency();
             let day = calendar.today.date(currency);
-            let actions = history
-                .actions
-                .iter()
-                .filter(|action| action.date() <= day)
-                .cloned()
-                .collect::<Vec<_>>();
-            let book = LotBook::from_settled(
-                rows,
-                history.identity.clone(),
-                CostBasisMethod::Fifo,
-                &actions,
-                day,
-            );
+            let book = history.reconstruct_book(rows, day);
             let candidates = history
                 .candles
                 .iter()
                 .filter(|candle| candle.time().date() == day)
                 .collect::<Vec<_>>();
-            let candle = candidates.first().copied().cloned();
+            let candle = match candidates.as_slice() {
+                [single] => Some((**single).clone()),
+                _ => None,
+            };
             let value = position_value(&book, &candidates, &history.identity);
             let total = match currency {
                 Currency::Krw => &mut krw,
@@ -1351,6 +1375,167 @@ mod tests {
                 reconstruct(2, &[item], &rows(vec![buy("A", 1, "10")]))
                     .currency_value(Currency::Usd),
                 Err(SnapshotError::PendingCorporateCash)
+            );
+        }
+    }
+    #[test]
+    fn different_duplicate_candles_have_no_arbitrary_selected_evidence() {
+        let first = candle(2, "A", "100", PriceAdjustment::Raw, CandleStatus::Finalized);
+        let second = candle(2, "A", "101", PriceAdjustment::Raw, CandleStatus::Finalized);
+        let left = SnapshotInstrumentHistory::new(
+            identity("A"),
+            Vec::new(),
+            vec![first.clone(), second.clone()],
+        )
+        .expect("정순");
+        let right = SnapshotInstrumentHistory::new(identity("A"), Vec::new(), vec![second, first])
+            .expect("역순");
+        let state = rows(vec![buy("A", 1, "10")]);
+        let result = reconstruct(2, &[left], &state);
+        assert_eq!(result, reconstruct(2, &[right], &state));
+        assert_eq!(result.positions().first().expect("종목").candle(), None);
+    }
+    #[test]
+    fn incomplete_reconstructed_previous_keeps_both_source_and_state() {
+        let previous = reconstruct(1, &[history("A", "100")], &rows(vec![buy("A", 1, "10")]));
+        let current = observed(2, "0", "0", None);
+        let external = flows(2, "0", "0");
+        let result = DailyPortfolioProfit::calculate(
+            &calendar(2),
+            &current,
+            Some(&previous),
+            &external,
+            None,
+        );
+        assert_eq!(result.previous(), SnapshotPrevious::Incomplete);
+        assert_eq!(result.previous_source(), Some(SnapshotSource::Recalculated));
+        let missing =
+            DailyPortfolioProfit::calculate(&calendar(2), &current, None, &external, None);
+        assert_eq!(missing.previous_source(), None);
+    }
+    #[test]
+    fn future_symbol_change_does_not_erase_historical_holdings() {
+        let change = CorporateAction::try_new(
+            CorporateActionId::new(InstrumentId::try_new("rename").expect("ID")),
+            at(3).offset_calendar_date(),
+            CorporateActionKind::SymbolChange {
+                from: Symbol::try_new("OLD").expect("이전"),
+                to: Symbol::try_new("NEW").expect("현재"),
+            },
+        )
+        .expect("변경");
+        let item = SnapshotInstrumentHistory::new(
+            identity("NEW"),
+            vec![change],
+            vec![candle(
+                2,
+                "NEW",
+                "100",
+                PriceAdjustment::Raw,
+                CandleStatus::Finalized,
+            )],
+        )
+        .expect("이력");
+        let result = reconstruct(2, &[item], &rows(vec![buy("OLD", 1, "10")]));
+        assert_eq!(
+            result.currency_value(Currency::Usd),
+            Ok(money("1000", Currency::Usd))
+        );
+    }
+    #[test]
+    fn nonempty_order_assumptions_and_unknown_cost_remain_readable() {
+        let result = reconstruct(
+            2,
+            &[history("A", "100")],
+            &rows(vec![buy("A", 1, "10"), buy("A", 1, "11")]),
+        );
+        assert!(
+            result
+                .assumptions()
+                .contains(&crate::LotAssumption::TransactionOrder)
+        );
+        let mut data = buy("A", 1, "10").data().clone();
+        data.kind = TransactionKind::SecuritiesTransferIn;
+        data.amount = None;
+        data.net_amount = None;
+        let unknown = reconstruct(
+            2,
+            &[history("A", "100")],
+            &rows(vec![Transaction::try_new(data).expect("원가 미상 입고")]),
+        );
+        assert_eq!(
+            unknown
+                .positions()
+                .first()
+                .expect("종목")
+                .book()
+                .expect("로트")
+                .total_cost()
+                .expect("원가"),
+            crate::LotCost::Unknown
+        );
+        assert_eq!(
+            unknown.currency_value(Currency::Usd),
+            Ok(money("1000", Currency::Usd))
+        );
+    }
+    fn rename(id: &str, from: &str, to: &str) -> CorporateAction {
+        CorporateAction::try_new(
+            CorporateActionId::new(InstrumentId::try_new(id).expect("ID")),
+            at(3).offset_calendar_date(),
+            CorporateActionKind::SymbolChange {
+                from: Symbol::try_new(from).expect("이전"),
+                to: Symbol::try_new(to).expect("다음"),
+            },
+        )
+        .expect("변경")
+    }
+    #[test]
+    fn ambiguous_or_cyclic_future_symbol_history_is_incomplete() {
+        for (changes, expected) in [
+            (
+                vec![rename("1", "OLD", "NEW"), rename("2", "OTHER", "NEW")],
+                LotError::AmbiguousOrder,
+            ),
+            (
+                vec![rename("1", "OLD", "NEW"), rename("2", "NEW", "OLD")],
+                LotError::InvalidIdentity,
+            ),
+        ] {
+            let item =
+                SnapshotInstrumentHistory::new(identity("NEW"), changes, Vec::new()).expect("이력");
+            assert_eq!(
+                reconstruct(2, &[item], &rows(vec![buy("OLD", 1, "10")]))
+                    .currency_value(Currency::Usd),
+                Err(SnapshotError::Lot(expected))
+            );
+        }
+    }
+    #[test]
+    fn minute_or_wrong_currency_candle_cannot_value_a_daily_position() {
+        let original = candle(2, "A", "100", PriceAdjustment::Raw, CandleStatus::Finalized);
+        let native = Price::try_new(money("100", Currency::Krw)).expect("원화 가격");
+        let native_values =
+            Ohlcv::try_new(native, native, native, native, original.values().volume())
+                .expect("원화 봉");
+        for (period, values) in [
+            (CandlePeriod::Minute, original.values()),
+            (CandlePeriod::Daily, native_values),
+        ] {
+            let invalid = Candle::try_new(
+                original.instrument().clone(),
+                CandleTime::try_new(at(2), period).expect("시각"),
+                PriceAdjustment::Raw,
+                values,
+                CandleObservation::new(at(4), CandleStatus::Finalized),
+            )
+            .expect("봉");
+            let item = SnapshotInstrumentHistory::new(identity("A"), Vec::new(), vec![invalid])
+                .expect("이력");
+            assert_eq!(
+                reconstruct(2, &[item], &rows(vec![buy("A", 1, "10")]))
+                    .currency_value(Currency::Usd),
+                Err(SnapshotError::InvalidCandle)
             );
         }
     }

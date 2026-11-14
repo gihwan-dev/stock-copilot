@@ -85,6 +85,7 @@ pub struct DailyPortfolioProfit {
     converted: Result<KrwValuation, SnapshotError>,
     selected_converted: Result<KrwValuation, SnapshotError>,
     previous: SnapshotPrevious,
+    previous_source: Option<SnapshotSource>,
     current_source: SnapshotSource,
     reported: Option<PortfolioDailyProfitLoss>,
 }
@@ -97,16 +98,7 @@ impl DailyPortfolioProfit {
         flows: &SnapshotExternalFlows,
         reported: Option<PortfolioDailyProfitLoss>,
     ) -> Self {
-        let previous_state = match previous {
-            None => SnapshotPrevious::Missing,
-            Some(value) if value.completeness() == TotalCompleteness::Incomplete => {
-                SnapshotPrevious::Incomplete
-            }
-            Some(value) => match value.source() {
-                SnapshotSource::Observed => SnapshotPrevious::Observed,
-                SnapshotSource::Recalculated => SnapshotPrevious::Recalculated,
-            },
-        };
+        let previous_state = classify_previous(previous);
         let validated = previous
             .ok_or(SnapshotError::MissingPrevious)
             .and_then(|value| {
@@ -153,6 +145,7 @@ impl DailyPortfolioProfit {
             converted,
             selected_converted,
             previous: previous_state,
+            previous_source: previous.map(ValuationSnapshot::source),
             current_source: today.source(),
             reported,
         }
@@ -180,6 +173,10 @@ impl DailyPortfolioProfit {
     #[must_use]
     pub const fn previous(&self) -> SnapshotPrevious {
         self.previous
+    }
+    #[must_use]
+    pub const fn previous_source(&self) -> Option<SnapshotSource> {
+        self.previous_source
     }
     #[must_use]
     pub const fn current_source(&self) -> SnapshotSource {
@@ -232,4 +229,17 @@ fn currency_difference(
             .map_err(SnapshotError::Arithmetic)?;
     }
     Ok(result)
+}
+
+fn classify_previous(previous: Option<&ValuationSnapshot>) -> SnapshotPrevious {
+    match previous {
+        None => SnapshotPrevious::Missing,
+        Some(value) if value.completeness() == TotalCompleteness::Incomplete => {
+            SnapshotPrevious::Incomplete
+        }
+        Some(value) => match value.source() {
+            SnapshotSource::Observed => SnapshotPrevious::Observed,
+            SnapshotSource::Recalculated => SnapshotPrevious::Recalculated,
+        },
+    }
 }
