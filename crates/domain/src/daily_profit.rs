@@ -1,77 +1,96 @@
 use crate::{
-    Comparison, Currency, CurrencyAmounts, KrwValuation, Money, PortfolioDailyProfitLoss,
-    SelectedValue, SnapshotCalendar, SnapshotDates, SnapshotError, SnapshotSource,
-    TotalCompleteness, ValuationSnapshot, ValuationSource,
+    Comparison, Currency, Money, PortfolioDailyProfitLoss, SettledRowSet, SnapshotError,
+    SnapshotSource, TotalCompleteness, TransactionKind, ValuationSnapshot, ValuationSource,
 };
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SnapshotPrevious {
-    Missing,
-    Observed,
-    Recalculated,
-    Incomplete,
+pub struct SnapshotPrevious {
+    source: SnapshotSource,
+    stocks: TotalCompleteness,
+    account: TotalCompleteness,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SnapshotExternalFlows {
-    dates: SnapshotDates,
-    amounts: Option<CurrencyAmounts>,
-}
-impl SnapshotExternalFlows {
+impl SnapshotPrevious {
     #[must_use]
-    pub const fn classified(calendar: &SnapshotCalendar, amounts: CurrencyAmounts) -> Self {
-        Self {
-            dates: calendar.dates(),
-            amounts: Some(amounts),
-        }
+    pub const fn source(self) -> SnapshotSource {
+        self.source
     }
     #[must_use]
-    pub const fn unavailable(calendar: &SnapshotCalendar) -> Self {
-        Self {
-            dates: calendar.dates(),
-            amounts: None,
-        }
+    pub const fn stock_completeness(self) -> TotalCompleteness {
+        self.stocks
     }
-    pub fn amount(self, currency: Currency) -> Result<Money, SnapshotError> {
-        self.amounts
-            .map(|value| value.resolved(currency))
-            .ok_or(SnapshotError::MissingFlows)
+    #[must_use]
+    pub const fn account_completeness(self) -> TotalCompleteness {
+        self.account
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DailyCurrencyProfit {
+pub enum HoldingsDailyOrigin {
+    TossSummary,
+    TossHoldings,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HoldingsDailySelection {
+    amount: Money,
+    origin: HoldingsDailyOrigin,
+    previous: Result<SnapshotSource, SnapshotError>,
+}
+impl HoldingsDailySelection {
+    #[must_use]
+    pub const fn amount(self) -> Money {
+        self.amount
+    }
+    #[must_use]
+    pub const fn origin(self) -> HoldingsDailyOrigin {
+        self.origin
+    }
+    #[must_use]
+    pub const fn source(self) -> ValuationSource {
+        match self.origin {
+            HoldingsDailyOrigin::TossSummary | HoldingsDailyOrigin::TossHoldings => {
+                ValuationSource::TossOpenApi
+            }
+        }
+    }
+    pub const fn previous_source(self) -> Result<SnapshotSource, SnapshotError> {
+        self.previous
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HoldingsDailyCurrency {
     computed: Result<Money, SnapshotError>,
-    selected: Result<SelectedValue<Money>, SnapshotError>,
+    selected: Result<HoldingsDailySelection, SnapshotError>,
     comparison: Comparison,
 }
-impl DailyCurrencyProfit {
-    fn new(computed: Result<Money, SnapshotError>, reported: Option<Money>) -> Self {
-        let (selected, comparison) = match reported {
-            Some(value) => (
-                Ok(SelectedValue::new(value, ValuationSource::TossOpenApi)),
-                computed.map_or(Comparison::Unavailable, |calculated| {
+impl HoldingsDailyCurrency {
+    fn select(
+        computed: Result<Money, SnapshotError>,
+        reported: Result<(Money, HoldingsDailyOrigin), SnapshotError>,
+        previous: Result<SnapshotSource, SnapshotError>,
+        override_comparison: Option<Comparison>,
+    ) -> Self {
+        let comparison = match reported {
+            Ok((value, _origin)) => match override_comparison {
+                Some(comparison) => comparison,
+                None => computed.map_or(Comparison::Unavailable, |calculated| {
                     crate::holding_valuation::compare_money(calculated, value)
                 }),
-            ),
-            None => (
-                computed.map(|value| SelectedValue::new(value, ValuationSource::Calculated)),
-                Comparison::NotProvided,
-            ),
+            },
+            Err(_) => Comparison::NotProvided,
         };
         Self {
             computed,
-            selected,
+            selected: reported.map(|(amount, origin)| HoldingsDailySelection {
+                amount,
+                origin,
+                previous,
+            }),
             comparison,
         }
     }
     pub const fn computed(self) -> Result<Money, SnapshotError> {
         self.computed
     }
-    pub const fn selected(self) -> Result<SelectedValue<Money>, SnapshotError> {
+    pub const fn selected(self) -> Result<HoldingsDailySelection, SnapshotError> {
         self.selected
-    }
-    #[must_use]
-    pub fn source(self) -> Option<ValuationSource> {
-        self.selected.ok().map(SelectedValue::source)
     }
     #[must_use]
     pub const fn comparison(self) -> Comparison {
@@ -79,167 +98,118 @@ impl DailyCurrencyProfit {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DailyPortfolioProfit {
-    krw: DailyCurrencyProfit,
-    usd: DailyCurrencyProfit,
-    converted: Result<KrwValuation, SnapshotError>,
-    selected_converted: Result<KrwValuation, SnapshotError>,
-    previous: SnapshotPrevious,
-    previous_source: Option<SnapshotSource>,
-    current_source: SnapshotSource,
+pub struct HoldingsDailyProfit {
+    kr: HoldingsDailyCurrency,
+    us: HoldingsDailyCurrency,
+    previous: Result<SnapshotPrevious, SnapshotError>,
     reported: Option<PortfolioDailyProfitLoss>,
+    krw_cmp: Comparison,
 }
-impl DailyPortfolioProfit {
+impl HoldingsDailyProfit {
     #[must_use]
-    pub fn calculate(
-        calendar: &SnapshotCalendar,
+    pub fn compare(
         today: &ValuationSnapshot,
         previous: Option<&ValuationSnapshot>,
-        flows: &SnapshotExternalFlows,
+        rows: &SettledRowSet,
         reported: Option<PortfolioDailyProfitLoss>,
     ) -> Self {
-        let previous_state = classify_previous(previous);
-        let validated = previous
-            .ok_or(SnapshotError::MissingPrevious)
-            .and_then(|value| {
-                let prior_dates = value.dates();
-                if today.dates() != calendar.dates()
-                    || prior_dates != calendar.previous_dates()
-                    || flows.dates != calendar.dates()
-                {
-                    return Err(SnapshotError::WrongPeriod);
-                }
-                Ok(value)
-            });
-        let difference = |currency| {
-            let old = validated?;
-            currency_difference(
-                today.currency_value(currency),
-                old.currency_value(currency),
-                flows.amount(currency),
+        let pair = validated_previous(today, previous);
+        let state = pair.map(|(state, _old)| state);
+        let one = |currency| {
+            let computed =
+                pair.and_then(|(_state, old)| holding_change(today, old, rows, currency));
+            let provided = match reported.and_then(|record| record.amounts().amount(currency)) {
+                Some(amount) => Ok((amount, HoldingsDailyOrigin::TossSummary)),
+                None => match reported {
+                    Some(_) => Err(SnapshotError::MissingReportedValue),
+                    None => today
+                        .reported_stock_daily(currency)
+                        .map(|entry| (entry, HoldingsDailyOrigin::TossHoldings)),
+                },
+            };
+            let uncertain_krw = reported.is_some()
+                && currency == Currency::Krw
+                && (!today
+                    .stock_value(Currency::Usd)
+                    .is_ok_and(|entry| entry.amount().as_decimal().is_zero())
+                    || previous.is_some_and(|old| {
+                        !old.stock_value(Currency::Usd)
+                            .is_ok_and(|entry| entry.amount().as_decimal().is_zero())
+                    }));
+            HoldingsDailyCurrency::select(
+                computed,
+                provided,
+                state.map(SnapshotPrevious::source),
+                uncertain_krw.then_some(Comparison::Unavailable),
             )
         };
-        let krw = DailyCurrencyProfit::new(
-            difference(Currency::Krw),
-            reported.and_then(|value| value.amounts().amount(Currency::Krw)),
-        );
-        let usd = DailyCurrencyProfit::new(
-            difference(Currency::Usd),
-            reported.and_then(|value| value.amounts().amount(Currency::Usd)),
-        );
-        let converted = validated.and_then(|old| converted_difference(today, old, flows));
-        let selected_converted = match reported {
-            Some(_value) => krw.selected().and_then(|native| {
-                crate::valuation_snapshot::aggregate(
-                    native.value(),
-                    usd.selected()?.value(),
-                    today.fx(),
-                    today.dates().date(Currency::Usd),
-                )
-            }),
-            None => converted.clone(),
-        };
         Self {
-            krw,
-            usd,
-            converted,
-            selected_converted,
-            previous: previous_state,
-            previous_source: previous.map(ValuationSnapshot::source),
-            current_source: today.source(),
+            kr: one(Currency::Krw),
+            us: one(Currency::Usd),
+            previous: state,
             reported,
+            krw_cmp: Comparison::Unavailable,
         }
     }
     #[must_use]
-    pub const fn currency(&self, currency: Currency) -> DailyCurrencyProfit {
+    pub const fn currency(&self, currency: Currency) -> HoldingsDailyCurrency {
         match currency {
-            Currency::Krw => self.krw,
-            Currency::Usd => self.usd,
+            Currency::Krw => self.kr,
+            Currency::Usd => self.us,
         }
     }
-    pub fn krw_computed(&self) -> Result<&KrwValuation, SnapshotError> {
-        self.converted.as_ref().map_err(|error| *error)
+    pub const fn previous(&self) -> Result<SnapshotPrevious, SnapshotError> {
+        self.previous
     }
-    pub fn krw_selected(&self) -> Result<&KrwValuation, SnapshotError> {
-        self.selected_converted.as_ref().map_err(|error| *error)
+    pub fn krw_selected(&self) -> Result<Money, SnapshotError> {
+        self.reported
+            .and_then(|record| record.amounts().amount(Currency::Krw))
+            .ok_or(SnapshotError::MissingReportedValue)
     }
     #[must_use]
     pub const fn krw_comparison(&self) -> Comparison {
-        match self.reported {
-            Some(_) => Comparison::Unavailable,
-            None => Comparison::NotProvided,
-        }
-    }
-    #[must_use]
-    pub const fn previous(&self) -> SnapshotPrevious {
-        self.previous
-    }
-    #[must_use]
-    pub const fn previous_source(&self) -> Option<SnapshotSource> {
-        self.previous_source
-    }
-    #[must_use]
-    pub const fn current_source(&self) -> SnapshotSource {
-        self.current_source
+        self.krw_cmp
     }
     #[must_use]
     pub const fn reported(&self) -> Option<PortfolioDailyProfitLoss> {
         self.reported
     }
 }
-fn negative(value: Money) -> Money {
-    let mut amount = value.amount().as_decimal();
-    amount.set_sign_negative(!amount.is_sign_negative());
-    Money::new(crate::Amount::new(amount), value.currency())
+pub(crate) fn validated_previous<'action>(
+    today: &ValuationSnapshot,
+    old: Option<&'action ValuationSnapshot>,
+) -> Result<(SnapshotPrevious, &'action ValuationSnapshot), SnapshotError> {
+    let previous = old.ok_or(SnapshotError::MissingPrevious)?;
+    if previous.valuation_at() >= today.valuation_at() {
+        return Err(SnapshotError::WrongPeriod);
+    }
+    Ok((
+        SnapshotPrevious {
+            source: previous.source(),
+            stocks: previous.stock_completeness(),
+            account: previous.completeness(),
+        },
+        previous,
+    ))
 }
-fn converted_difference(
+fn holding_change(
     today: &ValuationSnapshot,
     previous: &ValuationSnapshot,
-    flows: &SnapshotExternalFlows,
-) -> Result<KrwValuation, SnapshotError> {
-    let old = crate::valuation_snapshot::aggregate(
-        negative(previous.currency_value(Currency::Krw)?),
-        negative(previous.currency_value(Currency::Usd)?),
-        previous.fx(),
-        previous.dates().date(Currency::Usd),
-    )?;
-    let amounts = flows.amounts.ok_or(SnapshotError::MissingFlows)?;
-    let external = crate::valuation_snapshot::aggregate(
-        negative(amounts.resolved(Currency::Krw)),
-        negative(amounts.resolved(Currency::Usd)),
-        today.fx(),
-        today.dates().date(Currency::Usd),
-    )?;
-    today
-        .krw_value()?
-        .checked_add(&old)
-        .and_then(|value| value.checked_add(&external))
-        .map_err(SnapshotError::Conversion)
-}
-
-fn currency_difference(
-    current: Result<Money, SnapshotError>,
-    previous: Result<Money, SnapshotError>,
-    flow: Result<Money, SnapshotError>,
+    rows: &SettledRowSet,
+    currency: Currency,
 ) -> Result<Money, SnapshotError> {
-    let mut result = current?;
-    for amount in [previous, flow] {
-        result = result
-            .checked_sub(&amount?)
-            .map_err(SnapshotError::Arithmetic)?;
+    let trade = |row: &crate::Transaction| {
+        row.data().currency == currency
+            && (row.data().kind == TransactionKind::Buy || row.data().kind == TransactionKind::Sell)
+    };
+    if rows.last_synchronized_at().is_none()
+        || rows.active_settled_for_calculation().any(trade)
+        || rows.pending_rows().as_slice().iter().any(trade)
+    {
+        return Err(SnapshotError::MissingExecutionDate);
     }
-    Ok(result)
-}
-
-fn classify_previous(previous: Option<&ValuationSnapshot>) -> SnapshotPrevious {
-    match previous {
-        None => SnapshotPrevious::Missing,
-        Some(value) if value.completeness() == TotalCompleteness::Incomplete => {
-            SnapshotPrevious::Incomplete
-        }
-        Some(value) => match value.source() {
-            SnapshotSource::Observed => SnapshotPrevious::Observed,
-            SnapshotSource::Recalculated => SnapshotPrevious::Recalculated,
-        },
-    }
+    today
+        .stock_value(currency)?
+        .checked_sub(&previous.stock_value(currency)?)
+        .map_err(SnapshotError::Arithmetic)
 }
