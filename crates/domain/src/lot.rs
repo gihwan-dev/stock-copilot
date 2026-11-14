@@ -51,6 +51,11 @@ pub struct LotIdentity {
     cost_currency: LotCostCurrency,
 }
 impl LotIdentity {
+    pub(crate) fn with_historical_symbol(&self, symbol: Symbol) -> Self {
+        let mut identity = self.clone();
+        identity.symbol = symbol;
+        identity
+    }
     #[must_use]
     pub const fn new(
         instrument: InstrumentId,

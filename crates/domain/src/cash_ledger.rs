@@ -105,6 +105,26 @@ impl CashLedger {
             },
         }
     }
+    pub(crate) fn snapshot_basis(
+        &self,
+        period: &crate::ConfirmedFlowPeriod,
+        classifications: &[crate::TransferClassification],
+    ) -> Result<(Money, &[crate::Transaction]), CashUnavailable> {
+        if period.currency() != self.currency || period.window() != self.facts.window {
+            return Err(CashUnavailable::IncompleteResponse);
+        }
+        match self.state {
+            CashLedgerState::Reconciled(value) => {
+                let expected = crate::external_flow::collect(&self.facts, classifications)
+                    .period(self.facts.window);
+                if expected != crate::FlowPeriod::Confirmed(period.clone()) {
+                    return Err(CashUnavailable::IncompleteResponse);
+                }
+                Ok((value.0, &self.facts.rows))
+            }
+            CashLedgerState::Unavailable(reason) => Err(reason),
+        }
+    }
     #[must_use]
     pub fn external_flows(
         &self,
@@ -254,7 +274,7 @@ impl std::fmt::Debug for CashLedger {
             .finish_non_exhaustive()
     }
 }
-fn cash_delta(data: &TransactionData) -> Result<Money, CashUnavailable> {
+pub(crate) fn cash_delta(data: &TransactionData) -> Result<Money, CashUnavailable> {
     if let Some(AssetClass::Unknown(_)) = data.asset_class {
         return Err(CashUnavailable::UnclassifiedRow);
     }
