@@ -2,7 +2,6 @@ import type { ReactElement } from "react";
 import { text } from "../lib";
 import { Badge } from "./Badge";
 import { StatusBar } from "./StatusBar";
-import { Button } from "./Button";
 type Story = {
   readonly component: "Badge" | "StatusBar";
   readonly state: "present" | "absent";
@@ -12,8 +11,6 @@ type Story = {
 const labels = {
   neutral: text("ds.badgeNeutral", "ko"),
   primary: text("ds.badgePrimary", "ko"),
-  up: text("ds.badgeUp", "ko"),
-  down: text("ds.badgeDown", "ko"),
   alert: text("ds.badgeAlert", "ko"),
 } as const;
 const sentences = {
@@ -22,7 +19,7 @@ const sentences = {
   info: text("ds.statusInfo", "ko"),
 } as const;
 export const statusComponentStories: readonly Story[] = [
-  ...(["neutral", "primary", "up", "down", "alert"] as const).flatMap((tone) =>
+  ...(["neutral", "primary", "alert"] as const).flatMap((tone) =>
     (["normal", "mono"] as const).map((mono): Story => ({
       component: "Badge",
       state: "present",
@@ -43,9 +40,10 @@ export const statusComponentStories: readonly Story[] = [
         action === "present" ? (
           <StatusBar
             tone={tone}
-            action={
-              <Button size="control-height-sm">{text("ds.retry", "ko")}</Button>
-            }
+            action={{
+              label: text("ds.retry", "ko"),
+              onPress: (): void => undefined,
+            }}
           >
             {sentences[tone]}
           </StatusBar>
@@ -61,9 +59,10 @@ export const statusComponentStories: readonly Story[] = [
     render: (): ReactElement => (
       <StatusBar
         tone={tone}
-        action={
-          <Button size="control-height-sm">{text("ds.retry", "ko")}</Button>
-        }
+        action={{
+          label: text("ds.retry", "ko"),
+          onPress: (): void => undefined,
+        }}
       />
     ),
   })),

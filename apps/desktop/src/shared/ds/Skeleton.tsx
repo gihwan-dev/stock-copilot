@@ -13,22 +13,22 @@ const variantClasses = {
   text: "flex flex-col gap-space-2",
   block: "rounded-md bg-surface-sunken h-chart-height-sm",
 } as const;
+const tallVariantClasses = {
+  text: "flex flex-col gap-space-2",
+  block: "rounded-md bg-surface-sunken h-chart-height",
+} as const;
+const tallerVariantClasses = {
+  text: "flex flex-col gap-space-2",
+  block: "rounded-md bg-surface-sunken h-chart-height-lg",
+} as const;
 export const Skeleton = (props: Props): ReactElement => {
   const variant = props.variant ?? "text";
   if (props.variant === "block") {
     if (props.height === "chart-height")
-      return (
-        <div
-          aria-hidden="true"
-          className="rounded-md bg-surface-sunken h-chart-height"
-        />
-      );
+      return <div aria-hidden="true" className={tallVariantClasses[variant]} />;
     if (props.height === "chart-height-lg")
       return (
-        <div
-          aria-hidden="true"
-          className="rounded-md bg-surface-sunken h-chart-height-lg"
-        />
+        <div aria-hidden="true" className={tallerVariantClasses[variant]} />
       );
     return <div aria-hidden="true" className={variantClasses[variant]} />;
   }

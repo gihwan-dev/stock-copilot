@@ -135,13 +135,24 @@ export const publicProps = {
             (t.flags & ts.TypeFlags.Undefined) === 0 &&
             !reactType(t, ["RefObject"]),
         );
+      if (
+        (p.declarations ?? []).some((d) => semantics.colorType(d.type)) &&
+        !["textColor", "bg", "color"].includes(p.name)
+      )
+        return true;
       if (semanticName(p.name)) {
-        const token = (p.declarations ?? []).every((d) =>
-          semantics.tokenOnly(d.type),
-        );
-        if (!token) return !semantics.contract(p);
-        if (p.name !== "tone") return !tokenValue(value);
+        const declarations = p.declarations ?? [];
+        const typeStyle =
+          p.name === "variant" &&
+          declarations.length > 0 &&
+          declarations.every(
+            (d) => semantics.tokenOnly(d.type) && semantics.typeStyle(d.type),
+          );
+        if (typeStyle) return !tokenValue(value);
+        return !semantics.contract(p);
       }
+      const tokenName = tokenProperty.test(p.name);
+      if (semantics.reaches(p) && !tokenName) return !semantics.contract(p);
       if (tokenProperty.test(p.name)) {
         const category = categoryNames.get(tokenCategory(p.name));
         const values = value.isUnion() ? value.types : [value];

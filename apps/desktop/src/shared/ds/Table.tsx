@@ -40,67 +40,55 @@ type CellProps = {
   readonly children?: UiText | ReactElement;
   readonly align?: "start" | "end";
 };
-const header = (props: CellProps): ReactElement => (
-  <th
-    scope="col"
-    className={
-      props.align === "end"
-        ? "text-right px-space-3 py-space-2 bg-surface-sunken text-ink-muted text-label"
-        : "text-left px-space-3 py-space-2 bg-surface-sunken text-ink-muted text-label"
-    }
-  >
-    {props.children}
-  </th>
-);
+const headerStyles = {
+  start:
+    "text-left px-space-3 py-space-2 bg-surface-sunken text-ink-muted text-label",
+  end: "text-right px-space-3 py-space-2 bg-surface-sunken text-ink-muted text-label",
+} as const;
+const normalCells = {
+  start:
+    "h-row-height px-space-3 border-t-hairline border-line text-body text-left",
+  end: "h-row-height px-space-3 border-t-hairline border-line text-body text-right",
+} as const;
+const denseCells = {
+  start:
+    "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-left",
+  end: "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-right",
+} as const;
+const normalHeaders = {
+  start:
+    "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-left",
+  end: "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-right",
+} as const;
+const denseHeaders = {
+  start:
+    "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-left",
+  end: "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-right",
+} as const;
+const header = (props: CellProps): ReactElement => {
+  const align = props.align ?? "start";
+  return (
+    <th scope="col" className={headerStyles[align]}>
+      {props.children}
+    </th>
+  );
+};
 const Cell = (props: CellProps): ReactElement => {
   const dense = use(DensityContext);
-  if (props.align === "end")
-    return (
-      <td
-        className={
-          dense === "dense"
-            ? "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-right"
-            : "h-row-height px-space-3 border-t-hairline border-line text-body text-right"
-        }
-      >
-        {props.children}
-      </td>
-    );
+  const align = props.align ?? "start";
   return (
-    <td
-      className={
-        dense === "dense"
-          ? "h-row-height-dense px-space-3 border-t-hairline border-line text-body-sm text-left"
-          : "h-row-height px-space-3 border-t-hairline border-line text-body text-left"
-      }
-    >
+    <td className={dense === "dense" ? denseCells[align] : normalCells[align]}>
       {props.children}
     </td>
   );
 };
 const RowHeader = (props: CellProps): ReactElement => {
   const dense = use(DensityContext);
-  if (props.align === "end")
-    return (
-      <th
-        scope="row"
-        className={
-          dense === "dense"
-            ? "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-right"
-            : "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-right"
-        }
-      >
-        {props.children}
-      </th>
-    );
+  const align = props.align ?? "start";
   return (
     <th
       scope="row"
-      className={
-        dense === "dense"
-          ? "h-row-height-dense px-space-3 font-regular border-t-hairline border-line text-body-sm text-left"
-          : "h-row-height px-space-3 font-regular border-t-hairline border-line text-body text-left"
-      }
+      className={dense === "dense" ? denseHeaders[align] : normalHeaders[align]}
     >
       {props.children}
     </th>

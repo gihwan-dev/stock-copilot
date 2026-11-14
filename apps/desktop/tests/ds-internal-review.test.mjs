@@ -131,7 +131,7 @@ test("DS02 price inline style and DOM exceptions are exact protected file lists"
   assert.deepEqual(
     { ...lists },
     {
-      PRICE_COLOR_FILES: ["src/shared/ds/Badge.tsx"],
+      PRICE_COLOR_FILES: [],
       INLINE_STYLE_FILES: [],
       DOM_STYLE_FILES: [],
       DOM_ACCESS_FILES: [

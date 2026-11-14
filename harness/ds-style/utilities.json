@@ -3161,6 +3161,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:status-sentence",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:stroke-alert",
       "kind": "allowed",
       "generated": "yes"
@@ -6912,6 +6917,11 @@
     },
     {
       "name": "@content-wide:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:status-sentence",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -10677,6 +10687,11 @@
     },
     {
       "name": "active:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:status-sentence",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15021,6 +15036,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:status-sentence",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:stroke-alert",
       "kind": "allowed",
       "generated": "yes"
@@ -18996,6 +19016,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:status-sentence",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:stroke-alert",
       "kind": "allowed",
       "generated": "yes"
@@ -22747,6 +22772,11 @@
     },
     {
       "name": "focus:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:status-sentence",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -26842,6 +26872,11 @@
     },
     {
       "name": "hover:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:status-sentence",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31066,6 +31101,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:status-sentence",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:stroke-alert",
       "kind": "allowed",
       "generated": "yes"
@@ -33302,6 +33342,11 @@
     },
     {
       "name": "space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "status-sentence",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -37061,6 +37106,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:status-sentence",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:stroke-alert",
       "kind": "allowed",
       "generated": "yes"
@@ -40816,6 +40866,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:status-sentence",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:stroke-alert",
       "kind": "allowed",
       "generated": "yes"
@@ -43892,6 +43947,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:status-sentence",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:stroke-alert",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -46797,6 +46856,10 @@
     },
     {
       "selector": ".\\@content-wide\\:skeleton-line",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:status-sentence",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -49713,6 +49776,10 @@
     },
     {
       "selector": ".active\\:skeleton-line:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:status-sentence:active",
       "context": []
     },
     {
@@ -53088,6 +53155,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:status-sentence:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:stroke-alert-soft:disabled",
       "context": []
     },
@@ -56172,6 +56243,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:status-sentence:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:stroke-alert-soft:focus-visible",
       "context": []
     },
@@ -59077,6 +59152,10 @@
     },
     {
       "selector": ".focus\\:skeleton-line:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:status-sentence:focus",
       "context": []
     },
     {
@@ -62257,6 +62336,10 @@
     },
     {
       "selector": ".hover\\:skeleton-line:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:status-sentence:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -65540,6 +65623,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:status-sentence",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:stroke-alert",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -67229,6 +67316,10 @@
     },
     {
       "selector": ".skeleton-line",
+      "context": []
+    },
+    {
+      "selector": ".status-sentence",
       "context": []
     },
     {
@@ -70133,6 +70224,10 @@
     },
     {
       "selector": ".window-lg\\:skeleton-line",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:status-sentence",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -73041,6 +73136,10 @@
     },
     {
       "selector": ".window-md\\:skeleton-line",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:status-sentence",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

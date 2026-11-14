@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   cpSync,
+  existsSync,
   writeFileSync,
   readFileSync,
   rmSync,
@@ -39,7 +40,10 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
       }),
     );
     const config = {
-      settings: { "boundaries/root-path": folder },
+      settings: {
+        "boundaries/root-path": folder,
+        "ds/price-color-files": ["src/shared/ds/Badge.tsx"],
+      },
       languageOptions: {
         parserOptions: {
           projectService: false,
@@ -82,8 +86,12 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
           readFileSync(join(desktopRoot, "src/shared/ds", name), "utf8") + code,
         );
       }
+      const target = entry.sourcePath
+        ? join(folder, "src/shared/ds", entry.sourcePath)
+        : source;
+      mkdirSync(join(target, ".."), { recursive: true });
       writeFileSync(
-        source,
+        target,
         'import type {ReactElement} from "react";' + entry.code,
       );
       for (const name of Object.keys({
@@ -92,13 +100,39 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
       })) {
         await engine.lintFiles([join(folder, "src/shared/ds", name)]);
       }
-      const [result] = await engine.lintFiles([source]);
+      const [result] = await engine.lintFiles([target]);
       assert.deepEqual(
         [...new Set(result.messages.map((message) => message.ruleId))].sort(),
         entry.expected.toSorted(),
         entry.name + JSON.stringify(result.messages),
       );
-      if (entry.expected.length === 0 || entry.compile === "valid") {
+      const fullCases = [
+        "generated token arbitrary prop",
+        "generated token semantic prop",
+        "generated token wrong category with flow",
+        "nested forged Badge map",
+        "nested forged Badge switch",
+        "different prop cannot prove tone",
+        "spread overwrites tone",
+        "narrowed conditional only one branch",
+        "foreign probe cannot prove component",
+        "kind dynamic class",
+        "color tokens cannot be variant",
+      ];
+      if (fullCases.includes(entry.name)) {
+        const [full] = await base.lintFiles([target]);
+        assert.ok(
+          full.messages.some((m) =>
+            ["ds/public-props", "ds/static-classes"].includes(m.ruleId),
+          ),
+          entry.name + JSON.stringify(full.messages),
+        );
+      }
+      if (
+        entry.expected.length === 0 ||
+        entry.compile === "valid" ||
+        fullCases.includes(entry.name)
+      ) {
         const compiled = spawnSync(
           join(desktopRoot, "node_modules/.bin/tsc"),
           ["-p", project],
@@ -109,6 +143,11 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
           0,
           entry.name + compiled.stdout + compiled.stderr,
         );
+      }
+      if (target !== source) {
+        const original = join(desktopRoot, "src/shared/ds", entry.sourcePath);
+        if (existsSync(original)) writeFileSync(target, readFileSync(original));
+        else rmSync(target);
       }
     }
   } finally {

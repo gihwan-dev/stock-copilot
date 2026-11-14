@@ -12,7 +12,13 @@ type Props = {
   readonly actions?: ReactElement;
   readonly wide?: "normal" | "wide";
 };
+const widths = {
+  normal:
+    "w-full max-w-dialog-width flex flex-col bg-surface-raised rounded-lg shadow-popover",
+  wide: "w-full max-w-dialog-width-wide flex flex-col bg-surface-raised rounded-lg shadow-popover",
+} as const;
 export const Dialog = (props: Props): ReactElement => {
+  const wide = props.wide ?? "normal";
   const popupRef = useRef<HTMLDivElement>(null);
   return (
     <BaseDialog.Root<void>
@@ -37,11 +43,7 @@ export const Dialog = (props: Props): ReactElement => {
             initialFocus={(): void => {
               focusDialogInput(popupRef);
             }}
-            className={
-              props.wide === "wide"
-                ? "w-full max-w-dialog-width-wide flex flex-col bg-surface-raised rounded-lg shadow-popover"
-                : "w-full max-w-dialog-width flex flex-col bg-surface-raised rounded-lg shadow-popover"
-            }
+            className={widths[wide]}
           >
             <header className="flex items-center gap-space-2 h-toolbar-height px-space-5 border-b-hairline border-solid border-line">
               <BaseDialog.Title className="flex-1 text-title-md text-ink">

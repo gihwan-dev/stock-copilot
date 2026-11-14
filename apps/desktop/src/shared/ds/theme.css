@@ -2,6 +2,14 @@
 @import "./tokens.css";
 @source "../../";
 
+@utility status-sentence {
+  min-width: 0;
+}
+
+@utility status-sentence {
+  overflow-wrap: anywhere;
+}
+
 @utility dialog-overlay {
   position: fixed;
 }

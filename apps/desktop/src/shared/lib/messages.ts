@@ -5,8 +5,6 @@ export type Locale = "ko";
 const catalog = {
   "ds.badgeNeutral": { ko: "보유 종목" as UiText },
   "ds.badgePrimary": { ko: "앱 계산" as UiText },
-  "ds.badgeUp": { ko: "상승" as UiText },
-  "ds.badgeDown": { ko: "하락" as UiText },
   "ds.badgeAlert": { ko: "값 오류" as UiText },
   "ds.statusWarning": { ko: "자료가 오래됐어요" as UiText },
   "ds.statusError": { ko: "토스에 연결하지 못했어요" as UiText },

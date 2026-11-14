@@ -140,7 +140,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     assert.deepEqual((await make().lintFiles([ds]))[0].messages, []);
     writeFileSync(
       ds,
-      'import type {ReactElement} from "react"; export const Probe=({kind}:{readonly kind:"high"|"low"}):ReactElement=><button type="button" aria-label="Close dialog" title={kind} aria-valuetext="High"/>;',
+      'import type {ReactElement} from "react"; export const Probe=({level}:{readonly level:"high"|"low"}):ReactElement=><button type="button" aria-label="Close dialog" title={level} aria-valuetext="High"/>;',
     );
     compile();
     assert.equal(

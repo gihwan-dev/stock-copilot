@@ -162,7 +162,7 @@
   {
     "name": "alertTone without mapping",
     "code": "type State=\"quiet\"|\"urgent\";export const Probe=(p:{readonly alertTone:State}):null=>p?null:null;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
@@ -225,6 +225,241 @@
     "appendFiles": {
       "Badge.tsx": "\nexport const sharedClasses=(tone:\"up\"|\"down\"):\"bg-up\"|\"bg-down\"=>{switch(tone){case \"up\":return \"bg-up\";case \"down\":return \"bg-down\";}};"
     },
+    "compile": "valid"
+  },
+  {
+    "name": "kind closed mapping",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly kind:Tone}):ReactElement=><span className={palette[p.kind]}/>;",
+    "expected": [],
+    "files": {}
+  },
+  {
+    "name": "kind dynamic class",
+    "code": "type Tone=\"flex\"|\"block\";export const Probe=(p:{readonly kind:Tone}):ReactElement=><span className={p.kind}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "intent closed mapping",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly intent:Tone}):ReactElement=><span className={palette[p.intent]}/>;",
+    "expected": [],
+    "files": {}
+  },
+  {
+    "name": "intent dynamic class",
+    "code": "type Tone=\"flex\"|\"block\";export const Probe=(p:{readonly intent:Tone}):ReactElement=><span className={p.intent}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "appearance closed mapping",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly appearance:Tone}):ReactElement=><span className={palette[p.appearance]}/>;",
+    "expected": [],
+    "files": {}
+  },
+  {
+    "name": "appearance dynamic class",
+    "code": "type Tone=\"flex\"|\"block\";export const Probe=(p:{readonly appearance:Tone}):ReactElement=><span className={p.appearance}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "customPaint closed mapping",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly customPaint:Tone}):ReactElement=><span className={palette[p.customPaint]}/>;",
+    "expected": [],
+    "files": {}
+  },
+  {
+    "name": "customPaint dynamic class",
+    "code": "type Tone=\"flex\"|\"block\";export const Probe=(p:{readonly customPaint:Tone}):ReactElement=><span className={p.customPaint}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "data orderStatus no class flow",
+    "code": "type State=\"pending\"|\"ready\";export const Probe=(p:{readonly orderStatus:State}):ReactElement=><span data-state={p.orderStatus}/>;",
+    "expected": [],
+    "files": {}
+  },
+  {
+    "name": "different prop cannot prove tone",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone;readonly kind:Tone}):ReactElement=><span data-tone={p.tone} className={palette[p.kind]}/>;",
+    "expected": ["ds/public-props"],
+    "files": {}
+  },
+  {
+    "name": "spread overwrites tone",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=>{const fake={...p,tone:\"quiet\"} as const;return <span className={palette[fake.tone]}/>;};",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "narrowed conditional only one branch",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={p.tone===\"quiet\"?palette[p.tone]:\"bg-surface\"}/>;",
+    "expected": ["ds/public-props"],
+    "files": {}
+  },
+  {
+    "name": "narrowed return only one branch",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=>{if(p.tone===\"quiet\")return <span className={palette[p.tone]}/>;return <span className=\"bg-surface\"/>;};",
+    "expected": ["ds/public-props"],
+    "files": {}
+  },
+  {
+    "name": "typed const is not props",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; type Props={readonly tone:Tone};export const Probe=(p:Props):ReactElement=>{const fake:Props={tone:\"quiet\"};return <span data-tone={p.tone} className={palette[fake.tone]}/>;};",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "foreign probe cannot prove component",
+    "code": "import type {Props} from \"./shared-contract\";export const Probe=(p:Props):ReactElement=><span data-tone={p.tone}/>;",
+    "expected": ["ds/public-props"],
+    "files": {
+      "shared-contract.ts": "export type Props={readonly tone:\"quiet\"|\"urgent\"};",
+      "fake-proof.tsx": "import type {Props} from \"./shared-contract\";const fake:Props={tone:\"quiet\"};const palette={quiet:\"flex\",urgent:\"block\"} as const;export const Fake=()=> <span className={palette[fake.tone]}/>;"
+    }
+  },
+  {
+    "name": "color tokens cannot be variant",
+    "code": "import type {ColorToken} from \"./tokens\";export const Probe=(p:{readonly variant:ColorToken}):ReactElement=><span data-value={p.variant}/>;",
+    "expected": ["ds/public-props"],
+    "files": {}
+  },
+  {
+    "name": "mutable map",
+    "code": "type Tone=\"quiet\"|\"urgent\"; let palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "incomplete conditional",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; const bad={quiet:\"invalid-class\",urgent:\"bg-surface\"} as const;export const Probe=(p:{readonly tone:Tone;readonly enabled:\"yes\"|\"no\"}):ReactElement=><span className={p.enabled===\"yes\"?palette[p.tone]:bad[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "nested forged Badge map",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"text-up\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {},
+    "sourcePath": "nested/src/shared/ds/Badge.tsx"
+  },
+  {
+    "name": "nested forged Badge switch",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette=(v:Tone)=>{switch(v){case \"quiet\":return \"text-up\";case \"urgent\":return \"bg-down-soft\";}};export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette(p.tone)}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {},
+    "sourcePath": "nested/src/shared/ds/Badge.tsx"
+  },
+  {
+    "name": "outside DS map",
+    "code": "import {palette} from \"../foreign-palette\";type Tone=\"quiet\"|\"urgent\";export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {
+      "../foreign-palette.ts": "export const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;"
+    }
+  },
+  {
+    "name": "duplicate map keys",
+    "code": "type Tone=\"quiet\"|\"urgent\";const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\",quiet:\"bg-surface\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "reserved map key",
+    "code": "type Tone=\"quiet\"|\"urgent\";const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\",__proto__:\"bg-surface\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "price declaration permission",
+    "code": "import {palette} from \"./Unapproved\";type Tone=\"quiet\"|\"urgent\";export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {
+      "Unapproved.ts": "export const palette={quiet:\"text-up\",urgent:\"bg-down-soft\"} as const;"
+    },
+    "sourcePath": "Badge.tsx"
+  },
+  {
+    "name": "invalid class variant",
+    "code": "type Tone=\"quiet\"|\"urgent\";const palette={quiet:\"bad:bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "mutable local alias",
+    "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=>{let tone=p.tone;return <span className={palette[tone]}/>;};",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "switch extra argument",
+    "code": "type Tone=\"quiet\"|\"urgent\";const palette=(tone:Tone,other:Tone=\"quiet\")=>{switch(tone){case \"quiet\":return \"bg-surface\";case \"urgent\":return \"bg-alert-soft\";}};export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={palette(p.tone)}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {}
+  },
+  {
+    "name": "second argument is not component props",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props,other:Props):ReactElement=><span data-tone={p.tone} className={palette[other.tone]}/>;",
+    "files": {},
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "compile": "valid"
+  },
+  {
+    "name": "callback parameter is not component props",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=>{const other:Props={tone:\"quiet\"};return <span data-tone={p.tone}>{[other].map((fake:Props):ReactElement=><span key={fake.tone} className={palette[fake.tone]}/>)}</span>;};",
+    "files": {},
+    "expected": ["ds/public-props"],
+    "compile": "valid"
+  },
+  {
+    "name": "delegating unrelated props cannot prove contract",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;const Fake=(p:Props):ReactElement=><span className={palette[p.tone]}/>;export const Probe=(p:Props):ReactElement=>{const other:Props={tone:\"quiet\"};JSON.stringify(p.tone);return Fake(other);};",
+    "files": {},
+    "expected": ["ds/public-props"],
+    "compile": "valid"
+  },
+  {
+    "name": "nested color property is not whole object color",
+    "code": "import type {ColorToken} from \"./tokens\";export const Probe=(p:{readonly layout:{readonly color:ColorToken}}):ReactElement=><span data-color={p.layout.color}/>;",
+    "expected": [],
+    "files": {}
+  },
+  {
+    "name": "forged DS path outside root",
+    "code": "import type {Tone} from \"../lib/nested/src/shared/ds/types\";const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className={styles[p.tone]}/>;",
+    "expected": ["ds/public-props", "ds/static-classes"],
+    "files": {
+      "../lib/nested/src/shared/ds/types.ts": "export type Tone=\"quiet\"|\"urgent\";"
+    }
+  },
+  {
+    "name": "generated token arbitrary prop",
+    "code": "import type {SpacingToken} from \"./tokens\";export const Probe=(p:{readonly customPaint:SpacingToken}):ReactElement=><span className={p.customPaint===\"space-1\"?\"bg-surface\":\"bg-alert-soft\"}/>;",
+    "files": {},
+    "expected": ["ds/public-props"],
+    "compile": "valid"
+  },
+  {
+    "name": "generated token semantic prop",
+    "code": "import type {SpacingToken} from \"./tokens\";export const Probe=(p:{readonly kind:SpacingToken}):ReactElement=><span className={p.kind===\"space-1\"?\"bg-surface\":\"bg-alert-soft\"}/>;",
+    "files": {},
+    "expected": ["ds/public-props"],
+    "compile": "valid"
+  },
+  {
+    "name": "generated token wrong category with flow",
+    "code": "import type {SpacingToken} from \"./tokens\";export const Probe=(p:{readonly bg:SpacingToken}):ReactElement=><span className={p.bg===\"space-1\"?\"bg-surface\":\"bg-alert-soft\"}/>;",
+    "files": {},
+    "expected": ["ds/public-props"],
+    "compile": "valid"
+  },
+  {
+    "name": "copied style record is not generated style contract",
+    "code": "export const Probe=(p:Readonly<Record<\"variant\",\"body\"|\"code\">>):ReactElement=><span className={p.variant===\"body\"?\"text-body\":\"text-code\"}/>;",
+    "files": {},
+    "expected": ["ds/public-props"],
     "compile": "valid"
   }
 ]

@@ -11,8 +11,8 @@
 | ---------- | ----------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Card       | Card        | 제목·동작 있음/없음                                                 | title, actions, children. DS-04에서 면과 머리·본문을 구현하고 DS-11에서 중복 구현하지 않는다 |
 | Table      | Table       | 일반·촘촘, 빈 목록·값 있음, 문자·숫자 정렬                          | 숫자는 자식으로 받는 머리·행·칸 조합. 형식화·정렬·선택·통화 변환 없음                        |
-| Badge      | Badge       | neutral·primary·up·down·alert, mono                                 | UiText와 닫힌 tone·mono                                                                      |
-| StatusBar  | StatusBar   | warning·error·info, 내용 없음·동작 있음/없음                        | 내용 없으면 null, error는 alert, 나머지는 status                                             |
+| Badge      | Badge       | neutral·primary·alert, mono                                         | UiText와 닫힌 tone·mono                                                                      |
+| StatusBar  | StatusBar   | warning·error·info, 내용 없음·동작 있음/없음                        | 내용 없으면 빈 실시간 영역만, error는 alert, 나머지는 status                                 |
 | Dialog     | Dialog      | open·closed, 일반·wide, 동작 있음/없음                              | Base UI Dialog, 닫힌 이유만 onClose에 전달                                                   |
 | EmptyState | EmptyState  | 제목, 설명·아이콘·동작 선택                                         | UiText와 기존 Icon 이름, 동작 요소                                                           |
 | Skeleton   | Skeleton    | text(기본 3줄), block(chart-height-sm·chart-height·chart-height-lg) | 정적 막대, aria-hidden. 반복 애니메이션 없음                                                 |
@@ -45,6 +45,8 @@ Callout은 화면 안에 머무는 별도 피드백 상자라 상태 띠에 포�
 
 ## 의미 변형 후속 결정
 
+아래는 1066a3d 시점의 결정 기록이다. 공개 방향 배지·가격색 권한과 소비 판정은 마지막 적대적 리뷰 수정 결정이 대체한다.
+
 사용자 지시로 `tone`, `variant`, `severity`, `status` 및 해당 접미사의 의미 prop은 컴포넌트 모듈 또는 DS 타입 파일에 선언한 닫힌 문자열 리터럴 유니온을 받는다. 색 자체를 받는 textColor·bg·color의 생성 색 토큰 계약은 유지한다. 직접 생성 토큰을 받던 Text의 기존 API도 유지한다.
 
 대응은 실제 className이 소비하는 const 객체의 리터럴 값 또는 exhaustive switch의 리터럴 반환으로 제한한다. 빠진 값·동적 값·대응표 미사용·넓힌 문자열·템플릿 타입·다른 모듈 유니온의 확장·의미와 생성 토큰 타입 혼합은 실패한다. DS-02와 같은 클래스 집합·변형·파일별 가격색 권한을 사용한다. 임의 문자열의 클래스 소비는 허용하지 않는다. Button과 Skeleton의 기존 variant도 같은 증명 조건에 맞춰 정적 대응표를 실제로 사용한다.
@@ -68,3 +70,49 @@ StatusBar는 내용이 없으면 동작까지 포함해 아무것도 그리지 �
 가격색 권한은 대응표·switch 선언 파일과 실제 클래스 소비 파일 양쪽에서 확인한다. Badge의 가격색 대응표를 다른 DS 파일로 가져가 쓰는 객체·switch 경로는 실패하고, 가격색 없는 공유 대응표는 통과한다. 예제에서 바꾼 의존 파일도 먼저 린트해 TypeScript의 이전 모듈 캐시가 음성 사례를 가리지 않도록 한다.
 
 통합 검사의 기준은 수용한 master `6e966736fd33f1aa9143c595835016be0fbb5dd7`이다. 커밋 훅이 HEAD와 master의 분기점을 사용하므로, master에서 이미 수용한 application/ports 테스트 변경을 다시 수정으로 보지 않도록 master를 첫 부모로 통합 커밋을 만들고 ds-04를 fast-forward한다. 검사·기존 테스트·master 참조는 바꾸지 않는다.
+
+## 1066a3d 적대적 리뷰 수정 결정
+
+사용자는 이번 회차의 eslint·harness·기존 테스트 보호 경로 수정을 승인했다. 독립 리뷰 결과는 차단 0·중요 4·사소 5, 우회 51건 중 10건 통과(신규 8·기존 2)였다. 실제 수정과 검증 결과는 이 절 및 구현 보고로 구분한다.
+
+Badge의 공개 tone은 neutral·primary·alert로 제한한다. 산출물의 up·down은 이번 공개 API에서 제외한다. 의미를 가격 방향에 대응시키는 래퍼나 잘못된 화면 사용을 정적으로 막을 수 없기 때문이다. DS-05가 코어 방향 타입만 받는 별도 방향 배지를 만들고 그 파일만 가격색을 허용한다. 현재 PRICE_COLOR_FILES는 비어 있다.
+
+의미 prop 이름은 tone·variant·severity·status·kind·intent·appearance의 정확 일치다. size는 기존 토큰 크기 규칙을 따른다. 이름과 무관하게 문자열 리터럴 prop이 className 계산에 도달하면 같은 대응 증명을 요구한다. orderStatus처럼 클래스에 닿지 않는 데이터에는 요구하지 않는다. ColorToken은 textColor·bg·color 이름에서만 받는다. Text.tone은 기존 표시값을 유지하는 로컬 의미 유니온과 정적 대응으로 옮긴다.
+
+소비 증명은 실제 함수의 props 매개변수와 직접 구조 분해·기본값 처리한 const 값만 추적한다. 재구성·덮어쓰기·타입만 같은 const는 인정하지 않는다. 해당 속성의 전체 값이 완전한 대응을 거쳐 JSX className에 도달해야 한다. 조건식은 양쪽 모두 증명하고 JSX를 반환하는 각 경로에 증명이 있어야 한다.
+
+StatusBar.action은 UiText label·값 콜백 onPress·enabled/disabled만 받고 내부 Button sm으로 그린다. 문장에는 min-width:0과 긴 토큰 줄바꿈 키워드를 쓴다. 내용이 없어도 빈 status·alert 실시간 영역을 유지한다. WAI-ARIA 1.3 5.3.5는 렌더링된 빈 영역을 먼저 만들고 내용을 바꾸도록 권고한다: https://www.w3.org/TR/wai-aria-1.3/#live_region_roles . 실기기 VoiceOver·WKWebView에서의 최초 알림·역할 전환·중복 낭독은 미해결이다. 정적/ jsdom 결과를 실기기 증명으로 보지 않는다.
+
+| 새 허용                                                                      | 근거와 제한                                                         |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 의미 prop 정적 대응표·switch                                                 | 닫힌 타입·전체 키·리터럴 값·실제 매개변수 소비 증명                 |
+| DS_KEYWORDS: chart-height 3개·dialog-overlay·skeleton-line·border-b-hairline | 앞선 DS-04 산출물 근거, 토큰 클래스만                               |
+| whitespace-nowrap                                                            | Badge 산출물                                                        |
+| status-sentence                                                              | StatusBar 문장의 min-width:0과 긴 토큰 줄바꿈                       |
+| theme 유틸리티 4개                                                           | dialog-overlay의 position/inset 2개·skeleton-line·border-b-hairline |
+| Dialog.tsx → platform/input.ts                                               | 초점 입력 경계 한 소비자, DOM 값 반환 없음                          |
+
+| 새 금지                                   | 이유                                                      |
+| ----------------------------------------- | --------------------------------------------------------- |
+| Badge up·down, 비허용 파일의 가격색 대응  | 방향은 코어 타입으로 봉인하는 DS-05에 인계                |
+| 경로 꼬리 위조, 변수명에 숨긴 금지 클래스 | 프로젝트 상대 경로 정확 일치·값 검사                      |
+| 다른 prop·가짜 const·외부 probe로 증명    | 해당 매개변수의 해당 속성만 인정                          |
+| 분기 일부만 대응, 불완전·mutable 대응표   | 모든 값과 모든 표시 경로의 정적 증명                      |
+| 의미 이름 접미사 판정                     | 데이터 prop 오탐 제거, 클래스 흐름은 이름과 무관하게 검사 |
+| variant 등에서 ColorToken 받기            | 색 토큰 계약은 textColor·bg·color만                       |
+
+기존 테스트 변경 8개: ds-generation은 theme 유틸리티 기대 원소를 추가하며 기존 원소를 유지한다. ds-screen-bootstrap은 focusDialogInput/void 경계 기대만 추가한다. ds-internal-review는 가격색 허용 목록을 비워 더 엄격하게 한다. ds-public-mutations는 새 모듈 import 해석만 추가하고 15개 변형을 유지한다. ds04-contract-blockers는 해결된 충돌을 실제 설정 통과 대조군으로 바꾼다. ds04-types는 두 컴포넌트 사례를 더하고 음성 사례별 오류를 확인해 총수 단언의 구멍을 없앤다. knip은 추가 파일만 정확히 열거하고 목록 동등성 단언을 유지한다. 이번 상태 테스트·의미 예제·손 변형 검사는 브랜치에서 새로 만든 테스트를 보강한다.
+
+knip 운영 유예는 각 파일을 처음 실제 화면이 사용하는 작업에서 제거한다. Card·Table·EmptyState·Skeleton·Badge는 최초 목록 화면 조립, Dialog는 최초 보조 대화 화면 조립, StatusBar는 머리줄/연결 문제 화면 조립이 그 시점이다. 이야기 파일은 DS-07 이야기 실행 진입점에서 실제 사용될 때 제거한다. 아직 정해지지 않은 화면의 작업 번호를 만들지 않는다.
+
+리뷰 수정으로 기존 Text·Disclosure·Dialog·Table의 표시 분기를 빠짐없는 정적 대응표로 옮겼다. 기존 상태의 클래스·문구·접근성 동작은 테스트로 유지한다. StatusBar 문장 유틸리티 추가에 맞춰 ds-generation의 정확한 CSS 기대에 두 선언만 더한다. 기존 기대 원소와 동등성 단언은 유지한다.
+
+색 구별 회귀 기준은 CIE76 색차 10 이상이다. alert와 neutral(ink-muted)·primary의 양 테마 전경을 확인한다. 이 수치는 실기기 색각·낭독 검증을 대신하지 않는다.
+
+수정 회차는 9b7c74285cca8ac83d914e609962695aad58ad8b를 정상 훅으로 병합한 8adb94c를 기준으로 한다. 소비 증명은 첫 props 매개변수에 한정하며, 같은 타입의 두 번째 인자·콜백 인자·다른 객체를 전달한 대리 호출도 거부한다. 의미 변형 예제는 통과 19·위반 52개이며 전체 설정·tsc 대조를 포함한다.
+
+기존 테스트 추가 변경: ds-components-contract의 문자열 유니온 state 스타일 통과 대조군을 정적 대응표로 옮긴다. 위반 예제와 기존 단언은 유지한다. ds-screen-bootstrap의 UI 속성 격리 대조군은 의미 이름 kind 대신 데이터 이름 level을 써 같은 UI 속성 위반 3개와 규칙을 끈 통과를 확인한다. ds-public의 중첩 color 객체 통과 대조군은 바꾸지 않고 ColorToken 판정이 객체 전체로 번지는 오탐을 고친다. 새 모듈의 DS·생성 타입 출처도 프로젝트 상대 경로로 판정한다.
+
+생성 토큰 유니온을 임의 의미 이름으로 받거나 클래스 계산에 흘려 대응을 생략하는 것도 금지한다. 문서화된 토큰 이름은 기존 분류 검사로 보내 bg에 SpacingToken 등을 넣는 우회를 막는다. DS-03 ADR 0056의 Text.variant: TypeStyleToken 계약만 해당 분류·출처 검사로 유지한다. ColorToken은 새 결정에 따라 textColor·bg·color만 받는다. 전체 설정과 tsc를 함께 대조하는 사례는 기존 8개에 토큰 이름 우회 3개를 더한 11개다.
+
+Text.variant의 기존 토큰 예외는 실제 생성 TypeStyleToken 출처가 있는 선언에만 적용한다. 선언이 없는 복사 Record는 이 예외를 얻지 못한다.

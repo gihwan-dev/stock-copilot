@@ -8,9 +8,11 @@ import { desktopRoot } from "./paths.mjs";
 const cases = [
   [
     "Badge",
-    '<Badge tone="up" mono="mono">{label}</Badge>',
+    '<Badge tone="primary" mono="mono">{label}</Badge>',
     [
       '<Badge tone="warning">{label}</Badge>',
+      '<Badge tone="up">{label}</Badge>',
+      '<Badge tone="down">{label}</Badge>',
       "<Badge mono={true}>{label}</Badge>",
       "<Badge>Raw</Badge>",
       '<Badge className="text-up">{label}</Badge>',
@@ -18,9 +20,11 @@ const cases = [
   ],
   [
     "StatusBar",
-    '<StatusBar tone="error">{label}</StatusBar>',
+    '<StatusBar tone="error" action={{label,onPress:():void=>{consume(label);},disabled:"disabled"}}>{label}</StatusBar>',
     [
       '<StatusBar tone="up">{label}</StatusBar>',
+      "<StatusBar action={<Text>{label}</Text>}>{label}</StatusBar>",
+      "<StatusBar action={{label,onPress:():void=>{},disabled:true}}>{label}</StatusBar>",
       "<StatusBar>Raw</StatusBar>",
       "<StatusBar onClick={(e:MouseEvent):void=>{consume(e);}}/>",
     ],
@@ -101,20 +105,19 @@ for (const [name, valid, invalid] of cases) {
       );
       const accepted = compile();
       assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
-      writeFileSync(
-        probe,
-        header +
-          "export const Probe=():ReactElement=><>" +
-          invalid.join("") +
-          "</>;",
-      );
-      const rejected = compile();
-      assert.notEqual(rejected.status, 0);
-      assert.equal(
-        (rejected.stdout.match(/error TS/g) ?? []).length,
-        invalid.length,
-        rejected.stdout + rejected.stderr,
-      );
+      for (const negative of invalid) {
+        writeFileSync(
+          probe,
+          header + "export const Probe=():ReactElement=><>" + negative + "</>;",
+        );
+        const rejected = compile();
+        assert.notEqual(
+          rejected.status,
+          0,
+          negative + rejected.stdout + rejected.stderr,
+        );
+        assert.match(rejected.stdout, /TypeProbe\.tsx\(1,/u, negative);
+      }
     } finally {
       rmSync(folder, { recursive: true, force: true });
     }

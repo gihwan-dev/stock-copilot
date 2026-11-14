@@ -1,14 +1,17 @@
 import ts from "typescript";
+import { relative, dirname } from "node:path";
 import { DS_CLASSES, DS_VARIANTS } from "./ds-classes.mjs";
 const cache = new WeakMap();
-const dsFile = (node) =>
-  /\/src\/shared\/ds\/.+\.tsx?$/u.test(node.getSourceFile().fileName);
-const generated = (node) =>
-  /\/src\/shared\/ds\/tokens\.ts$/u.test(node.getSourceFile().fileName);
 export const semanticName = (name) =>
-  /^(tone|variant|severity|status)$|(?:Tone|Variant|Severity|Status)$|_(tone|variant|severity|status)$/u.test(
-    name,
-  );
+  [
+    "tone",
+    "variant",
+    "severity",
+    "status",
+    "kind",
+    "intent",
+    "appearance",
+  ].includes(name);
 const unwrap = (node) => {
   while (
     node !== undefined &&
@@ -25,11 +28,23 @@ export const semanticVariants = (ctx) => {
     return {
       contract: () => false,
       tokenOnly: () => false,
+      reaches: () => false,
+      colorType: () => false,
+      typeStyle: () => false,
       classes: () => false,
     };
   const checker = program.getTypeChecker();
   const priceFiles = ctx.settings["ds/price-color-files"] ?? [];
-  const key = JSON.stringify(priceFiles);
+  const projectRoot = dirname(
+    program.getCompilerOptions().configFilePath ?? ctx.filename,
+  );
+  const relativeSource = (source) =>
+    relative(projectRoot, source.fileName).replaceAll("\\", "/");
+  const dsFile = (node) =>
+    /^src\/shared\/ds\/.+\.tsx?$/u.test(relativeSource(node.getSourceFile()));
+  const generated = (node) =>
+    relativeSource(node.getSourceFile()) === "src/shared/ds/tokens.ts";
+  const key = JSON.stringify([priceFiles, projectRoot]);
   const entries = cache.get(program) ?? new Map();
   cache.set(program, entries);
   if (entries.has(key)) return entries.get(key);
@@ -99,6 +114,30 @@ export const semanticVariants = (ctx) => {
       );
     return aliases(node).some((d) => tokenOnly(d.type, new Set(seen)));
   };
+  const colorType = (node, seen = new Set(), targetType = "ColorToken") => {
+    if (
+      !node ||
+      seen.has(node) ||
+      literals(checker.getTypeAtLocation(node)) === undefined
+    )
+      return false;
+    seen.add(node);
+    if (ts.isTypeReferenceNode(node)) {
+      if (
+        node.typeName.getText() === targetType &&
+        aliases(node).some((d) => generated(d))
+      )
+        return true;
+      if (aliases(node).some((d) => colorType(d.type, seen, targetType)))
+        return true;
+    }
+    return (
+      ts.forEachChild(
+        node,
+        (n) => colorType(n, seen, targetType) || undefined,
+      ) === true
+    );
+  };
   const classNames = new Set(DS_CLASSES),
     variants = new Set(DS_VARIANTS);
   const staticValue = (value, source) =>
@@ -115,7 +154,9 @@ export const semanticVariants = (ctx) => {
           (!/^(text|bg|border|fill|stroke|outline|ring|decoration)-(up|down|on-up|on-down)(-|$)/u.test(
             base,
           ) ||
-            priceFiles.some((file) => source.fileName.endsWith("/" + file)))
+            priceFiles.includes(
+              relative(projectRoot, source.fileName).replaceAll("\\", "/"),
+            ))
         );
       });
   const constantObject = (expression, consumer) => {
@@ -154,31 +195,93 @@ export const semanticVariants = (ctx) => {
       return undefined;
     return pairs.map((p) => p[0]);
   };
+  const ownerOf = (node) => {
+    for (let p = node.parent; p !== undefined; p = p.parent)
+      if (
+        ts.isArrowFunction(p) ||
+        ts.isFunctionDeclaration(p) ||
+        ts.isFunctionExpression(p)
+      )
+        return p;
+    return undefined;
+  };
   const propertyOf = (expression, seen = new Set()) => {
     const node = unwrap(expression);
     if (node === undefined || seen.has(node) || seen.size > 32)
       return undefined;
     seen.add(node);
-    if (ts.isIdentifier(node)) {
-      const declaration = (symbol(node)?.declarations ?? []).find(
-        ts.isVariableDeclaration,
-      );
-      if (
-        declaration === undefined ||
-        !dsFile(declaration) ||
-        !ts.isVariableDeclarationList(declaration.parent) ||
-        (declaration.parent.flags & ts.NodeFlags.Const) === 0
-      )
-        return undefined;
-      return propertyOf(declaration.initializer, seen);
-    }
     if (
       ts.isBinaryExpression(node) &&
       node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
     )
       return propertyOf(node.left, seen);
-    return ts.isPropertyAccessExpression(node) && semanticName(node.name.text)
-      ? symbol(node.name)
+    if (ts.isIdentifier(node)) {
+      const d = (symbol(node)?.declarations ?? [])[0];
+      if (d && ts.isBindingElement(d)) {
+        const binding = d.parent,
+          parent = binding.parent;
+        const name = d.propertyName ?? d.name;
+        if (!ts.isIdentifier(name)) return undefined;
+        if (
+          ts.isParameter(parent) &&
+          ownerOf(parent)?.parameters[0] === parent
+        ) {
+          const property = checker.getPropertyOfType(
+            checker.getTypeAtLocation(parent),
+            name.text,
+          );
+          return property
+            ? { property, parameter: parent, owner: ownerOf(parent) }
+            : undefined;
+        }
+        if (
+          ts.isVariableDeclaration(parent) &&
+          parent.initializer &&
+          ts.isIdentifier(parent.initializer)
+        ) {
+          const param = (symbol(parent.initializer)?.declarations ?? [])[0];
+          if (
+            param &&
+            ts.isParameter(param) &&
+            ownerOf(param)?.parameters[0] === param &&
+            (parent.parent.flags & ts.NodeFlags.Const) !== 0
+          ) {
+            const property = checker.getPropertyOfType(
+              checker.getTypeAtLocation(param),
+              name.text,
+            );
+            return property
+              ? { property, parameter: param, owner: ownerOf(param) }
+              : undefined;
+          }
+        }
+        return undefined;
+      }
+      if (
+        !d ||
+        !ts.isVariableDeclaration(d) ||
+        (d.parent.flags & ts.NodeFlags.Const) === 0 ||
+        ownerOf(d) !== ownerOf(node)
+      )
+        return undefined;
+      return propertyOf(d.initializer, seen);
+    }
+    if (
+      !ts.isPropertyAccessExpression(node) ||
+      !ts.isIdentifier(node.expression)
+    )
+      return undefined;
+    const parameter = (symbol(node.expression)?.declarations ?? [])[0];
+    if (
+      !parameter ||
+      !ts.isParameter(parameter) ||
+      ownerOf(parameter)?.parameters[0] !== parameter ||
+      ownerOf(parameter) !== ownerOf(node)
+    )
+      return undefined;
+    const property = symbol(node.name);
+    return property
+      ? { property, parameter, owner: ownerOf(parameter) }
       : undefined;
   };
   const functionKeys = (expression, consumer) => {
@@ -236,7 +339,6 @@ export const semanticVariants = (ctx) => {
       ? keys
       : undefined;
   };
-  const mappings = [];
   const evaluate = (expression) => {
     const node = unwrap(expression);
     if (node === undefined) return undefined;
@@ -244,12 +346,16 @@ export const semanticVariants = (ctx) => {
     const called = ts.isCallExpression(node) && node.arguments.length === 1;
     if (!indexed && !called) return undefined;
     const argument = indexed ? node.argumentExpression : node.arguments[0];
-    const property = propertyOf(argument);
+    const origin = propertyOf(argument);
+    const property = origin?.property;
     if (property === undefined) return undefined;
     const keys = indexed
       ? constantObject(node.expression, node.getSourceFile())
       : functionKeys(node.expression, node.getSourceFile());
-    const values = literals(checker.getTypeAtLocation(argument));
+    const values =
+      property === undefined
+        ? undefined
+        : literals(checker.getTypeOfSymbol(property));
     const declarations = (property.declarations ?? []).filter(
       (d) => d.type !== undefined,
     );
@@ -261,7 +367,7 @@ export const semanticVariants = (ctx) => {
       !declarations.every((d) => closed(d.type, d.getSourceFile()))
     )
       return undefined;
-    return { declarations, keys, source: node.getSourceFile() };
+    return { declarations, keys, origin, source: node.getSourceFile() };
   };
   const classes = (node) => {
     if (node === undefined) return false;
@@ -271,35 +377,154 @@ export const semanticVariants = (ctx) => {
       return staticValue(node.text, node.getSourceFile());
     return evaluate(node) !== undefined;
   };
+  const reaches = new Set();
+  const references = (node) => {
+    const found = [];
+    const visit = (n) => {
+      const origin = propertyOf(n);
+      if (origin !== undefined) found.push(origin.property);
+      ts.forEachChild(n, visit);
+    };
+    if (node) visit(node);
+    return found;
+  };
+  const proof = (value, property, owner) => {
+    value = unwrap(value);
+    if (value === undefined) return false;
+    if (ts.isConditionalExpression(value))
+      return (
+        proof(value.whenTrue, property, owner) &&
+        proof(value.whenFalse, property, owner)
+      );
+    const mapping = evaluate(value);
+    return (
+      mapping !== undefined &&
+      mapping.origin.owner === owner &&
+      sameProperty(mapping.origin.property, property)
+    );
+  };
+  const functions = [];
   for (const source of program.getSourceFiles()) {
     if (!dsFile(source)) continue;
     const visit = (node) => {
       if (
+        (ts.isArrowFunction(node) ||
+          ts.isFunctionDeclaration(node) ||
+          ts.isFunctionExpression(node)) &&
+        node.body
+      )
+        functions.push(node);
+      if (
         ts.isJsxAttribute(node) &&
         node.name.getText() === "className" &&
-        node.initializer !== undefined &&
+        node.initializer &&
         ts.isJsxExpression(node.initializer)
       ) {
-        const expression = node.initializer.expression;
-        const collect = (value) => {
-          if (value === undefined) return;
-          if (ts.isConditionalExpression(value)) {
-            collect(value.whenTrue);
-            collect(value.whenFalse);
-            return;
-          }
-          const mapping = evaluate(value);
-          if (mapping !== undefined) mappings.push(mapping);
-        };
-        collect(expression);
+        for (const p of references(node.initializer.expression)) reaches.add(p);
       }
       ts.forEachChild(node, visit);
     };
     visit(source);
   }
+  const sameProperty = (a, b) =>
+    a === b ||
+    (a.name === b.name &&
+      (a.declarations ?? []).some((d) => (b.declarations ?? []).includes(d)));
+  const consumed = (property) => {
+    let owners = 0;
+    for (const fn of functions) {
+      const parameter = fn.parameters[0];
+      if (!parameter) continue;
+      const actual = checker.getPropertyOfType(
+        checker.getTypeAtLocation(parameter),
+        property.name,
+      );
+      if (!actual || !sameProperty(actual, property)) continue;
+      const returns = [];
+      const collect = (node) => {
+        if (
+          node !== fn &&
+          (ts.isArrowFunction(node) ||
+            ts.isFunctionDeclaration(node) ||
+            ts.isFunctionExpression(node))
+        )
+          return;
+        if (ts.isReturnStatement(node) && node.expression)
+          returns.push(node.expression);
+        ts.forEachChild(node, collect);
+      };
+      if (ts.isBlock(fn.body)) collect(fn);
+      else returns.push(fn.body);
+      const jsxReturns = returns.filter(
+        (n) =>
+          ts.isJsxElement(n) ||
+          ts.isJsxSelfClosingElement(n) ||
+          ts.isJsxFragment(n) ||
+          ts.isParenthesizedExpression(n),
+      );
+      if (jsxReturns.length === 0) {
+        const returned = checker
+          .getSignatureFromDeclaration(fn)
+          ?.getReturnType();
+        const reactReturn =
+          returned !== undefined &&
+          (returned.isUnion() ? returned.types : [returned]).some((t) =>
+            ["ReactElement", "Element"].includes(t.getSymbol()?.name),
+          );
+        if (reactReturn)
+          for (const expression of returns) {
+            const call = unwrap(expression);
+            if (
+              ts.isCallExpression(call) &&
+              (!ts.isIdentifier(parameter.name) ||
+                !call.arguments[0] ||
+                symbol(unwrap(call.arguments[0])) !== symbol(parameter.name))
+            )
+              return false;
+          }
+        continue;
+      }
+      owners++;
+      for (const returned of jsxReturns) {
+        let proven = false;
+        const visited = new Set();
+        const scan = (node) => {
+          if (visited.has(node)) return;
+          visited.add(node);
+          if (ts.isIdentifier(node)) {
+            const d = (symbol(node)?.declarations ?? [])[0];
+            if (
+              d &&
+              ts.isVariableDeclaration(d) &&
+              d.initializer &&
+              ownerOf(d) === fn &&
+              (d.parent.flags & ts.NodeFlags.Const) !== 0
+            )
+              scan(d.initializer);
+          }
+          if (
+            ts.isJsxAttribute(node) &&
+            node.name.getText() === "className" &&
+            node.initializer &&
+            ts.isJsxExpression(node.initializer)
+          )
+            proven = proven || proof(node.initializer.expression, property, fn);
+          ts.forEachChild(node, scan);
+        };
+        scan(returned);
+        if (!proven) return false;
+      }
+    }
+    return owners > 0;
+  };
   const result = {
     classes,
     tokenOnly,
+    colorType,
+    typeStyle: (node) => colorType(node, new Set(), "TypeStyleToken"),
+    reaches: (property) =>
+      literals(checker.getTypeOfSymbol(property)) !== undefined &&
+      reaches.has(property),
     contract: (property) => {
       const values = literals(checker.getTypeOfSymbol(property));
       const declarations = property.declarations ?? [];
@@ -307,14 +532,7 @@ export const semanticVariants = (ctx) => {
         values !== undefined &&
         declarations.length > 0 &&
         declarations.every((d) => closed(d.type, d.getSourceFile())) &&
-        mappings.some(
-          (mapping) =>
-            declarations.some(
-              (d) =>
-                mapping.declarations.includes(d) ||
-                d.getSourceFile() === mapping.source,
-            ) && values.every((value) => mapping.keys.includes(value)),
-        )
+        consumed(property)
       );
     },
   };

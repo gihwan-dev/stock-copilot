@@ -17,67 +17,7 @@ const normalVariantClasses = {
   ghost:
     "inline-flex items-center justify-center gap-space-1 rounded-md border-hairline border-solid border-transparent cursor-pointer font-semibold focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled disabled:cursor-not-allowed bg-transparent text-ink-muted hover:bg-surface-sunken disabled:bg-transparent h-control-height px-space-3 text-size-md",
 } as const;
-export const primary = (props: ButtonProps): ReactElement => {
-  const variant = props.variant ?? "secondary";
-  if (props.size === "control-height-sm")
-    return (
-      <BaseButton
-        type={props.type ?? "button"}
-        disabled={props.disabled === "disabled"}
-        aria-label={props["aria-label"]}
-        onClick={(): void => {
-          if (props.onClick !== undefined) props.onClick();
-        }}
-        className={smallVariantClasses[variant]}
-      >
-        {props.children}
-      </BaseButton>
-    );
-  return (
-    <BaseButton
-      type={props.type ?? "button"}
-      disabled={props.disabled === "disabled"}
-      aria-label={props["aria-label"]}
-      onClick={(): void => {
-        if (props.onClick !== undefined) props.onClick();
-      }}
-      className={normalVariantClasses[variant]}
-    >
-      {props.children}
-    </BaseButton>
-  );
-};
-export const secondary = (props: ButtonProps): ReactElement => {
-  const variant = props.variant ?? "secondary";
-  if (props.size === "control-height-sm")
-    return (
-      <BaseButton
-        type={props.type ?? "button"}
-        disabled={props.disabled === "disabled"}
-        aria-label={props["aria-label"]}
-        onClick={(): void => {
-          if (props.onClick !== undefined) props.onClick();
-        }}
-        className={smallVariantClasses[variant]}
-      >
-        {props.children}
-      </BaseButton>
-    );
-  return (
-    <BaseButton
-      type={props.type ?? "button"}
-      disabled={props.disabled === "disabled"}
-      aria-label={props["aria-label"]}
-      onClick={(): void => {
-        if (props.onClick !== undefined) props.onClick();
-      }}
-      className={normalVariantClasses[variant]}
-    >
-      {props.children}
-    </BaseButton>
-  );
-};
-export const ghost = (props: ButtonProps): ReactElement => {
+export const buttonVariant = (props: ButtonProps): ReactElement => {
   const variant = props.variant ?? "secondary";
   if (props.size === "control-height-sm")
     return (

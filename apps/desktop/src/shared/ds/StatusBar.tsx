@@ -1,12 +1,17 @@
 import type { ReactElement } from "react";
 import type { UiText } from "../lib";
+import { Button } from "./Button";
 import { Icon } from "./Icon";
 import type { IconName } from "./icon-paths";
 type Tone = "warning" | "error" | "info";
 type Props = {
   readonly tone?: Tone;
   readonly children?: UiText;
-  readonly action?: ReactElement;
+  readonly action?: {
+    readonly label: UiText;
+    readonly onPress: () => void;
+    readonly disabled?: "enabled" | "disabled";
+  };
 };
 const styles = {
   warning:
@@ -25,19 +30,39 @@ const statusIcon = (tone: Tone): IconName => {
       return "info";
   }
 };
-export const StatusBar = (props: Props): ReactElement | null => {
-  if (props.children === undefined || props.children.length === 0) return null;
-  const tone = props.tone ?? "warning";
-  return (
-    <div
-      role={props.tone === "error" ? "alert" : "status"}
-      className={styles[tone]}
+const statusAction = (action: Props["action"]): ReactElement | null =>
+  action === undefined ? null : (
+    <Button
+      size="control-height-sm"
+      onClick={action.onPress}
+      disabled={action.disabled ?? "enabled"}
     >
-      <span className={props.tone === "info" ? "text-ink-muted" : "text-alert"}>
-        <Icon name={statusIcon(tone)} />
-      </span>
-      <span className="flex-1">{props.children}</span>
-      {props.action}
-    </div>
+      {action.label}
+    </Button>
+  );
+export const StatusBar = (props: Props): ReactElement | null => {
+  const tone = props.tone ?? "warning";
+
+  const content =
+    props.children === undefined || props.children.length === 0 ? null : (
+      <div className={styles[tone]}>
+        <span
+          className={props.tone === "info" ? "text-ink-muted" : "text-alert"}
+        >
+          <Icon name={statusIcon(tone)} />
+        </span>
+        <span className="flex-1 status-sentence">{props.children}</span>
+        {statusAction(props.action)}
+      </div>
+    );
+  return (
+    <>
+      <div role="status" aria-atomic="true">
+        {tone === "error" ? null : content}
+      </div>
+      <div role="alert" aria-atomic="true">
+        {tone === "error" ? content : null}
+      </div>
+    </>
   );
 };
