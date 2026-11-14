@@ -218,3 +218,20 @@ test("DS04 clicking dialog content preserves the open state", async () => {
   assert.deepEqual(Array.from(w.calls), []);
   assert.ok(w.q.getByRole("dialog", { name: "주식 코파일럿", exact: true }));
 });
+
+test("DS04 Dialog without onClose omits the inactive close button", async () => {
+  const w = fixture.open();
+  w.show("Dialog", { onClose: undefined });
+  await action(w, () =>
+    w.user.click(
+      w.q.getByRole("button", { name: "주식 코파일럿", exact: true }),
+    ),
+  );
+  assert.ok(w.q.getByRole("dialog", { name: "주식 코파일럿", exact: true }));
+  assert.equal(
+    w.q.queryByRole("button", { name: "닫기", exact: true }) === null,
+    true,
+  );
+  await action(w, () => w.user.keyboard("{Escape}"));
+  assert.deepEqual(Array.from(w.calls), []);
+});

@@ -47,12 +47,14 @@ export const Dialog = (props: Props): ReactElement => {
               <BaseDialog.Title className="flex-1 text-title-md text-ink">
                 {props.title}
               </BaseDialog.Title>
-              <BaseDialog.Close
-                aria-label={text("ds.close", "ko")}
-                className="inline-grid place-items-center size-control-height rounded-md bg-transparent text-ink-muted cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
-              >
-                <Icon name="x" />
-              </BaseDialog.Close>
+              {props.onClose === undefined ? null : (
+                <BaseDialog.Close
+                  aria-label={text("ds.close", "ko")}
+                  className="inline-grid place-items-center size-control-height rounded-md bg-transparent text-ink-muted cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+                >
+                  <Icon name="x" />
+                </BaseDialog.Close>
+              )}
             </header>
             <div className="p-space-5 flex flex-col gap-space-4">
               {props.children}

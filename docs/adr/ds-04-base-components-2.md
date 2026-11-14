@@ -40,3 +40,5 @@ Callout은 화면 안에 머무는 별도 피드백 상자라 상태 띠에 포�
 - 기존 테스트 변경은 ds-generation.test.mjs의 정확한 theme 기대에 utility 네 선언 추가, ds-screen-bootstrap.test.mjs의 input 내보내기와 반환 기대에 focusDialogInput/void 추가, knip.test.mjs의 정확한 운영 유예 기대에 새 파일 여섯 개 추가뿐이다. 단언 형태·기존 기대 원소는 유지한다.
 - knip 운영 유예는 기존 48개에서 새 파일 여섯 개만 추가한 54개다.
 - 설정은 디자인 산출물에서 Dialog를 쓴다. architecture 5.1의 별도 macOS 설정 창 결정과 산출물 사이에는 간극이 있으므로 이번 작업은 설정 화면을 조립하거나 창 방식을 바꾸지 않는다.
+
+- Dialog.onClose가 없는 경우에는 산출물 bundle.js와 같이 닫기 버튼을 표시하지 않는다. 콜백이 없는 제어 상태는 유지하고 외부 콜백도 발생하지 않는다. 해당 회귀는 수정 전 실패·수정 후 통과를 확인한다.
