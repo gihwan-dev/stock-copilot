@@ -1,2 +1,2 @@
-import { buttonVariant } from "./button-variants";
-export const Button = buttonVariant;
+import { ButtonVariant } from "./button-variants";
+export const Button = ButtonVariant;

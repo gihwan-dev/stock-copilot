@@ -17,6 +17,7 @@ window.user=userEvent.setup({document});window.stories=statusComponentStories;
 window.showBadge=(props={})=>{cleanup();render(h(Badge,props,text("ds.badgeNeutral","ko")));};
 window.showStatus=(props={},content="present",disabled="enabled")=>{cleanup();window.calls=[];const action=props.action==="present"?{label:text("ds.retry","ko"),disabled,onPress:()=>window.calls.push("action")}:undefined;render(h(StatusBar,{...props,action},content==="present"?text("ds.statusError","ko"):undefined));};
 window.transition=()=>{cleanup();const view=render(h(StatusBar));const status=document.querySelector('[role="status"]'),alert=document.querySelector('[role="alert"]');view.rerender(h(StatusBar,{tone:"warning"},text("ds.statusWarning","ko")));const warning=status.textContent;view.rerender(h(StatusBar,{tone:"error"},text("ds.statusError","ko")));window.transitionResult={sameStatus:document.querySelector('[role="status"]')===status,sameAlert:document.querySelector('[role="alert"]')===alert,warning,emptyStatus:status.textContent,error:alert.textContent};};
+window.actionTransition=()=>{cleanup();const action={label:text("ds.retry","ko"),onPress:()=>window.calls.push("action")};const view=render(h(StatusBar,{tone:"warning",action},text("ds.statusWarning","ko")));const button=document.querySelector("button");button.focus();const root=document.body.firstElementChild;const initialChildren=root.childElementCount;view.rerender(h(StatusBar,{tone:"error",action},text("ds.statusError","ko")));window.actionResult={same:document.querySelector("button")===button,focused:document.activeElement===button,outside:button.closest('[role="status"],[role="alert"]')===null,status:document.querySelector('[role="status"]').textContent,alert:document.querySelector('[role="alert"]').textContent,initialChildren,children:root.childElementCount,wrapper:root.firstElementChild.classList.contains("flex-none")};};
 window.renderStory=(index,theme)=>{cleanup();document.documentElement.dataset.theme=theme;render(statusComponentStories[index].render());};
 `);
 });
@@ -56,8 +57,8 @@ for (const tone of ["warning", "error", "info"]) {
     const w = fixture.open();
     w.showStatus({ tone });
     const region = w.q.getByRole(tone === "error" ? "alert" : "status");
-    const bar = region.firstElementChild;
-    assert.equal(bar.textContent, "토스에 연결하지 못했어요");
+    const bar = region.parentElement.parentElement;
+    assert.equal(region.textContent, "토스에 연결하지 못했어요");
     assert.ok(
       bar.classList.contains(
         tone === "info" ? "bg-surface-sunken" : "bg-alert-soft",
@@ -78,6 +79,10 @@ test("DS04 StatusBar without a problem renders nothing including its action", ()
     w.showStatus({ tone, action: "present" }, "absent");
     assert.equal(w.q.getByRole("status").childElementCount, 0);
     assert.equal(w.q.getByRole("alert").childElementCount, 0);
+    assert.equal(w.q.queryByRole("button"), null);
+    const container = w.document.body.firstElementChild;
+    assert.equal(container.childElementCount, 1);
+    assert.ok(container.firstElementChild.classList.contains("flex-none"));
     assert.deepEqual(Array.from(w.calls), []);
   }
 });
@@ -88,7 +93,7 @@ test("DS04 StatusBar defaults to warning and suppresses disabled child actions",
     assert.ok(
       w.q
         .getByRole("status")
-        .firstElementChild.classList.contains("bg-alert-soft"),
+        .parentElement.parentElement.classList.contains("bg-alert-soft"),
     );
     await w.act(() =>
       w.user.click(w.q.getByRole("button", { name: "다시 시도", exact: true })),
@@ -145,7 +150,7 @@ test("DS04 all sixteen status stories render their state in both themes", async 
             : ["warning", "error", "info"][Math.floor((index - 6) / 2)];
         const region = w.q.getByRole(tone === "error" ? "alert" : "status");
         assert.ok(
-          region.firstElementChild.classList.contains(
+          region.parentElement.parentElement.classList.contains(
             tone === "info" ? "bg-surface-sunken" : "bg-alert-soft",
           ),
         );
@@ -155,7 +160,7 @@ test("DS04 all sixteen status stories render their state in both themes", async 
             warning: "자료가 오래됐어요",
             error: "토스에 연결하지 못했어요",
             info: "오늘은 휴장이에요",
-          }[tone] + (index < 12 && index % 2 === 0 ? "다시 시도" : ""),
+          }[tone],
         );
         assert.equal(
           w.q.getByRole(tone === "error" ? "status" : "alert")
@@ -213,4 +218,17 @@ test("DS04 live region nodes persist from empty through warning and error", () =
   assert.equal(w.transitionResult.warning, "자료가 오래됐어요");
   assert.equal(w.transitionResult.emptyStatus, "");
   assert.equal(w.transitionResult.error, "토스에 연결하지 못했어요");
+});
+
+test("DS04 StatusBar keeps one flex item and a focused action outside live regions across tone changes", () => {
+  const w = fixture.open();
+  w.actionTransition();
+  assert.equal(w.actionResult.same, true);
+  assert.equal(w.actionResult.focused, true);
+  assert.equal(w.actionResult.outside, true);
+  assert.equal(w.actionResult.initialChildren, 1);
+  assert.equal(w.actionResult.children, 1);
+  assert.equal(w.actionResult.wrapper, true);
+  assert.equal(w.actionResult.status, "");
+  assert.equal(w.actionResult.alert, "토스에 연결하지 못했어요");
 });

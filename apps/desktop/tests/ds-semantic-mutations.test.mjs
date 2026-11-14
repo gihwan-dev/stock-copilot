@@ -119,10 +119,102 @@ const mutations = [
     "false",
     "price switch consumer permission",
   ],
+  [
+    "lowercase inspection gate",
+    "if(!upper && !element)continue;",
+    "if(!upper)continue;",
+    "V01 lowercase event and ref",
+    "public",
+  ],
+  [
+    "lowercase export ban",
+    "if(lowercaseElement(type,exported.name))",
+    "if(false)",
+    "V01 lowercase event and ref",
+    "public",
+  ],
+  [
+    "resolved color type",
+    "if(token && checker.isTypeAssignableTo(resolved,token) && checker.isTypeAssignableTo(token,resolved))return true;",
+    "if(false)return true;",
+    "R6 indexed hidden ColorToken",
+    "semantic",
+  ],
+  [
+    "every return",
+    "returns.every((value)=>returned(value,property,owner))",
+    "returns.some(value=>returned(value,property,owner))",
+    "Z17 unknown returned call",
+    "semantic",
+  ],
+  [
+    "both returned conditional branches",
+    "returned(node.whenTrue,property,owner,new Set(seen))&&returned(node.whenFalse,property,owner,new Set(seen))",
+    "returned(node.whenTrue,property,owner,new Set(seen))||returned(node.whenFalse,property,owner,new Set(seen))",
+    "Z15 returned conditional bad",
+    "semantic",
+  ],
+  [
+    "returned const expansion",
+    "return value!==undefined && returned(value,property,owner,seen);",
+    "return true;",
+    "Z14 returned identifier bad",
+    "semantic",
+  ],
+  [
+    "rendered attributes exclusion",
+    "own ||",
+    "own || opening.attributes.properties.some(attribute=>ts.isJsxAttribute(attribute)&&attribute.initializer&&ts.isJsxExpression(attribute.initializer)&&rendered(attribute.initializer.expression,property,owner,new Set(seen))) ||",
+    "Z13 attribute JSX is not rendered proof",
+    "semantic",
+  ],
+  [
+    "per function proof",
+    "!contract(property,fn)",
+    "!functions.some(other=>contract(property,other))",
+    "Z16 each function owns proof",
+    "semantic",
+  ],
+  [
+    "exact semantic name obligation",
+    "semanticName(origin.property.name)",
+    "true",
+    "limit outside semantic names",
+    "semantic",
+  ],
+  [
+    "class calculation only obligation",
+    'node.name.getText()==="className"',
+    "true",
+    "R4c status accessibility only",
+    "semantic",
+  ],
+  [
+    "unresolved return exclusion",
+    "return rendered(node,property,owner,seen);",
+    "return true;",
+    "Z17 unknown returned call",
+    "semantic",
+  ],
+  [
+    "cause function error location",
+    "report(services.tsNodeToESTreeNodeMap.get(fn));",
+    "report(node);",
+    "R5 error belongs to helper",
+    "public",
+    "location",
+  ],
+  [
+    "semantic data stays closed",
+    "openSemanticString(value) ||",
+    "",
+    "semantic data still rejects broad branded text",
+    "public",
+  ],
 ];
 const data = (s) =>
   "data:text/javascript;base64," + Buffer.from(s).toString("base64");
-const importRules = async (source) => {
+const importRules = async (source, publicCode = publicSource) => {
   source = source
     .replace('"typescript"', JSON.stringify(import.meta.resolve("typescript")))
     .replace(
@@ -131,7 +223,7 @@ const importRules = async (source) => {
     );
   const semanticUrl = data(source);
   const semantic = await import(semanticUrl);
-  let pub = publicSource
+  let pub = publicCode
     .replace('"typescript"', JSON.stringify(import.meta.resolve("typescript")))
     .replace('"./ds-semantic-variants.mjs"', JSON.stringify(semanticUrl));
   for (const name of ["ds-boundaries", "allowlists"])
@@ -180,7 +272,7 @@ const edit = (source, needle, replacement) => {
     source.slice(offsets[start + target.length - 1] + 1)
   );
 };
-test("DS04 sixteen semantic guard mutations lose a regression witness", async () => {
+test("DS04 twenty nine semantic and public guard mutations change a regression witness", async () => {
   const folder = mkdtempSync("ds04-semantic-mutations-");
   try {
     cpSync(join(desktopRoot, "src"), join(folder, "src"), { recursive: true });
@@ -203,7 +295,7 @@ test("DS04 sixteen semantic guard mutations lose a regression witness", async ()
       overrideConfigFile: join(desktopRoot, "eslint.config.mjs"),
     });
     const config = await base.calculateConfigForFile(source);
-    const engine = async (code) =>
+    const engine = async (code, publicCode = publicSource) =>
       new ESLint({
         cwd: folder,
         overrideConfigFile: join(desktopRoot, "eslint.config.mjs"),
@@ -217,7 +309,9 @@ test("DS04 sixteen semantic guard mutations lose a regression witness", async ()
                 tsconfigRootDir: folder,
               },
             },
-            plugins: { witness: { rules: await importRules(code) } },
+            plugins: {
+              witness: { rules: await importRules(code, publicCode) },
+            },
             rules: {
               ...Object.fromEntries(
                 Object.keys(config.rules).map((n) => [n, "off"]),
@@ -228,7 +322,14 @@ test("DS04 sixteen semantic guard mutations lose a regression witness", async ()
           },
         ],
       });
-    for (const [name, needle, replacement, fixture] of mutations) {
+    for (const [
+      name,
+      needle,
+      replacement,
+      fixture,
+      targetModule,
+      mode,
+    ] of mutations) {
       const entry = cases.find((c) => c.name === fixture);
       assert.ok(entry, fixture);
       for (const [file, code] of Object.entries(entry.files ?? {})) {
@@ -250,7 +351,10 @@ test("DS04 sixteen semantic guard mutations lose a regression witness", async ()
         'import type {ReactElement} from "react";' + entry.code,
       );
       const beforeEngine = await engine(original),
-        afterEngine = await engine(edit(original, needle, replacement));
+        afterEngine =
+          targetModule === "public"
+            ? await engine(original, edit(publicSource, needle, replacement))
+            : await engine(edit(original, needle, replacement));
       for (const file of Object.keys({
         ...entry.files,
         ...entry.appendFiles,
@@ -260,12 +364,28 @@ test("DS04 sixteen semantic guard mutations lose a regression witness", async ()
       }
       const before = (await beforeEngine.lintFiles([target]))[0].messages,
         after = (await afterEngine.lintFiles([target]))[0].messages;
-      assert.ok(before.length > 0, name + " no baseline rejection");
+      assert.equal(
+        before.length === 0,
+        entry.expected.length === 0,
+        name + " unexpected baseline verdict",
+      );
       assert.ok(
-        after.length < before.length,
+        mode === "location"
+          ? before.some((message, index) => message.line !== after[index]?.line)
+          : entry.expected.length === 0
+            ? after.length > 0
+            : after.length < before.length,
         name + " survived " + JSON.stringify({ before, after }),
       );
       process.stdout.write("DS04 killed mutation: " + name + "\n");
+      if (entry.sourcePath) {
+        const path = join(desktopRoot, "src/shared/ds", entry.sourcePath);
+        try {
+          writeFileSync(target, readFileSync(path));
+        } catch {
+          rmSync(target, { force: true });
+        }
+      }
     }
   } finally {
     rmSync(folder, { recursive: true, force: true });

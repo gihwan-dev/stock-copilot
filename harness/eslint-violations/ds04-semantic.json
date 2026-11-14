@@ -70,7 +70,7 @@
   {
     "name": "no mapping",
     "code": "type Tone=\"quiet\"|\"urgent\";export const Probe=(p:{readonly tone:Tone}):null=>p?null:null;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
@@ -108,7 +108,7 @@
   {
     "name": "unused map",
     "code": "type Tone=\"quiet\"|\"urgent\"; const styles={quiet:\"bg-surface text-ink\",urgent:\"bg-alert-soft text-alert\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=><span className=\"bg-surface\"/>;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
@@ -144,19 +144,19 @@
   {
     "name": "variant without mapping",
     "code": "type State=\"quiet\"|\"urgent\";export const Probe=(p:{readonly variant:State}):null=>p?null:null;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
     "name": "severity without mapping",
     "code": "type State=\"quiet\"|\"urgent\";export const Probe=(p:{readonly severity:State}):null=>p?null:null;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
     "name": "status without mapping",
     "code": "type State=\"quiet\"|\"urgent\";export const Probe=(p:{readonly status:State}):null=>p?null:null;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
@@ -182,7 +182,7 @@
   {
     "name": "cyclic key aliases",
     "code": "type Tone=\"quiet\"|\"urgent\";const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:{readonly tone:Tone}):ReactElement=>{const a=b??p.tone;const b=a??p.tone;return <span className={styles[a]}/>;};",
-    "expected": ["ds/public-props", "ds/static-classes"],
+    "expected": ["ds/static-classes"],
     "files": {}
   },
   {
@@ -272,7 +272,7 @@
   {
     "name": "customPaint dynamic class",
     "code": "type Tone=\"flex\"|\"block\";export const Probe=(p:{readonly customPaint:Tone}):ReactElement=><span className={p.customPaint}/>;",
-    "expected": ["ds/public-props", "ds/static-classes"],
+    "expected": ["ds/static-classes"],
     "files": {}
   },
   {
@@ -284,13 +284,13 @@
   {
     "name": "different prop cannot prove tone",
     "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone;readonly kind:Tone}):ReactElement=><span data-tone={p.tone} className={palette[p.kind]}/>;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {}
   },
   {
     "name": "spread overwrites tone",
     "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=>{const fake={...p,tone:\"quiet\"} as const;return <span className={palette[fake.tone]}/>;};",
-    "expected": ["ds/public-props", "ds/static-classes"],
+    "expected": ["ds/static-classes"],
     "files": {}
   },
   {
@@ -308,13 +308,13 @@
   {
     "name": "typed const is not props",
     "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; type Props={readonly tone:Tone};export const Probe=(p:Props):ReactElement=>{const fake:Props={tone:\"quiet\"};return <span data-tone={p.tone} className={palette[fake.tone]}/>;};",
-    "expected": ["ds/public-props", "ds/static-classes"],
+    "expected": ["ds/static-classes"],
     "files": {}
   },
   {
     "name": "foreign probe cannot prove component",
     "code": "import type {Props} from \"./shared-contract\";export const Probe=(p:Props):ReactElement=><span data-tone={p.tone}/>;",
-    "expected": ["ds/public-props"],
+    "expected": [],
     "files": {
       "shared-contract.ts": "export type Props={readonly tone:\"quiet\"|\"urgent\"};",
       "fake-proof.tsx": "import type {Props} from \"./shared-contract\";const fake:Props={tone:\"quiet\"};const palette={quiet:\"flex\",urgent:\"block\"} as const;export const Fake=()=> <span className={palette[fake.tone]}/>;"
@@ -390,7 +390,7 @@
   {
     "name": "mutable local alias",
     "code": "type Tone=\"quiet\"|\"urgent\"; const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const; export const Probe=(p:{readonly tone:Tone}):ReactElement=>{let tone=p.tone;return <span className={palette[tone]}/>;};",
-    "expected": ["ds/public-props", "ds/static-classes"],
+    "expected": ["ds/static-classes"],
     "files": {}
   },
   {
@@ -403,21 +403,21 @@
     "name": "second argument is not component props",
     "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props,other:Props):ReactElement=><span data-tone={p.tone} className={palette[other.tone]}/>;",
     "files": {},
-    "expected": ["ds/public-props", "ds/static-classes"],
+    "expected": ["ds/static-classes"],
     "compile": "valid"
   },
   {
     "name": "callback parameter is not component props",
     "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=>{const other:Props={tone:\"quiet\"};return <span data-tone={p.tone}>{[other].map((fake:Props):ReactElement=><span key={fake.tone} className={palette[fake.tone]}/>)}</span>;};",
     "files": {},
-    "expected": ["ds/public-props"],
+    "expected": [],
     "compile": "valid"
   },
   {
     "name": "delegating unrelated props cannot prove contract",
     "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const palette={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;const Fake=(p:Props):ReactElement=><span className={palette[p.tone]}/>;export const Probe=(p:Props):ReactElement=>{const other:Props={tone:\"quiet\"};JSON.stringify(p.tone);return Fake(other);};",
     "files": {},
-    "expected": ["ds/public-props"],
+    "expected": [],
     "compile": "valid"
   },
   {
@@ -438,7 +438,7 @@
     "name": "generated token arbitrary prop",
     "code": "import type {SpacingToken} from \"./tokens\";export const Probe=(p:{readonly customPaint:SpacingToken}):ReactElement=><span className={p.customPaint===\"space-1\"?\"bg-surface\":\"bg-alert-soft\"}/>;",
     "files": {},
-    "expected": ["ds/public-props"],
+    "expected": [],
     "compile": "valid"
   },
   {
@@ -461,5 +461,229 @@
     "files": {},
     "expected": ["ds/public-props"],
     "compile": "valid"
+  },
+  {
+    "name": "R4a shared Props children helper",
+    "code": "type Props={readonly tone:\"quiet\"|\"urgent\";readonly children:ReactElement};const Helper=(p:Props):ReactElement=><span>{p.children}</span>;export const Probe=(p:Props):ReactElement=><Helper tone={p.tone}>{p.children}</Helper>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R4b kind selects icon only",
+    "code": "import {Icon}from\"./Icon\";const icons={quiet:\"info\",urgent:\"triangle-alert\"}as const;export const Probe=(p:{readonly kind:\"quiet\"|\"urgent\"}):ReactElement=><Icon name={icons[p.kind]}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R4c status accessibility only",
+    "code": "export const Probe=(p:{readonly status:\"polite\"|\"assertive\"}):ReactElement=><span aria-live={p.status}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R4d forwarding meaning to Badge",
+    "code": "import {Badge}from\"./Badge\";import{text}from\"../lib\";export const Probe=(p:{readonly tone:\"neutral\"|\"primary\"|\"alert\"}):ReactElement=><Badge tone={p.tone}>{text(\"app.title\",\"ko\")}</Badge>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R4e nullish key not class",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone?:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=><span className={styles[p.tone??\"quiet\"]}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "Z14 returned identifier bad",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Good=(p:Props):ReactElement=><span className={styles[p.tone]}/>;export const Probe=(p:Props):ReactElement=>{const node=<span className={p.tone===\"quiet\"?\"bg-surface\":\"bg-alert-soft\"}/>;return node;};",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "Z14 returned identifier good",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=>{const first=<span className={styles[p.tone]}/>;const second=first;return second;};",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "Z15 returned conditional bad",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=>p.tone===\"quiet\"?<span className={styles[p.tone]}/>:<span className=\"bg-surface\"/>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "Z15 returned conditional good",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=>p.tone===\"quiet\"?<span className={styles[p.tone]}/>:<span className={styles[p.tone]}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "Z16 each function owns proof",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Good=(p:Props):ReactElement=><span className={styles[p.tone]}/>;export const Probe=(p:Props):ReactElement=>{const bad=<span className={p.tone===\"quiet\"?\"bg-surface\":\"bg-alert-soft\"}/>;return bad;};",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "Z17 unknown returned call",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;const placeholder=():ReactElement=><span/>;export const Probe=(p:Props):ReactElement=>{const node=<span className={styles[p.tone]}/>;if(p.tone===\"quiet\")return node;return placeholder();};",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "Z13 attribute JSX is not rendered proof",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=><span data-proof={<span className={styles[p.tone]}/>} className=\"bg-surface\"/>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "Z12 conditional sibling documented limit",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};const styles={quiet:\"bg-surface\",urgent:\"bg-alert-soft\"} as const;export const Probe=(p:Props):ReactElement=><><span className=\"bg-surface\"/>{p.tone===\"quiet\"?<span className={styles[p.tone]}/>:null}</>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "Z10 identical values documented limit",
+    "code": "type Props={readonly tone:\"quiet\"|\"urgent\"};const styles={quiet:\"bg-surface\",urgent:\"bg-surface\"}as const;export const Probe=(p:Props):ReactElement=><span className={styles[p.tone]}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R6 indexed hidden ColorToken",
+    "code": "import type{ColorToken}from\"./tokens\";type Box={readonly color:ColorToken};export const Probe=(p:{readonly shade:Box[\"color\"]}):ReactElement=><span data-shade={p.shade}/>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "R6 Parameters hidden ColorToken",
+    "code": "import type{ColorToken}from\"./tokens\";export const f=(value:ColorToken):ColorToken=>value;export const Probe=(p:{readonly shade:Parameters<typeof f>[0]}):ReactElement=><span data-shade={p.shade}/>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "R6 indexed proper ColorToken name",
+    "code": "import type{ColorToken}from\"./tokens\";type Box={readonly color:ColorToken};export const Probe=(p:{readonly color:Box[\"color\"]}):ReactElement=><span data-color={p.color}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R6 Parameters proper ColorToken name",
+    "code": "import type{ColorToken}from\"./tokens\";export const f=(value:ColorToken):ColorToken=>value;export const Probe=(p:{readonly bg:Parameters<typeof f>[0]}):ReactElement=><span data-bg={p.bg}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "limit outside semantic names",
+    "code": "export const Probe=(p:{readonly emphasis:\"quiet\"|\"urgent\"}):ReactElement=><span className={p.emphasis===\"quiet\"?\"bg-surface\":\"bg-alert-soft\"}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "limit numeric branch",
+    "code": "export const Probe=(p:{readonly level:1|2}):ReactElement=><span className={p.level===1?\"bg-surface\":\"bg-alert-soft\"}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "limit object branch",
+    "code": "export const Probe=(p:{readonly choice:{readonly tone:\"quiet\"|\"urgent\"}}):ReactElement=><span className={p.choice.tone===\"quiet\"?\"bg-surface\":\"bg-alert-soft\"}/>;",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "limit derived alias branch",
+    "code": "type Tone=\"quiet\"|\"urgent\";type Props={readonly tone:Tone};export const Probe=(p:Props):ReactElement=>{const tone=p.tone;return <span className={tone===\"quiet\"?\"bg-surface\":\"bg-alert-soft\"}/>;};",
+    "expected": [],
+    "files": {},
+    "full": "pass"
+  },
+  {
+    "name": "R5 error belongs to helper",
+    "code": "import type{Badge}from\"./Badge\";import{text}from\"../lib\";\nconst Bad=(p:Parameters<typeof Badge>[0]):ReactElement=><span className={p.tone===\"alert\"?\"bg-alert-soft\":\"bg-surface\"}/>;\nexport const Probe=():ReactElement=><Bad tone=\"alert\">{text(\"app.title\",\"ko\")}</Bad>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "line": 2,
+    "cleanFiles": ["Badge.tsx", "index.ts"],
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "V01 lowercase event and ref",
+    "code": "import type{MouseEvent}from\"react\";import type{UiText}from\"../lib\";export const lower=(p:{readonly children:UiText;readonly onPick:(event:Readonly<MouseEvent>)=>void;readonly ref?:(node:Readonly<HTMLDivElement|null>)=>void}):ReactElement=><span>{p.children}</span>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid",
+    "minimum": 2
+  },
+  {
+    "name": "V01 inferred JSX lowercase export",
+    "code": "export type Output=Readonly<ReactElement>;import type{MouseEvent}from\"react\";import type{UiText}from\"../lib\";export const lower=(p:{readonly children:UiText;readonly onPick:(event:Readonly<MouseEvent>)=>void;readonly ref?:(node:Readonly<HTMLDivElement|null>)=>void})=><span>{p.children}</span>;",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid",
+    "minimum": 2,
+    "fullExpected": [
+      "ds/public-props",
+      "@typescript-eslint/explicit-function-return-type",
+      "@typescript-eslint/explicit-module-boundary-types"
+    ]
+  },
+  {
+    "name": "V01 lowercase function declaration",
+    "code": "import type{MouseEvent}from\"react\";import type{UiText}from\"../lib\";export function lower(p:{readonly children:UiText;readonly onPick:(event:Readonly<MouseEvent>)=>void;readonly ref?:(node:Readonly<HTMLDivElement|null>)=>void} ):ReactElement{return <span>{p.children}</span>;}",
+    "expected": ["ds/public-props"],
+    "files": {},
+    "full": "reject",
+    "compile": "valid",
+    "minimum": 2
+  },
+  {
+    "name": "semantic data still rejects broad branded text",
+    "code": "import type{UiText}from\"../lib\";export const Probe=(p:{readonly tone:UiText}):ReactElement=><span data-tone={p.tone}/>;",
+    "files": {},
+    "expected": ["ds/public-props"],
+    "full": "reject",
+    "compile": "valid"
+  },
+  {
+    "name": "V01 barrel lowercase event and ref",
+    "code": "export type Output=Readonly<ReactElement>;export {lower}from\"./index\";",
+    "expected": ["ds/public-props"],
+    "files": {
+      "LowerExport.tsx": "import type{ReactElement,MouseEvent}from\"react\";import type{UiText}from\"../lib\";export const lower=(p:{readonly children:UiText;readonly onPick:(event:Readonly<MouseEvent>)=>void;readonly ref?:(node:Readonly<HTMLDivElement|null>)=>void}):ReactElement=><span>{p.children}</span>;"
+    },
+    "full": "reject",
+    "compile": "valid",
+    "appendFiles": {
+      "index.ts": "\nexport {lower}from\"./LowerExport\";"
+    }
   }
 ]

@@ -100,6 +100,8 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
       })) {
         await engine.lintFiles([join(folder, "src/shared/ds", name)]);
       }
+      for (const file of entry.cleanFiles ?? [])
+        await engine.lintFiles([join(folder, "src/shared/ds", file)]);
       const [result] = await engine.lintFiles([target]);
       assert.deepEqual(
         [...new Set(result.messages.map((message) => message.ruleId))].sort(),
@@ -119,19 +121,48 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
         "kind dynamic class",
         "color tokens cannot be variant",
       ];
-      if (fullCases.includes(entry.name)) {
-        const [full] = await base.lintFiles([target]);
-        assert.ok(
-          full.messages.some((m) =>
-            ["ds/public-props", "ds/static-classes"].includes(m.ruleId),
-          ),
-          entry.name + JSON.stringify(full.messages),
+      if (entry.line !== undefined)
+        assert.deepEqual(
+          result.messages.map((message) => message.line),
+          [entry.line],
+          entry.name,
         );
+      if (entry.minimum !== undefined)
+        assert.ok(result.messages.length >= entry.minimum, entry.name);
+      for (const file of entry.cleanFiles ?? [])
+        assert.deepEqual(
+          (await engine.lintFiles([join(folder, "src/shared/ds", file)]))[0]
+            .messages,
+          [],
+          entry.name + file,
+        );
+      if (fullCases.includes(entry.name) || entry.full !== undefined) {
+        const [full] = await base.lintFiles([target]);
+        if (entry.expected.length === 0)
+          assert.deepEqual(
+            full.messages,
+            [],
+            entry.name + JSON.stringify(full.messages),
+          );
+        else if (entry.full === "reject")
+          assert.deepEqual(
+            [...new Set(full.messages.map((message) => message.ruleId))].sort(),
+            (entry.fullExpected ?? entry.expected).toSorted(),
+            entry.name + JSON.stringify(full.messages),
+          );
+        else
+          assert.ok(
+            full.messages.some((m) =>
+              ["ds/public-props", "ds/static-classes"].includes(m.ruleId),
+            ),
+            entry.name + JSON.stringify(full.messages),
+          );
       }
       if (
         entry.expected.length === 0 ||
         entry.compile === "valid" ||
-        fullCases.includes(entry.name)
+        fullCases.includes(entry.name) ||
+        entry.full !== undefined
       ) {
         const compiled = spawnSync(
           join(desktopRoot, "node_modules/.bin/tsc"),
@@ -146,8 +177,10 @@ test("DS04 semantic unions require complete, local, consumed static token mappin
       }
       if (target !== source) {
         const original = join(desktopRoot, "src/shared/ds", entry.sourcePath);
-        if (existsSync(original)) writeFileSync(target, readFileSync(original));
-        else rmSync(target);
+        if (existsSync(original)) {
+          writeFileSync(target, readFileSync(original));
+          await engine.lintFiles([target]);
+        } else rmSync(target);
       }
     }
   } finally {

@@ -17,7 +17,7 @@ const normalVariantClasses = {
   ghost:
     "inline-flex items-center justify-center gap-space-1 rounded-md border-hairline border-solid border-transparent cursor-pointer font-semibold focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled disabled:cursor-not-allowed bg-transparent text-ink-muted hover:bg-surface-sunken disabled:bg-transparent h-control-height px-space-3 text-size-md",
 } as const;
-export const buttonVariant = (props: ButtonProps): ReactElement => {
+export const ButtonVariant = (props: ButtonProps): ReactElement => {
   const variant = props.variant ?? "secondary";
   if (props.size === "control-height-sm")
     return (

@@ -26,12 +26,9 @@ export const semanticVariants = (ctx) => {
   const program = ctx.sourceCode.parserServices.program;
   if (program === undefined || program === null)
     return {
-      contract: () => false,
-      tokenOnly: () => false,
-      reaches: () => false,
       colorType: () => false,
-      typeStyle: () => false,
       classes: () => false,
+      violations: () => [],
     };
   const checker = program.getTypeChecker();
   const priceFiles = ctx.settings["ds/price-color-files"] ?? [];
@@ -99,21 +96,6 @@ export const semanticVariants = (ctx) => {
       )
     );
   };
-  const tokenOnly = (node, seen = new Set()) => {
-    if (node === undefined || seen.has(node) || seen.size > 32) return false;
-    if (generated(node)) return true;
-    seen.add(node);
-    if (!ts.isTypeReferenceNode(node)) return false;
-    if (
-      ["Extract", "Exclude"].includes(node.typeName.getText()) &&
-      node.typeArguments?.length === 2
-    )
-      return (
-        tokenOnly(node.typeArguments[0], seen) &&
-        closed(node.typeArguments[1], node.getSourceFile())
-      );
-    return aliases(node).some((d) => tokenOnly(d.type, new Set(seen)));
-  };
   const colorType = (node, seen = new Set(), targetType = "ColorToken") => {
     if (
       !node ||
@@ -122,6 +104,21 @@ export const semanticVariants = (ctx) => {
     )
       return false;
     seen.add(node);
+    const resolved = checker.getTypeAtLocation(node);
+    const tokenFile = program.getSourceFiles().find((file) => generated(file));
+    const tokenModule = tokenFile && checker.getSymbolAtLocation(tokenFile);
+    const tokenSymbol =
+      tokenModule &&
+      checker
+        .getExportsOfModule(tokenModule)
+        .find((entry) => entry.name === targetType);
+    const token = tokenSymbol && checker.getDeclaredTypeOfSymbol(tokenSymbol);
+    if (
+      token &&
+      checker.isTypeAssignableTo(resolved, token) &&
+      checker.isTypeAssignableTo(token, resolved)
+    )
+      return true;
     if (ts.isTypeReferenceNode(node)) {
       if (
         node.typeName.getText() === targetType &&
@@ -377,17 +374,10 @@ export const semanticVariants = (ctx) => {
       return staticValue(node.text, node.getSourceFile());
     return evaluate(node) !== undefined;
   };
-  const reaches = new Set();
-  const references = (node) => {
-    const found = [];
-    const visit = (n) => {
-      const origin = propertyOf(n);
-      if (origin !== undefined) found.push(origin.property);
-      ts.forEachChild(n, visit);
-    };
-    if (node) visit(node);
-    return found;
-  };
+  const sameProperty = (a, b) =>
+    a === b ||
+    (a.name === b.name &&
+      (a.declarations ?? []).some((d) => (b.declarations ?? []).includes(d)));
   const proof = (value, property, owner) => {
     value = unwrap(value);
     if (value === undefined) return false;
@@ -403,6 +393,87 @@ export const semanticVariants = (ctx) => {
       sameProperty(mapping.origin.property, property)
     );
   };
+  const constant = (node, owner, seen) => {
+    const d = (symbol(node)?.declarations ?? [])[0];
+    if (
+      !d ||
+      !ts.isVariableDeclaration(d) ||
+      !d.initializer ||
+      ownerOf(d) !== owner ||
+      (d.parent.flags & ts.NodeFlags.Const) === 0 ||
+      seen.has(d)
+    )
+      return undefined;
+    seen.add(d);
+    return d.initializer;
+  };
+  const rendered = (node, property, owner, seen = new Set()) => {
+    node = unwrap(node);
+    if (!node) return false;
+    if (ts.isIdentifier(node)) {
+      const value = constant(node, owner, seen);
+      return value !== undefined && rendered(value, property, owner, seen);
+    }
+    if (ts.isConditionalExpression(node))
+      return (
+        rendered(node.whenTrue, property, owner, new Set(seen)) ||
+        rendered(node.whenFalse, property, owner, new Set(seen))
+      );
+    if (
+      ts.isBinaryExpression(node) &&
+      [
+        ts.SyntaxKind.AmpersandAmpersandToken,
+        ts.SyntaxKind.BarBarToken,
+        ts.SyntaxKind.QuestionQuestionToken,
+      ].includes(node.operatorToken.kind)
+    )
+      return (
+        rendered(node.left, property, owner, new Set(seen)) ||
+        rendered(node.right, property, owner, new Set(seen))
+      );
+    if (ts.isJsxExpression(node))
+      return rendered(node.expression, property, owner, seen);
+    if (ts.isArrayLiteralExpression(node))
+      return node.elements.some((child) =>
+        rendered(child, property, owner, new Set(seen)),
+      );
+    if (ts.isJsxFragment(node))
+      return node.children.some((child) =>
+        rendered(child, property, owner, new Set(seen)),
+      );
+    if (!ts.isJsxElement(node) && !ts.isJsxSelfClosingElement(node))
+      return false;
+    const opening = ts.isJsxElement(node) ? node.openingElement : node;
+    const own = opening.attributes.properties.some(
+      (attribute) =>
+        ts.isJsxAttribute(attribute) &&
+        attribute.name.getText() === "className" &&
+        attribute.initializer &&
+        ts.isJsxExpression(attribute.initializer) &&
+        proof(attribute.initializer.expression, property, owner),
+    );
+    return (
+      own ||
+      (ts.isJsxElement(node) &&
+        node.children.some((child) =>
+          rendered(child, property, owner, new Set(seen)),
+        ))
+    );
+  };
+  const returned = (node, property, owner, seen = new Set()) => {
+    node = unwrap(node);
+    if (!node) return false;
+    if (ts.isIdentifier(node)) {
+      const value = constant(node, owner, seen);
+      return value !== undefined && returned(value, property, owner, seen);
+    }
+    if (ts.isConditionalExpression(node))
+      return (
+        returned(node.whenTrue, property, owner, new Set(seen)) &&
+        returned(node.whenFalse, property, owner, new Set(seen))
+      );
+    return rendered(node, property, owner, seen);
+  };
   const functions = [];
   for (const source of program.getSourceFiles()) {
     if (!dsFile(source)) continue;
@@ -414,127 +485,100 @@ export const semanticVariants = (ctx) => {
         node.body
       )
         functions.push(node);
-      if (
-        ts.isJsxAttribute(node) &&
-        node.name.getText() === "className" &&
-        node.initializer &&
-        ts.isJsxExpression(node.initializer)
-      ) {
-        for (const p of references(node.initializer.expression)) reaches.add(p);
-      }
       ts.forEachChild(node, visit);
     };
     visit(source);
   }
-  const sameProperty = (a, b) =>
-    a === b ||
-    (a.name === b.name &&
-      (a.declarations ?? []).some((d) => (b.declarations ?? []).includes(d)));
-  const consumed = (property) => {
-    let owners = 0;
-    for (const fn of functions) {
-      const parameter = fn.parameters[0];
-      if (!parameter) continue;
-      const actual = checker.getPropertyOfType(
-        checker.getTypeAtLocation(parameter),
-        property.name,
-      );
-      if (!actual || !sameProperty(actual, property)) continue;
-      const returns = [];
-      const collect = (node) => {
-        if (
-          node !== fn &&
-          (ts.isArrowFunction(node) ||
-            ts.isFunctionDeclaration(node) ||
-            ts.isFunctionExpression(node))
-        )
-          return;
-        if (ts.isReturnStatement(node) && node.expression)
-          returns.push(node.expression);
-        ts.forEachChild(node, collect);
-      };
-      if (ts.isBlock(fn.body)) collect(fn);
-      else returns.push(fn.body);
-      const jsxReturns = returns.filter(
-        (n) =>
-          ts.isJsxElement(n) ||
-          ts.isJsxSelfClosingElement(n) ||
-          ts.isJsxFragment(n) ||
-          ts.isParenthesizedExpression(n),
-      );
-      if (jsxReturns.length === 0) {
-        const returned = checker
-          .getSignatureFromDeclaration(fn)
-          ?.getReturnType();
-        const reactReturn =
-          returned !== undefined &&
-          (returned.isUnion() ? returned.types : [returned]).some((t) =>
-            ["ReactElement", "Element"].includes(t.getSymbol()?.name),
-          );
-        if (reactReturn)
-          for (const expression of returns) {
-            const call = unwrap(expression);
-            if (
-              ts.isCallExpression(call) &&
-              (!ts.isIdentifier(parameter.name) ||
-                !call.arguments[0] ||
-                symbol(unwrap(call.arguments[0])) !== symbol(parameter.name))
-            )
-              return false;
-          }
-        continue;
-      }
-      owners++;
-      for (const returned of jsxReturns) {
-        let proven = false;
-        const visited = new Set();
-        const scan = (node) => {
-          if (visited.has(node)) return;
-          visited.add(node);
-          if (ts.isIdentifier(node)) {
-            const d = (symbol(node)?.declarations ?? [])[0];
-            if (
-              d &&
-              ts.isVariableDeclaration(d) &&
-              d.initializer &&
-              ownerOf(d) === fn &&
-              (d.parent.flags & ts.NodeFlags.Const) !== 0
-            )
-              scan(d.initializer);
-          }
-          if (
-            ts.isJsxAttribute(node) &&
-            node.name.getText() === "className" &&
-            node.initializer &&
-            ts.isJsxExpression(node.initializer)
-          )
-            proven = proven || proof(node.initializer.expression, property, fn);
-          ts.forEachChild(node, scan);
-        };
-        scan(returned);
-        if (!proven) return false;
-      }
+  const stringLike = (type, seen = new Set()) => {
+    if (seen.has(type)) return false;
+    seen.add(type);
+    if (type.isUnionOrIntersection())
+      return type.types.some((t) => stringLike(t, seen));
+    if ((type.flags & ts.TypeFlags.TypeParameter) !== 0) {
+      const constraint = checker.getBaseConstraintOfType(type);
+      return constraint !== undefined && stringLike(constraint, seen);
     }
-    return owners > 0;
+    return (type.flags & ts.TypeFlags.StringLike) !== 0;
+  };
+  const requirements = (owner) => {
+    const found = new Set();
+    const references = (node) => {
+      const binding = ts.isIdentifier(node)
+        ? (symbol(node)?.declarations ?? [])[0]
+        : undefined;
+      const direct =
+        ts.isPropertyAccessExpression(node) ||
+        (binding &&
+          ts.isBindingElement(binding) &&
+          ts.isParameter(binding.parent.parent));
+      const origin = direct ? propertyOf(node) : undefined;
+      if (
+        origin &&
+        origin.owner === owner &&
+        semanticName(origin.property.name) &&
+        stringLike(checker.getTypeOfSymbol(origin.property))
+      )
+        found.add(origin.property);
+      ts.forEachChild(node, references);
+    };
+    const visit = (node) => {
+      if (
+        node !== owner &&
+        (ts.isArrowFunction(node) ||
+          ts.isFunctionDeclaration(node) ||
+          ts.isFunctionExpression(node))
+      )
+        return;
+      if (
+        ts.isJsxAttribute(node) &&
+        node.name.getText() === "className" &&
+        node.initializer &&
+        ts.isJsxExpression(node.initializer) &&
+        node.initializer.expression
+      )
+        references(node.initializer.expression);
+      ts.forEachChild(node, visit);
+    };
+    visit(owner);
+    return found;
+  };
+  const contract = (property, owner) => {
+    const values = literals(checker.getTypeOfSymbol(property));
+    const declarations = property.declarations ?? [];
+    if (
+      values === undefined ||
+      declarations.length === 0 ||
+      !declarations.every((d) => closed(d.type, d.getSourceFile()))
+    )
+      return false;
+    const returns = [];
+    const collect = (node) => {
+      if (
+        node !== owner &&
+        (ts.isArrowFunction(node) ||
+          ts.isFunctionDeclaration(node) ||
+          ts.isFunctionExpression(node))
+      )
+        return;
+      if (ts.isReturnStatement(node)) returns.push(node.expression);
+      ts.forEachChild(node, collect);
+    };
+    if (ts.isBlock(owner.body)) collect(owner);
+    else returns.push(owner.body);
+    return (
+      returns.length > 0 &&
+      returns.every((value) => returned(value, property, owner))
+    );
   };
   const result = {
     classes,
-    tokenOnly,
     colorType,
-    typeStyle: (node) => colorType(node, new Set(), "TypeStyleToken"),
-    reaches: (property) =>
-      literals(checker.getTypeOfSymbol(property)) !== undefined &&
-      reaches.has(property),
-    contract: (property) => {
-      const values = literals(checker.getTypeOfSymbol(property));
-      const declarations = property.declarations ?? [];
-      return (
-        values !== undefined &&
-        declarations.length > 0 &&
-        declarations.every((d) => closed(d.type, d.getSourceFile())) &&
-        consumed(property)
-      );
-    },
+    violations: (source) =>
+      functions.filter(
+        (fn) =>
+          fn.getSourceFile() === source &&
+          [...requirements(fn)].some((property) => !contract(property, fn)),
+      ),
   };
   entries.set(key, result);
   return result;

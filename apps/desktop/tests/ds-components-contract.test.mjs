@@ -154,7 +154,7 @@ test("DS03 Base UI callbacks stay internal while public event and DOM forwarding
         "ds/no-ui-attributes",
       ],
       [
-        'const styles={on:"text-ink",off:"text-alert"} as const;export const Probe=(props:{readonly state:"on"|"off"}):ReactElement=><span className={styles[props.state]}/>;',
+        'export const Probe=(props:{readonly state:"on"|"off"}):ReactElement=><span className={props.state==="on"?"text-ink":"text-alert"}/>;',
         null,
       ],
       [

@@ -1,6 +1,8 @@
 import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
-import tailwind from "eslint-plugin-better-tailwindcss";
+import rawTailwind from "eslint-plugin-better-tailwindcss";
+import { tokenTailwind } from "./ds-tailwind.mjs";
+const tailwind = tokenTailwind(rawTailwind);
 import tseslint from "typescript-eslint";
 import { DS_CLASSES, DS_VARIANTS } from "./ds-classes.mjs";
 import { dsPlugin } from "./ds-plugin.mjs";

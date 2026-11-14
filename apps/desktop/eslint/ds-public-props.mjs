@@ -44,6 +44,7 @@ export const publicProps = {
     type: "problem",
     schema: [],
     messages: {
+      lowercase: "요소를 돌려주는 공개 함수의 이름은 대문자로 시작한다.",
       forbidden:
         "공개 props는 닫힌 값 계약이다. HTML 전달·DOM 이벤트·콜백 ref·자유 스타일 대신 토큰 이름과 값만 받는다.",
     },
@@ -126,6 +127,11 @@ export const publicProps = {
         );
       }
     }
+    const openSemanticString = (type) =>
+      type.isUnionOrIntersection()
+        ? type.types.some(openSemanticString)
+        : (type.flags & ts.TypeFlags.StringLike) !== 0 &&
+          (type.flags & ts.TypeFlags.StringLiteral) === 0;
     const propertyBad = (p, seen, depth) => {
       const value = checker.getTypeOfSymbol(p);
       if (["className", "style"].includes(p.name)) return true;
@@ -140,19 +146,8 @@ export const publicProps = {
         !["textColor", "bg", "color"].includes(p.name)
       )
         return true;
-      if (semanticName(p.name)) {
-        const declarations = p.declarations ?? [];
-        const typeStyle =
-          p.name === "variant" &&
-          declarations.length > 0 &&
-          declarations.every(
-            (d) => semantics.tokenOnly(d.type) && semantics.typeStyle(d.type),
-          );
-        if (typeStyle) return !tokenValue(value);
-        return !semantics.contract(p);
-      }
-      const tokenName = tokenProperty.test(p.name);
-      if (semantics.reaches(p) && !tokenName) return !semantics.contract(p);
+      if (semanticName(p.name))
+        return openSemanticString(value) || badValue(value, seen, depth + 1);
       if (tokenProperty.test(p.name)) {
         const category = categoryNames.get(tokenCategory(p.name));
         const values = value.isUnion() ? value.types : [value];
@@ -160,8 +155,11 @@ export const publicProps = {
           !tokenValue(value) ||
           (category !== undefined &&
             values.some((t) => !optional(t) && !category.has(t.value))) ||
-          !(p.declarations ?? []).some((d) =>
-            generatedReference(checker, d.type),
+          !(p.declarations ?? []).some(
+            (d) =>
+              generatedReference(checker, d.type) ||
+              (["textColor", "bg", "color"].includes(p.name) &&
+                semantics.colorType(d.type)),
           )
         );
       }
@@ -306,6 +304,62 @@ export const publicProps = {
       return checker
         .getPropertiesOfType(type)
         .some((p) => badExport(checker.getTypeOfSymbol(p), seen, depth + 1));
+    };
+    let elementTarget;
+    for (const file of services.program.getSourceFiles()) {
+      if (!/\/@types\/react\/index\.d\.ts$/u.test(file.fileName)) continue;
+      const visit = (node) => {
+        if (ts.isInterfaceDeclaration(node) && node.name.text === "Element")
+          elementTarget = checker.getTypeAtLocation(node);
+        ts.forEachChild(node, visit);
+      };
+      visit(file);
+    }
+    const elementResult = (type) => {
+      const resolved = checker.getAwaitedType(type) ?? type;
+      if (resolved.isUnionOrIntersection())
+        return resolved.types.some(elementResult);
+      if (
+        (resolved.flags &
+          (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !==
+        0
+      )
+        return false;
+      return (
+        reactType(resolved, ["ReactElement", "ReactPortal", "Element"]) ||
+        (elementTarget !== undefined &&
+          checker.isTypeAssignableTo(resolved, elementTarget))
+      );
+    };
+    const elementFunction = (type) =>
+      type
+        .getCallSignatures()
+        .some((signature) => elementResult(signature.getReturnType()));
+    const elementReturning = (type, seen = new Set()) => {
+      if (seen.has(type)) return false;
+      seen.add(type);
+      if (type.isUnionOrIntersection())
+        return type.types.some((t) => elementReturning(t, seen));
+      if (elementFunction(type)) return true;
+      if (library(type) || (type.flags & ts.TypeFlags.Object) === 0)
+        return false;
+      return checker
+        .getPropertiesOfType(type)
+        .some((p) => elementReturning(checker.getTypeOfSymbol(p), seen));
+    };
+    const lowercaseElement = (type, name, seen = new Set()) => {
+      if (seen.has(type)) return false;
+      seen.add(type);
+      if (type.isUnionOrIntersection())
+        return type.types.some((t) => lowercaseElement(t, name, seen));
+      if (elementFunction(type) && !/^[A-Z]/u.test(name)) return true;
+      if (library(type) || (type.flags & ts.TypeFlags.Object) === 0)
+        return false;
+      return checker
+        .getPropertiesOfType(type)
+        .some((p) =>
+          lowercaseElement(checker.getTypeOfSymbol(p), p.name, seen),
+        );
     };
     const openGeneric = (type, seen = new Set()) => {
       if (seen.has(type)) return false;
@@ -575,10 +629,16 @@ export const publicProps = {
         const source = services.esTreeNodeToTSNodeMap.get(node);
         const module = checker.getSymbolAtLocation(source);
         if (module === undefined) return;
+        for (const fn of semantics.violations(source))
+          report(services.tsNodeToESTreeNodeMap.get(fn));
         for (const exported of checker.getExportsOfModule(module)) {
-          if (!/^[A-Z]/u.test(exported.name)) continue;
           const type = checker.getTypeOfSymbolAtLocation(exported, source);
+          const upper = /^[A-Z]/u.test(exported.name);
+          const element = elementReturning(type);
+          if (!upper && !element) continue;
           if (badExport(type)) report(node);
+          if (lowercaseElement(type, exported.name))
+            ctx.report({ node, messageId: "lowercase" });
         }
       },
       RestElement(node) {
