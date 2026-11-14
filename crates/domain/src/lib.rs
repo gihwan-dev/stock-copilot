@@ -278,3 +278,9 @@ pub use concentration::{
     ConcentrationWeight, EffectiveInstrumentCount,
 };
 mod concentration_arithmetic;
+
+mod signal_decision;
+pub use signal_decision::{
+    BuySignal, NoSignalReason, RaisedSignal, SellSignal, SignalBuyAdjustment, SignalContext,
+    SignalDecision, SignalEstimate, SignalOperation, SignalSourceLedger, SignalUnavailable,
+};
