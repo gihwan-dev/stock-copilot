@@ -1166,3 +1166,261 @@ fn commit_guard_reads_output_while_it_writes_input_larger_than_a_pipe() {
     assert_eq!(echoed.len(), lines);
     assert!(echoed.iter().all(|found| found == &line));
 }
+
+const H44_TESTS: &str =
+    "#[test]\nfn approved() { assert_eq!(1, 1); }\n#[test]\nfn protected() { assert_eq!(2, 2); }\n";
+const H44_APPROVED: &str =
+    "#[test]\nfn approved() { assert_eq!(3, 3); }\n#[test]\nfn protected() { assert_eq!(2, 2); }\n";
+
+fn h44_repository(name: &str) -> PathBuf {
+    let directory = repository(name, Hooks::Absent);
+    git(&directory, &["branch", "-m", "master"]);
+    fs::create_dir_all(directory.join("fixture/src")).expect("source folder");
+    fs::write(
+        directory.join("fixture/Cargo.toml"),
+        "[package]\nname = \"h44\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .expect("manifest");
+    fs::write(
+        directory.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"fixture\"]\nresolver = \"3\"\n",
+    )
+    .expect("workspace");
+    commit_file(&directory, "fixture/src/lib.rs", H44_TESTS);
+    generate_lockfile(&directory.join("Cargo.toml"));
+    commit_file(&directory, ".gitignore", "target/\n");
+    git(&directory, &["switch", "-c", "work"]);
+    directory
+}
+
+fn h44_diverged(name: &str) -> PathBuf {
+    let directory = h44_repository(name);
+    commit_file(&directory, "work.txt", "work\n");
+    git(&directory, &["switch", "master"]);
+    commit_file(&directory, "fixture/src/lib.rs", H44_APPROVED);
+    git(&directory, &["switch", "work"]);
+    directory
+}
+
+fn h44_begin(directory: &Path, revision: &str) {
+    git(directory, &["merge", "--no-ff", "--no-commit", revision]);
+}
+
+fn h44_findings(
+    directory: &Path,
+    base: &str,
+) -> BTreeSet<crate::check_support::Finding<crate::test_diff::Rule>> {
+    let resolved = crate::git_base::resolve_base(directory, base).expect("resolve comparison base");
+    crate::test_diff::compare_files(
+        &crate::test_diff::base_files(directory, &resolved).expect("base files"),
+        &crate::test_diff::current_files(directory).expect("current files"),
+    )
+    .0
+}
+
+#[test]
+fn h44_incoming_approved_tests_use_master_tip_and_pass_real_test_diff() {
+    let directory = h44_diverged("h44-incoming");
+    let old = git(&directory, &["merge-base", "HEAD", "master"]);
+    let tip = git(&directory, &["rev-parse", "master"]);
+    h44_begin(&directory, "master");
+    assert!(!h44_findings(&directory, &old).is_empty());
+    assert_eq!(super::commit_base::commit_base(&directory), Ok(tip.clone()));
+    assert_eq!(
+        crate::git_base::resolve_base(&directory, &tip),
+        Ok(tip.clone())
+    );
+    assert!(
+        crate::test_diff::check(&directory, &tip)
+            .expect("test-diff")
+            .is_empty()
+    );
+}
+
+#[test]
+fn h44_work_branch_test_changes_remain_violations_during_merge() {
+    let directory = h44_repository("h44-work-change");
+    commit_file(
+        &directory,
+        "fixture/src/lib.rs",
+        &H44_TESTS.replace("2, 2", "4, 4"),
+    );
+    git(&directory, &["switch", "master"]);
+    commit_file(&directory, "approved.txt", "approved\n");
+    git(&directory, &["switch", "work"]);
+    h44_begin(&directory, "master");
+    let base = super::commit_base::commit_base(&directory).expect("base");
+    assert!(!h44_findings(&directory, &base).is_empty());
+}
+
+#[test]
+fn h44_conflict_resolution_cannot_change_existing_tests() {
+    let directory = h44_repository("h44-conflict");
+    commit_file(
+        &directory,
+        "fixture/src/lib.rs",
+        &H44_TESTS.replace("1, 1", "4, 4"),
+    );
+    git(&directory, &["switch", "master"]);
+    commit_file(&directory, "fixture/src/lib.rs", H44_APPROVED);
+    git(&directory, &["switch", "work"]);
+    assert!(
+        !git_output(&directory, &["merge", "--no-ff", "--no-commit", "master"])
+            .status
+            .success()
+    );
+    fs::write(
+        directory.join("fixture/src/lib.rs"),
+        H44_APPROVED.replace("2, 2", "5, 5"),
+    )
+    .expect("resolve conflict");
+    git(&directory, &["add", "--all"]);
+    let base = super::commit_base::commit_base(&directory).expect("base");
+    assert_eq!(base, git(&directory, &["rev-parse", "master"]));
+    assert!(!h44_findings(&directory, &base).is_empty());
+}
+
+#[test]
+fn h44_merging_work_into_master_keeps_the_old_verdict() {
+    let directory = h44_repository("h44-reverse");
+    commit_file(
+        &directory,
+        "fixture/src/lib.rs",
+        &H44_TESTS.replace("2, 2", "4, 4"),
+    );
+    let work = git(&directory, &["rev-parse", "HEAD"]);
+    git(&directory, &["switch", "master"]);
+    let head = git(&directory, &["rev-parse", "HEAD"]);
+    h44_begin(&directory, "work");
+    assert_eq!(
+        super::commit_base::commit_base(&directory),
+        Ok(head.clone())
+    );
+    assert!(!h44_findings(&directory, &head).is_empty());
+    h44_assert_rejected(&directory, &work);
+}
+
+#[test]
+fn h44_non_tip_and_other_branch_merges_do_not_open_ancestry() {
+    let directory = h44_diverged("h44-non-tip");
+    let stale = git(&directory, &["rev-parse", "master"]);
+    git(&directory, &["switch", "master"]);
+    commit_file(&directory, "later.txt", "later\n");
+    git(&directory, &["switch", "work"]);
+    let old = git(&directory, &["merge-base", "HEAD", "master"]);
+    h44_begin(&directory, &stale);
+    assert_eq!(super::commit_base::commit_base(&directory), Ok(old.clone()));
+    h44_assert_rejected(&directory, &stale);
+    git(&directory, &["merge", "--abort"]);
+    git(&directory, &["branch", "other", &stale]);
+    h44_begin(&directory, "other");
+    assert_eq!(super::commit_base::commit_base(&directory), Ok(old));
+    h44_assert_rejected(&directory, &stale);
+}
+
+#[test]
+fn h44_octopus_and_detached_merges_do_not_open_ancestry() {
+    let directory = h44_diverged("h44-octopus");
+    let old = git(&directory, &["merge-base", "HEAD", "master"]);
+    let tip = git(&directory, &["rev-parse", "master"]);
+    h44_begin(&directory, "master");
+    let merge_path = git(
+        &directory,
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "MERGE_HEAD",
+        ],
+    );
+    fs::write(&merge_path, format!("{tip}\n{old}\n")).expect("octopus heads");
+    assert_eq!(super::commit_base::commit_base(&directory), Ok(old.clone()));
+    h44_assert_rejected(&directory, &tip);
+    git(&directory, &["merge", "--abort"]);
+    git(&directory, &["checkout", "--detach"]);
+    h44_begin(&directory, "master");
+    assert_eq!(super::commit_base::commit_base(&directory), Ok(old));
+    h44_assert_rejected(&directory, &tip);
+}
+
+#[test]
+fn h44_after_merge_normal_commits_keep_approved_tests_out_of_review() {
+    let directory = h44_diverged("h44-after-merge");
+    let tip = git(&directory, &["rev-parse", "master"]);
+    h44_begin(&directory, "master");
+    git(&directory, &["commit", "--quiet", "-m", "merge"]);
+    commit_file(&directory, "work.txt", "next\n");
+    assert_eq!(super::commit_base::commit_base(&directory), Ok(tip.clone()));
+    let findings = h44_findings(&directory, &tip);
+    assert!(findings.is_empty(), "{findings:?}");
+}
+
+#[test]
+fn h44_master_tip_is_not_accepted_outside_its_exact_merge() {
+    let directory = h44_diverged("h44-closed");
+    let tip = git(&directory, &["rev-parse", "master"]);
+    h44_assert_rejected(&directory, &tip);
+    h44_begin(&directory, "master");
+    let unrelated = git(&directory, &["rev-parse", "HEAD"]);
+    assert_eq!(
+        crate::git_base::resolve_base(&directory, &unrelated),
+        Ok(unrelated)
+    );
+    git(&directory, &["merge", "--abort"]);
+    h44_assert_rejected(&directory, &tip);
+}
+
+#[test]
+fn h44_malformed_merge_heads_and_unrelated_bases_are_closed() {
+    let directory = h44_diverged("h44-malformed");
+    let old = git(&directory, &["merge-base", "HEAD", "master"]);
+    let tip = git(&directory, &["rev-parse", "master"]);
+    git(&directory, &["switch", "-c", "unrelated"]);
+    let unrelated = commit_file(&directory, "unrelated.txt", "unrelated\n");
+    git(&directory, &["switch", "work"]);
+    h44_begin(&directory, "master");
+    h44_assert_rejected(&directory, &unrelated);
+    let merge_path = git(
+        &directory,
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "MERGE_HEAD",
+        ],
+    );
+    for malformed in ["", "HEAD\n", "invalid\n", &format!("{tip}\n\n")] {
+        fs::write(&merge_path, malformed).expect("malformed merge heads");
+        assert_eq!(super::commit_base::commit_base(&directory), Ok(old.clone()));
+        h44_assert_rejected(&directory, &tip);
+    }
+}
+
+#[test]
+fn h44_linked_worktree_reads_its_own_merge_state() {
+    let directory = h44_diverged("h44-linked");
+    let tip = git(&directory, &["rev-parse", "master"]);
+    let linked = directory.parent().expect("parent").join("linked");
+    git(
+        &directory,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "linked-work",
+            linked.to_str().expect("path"),
+        ],
+    );
+    h44_begin(&linked, "master");
+    assert_eq!(super::commit_base::commit_base(&linked), Ok(tip.clone()));
+    assert_eq!(
+        crate::git_base::resolve_base(&linked, &tip),
+        Ok(tip.clone())
+    );
+    h44_assert_rejected(&directory, &tip);
+}
+
+fn h44_assert_rejected(directory: &Path, base: &str) {
+    let failure = crate::git_base::resolve_base(directory, base).expect_err("nonancestor rejected");
+    assert!(failure.contains("HEAD의 조상이 아니다"), "{failure}");
+}

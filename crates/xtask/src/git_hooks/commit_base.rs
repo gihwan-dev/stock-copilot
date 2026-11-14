@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -29,6 +30,9 @@ pub(crate) fn commit_base(root: &Path) -> Result<String, String> {
             "기준 브랜치 master가 없다. 커밋 훅은 master와의 분기점을 기준으로 검사한다 ({failure})"
         )
     })?;
+    if let MergeBase::IncomingDefault(base) = merge_base_kind(root)? {
+        return Ok(base);
+    }
     first_line(
         root,
         &["merge-base", "HEAD", BASE_BRANCH],
@@ -55,5 +59,57 @@ pub(crate) fn command() -> ExitCode {
     match written {
         Ok(code) => code,
         Err(_) => ExitCode::FAILURE,
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum MergeBase {
+    ForkPoint,
+    IncomingDefault(String),
+}
+
+pub(crate) fn merge_base_kind(root: &Path) -> Result<MergeBase, String> {
+    let merge_path = first_line(
+        root,
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "MERGE_HEAD",
+        ],
+        "MERGE_HEAD 경로",
+    )?;
+    let text = match fs::read_to_string(merge_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(MergeBase::ForkPoint),
+        Err(error) => return Err(format!("MERGE_HEAD: {error}")),
+    };
+    let heads: Vec<&str> = text.lines().collect();
+    let [incoming] = heads.as_slice() else {
+        return Ok(MergeBase::ForkPoint);
+    };
+    if !git_base::is_commit_id(incoming) {
+        return Ok(MergeBase::ForkPoint);
+    }
+    let mut symbolic = git_base::git(root);
+    symbolic.args(["symbolic-ref", "--quiet", "HEAD"]);
+    let finished = symbolic
+        .output()
+        .map_err(|error| format!("symbolic-ref HEAD: {error}"))?;
+    if finished.status.code() == Some(1_i32) {
+        return Ok(MergeBase::ForkPoint);
+    }
+    if !finished.status.success() {
+        return Err(String::from("symbolic-ref HEAD 실패"));
+    }
+    let branch = String::from_utf8_lossy(&finished.stdout);
+    if !branch.trim().starts_with("refs/heads/") || branch.trim() == BASE_BRANCH {
+        return Ok(MergeBase::ForkPoint);
+    }
+    let tip = first_line(root, &["rev-parse", "--verify", BASE_BRANCH], "master 끝")?;
+    if *incoming == tip {
+        Ok(MergeBase::IncomingDefault(tip))
+    } else {
+        Ok(MergeBase::ForkPoint)
     }
 }

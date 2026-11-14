@@ -99,7 +99,17 @@ pub(crate) fn resolve_base(root: &Path, base: &str) -> Result<String, String> {
     if status.success() {
         Ok(resolved)
     } else {
-        Err(format!("기준 커밋 {resolved}이 HEAD의 조상이 아니다"))
+        match crate::git_hooks::commit_base::merge_base_kind(root)? {
+            crate::git_hooks::commit_base::MergeBase::IncomingDefault(incoming)
+                if incoming == resolved =>
+            {
+                Ok(resolved)
+            }
+            crate::git_hooks::commit_base::MergeBase::ForkPoint
+            | crate::git_hooks::commit_base::MergeBase::IncomingDefault(_) => {
+                Err(format!("기준 커밋 {resolved}이 HEAD의 조상이 아니다"))
+            }
+        }
     }
 }
 
