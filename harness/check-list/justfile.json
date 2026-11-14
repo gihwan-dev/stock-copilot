@@ -101,6 +101,7 @@
         ["\"", [["call", "just_executable"]], "\" migration-check"],
         ["\"", [["call", "just_executable"]], "\" capability-check"],
         ["node harness/generated-files/check.mjs"],
+        ["cargo run --locked --quiet --package xtask -- gen-schema --check"],
         ["\"", [["call", "just_executable"]], "\" raw-types"],
         ["\"", [["call", "just_executable"]], "\" disable-check"],
         ["cargo nextest run --workspace --locked"],

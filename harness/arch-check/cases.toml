@@ -620,3 +620,74 @@ findings = [
     { rule = "external-feature", subject = "domain -> rust_decimal[default]" },
     { rule = "external-feature", subject = "domain -> rust_decimal[serde]" },
 ]
+
+[[case]]
+name = "schema-cannot-use-generator"
+findings = [
+    { rule = "external-location", subject = "broker-toss-schema => typify" },
+    { rule = "external-location", subject = "broker-toss-schema => typify-impl" },
+]
+
+[[case]]
+name = "schema-public-use"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-signature"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-fields"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-alias"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-trait"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-method"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss-trade/src/lib.rs" }]
+
+[[case]]
+name = "schema-private-pass"
+findings = []
+
+[[case]]
+name = "schema-cross-module-alias"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-raw-alias"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-associated-impl"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-cargo-rename"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-enum"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-const"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-static"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-associated-const"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "schema-public-extern"
+findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]

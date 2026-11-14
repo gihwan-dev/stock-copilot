@@ -253,7 +253,7 @@ allowed = ["rust_decimal", "time"]
 
 [[external-allowlist]]
 crate = "xtask"
-allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
+allowed = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml", "typify", "schemars", "serde_json", "quote", "sha2"]
 
 [[feature-location]]
 external = "tokio"
@@ -265,6 +265,9 @@ external = "rmcp"
 dependent = "testkit"
 default-features = "off"
 features = ["client"]
+
+[source.schema-surface]
+crates = ["broker-toss", "broker-toss-trade"]
 
 [source.reexport]
 crates = ["approval-command", "broker-toss-trade", "trade-fakes"]
@@ -366,3 +369,25 @@ external = "rust_decimal"
 dependent = "domain"
 default-features = "off"
 features = []
+
+[[external-location]]
+crates = ["typify", "typify-impl"]
+allowed-in = ["xtask"]
+
+[[external-location-exception]]
+crates = ["broker-toss-schema", "broker-toss"]
+externals = ["syn", "proc-macro2"]
+through = "serde"
+reason = "T-01 생성 타입 및 왕복 테스트의 serde derive 절차 매크로"
+
+[[external-location-exception]]
+crates = ["broker-toss-schema", "broker-toss"]
+externals = ["syn", "proc-macro2"]
+through = "serde_json"
+reason = "T-01 생성 타입 및 왕복 테스트 serde_json의 작업 공간 기능 통합"
+
+[[external-location-exception]]
+crates = ["broker-toss"]
+externals = ["syn", "proc-macro2"]
+through = "time"
+reason = "T-01 time과 작업 공간 serde derive 기능 통합으로 연결되는 절차 매크로"

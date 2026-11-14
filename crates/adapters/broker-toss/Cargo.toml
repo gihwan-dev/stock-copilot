@@ -6,3 +6,13 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+domain = { path = "../../domain" }
+time = { version = "=0.3.55", default-features = false, features = ["std", "parsing"] }
+
+broker-toss-schema = { path = "../broker-toss-schema" }
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
