@@ -47,21 +47,6 @@ fn without_exports(source: &str) -> Option<String> {
         .map(|tokens| tokens.to_string())
 }
 
-fn reexports_only(root: &Path, base: &str, path: &str) -> bool {
-    let mut command = git(root);
-    command.args(["show", &format!("{base}:{path}")]);
-    let previous = output(command, "show")
-        .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok());
-    previous
-        .zip(read_text(&root.join(path)).ok())
-        .is_some_and(|(before, after)| {
-            without_exports(&before)
-                .zip(without_exports(&after))
-                .is_some_and(|(left, right)| left == right)
-        })
-}
-
 fn test_support(path: &str, source: &str) -> bool {
     path.split('/').any(|part| part.contains("test"))
         || syn::parse_file(source).is_ok_and(|file| !file.attrs.is_empty())
@@ -74,45 +59,72 @@ fn narrow_crate(
     changed: &BTreeSet<String>,
     directory: &str,
 ) -> Result<BTreeSet<String>, String> {
+    let before = snapshot(root, directory, Some(base))?;
+    let after = snapshot(root, directory, None)?;
+    select_sources(&before, &after, globs, changed, directory)
+}
+
+pub(super) fn select_sources(
+    before: &super::graph::Sources,
+    after: &super::graph::Sources,
+    globs: &[String],
+    changed: &BTreeSet<String>,
+    directory: &str,
+) -> Result<BTreeSet<String>, String> {
     let prefix = format!("{directory}/");
     let touched: Vec<&String> = changed
         .iter()
         .filter(|path| path.starts_with(&prefix))
         .collect();
-    let mut files = BTreeSet::new();
-    for path in touched {
-        let source = read_text(&root.join(path))?;
-        if path.ends_with("/Cargo.toml")
-            || test_support(path, &source)
-            || (path.ends_with("/lib.rs") && !reexports_only(root, base, path))
-        {
-            return Err(String::from("crate 전체"));
-        }
-        if Path::new(path).extension().is_some_and(|ext| ext == "rs") {
-            if path.contains(['*', '?', '[', ']', '{', '}']) {
-                return Err(String::from("glob path"));
-            }
-            syn::parse_file(&source).map_err(|error| error.to_string())?;
-            files.insert(path.clone());
-        } else if Path::new(path).extension().is_none_or(|ext| ext != "rs") {
-            return Err(String::from("support file"));
+    for path in &touched {
+        let source = after
+            .get(*path)
+            .ok_or("missing, deleted, or non-Rust input")?;
+        if test_support(path, source) || path.contains(['*', '?', '[', ']', '{', '}']) {
+            return Err(String::from("crate-wide support input"));
         }
     }
-    let mut graph = super::graph::Graph::read(&snapshot(root, directory, None)?)?;
-    graph.extend(super::graph::Graph::read(&snapshot(
-        root,
-        directory,
-        Some(base),
-    )?)?);
-    graph.selected(&files).map(|selected| {
-        selected
-            .into_iter()
-            .filter(|path| globs.iter().any(|glob| matches_target(glob, path)))
-            .collect()
-    })
+    let mut graph = super::graph::Graph::read(after)?;
+    graph.extend(super::graph::Graph::read(before)?);
+    let additions = super::additions::Additions::read(before, after).ok_or("addition context")?;
+    let mut selected = BTreeSet::new();
+    let mut seeds = BTreeSet::new();
+    for path in touched {
+        match additions.classify(path) {
+            super::additions::Change::OnlyFile => {
+                graph.outward(&BTreeSet::from([path.clone()]))?;
+                if globs.iter().any(|glob| matches_target(glob, path)) {
+                    selected.insert(path.clone());
+                }
+            }
+            super::additions::Change::Registration => {}
+            super::additions::Change::Graph => {
+                if path.ends_with("/lib.rs") && !unchanged_lib(before.get(path), after.get(path)) {
+                    return Err(String::from("lib structure changed"));
+                }
+                seeds.insert(path.clone());
+            }
+        }
+    }
+    if !seeds.is_empty() {
+        selected.extend(
+            graph
+                .selected(&seeds)?
+                .into_iter()
+                .filter(|path| globs.iter().any(|glob| matches_target(glob, path))),
+        );
+    }
+    Ok(selected)
 }
 
-fn snapshot(
+fn unchanged_lib(before: Option<&String>, after: Option<&String>) -> bool {
+    before
+        .zip(after)
+        .and_then(|(left, right)| without_exports(left).zip(without_exports(right)))
+        .is_some_and(|(left, right)| left == right)
+}
+
+pub(super) fn snapshot(
     root: &Path,
     directory: &str,
     base: Option<&str>,
