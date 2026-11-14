@@ -196,6 +196,12 @@ pub use calibration::{
 
 mod policy;
 pub use policy::{
-    Policy, PolicyBuyDecision, PolicyBuyLimit, PolicyCandidate, PolicyCostFit, PolicyPrinciple,
-    PolicySellDecision, PolicyViolation,
+    Policy, PolicyBuyDecision, PolicyBuyLimit, PolicyCandidate, PolicyCostFit, PolicySellDecision,
+    PolicyViolation,
+};
+
+mod policy_settings;
+pub use policy_settings::{
+    PolicyConcentration, PolicyHoldingCount, PolicyPrinciple, PolicySecurityFacts, PolicyText,
+    PolicyTextError,
 };

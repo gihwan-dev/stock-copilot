@@ -1,17 +1,11 @@
 use crate::{
     Allocation, AllocationError, AllocationInstrument, AllocationSector, AssetAllocation,
-    AssetInstrument, Currency, ExcludedSecurityType, ExclusionDecision, InstrumentClassification,
-    InvestorProfile, Money, PortfolioValuation, ProfileWeight, ResolvedOrderInstrument,
-    SectorAssignments, SectorId, Total,
+    AssetInstrument, Currency, ExcludedSecurityType, ExclusionDecision, InvestorProfile, Money,
+    PolicyConcentration, PolicyHoldingCount, PolicyPrinciple, PolicySecurityFacts, PolicyText,
+    PortfolioValuation, ProfileWeight, ResolvedOrderInstrument, SectorAssignments, SectorId, Total,
 };
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{cmp::Ordering, fmt};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PolicyPrinciple {
-    FreeText,
-    MinimumCash,
-    ConcentrationWarning,
-}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PolicyViolation {
     InstrumentCap(AllocationInstrument),
@@ -19,9 +13,13 @@ pub enum PolicyViolation {
     SectorCap(SectorId),
     ExcludedSector(SectorId),
     ExcludedType(ExcludedSecurityType),
-    UnknownClassification,
+    CandidateSectorUnassigned,
+    SectorUnassignedHoldings(PolicyHoldingCount),
     UnknownSecurityType,
-    UnresolvedPrinciple(PolicyPrinciple),
+    MinimumCash,
+    ConcentrationWarning,
+    ConcentrationUnavailable,
+    UnresolvedPrinciples,
     Allocation(AllocationError),
     Arithmetic(crate::MoneyError),
     InvalidCandidate,
@@ -42,8 +40,13 @@ pub enum PolicyCostFit {
     AboveLimit,
     InvalidCost,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PolicyBuyLimit(Money);
+impl fmt::Debug for PolicyBuyLimit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PolicyBuyLimit([비공개])")
+    }
+}
 impl PolicyBuyLimit {
     #[must_use]
     pub fn compare_krw_cost(self, cost: Money) -> PolicyCostFit {
@@ -60,13 +63,11 @@ impl PolicyBuyLimit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyCandidate {
     instrument: AllocationInstrument,
-    security_type: Option<ExcludedSecurityType>,
     requested_krw: Money,
 }
 impl PolicyCandidate {
     pub fn new(
         instrument: &ResolvedOrderInstrument,
-        security_type: Option<ExcludedSecurityType>,
         requested_krw: Money,
     ) -> Result<Self, PolicyViolation> {
         if requested_krw.currency() != Currency::Krw
@@ -76,17 +77,12 @@ impl PolicyCandidate {
         }
         Ok(Self {
             instrument: AllocationInstrument::new(instrument),
-            security_type,
             requested_krw,
         })
     }
     #[must_use]
     pub const fn instrument(&self) -> &AllocationInstrument {
         &self.instrument
-    }
-    #[must_use]
-    pub const fn security_type(&self) -> Option<ExcludedSecurityType> {
-        self.security_type
     }
     #[must_use]
     pub const fn requested_krw(&self) -> Money {
@@ -96,19 +92,40 @@ impl PolicyCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
     profile: InvestorProfile,
-    unresolved: Option<PolicyPrinciple>,
+    unresolved: Vec<PolicyPrinciple>,
+    context: Vec<PolicyText>,
+    minimum_cash: Option<ProfileWeight>,
+    concentration: PolicyConcentration,
 }
 impl Policy {
     #[must_use]
     pub const fn new(profile: InvestorProfile) -> Self {
         Self {
             profile,
-            unresolved: None,
+            unresolved: Vec::new(),
+            context: Vec::new(),
+            minimum_cash: None,
+            concentration: PolicyConcentration::NotApplicable,
         }
     }
     #[must_use]
     pub fn with_unresolved_principle(mut self, principle: PolicyPrinciple) -> Self {
-        self.unresolved = Some(principle);
+        self.unresolved.push(principle);
+        self
+    }
+    #[must_use]
+    pub fn with_context(mut self, text: PolicyText) -> Self {
+        self.context.push(text);
+        self
+    }
+    #[must_use]
+    pub fn with_minimum_cash(mut self, minimum: ProfileWeight) -> Self {
+        self.minimum_cash = Some(minimum);
+        self
+    }
+    #[must_use]
+    pub fn with_concentration(mut self, concentration: PolicyConcentration) -> Self {
+        self.concentration = concentration;
         self
     }
     #[must_use]
@@ -116,61 +133,70 @@ impl Policy {
         &self.profile
     }
     #[must_use]
-    pub const fn unresolved_principle(&self) -> Option<PolicyPrinciple> {
-        self.unresolved
+    pub fn unresolved_principles(&self) -> &[PolicyPrinciple] {
+        &self.unresolved
+    }
+    #[must_use]
+    pub fn context(&self) -> &[PolicyText] {
+        &self.context
+    }
+    #[must_use]
+    pub const fn minimum_cash(&self) -> Option<ProfileWeight> {
+        self.minimum_cash
+    }
+    #[must_use]
+    pub const fn concentration(&self) -> PolicyConcentration {
+        self.concentration
     }
     #[must_use]
     pub fn check_sell() -> PolicySellDecision {
         PolicySellDecision::Allowed
     }
-
     pub fn check_current(
         &self,
         valuation: &PortfolioValuation,
         assignments: &SectorAssignments,
-        security_types: &BTreeMap<AllocationInstrument, ExcludedSecurityType>,
+        facts: &PolicySecurityFacts,
     ) -> Result<Vec<PolicyViolation>, PolicyViolation> {
         self.require_resolved()?;
-        let allocation = Allocation::new(valuation, assignments);
-        let (instruments, sectors) = asset_axes(&allocation)?;
-        let caps = self.profile.weight_caps();
-        let mut violations = Vec::new();
-        for row in instruments.entries() {
-            let AssetInstrument::Holding(instrument) = row.key() else {
-                continue;
-            };
-            let security_type = security_types
-                .get(instrument)
-                .copied()
-                .ok_or(PolicyViolation::UnknownSecurityType)?;
-            record_exclusion(
-                self.exclusion_check(instrument, Some(security_type), assignments),
-                &mut violations,
-            )?;
-            if row.weight().cmp_profile_weight(&caps.instrument_cap()) == Ordering::Greater {
-                violations.push(PolicyViolation::InstrumentCap(instrument.clone()));
-            } else if row.weight().cmp_profile_weight(&caps.instrument_warning()) != Ordering::Less
-            {
-                violations.push(PolicyViolation::InstrumentWarning(instrument.clone()));
-            }
-        }
-        for row in sectors.entries() {
+        let snapshot = snapshot(valuation, assignments)?;
+        let mut findings =
+            current_instruments(&self.profile, &snapshot.instruments, assignments, facts)?;
+        for row in snapshot.sectors.entries() {
             if let AllocationSector::Classified(sector) = row.key()
-                && row.weight().cmp_profile_weight(&caps.sector_cap()) == Ordering::Greater
+                && row
+                    .weight()
+                    .cmp_profile_weight(&self.profile.weight_caps().sector_cap())
+                    == Ordering::Greater
             {
-                violations.push(PolicyViolation::SectorCap(sector.clone()));
+                findings.push(PolicyViolation::SectorCap(sector.clone()));
             }
         }
-        Ok(violations)
+        match self.concentration {
+            PolicyConcentration::Warning => findings.push(PolicyViolation::ConcentrationWarning),
+            PolicyConcentration::Unavailable => {
+                findings.push(PolicyViolation::ConcentrationUnavailable);
+            }
+            PolicyConcentration::Clear | PolicyConcentration::NotApplicable => {}
+        }
+        if let Some(minimum) = self.minimum_cash {
+            findings.extend(current_cash_finding(
+                snapshot.total,
+                cash_value(snapshot.total, &snapshot.rows),
+                minimum,
+            )?);
+        }
+        Ok(findings)
     }
     #[must_use]
     pub fn check_buy(
         &self,
         valuation: &PortfolioValuation,
         assignments: &SectorAssignments,
+        facts: &PolicySecurityFacts,
         candidate: &PolicyCandidate,
     ) -> PolicyBuyDecision {
-        match self.buy_limit(valuation, assignments, candidate) {
+        match self.buy_limit(valuation, assignments, facts, candidate) {
             Ok(limit) => {
                 if limit.compare_krw_cost(candidate.requested_krw) == PolicyCostFit::AboveLimit {
                     PolicyBuyDecision::Reduce(limit)
@@ -182,97 +208,224 @@ impl Policy {
         }
     }
     fn require_resolved(&self) -> Result<(), PolicyViolation> {
-        match self.unresolved {
-            Some(principle) => Err(PolicyViolation::UnresolvedPrinciple(principle)),
-            None => Ok(()),
+        if self.unresolved.is_empty() {
+            Ok(())
+        } else {
+            Err(PolicyViolation::UnresolvedPrinciples)
         }
-    }
-    fn exclusion_check(
-        &self,
-        instrument: &AllocationInstrument,
-        security_type: Option<ExcludedSecurityType>,
-        assignments: &SectorAssignments,
-    ) -> Result<SectorId, PolicyViolation> {
-        let resolved_type = security_type.ok_or(PolicyViolation::UnknownSecurityType)?;
-        if self
-            .profile
-            .exclusions()
-            .security_type_decision(resolved_type)
-            == ExclusionDecision::Excluded
-        {
-            return Err(PolicyViolation::ExcludedType(resolved_type));
-        }
-        let Some(InstrumentClassification::Sector(sector)) = assignments.classification(instrument)
-        else {
-            return Err(PolicyViolation::UnknownClassification);
-        };
-        if self.profile.exclusions().sector_decision(sector) == ExclusionDecision::Excluded {
-            return Err(PolicyViolation::ExcludedSector(sector.clone()));
-        }
-        Ok(sector.clone())
     }
     fn buy_limit(
         &self,
         valuation: &PortfolioValuation,
         assignments: &SectorAssignments,
+        facts: &PolicySecurityFacts,
         candidate: &PolicyCandidate,
     ) -> Result<PolicyBuyLimit, PolicyViolation> {
         self.require_resolved()?;
-        let (total, rates, _) = match valuation.assets() {
-            Total::Complete(value) => value.value().clone().into_parts(),
-            Total::Incomplete(value) => value.subtotal().clone().into_parts(),
-        };
-        let sector =
-            self.exclusion_check(&candidate.instrument, candidate.security_type, assignments)?;
-        let values = crate::allocation::policy_krw_holding_values(valuation, &rates)
-            .map_err(PolicyViolation::Allocation)
-            .and_then(|rows| exposure_values(rows, assignments, &candidate.instrument, &sector))?;
-        let allocation = Allocation::new(valuation, assignments);
-        let (instruments, sectors) = asset_axes(&allocation)?;
-        require_classified_sectors(&sectors)?;
+        if let Some(violation) = type_violation(&self.profile, facts, &candidate.instrument)? {
+            return Err(violation);
+        }
+        let sector = candidate_sector(&self.profile, assignments, &candidate.instrument)?;
+        let snapshot = snapshot(valuation, assignments)?;
         let caps = self.profile.weight_caps();
         reject_at_cap(
-            &instruments,
+            &snapshot.instruments,
             &AssetInstrument::Holding(candidate.instrument.clone()),
             caps.instrument_cap(),
             PolicyViolation::InstrumentCap(candidate.instrument.clone()),
         )?;
-        reject_at_cap(
-            &sectors,
-            &AllocationSector::Classified(sector.clone()),
-            caps.sector_cap(),
-            PolicyViolation::SectorCap(sector.clone()),
-        )?;
-        limit_from_values(total, values, caps, &candidate.instrument, &sector)
+        if let AllocationSector::Classified(id) = &sector {
+            reject_at_cap(
+                &snapshot.sectors,
+                &sector,
+                caps.sector_cap(),
+                PolicyViolation::SectorCap(id.clone()),
+            )?;
+        }
+        let values = exposure_values(
+            snapshot.rows.clone(),
+            assignments,
+            &candidate.instrument,
+            &sector,
+        );
+        let limit =
+            limit_from_values(snapshot.total, values, caps, &candidate.instrument, &sector)?;
+        match self.minimum_cash {
+            None => Ok(limit),
+            Some(minimum) => cash_value(snapshot.total, &snapshot.rows)
+                .and_then(|cash| cash_headroom(snapshot.total, cash, minimum))
+                .map(|cash_room| minimum_room(limit.0, cash_room)),
+        }
+    }
+}
+struct PolicySnapshot {
+    instruments: AssetAllocation<AssetInstrument>,
+    sectors: AssetAllocation<AllocationSector>,
+    total: Money,
+    rows: Vec<(AllocationInstrument, Money)>,
+}
+fn snapshot(
+    valuation: &PortfolioValuation,
+    assignments: &SectorAssignments,
+) -> Result<PolicySnapshot, PolicyViolation> {
+    let (total, rates, _) = match valuation.assets() {
+        Total::Complete(value) => value.value().clone().into_parts(),
+        Total::Incomplete(value) => value.subtotal().clone().into_parts(),
+    };
+    let rows = crate::allocation::policy_krw_holding_values(valuation, &rates)
+        .map_err(PolicyViolation::Allocation)?;
+    let (instruments, sectors) = asset_axes(&Allocation::new(valuation, assignments))?;
+    Ok(PolicySnapshot {
+        instruments,
+        sectors,
+        total,
+        rows,
+    })
+}
+fn type_violation(
+    profile: &InvestorProfile,
+    facts: &PolicySecurityFacts,
+    instrument: &AllocationInstrument,
+) -> Result<Option<PolicyViolation>, PolicyViolation> {
+    let kind = facts
+        .security_type(instrument)
+        .ok_or(PolicyViolation::UnknownSecurityType)?;
+    Ok(match profile.exclusions().security_type_decision(kind) {
+        ExclusionDecision::Excluded => Some(PolicyViolation::ExcludedType(kind)),
+        ExclusionDecision::Included => None,
+    })
+}
+fn candidate_sector(
+    profile: &InvestorProfile,
+    assignments: &SectorAssignments,
+    instrument: &AllocationInstrument,
+) -> Result<AllocationSector, PolicyViolation> {
+    let sector = assignments.sector(instrument);
+    match &sector {
+        AllocationSector::Unclassified => return Err(PolicyViolation::CandidateSectorUnassigned),
+        AllocationSector::Classified(id)
+            if profile.exclusions().sector_decision(id) == ExclusionDecision::Excluded =>
+        {
+            return Err(PolicyViolation::ExcludedSector(id.clone()));
+        }
+        AllocationSector::Classified(_) | AllocationSector::EtfFund | AllocationSector::Cash => {}
+    }
+    Ok(sector)
+}
+fn current_instruments(
+    profile: &InvestorProfile,
+    instruments: &AssetAllocation<AssetInstrument>,
+    assignments: &SectorAssignments,
+    facts: &PolicySecurityFacts,
+) -> Result<Vec<PolicyViolation>, PolicyViolation> {
+    let mut findings = Vec::new();
+    let mut unassigned = 0_usize;
+    let caps = profile.weight_caps();
+    for row in instruments.entries() {
+        let AssetInstrument::Holding(instrument) = row.key() else {
+            continue;
+        };
+        if let Some(violation) = type_violation(profile, facts, instrument)? {
+            findings.push(violation);
+        }
+        match assignments.sector(instrument) {
+            AllocationSector::Classified(id) => {
+                if profile.exclusions().sector_decision(&id) == ExclusionDecision::Excluded {
+                    findings.push(PolicyViolation::ExcludedSector(id));
+                }
+            }
+            AllocationSector::Unclassified => unassigned = unassigned.saturating_add(1),
+            AllocationSector::EtfFund | AllocationSector::Cash => {}
+        }
+        if row.weight().cmp_profile_weight(&caps.instrument_cap()) == Ordering::Greater {
+            findings.push(PolicyViolation::InstrumentCap(instrument.clone()));
+        } else if row.weight().cmp_profile_weight(&caps.instrument_warning()) != Ordering::Less {
+            findings.push(PolicyViolation::InstrumentWarning(instrument.clone()));
+        }
+    }
+    if unassigned > 0 {
+        findings.push(PolicyViolation::SectorUnassignedHoldings(
+            PolicyHoldingCount::new(unassigned),
+        ));
+    }
+    Ok(findings)
+}
+fn cash_value(
+    total: Money,
+    rows: &[(AllocationInstrument, Money)],
+) -> Result<Money, PolicyViolation> {
+    rows.iter()
+        .try_fold(crate::holding::zero(Currency::Krw), |sum, (_, value)| {
+            sum.checked_add(value)
+        })
+        .and_then(|holdings| total.checked_sub(&holdings))
+        .map_err(PolicyViolation::Arithmetic)
+}
+fn current_cash_finding(
+    total: Money,
+    cash: Result<Money, PolicyViolation>,
+    minimum: ProfileWeight,
+) -> Result<Option<PolicyViolation>, PolicyViolation> {
+    let checked_cash = cash?;
+    let threshold = total
+        .checked_mul(&minimum.as_ratio())
+        .map_err(PolicyViolation::Arithmetic)?;
+    Ok(
+        (checked_cash.amount().as_decimal() < threshold.amount().as_decimal())
+            .then_some(PolicyViolation::MinimumCash),
+    )
+}
+fn cash_headroom(
+    total: Money,
+    cash: Money,
+    minimum: ProfileWeight,
+) -> Result<Money, PolicyViolation> {
+    let remaining = total
+        .checked_mul(&minimum.as_ratio())
+        .and_then(|threshold| cash.checked_sub(&threshold))
+        .map_err(PolicyViolation::Arithmetic)?;
+    if remaining.amount().as_decimal() <= rust_decimal::Decimal::ZERO {
+        Err(PolicyViolation::MinimumCash)
+    } else {
+        Ok(remaining)
     }
 }
 fn limit_from_values(
     total: Money,
-    values: (Money, Money),
+    values: Result<(Money, Money), PolicyViolation>,
     caps: crate::WeightCaps,
     instrument: &AllocationInstrument,
-    sector: &SectorId,
+    sector: &AllocationSector,
 ) -> Result<PolicyBuyLimit, PolicyViolation> {
+    let checked_values = values?;
     let instrument_room = room(
         total,
-        values.0,
+        checked_values.0,
         caps.instrument_cap(),
         PolicyViolation::InstrumentCap(instrument.clone()),
     )?;
-    room(
-        total,
-        values.1,
-        caps.sector_cap(),
-        PolicyViolation::SectorCap(sector.clone()),
-    )
-    .map(|sector_room| minimum_room(instrument_room, sector_room))
+    match sector {
+        AllocationSector::Classified(id) => room(
+            total,
+            checked_values.1,
+            caps.sector_cap(),
+            PolicyViolation::SectorCap(id.clone()),
+        )
+        .map(|sector_room| minimum_room(instrument_room, sector_room)),
+        AllocationSector::EtfFund | AllocationSector::Unclassified | AllocationSector::Cash => {
+            Ok(PolicyBuyLimit(instrument_room))
+        }
+    }
 }
 fn minimum_room(instrument: Money, sector: Money) -> PolicyBuyLimit {
     PolicyBuyLimit(
-        if instrument.amount().as_decimal() <= sector.amount().as_decimal() {
-            instrument
-        } else {
-            sector
+        match instrument
+            .amount()
+            .as_decimal()
+            .cmp(&sector.amount().as_decimal())
+        {
+            Ordering::Less | Ordering::Equal => instrument,
+            Ordering::Greater => sector,
         },
     )
 }
@@ -298,49 +451,11 @@ fn asset_axes(
         })
         .map_err(PolicyViolation::Allocation)
 }
-fn record_exclusion(
-    result: Result<SectorId, PolicyViolation>,
-    violations: &mut Vec<PolicyViolation>,
-) -> Result<(), PolicyViolation> {
-    match result {
-        Ok(_) => Ok(()),
-        Err(
-            violation @ (PolicyViolation::ExcludedSector(_) | PolicyViolation::ExcludedType(_)),
-        ) => {
-            violations.push(violation);
-            Ok(())
-        }
-        Err(
-            violation @ (PolicyViolation::InstrumentCap(_)
-            | PolicyViolation::InstrumentWarning(_)
-            | PolicyViolation::SectorCap(_)
-            | PolicyViolation::UnknownClassification
-            | PolicyViolation::UnknownSecurityType
-            | PolicyViolation::UnresolvedPrinciple(_)
-            | PolicyViolation::Allocation(_)
-            | PolicyViolation::Arithmetic(_)
-            | PolicyViolation::InvalidCandidate),
-        ) => Err(violation),
-    }
-}
-fn require_classified_sectors(
-    sectors: &AssetAllocation<AllocationSector>,
-) -> Result<(), PolicyViolation> {
-    for row in sectors.entries() {
-        match row.key() {
-            AllocationSector::Classified(_) | AllocationSector::Cash => {}
-            AllocationSector::EtfFund | AllocationSector::Unclassified => {
-                return Err(PolicyViolation::UnknownClassification);
-            }
-        }
-    }
-    Ok(())
-}
 fn exposure_values(
     rows: Vec<(AllocationInstrument, Money)>,
     assignments: &SectorAssignments,
     candidate: &AllocationInstrument,
-    sector: &SectorId,
+    sector: &AllocationSector,
 ) -> Result<(Money, Money), PolicyViolation> {
     let mut instrument_value = crate::holding::zero(Currency::Krw);
     let mut sector_value = crate::holding::zero(Currency::Krw);
@@ -348,7 +463,7 @@ fn exposure_values(
         if &instrument == candidate {
             instrument_value = value;
         }
-        if assignments.sector(&instrument) == AllocationSector::Classified(sector.clone()) {
+        if &assignments.sector(&instrument) == sector {
             sector_value = sector_value
                 .checked_add(&value)
                 .map_err(PolicyViolation::Arithmetic)?;
@@ -386,24 +501,22 @@ fn room(
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        AcquisitionPrice, AllocationInstrument, AllocationSector, BuyingPower, Currency,
+        ExcludedSecurityType, Exclusions, Holding, HoldingObservation, InstrumentClassification,
+        InvestorProfile, Market, Money, Nanosecond, NumericInput, OffsetSeconds, Policy,
+        PolicyBuyDecision, PolicyCandidate, PolicyConcentration, PolicyCostFit, PolicyPrinciple,
+        PolicySecurityFacts, PolicyText, PolicyViolation, Portfolio, PortfolioValuation, Quantity,
+        Ratio, ReportedHolding, ResolvedOrderInstrument, SectorAssignment, SectorAssignments,
+        SectorId, Symbol, Timestamp, UnixSeconds,
+    };
+    use proptest::test_runner::{Config, TestRunner};
     fn assert_block(decision: &PolicyBuyDecision) {
         assert_eq!(
             std::mem::discriminant(decision),
             std::mem::discriminant(&PolicyBuyDecision::Block(PolicyViolation::InvalidCandidate))
         );
     }
-
-    use crate::{
-        AcquisitionPrice, AllocationInstrument, BuyingPower, Currency, ExcludedSecurityType,
-        Exclusions, Holding, HoldingObservation, InstrumentClassification, InvestorProfile, Market,
-        Money, Nanosecond, NumericInput, OffsetSeconds, Policy, PolicyBuyDecision, PolicyCandidate,
-        PolicyCostFit, PolicyPrinciple, PolicyViolation, Portfolio, PortfolioValuation, Quantity,
-        Ratio, ReportedHolding, ResolvedOrderInstrument, SectorAssignment, SectorAssignments,
-        SectorId, Symbol, Timestamp, UnixSeconds,
-    };
-    use proptest::test_runner::{Config, TestRunner};
-    use std::collections::BTreeMap;
-
     fn money(text: &str) -> Money {
         Money::parse(&NumericInput::try_new(text).expect("입력"), Currency::Krw).expect("금액")
     }
@@ -468,26 +581,64 @@ mod tests {
         .expect("분류")
     }
     fn candidate(symbol: &str, amount: &str) -> PolicyCandidate {
-        PolicyCandidate::new(
-            &instrument(symbol),
-            Some(ExcludedSecurityType::Stock),
-            money(amount),
-        )
-        .expect("후보")
+        PolicyCandidate::new(&instrument(symbol), money(amount)).expect("후보")
     }
     fn policy() -> Policy {
         Policy::new(InvestorProfile::default())
     }
-    fn known_types() -> BTreeMap<AllocationInstrument, ExcludedSecurityType> {
-        ["A", "B"]
-            .map(|value| {
-                (
-                    AllocationInstrument::new(&instrument(value)),
-                    ExcludedSecurityType::Stock,
+    fn known_types() -> PolicySecurityFacts {
+        PolicySecurityFacts::from_master_lookup_results(
+            ["A", "B", "C", "NEW", "ETF", "X"]
+                .map(|name| {
+                    (
+                        AllocationInstrument::new(&instrument(name)),
+                        if name == "ETF" {
+                            ExcludedSecurityType::Etf
+                        } else {
+                            ExcludedSecurityType::Stock
+                        },
+                    )
+                })
+                .into_iter()
+                .collect(),
+        )
+    }
+    fn custom_policy(instrument: u32, sector: u32) -> Policy {
+        let cap = crate::ProfileWeight::parse_percent(
+            &NumericInput::try_new(&instrument.to_string()).expect("입력"),
+        )
+        .expect("상한");
+        let sector_cap = crate::ProfileWeight::parse_percent(
+            &NumericInput::try_new(&sector.to_string()).expect("입력"),
+        )
+        .expect("상한");
+        Policy::new(
+            InvestorProfile::default()
+                .with_weight_caps(crate::WeightCaps::try_new(cap, cap, sector_cap).expect("관계")),
+        )
+    }
+    fn reference_room(
+        total: u32,
+        cap_percent: u32,
+        sector_percent: u32,
+        first: u32,
+        sibling: u32,
+    ) -> i64 {
+        let instrument_room = i64::from(total)
+            .checked_mul(i64::from(cap_percent))
+            .and_then(|value| value.checked_sub(i64::from(first).checked_mul(100).expect("분자")))
+            .expect("종목 여유 분자");
+        let sector_room = i64::from(total)
+            .checked_mul(i64::from(sector_percent))
+            .and_then(|value| {
+                value.checked_sub(
+                    i64::from(first.checked_add(sibling).expect("합"))
+                        .checked_mul(100)
+                        .expect("분자"),
                 )
             })
-            .into_iter()
-            .collect()
+            .expect("섹터 여유 분자");
+        instrument_room.min(sector_room)
     }
     #[test]
     fn buy_pass_reduce_and_block_at_both_caps() {
@@ -496,12 +647,22 @@ mod tests {
             "65",
         );
         assert_eq!(
-            policy().check_buy(&initial, &assignments(), &candidate("A", "5")),
+            policy().check_buy(
+                &initial,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "5")
+            ),
             PolicyBuyDecision::Pass
         );
         let limit = super::PolicyBuyLimit(money("5"));
         assert_eq!(
-            policy().check_buy(&initial, &assignments(), &candidate("A", "10")),
+            policy().check_buy(
+                &initial,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "10")
+            ),
             PolicyBuyDecision::Reduce(limit)
         );
         assert_eq!(
@@ -514,7 +675,12 @@ mod tests {
         );
         let at_instrument = valuation(vec![holding("A", Some("20"))], "80");
         assert_eq!(
-            policy().check_buy(&at_instrument, &assignments(), &candidate("A", "1")),
+            policy().check_buy(
+                &at_instrument,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "1")
+            ),
             PolicyBuyDecision::Block(PolicyViolation::InstrumentCap(AllocationInstrument::new(
                 &instrument("A")
             )))
@@ -524,7 +690,12 @@ mod tests {
             "60",
         );
         assert_eq!(
-            policy().check_buy(&at_sector, &assignments(), &candidate("A", "1")),
+            policy().check_buy(
+                &at_sector,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "1")
+            ),
             PolicyBuyDecision::Block(PolicyViolation::SectorCap(sector()))
         );
     }
@@ -568,10 +739,20 @@ mod tests {
                 ];
                 let first = valuation(rows.clone(), &cash.to_string());
                 let second = valuation(rows.into_iter().rev().collect(), &cash.to_string());
-                let actual = policy().check_buy(&first, &assignments(), &candidate("A", "100"));
+                let actual = policy().check_buy(
+                    &first,
+                    &assignments(),
+                    &known_types(),
+                    &candidate("A", "100"),
+                );
                 assert_eq!(
                     actual,
-                    policy().check_buy(&second, &assignments(), &candidate("A", "100"))
+                    policy().check_buy(
+                        &second,
+                        &assignments(),
+                        &known_types(),
+                        &candidate("A", "100")
+                    )
                 );
                 if first_value.checked_add(second_value).expect("합") >= 40 {
                     assert_block(&actual);
@@ -598,166 +779,6 @@ mod tests {
                 Ok(())
             })
             .expect("독립 정수 기준");
-    }
-    #[test]
-    fn unknown_inputs_never_pass_and_exclusions_use_profile_decisions() {
-        let complete = valuation(vec![holding("A", Some("1"))], "99");
-        for values in [
-            valuation(vec![holding("A", None)], "99"),
-            valuation(vec![holding("A", Some("1"))], "-1"),
-        ] {
-            assert_block(&policy().check_buy(&values, &assignments(), &candidate("A", "1")));
-            policy()
-                .check_current(&values, &assignments(), &known_types())
-                .expect_err("판정 불가");
-        }
-        for classification in [
-            InstrumentClassification::Unclassified,
-            InstrumentClassification::EtfFund,
-        ] {
-            let mapping = SectorAssignments::try_new(vec![SectorAssignment::new(
-                &instrument("A"),
-                classification,
-            )])
-            .expect("분류");
-            assert_block(&policy().check_buy(&complete, &mapping, &candidate("A", "1")));
-        }
-        assert_block(&policy().check_buy(
-            &complete,
-            &SectorAssignments::default(),
-            &candidate("A", "1"),
-        ));
-        let unknown = PolicyCandidate::new(&instrument("A"), None, money("1")).expect("후보");
-        assert_block(&policy().check_buy(&complete, &assignments(), &unknown));
-    }
-    #[test]
-    fn exclusions_and_unresolved_principles_block() {
-        let complete = valuation(vec![holding("A", Some("1"))], "99");
-        for exclusions in [
-            Exclusions::try_new(vec![sector()], vec![]).expect("제외"),
-            Exclusions::try_new(vec![], vec![ExcludedSecurityType::Stock]).expect("제외"),
-        ] {
-            let configured = Policy::new(InvestorProfile::default().with_exclusions(exclusions));
-            assert_block(&configured.check_buy(&complete, &assignments(), &candidate("A", "1")));
-            assert_ne!(
-                configured
-                    .check_current(&complete, &assignments(), &known_types())
-                    .expect("완전"),
-                vec![]
-            );
-        }
-        for principle in [
-            PolicyPrinciple::FreeText,
-            PolicyPrinciple::MinimumCash,
-            PolicyPrinciple::ConcentrationWarning,
-        ] {
-            let configured = policy().with_unresolved_principle(principle);
-            assert_block(&configured.check_buy(&complete, &assignments(), &candidate("A", "1")));
-            configured
-                .check_current(&complete, &assignments(), &known_types())
-                .expect_err("판정 불가");
-        }
-    }
-    #[test]
-    fn public_boundaries_accessors_and_unknown_current_metadata() {
-        let instance = policy();
-        assert_eq!(instance.profile(), &InvestorProfile::default());
-        assert_eq!(instance.unresolved_principle(), None);
-        assert_eq!(
-            instance
-                .with_unresolved_principle(PolicyPrinciple::FreeText)
-                .unresolved_principle(),
-            Some(PolicyPrinciple::FreeText)
-        );
-        let item = candidate("NEW", "1");
-        assert_eq!(
-            item.instrument(),
-            &AllocationInstrument::new(&instrument("NEW"))
-        );
-        assert_eq!(item.security_type(), Some(ExcludedSecurityType::Stock));
-        assert_eq!(item.requested_krw(), money("1"));
-        for cost in [
-            money("0"),
-            money("-1"),
-            Money::new(money("1").amount(), Currency::Usd),
-        ] {
-            assert_eq!(
-                PolicyCandidate::new(&instrument("A"), Some(ExcludedSecurityType::Stock), cost),
-                Err(PolicyViolation::InvalidCandidate)
-            );
-        }
-    }
-    #[test]
-    fn missing_current_metadata_and_cost_fit_boundaries() {
-        let item = candidate("NEW", "1");
-        let values = valuation(vec![holding("A", Some("1"))], "99");
-        assert_eq!(
-            policy().check_current(&values, &assignments(), &BTreeMap::new()),
-            Err(PolicyViolation::UnknownSecurityType)
-        );
-        assert_eq!(
-            policy().check_current(&values, &SectorAssignments::default(), &known_types()),
-            Err(PolicyViolation::UnknownClassification)
-        );
-        assert_eq!(
-            policy().check_current(&values, &assignments(), &known_types()),
-            Ok(vec![])
-        );
-        assert_eq!(
-            policy().check_buy(&values, &assignments(), &item),
-            PolicyBuyDecision::Pass
-        );
-        let limit = super::PolicyBuyLimit(money("19"));
-        assert_eq!(
-            policy().check_buy(&values, &assignments(), &candidate("A", "100")),
-            PolicyBuyDecision::Reduce(limit)
-        );
-        assert_eq!(
-            limit.compare_krw_cost(money("-1")),
-            PolicyCostFit::InvalidCost
-        );
-        assert_eq!(
-            limit.compare_krw_cost(Money::new(money("1").amount(), Currency::Usd)),
-            PolicyCostFit::InvalidCost
-        );
-        assert_eq!(
-            limit.compare_krw_cost(money("0")),
-            PolicyCostFit::WithinLimit
-        );
-        let empty = valuation(vec![], "0");
-        assert_block(&policy().check_buy(&empty, &assignments(), &item));
-    }
-    #[test]
-    fn generated_missing_information_and_negative_cash_never_pass() {
-        TestRunner::new(Config::with_cases(512))
-            .run(&(1_u32..10000, 0_u8..4), |(amount, missing)| {
-                let values = valuation(
-                    vec![holding("A", if missing == 0 { None } else { Some("1") })],
-                    &if missing == 1 {
-                        format!("-{amount}")
-                    } else {
-                        amount.to_string()
-                    },
-                );
-                let mapping = if missing == 2 {
-                    SectorAssignments::default()
-                } else {
-                    assignments()
-                };
-                let item = PolicyCandidate::new(
-                    &instrument("A"),
-                    if missing == 3 {
-                        None
-                    } else {
-                        Some(ExcludedSecurityType::Stock)
-                    },
-                    money("1"),
-                )
-                .expect("후보");
-                assert_block(&policy().check_buy(&values, &mapping, &item));
-                Ok(())
-            })
-            .expect("판정 불가 속성");
     }
     #[test]
     fn exact_room_errors_and_limit_boundaries_are_conservative() {
@@ -787,7 +808,7 @@ mod tests {
             "0.0000000000000000000000000001",
         );
         assert_eq!(
-            policy().check_buy(&tiny, &assignments(), &candidate("A", "1")),
+            policy().check_buy(&tiny, &assignments(), &known_types(), &candidate("A", "1")),
             PolicyBuyDecision::Block(PolicyViolation::Arithmetic(
                 crate::MoneyError::PrecisionLoss
             ))
@@ -804,72 +825,10 @@ mod tests {
                 overflow_rows,
                 &assignments(),
                 &AllocationInstrument::new(&instrument("A")),
-                &sector()
+                &AllocationSector::Classified(sector())
             ),
             Err(PolicyViolation::Arithmetic(crate::MoneyError::Overflow))
         );
-    }
-    #[test]
-    fn unknown_other_holding_and_separate_sector_cannot_hide_exposure() {
-        let values = valuation(vec![holding("A", Some("1")), holding("B", Some("1"))], "98");
-        let missing = SectorAssignments::try_new(vec![SectorAssignment::new(
-            &instrument("A"),
-            InstrumentClassification::Sector(sector()),
-        )])
-        .expect("분류");
-        assert_eq!(
-            policy().check_buy(&values, &missing, &candidate("A", "1")),
-            PolicyBuyDecision::Block(PolicyViolation::UnknownClassification)
-        );
-        let split = SectorAssignments::try_new(vec![
-            SectorAssignment::new(&instrument("A"), InstrumentClassification::Sector(sector())),
-            SectorAssignment::new(
-                &instrument("B"),
-                InstrumentClassification::Sector(SectorId::try_new("Energy").expect("섹터")),
-            ),
-        ])
-        .expect("분류");
-        assert_eq!(
-            policy().check_buy(&values, &split, &candidate("A", "1")),
-            PolicyBuyDecision::Pass
-        );
-    }
-    fn custom_policy(instrument: u32, sector: u32) -> Policy {
-        let cap = crate::ProfileWeight::parse_percent(
-            &NumericInput::try_new(&instrument.to_string()).expect("입력"),
-        )
-        .expect("상한");
-        let sector_cap = crate::ProfileWeight::parse_percent(
-            &NumericInput::try_new(&sector.to_string()).expect("입력"),
-        )
-        .expect("상한");
-        Policy::new(
-            InvestorProfile::default()
-                .with_weight_caps(crate::WeightCaps::try_new(cap, cap, sector_cap).expect("관계")),
-        )
-    }
-    fn reference_room(
-        total: u32,
-        cap_percent: u32,
-        sector_percent: u32,
-        first: u32,
-        sibling: u32,
-    ) -> i64 {
-        let instrument_room = i64::from(total)
-            .checked_mul(i64::from(cap_percent))
-            .and_then(|value| value.checked_sub(i64::from(first).checked_mul(100).expect("분자")))
-            .expect("종목 여유 분자");
-        let sector_room = i64::from(total)
-            .checked_mul(i64::from(sector_percent))
-            .and_then(|value| {
-                value.checked_sub(
-                    i64::from(first.checked_add(sibling).expect("합"))
-                        .checked_mul(100)
-                        .expect("분자"),
-                )
-            })
-            .expect("섹터 여유 분자");
-        instrument_room.min(sector_room)
     }
     #[test]
     fn rational_reference_matches_variable_caps_and_native_cent_boundary() {
@@ -901,6 +860,7 @@ mod tests {
                     let actual = configured.check_buy(
                         &values,
                         &assignments(),
+                        &known_types(),
                         &candidate("A", &total.to_string()),
                     );
                     let room = reference_room(total, cap_percent, sector_percent, first, sibling);
@@ -936,6 +896,7 @@ mod tests {
             policy().check_buy(
                 &values,
                 &assignments(),
+                &known_types(),
                 &candidate("A", "79228162514264337593543950335")
             ),
             PolicyBuyDecision::Reduce(super::PolicyBuyLimit(money(
@@ -957,10 +918,13 @@ mod tests {
                 Policy::new(InvestorProfile::default().with_exclusions(
                     Exclusions::try_new(vec![], vec![security_type]).expect("제외"),
                 ));
-            let item = PolicyCandidate::new(&instrument("A"), Some(security_type), money("1"))
-                .expect("후보");
+            let item = PolicyCandidate::new(&instrument("A"), money("1")).expect("후보");
+            let facts = PolicySecurityFacts::from_master_lookup_results(
+                std::iter::once((AllocationInstrument::new(&instrument("A")), security_type))
+                    .collect(),
+            );
             assert_eq!(
-                configured.check_buy(&values, &assignments(), &item),
+                configured.check_buy(&values, &assignments(), &facts, &item),
                 PolicyBuyDecision::Block(PolicyViolation::ExcludedType(security_type))
             );
         }
@@ -979,24 +943,591 @@ mod tests {
             ])
         );
         assert_eq!(
-            policy().check_buy(&values, &assignments(), &candidate("A", "1")),
+            policy().check_buy(
+                &values,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "1")
+            ),
             PolicyBuyDecision::Block(PolicyViolation::InstrumentCap(AllocationInstrument::new(
                 &instrument("A")
             )))
         );
         assert_eq!(
-            policy().check_buy(&values, &assignments(), &candidate("NEW", "1")),
+            policy().check_buy(
+                &values,
+                &assignments(),
+                &known_types(),
+                &candidate("NEW", "1")
+            ),
             PolicyBuyDecision::Block(PolicyViolation::SectorCap(sector()))
         );
         assert_eq!(Policy::check_sell(), crate::PolicySellDecision::Allowed);
         let cash_only = valuation(vec![], "100");
         assert_eq!(
-            policy().check_buy(&cash_only, &assignments(), &candidate("NEW", "20")),
+            policy().check_buy(
+                &cash_only,
+                &assignments(),
+                &known_types(),
+                &candidate("NEW", "20")
+            ),
             PolicyBuyDecision::Pass
         );
         assert_eq!(
-            policy().check_current(&cash_only, &assignments(), &BTreeMap::new()),
+            policy().check_current(&cash_only, &assignments(), &PolicySecurityFacts::default()),
             Ok(vec![])
+        );
+    }
+    #[test]
+    fn review_etf_and_unclassified_holdings_do_not_block_other_sectors() {
+        let values = valuation(
+            vec![
+                holding("ETF", Some("10")),
+                holding("A", Some("10")),
+                holding("B", Some("10")),
+            ],
+            "70",
+        );
+        let mapping = SectorAssignments::try_new(vec![
+            SectorAssignment::new(&instrument("ETF"), InstrumentClassification::EtfFund),
+            SectorAssignment::new(&instrument("A"), InstrumentClassification::Sector(sector())),
+            SectorAssignment::new(
+                &instrument("B"),
+                InstrumentClassification::Sector(SectorId::try_new("Energy").expect("섹터")),
+            ),
+            SectorAssignment::new(
+                &instrument("C"),
+                InstrumentClassification::Sector(SectorId::try_new("Health").expect("섹터")),
+            ),
+        ])
+        .expect("분류");
+        assert_eq!(
+            policy().check_buy(&values, &mapping, &known_types(), &candidate("C", "10")),
+            PolicyBuyDecision::Pass
+        );
+        assert_eq!(
+            policy().check_buy(&values, &mapping, &known_types(), &candidate("ETF", "5")),
+            PolicyBuyDecision::Pass
+        );
+    }
+    fn text(value: &str) -> PolicyText {
+        PolicyText::try_new(value).expect("원칙 문맥")
+    }
+    fn mixed_mapping() -> SectorAssignments {
+        SectorAssignments::try_new(vec![
+            SectorAssignment::new(&instrument("ETF"), InstrumentClassification::EtfFund),
+            SectorAssignment::new(&instrument("A"), InstrumentClassification::Sector(sector())),
+            SectorAssignment::new(
+                &instrument("B"),
+                InstrumentClassification::Sector(SectorId::try_new("Energy").expect("섹터")),
+            ),
+            SectorAssignment::new(
+                &instrument("C"),
+                InstrumentClassification::Sector(SectorId::try_new("Health").expect("섹터")),
+            ),
+        ])
+        .expect("분류")
+    }
+    #[test]
+    fn review_five_ordinary_portfolio_rows_and_unassigned_candidate() {
+        let values = valuation(
+            vec![
+                holding("ETF", Some("10")),
+                holding("A", Some("10")),
+                holding("B", Some("10")),
+            ],
+            "70",
+        );
+        let mapping = mixed_mapping();
+        for symbol in ["C", "A", "ETF"] {
+            assert_eq!(
+                policy().check_buy(&values, &mapping, &known_types(), &candidate(symbol, "5")),
+                PolicyBuyDecision::Pass
+            );
+            let expected = if symbol == "C" { "20" } else { "10" };
+            assert_eq!(
+                policy().check_buy(&values, &mapping, &known_types(), &candidate(symbol, "30")),
+                PolicyBuyDecision::Reduce(super::PolicyBuyLimit(money(expected)))
+            );
+        }
+        let unassigned = valuation(
+            vec![
+                holding("ETF", Some("10")),
+                holding("A", Some("10")),
+                holding("B", Some("10")),
+                holding("X", Some("10")),
+            ],
+            "60",
+        );
+        assert_eq!(
+            policy().check_buy(&unassigned, &mapping, &known_types(), &candidate("C", "5")),
+            PolicyBuyDecision::Pass
+        );
+        assert_eq!(
+            policy().check_buy(&unassigned, &mapping, &known_types(), &candidate("X", "5")),
+            PolicyBuyDecision::Block(PolicyViolation::CandidateSectorUnassigned)
+        );
+        let findings = policy()
+            .check_current(&unassigned, &mapping, &known_types())
+            .expect("현재 상태");
+        assert!(
+            findings.contains(&PolicyViolation::SectorUnassignedHoldings(
+                crate::PolicyHoldingCount::new(1)
+            ))
+        );
+        assert_eq!(findings.len(), 5);
+        assert_eq!(crate::PolicyHoldingCount::new(1).as_usize(), 1);
+    }
+    #[test]
+    fn concentration_is_warning_and_text_is_context_without_a_gate() {
+        let values = valuation(vec![holding("A", Some("10"))], "90");
+        for state in [
+            PolicyConcentration::Warning,
+            PolicyConcentration::Clear,
+            PolicyConcentration::NotApplicable,
+            PolicyConcentration::Unavailable,
+        ] {
+            let configured = policy()
+                .with_concentration(state)
+                .with_context(text("반도체 장기 보유"));
+            assert_eq!(configured.context(), &[text("반도체 장기 보유")]);
+            assert_eq!(configured.concentration(), state);
+            assert_eq!(
+                configured.check_buy(
+                    &values,
+                    &assignments(),
+                    &known_types(),
+                    &candidate("A", "1")
+                ),
+                PolicyBuyDecision::Pass
+            );
+            let findings = configured
+                .check_current(&values, &assignments(), &known_types())
+                .expect("현재 상태");
+            assert_eq!(
+                findings.contains(&PolicyViolation::ConcentrationWarning),
+                state == PolicyConcentration::Warning
+            );
+            assert_eq!(
+                findings.contains(&PolicyViolation::ConcentrationUnavailable),
+                state == PolicyConcentration::Unavailable
+            );
+        }
+        assert_eq!(policy().minimum_cash(), None);
+        assert_eq!(policy().unresolved_principles(), []);
+        let first = PolicyPrinciple::from_missing_contract(text("실행 계약 A 미정"));
+        let second = PolicyPrinciple::from_missing_contract(text("실행 계약 B 미정"));
+        let configured = policy()
+            .with_unresolved_principle(first.clone())
+            .with_unresolved_principle(second.clone());
+        assert_eq!(first.description().as_str(), "실행 계약 A 미정");
+        assert_eq!(configured.unresolved_principles(), &[first, second]);
+        assert_eq!(
+            configured.check_buy(
+                &values,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "1")
+            ),
+            PolicyBuyDecision::Block(PolicyViolation::UnresolvedPrinciples)
+        );
+        assert_eq!(
+            configured.check_current(&values, &assignments(), &known_types()),
+            Err(PolicyViolation::UnresolvedPrinciples)
+        );
+    }
+    #[test]
+    fn minimum_cash_pass_reduce_block_and_current_boundary() {
+        let minimum = crate::ProfileWeight::parse(&NumericInput::try_new("0.8").expect("입력"))
+            .expect("비중");
+        let configured = policy().with_minimum_cash(minimum);
+        assert_eq!(configured.minimum_cash(), Some(minimum));
+        let values = valuation(
+            vec![holding("A", Some("10")), holding("B", Some("5"))],
+            "85",
+        );
+        assert_eq!(
+            configured.check_buy(
+                &values,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "5")
+            ),
+            PolicyBuyDecision::Pass
+        );
+        assert_eq!(
+            configured.check_buy(
+                &values,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "6")
+            ),
+            PolicyBuyDecision::Reduce(super::PolicyBuyLimit(money("5")))
+        );
+        assert!(
+            !configured
+                .check_current(&values, &assignments(), &known_types())
+                .expect("현재")
+                .contains(&PolicyViolation::MinimumCash)
+        );
+        for cash in ["80", "79"] {
+            let boundary = valuation(
+                vec![
+                    holding("A", Some("10")),
+                    holding("B", Some(if cash == "80" { "10" } else { "11" })),
+                ],
+                cash,
+            );
+            assert_eq!(
+                configured.check_buy(
+                    &boundary,
+                    &assignments(),
+                    &known_types(),
+                    &candidate("NEW", "1")
+                ),
+                PolicyBuyDecision::Block(PolicyViolation::MinimumCash)
+            );
+            assert_eq!(
+                configured
+                    .check_current(&boundary, &assignments(), &known_types())
+                    .expect("현재")
+                    .contains(&PolicyViolation::MinimumCash),
+                cash == "79"
+            );
+        }
+        assert_eq!(Policy::check_sell(), crate::PolicySellDecision::Allowed);
+    }
+    #[test]
+    fn reported_total_mismatch_cannot_supply_an_order_budget() {
+        let clean = valuation(vec![holding("A", Some("10"))], "90");
+        assert_eq!(
+            policy().check_buy(
+                &clean,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "200")
+            ),
+            PolicyBuyDecision::Reduce(super::PolicyBuyLimit(money("10")))
+        );
+        let amounts = crate::CurrencyAmounts::new(money("910"), None).expect("요약");
+        let reported = Portfolio::new(
+            vec![holding("A", Some("10"))],
+            BuyingPower::new(money("90"), time()),
+            BuyingPower::new(Money::new(money("0").amount(), Currency::Usd), time()),
+        )
+        .expect("포트폴리오")
+        .with_reported(crate::ReportedPortfolio::new(
+            amounts,
+            amounts,
+            amounts,
+            time(),
+        ))
+        .evaluate(None);
+        assert_eq!(
+            policy().check_buy(
+                &reported,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "200")
+            ),
+            PolicyBuyDecision::Block(PolicyViolation::Allocation(
+                crate::AllocationError::TotalMismatch
+            ))
+        );
+        assert_eq!(
+            policy().check_current(&reported, &assignments(), &known_types()),
+            Err(PolicyViolation::Allocation(
+                crate::AllocationError::TotalMismatch
+            ))
+        );
+    }
+    #[test]
+    fn facts_cannot_be_overridden_by_candidate_fields_and_unknown_types_block() {
+        let values = valuation(vec![holding("B", Some("1"))], "99");
+        let configured = Policy::new(
+            InvestorProfile::default().with_exclusions(
+                Exclusions::try_new(vec![SectorId::try_new("Energy").expect("섹터")], vec![])
+                    .expect("제외"),
+            ),
+        );
+        let item = candidate("B", "1");
+        assert_eq!(
+            item.instrument(),
+            &AllocationInstrument::new(&instrument("B"))
+        );
+        assert_eq!(item.requested_krw(), money("1"));
+        assert_eq!(
+            configured.check_buy(&values, &mixed_mapping(), &known_types(), &item),
+            PolicyBuyDecision::Block(PolicyViolation::ExcludedSector(
+                SectorId::try_new("Energy").expect("섹터")
+            ))
+        );
+        assert_eq!(
+            policy().check_buy(
+                &values,
+                &mixed_mapping(),
+                &PolicySecurityFacts::default(),
+                &item
+            ),
+            PolicyBuyDecision::Block(PolicyViolation::UnknownSecurityType)
+        );
+        assert_eq!(
+            policy().check_current(&values, &mixed_mapping(), &PolicySecurityFacts::default()),
+            Err(PolicyViolation::UnknownSecurityType)
+        );
+        for cost in [
+            money("0"),
+            money("-1"),
+            Money::new(money("1").amount(), Currency::Usd),
+        ] {
+            assert_eq!(
+                PolicyCandidate::new(&instrument("A"), cost),
+                Err(PolicyViolation::InvalidCandidate)
+            );
+        }
+        assert_eq!(policy().profile(), &InvestorProfile::default());
+        let limit = super::PolicyBuyLimit(money("12345.6789"));
+        assert_eq!(format!("{limit:?}"), "PolicyBuyLimit([비공개])");
+        assert_eq!(
+            format!("{:?}", PolicyBuyDecision::Reduce(limit)),
+            "Reduce(PolicyBuyLimit([비공개]))"
+        );
+        assert_eq!(
+            limit.compare_krw_cost(money("-1")),
+            PolicyCostFit::InvalidCost
+        );
+        assert_eq!(
+            limit.compare_krw_cost(Money::new(money("1").amount(), Currency::Usd)),
+            PolicyCostFit::InvalidCost
+        );
+    }
+    #[test]
+    fn generated_simultaneous_missing_axes_never_pass() {
+        TestRunner::new(Config::with_cases(4096))
+            .run(&(1_u32..10000, 1_u8..16), |(amount, missing)| {
+                let values = valuation(
+                    vec![holding(
+                        "A",
+                        if missing & 1 == 1 { None } else { Some("1") },
+                    )],
+                    &if missing & 2 == 2 {
+                        format!("-{amount}")
+                    } else {
+                        amount.to_string()
+                    },
+                );
+                let mapping = if missing & 4 == 4 {
+                    SectorAssignments::default()
+                } else {
+                    assignments()
+                };
+                let facts = if missing & 8 == 8 {
+                    PolicySecurityFacts::default()
+                } else {
+                    known_types()
+                };
+                assert_block(&policy().check_buy(&values, &mapping, &facts, &candidate("A", "1")));
+                Ok(())
+            })
+            .expect("4096회 복합 누락");
+    }
+    fn fractional_fx_portfolio() -> (
+        PortfolioValuation,
+        ResolvedOrderInstrument,
+        SectorAssignments,
+        PolicySecurityFacts,
+    ) {
+        let item = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("AUS").expect("심볼"),
+            Market::Us,
+        )
+        .expect("종목");
+        let usd = |value| {
+            Money::parse(&NumericInput::try_new(value).expect("입력"), Currency::Usd).expect("달러")
+        };
+        let report = ReportedHolding::new(
+            usd("0.125"),
+            usd("0"),
+            Ratio::parse(&NumericInput::try_new("0").expect("입력")).expect("비율"),
+        )
+        .expect("평가");
+        let row = Holding::new(
+            item.clone(),
+            Quantity::parse(&NumericInput::try_new("1").expect("입력")).expect("수량"),
+            AcquisitionPrice::try_new(usd("0")).expect("원가"),
+            HoldingObservation::new(None, Some(report), time()),
+        )
+        .expect("보유");
+        let end = Timestamp::from_parts(
+            UnixSeconds::new(1060),
+            Nanosecond::new(0),
+            OffsetSeconds::new(0),
+        )
+        .expect("끝");
+        let rate = crate::FxRate::parse(
+            &NumericInput::try_new("1375.25").expect("입력"),
+            crate::FxPair::UsdKrw,
+            crate::FxRateKind::Mid,
+            crate::TimeInterval::try_new(time(), end).expect("구간"),
+            crate::FxSource::TossOpenApi,
+        )
+        .expect("환율");
+        let values = Portfolio::new(
+            vec![row],
+            BuyingPower::new(money("807.465"), time()),
+            BuyingPower::new(usd("0.015"), time()),
+        )
+        .expect("포트폴리오")
+        .evaluate(Some(rate));
+        let mapping = SectorAssignments::try_new(vec![SectorAssignment::new(
+            &item,
+            InstrumentClassification::Sector(sector()),
+        )])
+        .expect("분류");
+        let facts = PolicySecurityFacts::from_master_lookup_results(
+            std::iter::once((
+                AllocationInstrument::new(&item),
+                ExcludedSecurityType::ForeignStock,
+            ))
+            .collect(),
+        );
+        (values, item, mapping, facts)
+    }
+    #[test]
+    fn fractional_dollars_and_fx_are_not_floored_into_more_headroom() {
+        let (values, item, mapping, facts) = fractional_fx_portfolio();
+        let candidate = PolicyCandidate::new(&item, money("28.5")).expect("후보");
+        let limit = super::PolicyBuyLimit(money("28.09375"));
+        assert_eq!(
+            policy().check_buy(&values, &mapping, &facts, &candidate),
+            PolicyBuyDecision::Reduce(limit)
+        );
+        assert_eq!(
+            limit.compare_krw_cost(money("28.09375")),
+            PolicyCostFit::WithinLimit
+        );
+        assert_eq!(
+            limit.compare_krw_cost(money("28.09375000000000000000000001")),
+            PolicyCostFit::AboveLimit
+        );
+        let minimum = crate::ProfileWeight::parse(&NumericInput::try_new("0.82").expect("입력"))
+            .expect("비중");
+        assert_eq!(
+            policy()
+                .with_minimum_cash(minimum)
+                .check_buy(&values, &mapping, &facts, &candidate),
+            PolicyBuyDecision::Reduce(super::PolicyBuyLimit(money("8.09375")))
+        );
+    }
+    #[test]
+    fn cash_floor_matches_independent_integer_room() {
+        TestRunner::new(Config::with_cases(4096))
+            .run(
+                &(0_u32..20, 0_u32..20, 1_u32..101),
+                |(first, second, minimum)| {
+                    let cash = 100_u32
+                        .checked_sub(first)
+                        .and_then(|value| value.checked_sub(second))
+                        .expect("현금");
+                    let values = valuation(
+                        vec![
+                            holding("A", Some(&first.to_string())),
+                            holding("B", Some(&second.to_string())),
+                        ],
+                        &cash.to_string(),
+                    );
+                    let floor = crate::ProfileWeight::parse_percent(
+                        &NumericInput::try_new(&minimum.to_string()).expect("입력"),
+                    )
+                    .expect("현금 최소");
+                    let actual = policy().with_minimum_cash(floor).check_buy(
+                        &values,
+                        &assignments(),
+                        &known_types(),
+                        &candidate("A", "100"),
+                    );
+                    if minimum >= cash {
+                        assert_eq!(
+                            actual,
+                            PolicyBuyDecision::Block(PolicyViolation::MinimumCash)
+                        );
+                    } else {
+                        let remaining = cash
+                            .checked_sub(minimum)
+                            .expect("현금 여유")
+                            .min(20_u32.checked_sub(first).expect("종목"))
+                            .min(
+                                40_u32
+                                    .checked_sub(first)
+                                    .and_then(|value| value.checked_sub(second))
+                                    .expect("섹터"),
+                            );
+                        assert_eq!(
+                            actual,
+                            PolicyBuyDecision::Reduce(super::PolicyBuyLimit(money(
+                                &remaining.to_string()
+                            )))
+                        );
+                    }
+                    Ok(())
+                },
+            )
+            .expect("현금 하한 독립 기준");
+    }
+    #[test]
+    fn current_exclusions_and_cash_arithmetic_errors_remain_explicit() {
+        let values = valuation(vec![holding("A", Some("10"))], "90");
+        for exclusions in [
+            Exclusions::try_new(vec![sector()], vec![]).expect("제외"),
+            Exclusions::try_new(vec![], vec![ExcludedSecurityType::Stock]).expect("제외"),
+        ] {
+            let configured = Policy::new(InvestorProfile::default().with_exclusions(exclusions));
+            assert_ne!(
+                configured
+                    .check_current(&values, &assignments(), &known_types())
+                    .expect("현재"),
+                vec![PolicyViolation::InstrumentWarning(
+                    AllocationInstrument::new(&instrument("A"))
+                )]
+            );
+        }
+        let minimum = crate::ProfileWeight::parse(&NumericInput::try_new("0.1").expect("입력"))
+            .expect("비중");
+        let tiny = valuation(
+            vec![holding("A", Some("0"))],
+            "0.0000000000000000000000000005",
+        );
+        let error = PolicyViolation::Arithmetic(crate::MoneyError::PrecisionLoss);
+        assert_eq!(
+            policy().with_minimum_cash(minimum).check_buy(
+                &tiny,
+                &assignments(),
+                &known_types(),
+                &candidate("A", "1")
+            ),
+            PolicyBuyDecision::Block(error.clone())
+        );
+        assert_eq!(
+            policy().with_minimum_cash(minimum).check_current(
+                &tiny,
+                &assignments(),
+                &known_types()
+            ),
+            Err(error.clone())
+        );
+        assert_eq!(
+            super::current_cash_finding(money("100"), Err(error.clone()), minimum),
+            Err(error.clone())
+        );
+        assert_eq!(
+            super::limit_from_values(
+                money("100"),
+                Err(error.clone()),
+                InvestorProfile::default().weight_caps(),
+                &AllocationInstrument::new(&instrument("A")),
+                &AllocationSector::Classified(sector())
+            ),
+            Err(error)
         );
     }
 }
