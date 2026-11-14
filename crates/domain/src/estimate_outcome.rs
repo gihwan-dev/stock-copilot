@@ -687,6 +687,10 @@ fn candle_resolution(candle: &Candle, boundaries: &OutcomeBoundaries) -> Option<
     }
 }
 
+pub(crate) fn scorecard_outcome_horizon(value: &EstimateOutcome) -> Option<Horizon> {
+    value.evidence().map(|evidence| evidence.horizon)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::candle::tests::{at, price, series};

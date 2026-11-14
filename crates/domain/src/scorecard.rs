@@ -1,23 +1,35 @@
 use crate::scorecard_arithmetic::{brier, reliability};
+use crate::scorecard_deferred::{
+    ScorecardDeferredBin, ScorecardDeferredBrier, defer_bin, defer_brier,
+};
+use crate::scorecard_input::{ScorecardCounts, ScorecardPromptId};
 use crate::{
     Calibration, CalibrationBin, CalibrationCount, CalibrationKey, CalibrationModel,
-    CalibrationReadiness, ModelIdentityPart,
+    CalibrationReadiness,
 };
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScorecardError {
     Calculation,
+    EmptyInput,
+    TooManyObservations,
+    InvalidPromptId,
+    MismatchedCombination,
+    ConflictingObservation,
+    FutureOutcome,
+    MissingFact,
+    InvalidCalibration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScorecardTrial {
+pub(crate) struct ScorecardTrial {
     model: CalibrationModel,
-    prompt: ModelIdentityPart,
+    prompt: ScorecardPromptId,
 }
 impl ScorecardTrial {
     #[must_use]
-    pub const fn new(model: CalibrationModel, prompt: ModelIdentityPart) -> Self {
+    pub(crate) const fn new(model: CalibrationModel, prompt: ScorecardPromptId) -> Self {
         Self { model, prompt }
     }
 }
@@ -30,10 +42,13 @@ impl ScorecardComparisonCount {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScorecardComparisons(ScorecardComparisonCount);
+pub(crate) struct ScorecardComparisons(ScorecardComparisonCount);
 impl ScorecardComparisons {
+    pub(crate) const fn count(&self) -> &ScorecardComparisonCount {
+        &self.0
+    }
     #[must_use]
-    pub fn from_trials(trials: &[ScorecardTrial]) -> Self {
+    pub(crate) fn from_trials(trials: &[ScorecardTrial]) -> Self {
         let unique: std::collections::BTreeSet<_> = trials
             .iter()
             .map(|trial| {
@@ -74,21 +89,38 @@ struct Metadata {
     key: CalibrationKey,
     count: CalibrationCount,
     comparisons: ScorecardComparisonCount,
+    counts: ScorecardCounts,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScorecardPending(Metadata);
+pub struct ScorecardPending {
+    metadata: Metadata,
+    brier: ScorecardDeferredBrier,
+    points: Vec<ScorecardDeferredBin>,
+}
 impl ScorecardPending {
     #[must_use]
+    pub const fn counts(&self) -> &ScorecardCounts {
+        &self.metadata.counts
+    }
+    #[must_use]
+    pub const fn brier(&self) -> &ScorecardDeferredBrier {
+        &self.brier
+    }
+    #[must_use]
+    pub fn reliability(&self) -> &[ScorecardDeferredBin] {
+        &self.points
+    }
+    #[must_use]
     pub const fn key(&self) -> &CalibrationKey {
-        &self.0.key
+        &self.metadata.key
     }
     #[must_use]
     pub const fn judgment_count(&self) -> &CalibrationCount {
-        &self.0.count
+        &self.metadata.count
     }
     #[must_use]
     pub const fn comparison_count(&self) -> &ScorecardComparisonCount {
-        &self.0.comparisons
+        &self.metadata.comparisons
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +130,10 @@ pub struct ScorecardMetrics {
     reliability: Vec<ScorecardBin>,
 }
 impl ScorecardMetrics {
+    #[must_use]
+    pub const fn counts(&self) -> &ScorecardCounts {
+        &self.metadata.counts
+    }
     #[must_use]
     pub const fn key(&self) -> &CalibrationKey {
         &self.metadata.key
@@ -163,25 +199,67 @@ impl ScorecardPoint {
     }
 }
 impl Scorecard {
-    pub fn calculate(
-        calibration: &Calibration,
-        comparisons: &ScorecardComparisons,
-    ) -> Result<Self, ScorecardError> {
-        let key = crate::calibration::scorecard_calibration_key(calibration);
-        let table = calibration.for_combination(key);
-        let metadata = Metadata {
-            key: key.clone(),
-            count: table.judgment_count(),
-            comparisons: comparisons.0.clone(),
-        };
-        match table.readiness() {
-            CalibrationReadiness::Conservative => Ok(Self::Pending(ScorecardPending(metadata))),
-            CalibrationReadiness::MinimumReached => {
-                assemble(metadata, brier(&table), reliability(&table))
-            }
+    #[must_use]
+    pub fn key(&self) -> &CalibrationKey {
+        match self {
+            Self::Pending(value) => value.key(),
+            Self::Ready(value) => value.key(),
+        }
+    }
+    #[must_use]
+    pub fn counts(&self) -> &ScorecardCounts {
+        match self {
+            Self::Pending(value) => value.counts(),
+            Self::Ready(value) => value.counts(),
+        }
+    }
+    #[must_use]
+    pub fn comparison_count(&self) -> &ScorecardComparisonCount {
+        match self {
+            Self::Pending(value) => value.comparison_count(),
+            Self::Ready(value) => value.comparison_count(),
         }
     }
 }
+pub(crate) fn scorecard_calculate(
+    calibration: &Calibration,
+    comparisons: &ScorecardComparisons,
+    counts: Result<ScorecardCounts, ScorecardError>,
+) -> Result<Scorecard, ScorecardError> {
+    let key = crate::calibration::scorecard_calibration_key(calibration);
+    let table = calibration.for_combination(key);
+    let metadata = Metadata {
+        key: key.clone(),
+        count: table.judgment_count(),
+        comparisons: comparisons.0.clone(),
+        counts: counts?,
+    };
+    match table.readiness() {
+        CalibrationReadiness::Conservative => {
+            let score = if table.judgment_count().as_usize() == 0 {
+                Ok(None)
+            } else {
+                brier(&table).map(Some)
+            };
+            assemble_pending(metadata, score, reliability(&table))
+        }
+        CalibrationReadiness::MinimumReached => {
+            assemble(metadata, brier(&table), reliability(&table))
+        }
+    }
+}
+fn assemble_pending(
+    metadata: Metadata,
+    score: Result<Option<ScorecardDisplay>, ScorecardError>,
+    points: Result<Vec<ScorecardBin>, ScorecardError>,
+) -> Result<Scorecard, ScorecardError> {
+    Ok(Scorecard::Pending(ScorecardPending {
+        metadata,
+        brier: defer_brier(score?),
+        points: points?.into_iter().map(defer_bin).collect(),
+    }))
+}
+
 fn assemble(
     metadata: Metadata,
     score: Result<ScorecardDisplay, ScorecardError>,
@@ -196,12 +274,13 @@ fn assemble(
 
 #[cfg(test)]
 mod tests {
+    use super::{ScorecardComparisons, ScorecardTrial};
     use crate::{
         AiProbability, AiProbabilityInput, Calibration, CalibrationBin, CalibrationEstimate,
         CalibrationEstimateId, CalibrationFact, CalibrationKey, CalibrationModel,
         CalibrationOutcome, Horizon, HorizonSelection, InstrumentId, ModelIdentityPart, Nanosecond,
-        OffsetSeconds, Scorecard, ScorecardBin, ScorecardComparisons, ScorecardMetrics,
-        ScorecardTrial, TimeInterval, Timestamp, UnixSeconds,
+        OffsetSeconds, Scorecard, ScorecardBin, ScorecardMetrics, TimeInterval, Timestamp,
+        UnixSeconds,
     };
     use proptest::test_runner::{Config, TestRunner};
 
@@ -238,13 +317,35 @@ mod tests {
             outcome,
         )
     }
+    fn calculate_table(
+        calibration: &Calibration,
+        comparisons: &ScorecardComparisons,
+    ) -> Result<Scorecard, super::ScorecardError> {
+        let table =
+            calibration.for_combination(crate::calibration::scorecard_calibration_key(calibration));
+        super::scorecard_calculate(
+            calibration,
+            comparisons,
+            Ok(crate::scorecard_input::tests::counts_from_table(&table)),
+        )
+    }
     fn calculate(rows: &[CalibrationFact]) -> Scorecard {
         let calibration =
             Calibration::try_new(key("v1", HorizonSelection::FewDays), rows).expect("적중표");
-        Scorecard::calculate(&calibration, &ScorecardComparisons::from_trials(&[])).expect("성적표")
+        calculate_table(&calibration, &ScorecardComparisons::from_trials(&[])).expect("성적표")
     }
     #[test]
-    fn pending_exposes_no_metric_and_assembly_propagates_errors() {
+    fn pending_and_ready_assembly_propagate_errors() {
+        let calibration =
+            Calibration::try_new(key("v1", HorizonSelection::FewDays), &[]).expect("표");
+        assert_eq!(
+            super::scorecard_calculate(
+                &calibration,
+                &ScorecardComparisons::from_trials(&[]),
+                Err(super::ScorecardError::Calculation)
+            ),
+            Err(super::ScorecardError::Calculation)
+        );
         let pending = calculate(&[]);
         assert!(ready(&pending).is_none());
         let metadata = super::Metadata {
@@ -254,7 +355,28 @@ mod tests {
                 .for_combination(&key("v1", HorizonSelection::FewDays))
                 .judgment_count(),
             comparisons: super::ScorecardComparisonCount(0),
+            counts: crate::scorecard_input::tests::counts_from_table(
+                &Calibration::try_new(key("v1", HorizonSelection::FewDays), &[])
+                    .expect("표")
+                    .for_combination(&key("v1", HorizonSelection::FewDays)),
+            ),
         };
+        assert_eq!(
+            super::assemble_pending(
+                metadata.clone(),
+                Err(super::ScorecardError::Calculation),
+                Ok(Vec::new())
+            ),
+            Err(super::ScorecardError::Calculation)
+        );
+        assert_eq!(
+            super::assemble_pending(
+                metadata.clone(),
+                Ok(None),
+                Err(super::ScorecardError::Calculation)
+            ),
+            Err(super::ScorecardError::Calculation)
+        );
         assert_eq!(
             super::assemble(
                 metadata.clone(),
@@ -389,7 +511,7 @@ mod tests {
         let trial = |version, prompt| {
             ScorecardTrial::new(
                 key(version, HorizonSelection::FewDays).model().clone(),
-                ModelIdentityPart::try_new(prompt).expect("프롬프트 해시"),
+                crate::ScorecardPromptId::try_new(prompt).expect("프롬프트 해시"),
             )
         };
         let trials = [
@@ -401,7 +523,7 @@ mod tests {
         let comparisons = ScorecardComparisons::from_trials(&trials);
         let calibration =
             Calibration::try_new(key("v1", HorizonSelection::FewDays), &[]).expect("빈 표");
-        let result = Scorecard::calculate(&calibration, &comparisons).expect("성적표");
+        let result = calculate_table(&calibration, &comparisons).expect("성적표");
         assert!(ready(&result).is_none());
         assert_eq!(comparison_count(&result).as_usize(), 3);
     }
@@ -484,6 +606,53 @@ mod tests {
             .expect("판정 경계와 허용 예측 끝점");
     }
 
+    #[test]
+    fn pending_numbers_require_judgment_pending_branch_for_29_and_empty() {
+        let rows: Vec<_> = (0..29)
+            .map(|index| row(index, 60, CalibrationOutcome::Hit))
+            .collect();
+        let complete: Vec<_> = (0..30)
+            .map(|index| row(index, 60, CalibrationOutcome::Hit))
+            .collect();
+        assert!(deferred(&calculate(&complete)).is_none());
+        for (result, expected) in [(calculate(&[]), None), (calculate(&rows), Some("0.1600"))] {
+            let pending = deferred(&result).expect("보류");
+            let actual = match pending.brier() {
+                crate::ScorecardDeferredBrier::NoData => None,
+                crate::ScorecardDeferredBrier::JudgmentPending(value) => {
+                    assert_eq!(format!("{value:?}"), "ScorecardDeferredDisplay");
+                    Some(value.as_str())
+                }
+            };
+            assert_eq!(actual, expected);
+            check_deferred_bins(pending.reliability(), expected);
+        }
+    }
+    fn deferred(result: &Scorecard) -> Option<&crate::ScorecardPending> {
+        match result {
+            Scorecard::Pending(value) => Some(value),
+            Scorecard::Ready(_) => None,
+        }
+    }
+    fn check_deferred_bins(bins: &[crate::ScorecardDeferredBin], expected: Option<&str>) {
+        for bin in bins {
+            match bin {
+                crate::ScorecardDeferredBin::NoData(kind) => {
+                    assert!(expected.is_none() || *kind != CalibrationBin::From60To70);
+                }
+                crate::ScorecardDeferredBin::Observed(point) => {
+                    assert_eq!(point.bin(), CalibrationBin::From60To70);
+                    let crate::ScorecardDeferredCount::JudgmentPending(count) = point.count();
+                    assert_eq!(count.as_usize(), 29);
+                    let crate::ScorecardDeferredNumber::JudgmentPending(mean) =
+                        point.mean_prediction();
+                    assert_eq!(mean.as_str(), "0.6000");
+                    let crate::ScorecardDeferredNumber::JudgmentPending(hit) = point.hit_rate();
+                    assert_eq!(hit.as_str(), "1.0000");
+                }
+            }
+        }
+    }
     fn comparison_count(result: &Scorecard) -> &crate::ScorecardComparisonCount {
         match result {
             Scorecard::Pending(value) => value.comparison_count(),

@@ -5,49 +5,97 @@ use crate::{CalibrationBin, CalibrationOutcome, CalibrationTable, RatioQuotient}
 #[derive(Clone, Copy)]
 struct Integer(u128);
 
+impl Integer {
+    fn add(self, other: Self) -> Result<Self, ScorecardError> {
+        self.0
+            .checked_add(other.0)
+            .map(Self)
+            .ok_or(ScorecardError::Calculation)
+    }
+    fn sub(self, other: Self) -> Result<Self, ScorecardError> {
+        self.0
+            .checked_sub(other.0)
+            .map(Self)
+            .ok_or(ScorecardError::Calculation)
+    }
+    fn mul(self, other: Self) -> Result<Self, ScorecardError> {
+        self.0
+            .checked_mul(other.0)
+            .map(Self)
+            .ok_or(ScorecardError::Calculation)
+    }
+    fn div(self, other: Self) -> Result<Self, ScorecardError> {
+        self.0
+            .checked_div(other.0)
+            .map(Self)
+            .ok_or(ScorecardError::Calculation)
+    }
+}
 fn display(numerator: Integer, denominator: Integer) -> Result<ScorecardDisplay, ScorecardError> {
-    let scaled = numerator.0.wrapping_mul(10_000);
+    let scaled = numerator.mul(Integer(10_000))?;
     let rounded = scaled
-        .wrapping_add(denominator.0.wrapping_div(2))
-        .checked_div(denominator.0)
-        .ok_or(ScorecardError::Calculation)?;
+        .add(Integer(denominator.0.wrapping_div(2)))?
+        .div(denominator)?;
     Ok(ScorecardDisplay::new(format!(
         "{}.{:04}",
-        rounded.wrapping_div(10_000),
-        rounded.wrapping_rem(10_000)
+        rounded.0.wrapping_div(10_000),
+        rounded.0.wrapping_rem(10_000)
     )))
 }
 fn percent(fact: &crate::CalibrationFact) -> Integer {
     Integer(
-        fact.estimate()
-            .predicted_probability()
-            .into_probability()
-            .as_decimal()
-            .mantissa()
-            .unsigned_abs(),
+        crate::probability::scorecard_ai_percent(fact.estimate().predicted_probability()).as_u128(),
     )
 }
-fn squared_error(predicted: Integer, outcome: CalibrationOutcome) -> Integer {
+fn squared_error(
+    predicted: Integer,
+    outcome: CalibrationOutcome,
+) -> Result<Integer, ScorecardError> {
     let error = match outcome {
-        CalibrationOutcome::Hit => 100_u128.wrapping_sub(predicted.0),
-        CalibrationOutcome::Miss => predicted.0,
+        CalibrationOutcome::Hit => Integer(100).sub(predicted)?,
+        CalibrationOutcome::Miss => predicted,
     };
-    Integer(error.wrapping_mul(error))
+    error.mul(error)
 }
 pub(crate) fn brier(table: &CalibrationTable) -> Result<ScorecardDisplay, ScorecardError> {
-    let sum = table.selected_facts().iter().fold(0_u128, |total, fact| {
-        let predicted = percent(fact).0;
-        total.wrapping_add(squared_error(Integer(predicted), fact.outcome()).0)
-    });
-    display(
-        Integer(sum),
+    let terms = table
+        .selected_facts()
+        .iter()
+        .map(|fact| squared_error(percent(fact), fact.outcome()))
+        .collect();
+    brier_result(
+        terms,
         Integer(
             rust_decimal::Decimal::from(table.judgment_count().as_usize())
                 .mantissa()
-                .unsigned_abs()
-                .wrapping_mul(10_000),
+                .unsigned_abs(),
         ),
     )
+}
+fn brier_result(
+    terms: Result<Vec<Integer>, ScorecardError>,
+    count: Integer,
+) -> Result<ScorecardDisplay, ScorecardError> {
+    let sum = terms?.into_iter().try_fold(Integer(0), Integer::add)?;
+    let denominator = count.mul(Integer(10_000))?;
+    display(sum, denominator)
+}
+fn mean_result(
+    terms: Result<Vec<Integer>, ScorecardError>,
+    count: Integer,
+) -> Result<ScorecardDisplay, ScorecardError> {
+    let sum = terms?.into_iter().try_fold(Integer(0), Integer::add)?;
+    let denominator = count.mul(Integer(100))?;
+    display(sum, denominator)
+}
+#[derive(Clone, Copy)]
+struct Scale(u32);
+fn ratio_parts(numerator: Integer, scale: Scale) -> Result<ScorecardDisplay, ScorecardError> {
+    let denominator = 10_u128
+        .checked_pow(scale.0)
+        .map(Integer)
+        .ok_or(ScorecardError::Calculation)?;
+    display(numerator, denominator)
 }
 pub(crate) fn reliability(table: &CalibrationTable) -> Result<Vec<ScorecardBin>, ScorecardError> {
     [
@@ -72,12 +120,12 @@ fn bin_result(
                 RatioQuotient::Exact(value) => value.as_decimal(),
                 RatioQuotient::Approximate(value) => value.as_decimal(),
             };
-            let hits = display(
+            let hits = ratio_parts(
                 Integer(value.mantissa().unsigned_abs()),
-                Integer(10_u128.wrapping_pow(value.scale())),
+                Scale(value.scale()),
             );
             let count = table.bin(bin).judgment_count().clone();
-            let sum = table
+            let terms = table
                 .selected_facts()
                 .iter()
                 .filter(|fact| {
@@ -85,14 +133,14 @@ fn bin_result(
                         fact.estimate().predicted_probability().into_probability(),
                     ) == bin
                 })
-                .fold(0_u128, |total, fact| total.wrapping_add(percent(fact).0));
-            let mean = display(
-                Integer(sum),
+                .map(|fact| Ok(percent(fact)))
+                .collect();
+            let mean = mean_result(
+                terms,
                 Integer(
                     rust_decimal::Decimal::from(count.as_usize())
                         .mantissa()
-                        .unsigned_abs()
-                        .wrapping_mul(100),
+                        .unsigned_abs(),
                 ),
             );
             observed_point(bin, count, mean, hits)
@@ -118,6 +166,41 @@ fn calculation_error(_error: crate::MoneyError) -> ScorecardError {
 mod tests {
     use super::{Integer, calculation_error, display, squared_error};
     use crate::{MoneyError, ScorecardError};
+    #[test]
+    fn checked_arithmetic_propagates_overflow_underflow_and_invalid_terms() {
+        assert_eq!(
+            squared_error(Integer(101), crate::CalibrationOutcome::Hit).map(|value| value.0),
+            Err(ScorecardError::Calculation)
+        );
+        assert_eq!(
+            squared_error(Integer(u128::MAX), crate::CalibrationOutcome::Miss).map(|value| value.0),
+            Err(ScorecardError::Calculation)
+        );
+        for numerator in [u128::MAX, u128::MAX.wrapping_div(10000)] {
+            assert_eq!(
+                display(Integer(numerator), Integer(u128::MAX)),
+                Err(ScorecardError::Calculation)
+            );
+        }
+        assert_eq!(
+            super::ratio_parts(Integer(1), super::Scale(39)),
+            Err(ScorecardError::Calculation)
+        );
+        for calculate in [super::brier_result, super::mean_result] {
+            assert_eq!(
+                calculate(Err(ScorecardError::Calculation), Integer(1)),
+                Err(ScorecardError::Calculation)
+            );
+            assert_eq!(
+                calculate(Ok(vec![Integer(u128::MAX), Integer(1)]), Integer(1)),
+                Err(ScorecardError::Calculation)
+            );
+            assert_eq!(
+                calculate(Ok(Vec::new()), Integer(u128::MAX)),
+                Err(ScorecardError::Calculation)
+            );
+        }
+    }
     #[test]
     fn bin_and_point_errors_never_emit_partial_metrics() {
         let key = crate::CalibrationKey::new(
@@ -173,9 +256,11 @@ mod tests {
                 let predicted = u128::from(binary).wrapping_mul(100);
                 let denominator = Integer(u128::from(count).wrapping_mul(10000));
                 let perfect = squared_error(Integer(predicted), outcome)
+                    .expect("제곱")
                     .0
                     .wrapping_mul(u128::from(count));
                 let opposite = squared_error(Integer(100_u128.wrapping_sub(predicted)), outcome)
+                    .expect("제곱")
                     .0
                     .wrapping_mul(u128::from(count));
                 assert_eq!(

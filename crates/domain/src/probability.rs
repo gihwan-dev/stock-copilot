@@ -61,6 +61,17 @@ impl AiProbability {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AiIntegerPercent(u128);
+impl AiIntegerPercent {
+    pub(crate) const fn as_u128(&self) -> u128 {
+        self.0
+    }
+}
+pub(crate) fn scorecard_ai_percent(value: AiProbability) -> AiIntegerPercent {
+    AiIntegerPercent(value.0.0.mantissa().unsigned_abs())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
