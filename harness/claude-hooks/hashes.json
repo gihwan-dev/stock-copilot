@@ -33,7 +33,7 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "a07d334d560a5415aecf3558a39ed8a05507484fd644e0b0f6de43aecf6a14ce",
   ".claude/hooks/subagent-start.mjs": "837a26d6ab79331429ca714ba9fa663bd4310e46aa5cfa5e8e6a85662a2a87f7",
-  ".codex/config.toml": "7f75f91e2990d98236470909f78af7cb7422b58e18c31edb36d8c0cb4c0b49ff",
+  ".codex/config.toml": "8e5b78ff6918082c617f910e2994395d4f0a2d42612e572c6724cb8c65a413cf",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "harness/agent-writable.txt": "de43dd0c1e2f361057ceb168224f088e2e0b4a169d18b77e35c5537db39caa48",
   "harness/claude-hooks/agent-rules.json": "083f56b11c43377855d5487e9c2deffd061cc9d02b95712fd92110bce083b7fe",
