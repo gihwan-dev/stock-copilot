@@ -3527,11 +3527,11 @@
     "src/shared/ds/text/library-props-gap.tsx": {
       "row": "원시 타입",
       "expect": "KNOWN_GAP",
-      "reports": ["ds/no-dom-values"]
+      "reports": ["ds/no-dom-values", "ds/public-props"]
     },
     "src/shared/ds/text/spread-allowed.tsx": {
       "row": "React",
-      "expect": ["ds/static-classes", "ds/no-dom-styling"]
+      "expect": ["ds/static-classes", "ds/no-dom-styling", "ds/public-props"]
     },
     "src/shared/ipc/bindings.ts": {
       "row": "원시 타입",

@@ -573,8 +573,8 @@ mod tests {
                         &format!("{symbol}-{week}"),
                         &symbol.to_string(),
                         (
-                            week.saturating_mul(7),
-                            week.saturating_mul(7).saturating_add(28),
+                            week.saturating_mul(604_800),
+                            week.saturating_mul(604_800).saturating_add(2_419_200),
                             0_i32,
                         ),
                         60,
@@ -719,8 +719,8 @@ mod tests {
                         &format!("{symbol}-{week}"),
                         &symbol.to_string(),
                         (
-                            week.saturating_mul(7),
-                            week.saturating_mul(7).saturating_add(28),
+                            week.saturating_mul(604_800),
+                            week.saturating_mul(604_800).saturating_add(2_419_200),
                             0_i32,
                         ),
                         60,
@@ -936,11 +936,16 @@ mod tests {
         TestRunner::new(Config::with_cases(4096))
             .run(&generated_rows(), |rows| {
                 let before = selected(&rows);
+                let latest = rows
+                    .iter()
+                    .map(|fact| *fact.estimate().estimated_at().utc_seconds().as_i64())
+                    .max()
+                    .map_or(0_i64, |seconds| seconds.saturating_add(1));
                 let mut extended = rows;
                 extended.push(row(
                     "later",
                     "0",
-                    (100, 110, 0_i32),
+                    (latest, latest.saturating_add(10), 0_i32),
                     37,
                     CalibrationOutcome::Miss,
                 ));
