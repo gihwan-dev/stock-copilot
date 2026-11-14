@@ -157,6 +157,24 @@ fn matches_known_market(market: &Market) -> crate::CheckResult {
     }
 }
 
+pub(crate) fn buy_quantity_fee(
+    fact: &CommissionRateFact,
+    market: &Market,
+    amount: Money,
+    now: crate::Timestamp,
+) -> Result<Money, TradeCostError> {
+    if &fact.market != market {
+        return Err(TradeCostError::MarketMismatch);
+    }
+    if fact.validity.covers(now, now) != crate::CheckResult::Passed {
+        return Err(TradeCostError::UnknownComponent);
+    }
+    amount
+        .checked_mul(&fact.rate.ratio())
+        .map(crate::trade_cost_arithmetic::ceil_fee)
+        .map_err(TradeCostError::Arithmetic)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

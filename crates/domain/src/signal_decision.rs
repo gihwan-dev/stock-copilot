@@ -16,6 +16,8 @@ pub enum SignalUnavailable {
     UnknownClassification,
     HoldingsQueryFailed,
     IncompleteHoldings,
+    CashObservationFailed(crate::CashObservationFailures),
+    NegativeCash(crate::Currency),
     Calendar,
     StaleHolding,
     SubmissionFromFuture,
@@ -320,9 +322,21 @@ fn policy_reason(violation: &PolicyViolation) -> NoSignalReason {
         PolicyViolation::CandidateSectorUnassigned | PolicyViolation::UnknownSecurityType => {
             NoSignalReason::Unavailable(SignalUnavailable::UnknownClassification)
         }
-        PolicyViolation::Allocation(_) => {
-            NoSignalReason::Unavailable(SignalUnavailable::IncompleteHoldings)
+        PolicyViolation::Allocation(crate::AllocationError::CashObservationFailed(failures)) => {
+            NoSignalReason::Unavailable(SignalUnavailable::CashObservationFailed(*failures))
         }
+        PolicyViolation::Allocation(crate::AllocationError::NegativeCash(currency)) => {
+            NoSignalReason::Unavailable(SignalUnavailable::NegativeCash(*currency))
+        }
+        PolicyViolation::Allocation(
+            crate::AllocationError::Incomplete
+            | crate::AllocationError::ZeroTotal
+            | crate::AllocationError::NegativeValue
+            | crate::AllocationError::TotalMismatch
+            | crate::AllocationError::MissingFx
+            | crate::AllocationError::Arithmetic(_)
+            | crate::AllocationError::Conversion(_),
+        ) => NoSignalReason::Unavailable(SignalUnavailable::IncompleteHoldings),
         PolicyViolation::InstrumentCap(_)
         | PolicyViolation::InstrumentWarning(_)
         | PolicyViolation::SectorCap(_)
@@ -1387,6 +1401,145 @@ mod tests {
         assert_eq!(
             decide_sources(mixed, ledger),
             SignalDecision::None(NoSignalReason::MissingSource)
+        );
+    }
+    fn cash_network_failure() -> crate::CashObservationFailure {
+        crate::CashObservationFailure::Unavailable {
+            cause: crate::CashUnavailableCause::Network,
+            retry: crate::CashRetryDelay::Known(
+                TimeSpan::try_new(SpanSeconds::new(7), Nanosecond::new(0)).expect("재시도"),
+            ),
+        }
+    }
+    #[test]
+    fn cash_failures_remain_distinct_through_allocation_policy_and_signal() {
+        let network = cash_network_failure();
+        let maintenance = crate::CashObservationFailure::Unavailable {
+            cause: crate::CashUnavailableCause::Maintenance,
+            retry: crate::CashRetryDelay::Unknown,
+        };
+        let fail = |currency, reason| crate::CashObservation::Failed {
+            currency,
+            reason,
+            observed_at: at(61),
+        };
+        let krw = crate::CashObservation::Observed(BuyingPower::new(money("100"), at(61)));
+        let usd = crate::CashObservation::Observed(BuyingPower::new(
+            Money::new(money("0").amount(), Currency::Usd),
+            at(61),
+        ));
+        let negative = crate::CashObservation::Observed(BuyingPower::new(
+            Money::new(money("-1").amount(), Currency::Usd),
+            at(61),
+        ));
+        let usd_error = crate::CashObservationFailures::Usd(maintenance);
+        let krw_error = crate::CashObservationFailures::Krw(network);
+        let both = crate::CashObservationFailures::Both {
+            krw: network,
+            usd: maintenance,
+        };
+        for (krw_cash, usd_cash, allocation_error, signal_error) in [
+            (
+                krw,
+                fail(Currency::Usd, maintenance),
+                crate::AllocationError::CashObservationFailed(usd_error),
+                SignalUnavailable::CashObservationFailed(usd_error),
+            ),
+            (
+                fail(Currency::Krw, network),
+                usd,
+                crate::AllocationError::CashObservationFailed(krw_error),
+                SignalUnavailable::CashObservationFailed(krw_error),
+            ),
+            (
+                fail(Currency::Krw, network),
+                fail(Currency::Usd, maintenance),
+                crate::AllocationError::CashObservationFailed(both),
+                SignalUnavailable::CashObservationFailed(both),
+            ),
+            (
+                krw,
+                negative,
+                crate::AllocationError::NegativeCash(Currency::Usd),
+                SignalUnavailable::NegativeCash(Currency::Usd),
+            ),
+        ] {
+            let value = crate::portfolio_from_cash_observations(
+                vec![holding(Market::Kr, "ABC", "1", at(61))],
+                krw_cash,
+                usd_cash,
+            )
+            .expect("포트")
+            .evaluate(None);
+            assert_cash_consumer_results(&value, allocation_error, signal_error);
+        }
+    }
+    fn assert_cash_consumer_results(
+        value: &PortfolioValuation,
+        allocation_error: crate::AllocationError,
+        signal_error: SignalUnavailable,
+    ) {
+        let mapping = assignments();
+        let types = facts();
+        let policy = policy(0);
+        let allocation = crate::Allocation::new(value, &mapping);
+        assert_eq!(allocation.assets().instruments(), &Err(allocation_error));
+        assert!(allocation.holdings().instruments().is_ok());
+        assert_eq!(
+            value.currency_total(Currency::Krw).completeness(),
+            crate::TotalCompleteness::Complete
+        );
+        assert_eq!(
+            value.assets().completeness(),
+            crate::TotalCompleteness::Incomplete
+        );
+        assert_eq!(
+            policy.check_current(value, &mapping, &types),
+            Err(crate::PolicyViolation::Allocation(allocation_error))
+        );
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let candidate =
+            crate::PolicyCandidate::new(estimate.task().reference().instrument(), money("1"))
+                .expect("후보");
+        assert_eq!(
+            policy.check_buy(value, &mapping, &types, &candidate),
+            crate::PolicyBuyDecision::Block(crate::PolicyViolation::Allocation(allocation_error))
+        );
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(value),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            SignalTiming::new(at(61), &calendar),
+        );
+        assert_eq!(
+            SignalDecision::assess(&estimate, &context),
+            SignalDecision::None(NoSignalReason::Unavailable(signal_error))
+        );
+    }
+    #[test]
+    fn negative_krw_does_not_hide_failed_usd_lookup() {
+        let reason = cash_network_failure();
+        let failures = crate::CashObservationFailures::Usd(reason);
+        let value = crate::portfolio_from_cash_observations(
+            vec![holding(Market::Kr, "ABC", "1", at(61))],
+            crate::CashObservation::Observed(BuyingPower::new(money("-1"), at(61))),
+            crate::CashObservation::Failed {
+                currency: Currency::Usd,
+                reason,
+                observed_at: at(61),
+            },
+        )
+        .expect("포트")
+        .evaluate(None);
+        assert_cash_consumer_results(
+            &value,
+            crate::AllocationError::CashObservationFailed(failures),
+            SignalUnavailable::CashObservationFailed(failures),
         );
     }
 }

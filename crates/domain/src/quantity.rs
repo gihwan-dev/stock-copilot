@@ -23,6 +23,10 @@ impl Quantity {
     }
 }
 
+pub(crate) fn maximum_buy_quantity() -> Quantity {
+    Quantity(Decimal::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{NumericError, NumericInput, Quantity};

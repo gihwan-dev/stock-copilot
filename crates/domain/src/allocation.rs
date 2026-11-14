@@ -44,6 +44,7 @@ pub enum AllocationError {
     ZeroTotal,
     NegativeValue,
     NegativeCash(Currency),
+    CashObservationFailed(crate::CashObservationFailures),
     TotalMismatch,
     MissingFx,
     Arithmetic(MoneyError),
@@ -338,6 +339,9 @@ fn asset_values(
     valuation: &PortfolioValuation,
     rates: &[FxRate],
 ) -> Result<AssetValues, AllocationError> {
+    if let Some(failures) = crate::cash_observation_failures(valuation) {
+        return Err(AllocationError::CashObservationFailed(failures));
+    }
     let mut cash = Vec::new();
     for currency in [Currency::Krw, Currency::Usd] {
         let value = valuation

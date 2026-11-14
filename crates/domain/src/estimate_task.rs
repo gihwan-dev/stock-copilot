@@ -37,6 +37,7 @@ pub struct EstimateTask {
     target: EstimateDistance,
     stop: EstimateDistance,
     base_probability: BaseProbability,
+    appetite: RiskAppetite,
 }
 impl EstimateTask {
     pub fn create(
@@ -95,6 +96,7 @@ impl EstimateTask {
             target,
             stop,
             base_probability,
+            appetite,
         })
     }
     #[must_use]
@@ -134,6 +136,10 @@ impl EstimateTask {
             horizon: self.horizon,
         }
     }
+}
+
+pub(crate) const fn buy_task_risk_appetite(task: &EstimateTask) -> RiskAppetite {
+    task.appetite
 }
 
 #[cfg(test)]

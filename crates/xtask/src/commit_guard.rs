@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::thread;
 
 use crate::git_base::{self, git, output};
 
@@ -90,7 +91,11 @@ fn staged(entry: &str) -> Option<Staged> {
     })
 }
 
-fn hashed(root: &Path, mut command: Command, input: &[u8]) -> Result<Vec<String>, String> {
+pub(crate) fn hashed(
+    root: &Path,
+    mut command: Command,
+    input: &[u8],
+) -> Result<Vec<String>, String> {
     let mut child = command
         .current_dir(root)
         .stdin(Stdio::piped())
@@ -98,19 +103,26 @@ fn hashed(root: &Path, mut command: Command, input: &[u8]) -> Result<Vec<String>
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("git hash-object: {error}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(input)
-            .map_err(|error| format!("git hash-object: {error}"))?;
-    }
-    let finished = child
-        .wait_with_output()
-        .map_err(|error| format!("git hash-object: {error}"))?;
+    let pipe = child.stdin.take();
+    let (written, waited) = thread::scope(|scope| {
+        let writer = scope.spawn(move || match pipe {
+            Some(mut stdin) => stdin.write_all(input),
+            None => Ok(()),
+        });
+        let waited = child.wait_with_output();
+        (writer.join(), waited)
+    });
+    let finished = waited.map_err(|error| format!("git hash-object: {error}"))?;
     if !finished.status.success() {
         return Err(format!(
             "git hash-object: {}",
             String::from_utf8_lossy(&finished.stderr).trim()
         ));
+    }
+    match written {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => return Err(format!("git hash-object: {error}")),
+        Err(_) => return Err(String::from("git hash-object: 입력 쓰기 스레드가 실패했다")),
     }
     Ok(String::from_utf8_lossy(&finished.stdout)
         .lines()

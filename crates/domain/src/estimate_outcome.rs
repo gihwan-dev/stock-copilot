@@ -246,8 +246,14 @@ fn schedule(
     task: &EstimateTask,
     calendars: &[MarketCalendar],
 ) -> Result<Schedule, OutcomeUnavailable> {
-    let start = task.reference().observed_at();
-    let mut rows = calendar_rows(task, calendars)?;
+    schedule_at(task, task.reference().observed_at(), calendars)
+}
+fn schedule_at(
+    task: &EstimateTask,
+    start: Timestamp,
+    calendars: &[MarketCalendar],
+) -> Result<Schedule, OutcomeUnavailable> {
+    let mut rows = calendar_rows_at(task, start, calendars)?;
     let (start_day, first) = rows
         .iter()
         .find_map(|row| {
@@ -447,11 +453,11 @@ fn evaluate(
     }
 }
 
-fn calendar_rows(
+fn calendar_rows_at(
     task: &EstimateTask,
+    start: Timestamp,
     calendars: &[MarketCalendar],
 ) -> Result<Vec<MarketSession>, OutcomeUnavailable> {
-    let start = task.reference().observed_at();
     let mut sorted = calendars.iter().collect::<Vec<_>>();
     sorted.sort_by_key(|calendar| calendar.today().date());
     sorted.dedup();
@@ -696,6 +702,14 @@ pub(crate) fn signal_task_interval(
     calendars: &[MarketCalendar],
 ) -> Result<TimeInterval, OutcomeUnavailable> {
     schedule(task, calendars).map(|value| value.interval)
+}
+
+pub(crate) fn buy_signal_interval_from(
+    task: &EstimateTask,
+    start: Timestamp,
+    calendars: &[MarketCalendar],
+) -> Result<TimeInterval, OutcomeUnavailable> {
+    schedule_at(task, start, calendars).map(|value| value.interval)
 }
 
 #[cfg(test)]
