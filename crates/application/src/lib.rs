@@ -1,36 +1,36 @@
+mod observations;
+mod port_error;
 use domain::{
-    AccountDisplayFact, AccountId, BuyingPower, CalendarDate, Candle, CandlePeriod,
-    CompleteTransactionResponse, Currency, FxPair, FxRate, FxRateKind, InstrumentId, Market,
-    MarketCalendar, OrderFxRates, Portfolio, PriceAdjustment, Quote, ResolvedOrderInstrument,
-    SettlementWindow, TimeInterval, Timestamp, TransactionFilter,
+    AccountId, BuyingPower, Candle, CandlePeriod, Currency, FxPair, FxRate, FxRateKind,
+    OrderFxRates, PriceAdjustment, ResolvedOrderInstrument, SettlementWindow, TimeInterval,
+    Timestamp, TransactionFilter,
+};
+pub use observations::{
+    AccountObservation, HoldingsObservation, IncompleteReason, IncompleteTransactions,
+    QuarantinedTransaction, QuoteObservation, TransactionRead,
+};
+pub use port_error::{
+    AccessDenial, HttpStatus, MissingData, PortError, PortErrorKind, ReadEndpoint,
+    RequestRejection, ResponseMismatch, RetryDelay, UnavailableCause,
 };
 use std::{collections::BTreeSet, future::Future};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PortError {
-    AccessDenied,
-    Unavailable,
-    InvalidResponse,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BrokerCapability {
-    KrLimit,
-    KrMarket,
-    UsLimit,
-    UsMarketBuy,
-    UsMarketSell,
-    UsMarketAmountBuy,
-    UsFractionalMarketSell,
     DailyCandles,
     MinuteCandles,
-    AdjustedCandles,
-    RawCandles,
+    AdjustedHistory,
+    RawHistory,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CapabilitySupport {
+    Supported,
+    Unsupported,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrokerCapabilities(BTreeSet<BrokerCapability>);
-
 impl BrokerCapabilities {
     #[must_use]
     pub const fn new(supported: BTreeSet<BrokerCapability>) -> Self {
@@ -38,34 +38,34 @@ impl BrokerCapabilities {
     }
 
     #[must_use]
-    pub const fn supported(&self) -> &BTreeSet<BrokerCapability> {
-        &self.0
+    pub fn support_for(&self, capability: BrokerCapability) -> CapabilitySupport {
+        if self.0.contains(&capability) {
+            CapabilitySupport::Supported
+        } else {
+            CapabilitySupport::Unsupported
+        }
     }
 }
 
 pub trait BrokerRead: Send + Sync {
-    fn accounts(&self) -> impl Future<Output = Result<Vec<AccountId>, PortError>> + Send;
-    fn account_display(
+    fn accounts(&self) -> impl Future<Output = Result<Vec<AccountObservation>, PortError>> + Send;
+    fn holdings(
         &self,
         account: &AccountId,
-    ) -> impl Future<Output = Result<AccountDisplayFact, PortError>> + Send;
-    fn portfolio(
-        &self,
-        account: &AccountId,
-    ) -> impl Future<Output = Result<Portfolio, PortError>> + Send;
+    ) -> impl Future<Output = Result<HoldingsObservation, PortError>> + Send;
     fn transactions(
         &self,
         account: &AccountId,
         window: SettlementWindow,
         filter: &TransactionFilter,
-    ) -> impl Future<Output = Result<CompleteTransactionResponse, PortError>> + Send;
-    fn quote(
+    ) -> impl Future<Output = Result<TransactionRead, PortError>> + Send;
+    fn quotes(
         &self,
-        instrument: &ResolvedOrderInstrument,
-    ) -> impl Future<Output = Result<Quote, PortError>> + Send;
+        instruments: &[ResolvedOrderInstrument],
+    ) -> impl Future<Output = Result<Vec<QuoteObservation>, PortError>> + Send;
     fn candles(
         &self,
-        instrument: (&ResolvedOrderInstrument, &InstrumentId),
+        instrument: &ResolvedOrderInstrument,
         window: TimeInterval,
         period: CandlePeriod,
         adjustment: PriceAdjustment,
@@ -78,11 +78,6 @@ pub trait BrokerRead: Send + Sync {
 }
 
 pub trait MarketInfo: Send + Sync {
-    fn calendar(
-        &self,
-        market: &Market,
-        date: CalendarDate,
-    ) -> impl Future<Output = Result<MarketCalendar, PortError>> + Send;
     fn fx_rate(
         &self,
         pair: FxPair,
