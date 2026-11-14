@@ -171,3 +171,11 @@ pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsE
 
 pub use exclusions::ExclusionDecision;
 pub use weight_caps::WeightCapChange;
+
+mod allocation;
+mod sector_assignment;
+pub use allocation::{
+    Allocation, AllocationBasis, AllocationCurrency, AllocationDisplay, AllocationEntry,
+    AllocationError, AllocationWeight, AllocationWeights,
+};
+pub use sector_assignment::{AllocationInstrument, AllocationSector, SectorAssignment};

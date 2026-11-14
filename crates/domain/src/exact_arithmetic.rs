@@ -352,6 +352,83 @@ pub(crate) fn compare_reported(computed: Amount, reported: Amount) -> crate::Com
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct AllocationUnits(u32);
+impl AllocationUnits {
+    pub(crate) const fn as_units(&self) -> u32 {
+        self.0
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AllocationRemainder(Magnitude);
+impl Ord for AllocationRemainder {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+impl PartialOrd for AllocationRemainder {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+pub(crate) fn allocation_parts(
+    value: Amount,
+    total: Amount,
+) -> (AllocationUnits, AllocationRemainder) {
+    let mut numerator = allocation_scaled(value, &AllocationUnits(10000));
+    let divisor = allocation_scaled(total, &AllocationUnits(1));
+    let mut lower = 0_u32;
+    let mut upper = 10001_u32;
+    while upper.saturating_sub(lower) > 1 {
+        let middle = lower.saturating_add(upper) >> 1_u32;
+        let candidate = allocation_multiple(divisor, &AllocationUnits(middle));
+        if candidate.cmp(&numerator).is_gt() {
+            upper = middle;
+        } else {
+            lower = middle;
+        }
+    }
+    let denominator = allocation_multiple(divisor, &AllocationUnits(lower));
+    let mut borrow = false;
+    for (left, right) in numerator.0.iter_mut().zip(denominator.0) {
+        let (difference, first) = left.0.overflowing_sub(right.0);
+        let (reduced, second) = difference.overflowing_sub(u32::from(borrow));
+        left.0 = reduced;
+        borrow = first || second;
+    }
+    let units = AllocationUnits(lower);
+    (units, AllocationRemainder(numerator))
+}
+
+fn allocation_scaled(value: Amount, units: &AllocationUnits) -> Magnitude {
+    let mut result = Magnitude::product(value, Amount::new(Decimal::from(units.0)));
+    for _place in value.as_decimal().scale()..28 {
+        let mut carry = Limb(0);
+        for digit in &mut result.0 {
+            let total = u64::from(digit.0)
+                .wrapping_mul(10)
+                .wrapping_add(u64::from(carry.0));
+            let (low, high) = split_word(Word(total));
+            *digit = low;
+            carry = high;
+        }
+    }
+    result
+}
+
+fn allocation_multiple(mut value: Magnitude, units: &AllocationUnits) -> Magnitude {
+    let mut carry = Limb(0);
+    for digit in &mut value.0 {
+        let total = u64::from(digit.0)
+            .wrapping_mul(u64::from(units.0))
+            .wrapping_add(u64::from(carry.0));
+        let (low, high) = split_word(Word(total));
+        *digit = low;
+        carry = high;
+    }
+    value
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
