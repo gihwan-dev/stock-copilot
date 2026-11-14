@@ -352,6 +352,126 @@ pub(crate) fn compare_reported(computed: Amount, reported: Amount) -> crate::Com
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct AllocationUnits(u32);
+impl AllocationUnits {
+    pub(crate) const fn as_units(&self) -> u32 {
+        self.0
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AllocationRemainder(Magnitude);
+impl Ord for AllocationRemainder {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+impl PartialOrd for AllocationRemainder {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+pub(crate) fn allocation_parts(
+    value: Amount,
+    total: Amount,
+) -> (AllocationUnits, AllocationRemainder) {
+    let mut numerator = allocation_scaled(value, &AllocationUnits(10000));
+    let divisor = allocation_scaled(total, &AllocationUnits(1));
+    let mut lower = 0_u32;
+    let mut upper = 10001_u32;
+    while upper.saturating_sub(lower) != 1 {
+        let middle = lower.midpoint(upper);
+        let candidate = allocation_multiple(divisor, &AllocationUnits(middle));
+        if candidate.cmp(&numerator).is_gt() {
+            upper = middle;
+        } else {
+            lower = middle;
+        }
+    }
+    let denominator = allocation_multiple(divisor, &AllocationUnits(lower));
+    let mut borrow = false;
+    for (left, right) in numerator.0.iter_mut().zip(denominator.0) {
+        let (difference, first) = left.0.overflowing_sub(right.0);
+        let (reduced, second) = difference.overflowing_sub(u32::from(borrow));
+        left.0 = reduced;
+        borrow = first || second;
+    }
+    let units = AllocationUnits(lower);
+    (units, AllocationRemainder(numerator))
+}
+
+fn allocation_scaled(value: Amount, units: &AllocationUnits) -> Magnitude {
+    let mut result = Magnitude::product(value, Amount::new(Decimal::from(units.0)));
+    for _place in value.as_decimal().scale()..28 {
+        let mut carry = Limb(0);
+        for digit in &mut result.0 {
+            let total = u64::from(digit.0)
+                .wrapping_mul(10)
+                .wrapping_add(u64::from(carry.0));
+            let (low, high) = split_word(Word(total));
+            *digit = low;
+            carry = high;
+        }
+    }
+    result
+}
+
+fn allocation_multiple(mut value: Magnitude, units: &AllocationUnits) -> Magnitude {
+    let mut carry = Limb(0);
+    for digit in &mut value.0 {
+        let total = u64::from(digit.0)
+            .wrapping_mul(u64::from(units.0))
+            .wrapping_add(u64::from(carry.0));
+        let (low, high) = split_word(Word(total));
+        *digit = low;
+        carry = high;
+    }
+    value
+}
+
+#[cfg(test)]
+mod allocation_remainder_tests {
+    use super::{AllocationRemainder, allocation_parts};
+    use crate::Amount;
+    use proptest::test_runner::{Config, TestRunner};
+    use rust_decimal::Decimal;
+
+    fn assert_integer_remainder(value: u32, total: u32) {
+        let numerator = u128::from(value).checked_mul(10000).expect("독립 분자");
+        let (units, AllocationRemainder(actual)) = allocation_parts(
+            Amount::new(Decimal::from(value)),
+            Amount::new(Decimal::from(total)),
+        );
+        assert_eq!(
+            u128::from(units.as_units()),
+            numerator.checked_div(u128::from(total)).expect("독립 몫")
+        );
+        let mut coefficient = 0_u128;
+        for limb in actual.0.iter().rev() {
+            coefficient = coefficient
+                .checked_mul(1_u128 << 32_u32)
+                .and_then(|shifted| shifted.checked_add(u128::from(limb.0)))
+                .expect("기준 나머지는 128비트 안");
+        }
+        let expected = numerator
+            .checked_rem(u128::from(total))
+            .expect("독립 나머지")
+            .checked_mul(10_u128.checked_pow(28).expect("공통 스케일"))
+            .expect("스케일 정렬");
+        assert_eq!(coefficient, expected);
+    }
+    #[test]
+    fn allocation_remainders_match_independent_integer_coefficients() {
+        assert_integer_remainder(47, 29016);
+        TestRunner::new(Config::with_cases(4096))
+            .run(&(0_u32..1_000_000, 1_u32..1_000_000), |(seed, total)| {
+                assert_integer_remainder(seed.checked_rem(total).expect("양수 분모"), total);
+                Ok(())
+            })
+            .expect("4096 독립 정수 나머지");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

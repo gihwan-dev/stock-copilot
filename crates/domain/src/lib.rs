@@ -172,6 +172,19 @@ pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsE
 pub use exclusions::ExclusionDecision;
 pub use weight_caps::WeightCapChange;
 
+mod allocation;
+mod sector_assignment;
+pub use allocation::{
+    Allocation, AllocationCurrency, AllocationDisplay, AllocationDisplayRange,
+    AllocationDisplayUnits, AllocationEntry, AllocationError, AssetAllocation, AssetAllocations,
+    AssetCountry, AssetInstrument, AssetWeight, CompositionWeight, HoldingsAllocations,
+    HoldingsComposition,
+};
+pub use sector_assignment::{
+    AllocationInstrument, AllocationSector, InstrumentClassification, SectorAssignment,
+    SectorAssignments, SectorAssignmentsError,
+};
+
 mod calibration;
 pub use calibration::{
     CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
