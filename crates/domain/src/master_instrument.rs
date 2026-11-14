@@ -276,20 +276,34 @@ impl MasterInstrument {
         price: crate::Price,
         observed_at: Timestamp,
     ) -> Result<crate::PriceObservation, MasterInstrumentError> {
+        self.price_observation_for(crate::OrderSide::Buy, price, observed_at)
+    }
+    pub fn price_observation_for(
+        &self,
+        side: crate::OrderSide,
+        price: crate::Price,
+        observed_at: Timestamp,
+    ) -> Result<crate::PriceObservation, MasterInstrumentError> {
         if price.as_money().currency() != self.row.currency {
             return Err(MasterInstrumentError::CurrencyMismatch);
         }
         crate::PriceObservation::from_identified_quote_parts(
             self.row.instrument_id.clone(),
-            self.order_instrument()?,
+            self.order_gate_facts()?.instrument_for(side)?,
             price,
             observed_at,
         )
         .or(Err(MasterInstrumentError::InvalidPriceObservation))
     }
     pub fn name_fact(&self) -> Result<InstrumentNameFact, MasterInstrumentError> {
+        self.name_fact_for(crate::OrderSide::Buy)
+    }
+    pub fn name_fact_for(
+        &self,
+        side: crate::OrderSide,
+    ) -> Result<InstrumentNameFact, MasterInstrumentError> {
         Ok(InstrumentNameFact::from_master_lookup_result(
-            self.order_instrument()?,
+            self.order_gate_facts()?.instrument_for(side)?,
             self.row.name.clone(),
         ))
     }
@@ -780,6 +794,8 @@ mod tests {
                 gate.instrument_for(crate::OrderSide::Sell).map(|_| ()),
                 sell
             );
+            check_directional_facts(&master, crate::OrderSide::Buy, buy);
+            check_directional_facts(&master, crate::OrderSide::Sell, sell);
         }
         let mut input = row();
         input.korean_detail = None;
@@ -873,6 +889,32 @@ mod tests {
                 Err(MasterInstrumentError::SymbolMismatch)
             );
         }
+    }
+
+    fn check_directional_facts(
+        master: &MasterInstrument,
+        side: crate::OrderSide,
+        expected: Result<(), MasterInstrumentError>,
+    ) {
+        let price = Price::parse(&NumericInput::try_new("100").expect("입력"), Currency::Krw)
+            .expect("가격");
+        if side == crate::OrderSide::Buy {
+            assert_eq!(master.order_instrument().map(|_| ()), expected);
+            assert_eq!(master.name_fact().map(|_| ()), expected);
+            assert_eq!(
+                master
+                    .price_observation(price, master.row().observed_at)
+                    .map(|_| ()),
+                expected
+            );
+        }
+        assert_eq!(master.name_fact_for(side).map(|_| ()), expected);
+        assert_eq!(
+            master
+                .price_observation_for(side, price, master.row().observed_at)
+                .map(|_| ()),
+            expected
+        );
     }
 
     fn korean_details() -> Vec<KoreanMasterDetail> {
