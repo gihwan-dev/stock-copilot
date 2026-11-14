@@ -148,17 +148,22 @@ fn introduced_names(kind: &str, name: &str) -> Vec<String> {
     match kind {
         "use" => use_leaves(name),
         "impl" => Vec::new(),
-        _ => vec![String::from(name)],
+        _ => vec![crate::rust_names::normalize(name)],
     }
 }
 
 fn shadows(kind: &str, name: &str, base: &ModuleRecord) -> bool {
     match kind {
         "use" if name.contains('*') => true,
-        "macro_rules" if STANDARD_MACROS.contains(&name) => true,
-        _ => introduced_names(kind, name)
-            .iter()
-            .any(|introduced| base.identifiers.contains(introduced)),
+        "macro_rules" if STANDARD_MACROS.contains(&crate::rust_names::normalize(name).as_str()) => {
+            true
+        }
+        _ => introduced_names(kind, name).iter().any(|introduced| {
+            !introduced.is_ascii()
+                || base
+                    .identifiers
+                    .contains(&crate::rust_names::normalize(introduced))
+        }),
     }
 }
 

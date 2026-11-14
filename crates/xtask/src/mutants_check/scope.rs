@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use proc_macro2::TokenStream;
-use syn::spanned::Spanned;
 
 use crate::check_support::read_text;
 use crate::git_base::{git, listed_paths, output};
@@ -20,46 +19,20 @@ pub(super) fn matches_target(glob: &str, file: &str) -> bool {
 }
 
 fn without_exports(source: &str) -> Option<String> {
-    let parsed = syn::parse_file(source).ok()?;
-    let mut remaining = source.as_bytes().to_vec();
-    for declaration in parsed.items {
-        if let syn::Item::Use(item) = declaration
-            && let syn::Visibility::Public(_) = item.vis
-            && item.attrs.is_empty()
-        {
-            let span = item.span();
-            let offset = |position: proc_macro2::LineColumn| {
-                source
-                    .split_inclusive('\n')
-                    .take(position.line.saturating_sub(1))
-                    .map(str::len)
-                    .sum::<usize>()
-                    .saturating_add(position.column)
-            };
-            remaining
-                .get_mut(offset(span.start())..offset(span.end()))?
-                .fill(b' ');
-        }
-    }
-    String::from_utf8(remaining)
-        .ok()
-        .and_then(|text| text.parse::<TokenStream>().ok())
-        .map(|tokens| tokens.to_string())
+    let mut parsed = syn::parse_file(source).ok()?;
+    parsed.items.retain(|item| !removable_export(item));
+    let tokens: TokenStream = syn::parse_quote!(#parsed);
+    Some(tokens.to_string())
 }
 
-fn reexports_only(root: &Path, base: &str, path: &str) -> bool {
-    let mut command = git(root);
-    command.args(["show", &format!("{base}:{path}")]);
-    let previous = output(command, "show")
-        .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok());
-    previous
-        .zip(read_text(&root.join(path)).ok())
-        .is_some_and(|(before, after)| {
-            without_exports(&before)
-                .zip(without_exports(&after))
-                .is_some_and(|(left, right)| left == right)
-        })
+fn removable_export(item: &syn::Item) -> bool {
+    let syn::Item::Use(import) = item else {
+        return false;
+    };
+    match &import.vis {
+        syn::Visibility::Public(_) => import.attrs.is_empty(),
+        syn::Visibility::Restricted(_) | syn::Visibility::Inherited => false,
+    }
 }
 
 fn test_support(path: &str, source: &str) -> bool {
@@ -74,45 +47,77 @@ fn narrow_crate(
     changed: &BTreeSet<String>,
     directory: &str,
 ) -> Result<BTreeSet<String>, String> {
+    let before = snapshot(root, directory, Some(base))?;
+    let after = snapshot(root, directory, None)?;
+    select_sources(&before, &after, globs, changed, directory)
+}
+
+pub(super) fn select_sources(
+    before: &super::graph::Sources,
+    after: &super::graph::Sources,
+    globs: &[String],
+    changed: &BTreeSet<String>,
+    directory: &str,
+) -> Result<BTreeSet<String>, String> {
     let prefix = format!("{directory}/");
     let touched: Vec<&String> = changed
         .iter()
         .filter(|path| path.starts_with(&prefix))
         .collect();
-    let mut files = BTreeSet::new();
-    for path in touched {
-        let source = read_text(&root.join(path))?;
-        if path.ends_with("/Cargo.toml")
-            || test_support(path, &source)
-            || (path.ends_with("/lib.rs") && !reexports_only(root, base, path))
+    for path in &touched {
+        if !path.starts_with(&format!("{directory}/src/"))
+            || (!before.contains_key(*path) && !globs.iter().any(|glob| matches_target(glob, path)))
         {
-            return Err(String::from("crate 전체"));
+            return Err(String::from("non-target crate input"));
         }
-        if Path::new(path).extension().is_some_and(|ext| ext == "rs") {
-            if path.contains(['*', '?', '[', ']', '{', '}']) {
-                return Err(String::from("glob path"));
-            }
-            syn::parse_file(&source).map_err(|error| error.to_string())?;
-            files.insert(path.clone());
-        } else if Path::new(path).extension().is_none_or(|ext| ext != "rs") {
-            return Err(String::from("support file"));
+        let source = after
+            .get(*path)
+            .ok_or("missing, deleted, or non-Rust input")?;
+        if test_support(path, source) || path.contains(['*', '?', '[', ']', '{', '}']) {
+            return Err(String::from("crate-wide support input"));
         }
     }
-    let mut graph = super::graph::Graph::read(&snapshot(root, directory, None)?)?;
-    graph.extend(super::graph::Graph::read(&snapshot(
-        root,
-        directory,
-        Some(base),
-    )?)?);
-    graph.selected(&files).map(|selected| {
-        selected
-            .into_iter()
-            .filter(|path| globs.iter().any(|glob| matches_target(glob, path)))
-            .collect()
-    })
+    let mut graph = super::graph::Graph::read(after)?;
+    graph.extend(super::graph::Graph::read(before)?);
+    let additions = super::additions::Additions::read(before, after).ok_or("addition context")?;
+    let mut selected = BTreeSet::new();
+    let mut seeds = BTreeSet::new();
+    for path in touched {
+        match additions.classify(path) {
+            super::additions::Change::OnlyFile => {
+                graph.outward(&BTreeSet::from([path.clone()]))?;
+                if globs.iter().any(|glob| matches_target(glob, path)) {
+                    selected.insert(path.clone());
+                }
+            }
+            super::additions::Change::Registration => {}
+            super::additions::Change::Graph => {
+                if path.ends_with("/lib.rs") && !unchanged_lib(before.get(path), after.get(path)) {
+                    return Err(String::from("lib structure changed"));
+                }
+                seeds.insert(path.clone());
+            }
+        }
+    }
+    if !seeds.is_empty() {
+        selected.extend(
+            graph
+                .selected(&seeds)?
+                .into_iter()
+                .filter(|path| globs.iter().any(|glob| matches_target(glob, path))),
+        );
+    }
+    Ok(selected)
 }
 
-fn snapshot(
+fn unchanged_lib(before: Option<&String>, after: Option<&String>) -> bool {
+    before
+        .zip(after)
+        .and_then(|(left, right)| without_exports(left).zip(without_exports(right)))
+        .is_some_and(|(left, right)| left == right)
+}
+
+pub(super) fn snapshot(
     root: &Path,
     directory: &str,
     base: Option<&str>,

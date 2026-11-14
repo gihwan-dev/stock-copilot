@@ -73,6 +73,13 @@ fn punct_is(token: Option<&TokenTree>, expected: char) -> bool {
 
 fn ident_of(token: Option<&TokenTree>) -> Option<String> {
     match token {
+        Some(TokenTree::Ident(ident)) => Some(crate::rust_names::ident(ident)),
+        Some(TokenTree::Group(_) | TokenTree::Punct(_) | TokenTree::Literal(_)) | None => None,
+    }
+}
+
+fn keyword_of(token: Option<&TokenTree>) -> Option<String> {
+    match token {
         Some(TokenTree::Ident(ident)) => Some(ident.to_string()),
         Some(TokenTree::Group(_) | TokenTree::Punct(_) | TokenTree::Literal(_)) | None => None,
     }
@@ -92,7 +99,7 @@ fn is_test_attribute(group: &Group) -> bool {
     let mut last = None;
     for token in group.stream() {
         match token {
-            TokenTree::Ident(ident) => last = Some(ident.to_string()),
+            TokenTree::Ident(ident) => last = Some(crate::rust_names::ident(&ident)),
             TokenTree::Punct(punct) if punct.as_char() == ':' => {}
             TokenTree::Group(_) | TokenTree::Punct(_) | TokenTree::Literal(_) => break,
         }
@@ -124,7 +131,7 @@ fn identifiers(stream: TokenStream, found: &mut BTreeSet<String>) {
     for token in stream {
         match token {
             TokenTree::Ident(ident) => {
-                found.insert(ident.to_string());
+                found.insert(crate::rust_names::ident(&ident));
             }
             TokenTree::Group(group) => identifiers(group.stream(), found),
             TokenTree::Punct(_) | TokenTree::Literal(_) => {}
@@ -162,7 +169,7 @@ fn span(kind: &str, name: String, end: usize, body: usize) -> Span {
 }
 
 fn constant(tokens: &[TokenTree], index: usize, keyword: &str) -> Option<Span> {
-    let following = ident_of(tokens.get(index.saturating_add(1)));
+    let following = keyword_of(tokens.get(index.saturating_add(1)));
     if following
         .as_deref()
         .is_some_and(|word| FUNCTION_QUALIFIERS.contains(&word))
@@ -207,7 +214,7 @@ fn simple_item(tokens: &[TokenTree], index: usize, keyword: &str) -> Option<Span
             let header = tokens.get(index..end).map_or_else(String::new, joined);
             Some(span(keyword, header, end, index.saturating_add(1)))
         }
-        "extern" if ident_of(next).as_deref() == Some("crate") => {
+        "extern" if keyword_of(next).as_deref() == Some("crate") => {
             let end = semicolon_after(tokens, index)?;
             Some(span(
                 "extern crate",
@@ -428,7 +435,7 @@ impl Walker<'_> {
         location: &Location,
     ) -> Option<usize> {
         let token = tokens.get(index)?;
-        let keyword = ident_of(Some(token));
+        let keyword = keyword_of(Some(token));
         match keyword.as_deref() {
             Some("mod") => self.module(tokens, index, &item.attributes.join(""), location),
             Some("fn") => self.function(tokens, index, item, location),
