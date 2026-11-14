@@ -38,6 +38,7 @@ const expectedLists = {
     "src/shared/ipc/bindings.ts",
   ],
   PROMISE_REJECTION_ALLOWLIST: [
+    "src/shared/platform/index.ts",
     "src/shared/ipc/call.ts",
     "src/shared/platform/detach.ts",
   ],

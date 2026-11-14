@@ -1,0 +1,59 @@
+[
+  {
+    "name": "native-select",
+    "imports": "",
+    "jsx": "<select onChange={():void=>undefined} />",
+    "rule": "ds/no-dom-values",
+    "forbidden": "<select onChange={(event) => { event.currentTarget.value; }} />"
+  },
+  {
+    "name": "secret-paste",
+    "imports": "",
+    "jsx": "<button type=\"button\" onClick={():void=>undefined} />",
+    "rule": "ds/no-dom-values",
+    "forbidden": "<button onClick={() => { navigator.clipboard.readText(); }} />"
+  },
+  {
+    "name": "korean-wrap",
+    "imports": "",
+    "jsx": "<p className=\"text-body\" />",
+    "rule": "better-tailwindcss/no-restricted-classes",
+    "forbidden": "<p className=\"break-keep wrap-anywhere\" />"
+  },
+  {
+    "name": "base-button",
+    "imports": "import { Button as BaseButton } from \"@base-ui/react/button\";",
+    "jsx": "<BaseButton onClick={():void=>undefined} />",
+    "rule": "ds/public-props"
+  },
+  {
+    "name": "base-checkbox",
+    "imports": "import { Checkbox } from \"@base-ui/react/checkbox\";",
+    "jsx": "<Checkbox.Root onCheckedChange={():void=>undefined} />",
+    "rule": "ds/public-props"
+  },
+  {
+    "name": "base-switch",
+    "imports": "import { Switch } from \"@base-ui/react/switch\";",
+    "jsx": "<Switch.Root onCheckedChange={():void=>undefined} />",
+    "rule": "ds/public-props"
+  },
+  {
+    "name": "base-disclosure",
+    "imports": "import { Collapsible } from \"@base-ui/react/collapsible\";",
+    "jsx": "<Collapsible.Root onOpenChange={():void=>undefined} />",
+    "rule": "ds/public-props"
+  },
+  {
+    "name": "base-segment",
+    "imports": "import { ToggleGroup } from \"@base-ui/react/toggle-group\";",
+    "jsx": "<ToggleGroup onValueChange={():void=>undefined} />",
+    "rule": "ds/public-props"
+  },
+  {
+    "name": "base-input",
+    "imports": "import { Input } from \"@base-ui/react/input\";",
+    "jsx": "<Input onValueChange={():void=>undefined} />",
+    "rule": "ds/public-props"
+  }
+]

@@ -351,6 +351,16 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:border-transparent",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:border-up",
       "kind": "allowed",
       "generated": "yes"
@@ -3676,6 +3686,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -4037,6 +4052,16 @@
     },
     {
       "name": "@content-wide:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -7366,6 +7391,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -7737,6 +7767,16 @@
     },
     {
       "name": "active:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11066,6 +11106,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -11447,6 +11492,16 @@
     },
     {
       "name": "border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11992,6 +12047,16 @@
     },
     {
       "name": "disabled:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15321,6 +15386,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -15902,6 +15972,16 @@
     },
     {
       "name": "focus-visible:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -19231,6 +19311,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -19592,6 +19677,16 @@
     },
     {
       "name": "focus:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -22921,6 +23016,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -23607,6 +23707,16 @@
     },
     {
       "name": "hover:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -26936,6 +27046,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -27762,6 +27877,16 @@
     },
     {
       "name": "motion-reduce:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31091,6 +31216,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -33326,6 +33456,11 @@
       "generated": "yes"
     },
     {
+      "name": "w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:@container",
       "kind": "allowed",
       "generated": "yes"
@@ -33662,6 +33797,16 @@
     },
     {
       "name": "window-lg:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -36991,6 +37136,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -37352,6 +37502,16 @@
     },
     {
       "name": "window-md:border-surface-sunken",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:border-t-hairline",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:border-transparent",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -40681,6 +40841,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -41022,6 +41187,14 @@
     },
     {
       "selector": ".\\@content-medium\\:border-surface-sunken",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:border-t-hairline",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:border-transparent",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -43589,6 +43762,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:w-switch",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:z-modal",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -43878,6 +44055,14 @@
     },
     {
       "selector": ".\\@content-wide\\:border-surface-sunken",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:border-t-hairline",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:border-transparent",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -46445,6 +46630,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:w-switch",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:z-modal",
       "context": ["@container (width >= 75rem)"]
     },
@@ -46742,6 +46931,14 @@
     },
     {
       "selector": ".active\\:border-surface:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:border-t-hairline:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:border-transparent:active",
       "context": []
     },
     {
@@ -49309,6 +49506,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:w-switch:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:z-modal:active",
       "context": []
     },
@@ -49610,6 +49811,14 @@
     },
     {
       "selector": ".border-surface-sunken",
+      "context": []
+    },
+    {
+      "selector": ".border-t-hairline",
+      "context": []
+    },
+    {
+      "selector": ".border-transparent",
       "context": []
     },
     {
@@ -50046,6 +50255,14 @@
     },
     {
       "selector": ".disabled\\:border-surface:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:border-t-hairline:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:border-transparent:disabled",
       "context": []
     },
     {
@@ -52613,6 +52830,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:w-switch:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:z-modal:disabled",
       "context": []
     },
@@ -53078,6 +53299,14 @@
     },
     {
       "selector": ".focus-visible\\:border-surface:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:border-t-hairline:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:border-transparent:focus-visible",
       "context": []
     },
     {
@@ -55645,6 +55874,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:w-switch:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:z-modal:focus-visible",
       "context": []
     },
@@ -55934,6 +56167,14 @@
     },
     {
       "selector": ".focus\\:border-surface:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:border-t-hairline:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:border-transparent:focus",
       "context": []
     },
     {
@@ -58501,6 +58742,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:w-switch:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:z-modal:focus",
       "context": []
     },
@@ -59050,6 +59295,14 @@
     },
     {
       "selector": ".hover\\:border-surface:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:border-t-hairline:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:border-transparent:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -61617,6 +61870,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:w-switch:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:z-modal:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -62278,6 +62535,14 @@
     },
     {
       "selector": ".motion-reduce\\:border-surface-sunken",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:border-t-hairline",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:border-transparent",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -64845,6 +65110,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:w-switch",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:z-modal",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -66529,6 +66798,10 @@
       "context": []
     },
     {
+      "selector": ".w-switch",
+      "context": []
+    },
+    {
       "selector": ".window-lg\\:\\@container",
       "context": ["@media (width >= 80rem)"]
     },
@@ -66798,6 +67071,14 @@
     },
     {
       "selector": ".window-lg\\:border-surface-sunken",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:border-t-hairline",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:border-transparent",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -69365,6 +69646,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:w-switch",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:z-modal",
       "context": ["@media (width >= 80rem)"]
     },
@@ -69654,6 +69939,14 @@
     },
     {
       "selector": ".window-md\\:border-surface-sunken",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:border-t-hairline",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:border-transparent",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
@@ -72218,6 +72511,10 @@
     },
     {
       "selector": ".window-md\\:w-space-2",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:w-switch",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

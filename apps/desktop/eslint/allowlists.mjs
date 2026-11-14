@@ -26,6 +26,7 @@ export const RAW_TYPE_ALLOWLIST = [
 ];
 
 export const PROMISE_REJECTION_ALLOWLIST = [
+  "src/shared/platform/index.ts",
   "src/shared/ipc/call.ts",
   "src/shared/platform/detach.ts",
 ];

@@ -3910,6 +3910,20 @@
       "expect": [
         "boundaries/dependencies :: review-unlisted-ui 가져오기 금지: 이 패키지는 정해진 위치의 파일에서만 가져온다."
       ]
+    },
+    "src/shared/ds/TextField.tsx": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/shared/ds/Select.tsx": {
+      "row": "경계",
+      "expect": []
+    },
+    "src/shared/ds/InputBoundaryForbidden.tsx": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 platform의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
     }
   }
 }

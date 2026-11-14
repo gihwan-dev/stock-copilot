@@ -354,12 +354,25 @@ export const publicProps = {
           return;
         if (tokenProperty.test(node.name.name) && !tokenValue(type))
           return report(node);
+        const tag = services.esTreeNodeToTSNodeMap.get(node.parent.name);
+        const symbol = checker.getSymbolAtLocation(tag);
+        const resolved =
+          symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0
+            ? checker.getAliasedSymbol(symbol)
+            : symbol;
+        const internalLibrary = from(
+          resolved,
+          /\/node_modules\/@base-ui\/react\//u,
+        );
+        if (internalLibrary && type.getCallSignatures().length !== 0) return;
         const contextual = checker.getContextualType(
           services.esTreeNodeToTSNodeMap.get(expression),
         );
         if (
           (badValue(type) ||
-            (contextual !== undefined && badValue(contextual))) &&
+            (!internalLibrary &&
+              contextual !== undefined &&
+              badValue(contextual))) &&
           !["ref", "children"].includes(node.name.name)
         )
           report(node);

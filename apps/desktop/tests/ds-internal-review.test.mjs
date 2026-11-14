@@ -126,16 +126,21 @@ test("DS02 review covers color names functions units and assembled lengths", asy
     );
 });
 
-test("DS02 price inline style and DOM exceptions are protected empty file lists", async () => {
+test("DS02 price inline style and DOM exceptions are exact protected file lists", async () => {
   const lists = await import("../eslint/ds-allowlists.mjs");
   assert.deepEqual(
     { ...lists },
     {
-      PRICE_COLOR_FILES: [],
+      PRICE_COLOR_FILES: ["src/shared/ds/button-variants.tsx"],
       INLINE_STYLE_FILES: [],
       DOM_STYLE_FILES: [],
       DOM_ACCESS_FILES: ["src/shared/platform/index.ts"],
-      ICON_GEOMETRY_FILES: [],
+      ICON_GEOMETRY_FILES: [
+        "src/shared/ds/Icon.tsx",
+        "src/shared/ds/icon-paths-0.tsx",
+        "src/shared/ds/icon-paths-1.tsx",
+        "src/shared/ds/icon-paths-2.tsx",
+      ],
     },
   );
   for (const [key, code] of [

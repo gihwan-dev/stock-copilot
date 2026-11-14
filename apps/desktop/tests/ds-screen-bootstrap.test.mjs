@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  cpSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -65,6 +66,11 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
   };
   try {
     assert.deepEqual(SCREEN_DOM_BOOTSTRAP, []);
+    cpSync(
+      join(desktopRoot, "src/shared/lib"),
+      join(folder, "src/shared/lib"),
+      { recursive: true },
+    );
     for (const path of [
       "app/main.tsx",
       "app/App.tsx",
@@ -85,7 +91,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     const symbol = checker.getSymbolAtLocation(program.getSourceFile(platform));
     assert.deepEqual(
       checker.getExportsOfModule(symbol).map((s) => s.name),
-      ["mountApp"],
+      ["mountApp", "inputEventValue", "inputCommit", "pasteInputValue"],
     );
     const exported = checker.getExportsOfModule(symbol)[0];
     assert.deepEqual(
@@ -98,7 +104,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     assert.deepEqual(DOM_ACCESS_FILES, ["src/shared/platform/index.ts"]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>;',
+      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId} from "./brand"; export type {InputValue,BrandError} from "./brand"; export {err} from "./result"; export type {Result} from "./result";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

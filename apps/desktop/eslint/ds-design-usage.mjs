@@ -81,6 +81,8 @@ export const iconUtilities = [
 const declaration = (property) =>
   property === "width/height" ? ["width", "height"] : [property];
 export const designUtilities = (tokens) => [
+  ["w-switch", "width", "calc(var(--spacing-icon-md) * 2)"],
+  ["border-t-hairline", "border-top-width", "var(--border-width-hairline)"],
   ...iconUtilities,
   ...designLengthClasses(tokens)
     .filter((r) => r.token.startsWith("border-") || r.token === "focus-offset")

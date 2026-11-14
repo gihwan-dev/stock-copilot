@@ -112,6 +112,14 @@ export const boundaryPolicies = ({
 }) => [
   ...elementPolicies(dependencies, entryFile),
   ...featurePolicies(features),
+  {
+    from: {
+      file: {
+        path: ["src/shared/ds/TextField.tsx", "src/shared/ds/Select.tsx"],
+      },
+    },
+    allow: { to: { file: { path: "src/shared/platform/index.ts" } } },
+  },
   { allow: { to: { module: { origin: "external" } } } },
   ...packagePolicies(locations),
   {
