@@ -223,3 +223,8 @@ pub use calibration::{
     CalibrationOutcome, CalibrationReadiness, CalibrationTable, ConservativeCalibration,
     EligibleCalibration, ModelIdentityPart,
 };
+
+mod base_probability;
+mod estimate_task;
+pub use base_probability::{BaseProbability, EstimateDistance};
+pub use estimate_task::{EstimateContext, EstimateTask, NoEstimateTask};
