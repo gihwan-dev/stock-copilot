@@ -113,7 +113,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     );
     assert.deepEqual(
       inputExports.map((entry) => entry.name),
-      ["inputEventValue", "inputCommit", "pasteInputValue"],
+      ["inputEventValue", "inputCommit", "pasteInputValue", "focusDialogInput"],
     );
     const returns = inputExports.map((entry) =>
       checker
@@ -124,6 +124,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     assert.deepEqual(returns, [
       ["Result<InputValue, BrandError>"],
       ['"commit" | "ignore"'],
+      ["void"],
       ["void"],
     ]);
     writeFileSync(

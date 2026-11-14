@@ -1,0 +1,72 @@
+import { useRef, type ReactElement } from "react";
+import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import { focusDialogInput } from "../platform/input";
+import { text, type UiText } from "../lib";
+import { Icon } from "./Icon";
+type CloseReason = "escape" | "outside" | "close-button";
+type Props = {
+  readonly open: "open" | "closed";
+  readonly title: UiText;
+  readonly onClose?: (reason: CloseReason) => void;
+  readonly children: ReactElement | readonly ReactElement[];
+  readonly actions?: ReactElement;
+  readonly wide?: "normal" | "wide";
+};
+export const Dialog = (props: Props): ReactElement => {
+  const popupRef = useRef<HTMLDivElement>(null);
+  return (
+    <BaseDialog.Root<void>
+      open={props.open === "open"}
+      onOpenChange={(open, details): void => {
+        if (open || props.open === "closed" || props.onClose === undefined)
+          return;
+        if (details.reason === "escape-key") props.onClose("escape");
+        if (details.reason === "outside-press") props.onClose("outside");
+        if (details.reason === "close-press") props.onClose("close-button");
+      }}
+    >
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop
+          data-dialog-backdrop=""
+          className="dialog-overlay z-modal bg-overlay"
+        />
+        <BaseDialog.Viewport className="dialog-overlay z-modal grid place-items-center p-space-6">
+          <BaseDialog.Popup
+            aria-modal="true"
+            ref={popupRef}
+            initialFocus={(): void => {
+              focusDialogInput(popupRef);
+            }}
+            className={
+              props.wide === "wide"
+                ? "w-full max-w-dialog-width-wide flex flex-col bg-surface-raised rounded-lg shadow-popover"
+                : "w-full max-w-dialog-width flex flex-col bg-surface-raised rounded-lg shadow-popover"
+            }
+          >
+            <header className="flex items-center gap-space-2 h-toolbar-height px-space-5 border-b-hairline border-solid border-line">
+              <BaseDialog.Title className="flex-1 text-title-md text-ink">
+                {props.title}
+              </BaseDialog.Title>
+              {props.onClose === undefined ? null : (
+                <BaseDialog.Close
+                  aria-label={text("ds.close", "ko")}
+                  className="inline-grid place-items-center size-control-height rounded-md bg-transparent text-ink-muted cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus"
+                >
+                  <Icon name="x" />
+                </BaseDialog.Close>
+              )}
+            </header>
+            <div className="p-space-5 flex flex-col gap-space-4">
+              {props.children}
+            </div>
+            {props.actions === undefined ? null : (
+              <footer className="flex justify-end gap-space-2 px-space-5 py-space-3 border-t-hairline border-solid border-line">
+                {props.actions}
+              </footer>
+            )}
+          </BaseDialog.Popup>
+        </BaseDialog.Viewport>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
+  );
+};

@@ -133,7 +133,7 @@ const importRule = async (source) => {
     '"typescript"',
     JSON.stringify(import.meta.resolve("typescript")),
   );
-  for (const name of ["ds-boundaries", "allowlists"])
+  for (const name of ["ds-boundaries", "allowlists", "ds-semantic-variants"])
     source = source.replace(
       `"./${name}.mjs"`,
       JSON.stringify(new URL(`../eslint/${name}.mjs`, import.meta.url).href),
