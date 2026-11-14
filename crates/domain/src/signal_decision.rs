@@ -1,10 +1,9 @@
 use crate::{
-    AllocationInstrument, CalibratedProbability, CollectedItem, CostEligibleTask, Disclosure,
-    EstimateTask, Evidence, EvidenceRef, ExclusionDecision, InformationSource,
-    InstrumentClassification, Margin, Money, NoThresholds, Policy, PolicyBuyDecision,
-    PolicyBuyLimit, PolicyCandidate, PolicySecurityFacts, PortfolioValuation, Quantity,
-    SectorAssignments, SignalCondition, ThresholdDisplay, ThresholdKind, Thresholds, ToolReference,
-    Total,
+    CalibratedProbability, CollectedItem, CostEligibleTask, Disclosure, EstimateTask, Evidence,
+    EvidenceRef, InformationSource, Margin, NoThresholds, Policy, PolicyBuyLimit,
+    PolicySecurityFacts, PolicyViolation, PortfolioValuation, Quantity, SectorAssignments,
+    SignalCondition, SignalSubmission, SignalTiming, SubmittedCalibration, ThresholdDisplay,
+    Thresholds, Timestamp, ToolReference,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +16,9 @@ pub enum SignalUnavailable {
     UnknownClassification,
     HoldingsQueryFailed,
     IncompleteHoldings,
-    Thresholds(NoThresholds),
+    Calendar,
+    StaleHolding,
+    SubmissionFromFuture,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoSignalReason {
@@ -26,28 +27,32 @@ pub enum NoSignalReason {
     Excluded,
     MissingSource,
     PolicyViolation,
+    Expired,
     Unavailable(SignalUnavailable),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalPreparationError {
+    SubmissionMismatch,
+    Thresholds(NoThresholds),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalEstimate {
     task: EstimateTask,
     thresholds: Thresholds,
-    calibration: CalibratedProbability,
-    evidence: Option<Evidence>,
+    submitted: SubmittedCalibration,
+    buy: SignalCondition,
+    sell: SignalCondition,
 }
 impl SignalEstimate {
     pub fn create(
         eligible: &CostEligibleTask,
-        calibration: &CalibratedProbability,
+        submitted: &SubmittedCalibration,
         margin: Margin,
-        evidence: Option<Evidence>,
-    ) -> Result<Self, NoThresholds> {
-        Ok(Self {
-            task: eligible.task().clone(),
-            thresholds: Thresholds::create(eligible, calibration, margin)?,
-            calibration: calibration.clone(),
-            evidence,
-        })
+    ) -> Result<Self, SignalPreparationError> {
+        if submitted.submission().task_key().task() != eligible.task() {
+            return Err(SignalPreparationError::SubmissionMismatch);
+        }
+        prepare(eligible, submitted, margin).map_err(SignalPreparationError::Thresholds)
     }
     #[must_use]
     pub const fn task(&self) -> &EstimateTask {
@@ -59,29 +64,49 @@ impl SignalEstimate {
     }
     #[must_use]
     pub const fn calibration(&self) -> &CalibratedProbability {
-        &self.calibration
+        self.submitted.calibration()
+    }
+    #[must_use]
+    pub const fn submission(&self) -> &SignalSubmission {
+        self.submitted.submission()
     }
     #[must_use]
     pub const fn evidence(&self) -> Option<&Evidence> {
-        self.evidence.as_ref()
+        self.submission().evidence()
     }
     #[must_use]
     pub const fn operation(&self) -> SignalOperation {
-        match &self.calibration {
+        match self.calibration() {
             CalibratedProbability::InsufficientSamples(_) => SignalOperation::Conservative,
             CalibratedProbability::EligibleBeforeE91(_) => SignalOperation::EligibleBeforeE91,
         }
     }
     pub fn display_probability(&self) -> Result<ThresholdDisplay, NoThresholds> {
-        let probability = match &self.calibration {
+        let probability = match self.calibration() {
             CalibratedProbability::InsufficientSamples(value) => value.evidence().probability(),
             CalibratedProbability::EligibleBeforeE91(value) => value.evidence().probability(),
         };
-        crate::thresholds_arithmetic::ThresholdNumber::new(probability.as_decimal())
-            .percent(ThresholdKind::Buy)
+        crate::thresholds_arithmetic::signal_probability_display(
+            crate::thresholds_arithmetic::ThresholdNumber::new(probability.as_decimal()),
+        )
     }
 }
-
+fn prepare(
+    eligible: &CostEligibleTask,
+    submitted: &SubmittedCalibration,
+    margin: Margin,
+) -> Result<SignalEstimate, NoThresholds> {
+    let calibration = submitted.calibration();
+    let thresholds = Thresholds::create(eligible, calibration, margin)?;
+    let (buy, sell) = crate::thresholds::bound_signal_conditions(&thresholds);
+    Ok(SignalEstimate {
+        task: eligible.task().clone(),
+        thresholds,
+        submitted: submitted.clone(),
+        buy,
+        sell,
+    })
+}
 #[derive(Debug)]
 pub struct SignalSourceLedger<'facts> {
     items: &'facts [CollectedItem],
@@ -133,14 +158,13 @@ impl<'facts> SignalSourceLedger<'facts> {
     }
 }
 
-#[derive(Debug)]
 pub struct SignalContext<'facts> {
     valuation: Option<&'facts PortfolioValuation>,
     policy: &'facts Policy,
     assignments: &'facts SectorAssignments,
     security: &'facts PolicySecurityFacts,
     sources: &'facts SignalSourceLedger<'facts>,
-    requested_krw: Money,
+    timing: SignalTiming<'facts>,
 }
 impl<'facts> SignalContext<'facts> {
     #[must_use]
@@ -149,7 +173,7 @@ impl<'facts> SignalContext<'facts> {
         policy: &'facts Policy,
         classification: (&'facts SectorAssignments, &'facts PolicySecurityFacts),
         sources: &'facts SignalSourceLedger<'facts>,
-        requested_krw: Money,
+        timing: SignalTiming<'facts>,
     ) -> Self {
         Self {
             valuation,
@@ -157,20 +181,19 @@ impl<'facts> SignalContext<'facts> {
             assignments: classification.0,
             security: classification.1,
             sources,
-            requested_krw,
+            timing,
         }
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SignalBuyAdjustment {
-    Unchanged,
-    Reduce(PolicyBuyLimit),
+impl std::fmt::Debug for SignalContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SignalContext(..)")
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuySignal {
     facts: SignalEstimate,
-    adjustment: SignalBuyAdjustment,
+    limit: PolicyBuyLimit,
 }
 impl BuySignal {
     #[must_use]
@@ -178,14 +201,15 @@ impl BuySignal {
         &self.facts
     }
     #[must_use]
-    pub const fn adjustment(&self) -> SignalBuyAdjustment {
-        self.adjustment
+    pub const fn limit(&self) -> PolicyBuyLimit {
+        self.limit
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SellSignal {
     facts: SignalEstimate,
     held_quantity: Quantity,
+    observed_at: Timestamp,
 }
 impl SellSignal {
     #[must_use]
@@ -195,6 +219,10 @@ impl SellSignal {
     #[must_use]
     pub const fn held_quantity(&self) -> Quantity {
         self.held_quantity
+    }
+    #[must_use]
+    pub const fn observed_at(&self) -> Timestamp {
+        self.observed_at
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,12 +238,8 @@ pub enum SignalDecision {
 }
 impl SignalDecision {
     #[must_use]
-    pub fn assess(
-        estimate: &SignalEstimate,
-        calibration: &CalibratedProbability,
-        context: &SignalContext<'_>,
-    ) -> Self {
-        match assess(estimate, calibration, context) {
+    pub fn assess(estimate: &SignalEstimate, context: &SignalContext<'_>) -> Self {
+        match assess(estimate, context) {
             Ok(signal) => match signal {
                 RaisedSignal::Buy(value) => Self::Buy(value),
                 RaisedSignal::Sell(value) => Self::Sell(value),
@@ -232,117 +256,106 @@ impl SignalDecision {
         }
     }
 }
-fn exclusions(
-    estimate: &SignalEstimate,
-    context: &SignalContext<'_>,
-) -> Result<(), NoSignalReason> {
-    let instrument = AllocationInstrument::new(estimate.task.reference().instrument());
-    let profile = context.policy.profile();
-    let kind = context.security.security_type(&instrument);
-    let classification = context.assignments.classification(&instrument);
-    if kind.is_some_and(|value| {
-        profile.exclusions().security_type_decision(value) == ExclusionDecision::Excluded
-    }) || classification.is_some_and(|value| match value {
-        InstrumentClassification::Sector(sector) => {
-            profile.exclusions().sector_decision(sector) == ExclusionDecision::Excluded
-        }
-        InstrumentClassification::EtfFund | InstrumentClassification::Unclassified => false,
-    }) {
-        return Err(NoSignalReason::Excluded);
-    }
-    match (kind, classification) {
-        (
-            Some(_),
-            Some(InstrumentClassification::Sector(_) | InstrumentClassification::EtfFund),
-        ) => Ok(()),
-        (None, _) | (Some(_), None | Some(InstrumentClassification::Unclassified)) => Err(
-            NoSignalReason::Unavailable(SignalUnavailable::UnknownClassification),
-        ),
-    }
-}
 fn assess(
     estimate: &SignalEstimate,
-    calibration: &CalibratedProbability,
     context: &SignalContext<'_>,
 ) -> Result<RaisedSignal, NoSignalReason> {
-    exclusions(estimate, context)?;
     context.sources.check(estimate.evidence())?;
-    let buy_result = estimate.thresholds.buy_condition(calibration);
-    let sell_result = estimate.thresholds.sell_condition(calibration);
-    let (buy, sell) = buy_result
-        .and_then(|buy_value| sell_result.map(|sell_value| (buy_value, sell_value)))
-        .map_err(|error| NoSignalReason::Unavailable(SignalUnavailable::Thresholds(error)))?;
+    context
+        .timing
+        .check(estimate.task(), estimate.submission().submitted_at())?;
+    if estimate.sell == SignalCondition::Met {
+        return sell_signal(estimate, context);
+    }
     let valuation = context.valuation.ok_or(NoSignalReason::Unavailable(
         SignalUnavailable::HoldingsQueryFailed,
     ))?;
-    if let Total::Incomplete(_) = valuation.valuation() {
-        return Err(NoSignalReason::Unavailable(
-            SignalUnavailable::IncompleteHoldings,
-        ));
-    }
-    if buy == SignalCondition::Met {
-        return buy_signal(estimate, context, valuation);
-    }
-    if sell == SignalCondition::Met {
-        let holding = valuation
-            .holdings()
-            .iter()
-            .find(|row| row.instrument() == estimate.task.reference().instrument())
-            .ok_or(NoSignalReason::UnheldLowProbability)?;
-        let quantity = holding.holding().quantity();
-        if quantity.as_decimal() <= rust_decimal::Decimal::ZERO {
-            return Err(NoSignalReason::UnheldLowProbability);
-        }
-        return Ok(RaisedSignal::Sell(SellSignal {
+    let limit = crate::policy::signal_buy_limit(
+        context.policy,
+        valuation,
+        context.assignments,
+        context.security,
+        &crate::AllocationInstrument::new(estimate.task().reference().instrument()),
+    )
+    .map_err(|violation| policy_reason(&violation))?;
+    if estimate.buy == SignalCondition::Met {
+        return Ok(RaisedSignal::Buy(BuySignal {
             facts: estimate.clone(),
-            held_quantity: quantity,
+            limit,
         }));
     }
     Err(NoSignalReason::ConditionsUnmet)
 }
-fn buy_signal(
+fn sell_signal(
     estimate: &SignalEstimate,
     context: &SignalContext<'_>,
-    valuation: &PortfolioValuation,
 ) -> Result<RaisedSignal, NoSignalReason> {
-    let candidate = PolicyCandidate::new(
-        estimate.task.reference().instrument(),
-        context.requested_krw,
-    )
-    .map_err(|_error| NoSignalReason::PolicyViolation)?;
-    let adjustment =
-        match context
-            .policy
-            .check_buy(valuation, context.assignments, context.security, &candidate)
-        {
-            PolicyBuyDecision::Pass => SignalBuyAdjustment::Unchanged,
-            PolicyBuyDecision::Reduce(limit) => SignalBuyAdjustment::Reduce(limit),
-            PolicyBuyDecision::Block(_) => return Err(NoSignalReason::PolicyViolation),
-        };
-    Ok(RaisedSignal::Buy(BuySignal {
+    let valuation = context.valuation.ok_or(NoSignalReason::Unavailable(
+        SignalUnavailable::HoldingsQueryFailed,
+    ))?;
+    let holding = valuation
+        .holdings()
+        .iter()
+        .find(|row| row.instrument() == estimate.task().reference().instrument())
+        .ok_or(NoSignalReason::UnheldLowProbability)?
+        .holding();
+    let quantity = holding.quantity();
+    if quantity.as_decimal() <= rust_decimal::Decimal::ZERO {
+        return Err(NoSignalReason::UnheldLowProbability);
+    }
+    context
+        .timing
+        .check_holding(estimate.task(), holding.observed_at())?;
+    Ok(RaisedSignal::Sell(SellSignal {
         facts: estimate.clone(),
-        adjustment,
+        held_quantity: quantity,
+        observed_at: holding.observed_at(),
     }))
+}
+fn policy_reason(violation: &PolicyViolation) -> NoSignalReason {
+    match violation {
+        PolicyViolation::ExcludedSector(_) | PolicyViolation::ExcludedType(_) => {
+            NoSignalReason::Excluded
+        }
+        PolicyViolation::CandidateSectorUnassigned | PolicyViolation::UnknownSecurityType => {
+            NoSignalReason::Unavailable(SignalUnavailable::UnknownClassification)
+        }
+        PolicyViolation::Allocation(_) => {
+            NoSignalReason::Unavailable(SignalUnavailable::IncompleteHoldings)
+        }
+        PolicyViolation::InstrumentCap(_)
+        | PolicyViolation::InstrumentWarning(_)
+        | PolicyViolation::SectorCap(_)
+        | PolicyViolation::SectorUnassignedHoldings(_)
+        | PolicyViolation::MinimumCash
+        | PolicyViolation::ConcentrationWarning
+        | PolicyViolation::ConcentrationUnavailable
+        | PolicyViolation::UnresolvedPrinciples
+        | PolicyViolation::Arithmetic(_)
+        | PolicyViolation::InvalidCandidate => NoSignalReason::PolicyViolation,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
         AcquisitionPrice, AiProbability, AiProbabilityInput, AllocationInstrument, Amount,
-        BuyingPower, CalibratedProbability, Calibration, CalibrationEstimate,
-        CalibrationEstimateId, CalibrationFact, CalibrationKey, CalibrationModel,
-        CalibrationOutcome, CollectedItem, CommissionRateFact, CommissionValidity,
-        CostEligibleTask, CostRate, Currency, DartReceiptNo, Disclosure, Evidence, EvidenceRef,
-        EvidenceUrl, ExcludedSecurityType, Exclusions, Holding, HoldingObservation, Horizon,
-        HorizonSelection, HoursPermission, InstrumentClassification, InstrumentId, InvestorProfile,
-        Margin, Market, ModelIdentityPart, Money, NewsItem, NewsSource, NoSignalReason,
-        NoThresholds, NormalizedUrl, NumericInput, Policy, PolicyCostFit, PolicyPrinciple,
-        PolicySecurityFacts, PolicyText, Portfolio, PortfolioValuation, Quantity, RaisedSignal,
-        Ratio, ReceiptNo, ReportedHolding, ResolvedOrderInstrument, RiskAppetite, SectorAssignment,
-        SectorAssignments, SectorId, SignalBuyAdjustment, SignalCondition, SignalContext,
-        SignalDecision, SignalEstimate, SignalOperation, SignalSourceLedger, SignalUnavailable,
-        Symbol, TimeInterval, ToolReference, TotalCompleteness, TradeCost, TradeTaxFact,
-        UntrustedText, WeightCaps, candle, thresholds,
+        BuyingPower, Calibration, CalibrationEstimate, CalibrationEstimateId, CalibrationFact,
+        CalibrationKey, CalibrationModel, CalibrationOutcome, CollectedItem, CommissionRateFact,
+        CommissionValidity, CostEligibleTask, CostRate, Currency, DartReceiptNo, Disclosure,
+        EstimateContext, EstimateCostPeriod, EstimateTask, Evidence, EvidenceRef, EvidenceUrl,
+        ExcludedSecurityType, Exclusions, Holding, HoldingObservation, Horizon, HorizonSelection,
+        HoursPermission, InstrumentClassification, InstrumentId, InvestorProfile, Margin, Market,
+        MarketCalendar, MarketSession, ModelIdentityPart, Money, Nanosecond, NewsItem, NewsSource,
+        NoSignalReason, NormalizedUrl, NumericInput, OffsetSeconds, Policy, PolicyCostFit,
+        PolicyPrinciple, PolicySecurityFacts, PolicyText, Portfolio, PortfolioValuation,
+        PriceObservation, Quantity, RaisedSignal, Ratio, ReceiptNo, ReportedHolding,
+        ResolvedOrderInstrument, RiskAppetite, SectorAssignment, SectorAssignments, SectorId,
+        SessionData, SessionInformation, SignalContext, SignalDecision, SignalEstimate,
+        SignalOperation, SignalPreparationError, SignalSourceLedger, SignalSubmission,
+        SignalSubmissionError, SignalTaskKey, SignalTiming, SignalUnavailable, SpanSeconds,
+        SubmittedCalibration, Symbol, TimeInterval, TimeSpan, Timestamp, ToolReference, TradeCost,
+        TradeTaxFact, UntrustedText, WeightCaps, calibrate_signal_submission, candle, thresholds,
     };
     use proptest::test_runner::{Config, TestRunner};
     use rust_decimal::Decimal;
@@ -350,36 +363,63 @@ mod tests {
     fn money(text: &str) -> Money {
         Money::parse(&NumericInput::try_new(text).expect("입력"), Currency::Krw).expect("금액")
     }
-    fn probability(percent: i64, count: usize) -> CalibratedProbability {
-        let part = ModelIdentityPart::try_new("d24").expect("모델");
-        let key = CalibrationKey::new(
-            CalibrationModel::new(part.clone(), part.clone(), part),
-            Horizon::default(),
-        );
-        let predicted =
-            AiProbability::parse(&AiProbabilityInput::try_new(&percent.to_string()).expect("입력"))
-                .expect("확률");
-        let facts = (0..count)
-            .map(|index| {
-                CalibrationFact::new(
-                    CalibrationEstimate::new(
-                        CalibrationEstimateId::try_new(&format!("e{index}")).expect("ID"),
-                        InstrumentId::try_new(&format!("i{index}")).expect("종목"),
-                        key.clone(),
-                        TimeInterval::try_new(candle::tests::at(1), candle::tests::at(2))
-                            .expect("구간"),
-                        predicted,
-                    ),
-                    CalibrationOutcome::Hit,
+    fn ai(percent: i64) -> AiProbability {
+        AiProbability::parse(&AiProbabilityInput::try_new(&percent.to_string()).expect("입력"))
+            .expect("확률")
+    }
+    fn at(day: i64) -> Timestamp {
+        let point = candle::tests::at(day);
+        Timestamp::from_parts(
+            point.utc_seconds(),
+            point.nanosecond(),
+            OffsetSeconds::new(32_400),
+        )
+        .expect("현지 시각")
+    }
+    fn later(point: Timestamp, seconds: u64) -> Timestamp {
+        point
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(seconds), Nanosecond::new(0)).expect("기간"),
+            )
+            .expect("이후")
+    }
+    fn row(day: i64) -> MarketSession {
+        MarketSession::try_new(
+            at(day).offset_calendar_date(),
+            SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(
+                    SessionData::try_new(
+                        TimeInterval::try_new(at(day), later(at(day), 3600)).expect("구간"),
+                        None,
+                    )
+                    .expect("장"),
+                ),
+                after_market: None,
+            },
+        )
+        .expect("시장")
+    }
+    fn calendars() -> Vec<MarketCalendar> {
+        (61_i64..=66)
+            .map(|day| {
+                MarketCalendar::try_new(
+                    row(day.checked_sub(1).expect("전일")),
+                    row(day),
+                    row(day.checked_add(1).expect("익일")),
                 )
+                .expect("캘린더")
             })
-            .collect::<Vec<_>>();
-        Calibration::try_new(key.clone(), &facts)
-            .expect("집계")
-            .calibrate(&key, predicted)
+            .collect()
     }
     fn eligible() -> CostEligibleTask {
+        let task = thresholds::tests::task_for(Horizon::new(HorizonSelection::FewDays));
+        eligible_for(task)
+    }
+    fn eligible_for(task: EstimateTask) -> CostEligibleTask {
         let zero = CostRate::try_new(Ratio::new(Decimal::ZERO)).expect("비용");
+        let period =
+            EstimateCostPeriod::from_calendar_result(&task, later(at(66), 3600)).expect("만기");
         let cost = TradeCost::from_facts(
             Some(CommissionRateFact::from_commissions_result(
                 Market::Kr,
@@ -387,13 +427,17 @@ mod tests {
                 CommissionValidity::try_new(None, None).expect("기간"),
             )),
             Some(TradeTaxFact::from_schedule_result(Market::Kr, zero, zero)),
-            thresholds::tests::cost_period(),
+            period,
         )
         .expect("비용");
-        CostEligibleTask::assess(thresholds::tests::task(), &cost).expect("적격")
+        CostEligibleTask::assess(task, &cost).expect("적격")
     }
-    fn margin(percent: i64) -> Margin {
-        Margin::try_new(Ratio::new(Decimal::new(percent, 2))).expect("여유")
+    fn key() -> CalibrationKey {
+        let part = ModelIdentityPart::try_new("d24").expect("모델");
+        CalibrationKey::new(
+            CalibrationModel::new(part.clone(), part.clone(), part),
+            Horizon::new(HorizonSelection::FewDays),
+        )
     }
     fn item() -> CollectedItem {
         CollectedItem::from_web(
@@ -428,35 +472,91 @@ mod tests {
             ),
         }
     }
-    fn instrument() -> ResolvedOrderInstrument {
-        thresholds::tests::task().reference().instrument().clone()
-    }
-    fn valuation(quantity: Option<&str>, complete: TotalCompleteness) -> PortfolioValuation {
-        let rows = quantity
-            .map(|value| {
-                Holding::new(
-                    instrument(),
-                    Quantity::parse(&NumericInput::try_new(value).expect("입력")).expect("수량"),
-                    AcquisitionPrice::try_new(money("1")).expect("원가"),
-                    HoldingObservation::new(
-                        None,
-                        (complete == TotalCompleteness::Complete).then(|| {
-                            ReportedHolding::new(money("10"), money("0"), Ratio::new(Decimal::ZERO))
-                                .expect("평가")
-                        }),
-                        candle::tests::at(61),
+    fn calibrated(submission: SignalSubmission, count: usize) -> SubmittedCalibration {
+        let key = submission.calibration_key().clone();
+        let facts = (0..count)
+            .map(|index| {
+                CalibrationFact::new(
+                    CalibrationEstimate::new(
+                        CalibrationEstimateId::try_new(&format!("e{index}")).expect("ID"),
+                        InstrumentId::try_new(&format!("i{index}")).expect("종목"),
+                        key.clone(),
+                        TimeInterval::try_new(at(1), at(2)).expect("기간"),
+                        ai(50),
                     ),
+                    CalibrationOutcome::Hit,
                 )
-                .expect("보유")
             })
-            .into_iter()
-            .collect();
+            .collect::<Vec<_>>();
+        calibrate_signal_submission(
+            &Calibration::try_new(key, &facts).expect("집계"),
+            submission,
+        )
+    }
+    fn submission(
+        eligible: &CostEligibleTask,
+        percent: i64,
+        sources: Option<Evidence>,
+    ) -> SignalSubmission {
+        SignalSubmission::create(
+            SignalTaskKey::from_task(eligible),
+            key(),
+            ai(percent),
+            sources,
+            eligible.task().created_at(),
+        )
+        .expect("제출")
+    }
+    fn estimate(
+        eligible: &CostEligibleTask,
+        percent: i64,
+        count: usize,
+        margin: i64,
+        source: u8,
+    ) -> SignalEstimate {
+        SignalEstimate::create(
+            eligible,
+            &calibrated(submission(eligible, percent, evidence(source)), count),
+            Margin::try_new(Ratio::new(Decimal::new(margin, 2))).expect("여유"),
+        )
+        .expect("신호 입력")
+    }
+    fn instrument(market: Market, symbol: &str) -> ResolvedOrderInstrument {
+        ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new(symbol).expect("심볼"),
+            market,
+        )
+        .expect("종목")
+    }
+    fn holding(market: Market, symbol: &str, quantity: &str, observed_at: Timestamp) -> Holding {
+        let currency = if market == Market::Kr {
+            Currency::Krw
+        } else {
+            Currency::Usd
+        };
+        let value = |text| Money::new(money(text).amount(), currency);
+        Holding::new(
+            instrument(market, symbol),
+            Quantity::parse(&NumericInput::try_new(quantity).expect("입력")).expect("수량"),
+            AcquisitionPrice::try_new(value("1")).expect("원가"),
+            HoldingObservation::new(
+                None,
+                Some(
+                    ReportedHolding::new(value("10"), value("0"), Ratio::new(Decimal::ZERO))
+                        .expect("평가"),
+                ),
+                observed_at,
+            ),
+        )
+        .expect("보유")
+    }
+    fn portfolio(rows: Vec<Holding>) -> PortfolioValuation {
         Portfolio::new(
             rows,
-            BuyingPower::new(money("100"), candle::tests::at(61)),
+            BuyingPower::new(money("100"), at(61)),
             BuyingPower::new(
                 Money::new(Amount::new(Decimal::ZERO), Currency::Usd),
-                candle::tests::at(61),
+                at(61),
             ),
         )
         .expect("포트")
@@ -464,7 +564,7 @@ mod tests {
     }
     fn assignments() -> SectorAssignments {
         SectorAssignments::try_new(vec![SectorAssignment::new(
-            &instrument(),
+            &instrument(Market::Kr, "ABC"),
             InstrumentClassification::Sector(SectorId::try_new("Tech").expect("섹터")),
         )])
         .expect("분류")
@@ -472,7 +572,7 @@ mod tests {
     fn facts() -> PolicySecurityFacts {
         PolicySecurityFacts::from_master_lookup_results(
             std::iter::once((
-                AllocationInstrument::new(&instrument()),
+                AllocationInstrument::new(&instrument(Market::Kr, "ABC")),
                 ExcludedSecurityType::Stock,
             ))
             .collect(),
@@ -500,7 +600,7 @@ mod tests {
                 exclusions,
                 WeightCaps::default(),
             )
-            .expect("성향"),
+            .expect("원칙"),
         )
     }
     fn classify(decision: &SignalDecision) -> u8 {
@@ -510,15 +610,537 @@ mod tests {
             SignalDecision::None(_) => 0,
         }
     }
+    fn buy_payload(signal: RaisedSignal) -> Option<crate::BuySignal> {
+        match signal {
+            RaisedSignal::Buy(value) => Some(value),
+            RaisedSignal::Sell(_) => None,
+        }
+    }
+    fn sell_payload(signal: RaisedSignal) -> Option<crate::SellSignal> {
+        match signal {
+            RaisedSignal::Sell(value) => Some(value),
+            RaisedSignal::Buy(_) => None,
+        }
+    }
+    fn expected_fit(policy: &Policy, amount: &str) -> PolicyCostFit {
+        if (policy.minimum_cash().is_some() && amount != "1") || amount == "13" {
+            PolicyCostFit::AboveLimit
+        } else {
+            PolicyCostFit::WithinLimit
+        }
+    }
+    #[test]
+    fn signal_limit_is_always_present_and_cash_minimum_is_enforced() {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let portfolio = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let types = facts();
+        let calendar = calendars();
+        for policy in [
+            policy(0),
+            policy(0).with_minimum_cash(
+                crate::ProfileWeight::parse_percent(&NumericInput::try_new("90").expect("입력"))
+                    .expect("비중"),
+            ),
+        ] {
+            let context = SignalContext::new(
+                Some(&portfolio),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(at(61), &calendar),
+            );
+            let decision = SignalDecision::assess(&estimate, &context);
+            let raised = decision.into_signal().expect("신호");
+            assert_eq!(sell_payload(raised.clone()), None);
+            let signal = buy_payload(raised).expect("매수 한도");
+            let limit = signal.limit();
+            for amount in ["1", "11", "12", "13"] {
+                let expected = expected_fit(&policy, amount);
+                assert_eq!(limit.compare_krw_cost(money(amount)), expected);
+            }
+            assert_eq!(signal.facts(), &estimate);
+        }
+    }
 
     #[test]
-    fn independent_reference_covers_probability_threshold_holding_exclusion_and_sources() {
+    fn excluded_unclassified_unknown_and_incomplete_holdings_can_sell() {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 1, 0, 10, 1);
+        let portfolio = portfolio(vec![
+            holding(Market::Kr, "ABC", "0.25", at(61)),
+            holding(Market::Us, "US", "1", at(61)),
+        ]);
+        assert_eq!(
+            portfolio.valuation().completeness(),
+            crate::TotalCompleteness::Incomplete
+        );
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let missing = SectorAssignments::default();
+        let unclassified = SectorAssignments::try_new(vec![SectorAssignment::new(
+            &instrument(Market::Kr, "ABC"),
+            InstrumentClassification::Unclassified,
+        )])
+        .expect("분류");
+        let types = facts();
+        let unknown = PolicySecurityFacts::default();
+        let calendar = calendars();
+        for policy in [
+            policy(0),
+            policy(1),
+            policy(2),
+            policy(0).with_unresolved_principle(PolicyPrinciple::from_missing_contract(
+                PolicyText::try_new("미확정").expect("원칙"),
+            )),
+        ] {
+            for (candidate_mapping, candidate_types) in [
+                (&mapping, &types),
+                (&mapping, &unknown),
+                (&missing, &unknown),
+                (&unclassified, &types),
+            ] {
+                let context = SignalContext::new(
+                    Some(&portfolio),
+                    &policy,
+                    (candidate_mapping, candidate_types),
+                    &ledger,
+                    SignalTiming::new(at(61), &calendar),
+                );
+                let raised = SignalDecision::assess(&estimate, &context)
+                    .into_signal()
+                    .expect("신호");
+                assert_eq!(buy_payload(raised.clone()), None);
+                let signal = sell_payload(raised).expect("손절 매도");
+                assert_eq!(signal.held_quantity().as_decimal(), Decimal::new(25, 2));
+                assert_eq!(signal.observed_at(), at(61));
+                assert_eq!(signal.facts(), &estimate);
+            }
+        }
+    }
+
+    fn buy_block_reason(policy: &Policy) -> NoSignalReason {
+        let exclusions = policy.profile().exclusions();
+        if exclusions.sectors().is_empty() && exclusions.security_types().is_empty() {
+            NoSignalReason::Unavailable(SignalUnavailable::IncompleteHoldings)
+        } else {
+            NoSignalReason::Excluded
+        }
+    }
+    #[test]
+    fn buy_policy_still_blocks_unknown_excluded_and_incomplete_inputs() {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let values = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
+        let incomplete = portfolio(vec![holding(Market::Us, "US", "1", at(61))]);
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let missing = SectorAssignments::default();
+        let types = facts();
+        let unknown = PolicySecurityFacts::default();
+        let calendar = calendars();
+        let plain = policy(0);
+        for policy in [policy(0), policy(1), policy(2)] {
+            let snapshot = if policy.profile().exclusions().security_types().is_empty()
+                && policy.profile().exclusions().sectors().is_empty()
+            {
+                &incomplete
+            } else {
+                &values
+            };
+            let context = SignalContext::new(
+                Some(snapshot),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(at(61), &calendar),
+            );
+            let expected = buy_block_reason(&policy);
+            assert_eq!(
+                SignalDecision::assess(&estimate, &context),
+                SignalDecision::None(expected)
+            );
+        }
+        for classification in [(&mapping, &unknown), (&missing, &types)] {
+            let context = SignalContext::new(
+                Some(&values),
+                &plain,
+                classification,
+                &ledger,
+                SignalTiming::new(at(61), &calendar),
+            );
+            assert_eq!(
+                SignalDecision::assess(&estimate, &context).into_signal(),
+                None
+            );
+        }
+        let context = SignalContext::new(
+            None,
+            &plain,
+            (&mapping, &types),
+            &ledger,
+            SignalTiming::new(at(61), &calendar),
+        );
+        assert_eq!(
+            SignalDecision::assess(&estimate, &context),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::HoldingsQueryFailed
+            ))
+        );
+        assert_eq!(format!("{context:?}"), "SignalContext(..)");
+    }
+
+    #[test]
+    fn unrelated_market_symbol_absent_and_zero_holdings_never_sell() {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 1, 0, 10, 1);
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let types = facts();
+        let policy = policy(0);
+        let calendar = calendars();
+        for holdings in [
+            vec![],
+            vec![holding(Market::Kr, "ABC", "0", at(61))],
+            vec![holding(Market::Us, "ABC", "1", at(61))],
+            vec![holding(Market::Kr, "OTHER", "1", at(61))],
+        ] {
+            let values = portfolio(holdings);
+            let context = SignalContext::new(
+                Some(&values),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(at(61), &calendar),
+            );
+            assert_eq!(
+                SignalDecision::assess(&estimate, &context),
+                SignalDecision::None(NoSignalReason::UnheldLowProbability)
+            );
+        }
+        let context = SignalContext::new(
+            None,
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            SignalTiming::new(at(61), &calendar),
+        );
+        assert_eq!(
+            SignalDecision::assess(&estimate, &context).into_signal(),
+            None
+        );
+    }
+
+    fn alternate_task() -> CostEligibleTask {
+        let original = eligible();
+        let task = original.task();
+        let reference = PriceObservation::from_identified_quote_parts(
+            task.volatility().instrument().clone(),
+            instrument(Market::Kr, "OTHER"),
+            task.reference().price(),
+            task.reference().observed_at(),
+        )
+        .expect("관측");
+        eligible_for(
+            EstimateTask::create(
+                EstimateContext::new(reference, task.created_at()),
+                task.volatility().clone(),
+                Horizon::new(HorizonSelection::FewDays),
+                HoursPermission::default(),
+                RiskAppetite::Neutral,
+            )
+            .expect("과제"),
+        )
+    }
+
+    #[test]
+    fn submission_binds_task_probability_model_evidence_and_time() {
+        let eligible = eligible();
+        let other = alternate_task();
+        assert_ne!(
+            SignalTaskKey::from_task(&eligible),
+            SignalTaskKey::from_task(&other)
+        );
+        assert_eq!(
+            SignalTaskKey::from_task(&eligible),
+            SignalTaskKey::from_task(&eligible)
+        );
+        let submitted = submission(&other, 99, evidence(1));
+        let bound = calibrated(submitted.clone(), 0);
+        assert_eq!(bound.submission(), &submitted);
+        assert_eq!(submitted.probability(), ai(99));
+        assert_eq!(submitted.calibration_key(), &key());
+        assert_eq!(submitted.submitted_at(), other.task().created_at());
+        assert_eq!(
+            SignalEstimate::create(&eligible, &bound, Margin::default()),
+            Err(SignalPreparationError::SubmissionMismatch)
+        );
+        let before = eligible
+            .task()
+            .created_at()
+            .checked_sub(TimeSpan::NANOSECOND)
+            .expect("직전");
+        assert_eq!(
+            SignalSubmission::create(
+                SignalTaskKey::from_task(&eligible),
+                key(),
+                ai(99),
+                evidence(1),
+                before
+            ),
+            Err(SignalSubmissionError::BeforeTask)
+        );
+        let bad_key = CalibrationKey::new(key().model().clone(), Horizon::default());
+        let wrong_horizon = SignalSubmission::create(
+            SignalTaskKey::from_task(&eligible),
+            bad_key,
+            ai(99),
+            evidence(1),
+            at(61),
+        )
+        .expect("제출");
+        assert_eq!(
+            SignalEstimate::create(
+                &eligible,
+                &calibrated_for_bad(wrong_horizon),
+                Margin::default()
+            ),
+            Err(SignalPreparationError::Thresholds(
+                crate::NoThresholds::HorizonMismatch
+            ))
+        );
+    }
+    fn calibrated_for_bad(submission: SignalSubmission) -> SubmittedCalibration {
+        calibrated(submission, 0)
+    }
+
+    #[test]
+    fn expiry_and_calendar_absence_are_common_signal_gates() {
+        let eligible = eligible();
+        let calendar = calendars();
+        let endpoint = later(at(66), 3600);
+        assert_eq!(SignalTiming::new(at(61), &calendar).now(), at(61));
+        assert_eq!(
+            format!("{:?}", SignalTiming::new(at(61), &calendar)),
+            "SignalTiming(..)"
+        );
+        assert_eq!(
+            crate::estimate_outcome::signal_task_interval(eligible.task(), &calendar)
+                .expect("만기")
+                .end(),
+            endpoint
+        );
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let types = facts();
+        let values = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
+        let policy = policy(0);
+        for percent in [1, 99] {
+            let estimate = estimate(&eligible, percent, 0, 10, 1);
+            let context = SignalContext::new(
+                Some(&values),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(endpoint, &calendar),
+            );
+            assert_eq!(
+                SignalDecision::assess(&estimate, &context),
+                SignalDecision::None(NoSignalReason::Expired)
+            );
+            let missing = SignalContext::new(
+                Some(&values),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(at(61), &[]),
+            );
+            assert_eq!(
+                SignalDecision::assess(&estimate, &missing),
+                SignalDecision::None(NoSignalReason::Unavailable(SignalUnavailable::Calendar))
+            );
+        }
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let before = endpoint.checked_sub(TimeSpan::NANOSECOND).expect("직전");
+        let context = SignalContext::new(
+            Some(&values),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            SignalTiming::new(before, &calendar),
+        );
+        assert_eq!(classify(&SignalDecision::assess(&estimate, &context)), 1);
+    }
+
+    #[test]
+    fn sell_holding_age_checks_task_creation_future_and_sixty_second_boundary() {
+        let eligible = eligible();
+        let calendar = calendars();
+        let estimate = estimate(&eligible, 1, 0, 10, 1);
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let types = facts();
+        let policy = policy(0);
+        let boundary = later(at(61), 60);
+        let before_task = at(61).checked_sub(TimeSpan::NANOSECOND).expect("이전");
+        for (observed, now, expected) in [
+            (at(61), boundary, 2),
+            (later(at(61), 1), later(at(61), 2), 2),
+            (
+                at(61),
+                boundary.checked_add(TimeSpan::NANOSECOND).expect("직후"),
+                0,
+            ),
+            (before_task, at(61), 0),
+            (later(at(61), 1), at(61), 0),
+        ] {
+            let values = portfolio(vec![holding(Market::Kr, "ABC", "1", observed)]);
+            let context = SignalContext::new(
+                Some(&values),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(now, &calendar),
+            );
+            let decision = SignalDecision::assess(&estimate, &context);
+            assert_eq!(classify(&decision), expected);
+            if let SignalDecision::Sell(signal) = decision {
+                assert_eq!(signal.observed_at(), observed);
+            }
+        }
+    }
+
+    #[test]
+    fn a_submission_from_the_future_cannot_raise_a_signal() {
+        let eligible = eligible();
+        let calendar = calendars();
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let types = facts();
+        let policy = policy(0);
+        let future = SignalSubmission::create(
+            SignalTaskKey::from_task(&eligible),
+            key(),
+            ai(99),
+            evidence(1),
+            later(at(61), 1),
+        )
+        .expect("제출");
+        let future_input =
+            SignalEstimate::create(&eligible, &calibrated(future, 0), Margin::default())
+                .expect("입력");
+        let values = portfolio(vec![]);
+        let context = SignalContext::new(
+            Some(&values),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            SignalTiming::new(at(61), &calendar),
+        );
+        assert_eq!(
+            SignalDecision::assess(&future_input, &context),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::SubmissionFromFuture
+            ))
+        );
+    }
+
+    fn decide_sources(evidence: Evidence, ledger: &SignalSourceLedger<'_>) -> SignalDecision {
+        let eligible = eligible();
+        let input = SignalEstimate::create(
+            &eligible,
+            &calibrated(submission(&eligible, 99, Some(evidence)), 0),
+            Margin::default(),
+        )
+        .expect("입력");
+        let values = portfolio(vec![]);
+        let mapping = assignments();
+        let types = facts();
+        let policy = policy(0);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(&values),
+            &policy,
+            (&mapping, &types),
+            ledger,
+            SignalTiming::new(at(61), &calendar),
+        );
+        SignalDecision::assess(&input, &context)
+    }
+
+    fn reference(values: (i64, i64, usize), axes: (u8, u8, u8), base: Decimal) -> u8 {
+        let (percent, margin, count) = values;
+        let (held, excluded, source) = axes;
+        let buy_margin = if count < 30 { margin.max(15) } else { margin };
+        let sell_margin = if count < 30 { 15 } else { margin };
+        if source != 1 {
+            0
+        } else if Decimal::new(percent, 2)
+            <= base
+                .checked_sub(Decimal::new(sell_margin, 2))
+                .expect("매도")
+                .max(Decimal::new(5, 2))
+        {
+            if held == 2 { 2 } else { 0 }
+        } else {
+            u8::from(
+                excluded == 0
+                    && Decimal::new(percent, 2)
+                        >= base.checked_add(Decimal::new(buy_margin, 2)).expect("매수"),
+            )
+        }
+    }
+
+    fn assert_estimate_contract(
+        estimate: &SignalEstimate,
+        eligible: &CostEligibleTask,
+        values: (i64, usize),
+    ) {
+        let (percent, count) = values;
+        let operation = if count < 30 {
+            SignalOperation::Conservative
+        } else {
+            SignalOperation::EligibleBeforeE91
+        };
+        assert_eq!(estimate.operation(), operation);
+        assert_eq!(estimate.task(), eligible.task());
+        assert_eq!(estimate.submission().probability(), ai(percent));
+        assert_eq!(
+            estimate.display_probability().expect("표시").as_str(),
+            format!("≈{percent}.0%")
+        );
+        let calibration = estimate.calibration();
+        assert!(
+            !(estimate
+                .thresholds()
+                .buy_condition(calibration)
+                .expect("비교")
+                == crate::SignalCondition::Met
+                && estimate
+                    .thresholds()
+                    .sell_condition(calibration)
+                    .expect("비교")
+                    == crate::SignalCondition::Met)
+        );
+    }
+    #[test]
+    fn independent_reference_covers_new_sell_priority_and_submission_readiness() {
         let eligible = eligible();
         let base = eligible.task().base_probability().as_decimal();
         let rows = [item()];
         let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let assignments = assignments();
-        let facts = facts();
+        let mapping = assignments();
+        let types = facts();
+        let calendar = calendars();
         TestRunner::new(Config::with_cases(4096))
             .run(
                 &(
@@ -527,45 +1149,32 @@ mod tests {
                     0_u8..3,
                     0_u8..3,
                     0_u8..4,
-                    proptest::bool::ANY,
+                    0_usize..2,
                 ),
-                |(percent, buffer, holding, exclusion, source, ready)| {
-                    let calibration = probability(percent, if ready { 30 } else { 0 });
-                    let estimate = SignalEstimate::create(
-                        &eligible,
-                        &calibration,
-                        margin(buffer),
-                        evidence(source),
-                    )
-                    .expect("추정");
-                    let portfolio = valuation(
-                        match holding {
-                            0 => None,
-                            1 => Some("0"),
-                            _ => Some("0.25"),
-                        },
-                        TotalCompleteness::Complete,
-                    );
-                    let policy = policy(exclusion);
+                |(percent, margin, held, excluded, source, ready)| {
+                    let count = ready * 30;
+                    let estimate = estimate(&eligible, percent, count, margin, source);
+                    let holdings = match held {
+                        0 => vec![],
+                        1 => vec![holding(Market::Kr, "ABC", "0", at(61))],
+                        _ => vec![holding(Market::Kr, "ABC", "0.25", at(61))],
+                    };
+                    let portfolio = portfolio(holdings);
+                    let policy = policy(excluded);
                     let context = SignalContext::new(
                         Some(&portfolio),
                         &policy,
-                        (&assignments, &facts),
+                        (&mapping, &types),
                         &ledger,
-                        money("1"),
+                        SignalTiming::new(at(61), &calendar),
                     );
-                    let decision = SignalDecision::assess(&estimate, &calibration, &context);
-                    let expected = reference(
-                        (percent, buffer),
-                        base,
-                        estimate.operation(),
-                        (holding, exclusion, source),
+                    let decision = SignalDecision::assess(&estimate, &context);
+                    proptest::prop_assert_eq!(
+                        classify(&decision),
+                        reference((percent, margin, count), (held, excluded, source), base)
                     );
-                    proptest::prop_assert_eq!(classify(&decision), expected);
-                    if holding != 2 {
-                        proptest::prop_assert_ne!(classify(&decision), 2);
-                    }
-                    if exclusion != 0 || source != 1 {
+                    assert_estimate_contract(&estimate, &eligible, (percent, count));
+                    if source != 1 {
                         proptest::prop_assert_eq!(decision.into_signal(), None);
                     }
                     Ok(())
@@ -575,47 +1184,39 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_inputs_never_fall_through_to_signals() {
+    fn unavailable_and_missing_sources_never_produce_payloads() {
         let eligible = eligible();
         let rows = [item()];
         let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let assignments = assignments();
-        let facts = facts();
+        let mapping = assignments();
+        let types = facts();
+        let calendar = calendars();
+        let values = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
         let policy = policy(0);
-        let incomplete = valuation(Some("1"), TotalCompleteness::Incomplete);
-        let complete = valuation(Some("1"), TotalCompleteness::Complete);
         TestRunner::new(Config::with_cases(4096))
-            .run(&(1_i64..=99), |percent| {
-                let calibration = probability(percent, 0);
-                let estimate =
-                    SignalEstimate::create(&eligible, &calibration, margin(10), evidence(1))
-                        .expect("추정");
-                for snapshot in [None, Some(&incomplete)] {
-                    let context = SignalContext::new(
-                        snapshot,
-                        &policy,
-                        (&assignments, &facts),
-                        &ledger,
-                        money("1"),
-                    );
-                    proptest::prop_assert_eq!(
-                        SignalDecision::assess(&estimate, &calibration, &context).into_signal(),
-                        None
-                    );
-                }
+            .run(&(1_i64..=99, 0_u8..3), |(percent, condition)| {
+                let source = u8::from(condition != 0);
+                let input = estimate(&eligible, percent, 0, 10, source);
+                let now = if condition == 2 {
+                    later(at(66), 3600)
+                } else {
+                    at(61)
+                };
+                let calendars = if condition == 1 {
+                    &[][..]
+                } else {
+                    calendar.as_slice()
+                };
                 let context = SignalContext::new(
-                    Some(&complete),
+                    Some(&values),
                     &policy,
-                    (&assignments, &facts),
+                    (&mapping, &types),
                     &ledger,
-                    money("1"),
+                    SignalTiming::new(now, calendars),
                 );
-                let different = probability(if percent == 99 { 1 } else { percent + 1 }, 0);
                 proptest::prop_assert_eq!(
-                    SignalDecision::assess(&estimate, &different, &context),
-                    SignalDecision::None(NoSignalReason::Unavailable(
-                        SignalUnavailable::Thresholds(NoThresholds::CalibrationMismatch)
-                    ))
+                    SignalDecision::assess(&input, &context).into_signal(),
+                    None
                 );
                 Ok(())
             })
@@ -623,164 +1224,69 @@ mod tests {
     }
 
     #[test]
-    fn policy_blocks_buys_reduces_budgets_and_never_blocks_owned_sells() {
-        let eligible = eligible();
-        let rows = [item()];
-        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let assignments = assignments();
-        let facts = facts();
-        let portfolio = valuation(Some("0.25"), TotalCompleteness::Complete);
-        let plain = policy(0);
-        let blocked =
-            plain
-                .clone()
-                .with_unresolved_principle(PolicyPrinciple::from_missing_contract(
-                    PolicyText::try_new("미확정").expect("원칙"),
-                ));
-        for (percent, budget, policy, expected) in [
-            (99, "1", &plain, 1),
-            (99, "90", &plain, 1),
-            (99, "1", &blocked, 0),
-            (1, "1", &blocked, 2),
+    fn probability_display_uses_nearest_rounding_instead_of_threshold_ceiling() {
+        for (value, expected) in [
+            ("0.64149", "≈64.1%"),
+            ("0.6415", "≈64.2%"),
+            ("0.6405", "≈64.1%"),
+            ("0", "≈0.0%"),
+            ("1", "≈100.0%"),
         ] {
-            let calibration = probability(percent, 0);
-            let estimate = SignalEstimate::create(&eligible, &calibration, margin(10), evidence(1))
-                .expect("추정");
-            let context = SignalContext::new(
-                Some(&portfolio),
-                policy,
-                (&assignments, &facts),
-                &ledger,
-                money(budget),
+            let probability = crate::Probability::try_new(
+                Ratio::parse(&NumericInput::try_new(value).expect("입력"))
+                    .expect("비율")
+                    .as_decimal(),
+            )
+            .expect("확률");
+            assert_eq!(
+                crate::thresholds_arithmetic::signal_probability_display(
+                    crate::thresholds_arithmetic::ThresholdNumber::new(probability.as_decimal())
+                )
+                .expect("표시")
+                .as_str(),
+                expected
             );
-            let decision = SignalDecision::assess(&estimate, &calibration, &context);
-            assert_eq!(classify(&decision), expected);
-            match decision.clone().into_signal() {
-                Some(RaisedSignal::Buy(signal)) => {
-                    assert_eq!(signal.facts(), &estimate);
-                    match signal.adjustment() {
-                        SignalBuyAdjustment::Unchanged => assert_eq!(budget, "1"),
-                        SignalBuyAdjustment::Reduce(limit) => assert_eq!(
-                            limit.compare_krw_cost(money("90")),
-                            PolicyCostFit::AboveLimit
-                        ),
-                    }
-                }
-                Some(RaisedSignal::Sell(signal)) => {
-                    assert_eq!(signal.facts(), &estimate);
-                    assert_eq!(signal.held_quantity().as_decimal(), Decimal::new(25, 2));
-                }
-                None => assert_eq!(
-                    decision,
-                    SignalDecision::None(NoSignalReason::PolicyViolation)
-                ),
-            }
         }
-    }
-
-    fn reference(
-        values: (i64, i64),
-        base: Decimal,
-        mode: SignalOperation,
-        axes: (u8, u8, u8),
-    ) -> u8 {
-        let (percent, buffer) = values;
-        let (holding, exclusion, source) = axes;
-        let (buy_margin, sell_margin) = match mode {
-            SignalOperation::Conservative => (buffer.max(15), 15),
-            SignalOperation::EligibleBeforeE91 => (buffer, buffer),
-        };
-        if exclusion != 0 || source != 1 {
-            0
-        } else if Decimal::new(percent, 2)
-            >= base
-                .checked_add(Decimal::new(buy_margin, 2))
-                .expect("매수 기준")
-        {
-            1
-        } else if Decimal::new(percent, 2)
-            <= base
-                .checked_sub(Decimal::new(sell_margin, 2))
-                .expect("매도 기준")
-                .max(Decimal::new(5, 2))
-            && holding == 2
-        {
-            2
-        } else {
-            0
-        }
+        assert_eq!(
+            crate::thresholds_arithmetic::signal_probability_display(
+                crate::thresholds_arithmetic::ThresholdNumber::new(Decimal::MAX)
+            ),
+            Err(crate::NoThresholds::NumericalDomain)
+        );
     }
 
     #[test]
-    fn threshold_conditions_are_disjoint_and_conservative_signals_keep_display_facts() {
+    fn zero_headroom_and_unresolved_principles_block_buys() {
         let eligible = eligible();
-        TestRunner::new(Config::with_cases(4096))
-            .run(&(1_i64..=99, 5_i64..=25), |(percent, buffer)| {
-                let calibration = probability(percent, 0);
-                let estimate =
-                    SignalEstimate::create(&eligible, &calibration, margin(buffer), evidence(1))
-                        .expect("추정");
-                proptest::prop_assert!(
-                    !(estimate
-                        .thresholds()
-                        .buy_condition(&calibration)
-                        .expect("비교")
-                        == SignalCondition::Met
-                        && estimate
-                            .thresholds()
-                            .sell_condition(&calibration)
-                            .expect("비교")
-                            == SignalCondition::Met)
-                );
-                proptest::prop_assert_eq!(estimate.operation(), SignalOperation::Conservative);
-                proptest::prop_assert_eq!(estimate.task(), eligible.task());
-                proptest::prop_assert_eq!(estimate.calibration(), &calibration);
-                proptest::prop_assert_eq!(
-                    estimate
-                        .display_probability()
-                        .expect("표시")
-                        .as_str()
-                        .to_owned(),
-                    format!("≈{percent}.0%")
-                );
-                Ok(())
-            })
-            .expect("배타성4096");
-        let calibration = probability(99, 30);
-        let estimate =
-            SignalEstimate::create(&eligible, &calibration, margin(10), None).expect("추정");
-        assert_eq!(estimate.operation(), SignalOperation::EligibleBeforeE91);
-        assert_eq!(
-            estimate.display_probability().expect("표시").as_str(),
-            "≈99.0%"
+        let input = estimate(&eligible, 99, 0, 10, 1);
+        let cap = crate::ProfileWeight::parse_percent(&NumericInput::try_new("5").expect("입력"))
+            .expect("상한");
+        let tight = Policy::new(InvestorProfile::default().with_weight_caps(
+            WeightCaps::try_new(cap, cap, WeightCaps::default().sector_cap()).expect("관계"),
+        ));
+        let unresolved = policy(0).with_unresolved_principle(
+            PolicyPrinciple::from_missing_contract(PolicyText::try_new("미확정").expect("원칙")),
         );
-        assert!(estimate.task().target().to_string().starts_with('≈'));
-        assert!(estimate.task().stop().to_string().starts_with('≈'));
-        assert_eq!(
-            estimate.task().horizon().as_ratio().as_decimal(),
-            Decimal::from(40_i32)
-        );
+        let values = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
+        let rows = [item()];
+        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
+        let mapping = assignments();
+        let types = facts();
+        let calendar = calendars();
+        for policy in [tight, unresolved] {
+            let context = SignalContext::new(
+                Some(&values),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                SignalTiming::new(at(61), &calendar),
+            );
+            assert_eq!(
+                SignalDecision::assess(&input, &context),
+                SignalDecision::None(NoSignalReason::PolicyViolation)
+            );
+        }
     }
-
-    fn decide_sources(evidence: Evidence, ledger: &SignalSourceLedger<'_>) -> SignalDecision {
-        let calibration = probability(99, 0);
-        let estimate =
-            SignalEstimate::create(&eligible(), &calibration, margin(10), Some(evidence))
-                .expect("추정");
-        let portfolio = valuation(None, TotalCompleteness::Complete);
-        let assignments = assignments();
-        let facts = facts();
-        let policy = policy(0);
-        let context = SignalContext::new(
-            Some(&portfolio),
-            &policy,
-            (&assignments, &facts),
-            ledger,
-            money("1"),
-        );
-        SignalDecision::assess(&estimate, &calibration, &context)
-    }
-
     #[test]
     fn source_ledger_matches_kinds_urls_receipts_and_tools_without_counting_tools_as_sources() {
         let web = item();
@@ -881,190 +1387,6 @@ mod tests {
         assert_eq!(
             decide_sources(mixed, ledger),
             SignalDecision::None(NoSignalReason::MissingSource)
-        );
-    }
-
-    #[test]
-    fn closed_reasons_and_unknown_classification_precede_thresholds() {
-        let eligible = eligible();
-        let rows = [item()];
-        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let assignments = assignments();
-        let facts = facts();
-        let portfolio = valuation(None, TotalCompleteness::Complete);
-        let plain = policy(0);
-        for (percent, source, expected) in [
-            (30, 1, NoSignalReason::ConditionsUnmet),
-            (1, 1, NoSignalReason::UnheldLowProbability),
-            (99, 0, NoSignalReason::MissingSource),
-        ] {
-            let calibration = probability(percent, 0);
-            let estimate =
-                SignalEstimate::create(&eligible, &calibration, margin(10), evidence(source))
-                    .expect("추정");
-            let context = SignalContext::new(
-                Some(&portfolio),
-                &plain,
-                (&assignments, &facts),
-                &ledger,
-                money("1"),
-            );
-            assert_eq!(
-                SignalDecision::assess(&estimate, &calibration, &context),
-                SignalDecision::None(expected)
-            );
-        }
-    }
-
-    #[test]
-    fn unknown_classification_and_invalid_budget_do_not_make_a_signal() {
-        let eligible = eligible();
-        let rows = [item()];
-        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let assignments = assignments();
-        let facts = facts();
-        let portfolio = valuation(None, TotalCompleteness::Complete);
-        let plain = policy(0);
-        let calibration = probability(99, 0);
-        let estimate =
-            SignalEstimate::create(&eligible, &calibration, margin(10), evidence(1)).expect("추정");
-        let unknown = PolicySecurityFacts::default();
-        let missing = SectorAssignments::default();
-        let unclassified = SectorAssignments::try_new(vec![SectorAssignment::new(
-            &instrument(),
-            InstrumentClassification::Unclassified,
-        )])
-        .expect("미분류");
-        for (mapping, types) in [
-            (&assignments, &unknown),
-            (&missing, &facts),
-            (&unclassified, &facts),
-        ] {
-            let context = SignalContext::new(
-                Some(&portfolio),
-                &plain,
-                (mapping, types),
-                &ledger,
-                money("1"),
-            );
-            assert_eq!(
-                SignalDecision::assess(&estimate, &calibration, &context),
-                SignalDecision::None(NoSignalReason::Unavailable(
-                    SignalUnavailable::UnknownClassification
-                ))
-            );
-        }
-        for budget in ["0", "-1"] {
-            let context = SignalContext::new(
-                Some(&portfolio),
-                &plain,
-                (&assignments, &facts),
-                &ledger,
-                money(budget),
-            );
-            assert_eq!(
-                SignalDecision::assess(&estimate, &calibration, &context),
-                SignalDecision::None(NoSignalReason::PolicyViolation)
-            );
-        }
-    }
-
-    #[test]
-    fn holding_identity_cannot_be_replaced_by_another_owned_instrument() {
-        let other = ResolvedOrderInstrument::from_master_lookup_result(
-            Symbol::try_new("OTHER").expect("종목"),
-            Market::Kr,
-        )
-        .expect("시장");
-        let holding = Holding::new(
-            other,
-            Quantity::parse(&NumericInput::try_new("1").expect("입력")).expect("수량"),
-            AcquisitionPrice::try_new(money("1")).expect("원가"),
-            HoldingObservation::new(
-                None,
-                Some(
-                    ReportedHolding::new(money("10"), money("0"), Ratio::new(Decimal::ZERO))
-                        .expect("평가"),
-                ),
-                candle::tests::at(61),
-            ),
-        )
-        .expect("보유");
-        let portfolio = Portfolio::new(
-            vec![holding],
-            BuyingPower::new(money("100"), candle::tests::at(61)),
-            BuyingPower::new(
-                Money::new(Amount::new(Decimal::ZERO), Currency::Usd),
-                candle::tests::at(61),
-            ),
-        )
-        .expect("포트")
-        .evaluate(None);
-        let rows = [item()];
-        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let assignments = assignments();
-        let facts = facts();
-        let policy = policy(0);
-        let calibration = probability(1, 0);
-        let estimate = SignalEstimate::create(&eligible(), &calibration, margin(10), evidence(1))
-            .expect("추정");
-        let context = SignalContext::new(
-            Some(&portfolio),
-            &policy,
-            (&assignments, &facts),
-            &ledger,
-            money("1"),
-        );
-        assert_eq!(
-            SignalDecision::assess(&estimate, &calibration, &context),
-            SignalDecision::None(NoSignalReason::UnheldLowProbability)
-        );
-    }
-
-    #[test]
-    fn etf_classification_can_raise_a_signal_without_an_assigned_sector() {
-        let eligible = eligible();
-        let rows = [item()];
-        let ledger = SignalSourceLedger::new(&rows, &[], &[]);
-        let facts = facts();
-        let portfolio = valuation(None, TotalCompleteness::Complete);
-        let plain = policy(0);
-        let calibration = probability(99, 0);
-        let estimate =
-            SignalEstimate::create(&eligible, &calibration, margin(10), evidence(1)).expect("추정");
-        let etf = SectorAssignments::try_new(vec![SectorAssignment::new(
-            &instrument(),
-            InstrumentClassification::EtfFund,
-        )])
-        .expect("ETF");
-        let context = SignalContext::new(
-            Some(&portfolio),
-            &plain,
-            (&etf, &facts),
-            &ledger,
-            money("1"),
-        );
-        assert_eq!(
-            classify(&SignalDecision::assess(&estimate, &calibration, &context)),
-            1
-        );
-    }
-
-    #[test]
-    fn preparation_uses_d22_horizon_validation_before_any_signal() {
-        let part = ModelIdentityPart::try_new("d24").expect("모델");
-        let key = CalibrationKey::new(
-            CalibrationModel::new(part.clone(), part.clone(), part),
-            Horizon::new(HorizonSelection::FewDays),
-        );
-        let predicted =
-            AiProbability::parse(&AiProbabilityInput::try_new("99").expect("입력")).expect("확률");
-        let calibration = Calibration::try_new(key.clone(), &[])
-            .expect("자료")
-            .calibrate(&key, predicted);
-        assert_eq!(
-            SignalEstimate::create(&eligible(), &calibration, margin(10), evidence(1)),
-            Err(NoThresholds::HorizonMismatch)
         );
     }
 }

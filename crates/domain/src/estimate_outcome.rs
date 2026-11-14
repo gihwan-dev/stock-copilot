@@ -687,6 +687,13 @@ fn candle_resolution(candle: &Candle, boundaries: &OutcomeBoundaries) -> Option<
     }
 }
 
+pub(crate) fn signal_task_interval(
+    task: &EstimateTask,
+    calendars: &[MarketCalendar],
+) -> Result<TimeInterval, OutcomeUnavailable> {
+    schedule(task, calendars).map(|value| value.interval)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::candle::tests::{at, price, series};

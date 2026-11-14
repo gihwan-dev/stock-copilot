@@ -224,6 +224,7 @@ impl Timestamp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimeSpan(SignedDuration);
+pub(crate) const SIGNAL_HOLDING_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 impl TimeSpan {
     pub const DAY: Self = Self(SignedDuration::seconds(86400));
     pub const NANOSECOND: Self = Self(SignedDuration::nanoseconds(1));
