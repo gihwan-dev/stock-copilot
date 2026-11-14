@@ -374,7 +374,58 @@ v0.1의 `Idea`, `ProposalOutcome`은 없앤다. 장이 닫혀 있을 때의 신�
 
 코어 안의 일은 `DomainEvent`로 알린다. 스케줄러 트리거와 UI 갱신이 모두 이것을 구독한다. 새 반응을 추가할 때 기존 코드를 고치지 않고 구독자를 추가한다.
 
-예: `PortfolioSynced`, `ValuationSnapshotTaken`, `PriceMoved`, `DisclosureArrived`, `NewsClusterGrew`, `CollectionFinished`, `EstimateSubmitted`, `SignalRaised`, `SignalCleared`, `ProposalCreated`, `ProposalExpired`, `OrderSubmitted`, `OrderFilled`, `OrderOutcomeUnknown`, `EstimateResolved`, `AiJobFinished`, `AiQuotaExhausted`, `BrokerAccessBlocked`. 닫힌 목록은 D-18에서 확정한다.
+다음은 닫힌 목록이다. `DomainEventKind`는 코드에 있는 각 변형과 같은 이름으로 일대일 대응하고 `DomainEvent::kind()`로 얻는다. 정의 대기 행은 코드와 종류 열거형에 넣지 않는다. 새 변형은 이 표와 테스트를 함께 바꾼다.
+
+각 이벤트는 기록 저장 뒤 내는 변경 알림이며 승인이나 주문 전송 권한이 아니다. 모든 페이로드는 아래 식별자 또는 닫힌 종류뿐이다. 전역 단일 자원(설정, 원칙, 주문 스위치, 관심 목록, 단일 토큰, 자체 점검)은 ID 없이 종류만 보낸다. 구독자는 해당 단일 자원을 다시 읽는다. 계좌 선택 전에도 일어나는 연결 차단에 가짜 계좌 ID를 붙이지 않는다.
+
+| 변형 | 싣는 ID·종류 | 내는 곳·발생 조건 | 구독자 | 근거 | 정의 대기 여부 |
+|---|---|---|---|---|---|
+| `PortfolioSynced` | `AccountId` | A-06이 보유·매수가능금액 동기화 결과를 저장했을 때 | 스케줄러, UI 갱신 | design 5.2, A-06 | 아니오 |
+| `HoldingsSyncFailed` | `AccountId` | A-06이 보유 조회 실패를 저장했을 때 | UI 갱신 | A-06의 일부 실패 경로 | 아니오 |
+| `BuyingPowerSyncFailed` | `AccountId` | A-06이 매수가능금액 조회 실패를 저장했을 때 | UI 갱신 | A-06, design 5.2 | 아니오 |
+| `TransactionsSynced` | `AccountId` | A-07이 14일 창 대조 결과와 사라진 행을 저장했을 때 | UI 갱신 | A-07, design 5.2 | 아니오 |
+| `PriceUpdated` | `InstrumentId` | 시세 수집기가 새 시세를 저장했을 때 | UI 갱신 | design 5.2, U-13 | 아니오 |
+| `PriceMoved` | `InstrumentId` | N-12가 보유 종목 하루 변동 기준 충족을 기록했을 때 | 스케줄러, UI 갱신 | design 5.3의 하루 ±5% | 아니오 |
+| `DisclosureArrived` | `DisclosureKey` | 공시 수집기가 신규·정정 공시를 저장했을 때 | 스케줄러, UI 갱신, 알림 | design 5.3, UX-3, N-21 | 아니오 |
+| `NewsActivityIncreased` | `InstrumentId` | N-12가 같은 종목 뉴스 급증을 기록했을 때 | 스케줄러, UI 갱신 | design 5.3의 1시간 5건 | 아니오 |
+| `ProposalCreated` | `ProposalId` | A-14가 새 주문 제안을 저장했을 때 | UI 갱신 | A-14, design 6.4 | 아니오 |
+| `ProposalExpired` | `ProposalId` | 제안 관리가 시간·가격 범위 만료를 기록했을 때 | UI 갱신 | design 6.5 | 아니오 |
+| `ProposalApproved` | `ProposalId` | 승인 서비스가 본인 확인 성공을 감사 기록했을 때 | UI 갱신 | architecture 4.4, SEC-8 | 아니오 |
+| `ProposalRejected` | `ProposalId` | 승인 서비스가 사용자 거절·확인 취소를 기록했을 때 | UI 갱신 | SEC-8, O-04 | 아니오 |
+| `ProposalSkipped` | `ProposalId` | 넘기기 유스케이스가 사용자 선택을 저장했을 때 | UI 갱신 | design 6.5, E-10 | 아니오 |
+| `OrderSubmitted` | `ClientOrderId` | 주문 실행이 전송 사실을 기록했을 때 | 스케줄러, UI 갱신 | design 5.2의 주문 직후 동기화, ORD-2 | 아니오 |
+| `OrderOutcomeUnknown` | `ClientOrderId` | 주문 실행이 전송 결과 미확정을 저장했을 때 | 스케줄러, UI 갱신 | ORD-2, O-19 | 아니오 |
+| `BrokerAccessBlocked` | 없음(전역 단일 자원) | 토스 연결 관리가 IP·접근 차단 상태를 저장했을 때 | 스케줄러, UI 갱신 | REL-1, A-06 | 아니오 |
+| `BrokerTokenExpired` | 없음(전역 단일 자원) | 단일 토큰 관리가 만료 상태를 기록했을 때 | 스케줄러, UI 갱신 | API-3, T-02 | 아니오 |
+| `BrokerUserActionRequired` | 없음(전역 단일 자원) | 자체 점검이 키 오류·중복 사용 등 사용자 조치를 기록했을 때 | UI 갱신 | design 2.6의 1~3번, API-3 | 아니오 |
+| `SettingsChanged` | 없음(전역 단일 자원) | 설정 유스케이스가 일반·성향·예약·알림 설정 변경을 저장했을 때 | 스케줄러, UI 갱신 | design 8장, A-17, J-10, N-14 | 아니오 |
+| `PolicyChanged` | 없음(전역 단일 자원) | 원칙 설정이 변경을 저장했을 때 | 스케줄러, UI 갱신 | design 6.2, 8장 | 아니오 |
+| `OrderSwitchChanged` | 없음(전역 단일 자원) | 설정 유스케이스가 주문 켜기·끄기를 저장했을 때 | UI 갱신 | ORD-5, O-06 | 아니오 |
+| `WatchlistChanged` | 없음(전역 단일 자원) | J-09가 관심 종목 목록 변경을 저장했을 때 | 스케줄러, UI 갱신 | J-09의 수집·감시·추정 대상 반영 | 아니오 |
+| `ThesisUpdated` | `InstrumentId` | J-02가 해당 종목 논거 노트 차분·이력을 저장했을 때 | UI 갱신 | J-02, J-08 | 아니오 |
+| `SelfCheckChanged` | 없음(전역 단일 자원) | A-19가 자체 점검 결과 변경을 저장했을 때 | UI 갱신 | design 2.6, U-21, U-27 | 아니오 |
+| `MarketSessionChanged` | `KnownMarket` | 장 운영 조회가 개장·마감 전이를 저장했을 때 | 스케줄러, UI 갱신 | A-14, design 6.4; KnownMarket은 닫힌 시장 종류 | 아니오 |
+| `ValuationSnapshotTaken` | 평가 스냅샷 ID(미정의) | A-16이 일별 조회·재계산 기록을 저장했을 때 | UI 갱신 | A-16, J-11; D-31에는 영속 스냅샷 ID가 없음 | 정의 대기 |
+| `NewsClusterGrew` | 뉴스 묶음 ID(미정의) | N-09가 사건 묶음에 기사를 저장했을 때 | UI 갱신 | N-09; Cluster에는 ID가 없음 | 정의 대기 |
+| `CollectionFinished` | 수집 실행 ID(미정의) | 수집 러너가 실행 결과를 저장했을 때 | 스케줄러, UI 갱신 | design 4.4, N-18 | 정의 대기 |
+| `EstimateSubmitted` | 추정 과제·제출 ID(미정의) | A-12가 추정 제출을 저장했을 때 | 스케줄러, UI 갱신 | A-12; D-24의 내용 키를 외부 task_id로 쓰지 않음 | 정의 대기 |
+| `SignalRaised` | 신호 ID(미정의) | A-13이 새 신호를 저장했을 때 | UI 갱신, 알림 | A-13, UX-3 | 정의 대기 |
+| `SignalCleared` | 신호 ID(미정의) | A-13이 이전 신호 해제를 저장했을 때 | UI 갱신 | A-13 | 정의 대기 |
+| `OrderFilled` | 증권사 주문 ID(미정의) | 주문 조회·웹소켓 대조가 체결을 저장했을 때 | 스케줄러, UI 갱신 | T-17, design 5.2; 외부 주문에는 ClientOrderId가 없음 | 정의 대기 |
+| `OrderCancelled` | 증권사 주문 ID(미정의) | 주문 조회·웹소켓 대조가 외부·DAY 취소를 저장했을 때 | 스케줄러, UI 갱신 | design 6.5의 토스 앱 정정·취소, DAY 자동 취소 | 정의 대기 |
+| `OrderModified` | 증권사 주문 ID(미정의) | 주문 조회·웹소켓 대조가 외부 정정을 저장했을 때 | 스케줄러, UI 갱신 | design 6.5; 이 앱의 정정 전송은 없음 | 정의 대기 |
+| `OrderRejected` | 증권사 주문 ID 또는 확정된 로컬 주문 대응 키(미정의) | 주문 대조가 거절·사전 요건 실패를 저장했을 때 | UI 갱신 | design 2.6의 8번, O-19 | 정의 대기 |
+| `EstimateResolved` | 영속 추정 ID(미정의) | A-15가 최종 판정과 보정표를 저장했을 때 | UI 갱신 | A-15; CalibrationEstimateId는 보정 이력용이며 과제·제출 대응 미정 | 정의 대기 |
+| `AiJobFinished` | AI 작업 ID(미정의) | AI 러너가 작업 종료 결과를 저장했을 때 | 스케줄러, UI 갱신 | architecture 2.3, J-10 | 정의 대기 |
+| `AiQuotaExhausted` | AI 제공자·한도 상태 ID(미정의) | AI 러너가 한도 대기를 저장했을 때 | 스케줄러, UI 갱신 | REL-4; 주 화면 알림 없음 | 정의 대기 |
+| `BriefingFinished` | 브리핑 ID(미정의) | J-03이 브리핑 결과를 저장했을 때 | UI 갱신, 알림 | UX-3, J-07; AiJobFinished 전부에 알림을 붙이지 않음 | 정의 대기 |
+| `SourceStatusChanged` | 수집 소스 ID(미정의) | 수집기가 성공·실패와 마지막 성공 시각을 저장했을 때 | UI 갱신 | REL-5, N-14; 고급 상태만 갱신 | 정의 대기 |
+
+알림 구독은 UX-3의 세 종류만 수행한다. `DisclosureArrived`의 구독자는 공시를 다시 읽어 보유 종목·긴급 등급을 확인한다. 스케줄러도 ID로 원본과 트리거 충족 사실을 다시 읽고 중복을 막는다. `PriceUpdated` 전부가 AI 실행을 깨우지는 않는다. `NewsActivityIncreased`는 종목 단위 뉴스 급증이며 사건 묶음 증가와 구별한다. 종류·식별자 외의 금액, 수량, 가격, 계좌번호, 종목 이름, AI 글은 싣지 않는다. 실패 원인·재개 시각도 재조회한다.
+
+`ProposalApproved`는 감사 사실일 뿐 승인 상태를 저장하거나 비동기 구독으로 전송하지 않는다. 승인과 전송은 기존 동기 경로에서 한 번에 끝낸다. `ProposalRejected`는 사람의 확인 거절이고 증권사 거절은 정의 대기인 `OrderRejected`다. 킬 스위치는 별도 장치를 만들지 않고 ORD-5의 `OrderSwitchChanged`로 표현한다. 취소·정정 이벤트는 토스 앱과 DAY 자동 취소의 관측이며 이 앱의 전송 기능을 늘리지 않는다.
+
+D-03에는 증권사 주문·AI 작업·수집 실행 ID가 없다. D-24의 `SignalTaskKey`는 과제 내용 전체이고 ID 전용 페이로드가 아니며, `CalibrationEstimateId`를 제출 ID로 간주하지 않는다. 정의 대기 식별자의 발급·저장 조회 계약은 A-20/T-17, E/S-18, AI/J/N 작업에서 먼저 확정한다. 직렬화·IPC DTO 변환은 A-10/U-02가 맡고 domain에는 직렬화 파생을 추가하지 않는다.
 
 | 전달 대상 | 방식 | 근거 |
 |---|---|---|

@@ -341,3 +341,6 @@ pub use master_instrument::{
 };
 mod master_order_gate;
 pub use master_order_gate::{MasterOrderGateFacts, NxtSupport};
+
+mod domain_event;
+pub use domain_event::{DomainEvent, DomainEventKind};
