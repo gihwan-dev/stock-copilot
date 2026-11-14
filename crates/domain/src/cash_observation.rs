@@ -1,17 +1,13 @@
-use crate::{BuyingPower, Currency, Holding, Portfolio, PortfolioError, Timestamp};
+use crate::{
+    BuyingPower, CashObservationFailure, Currency, Holding, Portfolio, PortfolioError, Timestamp,
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CashLookupFailure {
-    Unavailable,
-    AccessDenied,
-    InvalidResponse,
-}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CashObservation {
     Observed(BuyingPower),
     Failed {
         currency: Currency,
-        reason: CashLookupFailure,
+        reason: CashObservationFailure,
         observed_at: Timestamp,
     },
 }
@@ -30,7 +26,7 @@ pub fn portfolio_from_cash_observations(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AcquisitionPrice, Amount, BuyingPower, CashLookupFailure, CashObservation, Currency,
+        AcquisitionPrice, Amount, BuyingPower, CashObservation, CashObservationFailure, Currency,
         FxPair, FxRate, FxRateKind, FxSource, Holding, HoldingObservation, Market, Money,
         Nanosecond, NumericInput, OffsetSeconds, Portfolio, PortfolioError, Quantity,
         ResolvedOrderInstrument, Symbol, TimeInterval, Timestamp, Total, UnixSeconds,
@@ -40,6 +36,12 @@ mod tests {
         prop_assert_eq,
         test_runner::{Config, TestRunner},
     };
+    fn network_failure() -> CashObservationFailure {
+        CashObservationFailure::Unavailable {
+            cause: crate::CashUnavailableCause::Network,
+            retry: crate::CashRetryDelay::Unknown,
+        }
+    }
     fn time() -> Timestamp {
         Timestamp::from_parts(
             UnixSeconds::new(100),
@@ -57,7 +59,7 @@ mod tests {
     fn failure(currency: Currency) -> CashObservation {
         CashObservation::Failed {
             currency,
-            reason: CashLookupFailure::Unavailable,
+            reason: network_failure(),
             observed_at: time(),
         }
     }
@@ -174,9 +176,7 @@ mod tests {
                     assert_holdings_unchanged(&partial, &baseline);
                     prop_assert_eq!(
                         partial.buying_power(failed).money(),
-                        Err(PortfolioError::CashLookupFailed(
-                            CashLookupFailure::Unavailable
-                        ))
+                        Err(PortfolioError::CashLookupFailed(network_failure()))
                     );
                     prop_assert_eq!(partial.buying_power(failed).currency(), failed);
                     prop_assert_eq!(partial.buying_power(failed).observed_at(), time());
@@ -221,9 +221,9 @@ mod tests {
             Ok(original)
         );
         for reason in [
-            CashLookupFailure::Unavailable,
-            CashLookupFailure::AccessDenied,
-            CashLookupFailure::InvalidResponse,
+            network_failure(),
+            CashObservationFailure::AccessDenied(crate::CashAccessDenial::Forbidden),
+            CashObservationFailure::InvalidResponse(crate::CashResponseMismatch::Validation),
         ] {
             let observation = CashObservation::Failed {
                 currency: Currency::Usd,
@@ -268,7 +268,9 @@ mod tests {
         let allocation = crate::Allocation::new(&value, &assignments);
         assert_eq!(
             allocation.assets().instruments(),
-            &Err(crate::AllocationError::NegativeCash(Currency::Usd))
+            &Err(crate::AllocationError::CashObservationFailed(
+                crate::CashObservationFailures::Usd(network_failure())
+            ))
         );
         assert!(allocation.holdings().instruments().is_ok());
         let findings = crate::Policy::new(crate::InvestorProfile::default()).check_current(
@@ -279,7 +281,9 @@ mod tests {
         assert_eq!(
             findings,
             Err(crate::PolicyViolation::Allocation(
-                crate::AllocationError::NegativeCash(Currency::Usd)
+                crate::AllocationError::CashObservationFailed(crate::CashObservationFailures::Usd(
+                    network_failure()
+                ))
             ))
         );
     }
@@ -321,8 +325,28 @@ mod tests {
                 &candidate
             ),
             crate::PolicyBuyDecision::Block(crate::PolicyViolation::Allocation(
-                crate::AllocationError::NegativeCash(Currency::Usd)
+                crate::AllocationError::CashObservationFailed(crate::CashObservationFailures::Usd(
+                    network_failure()
+                ))
             ))
         );
+    }
+    #[test]
+    fn failure_currency_is_not_overwritten_by_the_slot() {
+        for (krw, usd) in [
+            (
+                failure(Currency::Usd),
+                CashObservation::Observed(power(1, Currency::Usd)),
+            ),
+            (
+                CashObservation::Observed(power(1, Currency::Krw)),
+                failure(Currency::Krw),
+            ),
+        ] {
+            assert_eq!(
+                portfolio_from_cash_observations(vec![], krw, usd),
+                Err(PortfolioError::CurrencyMismatch)
+            );
+        }
     }
 }

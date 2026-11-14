@@ -8,14 +8,14 @@ mod tests {
         RetryDelay, TransactionRead, UnavailableCause,
     };
     use domain::{
-        AccountDisplayFact, AccountId, AccountLookupDisplayRow, AcquisitionPrice, BuyingPower,
-        Cancellation, Candle, CandlePeriod, CompleteTransactionResponse, CompletionAttestation,
-        Currency, CurrencyAmounts, FxPair, FxRate, FxRateKind, FxSource, Holding,
-        HoldingObservation, Market, MaskedAccountNumber, Money, Nanosecond, NumericInput,
-        OffsetSeconds, OrderFxRates, PriceAdjustment, Quantity, Quote, ReportedPortfolio,
-        ResolvedOrderInstrument, Settlement, SettlementWindow, SpanSeconds, Symbol, TimeInterval,
-        TimeSpan, Timestamp, Transaction, TransactionBatch, TransactionData, TransactionFilter,
-        TransactionKind, UnixSeconds, UntrustedText,
+        AccountId, AcquisitionPrice, BrokerAccountNumberInput, BrokerAccountRow,
+        BrokerAccountTypeCode, BuyingPower, Cancellation, Candle, CandlePeriod,
+        CompleteTransactionResponse, CompletionAttestation, Currency, CurrencyAmounts, FxPair,
+        FxRate, FxRateKind, FxSource, Holding, HoldingObservation, Market, Money, Nanosecond,
+        NumericInput, OffsetSeconds, OrderFxRates, PriceAdjustment, Quantity, Quote,
+        ReportedPortfolio, ResolvedOrderInstrument, Settlement, SettlementWindow, SpanSeconds,
+        Symbol, TimeInterval, TimeSpan, Timestamp, Transaction, TransactionBatch, TransactionData,
+        TransactionFilter, TransactionKind, UnixSeconds, UntrustedText,
     };
     use std::{
         collections::BTreeSet,
@@ -74,12 +74,14 @@ mod tests {
     }
     fn account() -> AccountObservation {
         let key = AccountId::new(7);
-        let display = AccountDisplayFact::from_account_lookup_result(
-            AccountLookupDisplayRow::from_broker_account_result(
-                key.clone(),
-                MaskedAccountNumber::try_new("12345678").expect("가짜 계좌"),
-            ),
-        );
+        let display = BrokerAccountRow::from_broker_account_result(
+            key.clone(),
+            BrokerAccountTypeCode::new("BROKERAGE"),
+            BrokerAccountNumberInput::new("12345678".to_owned()),
+            instant(),
+        )
+        .expect("가짜 계좌")
+        .display_fact();
         AccountObservation::from_broker_result(key, display)
     }
     fn holdings() -> HoldingsObservation {

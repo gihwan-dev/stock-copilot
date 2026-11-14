@@ -5,7 +5,7 @@ pub enum PortfolioError {
     DuplicateInstrument,
     CurrencyMismatch,
     NegativeBuyingPower,
-    CashLookupFailed(crate::CashLookupFailure),
+    CashLookupFailed(crate::CashObservationFailure),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuyingPower {

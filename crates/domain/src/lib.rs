@@ -313,7 +313,7 @@ pub use broker_account::{
     UnknownBrokerAccountKind, select_brokerage_account,
 };
 mod cash_observation;
-pub use cash_observation::{CashLookupFailure, CashObservation, portfolio_from_cash_observations};
+pub use cash_observation::{CashObservation, portfolio_from_cash_observations};
 mod signal_submission;
 pub use signal_submission::{
     SignalSubmission, SignalSubmissionError, SignalTaskKey, SubmittedCalibration,
@@ -321,3 +321,14 @@ pub use signal_submission::{
 };
 mod signal_timing;
 pub use signal_timing::SignalTiming;
+
+mod cash_observation_failure;
+pub use broker_account::{
+    BrokerAccountKeySelection, BrokerAccountNumberInput, BrokerAccountRows, BrokerAccountRowsError,
+    select_brokerage_account_by_id,
+};
+pub use cash_observation_failure::{
+    CashAccessDenial, CashMissingData, CashObservationFailure, CashObservationFailures,
+    CashReadCapability, CashRequestRejection, CashResponseMismatch, CashRetryDelay,
+    CashUnavailableCause, cash_observation_failures,
+};
