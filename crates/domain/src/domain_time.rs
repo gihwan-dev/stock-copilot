@@ -224,6 +224,7 @@ impl Timestamp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimeSpan(SignedDuration);
+pub(crate) const BUYING_POWER_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 pub(crate) const SIGNAL_HOLDING_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 impl TimeSpan {
     pub const DAY: Self = Self(SignedDuration::seconds(86400));
