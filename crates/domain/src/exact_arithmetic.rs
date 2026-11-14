@@ -430,6 +430,49 @@ fn allocation_multiple(mut value: Magnitude, units: &AllocationUnits) -> Magnitu
 }
 
 #[cfg(test)]
+mod allocation_remainder_tests {
+    use super::{AllocationRemainder, allocation_parts};
+    use crate::Amount;
+    use proptest::test_runner::{Config, TestRunner};
+    use rust_decimal::Decimal;
+
+    fn assert_integer_remainder(value: u32, total: u32) {
+        let numerator = u128::from(value).checked_mul(10000).expect("독립 분자");
+        let (units, AllocationRemainder(actual)) = allocation_parts(
+            Amount::new(Decimal::from(value)),
+            Amount::new(Decimal::from(total)),
+        );
+        assert_eq!(
+            u128::from(units.as_units()),
+            numerator.checked_div(u128::from(total)).expect("독립 몫")
+        );
+        let mut coefficient = 0_u128;
+        for limb in actual.0.iter().rev() {
+            coefficient = coefficient
+                .checked_mul(1_u128 << 32_u32)
+                .and_then(|shifted| shifted.checked_add(u128::from(limb.0)))
+                .expect("기준 나머지는 128비트 안");
+        }
+        let expected = numerator
+            .checked_rem(u128::from(total))
+            .expect("독립 나머지")
+            .checked_mul(10_u128.checked_pow(28).expect("공통 스케일"))
+            .expect("스케일 정렬");
+        assert_eq!(coefficient, expected);
+    }
+    #[test]
+    fn allocation_remainders_match_independent_integer_coefficients() {
+        assert_integer_remainder(47, 29016);
+        TestRunner::new(Config::with_cases(4096))
+            .run(&(0_u32..1_000_000, 1_u32..1_000_000), |(seed, total)| {
+                assert_integer_remainder(seed.checked_rem(total).expect("양수 분모"), total);
+                Ok(())
+            })
+            .expect("4096 독립 정수 나머지");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use crate::{
         Amount, AmountInput, Currency, Money, MoneyError, NumericInput, Price, Quantity, Ratio,
