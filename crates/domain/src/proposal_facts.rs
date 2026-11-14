@@ -27,7 +27,7 @@ impl PriceObservation {
             fresh_until,
         })
     }
-    pub fn from_identified_quote_parts(
+    pub(crate) fn from_identified_quote_parts(
         instrument_id: crate::InstrumentId,
         instrument: ResolvedOrderInstrument,
         price: Price,

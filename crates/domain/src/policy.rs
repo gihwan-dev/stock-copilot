@@ -221,41 +221,45 @@ impl Policy {
         facts: &PolicySecurityFacts,
         candidate: &PolicyCandidate,
     ) -> Result<PolicyBuyLimit, PolicyViolation> {
-        self.require_resolved()?;
-        if let Some(violation) = type_violation(&self.profile, facts, &candidate.instrument)? {
-            return Err(violation);
-        }
-        let sector = candidate_sector(&self.profile, assignments, &candidate.instrument)?;
-        let snapshot = snapshot(valuation, assignments)?;
-        let caps = self.profile.weight_caps();
+        signal_buy_limit(self, valuation, assignments, facts, &candidate.instrument)
+    }
+}
+
+pub(crate) fn signal_buy_limit(
+    policy: &Policy,
+    valuation: &PortfolioValuation,
+    assignments: &SectorAssignments,
+    facts: &PolicySecurityFacts,
+    instrument: &AllocationInstrument,
+) -> Result<PolicyBuyLimit, PolicyViolation> {
+    policy.require_resolved()?;
+    if let Some(violation) = type_violation(&policy.profile, facts, instrument)? {
+        return Err(violation);
+    }
+    let sector = candidate_sector(&policy.profile, assignments, instrument)?;
+    let snapshot = snapshot(valuation, assignments)?;
+    let caps = policy.profile.weight_caps();
+    reject_at_cap(
+        &snapshot.instruments,
+        &AssetInstrument::Holding(instrument.clone()),
+        caps.instrument_cap(),
+        PolicyViolation::InstrumentCap(instrument.clone()),
+    )?;
+    if let AllocationSector::Classified(id) = &sector {
         reject_at_cap(
-            &snapshot.instruments,
-            &AssetInstrument::Holding(candidate.instrument.clone()),
-            caps.instrument_cap(),
-            PolicyViolation::InstrumentCap(candidate.instrument.clone()),
-        )?;
-        if let AllocationSector::Classified(id) = &sector {
-            reject_at_cap(
-                &snapshot.sectors,
-                &sector,
-                caps.sector_cap(),
-                PolicyViolation::SectorCap(id.clone()),
-            )?;
-        }
-        let values = exposure_values(
-            snapshot.rows.clone(),
-            assignments,
-            &candidate.instrument,
+            &snapshot.sectors,
             &sector,
-        );
-        let limit =
-            limit_from_values(snapshot.total, values, caps, &candidate.instrument, &sector)?;
-        match self.minimum_cash {
-            None => Ok(limit),
-            Some(minimum) => cash_value(snapshot.total, &snapshot.rows)
-                .and_then(|cash| cash_headroom(snapshot.total, cash, minimum))
-                .map(|cash_room| minimum_room(limit.0, cash_room)),
-        }
+            caps.sector_cap(),
+            PolicyViolation::SectorCap(id.clone()),
+        )?;
+    }
+    let values = exposure_values(snapshot.rows.clone(), assignments, instrument, &sector);
+    let limit = limit_from_values(snapshot.total, values, caps, instrument, &sector)?;
+    match policy.minimum_cash {
+        None => Ok(limit),
+        Some(minimum) => cash_value(snapshot.total, &snapshot.rows)
+            .and_then(|cash| cash_headroom(snapshot.total, cash, minimum))
+            .map(|cash_room| minimum_room(limit.0, cash_room)),
     }
 }
 struct PolicySnapshot {

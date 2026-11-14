@@ -1,98 +1,72 @@
-# D-33: 종목 마스터 사실과 알려진 시장
+# D-33: 종목 마스터 사실과 주문 게이트 경계
 
 - 상태: 초안
-- 기준: e31ab9d0ce070a9911c9e6402c9651184081e2c3
+- 최초 구현: efbf18c53d51048654beeb5bddd08c9b2f0a3b79
+- 수정 회차 병합 기준: 로컬 master 792a35b5da51e9a8fff146793a172d1c2e210fc1 (D-24, DS-03, H-43)
 
-## 사실의 출처와 범위
+## 입력과 봉인
 
-StockInfo 상세 행을 MasterInstrumentRow로 변환한 뒤 MasterInstrument::try_new가 일관성을 검증한다. 공개 입력 행은 어댑터 경계이고, 결과 마스터와 QuoteInstrument의 필드는 비공개다. 행의 공개 필드를 바꾸어도 만들어진 마스터는 바뀌지 않는다. 외부 응답의 진위나 내부 ID의 실제 대응은 domain 생성자가 인증하지 않는다. T-09만 이 경계를 호출하도록 제한하는 것은 하네스 인계다.
+T-09가 StockInfo 상세 행과 안정적 InstrumentId, 조회 시각을 MasterInstrumentRow에 넣고 MasterInstrument::try_new를 호출한다. 결과의 필드는 비공개이고 읽기 전용 접근자만 있다. 생성자는 실제 응답의 진위나 내부 ID의 실제 대응을 인증하지 않는다. 호출 위치를 T-09로 제한하는 것은 하네스 책임이다. InstrumentId는 ADR 0022대로 심볼·ISIN에서 유도하지 않는다.
 
-| 스키마 필드                                                                    | 도메인 보존                                                                                                                      |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| market                                                                         | listing_market 원문과 QuoteInstrument.market의 국가 시장. KOSPI/KOSDAQ/KR_ETC → Kr, NYSE/NASDAQ/AMEX/US_ETC → Us                 |
-| symbol                                                                         | Symbol, 알려진 국내 시장은 ASCII 영숫자 6자리, 미국은 영문자로 시작하는 기존 Symbol 문법                                         |
-| name                                                                           | D-32 DisplayInstrumentName. 문자 제한과 256바이트 상한을 재사용                                                                  |
-| securityType                                                                   | MasterSecurityType: 아홉 ExcludedSecurityType 또는 원문 코드와 SecurityTypeKnowledge::Unknown. 모르는 값을 Stock으로 바꾸지 않음 |
-| currency                                                                       | Currency, 국내 KRW·미국 USD만 허용                                                                                               |
-| status                                                                         | ListingStatus: Scheduled/Active/Delisted                                                                                         |
-| isCommonShare                                                                  | CommonShare: Common/Other                                                                                                        |
-| koreanMarketDetail                                                             | Option<KoreanMasterDetail>. 정리매매, KRX 정지, NXT 지원과 nullable 정지 상태를 열거형으로 보존                                  |
-| 내부 ID, 조회 시각                                                             | 스키마 필드 없음. T-09가 보존한 InstrumentId와 Clock의 Timestamp                                                                 |
-| englishName, isinCode, listDate, delistDate, sharesOutstanding, leverageFactor | 이번 도메인 소비 계약에 필요한 사실로 확정되지 않아 보관하지 않음                                                                |
-| 섹터                                                                           | 스키마에 없음. tasks D-33의 섹터 포함 문구 정정 요청. D-06 SectorAssignments가 사용자 확인·별도 섹터 조회로 채움                 |
+| StockInfo 필드        | 도메인 계약                                                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| market                | 상장 시장 원문 보존. KOSPI/KOSDAQ/KR_ETC → Kr, NYSE/NASDAQ/AMEX/US_ETC → Us. 미지 시장 원문도 보존하지만 시세·주문 식별 생성은 거부                               |
+| symbol                | 대문자 정규형만 수용. 소문자를 정규화하는 것은 ADR 0022의 어댑터 책임. 국내 ASCII 영숫자 6자리, 미국 영문자 시작의 기존 Symbol 문법                               |
+| name                  | D-32 DisplayInstrumentName의 문자 제한·256바이트 상한 재사용                                                                                                      |
+| securityType          | 스키마 아홉 유형과 원문 코드의 Unknown. 미지 값을 Stock으로 치환하지 않음                                                                                         |
+| currency              | 국내 KRW·미국 USD 일치 검증. QuoteInstrument에도 보존                                                                                                             |
+| status, isCommonShare | ListingStatus와 CommonShare 열거형                                                                                                                                |
+| koreanMarketDetail    | 정리매매, KRX 정지, NXT 지원·정지 사실. NxtTrading은 Unsupported 또는 Supported(TradingSuspension)만 표현. try_from_parts는 미지원+정지 값, 지원+null을 모두 거부 |
+| 내부 ID, 조회 시각    | 스키마 필드 없음. 안정적 InstrumentId와 Clock의 Timestamp                                                                                                         |
+| 섹터                  | 종목 마스터 행 StockInfo에는 없음. /api/v1/sectors/{sectorId}/stocks가 별도로 있음. D-37·T-09의 별도 조회와 D-06 SectorAssignments가 담당                         |
 
-/stocks/all의 ListedStock은 심볼·이름·유형·보통주 여부·ISIN만 준다. 조회 요청의 시장만으로 통화·상장 상태·거래 정지를 발명하지 않는다. /stocks로 상세 정보를 채운 후에만 마스터를 만든다. R-01의 STOCK_ALL 초당 1회는 T-09 책임이다.
+/stocks/all의 ListedStock은 심볼·이름·유형·보통주 여부·ISIN만 준다. 통화·상장 상태·정지 여부를 발명하지 않고 /stocks 상세 행을 보완한 뒤 마스터를 만든다. R-01의 STOCK_ALL 초당 1회 한도는 T-09 책임이다. 같은 목록의 중복 내부 ID와 중복 (시장, 심볼)을 거부한다. AAPL과 aapl의 동시 등록은 소문자 행 생성 단계에서 거부한다.
 
-InstrumentId는 심볼이나 ISIN에서 유도하지 않는다(ADR 0022). T-09는 저장된 안정적 ID 대응을 확보하고 코드 변경에도 유지해야 한다. 이 대응이 없으면 마스터를 만들지 않는다. 별개의 두 마스터 사이 중복 내부 ID 또는 (국가 시장, 심볼)은 MasterInstrumentFacts가 거부한다. 같은 심볼의 다른 시장은 내부 ID가 다르면 허용한다. 충돌을 마지막 행으로 덮지 않는다.
+englishName, isinCode, listDate, delistDate, sharesOutstanding는 이번 소비 계약에서 저장하지 않는다. leverageFactor도 현재 저장하지 않는다. R-11에는 1이 아니면 표시하고 ETF 노출에 곱한 값을 따로 보여 주자는 제안이 있다. 이를 구현하려면 보존 타입·표시 계약을 후속에서 정하고 T-09의 원본 값과 연결해야 한다. 현재 마스터가 레버리지 여부를 판정할 수 있다고 주장하지 않는다.
 
-## 파생과 이행
+## 파생 사실과 생성자 폐쇄
 
-| 파생 경로                                    | 결합                                                                               | 기존 생성자                                                                                                                 |
-| -------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| order_instrument                             | 행의 심볼·국가 시장, 미지 시장 거부                                                | ResolvedOrderInstrument::from_master_lookup_result는 기존 master 테스트 때문에 남김                                         |
-| name_fact                                    | 같은 행에서 꺼낸 주문 식별과 표시 이름                                             | InstrumentNameFact::from_master_lookup_result는 기존 파일 항목 변경 금지 범위 때문에 남김. 확인된 호출은 domain 내부 테스트 |
-| price_observation                            | 같은 마스터의 내부 ID와 주문 식별, 관측 가격·현지 시각. 통화와 기존 시각 규칙 검증 | 기존 from_identified_quote_parts는 소비자 이전 후 닫음                                                                      |
-| quote_instrument                             | 같은 행의 시장·심볼·내부 ID. 주문 생성 없이 사용                                   | 새 QuoteInstrument는 외부 필드 조립·생성자·가변 접근자 없음                                                                 |
-| MasterInstrumentFacts::policy_security_facts | 각 마스터의 식별과 유형. 미지 유형·미지 시장이면 전체 오류                         | PolicySecurityFacts의 기존 생성자는 crate 안에 계속 닫힘                                                                    |
+| 공개 경로                            | 계약                                                                                                                                                                                                                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| quote_instrument                     | Result<QuoteInstrument, MasterInstrumentError>. KnownMarket·통화·심볼·내부 ID를 같은 행에서 봉인. 미지 시장 거부. 상장폐지·정지 종목도 조회 식별 자체는 만들 수 있음                                                                                           |
+| order_gate_facts                     | 조회로 확정한 주문 식별과 원 행의 상장 상태·유형 알려짐·정리매매·정지·NXT 지원·시각을 함께 봉인. 입력 행과 식별을 외부에서 따로 조립할 수 없음                                                                                                                 |
+| order_instrument                     | 아래 매수 방향의 보수적 판정을 적용하는 편의 경로                                                                                                                                                                                                              |
+| MasterOrderGateFacts::instrument_for | 방향별 아래 판정 뒤 식별 반환. 이 식별은 승인·잔고·장 시간 검증의 증거가 아니며 O-01과 승인 경로를 면제하지 않음                                                                                                                                               |
+| name_fact, price_observation         | 같은 행의 표시 이름 또는 내부 ID·주문 식별을 결합. 가격 관측 통화와 기존 현지 시각 규칙 검증. 공개 가격 관측에서 주문 식별을 다시 얻을 수 있으므로 동일 매수 식별 적격성을 요구. 거래 불가 종목의 순수 조회는 QuoteInstrument, 표시 이름은 원 행 접근자를 사용 |
+| policy_security_facts                | 정상 행의 유형 사실을 유지. 미지 시장·미지 유형 행은 건너뛰고 그 원 행은 MasterInstrumentFacts에 보존. 누락 항목은 D-12의 security_type 조회에서 None이 되어 UnknownSecurityType으로 매수 차단. 전체 목록은 실패하지 않으므로 Result를 제거                    |
 
-A-20·T-09와 기존 소비자가 새 경로로 옮긴 뒤 두 공개 legacy 생성자와 PriceObservation::from_identified_quote_parts의 임의 쌍 경계를 닫아야 한다. 기존 생성자가 남아 있으므로 저장소 전체에서 유일 출처가 강제됐다고 주장하지 않는다. 새 봉인 경로에서 식별자 필드를 다른 행의 것으로 교체할 수 없다는 범위만 검증한다. 원시 입력 행을 위조하는 것은 하네스 호출 위치 제한 전까지 가능하다.
+ResolvedOrderInstrument::from_master_lookup_result, InstrumentNameFact::from_master_lookup_result, PriceObservation::from_identified_quote_parts는 모두 pub(crate)로 닫는다. 기존 crate 내부 테스트는 그대로 둔다. 메인이 승인한 application/tests/ports.rs의 도우미와 종목별 시세 테스트만 MasterInstrument 경로로 이전하고 기존 단언은 유지한다. 기존 공개 생성자 유지라는 최초 구현의 이행 예외는 이 수정으로 폐기한다.
 
-A-20은 quotes(&[QuoteInstrument]), candles(&QuoteInstrument, ...)로 임시 주문용 입력을 교체한다. QuoteInstrument는 주문 의도·계좌·승인을 받지 않아 보유 종목 조회에 쓸 수 있다. T-07은 이 타입의 심볼로 요청하고 내부 ID를 Candle에 넣는다. 가격 관측과 과제에도 동일 ID를 전달한다. application은 이번에 바꾸지 않는다.
+## 거래 가능 여부의 보수적 판정 초안
 
-KnownMarket은 Kr/Us만 있고 try_from_market 하나가 Market::Unknown을 거부한다. A-20의 calendar 입력, D-10 MarketCalendar·SessionInformation 생성 입력과 장 세션 조회, O-01의 시장 요구 입력을 이 타입으로 교체할 목록으로 남긴다. 기존 함수 시그니처는 이번에 바꾸지 않는다. 현재 캘린더 포트는 정의 대기이므로 새 타입을 받는 외부 실험으로 경계를 확인한다.
+| 마스터 사실                                            | 매수 식별            | 매도 식별            | 근거와 범위                                                                                                                             |
+| ------------------------------------------------------ | -------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Active, 알려진 유형, 국내 KRX 정지 아님, 정리매매 아님 | 생성                 | 생성                 | 식별 적격성일 뿐 최종 주문 허가 아님. O-01이 장·수량·유의사항 등을 검사                                                                 |
+| Scheduled 또는 Delisted                                | NotListed            | NotListed            | ADR 0044는 상장폐지 뒤 매수·행사를 거부. 폐지 뒤 매도 결제 행 보존은 새 매도 주문 허용과 다름. 새 주문은 양쪽 모두 거부하는 보수적 초안 |
+| 미지 유형                                              | UnknownSecurityType  | UnknownSecurityType  | ADR 0039의 미지 유형 주문 차단                                                                                                          |
+| 정리매매, KRX 정지 아님                                | LiquidationBuy       | 생성                 | 매도 청산을 보존. 매수 거부는 보수적 초안. 유의사항·실제 주문 허용은 O-01                                                               |
+| KRX 정지                                               | TradingSuspended     | TradingSuspended     | R-01의 거래 정지 사실. 현재 식별 편의 경로는 KRX 기준의 보수적 거부                                                                     |
+| 국내 상세 미제공                                       | MissingTradingStatus | MissingTradingStatus | null을 거래 가능으로 간주하지 않음                                                                                                      |
+| 미지 시장                                              | UnknownMarket        | UnknownMarket        | 닫힌 지원 시장이 아님                                                                                                                   |
 
-## 보수적 초안과 미해결
+NXT 지원·정지는 게이트 묶음의 원 행에서 읽을 수 있다. NXT 지원 자체를 거래 허가로 바꾸지 않는다. KRX가 정지이고 NXT만 가능한 경우를 허용하려면 O-01에서 거래소 선택·세션·경고와 함께 별도 계약을 정해야 한다. 현재 편의 경로에서 이 경우를 자동 허용하지 않는다. 정리매매·정지·미제공 정보 판정은 사용자 설정을 추가하지 않는 보수적 초안이다.
 
-- 미국 첫 글자 영문자 제한은 보수적 정책이다. 소문자·점·하이픈·옵션 형식은 기존 Symbol 허용 범위 안에서 보존하며 주식 여부를 심볼로 추정하지 않는다. 실제 상장 여부는 T-09 응답 출처 책임이다.
-- 국내 상세 정보는 스키마에서 nullable이므로 없어도 허용한다. 없음은 거래 가능 사실이 아니다. 상장 상태·정지·정리매매의 주문 허용 판정은 O-01 책임이다. 미지 시장은 원문을 보관하지만 주문·이름·정책 사실은 만들지 않는다.
-- 상장 상태의 새 값과 모르는 통화는 어댑터에서 검증 실패로 격리한다. 새 값을 기존 값으로 추측하지 않는다. 종목 유형의 Unknown은 원문을 유지하며 정책 사실 변환은 실패해 D-12가 모르는 유형을 통과시키지 않는다.
-- 코드 문자열의 64바이트 상한은 자원 제한 초안이다. 시장 코드는 기존 MarketCode의 32바이트 상한도 따른다.
-- 프로젝트 설정의 hooks=true와 lefthook 설치는 확인했으나 세션 프로젝트·훅 신뢰의 실제 적용 증거는 확보하지 못했다. 직접 just check와 커밋 훅 결과를 증거로 삼는다.
-- 새 의존성, 검사 끄기, 기존 테스트 변경은 없다. ADR 0054/H-43은 시작 시 로컬 master에 없어 새 코드의 손 변형 14개 이상을 실행한다.
+## A-20·T-09·후속 인계
 
-## 외부 crate 실험
+- A-20: quotes(&[QuoteInstrument]), candles(&QuoteInstrument, ...)로 임시 주문 타입 입력을 교체. T-07은 이 식별의 심볼로 요청하고 내부 ID를 Candle에 넣는다.
+- A-20: CalendarQuery의 시장을 KnownMarket으로 정의. J-05·A-14의 캘린더 소비자와 O-01의 장 시간 입력까지 연결한다. D-10의 MarketCalendar·SessionInformation·세션 생성 입력도 검토한다.
+- KnownMarket은 Kr/Us만 있고 try_from_market이 미지 시장을 거부한다. KnownMarket → Market은 From 구현으로 제공한다.
+- CommissionRateFact::from_commissions_result와 from_schedule_result의 Market 입력도 KnownMarket으로 바꿀 후속 목록에 포함한다. 이번에는 기존 시그니처를 바꾸지 않는다.
+- O-01: MasterOrderGateFacts와 주문 방향·거래소를 함께 소비하고 승인 직전 다시 조회한다. 유형·상태·정지를 주문 식별만 보고 추정하지 않는다.
+- T-09: 안정적 내부 ID 대응, 심볼 대문자 정규화, nullable NXT 조합 검증, 상세 행 결합과 초당 한도, 섹터 별도 조회를 연결한다.
+- 메인이 고칠 tasks D-33 문장: 종목 마스터 사실 MasterInstrument(주문 식별, 시계열 ID, 이름, 종목 유형을 함께 담음), 시장의 닫힌 값 KnownMarket. 섹터 대응은 D-37·T-09의 별도 조회와 D-06이 담당.
 
-`cargo build --locked -p domain --message-format=json`이 낸 rlib와 해당 deps 디렉터리를 rustc의 `--extern domain=... -L dependency=... --edition=2024`에 전달했다. 계좌·키·네트워크 호출은 없다. 허용 대조 1건은 KnownMarket::try_from_market(&Market::Kr)를 KnownMarket 입력 함수에 넘겨 성공했다.
+미해결: 국내 6자리 제약은 스펙에 명시되어 유지한다. ETN·신주인수권 코드 형식은 T-09 실측 대상이다. 미국 첫 문자 영문자·코드 64바이트(시장 32바이트)·이름 256바이트 상한은 보수적 초안이다. 프로젝트 설정·훅 정의의 실제 세션 신뢰 적용은 별도 증거가 없으며 직접 실행한 검사 결과로 보고한다.
 
-| 금지 사례                                               | 컴파일 결과 |
-| ------------------------------------------------------- | ----------- |
-| A의 시장·심볼과 B의 내부 ID로 QuoteInstrument 필드 조립 | E0451       |
-| 만들어진 QuoteInstrument의 내부 ID 교체                 | E0616       |
-| A의 이름과 B의 유형으로 MasterInstrument 필드 조립      | E0451       |
-| order_instrument에 다른 내부 ID 전달                    | E0061       |
-| name_fact에 다른 이름 전달                              | E0061       |
-| PolicySecurityFacts의 기존 내부 생성자 호출             | E0624       |
-| Market::Unknown을 KnownMarket 입력에 전달               | E0308       |
-| KnownMarket::Unknown 만들기                             | E0599       |
-| 표시 이름에 String 직접 대입                            | E0308       |
-| QuoteInstrument::new 호출                               | E0599       |
+## 검증 기록
 
-이 실험은 봉인 타입의 외부 조립 금지를 확인한다. 공개 어댑터 입력 MasterInstrumentRow가 실제 같은 응답 행인지 인증하는 실험이 아니며, 기존 legacy 생성자 차단도 아니다. 주문 식별 생성자는 crates/application/tests/ports.rs의 기존 외부 테스트가 사용한다. 이름 사실 생성자는 외부 호출을 찾지 못했으나 기존 항목의 가시성 수정은 이번 파일 범위와 충돌해 보류한다. 메인이 후속 범위에서 이름 생성자를 pub(crate)로 닫아야 한다. 컴파일 실패 회귀를 하네스에 영속화하는 것은 별도 인계다.
+적대적 리뷰 수정 테스트를 먼저 추가해 미구현 경계에서 컴파일 실패를 확인했다. 기존 D-33 테스트는 이번 브랜치에서 추가한 것이므로 새 계약에 맞게 고쳤다. 파생 사실 왕복과 미지 값 보존 속성 테스트는 각각 Config::with_cases(4096)를 유지한다. 상장예정·상장폐지·정리매매의 방향 차이, 정지·정보 없음·미지 유형, 시세의 닫힌 시장·통화, 혼합 목록의 정상 정책 사실 보존, 소문자 거부와 NXT nullable 조합을 검사한다.
 
-## 검증 결과와 재현
+외부 crate 실험에서 허용 대조는 컴파일되고 세 legacy 생성자는 각각 E0624로 거부된다. 리뷰어의 005930 주문 식별·KODEX 200 이름·다른 내부 ID 가격 관측 혼합 재현도 세 호출 모두 E0624다. QuoteInstrument·MasterOrderGateFacts·MasterInstrument 필드 조립은 E0451, 미지 시장의 KnownMarket 입력과 Supported(None)은 E0308이다. 공개 어댑터 입력의 사실성 인증과 하네스 호출 위치 제한은 별개다.
 
-- 기준 e31ab9d0ce070a9911c9e6402c9651184081e2c3에서 frozen install·lefthook 설치·전체 just check가 종료 코드 0이었다. 워크스페이스 837건, 커버리지용 553건이 통과했다.
-- 테스트를 먼저 추가했을 때 MasterInstrument 등 미정의 타입으로 컴파일이 실패했다. 구현 뒤 단위·속성 테스트가 통과했다. derivations_round_trip_one_row와 unknown_codes_survive_but_never_become_known_facts는 각각 Config::with_cases(4096)이다. 전자는 서로 다른 심볼·내부 ID·이름·유형을 생성해 파생 식별과 정책 사실까지 대조한다.
-- 최종 배치의 도메인 clippy, source-check, raw-types가 통과했다. coverage-check의 테스트 564건이 모두 통과했고 위반은 없다. 처음 발견한 가격 관측의 미지 시장 오류 분기는 테스트로 채웠다. 테스트 전용 파일도 측정 대상으로 요구되어 새 마스터 파일 내부 테스트 모듈로 옮겼다. 기존 테스트 본문은 수정하지 않았다.
-- 손 변형 직전에도 로컬 master에는 ADR 0054가 없었다. 새 코드에 아래 16개 변형을 하나씩 넣고 `cargo nextest run --locked -p domain -E 'test(master_instrument::tests)'`로 검출한 뒤 매번 원본을 복원했다. 모두 컴파일 후 테스트 실패로 검출되었고 생존·시간 초과·컴파일 불가는 0개다. 이 결과를 자동 변이 전수 실행 결과로 확대하지 않는다.
-
-| 손 변형                              | 결과 |
-| ------------------------------------ | ---- |
-| 국내 통화 거부 제거                  | 검출 |
-| 미국 통화 거부 제거                  | 검출 |
-| 국내 심볼 길이 거부 제거             | 검출 |
-| 국내 심볼 문자 거부 제거             | 검출 |
-| 미국 첫 문자 거부 제거               | 검출 |
-| 미국에 국내 상세 정보 거부 제거      | 검출 |
-| 미지 시장에 국내 상세 정보 거부 제거 | 검출 |
-| ETF를 Stock으로 매핑                 | 검출 |
-| 미지 유형을 Stock으로 매핑           | 검출 |
-| 중복 내부 ID 거부 제거               | 검출 |
-| 중복 시장·심볼 거부 제거             | 검출 |
-| 가격 관측 통화 거부 제거             | 검출 |
-| 상장 시장에 국가 코드 KR/US 허용     | 검출 |
-| KnownMarket의 Kr를 Us로 매핑         | 검출 |
-| KnownMarket의 Us를 Kr로 매핑         | 검출 |
-| 미지 시장을 KnownMarket::Kr로 허용   | 검출 |
-
-새 ADR 추적으로 필요한 .codex/config.toml·harness/claude-hooks/hashes.json은 지정된 쓰기 모드 생성기로 재생성했다. 직접 수정하지 않았다. 최종 전체 검사는 커밋 훅에서 실행한다. 푸시·PR·실계좌 조회는 하지 않는다.
+전체 검사는 병합한 master SHA를 기준으로 실행한다. 승인된 기존 application 테스트 변경의 test-diff 항목만 예외로 보고하며 규칙·허용 목록은 바꾸지 않는다. 나머지 검사와 검사 뒤의 끄기 보고·훅 설치 확인까지 실행한다. 검사 결과·변이 결과·정확한 test-diff 항목과 최종 SHA는 구현 보고에 남긴다. 푸시·PR·실계좌 조회·새 의존성·새 검사 끄기는 없다.

@@ -110,8 +110,18 @@ export const boundaryPolicies = ({
   FEATURE_DEPENDENCIES: features,
   PACKAGE_LOCATIONS: locations,
 }) => [
+  { allow: { dependency: { relationship: { from: "internal" } } } },
   ...elementPolicies(dependencies, entryFile),
   ...featurePolicies(features),
+  { disallow: { to: { file: { path: "src/shared/platform/input.ts" } } } },
+  {
+    from: {
+      file: {
+        path: ["src/shared/ds/TextField.tsx", "src/shared/ds/Select.tsx"],
+      },
+    },
+    allow: { to: { file: { path: "src/shared/platform/input.ts" } } },
+  },
   { allow: { to: { module: { origin: "external" } } } },
   ...packagePolicies(locations),
   {
@@ -168,6 +178,7 @@ export const boundaryRules = (tables) => ({
       default: "disallow",
       message: BOUNDARY_MESSAGES.element,
       checkAllOrigins: true,
+      checkInternals: true,
       checkUnknownLocals: true,
       policies: boundaryPolicies(tables),
     },

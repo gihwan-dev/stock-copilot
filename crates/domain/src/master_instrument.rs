@@ -98,7 +98,7 @@ pub enum TradingSuspension {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NxtTrading {
     Unsupported,
-    Supported(Option<TradingSuspension>),
+    Supported(TradingSuspension),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KoreanMasterDetail {
@@ -135,15 +135,21 @@ pub enum MasterInstrumentError {
     UnknownSecurityType,
     DuplicateIdentity,
     InvalidPriceObservation,
+    InvalidNxtStatus,
+    NotListed,
+    TradingSuspended,
+    LiquidationBuy,
+    MissingTradingStatus,
 }
 #[derive(Clone, PartialEq, Eq)]
 pub struct MasterInstrument {
     row: MasterInstrumentRow,
-    identity: QuoteInstrument,
+    market: Market,
 }
 #[derive(Clone, PartialEq, Eq)]
 pub struct QuoteInstrument {
-    market: Market,
+    market: crate::KnownMarket,
+    currency: Currency,
     symbol: Symbol,
     instrument_id: InstrumentId,
 }
@@ -154,8 +160,12 @@ impl fmt::Debug for QuoteInstrument {
 }
 impl QuoteInstrument {
     #[must_use]
-    pub const fn market(&self) -> &Market {
+    pub const fn market(&self) -> &crate::KnownMarket {
         &self.market
+    }
+    #[must_use]
+    pub const fn currency(&self) -> Currency {
+        self.currency
     }
     #[must_use]
     pub const fn symbol(&self) -> &Symbol {
@@ -182,6 +192,14 @@ impl MasterInstrument {
                     .or(Err(MasterInstrumentError::InvalidCode))?,
             ),
         };
+        if row
+            .symbol
+            .as_str()
+            .bytes()
+            .any(|byte| byte.is_ascii_lowercase())
+        {
+            return Err(MasterInstrumentError::SymbolMismatch);
+        }
         match market {
             Market::Kr => {
                 if row.currency != Currency::Krw {
@@ -220,27 +238,38 @@ impl MasterInstrument {
                 }
             }
         }
-        let identity = QuoteInstrument {
-            market,
-            symbol: row.symbol.clone(),
-            instrument_id: row.instrument_id.clone(),
-        };
-        Ok(Self { row, identity })
+        Ok(Self { row, market })
     }
     #[must_use]
     pub const fn row(&self) -> &MasterInstrumentRow {
         &self.row
     }
-    #[must_use]
-    pub fn quote_instrument(&self) -> QuoteInstrument {
-        self.identity.clone()
+    pub fn quote_instrument(&self) -> Result<QuoteInstrument, MasterInstrumentError> {
+        let market = crate::KnownMarket::try_from_market(&self.market)
+            .or(Err(MasterInstrumentError::UnknownMarket))?;
+        Ok(QuoteInstrument {
+            market,
+            currency: self.row.currency,
+            symbol: self.row.symbol.clone(),
+            instrument_id: self.row.instrument_id.clone(),
+        })
     }
-    pub fn order_instrument(&self) -> Result<ResolvedOrderInstrument, MasterInstrumentError> {
+    fn resolved_instrument(&self) -> Result<ResolvedOrderInstrument, MasterInstrumentError> {
         ResolvedOrderInstrument::from_master_lookup_result(
             self.row.symbol.clone(),
-            self.identity.market.clone(),
+            self.market.clone(),
         )
         .or(Err(MasterInstrumentError::UnknownMarket))
+    }
+    pub fn order_gate_facts(&self) -> Result<crate::MasterOrderGateFacts, MasterInstrumentError> {
+        Ok(crate::master_order_gate::from_master(
+            self.resolved_instrument()?,
+            self.row.clone(),
+        ))
+    }
+    pub fn order_instrument(&self) -> Result<ResolvedOrderInstrument, MasterInstrumentError> {
+        self.order_gate_facts()?
+            .instrument_for(crate::OrderSide::Buy)
     }
     pub fn price_observation(
         &self,
@@ -272,11 +301,8 @@ impl MasterInstrumentFacts {
         let mut ids = std::collections::BTreeSet::new();
         let mut symbols = std::collections::BTreeSet::new();
         for instrument in &instruments {
-            if !ids.insert(instrument.identity.instrument_id.clone())
-                || !symbols.insert((
-                    instrument.identity.market.clone(),
-                    instrument.row.symbol.clone(),
-                ))
+            if !ids.insert(instrument.row.instrument_id.clone())
+                || !symbols.insert((instrument.market.clone(), instrument.row.symbol.clone()))
             {
                 return Err(MasterInstrumentError::DuplicateIdentity);
             }
@@ -287,17 +313,18 @@ impl MasterInstrumentFacts {
     pub fn instruments(&self) -> &[MasterInstrument] {
         &self.0
     }
-    pub fn policy_security_facts(&self) -> Result<PolicySecurityFacts, MasterInstrumentError> {
+    #[must_use]
+    pub fn policy_security_facts(&self) -> PolicySecurityFacts {
         let mut values = BTreeMap::new();
         for master in &self.0 {
-            let kind = master
-                .row
-                .security_type
-                .known()
-                .ok_or(MasterInstrumentError::UnknownSecurityType)?;
-            values.insert(AllocationInstrument::new(&master.order_instrument()?), kind);
+            if let (Some(kind), Ok(instrument)) = (
+                master.row.security_type.known(),
+                master.resolved_instrument(),
+            ) {
+                values.insert(AllocationInstrument::new(&instrument), kind);
+            }
         }
-        Ok(PolicySecurityFacts::from_master_lookup_results(values))
+        PolicySecurityFacts::from_master_lookup_results(values)
     }
 }
 
@@ -325,7 +352,11 @@ mod tests {
             currency: Currency::Krw,
             listing_status: ListingStatus::Active,
             common_share: CommonShare::Common,
-            korean_detail: None,
+            korean_detail: Some(KoreanMasterDetail {
+                liquidation: LiquidationTrading::Regular,
+                krx: TradingSuspension::Clear,
+                nxt: NxtTrading::Unsupported,
+            }),
             observed_at: Timestamp::from_parts(
                 UnixSeconds::new(0),
                 Nanosecond::new(0),
@@ -342,10 +373,12 @@ mod tests {
         assert_eq!(master.row(), &input);
         assert_eq!(format!("{:?}", input.listing_market), "MasterCode { .. }");
         assert_eq!(format!("{input:?}"), "MasterInstrumentRow { .. }");
-        let query = master.quote_instrument();
+        let query = master.quote_instrument().expect("시세 식별");
         assert_eq!(query.instrument_id(), &input.instrument_id);
         assert_eq!(query.symbol(), &input.symbol);
-        assert_eq!(query.market(), &Market::Kr);
+        assert_eq!(query.market(), &KnownMarket::Kr);
+        assert_eq!(Market::from(KnownMarket::Kr), Market::Kr);
+        assert_eq!(Market::from(KnownMarket::Us), Market::Us);
         let order = master.order_instrument().expect("주문 식별");
         assert_eq!(order.symbol(), &input.symbol);
         assert_eq!(order.market(), Market::Kr);
@@ -356,7 +389,6 @@ mod tests {
         assert_eq!(
             facts
                 .policy_security_facts()
-                .expect("유형 사실")
                 .security_type(&AllocationInstrument::new(&order)),
             Some(ExcludedSecurityType::Stock)
         );
@@ -459,20 +491,20 @@ mod tests {
     proptest! {
         #![proptest_config(Config::with_cases(4096))]
         #[test]
-        fn derivations_round_trip_one_row(symbol in "[0-9A-Za-z]{6}", id in "[a-z]{1,32}", name in "[가-힣]{1,20}", security in sample::select(vec![("ETF", ExcludedSecurityType::Etf), ("ETN", ExcludedSecurityType::Etn), ("FOREIGN_STOCK", ExcludedSecurityType::ForeignStock)])) {
+        fn derivations_round_trip_one_row(symbol in "[0-9A-Z]{6}", id in "[a-z]{1,32}", name in "[가-힣]{1,20}", security in sample::select(vec![("ETF", ExcludedSecurityType::Etf), ("ETN", ExcludedSecurityType::Etn), ("FOREIGN_STOCK", ExcludedSecurityType::ForeignStock)])) {
             let mut input = row();
             input.symbol = Symbol::try_new(&symbol).expect("심볼");
             input.instrument_id = InstrumentId::try_new(&id).expect("키");
             input.name = DisplayInstrumentName::try_new(&name).expect("이름");
             input.security_type = MasterSecurityType::from_code(MasterCode::try_new(security.0).expect("유형"));
             let master = MasterInstrument::try_new(input.clone()).expect("마스터");
-            let query = master.quote_instrument();
+            let query = master.quote_instrument().expect("시세 식별");
             let order = master.order_instrument().expect("주문");
             let (named, display) = master.name_fact().expect("이름 사실").into_parts();
             prop_assert_eq!(query.instrument_id(), &input.instrument_id);
             prop_assert_eq!(query.symbol(), order.symbol());
-            prop_assert_eq!(query.market(), &order.market());
-            let policy = MasterInstrumentFacts::try_new(vec![master]).expect("목록").policy_security_facts().expect("유형 사실");
+            prop_assert_eq!(&Market::from(*query.market()), &order.market());
+            let policy = MasterInstrumentFacts::try_new(vec![master]).expect("목록").policy_security_facts();
             prop_assert_eq!(policy.security_type(&AllocationInstrument::new(&order)), Some(security.1));
             prop_assert_eq!(named, order);
             prop_assert_eq!(display, input.name);
@@ -486,12 +518,13 @@ mod tests {
             prop_assert_eq!(known_market.row().security_type.code().as_str(), &code);
             prop_assert_eq!(known_market.row().security_type.known(), None);
             prop_assert_eq!(known_market.row().security_type.knowledge(), SecurityTypeKnowledge::Unknown);
-            prop_assert_eq!(MasterInstrumentFacts::try_new(vec![known_market]).expect("목록").policy_security_facts(), Err(MasterInstrumentError::UnknownSecurityType));
+            prop_assert_eq!(MasterInstrumentFacts::try_new(vec![known_market]).expect("목록").policy_security_facts(), PolicySecurityFacts::default());
             input.listing_market = MasterCode::try_new(&code).expect("시장");
+            input.korean_detail = None;
             let master = MasterInstrument::try_new(input).expect("미지 시장 보존");
-            let market_code = master.quote_instrument().market().as_code();
+            let market_code = master.row().listing_market.clone();
             prop_assert_eq!(market_code.as_str(), code);
-            prop_assert_eq!(KnownMarket::try_from_market(master.quote_instrument().market()), Err(UnknownKnownMarket));
+            prop_assert_eq!(KnownMarket::try_from_market(&master.market), Err(UnknownKnownMarket));
             prop_assert_eq!(master.order_instrument(), Err(MasterInstrumentError::UnknownMarket));
             prop_assert_eq!(master.name_fact(), Err(MasterInstrumentError::UnknownMarket));
         }
@@ -544,20 +577,26 @@ mod tests {
                 "KR_ETC",
                 Market::Kr,
                 Currency::Krw,
-                "a12345",
+                "A12345",
                 KnownMarket::Kr,
             ),
             ("NYSE", Market::Us, Currency::Usd, "BRK.B", KnownMarket::Us),
-            ("NASDAQ", Market::Us, Currency::Usd, "aapl", KnownMarket::Us),
+            ("NASDAQ", Market::Us, Currency::Usd, "AAPL", KnownMarket::Us),
             ("AMEX", Market::Us, Currency::Usd, "BRK-B", KnownMarket::Us),
             ("US_ETC", Market::Us, Currency::Usd, "A", KnownMarket::Us),
         ] {
             let mut input = row();
             input.listing_market = MasterCode::try_new(code).expect("시장");
             input.currency = currency;
+            if currency == Currency::Usd {
+                input.korean_detail = None;
+            }
             input.symbol = Symbol::try_new(symbol).expect("심볼");
             let master = MasterInstrument::try_new(input).expect("마스터");
-            assert_eq!(master.quote_instrument().market(), &expected);
+            assert_eq!(
+                &Market::from(*master.quote_instrument().expect("시세 식별").market()),
+                &expected
+            );
             assert_eq!(KnownMarket::try_from_market(&expected), Ok(known));
         }
         for code in ["KR", "US", &"X".repeat(33)] {
@@ -618,7 +657,7 @@ mod tests {
             MasterInstrumentFacts::try_new(vec![])
                 .expect("빈 목록")
                 .policy_security_facts(),
-            Ok(PolicySecurityFacts::default())
+            PolicySecurityFacts::default()
         );
     }
 
@@ -650,8 +689,190 @@ mod tests {
             ])
             .expect("목록")
             .policy_security_facts(),
+            PolicySecurityFacts::default()
+        );
+    }
+
+    #[test]
+    fn reviewed_boundaries_reject_unsafe_orders_and_unknown_quotes() {
+        for status in [ListingStatus::Scheduled, ListingStatus::Delisted] {
+            let mut input = row();
+            input.listing_status = status;
+            let master = MasterInstrument::try_new(input).expect("마스터");
+            assert_eq!(
+                master.order_instrument(),
+                Err(MasterInstrumentError::NotListed)
+            );
+            let gate = master.order_gate_facts().expect("게이트");
+            assert_eq!(gate.row().listing_status, status);
+            assert_eq!(
+                gate.instrument_for(crate::OrderSide::Sell),
+                Err(MasterInstrumentError::NotListed)
+            );
+            assert_eq!(master.name_fact(), Err(MasterInstrumentError::NotListed));
+            let price = Price::parse(
+                &NumericInput::try_new("100").expect("가격 입력"),
+                Currency::Krw,
+            )
+            .expect("가격");
+            assert_eq!(
+                master.price_observation(price, master.row().observed_at),
+                Err(MasterInstrumentError::NotListed)
+            );
+            assert_eq!(
+                gate.instrument_for(crate::OrderSide::Buy),
+                Err(MasterInstrumentError::NotListed)
+            );
+        }
+        let mut foreign_input = row();
+        foreign_input.listing_market = MasterCode::try_new("JP").expect("시장");
+        foreign_input.korean_detail = None;
+        assert_eq!(
+            MasterInstrument::try_new(foreign_input)
+                .expect("마스터")
+                .quote_instrument(),
             Err(MasterInstrumentError::UnknownMarket)
         );
+        for symbol in ["aapl", "a12345"] {
+            let mut input = row();
+            input.symbol = Symbol::try_new(symbol).expect("심볼");
+            assert_eq!(
+                MasterInstrument::try_new(input),
+                Err(MasterInstrumentError::SymbolMismatch)
+            );
+        }
+    }
+
+    #[test]
+    fn gate_facts_keep_directional_restrictions_and_source() {
+        for (liquidation, suspension, buy, sell) in [
+            (
+                LiquidationTrading::Regular,
+                TradingSuspension::Clear,
+                Ok(()),
+                Ok(()),
+            ),
+            (
+                LiquidationTrading::Liquidation,
+                TradingSuspension::Clear,
+                Err(MasterInstrumentError::LiquidationBuy),
+                Ok(()),
+            ),
+            (
+                LiquidationTrading::Regular,
+                TradingSuspension::Suspended,
+                Err(MasterInstrumentError::TradingSuspended),
+                Err(MasterInstrumentError::TradingSuspended),
+            ),
+        ] {
+            let mut input = row();
+            input.korean_detail = Some(KoreanMasterDetail {
+                liquidation,
+                krx: suspension,
+                nxt: NxtTrading::Supported(TradingSuspension::Suspended),
+            });
+            let master = MasterInstrument::try_new(input.clone()).expect("마스터");
+            let gate = master.order_gate_facts().expect("게이트");
+            assert_eq!(gate.row(), &input);
+            assert_eq!(format!("{gate:?}"), "MasterOrderGateFacts { .. }");
+            assert_eq!(gate.instrument_for(crate::OrderSide::Buy).map(|_| ()), buy);
+            assert_eq!(
+                gate.instrument_for(crate::OrderSide::Sell).map(|_| ()),
+                sell
+            );
+        }
+        let mut input = row();
+        input.korean_detail = None;
+        assert_eq!(
+            MasterInstrument::try_new(input)
+                .expect("마스터")
+                .order_instrument(),
+            Err(MasterInstrumentError::MissingTradingStatus)
+        );
+        let mut unknown_input = row();
+        unknown_input.security_type =
+            MasterSecurityType::from_code(MasterCode::try_new("FUTURE").expect("유형"));
+        let master = MasterInstrument::try_new(unknown_input).expect("마스터");
+        assert_eq!(
+            master.order_instrument(),
+            Err(MasterInstrumentError::UnknownSecurityType)
+        );
+        assert_eq!(
+            master.quote_instrument().expect("시세 식별").currency(),
+            Currency::Krw
+        );
+    }
+
+    #[test]
+    fn nxt_nullable_contract_has_exactly_two_valid_shapes() {
+        for state in [TradingSuspension::Clear, TradingSuspension::Suspended] {
+            assert_eq!(
+                NxtTrading::try_from_parts(crate::NxtSupport::Supported, Some(state)),
+                Ok(NxtTrading::Supported(state))
+            );
+            assert_eq!(
+                NxtTrading::try_from_parts(crate::NxtSupport::Unsupported, Some(state)),
+                Err(MasterInstrumentError::InvalidNxtStatus)
+            );
+        }
+        assert_eq!(
+            NxtTrading::try_from_parts(crate::NxtSupport::Supported, None),
+            Err(MasterInstrumentError::InvalidNxtStatus)
+        );
+        assert_eq!(
+            NxtTrading::try_from_parts(crate::NxtSupport::Unsupported, None),
+            Ok(NxtTrading::Unsupported)
+        );
+    }
+
+    #[test]
+    fn partial_policy_facts_and_quotes_keep_good_rows_without_unknown_rows() {
+        let valid = MasterInstrument::try_new(row()).expect("마스터");
+        let key = AllocationInstrument::new(&valid.order_instrument().expect("주문"));
+        let query = valid.quote_instrument().expect("시세");
+        assert_eq!(query.currency(), Currency::Krw);
+        let mut unknown = row();
+        unknown.symbol = Symbol::try_new("005930").expect("심볼");
+        unknown.instrument_id = InstrumentId::try_new("unknown").expect("키");
+        unknown.security_type =
+            MasterSecurityType::from_code(MasterCode::try_new("FUTURE").expect("유형"));
+        let unknown_master = MasterInstrument::try_new(unknown).expect("마스터");
+        let unknown_key =
+            AllocationInstrument::new(&unknown_master.resolved_instrument().expect("내부 조회"));
+        let mut unknown_market = row();
+        unknown_market.listing_market = MasterCode::try_new("JP").expect("시장");
+        unknown_market.korean_detail = None;
+        unknown_market.instrument_id = InstrumentId::try_new("jp").expect("키");
+        unknown_market.security_type =
+            MasterSecurityType::from_code(MasterCode::try_new("ETF").expect("유형"));
+        let facts = MasterInstrumentFacts::try_new(vec![
+            valid,
+            unknown_master,
+            MasterInstrument::try_new(unknown_market).expect("마스터"),
+        ])
+        .expect("목록");
+        let policy = facts.policy_security_facts();
+        assert_eq!(
+            policy.security_type(&key),
+            Some(ExcludedSecurityType::Stock)
+        );
+        assert_eq!(policy.security_type(&unknown_key), None);
+        assert_eq!(facts.instruments().len(), 3);
+    }
+
+    #[test]
+    fn us_lowercase_aliases_are_rejected_before_collection() {
+        for symbol in ["aapl", "AaPL"] {
+            let mut input = row();
+            input.listing_market = MasterCode::try_new("NASDAQ").expect("시장");
+            input.currency = Currency::Usd;
+            input.korean_detail = None;
+            input.symbol = Symbol::try_new(symbol).expect("심볼");
+            assert_eq!(
+                MasterInstrument::try_new(input),
+                Err(MasterInstrumentError::SymbolMismatch)
+            );
+        }
     }
 
     fn korean_details() -> Vec<KoreanMasterDetail> {
@@ -684,9 +905,8 @@ mod tests {
     ) {
         for nxt in [
             NxtTrading::Unsupported,
-            NxtTrading::Supported(None),
-            NxtTrading::Supported(Some(TradingSuspension::Clear)),
-            NxtTrading::Supported(Some(TradingSuspension::Suspended)),
+            NxtTrading::Supported(TradingSuspension::Clear),
+            NxtTrading::Supported(TradingSuspension::Suspended),
         ] {
             details.push(KoreanMasterDetail {
                 liquidation,

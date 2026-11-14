@@ -73,9 +73,11 @@ const intrinsicType = (type) =>
     ? type.types.some(intrinsicType)
     : (type?.flags & typeFlags.StringLike) !== 0;
 const uiText = (checker, type) =>
-  type.isUnion()
-    ? type.types.every((part) => uiText(checker, part))
-    : brandNamesOf(checker, type).includes("UiText");
+  (type.flags & (typeFlags.Undefined | typeFlags.Null)) !== 0
+    ? true
+    : type.isUnion()
+      ? type.types.every((part) => uiText(checker, part))
+      : brandNamesOf(checker, type).includes("UiText");
 export const screenRules = {
   "no-screen-elements": rule("화면에서는 DS 컴포넌트만 조립한다.", (ctx) => ({
     JSXOpeningElement(node) {

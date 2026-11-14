@@ -2,7 +2,6 @@
 
 - 상태: 확정 (2026-11-14)
 
-- 상태: 적대적 리뷰 수정안. architecture 3.3 반영은 메인 리뷰 뒤 한다.
 - 최초 구현: 9c1ba39d547e6484b68d8d988d54a95d23860d6c
 - 최초 병합 기준: 1cd405c9f7ff11be0a26d1eb892766463aaf722a. 이번 회차 끝에 로컬 master f9f0c5f0b7dff04ad4a184aadf882f4af1fee376(D-22 포함)을 병합했다.
 - 범위: application과 이 ADR. domain·tasks·progress는 수정하지 않는다.

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  cpSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -65,19 +66,26 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
   };
   try {
     assert.deepEqual(SCREEN_DOM_BOOTSTRAP, []);
+    cpSync(
+      join(desktopRoot, "src/shared/lib"),
+      join(folder, "src/shared/lib"),
+      { recursive: true },
+    );
     for (const path of [
       "app/main.tsx",
       "app/App.tsx",
       "shared/platform/index.ts",
+      "shared/platform/input.ts",
     ])
       writeFileSync(
         join(folder, "src", path),
         readFileSync(join(desktopRoot, "src", path), "utf8"),
       );
     compile();
-    for (const result of await make().lintFiles([main, platform]))
+    const input = join(folder, "src/shared/platform/input.ts");
+    for (const result of await make().lintFiles([main, platform, input]))
       assert.deepEqual(result.messages, []);
-    const program = ts.createProgram([platform], {
+    const program = ts.createProgram([platform, input], {
       noEmit: true,
       strict: true,
     });
@@ -95,10 +103,32 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         .map((signature) => signature.getReturnType().flags),
       [ts.TypeFlags.Void],
     );
-    assert.deepEqual(DOM_ACCESS_FILES, ["src/shared/platform/index.ts"]);
+    assert.deepEqual(DOM_ACCESS_FILES, [
+      "src/shared/platform/index.ts",
+      "src/shared/platform/input.ts",
+    ]);
+    const inputSource = program.getSourceFile(input);
+    const inputExports = checker.getExportsOfModule(
+      checker.getSymbolAtLocation(inputSource),
+    );
+    assert.deepEqual(
+      inputExports.map((entry) => entry.name),
+      ["inputEventValue", "inputCommit", "pasteInputValue"],
+    );
+    const returns = inputExports.map((entry) =>
+      checker
+        .getTypeOfSymbolAtLocation(entry, inputSource)
+        .getCallSignatures()
+        .map((signature) => checker.typeToString(signature.getReturnType())),
+    );
+    assert.deepEqual(returns, [
+      ["Result<InputValue, BrandError>"],
+      ['"commit" | "ignore"'],
+      ["void"],
+    ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>;',
+      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId} from "./brand"; export type {InputValue,BrandError} from "./brand"; export {err} from "./result"; export type {Result} from "./result";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(

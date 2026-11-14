@@ -35,3 +35,11 @@ export const parseTimestamp = (input: unknown): Result<Timestamp, BrandError> =>
 
 export const parseCount = (input: unknown): Result<Count, BrandError> =>
   fromParse(countSchema.safeParse(input));
+
+export type InputValue = string & Brand<"InputValue">;
+const inputValueSchema = z.string().brand<"InputValue">();
+export const emptyInputValue = "" as InputValue;
+export const parseInputValue = (
+  input: unknown,
+): Result<InputValue, BrandError> =>
+  fromParse(inputValueSchema.safeParse(input));

@@ -18,3 +18,12 @@ impl KnownMarket {
         }
     }
 }
+
+impl From<KnownMarket> for Market {
+    fn from(value: KnownMarket) -> Self {
+        match value {
+            KnownMarket::Kr => Self::Kr,
+            KnownMarket::Us => Self::Us,
+        }
+    }
+}

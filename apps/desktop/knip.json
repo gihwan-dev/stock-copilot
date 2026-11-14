@@ -3,7 +3,8 @@
     "src/shared/*/index.ts",
     "eslint/**/*.mjs",
     "tests/*.test.mjs",
-    "src/shared/ds/theme.css!"
+    "src/shared/ds/theme.css!",
+    "src/shared/ds/stories.ts"
   ],
   "project": ["src/**/*.{ts,tsx}!", "src/**/*.css"],
   "include": [
