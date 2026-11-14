@@ -1,4 +1,4 @@
-use crate::{MasterCode, ResolvedOrderInstrument, Timestamp};
+use crate::{MasterCode, OrderSide, ResolvedOrderInstrument, Timestamp};
 use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StockWarning {
@@ -87,13 +87,17 @@ pub enum StockWarningDecision {
     Clear,
     Blocked,
     DifferentInstrument,
+    NotApplicable,
 }
 #[must_use]
 pub fn check_stock_warnings(
     fact: &StockWarnings,
     instrument: &ResolvedOrderInstrument,
+    side: OrderSide,
 ) -> StockWarningDecision {
-    if fact.instrument() != instrument {
+    if side == OrderSide::Sell {
+        StockWarningDecision::NotApplicable
+    } else if fact.instrument() != instrument {
         StockWarningDecision::DifferentInstrument
     } else if fact.warnings().is_empty() {
         StockWarningDecision::Clear

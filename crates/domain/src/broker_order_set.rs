@@ -1,6 +1,6 @@
 use crate::{
-    AccountId, BrokerOrder, BrokerOrderError, BrokerOrderId, Market, OrderOpenState, OrderSide,
-    ResolvedOrderInstrument, Timestamp,
+    AccountId, BrokerOrder, BrokerOrderError, BrokerOrderId, BrokerOrderRow, Market,
+    OrderOpenState, OrderSide, ResolvedOrderInstrument, Timestamp,
 };
 use std::{collections::BTreeMap, fmt};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,16 +18,25 @@ pub struct BrokerOrderSet {
 impl BrokerOrderSet {
     pub fn from_open_lookup_result(
         account_id: AccountId,
-        orders: Vec<BrokerOrder>,
+        rows: Vec<BrokerOrderRow>,
         coverage: OpenOrderCoverage,
         observed_at: Timestamp,
     ) -> Result<Self, BrokerOrderError> {
         let mut unique = BTreeMap::new();
-        for order in orders {
+        for row in rows {
+            if row.account_id != account_id {
+                return Err(BrokerOrderError::AccountMismatch);
+            }
+            if coverage == OpenOrderCoverage::Complete
+                && row.status.open_state() == OrderOpenState::Closed
+            {
+                return Err(BrokerOrderError::ClosedInOpenResult);
+            }
+            let order = BrokerOrder::from_lookup_result(row)?;
             if order.observed_at() != observed_at {
                 return Err(BrokerOrderError::ObservationMismatch);
             }
-            if unique.insert(order.row().order_id.clone(), order).is_some() {
+            if unique.insert(order.order_id().clone(), order).is_some() {
                 return Err(BrokerOrderError::DuplicateOrderId);
             }
         }
@@ -45,6 +54,10 @@ impl BrokerOrderSet {
     #[must_use]
     pub fn orders(&self) -> &BTreeMap<BrokerOrderId, BrokerOrder> {
         &self.orders
+    }
+    #[must_use]
+    pub fn coverage(&self) -> OpenOrderCoverage {
+        self.coverage
     }
     #[must_use]
     pub fn observed_at(&self) -> Timestamp {
@@ -78,9 +91,9 @@ pub fn opposite_open_order(
         return OppositeOpenOrder::NotApplicable;
     }
     if fact.orders.values().any(|order| {
-        &order.row().instrument == instrument
-            && order.row().side != side
-            && order.row().status.open_state() == OrderOpenState::Possible
+        order.instrument() == instrument
+            && order.side() != side
+            && order.status().open_state() == OrderOpenState::Possible
     }) {
         return OppositeOpenOrder::Present;
     }

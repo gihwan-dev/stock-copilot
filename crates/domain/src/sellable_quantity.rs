@@ -17,6 +17,7 @@ pub enum SellableQuantityDecision {
     Allowed,
     Exceeded,
     DifferentFact,
+    FractionalDomesticRequest,
 }
 impl SellableQuantityFact {
     pub fn from_lookup_result(
@@ -67,6 +68,10 @@ pub fn check_sellable_quantity(
 ) -> SellableQuantityDecision {
     if fact.account_id() != account || fact.instrument() != instrument {
         SellableQuantityDecision::DifferentFact
+    } else if instrument.market() == Market::Kr
+        && requested.quantity().as_decimal().normalize().scale() != 0
+    {
+        SellableQuantityDecision::FractionalDomesticRequest
     } else if requested.quantity() > fact.quantity() {
         SellableQuantityDecision::Exceeded
     } else {

@@ -390,3 +390,9 @@ pub use buy_minimum_unit::MinimumBuyUnit;
 pub use buy_plan_price::{
     BuyPlanOrderPrice, BuyPlanOrderPriceKind, PriceBoundBuyPlan, check_buy_plan_order_price,
 };
+
+mod broker_order_fields;
+pub use broker_order_fields::{
+    BrokerOrderMoney, BrokerOrderPrice, BrokerOrderSize, BrokerOrderTime, BrokerOrderType,
+    BrokerTimeInForce, UnfilledQuantity,
+};
