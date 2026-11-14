@@ -1,9 +1,17 @@
+mod environment;
+mod scope;
+use scope::{diff_scope, jobs_for};
+
+#[cfg(test)]
+mod scope_tests;
+
 #[cfg(test)]
 mod tests;
 
 use std::collections::BTreeSet;
 use std::fmt;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
@@ -53,6 +61,7 @@ pub(crate) struct Survivor {
 pub(crate) enum Scope {
     Everything,
     Crates(BTreeSet<String>),
+    Files(BTreeSet<String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,10 +188,14 @@ pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
+    if let Scope::Files(files) = scope {
+        return files.iter().cloned().collect();
+    }
     globs
         .iter()
         .filter(|glob| match scope {
             Scope::Everything => true,
+            Scope::Files(_) => false,
             Scope::Crates(crates) => crates.contains(&crate_of(glob)),
         })
         .cloned()
@@ -198,6 +211,70 @@ pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BT
             changed.iter().any(|path| path.starts_with(&prefix))
         })
         .collect()
+}
+
+fn selected_files(
+    root: &Path,
+    directory: &Path,
+    globs: &[String],
+    files: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    for listed in fs::read_dir(directory).map_err(|error| error.to_string())? {
+        let entry = listed.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let kind = entry.file_type().map_err(|error| error.to_string())?;
+        if kind.is_dir() {
+            selected_files(root, &path, globs, files)?;
+        } else {
+            let relative = path
+                .strip_prefix(root)
+                .map_err(|error| error.to_string())?
+                .to_str()
+                .ok_or("UTF-8 path")?;
+            if globs
+                .iter()
+                .any(|glob| scope::matches_target(glob, relative))
+            {
+                files.insert(String::from(relative));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn configure_parallelism(
+    command: &mut Command,
+    workspace: &Path,
+    globs: &[String],
+) -> Result<(), String> {
+    let cores = std::thread::available_parallelism()
+        .map_err(|error| error.to_string())?
+        .get();
+    let override_jobs = environment::jobs_override()?;
+    let jobs = jobs_for(cores, override_jobs.as_deref())?;
+    let multiplier = jobs.saturating_mul(5);
+    let mut files = BTreeSet::new();
+    for directory in globs.iter().map(|glob| crate_of(glob)) {
+        let path = workspace.join(directory).join("src");
+        if path.exists() {
+            selected_files(workspace, &path, globs, &mut files)?;
+        }
+    }
+    writeln!(
+        std::io::stdout(),
+        "mutants: jobs={jobs}, timeout-multiplier={multiplier}, files={}",
+        files.len()
+    )
+    .map_err(|error| error.to_string())?;
+    for file in files {
+        writeln!(std::io::stdout(), "mutants: file={file}").map_err(|error| error.to_string())?;
+    }
+    command
+        .arg("--jobs")
+        .arg(jobs.to_string())
+        .arg("--timeout-multiplier")
+        .arg(multiplier.to_string());
+    Ok(())
 }
 
 pub(crate) fn run(
@@ -231,6 +308,7 @@ pub(crate) fn run(
         .arg("--output")
         .arg(&output)
         .stdin(Stdio::null());
+    configure_parallelism(&mut command, workspace, &globs)?;
     for glob in &globs {
         command.arg("--file").arg(glob);
     }
@@ -257,10 +335,7 @@ fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
         [flag, base] if flag == "--in-diff" => {
             let commit = resolve_base(root, base)?;
             let changed = changed_paths(root, &commit)?;
-            Ok(Scope::Crates(touched_crates(
-                &target_globs(root)?,
-                &changed,
-            )))
+            Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
         _ => Err(String::from(
             "사용법: xtask mutants [--in-diff <HEAD|커밋 ID>]",

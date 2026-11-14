@@ -154,8 +154,7 @@
           [["call", "just_executable"]],
           "\" mutants-diff ",
           [["call", "quote", ["variable", "base"]]]
-        ],
-        ["\"", [["call", "just_executable"]], "\" mutants-all"]
+        ]
       ],
       "dependencies": [
         {
