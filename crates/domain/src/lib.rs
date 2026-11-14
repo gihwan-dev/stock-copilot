@@ -373,6 +373,9 @@ pub use master_instrument::{
 };
 mod master_order_gate;
 pub use master_order_gate::{MasterOrderGateFacts, NxtSupport};
+
+mod domain_event;
+pub use domain_event::{DomainEvent, DomainEventKind};
 mod buy_quantity;
 mod buy_quantity_arithmetic;
 mod buy_signal_history;
@@ -414,3 +417,23 @@ pub use investor_flow::{SignedFlowKrw, SignedFlowShares};
 pub use market_index::{IndexPoints, IndicatorYieldPercent, UnclassifiedIndicatorValue};
 pub use market_ranking::RankingResponseInput;
 pub use sector_composition::{SectorComposition, SectorCompositionScope};
+
+mod sellable_quantity;
+pub use sellable_quantity::{
+    SellableQuantityDecision, SellableQuantityError, SellableQuantityFact, check_sellable_quantity,
+};
+mod broker_order_status;
+pub use broker_order_status::{BrokerOrderStatus, OrderOpenState};
+mod broker_order;
+pub use broker_order::{BrokerOrder, BrokerOrderError, BrokerOrderId, BrokerOrderRow};
+mod broker_order_set;
+pub use broker_order_set::{
+    BrokerOrderSet, OpenOrderCoverage, OppositeOpenOrder, opposite_open_order,
+};
+mod stock_warnings;
+pub use stock_warnings::{StockWarning, StockWarningDecision, StockWarnings, check_stock_warnings};
+mod broker_order_fields;
+pub use broker_order_fields::{
+    BrokerOrderMoney, BrokerOrderPrice, BrokerOrderSize, BrokerOrderTime, BrokerOrderType,
+    BrokerTimeInForce, UnfilledQuantity,
+};
