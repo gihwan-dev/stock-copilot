@@ -1154,3 +1154,15 @@ fn missing_base_commit_reports_the_git_cause() {
         "{failure}"
     );
 }
+
+#[test]
+fn commit_guard_reads_output_while_it_writes_input_larger_than_a_pipe() {
+    let directory = repository("guard-large-listing", Hooks::Absent);
+    let lines = 40_000;
+    let line = "0".repeat(64);
+    let input = format!("{line}\n").repeat(lines);
+    let echoed = crate::commit_guard::hashed(&directory, Command::new("cat"), input.as_bytes())
+        .expect("echo");
+    assert_eq!(echoed.len(), lines);
+    assert!(echoed.iter().all(|found| found == &line));
+}
