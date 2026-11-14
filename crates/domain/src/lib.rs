@@ -300,3 +300,10 @@ pub use valuation_snapshot_calendar::{
     SnapshotSource,
 };
 pub use valuation_snapshot_cash::{SnapshotCashBasis, SnapshotLedgers};
+
+mod scorecard;
+mod scorecard_arithmetic;
+pub use scorecard::{
+    Scorecard, ScorecardBin, ScorecardComparisonCount, ScorecardComparisons, ScorecardDisplay,
+    ScorecardError, ScorecardMetrics, ScorecardPending, ScorecardPoint, ScorecardTrial,
+};
