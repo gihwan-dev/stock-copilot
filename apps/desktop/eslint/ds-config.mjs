@@ -81,6 +81,7 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     },
     plugins: { "better-tailwindcss": tailwind, ds: dsPlugin },
     settings: {
+      "ds/price-color-files": lists.PRICE_COLOR_FILES,
       "better-tailwindcss": {
         cwd: new URL("../", import.meta.url).pathname,
         entryPoint: DS_ENTRY,

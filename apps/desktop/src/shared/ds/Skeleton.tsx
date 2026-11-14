@@ -9,7 +9,12 @@ type Props =
         "chart-height-sm" | "chart-height" | "chart-height-lg"
       >;
     };
+const variantClasses = {
+  text: "flex flex-col gap-space-2",
+  block: "rounded-md bg-surface-sunken",
+} as const;
 export const Skeleton = (props: Props): ReactElement => {
+  const variant = props.variant ?? "text";
   if (props.variant === "block") {
     if (props.height === "chart-height")
       return (
@@ -37,7 +42,7 @@ export const Skeleton = (props: Props): ReactElement => {
       ? (["a", "b", "c", "d", "e", "f"] as const)
       : (["a", "b", "c"] as const);
   return (
-    <div aria-hidden="true" className="flex flex-col gap-space-2">
+    <div aria-hidden="true" className={variantClasses[variant]}>
       {lines.map((key): ReactElement => (
         <div key={key} className="skeleton-line rounded-sm bg-surface-sunken" />
       ))}

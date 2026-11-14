@@ -14,3 +14,5 @@ export { Table } from "./Table";
 export { Dialog } from "./Dialog";
 export { EmptyState } from "./EmptyState";
 export { Skeleton } from "./Skeleton";
+export { Badge } from "./Badge";
+export { StatusBar } from "./StatusBar";

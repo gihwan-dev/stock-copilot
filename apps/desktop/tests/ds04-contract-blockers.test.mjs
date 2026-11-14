@@ -4,40 +4,42 @@ import { cpSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ESLint, mkdtempSync } from "./ds-runtime-environment.mjs";
 import { desktopRoot } from "./paths.mjs";
-for (const [name, tones] of [
-  ["Badge", '"neutral" | "primary" | "up" | "down" | "alert"'],
-  ["StatusBar", '"warning" | "error" | "info"'],
-]) {
-  test(`DS04 ${name} design tone needs a public contract policy decision`, async () => {
-    const folder = mkdtempSync("ds04-blocker-");
+for (const name of ["Badge", "StatusBar"]) {
+  test(`DS04 ${name} semantic tone passes the real public and style contracts`, async () => {
+    const folder = mkdtempSync("ds04-semantic-control-");
     try {
       cpSync(join(desktopRoot, "src"), join(folder, "src"), {
         recursive: true,
       });
+      const project = join(folder, "tsconfig.json");
       writeFileSync(
-        join(folder, "tsconfig.json"),
+        project,
         JSON.stringify({
           extends: join(desktopRoot, "tsconfig.json"),
           include: ["src"],
           compilerOptions: { rootDir: "src" },
         }),
       );
-      const file = join(folder, "src/shared/ds/Blocker.tsx");
-      writeFileSync(
-        file,
-        `import type {ReactElement} from "react";import type {UiText} from "../lib";type Props={readonly tone?:${tones};readonly children:UiText};export const ${name}=(props:Props):ReactElement=><span>{props.children}</span>;`,
-      );
       const engine = new ESLint({
         cwd: folder,
         overrideConfigFile: join(desktopRoot, "eslint.config.mjs"),
+        overrideConfig: [
+          {
+            settings: { "boundaries/root-path": folder },
+            languageOptions: {
+              parserOptions: {
+                projectService: false,
+                project,
+                tsconfigRootDir: folder,
+              },
+            },
+          },
+        ],
       });
-      const [result] = await engine.lintFiles([file]);
-      assert.deepEqual(
-        result.messages
-          .filter((message) => message.ruleId === "ds/public-props")
-          .map((message) => message.ruleId),
-        ["ds/public-props"],
-      );
+      const [result] = await engine.lintFiles([
+        join(folder, `src/shared/ds/${name}.tsx`),
+      ]);
+      assert.deepEqual(result.messages, []);
     } finally {
       rmSync(folder, { recursive: true, force: true });
     }

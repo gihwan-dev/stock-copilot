@@ -14,6 +14,10 @@
       "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
     },
     {
+      "issue": "files src/shared/ds/Badge.tsx src/shared/ds/Badge.tsx",
+      "reason": "DS-04 의미 변형 Badge·StatusBar와 목록 이야기. 첫 화면 사용 전 정확한 파일만 유예"
+    },
+    {
       "issue": "files src/shared/ds/Base.stories.tsx src/shared/ds/Base.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
@@ -100,6 +104,14 @@
     {
       "issue": "files src/shared/ds/Skeleton.tsx src/shared/ds/Skeleton.tsx",
       "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Status.stories.tsx src/shared/ds/Status.stories.tsx",
+      "reason": "DS-04 의미 변형 Badge·StatusBar와 목록 이야기. 첫 화면 사용 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/StatusBar.tsx src/shared/ds/StatusBar.tsx",
+      "reason": "DS-04 의미 변형 Badge·StatusBar와 목록 이야기. 첫 화면 사용 전 정확한 파일만 유예"
     },
     {
       "issue": "files src/shared/ds/Switch.stories.tsx src/shared/ds/Switch.stories.tsx",

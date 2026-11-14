@@ -1,3 +1,4 @@
+import { semanticVariants } from "./ds-semantic-variants.mjs";
 import { publicProps } from "./ds-public-props.mjs";
 import { noMessageFormat } from "./ds-message-format.mjs";
 import { screenRules } from "./ds-screen.mjs";
@@ -51,6 +52,14 @@ export const dsPlugin = {
               node.value?.type === "JSXExpressionContainer"
                 ? node.value.expression
                 : node.value,
+            ) &&
+            !(
+              node.value?.type === "JSXExpressionContainer" &&
+              semanticVariants(ctx).classes(
+                ctx.sourceCode.parserServices.esTreeNodeToTSNodeMap?.get(
+                  node.value.expression,
+                ),
+              )
             )
           )
             report(ctx, node);

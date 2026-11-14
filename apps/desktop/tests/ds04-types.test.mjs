@@ -7,6 +7,25 @@ import { mkdtempSync } from "./ds-runtime-environment.mjs";
 import { desktopRoot } from "./paths.mjs";
 const cases = [
   [
+    "Badge",
+    '<Badge tone="up" mono="mono">{label}</Badge>',
+    [
+      '<Badge tone="warning">{label}</Badge>',
+      "<Badge mono={true}>{label}</Badge>",
+      "<Badge>Raw</Badge>",
+      '<Badge className="text-up">{label}</Badge>',
+    ],
+  ],
+  [
+    "StatusBar",
+    '<StatusBar tone="error">{label}</StatusBar>',
+    [
+      '<StatusBar tone="up">{label}</StatusBar>',
+      "<StatusBar>Raw</StatusBar>",
+      "<StatusBar onClick={(e:MouseEvent):void=>{consume(e);}}/>",
+    ],
+  ],
+  [
     "Card",
     "<Card title={label}><Text>{label}</Text></Card>",
     [
@@ -71,7 +90,7 @@ for (const [name, valid, invalid] of cases) {
         }),
       );
       const header =
-        'import type {ReactElement,MouseEvent,ChangeEvent} from "react"; import {Card,Table,Dialog,EmptyState,Skeleton,Text} from "./index"; import {text,emptyInputValue} from "../lib";import type {InputValue}from "../lib"; const label=text("app.title","ko"); const options=[{value:emptyInputValue,label},{value:emptyInputValue,label}] as const; const consume=(value:unknown):void=>{JSON.stringify(value);};';
+        'import type {ReactElement,MouseEvent,ChangeEvent} from "react"; import {Card,Table,Dialog,EmptyState,Skeleton,Text,Badge,StatusBar} from "./index"; import {text,emptyInputValue} from "../lib";import type {InputValue}from "../lib"; const label=text("app.title","ko"); const options=[{value:emptyInputValue,label},{value:emptyInputValue,label}] as const; const consume=(value:unknown):void=>{JSON.stringify(value);};';
       const compile = () =>
         spawnSync(join(desktopRoot, "node_modules/.bin/tsc"), ["-p", project], {
           encoding: "utf8",

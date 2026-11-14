@@ -3736,6 +3736,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -7482,6 +7487,11 @@
     },
     {
       "name": "@content-wide:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:whitespace-nowrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11242,6 +11252,11 @@
     },
     {
       "name": "active:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:whitespace-nowrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15581,6 +15596,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -19551,6 +19571,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -23297,6 +23322,11 @@
     },
     {
       "name": "focus:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:whitespace-nowrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27387,6 +27417,11 @@
     },
     {
       "name": "hover:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:whitespace-nowrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31606,6 +31641,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -33862,6 +33902,11 @@
     },
     {
       "name": "w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "whitespace-nowrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -37587,6 +37632,11 @@
     },
     {
       "name": "window-lg:w-switch",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:whitespace-nowrap",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -41341,6 +41391,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:whitespace-nowrap",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:z-modal",
       "kind": "allowed",
       "generated": "yes"
@@ -44297,6 +44352,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:whitespace-nowrap",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:z-modal",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -47198,6 +47257,10 @@
     },
     {
       "selector": ".\\@content-wide\\:w-switch",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:whitespace-nowrap",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -50110,6 +50173,10 @@
     },
     {
       "selector": ".active\\:w-switch:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:whitespace-nowrap:active",
       "context": []
     },
     {
@@ -53481,6 +53548,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:whitespace-nowrap:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:z-modal:disabled",
       "context": []
     },
@@ -56561,6 +56632,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:whitespace-nowrap:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:z-modal:focus-visible",
       "context": []
     },
@@ -59462,6 +59537,10 @@
     },
     {
       "selector": ".focus\\:w-switch:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:whitespace-nowrap:focus",
       "context": []
     },
     {
@@ -62638,6 +62717,10 @@
     },
     {
       "selector": ".hover\\:w-switch:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:whitespace-nowrap:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -65917,6 +66000,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:whitespace-nowrap",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:z-modal",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -67618,6 +67705,10 @@
     },
     {
       "selector": ".w-switch",
+      "context": []
+    },
+    {
+      "selector": ".whitespace-nowrap",
       "context": []
     },
     {
@@ -70502,6 +70593,10 @@
     },
     {
       "selector": ".window-lg\\:w-switch",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:whitespace-nowrap",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -73406,6 +73501,10 @@
     },
     {
       "selector": ".window-md\\:w-switch",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:whitespace-nowrap",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
