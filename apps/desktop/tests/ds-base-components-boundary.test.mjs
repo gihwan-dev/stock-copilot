@@ -17,7 +17,7 @@ const witnesses = JSON.parse(
   ),
 );
 
-for (const { name, imports, jsx, rule, forbidden } of witnesses) {
+for (const { name, imports, jsx, rule, forbidden, forwarding } of witnesses) {
   test(`DS03 approved internal adapter: ${name}`, async () => {
     const folder = mkdtempSync("ds03-boundary-");
     try {
@@ -63,6 +63,23 @@ for (const { name, imports, jsx, rule, forbidden } of witnesses) {
         results.flatMap((result) => result.messages),
         [],
       );
+      if (forwarding !== undefined) {
+        writeFileSync(
+          source,
+          `import type {ReactElement} from "react"; ${imports} ${forwarding}`,
+        );
+        const compiled = spawnSync(
+          join(desktopRoot, "node_modules/.bin/tsc"),
+          ["-p", project],
+          { encoding: "utf8" },
+        );
+        assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+        assert.ok(
+          (await lint.lintFiles([source]))
+            .flatMap((result) => result.messages)
+            .some((message) => message.ruleId === "ds/public-props"),
+        );
+      }
       if (forbidden !== undefined) {
         writeFileSync(
           source,

@@ -301,6 +301,100 @@ export const publicProps = {
         .getPropertiesOfType(type)
         .some((p) => openGeneric(checker.getTypeOfSymbol(p), seen));
     };
+    const directForwarding = (expression) => {
+      if (
+        !["ArrowFunctionExpression", "FunctionExpression"].includes(
+          expression.type,
+        )
+      )
+        return false;
+      const symbolOf = (node) =>
+        checker.getSymbolAtLocation(services.esTreeNodeToTSNodeMap.get(node));
+      const incoming = new Set(
+        expression.params.filter((p) => p.type === "Identifier").map(symbolOf),
+      );
+      const owner = (() => {
+        let node = expression.parent;
+        while (node !== undefined) {
+          if (
+            [
+              "ArrowFunctionExpression",
+              "FunctionExpression",
+              "FunctionDeclaration",
+            ].includes(node.type)
+          )
+            return node;
+          node = node.parent;
+        }
+        return undefined;
+      })();
+      const roots = new Set(
+        (owner?.params ?? []).flatMap((p) =>
+          p.type === "Identifier"
+            ? [symbolOf(p)]
+            : p.type === "ObjectPattern"
+              ? p.properties
+                  .filter(
+                    (entry) =>
+                      entry.type === "Property" &&
+                      entry.value.type === "Identifier",
+                  )
+                  .map((entry) => symbolOf(entry.value))
+              : [],
+        ),
+      );
+      const rooted = (node, seen = new Set()) => {
+        if (node?.type === "MemberExpression") return rooted(node.object, seen);
+        if (node?.type !== "Identifier") return false;
+        const symbol = symbolOf(node);
+        if (roots.has(symbol)) return true;
+        if (seen.has(symbol)) return false;
+        seen.add(symbol);
+        return (symbol?.declarations ?? []).some((declaration) => {
+          const initializer = ts.isVariableDeclaration(declaration)
+            ? declaration.initializer
+            : ts.isBindingElement(declaration) &&
+                ts.isVariableDeclaration(declaration.parent.parent)
+              ? declaration.parent.parent.initializer
+              : undefined;
+          return (
+            initializer !== undefined &&
+            rooted(services.tsNodeToESTreeNodeMap.get(initializer), seen)
+          );
+        });
+      };
+      const unprocessed = (node, seen = new Set()) => {
+        if (node.type !== "Identifier") return false;
+        const symbol = symbolOf(node);
+        if (incoming.has(symbol)) return true;
+        if (seen.has(symbol)) return false;
+        seen.add(symbol);
+        return (symbol?.declarations ?? []).some(
+          (declaration) =>
+            ts.isVariableDeclaration(declaration) &&
+            declaration.initializer !== undefined &&
+            unprocessed(
+              services.tsNodeToESTreeNodeMap.get(declaration.initializer),
+              seen,
+            ),
+        );
+      };
+      const visit = (node) => {
+        if (
+          node.type === "CallExpression" &&
+          rooted(node.callee) &&
+          node.arguments.some((argument) => unprocessed(argument))
+        )
+          return true;
+        return (ctx.sourceCode.visitorKeys[node.type] ?? []).some((key) => {
+          const value = node[key];
+          return Array.isArray(value)
+            ? value.some((child) => child !== null && visit(child))
+            : value !== null && value !== undefined && visit(value);
+        });
+      };
+      return visit(expression.body);
+    };
     return {
       "Program:exit"(node) {
         if (checker === undefined) return;
@@ -364,7 +458,10 @@ export const publicProps = {
           resolved,
           /\/node_modules\/@base-ui\/react\//u,
         );
-        if (internalLibrary && type.getCallSignatures().length !== 0) return;
+        if (internalLibrary && type.getCallSignatures().length !== 0) {
+          if (directForwarding(expression)) report(node);
+          return;
+        }
         const contextual = checker.getContextualType(
           services.esTreeNodeToTSNodeMap.get(expression),
         );

@@ -66,19 +66,6 @@ const tooltips = (size: ControlSize): readonly BaseStory[] => [
       />
     ),
   },
-  {
-    component: "IconButton",
-    state: "normal",
-    themes: ["light", "dark"],
-    render: (): ReactElement => (
-      <IconButton
-        icon="settings"
-        label={text("app.title", "ko")}
-        size={size}
-        tooltip="hidden"
-      />
-    ),
-  },
 ];
 export const iconButtonStories: readonly BaseStory[] = (
   ["control-height", "control-height-sm"] as const

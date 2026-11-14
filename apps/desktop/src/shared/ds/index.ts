@@ -1,5 +1,4 @@
 export { Icon } from "./Icon";
-export { iconStories } from "./Icon.stories";
 export { Text } from "./Text";
 export { Heading } from "./Heading";
 export { Button } from "./Button";
@@ -10,4 +9,3 @@ export { Disclosure } from "./Disclosure";
 export { SegmentedControl } from "./SegmentedControl";
 export { Select } from "./Select";
 export { TextField } from "./TextField";
-export { baseComponentStories } from "./Base.stories";

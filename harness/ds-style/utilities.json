@@ -2861,6 +2861,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:rotate-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:rounded-b-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -6562,6 +6567,11 @@
     },
     {
       "name": "@content-wide:ring-up-soft",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:rotate-disclosure",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -10277,6 +10287,11 @@
     },
     {
       "name": "active:ring-up-soft",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:rotate-disclosure",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -14561,6 +14576,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:rotate-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:rounded-b-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -18486,6 +18506,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:rotate-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:rounded-b-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -22187,6 +22212,11 @@
     },
     {
       "name": "focus:ring-up-soft",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:rotate-disclosure",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -26217,6 +26247,11 @@
     },
     {
       "name": "hover:ring-up-soft",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:rotate-disclosure",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -30391,6 +30426,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:rotate-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:rounded-b-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -32598,6 +32638,11 @@
     {
       "name": "rotate-45",
       "kind": "probe",
+      "generated": "yes"
+    },
+    {
+      "name": "rotate-disclosure",
+      "kind": "allowed",
       "generated": "yes"
     },
     {
@@ -36311,6 +36356,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:rotate-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:rounded-b-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -40016,6 +40066,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:rotate-disclosure",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:rounded-b-lg",
       "kind": "allowed",
       "generated": "yes"
@@ -43198,6 +43253,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:rotate-disclosure",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:rounded-b-lg",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -46063,6 +46122,10 @@
     },
     {
       "selector": ".\\@content-wide\\:ring-up-soft",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:rotate-disclosure",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -48939,6 +49002,10 @@
     },
     {
       "selector": ".active\\:ring-up:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:rotate-disclosure:active",
       "context": []
     },
     {
@@ -52266,6 +52333,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:rotate-disclosure:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:rounded-b-lg:disabled",
       "context": []
     },
@@ -55310,6 +55381,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:rotate-disclosure:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:rounded-b-lg:focus-visible",
       "context": []
     },
@@ -58175,6 +58250,10 @@
     },
     {
       "selector": ".focus\\:ring-up:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:rotate-disclosure:focus",
       "context": []
     },
     {
@@ -61303,6 +61382,10 @@
     },
     {
       "selector": ".hover\\:ring-up:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:rotate-disclosure:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -64546,6 +64629,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:rotate-disclosure",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:rounded-b-lg",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -66211,6 +66298,10 @@
     },
     {
       "selector": ".rotate-45",
+      "context": []
+    },
+    {
+      "selector": ".rotate-disclosure",
       "context": []
     },
     {
@@ -69082,6 +69173,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:rotate-disclosure",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:rounded-b-lg",
       "context": ["@media (width >= 80rem)"]
     },
@@ -71947,6 +72042,10 @@
     },
     {
       "selector": ".window-md\\:ring-up-soft",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:rotate-disclosure",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

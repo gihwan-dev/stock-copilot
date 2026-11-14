@@ -137,7 +137,7 @@ export const noDomValues = {
                 d.getSourceFile().fileName ===
                 ctx.filename.replace(
                   /\/src\/.*$/u,
-                  "/src/shared/platform/index.ts",
+                  "/src/shared/platform/input.ts",
                 ),
             )
           )
@@ -181,7 +181,12 @@ export const noDomExports = {
   create(ctx) {
     const services = ctx.sourceCode.parserServices;
     const checker = services.program?.getTypeChecker();
-    const leaks = (type, seen = new Set(), depth = 0) => {
+    const leaks = (
+      type,
+      seen = new Set(),
+      depth = 0,
+      inspectParameters = true,
+    ) => {
       if (depth > 32) return true;
       if (seen.has(type)) return false;
       seen.add(type);
@@ -194,13 +199,15 @@ export const noDomExports = {
       ];
       if (argumentsOf.some((argument) => leaks(argument, seen, depth + 1)))
         return true;
-      if ((type.types ?? []).some((part) => leaks(part, seen, depth + 1)))
+      if (
+        (type.types ?? []).some((part) =>
+          leaks(part, seen, depth + 1, inspectParameters),
+        )
+      )
         return true;
       if (
         (type.getSymbol()?.declarations ?? []).some((d) =>
-          /\/(?:lib\.[^/]+\.d\.ts|@types\/react\/index\.d\.ts)$/u.test(
-            d.getSourceFile().fileName,
-          ),
+          /\/lib\.es[^/]*\.d\.ts$/u.test(d.getSourceFile().fileName),
         )
       )
         return false;
@@ -208,8 +215,15 @@ export const noDomExports = {
       return (
         type
           .getCallSignatures()
-          .some((signature) =>
-            leaks(signature.getReturnType(), seen, depth + 1),
+          .some(
+            (signature) =>
+              leaks(signature.getReturnType(), seen, depth + 1) ||
+              (inspectParameters &&
+                signature
+                  .getParameters()
+                  .some((parameter) =>
+                    leaks(checker.getTypeOfSymbol(parameter), seen, depth + 1),
+                  )),
           ) ||
         checker
           .getPropertiesOfType(type)
@@ -225,7 +239,8 @@ export const noDomExports = {
         const symbol = checker.getSymbolAtLocation(source);
         if (symbol === undefined) return;
         for (const exported of checker.getExportsOfModule(symbol)) {
-          if (leaks(checker.getTypeOfSymbolAtLocation(exported, source)))
+          const type = checker.getTypeOfSymbolAtLocation(exported, source);
+          if (leaks(type, new Set(), 0, false))
             ctx.report({ node, messageId: "forbidden" });
         }
       },

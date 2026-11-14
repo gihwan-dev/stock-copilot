@@ -1,5 +1,5 @@
 import { useId, useState, type ReactElement } from "react";
-import { inputEventValue } from "../platform";
+import { inputEventValue } from "../platform/input";
 import { emptyInputValue, type UiText, type InputValue } from "../lib";
 import type { Option, Availability } from "./control-types";
 type Props = {
@@ -16,6 +16,7 @@ const initialValue = (props: Props): InputValue =>
   props.defaultValue ?? props.options.at(0)?.value ?? emptyInputValue;
 export const Select = (props: Props): ReactElement => {
   const id = useId();
+  const inputId = useId();
   const [inner, setInner] = useState((): InputValue => initialValue(props));
   const value = props.value ?? inner;
   const changed = (next: InputValue): void => {
@@ -25,9 +26,12 @@ export const Select = (props: Props): ReactElement => {
     }
   };
   return (
-    <label className="flex flex-col gap-space-1 text-ink">
-      <span className="text-label">{props.label}</span>
+    <div className="flex flex-col gap-space-1 text-ink">
+      <label htmlFor={inputId} className="text-label">
+        {props.label}
+      </label>
       <select
+        id={inputId}
         value={value}
         disabled={props.disabled === "disabled"}
         aria-invalid={props.error !== undefined}
@@ -59,6 +63,6 @@ export const Select = (props: Props): ReactElement => {
           {props.hint}
         </span>
       )}
-    </label>
+    </div>
   );
 };

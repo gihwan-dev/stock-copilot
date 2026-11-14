@@ -13,7 +13,6 @@ type Props = {
   readonly pressed?: "pressed" | "released";
   readonly expanded?: "open" | "closed";
   readonly disabled?: Availability;
-  readonly tooltip?: "shown" | "hidden";
   readonly tooltipSide?: "top" | "right";
 };
 const small = (props: Props): ReactElement => (
@@ -72,7 +71,6 @@ export const IconButton = (props: Props): ReactElement => {
   const [tooltipState, setTooltipState] = useState<"open" | "closed">("closed");
   const button =
     props.size === "control-height-sm" ? small(props) : normal(props);
-  if (props.tooltip === "hidden") return button;
   return (
     <Tooltip.Provider>
       <Tooltip.Root

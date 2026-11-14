@@ -3773,7 +3773,9 @@
     },
     "src/shared/platform/index.ts": {
       "row": "허용 목록",
-      "expect": []
+      "expect": [
+        "boundaries/dependencies :: platform에서 platform의 input.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
     },
     "src/shared/platform/unlisted-document.ts": {
       "row": "전역",
@@ -3923,6 +3925,28 @@
       "row": "경계",
       "expect": [
         "boundaries/dependencies :: ds에서 platform의 index.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/platform/input.ts": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ds/input-boundary.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: ds에서 platform의 input.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/features/input-boundary/index.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: feature에서 platform의 input.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/app/input-boundary.ts": {
+      "row": "경계",
+      "expect": [
+        "boundaries/dependencies :: app에서 platform의 input.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
       ]
     }
   }

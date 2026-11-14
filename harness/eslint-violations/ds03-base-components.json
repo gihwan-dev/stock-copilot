@@ -30,30 +30,35 @@
     "name": "base-checkbox",
     "imports": "import { Checkbox } from \"@base-ui/react/checkbox\";",
     "jsx": "<Checkbox.Root onCheckedChange={():void=>undefined} />",
-    "rule": "ds/public-props"
+    "rule": "ds/public-props",
+    "forwarding": "type Detail={readonly reason:\"none\"};export const Probe=(props:{readonly onPick:(value:Detail)=>void}):ReactElement=><Checkbox.Root onCheckedChange={(_next,details):void=>{props.onPick(details);}}/>;"
   },
   {
     "name": "base-switch",
     "imports": "import { Switch } from \"@base-ui/react/switch\";",
     "jsx": "<Switch.Root onCheckedChange={():void=>undefined} />",
-    "rule": "ds/public-props"
+    "rule": "ds/public-props",
+    "forwarding": "type Detail={readonly reason:\"none\"};export const Probe=(props:{readonly onPick:(value:Detail)=>void}):ReactElement=><Switch.Root onCheckedChange={(_next,details):void=>{props.onPick(details);}}/>;"
   },
   {
     "name": "base-disclosure",
     "imports": "import { Collapsible } from \"@base-ui/react/collapsible\";",
     "jsx": "<Collapsible.Root onOpenChange={():void=>undefined} />",
-    "rule": "ds/public-props"
+    "rule": "ds/public-props",
+    "forwarding": "type Detail={readonly reason:\"trigger-press\"|\"none\"};export const Probe=(props:{readonly onPick:(value:Detail)=>void}):ReactElement=><Collapsible.Root onOpenChange={(_next,details):void=>{props.onPick(details);}}/>;"
   },
   {
     "name": "base-segment",
     "imports": "import { ToggleGroup } from \"@base-ui/react/toggle-group\";",
     "jsx": "<ToggleGroup onValueChange={():void=>undefined} />",
-    "rule": "ds/public-props"
+    "rule": "ds/public-props",
+    "forwarding": "type Detail={readonly reason:\"none\"};export const Probe=(props:{readonly onPick:(value:Detail)=>void}):ReactElement=><ToggleGroup onValueChange={(_next,details):void=>{props.onPick(details);}}/>;"
   },
   {
     "name": "base-input",
     "imports": "import { Input } from \"@base-ui/react/input\";",
     "jsx": "<Input onValueChange={():void=>undefined} />",
-    "rule": "ds/public-props"
+    "rule": "ds/public-props",
+    "forwarding": "type Detail={readonly reason:\"none\"};export const Probe=(props:{readonly onPick:(value:Detail)=>void}):ReactElement=><Input onValueChange={(_next,details):void=>{props.onPick(details);}}/>;"
   }
 ]

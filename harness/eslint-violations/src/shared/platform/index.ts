@@ -8,10 +8,4 @@ export const mountApp = (app: Readonly<ReactElement>): void => {
   }
 };
 
-export const receiveValue = (): Promise<"ok" | "error"> =>
-  Promise.resolve<"ok">("ok").then(
-    (value): "ok" => value,
-    (): "error" => "error",
-  );
-
-export const inputCommit = (): "commit" | "ignore" => "ignore";
+export { inputCommit } from "./input";

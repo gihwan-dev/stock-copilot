@@ -1,236 +1,145 @@
 # DS-03 기본 컴포넌트
 
-- 상태: 구현
-- 기준: 4c46c32e9239384b24ca0e13869b118fe2a3a3c7
-- 결정: 2026-11-14 사용자 후속 지시에 따라 기존 기대값 확장과 내부 구현 오탐 수정을 승인받음
-- 범위: 글자·버튼·입력·선택·토글·고급 펼침·아이콘. 카드·표·배지·대화 상자·숫자·차트·레이아웃·마크다운·채팅 입력은 구현하지 않음
+- 상태: 구현·적대적 리뷰 수정
+- 최초 기준: `4c46c32e9239384b24ca0e13869b118fe2a3a3c7`
+- 이번 리뷰 대상: `13a86d78dc73be83dd672d92ba48bbfd67e49529`
+- 결정: 2026-11-14 사용자 지시. 공개 계약은 유지하며 내부 구현 오탐을 좁힌다. 기존 테스트의 정확한 기대값과 승인된 규칙 수정만 한다.
+- 범위: 글자·버튼·입력·선택·토글·고급 펼침·아이콘. 카드·표·대화 상자·숫자·차트·레이아웃·마크다운·채팅 입력은 해당 후속 DS 작업이 맡는다.
 
 ## 대상과 디자인 대응
 
-산출물 경로는 모두 `design/components/<컴포넌트>/`의 README·preview와 공통 bundle.js·bundle.css·index.d.ts다. 불리언 props는 architecture 5.3에 따라 닫힌 유니온으로 옮겼다. 의미상 크기 별칭은 DS-10 계약에 맞춰 생성 토큰 이름으로 받는다.
+각 경로의 README·preview와 공통 `design/components/bundle.js`, `bundle.css`, `index.d.ts`를 근거로 한다. 불리언 상태는 architecture 5.3의 닫힌 유니온, 크기는 생성 토큰 이름으로 옮긴다.
 
-| 컴포넌트         | 변형과 상태                                                                                                     | 등록 항목 |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- | --------- |
-| Heading          | level 1·2·3 → title-lg·title-md·title-sm, 기본 제목                                                             | 3         |
-| Text             | body·body-sm·label·caption·code × ink·ink-muted·ink-subtle·primary·alert × p·span·div                           | 75        |
-| Button           | primary·secondary·ghost·buy·sell × control-height·control-height-sm × enabled·disabled, hover·focus·Enter·Space | 20        |
-| IconButton       | control-height·control-height-sm, 기본·pressed·expanded·disabled·tooltip right·tooltip hidden                   | 12        |
-| TextField        | text·secret, 기본·hint·error·disabled·비밀 값 있음·빈 값, 보기·가리기·붙여넣기·한글 조합 Enter                  | 6         |
-| Select           | native 목록, 기본·hint·error·disabled, 선택 값 변경                                                             | 4         |
-| Checkbox         | checked·unchecked × enabled·disabled, 설명·키보드                                                               | 4         |
-| Switch           | on·off × enabled·disabled, 설명·키보드                                                                          | 4         |
-| SegmentedControl | 2–5개 선택지, 세 예시 선택 상태, 화살표 포커스·Space 선택·선택 해제 방지                                        | 3         |
-| Disclosure       | open·closed, 제어·비제어, Enter·Space·aria-controls                                                             | 2         |
-| Icon             | 산출물의 45개 이름 × icon-sm·icon-md·icon-lg × 장식·의미                                                        | 270       |
+| 컴포넌트         | 산출물 경로                         | 변형·상태                                                                                              | 등록 수 |
+| ---------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
+| Heading          | design/components/Heading/          | level 1·2·3, title-lg·md·sm                                                                            | 3       |
+| Text             | design/components/Text/             | body·body-sm·label·caption·code × ink·ink-muted·ink-subtle·primary·alert; p·span·div                   | 75      |
+| Button           | design/components/Button/           | primary·secondary·ghost × control-height·control-height-sm × enabled·disabled; hover·focus·Enter·Space | 12      |
+| IconButton       | design/components/IconButton/       | 두 control 크기, 기본·pressed·expanded·disabled·tooltip right                                          | 10      |
+| TextField        | design/components/TextField/        | text·secret, hint·error·disabled·빈 값·값 있음, 보기·가리기·붙여넣기                                   | 6       |
+| Select           | design/components/Select/           | native 목록, 기본·hint·error·disabled·선택                                                             | 4       |
+| Checkbox         | design/components/Checkbox/         | checked·unchecked × enabled·disabled, 설명·Space                                                       | 4       |
+| Switch           | design/components/Switch/           | on·off × enabled·disabled, 설명·Space                                                                  | 4       |
+| SegmentedControl | design/components/SegmentedControl/ | 2–5개 선택지, 세 선택 상태, 화살표 포커스·Space·빈 선택 방지                                           | 3       |
+| Disclosure       | design/components/Disclosure/       | open·closed, 제어·비제어, Enter·Space·aria-controls·동일 화살표 90도 회전                              | 2       |
+| Icon             | design/components/Icon/             | 45개 이름 × icon-sm·icon-md·icon-lg × 장식·의미                                                        | 270     |
 
-총 403개 등록 항목에 light·dark를 명시한다. hover·focus는 강제 상태 prop을 발명하지 않고 브라우저 조작으로 검사한다. Button의 buy·sell은 산출물대로 SignalCard 전용 사용 계약이며 이번에 주문·승인 경로를 붙이지 않는다.
+합계 393개 등록 항목에 light·dark를 명시한다. 공개 `shared/ds/index.ts`에는 컴포넌트만 둔다. DS-07은 별도 진입점 `shared/ds/stories.ts`의 `baseComponentStories`와 각 `.stories.tsx`에 Storybook 실행 환경을 붙인다. Knip의 이야기 진입점에는 운영 표시 `!`를 붙이지 않는다.
 
-## 공개 계약
+## 공개 계약과 범위 축소
 
-- className·style·rest·임의 HTML 속성 전달이 없다. children 문구·label·hint·error·placeholder는 UiText다.
-- Text.variant는 생성 TypeStyleToken 중 다섯 글자 스타일만, tone은 ColorToken의 다섯 글자 색만 받는다. 디자인의 default·muted·subtle 의미는 ink·ink-muted·ink-subtle로 대응한다.
-- Button·IconButton.size는 생성 SizeToken의 control-height·control-height-sm만, Icon.size는 icon-sm·icon-md·icon-lg만 받는다. 컴포넌트마다 실제 TypeScript 컴파일로 다른 분류를 거부한다.
-- ref prop을 새로 발명하지 않는다. 콜백 ref는 기존 전역 규칙과 타입 검사에서 계속 거부한다.
-- 입력·선택 값은 UiText와 다른 InputValue 브랜드다. 만드는 곳은 기존 shared/lib/brand.ts이고 빈 값과 safeParse 기반 생성 함수를 제공한다. 이벤트나 DOM 객체는 외부 콜백에 전달하지 않는다.
-- TextField의 onCommit(value)는 초기 작업의 조합 중 Enter 확정 콜백 완료 기준에 따른 값 전용 API다. 다른 새 제품 변형·상태를 발명하지 않는다.
+- className·style·rest·임의 HTML 속성 전달이 없다. 표시 문구는 UiText, 입력 값은 별도의 InputValue다. 공개 불리언·이벤트·DOM 값·콜백 ref가 없다.
+- Text.variant·tone, Button·IconButton.size, Icon.size는 생성 토큰의 해당 분류만 받는다. 컴포넌트별 실제 TypeScript 컴파일로 다른 분류와 열린 변형을 거부한다.
+- design/README.md의 “매수·매도 버튼은 SignalCard에만 있어요”에 따라 공개 Button에서 buy·sell과 가격색 구현·허용 항목을 제거한다. SignalCard 작업이 내부 전용 버튼을 만들고 공개 목록에는 내보내지 않는다. buy·sell 호출의 컴파일 실패를 고정한다.
+- TextField README에는 onCommit이 없다. 해당 공개 prop을 제거하고 조합 중 Enter는 외부 확정 콜백 대신 폼의 잘못된 제출을 경계에서 막는다. IconButton의 tooltip hidden, Heading의 id도 사용자 결정대로 제거하고 타입 검사에서 거부한다.
+- Select README는 “운영체제 기본 목록을 써서 키보드·화면 낭독기가 그대로 동작해요”를 명시하므로 native select를 유지한다. label은 htmlFor로 select만 가리킨다. 도움말·오류·옵션은 접근 이름에 들어가지 않고 테스트에서 이름 전체가 정확히 일치해야 한다.
 
-## DS-10과 내부 스타일 오탐 수정
+## DS-10 규칙 보정
 
-ADR 0040의 JSX 문맥 타입 결정을 다음처럼 좁힌다.
+ADR 0040의 JSX 문맥 타입 검사만 좁힌다. 실제 선언이 `node_modules/@base-ui/react`인 내부 콜백의 라이브러리 문맥 이벤트 인자는 공개 props가 아니다. 공개 컴포넌트 props의 이벤트·DOM·중첩·토큰 분류·ref·rest 검사와 일반 컴포넌트의 JSX 문맥 검사는 유지한다.
 
-1. 내보낸 컴포넌트의 공개 props 탐색·토큰 분류·이벤트·DOM·중첩·ref·rest 검사는 그대로 유지한다.
-2. JSX 대상 심볼의 실제 선언이 node_modules/@base-ui/react에 있는 내부 호출에서는 라이브러리의 문맥 타입을 공개 계약으로 검사하지 않는다. 내부 콜백 매개변수에 라이브러리 이벤트가 있어도 허용한다. 실제 데이터 값과 스타일·숫자 검사, 일반 로컬 컴포넌트의 문맥 숫자 검사는 유지한다.
-3. 외부 props가 이벤트·HTMLElement를 받으며 내부 콜백이 그대로 전달하는 예제는 공개 props 검사에서 계속 실패한다. 기존 DS-10 위반 예제와 15개 손 변형을 유지한다. 기존 충돌 재현 9개는 안전한 형태의 통과 대조군으로 바꾸고 원래 직접 DOM 접근·산출물 밖 클래스는 계속 거부한다.
-4. 선택적 UiText 속성에서 undefined·null은 속성 생략으로 허용한다. 자유 문자열과 UiText가 아닌 선택적 문자열은 계속 거부한다.
-5. className의 두 분기가 모두 문자열 리터럴인 단일 조건식을 허용한다. 기존 cn의 정적 분기와 같은 유한 집합이며 동적 변수·문자열 연결·임의 호출·토큰 밖 클래스는 계속 거부한다. 오류 테두리 상태를 이 형태로 표현한다.
-6. 크기·기하 파일을 넘기는 Icon 구현은 유지한다. optional label은 정의된 분기에서만 aria-label에 전달한다. target 아이콘의 내부 키만 targetIcon으로 두어 일반 객체의 target 키를 잡는 DOM 규칙과 충돌하지 않게 했다.
+추가로 내부 Base UI 콜백의 매개변수를 가공 없이 공개 콜백에 그대로 전달하면 거부한다. `props.onPick(details)`와 값/콜백의 단순 별칭·구조 분해 전달을 검사한다. `details.reason`처럼 추출한 닫힌 값은 통과한다. `base-checkbox`, `base-switch`, `base-disclosure`, `base-segment`, `base-input`에 세부 객체 전달 위반 예제를 붙였다. 기존 아홉 통과 대조군과 DS-10 손 변형 15개의 검출을 유지한다. 클래스 조건식의 모든 리터럴 분기 검사도 유지한다.
 
-## 스타일 산출물 근거
+## DOM 경계와 누출 검사
 
-- design/README.md, design/design-system.json, Text·Heading 산출물에서 keep-all·anywhere 명시를 찾지 못했다. 사용자 결정 3에 따라 break-keep·wrap-anywhere는 추가하지 않는다. Text·Heading에 말줄임 prop도 추가하지 않는다. architecture 5.1과 디자인의 간극은 미해결로 남긴다.
-- bundle.css .sc-btn의 transparent 테두리에 해당하는 border-transparent만 정적 키워드에 추가한다.
-- bundle.css .sc-switch의 calc(var(--icon-md) * 2)에 해당하는 w-switch와 .sc-disc의 토큰 상단 테두리에 해당하는 border-t-hairline을 정적 유틸리티로 추가한다. 새 숫자·색·토큰을 만들지 않고 생성 토큰 변수만 사용한다.
-- themeSource로 theme.css를 다시 만들고 생성 클래스 스냅샷을 갱신한다. tokens.ts·tokens.css·@theme 토큰 정의는 바꾸지 않는다. 라이트·다크 토큰 정의는 기존 토큰 검사와 실제 브라우저 렌더링으로 확인한다.
-- 아이콘은 패키지의 다른 버전으로 교체하지 않고 산출물 bundle.js의 45개 Lucide 경로를 그대로 쓴다. ISC 고지를 public/Icons-LICENSE.txt에 함께 넣는다. 기하 허용 파일은 Icon.tsx와 icon-paths-0/1/2.tsx 네 개뿐이다.
+DS-09 ADR의 mountApp 방식으로 DOM 소비를 별도 경계에 둔다. `shared/platform/index.ts`는 mountApp(app): void만 내보낸다. 새 `shared/platform/input.ts`는 다음 세 함수만 내보낸다.
 
-## 값 전용 입력 경계
+| 함수            | 입력                                       | 반환·바깥으로 전달하는 값                                              |
+| --------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| inputEventValue | React 입력·native 선택 ChangeEvent         | Result<InputValue, BrandError>                                         |
+| inputCommit     | React KeyboardEvent, idle·composing·ending | commit·ignore; 조합 Enter이면 preventDefault                           |
+| pasteInputValue | 결과 수신 콜백                             | void; 콜백에는 Result<InputValue, BrandError 또는 닫힌 ClipboardError> |
 
-DOM 접근 파일은 기존 shared/platform/index.ts 하나를 유지한다. 기존 mountApp(app): void를 유지하고 아래 세 함수만 더한다.
+TextField.tsx·Select.tsx 두 파일만 input.ts를 가져올 수 있다. 화면·다른 DS 파일·platform/index.ts의 재수출은 boundaries 위반 예제로 고정한다. 플러그인의 기본값은 같은 요소 안의 의존을 검사하지 않으므로 checkInternals를 켜고 기존 내부 의존은 그대로 허용한 다음 input.ts 예외만 좁힌다. 이 옵션·각 정책 제거 변형도 검출한다.
 
-| 함수            | 받는 것                            | 내보내는 것                                                                   |
-| --------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
-| inputEventValue | React 입력·native 선택 ChangeEvent | Result<InputValue, BrandError>                                                |
-| inputCommit     | React 입력 KeyboardEvent           | commit 또는 ignore                                                            |
-| pasteInputValue | 값 전용 결과 수신 콜백             | void. 콜백에는 Result<InputValue, BrandError 또는 닫힌 ClipboardError>만 전달 |
+DOM 접근·platform 파일 허용 목록에 input.ts 정확한 경로 하나를 추가한다. 거절 변환 허용 목록은 index.ts에서 input.ts로 옮긴다. keyCode 229 읽기는 경계의 작은 구조 타입으로 한정하고 원시 타입 허용 목록에 input.ts만 추가한다. 방문 집합과 깊이 상한을 유지하며 DOM 반환은 허용하지 않는다. ds-screen-bootstrap은 mountApp뿐 아니라 세 입력 함수의 반환을 모두 검사한다.
 
-문자열 읽기·isComposing 읽기·클립보드 읽기는 이 파일에서만 한다. clipboard가 없거나 읽기가 거절되면 닫힌 실패 값으로 바꾼다. 양쪽 Promise 결과를 처리하며 이 파일만 기존 거절 변환 허용 목록에 더한다. 비밀 값의 붙여넣기 trim은 디자인 bundle.js의 동작을 따른다. TextField는 compositionstart·compositionend의 닫힌 상태와 경계의 isComposing 판정을 함께 확인한다.
+`ds/no-dom-exports`의 멤버 생략은 TypeScript의 lib.es*.d.ts만 해당한다. DOM lib과 React 선언은 생략하지 않는다. 타입 인자를 먼저 검사하고 반환된 객체의 콜백 인자도 탐색한다. 최상위 입력 경계 함수의 입력 이벤트는 소비할 수 있지만 반환값·중첩 반환 콜백으로 누출할 수 없다. 호출 가능한 값 자체에 붙은 속성과 타입 인자는 기존처럼 검사한다. 함수 부가 속성의 DOM 타입도 별도 회귀로 고정한다. SyntheticEvent<never, never> 반환과 DOMAttributes<never> 반환, DOM Promise는 거부하고 값 Promise는 통과하는 실제 컴파일·린트 대조군을 둔다. 깊이 초과는 실패한다.
 
-DS에서 platform으로 가져오는 예외는 TextField.tsx·Select.tsx에서 platform/index.ts로 향하는 두 파일만 허용한다. DOM 읽기 규칙은 실제 승인 경계 함수로 직접 전달하는 이벤트 인자만 구별하며, 객체의 target/currentTarget/nativeEvent 읽기·가짜 동명 함수·DOM 객체 반환을 허용하지 않는다.
+## 입력과 접근성
 
-DOM 출력 검사는 Promise 등의 표준 라이브러리 내부 호출 시그니처를 무한히 순회하지 않도록 고쳤다. 타입 인자·중첩 객체의 DOM 여부를 먼저 검사하고 표준 라이브러리의 구현 멤버를 생략한다. 깊이 한계는 거부로 처리한다. 값 Promise 통과와 Promise 안의 DOM 거부를 실제 컴파일·린트 대조군으로 고정한다.
+- 체크·스위치·세그먼트는 Base UI 값 콜백을 쓴다. Button·Input·Tooltip·Collapsible도 문서의 Base UI 기반이다.
+- isComposing 또는 keyCode 229이면 Enter를 확정으로 보지 않는다. compositionend 직후 첫 keydown도 ending 상태에서 막는다. 다음 일반 Enter는 제출할 수 있다. 실제 WKWebView 이벤트 순서와 한글 입력기는 DS-16이 실측한다.
+- 비밀 입력은 기본 가림, 값이 있을 때만 보기 버튼이다. 사용자 지우기와 외부 제어 값 비우기 모두 가림 상태로 되돌린다. TextField README의 비밀 입력 동작과 SEC-1·SEC-11의 노출 최소화에 따라 autocomplete=off, spellcheck=false, autocapitalize=none을 둔다. 값 변경에 따른 로컬 상태 보정은 조건부 렌더 재시도로 하며 effect를 추가하지 않는다.
+- React 19.3.1의 제어 Input은 jsdom에서 value 프로퍼티뿐 아니라 value 속성에도 가짜 비밀 값을 동기화했다. 테스트가 이 사실을 확인한다. DOM에 값이 없다고 주장하지 않는다. 로그·저장소로 값을 보내는 기능은 추가하지 않았다. 실제 WebView·비밀 관리·노출 범위 검증은 S-02·DS-16 후속이다.
+- 클립보드 없음·거절은 닫힌 오류 값으로 바꾸고 현재 값을 보존한다. 비활성 입력·체크·스위치·버튼·붙여넣기·선택에서 바깥 콜백이 불리지 않음을 검사한다. SegmentedControl·Disclosure에는 산출물에 없는 비활성 prop을 만들지 않는다.
 
-Select README는 운영체제 기본 목록을 명시한다. 이 근거에 따라 Base UI Select로 바꾸지 않고 native select의 값만 같은 경계에서 읽는다. 체크·스위치·세그먼트는 Base UI 값 콜백을 쓴다. Button·Input·Tooltip·Collapsible도 Base UI 기반이다.
+## 스타일 근거
 
-## 검증과 후속 작업
+- design README·design-system.json·글자 산출물에 keep-all·anywhere 명시가 없어 break-keep·wrap-anywhere는 추가하지 않는다. 이 간극은 후속 디자인 결정으로 남긴다.
+- 기존 border-transparent, w-switch, border-t-hairline은 bundle.css의 투명 테두리·토큰 복합 폭·상단 테두리에서 왔다.
+- Disclosure README의 90도 회전과 bundle.css 236행에 따라 rotate-disclosure 고정 유틸리티 하나를 추가한다. 아이콘 자체를 교체하지 않고 같은 chevron-right를 회전한다. 회전은 즉시 바뀌므로 움직임 줄이기에서도 애니메이션이 없다. 실제 전환 시간의 표현은 DS-15 검증 때 평가한다.
+- themeSource로 theme.css와 생성 클래스 스냅샷을 맞춘다. @theme·토큰 JSON·라이트/다크 값은 바꾸지 않는다. 토큰 정의·대비는 기존 독립 검사로 검증한다.
+- 아이콘의 45개 기하는 산출물 bundle.js의 Lucide 경로다. ISC 고지는 public/Icons-LICENSE.txt에 둔다. 기하 허용 파일 네 개는 유지한다.
 
-새 Node 테스트는 36개다: 기존 충돌 통과 대조군 9개, Icon 기하·테마 렌더 2개, Icon 타입 1개, 나머지 열 컴포넌트 타입 10개, 공개 계약·경계 대조군 2개, 키보드·비활성·오류·조합·클립보드·테마별 목록 렌더 등 12개다. 기존 DS-10 손 변형 15개를 모두 계속 검출한다.
+## 브라우저 공급 결정과 검증 경계
 
-403개 등록 항목을 양 테마에서 실제 렌더링해 806개 조합의 상태 의미를 검사한다. 별도로 Icon의 SVG 기하 540개 조합을 디자인 원본에서 독립적으로 읽은 값과 대조한다. Button 높이·색·hover·disabled 색은 디자인 토큰에서 독립 기대값을 읽는다. 키보드는 Tab·Enter·Space·화살표를 포함하고 값·이벤트의 타입 경계를 별도로 검증한다. Select는 native picker의 Tab/화살표 입력과 브라우저 선택 값 확정을 검사하며 실제 OS 메뉴 내부나 WKWebView 실측을 주장하지 않는다.
+harness 4.3은 Testing Library를, R-15 2.4는 “jsdom에서 돌리거나 Vitest browser mode(Playwright 제공자)에서 돌린다”를 허용한다. harness 6.6은 실제 시각 회귀를 태그 고정 Playwright 컨테이너로 정한다. 따라서 just check의 컴포넌트 동작 검사는 Node + Testing Library + jsdom으로 실행한다. jsdom에 없는 MessageChannel은 Node의 표준 구현을 연결하고 정리할 때 포트를 모두 닫는다. user-event는 Testing Library의 키보드·Tab·Space·Enter·화살표·포커스·선택 조작 도구다. 설치 스크립트나 브라우저 다운로드가 필요하지 않다.
 
-Storybook 설치·실행 환경은 DS-07이 붙인다. 상태별 이야기 자료는 컴포넌트별 .stories.tsx와 baseComponentStories 목록으로 제공한다. default export를 발명하지 않는다. 시각 회귀 기준 환경·이미지, 부하 자료·넘침 검사, 실제 WKWebView는 DS-15·DS-20·DS-16 범위다.
+Playwright 운영·개발 의존성과 Chromium 실행 도우미·실제 SVG 기하 테스트를 제거한다. DOM 테스트는 393개 이야기의 두 테마 등록과 DOM 의미를 검사하며 실제 786개 렌더링 이미지·색·레이아웃 검증이라고 주장하지 않는다. 사용자 리뷰의 “806개”는 삭제된 buy·sell·tooltip hidden 10개 항목까지 포함한 이전 수치다.
 
-## 기존 테스트·유예 목록 변경
+DS-15에 넘기는 검증: 실제 CSS의 hover·focus 링 표시, 두 테마의 버튼 높이·색·비활성 색, 현재 786개 이야기 조합의 실제 렌더링·시각 회귀, 45개 아이콘의 SVG 기하·stroke·크기·Tab 제외. DS-07은 Storybook 실행 환경, DS-20은 부하·넘침, DS-16은 WKWebView 실측을 맡는다. jsdom의 native Select에 ArrowDown·Enter를 전달하지만 OS 목록의 실제 키보드 선택 확정은 이 환경에서 검증할 수 없어 DS-15·DS-16에 넘긴다. 기본 검사는 PLAYWRIGHT_BROWSERS_PATH를 빈 임시 폴더로 지정하고 일반·CI 전체 검사를 실행한다.
 
-단언의 형태나 기존 위반 기대를 약하게 바꾸지 않는다.
+## 규칙과 기존 테스트 변경
 
-- ds-final-review.test.mjs: 빈 기하 목록 기대에 승인된 네 파일만 추가한다.
-- knip.test.mjs: production 유예 목록의 정확한 항목 기대를 실제 상태에 맞춘다. 공개 DS 파일·이야기·도우미는 화면의 첫 사용처 전까지 파일별로 유예하며 와일드카드는 없다.
-- 입력 경계가 lib 공개 진입점을 처음 참조하여 기존 lib 파일 전체·Zod 의존성 유예 6개가 더 이상 보고되지 않는다. 이 유예를 제거하고 아직 화면이 쓰지 않는 기존 API를 export/type 단위로 세분화한다. 새로운 미사용 API는 계속 실패한다. 최종 목록은 95개이며 아래에 전부 기록한다.
-- ds-screen-bootstrap.test.mjs: mountApp 단독 공개 목록 기대를 네 함수로 확장하고 실제 소스의 새 의존성을 scratch에 복사한다. mountApp의 void 반환·DOM 반환 금지·화면 DOM 접근 금지 단언은 유지한다.
-- local-allowlists.test.mjs: 거절 변환 목록에 platform/index.ts 한 파일을 추가한다.
-- 기존 platform/index.ts 위반 예제에 정상적인 두 결과 Promise 변환 함수만 추가하여 새 허용 항목을 제거하면 반드시 실패하게 한다. 기존 기대 []는 그대로다.
+- ds-dom: React 선언 생략 제거, ES 표준 라이브러리만 생략, 반환 객체의 콜백 인자 검사, 승인된 입력 어댑터 경로 이동.
+- boundaries: checkInternals와 기존 내부 관계 보존 정책, input.ts 전역 거부와 두 소비 파일만 허용.
+- ds-public-props: 내부 콜백의 무가공 공개 전달 거부. 공개 props 규칙·DS-10 위반·변형은 유지.
+- 허용 목록: input.ts의 platform·DOM·원시 입력 타입·거절 변환, Button 가격색 예외 삭제. 검사 끄기 없음.
+- boundaries.test.mjs: 옵션 제거 변형 목록에 checkInternals 한 항목 추가.
+- ds-generation.test.mjs: 고정 theme 문자열에 rotate-disclosure 선언만 추가.
+- ds-internal-review.test.mjs: PRICE_COLOR_FILES를 다시 빈 목록으로, DOM_ACCESS_FILES에 input.ts만 추가.
+- ds-screen-bootstrap.test.mjs: index의 mountApp 단독 기대 복구, input의 세 반환형을 모두 검사하도록 추가. 기존 DOM·화면 금지 단언 유지.
+- local-allowlists.test.mjs: platform·raw에 input.ts 추가, promise 예외를 index.ts에서 input.ts로 이동.
+- knip.test.mjs: 이야기 진입점 정확한 경로 추가. production 기대는 도달 관계 변화에 따라 95개에서 48개의 정확한 항목으로 조정한다. 전체 lib가 다시 운영에서 미사용이므로 예전 export/type 유예를 파일 단위 실측 항목으로 교체하고 input.ts·stories.ts만 추가한다. 와일드카드 없음. 실제 전체 목록은 harness/knip-check/production-allowlist.json이다.
+- ds-final-review.test.mjs의 기하 네 파일 기대는 변경하지 않았다. 새 DS-03 테스트는 이 브랜치에서 수정 가능하다는 승인대로 동작 환경·공개 계약을 맞춘다.
 
-- ds-internal-review.test.mjs의 보호 목록 기대도 같은 기하 네 파일과 가격색 button-variants.tsx 한 파일로 고정한다. 빈 inline style·DOM style 목록과 단일 DOM 접근 파일 단언은 유지한다.
-- ds-generation.test.mjs의 고정 theme 문자열에 디자인 근거가 있는 w-switch·border-t-hairline 두 선언만 더한다.
-- DS-02 dynamic-ternary 예제는 한 분기가 변수인 실제 동적 코드로 고쳐 기존 거부 기대를 유지한다. 두 리터럴 분기의 통과와 토큰 밖 클래스 거부는 별도 대조군으로 고정한다.
-- 기존 경계 변형 하네스에 TextField·Select의 승인된 platform 가져오기 대조군과 다른 DS 파일의 거부 예제를 더한다. 새 정책을 지워도 반드시 실패한다.
+## 최종 직접 의존성
 
-## 새 의존성
+기존 저장소의 React 등 의존성은 유지하고 DS-03에서 사용하는 추가 의존성은 다음과 같다.
 
-| 직접 의존성            | 고정 버전 | 분류 | 문서 근거·라이선스                       |
-| ---------------------- | --------- | ---- | ---------------------------------------- |
-| @base-ui/react         | 1.9.0     | 운영 | architecture 5.2, MIT                    |
-| @testing-library/react | 16.3.3    | 개발 | harness 4.3, MIT                         |
-| playwright             | 1.65.0    | 개발 | architecture 5.2·harness 6.6, Apache-2.0 |
+| 이름                        | 고정 버전 | 용도                                | 근거                                     | 라이선스 |
+| --------------------------- | --------- | ----------------------------------- | ---------------------------------------- | -------- |
+| @base-ui/react              | 1.9.0     | 운영, 기반 컴포넌트                 | architecture 5.2                         | MIT      |
+| @testing-library/react      | 16.3.3    | 개발, 렌더·쿼리·act                 | harness 4.3                              | MIT      |
+| @testing-library/user-event | 14.6.10   | 개발, Testing Library 키보드·포인터 | harness 4.3, 사용자 리뷰 4               | MIT      |
+| jsdom                       | 31.0.1    | 개발, DOM 환경                      | R-15 2.4, harness 4.3·6.6, 사용자 리뷰 4 | MIT      |
 
-별도 선택 기능은 켜지 않는다. Playwright 1.65.1은 최소 공개 기간 정책에 걸려 예외를 제거하고 정책을 통과하는 직전 안정판 1.65.0을 유지했다. pnpm-workspace.yaml의 변경과 새 인라인 검사 끄기는 없다.
+jsdom·user-event는 안정판을 정확히 고정한다. 추가 기능·설치 스크립트·브라우저 설치는 없다. 이번 수정에서 추가된 직접·전이 패키지 전체는 다음과 같으며 preinstall/install/postinstall이 모두 없다. decimal.js는 jsdom의 테스트 환경 의존성이며 제품 금액 계산에는 사용하지 않는다.
 
-잠금 파일에 추가된 직접·전이 패키지의 라이선스다.
+| 패키지                           | 버전    | 라이선스      |
+| -------------------------------- | ------- | ------------- |
+| @exodus/bytes                    | 1.16.0  | MIT           |
+| @testing-library/user-event      | 14.6.10 | MIT           |
+| bcp-47-match                     | 2.0.3   | MIT           |
+| bcp-47                           | 2.1.2   | MIT           |
+| data-urls                        | 8.0.0   | MIT           |
+| decimal.js                       | 10.6.0  | MIT           |
+| entities                         | 9.0.0   | BSD-2-Clause  |
+| html-encoding-sniffer            | 7.0.0   | MIT           |
+| is-alphabetical                  | 2.0.1   | MIT           |
+| is-alphanumerical                | 2.0.1   | MIT           |
+| is-decimal                       | 2.0.1   | MIT           |
+| is-potential-custom-element-name | 1.0.1   | MIT           |
+| jsdom                            | 31.0.1  | MIT           |
+| lru-cache                        | 11.5.3  | BlueOak-1.0.0 |
+| parse5-parser-stream             | 8.1.1   | MIT           |
+| parse5                           | 8.1.1   | MIT           |
+| saxes                            | 6.0.0   | ISC           |
+| tldts-core                       | 7.5.1   | MIT           |
+| tldts                            | 7.5.1   | MIT           |
+| tough-cookie                     | 6.1.0   | BSD-3-Clause  |
+| tr46                             | 7.0.0   | MIT           |
+| undici                           | 8.12.4  | MIT           |
+| w3c-xmlserializer                | 6.0.0   | MIT           |
+| webidl-conversions               | 8.0.1   | BSD-2-Clause  |
+| whatwg-mimetype                  | 5.0.0   | MIT           |
+| whatwg-url                       | 17.3.0  | MIT           |
+| xml-name-validator               | 5.0.0   | Apache-2.0    |
+| xmlchars                         | 2.2.0   | MIT           |
 
-| 패키지                  | 버전    | 라이선스   |
-| ----------------------- | ------- | ---------- |
-| @babel/runtime          | 7.29.14 | MIT        |
-| @babel/runtime          | 8.1.2   | MIT        |
-| @base-ui/react          | 1.9.0   | MIT        |
-| @base-ui/utils          | 0.5.0   | MIT        |
-| @floating-ui/core       | 1.8.0   | MIT        |
-| @floating-ui/dom        | 1.8.0   | MIT        |
-| @floating-ui/react-dom  | 2.1.9   | MIT        |
-| @floating-ui/utils      | 0.2.12  | MIT        |
-| @testing-library/dom    | 10.4.2  | MIT        |
-| @testing-library/react  | 16.3.3  | MIT        |
-| @types/aria-query       | 5.0.4   | MIT        |
-| ansi-regex              | 5.0.1   | MIT        |
-| ansi-styles             | 5.2.0   | MIT        |
-| aria-query              | 5.3.0   | Apache-2.0 |
-| dequal                  | 2.0.3   | MIT        |
-| dom-accessibility-api   | 0.5.16  | MIT        |
-| lz-string               | 1.5.0   | MIT        |
-| playwright-core         | 1.65.0  | Apache-2.0 |
-| playwright              | 1.65.0  | Apache-2.0 |
-| pretty-format           | 27.5.1  | MIT        |
-| react-is                | 17.0.2  | MIT        |
-| reselect                | 5.3.0   | MIT        |
-| use-sync-external-store | 1.7.0   | MIT        |
+## 검사 기록과 미해결
 
-## 검사 기록
+입력/공개 계약/반환 타입 회귀, 아홉 내부 대조군과 다섯 무가공 전달 위반, 컴포넌트 타입, DS-10 손 변형 15개와 jsdom 동작 검사를 실행한다. 실제 브라우저 검증은 위 후속 범위다. 수용한 로컬 master는 `1cd405c9f7ff11be0a26d1eb892766463aaf722a`다. 병합 커밋을 만들기 전에도 조상인 리뷰 대상 `13a86d78dc73be83dd672d92ba48bbfd67e49529`를 전체 검사 기준으로 쓴다. master의 crates/domain 소스와 이번 병합 소스의 차이는 없다.
 
-`just base=4c46c32e9239384b24ca0e13869b118fe2a3a3c7 check`가 통과했다. Rust 작업 공간 534개·커버리지 대상 268개 테스트와 구조·test-diff·hooks-installed 검사가 통과했고 새 검사 끄기는 0개다.
-
-## 정확한 production 유예 항목
-
-- `files src/shared/ds/index.ts src/shared/ds/index.ts`
-- `files src/shared/ipc/index.ts src/shared/ipc/index.ts`
-- `dependencies package.json @tauri-apps/api`
-- `files src/shared/ipc/bindings.ts src/shared/ipc/bindings.ts`
-- `files src/shared/ipc/call.ts src/shared/ipc/call.ts`
-- `files src/shared/ipc/schema.ts src/shared/ipc/schema.ts`
-- `files src/shared/ipc/testing/fakes.ts src/shared/ipc/testing/fakes.ts`
-- `files src/shared/ipc/testing/mockBindings.ts src/shared/ipc/testing/mockBindings.ts`
-- `files src/shared/ipc/testing/responses.ts src/shared/ipc/testing/responses.ts`
-- `dependencies package.json @base-ui/react`
-- `exports src/shared/lib/brand.ts emptyInputValue`
-- `exports src/shared/lib/brand.ts parseCount`
-- `exports src/shared/lib/brand.ts parseEntityId`
-- `exports src/shared/lib/brand.ts parseTicker`
-- `exports src/shared/lib/brand.ts parseTimestamp`
-- `exports src/shared/lib/index.ts emptyInputValue`
-- `exports src/shared/lib/index.ts ok`
-- `exports src/shared/lib/index.ts parseCount`
-- `exports src/shared/lib/index.ts parseEntityId`
-- `exports src/shared/lib/index.ts parseMoney`
-- `exports src/shared/lib/index.ts parsePrice`
-- `exports src/shared/lib/index.ts parseProbability`
-- `exports src/shared/lib/index.ts parseQuantity`
-- `exports src/shared/lib/index.ts parseRatio`
-- `exports src/shared/lib/index.ts parseTicker`
-- `exports src/shared/lib/index.ts parseTimestamp`
-- `exports src/shared/lib/index.ts text`
-- `exports src/shared/lib/messages.ts text`
-- `exports src/shared/lib/money.ts parseMoney`
-- `exports src/shared/lib/money.ts parsePrice`
-- `exports src/shared/lib/money.ts parseProbability`
-- `exports src/shared/lib/money.ts parseQuantity`
-- `exports src/shared/lib/money.ts parseRatio`
-- `exports src/shared/platform/index.ts inputCommit`
-- `exports src/shared/platform/index.ts inputEventValue`
-- `exports src/shared/platform/index.ts pasteInputValue`
-- `files src/shared/ds/Base.stories.tsx src/shared/ds/Base.stories.tsx`
-- `files src/shared/ds/Button.stories.tsx src/shared/ds/Button.stories.tsx`
-- `files src/shared/ds/Button.tsx src/shared/ds/Button.tsx`
-- `files src/shared/ds/Checkbox.stories.tsx src/shared/ds/Checkbox.stories.tsx`
-- `files src/shared/ds/Checkbox.tsx src/shared/ds/Checkbox.tsx`
-- `files src/shared/ds/Disclosure.stories.tsx src/shared/ds/Disclosure.stories.tsx`
-- `files src/shared/ds/Disclosure.tsx src/shared/ds/Disclosure.tsx`
-- `files src/shared/ds/Heading.stories.tsx src/shared/ds/Heading.stories.tsx`
-- `files src/shared/ds/Heading.tsx src/shared/ds/Heading.tsx`
-- `files src/shared/ds/Icon.stories.tsx src/shared/ds/Icon.stories.tsx`
-- `files src/shared/ds/Icon.tsx src/shared/ds/Icon.tsx`
-- `files src/shared/ds/IconButton.stories.tsx src/shared/ds/IconButton.stories.tsx`
-- `files src/shared/ds/IconButton.tsx src/shared/ds/IconButton.tsx`
-- `files src/shared/ds/SegmentedControl.stories.tsx src/shared/ds/SegmentedControl.stories.tsx`
-- `files src/shared/ds/SegmentedControl.tsx src/shared/ds/SegmentedControl.tsx`
-- `files src/shared/ds/Select.stories.tsx src/shared/ds/Select.stories.tsx`
-- `files src/shared/ds/Select.tsx src/shared/ds/Select.tsx`
-- `files src/shared/ds/Switch.stories.tsx src/shared/ds/Switch.stories.tsx`
-- `files src/shared/ds/Switch.tsx src/shared/ds/Switch.tsx`
-- `files src/shared/ds/Text.stories.tsx src/shared/ds/Text.stories.tsx`
-- `files src/shared/ds/Text.tsx src/shared/ds/Text.tsx`
-- `files src/shared/ds/TextField.stories.tsx src/shared/ds/TextField.stories.tsx`
-- `files src/shared/ds/TextField.tsx src/shared/ds/TextField.tsx`
-- `files src/shared/ds/button-variants.tsx src/shared/ds/button-variants.tsx`
-- `files src/shared/ds/control-types.ts src/shared/ds/control-types.ts`
-- `files src/shared/ds/icon-paths-0.tsx src/shared/ds/icon-paths-0.tsx`
-- `files src/shared/ds/icon-paths-1.tsx src/shared/ds/icon-paths-1.tsx`
-- `files src/shared/ds/icon-paths-2.tsx src/shared/ds/icon-paths-2.tsx`
-- `files src/shared/ds/icon-paths.tsx src/shared/ds/icon-paths.tsx`
-- `files src/shared/ds/story-data.ts src/shared/ds/story-data.ts`
-- `types src/shared/lib/brand.ts Count`
-- `types src/shared/lib/brand.ts EntityId`
-- `types src/shared/lib/brand.ts Ticker`
-- `types src/shared/lib/brand.ts Timestamp`
-- `types src/shared/lib/index.ts Count`
-- `types src/shared/lib/index.ts Currency`
-- `types src/shared/lib/index.ts DecimalParseError`
-- `types src/shared/lib/index.ts EntityId`
-- `types src/shared/lib/index.ts Err`
-- `types src/shared/lib/index.ts Locale`
-- `types src/shared/lib/index.ts MessageKey`
-- `types src/shared/lib/index.ts Money`
-- `types src/shared/lib/index.ts Ok`
-- `types src/shared/lib/index.ts Price`
-- `types src/shared/lib/index.ts Probability`
-- `types src/shared/lib/index.ts Quantity`
-- `types src/shared/lib/index.ts Ratio`
-- `types src/shared/lib/index.ts Ticker`
-- `types src/shared/lib/index.ts Timestamp`
-- `types src/shared/lib/index.ts UiText`
-- `types src/shared/lib/messages.ts Locale`
-- `types src/shared/lib/messages.ts MessageKey`
-- `types src/shared/lib/money.ts Currency`
-- `types src/shared/lib/money.ts DecimalParseError`
-- `types src/shared/lib/money.ts Money`
-- `types src/shared/lib/money.ts Price`
-- `types src/shared/lib/money.ts Probability`
-- `types src/shared/lib/money.ts Quantity`
-- `types src/shared/lib/money.ts Ratio`
+남은 제품 결정은 한글 줄바꿈 산출물의 부재다. SignalCard 전용 매수·매도 버튼, Storybook 실행 환경, 실제 시각·넘침·WKWebView 검증은 각 후속 DS 작업 범위이며 이번 공개 API에 미완성 대체 기능을 남기지 않는다.

@@ -1,6 +1,10 @@
 import { useId, useState, type ReactElement } from "react";
 import { Input } from "@base-ui/react/input";
-import { inputEventValue, inputCommit, pasteInputValue } from "../platform";
+import {
+  inputEventValue,
+  inputCommit,
+  pasteInputValue,
+} from "../platform/input";
 import {
   emptyInputValue,
   parseEntityId,
@@ -17,7 +21,6 @@ type Props = {
   readonly value?: InputValue;
   readonly defaultValue?: InputValue;
   readonly onChange?: (value: InputValue) => void;
-  readonly onCommit?: (value: InputValue) => void;
   readonly placeholder?: UiText;
   readonly hint?: UiText;
   readonly error?: UiText;
@@ -63,15 +66,17 @@ type InputProps = {
   readonly visibility: Visibility;
   readonly descriptionId: EntityId;
 };
+const inputKind = (data: InputProps): "password" | "text" =>
+  data.field.type === "secret" && data.visibility === "masked"
+    ? "password"
+    : "text";
 const TextInput = (data: InputProps): ReactElement => {
-  const [composition, setComposition] = useState<"idle" | "composing">("idle");
+  const [composition, setComposition] = useState<
+    "idle" | "composing" | "ending"
+  >("idle");
   return (
     <Input
-      type={
-        data.field.type === "secret" && data.visibility === "masked"
-          ? "password"
-          : "text"
-      }
+      type={inputKind(data)}
       value={data.state.value}
       aria-label={data.field.label}
       onChange={(event): void => {
@@ -82,20 +87,19 @@ const TextInput = (data: InputProps): ReactElement => {
         setComposition("composing");
       }}
       onCompositionEnd={(): void => {
-        setComposition("idle");
+        setComposition("ending");
       }}
       onKeyDown={(event): void => {
         if (
-          composition === "idle" &&
-          inputCommit(event) === "commit" &&
-          data.field.onCommit !== undefined &&
-          data.field.disabled !== "disabled"
+          inputCommit(event, composition) === "ignore" &&
+          composition === "ending"
         )
-          data.field.onCommit(data.state.value);
+          setComposition("idle");
       }}
       placeholder={data.field.placeholder}
       disabled={data.field.disabled === "disabled"}
       autoComplete={data.field.type === "secret" ? "off" : undefined}
+      autoCapitalize={data.field.type === "secret" ? "none" : undefined}
       spellCheck={data.field.type === "secret" ? false : undefined}
       aria-invalid={data.state.error !== undefined}
       aria-describedby={
@@ -133,6 +137,11 @@ const reveal = (data: RevealProps): ReactElement | null => {
 export const TextField = (props: Props): ReactElement | null => {
   const state = useFieldState(props);
   const [visibility, setVisibility] = useState<Visibility>("masked");
+  const [previousValue, setPreviousValue] = useState(state.value);
+  if (previousValue !== state.value) {
+    setPreviousValue(state.value);
+    if (state.value === emptyInputValue) setVisibility("masked");
+  }
   const id = parseEntityId(useId());
   if (id.kind === "err") return null;
   const toggle = (): void => {

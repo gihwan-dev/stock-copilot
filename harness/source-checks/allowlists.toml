@@ -61,3 +61,14 @@ reason = "D-11 표본 통계의 근사 연산을 봉인된 일간·연율·내�
 path = "crates/xtask/src/mutants_check/environment.rs"
 names = ["clock-env:var"]
 reason = "H-42 변이 병렬 수를 낮추는 환경 변수 하나를 읽는 하네스 경계. 값 검증과 기본 상한은 순수 함수가 유지한다"
+
+[[decimal-arithmetic]]
+path = "crates/domain/src/base_probability.rs"
+reason = "D-21 DESIGN-v0.2 2절의 기간 제한 급수와 봉인된 근사 T·S·p₀만 계산한다 (D-21 초안 ADR)"
+
+[[decimal-rounding]]
+path = "crates/domain/src/base_probability.rs"
+reason = "D-21 근사 T·S·p₀의 표시 전용 소수 4자리 반올림과 근사 표지. 계산값은 보존한다 (D-21 초안 ADR)"
+[[decimal-arithmetic]]
+path = "crates/domain/src/concentration_arithmetic.rs"
+reason = "D-07 보유 구성비의 봉인된 근사 통계만 checked 연산하고 표시와 경계는 정확 정수 비율로 검증한다"

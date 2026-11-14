@@ -24,7 +24,13 @@ export const Disclosure = (props: Props): ReactElement => {
       className="border-t-hairline border-solid border-line"
     >
       <Collapsible.Trigger className="flex items-center gap-space-2 w-full h-toolbar-height bg-transparent text-ink text-body font-semibold cursor-pointer focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus">
-        <Icon name={state === "open" ? "chevron-down" : "chevron-right"} />
+        <span
+          className={
+            state === "open" ? "inline-flex rotate-disclosure" : "inline-flex"
+          }
+        >
+          <Icon name="chevron-right" />
+        </span>
         {props.title}
       </Collapsible.Trigger>
       <Collapsible.Panel className="pb-space-4 flex flex-col gap-space-4">

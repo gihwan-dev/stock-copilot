@@ -23,8 +23,8 @@ test("DS03 Base UI callbacks stay internal while public event and DOM forwarding
       { recursive: true },
     );
     cpSync(
-      join(desktopRoot, "src/shared/platform/index.ts"),
-      join(folder, "src/shared/platform/index.ts"),
+      join(desktopRoot, "src/shared/platform/input.ts"),
+      join(folder, "src/shared/platform/input.ts"),
     );
     cpSync(
       join(desktopRoot, "src/shared/ds/tokens.ts"),
@@ -62,7 +62,7 @@ test("DS03 Base UI callbacks stay internal while public event and DOM forwarding
         "ds/no-dom-values",
       ],
       [
-        'import {Input}from"@base-ui/react/input";import{inputEventValue}from"../platform";import type{InputValue}from"../lib";export const Probe=(props:{readonly onChange:(value:InputValue)=>void}):ReactElement=><Input onChange={(event):void=>{const value=inputEventValue(event);if(value.kind==="ok")props.onChange(value.value);}}/>;',
+        'import {Input}from"@base-ui/react/input";import{inputEventValue}from"../platform/input";import type{InputValue}from"../lib";export const Probe=(props:{readonly onChange:(value:InputValue)=>void}):ReactElement=><Input onChange={(event):void=>{const value=inputEventValue(event);if(value.kind==="ok")props.onChange(value.value);}}/>;',
         null,
       ],
       [
@@ -71,6 +71,22 @@ test("DS03 Base UI callbacks stay internal while public event and DOM forwarding
       ],
       [
         'import{Button}from"@base-ui/react/button";export const Probe=(props:{readonly onPick:(node:HTMLElement)=>void}):ReactElement=><Button onClick={(event):void=>{props.onPick(event.currentTarget);}}/>;',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"|"input-change"})=>void}):ReactElement=><Checkbox.Root onCheckedChange={(_next,details):void=>{props.onPick(details);}}/>;',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"|"input-change"})=>void}):ReactElement=><Checkbox.Root onCheckedChange={(_next,details):void=>{const forwarded=details;const receive=props.onPick;receive(forwarded);}}/>;',
+        "ds/public-props",
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:"none"|"input-change")=>void}):ReactElement=><Checkbox.Root onCheckedChange={(_next,details):void=>{props.onPick(details.reason);}}/>;',
+        null,
+      ],
+      [
+        'import{Checkbox}from"@base-ui/react/checkbox";export const Probe=(props:{readonly onPick:(value:{readonly reason:"none"|"input-change"})=>void}):ReactElement=>{const {onPick}=props;return <Checkbox.Root onCheckedChange={(_next,details):void=>{onPick(details);}}/>;};',
         "ds/public-props",
       ],
       [
@@ -127,7 +143,7 @@ test("DS03 Base UI callbacks stay internal while public event and DOM forwarding
 test("DS03 DOM boundary export validation terminates for value promises and rejects nested DOM promises", async () => {
   const folder = mkdtempSync("ds03-export-values-");
   try {
-    const source = join(folder, "src/shared/platform/index.ts"),
+    const source = join(folder, "src/shared/platform/input.ts"),
       project = join(folder, "tsconfig.json");
     mkdirSync(join(source, ".."), { recursive: true });
     writeFileSync(
@@ -161,6 +177,18 @@ test("DS03 DOM boundary export validation terminates for value promises and reje
       ],
       [
         "export const readNode=():Promise<Readonly<{node:HTMLElement}>>=>Promise.resolve({node:document.documentElement});",
+        true,
+      ],
+      [
+        'import type{SyntheticEvent}from"react";export const lastEvent=(e:Readonly<SyntheticEvent<never,never>>):Readonly<SyntheticEvent<never,never>>=>e;',
+        true,
+      ],
+      [
+        'import type{DOMAttributes}from"react";export const handlers=():Readonly<DOMAttributes<never>>=>({});',
+        true,
+      ],
+      [
+        'export declare const callable:(()=>"ok") & {readonly node:HTMLElement};',
         true,
       ],
     ]) {

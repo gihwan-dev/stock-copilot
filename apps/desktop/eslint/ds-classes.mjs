@@ -42,6 +42,7 @@ export const DS_KEYWORDS = [
   "bg-transparent",
   "border-transparent",
   "w-switch",
+  "rotate-disclosure",
   "border-t-hairline",
   "text-left",
   "text-center",

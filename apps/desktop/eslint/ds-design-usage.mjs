@@ -81,6 +81,7 @@ export const iconUtilities = [
 const declaration = (property) =>
   property === "width/height" ? ["width", "height"] : [property];
 export const designUtilities = (tokens) => [
+  ["rotate-disclosure", "transform", "rotate(90deg)"],
   ["w-switch", "width", "calc(var(--spacing-icon-md) * 2)"],
   ["border-t-hairline", "border-top-width", "var(--border-width-hairline)"],
   ...iconUtilities,

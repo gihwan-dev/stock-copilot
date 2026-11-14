@@ -12,6 +12,8 @@ const cases = [
     [
       '<Button size="icon-md">{label}</Button>',
       '<Button variant="unknown">{label}</Button>',
+      '<Button variant="buy">{label}</Button>',
+      '<Button variant="sell">{label}</Button>',
       "<Button disabled={true}>{label}</Button>",
       "<Button onClick={(e:MouseEvent):void=>{consume(e);}}>{label}</Button>",
     ],
@@ -25,6 +27,7 @@ const cases = [
       '<IconButton icon="search" label={label} pressed={true}/>',
       '<IconButton icon="search" label={label} expanded={false}/>',
       '<IconButton icon="search" label={label} tooltipSide="bottom"/>',
+      '<IconButton icon="search" label={label} tooltip="hidden"/>',
     ],
   ],
   [
@@ -44,6 +47,7 @@ const cases = [
       "<Heading level={4}>{label}</Heading>",
       '<Heading level="1">{label}</Heading>',
       "<Heading>Search</Heading>",
+      "<Heading id={label}>{label}</Heading>",
     ],
   ],
   [
@@ -54,7 +58,7 @@ const cases = [
       '<TextField label={label} placeholder="Input"/>',
       "<TextField label={label} disabled={true}/>",
       "<TextField label={label} onChange={(e:ChangeEvent<HTMLInputElement>):void=>{consume(e);}}/>",
-      "<TextField label={label} onCommit={(e:MouseEvent):void=>{consume(e);}}/>",
+      "<TextField label={label} onCommit={(value:InputValue):void=>{consume(value);}}/>",
       '<TextField label={label} type="password"/>',
     ],
   ],

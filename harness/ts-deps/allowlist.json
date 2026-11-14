@@ -148,9 +148,13 @@
           "target": "@testing-library/react",
           "reason": "DS-03 컴포넌트 상태 검증 (harness 4.3 Testing Library, architecture 5.2 Playwright)"
         },
-        "playwright": {
-          "target": "playwright",
-          "reason": "DS-03 컴포넌트 상태 검증 (harness 4.3 Testing Library, architecture 5.2 Playwright)"
+        "jsdom": {
+          "target": "jsdom",
+          "reason": "DS-03 브라우저 없는 컴포넌트 DOM 환경 (R-15 2.4, harness 4.3·6.6, 사용자 리뷰 결정 4)"
+        },
+        "@testing-library/user-event": {
+          "target": "@testing-library/user-event",
+          "reason": "Testing Library 키보드·포커스 상호작용 (harness 4.3 Testing Library, 사용자 리뷰 결정 4)"
         }
       }
     }
