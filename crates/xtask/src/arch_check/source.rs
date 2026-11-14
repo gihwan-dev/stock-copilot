@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 mod ast;
+mod schema_surface;
 
 use proc_macro2::{TokenStream, TokenTree};
 use syn::visit::Visit;
@@ -226,6 +227,27 @@ pub(crate) fn check_sources(
         if !rules.order_write_crates.contains(crate_name) {
             order_writes(files, &mut findings);
         }
+    }
+    for package in workspace
+        .packages
+        .iter()
+        .filter(|package| rules.schema_surface_crates.contains(&package.name))
+    {
+        let mut parsed = Vec::new();
+        for path in package_files(&package.directory, &skipped)?
+            .into_iter()
+            .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+        {
+            let text = fs::read_to_string(&path).map_err(|error| io_failure(&path, error))?;
+            if let Ok(file) = syn::parse_file(&text) {
+                parsed.push((relative_text(&workspace.root, &path), file));
+            }
+        }
+        findings.extend(
+            schema_surface::check(&parsed, &package.schema_names)
+                .into_iter()
+                .map(|path| Finding::new(Rule::SchemaSurface, path)),
+        );
     }
     http_write_means(rules, &by_crate, &mut findings);
     Ok(findings)

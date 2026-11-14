@@ -266,6 +266,9 @@ dependent = "testkit"
 default-features = "off"
 features = ["client"]
 
+[source.schema-surface]
+crates = ["broker-toss", "broker-toss-trade"]
+
 [source.reexport]
 crates = ["approval-command", "broker-toss-trade", "trade-fakes"]
 
@@ -386,5 +389,5 @@ reason = "T-01 생성 타입 및 왕복 테스트 serde_json의 작업 공간 �
 [[external-location-exception]]
 crates = ["broker-toss"]
 externals = ["syn", "proc-macro2"]
-through = "chrono"
-reason = "T-01 chrono와 작업 공간 serde derive 기능 통합으로 연결되는 절차 매크로"
+through = "time"
+reason = "T-01 time과 작업 공간 serde derive 기능 통합으로 연결되는 절차 매크로"

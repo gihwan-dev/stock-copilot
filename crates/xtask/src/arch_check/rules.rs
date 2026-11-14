@@ -95,6 +95,7 @@ pub(crate) struct FeatureAllowlist {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SourceRules {
+    pub(crate) schema_surface_crates: BTreeSet<CrateName>,
     pub(crate) reexport_crates: BTreeSet<CrateName>,
     pub(crate) presence_trait: String,
     pub(crate) presence_impl_crates: BTreeSet<CrateName>,
@@ -414,12 +415,19 @@ fn graph_rules(table: &Table) -> Result<GraphRules, CheckFailure> {
     })
 }
 
+fn schema_surface_names(table: &Table) -> Result<BTreeSet<CrateName>, CheckFailure> {
+    let schema = sub_table(table, "schema-surface")?;
+    only_keys(schema, "source.schema-surface", &["crates"])?;
+    names(schema, "crates")
+}
+
 fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(
         table,
         "source",
         &[
             "reexport",
+            "schema-surface",
             "user-presence",
             "toss-order",
             "http-write",
@@ -457,6 +465,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         &["needle", "allowed-crates", "allowed-files"],
     )?;
     Ok(SourceRules {
+        schema_surface_crates: schema_surface_names(table)?,
         reexport_crates: names(reexport, "crates")?,
         presence_trait: text(presence, "trait-name")?,
         presence_impl_crates: names(presence, "impl-crates")?,

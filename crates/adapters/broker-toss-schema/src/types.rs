@@ -8,17 +8,17 @@ pub struct Account {
     pub kind: AccountAccountType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum AccountAccountType {
     #[serde(rename = "BROKERAGE")]
     Brokerage,
@@ -28,42 +28,7 @@ pub enum AccountAccountType {
     PensionSavings,
     #[serde(rename = "RESHORING_INVESTMENT")]
     ReshoringInvestment,
-}
-impl ::std::fmt::Display for AccountAccountType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Brokerage => f.write_str("BROKERAGE"),
-            Self::OverseasDerivatives => f.write_str("OVERSEAS_DERIVATIVES"),
-            Self::PensionSavings => f.write_str("PENSION_SAVINGS"),
-            Self::ReshoringInvestment => f.write_str("RESHORING_INVESTMENT"),
-        }
-    }
-}
-impl ::std::str::FromStr for AccountAccountType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BROKERAGE" => Ok(Self::Brokerage),
-            "OVERSEAS_DERIVATIVES" => Ok(Self::OverseasDerivatives),
-            "PENSION_SAVINGS" => Ok(Self::PensionSavings),
-            "RESHORING_INVESTMENT" => Ok(Self::ReshoringInvestment),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for AccountAccountType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AccountAccountType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct AfterMarketSession {
@@ -91,17 +56,17 @@ pub struct ApiResponse {
     pub result: ::serde_json::Value,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum AssetClass {
     #[serde(rename = "STOCK")]
     Stock,
@@ -109,40 +74,7 @@ pub enum AssetClass {
     Bond,
     #[serde(rename = "OPTION")]
     Option,
-}
-impl ::std::fmt::Display for AssetClass {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Stock => f.write_str("STOCK"),
-            Self::Bond => f.write_str("BOND"),
-            Self::Option => f.write_str("OPTION"),
-        }
-    }
-}
-impl ::std::str::FromStr for AssetClass {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "STOCK" => Ok(Self::Stock),
-            "BOND" => Ok(Self::Bond),
-            "OPTION" => Ok(Self::Option),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for AssetClass {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for AssetClass {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct BuyingPowerResponse {
@@ -807,54 +739,23 @@ impl<'de> ::serde::Deserialize<'de> for ConditionRequestOrderPrice {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionRequestOrderSide {
     #[serde(rename = "BUY")]
     Buy,
     #[serde(rename = "SELL")]
     Sell,
-}
-impl ::std::fmt::Display for ConditionRequestOrderSide {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Buy => f.write_str("BUY"),
-            Self::Sell => f.write_str("SELL"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionRequestOrderSide {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BUY" => Ok(Self::Buy),
-            "SELL" => Ok(Self::Sell),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionRequestOrderSide {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionRequestOrderSide {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -939,67 +840,36 @@ pub struct ConditionalOrderCondition {
     pub type_: ConditionalOrderConditionType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderConditionOrderSide {
     #[serde(rename = "BUY")]
     Buy,
     #[serde(rename = "SELL")]
     Sell,
-}
-impl ::std::fmt::Display for ConditionalOrderConditionOrderSide {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Buy => f.write_str("BUY"),
-            Self::Sell => f.write_str("SELL"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderConditionOrderSide {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BUY" => Ok(Self::Buy),
-            "SELL" => Ok(Self::Sell),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderConditionOrderSide {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderConditionOrderSide {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderConditionStatus {
     #[serde(rename = "WATCHING")]
     Watching,
@@ -1017,100 +887,26 @@ pub enum ConditionalOrderConditionStatus {
     Expired,
     #[serde(rename = "CANCELED")]
     Canceled,
-}
-impl ::std::fmt::Display for ConditionalOrderConditionStatus {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Watching => f.write_str("WATCHING"),
-            Self::Holding => f.write_str("HOLDING"),
-            Self::Paused => f.write_str("PAUSED"),
-            Self::Ordering => f.write_str("ORDERING"),
-            Self::Ordered => f.write_str("ORDERED"),
-            Self::Completed => f.write_str("COMPLETED"),
-            Self::Expired => f.write_str("EXPIRED"),
-            Self::Canceled => f.write_str("CANCELED"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderConditionStatus {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "WATCHING" => Ok(Self::Watching),
-            "HOLDING" => Ok(Self::Holding),
-            "PAUSED" => Ok(Self::Paused),
-            "ORDERING" => Ok(Self::Ordering),
-            "ORDERED" => Ok(Self::Ordered),
-            "COMPLETED" => Ok(Self::Completed),
-            "EXPIRED" => Ok(Self::Expired),
-            "CANCELED" => Ok(Self::Canceled),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderConditionStatus {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderConditionStatus {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderConditionType {
     #[serde(rename = "STOP")]
     Stop,
     #[serde(rename = "PROFIT_RATE")]
     ProfitRate,
-}
-impl ::std::fmt::Display for ConditionalOrderConditionType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Stop => f.write_str("STOP"),
-            Self::ProfitRate => f.write_str("PROFIT_RATE"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderConditionType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "STOP" => Ok(Self::Stop),
-            "PROFIT_RATE" => Ok(Self::ProfitRate),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderConditionType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderConditionType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ConditionalOrderCreateRequest {
@@ -1188,54 +984,23 @@ impl<'de> ::serde::Deserialize<'de> for ConditionalOrderCreateRequestClientOrder
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderCreateRequestOrderType {
     #[serde(rename = "LIMIT")]
     Limit,
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for ConditionalOrderCreateRequestOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Limit => f.write_str("LIMIT"),
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderCreateRequestOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIMIT" => Ok(Self::Limit),
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderCreateRequestOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderCreateRequestOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -1292,17 +1057,17 @@ impl<'de> ::serde::Deserialize<'de> for ConditionalOrderCreateRequestQuantity {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderCreateRequestType {
     #[serde(rename = "SINGLE")]
     Single,
@@ -1310,40 +1075,7 @@ pub enum ConditionalOrderCreateRequestType {
     Oco,
     #[serde(rename = "OTO")]
     Oto,
-}
-impl ::std::fmt::Display for ConditionalOrderCreateRequestType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Single => f.write_str("SINGLE"),
-            Self::Oco => f.write_str("OCO"),
-            Self::Oto => f.write_str("OTO"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderCreateRequestType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "SINGLE" => Ok(Self::Single),
-            "OCO" => Ok(Self::Oco),
-            "OTO" => Ok(Self::Oto),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderCreateRequestType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderCreateRequestType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ConditionalOrderCreateResponse {
@@ -1379,117 +1111,55 @@ pub struct ConditionalOrderDetailResponse {
     pub type_: ConditionalOrderDetailResponseType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderDetailResponseMarket {
     #[serde(rename = "KR")]
     Kr,
     #[serde(rename = "US")]
     Us,
-}
-impl ::std::fmt::Display for ConditionalOrderDetailResponseMarket {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Kr => f.write_str("KR"),
-            Self::Us => f.write_str("US"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderDetailResponseMarket {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "KR" => Ok(Self::Kr),
-            "US" => Ok(Self::Us),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderDetailResponseMarket {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderDetailResponseMarket {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderDetailResponseOrderType {
     #[serde(rename = "LIMIT")]
     Limit,
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for ConditionalOrderDetailResponseOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Limit => f.write_str("LIMIT"),
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderDetailResponseOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIMIT" => Ok(Self::Limit),
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderDetailResponseOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderDetailResponseOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderDetailResponseStatus {
     #[serde(rename = "WATCHING")]
     Watching,
@@ -1503,59 +1173,20 @@ pub enum ConditionalOrderDetailResponseStatus {
     Completed,
     #[serde(rename = "EXPIRED")]
     Expired,
-}
-impl ::std::fmt::Display for ConditionalOrderDetailResponseStatus {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Watching => f.write_str("WATCHING"),
-            Self::Paused => f.write_str("PAUSED"),
-            Self::Ordering => f.write_str("ORDERING"),
-            Self::Ordered => f.write_str("ORDERED"),
-            Self::Completed => f.write_str("COMPLETED"),
-            Self::Expired => f.write_str("EXPIRED"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderDetailResponseStatus {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "WATCHING" => Ok(Self::Watching),
-            "PAUSED" => Ok(Self::Paused),
-            "ORDERING" => Ok(Self::Ordering),
-            "ORDERED" => Ok(Self::Ordered),
-            "COMPLETED" => Ok(Self::Completed),
-            "EXPIRED" => Ok(Self::Expired),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderDetailResponseStatus {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderDetailResponseStatus {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderDetailResponseType {
     #[serde(rename = "SINGLE")]
     Single,
@@ -1563,40 +1194,7 @@ pub enum ConditionalOrderDetailResponseType {
     Oco,
     #[serde(rename = "OTO")]
     Oto,
-}
-impl ::std::fmt::Display for ConditionalOrderDetailResponseType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Single => f.write_str("SINGLE"),
-            Self::Oco => f.write_str("OCO"),
-            Self::Oto => f.write_str("OTO"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderDetailResponseType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "SINGLE" => Ok(Self::Single),
-            "OCO" => Ok(Self::Oco),
-            "OTO" => Ok(Self::Oto),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderDetailResponseType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderDetailResponseType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ConditionalOrderModifyRequest {
@@ -1614,54 +1212,23 @@ pub struct ConditionalOrderModifyRequest {
     pub type_: ConditionalOrderModifyRequestType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderModifyRequestOrderType {
     #[serde(rename = "LIMIT")]
     Limit,
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for ConditionalOrderModifyRequestOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Limit => f.write_str("LIMIT"),
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderModifyRequestOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIMIT" => Ok(Self::Limit),
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderModifyRequestOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderModifyRequestOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -1718,17 +1285,17 @@ impl<'de> ::serde::Deserialize<'de> for ConditionalOrderModifyRequestQuantity {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ConditionalOrderModifyRequestType {
     #[serde(rename = "SINGLE")]
     Single,
@@ -1736,40 +1303,7 @@ pub enum ConditionalOrderModifyRequestType {
     Oco,
     #[serde(rename = "OTO")]
     Oto,
-}
-impl ::std::fmt::Display for ConditionalOrderModifyRequestType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Single => f.write_str("SINGLE"),
-            Self::Oco => f.write_str("OCO"),
-            Self::Oto => f.write_str("OTO"),
-        }
-    }
-}
-impl ::std::str::FromStr for ConditionalOrderModifyRequestType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "SINGLE" => Ok(Self::Single),
-            "OCO" => Ok(Self::Oco),
-            "OTO" => Ok(Self::Oto),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ConditionalOrderModifyRequestType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ConditionalOrderModifyRequestType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ConditionalOrderResponse {
@@ -2164,54 +1698,23 @@ pub struct CreditTradesResponse {
     pub records: ::std::vec::Vec<CreditTradeRecord>,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum Currency {
     #[serde(rename = "KRW")]
     Krw,
     #[serde(rename = "USD")]
     Usd,
-}
-impl ::std::fmt::Display for Currency {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Krw => f.write_str("KRW"),
-            Self::Usd => f.write_str("USD"),
-        }
-    }
-}
-impl ::std::str::FromStr for Currency {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "KRW" => Ok(Self::Krw),
-            "USD" => Ok(Self::Usd),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for Currency {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for Currency {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct DailyProfitLoss {
@@ -2486,17 +1989,17 @@ impl<'de> ::serde::Deserialize<'de> for ExchangeRateResponseRate {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ExchangeRateResponseRateChangeType {
     #[serde(rename = "UP")]
     Up,
@@ -2504,40 +2007,7 @@ pub enum ExchangeRateResponseRateChangeType {
     Equal,
     #[serde(rename = "DOWN")]
     Down,
-}
-impl ::std::fmt::Display for ExchangeRateResponseRateChangeType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Up => f.write_str("UP"),
-            Self::Equal => f.write_str("EQUAL"),
-            Self::Down => f.write_str("DOWN"),
-        }
-    }
-}
-impl ::std::str::FromStr for ExchangeRateResponseRateChangeType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "UP" => Ok(Self::Up),
-            "EQUAL" => Ok(Self::Equal),
-            "DOWN" => Ok(Self::Down),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ExchangeRateResponseRateChangeType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ExchangeRateResponseRateChangeType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ForeignerHolding {
@@ -3018,8 +2488,11 @@ pub struct InvestorNetTradingRanking {
     pub net_buy_rankings: ::std::vec::Vec<NetBuyRankingItem>,
     #[serde(rename = "netSellRankings")]
     pub net_sell_rankings: ::std::vec::Vec<NetSellRankingItem>,
-    #[serde(rename = "rankedAt")]
-    pub ranked_at: ::std::string::String,
+    #[serde(
+        rename = "rankedAt",
+        deserialize_with = "::std::option::Option::deserialize"
+    )]
+    pub ranked_at: ::std::option::Option<::std::string::String>,
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct InvestorTradingAmount {
@@ -3348,17 +2821,17 @@ pub struct ListedStock {
     pub symbol: ::std::string::String,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum ListedStockSecurityType {
     #[serde(rename = "STOCK")]
     Stock,
@@ -3378,102 +2851,26 @@ pub enum ListedStockSecurityType {
     Etn,
     #[serde(rename = "STOCK_WARRANTS")]
     StockWarrants,
-}
-impl ::std::fmt::Display for ListedStockSecurityType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Stock => f.write_str("STOCK"),
-            Self::ForeignStock => f.write_str("FOREIGN_STOCK"),
-            Self::DepositaryReceipt => f.write_str("DEPOSITARY_RECEIPT"),
-            Self::InfrastructureFund => f.write_str("INFRASTRUCTURE_FUND"),
-            Self::Reit => f.write_str("REIT"),
-            Self::Etf => f.write_str("ETF"),
-            Self::ForeignEtf => f.write_str("FOREIGN_ETF"),
-            Self::Etn => f.write_str("ETN"),
-            Self::StockWarrants => f.write_str("STOCK_WARRANTS"),
-        }
-    }
-}
-impl ::std::str::FromStr for ListedStockSecurityType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "STOCK" => Ok(Self::Stock),
-            "FOREIGN_STOCK" => Ok(Self::ForeignStock),
-            "DEPOSITARY_RECEIPT" => Ok(Self::DepositaryReceipt),
-            "INFRASTRUCTURE_FUND" => Ok(Self::InfrastructureFund),
-            "REIT" => Ok(Self::Reit),
-            "ETF" => Ok(Self::Etf),
-            "FOREIGN_ETF" => Ok(Self::ForeignEtf),
-            "ETN" => Ok(Self::Etn),
-            "STOCK_WARRANTS" => Ok(Self::StockWarrants),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for ListedStockSecurityType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for ListedStockSecurityType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum MarketCountry {
     #[serde(rename = "KR")]
     Kr,
     #[serde(rename = "US")]
     Us,
-}
-impl ::std::fmt::Display for MarketCountry {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Kr => f.write_str("KR"),
-            Self::Us => f.write_str("US"),
-        }
-    }
-}
-impl ::std::str::FromStr for MarketCountry {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "KR" => Ok(Self::Kr),
-            "US" => Ok(Self::Us),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for MarketCountry {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for MarketCountry {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct MarketIndicatorCandle {
@@ -4077,17 +3474,17 @@ pub struct OAuth2ErrorResponse {
     pub error_uri: ::std::option::Option<::std::string::String>,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OAuth2ErrorResponseError {
     #[serde(rename = "invalid_request")]
     InvalidRequest,
@@ -4101,46 +3498,7 @@ pub enum OAuth2ErrorResponseError {
     UnsupportedGrantType,
     #[serde(rename = "access_denied")]
     AccessDenied,
-}
-impl ::std::fmt::Display for OAuth2ErrorResponseError {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::InvalidRequest => f.write_str("invalid_request"),
-            Self::InvalidClient => f.write_str("invalid_client"),
-            Self::InvalidGrant => f.write_str("invalid_grant"),
-            Self::UnauthorizedClient => f.write_str("unauthorized_client"),
-            Self::UnsupportedGrantType => f.write_str("unsupported_grant_type"),
-            Self::AccessDenied => f.write_str("access_denied"),
-        }
-    }
-}
-impl ::std::str::FromStr for OAuth2ErrorResponseError {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "invalid_request" => Ok(Self::InvalidRequest),
-            "invalid_client" => Ok(Self::InvalidClient),
-            "invalid_grant" => Ok(Self::InvalidGrant),
-            "unauthorized_client" => Ok(Self::UnauthorizedClient),
-            "unsupported_grant_type" => Ok(Self::UnsupportedGrantType),
-            "access_denied" => Ok(Self::AccessDenied),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OAuth2ErrorResponseError {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OAuth2ErrorResponseError {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct OAuth2TokenRequest {
@@ -4149,50 +3507,21 @@ pub struct OAuth2TokenRequest {
     pub grant_type: OAuth2TokenRequestGrantType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OAuth2TokenRequestGrantType {
     #[serde(rename = "client_credentials")]
     ClientCredentials,
-}
-impl ::std::fmt::Display for OAuth2TokenRequestGrantType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::ClientCredentials => f.write_str("client_credentials"),
-        }
-    }
-}
-impl ::std::str::FromStr for OAuth2TokenRequestGrantType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "client_credentials" => Ok(Self::ClientCredentials),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OAuth2TokenRequestGrantType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OAuth2TokenRequestGrantType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct OAuth2TokenResponse {
@@ -4201,49 +3530,20 @@ pub struct OAuth2TokenResponse {
     pub token_type: OAuth2TokenResponseTokenType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OAuth2TokenResponseTokenType {
     Bearer,
-}
-impl ::std::fmt::Display for OAuth2TokenResponseTokenType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Bearer => f.write_str("Bearer"),
-        }
-    }
-}
-impl ::std::str::FromStr for OAuth2TokenResponseTokenType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "Bearer" => Ok(Self::Bearer),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OAuth2TokenResponseTokenType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OAuth2TokenResponseTokenType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Order {
@@ -4383,100 +3683,40 @@ impl<'de> ::serde::Deserialize<'de> for OrderCreateAmountBasedOrderAmount {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderCreateAmountBasedOrderType {
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for OrderCreateAmountBasedOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderCreateAmountBasedOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderCreateAmountBasedOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderCreateAmountBasedOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderCreateAmountBasedSide {
     #[serde(rename = "BUY")]
     Buy,
     #[serde(rename = "SELL")]
     Sell,
-}
-impl ::std::fmt::Display for OrderCreateAmountBasedSide {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Buy => f.write_str("BUY"),
-            Self::Sell => f.write_str("SELL"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderCreateAmountBasedSide {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BUY" => Ok(Self::Buy),
-            "SELL" => Ok(Self::Sell),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderCreateAmountBasedSide {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderCreateAmountBasedSide {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -4533,54 +3773,23 @@ impl<'de> ::serde::Deserialize<'de> for OrderCreateQuantityBasedClientOrderId {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderCreateQuantityBasedOrderType {
     #[serde(rename = "LIMIT")]
     Limit,
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for OrderCreateQuantityBasedOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Limit => f.write_str("LIMIT"),
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderCreateQuantityBasedOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIMIT" => Ok(Self::Limit),
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderCreateQuantityBasedOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderCreateQuantityBasedOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -4691,68 +3900,37 @@ impl<'de> ::serde::Deserialize<'de> for OrderCreateQuantityBasedQuantity {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderCreateQuantityBasedSide {
     #[serde(rename = "BUY")]
     Buy,
     #[serde(rename = "SELL")]
     Sell,
-}
-impl ::std::fmt::Display for OrderCreateQuantityBasedSide {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Buy => f.write_str("BUY"),
-            Self::Sell => f.write_str("SELL"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderCreateQuantityBasedSide {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BUY" => Ok(Self::Buy),
-            "SELL" => Ok(Self::Sell),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderCreateQuantityBasedSide {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderCreateQuantityBasedSide {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
-    Default,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
+#[derive(Default)]
 pub enum OrderCreateQuantityBasedTimeInForce {
     #[serde(rename = "DAY")]
     #[default]
@@ -4761,67 +3939,27 @@ pub enum OrderCreateQuantityBasedTimeInForce {
     Cls,
     #[serde(rename = "OPG")]
     Opg,
-}
-impl ::std::fmt::Display for OrderCreateQuantityBasedTimeInForce {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Day => f.write_str("DAY"),
-            Self::Cls => f.write_str("CLS"),
-            Self::Opg => f.write_str("OPG"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderCreateQuantityBasedTimeInForce {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "DAY" => Ok(Self::Day),
-            "CLS" => Ok(Self::Cls),
-            "OPG" => Ok(Self::Opg),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderCreateQuantityBasedTimeInForce {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderCreateQuantityBasedTimeInForce {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(untagged)]
+#[serde(deny_unknown_fields)]
 pub enum OrderCreateRequest {
     QuantityBased {
-        #[doc = "클라이언트 지정 주문 식별자. 멱등성 키로 사용됩니다.\n- 미전달: 멱등성 미적용. 매 요청을 별개 주문으로 처리합니다.\n- 전달: 동일 값으로 재요청 시 이전 주문 결과를 그대로 재반환합니다.\n서버는 자동 생성하지 않습니다.\n최대 36자, 영숫자 및 `-`, `_` 허용.\n멱등성 키는 10분간 유효하며, 이후 동일 값으로 재요청 시 새 주문으로 처리됩니다.\n"]
         #[serde(
             rename = "clientOrderId",
             skip_serializing_if = "::std::option::Option::is_none"
         )]
         client_order_id: ::std::option::Option<OrderCreateQuantityBasedClientOrderId>,
-        #[doc = "착오주문 방지를 위한 주문 확인 플래그. 기본값 `false`.\n1억원 이상의 주문 시 `true`가 아니면 `400 confirm-high-value-required` 에러를 반환합니다.\n사용자가 해당 주문의 금액을 인지하고 있음을 표시하기 위한 필드입니다.\n"]
         #[serde(rename = "confirmHighValueOrder", default)]
         confirm_high_value_order: bool,
-        #[doc = "호가 유형.\n- `LIMIT`: 지정가\n- `MARKET`: 시장가\n"]
         #[serde(rename = "orderType")]
         order_type: OrderCreateQuantityBasedOrderType,
-        #[doc = "주문 가격. `orderType`이 `LIMIT` 일 때만 사용합니다.\n- `LIMIT`: 필수. 미전달 시 `400 invalid-request`.\n- `MARKET`: 전달 불가. 전달 시 `400 invalid-request`.\n- KR: 정수 (원 단위). 호가 단위에 맞아야 합니다 (예: 50,000~200,000원 구간은 100원 단위). 맞지 않으면 `400 invalid-request` 에러와 함께 올바른 호가 단위가 `data`에 포함됩니다.\n- US: 소수점 (달러 단위).\n  - $1 미만: 소수점 넷째 자리까지 (그 이하 자릿수는 절삭).\n  - $1 이상: 소수점 둘째 자리까지 (그 이하 자릿수는 절삭).\n"]
         #[serde(skip_serializing_if = "::std::option::Option::is_none")]
         price: ::std::option::Option<OrderCreateQuantityBasedPrice>,
-        #[doc = "주문 수량 (주 단위). 지정한 수량만큼 주문합니다.\n- 기본: 양의 정수만 가능합니다.\n- 소수점 수량: 미국 주식 시장가 매도(`orderType=MARKET` + `side=SELL`) 주문에만 허용됩니다.\n  그 외(매수/지정가/국내) 소수점 수량은 `400 invalid-request` 를 반환합니다.\n  소수점 매수는 `orderAmount` 를 사용하세요.\n  소수점 수량 매도는 정규장 시작부터 정규장 종료 1시간 전까지만 접수 가능하며, 그 외 시간 요청 시 `422 fractional-quantity-outside-regular-hours` 를 반환합니다.\n  소수점 수량은 소수점 6자리까지 지원하며, 초과 시 `400 invalid-request` (`fractional-quantity-scale-exceeded`) 를 반환합니다.\n"]
         quantity: OrderCreateQuantityBasedQuantity,
-        #[doc = "주문 방향"]
         side: OrderCreateQuantityBasedSide,
-        #[doc = "종목 심볼. KRX: 6자리 종목코드 (숫자 또는 영문·숫자 조합), US: 영문 티커"]
         symbol: ::std::string::String,
-        #[doc = "주문 유효 조건 (Time In Force). 미전달 시 `DAY`. `orderType` 과 결합되어 주문 방식이 결정됩니다 (예: `LIMIT` + `CLS` = LOC).\n- `DAY`: 당일 유효 (Day). 정규장 종료까지 미체결분은 자동 취소됩니다.\n- `CLS`: 장 마감 주문 (At the Close). 현재 미국 주식 + `orderType=LIMIT` 조합만 지원합니다.\n- `OPG`: 장 개시 주문 (At the Opening, 국내 시가단일가). 현재 국내 주식 전용이며 `orderType` 은 `LIMIT`/`MARKET` 모두 지원합니다. 세션 시간(장전 사전접수) 외 접수는 원장에서 거절될 수 있습니다.\n"]
         #[serde(
             rename = "timeInForce",
             default = "defaults::order_create_request_quantity_based_time_in_force"
@@ -4829,24 +3967,18 @@ pub enum OrderCreateRequest {
         time_in_force: OrderCreateQuantityBasedTimeInForce,
     },
     AmountBased {
-        #[doc = "클라이언트 지정 주문 식별자. 멱등성 키로 사용됩니다.\n- 미전달: 멱등성 미적용. 매 요청을 별개 주문으로 처리합니다.\n- 전달: 동일 값으로 재요청 시 이전 주문 결과를 그대로 재반환합니다.\n서버는 자동 생성하지 않습니다.\n최대 36자, 영숫자 및 `-`, `_` 허용.\n멱등성 키는 10분간 유효하며, 이후 동일 값으로 재요청 시 새 주문으로 처리됩니다.\n"]
         #[serde(
             rename = "clientOrderId",
             skip_serializing_if = "::std::option::Option::is_none"
         )]
         client_order_id: ::std::option::Option<OrderCreateAmountBasedClientOrderId>,
-        #[doc = "착오주문 방지를 위한 주문 확인 플래그. 기본값 `false`.\n1억원 이상의 주문 시 `true`가 아니면 `400 confirm-high-value-required` 에러를 반환합니다.\n사용자가 해당 주문의 금액을 인지하고 있음을 표시하기 위한 필드입니다.\n"]
         #[serde(rename = "confirmHighValueOrder", default)]
         confirm_high_value_order: bool,
-        #[doc = "주문 금액 (달러). 지정한 금액만큼 주문합니다.\n체결 수량은 체결 시점의 시장가에 따라 결정됩니다.\n\nQuantity-based 와의 차이: quantity 는 수량을 확정하고 비용이 변동하며,\norderAmount 는 금액을 확정하고 수량이 변동합니다.\n\n정규장 시작부터 정규장 종료 1시간 전까지만 접수 가능합니다.\n그 외 시간 요청 시 `422 amount-order-outside-regular-hours` 에러를 반환합니다.\n"]
         #[serde(rename = "orderAmount")]
         order_amount: OrderCreateAmountBasedOrderAmount,
-        #[doc = "호가 유형. 금액 기반 주문은 `MARKET` 만 허용합니다."]
         #[serde(rename = "orderType")]
         order_type: OrderCreateAmountBasedOrderType,
-        #[doc = "주문 방향"]
         side: OrderCreateAmountBasedSide,
-        #[doc = "US 종목 심볼 (영문 티커). 금액 기반 주문은 US MARKET 전용입니다."]
         symbol: ::std::string::String,
     },
 }
@@ -4864,12 +3996,18 @@ pub struct OrderExecution {
         deserialize_with = "::std::option::Option::deserialize"
     )]
     pub filled_amount: ::std::option::Option<OrderExecutionFilledAmount>,
-    #[serde(rename = "filledAt")]
-    pub filled_at: ::std::string::String,
+    #[serde(
+        rename = "filledAt",
+        deserialize_with = "::std::option::Option::deserialize"
+    )]
+    pub filled_at: ::std::option::Option<::std::string::String>,
     #[serde(rename = "filledQuantity")]
     pub filled_quantity: OrderExecutionFilledQuantity,
-    #[serde(rename = "settlementDate")]
-    pub settlement_date: ::std::string::String,
+    #[serde(
+        rename = "settlementDate",
+        deserialize_with = "::std::option::Option::deserialize"
+    )]
+    pub settlement_date: ::std::option::Option<::std::string::String>,
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub tax: ::std::option::Option<OrderExecutionTax>,
 }
@@ -5130,54 +4268,23 @@ pub struct OrderModifyRequest {
     pub quantity: ::std::option::Option<OrderModifyRequestQuantity>,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderModifyRequestOrderType {
     #[serde(rename = "LIMIT")]
     Limit,
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for OrderModifyRequestOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Limit => f.write_str("LIMIT"),
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderModifyRequestOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIMIT" => Ok(Self::Limit),
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderModifyRequestOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderModifyRequestOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -5341,54 +4448,23 @@ impl<'de> ::serde::Deserialize<'de> for OrderOrderAmount {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderOrderType {
     #[serde(rename = "LIMIT")]
     Limit,
     #[serde(rename = "MARKET")]
     Market,
-}
-impl ::std::fmt::Display for OrderOrderType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Limit => f.write_str("LIMIT"),
-            Self::Market => f.write_str("MARKET"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderOrderType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIMIT" => Ok(Self::Limit),
-            "MARKET" => Ok(Self::Market),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderOrderType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderOrderType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -5499,67 +4575,36 @@ pub struct OrderResponse {
     pub order_id: ::std::string::String,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderSide {
     #[serde(rename = "BUY")]
     Buy,
     #[serde(rename = "SELL")]
     Sell,
-}
-impl ::std::fmt::Display for OrderSide {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Buy => f.write_str("BUY"),
-            Self::Sell => f.write_str("SELL"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderSide {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BUY" => Ok(Self::Buy),
-            "SELL" => Ok(Self::Sell),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderSide {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderSide {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderStatus {
     #[serde(rename = "PENDING")]
     Pending,
@@ -5581,67 +4626,20 @@ pub enum OrderStatus {
     ReplaceRejected,
     #[serde(rename = "REPLACED")]
     Replaced,
-}
-impl ::std::fmt::Display for OrderStatus {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Pending => f.write_str("PENDING"),
-            Self::PendingCancel => f.write_str("PENDING_CANCEL"),
-            Self::PendingReplace => f.write_str("PENDING_REPLACE"),
-            Self::PartialFilled => f.write_str("PARTIAL_FILLED"),
-            Self::Filled => f.write_str("FILLED"),
-            Self::Canceled => f.write_str("CANCELED"),
-            Self::Rejected => f.write_str("REJECTED"),
-            Self::CancelRejected => f.write_str("CANCEL_REJECTED"),
-            Self::ReplaceRejected => f.write_str("REPLACE_REJECTED"),
-            Self::Replaced => f.write_str("REPLACED"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderStatus {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "PENDING" => Ok(Self::Pending),
-            "PENDING_CANCEL" => Ok(Self::PendingCancel),
-            "PENDING_REPLACE" => Ok(Self::PendingReplace),
-            "PARTIAL_FILLED" => Ok(Self::PartialFilled),
-            "FILLED" => Ok(Self::Filled),
-            "CANCELED" => Ok(Self::Canceled),
-            "REJECTED" => Ok(Self::Rejected),
-            "CANCEL_REJECTED" => Ok(Self::CancelRejected),
-            "REPLACE_REJECTED" => Ok(Self::ReplaceRejected),
-            "REPLACED" => Ok(Self::Replaced),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderStatus {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderStatus {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum OrderTimeInForce {
     #[serde(rename = "DAY")]
     Day,
@@ -5649,40 +4647,7 @@ pub enum OrderTimeInForce {
     Cls,
     #[serde(rename = "OPG")]
     Opg,
-}
-impl ::std::fmt::Display for OrderTimeInForce {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Day => f.write_str("DAY"),
-            Self::Cls => f.write_str("CLS"),
-            Self::Opg => f.write_str("OPG"),
-        }
-    }
-}
-impl ::std::str::FromStr for OrderTimeInForce {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "DAY" => Ok(Self::Day),
-            "CLS" => Ok(Self::Cls),
-            "OPG" => Ok(Self::Opg),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for OrderTimeInForce {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for OrderTimeInForce {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct OrderbookEntry {
@@ -7020,17 +5985,17 @@ impl<'de> ::serde::Deserialize<'de> for SectorChangeRateChangeRate {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum SectorChangeRateDuration {
     #[serde(rename = "1d")]
     X1d,
@@ -7044,46 +6009,7 @@ pub enum SectorChangeRateDuration {
     X6mo,
     #[serde(rename = "1y")]
     X1y,
-}
-impl ::std::fmt::Display for SectorChangeRateDuration {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::X1d => f.write_str("1d"),
-            Self::X1w => f.write_str("1w"),
-            Self::X1mo => f.write_str("1mo"),
-            Self::X3mo => f.write_str("3mo"),
-            Self::X6mo => f.write_str("6mo"),
-            Self::X1y => f.write_str("1y"),
-        }
-    }
-}
-impl ::std::str::FromStr for SectorChangeRateDuration {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "1d" => Ok(Self::X1d),
-            "1w" => Ok(Self::X1w),
-            "1mo" => Ok(Self::X1mo),
-            "3mo" => Ok(Self::X3mo),
-            "6mo" => Ok(Self::X6mo),
-            "1y" => Ok(Self::X1y),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for SectorChangeRateDuration {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for SectorChangeRateDuration {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct SectorDetailResponse {
@@ -8047,17 +6973,17 @@ impl<'de> ::serde::Deserialize<'de> for StockInfoLeverageFactor {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum StockInfoMarket {
     #[serde(rename = "KOSPI")]
     Kospi,
@@ -8073,61 +6999,20 @@ pub enum StockInfoMarket {
     KrEtc,
     #[serde(rename = "US_ETC")]
     UsEtc,
-}
-impl ::std::fmt::Display for StockInfoMarket {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Kospi => f.write_str("KOSPI"),
-            Self::Kosdaq => f.write_str("KOSDAQ"),
-            Self::Nyse => f.write_str("NYSE"),
-            Self::Nasdaq => f.write_str("NASDAQ"),
-            Self::Amex => f.write_str("AMEX"),
-            Self::KrEtc => f.write_str("KR_ETC"),
-            Self::UsEtc => f.write_str("US_ETC"),
-        }
-    }
-}
-impl ::std::str::FromStr for StockInfoMarket {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "KOSPI" => Ok(Self::Kospi),
-            "KOSDAQ" => Ok(Self::Kosdaq),
-            "NYSE" => Ok(Self::Nyse),
-            "NASDAQ" => Ok(Self::Nasdaq),
-            "AMEX" => Ok(Self::Amex),
-            "KR_ETC" => Ok(Self::KrEtc),
-            "US_ETC" => Ok(Self::UsEtc),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for StockInfoMarket {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for StockInfoMarket {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum StockInfoSecurityType {
     #[serde(rename = "STOCK")]
     Stock,
@@ -8147,52 +7032,7 @@ pub enum StockInfoSecurityType {
     Etn,
     #[serde(rename = "STOCK_WARRANTS")]
     StockWarrants,
-}
-impl ::std::fmt::Display for StockInfoSecurityType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Stock => f.write_str("STOCK"),
-            Self::ForeignStock => f.write_str("FOREIGN_STOCK"),
-            Self::DepositaryReceipt => f.write_str("DEPOSITARY_RECEIPT"),
-            Self::InfrastructureFund => f.write_str("INFRASTRUCTURE_FUND"),
-            Self::Reit => f.write_str("REIT"),
-            Self::Etf => f.write_str("ETF"),
-            Self::ForeignEtf => f.write_str("FOREIGN_ETF"),
-            Self::Etn => f.write_str("ETN"),
-            Self::StockWarrants => f.write_str("STOCK_WARRANTS"),
-        }
-    }
-}
-impl ::std::str::FromStr for StockInfoSecurityType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "STOCK" => Ok(Self::Stock),
-            "FOREIGN_STOCK" => Ok(Self::ForeignStock),
-            "DEPOSITARY_RECEIPT" => Ok(Self::DepositaryReceipt),
-            "INFRASTRUCTURE_FUND" => Ok(Self::InfrastructureFund),
-            "REIT" => Ok(Self::Reit),
-            "ETF" => Ok(Self::Etf),
-            "FOREIGN_ETF" => Ok(Self::ForeignEtf),
-            "ETN" => Ok(Self::Etn),
-            "STOCK_WARRANTS" => Ok(Self::StockWarrants),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for StockInfoSecurityType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for StockInfoSecurityType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
@@ -8244,17 +7084,17 @@ impl<'de> ::serde::Deserialize<'de> for StockInfoSharesOutstanding {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum StockInfoStatus {
     #[serde(rename = "SCHEDULED")]
     Scheduled,
@@ -8262,40 +7102,7 @@ pub enum StockInfoStatus {
     Active,
     #[serde(rename = "DELISTED")]
     Delisted,
-}
-impl ::std::fmt::Display for StockInfoStatus {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Scheduled => f.write_str("SCHEDULED"),
-            Self::Active => f.write_str("ACTIVE"),
-            Self::Delisted => f.write_str("DELISTED"),
-        }
-    }
-}
-impl ::std::str::FromStr for StockInfoStatus {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "SCHEDULED" => Ok(Self::Scheduled),
-            "ACTIVE" => Ok(Self::Active),
-            "DELISTED" => Ok(Self::Delisted),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for StockInfoStatus {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for StockInfoStatus {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct StockInstitutionTradingBreakdown {
@@ -8518,17 +7325,17 @@ pub struct StockWarning {
     pub warning_type: StockWarningWarningType,
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum StockWarningWarningType {
     #[serde(rename = "LIQUIDATION_TRADING")]
     LiquidationTrading,
@@ -8546,50 +7353,7 @@ pub enum StockWarningWarningType {
     ViDynamic,
     #[serde(rename = "STOCK_WARRANTS")]
     StockWarrants,
-}
-impl ::std::fmt::Display for StockWarningWarningType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::LiquidationTrading => f.write_str("LIQUIDATION_TRADING"),
-            Self::Overheated => f.write_str("OVERHEATED"),
-            Self::InvestmentWarning => f.write_str("INVESTMENT_WARNING"),
-            Self::InvestmentRisk => f.write_str("INVESTMENT_RISK"),
-            Self::ViStaticAndDynamic => f.write_str("VI_STATIC_AND_DYNAMIC"),
-            Self::ViStatic => f.write_str("VI_STATIC"),
-            Self::ViDynamic => f.write_str("VI_DYNAMIC"),
-            Self::StockWarrants => f.write_str("STOCK_WARRANTS"),
-        }
-    }
-}
-impl ::std::str::FromStr for StockWarningWarningType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "LIQUIDATION_TRADING" => Ok(Self::LiquidationTrading),
-            "OVERHEATED" => Ok(Self::Overheated),
-            "INVESTMENT_WARNING" => Ok(Self::InvestmentWarning),
-            "INVESTMENT_RISK" => Ok(Self::InvestmentRisk),
-            "VI_STATIC_AND_DYNAMIC" => Ok(Self::ViStaticAndDynamic),
-            "VI_STATIC" => Ok(Self::ViStatic),
-            "VI_DYNAMIC" => Ok(Self::ViDynamic),
-            "STOCK_WARRANTS" => Ok(Self::StockWarrants),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for StockWarningWarningType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for StockWarningWarningType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Trade {
@@ -8739,8 +7503,11 @@ pub struct Transaction {
     #[serde(deserialize_with = "::std::option::Option::deserialize")]
     pub symbol: ::std::option::Option<::std::string::String>,
     pub tax: TransactionTax,
-    #[serde(rename = "transactionTime")]
-    pub time: ::std::string::String,
+    #[serde(
+        rename = "transactionTime",
+        deserialize_with = "::std::option::Option::deserialize"
+    )]
+    pub time: ::std::option::Option<::std::string::String>,
     #[serde(rename = "transactionType")]
     pub kind: TransactionType,
 }
@@ -9088,17 +7855,17 @@ impl<'de> ::serde::Deserialize<'de> for TransactionTax {
     }
 }
 #[derive(
-    :: serde :: Deserialize,
-    :: serde :: Serialize,
     Clone,
-    Copy,
     Debug,
     Eq,
     Hash,
     Ord,
     PartialEq,
     PartialOrd,
+    :: serde :: Deserialize,
+    :: serde :: Serialize,
 )]
+#[serde(from = "String", into = "String")]
 pub enum TransactionType {
     #[serde(rename = "BUY")]
     Buy,
@@ -9122,56 +7889,7 @@ pub enum TransactionType {
     Interest,
     #[serde(rename = "FEE")]
     Fee,
-}
-impl ::std::fmt::Display for TransactionType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Self::Buy => f.write_str("BUY"),
-            Self::Sell => f.write_str("SELL"),
-            Self::SecuritiesTransferIn => f.write_str("SECURITIES_TRANSFER_IN"),
-            Self::SecuritiesTransferOut => f.write_str("SECURITIES_TRANSFER_OUT"),
-            Self::Deposit => f.write_str("DEPOSIT"),
-            Self::Withdrawal => f.write_str("WITHDRAWAL"),
-            Self::ExchangeIn => f.write_str("EXCHANGE_IN"),
-            Self::ExchangeOut => f.write_str("EXCHANGE_OUT"),
-            Self::Dividend => f.write_str("DIVIDEND"),
-            Self::Interest => f.write_str("INTEREST"),
-            Self::Fee => f.write_str("FEE"),
-        }
-    }
-}
-impl ::std::str::FromStr for TransactionType {
-    type Err = error::ConversionError;
-    fn from_str(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        match value {
-            "BUY" => Ok(Self::Buy),
-            "SELL" => Ok(Self::Sell),
-            "SECURITIES_TRANSFER_IN" => Ok(Self::SecuritiesTransferIn),
-            "SECURITIES_TRANSFER_OUT" => Ok(Self::SecuritiesTransferOut),
-            "DEPOSIT" => Ok(Self::Deposit),
-            "WITHDRAWAL" => Ok(Self::Withdrawal),
-            "EXCHANGE_IN" => Ok(Self::ExchangeIn),
-            "EXCHANGE_OUT" => Ok(Self::ExchangeOut),
-            "DIVIDEND" => Ok(Self::Dividend),
-            "INTEREST" => Ok(Self::Interest),
-            "FEE" => Ok(Self::Fee),
-            _ => Err("invalid value".into()),
-        }
-    }
-}
-impl ::std::convert::TryFrom<&str> for TransactionType {
-    type Error = error::ConversionError;
-    fn try_from(value: &str) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
-}
-impl ::std::convert::TryFrom<::std::string::String> for TransactionType {
-    type Error = error::ConversionError;
-    fn try_from(
-        value: ::std::string::String,
-    ) -> ::std::result::Result<Self, error::ConversionError> {
-        value.parse()
-    }
+    Unknown(::std::string::String),
 }
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct UsAfterMarketSession {
@@ -9233,14 +7951,12 @@ pub struct UsRegularMarketSession {
     #[serde(rename = "startTime")]
     pub start_time: ::std::string::String,
 }
-#[doc = " Generation of default values for serde."]
 pub mod defaults {
     pub(super) fn order_create_request_quantity_based_time_in_force()
     -> super::OrderCreateQuantityBasedTimeInForce {
         super::OrderCreateQuantityBasedTimeInForce::Day
     }
 }
-#[doc = " Error types."]
 pub mod error {
     pub struct ConversionError(::std::borrow::Cow<'static, str>);
     impl ::std::error::Error for ConversionError {}
@@ -9263,5 +7979,1427 @@ pub mod error {
         fn from(value: String) -> Self {
             Self(value.into())
         }
+    }
+}
+impl From<String> for AccountAccountType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BROKERAGE" => Self::Brokerage,
+            "OVERSEAS_DERIVATIVES" => Self::OverseasDerivatives,
+            "PENSION_SAVINGS" => Self::PensionSavings,
+            "RESHORING_INVESTMENT" => Self::ReshoringInvestment,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<AccountAccountType> for String {
+    fn from(value: AccountAccountType) -> Self {
+        match value {
+            AccountAccountType::Brokerage => Self::from("BROKERAGE"),
+            AccountAccountType::OverseasDerivatives => Self::from("OVERSEAS_DERIVATIVES"),
+            AccountAccountType::PensionSavings => Self::from("PENSION_SAVINGS"),
+            AccountAccountType::ReshoringInvestment => Self::from("RESHORING_INVESTMENT"),
+            AccountAccountType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for AccountAccountType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Brokerage => f.write_str("BROKERAGE"),
+            Self::OverseasDerivatives => f.write_str("OVERSEAS_DERIVATIVES"),
+            Self::PensionSavings => f.write_str("PENSION_SAVINGS"),
+            Self::ReshoringInvestment => f.write_str("RESHORING_INVESTMENT"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for AccountAccountType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for AssetClass {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "STOCK" => Self::Stock,
+            "BOND" => Self::Bond,
+            "OPTION" => Self::Option,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<AssetClass> for String {
+    fn from(value: AssetClass) -> Self {
+        match value {
+            AssetClass::Stock => Self::from("STOCK"),
+            AssetClass::Bond => Self::from("BOND"),
+            AssetClass::Option => Self::from("OPTION"),
+            AssetClass::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for AssetClass {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Stock => f.write_str("STOCK"),
+            Self::Bond => f.write_str("BOND"),
+            Self::Option => f.write_str("OPTION"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for AssetClass {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionRequestOrderSide {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionRequestOrderSide> for String {
+    fn from(value: ConditionRequestOrderSide) -> Self {
+        match value {
+            ConditionRequestOrderSide::Buy => Self::from("BUY"),
+            ConditionRequestOrderSide::Sell => Self::from("SELL"),
+            ConditionRequestOrderSide::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionRequestOrderSide {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Buy => f.write_str("BUY"),
+            Self::Sell => f.write_str("SELL"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionRequestOrderSide {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderConditionOrderSide {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderConditionOrderSide> for String {
+    fn from(value: ConditionalOrderConditionOrderSide) -> Self {
+        match value {
+            ConditionalOrderConditionOrderSide::Buy => Self::from("BUY"),
+            ConditionalOrderConditionOrderSide::Sell => Self::from("SELL"),
+            ConditionalOrderConditionOrderSide::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderConditionOrderSide {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Buy => f.write_str("BUY"),
+            Self::Sell => f.write_str("SELL"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderConditionOrderSide {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderConditionStatus {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "WATCHING" => Self::Watching,
+            "HOLDING" => Self::Holding,
+            "PAUSED" => Self::Paused,
+            "ORDERING" => Self::Ordering,
+            "ORDERED" => Self::Ordered,
+            "COMPLETED" => Self::Completed,
+            "EXPIRED" => Self::Expired,
+            "CANCELED" => Self::Canceled,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderConditionStatus> for String {
+    fn from(value: ConditionalOrderConditionStatus) -> Self {
+        match value {
+            ConditionalOrderConditionStatus::Watching => Self::from("WATCHING"),
+            ConditionalOrderConditionStatus::Holding => Self::from("HOLDING"),
+            ConditionalOrderConditionStatus::Paused => Self::from("PAUSED"),
+            ConditionalOrderConditionStatus::Ordering => Self::from("ORDERING"),
+            ConditionalOrderConditionStatus::Ordered => Self::from("ORDERED"),
+            ConditionalOrderConditionStatus::Completed => Self::from("COMPLETED"),
+            ConditionalOrderConditionStatus::Expired => Self::from("EXPIRED"),
+            ConditionalOrderConditionStatus::Canceled => Self::from("CANCELED"),
+            ConditionalOrderConditionStatus::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderConditionStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Watching => f.write_str("WATCHING"),
+            Self::Holding => f.write_str("HOLDING"),
+            Self::Paused => f.write_str("PAUSED"),
+            Self::Ordering => f.write_str("ORDERING"),
+            Self::Ordered => f.write_str("ORDERED"),
+            Self::Completed => f.write_str("COMPLETED"),
+            Self::Expired => f.write_str("EXPIRED"),
+            Self::Canceled => f.write_str("CANCELED"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderConditionStatus {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderConditionType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "STOP" => Self::Stop,
+            "PROFIT_RATE" => Self::ProfitRate,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderConditionType> for String {
+    fn from(value: ConditionalOrderConditionType) -> Self {
+        match value {
+            ConditionalOrderConditionType::Stop => Self::from("STOP"),
+            ConditionalOrderConditionType::ProfitRate => Self::from("PROFIT_RATE"),
+            ConditionalOrderConditionType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderConditionType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Stop => f.write_str("STOP"),
+            Self::ProfitRate => f.write_str("PROFIT_RATE"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderConditionType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderCreateRequestOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIMIT" => Self::Limit,
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderCreateRequestOrderType> for String {
+    fn from(value: ConditionalOrderCreateRequestOrderType) -> Self {
+        match value {
+            ConditionalOrderCreateRequestOrderType::Limit => Self::from("LIMIT"),
+            ConditionalOrderCreateRequestOrderType::Market => Self::from("MARKET"),
+            ConditionalOrderCreateRequestOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderCreateRequestOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Limit => f.write_str("LIMIT"),
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderCreateRequestOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderCreateRequestType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "SINGLE" => Self::Single,
+            "OCO" => Self::Oco,
+            "OTO" => Self::Oto,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderCreateRequestType> for String {
+    fn from(value: ConditionalOrderCreateRequestType) -> Self {
+        match value {
+            ConditionalOrderCreateRequestType::Single => Self::from("SINGLE"),
+            ConditionalOrderCreateRequestType::Oco => Self::from("OCO"),
+            ConditionalOrderCreateRequestType::Oto => Self::from("OTO"),
+            ConditionalOrderCreateRequestType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderCreateRequestType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Single => f.write_str("SINGLE"),
+            Self::Oco => f.write_str("OCO"),
+            Self::Oto => f.write_str("OTO"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderCreateRequestType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderDetailResponseMarket {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "KR" => Self::Kr,
+            "US" => Self::Us,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderDetailResponseMarket> for String {
+    fn from(value: ConditionalOrderDetailResponseMarket) -> Self {
+        match value {
+            ConditionalOrderDetailResponseMarket::Kr => Self::from("KR"),
+            ConditionalOrderDetailResponseMarket::Us => Self::from("US"),
+            ConditionalOrderDetailResponseMarket::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderDetailResponseMarket {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Kr => f.write_str("KR"),
+            Self::Us => f.write_str("US"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderDetailResponseMarket {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderDetailResponseOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIMIT" => Self::Limit,
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderDetailResponseOrderType> for String {
+    fn from(value: ConditionalOrderDetailResponseOrderType) -> Self {
+        match value {
+            ConditionalOrderDetailResponseOrderType::Limit => Self::from("LIMIT"),
+            ConditionalOrderDetailResponseOrderType::Market => Self::from("MARKET"),
+            ConditionalOrderDetailResponseOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderDetailResponseOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Limit => f.write_str("LIMIT"),
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderDetailResponseOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderDetailResponseStatus {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "WATCHING" => Self::Watching,
+            "PAUSED" => Self::Paused,
+            "ORDERING" => Self::Ordering,
+            "ORDERED" => Self::Ordered,
+            "COMPLETED" => Self::Completed,
+            "EXPIRED" => Self::Expired,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderDetailResponseStatus> for String {
+    fn from(value: ConditionalOrderDetailResponseStatus) -> Self {
+        match value {
+            ConditionalOrderDetailResponseStatus::Watching => Self::from("WATCHING"),
+            ConditionalOrderDetailResponseStatus::Paused => Self::from("PAUSED"),
+            ConditionalOrderDetailResponseStatus::Ordering => Self::from("ORDERING"),
+            ConditionalOrderDetailResponseStatus::Ordered => Self::from("ORDERED"),
+            ConditionalOrderDetailResponseStatus::Completed => Self::from("COMPLETED"),
+            ConditionalOrderDetailResponseStatus::Expired => Self::from("EXPIRED"),
+            ConditionalOrderDetailResponseStatus::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderDetailResponseStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Watching => f.write_str("WATCHING"),
+            Self::Paused => f.write_str("PAUSED"),
+            Self::Ordering => f.write_str("ORDERING"),
+            Self::Ordered => f.write_str("ORDERED"),
+            Self::Completed => f.write_str("COMPLETED"),
+            Self::Expired => f.write_str("EXPIRED"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderDetailResponseStatus {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderDetailResponseType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "SINGLE" => Self::Single,
+            "OCO" => Self::Oco,
+            "OTO" => Self::Oto,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderDetailResponseType> for String {
+    fn from(value: ConditionalOrderDetailResponseType) -> Self {
+        match value {
+            ConditionalOrderDetailResponseType::Single => Self::from("SINGLE"),
+            ConditionalOrderDetailResponseType::Oco => Self::from("OCO"),
+            ConditionalOrderDetailResponseType::Oto => Self::from("OTO"),
+            ConditionalOrderDetailResponseType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderDetailResponseType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Single => f.write_str("SINGLE"),
+            Self::Oco => f.write_str("OCO"),
+            Self::Oto => f.write_str("OTO"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderDetailResponseType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderModifyRequestOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIMIT" => Self::Limit,
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderModifyRequestOrderType> for String {
+    fn from(value: ConditionalOrderModifyRequestOrderType) -> Self {
+        match value {
+            ConditionalOrderModifyRequestOrderType::Limit => Self::from("LIMIT"),
+            ConditionalOrderModifyRequestOrderType::Market => Self::from("MARKET"),
+            ConditionalOrderModifyRequestOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderModifyRequestOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Limit => f.write_str("LIMIT"),
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderModifyRequestOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ConditionalOrderModifyRequestType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "SINGLE" => Self::Single,
+            "OCO" => Self::Oco,
+            "OTO" => Self::Oto,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ConditionalOrderModifyRequestType> for String {
+    fn from(value: ConditionalOrderModifyRequestType) -> Self {
+        match value {
+            ConditionalOrderModifyRequestType::Single => Self::from("SINGLE"),
+            ConditionalOrderModifyRequestType::Oco => Self::from("OCO"),
+            ConditionalOrderModifyRequestType::Oto => Self::from("OTO"),
+            ConditionalOrderModifyRequestType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ConditionalOrderModifyRequestType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Single => f.write_str("SINGLE"),
+            Self::Oco => f.write_str("OCO"),
+            Self::Oto => f.write_str("OTO"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ConditionalOrderModifyRequestType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for Currency {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "KRW" => Self::Krw,
+            "USD" => Self::Usd,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<Currency> for String {
+    fn from(value: Currency) -> Self {
+        match value {
+            Currency::Krw => Self::from("KRW"),
+            Currency::Usd => Self::from("USD"),
+            Currency::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for Currency {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Krw => f.write_str("KRW"),
+            Self::Usd => f.write_str("USD"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for Currency {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ExchangeRateResponseRateChangeType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "UP" => Self::Up,
+            "EQUAL" => Self::Equal,
+            "DOWN" => Self::Down,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ExchangeRateResponseRateChangeType> for String {
+    fn from(value: ExchangeRateResponseRateChangeType) -> Self {
+        match value {
+            ExchangeRateResponseRateChangeType::Up => Self::from("UP"),
+            ExchangeRateResponseRateChangeType::Equal => Self::from("EQUAL"),
+            ExchangeRateResponseRateChangeType::Down => Self::from("DOWN"),
+            ExchangeRateResponseRateChangeType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ExchangeRateResponseRateChangeType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Up => f.write_str("UP"),
+            Self::Equal => f.write_str("EQUAL"),
+            Self::Down => f.write_str("DOWN"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ExchangeRateResponseRateChangeType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for ListedStockSecurityType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "STOCK" => Self::Stock,
+            "FOREIGN_STOCK" => Self::ForeignStock,
+            "DEPOSITARY_RECEIPT" => Self::DepositaryReceipt,
+            "INFRASTRUCTURE_FUND" => Self::InfrastructureFund,
+            "REIT" => Self::Reit,
+            "ETF" => Self::Etf,
+            "FOREIGN_ETF" => Self::ForeignEtf,
+            "ETN" => Self::Etn,
+            "STOCK_WARRANTS" => Self::StockWarrants,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<ListedStockSecurityType> for String {
+    fn from(value: ListedStockSecurityType) -> Self {
+        match value {
+            ListedStockSecurityType::Stock => Self::from("STOCK"),
+            ListedStockSecurityType::ForeignStock => Self::from("FOREIGN_STOCK"),
+            ListedStockSecurityType::DepositaryReceipt => Self::from("DEPOSITARY_RECEIPT"),
+            ListedStockSecurityType::InfrastructureFund => Self::from("INFRASTRUCTURE_FUND"),
+            ListedStockSecurityType::Reit => Self::from("REIT"),
+            ListedStockSecurityType::Etf => Self::from("ETF"),
+            ListedStockSecurityType::ForeignEtf => Self::from("FOREIGN_ETF"),
+            ListedStockSecurityType::Etn => Self::from("ETN"),
+            ListedStockSecurityType::StockWarrants => Self::from("STOCK_WARRANTS"),
+            ListedStockSecurityType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for ListedStockSecurityType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Stock => f.write_str("STOCK"),
+            Self::ForeignStock => f.write_str("FOREIGN_STOCK"),
+            Self::DepositaryReceipt => f.write_str("DEPOSITARY_RECEIPT"),
+            Self::InfrastructureFund => f.write_str("INFRASTRUCTURE_FUND"),
+            Self::Reit => f.write_str("REIT"),
+            Self::Etf => f.write_str("ETF"),
+            Self::ForeignEtf => f.write_str("FOREIGN_ETF"),
+            Self::Etn => f.write_str("ETN"),
+            Self::StockWarrants => f.write_str("STOCK_WARRANTS"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for ListedStockSecurityType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for MarketCountry {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "KR" => Self::Kr,
+            "US" => Self::Us,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<MarketCountry> for String {
+    fn from(value: MarketCountry) -> Self {
+        match value {
+            MarketCountry::Kr => Self::from("KR"),
+            MarketCountry::Us => Self::from("US"),
+            MarketCountry::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for MarketCountry {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Kr => f.write_str("KR"),
+            Self::Us => f.write_str("US"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for MarketCountry {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OAuth2ErrorResponseError {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "invalid_request" => Self::InvalidRequest,
+            "invalid_client" => Self::InvalidClient,
+            "invalid_grant" => Self::InvalidGrant,
+            "unauthorized_client" => Self::UnauthorizedClient,
+            "unsupported_grant_type" => Self::UnsupportedGrantType,
+            "access_denied" => Self::AccessDenied,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OAuth2ErrorResponseError> for String {
+    fn from(value: OAuth2ErrorResponseError) -> Self {
+        match value {
+            OAuth2ErrorResponseError::InvalidRequest => Self::from("invalid_request"),
+            OAuth2ErrorResponseError::InvalidClient => Self::from("invalid_client"),
+            OAuth2ErrorResponseError::InvalidGrant => Self::from("invalid_grant"),
+            OAuth2ErrorResponseError::UnauthorizedClient => Self::from("unauthorized_client"),
+            OAuth2ErrorResponseError::UnsupportedGrantType => Self::from("unsupported_grant_type"),
+            OAuth2ErrorResponseError::AccessDenied => Self::from("access_denied"),
+            OAuth2ErrorResponseError::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OAuth2ErrorResponseError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::InvalidRequest => f.write_str("invalid_request"),
+            Self::InvalidClient => f.write_str("invalid_client"),
+            Self::InvalidGrant => f.write_str("invalid_grant"),
+            Self::UnauthorizedClient => f.write_str("unauthorized_client"),
+            Self::UnsupportedGrantType => f.write_str("unsupported_grant_type"),
+            Self::AccessDenied => f.write_str("access_denied"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OAuth2ErrorResponseError {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OAuth2TokenRequestGrantType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "client_credentials" => Self::ClientCredentials,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OAuth2TokenRequestGrantType> for String {
+    fn from(value: OAuth2TokenRequestGrantType) -> Self {
+        match value {
+            OAuth2TokenRequestGrantType::ClientCredentials => Self::from("client_credentials"),
+            OAuth2TokenRequestGrantType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OAuth2TokenRequestGrantType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::ClientCredentials => f.write_str("client_credentials"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OAuth2TokenRequestGrantType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OAuth2TokenResponseTokenType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "Bearer" => Self::Bearer,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OAuth2TokenResponseTokenType> for String {
+    fn from(value: OAuth2TokenResponseTokenType) -> Self {
+        match value {
+            OAuth2TokenResponseTokenType::Bearer => Self::from("Bearer"),
+            OAuth2TokenResponseTokenType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OAuth2TokenResponseTokenType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Bearer => f.write_str("Bearer"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OAuth2TokenResponseTokenType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderCreateAmountBasedOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderCreateAmountBasedOrderType> for String {
+    fn from(value: OrderCreateAmountBasedOrderType) -> Self {
+        match value {
+            OrderCreateAmountBasedOrderType::Market => Self::from("MARKET"),
+            OrderCreateAmountBasedOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderCreateAmountBasedOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderCreateAmountBasedOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderCreateAmountBasedSide {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderCreateAmountBasedSide> for String {
+    fn from(value: OrderCreateAmountBasedSide) -> Self {
+        match value {
+            OrderCreateAmountBasedSide::Buy => Self::from("BUY"),
+            OrderCreateAmountBasedSide::Sell => Self::from("SELL"),
+            OrderCreateAmountBasedSide::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderCreateAmountBasedSide {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Buy => f.write_str("BUY"),
+            Self::Sell => f.write_str("SELL"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderCreateAmountBasedSide {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderCreateQuantityBasedOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIMIT" => Self::Limit,
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderCreateQuantityBasedOrderType> for String {
+    fn from(value: OrderCreateQuantityBasedOrderType) -> Self {
+        match value {
+            OrderCreateQuantityBasedOrderType::Limit => Self::from("LIMIT"),
+            OrderCreateQuantityBasedOrderType::Market => Self::from("MARKET"),
+            OrderCreateQuantityBasedOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderCreateQuantityBasedOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Limit => f.write_str("LIMIT"),
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderCreateQuantityBasedOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderCreateQuantityBasedSide {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderCreateQuantityBasedSide> for String {
+    fn from(value: OrderCreateQuantityBasedSide) -> Self {
+        match value {
+            OrderCreateQuantityBasedSide::Buy => Self::from("BUY"),
+            OrderCreateQuantityBasedSide::Sell => Self::from("SELL"),
+            OrderCreateQuantityBasedSide::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderCreateQuantityBasedSide {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Buy => f.write_str("BUY"),
+            Self::Sell => f.write_str("SELL"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderCreateQuantityBasedSide {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderCreateQuantityBasedTimeInForce {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "DAY" => Self::Day,
+            "CLS" => Self::Cls,
+            "OPG" => Self::Opg,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderCreateQuantityBasedTimeInForce> for String {
+    fn from(value: OrderCreateQuantityBasedTimeInForce) -> Self {
+        match value {
+            OrderCreateQuantityBasedTimeInForce::Day => Self::from("DAY"),
+            OrderCreateQuantityBasedTimeInForce::Cls => Self::from("CLS"),
+            OrderCreateQuantityBasedTimeInForce::Opg => Self::from("OPG"),
+            OrderCreateQuantityBasedTimeInForce::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderCreateQuantityBasedTimeInForce {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Day => f.write_str("DAY"),
+            Self::Cls => f.write_str("CLS"),
+            Self::Opg => f.write_str("OPG"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderCreateQuantityBasedTimeInForce {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderModifyRequestOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIMIT" => Self::Limit,
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderModifyRequestOrderType> for String {
+    fn from(value: OrderModifyRequestOrderType) -> Self {
+        match value {
+            OrderModifyRequestOrderType::Limit => Self::from("LIMIT"),
+            OrderModifyRequestOrderType::Market => Self::from("MARKET"),
+            OrderModifyRequestOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderModifyRequestOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Limit => f.write_str("LIMIT"),
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderModifyRequestOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderOrderType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIMIT" => Self::Limit,
+            "MARKET" => Self::Market,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderOrderType> for String {
+    fn from(value: OrderOrderType) -> Self {
+        match value {
+            OrderOrderType::Limit => Self::from("LIMIT"),
+            OrderOrderType::Market => Self::from("MARKET"),
+            OrderOrderType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderOrderType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Limit => f.write_str("LIMIT"),
+            Self::Market => f.write_str("MARKET"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderOrderType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderSide {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderSide> for String {
+    fn from(value: OrderSide) -> Self {
+        match value {
+            OrderSide::Buy => Self::from("BUY"),
+            OrderSide::Sell => Self::from("SELL"),
+            OrderSide::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderSide {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Buy => f.write_str("BUY"),
+            Self::Sell => f.write_str("SELL"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderSide {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderStatus {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "PENDING" => Self::Pending,
+            "PENDING_CANCEL" => Self::PendingCancel,
+            "PENDING_REPLACE" => Self::PendingReplace,
+            "PARTIAL_FILLED" => Self::PartialFilled,
+            "FILLED" => Self::Filled,
+            "CANCELED" => Self::Canceled,
+            "REJECTED" => Self::Rejected,
+            "CANCEL_REJECTED" => Self::CancelRejected,
+            "REPLACE_REJECTED" => Self::ReplaceRejected,
+            "REPLACED" => Self::Replaced,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderStatus> for String {
+    fn from(value: OrderStatus) -> Self {
+        match value {
+            OrderStatus::Pending => Self::from("PENDING"),
+            OrderStatus::PendingCancel => Self::from("PENDING_CANCEL"),
+            OrderStatus::PendingReplace => Self::from("PENDING_REPLACE"),
+            OrderStatus::PartialFilled => Self::from("PARTIAL_FILLED"),
+            OrderStatus::Filled => Self::from("FILLED"),
+            OrderStatus::Canceled => Self::from("CANCELED"),
+            OrderStatus::Rejected => Self::from("REJECTED"),
+            OrderStatus::CancelRejected => Self::from("CANCEL_REJECTED"),
+            OrderStatus::ReplaceRejected => Self::from("REPLACE_REJECTED"),
+            OrderStatus::Replaced => Self::from("REPLACED"),
+            OrderStatus::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Pending => f.write_str("PENDING"),
+            Self::PendingCancel => f.write_str("PENDING_CANCEL"),
+            Self::PendingReplace => f.write_str("PENDING_REPLACE"),
+            Self::PartialFilled => f.write_str("PARTIAL_FILLED"),
+            Self::Filled => f.write_str("FILLED"),
+            Self::Canceled => f.write_str("CANCELED"),
+            Self::Rejected => f.write_str("REJECTED"),
+            Self::CancelRejected => f.write_str("CANCEL_REJECTED"),
+            Self::ReplaceRejected => f.write_str("REPLACE_REJECTED"),
+            Self::Replaced => f.write_str("REPLACED"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderStatus {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for OrderTimeInForce {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "DAY" => Self::Day,
+            "CLS" => Self::Cls,
+            "OPG" => Self::Opg,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<OrderTimeInForce> for String {
+    fn from(value: OrderTimeInForce) -> Self {
+        match value {
+            OrderTimeInForce::Day => Self::from("DAY"),
+            OrderTimeInForce::Cls => Self::from("CLS"),
+            OrderTimeInForce::Opg => Self::from("OPG"),
+            OrderTimeInForce::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for OrderTimeInForce {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Day => f.write_str("DAY"),
+            Self::Cls => f.write_str("CLS"),
+            Self::Opg => f.write_str("OPG"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for OrderTimeInForce {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for SectorChangeRateDuration {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "1d" => Self::X1d,
+            "1w" => Self::X1w,
+            "1mo" => Self::X1mo,
+            "3mo" => Self::X3mo,
+            "6mo" => Self::X6mo,
+            "1y" => Self::X1y,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<SectorChangeRateDuration> for String {
+    fn from(value: SectorChangeRateDuration) -> Self {
+        match value {
+            SectorChangeRateDuration::X1d => Self::from("1d"),
+            SectorChangeRateDuration::X1w => Self::from("1w"),
+            SectorChangeRateDuration::X1mo => Self::from("1mo"),
+            SectorChangeRateDuration::X3mo => Self::from("3mo"),
+            SectorChangeRateDuration::X6mo => Self::from("6mo"),
+            SectorChangeRateDuration::X1y => Self::from("1y"),
+            SectorChangeRateDuration::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for SectorChangeRateDuration {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::X1d => f.write_str("1d"),
+            Self::X1w => f.write_str("1w"),
+            Self::X1mo => f.write_str("1mo"),
+            Self::X3mo => f.write_str("3mo"),
+            Self::X6mo => f.write_str("6mo"),
+            Self::X1y => f.write_str("1y"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for SectorChangeRateDuration {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for StockInfoMarket {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "KOSPI" => Self::Kospi,
+            "KOSDAQ" => Self::Kosdaq,
+            "NYSE" => Self::Nyse,
+            "NASDAQ" => Self::Nasdaq,
+            "AMEX" => Self::Amex,
+            "KR_ETC" => Self::KrEtc,
+            "US_ETC" => Self::UsEtc,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<StockInfoMarket> for String {
+    fn from(value: StockInfoMarket) -> Self {
+        match value {
+            StockInfoMarket::Kospi => Self::from("KOSPI"),
+            StockInfoMarket::Kosdaq => Self::from("KOSDAQ"),
+            StockInfoMarket::Nyse => Self::from("NYSE"),
+            StockInfoMarket::Nasdaq => Self::from("NASDAQ"),
+            StockInfoMarket::Amex => Self::from("AMEX"),
+            StockInfoMarket::KrEtc => Self::from("KR_ETC"),
+            StockInfoMarket::UsEtc => Self::from("US_ETC"),
+            StockInfoMarket::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for StockInfoMarket {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Kospi => f.write_str("KOSPI"),
+            Self::Kosdaq => f.write_str("KOSDAQ"),
+            Self::Nyse => f.write_str("NYSE"),
+            Self::Nasdaq => f.write_str("NASDAQ"),
+            Self::Amex => f.write_str("AMEX"),
+            Self::KrEtc => f.write_str("KR_ETC"),
+            Self::UsEtc => f.write_str("US_ETC"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for StockInfoMarket {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for StockInfoSecurityType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "STOCK" => Self::Stock,
+            "FOREIGN_STOCK" => Self::ForeignStock,
+            "DEPOSITARY_RECEIPT" => Self::DepositaryReceipt,
+            "INFRASTRUCTURE_FUND" => Self::InfrastructureFund,
+            "REIT" => Self::Reit,
+            "ETF" => Self::Etf,
+            "FOREIGN_ETF" => Self::ForeignEtf,
+            "ETN" => Self::Etn,
+            "STOCK_WARRANTS" => Self::StockWarrants,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<StockInfoSecurityType> for String {
+    fn from(value: StockInfoSecurityType) -> Self {
+        match value {
+            StockInfoSecurityType::Stock => Self::from("STOCK"),
+            StockInfoSecurityType::ForeignStock => Self::from("FOREIGN_STOCK"),
+            StockInfoSecurityType::DepositaryReceipt => Self::from("DEPOSITARY_RECEIPT"),
+            StockInfoSecurityType::InfrastructureFund => Self::from("INFRASTRUCTURE_FUND"),
+            StockInfoSecurityType::Reit => Self::from("REIT"),
+            StockInfoSecurityType::Etf => Self::from("ETF"),
+            StockInfoSecurityType::ForeignEtf => Self::from("FOREIGN_ETF"),
+            StockInfoSecurityType::Etn => Self::from("ETN"),
+            StockInfoSecurityType::StockWarrants => Self::from("STOCK_WARRANTS"),
+            StockInfoSecurityType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for StockInfoSecurityType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Stock => f.write_str("STOCK"),
+            Self::ForeignStock => f.write_str("FOREIGN_STOCK"),
+            Self::DepositaryReceipt => f.write_str("DEPOSITARY_RECEIPT"),
+            Self::InfrastructureFund => f.write_str("INFRASTRUCTURE_FUND"),
+            Self::Reit => f.write_str("REIT"),
+            Self::Etf => f.write_str("ETF"),
+            Self::ForeignEtf => f.write_str("FOREIGN_ETF"),
+            Self::Etn => f.write_str("ETN"),
+            Self::StockWarrants => f.write_str("STOCK_WARRANTS"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for StockInfoSecurityType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for StockInfoStatus {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "SCHEDULED" => Self::Scheduled,
+            "ACTIVE" => Self::Active,
+            "DELISTED" => Self::Delisted,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<StockInfoStatus> for String {
+    fn from(value: StockInfoStatus) -> Self {
+        match value {
+            StockInfoStatus::Scheduled => Self::from("SCHEDULED"),
+            StockInfoStatus::Active => Self::from("ACTIVE"),
+            StockInfoStatus::Delisted => Self::from("DELISTED"),
+            StockInfoStatus::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for StockInfoStatus {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Scheduled => f.write_str("SCHEDULED"),
+            Self::Active => f.write_str("ACTIVE"),
+            Self::Delisted => f.write_str("DELISTED"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for StockInfoStatus {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for StockWarningWarningType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "LIQUIDATION_TRADING" => Self::LiquidationTrading,
+            "OVERHEATED" => Self::Overheated,
+            "INVESTMENT_WARNING" => Self::InvestmentWarning,
+            "INVESTMENT_RISK" => Self::InvestmentRisk,
+            "VI_STATIC_AND_DYNAMIC" => Self::ViStaticAndDynamic,
+            "VI_STATIC" => Self::ViStatic,
+            "VI_DYNAMIC" => Self::ViDynamic,
+            "STOCK_WARRANTS" => Self::StockWarrants,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<StockWarningWarningType> for String {
+    fn from(value: StockWarningWarningType) -> Self {
+        match value {
+            StockWarningWarningType::LiquidationTrading => Self::from("LIQUIDATION_TRADING"),
+            StockWarningWarningType::Overheated => Self::from("OVERHEATED"),
+            StockWarningWarningType::InvestmentWarning => Self::from("INVESTMENT_WARNING"),
+            StockWarningWarningType::InvestmentRisk => Self::from("INVESTMENT_RISK"),
+            StockWarningWarningType::ViStaticAndDynamic => Self::from("VI_STATIC_AND_DYNAMIC"),
+            StockWarningWarningType::ViStatic => Self::from("VI_STATIC"),
+            StockWarningWarningType::ViDynamic => Self::from("VI_DYNAMIC"),
+            StockWarningWarningType::StockWarrants => Self::from("STOCK_WARRANTS"),
+            StockWarningWarningType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for StockWarningWarningType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::LiquidationTrading => f.write_str("LIQUIDATION_TRADING"),
+            Self::Overheated => f.write_str("OVERHEATED"),
+            Self::InvestmentWarning => f.write_str("INVESTMENT_WARNING"),
+            Self::InvestmentRisk => f.write_str("INVESTMENT_RISK"),
+            Self::ViStaticAndDynamic => f.write_str("VI_STATIC_AND_DYNAMIC"),
+            Self::ViStatic => f.write_str("VI_STATIC"),
+            Self::ViDynamic => f.write_str("VI_DYNAMIC"),
+            Self::StockWarrants => f.write_str("STOCK_WARRANTS"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for StockWarningWarningType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
+    }
+}
+impl From<String> for TransactionType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            "SECURITIES_TRANSFER_IN" => Self::SecuritiesTransferIn,
+            "SECURITIES_TRANSFER_OUT" => Self::SecuritiesTransferOut,
+            "DEPOSIT" => Self::Deposit,
+            "WITHDRAWAL" => Self::Withdrawal,
+            "EXCHANGE_IN" => Self::ExchangeIn,
+            "EXCHANGE_OUT" => Self::ExchangeOut,
+            "DIVIDEND" => Self::Dividend,
+            "INTEREST" => Self::Interest,
+            "FEE" => Self::Fee,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+impl From<TransactionType> for String {
+    fn from(value: TransactionType) -> Self {
+        match value {
+            TransactionType::Buy => Self::from("BUY"),
+            TransactionType::Sell => Self::from("SELL"),
+            TransactionType::SecuritiesTransferIn => Self::from("SECURITIES_TRANSFER_IN"),
+            TransactionType::SecuritiesTransferOut => Self::from("SECURITIES_TRANSFER_OUT"),
+            TransactionType::Deposit => Self::from("DEPOSIT"),
+            TransactionType::Withdrawal => Self::from("WITHDRAWAL"),
+            TransactionType::ExchangeIn => Self::from("EXCHANGE_IN"),
+            TransactionType::ExchangeOut => Self::from("EXCHANGE_OUT"),
+            TransactionType::Dividend => Self::from("DIVIDEND"),
+            TransactionType::Interest => Self::from("INTEREST"),
+            TransactionType::Fee => Self::from("FEE"),
+            TransactionType::Unknown(raw) => raw,
+        }
+    }
+}
+impl ::std::fmt::Display for TransactionType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match self {
+            Self::Buy => f.write_str("BUY"),
+            Self::Sell => f.write_str("SELL"),
+            Self::SecuritiesTransferIn => f.write_str("SECURITIES_TRANSFER_IN"),
+            Self::SecuritiesTransferOut => f.write_str("SECURITIES_TRANSFER_OUT"),
+            Self::Deposit => f.write_str("DEPOSIT"),
+            Self::Withdrawal => f.write_str("WITHDRAWAL"),
+            Self::ExchangeIn => f.write_str("EXCHANGE_IN"),
+            Self::ExchangeOut => f.write_str("EXCHANGE_OUT"),
+            Self::Dividend => f.write_str("DIVIDEND"),
+            Self::Interest => f.write_str("INTEREST"),
+            Self::Fee => f.write_str("FEE"),
+            Self::Unknown(raw) => f.write_str(raw),
+        }
+    }
+}
+impl ::std::str::FromStr for TransactionType {
+    type Err = ::std::convert::Infallible;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(String::from(value)))
     }
 }

@@ -471,7 +471,7 @@
       }
     },
     {
-      "recipe": "check-ts",
+      "recipe": "check",
       "command": "cargo run --locked --quiet --package xtask -- gen-schema --check",
       "kind": "check",
       "cases": "docs/toss-openapi-1.2.28.json",

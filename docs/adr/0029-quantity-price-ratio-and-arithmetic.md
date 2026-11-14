@@ -58,7 +58,7 @@ Decimal checked_mul·checked_div 호출은 exact_arithmetic.rs에만 두고 deci
 
 RatioQuotient는 Exact(Ratio) / Approximate(ApproximateRatio) 열거형이다. ApproximateRatio::as_decimal은 pub(crate)로 닫고 Ratio·Amount의 Decimal 생성자도 pub(crate)로 닫는다. domain 밖에서는 근사를 Ratio나 Amount로 다시 만들어 금액 산술에 넣을 수 없다. 자동 변환·Deref·공통 Ratio 접근자는 없다.
 
-D-07의 근사 비중 정렬과 D-12의 정확한 비중 상한 비교에 필요한 최소 API로 근사끼리 Ord·PartialOrd, 근사와 정확 Ratio 사이 cmp_ratio를 제공한다. 이 비교는 저장된 최대 정밀도 근사값을 비교한다. 같은 수치로 근사된 두 참값의 엄밀한 대소를 알아내는 API는 아니므로 같다는 결과를 참값의 완전한 동등성으로 해석하지 않는다. 산술 API는 제공하지 않는다.
+D-07의 근사 비중 정렬과 D-12의 정확한 비중 상한 비교에 필요한 최소 API로 근사끼리 Ord·PartialOrd, 근사와 정확 Ratio 사이 cmp_ratio를 제공한다. 이 비교는 저장된 최대 정밀도 근사값을 비교한다. 같은 수치로 근사된 두 참값의 엄밀한 대소를 알아내는 API는 아니므로 같다는 결과를 참값의 완전한 동등성으로 해석하지 않는다. 산술 API는 제공하지 않는다. 이후 D-07의 쏠림 전용 내부 통계는 `concentration_arithmetic`에서만 수행하며, 보유 구성비를 봉인 입력으로 받아 봉인 결과를 반환하고 `Amount`·`Money`·`Ratio`·`Decimal` 변환이나 일반 산술 API는 제공하지 않는다(ADR 0049).
 
 ApproximateRatio::original_direction은 원래 몫의 부호를 Up·Down으로 돌려준다. Approximate는 참값이 0이 아닌 경우에만 발생하므로 Flat은 없다. 근사값이 0이어도 원래 부호를 Decimal의 부호 비트에 보존한다. 수치 비교에서 음수 0과 양수 0은 같고, 원래 방향은 별도로 얻는다. 최대 스케일의 자리 채움은 try_from_i128_with_scale로 검사한 정확한 10배 계수만 받는다. 이전의 계수 상한 <=를 <로 바꾸는 변형은 10배 정수의 끝자리가 0이고 MAX의 끝자리는 5이므로 동치였다. 이 비교 지점을 checked 생성자로 교체했으며 MAX 계수의 근사 몫도 고정 예제로 검사한다.
 

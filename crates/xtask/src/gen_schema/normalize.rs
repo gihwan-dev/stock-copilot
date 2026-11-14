@@ -86,6 +86,7 @@ pub(super) fn normalize(stream: proc_macro2::TokenStream) -> Result<String, Stri
     let mut file = syn::parse2::<syn::File>(stream).map_err(|error| error.to_string())?;
     let defaults = file.items.iter().filter_map(default_names).collect();
     file.items.retain(|item| default_names(item).is_none());
+    super::open_enums::apply(&mut file)?;
     let mut visitor = Normalize { defaults };
     visitor.visit_file_mut(&mut file);
     Ok(file
@@ -99,6 +100,15 @@ struct Normalize {
     defaults: BTreeMap<String, String>,
 }
 impl VisitMut for Normalize {
+    fn visit_field_mut(&mut self, i: &mut syn::Field) {
+        i.attrs.retain(|attr| !attr.path().is_ident("doc"));
+        syn::visit_mut::visit_field_mut(self, i);
+    }
+    fn visit_item_mod_mut(&mut self, i: &mut syn::ItemMod) {
+        i.attrs.retain(|attr| !attr.path().is_ident("doc"));
+        syn::visit_mut::visit_item_mod_mut(self, i);
+    }
+
     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
         if i == "e" {
             *i = syn::Ident::new("error", i.span());
@@ -137,6 +147,10 @@ impl VisitMut for Normalize {
         i.attrs.retain(|attr| !attr.path().is_ident("doc"));
         for variant in &mut i.variants {
             variant.attrs.retain(|attr| !attr.path().is_ident("doc"));
+        }
+        if i.ident == "OrderCreateRequest" {
+            i.attrs
+                .push(syn::parse_quote!(#[serde(deny_unknown_fields)]));
         }
         if let Some(selected) = self.defaults.get(&i.ident.to_string()) {
             i.attrs.push(syn::parse_quote!(#[derive(Default)]));

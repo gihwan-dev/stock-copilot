@@ -9,7 +9,7 @@ workspace = true
 
 [dependencies]
 domain = { path = "../../domain" }
-chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
+time = { version = "=0.3.55", default-features = false, features = ["std", "parsing"] }
 
 broker-toss-schema = { path = "../broker-toss-schema" }
 

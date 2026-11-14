@@ -1,4 +1,6 @@
+mod inventory;
 mod normalize;
+mod open_enums;
 #[cfg(test)]
 mod tests;
 
@@ -11,6 +13,8 @@ use std::process::{Command, ExitCode, Stdio};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+const MANIFEST: &str = "[package]\nname = \"broker-toss-schema\"\nversion.workspace = true\nedition.workspace = true\npublish.workspace = true\n\n[lints]\nworkspace = true\n\n[dependencies]\nserde.workspace = true\nserde_json.workspace = true\nregress = \"=0.12.0\"\n";
+
 const INPUT: &str = "docs/toss-openapi-1.2.28.json";
 const OUTPUT: &str = "crates/adapters/broker-toss-schema/src";
 
@@ -22,9 +26,10 @@ fn conversions(value: &Value, settings: &mut typify::TypeSpaceSettings) -> Resul
                 .and_then(Value::as_str)
                 .is_some_and(|format| ["date", "date-time", "uri"].contains(&format))
             {
-                let object =
+                let mut object =
                     serde_json::from_value::<schemars::schema::SchemaObject>(value.clone())
                         .map_err(|error| error.to_string())?;
+                object.instance_type = Some(schemars::schema::InstanceType::String.into());
                 let _settings =
                     settings.with_conversion(object, "::std::string::String", std::iter::empty());
             }
@@ -107,17 +112,25 @@ fn render(input: &str) -> Result<[String; 2], String> {
     Ok([library, types])
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Write,
     Check,
 }
 
 fn generate(root: &Path, mode: Mode) -> Result<(), String> {
+    inventory::check(root, mode)?;
+    if mode == Mode::Write {
+        fs::create_dir_all(root.join(OUTPUT)).map_err(|error| error.to_string())?;
+    }
     let input = fs::read_to_string(root.join(INPUT)).map_err(|error| error.to_string())?;
-    let outputs = render(&input)?;
-    for (name, content) in ["lib.rs", "types.rs"].into_iter().zip(outputs) {
-        let path = root.join(OUTPUT).join(name);
+    let [library, types] = render(&input)?;
+    for (name, content) in
+        inventory::FILES
+            .into_iter()
+            .zip([String::from(MANIFEST), library, types])
+    {
+        let path = root.join(inventory::DIRECTORY).join(name);
         match mode {
             Mode::Write => fs::write(&path, content).map_err(|error| error.to_string())?,
             Mode::Check => {
@@ -137,12 +150,22 @@ pub(crate) fn command(arguments: &[String]) -> ExitCode {
     let mode = match arguments {
         [] => Mode::Write,
         [flag] if flag == "--check" => Mode::Check,
-        _ => return ExitCode::FAILURE,
+        _ => {
+            let _written = writeln!(io::stderr().lock(), "사용법: xtask gen-schema [--check]");
+            return ExitCode::FAILURE;
+        }
     };
     let result = generate(Path::new("."), mode);
     match result {
         Ok(()) => {
-            let _written = writeln!(io::stdout().lock(), "gen-schema: 위반 없음");
+            let _written = writeln!(
+                io::stdout().lock(),
+                "gen-schema: {}",
+                match mode {
+                    Mode::Check => "위반 없음",
+                    Mode::Write => "Cargo.toml, lib.rs, types.rs 생성 완료",
+                }
+            );
             ExitCode::SUCCESS
         }
         Err(error) => {
