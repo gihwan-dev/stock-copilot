@@ -171,3 +171,13 @@ pub use weight_caps::{ProfileWeight, ProfileWeightError, WeightCaps, WeightCapsE
 
 pub use exclusions::ExclusionDecision;
 pub use weight_caps::WeightCapChange;
+
+mod corporate_action;
+mod cost_basis;
+mod lot;
+pub use corporate_action::{
+    CorporateAction, CorporateActionId, CorporateActionKind, DividendBasis, FractionalEntitlement,
+    LotListing, LotTaxStatus,
+};
+pub use cost_basis::{CostBasisMethod, LotCost, LotUnitPrice};
+pub use lot::{Lot, LotBook, LotCostCurrency, LotError, LotIdentity};
