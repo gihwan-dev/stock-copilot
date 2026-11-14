@@ -20,6 +20,9 @@ const branch = (node) =>
     branch(node.right));
 const classes = (node) =>
   literal(node) ||
+  (node?.type === "ConditionalExpression" &&
+    literal(node.consequent) &&
+    literal(node.alternate)) ||
   (node?.type === "CallExpression" &&
     node.callee.type === "Identifier" &&
     node.callee.name === "cn" &&

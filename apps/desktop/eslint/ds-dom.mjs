@@ -120,6 +120,30 @@ export const noDomValues = {
       },
       Identifier(node) {
         if (checker === undefined || skippedIdentifier(node)) return;
+        if (
+          node.parent?.type === "CallExpression" &&
+          node.parent.arguments.includes(node)
+        ) {
+          const callee = services.esTreeNodeToTSNodeMap.get(node.parent.callee);
+          const reference = checker.getSymbolAtLocation(callee);
+          const symbol =
+            reference && (reference.flags & ts.SymbolFlags.Alias) !== 0
+              ? checker.getAliasedSymbol(reference)
+              : reference;
+          if (
+            ["inputEventValue", "inputCommit"].includes(symbol?.name) &&
+            (symbol?.declarations ?? []).some(
+              (d) =>
+                d.getSourceFile().fileName ===
+                ctx.filename.replace(
+                  /\/src\/.*$/u,
+                  "/src/shared/platform/input.ts",
+                ),
+            )
+          )
+            return;
+        }
+
         const type = typeOf(node);
         const isRead = ctx.sourceCode
           .getScope(node)
@@ -157,18 +181,55 @@ export const noDomExports = {
   create(ctx) {
     const services = ctx.sourceCode.parserServices;
     const checker = services.program?.getTypeChecker();
-    const leaks = (type, seen = new Set()) => {
+    const leaks = (
+      type,
+      seen = new Set(),
+      depth = 0,
+      inspectParameters = true,
+    ) => {
+      if (depth > 32) return true;
       if (seen.has(type)) return false;
       seen.add(type);
       if (domType(checker, type)) return true;
+      const argumentsOf = [
+        ...(type.aliasTypeArguments ?? []),
+        ...((type.objectFlags & ts.ObjectFlags.Reference) !== 0
+          ? checker.getTypeArguments(type)
+          : []),
+      ];
+      if (argumentsOf.some((argument) => leaks(argument, seen, depth + 1)))
+        return true;
+      if (
+        (type.types ?? []).some((part) =>
+          leaks(part, seen, depth + 1, inspectParameters),
+        )
+      )
+        return true;
+      if (
+        (type.getSymbol()?.declarations ?? []).some((d) =>
+          /\/lib\.es[^/]*\.d\.ts$/u.test(d.getSourceFile().fileName),
+        )
+      )
+        return false;
       if ((type.flags & ts.TypeFlags.Object) === 0) return false;
       return (
         type
           .getCallSignatures()
-          .some((signature) => leaks(signature.getReturnType(), seen)) ||
+          .some(
+            (signature) =>
+              leaks(signature.getReturnType(), seen, depth + 1) ||
+              (inspectParameters &&
+                signature
+                  .getParameters()
+                  .some((parameter) =>
+                    leaks(checker.getTypeOfSymbol(parameter), seen, depth + 1),
+                  )),
+          ) ||
         checker
           .getPropertiesOfType(type)
-          .some((property) => leaks(checker.getTypeOfSymbol(property), seen))
+          .some((property) =>
+            leaks(checker.getTypeOfSymbol(property), seen, depth + 1),
+          )
       );
     };
     return {
@@ -178,7 +239,8 @@ export const noDomExports = {
         const symbol = checker.getSymbolAtLocation(source);
         if (symbol === undefined) return;
         for (const exported of checker.getExportsOfModule(symbol)) {
-          if (leaks(checker.getTypeOfSymbolAtLocation(exported, source)))
+          const type = checker.getTypeOfSymbolAtLocation(exported, source);
+          if (leaks(type, new Set(), 0, false))
             ctx.report({ node, messageId: "forbidden" });
         }
       },
