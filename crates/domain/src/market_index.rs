@@ -1,7 +1,6 @@
 use crate::quote::{TimestampAllowance, assess_time};
 use crate::{CandlePeriod, ClockAlignment, MasterCode, NumericInput, Quantity, Ratio, Timestamp};
 use rust_decimal::Decimal;
-use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketDataError {
@@ -164,11 +163,46 @@ impl IndicatorValue {
             Self::Unknown(value) => value.0,
         }
     }
-}
-impl fmt::Display for IndicatorValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.number().as_decimal(), f)
+
+    #[must_use]
+    pub fn display(self) -> IndicatorDisplay {
+        let text = IndicatorDisplayText(self.number().as_decimal().to_string());
+        match self {
+            Self::Points(_) => IndicatorDisplay::Points(text),
+            Self::YieldPercent(_) => IndicatorDisplay::YieldPercent(text),
+            Self::Unknown(_) => IndicatorDisplay::Unknown(text),
+        }
     }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndicatorDisplayText(String);
+impl IndicatorDisplayText {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndicatorDisplay {
+    Points(IndicatorDisplayText),
+    YieldPercent(IndicatorDisplayText),
+    Unknown(IndicatorDisplayText),
+    VolumeShares(IndicatorDisplayText),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IndicatorVolume(Quantity);
+impl IndicatorVolume {
+    #[must_use]
+    pub fn display(self) -> IndicatorDisplay {
+        IndicatorDisplay::VolumeShares(IndicatorDisplayText(self.0.as_decimal().to_string()))
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndicatorCandleStatus {
+    Finalized,
+    InProgress,
+    Unknown,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarketIndicatorQuote {
@@ -259,8 +293,9 @@ pub struct MarketIndicatorCandle {
     high: IndicatorValue,
     low: IndicatorValue,
     close: IndicatorValue,
-    volume: Quantity,
+    volume: IndicatorVolume,
     observation: MarketObservation,
+    status: IndicatorCandleStatus,
 }
 impl MarketIndicatorCandle {
     pub fn from_response(
@@ -295,7 +330,10 @@ impl MarketIndicatorCandle {
             high,
             low,
             close,
-            volume: Quantity::parse(&row.volume).or(Err(MarketDataError::InvalidNumber))?,
+            volume: IndicatorVolume(
+                Quantity::parse(&row.volume).or(Err(MarketDataError::InvalidNumber))?,
+            ),
+            status: indicator_candle_status(row.timestamp, period, collected),
             observation: MarketObservation::from_response(Some(row.timestamp), collected)?,
         })
     }
@@ -310,6 +348,10 @@ impl MarketIndicatorCandle {
     #[must_use]
     pub const fn period(&self) -> CandlePeriod {
         self.period
+    }
+    #[must_use]
+    pub const fn status(&self) -> IndicatorCandleStatus {
+        self.status
     }
     #[must_use]
     pub const fn open(&self) -> IndicatorValue {
@@ -328,7 +370,7 @@ impl MarketIndicatorCandle {
         self.close
     }
     #[must_use]
-    pub const fn volume(&self) -> Quantity {
+    pub const fn volume(&self) -> IndicatorVolume {
         self.volume
     }
     #[must_use]
@@ -337,6 +379,34 @@ impl MarketIndicatorCandle {
     }
 }
 
+fn indicator_candle_status(
+    start: Timestamp,
+    period: CandlePeriod,
+    collected: Timestamp,
+) -> IndicatorCandleStatus {
+    match period {
+        CandlePeriod::Daily => IndicatorCandleStatus::Unknown,
+        CandlePeriod::Minute => {
+            let possible_end = start
+                .utc_seconds()
+                .as_i64()
+                .checked_add(60)
+                .and_then(|seconds| {
+                    Timestamp::from_parts(
+                        crate::UnixSeconds::new(seconds),
+                        start.nanosecond(),
+                        start.offset_seconds(),
+                    )
+                    .ok()
+                });
+            match possible_end {
+                Some(end) if end < collected => IndicatorCandleStatus::Finalized,
+                Some(_) => IndicatorCandleStatus::InProgress,
+                None => IndicatorCandleStatus::Unknown,
+            }
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::market_index::{
@@ -345,6 +415,14 @@ mod tests {
     };
     use crate::{CandlePeriod, Timestamp};
     use crate::{MasterCode, Nanosecond, NumericInput, OffsetSeconds, UnixSeconds};
+    fn display_text(display: crate::IndicatorDisplay) -> String {
+        match display {
+            crate::IndicatorDisplay::Points(value)
+            | crate::IndicatorDisplay::YieldPercent(value)
+            | crate::IndicatorDisplay::Unknown(value)
+            | crate::IndicatorDisplay::VolumeShares(value) => value.as_str().to_owned(),
+        }
+    }
     fn code(value: &str) -> MasterCode {
         MasterCode::try_new(value).expect("코드")
     }
@@ -393,7 +471,7 @@ mod tests {
                 }
             );
             assert_eq!(quote.source(), IndicatorSource::TossOpenApi);
-            assert_eq!(quote.value().to_string(), "2812.45");
+            assert_eq!(display_text(quote.value().display()), "2812.45");
             assert_eq!(quote.unit(), expected.unit());
         }
     }
@@ -442,11 +520,11 @@ mod tests {
         assert_eq!(candle.raw_code().as_str(), "KOSPI");
         assert_eq!(candle.period(), CandlePeriod::Daily);
         assert_eq!(candle.observation().server_at(), Some(at(0, 0)));
-        assert_eq!(candle.open().to_string(), "2");
-        assert_eq!(candle.high().to_string(), "4");
-        assert_eq!(candle.low().to_string(), "1");
-        assert_eq!(candle.close().to_string(), "3");
-        assert_eq!(candle.volume().as_decimal().to_string(), "10");
+        assert_eq!(display_text(candle.open().display()), "2");
+        assert_eq!(display_text(candle.high().display()), "4");
+        assert_eq!(display_text(candle.low().display()), "1");
+        assert_eq!(display_text(candle.close().display()), "3");
+        assert_eq!(display_text(candle.volume().display()), "10");
     }
     #[test]
     fn invalid_indicator_candles_are_rejected() {
@@ -540,6 +618,94 @@ mod tests {
             at(100, 0),
         )
         .expect("국채 일봉");
-        assert_eq!(bond.close().to_string(), "3");
+        assert_eq!(display_text(bond.close().display()), "3");
+    }
+
+    #[test]
+    fn indicator_display_is_tagged_and_volume_is_not_order_quantity() {
+        let quote =
+            MarketIndicatorQuote::from_response(code("KOSPI"), &num("2812.45"), None, at(0, 0))
+                .expect("지수");
+        assert_eq!(
+            quote.value().display(),
+            crate::IndicatorDisplay::Points(super::IndicatorDisplayText("2812.45".to_owned()))
+        );
+        let row = IndicatorCandleRow {
+            timestamp: at(0, 0),
+            open: num("1"),
+            high: num("1"),
+            low: num("1"),
+            close: num("1"),
+            volume: num("42"),
+        };
+        assert_eq!(
+            MarketIndicatorCandle::from_response(
+                code("KOSPI"),
+                CandlePeriod::Daily,
+                &row,
+                at(0, 0)
+            )
+            .expect("봉")
+            .volume()
+            .display(),
+            crate::IndicatorDisplay::VolumeShares(super::IndicatorDisplayText("42".to_owned()))
+        );
+    }
+    #[test]
+    fn minute_finality_requires_a_strictly_past_end_daily_without_end_is_unknown() {
+        let row = IndicatorCandleRow {
+            timestamp: at(0, 0),
+            open: num("1"),
+            high: num("1"),
+            low: num("1"),
+            close: num("1"),
+            volume: num("0"),
+        };
+        for (collected, expected) in [
+            (59, crate::IndicatorCandleStatus::InProgress),
+            (60, crate::IndicatorCandleStatus::InProgress),
+            (61, crate::IndicatorCandleStatus::Finalized),
+        ] {
+            assert_eq!(
+                MarketIndicatorCandle::from_response(
+                    code("KOSPI"),
+                    CandlePeriod::Minute,
+                    &row,
+                    at(collected, 0)
+                )
+                .expect("분봉")
+                .status(),
+                expected
+            );
+        }
+        assert_eq!(
+            MarketIndicatorCandle::from_response(
+                code("KOSPI"),
+                CandlePeriod::Daily,
+                &row,
+                at(86400, 0)
+            )
+            .expect("일봉")
+            .status(),
+            crate::IndicatorCandleStatus::Unknown
+        );
+        let mut boundary = row;
+        boundary.timestamp = Timestamp::from_parts(
+            UnixSeconds::new(253_402_300_799),
+            Nanosecond::new(0),
+            OffsetSeconds::new(0),
+        )
+        .expect("최대 시각");
+        assert_eq!(
+            MarketIndicatorCandle::from_response(
+                code("KOSPI"),
+                CandlePeriod::Minute,
+                &boundary,
+                boundary.timestamp
+            )
+            .expect("종료 범위 없음")
+            .status(),
+            crate::IndicatorCandleStatus::Unknown
+        );
     }
 }
