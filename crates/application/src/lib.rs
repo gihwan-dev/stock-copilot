@@ -91,3 +91,27 @@ mod error_class;
 pub use error_class::{
     BugDiagnostic, ClassifiedError, ErrorClass, UserAction, classify_port_error,
 };
+
+mod information_error;
+pub use information_error::{DataAvailability, InformationError};
+
+mod news_source;
+pub use news_source::{
+    AiReadPolicy, CollectedObservation, ConditionalGet, NewsMetadata, NewsSource, PublicationTime,
+    Retention, UserAgentRequirement,
+};
+
+mod fundamentals;
+pub use fundamentals::{
+    FinancialLine, FinancialStatement, Fundamentals, MetricFact, MetricSource, MetricUnit,
+    MetricValue,
+};
+
+mod macro_series;
+pub use macro_series::{MacroObservation, MacroSeries, MacroSeriesId};
+
+mod ai_provider;
+pub use ai_provider::{
+    AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, IsolationCheck, ResetTime, RunInput,
+    RunKind, RunSpec, TokenCount, ToolStatus, run_kind,
+};
