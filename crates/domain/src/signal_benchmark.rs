@@ -13,6 +13,7 @@ struct BenchmarkSegment {
 pub struct SignalBenchmark {
     series: BenchmarkSeries,
     segments: Vec<BenchmarkSegment>,
+    dates: std::collections::BTreeMap<crate::CalendarDate, Timestamp>,
 }
 impl SignalBenchmark {
     pub fn from_candles(
@@ -61,11 +62,46 @@ impl SignalBenchmark {
                 value: value.value(),
             })
             .collect();
-        Ok(Self { series, segments })
+        let dates = ordered
+            .iter()
+            .zip(&points)
+            .map(|(snapshot, at)| (snapshot.price_date(currency), *at))
+            .collect();
+        Ok(Self {
+            series,
+            segments,
+            dates,
+        })
     }
     #[must_use]
     pub const fn series(&self) -> &BenchmarkSeries {
         &self.series
+    }
+    pub(crate) fn between_dates(
+        &self,
+        start: crate::CalendarDate,
+        end: crate::CalendarDate,
+        currency: Currency,
+    ) -> Result<PerformanceValue, SignalReturnError> {
+        if self.series.currency() != PerformanceCurrency::Native(currency) {
+            return Err(SignalReturnError::BenchmarkMismatch);
+        }
+        let first = self
+            .dates
+            .get(&start)
+            .copied()
+            .ok_or(SignalReturnError::BenchmarkMismatch)?;
+        let last = self
+            .dates
+            .get(&end)
+            .copied()
+            .ok_or(SignalReturnError::BenchmarkMismatch)?;
+        if start == end {
+            return Ok(PerformanceValue::from_number(
+                crate::performance_arithmetic::Number::new(rust_decimal::Decimal::ZERO),
+            ));
+        }
+        self.between(first, last, currency)
     }
     pub(crate) fn between(
         &self,
@@ -189,6 +225,43 @@ mod tests {
                 .expect("지수")
             })
             .collect()
+    }
+    #[test]
+    fn review_daily_close_same_day_is_zero_and_missing_end_is_unavailable() {
+        let benchmark = SignalBenchmark::from_candles(
+            BenchmarkKind::Kospi,
+            &prices(Currency::Krw, &["100", "110", "220"]),
+            &[snapshot(61), snapshot(62), snapshot(63)],
+            &[calendar(61), calendar(62)],
+            Currency::Krw,
+        )
+        .expect("세 종가");
+        assert_eq!(
+            benchmark
+                .between_dates(row(61).date(), row(61).date(), Currency::Krw)
+                .expect("당일")
+                .to_string(),
+            "0.000000"
+        );
+        assert_eq!(
+            benchmark
+                .between_dates(row(61).date(), row(62).date(), Currency::Krw)
+                .expect("하루")
+                .to_string(),
+            "0.100000"
+        );
+        assert_eq!(
+            benchmark.between_dates(row(61).date(), row(64).date(), Currency::Krw),
+            Err(SignalReturnError::BenchmarkMismatch)
+        );
+        assert_eq!(
+            benchmark.between_dates(row(60).date(), row(62).date(), Currency::Krw),
+            Err(SignalReturnError::BenchmarkMismatch)
+        );
+        assert_eq!(
+            benchmark.between_dates(row(61).date(), row(62).date(), Currency::Usd),
+            Err(SignalReturnError::BenchmarkMismatch)
+        );
     }
     #[test]
     fn d29_benchmark_requires_native_currency_and_exact_close_instants() {

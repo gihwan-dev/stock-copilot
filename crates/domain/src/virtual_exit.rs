@@ -16,6 +16,7 @@ pub struct VirtualExitSignal {
     maturity: Timestamp,
     target: Price,
     stop: Price,
+    origin: Option<crate::ScorecardSignalRecord>,
 }
 impl std::fmt::Debug for VirtualExitSignal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -23,16 +24,36 @@ impl std::fmt::Debug for VirtualExitSignal {
     }
 }
 impl VirtualExitSignal {
-    pub fn try_new(
-        task: EstimateTask,
-        target: Price,
-        stop: Price,
-        maturity: Timestamp,
+    pub fn from_record(
+        record: &crate::ScorecardSignalRecord,
     ) -> Result<Self, VirtualExitSignalError> {
-        let entry = task.reference().clone();
-        Self::from_entry(task, entry, target, stop, maturity)
+        let task = record.task().clone();
+        let entry = record.entry().clone();
+        let maturity = record.interval().end();
+        match record.direction() {
+            crate::ScorecardSignalDirection::Buy => record_prices(record)
+                .and_then(|(target, stop)| Self::from_entry(task, entry, target, stop, maturity)),
+            crate::ScorecardSignalDirection::SellAvoidance => Ok(Self {
+                target: entry.price(),
+                stop: entry.price(),
+                task,
+                entry,
+                maturity,
+                origin: None,
+            }),
+        }
+        .map(|mut result| {
+            result.origin = Some(record.clone());
+            result
+        })
     }
-    pub fn from_entry(
+    pub(crate) fn direction(&self) -> crate::ScorecardSignalDirection {
+        self.origin.as_ref().map_or(
+            crate::ScorecardSignalDirection::Buy,
+            crate::ScorecardSignalRecord::direction,
+        )
+    }
+    pub(crate) fn from_entry(
         task: EstimateTask,
         entry: crate::PriceObservation,
         target: Price,
@@ -64,6 +85,7 @@ impl VirtualExitSignal {
             maturity,
             target,
             stop,
+            origin: None,
         })
     }
     #[must_use]
@@ -79,14 +101,44 @@ impl VirtualExitSignal {
         &self.task
     }
     #[must_use]
-    pub const fn target(&self) -> Price {
-        self.target
+    pub fn target(&self) -> Option<Price> {
+        match self.direction() {
+            crate::ScorecardSignalDirection::Buy => Some(self.target),
+            crate::ScorecardSignalDirection::SellAvoidance => None,
+        }
     }
     #[must_use]
-    pub const fn stop(&self) -> Price {
-        self.stop
+    pub fn stop(&self) -> Option<Price> {
+        match self.direction() {
+            crate::ScorecardSignalDirection::Buy => Some(self.stop),
+            crate::ScorecardSignalDirection::SellAvoidance => None,
+        }
     }
 }
+fn record_prices(
+    record: &crate::ScorecardSignalRecord,
+) -> Result<(Price, Price), VirtualExitSignalError> {
+    let one = crate::Ratio::new(rust_decimal::Decimal::ONE);
+    let up = one.checked_add(&crate::Ratio::new(record.task().target().as_decimal()));
+    let down = one.checked_sub(&crate::Ratio::new(record.task().stop().as_decimal()));
+    up.ok()
+        .zip(down.ok())
+        .and_then(|(target, stop)| {
+            record_bound(record.entry().price(), target)
+                .ok()
+                .zip(record_bound(record.entry().price(), stop).ok())
+        })
+        .ok_or(VirtualExitSignalError::InvalidBounds)
+}
+fn record_bound(entry: Price, factor: crate::Ratio) -> Result<Price, VirtualExitSignalError> {
+    entry
+        .as_money()
+        .checked_mul(&factor)
+        .ok()
+        .and_then(|money| Price::try_new(money).ok())
+        .ok_or(VirtualExitSignalError::InvalidBounds)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetExit(VirtualExitFill);
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,16 +182,28 @@ impl VirtualExit {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VirtualExitMoment {
+    At(Timestamp),
+    TradingDay(crate::CalendarDate),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ExitDates {
+    entry: crate::CalendarDate,
+    exit: crate::CalendarDate,
+}
 #[derive(Clone, PartialEq, Eq)]
 pub struct VirtualExitFill {
     task: EstimateTask,
     interval: crate::TimeInterval,
     entered_at: Timestamp,
+    dates: ExitDates,
+    moment: VirtualExitMoment,
+    origin: Option<crate::ScorecardSignalRecord>,
     entry_close: crate::CheckResult,
     exit_close: crate::CheckResult,
     entry: Price,
     price: Price,
-    at: Timestamp,
 }
 impl std::fmt::Debug for VirtualExitFill {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -152,10 +216,26 @@ impl VirtualExitFill {
         self.price
     }
     #[must_use]
-    pub const fn at(&self) -> Timestamp {
-        self.at
+    pub const fn at(&self) -> VirtualExitMoment {
+        self.moment
     }
-    pub(crate) const fn entered_at(&self) -> Timestamp {
+    #[must_use]
+    pub const fn moment(&self) -> VirtualExitMoment {
+        self.moment
+    }
+    pub(crate) const fn entry_day(&self) -> crate::CalendarDate {
+        self.dates.entry
+    }
+    pub(crate) const fn exit_day(&self) -> crate::CalendarDate {
+        self.dates.exit
+    }
+    fn into_day(mut self, day: crate::CalendarDate) -> Self {
+        self.moment = VirtualExitMoment::TradingDay(day);
+        self.exit_close = crate::CheckResult::Failed;
+        self
+    }
+    #[must_use]
+    pub const fn entered_at(&self) -> Timestamp {
         self.entered_at
     }
     pub(crate) const fn entry(&self) -> Price {
@@ -164,6 +244,9 @@ impl VirtualExitFill {
     fn into_intraday(mut self) -> Self {
         self.exit_close = crate::CheckResult::Failed;
         self
+    }
+    pub(crate) fn identity(&self) -> Option<&crate::ScorecardSignalRecord> {
+        self.origin.as_ref()
     }
     pub(crate) fn benchmark_ready(&self) -> crate::CheckResult {
         if self.entry_close == crate::CheckResult::Passed
@@ -190,6 +273,8 @@ struct ExitContext<'a> {
     task: &'a EstimateTask,
     interval: crate::TimeInterval,
     prices: ExitPrices,
+    dates: ExitDates,
+    origin: Option<&'a crate::ScorecardSignalRecord>,
     entry_close: crate::CheckResult,
     exit_close: crate::CheckResult,
 }
@@ -199,11 +284,13 @@ impl ExitContext<'_> {
             task: self.task.clone(),
             interval: self.interval,
             entered_at: self.interval.start(),
+            dates: self.dates,
+            moment: VirtualExitMoment::At(at),
+            origin: self.origin.cloned(),
             entry_close: self.entry_close,
             exit_close: self.exit_close,
             entry: self.prices.entry,
             price,
-            at,
         }
     }
 }
@@ -236,22 +323,37 @@ fn evaluate(
     }
     let (interval, rows, bars) =
         crate::estimate_outcome::virtual_exit_inputs(signal, calendars, adjustment, candles)?;
-    let context = ExitContext {
-        task,
-        interval,
-        prices: prices(signal, adjustment)?,
-        entry_close: entry_close(signal.entry().observed_at(), calendars),
-        exit_close: crate::CheckResult::Failed,
-    };
+    let prices = prices(signal, adjustment)?;
+    signal_dates(signal.entry().observed_at(), calendars).map_or_else(Err, |dates| {
+        let context = ExitContext {
+            task,
+            interval,
+            prices,
+            dates,
+            origin: signal.origin.as_ref(),
+            entry_close: entry_close(signal.entry().observed_at(), calendars),
+            exit_close: crate::CheckResult::Failed,
+        };
+        evaluate_rows(context, rows, &bars, now)
+    })
+}
+fn evaluate_rows(
+    context: ExitContext<'_>,
+    rows: Vec<VirtualExitSession>,
+    bars: &[&Candle],
+    now: Timestamp,
+) -> Result<VirtualExit, OutcomeUnavailable> {
+    let interval = context.interval;
     let mut result = VirtualExit::Ongoing;
     for row in rows {
         let session = row.interval;
-        if session.start() >= now {
-            break;
-        }
         let end = session.end().min(interval.end());
         let start = session.start().max(interval.start());
         let row_context = ExitContext {
+            dates: ExitDates {
+                entry: context.dates.entry,
+                exit: row.date,
+            },
             exit_close: if end == session.end() {
                 crate::CheckResult::Passed
             } else {
@@ -262,15 +364,12 @@ fn evaluate(
         let daily = bars.iter().copied().find(|bar| {
             bar.time().period() == CandlePeriod::Daily && bar.time().date() == row.date
         });
-        if row.date == interval.start().offset_calendar_date()
-            || now < session.end()
-            || end < session.end()
-        {
-            if let Some(value) = minutes(&bars, start, end, now, row_context)? {
+        if row.date == context.dates.entry || now < session.end() || end < session.end() {
+            if let Some(value) = minutes(bars, start, end, now, row_context)? {
                 result = value;
                 break;
             }
-        } else if let Some(value) = daily_exit(daily, &bars, session, now, row_context)? {
+        } else if let Some(value) = daily_exit(daily, bars, session, now, row_context)? {
             result = value;
             break;
         }
@@ -282,6 +381,37 @@ fn evaluate(
         }
     }
     Ok(result)
+}
+fn signal_dates(
+    at: Timestamp,
+    calendars: &[MarketCalendar],
+) -> Result<ExitDates, OutcomeUnavailable> {
+    let days = calendars
+        .iter()
+        .flat_map(|calendar| {
+            [
+                calendar.previous_business_day(),
+                calendar.today(),
+                calendar.next_business_day(),
+            ]
+        })
+        .filter(|row| {
+            row.sessions().iter().any(|part| {
+                part.session().interval().start() <= at && at <= part.session().interval().end()
+            })
+        })
+        .map(crate::MarketSession::date)
+        .collect::<std::collections::BTreeSet<_>>();
+    if days.len() != 1 {
+        return Err(OutcomeUnavailable::Calendar);
+    }
+    days.into_iter()
+        .next()
+        .map(|day| ExitDates {
+            entry: day,
+            exit: day,
+        })
+        .ok_or(OutcomeUnavailable::Calendar)
 }
 fn entry_close(at: Timestamp, calendars: &[MarketCalendar]) -> crate::CheckResult {
     let closed = calendars
@@ -313,6 +443,13 @@ fn daily_exit(
     let maturity = context.interval.end();
     let bar = daily.ok_or(OutcomeUnavailable::MissingCandles)?;
     let values = bar.values();
+    if context
+        .origin
+        .is_some_and(|record| record.direction() == crate::ScorecardSignalDirection::SellAvoidance)
+    {
+        return Ok((session.end() == maturity)
+            .then(|| VirtualExit::Maturity(MaturityExit(context.fill(values.close(), maturity)))));
+    }
     if let Some(value) = opening(values.open(), session.start(), context) {
         return Ok(Some(value));
     }
@@ -325,12 +462,16 @@ fn daily_exit(
     }
     if stop {
         return Ok(Some(VirtualExit::Stop(StopExit(
-            context.fill(context.prices.stop, session.end()),
+            context
+                .fill(context.prices.stop, session.end())
+                .into_day(context.dates.exit),
         ))));
     }
     if target {
         return Ok(Some(VirtualExit::Target(TargetExit(
-            context.fill(context.prices.target, session.end()),
+            context
+                .fill(context.prices.target, session.end())
+                .into_day(context.dates.exit),
         ))));
     }
     if session.end() == maturity {
@@ -404,6 +545,17 @@ fn scan_minutes(
             return Ok(None);
         };
         let values = bar.values();
+        if context.origin.is_some_and(|record| {
+            record.direction() == crate::ScorecardSignalDirection::SellAvoidance
+        }) {
+            if next == end && end == context.interval.end() {
+                return Ok(Some(VirtualExit::Maturity(MaturityExit(
+                    context.fill(values.close(), end),
+                ))));
+            }
+            cursor = next;
+            continue;
+        }
         if cursor >= start
             && let Some(value) = opening(values.open(), cursor, context)
         {
@@ -472,8 +624,8 @@ fn prices(
     adjustment: &OutcomeAdjustment,
 ) -> Result<ExitPrices, OutcomeUnavailable> {
     let entry = adjusted_price(signal.entry().price(), adjustment)?;
-    let target = adjusted_price(signal.target(), adjustment)?;
-    let stop = adjusted_price(signal.stop(), adjustment)?;
+    let target = adjusted_price(signal.target, adjustment)?;
+    let stop = adjusted_price(signal.stop, adjustment)?;
     Ok(ExitPrices {
         entry,
         target,
@@ -490,6 +642,15 @@ pub(crate) mod tests {
         Candle, CandleObservation, CandlePeriod, CandleStatus, CandleTime, Currency, EstimateTask,
         NumericInput, Ohlcv, PriceAdjustment, Quantity, TimeInterval,
     };
+    pub(crate) fn signal_fixture(
+        task: EstimateTask,
+        target: crate::Price,
+        stop: crate::Price,
+        maturity: crate::Timestamp,
+    ) -> Result<crate::VirtualExitSignal, crate::VirtualExitSignalError> {
+        let entry = task.reference().clone();
+        crate::VirtualExitSignal::from_entry(task, entry, target, stop, maturity)
+    }
     pub(crate) fn virtual_exit_fixture_fill(
         task: &EstimateTask,
         price: crate::Price,
@@ -499,8 +660,13 @@ pub(crate) mod tests {
             task: task.clone(),
             interval: TimeInterval::try_new(task.reference().observed_at(), at).expect("구간"),
             entered_at: task.reference().observed_at(),
+            dates: super::ExitDates {
+                entry: task.reference().observed_at().offset_calendar_date(),
+                exit: at.offset_calendar_date(),
+            },
+            moment: super::VirtualExitMoment::At(at),
+            origin: None,
             price,
-            at,
             entry_close: crate::CheckResult::Failed,
             exit_close: crate::CheckResult::Failed,
             entry: task.reference().price(),
@@ -510,6 +676,11 @@ pub(crate) mod tests {
     fn context(source: &EstimateTask, end: crate::Timestamp) -> ExitContext<'_> {
         ExitContext {
             task: source,
+            origin: None,
+            dates: super::ExitDates {
+                entry: source.reference().observed_at().offset_calendar_date(),
+                exit: end.offset_calendar_date(),
+            },
             interval: TimeInterval::try_new(source.reference().observed_at(), end).expect("구간"),
             prices: ExitPrices {
                 entry: price("100", Currency::Krw),
@@ -544,6 +715,142 @@ pub(crate) mod tests {
         .expect("봉")
     }
     #[test]
+    fn review_sealed_buy_getters_and_sell_minute_path_keep_recorded_facts() {
+        let buy = crate::scorecard_signal_review::tests::record(
+            0,
+            crate::ScorecardSignalDirection::Buy,
+            "0",
+        );
+        let signal = super::VirtualExitSignal::from_record(&buy).expect("봉인 매수");
+        assert_eq!(
+            signal.target().expect("목표").as_money().currency(),
+            Currency::Krw
+        );
+        assert_eq!(
+            signal.stop().expect("손절").as_money().currency(),
+            Currency::Krw
+        );
+        assert_eq!(signal.entry(), buy.entry());
+        let sell = crate::scorecard_signal_review::tests::record(
+            0,
+            crate::ScorecardSignalDirection::SellAvoidance,
+            "0",
+        );
+        let source = sell.task();
+        let context = ExitContext {
+            origin: Some(&sell),
+            ..context(source, instant(62, 4))
+        };
+        let candles = (1_i64..=4)
+            .map(|minute| {
+                crate::signal_return_contract::tests::candle(
+                    62,
+                    minute,
+                    CandlePeriod::Minute,
+                    ["100", "200", "1", "120"],
+                )
+            })
+            .collect::<Vec<_>>();
+        let bars = candles.iter().collect::<Vec<_>>();
+        let exit = minutes(
+            &bars,
+            instant(62, 0),
+            instant(62, 4),
+            instant(67, 4),
+            context,
+        )
+        .expect("분봉")
+        .expect("매도 만기");
+        assert_eq!(exit_summary(&exit).0, "maturity");
+        let fill = exit.into_fill().expect("청산");
+        assert_eq!(fill.price(), price("120", Currency::Krw));
+        assert_eq!(fill.entered_at(), source.reference().observed_at());
+        assert_eq!(
+            super::signal_dates(instant(70, 0), &[]).map(|dates| dates.entry),
+            Err(crate::OutcomeUnavailable::Calendar)
+        );
+    }
+    #[test]
+    fn review_daily_both_uses_minute_sequence_and_target_is_intraday() {
+        let source = crate::signal_return_scenarios::tests::task(0);
+        let mut context = context(&source, instant(67, 4));
+        context.entry_close = crate::CheckResult::Passed;
+        context.exit_close = crate::CheckResult::Passed;
+        let daily = bar(CandlePeriod::Daily, ["100", "110", "90", "100"]);
+        let first = bar(CandlePeriod::Minute, ["100", "110", "100", "100"]);
+        let session = TimeInterval::try_new(instant(62, 0), instant(62, 4)).expect("장");
+        let exit = daily_exit(Some(&daily), &[&first], session, instant(67, 4), context)
+            .expect("분봉 확인")
+            .expect("목표 선행");
+        assert_eq!(exit_summary(&exit).0, "target");
+        let fill = exit.into_fill().expect("목표 청산");
+        assert_eq!(fill.benchmark_ready(), crate::CheckResult::Failed);
+        assert_eq!(fill.moment(), super::VirtualExitMoment::At(instant(62, 1)));
+    }
+    fn review_market_row(day: i64, us: Option<()>) -> crate::MarketSession {
+        let offset = crate::OffsetSeconds::new(if us.is_some() { -18000 } else { 32400 });
+        let stamp = |minute| {
+            let at = instant(day, minute);
+            crate::Timestamp::from_parts(at.utc_seconds(), at.nanosecond(), offset)
+                .expect("시장 오프셋")
+        };
+        let interval = TimeInterval::try_new(
+            stamp(if us.is_some() { 900 } else { 0 }),
+            stamp(if us.is_some() { 904 } else { 4 }),
+        )
+        .expect("장");
+        let regular = Some(crate::SessionData::try_new(interval, None).expect("장"));
+        let info = if us.is_some() {
+            crate::SessionInformation::Us {
+                day_market: None,
+                pre_market: None,
+                regular_market: regular,
+                after_market: None,
+            }
+        } else {
+            crate::SessionInformation::Kr {
+                pre_market: regular,
+                regular_market: None,
+                after_market: None,
+            }
+        };
+        crate::MarketSession::try_new(crate::signal_return_contract::tests::row(day).date(), info)
+            .expect("거래일")
+    }
+    #[test]
+    fn review_native_session_date_and_regular_close_are_distinct_from_korean_date_and_premarket() {
+        let us = crate::MarketCalendar::try_new(
+            review_market_row(60, Some(())),
+            review_market_row(61, Some(())),
+            review_market_row(62, Some(())),
+        )
+        .expect("미국 달력");
+        let kr = crate::MarketCalendar::try_new(
+            review_market_row(60, None),
+            review_market_row(61, None),
+            review_market_row(62, None),
+        )
+        .expect("한국 달력");
+        let at = instant(61, 904);
+        let native = super::signal_dates(at, std::slice::from_ref(&us)).expect("시장 거래일");
+        assert_eq!(
+            native.entry,
+            crate::signal_return_contract::tests::row(61).date()
+        );
+        assert_ne!(native.entry, at.offset_calendar_date());
+        assert_eq!(
+            super::signal_dates(instant(61, 4), std::slice::from_ref(&kr))
+                .expect("같은 날짜")
+                .entry,
+            native.entry
+        );
+        assert_eq!(super::entry_close(at, &[us]), crate::CheckResult::Passed);
+        assert_eq!(
+            super::entry_close(instant(61, 4), &[kr]),
+            crate::CheckResult::Failed
+        );
+    }
+    #[test]
     fn d29_opening_boundary_prices_are_inclusive_and_gaps_use_open() {
         let source = crate::thresholds::tests::task();
         let context = context(&source, instant(66, 4));
@@ -562,7 +869,7 @@ pub(crate) mod tests {
             if let Some(exit) = result {
                 let fill = exit.into_fill().expect("닫힌 청산");
                 assert_eq!(fill.price(), price(value, Currency::Krw));
-                assert_eq!(fill.at(), instant(62, 0));
+                assert_eq!(fill.at(), super::VirtualExitMoment::At(instant(62, 0)));
             }
         }
     }
@@ -624,6 +931,11 @@ mod boundary_tests {
     fn context(end: crate::Timestamp, source: &crate::EstimateTask) -> ExitContext<'_> {
         ExitContext {
             task: source,
+            origin: None,
+            dates: super::ExitDates {
+                entry: source.reference().observed_at().offset_calendar_date(),
+                exit: end.offset_calendar_date(),
+            },
             interval: TimeInterval::try_new(instant(62, 0), end).expect("구간"),
             prices: ExitPrices {
                 entry: price("100", Currency::Krw),
@@ -646,7 +958,7 @@ mod boundary_tests {
             .into_fill()
             .expect("체결");
         assert_eq!(result.price(), price("120", Currency::Krw));
-        assert_eq!(result.at(), instant(62, 0));
+        assert_eq!(result.at(), super::VirtualExitMoment::At(instant(62, 0)));
         let flat = candle(62, 1, CandlePeriod::Minute, ["100", "101", "100", "101"]);
         let maturity = minutes(&[&flat], instant(62, 0), end, end, context)
             .expect("만기")
@@ -770,12 +1082,24 @@ mod maturity_tests {
         AdjustmentBasis, CandlePeriod, Currency, EstimateContext, EstimateTask, Horizon,
         HorizonSelection, HoursPermission, HoursPermissionState, MarketCalendar, MarketSession,
         OutcomeUnavailable, RiskAppetite, SessionData, SessionInformation, TimeInterval,
-        VirtualExit, VirtualExitSignal,
+        VirtualExit,
     };
     fn source() -> EstimateTask {
+        source_at(4)
+    }
+    fn source_at(minute: i64) -> EstimateTask {
         let original = crate::signal_return_scenarios::tests::task(0);
         EstimateTask::create(
-            EstimateContext::new(original.reference().clone(), original.created_at()),
+            EstimateContext::new(
+                crate::PriceObservation::from_identified_quote_parts(
+                    original.volatility().instrument().clone(),
+                    original.reference().instrument().clone(),
+                    original.reference().price(),
+                    instant(61, minute),
+                )
+                .expect("실제 기준"),
+                instant(61, minute),
+            ),
             original.volatility().clone(),
             Horizon::new(HorizonSelection::Hours),
             HoursPermission::restore_from_saved_state(HoursPermissionState::Enabled),
@@ -785,7 +1109,7 @@ mod maturity_tests {
     }
     #[test]
     fn d29_hours_maturity_uses_its_minute_close_and_cannot_claim_daily_benchmark() {
-        let signal = VirtualExitSignal::try_new(
+        let signal = crate::virtual_exit::tests::signal_fixture(
             source(),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
@@ -799,12 +1123,12 @@ mod maturity_tests {
         let result = crate::virtual_exit(&signal, &calendars, &adjusted, &bars, instant(62, 1));
         let fill = result.into_fill().expect("장중 만기");
         assert_eq!(fill.price(), price("101", Currency::Krw));
-        assert_eq!(fill.at(), instant(62, 1));
+        assert_eq!(fill.at(), super::VirtualExitMoment::At(instant(62, 1)));
         assert_eq!(fill.benchmark_ready(), crate::CheckResult::Failed);
     }
     #[test]
     fn d29_ongoing_missing_daily_and_partial_minute_maturity_remain_closed() {
-        let signal = VirtualExitSignal::try_new(
+        let signal = crate::virtual_exit::tests::signal_fixture(
             task(),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
@@ -881,8 +1205,8 @@ mod maturity_tests {
             instant(62, 0).offset_seconds(),
         )
         .expect("부분 분 만기");
-        let short = VirtualExitSignal::try_new(
-            source(),
+        let short = crate::virtual_exit::tests::signal_fixture(
+            source_at(3),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
             end,

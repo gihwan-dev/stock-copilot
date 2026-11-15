@@ -199,6 +199,19 @@ pub(crate) mod tests {
         )
         .expect("관측")
     }
+    fn zero_cost(source: &EstimateTask, end: crate::Timestamp) -> crate::SignalReturnCost {
+        let zero = CostRate::try_new(Ratio::new(Decimal::ZERO)).expect("요율");
+        crate::signal_return_cost(
+            Some(CommissionRateFact::from_commissions_result(
+                Market::Kr,
+                zero,
+                CommissionValidity::try_new(None, None).expect("유효 기간"),
+            )),
+            Some(TradeTaxFact::from_schedule_result(Market::Kr, zero, zero)),
+            EstimateCostPeriod::from_calendar_result(source, end).expect("비용 기간"),
+        )
+        .expect("거래 비용")
+    }
     pub(crate) fn sample(
         shift: i64,
         last: &str,
@@ -230,18 +243,8 @@ pub(crate) mod tests {
                 basis,
             )
         }));
-        let zero = CostRate::try_new(Ratio::new(Decimal::ZERO)).expect("요율");
-        let cost = crate::signal_return_cost(
-            Some(CommissionRateFact::from_commissions_result(
-                Market::Kr,
-                zero,
-                CommissionValidity::try_new(None, None).expect("유효 기간"),
-            )),
-            Some(TradeTaxFact::from_schedule_result(Market::Kr, zero, zero)),
-            EstimateCostPeriod::from_calendar_result(&source, instant(end, 4)).expect("비용 기간"),
-        )
-        .expect("거래 비용");
-        let signal = crate::VirtualExitSignal::try_new(
+        let cost = zero_cost(&source, instant(end, 4));
+        let signal = crate::virtual_exit::tests::signal_fixture(
             source.clone(),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
@@ -258,16 +261,30 @@ pub(crate) mod tests {
             &bars,
             &format!("sample-{shift}"),
         );
-        let bound =
-            crate::ScorecardReturnObservation::try_new(record.clone(), value).expect("신호 결합");
-        (record, bound)
+        let (identified_record, identified_value) =
+            crate::signal_return::boundary_tests::identify_fixture(record, value);
+        (
+            identified_record.clone(),
+            crate::ScorecardReturnObservation::try_new(identified_record, identified_value)
+                .expect("신호 결합"),
+        )
     }
     #[test]
     fn d29_public_path_compares_same_closes_and_preserves_all_edge_directions() {
-        for (last, expected, excess) in [
-            ("99", EdgeDirection::Superior, "0.010000"),
-            ("100", EdgeDirection::EdgeNotConfirmed, "0.000000"),
-            ("101", EdgeDirection::Inferior, "-0.010000"),
+        for (last, expected, excess, interval_value) in [
+            ("99", EdgeDirection::Superior, "0.010000", "0.010000000000"),
+            (
+                "100",
+                EdgeDirection::EdgeNotConfirmed,
+                "0.000000",
+                "0.000000000000",
+            ),
+            (
+                "101",
+                EdgeDirection::Inferior,
+                "-0.010000",
+                "-0.010000000000",
+            ),
         ] {
             let pairs = (0_i64..30)
                 .map(|index| sample(index.checked_mul(7).expect("비겹침"), last))
@@ -310,8 +327,8 @@ pub(crate) mod tests {
             );
             let interval = edge.confidence().clone().into_ready().expect("준비된 구간");
             assert_eq!(interval.direction(), expected);
-            assert_eq!(interval.lower().to_string(), excess);
-            assert_eq!(interval.upper().to_string(), excess);
+            assert_eq!(interval.lower().to_string(), interval_value);
+            assert_eq!(interval.upper().to_string(), interval_value);
         }
     }
 }

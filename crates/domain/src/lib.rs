@@ -441,3 +441,20 @@ pub use broker_order_fields::{
     BrokerOrderMoney, BrokerOrderPrice, BrokerOrderSize, BrokerOrderTime, BrokerOrderType,
     BrokerTimeInForce, UnfilledQuantity,
 };
+
+pub use bootstrap::BootstrapValue;
+
+pub use bootstrap::{WithheldCount, WithheldReason};
+pub use signal_return::BenchmarkAlignment;
+
+mod signal_return_review;
+
+pub use virtual_exit::VirtualExitMoment;
+
+mod scorecard_signal;
+pub use scorecard_signal::{
+    ScorecardSignalDirection, ScorecardSignalIdentity, ScorecardSignalRecord, ScorecardTaskId,
+};
+
+pub use signal_return::{SignalExcess, SignalReturnBasis};
+mod scorecard_signal_review;

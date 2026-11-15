@@ -68,7 +68,7 @@ pub(crate) mod tests {
         candles: &[Candle],
         now: Timestamp,
     ) -> VirtualExit {
-        let signal = crate::VirtualExitSignal::try_new(
+        let signal = crate::virtual_exit::tests::signal_fixture(
             task.clone(),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
@@ -155,7 +155,12 @@ pub(crate) mod tests {
             assert_eq!(exit_summary(&result).0, expected);
             let fill = result.into_fill().expect("닫힌 청산");
             assert_eq!(fill.price(), price(exit_price, Currency::Krw));
-            assert_eq!(fill.at(), instant(62, minute));
+            let moment = if minute == 0 {
+                crate::VirtualExitMoment::At(instant(62, minute))
+            } else {
+                crate::VirtualExitMoment::TradingDay(row(62).date())
+            };
+            assert_eq!(fill.at(), moment);
             assert_eq!(format!("{fill:?}"), "VirtualExitFill");
         }
         let mut flat = entry_bars();
@@ -164,7 +169,7 @@ pub(crate) mod tests {
         assert_eq!(exit_summary(&result).0, "maturity");
         let fill = result.into_fill().expect("만기 청산");
         assert_eq!(fill.price(), price("100", Currency::Krw));
-        assert_eq!(fill.at(), instant(66, 4));
+        assert_eq!(fill.at(), crate::VirtualExitMoment::At(instant(66, 4)));
         let missing = virtual_exit(&task(), &calendars(), &adjustment(), &[], instant(66, 4));
         assert_eq!(
             missing,
@@ -172,6 +177,55 @@ pub(crate) mod tests {
         );
         assert_eq!(exit_summary(&missing), ("unavailable", None));
         assert_eq!(missing.into_fill(), None);
+    }
+    #[test]
+    fn review_zero_volume_is_rejected_in_an_otherwise_complete_maturity_path() {
+        let mut flat = entry_bars();
+        flat.extend((62_i64..=66).map(|day| candle(day, 0, CandlePeriod::Daily, ["100"; 4])));
+        assert_eq!(
+            exit_summary(&virtual_exit(
+                &task(),
+                &calendars(),
+                &adjustment(),
+                &flat,
+                instant(66, 4)
+            ))
+            .0,
+            "maturity"
+        );
+        let last = flat.pop().expect("만기 봉");
+        let values = last.values();
+        flat.push(
+            Candle::try_new(
+                last.instrument().clone(),
+                last.time(),
+                last.adjustment(),
+                Ohlcv::try_new(
+                    values.open(),
+                    values.high(),
+                    values.low(),
+                    values.close(),
+                    Quantity::parse(&NumericInput::try_new("0").expect("영 거래량")).expect("수량"),
+                )
+                .expect("OHLC"),
+                CandleObservation::new(last.collected_at(), last.status()),
+            )
+            .expect("무거래 봉"),
+        );
+        assert_eq!(
+            virtual_exit(&task(), &calendars(), &adjustment(), &flat, instant(66, 4)),
+            VirtualExit::Unavailable(crate::OutcomeUnavailable::MissingCandles)
+        );
+        assert_eq!(
+            virtual_exit(
+                &task(),
+                &calendars(),
+                &adjustment(),
+                &entry_bars(),
+                instant(62, 0)
+            ),
+            VirtualExit::Ongoing
+        );
     }
     pub(crate) fn benchmark() -> crate::SignalBenchmark {
         crate::signal_return_scenarios::tests::benchmark(
@@ -203,7 +257,7 @@ pub(crate) mod tests {
         .expect("비용")
     }
     #[test]
-    fn d29_r11_cost_example_and_unaligned_benchmark_preserve_net_return() {
+    fn d29_r11_cost_example_and_daily_close_benchmark_preserve_net_return() {
         let source = task();
         let fill = crate::virtual_exit::tests::virtual_exit_fixture_fill(
             &source,
@@ -216,9 +270,11 @@ pub(crate) mod tests {
             .checked_sub(rust_decimal::Decimal::ONE)
             .expect("순수익률");
         assert_eq!(result.net().number().as_decimal(), expected);
+        let comparison = result.excess().expect("종가 근사");
+        assert_eq!(comparison.value(), result.net());
         assert_eq!(
-            result.excess(),
-            Err(crate::SignalReturnError::BenchmarkMismatch)
+            comparison.alignment(),
+            crate::BenchmarkAlignment::DailyCloseApproximation
         );
         assert_eq!(result.currency(), Currency::Krw);
         assert_eq!(result.entry_day(), instant(61, 0).offset_calendar_date());

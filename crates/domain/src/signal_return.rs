@@ -31,19 +31,65 @@ pub enum SignalReturnError {
     Scorecard(crate::ScorecardError),
     TooManyInputs,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BenchmarkAlignment {
+    Exact,
+    DailyCloseApproximation,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SignalExcess {
+    value: PerformanceValue,
+    alignment: BenchmarkAlignment,
+}
+impl SignalExcess {
+    #[must_use]
+    pub const fn value(self) -> PerformanceValue {
+        self.value
+    }
+    #[must_use]
+    pub const fn alignment(self) -> BenchmarkAlignment {
+        self.alignment
+    }
+}
+impl std::fmt::Display for SignalExcess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.value.fmt(f)
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalReturnBasis {
+    NetOfBuyAndSellCosts,
+    GrossSellAvoidance,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalReturn {
     instrument: crate::InstrumentId,
+    task_id: crate::ScorecardTaskId,
+    estimate_id: Option<crate::CalibrationEstimateId>,
+    direction: crate::ScorecardSignalDirection,
+    origin: Option<crate::ScorecardSignalRecord>,
     interval: TimeInterval,
-    exit_at: Timestamp,
+    exit_at: crate::VirtualExitMoment,
     entry_day: crate::CalendarDate,
     cluster_day: crate::CalendarDate,
     exit_day: crate::CalendarDate,
     currency: Currency,
     net: PerformanceValue,
-    excess: Result<PerformanceValue, SignalReturnError>,
+    excess: Result<SignalExcess, SignalReturnError>,
 }
 impl SignalReturn {
+    #[must_use]
+    pub const fn task_id(&self) -> &crate::ScorecardTaskId {
+        &self.task_id
+    }
+    #[must_use]
+    pub const fn estimate_id(&self) -> Option<&crate::CalibrationEstimateId> {
+        self.estimate_id.as_ref()
+    }
+    #[must_use]
+    pub const fn direction(&self) -> crate::ScorecardSignalDirection {
+        self.direction
+    }
     #[must_use]
     pub const fn instrument(&self) -> &crate::InstrumentId {
         &self.instrument
@@ -57,7 +103,7 @@ impl SignalReturn {
         self.interval.end()
     }
     #[must_use]
-    pub const fn exit_at(&self) -> Timestamp {
+    pub const fn exit_at(&self) -> crate::VirtualExitMoment {
         self.exit_at
     }
     #[must_use]
@@ -68,7 +114,14 @@ impl SignalReturn {
     pub const fn net(&self) -> PerformanceValue {
         self.net
     }
-    pub const fn excess(&self) -> Result<PerformanceValue, SignalReturnError> {
+    #[must_use]
+    pub const fn basis(&self) -> SignalReturnBasis {
+        match self.direction {
+            crate::ScorecardSignalDirection::Buy => SignalReturnBasis::NetOfBuyAndSellCosts,
+            crate::ScorecardSignalDirection::SellAvoidance => SignalReturnBasis::GrossSellAvoidance,
+        }
+    }
+    pub const fn excess(&self) -> Result<SignalExcess, SignalReturnError> {
         self.excess
     }
     #[must_use]
@@ -91,9 +144,16 @@ pub fn signal_return(
     benchmark: &SignalBenchmark,
 ) -> Result<SignalReturn, SignalReturnError> {
     let fill = exit.into_fill().ok_or(SignalReturnError::ExitUnavailable)?;
-    if fill.task() != task
-        || cost.cost.period().task() != task
-        || cost.cost.period().interval().end() != fill.interval().end()
+    let direction = fill.identity().map_or(
+        crate::ScorecardSignalDirection::Buy,
+        crate::ScorecardSignalRecord::direction,
+    );
+    if fill.task() != task {
+        return Err(SignalReturnError::ConflictingReturn);
+    }
+    if direction == crate::ScorecardSignalDirection::Buy
+        && (cost.cost.period().task() != task
+            || cost.cost.period().interval().end() != fill.interval().end())
     {
         return Err(SignalReturnError::Cost);
     }
@@ -103,65 +163,101 @@ pub fn signal_return(
         Currency::Krw => Market::Kr,
         Currency::Usd => Market::Us,
     };
-    if cost.cost.market() != expected {
+    if direction == crate::ScorecardSignalDirection::Buy && cost.cost.market() != expected {
         return Err(SignalReturnError::Cost);
     }
-    let net = net_return(entry, fill.price(), cost)?;
-    let entry_day = fill.entered_at().offset_calendar_date();
-    let exit_day = fill.at().offset_calendar_date();
-    let excess = if fill.benchmark_ready() == crate::CheckResult::Passed {
-        benchmark
-            .between(fill.entered_at(), fill.at(), currency)
-            .and_then(|value| {
-                net.number()
-                    .sub(value.number())
-                    .map(PerformanceValue::from_number)
-                    .map_err(arithmetic)
-            })
+    let asset = asset_return(entry, fill.price(), cost, direction)?;
+    let net = directed(asset, direction);
+    let entry_day = fill.entry_day();
+    let exit_day = fill.exit_day();
+    let comparison = benchmark
+        .between_dates(entry_day, exit_day, currency)
+        .and_then(|benchmark_value| {
+            asset
+                .number()
+                .sub(benchmark_value.number())
+                .map(PerformanceValue::from_number)
+                .map(|value| directed(value, direction))
+                .map_err(arithmetic)
+        });
+    let alignment = if fill.benchmark_ready() == crate::CheckResult::Passed && entry_day != exit_day
+    {
+        BenchmarkAlignment::Exact
     } else {
-        Err(SignalReturnError::BenchmarkMismatch)
+        BenchmarkAlignment::DailyCloseApproximation
     };
-    fill.entered_at()
-        .date_at_offset(crate::OffsetSeconds::new(32400))
-        .map(|cluster_day| SignalReturn {
-            instrument: task.volatility().instrument().clone(),
-            interval: fill.interval(),
-            exit_at: fill.at(),
-            entry_day,
-            cluster_day,
-            exit_day,
-            currency,
-            net,
-            excess,
-        })
-        .map_err(arithmetic)
+    let excess = comparison.map(|value| SignalExcess { value, alignment });
+    Ok(SignalReturn {
+        instrument: task.volatility().instrument().clone(),
+        task_id: crate::ScorecardTaskId::from_task(task),
+        estimate_id: fill.identity().map(|record| record.estimate_id().clone()),
+        origin: fill.identity().cloned(),
+        direction,
+        interval: fill.interval(),
+        exit_at: fill.moment(),
+        entry_day,
+        cluster_day: entry_day,
+        exit_day,
+        currency,
+        net,
+        excess,
+    })
+}
+fn asset_return(
+    entry: crate::Price,
+    exit: crate::Price,
+    cost: &SignalReturnCost,
+    direction: crate::ScorecardSignalDirection,
+) -> Result<PerformanceValue, SignalReturnError> {
+    match direction {
+        crate::ScorecardSignalDirection::Buy => net_return(entry, exit, cost),
+        crate::ScorecardSignalDirection::SellAvoidance => {
+            Number::new(exit.as_money().amount().as_decimal())
+                .div(Number::new(entry.as_money().amount().as_decimal()))
+                .and_then(|value| value.sub(Number::new(Decimal::ONE)))
+                .map(PerformanceValue::from_number)
+                .map_err(arithmetic)
+        }
+    }
+}
+fn directed(
+    value: PerformanceValue,
+    direction: crate::ScorecardSignalDirection,
+) -> PerformanceValue {
+    match direction {
+        crate::ScorecardSignalDirection::Buy => value,
+        crate::ScorecardSignalDirection::SellAvoidance => {
+            PerformanceValue::from_number(value.number().neg())
+        }
+    }
 }
 #[derive(Clone, Copy)]
 enum CostSide {
     Buy,
     Sell,
 }
-fn cost_factor(rate: Ratio, side: CostSide) -> Number {
-    let value = rate.as_decimal();
-    let unit = 10_i128.wrapping_pow(value.scale());
-    let coefficient = match side {
-        CostSide::Buy => unit.wrapping_add(value.mantissa()),
-        CostSide::Sell => unit.wrapping_sub(value.mantissa()),
-    };
-    Number::new(Decimal::from_i128_with_scale(coefficient, value.scale()))
+fn cost_factor(rate: Ratio, side: CostSide) -> Result<Number, crate::PerformanceError> {
+    let unit = Number::new(Decimal::ONE);
+    let value = Number::new(rate.as_decimal());
+    match side {
+        CostSide::Buy => unit.add(value),
+        CostSide::Sell => unit.sub(value),
+    }
 }
 fn net_return(
     entry: crate::Price,
     exit: crate::Price,
     cost: &SignalReturnCost,
 ) -> Result<PerformanceValue, SignalReturnError> {
-    let paid = cost_factor(cost.buy, CostSide::Buy);
-    let retained = cost_factor(cost.sell, CostSide::Sell);
-    Number::new(exit.as_money().amount().as_decimal())
-        .div(Number::new(entry.as_money().amount().as_decimal()))
-        .and_then(|growth| growth.mul(retained))
-        .and_then(|after_sell| after_sell.div(paid))
-        .and_then(|after_buy| after_buy.sub(Number::new(Decimal::ONE)))
+    cost_factor(cost.buy, CostSide::Buy)
+        .and_then(|paid| cost_factor(cost.sell, CostSide::Sell).map(|retained| (paid, retained)))
+        .and_then(|(paid, retained)| {
+            let after_buy = Number::new(exit.as_money().amount().as_decimal())
+                .div(Number::new(entry.as_money().amount().as_decimal()))
+                .and_then(|growth| growth.mul(retained))
+                .and_then(|after_sell| after_sell.div(paid))?;
+            after_buy.sub(Number::new(Decimal::ONE))
+        })
         .map(PerformanceValue::from_number)
         .map_err(arithmetic)
 }
@@ -183,6 +279,7 @@ pub struct ScorecardEdge {
     cards: crate::Scorecards,
     confidence: BootstrapInterval,
     unavailable: SignalReturnCount,
+    approximate: SignalReturnCount,
 }
 impl ScorecardEdge {
     #[must_use]
@@ -192,6 +289,10 @@ impl ScorecardEdge {
     #[must_use]
     pub const fn confidence(&self) -> &BootstrapInterval {
         &self.confidence
+    }
+    #[must_use]
+    pub const fn approximate_samples(&self) -> &SignalReturnCount {
+        &self.approximate
     }
     #[must_use]
     pub const fn unavailable(&self) -> &SignalReturnCount {
@@ -208,7 +309,7 @@ impl ScorecardReturnObservation {
         original: crate::ScorecardObservation,
         value: SignalReturn,
     ) -> Result<Self, SignalReturnError> {
-        let (_, _, outcome) = crate::scorecard_input::scorecard_return_identity(&original);
+        let (id, _, outcome) = crate::scorecard_input::scorecard_return_identity(&original);
         let evidence = outcome
             .evidence()
             .ok_or(SignalReturnError::ExitUnavailable)?;
@@ -217,6 +318,15 @@ impl ScorecardReturnObservation {
                 return Err(SignalReturnError::ExitUnavailable);
             }
             crate::OutcomeState::Success | crate::OutcomeState::Failure(_) => {}
+        }
+        if value.estimate_id.as_ref() != Some(id)
+            || crate::scorecard_input::scorecard_task_id(&original) != Some(&value.task_id)
+            || value.origin.as_ref().is_some_and(|signal| {
+                crate::scorecard_input::scorecard_matches_signal(&original, signal)
+                    != crate::CheckResult::Passed
+            })
+        {
+            return Err(SignalReturnError::ConflictingReturn);
         }
         if evidence.instrument() != value.instrument()
             || value.interval.start() < evidence.interval().start()
@@ -265,34 +375,54 @@ pub fn scorecard_edge(
     now: Timestamp,
     seed: BootstrapSeed,
 ) -> Result<ScorecardEdge, SignalReturnError> {
-    let (cards, selected) = crate::scorecard_input::scorecard_edge_facts(input, key, now)
-        .map_err(SignalReturnError::Scorecard)?;
+    let (cards, selected, completed) =
+        crate::scorecard_input::scorecard_edge_facts(input, key, now)
+            .map_err(SignalReturnError::Scorecard)?;
     let index = ReturnIndex::new(returns, key)?;
     let mut samples = Vec::new();
     let mut unavailable = SignalReturnCount(0);
-    for fact in &selected {
-        let Some(first) = index
+    let mut approximate = SignalReturnCount(0);
+    for fact in &completed {
+        match index
             .0
             .get(crate::scorecard_input::scorecard_return_identity(fact).0)
-        else {
-            unavailable.0 = unavailable.0.wrapping_add(1);
-            continue;
-        };
-        if &first.original != fact {
-            return Err(SignalReturnError::ConflictingReturn);
-        }
-        match first.value.excess {
-            Ok(value) => samples.push((first.value.cluster_day, value)),
-            Err(_error) => {
-                unavailable.0 = unavailable.0.wrapping_add(1);
+        {
+            None => unavailable.0 = unavailable.0.wrapping_add(1),
+            Some(value) => {
+                if &value.original != fact {
+                    return Err(SignalReturnError::ConflictingReturn);
+                }
+                if value.value.excess.is_err() {
+                    unavailable.0 = unavailable.0.wrapping_add(1);
+                }
             }
         }
     }
-    let confidence = crate::bootstrap::interval(&samples, seed).map_err(arithmetic)?;
+    for fact in &selected {
+        if let Some(first) = index
+            .0
+            .get(crate::scorecard_input::scorecard_return_identity(fact).0)
+            && let Ok(value) = first.value.excess
+        {
+            if value.alignment == BenchmarkAlignment::DailyCloseApproximation {
+                approximate.0 = approximate.0.wrapping_add(1);
+            }
+            samples.push((first.value.cluster_day, value.value));
+        }
+    }
+    let confidence = if unavailable.0 == 0 {
+        crate::bootstrap::interval(&samples, seed).map_err(arithmetic)?
+    } else {
+        BootstrapInterval::Withheld(
+            crate::WithheldReason::IncomparableSamples,
+            crate::WithheldCount::new(unavailable.0),
+        )
+    };
     Ok(ScorecardEdge {
         cards,
         confidence,
         unavailable,
+        approximate,
     })
 }
 pub(crate) fn cost_rates(
@@ -301,34 +431,30 @@ pub(crate) fn cost_rates(
     buy_tax: crate::CostRate,
     sell_tax: crate::CostRate,
 ) -> Result<SignalReturnCost, crate::TradeCostError> {
-    let buy = combined_rate(commission, buy_tax);
-    let sell = combined_rate(commission, sell_tax);
-    if !(Decimal::ZERO..=Decimal::ONE).contains(&buy.as_decimal())
-        || !(Decimal::ZERO..=Decimal::ONE).contains(&sell.as_decimal())
+    commission
+        .ratio()
+        .checked_add(&buy_tax.ratio())
+        .and_then(|buy| {
+            commission
+                .ratio()
+                .checked_add(&sell_tax.ratio())
+                .map(|sell| (buy, sell))
+        })
+        .map_err(crate::TradeCostError::Arithmetic)
+        .and_then(validate_rates)
+        .map(|(buy, sell)| SignalReturnCost::new(cost, buy, sell))
+}
+fn validate_rates(rates: (Ratio, Ratio)) -> Result<(Ratio, Ratio), crate::TradeCostError> {
+    if !(Decimal::ZERO..=Decimal::ONE).contains(&rates.0.as_decimal())
+        || !(Decimal::ZERO..=Decimal::ONE).contains(&rates.1.as_decimal())
     {
         return Err(crate::TradeCostError::InvalidRate);
     }
-    Ok(SignalReturnCost::new(cost, buy, sell))
-}
-
-fn combined_rate(left_rate: crate::CostRate, right_rate: crate::CostRate) -> Ratio {
-    let left = left_rate.ratio().as_decimal();
-    let right = right_rate.ratio().as_decimal();
-    let scale = left.scale().max(right.scale());
-    let first = left
-        .mantissa()
-        .wrapping_mul(10_i128.wrapping_pow(scale.wrapping_sub(left.scale())));
-    let second = right
-        .mantissa()
-        .wrapping_mul(10_i128.wrapping_pow(scale.wrapping_sub(right.scale())));
-    Ratio::new(Decimal::from_i128_with_scale(
-        first.wrapping_add(second),
-        scale,
-    ))
+    Ok(rates)
 }
 
 #[cfg(test)]
-mod boundary_tests {
+pub(crate) mod boundary_tests {
     use super::{
         ScorecardReturnObservation, SignalReturnCost, SignalReturnError, scorecard_edge,
         signal_return,
@@ -340,6 +466,18 @@ mod boundary_tests {
         HoursPermission, Market, PerformanceValue, PriceObservation, ResolvedOrderInstrument,
         RiskAppetite, Symbol,
     };
+    pub(crate) fn identify_fixture(
+        original: crate::ScorecardObservation,
+        mut value: super::SignalReturn,
+    ) -> (crate::ScorecardObservation, super::SignalReturn) {
+        value.estimate_id = Some(
+            crate::scorecard_input::scorecard_return_identity(&original)
+                .0
+                .clone(),
+        );
+        let record = crate::scorecard_input::identified_scorecard(original, value.task_id.clone());
+        (record, value)
+    }
     fn source(currency: Currency, amount: &str) -> EstimateTask {
         let original = task();
         let market = match currency {
@@ -407,7 +545,7 @@ mod boundary_tests {
         assert_eq!(value.net().to_string(), "0.100000");
         assert_eq!(
             signal_return(&task(), fill.clone(), &us_cost, &benchmark()),
-            Err(SignalReturnError::Cost)
+            Err(SignalReturnError::ConflictingReturn)
         );
         assert_eq!(
             signal_return(
@@ -513,6 +651,76 @@ mod boundary_tests {
         );
     }
     #[test]
+    fn review_binding_rejects_modified_start_maturity_and_task_identity() {
+        let (record, bound) = crate::scorecard_signal_review::tests::sample(
+            0,
+            crate::ScorecardSignalDirection::Buy,
+            "0",
+            "100",
+            "100",
+        );
+        let mut earlier = bound.value.clone();
+        earlier.interval =
+            crate::TimeInterval::try_new(instant(60, 4), earlier.maturity()).expect("시작 변조");
+        assert_eq!(
+            ScorecardReturnObservation::try_new(record.clone(), earlier),
+            Err(SignalReturnError::ConflictingReturn)
+        );
+        let mut later = bound.value.clone();
+        later.interval =
+            crate::TimeInterval::try_new(later.entry_at(), instant(68, 4)).expect("만기 변조");
+        assert_eq!(
+            ScorecardReturnObservation::try_new(record.clone(), later),
+            Err(SignalReturnError::ConflictingReturn)
+        );
+        let mut other = bound.value;
+        other.task_id =
+            crate::ScorecardTaskId::from_task(&crate::signal_return_scenarios::tests::task(7));
+        assert_eq!(
+            ScorecardReturnObservation::try_new(record, other),
+            Err(SignalReturnError::ConflictingReturn)
+        );
+    }
+    #[test]
+    fn review_unavailable_excess_within_bound_record_withholds_interval() {
+        let (record, mut bound) = crate::scorecard_signal_review::tests::sample(
+            0,
+            crate::ScorecardSignalDirection::Buy,
+            "0",
+            "100",
+            "100",
+        );
+        assert_eq!(
+            bound.value.basis(),
+            super::SignalReturnBasis::NetOfBuyAndSellCosts
+        );
+        bound.value.excess = Err(SignalReturnError::BenchmarkMismatch);
+        let edge = scorecard_edge(
+            &key(),
+            &[record],
+            &[bound],
+            instant(300, 4),
+            BootstrapSeed::new(0),
+        )
+        .expect("보류");
+        assert_eq!(
+            edge.confidence(),
+            &crate::BootstrapInterval::Withheld(
+                crate::WithheldReason::IncomparableSamples,
+                crate::WithheldCount::new(1)
+            )
+        );
+        assert_eq!(crate::WithheldCount::new(1).as_usize(), 1);
+    }
+    fn other_key() -> crate::CalibrationKey {
+        let other_model = crate::CalibrationModel::new(
+            crate::ModelIdentityPart::try_new("other").expect("제공자"),
+            crate::ModelIdentityPart::try_new("model").expect("모델"),
+            crate::ModelIdentityPart::try_new("version").expect("버전"),
+        );
+        crate::CalibrationKey::new(other_model, Horizon::new(HorizonSelection::FewDays))
+    }
+    #[test]
     fn d29_other_combination_is_ignored_and_bootstrap_overflow_is_reported() {
         let pairs = (0_i64..30)
             .map(|index| {
@@ -531,9 +739,12 @@ mod boundary_tests {
             .map(|(_, bound)| bound)
             .collect::<Vec<_>>();
         for value in &mut values {
-            value.value.excess = Ok(PerformanceValue::from_number(
-                crate::performance_arithmetic::Number::new(rust_decimal::Decimal::MAX),
-            ));
+            value.value.excess = Ok(super::SignalExcess {
+                value: PerformanceValue::from_number(crate::performance_arithmetic::Number::new(
+                    rust_decimal::Decimal::MAX,
+                )),
+                alignment: super::BenchmarkAlignment::Exact,
+            });
         }
         assert_eq!(
             scorecard_edge(
@@ -545,13 +756,7 @@ mod boundary_tests {
             ),
             Err(SignalReturnError::Arithmetic)
         );
-        let other_model = crate::CalibrationModel::new(
-            crate::ModelIdentityPart::try_new("other").expect("제공자"),
-            crate::ModelIdentityPart::try_new("model").expect("모델"),
-            crate::ModelIdentityPart::try_new("version").expect("버전"),
-        );
-        let other_key =
-            crate::CalibrationKey::new(other_model, Horizon::new(HorizonSelection::FewDays));
+        let other_key = other_key();
         let (id, _, outcome) = crate::scorecard_input::scorecard_return_identity(&records[0]);
         let other = crate::ScorecardObservation::try_new(
             id.clone(),
@@ -562,8 +767,10 @@ mod boundary_tests {
             outcome.clone(),
         )
         .expect("관측");
-        let value =
-            ScorecardReturnObservation::try_new(other, values[0].value.clone()).expect("결합");
+        let identified_other =
+            crate::scorecard_input::identified_scorecard(other, values[0].value.task_id.clone());
+        let value = ScorecardReturnObservation::try_new(identified_other, values[0].value.clone())
+            .expect("결합");
         let edge = scorecard_edge(
             &key(),
             &records,

@@ -11,7 +11,7 @@ mod tests {
     };
 
     fn signal() -> VirtualExitSignal {
-        VirtualExitSignal::try_new(
+        crate::virtual_exit::tests::signal_fixture(
             task(),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
@@ -57,7 +57,10 @@ mod tests {
         assert_eq!(value.cluster_day(), instant(61, 1).offset_calendar_date());
         assert_eq!(value.exit_day(), instant(66, 4).offset_calendar_date());
         assert_eq!(value.maturity(), instant(66, 4));
-        assert_eq!(value.exit_at(), instant(66, 4));
+        assert_eq!(
+            value.exit_at(),
+            crate::VirtualExitMoment::At(instant(66, 4))
+        );
         assert_eq!(value.currency(), Currency::Krw);
         assert_eq!(
             crate::virtual_exit(
@@ -91,7 +94,12 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                VirtualExitSignal::try_new(source.clone(), target, stop, instant(66, 4)),
+                crate::virtual_exit::tests::signal_fixture(
+                    source.clone(),
+                    target,
+                    stop,
+                    instant(66, 4)
+                ),
                 Err(expected)
             );
         }
@@ -112,7 +120,7 @@ mod tests {
             Err(VirtualExitSignalError::InvalidEntry)
         );
         assert_eq!(
-            VirtualExitSignal::try_new(
+            crate::virtual_exit::tests::signal_fixture(
                 source,
                 price("110", Currency::Krw),
                 price("90", Currency::Krw),
@@ -120,7 +128,31 @@ mod tests {
             ),
             Err(VirtualExitSignalError::InvalidEntry)
         );
-        let wrong = VirtualExitSignal::try_new(
+    }
+    #[test]
+    fn review_identified_entry_before_task_creation_is_rejected() {
+        let source = task();
+        let entry = crate::PriceObservation::from_identified_quote_parts(
+            source.volatility().instrument().clone(),
+            source.reference().instrument().clone(),
+            source.reference().price(),
+            instant(60, 4),
+        )
+        .expect("식별된 과거 관측");
+        assert_eq!(
+            VirtualExitSignal::from_entry(
+                source,
+                entry,
+                price("110", Currency::Krw),
+                price("90", Currency::Krw),
+                instant(66, 4)
+            ),
+            Err(VirtualExitSignalError::InvalidEntry)
+        );
+    }
+    #[test]
+    fn review_maturity_assertion_is_validated_against_calendar() {
+        let wrong = crate::virtual_exit::tests::signal_fixture(
             task(),
             price("110", Currency::Krw),
             price("90", Currency::Krw),
@@ -218,7 +250,7 @@ mod tests {
         );
     }
     #[test]
-    fn d29_intraday_benchmark_is_unavailable_and_bindings_follow_original_observation() {
+    fn d29_intraday_benchmark_is_approximated_and_bindings_follow_original_observation() {
         let source = task();
         let mut bars = entry_bars();
         bars.push(candle(62, 0, CandlePeriod::Daily, ["200"; 4]));
@@ -240,24 +272,37 @@ mod tests {
         );
         let value = crate::signal_return(&source, exit, &cost("0", "0", "0"), &benchmark())
             .expect("순수익률");
+        let comparison = value.excess().expect("장중 종가 근사");
+        assert_eq!(comparison.value().to_string(), "1.000000");
         assert_eq!(
-            value.excess(),
-            Err(crate::SignalReturnError::BenchmarkMismatch)
+            comparison.alignment(),
+            crate::BenchmarkAlignment::DailyCloseApproximation
         );
         assert_eq!(value.entry_at(), instant(61, 0));
-        assert_eq!(value.exit_at(), instant(62, 0));
+        assert_eq!(
+            value.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 0))
+        );
         assert_eq!(value.maturity(), instant(66, 4));
+        let (identified_record, identified_value) =
+            crate::signal_return::boundary_tests::identify_fixture(record, value);
         let bound =
-            crate::ScorecardReturnObservation::try_new(record.clone(), value).expect("원본 결합");
+            crate::ScorecardReturnObservation::try_new(identified_record.clone(), identified_value)
+                .expect("원본 결합");
         let edge = crate::scorecard_edge(
             &key(),
-            std::slice::from_ref(&record),
+            std::slice::from_ref(&identified_record),
             &[bound.clone(), bound],
             instant(66, 4),
             BootstrapSeed::new(1),
         )
         .expect("중복 동일 기록");
-        assert_eq!(edge.unavailable().as_usize(), 1);
+        assert_eq!(edge.unavailable().as_usize(), 0);
+        assert_eq!(edge.approximate_samples().as_usize(), 1);
+    }
+    #[test]
+    fn review_ongoing_observation_cannot_bind_completed_return() {
+        let source = task();
         let ongoing = observation(crate::EstimateOutcome::evaluate(
             &source,
             &calendars(),
@@ -486,7 +531,7 @@ mod candle_tests {
             crate::CandleObservation::new(first.collected_at(), first.status()),
         )
         .expect("다른 종목의 유효 봉");
-        let signal = crate::VirtualExitSignal::try_new(
+        let signal = crate::virtual_exit::tests::signal_fixture(
             task(),
             crate::candle::tests::price("110", crate::Currency::Krw),
             crate::candle::tests::price("90", crate::Currency::Krw),

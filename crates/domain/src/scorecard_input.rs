@@ -32,6 +32,7 @@ pub struct ScorecardObservation {
     prompt: ScorecardPromptId,
     probability: AiProbability,
     outcome: EstimateOutcome,
+    task_id: Option<crate::ScorecardTaskId>,
 }
 impl ScorecardObservation {
     pub fn try_new(
@@ -52,6 +53,7 @@ impl ScorecardObservation {
             prompt,
             probability,
             outcome,
+            task_id: None,
         })
     }
 }
@@ -297,7 +299,14 @@ pub(crate) fn scorecard_edge_facts(
     input: &[ScorecardObservation],
     key: &CalibrationKey,
     as_of: Timestamp,
-) -> Result<(Scorecards, Vec<ScorecardObservation>), ScorecardError> {
+) -> Result<
+    (
+        Scorecards,
+        Vec<ScorecardObservation>,
+        Vec<ScorecardObservation>,
+    ),
+    ScorecardError,
+> {
     let cards = Scorecards::calculate(input, as_of)?;
     if cards.select(key).is_none() {
         return Err(ScorecardError::MismatchedCombination);
@@ -318,8 +327,23 @@ pub(crate) fn scorecard_edge_facts(
                 })
                 .collect::<Vec<_>>()
         })
-        .and_then(|judged| Calibration::try_new(key.clone(), &judged).map_err(calibration_error))
-        .map(|calibration| {
+        .and_then(|judged| {
+            let ids = judged
+                .iter()
+                .map(|fact| fact.estimate().id())
+                .collect::<std::collections::BTreeSet<_>>();
+            let completed = input
+                .iter()
+                .filter(|record| &record.key == key && ids.contains(&record.id))
+                .map(|record| (record.id.clone(), record.clone()))
+                .collect::<BTreeMap<_, _>>()
+                .into_values()
+                .collect::<Vec<_>>();
+            Calibration::try_new(key.clone(), &judged)
+                .map_err(calibration_error)
+                .map(|calibration| (calibration, completed))
+        })
+        .map(|(calibration, completed)| {
             let table = calibration.for_combination(key);
             let selected = table
                 .selected_facts()
@@ -333,7 +357,7 @@ pub(crate) fn scorecard_edge_facts(
                 .collect::<BTreeMap<_, _>>()
                 .into_values()
                 .collect();
-            (cards, records)
+            (cards, records, completed)
         })
 }
 
@@ -341,6 +365,33 @@ pub(crate) fn scorecard_return_identity(
     record: &ScorecardObservation,
 ) -> (&CalibrationEstimateId, &CalibrationKey, &EstimateOutcome) {
     (&record.id, &record.key, &record.outcome)
+}
+
+pub(crate) fn identified_scorecard(
+    mut record: ScorecardObservation,
+    task: crate::ScorecardTaskId,
+) -> ScorecardObservation {
+    record.task_id = Some(task);
+    record
+}
+pub(crate) fn scorecard_task_id(record: &ScorecardObservation) -> Option<&crate::ScorecardTaskId> {
+    record.task_id.as_ref()
+}
+
+pub(crate) fn scorecard_matches_signal(
+    record: &ScorecardObservation,
+    signal: &crate::ScorecardSignalRecord,
+) -> crate::CheckResult {
+    if &record.id == signal.estimate_id()
+        && &record.key == signal.key()
+        && &record.prompt == signal.prompt()
+        && record.probability == signal.probability()
+        && record.task_id.as_ref() == Some(&signal.task_id())
+    {
+        crate::CheckResult::Passed
+    } else {
+        crate::CheckResult::Failed
+    }
 }
 
 #[cfg(test)]
