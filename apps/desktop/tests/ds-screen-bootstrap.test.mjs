@@ -113,7 +113,13 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     );
     assert.deepEqual(
       inputExports.map((entry) => entry.name),
-      ["inputEventValue", "inputCommit", "pasteInputValue", "focusDialogInput"],
+      [
+        "inputEventValue",
+        "inputCommit",
+        "pasteInputValue",
+        "focusDialogInput",
+        "chartNavigation",
+      ],
     );
     const returns = inputExports.map((entry) =>
       checker
@@ -126,6 +132,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       ['"commit" | "ignore"'],
       ["void"],
       ["void"],
+      ['"ignore" | "next" | "previous" | "first" | "last"'],
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),

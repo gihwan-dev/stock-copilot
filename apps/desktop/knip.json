@@ -4,7 +4,8 @@
     "eslint/**/*.mjs",
     "tests/*.test.mjs",
     "src/shared/ds/theme.css!",
-    "src/shared/ds/stories.ts"
+    "src/shared/ds/stories.ts",
+    "tests/ds06-geometry-fixture.ts"
   ],
   "project": ["src/**/*.{ts,tsx}!", "src/**/*.css"],
   "include": [

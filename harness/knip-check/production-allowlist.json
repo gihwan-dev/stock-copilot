@@ -240,6 +240,38 @@
     {
       "issue": "files src/shared/platform/input.ts src/shared/platform/input.ts",
       "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+    },
+    {
+      "issue": "files src/shared/ds/AreaChart.tsx src/shared/ds/AreaChart.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/ChartFrame.tsx src/shared/ds/ChartFrame.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/ChartTable.tsx src/shared/ds/ChartTable.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Charts.stories.tsx src/shared/ds/Charts.stories.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/DonutChart.tsx src/shared/ds/DonutChart.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/LineChart.tsx src/shared/ds/LineChart.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Treemap.tsx src/shared/ds/Treemap.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/chart-types.ts src/shared/ds/chart-types.ts",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
     }
   ]
 }

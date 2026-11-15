@@ -1,4 +1,4 @@
-import type { FormattedNumber, UiText } from "./brand";
+import type { ChartDecimal, FormattedNumber, UiText } from "./brand";
 import type { Money, Price, Quantity, PercentDisplay } from "./money";
 import { readDecimalForNumberDisplay } from "./money";
 import { text, type MessageKey } from "./messages";
@@ -13,6 +13,7 @@ type NumericInput =
     }
   | { readonly kind: "quantity"; readonly value: Quantity }
   | { readonly kind: "percent" | "probability"; readonly value: PercentDisplay }
+  | { readonly kind: "decimal"; readonly value: ChartDecimal }
   | { readonly kind: "unavailable" };
 export type Display =
   | { readonly kind: "available"; readonly text: FormattedNumber }
@@ -107,6 +108,8 @@ const unitText = (
     case "percent":
     case "probability":
       return "%";
+    case "decimal":
+      return "";
   }
 };
 const currencyStatus = (currency: unknown): "valid" | "invalid" => {
@@ -136,7 +139,10 @@ export const formatNumber = (
   direction?: Direction,
 ): Display => {
   if (input.kind === "unavailable") return unavailable();
-  const raw = readDecimalForNumberDisplay(input.value);
+  const raw =
+    input.kind === "decimal"
+      ? input.value
+      : readDecimalForNumberDisplay(input.value);
   if (typeof raw !== "string" || valueStatus(raw, input) === "invalid")
     return unavailable();
   if (directionMatches(raw, direction) === "mismatched") return unavailable();

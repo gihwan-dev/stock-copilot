@@ -163,6 +163,14 @@ const expectedProductionAllowlist = [
   "files src/shared/lib/money.ts src/shared/lib/money.ts",
   "files src/shared/lib/result.ts src/shared/lib/result.ts",
   "files src/shared/platform/input.ts src/shared/platform/input.ts",
+  "files src/shared/ds/AreaChart.tsx src/shared/ds/AreaChart.tsx",
+  "files src/shared/ds/ChartFrame.tsx src/shared/ds/ChartFrame.tsx",
+  "files src/shared/ds/ChartTable.tsx src/shared/ds/ChartTable.tsx",
+  "files src/shared/ds/Charts.stories.tsx src/shared/ds/Charts.stories.tsx",
+  "files src/shared/ds/DonutChart.tsx src/shared/ds/DonutChart.tsx",
+  "files src/shared/ds/LineChart.tsx src/shared/ds/LineChart.tsx",
+  "files src/shared/ds/Treemap.tsx src/shared/ds/Treemap.tsx",
+  "files src/shared/ds/chart-types.ts src/shared/ds/chart-types.ts",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

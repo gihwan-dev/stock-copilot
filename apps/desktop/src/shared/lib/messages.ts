@@ -3,6 +3,20 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "ds.chartMinimum": { ko: "최소" as UiText },
+  "ds.chartMaximum": { ko: "최대" as UiText },
+  "ds.chartExplore": { ko: "차트 항목 살펴보기" as UiText },
+  "ds.chartTrendOrder": {
+    ko: "화살표 키로 항목을 옮겨 살펴볼 수 있어요" as UiText,
+  },
+  "ds.chartDonutOrder": {
+    ko: "위쪽부터 시계 방향으로 아래 목록의 순서예요. 값이 0인 항목은 제외해요" as UiText,
+  },
+  "ds.chartTreemapOrder": {
+    ko: "왼쪽부터 아래 목록의 순서예요. 값이 0인 항목은 제외해요" as UiText,
+  },
+  "ds.chartInvalid": { ko: "차트 값을 읽을 수 없어요" as UiText },
+  "ds.chartSeparator": { ko: " · " as UiText },
   "number.jo": { ko: "조" as UiText },
   "number.empty": { ko: "" as UiText },
   "number.invalid": { ko: "값을 표시할 수 없음" as UiText },
