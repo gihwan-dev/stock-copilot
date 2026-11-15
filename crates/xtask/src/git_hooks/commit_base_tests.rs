@@ -73,7 +73,8 @@ fn commit_all(directory: &Path, message: &str, verify: &str) -> bool {
 }
 
 fn base_repository(name: &str, branch: &str) -> PathBuf {
-    let directory = fresh_directory(&repository_root(), name).join("repository");
+    let root = crate::harness_workspace_tests::unique_directory(&repository_root(), name);
+    let directory = fresh_directory(&root, name).join("repository");
     fs::create_dir_all(&directory).expect("create repository");
     git_text(
         &directory,

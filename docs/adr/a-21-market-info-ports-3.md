@@ -71,6 +71,7 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 
 ## 인계
 
+- A-21 채택 담당 메인: 초안 번호 부여와 함께 architecture 3.3의 포트 역할/메서드 및 ADR 0082의 정의 대기 투자자·섹터·ETF 행을 갱신한다. 구현자는 기존 확정 ADR을 수정하지 않는다.
 - A-04: testkit 가짜에는 이번 다섯 메서드와 capability를 반영한다. 이 작업은 testkit을 수정하지 않는다.
 - T-09/T-10: 위 계약의 실제 HTTP·응답 식별·완전성·capability 검사를 구현한다. 로컬 계약 검증과 실제 API 실측을 구분한다.
 - A-09/G-07/M-04: freshness·TopN·Unknown 및 섹터 대분류 의미를 표시/후보 선택에 사용한다.

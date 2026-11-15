@@ -4,8 +4,25 @@
     "schedule": [
       {
         "cron": "0 18 * * *"
+      },
+      {
+        "cron": "0 14 * * 0"
       }
-    ]
+    ],
+    "workflow_dispatch": {
+      "inputs": {
+        "mode": {
+          "description": "변이 검사 범위",
+          "type": "choice",
+          "required": true,
+          "default": "daily",
+          "options": [
+            "daily",
+            "full"
+          ]
+        }
+      }
+    }
   },
   "permissions": {
     "contents": "read"
@@ -38,13 +55,14 @@
           "id": "changed",
           "run": "node harness/ci/ci-range.mjs changed"
         }
-      ]
+      ],
+      "if": "github.event.schedule == '0 18 * * *'"
     },
     "macos": {
       "needs": [
         "changes"
       ],
-      "if": "needs.changes.outputs.changed == 'yes'",
+      "if": "github.event.schedule == '0 18 * * *' && needs.changes.outputs.changed == 'yes'",
       "runs-on": "macos-15",
       "timeout-minutes": 90,
       "steps": [
@@ -154,7 +172,8 @@
           "name": "linux tests without network",
           "run": "node harness/ci/linux/offline.mjs just linux-test"
         }
-      ]
+      ],
+      "if": "github.event.schedule == '0 18 * * *'"
     },
     "notify": {
       "needs": [
@@ -162,7 +181,7 @@
         "macos",
         "linux"
       ],
-      "if": "failure()",
+      "if": "failure() && github.event.schedule == '0 18 * * *'",
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 10,
       "permissions": {
@@ -206,15 +225,139 @@
     },
     "mutants": {
       "runs-on": "ubuntu-24.04-arm",
-      "timeout-minutes": 120,
+      "timeout-minutes": 180,
       "strategy": {
         "fail-fast": false,
         "matrix": {
           "shard": [
-            "0/4",
-            "1/4",
-            "2/4",
-            "3/4"
+            "0/128",
+            "1/128",
+            "2/128",
+            "3/128",
+            "4/128",
+            "5/128",
+            "6/128",
+            "7/128",
+            "8/128",
+            "9/128",
+            "10/128",
+            "11/128",
+            "12/128",
+            "13/128",
+            "14/128",
+            "15/128",
+            "16/128",
+            "17/128",
+            "18/128",
+            "19/128",
+            "20/128",
+            "21/128",
+            "22/128",
+            "23/128",
+            "24/128",
+            "25/128",
+            "26/128",
+            "27/128",
+            "28/128",
+            "29/128",
+            "30/128",
+            "31/128",
+            "32/128",
+            "33/128",
+            "34/128",
+            "35/128",
+            "36/128",
+            "37/128",
+            "38/128",
+            "39/128",
+            "40/128",
+            "41/128",
+            "42/128",
+            "43/128",
+            "44/128",
+            "45/128",
+            "46/128",
+            "47/128",
+            "48/128",
+            "49/128",
+            "50/128",
+            "51/128",
+            "52/128",
+            "53/128",
+            "54/128",
+            "55/128",
+            "56/128",
+            "57/128",
+            "58/128",
+            "59/128",
+            "60/128",
+            "61/128",
+            "62/128",
+            "63/128",
+            "64/128",
+            "65/128",
+            "66/128",
+            "67/128",
+            "68/128",
+            "69/128",
+            "70/128",
+            "71/128",
+            "72/128",
+            "73/128",
+            "74/128",
+            "75/128",
+            "76/128",
+            "77/128",
+            "78/128",
+            "79/128",
+            "80/128",
+            "81/128",
+            "82/128",
+            "83/128",
+            "84/128",
+            "85/128",
+            "86/128",
+            "87/128",
+            "88/128",
+            "89/128",
+            "90/128",
+            "91/128",
+            "92/128",
+            "93/128",
+            "94/128",
+            "95/128",
+            "96/128",
+            "97/128",
+            "98/128",
+            "99/128",
+            "100/128",
+            "101/128",
+            "102/128",
+            "103/128",
+            "104/128",
+            "105/128",
+            "106/128",
+            "107/128",
+            "108/128",
+            "109/128",
+            "110/128",
+            "111/128",
+            "112/128",
+            "113/128",
+            "114/128",
+            "115/128",
+            "116/128",
+            "117/128",
+            "118/128",
+            "119/128",
+            "120/128",
+            "121/128",
+            "122/128",
+            "123/128",
+            "124/128",
+            "125/128",
+            "126/128",
+            "127/128"
           ]
         }
       },
@@ -224,7 +367,8 @@
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
             "fetch-depth": 0,
-            "persist-credentials": false
+            "persist-credentials": false,
+            "ref": "${{ github.sha }}"
           }
         },
         {
@@ -232,6 +376,14 @@
           "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
           "with": {
             "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "master snapshot",
+          "run": "node harness/ci/mutation-range.mjs verify",
+          "env": {
+            "REF": "${{ github.ref }}",
+            "SHA": "${{ github.sha }}"
           }
         },
         {
@@ -259,18 +411,27 @@
         },
         {
           "name": "mutants without network",
-          "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}"
+          "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+          "id": "mutation",
+          "timeout-minutes": 160
         },
         {
           "name": "mutation results",
           "if": "always()",
-          "run": "node harness/ci/mutants-summary.mjs"
+          "run": "node harness/ci/mutants-summary.mjs",
+          "env": {
+            "MUTATION_OUTCOME": "${{ steps.mutation.outcome }}",
+            "MUTATION_SHARD": "${{ matrix.shard }}"
+          }
         }
-      ]
+      ],
+      "if": "github.event.schedule == '0 14 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')"
     },
     "notify-mutants": {
       "needs": [
-        "mutants"
+        "mutants",
+        "daily-plan",
+        "mutants-daily"
       ],
       "if": "failure()",
       "runs-on": "ubuntu-24.04",
@@ -313,6 +474,172 @@
           "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
         }
       ]
+    },
+    "mutants-daily": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 360,
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false,
+            "ref": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "master snapshot",
+          "run": "node harness/ci/mutation-range.mjs verify",
+          "env": {
+            "REF": "${{ github.ref }}",
+            "SHA": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "pnpm",
+          "run": "node harness/ci/tools.mjs pnpm"
+        },
+        {
+          "name": "tools",
+          "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+          "with": {
+            "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+          }
+        },
+        {
+          "name": "cargo-mutants",
+          "run": "node harness/ci/tools.mjs cargo-install"
+        },
+        {
+          "name": "lefthook",
+          "run": "node harness/ci/tools.mjs lefthook"
+        },
+        {
+          "name": "fetch",
+          "run": "node harness/ci/tools.mjs fetch"
+        },
+        {
+          "name": "mutants without network",
+          "run": "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
+          "id": "mutation",
+          "timeout-minutes": 330,
+          "env": {
+            "MUTATION_BASE": "${{ needs.daily-plan.outputs.base }}",
+            "MUTATION_SHARD": "${{ matrix.shard }}"
+          }
+        },
+        {
+          "name": "mutation results",
+          "if": "always()",
+          "run": "node harness/ci/mutants-summary.mjs",
+          "env": {
+            "MUTATION_OUTCOME": "${{ steps.mutation.outcome }}",
+            "MUTATION_SHARD": "${{ matrix.shard }}",
+            "MUTATION_MODE": "daily"
+          }
+        }
+      ],
+      "if": "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
+      "needs": [
+        "daily-plan"
+      ],
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
+        }
+      }
+    },
+    "daily-plan": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 30,
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false,
+            "ref": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "master snapshot",
+          "run": "node harness/ci/mutation-range.mjs verify",
+          "env": {
+            "REF": "${{ github.ref }}",
+            "SHA": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "pnpm",
+          "run": "node harness/ci/tools.mjs pnpm"
+        },
+        {
+          "name": "tools",
+          "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+          "with": {
+            "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+          }
+        },
+        {
+          "name": "cargo-mutants",
+          "run": "node harness/ci/tools.mjs cargo-install"
+        },
+        {
+          "name": "lefthook",
+          "run": "node harness/ci/tools.mjs lefthook"
+        },
+        {
+          "name": "fetch",
+          "run": "node harness/ci/tools.mjs fetch"
+        },
+        {
+          "name": "daily plan",
+          "id": "plan",
+          "run": "node harness/ci/mutation-range.mjs plan",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "timeout-minutes": 15
+        },
+        {
+          "name": "mutation results",
+          "if": "always()",
+          "run": "node harness/ci/mutants-summary.mjs",
+          "env": {
+            "MUTATION_OUTCOME": "${{ steps.plan.outcome }}",
+            "MUTATION_SHARD": "plan",
+            "MUTATION_MODE": "plan"
+          }
+        }
+      ],
+      "if": "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
+      "permissions": {
+        "contents": "read",
+        "actions": "read"
+      },
+      "outputs": {
+        "base": "${{ steps.plan.outputs.base }}",
+        "shards": "${{ steps.plan.outputs.shards }}",
+        "count": "${{ steps.plan.outputs.count }}",
+        "anchor": "${{ steps.plan.outputs.anchor }}"
+      }
     }
   }
 }

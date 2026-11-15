@@ -913,6 +913,54 @@
       "namepath": "mutants-all",
       "shebang": false
     },
+    "mutants-daily": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- mutants --daily \"$1\" --shard \"$2\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-daily",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "shard",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-daily",
+      "shebang": false
+    },
     "mutants-diff": {
       "attributes": [],
       "body": [
