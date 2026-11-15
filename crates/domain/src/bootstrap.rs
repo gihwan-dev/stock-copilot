@@ -799,3 +799,26 @@ mod quantization_review_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod boundary_contract_tests {
+    use super::{BootstrapSeed, Count, Generator};
+
+    #[test]
+    fn d42_large_cluster_counts_accept_the_first_valid_random_word() {
+        for (seed, expected) in [
+            (BootstrapSeed::new(0), 52655),
+            (BootstrapSeed::new(42), 28309),
+        ] {
+            for count in [Count(65533), Count(65536)] {
+                assert_eq!(
+                    Generator::new(seed)
+                        .index(count)
+                        .expect("지원하는 묶음 수")
+                        .0,
+                    expected
+                );
+            }
+        }
+    }
+}
