@@ -54,12 +54,10 @@ export const noUiText = {
     const formattedBrands = /^src\/shared\/ds\//u.test(file)
       ? [...TEXT_BRANDS, "FormattedNumber"]
       : TEXT_BRANDS;
-    const brands = [
-      "src/shared/ds/ChartFrame.tsx",
-      "src/shared/ds/ChartTable.tsx",
-    ].includes(file)
-      ? [...formattedBrands, "ChartDecimal"]
-      : formattedBrands;
+    const brands =
+      file === "src/shared/ds/ChartFrame.tsx"
+        ? [...formattedBrands, "ChartDecimal"]
+        : formattedBrands;
     const report = (node, messageId) => context.report({ node, messageId });
     return {
       Literal: (node) => {

@@ -8,7 +8,7 @@
 
 네 공개 컴포넌트는 동일하게 data, label, empty, theme만 받는다. data는 봉인된 ID, 이름, 코어가 보낸 십진수 문자열의 순서 있는 목록이다. 반복된 이름을 허용하고 중복 ID를 거부한다. 색·축·눈금·범례·확대·이동·토글·높이 선택지는 없다. 선은 한 계열이고 x축은 입력 순서의 균등 간격이다. theme은 light 또는 dark이며 제공자가 선택한다. SVG는 CSS 토큰 변수를 직접 해석하므로 색 값을 별도로 복제하지 않는다.
 
-숫자 변환과 계산은 LineChart.tsx, DonutChart.tsx, Treemap.tsx에서만 한다. AreaChart는 LineChart의 순수 함수를 사용한다. ChartCoordinate와 ChartPath는 표시용 브랜드다. 원래 십진수 문자열은 ChartDecimal 브랜드로 봉인하며, 화면에 쓰는 문구는 messages.ts에 둔다. ChartDecimal을 JSX에 표시하는 예외는 no-ui-text의 ChartFrame·ChartTable 두 파일에만 더한다. app·features와 다른 DS 파일에서는 계속 금지한다. 원시 문자열과 다른 브랜드는 계속 금지한다. 부동소수점 좌표에서 숫자 라벨을 역으로 만들지 않는다.
+숫자 변환과 계산은 LineChart.tsx, DonutChart.tsx, Treemap.tsx에서만 한다. AreaChart는 LineChart의 순수 함수를 사용한다. ChartCoordinate와 ChartPath는 표시용 브랜드다. 원래 십진수 문자열은 ChartDecimal 브랜드로 봉인하며, 화면에 쓰는 문구는 messages.ts에 둔다. SVG title에서 ChartDecimal을 JSX에 표시하는 예외는 no-ui-text의 ChartFrame 한 파일에만 더한다. app·features와 다른 DS 파일에서는 계속 금지한다. 원시 문자열과 다른 브랜드는 계속 금지한다. 부동소수점 좌표에서 숫자 라벨을 역으로 만들지 않는다.
 
 ChartFrame의 d와 viewBox 및 정확한 non-scaling-stroke·포인터 all/none만 SVG 표현 예외로 등록한다. 다른 표현 속성이나 파일은 예외가 아니다. fill·stroke·opacity·초점 색은 토큰 클래스만 사용한다. 조각은 순서대로 chart-1부터 chart-6이며 이름은 SVG title, 선택한 항목의 상세 문장, 같은 순서의 항상 보이는 대체 표에 있다. 표는 숨겨진 표보다 마우스·키보드·낭독 모두에서 원문을 확인하기 쉽고, 작은 조각에 긴 이름을 밀어 넣지 않는다. 색에만 의존하지 않는다.
 
@@ -56,6 +56,12 @@ SVG는 role=img, 접근성 이름, viewBox=0 0 100 60, w-full과 차트 높이 �
 | SVG 칸 안에 긴 이름 강제          | 좁은 폭·작은 조각에서 잘림과 겹침                |
 | 자동 축 눈금·반올림               | 원문과 다른 숫자를 표시하거나 화면 설정을 늘림   |
 
+## DS-05 숫자 표시 연결
+
+DS-05가 master에 병합되어 기존 Numbers.tsx의 Numeric과 format.ts의 문자열 포매터를 연결했다. ChartNumber는 차트 내부에서만 가져오며 공개 index의 여섯 숫자 컴포넌트와 네 차트 계약은 바꾸지 않는다. 차트 입력에는 통화·주식 수·퍼센트 단위가 없으므로 단위를 추측하지 않는 decimal 표시 변형을 포매터에 더했다. 새 숫자 변환이나 반올림은 없다. 소수부 끝자리 0은 보존하고 쉼표·U+2212·표시 0의 부호 처리는 DS-05와 같다.
+
+상세·대체 표·범위 라벨은 ChartNumber를 사용한다. HTML 컴포넌트를 넣을 수 없는 SVG title만 원문을 제공한다. 따라서 ChartTable의 원문 JSX 예외는 제거했다. 범위 라벨은 컨테이너 중간 폭 미만에서 세로로 놓아 숫자를 자르지 않는다. 기존 허용 클래스만 사용한다. 연결 테스트는 구현 전에 missing export로 실패한 뒤 통과했으며, 기존 DS-05 테스트는 바꾸지 않았다.
+
 ## 보호 파일과 인계
 
 | 변경                                                     | 이유                                    |
@@ -70,7 +76,7 @@ SVG는 role=img, 접근성 이름, viewBox=0 0 100 60, w-full과 차트 높이 �
 
 | 받는 작업   | 인계                                                                                                                |
 | ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| DS-05       | master에 들어오면 원문 값의 표시 컴포넌트 연결                                                                      |
+| DS-05       | c27ad60 병합 뒤 Numbers.tsx 내부 ChartNumber와 기존 문자열 포매터로 연결 완료                                       |
 | DS-07       | 차트 이야기 실행·시각 기준 화면. 실제 사용 시 knip 유예 제거                                                        |
 | DS-19·DS-20 | 전용 넘침 검사 함수와 폭·글자 크기 부하 실측                                                                        |
 | U-10·E-08   | 코어 자료를 브랜드로 파싱해 연결. 도넛·트리맵은 코어가 최대 6개로 정렬·묶음. 성적표 산점도는 이 네 컴포넌트 범위 밖 |
@@ -79,39 +85,39 @@ SVG는 role=img, 접근성 이름, viewBox=0 0 100 60, w-full과 차트 높이 �
 
 컴파일되는 변형만 센다. 아래 표는 임시 복사본에서 실제 실행한 결과다. 각 변형마다 tsc를 먼저 실행했다. 테스트는 DS06 좌표 경계와 배치 보존 속성 및 접근성·원문·키보드·포인터 표시다.
 
-| 번호 | 파일           | 바꾼 것          | 결과   |
-| ---- | -------------- | ---------------- | ------ |
-| 1    | LineChart.tsx  | 한 점 x          | KILLED |
-| 2    | LineChart.tsx  | 가로 폭          | KILLED |
-| 3    | LineChart.tsx  | 점 간격          | KILLED |
-| 4    | LineChart.tsx  | 상수 y           | KILLED |
-| 5    | LineChart.tsx  | 세로 시작        | KILLED |
-| 6    | LineChart.tsx  | 세로 배율        | KILLED |
-| 7    | LineChart.tsx  | 최솟값           | KILLED |
-| 8    | LineChart.tsx  | 최댓값           | KILLED |
-| 9    | LineChart.tsx  | 점 상한          | KILLED |
-| 10   | LineChart.tsx  | 유효 자릿수      | KILLED |
-| 11   | LineChart.tsx  | 빈 이름          | KILLED |
-| 12   | LineChart.tsx  | 중복 이름        | KILLED |
-| 13   | LineChart.tsx  | 영역 바닥        | KILLED |
-| 14   | DonutChart.tsx | 도넛 항목 상한   | KILLED |
-| 15   | DonutChart.tsx | 도넛 음수        | KILLED |
-| 16   | DonutChart.tsx | 도넛 영 합       | KILLED |
-| 17   | DonutChart.tsx | 도넛 최소 경계   | KILLED |
-| 18   | DonutChart.tsx | 도넛 최소 배율   | KILLED |
-| 19   | DonutChart.tsx | 도넛 시작 각도   | KILLED |
-| 20   | DonutChart.tsx | 도넛 마지막 각도 | KILLED |
-| 21   | DonutChart.tsx | 도넛 구멍 방향   | KILLED |
-| 22   | Treemap.tsx    | 트리맵 항목 상한 | KILLED |
-| 23   | Treemap.tsx    | 트리맵 음수      | KILLED |
-| 24   | Treemap.tsx    | 트리맵 영 합     | KILLED |
-| 25   | Treemap.tsx    | 트리맵 최소 경계 | KILLED |
-| 26   | Treemap.tsx    | 트리맵 최소 배율 | KILLED |
-| 27   | Treemap.tsx    | 트리맵 x         | KILLED |
-| 28   | Treemap.tsx    | 트리맵 마지막 끝 | KILLED |
-| 29   | Treemap.tsx    | 트리맵 폭        | KILLED |
-| 30   | Treemap.tsx    | 트리맵 높이      | KILLED |
-| 31   | ChartFrame.tsx | 접근성 역할      | KILLED |
+| 번호 | 파일           | 바꾼 것          | 잡은 실제 테스트                                                          | 결과   |
+| ---- | -------------- | ---------------- | ------------------------------------------------------------------------- | ------ |
+| 1    | LineChart.tsx  | 한 점 x          | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 2    | LineChart.tsx  | 가로 폭          | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 3    | LineChart.tsx  | 점 간격          | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 4    | LineChart.tsx  | 상수 y           | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 5    | LineChart.tsx  | 세로 시작        | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 6    | LineChart.tsx  | 세로 배율        | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 7    | LineChart.tsx  | 최솟값           | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 8    | LineChart.tsx  | 최댓값           | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 9    | LineChart.tsx  | 점 상한          | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 10   | LineChart.tsx  | 유효 자릿수      | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 11   | LineChart.tsx  | 빈 이름          | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 12   | LineChart.tsx  | 중복 이름        | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 13   | LineChart.tsx  | 영역 바닥        | DS06 접근성, 원문, 키보드와 포인터 표시                                   | KILLED |
+| 14   | DonutChart.tsx | 도넛 항목 상한   | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 15   | DonutChart.tsx | 도넛 음수        | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 16   | DonutChart.tsx | 도넛 영 합       | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 17   | DonutChart.tsx | 도넛 최소 경계   | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 18   | DonutChart.tsx | 도넛 최소 배율   | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 19   | DonutChart.tsx | 도넛 시작 각도   | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 20   | DonutChart.tsx | 도넛 마지막 각도 | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 21   | DonutChart.tsx | 도넛 구멍 방향   | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 22   | Treemap.tsx    | 트리맵 항목 상한 | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 23   | Treemap.tsx    | 트리맵 음수      | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 24   | Treemap.tsx    | 트리맵 영 합     | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 | KILLED |
+| 25   | Treemap.tsx    | 트리맵 최소 경계 | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 26   | Treemap.tsx    | 트리맵 최소 배율 | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 27   | Treemap.tsx    | 트리맵 x         | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 28   | Treemap.tsx    | 트리맵 마지막 끝 | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 29   | Treemap.tsx    | 트리맵 폭        | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 30   | Treemap.tsx    | 트리맵 높이      | DS06 좌표 경계와 배치 보존 속성                                           | KILLED |
+| 31   | ChartFrame.tsx | 접근성 역할      | DS06 접근성, 원문, 키보드와 포인터 표시                                   | KILLED |
 
 ## 기계적인 기존 테스트 기대 목록 갱신
 
@@ -133,71 +139,89 @@ SVG는 role=img, 접근성 이름, viewBox=0 0 100 60, w-full과 차트 높이 �
 
 ## 리뷰 수정의 추가 등록
 
-no-ui-text의 전역 예외는 제거하고 두 표시 파일만 허용한다. sr-only는 ChartTable 한 파일만 허용한다. SVG의 추가 예외도 정확한 값만 허용하며 임의 vectorEffect·pointerEvents와 다른 파일은 실패한다. 키보드 DOM 판정은 새 경계 파일을 만들지 않고 기존 input.ts에 함수 하나를 추가했다.
+no-ui-text의 전역 예외는 제거하고 처음에는 두 표시 파일만 허용했다. DS-05 연결 뒤에는 SVG title을 담는 ChartFrame 하나로 더 좁혔다. sr-only는 ChartTable 한 파일만 허용한다. SVG의 추가 예외도 정확한 값만 허용하며 임의 vectorEffect·pointerEvents와 다른 파일은 실패한다. 키보드 DOM 판정은 새 경계 파일을 만들지 않고 기존 input.ts에 함수 하나를 추가했다.
 
 기계적인 기대 목록 추가: ds-internal-review의 보호 목록에 CHART_TABLE_FILES 한 항목, ds-screen-bootstrap의 입력 경계 공개 함수 목록과 반환 유니온 목록에 chartNavigation 한 항목을 더했다. 기존 원소와 단언은 유지한다. 생성 CSS와 Tailwind 유틸리티 스냅샷은 기존 생성 함수로 다시 만들었다. 새 Rust 테스트는 gen_tokens/chart_theme_tests.rs에 따로 두었다. 구조와 테마 결정은 이 초안에 기록하며 tasks/progress는 고치지 않는다.
 
 ## 수정 회차 손 변형
 
-최종 수정 코드에서 타입 검사를 통과한 좌표·탐색·범위 표시 41개와 표시·린트 경계 8개를 실제 실행했다. 49개 모두 해당 검사가 검출했다. 아래 두 표는 서로 다른 실행이며 개수에 중복 합산하지 않는다.
+최종 수정 코드에서 타입 검사를 통과한 좌표·탐색·범위 표시 41개와 표시·린트 경계 8개, DS-05 연결 7개를 실제 실행했다. 56개 모두 해당 검사가 검출했다. 세 표는 서로 다른 변형이며 초기 회차 결과를 최종 개수에 중복 합산하지 않는다.
 
-| 번호 | 파일           | 바꾼 것                    | 결과   |
-| ---- | -------------- | -------------------------- | ------ |
-| R-1  | LineChart.tsx  | 한 점 x                    | KILLED |
-| R-2  | LineChart.tsx  | 가로 폭                    | KILLED |
-| R-3  | LineChart.tsx  | 점 간격                    | KILLED |
-| R-4  | LineChart.tsx  | 상수 y                     | KILLED |
-| R-5  | LineChart.tsx  | 세로 시작                  | KILLED |
-| R-6  | LineChart.tsx  | 세로 배율                  | KILLED |
-| R-7  | LineChart.tsx  | 최솟값                     | KILLED |
-| R-8  | LineChart.tsx  | 최댓값                     | KILLED |
-| R-9  | LineChart.tsx  | 점 상한                    | KILLED |
-| R-10 | LineChart.tsx  | 유효 자릿수                | KILLED |
-| R-11 | LineChart.tsx  | 빈 이름                    | KILLED |
-| R-12 | LineChart.tsx  | 중복 이름                  | KILLED |
-| R-13 | LineChart.tsx  | 영역 바닥                  | KILLED |
-| R-14 | DonutChart.tsx | 도넛 항목 상한             | KILLED |
-| R-15 | DonutChart.tsx | 도넛 음수                  | KILLED |
-| R-16 | DonutChart.tsx | 도넛 영 합                 | KILLED |
-| R-17 | DonutChart.tsx | 도넛 최소 경계             | KILLED |
-| R-18 | DonutChart.tsx | 도넛 최소 배율             | KILLED |
-| R-19 | DonutChart.tsx | 도넛 시작 각도             | KILLED |
-| R-20 | DonutChart.tsx | 도넛 마지막 각도           | KILLED |
-| R-21 | DonutChart.tsx | 도넛 구멍 방향             | KILLED |
-| R-22 | Treemap.tsx    | 트리맵 항목 상한           | KILLED |
-| R-23 | Treemap.tsx    | 트리맵 음수                | KILLED |
-| R-24 | Treemap.tsx    | 트리맵 영 합               | KILLED |
-| R-25 | Treemap.tsx    | 트리맵 최소 경계           | KILLED |
-| R-26 | Treemap.tsx    | 트리맵 최소 배율           | KILLED |
-| R-27 | Treemap.tsx    | 트리맵 x                   | KILLED |
-| R-28 | Treemap.tsx    | 트리맵 마지막 끝           | KILLED |
-| R-29 | Treemap.tsx    | 트리맵 폭                  | KILLED |
-| R-30 | Treemap.tsx    | 트리맵 높이                | KILLED |
-| R-31 | ChartFrame.tsx | 접근성 역할                | KILLED |
-| R-32 | ChartFrame.tsx | 키보드 다음 항목           | KILLED |
-| R-33 | ChartFrame.tsx | 키보드 이전 항목           | KILLED |
-| R-34 | ChartFrame.tsx | 키보드 Home                | KILLED |
-| R-35 | ChartFrame.tsx | 키보드 End                 | KILLED |
-| R-36 | ChartFrame.tsx | 삭제된 선택 이후 이전 탐색 | KILLED |
-| R-37 | LineChart.tsx  | 최소 원문 필드 교환        | KILLED |
-| R-38 | LineChart.tsx  | 최대 원문 필드 교환        | KILLED |
-| R-39 | LineChart.tsx  | 시작 이름 필드 교환        | KILLED |
-| R-40 | LineChart.tsx  | 끝 이름 필드 교환          | KILLED |
-| R-41 | LineChart.tsx  | 끝 0 제거 판정             | KILLED |
+| 번호 | 파일           | 바꾼 것                    | 잡은 실제 테스트                                                                                                               | 결과   |
+| ---- | -------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| R-1  | LineChart.tsx  | 한 점 x                    | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-2  | LineChart.tsx  | 가로 폭                    | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시                                                      | KILLED |
+| R-3  | LineChart.tsx  | 점 간격                    | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시                                                      | KILLED |
+| R-4  | LineChart.tsx  | 상수 y                     | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-5  | LineChart.tsx  | 세로 시작                  | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시                                                      | KILLED |
+| R-6  | LineChart.tsx  | 세로 배율                  | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시                                                      | KILLED |
+| R-7  | LineChart.tsx  | 최솟값                     | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-8  | LineChart.tsx  | 최댓값                     | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-9  | LineChart.tsx  | 점 상한                    | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-10 | LineChart.tsx  | 유효 자릿수                | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-11 | LineChart.tsx  | 빈 이름                    | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-12 | LineChart.tsx  | 중복 이름                  | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-13 | LineChart.tsx  | 영역 바닥                  | DS06 접근성, 원문, 키보드와 포인터 표시                                                                                        | KILLED |
+| R-14 | DonutChart.tsx | 도넛 항목 상한             | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-15 | DonutChart.tsx | 도넛 음수                  | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-16 | DonutChart.tsx | 도넛 영 합                 | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-17 | DonutChart.tsx | 도넛 최소 경계             | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-18 | DonutChart.tsx | 도넛 최소 배율             | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-19 | DonutChart.tsx | 도넛 시작 각도             | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-20 | DonutChart.tsx | 도넛 마지막 각도           | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-21 | DonutChart.tsx | 도넛 구멍 방향             | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-22 | Treemap.tsx    | 트리맵 항목 상한           | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-23 | Treemap.tsx    | 트리맵 음수                | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-24 | Treemap.tsx    | 트리맵 영 합               | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-25 | Treemap.tsx    | 트리맵 최소 경계           | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-26 | Treemap.tsx    | 트리맵 최소 배율           | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-27 | Treemap.tsx    | 트리맵 x                   | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-28 | Treemap.tsx    | 트리맵 마지막 끝           | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-29 | Treemap.tsx    | 트리맵 폭                  | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-30 | Treemap.tsx    | 트리맵 높이                | DS06 좌표 경계와 배치 보존 속성                                                                                                | KILLED |
+| R-31 | ChartFrame.tsx | 접근성 역할                | DS06 접근성, 원문, 키보드와 포인터 표시                                                                                        | KILLED |
+| R-32 | ChartFrame.tsx | 키보드 다음 항목           | DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다                                                                     | KILLED |
+| R-33 | ChartFrame.tsx | 키보드 이전 항목           | DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다                           | KILLED |
+| R-34 | ChartFrame.tsx | 키보드 Home                | DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다                           | KILLED |
+| R-35 | ChartFrame.tsx | 키보드 End                 | DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다                           | KILLED |
+| R-36 | ChartFrame.tsx | 삭제된 선택 이후 이전 탐색 | DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다                                                                     | KILLED |
+| R-37 | LineChart.tsx  | 최소 원문 필드 교환        | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-38 | LineChart.tsx  | 최대 원문 필드 교환        | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
+| R-39 | LineChart.tsx  | 시작 이름 필드 교환        | DS06 접근성, 원문, 키보드와 포인터 표시                                                                                        | KILLED |
+| R-40 | LineChart.tsx  | 끝 이름 필드 교환          | DS06 접근성, 원문, 키보드와 포인터 표시                                                                                        | KILLED |
+| R-41 | LineChart.tsx  | 끝 0 제거 판정             | DS06 좌표 경계와 배치 보존 속성 / DS06 접근성, 원문, 키보드와 포인터 표시 / DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다 | KILLED |
 
-| 번호 | 파일                         | 바꾼 것                      | 결과   |
-| ---- | ---------------------------- | ---------------------------- | ------ |
-| E-1  | src/shared/ds/ChartFrame.tsx | 한 점 채움 제거              | KILLED |
-| E-2  | src/shared/ds/ChartFrame.tsx | 획 크기 고정 제거            | KILLED |
-| E-3  | eslint/rules/no-ui-text.mjs  | 원문 표시 전역 허용 회귀     | KILLED |
-| E-4  | eslint/ds-config.mjs         | 숨은 표 파일 제한 제거       | KILLED |
-| E-5  | src/shared/ds/ChartFrame.tsx | 테마 prop 무시               | KILLED |
-| E-6  | src/shared/ds/tokens.css     | 생성 테마 범위 손상          | KILLED |
-| E-7  | src/shared/platform/input.ts | 오른쪽 화살표 역행           | KILLED |
-| E-8  | src/shared/platform/input.ts | 화살표 기본 스크롤 방지 제거 | KILLED |
+| 번호 | 파일                         | 바꾼 것                      | 잡은 실제 테스트                                               | 결과   |
+| ---- | ---------------------------- | ---------------------------- | -------------------------------------------------------------- | ------ |
+| E-1  | src/shared/ds/ChartFrame.tsx | 한 점 채움 제거              | DS06 한 점은 채워지고 밀집 선의 기본 마커는 선을 덮지 않는다   | KILLED |
+| E-2  | src/shared/ds/ChartFrame.tsx | 획 크기 고정 제거            | DS06 한 점은 채워지고 밀집 선의 기본 마커는 선을 덮지 않는다   | KILLED |
+| E-3  | eslint/rules/no-ui-text.mjs  | 원문 표시 전역 허용 회귀     | DS06 원문 표시 예외는 SVG title을 담는 ChartFrame에만 적용된다 | KILLED |
+| E-4  | eslint/ds-config.mjs         | 숨은 표 파일 제한 제거       | DS06 숨은 표와 SVG의 비례·포인터 예외는 승인 파일만 허용한다   | KILLED |
+| E-5  | src/shared/ds/ChartFrame.tsx | 테마 prop 무시               | DS06 접근성, 원문, 키보드와 포인터 표시                        | KILLED |
+| E-6  | src/shared/ds/tokens.css     | 생성 테마 범위 손상          | DS06 접근성, 원문, 키보드와 포인터 표시                        | KILLED |
+| E-7  | src/shared/platform/input.ts | 오른쪽 화살표 역행           | DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다     | KILLED |
+| E-8  | src/shared/platform/input.ts | 화살표 기본 스크롤 방지 제거 | DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다     | KILLED |
 
 예비 실험에서 Home 조건을 다른 닫힌 변형 이름으로 바꾼 한 건은 TS2367로 컴파일되지 않아 세지 않았다. Home 반환 위치를 바꾼 유효 변형으로 다시 실행했다. 추가 실험의 첫 8번은 같은 입력 파일의 기존 inputCommit 조합 처리에서 preventDefault를 지운 범위 밖 변형이었다. 차트 탐색 검사에서 생존했고 새 코드 검출 수에 세지 않았다. 이를 기록한 뒤 chartNavigation의 오른쪽 화살표 분기를 정확히 지정해 다시 실행했으며, 기본 동작 방지 단언이 검출했다.
 
 ## 최신 기준 병합
 
 H-46을 포함한 master 8ba1f6abf3b1050017b649d1d1a5fd63104a6363을 758e4d2로 정상 병합했다. 충돌은 .codex/config.toml과 hashes.json 두 생성 파일뿐이었고 기존 생성 스크립트로 해결했다. 병합의 정상 훅 전체 검사는 통과했다. 수정안은 백업 패치로 보관했다가 3-way로 충돌 없이 적용했다. 별도 스냅샷에서 36개 손 변형을 다시 실행해 모두 검출했고, 적용 뒤 모든 변경된 app 파일이 그 스냅샷과 바이트 단위로 같음을 확인했다. 이후 범위 표시와 소수부 끝 0 처리의 5개 변형을 더해 41개를 다시 실행했고 모두 검출했다. 규칙을 끄거나 커밋 훅을 생략하지 않았다.
+
+## DS-05 연결 손 변형
+
+| 번호 | 파일                         | 바꾼 것                      | 잡은 실제 테스트                                              | 결과   |
+| ---- | ---------------------------- | ---------------------------- | ------------------------------------------------------------- | ------ |
+| N-1  | src/shared/lib/format.ts     | 십진수 원문 대신 0           | DS06 DS05 숫자 표시 연결은 원문 자릿수와 중립 단위를 보존한다 | KILLED |
+| N-2  | src/shared/lib/format.ts     | 단위 없는 값에 퍼센트 추가   | DS06 DS05 숫자 표시 연결은 원문 자릿수와 중립 단위를 보존한다 | KILLED |
+| N-3  | src/shared/ds/Numbers.tsx    | 중립 값에 상승 방향 추가     | DS06 DS05 숫자 표시 연결은 원문 자릿수와 중립 단위를 보존한다 | KILLED |
+| N-4  | src/shared/ds/ChartTable.tsx | 표에서 DS05 표시 우회        | DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다            | KILLED |
+| N-5  | src/shared/ds/ChartFrame.tsx | 최소 라벨에 최대 값 연결     | DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다            | KILLED |
+| N-6  | src/shared/ds/ChartFrame.tsx | 상세에서 DS05 표시 우회      | DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다            | KILLED |
+| N-7  | src/shared/ds/ChartFrame.tsx | 최대 라벨에서 DS05 표시 우회 | DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다            | KILLED |
+
+표의 원문 직접 표시 예비 변형은 사용하지 않는 ChartNumber import 때문에 TS6133으로 컴파일되지 않아 세지 않았다. 해당 import를 함께 제거한 같은 동작 변형으로 다시 실행했고 실제 표시 연결 테스트가 검출했다. DS-05 병합·연결을 반영한 최종 코드에서 좌표 41개·경계 8개도 전부 다시 실행했다.
+
+## DS-05 기준 병합
+
+master c27ad60470b68e1bfc394d99a612270f798d5916을 f31f6f575041f05b893dfe6f0275b15c65848fd0으로 병합했다. 겹친 공개 등록·브랜드·문구·린트 허용 목록은 양쪽을 보존했고, 생성 파일은 다시 만들었다. 타입 검사와 관련 테스트 27개, 정상 병합 훅의 전체 검사가 통과했다. DS-05 연결 뒤 관련 테스트 16개와 타입·린트·스타일 검사가 통과했다.

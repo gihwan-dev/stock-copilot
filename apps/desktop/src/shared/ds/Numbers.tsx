@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { text } from "../lib";
+import type { ChartDecimal } from "../lib";
 import type {
   Money as MoneyValue,
   Price,
@@ -95,6 +96,14 @@ export const Quantity = (props: {
 }): ReactElement => (
   <Numeric
     display={formatNumber({ kind: "quantity", value: props.value })}
+    direction={undefined}
+  />
+);
+export const ChartNumber = (props: {
+  readonly value: ChartDecimal;
+}): ReactElement => (
+  <Numeric
+    display={formatNumber({ kind: "decimal", value: props.value })}
     direction={undefined}
   />
 );

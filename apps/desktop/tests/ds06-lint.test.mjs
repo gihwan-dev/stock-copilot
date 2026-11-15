@@ -67,11 +67,11 @@ test("DS06 기하 예외는 ChartFrame의 경로와 viewBox만이다", async () 
   );
 });
 
-test("DS06 원문 표시 예외는 차트의 두 표시 파일에만 적용된다", async () => {
+test("DS06 원문 표시 예외는 SVG title을 담는 ChartFrame에만 적용된다", async () => {
   const engine = new ESLint({ cwd: desktopRoot });
   for (const [path, allowed] of [
     ["src/shared/ds/ChartFrame.tsx", true],
-    ["src/shared/ds/ChartTable.tsx", true],
+    ["src/shared/ds/ChartTable.tsx", false],
     ["src/shared/ds/AreaChart.tsx", false],
     ["src/app/main.tsx", false],
   ]) {

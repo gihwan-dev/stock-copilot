@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import type { ChartProps, ChartPoint } from "./chart-types";
+import { ChartNumber } from "./Numbers";
 type Props = ChartProps & {
   readonly onHighlight: (point: ChartPoint | undefined) => void;
   readonly layout: "trend" | "donut" | "treemap";
@@ -21,7 +22,9 @@ export const ChartTable = (props: Props): ReactElement => (
           <th scope="row" className="text-left status-sentence">
             {point.label}
           </th>
-          <td className="text-right status-sentence">{point.value}</td>
+          <td className="text-right status-sentence">
+            <ChartNumber value={point.value} />
+          </td>
         </tr>
       ))}
     </tbody>

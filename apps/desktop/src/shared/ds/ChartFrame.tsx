@@ -9,6 +9,7 @@ import type {
 import { chartNavigation } from "../platform/input";
 import { EmptyState } from "./EmptyState";
 import { ChartTable } from "./ChartTable";
+import { ChartNumber } from "./Numbers";
 type Props = ChartProps & { readonly geometry: ChartGeometry };
 type Ready = ChartProps & {
   readonly geometry: Extract<ChartGeometry, { readonly kind: "ready" }>;
@@ -17,7 +18,7 @@ export const ChartFrame = (props: Props): ReactElement => (
   <figure
     aria-label={props.label}
     data-chart-theme={props.theme}
-    className="w-full max-w-full text-ink"
+    className="@container w-full max-w-full text-ink"
   >
     {props.geometry.kind === "ready" ? (
       <ChartContent
@@ -127,7 +128,7 @@ const ChartNavigation = (props: NavigationProps): ReactElement => {
           <>
             {props.selected.label}
             {text("ds.chartSeparator", "ko")}
-            {props.selected.value}
+            <ChartNumber value={props.selected.value} />
           </>
         )}
       </p>
@@ -225,7 +226,7 @@ const orderMessages = {
 
 const ChartAxes = (props: { readonly axes: ChartAxisLabels }): ReactElement => (
   <div className="flex flex-col gap-space-1">
-    <div className="flex justify-between gap-space-2">
+    <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
       <span className="text-caption text-ink-muted status-sentence">
         {props.axes.first}
       </span>
@@ -233,16 +234,16 @@ const ChartAxes = (props: { readonly axes: ChartAxisLabels }): ReactElement => (
         {props.axes.last}
       </span>
     </div>
-    <div className="flex justify-between gap-space-2">
+    <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
       <span className="text-caption text-ink-muted status-sentence">
         {text("ds.chartMinimum", "ko")}
         {text("ds.chartSeparator", "ko")}
-        {props.axes.minimum}
+        <ChartNumber value={props.axes.minimum} />
       </span>
       <span className="text-caption text-ink-muted status-sentence">
         {text("ds.chartMaximum", "ko")}
         {text("ds.chartSeparator", "ko")}
-        {props.axes.maximum}
+        <ChartNumber value={props.axes.maximum} />
       </span>
     </div>
   </div>

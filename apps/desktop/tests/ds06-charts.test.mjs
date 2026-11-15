@@ -459,3 +459,69 @@ test("DS06 한 점은 채워지고 밀집 선의 기본 마커는 선을 덮지 
     assert.equal(w.getComputedStyle(mark).fill, "none");
   w.cleanup();
 });
+
+test("DS06 DS05 숫자 표시 연결은 원문 자릿수와 중립 단위를 보존한다", async () => {
+  const app = await componentsDom(`
+    import {createElement} from 'react';
+    import {render,cleanup} from '@testing-library/react';
+    import {ChartNumber} from '${join(desktopRoot, "src/shared/ds/Numbers.tsx")}';
+    window.show=value=>render(createElement(ChartNumber,{value}));
+    window.cleanup=cleanup;
+  `);
+  try {
+    const w = app.open();
+    for (const [raw, expected] of [
+      ["12345.600", "12,345.600"],
+      ["-12345.600", "−12,345.600"],
+      ["-0.00", "0.00"],
+      ["0.300000000000000000", "0.300000000000000000"],
+      ["999999999999999", "999,999,999,999,999"],
+    ]) {
+      const view = w.show(raw);
+      assert.equal(view.container.textContent, expected);
+      assert.ok(
+        view.container.querySelector(".tabular-nums.whitespace-nowrap"),
+      );
+      w.cleanup();
+    }
+    for (const raw of ["1e3", "01", "1\n", null, undefined, 123]) {
+      const view = w.show(raw);
+      assert.equal(view.container.textContent, "—");
+      assert.ok(view.getByRole("img", { name: "값을 표시할 수 없음" }));
+      w.cleanup();
+    }
+  } finally {
+    app.close();
+  }
+});
+
+test("DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다", () => {
+  const w = runtime.open();
+  for (const component of ["LineChart", "AreaChart", "DonutChart", "Treemap"]) {
+    const view = w.draw(component, [
+      { label: "원문 첫 항목", value: "12345.600" },
+      { label: "원문 끝 항목", value: "23456.875" },
+    ]);
+    const cells = view.container.querySelectorAll("td");
+    assert.equal(cells[0].textContent, "12,345.600");
+    assert.equal(cells[1].textContent, "23,456.875");
+    w.fire.focus(view.container.querySelector("button"));
+    assert.equal(
+      view.container.querySelector("[role=status]").textContent,
+      "원문 첫 항목 · 12,345.600",
+    );
+    if (component === "LineChart" || component === "AreaChart") {
+      const context = view.container.cloneNode(true);
+      context
+        .querySelectorAll("svg,table,[role=status]")
+        .forEach((node) => node.remove());
+      assert.match(context.textContent, /최소 · 12,345\.600/);
+      assert.match(context.textContent, /최대 · 23,456\.875/);
+    }
+    assert.equal(
+      view.container.querySelector("svg title").textContent,
+      "원문 첫 항목 · 12345.600",
+    );
+    w.cleanup();
+  }
+});
