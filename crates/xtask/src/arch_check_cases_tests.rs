@@ -87,19 +87,51 @@ fn copied_harness(directory_name: &str) -> (PathBuf, PathBuf) {
     (root, directory)
 }
 
+fn load_case(
+    entry: &(String, Expected),
+    directory: &Path,
+    options: &[String],
+) -> (String, (Workspace, Expected)) {
+    let (name, expected) = entry;
+    let manifest = directory.join("cases").join(name).join("Cargo.toml");
+    generate_vendored_lockfile(&manifest, options);
+    let workspace = load_workspace(&manifest, options).expect("load case workspace");
+    (name.clone(), (workspace, expected.clone()))
+}
+
+fn case_batch(
+    expected: &[(String, Expected)],
+    directory: &Path,
+    options: &[String],
+    worker: usize,
+) -> Cases {
+    expected
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| index.checked_rem(4) == Some(worker))
+        .map(|(_, entry)| load_case(entry, directory, options))
+        .collect()
+}
+
+fn parallel_cases(expected: &[(String, Expected)], directory: &Path, options: &[String]) -> Cases {
+    std::thread::scope(|scope| {
+        let mut handles = Vec::new();
+        for worker in 0..4 {
+            handles.push(scope.spawn(move || case_batch(expected, directory, options, worker)));
+        }
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("case loader"))
+            .collect()
+    })
+}
+
 fn loaded_cases(directory_name: &str) -> (Rules, Cases) {
     let (root, directory) = copied_harness(directory_name);
     let rules = load_rules(&root.join(RULES_PATH)).expect("load rules");
     let options = vendor_options(&directory);
-    let mut cases: Cases = expected_cases(&root)
-        .into_iter()
-        .map(|(name, expected)| {
-            let manifest = directory.join("cases").join(&name).join("Cargo.toml");
-            generate_vendored_lockfile(&manifest, &options);
-            let workspace = load_workspace(&manifest, &options).expect("load case workspace");
-            (name, (workspace, expected))
-        })
-        .collect();
+    let expected: Vec<_> = expected_cases(&root).into_iter().collect();
+    let mut cases = parallel_cases(&expected, &directory, &options);
     let real = load_workspace(&root.join("Cargo.toml"), &[]).expect("load real workspace");
     cases.insert(String::from(REAL_WORKSPACE), (real, Expected::new()));
     (rules, cases)
@@ -233,7 +265,17 @@ fn value_variants(value: &toml::Value, label: &str) -> Vec<(String, toml::Value)
 fn unnoticed_variant(variant: &toml::Value, cases: &Cases) -> bool {
     let table = variant.as_table().expect("rules document table");
     let text = toml::to_string(table).expect("serialize variant");
-    parse_rules(&text).is_ok_and(|mutated| mismatches(&mutated, cases).is_empty())
+    parse_rules(&text).is_ok_and(|mutated| {
+        cases
+            .iter()
+            .filter(|(name, _)| name.as_str() != REAL_WORKSPACE)
+            .chain(
+                cases
+                    .iter()
+                    .filter(|(name, _)| name.as_str() == REAL_WORKSPACE),
+            )
+            .all(|(_, (workspace, expected))| reported(workspace, &mutated) == *expected)
+    })
 }
 
 #[test]

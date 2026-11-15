@@ -323,7 +323,7 @@ mod tests {
         verify_product(&fixtures(), &mut Vec::new());
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn arbitrary_combinations_preserve_hidden_records(indices in array::uniform8(0_usize..1000)) {
             let groups = fixtures();

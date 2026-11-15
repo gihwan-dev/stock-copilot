@@ -147,7 +147,7 @@ mod tests {
     }
     #[test]
     fn failed_currency_has_no_money_and_preserves_others() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     0_i64..10000,

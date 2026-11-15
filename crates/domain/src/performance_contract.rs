@@ -100,7 +100,7 @@ mod tests {
         );
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn uncertain_and_incomplete_inputs_never_release_a_return(choice in 0_u8..3) {
             let data=fixture();
@@ -412,7 +412,7 @@ mod calendar_tests {
         }
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn flow_day_weights_match_independent_calendar_projection(day in -700_000_i64..2_800_000,hour in 0_i64..24) {
             let start=at(2,7); let end=at(day,hour);

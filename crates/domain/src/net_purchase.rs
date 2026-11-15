@@ -478,7 +478,7 @@ pub(crate) mod tests {
             prop_assert_eq,
             test_runner::{Config, TestRunner},
         };
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_i64..100_000, 1_i64..100_000, 1_i64..100_000),
                 |(first, second, sold)| {

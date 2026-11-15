@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn caps_and_percent_parsing_match_independent_integer_reference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_i64..=10000, 1_i64..=10000, 1_i64..=10000),
                 |(cap, warning, sector)| {
@@ -259,7 +259,7 @@ mod tests {
             .prop_map(|(lo, mid, hi, negative, scale)| {
                 rust_decimal::Decimal::from_parts(lo, mid, hi, negative, scale)
             });
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&strategy, |value| {
                 let parts = value.unpack();
                 let coefficient = u128::from(parts.lo)
@@ -309,7 +309,7 @@ mod review_tests {
 
     #[test]
     fn relaxation_matches_independent_integer_comparison() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_i64..=100, 1_i64..=100, 1_i64..=100, 1_i64..=100),
                 |(first_old, second_old, first_new, second_new)| {

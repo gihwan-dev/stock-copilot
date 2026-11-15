@@ -414,7 +414,7 @@ mod tests {
     }
     #[test]
     fn direction_symmetry_markets_and_set_permutations_hold() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(any::<bool>(), any::<bool>(), any::<bool>()),
                 |(buy, us, reverse)| {

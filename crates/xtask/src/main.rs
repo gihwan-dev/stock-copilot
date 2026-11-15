@@ -8,6 +8,7 @@ mod check_support;
 mod commit_guard;
 mod coverage_check;
 mod disable_control;
+mod fast_check;
 mod gen_schema;
 mod gen_tokens;
 mod git_base;
@@ -66,9 +67,16 @@ fn main() -> ExitCode {
         [command, base] if command == "require-comparison-base" => {
             git_hooks::commit_base::validate_command(base, base_use)
         }
+        [command, base, just] if command == "check-fast" => {
+            fast_check::command(base, base_use, just)
+        }
+        [command] if command == "commit-recipe" => git_hooks::commit_base::recipe_command(),
         [command] if command == "commit-base" => git_hooks::commit_base::command(),
         [command, rest @ ..] if command == "commit-guard" => commit_guard::command(rest),
         [command, rest @ ..] if command == "mutants" => mutants_check::command(rest, base_use),
+        [command, base, packages @ ..] if command == "test-diff-selected" => {
+            test_diff::selected_command(base, packages, base_use)
+        }
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest, base_use),
         [command, rest @ ..] if command == "test-changes" => test_diff::changes_command(rest),
         [command, rest @ ..] if command == "manifest-changes" => manifest_changes::command(rest),

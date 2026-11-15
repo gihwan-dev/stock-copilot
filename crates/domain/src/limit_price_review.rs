@@ -128,7 +128,7 @@ pub(crate) mod tests {
     #[test]
     fn limit_matches_independent_tick_reference() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(2_u32..899_000), |bid| {
                 let ask = bid + 1;
                 let (orderbook, table, limits) =

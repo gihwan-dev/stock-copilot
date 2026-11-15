@@ -1,26 +1,8 @@
-mod addition_symbols;
-#[cfg(test)]
-mod addition_tests;
-mod additions;
 mod environment;
-mod graph;
-mod location_tokens;
-mod macro_tokens;
-#[cfg(test)]
-mod macros_tests;
-#[cfg(test)]
-mod review_tests;
-#[cfg(test)]
-mod revision_tests;
 mod scope;
 use scope::{diff_scope, jobs_for};
-
-#[cfg(test)]
-mod scope_tests;
-
 #[cfg(test)]
 mod tests;
-
 use std::collections::BTreeSet;
 use std::fmt;
 use std::fs;
@@ -29,7 +11,7 @@ use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 use crate::check_support::{Finding, read_text, report, workspace_root};
-use crate::git_base::{changed_paths, resolve_base};
+use crate::git_base::changed_paths;
 use crate::source_check::cargo_config::examine_globs;
 
 pub(crate) const SURVIVORS_FILE: &str = "harness/mutants/survivors.toml";
@@ -74,7 +56,6 @@ pub(crate) struct Survivor {
 pub(crate) enum Scope {
     Everything,
     Sharded(String),
-    Crates(BTreeSet<String>),
     Files(BTreeSet<String>),
 }
 
@@ -207,13 +188,32 @@ pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
     }
     globs
         .iter()
-        .filter(|glob| match scope {
+        .filter(|_| match scope {
             Scope::Everything | Scope::Sharded(_) => true,
             Scope::Files(_) => false,
-            Scope::Crates(crates) => crates.contains(&crate_of(glob)),
         })
         .cloned()
         .collect()
+}
+
+fn workspace_support(path: &str) -> bool {
+    [
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+        "justfile",
+        "lefthook.yml",
+    ]
+    .contains(&path)
+        || [
+            ".cargo/",
+            ".config/",
+            "harness/",
+            "crates/xtask/",
+            ".github/",
+        ]
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
 }
 
 pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BTreeSet<String> {
@@ -222,7 +222,9 @@ pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BT
         .map(|glob| crate_of(glob))
         .filter(|directory| {
             let prefix = format!("{directory}/");
-            changed.iter().any(|path| path.starts_with(&prefix))
+            changed
+                .iter()
+                .any(|path| path.starts_with(&prefix) || workspace_support(path))
         })
         .collect()
 }
@@ -266,7 +268,8 @@ fn configure_parallelism(
         .get();
     let override_jobs = environment::jobs_override()?;
     let jobs = jobs_for(cores, override_jobs.as_deref())?;
-    let multiplier = jobs.saturating_mul(5);
+    let multiplier = 5_usize;
+    let test_threads = cores.checked_div(jobs).unwrap_or(1).clamp(1, 4);
     let mut files = BTreeSet::new();
     for directory in globs.iter().map(|glob| crate_of(glob)) {
         let path = workspace.join(directory).join("src");
@@ -276,7 +279,7 @@ fn configure_parallelism(
     }
     writeln!(
         std::io::stdout(),
-        "mutants: jobs={jobs}, timeout-multiplier={multiplier}, files={}",
+        "mutants: jobs={jobs}, test-threads={test_threads}, timeout-multiplier={multiplier}, files={}",
         files.len()
     )
     .map_err(|error| error.to_string())?;
@@ -287,7 +290,8 @@ fn configure_parallelism(
         .arg("--jobs")
         .arg(jobs.to_string())
         .arg("--timeout-multiplier")
-        .arg(multiplier.to_string());
+        .arg(multiplier.to_string())
+        .arg(format!("--cargo-test-arg=--test-threads={test_threads}"));
     Ok(())
 }
 
@@ -295,6 +299,28 @@ pub(crate) fn run(
     workspace: &Path,
     scope: &Scope,
     ignore: IgnoreFiles,
+) -> Result<Outcomes, String> {
+    run_with_diff(workspace, scope, ignore, None)
+}
+
+fn configure_profile(command: &mut Command) {
+    command
+        .env_remove("STOCK_COPILOT_PROPTEST_CASES")
+        .env("CARGO_PROFILE_DEV_DEBUG", "0")
+        .env("CARGO_PROFILE_TEST_DEBUG", "0")
+        .env("CARGO_PROFILE_DEV_OPT_LEVEL", "1")
+        .env("CARGO_PROFILE_TEST_OPT_LEVEL", "1")
+        .env("CARGO_PROFILE_DEV_DEBUG_ASSERTIONS", "true")
+        .env("CARGO_PROFILE_TEST_DEBUG_ASSERTIONS", "true")
+        .env("CARGO_PROFILE_DEV_OVERFLOW_CHECKS", "true")
+        .env("CARGO_PROFILE_TEST_OVERFLOW_CHECKS", "true");
+}
+
+fn run_with_diff(
+    workspace: &Path,
+    scope: &Scope,
+    ignore: IgnoreFiles,
+    patch: Option<&Path>,
 ) -> Result<Outcomes, String> {
     let globs = selected_globs(&target_globs(workspace)?, scope);
     if globs.is_empty() {
@@ -316,12 +342,14 @@ pub(crate) fn run(
             "--test-tool=nextest",
             "--no-shuffle",
             "--colors=never",
+            "--cargo-arg=--build-jobs=1",
         ])
         .arg("--dir")
         .arg(workspace)
         .arg("--output")
         .arg(&output)
         .stdin(Stdio::null());
+    configure_profile(&mut command);
     configure_parallelism(&mut command, workspace, &globs)?;
     if let Scope::Sharded(shard) = scope {
         command.arg("--shard").arg(shard);
@@ -332,9 +360,15 @@ pub(crate) fn run(
     if ignore == IgnoreFiles::Disregarded {
         command.arg("--gitignore=false");
     }
-    let status = command
-        .status()
-        .map_err(|error| format!("cargo mutants: {error}"))?;
+    if let Some(file) = patch {
+        command.arg("--in-diff").arg(file);
+    }
+    let status = match scope {
+        Scope::Files(_) => environment::run_bounded(command)?,
+        Scope::Everything | Scope::Sharded(_) => {
+            command.status().map_err(|error| error.to_string())?
+        }
+    };
     let written = match status.code() {
         Some(PASSED) => Written::WhenTested,
         Some(FOUND_SURVIVORS | FOUND_TIMEOUTS) => Written::Always,
@@ -346,7 +380,11 @@ pub(crate) fn run(
     })
 }
 
-fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
+fn scope_for(
+    root: &Path,
+    arguments: &[String],
+    base_use: crate::git_base::BaseUse,
+) -> Result<Scope, String> {
     match arguments {
         [] => Ok(Scope::Everything),
         [flag, shard]
@@ -355,7 +393,7 @@ fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
             Ok(Scope::Sharded(shard.clone()))
         }
         [flag, base] if flag == "--in-diff" => {
-            let commit = resolve_base(root, base)?;
+            let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
             let changed = changed_paths(root, &commit)?;
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
@@ -365,41 +403,134 @@ fn scope_for(root: &Path, arguments: &[String]) -> Result<Scope, String> {
     }
 }
 
-fn checked_scope(root: &Path, arguments: &[String]) -> Result<Scope, String> {
-    let [flag, base] = arguments else {
-        return scope_for(root, arguments);
-    };
-    if flag != "--in-diff" {
-        return scope_for(root, arguments);
-    }
-    checked_diff_scope(root, flag, base, crate::git_base::BaseUse::Ancestor)
-}
-
-fn checked_diff_scope(
+fn checked_scope(
     root: &Path,
-    flag: &str,
-    base: &str,
+    arguments: &[String],
     base_use: crate::git_base::BaseUse,
 ) -> Result<Scope, String> {
-    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
-    let findings = crate::test_diff::check_for(root, &commit, base_use)?;
-    if !findings.is_empty() {
-        return Err(format!(
-            "추가 전용 범위의 전제인 test-diff 실패:\n{}",
-            findings
+    let scope = scope_for(root, arguments, base_use)?;
+    if let [flag, base] = arguments
+        && flag == "--in-diff"
+    {
+        let findings = crate::test_diff::check_for(root, base, base_use)?;
+        if !findings.is_empty() {
+            let details = findings
                 .iter()
-                .map(ToString::to_string)
+                .map(|finding| finding.rule.to_string())
                 .collect::<Vec<_>>()
-                .join("\n")
-        ));
-    }
-    match base_use {
-        crate::git_base::BaseUse::Ancestor => scope_for(root, &[String::from(flag), commit]),
-        crate::git_base::BaseUse::Commit => {
-            let changed = changed_paths(root, &commit)?;
-            Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
+                .join("\n");
+            return Err(format!("test-diff 실패: {details}"));
         }
     }
+    Ok(scope)
+}
+
+fn list_changed_mutants(
+    root: &Path,
+    scope: &Scope,
+    patch: &Path,
+) -> Result<BTreeSet<String>, String> {
+    let globs = selected_globs(&target_globs(root)?, scope);
+    if globs.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    let mut command = Command::new("cargo");
+    command
+        .current_dir(root)
+        .args(["mutants", "--no-config", "--list", "--json", "--in-diff"])
+        .arg(patch);
+    for file in globs {
+        command.arg("--file").arg(file);
+    }
+    let output = command.output().map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "변이 열거 실패: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    if output.stdout.is_empty()
+        && String::from_utf8_lossy(&output.stderr).contains("No mutants to filter")
+    {
+        writeln!(std::io::stdout().lock(), "mutants: 선택 변이 0개")
+            .map_err(|error| error.to_string())?;
+        return Ok(BTreeSet::new());
+    }
+    let parsed: serde_json::Value =
+        serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
+    let entries = parsed.as_array().ok_or("변이 열거 목록이 아니다")?;
+    writeln!(
+        std::io::stdout().lock(),
+        "mutants: 선택 변이 {}개",
+        entries.len()
+    )
+    .map_err(|error| error.to_string())?;
+    entries
+        .iter()
+        .map(|entry| {
+            entry
+                .get("file")
+                .and_then(serde_json::Value::as_str)
+                .map(crate_of)
+                .ok_or_else(|| String::from("변이 열거에 file이 없다"))
+        })
+        .collect()
+}
+
+fn report_nightly_targets(
+    root: &Path,
+    base: &str,
+    mutated: &BTreeSet<String>,
+) -> Result<(), String> {
+    let changed = changed_paths(root, base)?;
+    let globs = target_globs(root)?;
+    for directory in touched_crates(&globs, &changed).difference(mutated) {
+        writeln!(
+            std::io::stdout().lock(),
+            "mutants: {directory}는 밤 전체 실행 대상"
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn diff_patch(root: &Path, base: &str) -> Result<std::path::PathBuf, String> {
+    let mut command = crate::git_base::git(root);
+    command.args([
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-renames",
+        "--unified=0",
+        base,
+        "--",
+    ]);
+    let mut patch = crate::git_base::output(command, "diff")?;
+    for file in crate::git_base::untracked_paths(root)? {
+        if Path::new(&file).extension().is_some_and(|ext| ext == "rs") {
+            let mut added = crate::git_base::git(root);
+            added.args([
+                "diff",
+                "--no-index",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--unified=0",
+                "--",
+                "/dev/null",
+                &file,
+            ]);
+            let result = added.output().map_err(|error| error.to_string())?;
+            if result.status.code() != Some(1_i32) {
+                return Err(format!("새 파일 diff 실패: {file}"));
+            }
+            patch.extend(result.stdout);
+        }
+    }
+    let directory = root.join(OUTPUT_DIRECTORY);
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let destination = directory.join("changes.diff");
+    fs::write(&destination, patch).map_err(|error| error.to_string())?;
+    Ok(destination)
 }
 
 pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
@@ -407,13 +538,21 @@ pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) 
         "mutants",
         workspace_root().and_then(|root| {
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
-            let scope = match (arguments, base_use) {
-                ([flag, base], crate::git_base::BaseUse::Commit) if flag == "--in-diff" => {
-                    checked_diff_scope(&root, flag, base, base_use)?
+            let scope = checked_scope(&root, arguments, base_use)?;
+            let outcomes = if let [flag, base] = arguments
+                && flag == "--in-diff"
+            {
+                let patch = diff_patch(&root, base)?;
+                let mutated = list_changed_mutants(&root, &scope, &patch)?;
+                report_nightly_targets(&root, base, &mutated)?;
+                if mutated.is_empty() {
+                    Outcomes::default()
+                } else {
+                    run_with_diff(&root, &scope, IgnoreFiles::Respected, Some(&patch))?
                 }
-                _ => checked_scope(&root, arguments)?,
+            } else {
+                run(&root, &scope, IgnoreFiles::Respected)?
             };
-            let outcomes = run(&root, &scope, IgnoreFiles::Respected)?;
             evaluate(&outcomes, &survivors)
         }),
     )

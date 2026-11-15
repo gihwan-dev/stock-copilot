@@ -368,7 +368,7 @@ pub(crate) mod tests {
         );
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn sampled_mean_matches_independent_integer_ratio_and_convex_hull(seed in any::<u64>(), values in proptest::collection::vec((-1000_i32..1000_i32,1_usize..5),1..9)) {
             let clusters=values.iter().map(|(value,count)| Cluster { sum:coefficient(Number::new(Decimal::from(*value).checked_mul(Decimal::from(*count)).expect("작은 정수"))).expect("고정 배율 계수"),count:Count(*count) }).collect::<Vec<_>>();
@@ -409,7 +409,7 @@ pub(crate) mod tests {
     #[test]
     fn sorted_date_clusters_are_seed_deterministic_for_4096_input_permutations() {
         use proptest::test_runner::TestRunner;
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(any::<u64>(), 1_i64..10000_i64), |(seed, step)| {
                 let mut input = scaled_observations(step);
                 let first = interval(&input, BootstrapSeed::new(seed)).expect("첫 구간");
@@ -778,7 +778,7 @@ mod quantization_review_tests {
         assert_eq!(super::tests::reference_mean(3, 2), Decimal::new(15, 1));
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn review_quantization_and_resampled_i128_mean_match_independent_integer_reference(seed in any::<u64>(), coefficients in proptest::collection::vec(-9_999_999_999_999_999_i64..9_999_999_999_999_999_i64,1..12)) {
             let expected = coefficients.iter().map(|coefficient|independent_round(i128::from(*coefficient),10_000_000_000_000_000)).collect::<Vec<_>>();

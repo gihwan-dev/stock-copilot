@@ -490,7 +490,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn accepted_books_have_strict_spreads_for_4096_generated_cases() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u32..100_000, 1_u32..100_000), |(ask, bid)| {
                 let result = book(vec![level(&ask.to_string())], vec![level(&bid.to_string())]);
                 proptest::prop_assert_eq!(result.is_ok(), bid < ask);

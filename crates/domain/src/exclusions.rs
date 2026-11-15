@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn exclusion_uniqueness_matches_independent_set_reference() {
-        TestRunner::new(Config::with_cases(512))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&proptest::collection::vec(0_u16..300, 0..300), |ids| {
                 let unique: std::collections::BTreeSet<_> = ids.iter().copied().collect();
                 let sectors = ids

@@ -651,7 +651,7 @@ mod tests {
             ),
             Err(NoEstimateTask::HoursNotAllowed)
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u8..4, 0_u8..3), |(days_ratio, risk_index)| {
                 let horizon = match days_ratio {
                     0 => HorizonSelection::Hours,
