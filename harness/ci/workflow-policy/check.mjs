@@ -113,7 +113,7 @@ const stepFindings = (job, step, policy, toolSpec) => {
       ? []
       : [finding("condition", job)]),
     ...(step["timeout-minutes"] === undefined ||
-    (job === "mutants" &&
+    (["mutants", "mutants-daily"].includes(job) &&
       step.name === "mutants without network" &&
       step["timeout-minutes"] === 160)
       ? []

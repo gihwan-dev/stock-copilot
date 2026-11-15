@@ -2,6 +2,14 @@
 
 - 상태: 초안
 
+## 현행 결정: 일일 변경분과 주간 전체
+
+메인 결정으로 매일은 지난24시간의 master 변경분만 한 작업으로 검사하고 전체는 주1회128분할로 실행한다. 일일 cron은18:00 UTC(매일03:00 KST), 주간은일요일14:00 UTC(일요일23:00 KST)다. workflow_dispatch의 mode는 daily/full이며 기본daily다. 두 모드 모두 master 이벤트의 고정 github.sha를 checkout하고 ref가 refs/heads/master인지 검증한다. 수동 실행도 master에서 요청해야 하며 다른 브랜치는 명시적으로 실패한다. 128개 작업이 서로 다른 master 끝을 읽는 경쟁을 막는다. 정상 macOS/Linux 검사는 기존대로 유지한다.
+
+일일은 Git의 master 첫 부모 이력에서 실행 시각24시간 전의 마지막 커밋을 고른다. checkout은fetch-depth0이고 얕은 복제면 fetch --unshallow origin을 먼저 수행한다. 가져오기 실패는 성공이나 빈 구간으로 바꾸지 않는다. 과거 커밋이 없는 저장소 첫24시간은 initial로 표시해 빈 트리부터 모든 현재 대상 소스를 고른다. 기준HEAD와 같거나 선택 변이가0이면 변경 없음이다. 기존 diff_scope·diff_patch·list_changed_mutants를 재사용하여 대상 src와 diff 영역의 교집합을 검사한다.
+
+일일은 한 작업(상한8 이하)으로 시작하고 단계160분·작업180분 제한이다. 작업 브랜치 mutants-diff의20분·test-diff 선행 검사는 유지한다. 일일은 이미 master에 반영된 승인 테스트 변경을 다시 거부하지 않으며 선택 로직과 missed/timeout evaluate를 재사용한다. 주간 전체·일일 모두 기본256회, 미검출·시간 초과 실패, always 요약을 유지한다. 일일의 catalog는 실제 diff 선택 목록이며 빈 목록은 유효한 기준·HEAD 영수증과 빈 결과가 함께 있을 때만 변경 없음이다. 선택 목록이 양수인데 계획이 비면 실패한다. 아래 이전 회차의 전체 매일 실행 계획은 이 결정으로 대체된다.
+
 ## 기준과 진단
 
 기준 커밋은 `8ba1f6abf3b1050017b649d1d1a5fd63104a6363`이다. 원격 조회는 `gh run list --workflow nightly.yml`, 두 실행의 `gh run view --log`만 사용했다. 원격 쓰기는 하지 않았다.
@@ -190,3 +198,56 @@ master0739990을 합친 소스의 실제 catalog는4471개다. ceil(4471/128)=35
 필수 변경분 변이 명령은 원기준8ba1f6a로 실제 실행했지만 test-diff에서 중단됐고 변이 통과가 아니다. 병합 커밋을 만들기 전 master0739990으로 실행한 명령은 아직 HEAD의 조상이 아니라는 선행 검증에서 중단됐다. 병합을 마친 뒤 같은 기준으로 다시 실행한 최종 결과는 보고서와 실행 로그에 남긴다. 승인4건 외에 검사 규칙을 느슨하게 하거나 새 끄기를 추가하지 않았다.
 
 최종 상태는 막힘이다. 코드로 확인한 기존 중요 결함3건은 수정했으나 추가 조사 항목인 원래 SIGKILL의 발신 주체·원인에 대한 중요 증거 공백1건이 최대3회 리뷰 뒤에도 남는다. 고유 fixture 충돌 수정이나 한 번의 전체 검사 통과를 그 원인의 해결 증거로 세지 않는다.
+
+## 미해결: SIGKILL 조사 기록 종료
+
+메인은 남은 중요1건을 원인 미확인 상태로 기록하고 닫았으며 막힘을 해제했다. 네 훅 테스트에는 자체 시간 제한이 없고 nextest 기본 실패 중단은 :wait다. 별개 실행 간 fixture 삭제 충돌은 고쳤다. 그 수정이 원래 SIGKILL을 해결했다는 증거는 없으며 그 뒤 재발 여부는 관찰 대상이다. 재발하면 전체 로그, 실제 실행 명령, PID/PPID/PGID, 종료 시각을 보존한다. 이전 회차의 막힘 판정은 이 결정으로 종료한다.
+
+## 일일·주간 설계 회차 검증
+
+새 일정·수동 선택 회귀는 변경 전 실패했고 변경 후 통과했다. 실제 Git 저장소로 조용한24시간·첫24시간·얕은clone 복구·fetch 실패·HEAD 부재·master 첫 부모와 side branch 날짜 구분·24시간 경계 양쪽을 검증했다. 실제 Cargo fixture는 루트 초기 소스의 변이를 검사하고 약한 테스트의 미검출을 실패 findings로 남겼다. 기본256 프로필과 기존20분 작업 브랜치 제한은 유지한다.
+
+첫 정상 훅은 새 justfile 레시피의 보호 기대값 등록 누락으로 check-ts에서 중단됐다. harness/check-list/justfile.json에 mutants-daily 한 레시피만 추가했으며 기존 기대값은 그대로다. 해당 검사와 새 일정·범위 회귀17/17이 통과했다. 이 오류는 test-diff 예외로 넘기지 않고 수정했다.
+
+새 일정·요약 코드의 손 변형22개를 별도 mktemp 복사본에서 node --check로 컴파일 확인한 뒤 실제 회귀로 실행해 모두 검출했다. 아래 표는 이번 회차 실행만 기록한다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| S1 | "--first-parent", →  | H47 daily range follows master first parents and fails closed without HEAD | 컴파일 후 검출 |
+| S2 | - 24 * 60 * 60 * 1000 → + 24 * 60 * 60 * 1000 | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S3 | - 24 * 60 * 60 * 1000 → - 0 * 60 * 60 * 1000 | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S4 | === "true" → === "false" | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S5 | "--unshallow" → "--depth=1" | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S6 | run.status !== 0 → run.status === 0 | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S7 | --before=${cutoff} → --after=${cutoff} | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S8 | ]) \|\| "initial" → ]) \|\| "HEAD" | H47 daily range covers quiet windows initial history and shallow clones | 컴파일 후 검출 |
+| S9 | process.env.MUTATION_MODE === "daily" → false | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S10 | process.env.MUTATION_MODE === "daily" → true | H47 completion requires a successful baseline and every planned mutant | 컴파일 후 검출 |
+| S11 | read("../daily.json") → read("../missing-daily.json") | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S12 | !validCommit(receipt.head) → !validCommit(receipt.base) | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S13 | receipt.base === "initial" → receipt.base === "never" | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S14 | if (daily) { → if (false) { | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S15 | outcome !== "success" → outcome === "success" | H47 completion requires a successful baseline and every planned mutant | 컴파일 후 검출 |
+| S16 | (!daily && catalog.length === 0) → false | H47 missing empty or malformed global catalogs never validate an empty shard | 컴파일 후 검출 |
+| S17 | (!daily \|\| catalog.length === 0) → true | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S18 | (!daily \|\| planned.length === catalog.length) → (!daily \|\| planned.length !== catalog.length) | H47 daily summary requires range evidence and preserves cancellation and completion failures | 컴파일 후 검출 |
+| S19 | state = daily ? "변경 없음" : "대상 없음" → state = daily ? "대상 없음" : "변경 없음" | H47 successful empty slices have an explicit empty result without baseline | 컴파일 후 검출 |
+| S20 | entry.summary === "Success" → entry.summary !== "Success" | H47 completion requires a successful baseline and every planned mutant | 컴파일 후 검출 |
+| S21 | entry.scenario === "Baseline" → entry.scenario !== "Baseline" | H47 completion requires a successful baseline and every planned mutant | 컴파일 후 검출 |
+| S22 | process.exitCode = 1 → process.exitCode = 0 | H47 cancellation and missing results remain visible and fail | 컴파일 후 검출 |
+
+전체 검사 재시도에서 ci-plumbing의 예전 일정 하나만 기대하는 단언을 발견해 새 일정2개와 수동 입력의 정확한 값으로 갱신했다. 기존 단언은 삭제하지 않았다. 추가 검증에서 수동 전체128조각도 같은 commit을 써야 하므로 checkout을 움직이는 master 참조 대신 실행 이벤트SHA로 고정하고 master ref·HEAD SHA 일치를 검증한다. 이 변경은 정상/잘못된 ref/다른 SHA/누락 SHA 회귀로 확인한다.
+
+경계·스냅샷 보강: 정상24시간은 통과하고23시간·25시간 변형은 각각 실패했다. master ref·SHA 검증의 추가5개 변형도 실제 컴파일·실행 후 모두 검출했다. 이 회차 손 변형은 합계29개이며 전부 실제 실행했다. 최신 CI 회귀 전체81/81, 하네스 ESLint 통과.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| S23 | 24시간 → 23시간 | H47 daily cutoff includes exactly the prior 24 hours | 컴파일 후 검출 |
+| S24 | 24시간 → 25시간 | H47 daily cutoff includes exactly the prior 24 hours | 컴파일 후 검출 |
+| S25 | ref !== "refs/heads/master" → ref === "refs/heads/master" | H47 manual mutation runs require the pinned master snapshot | 컴파일 후 검출(exit1) |
+| S26 | !/^[0-9a-f]{40}$/u.test(sha) → !/^[0-9a-f]{39}$/u.test(sha) | H47 manual mutation runs require the pinned master snapshot | 컴파일 후 검출(exit1) |
+| S27 | git(root, ["rev-parse", "HEAD"]) !== sha → git(root, ["rev-parse", "HEAD"]) === sha | H47 manual mutation runs require the pinned master snapshot | 컴파일 후 검출(exit1) |
+| S28 | ref !== "refs/heads/master" \|\| → false \|\| | H47 manual mutation runs require the pinned master snapshot | 컴파일 후 검출(exit1) |
+| S29 | throw new Error("변이 실행은 master의 고정된 실행 SHA가 필요하다"); → ; | H47 manual mutation runs require the pinned master snapshot | 컴파일 후 검출(exit1) |
+
+4회차 정상 통합 검사: master580a19874ee4ad32c21c4c3f83a0a4142b3a4858 기준 workspace1332/1332(114.931초), coverage975/975(86.911초), coverage-check 위반0. 실제128분할 목록 회귀81.443초 통과. 전체 정상 훅631.62초 뒤 승인된 test-diff 정확4건(기존 정확분할·deadline 테스트2건, 훅 fixture 헬퍼2건)에서 exit1이었다. 이4건 외 문제는 없고 후속 disable-report·disable-report-since·hooks-installed도 통과했다. 새 끄기0. 지시문의 해당 커밋 예외를 적용하고 사유를 커밋 메시지에 남긴다. 전체 명령이 exit0이었다고 표현하지 않는다.

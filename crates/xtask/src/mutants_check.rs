@@ -1,4 +1,5 @@
 mod catalog;
+mod daily;
 mod environment;
 mod scope;
 use scope::{diff_scope, jobs_for};
@@ -58,6 +59,7 @@ pub(crate) enum Scope {
     Everything,
     Sharded(String),
     Files(BTreeSet<String>),
+    DailyFiles(BTreeSet<String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,14 +186,14 @@ pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
-    if let Scope::Files(files) = scope {
+    if let Scope::Files(files) | Scope::DailyFiles(files) = scope {
         return files.iter().cloned().collect();
     }
     globs
         .iter()
         .filter(|_| match scope {
             Scope::Everything | Scope::Sharded(_) => true,
-            Scope::Files(_) => false,
+            Scope::Files(_) | Scope::DailyFiles(_) => false,
         })
         .cloned()
         .collect()
@@ -330,7 +332,7 @@ fn prepare_output(
         fs::remove_dir_all(results).map_err(|error| error.to_string())?;
     }
     match scope {
-        Scope::Files(_) => {}
+        Scope::Files(_) | Scope::DailyFiles(_) => {}
         Scope::Everything | Scope::Sharded(_) => catalog::prepare(root, globs, ignore, &output)?,
     }
     Ok(output)
@@ -345,7 +347,7 @@ fn run_with_diff(
     let globs = selected_globs(&target_globs(workspace)?, scope);
     if globs.is_empty() {
         return match scope {
-            Scope::Files(_) => Ok(Outcomes::default()),
+            Scope::Files(_) | Scope::DailyFiles(_) => Ok(Outcomes::default()),
             Scope::Everything | Scope::Sharded(_) => Err(String::from("밤 전체 변이 대상이 없다")),
         };
     }
@@ -384,7 +386,7 @@ fn run_with_diff(
     let results = output.join("mutants.out");
     let status = match scope {
         Scope::Files(_) => environment::run_bounded(command)?,
-        Scope::Everything | Scope::Sharded(_) => {
+        Scope::Everything | Scope::Sharded(_) | Scope::DailyFiles(_) => {
             command.status().map_err(|error| error.to_string())?
         }
     };
@@ -417,7 +419,7 @@ fn scope_for(
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
         _ => Err(String::from(
-            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/128..127/128>]",
+            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/128..127/128> | --daily <커밋 ID|initial>]",
         )),
     }
 }
@@ -451,6 +453,7 @@ fn list_changed_mutants(
 ) -> Result<BTreeSet<String>, String> {
     let globs = selected_globs(&target_globs(root)?, scope);
     if globs.is_empty() {
+        daily::catalog(root, b"[]")?;
         return Ok(BTreeSet::new());
     }
     let mut command = Command::new("cargo");
@@ -471,6 +474,7 @@ fn list_changed_mutants(
     if output.stdout.is_empty()
         && String::from_utf8_lossy(&output.stderr).contains("No mutants to filter")
     {
+        daily::catalog(root, b"[]")?;
         writeln!(std::io::stdout().lock(), "mutants: 선택 변이 0개")
             .map_err(|error| error.to_string())?;
         return Ok(BTreeSet::new());
@@ -478,6 +482,7 @@ fn list_changed_mutants(
     let parsed: serde_json::Value =
         serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
     let entries = parsed.as_array().ok_or("변이 열거 목록이 아니다")?;
+    daily::catalog(root, &output.stdout)?;
     writeln!(
         std::io::stdout().lock(),
         "mutants: 선택 변이 {}개",
@@ -506,7 +511,7 @@ fn report_nightly_targets(
     for directory in touched_crates(&globs, &changed).difference(mutated) {
         writeln!(
             std::io::stdout().lock(),
-            "mutants: {directory}는 밤 전체 실행 대상"
+            "mutants: {directory}는 주간 전체 실행 대상"
         )
         .map_err(|error| error.to_string())?;
     }
@@ -556,6 +561,11 @@ pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) 
     report(
         "mutants",
         workspace_root().and_then(|root| {
+            if let [flag, base] = arguments
+                && flag == "--daily"
+            {
+                return daily::check(&root, base, base_use);
+            }
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
             let scope = checked_scope(&root, arguments, base_use)?;
             let outcomes = if let [flag, base] = arguments

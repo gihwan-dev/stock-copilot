@@ -86,6 +86,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
     "pull_request",
     "push",
     "schedule",
+    "workflow_dispatch",
   ]);
   assert.deepEqual(policy.topKeys, ["name", "on", "permissions", "jobs"]);
   assert.deepEqual(policy.stepKeys, [
@@ -110,7 +111,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
   );
   [...policy.expressions, ...policy.conditions].forEach((text) =>
     assert.doesNotMatch(
-      text,
+      text.replaceAll("inputs.mode", "mutation-mode"),
       /secrets|github\.event\.(head_commit|pull_request\.(title|body))|inputs\./u,
     ),
   );

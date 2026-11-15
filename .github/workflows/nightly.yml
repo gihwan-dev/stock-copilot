@@ -4,8 +4,25 @@
     "schedule": [
       {
         "cron": "0 18 * * *"
+      },
+      {
+        "cron": "0 14 * * 0"
       }
-    ]
+    ],
+    "workflow_dispatch": {
+      "inputs": {
+        "mode": {
+          "description": "변이 검사 범위",
+          "type": "choice",
+          "required": true,
+          "default": "daily",
+          "options": [
+            "daily",
+            "full"
+          ]
+        }
+      }
+    }
   },
   "permissions": {
     "contents": "read"
@@ -348,7 +365,8 @@
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
             "fetch-depth": 0,
-            "persist-credentials": false
+            "persist-credentials": false,
+            "ref": "${{ github.sha }}"
           }
         },
         {
@@ -356,6 +374,14 @@
           "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
           "with": {
             "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "master snapshot",
+          "run": "node harness/ci/mutation-range.mjs verify",
+          "env": {
+            "REF": "${{ github.ref }}",
+            "SHA": "${{ github.sha }}"
           }
         },
         {
@@ -396,11 +422,13 @@
             "MUTATION_SHARD": "${{ matrix.shard }}"
           }
         }
-      ]
+      ],
+      "if": "github.event.schedule == '0 14 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')"
     },
     "notify-mutants": {
       "needs": [
-        "mutants"
+        "mutants",
+        "mutants-daily"
       ],
       "if": "failure()",
       "runs-on": "ubuntu-24.04",
@@ -443,6 +471,84 @@
           "run": "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'"
         }
       ]
+    },
+    "mutants-daily": {
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 180,
+      "steps": [
+        {
+          "name": "checkout",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false,
+            "ref": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "node",
+          "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+          "with": {
+            "node-version-file": ".node-version"
+          }
+        },
+        {
+          "name": "master snapshot",
+          "run": "node harness/ci/mutation-range.mjs verify",
+          "env": {
+            "REF": "${{ github.ref }}",
+            "SHA": "${{ github.sha }}"
+          }
+        },
+        {
+          "name": "pnpm",
+          "run": "node harness/ci/tools.mjs pnpm"
+        },
+        {
+          "name": "tools",
+          "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+          "with": {
+            "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+          }
+        },
+        {
+          "name": "cargo-mutants",
+          "run": "node harness/ci/tools.mjs cargo-install"
+        },
+        {
+          "name": "lefthook",
+          "run": "node harness/ci/tools.mjs lefthook"
+        },
+        {
+          "name": "fetch",
+          "run": "node harness/ci/tools.mjs fetch"
+        },
+        {
+          "name": "daily range",
+          "id": "range",
+          "run": "node harness/ci/mutation-range.mjs"
+        },
+        {
+          "name": "mutants without network",
+          "run": "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\"",
+          "id": "mutation",
+          "timeout-minutes": 160,
+          "env": {
+            "MUTATION_BASE": "${{ steps.range.outputs.base }}"
+          }
+        },
+        {
+          "name": "mutation results",
+          "if": "always()",
+          "run": "node harness/ci/mutants-summary.mjs",
+          "env": {
+            "MUTATION_OUTCOME": "${{ steps.mutation.outcome }}",
+            "MUTATION_SHARD": "daily",
+            "MUTATION_MODE": "daily"
+          }
+        }
+      ],
+      "if": "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')"
     }
   }
 }
