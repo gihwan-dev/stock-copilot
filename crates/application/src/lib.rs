@@ -93,20 +93,24 @@ pub use error_class::{
 };
 
 mod system_port_error;
-pub use system_port_error::{SystemFailure, SystemPort, SystemPortError, WriteCompleted};
+pub use system_port_error::{
+    RecordOutcome, SystemDiagnostic, SystemFailure, SystemPort, SystemPortError, WriteCompleted,
+};
 mod clock;
 pub use clock::Clock;
 mod notifier;
 pub use notifier::{Notification, Notifier};
 mod secret_store;
-pub use secret_store::{SecretKey, SecretStore, SecretValue};
+pub use secret_store::SecretValue;
+mod secret_port;
+pub use secret_port::{SecretKey, SecretStore};
 pub mod user_presence;
-pub use user_presence::{ConfirmationOutcome, ConfirmationRequest};
+pub use user_presence::{OrderConfirmation, RiskChangeConfirmation};
 mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod storage_ports;
 pub use storage_ports::{
-    EstimateRepository, MarketDataRepository, NewsRepository, PortfolioRepository,
+    EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
     ProposalRepository, SettingsRepository, SignalRepository, ThesisRepository,
     TransactionRepository, ValuationRepository,
 };
@@ -150,4 +154,13 @@ mod event_bus;
 pub use event_bus::{
     DeliveryFailure, DeliveryReport, EventBus, EventBusBuilder, EventSubscriber, SubscriberFailure,
     SubscriptionId,
+};
+
+mod self_check;
+pub use self_check::{
+    AiCheckObservation, AiEnvironmentProblem, CheckState, ClaudeInstallProblem, ClaudeLoginProblem,
+    DuplicateKeyProblem, IpProblem, NewsCheckState, OrderPrerequisiteProblem, SelfCheckAction,
+    SelfCheckChange, SelfCheckInput, SelfCheckResult, SourceCheckRecord, TossCheckObservation,
+    TossKeyProblem, evaluate_self_check, isolation_check_observation, self_check_change,
+    toss_check_observation,
 };

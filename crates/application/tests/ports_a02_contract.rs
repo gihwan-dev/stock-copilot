@@ -31,7 +31,7 @@ mod tests {
         check_trait(
             &port_source("src/clock.rs"),
             "Clock",
-            &["fn now(&self) -> impl Future<Output = Result<Timestamp, SystemPortError>> + Send"],
+            &["fn now(&self) -> Timestamp"],
         );
         check_trait(
             &port_source("src/notifier.rs"),
@@ -44,19 +44,20 @@ mod tests {
             &port_source("src/user_presence.rs"),
             "UserPresence",
             &[
-                "fn confirm(&self, request: ConfirmationRequest<'_>) -> impl Future<Output = Result<ConfirmationOutcome, SystemPortError>> + Send",
+                "fn confirm_order(&self, summary: OrderSummary) -> impl Future<Output = OrderConfirmation> + Send",
+                "fn confirm_risk_change(&self, change: RiskChange) -> impl Future<Output = RiskChangeConfirmation> + Send",
             ],
         );
         check_trait(
             &port_source("src/audit_log.rs"),
             "AuditLog",
             &[
-                "fn append(&self, entry: &AuditEntry) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn append(&self, entry: &AuditEntry) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send",
                 "fn verify(&self) -> impl Future<Output = Result<AuditIntegrity, SystemPortError>> + Send",
             ],
         );
         check_trait(
-            &port_source("src/secret_store.rs"),
+            &port_source("src/secret_port.rs"),
             "SecretStore",
             &[
                 "fn load(&self, key: SecretKey) -> impl Future<Output = Result<Option<SecretValue>, SystemPortError>> + Send",
@@ -93,7 +94,7 @@ mod tests {
                 "fn store_candles(&self, instrument: &InstrumentId, candles: &[Candle]) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
                 "fn candles(&self, instrument: &InstrumentId, window: TimeInterval, period: CandlePeriod, adjustment: PriceAdjustment) -> impl Future<Output = Result<Vec<Candle>, SystemPortError>> + Send",
                 "fn store_fx_rate(&self, rate: &FxRate) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
-                "fn fx_rate(&self, pair: FxPair, kind: FxRateKind, at: Option<Timestamp>) -> impl Future<Output = Result<Option<FxRate>, SystemPortError>> + Send",
+                "fn fx_rate(&self, pair: FxPair, kind: FxRateKind, at: FxRateQuery) -> impl Future<Output = Result<Option<FxRate>, SystemPortError>> + Send",
             ],
         );
     }
@@ -129,7 +130,7 @@ mod tests {
             &source,
             "ProposalRepository",
             &[
-                "fn store_draft(&self, proposal: &Proposal<Draft>, report: &ValidationReport) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn store_draft(&self, proposal: &Proposal<Draft>) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
                 "fn draft(&self, proposal: &ProposalId) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send",
             ],
         );
@@ -137,7 +138,7 @@ mod tests {
             &source,
             "ValuationRepository",
             &[
-                "fn append(&self, account: &AccountId, snapshot: &ValuationSnapshot) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn append(&self, account: &AccountId, snapshot: &ValuationSnapshot) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send",
                 "fn history(&self, account: &AccountId, window: TimeInterval) -> impl Future<Output = Result<Vec<ValuationSnapshot>, SystemPortError>> + Send",
             ],
         );
@@ -147,6 +148,8 @@ mod tests {
             &[
                 "fn store_profile(&self, profile: &InvestorProfile) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
                 "fn profile(&self) -> impl Future<Output = Result<Option<InvestorProfile>, SystemPortError>> + Send",
+                "fn store_risk_settings(&self, settings: &RiskSettings) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn risk_settings(&self) -> impl Future<Output = Result<Option<RiskSettings>, SystemPortError>> + Send",
             ],
         );
     }
@@ -156,11 +159,11 @@ mod tests {
             &port_source("src/storage_ports.rs"),
             "EstimateRepository",
             &[
-                "fn append_submission(&self, submission: &SignalSubmission) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn append_submission(&self, submission: &SignalSubmission) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send",
                 "fn submissions(&self, instrument: &InstrumentId) -> impl Future<Output = Result<Vec<SignalSubmission>, SystemPortError>> + Send",
-                "fn append_resolution(&self, task: &SignalTaskKey, outcome: &EstimateOutcome) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn append_resolution(&self, task: &SignalTaskKey, outcome: &EstimateOutcome) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send",
                 "fn resolution(&self, task: &SignalTaskKey) -> impl Future<Output = Result<Option<EstimateOutcome>, SystemPortError>> + Send",
-                "fn store_calibration(&self, key: &CalibrationKey, calibration: &Calibration) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn append_calibration(&self, key: &CalibrationKey, calibration: &Calibration) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send",
                 "fn calibration(&self, key: &CalibrationKey) -> impl Future<Output = Result<Option<Calibration>, SystemPortError>> + Send",
             ],
         );

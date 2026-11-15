@@ -1,5 +1,5 @@
-use crate::{ConfirmationOutcome, SystemPortError, WriteCompleted};
-use domain::{ClientOrderId, InstrumentId, ProposalId, RiskSettingsChange, Timestamp};
+use crate::{OrderConfirmation, RecordOutcome, RiskChangeConfirmation, SystemPortError};
+use domain::{ClientOrderId, InstrumentId, ProposalId, RiskChange, Timestamp};
 use std::future::Future;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,12 +10,16 @@ pub enum AuditKind {
     ApprovalRequested(ProposalId),
     PresenceRecorded {
         proposal: ProposalId,
-        outcome: ConfirmationOutcome,
+        outcome: OrderConfirmation,
     },
     ProposalSkipped(ProposalId),
     SubmissionPrepared(ClientOrderId),
     SubmissionResponseRecorded(ClientOrderId),
-    RiskSettingsChanged(RiskSettingsChange),
+    RiskSettingsChanged(RiskChange),
+    RiskChangeConfirmationRecorded {
+        change: RiskChange,
+        outcome: RiskChangeConfirmation,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +53,6 @@ pub trait AuditLog: Send + Sync {
     fn append(
         &self,
         entry: &AuditEntry,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
     fn verify(&self) -> impl Future<Output = Result<AuditIntegrity, SystemPortError>> + Send;
 }

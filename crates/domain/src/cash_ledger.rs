@@ -634,7 +634,7 @@ pub(crate) mod tests {
         }
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn mixed_kinds_currencies_cancellations_and_transfers_match_independent_cents(values in collection::vec((0_usize..12,0_i64..100,any::<bool>()),0..24)) {
             let codes=["BUY","SELL","DEPOSIT","WITHDRAWAL","EXCHANGE_IN","EXCHANGE_OUT","DIVIDEND","INTEREST","FEE","SECURITIES_TRANSFER_IN","SECURITIES_TRANSFER_OUT","CANCELLED"];

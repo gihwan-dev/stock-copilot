@@ -760,7 +760,7 @@ mod tests {
     }
     #[test]
     fn long_decimal_volatility_matches_independent_rational_reference() {
-        let mut runner = TestRunner::new(Config::with_cases(4096));
+        let mut runner = TestRunner::new(Config::with_cases(testkit::property_cases()));
         runner
             .run(
                 &(
@@ -1003,7 +1003,7 @@ mod tests {
     }
     #[test]
     fn multiword_differences_match_independent_rational_reference() {
-        let mut runner = TestRunner::new(Config::with_cases(4096));
+        let mut runner = TestRunner::new(Config::with_cases(testkit::property_cases()));
         runner
             .run(
                 &(64_u32..96, 1_u16..256, 1_u32..17, 0_u8..2),

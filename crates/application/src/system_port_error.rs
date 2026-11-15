@@ -1,13 +1,11 @@
-use crate::{BugDiagnostic, ClassifiedError, ErrorClass, ResponseMismatch, RetryDelay, UserAction};
+use crate::{BugDiagnostic, ClassifiedError, ErrorClass, RetryDelay, UserAction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemPort {
     Repository,
     AuditLog,
     SecretStore,
-    Clock,
     Notifier,
-    UserPresence,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,8 +13,8 @@ pub enum SystemFailure {
     PermissionDenied,
     Unavailable(RetryDelay),
     InvalidData,
-    Conflict,
-    IntegrityViolation,
+    RepositoryIntegrity,
+    SecretIntegrity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,10 +43,14 @@ impl ClassifiedError for SystemPortError {
         match self.failure {
             SystemFailure::PermissionDenied => ErrorClass::UserAction(UserAction::CheckPermissions),
             SystemFailure::Unavailable(retry) => ErrorClass::Wait(retry),
-            SystemFailure::InvalidData
-            | SystemFailure::Conflict
-            | SystemFailure::IntegrityViolation => {
-                ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Validation))
+            SystemFailure::InvalidData => {
+                ErrorClass::Bug(BugDiagnostic::System(SystemDiagnostic::InvalidStoredData))
+            }
+            SystemFailure::RepositoryIntegrity => {
+                ErrorClass::Bug(BugDiagnostic::System(SystemDiagnostic::RepositoryIntegrity))
+            }
+            SystemFailure::SecretIntegrity => {
+                ErrorClass::Bug(BugDiagnostic::System(SystemDiagnostic::SecretIntegrity))
             }
         }
     }
@@ -56,3 +58,16 @@ impl ClassifiedError for SystemPortError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WriteCompleted;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemDiagnostic {
+    InvalidStoredData,
+    RepositoryIntegrity,
+    SecretIntegrity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordOutcome {
+    Recorded,
+    AlreadyRecorded,
+}

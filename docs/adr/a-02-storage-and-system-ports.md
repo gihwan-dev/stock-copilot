@@ -4,111 +4,166 @@
 
 ## 결정과 범위
 
-architecture 3.3·3.7·3.8, design SEC-1·6·8·11·12, ORD-3, UX-3과 ADR 0055·0063·0065를 따른다. 구현은 application의 새 모듈과 새 테스트, domain의 새 저장 기록·위험 변경 값만 추가한다. 기존 impl과 기존 테스트를 고치지 않는다. 어댑터, A-04 가짜, 주문 전송, UI 문구는 만들지 않는다.
+architecture 3.3·3.7·3.8, design SEC-1·6·8·11·12, ORD-3, UX-3과 ADR 0055·0063·0065를 따른다. 이번 리뷰 수정은 메인이 확정한 단순화 결정 1~10을 반영한다. 어댑터, A-04 가짜, 주문 전송과 UI는 구현하지 않는다. 실제 키·계좌·API는 사용하지 않는다.
 
-모든 포트는 Send + Sync와 RPITIT의 Send Future를 사용한다. Clock도 같은 호출 계약을 사용하되 단조 시계가 아닌 domain::Timestamp 벽시계 값을 반환한다. 런타임·파일·네트워크·현재 시각 직접 호출이 없다. dyn 호환성을 약속하지 않는다. UserPresence는 application::user_presence::UserPresence로 공개한다. 현재 arch-check가 정의 crate의 pub use도 UserPresenceReexport로 거부하므로 공개 모듈을 쓰고 trait을 루트에서 재내보내지 않는다. 검사나 기존 테스트를 바꾸지 않는 가장 가까운 배치다. 성공한 쓰기는 WriteCompleted, 조회 부재는 Option 또는 빈 Vec다. 쓰기 완료는 어댑터가 내구 저장을 마친 뒤 반환한다. 호출자는 완료를 받기 전에 이벤트를 내거나 주문을 전송하지 않는다.
+Clock은 동기이며 실패하지 않는다. 나머지 포트는 Send + Sync와 RPITIT의 Send Future를 사용한다. UserPresence의 두 메서드는 Result 없이 각자의 닫힌 결과를 반환한다. 저장·조회 포트의 오류는 SystemPortError이며 ClassifiedError를 구현한다. 조회 부재는 Option 또는 빈 Vec로 표현한다. 임의 문자열·HTTP 응답·외부 오류 객체를 오류에 넣지 않는다.
 
-## 계약 표
+## 최종 계약 표
 
-출력 열에는 Result의 성공 값만 적는다. 오류는 모든 행에서 SystemPortError다. 저장소 이름은 architecture 6.2의 묶음에 대응하며 새 저장 기능을 발명하지 않는다.
+성공 값 열은 Result의 성공 값만 나타낸다. Clock과 UserPresence는 표의 값을 직접 반환한다. UserPresence는 application::user_presence::UserPresence로 공개하며 루트 재내보내기는 하지 않는다.
 
-| 포트                  | 메서드            | 입력                                                      | 출력                              | 소비자·근거                                           |
-| --------------------- | ----------------- | --------------------------------------------------------- | --------------------------------- | ----------------------------------------------------- |
-| PortfolioRepository   | record            | AccountId, SyncRecord<Portfolio>                          | WriteCompleted                    | A-06, S-02; 성공·일부 실패·실패·접근 차단 기록        |
-| PortfolioRepository   | latest            | AccountId                                                 | Option<SyncRecord<Portfolio>>     | A-08; 저장된 최신 결과 조회                           |
-| TransactionRepository | record            | AccountId, SyncRecord<SettledRowSet>                      | WriteCompleted                    | A-07, S-03; 멀티셋과 사라진 행 표시 보존              |
-| TransactionRepository | latest            | AccountId                                                 | Option<SyncRecord<SettledRowSet>> | A-07·A-16; 기존 대조 결과 조회                        |
-| MarketDataRepository  | store_quote       | InstrumentId, Quote                                       | WriteCompleted                    | S-04; 현재가 사실 보존                                |
-| MarketDataRepository  | quote             | InstrumentId                                              | Option<Quote>                     | A-09·A-14; 최신 관측 조회                             |
-| MarketDataRepository  | store_candles     | InstrumentId, [Candle]                                    | WriteCompleted                    | S-04; 원시·수정·일봉·분봉 사실 보존                   |
-| MarketDataRepository  | candles           | InstrumentId, TimeInterval, CandlePeriod, PriceAdjustment | Vec<Candle>                       | A-15·A-16; 기간·수정 기준이 같은 자료만 반환          |
-| MarketDataRepository  | store_fx_rate     | FxRate                                                    | WriteCompleted                    | S-04; 종류·출처·시각 보존                             |
-| MarketDataRepository  | fx_rate           | FxPair, FxRateKind, Option<Timestamp>                     | Option<FxRate>                    | A-08·A-16; None은 최신, Some은 그 시각 이하 최신 사실 |
-| NewsRepository        | store             | NewsItem                                                  | WriteCompleted                    | S-05; 봉인된 기사 보존                                |
-| NewsRepository        | for_instrument    | InstrumentId                                              | Vec<NewsItem>                     | A-13; 종목별 근거 조회                                |
-| ThesisRepository      | store             | InstrumentId, Thesis                                      | WriteCompleted                    | S-06; 이력을 포함한 노트 보존                         |
-| ThesisRepository      | load              | InstrumentId                                              | Option<Thesis>                    | A-13; 현재 노트와 이력 조회                           |
-| EstimateRepository    | append_submission | SignalSubmission                                          | WriteCompleted                    | A-12; 거래 여부와 무관하게 추가                       |
-| EstimateRepository    | submissions       | InstrumentId                                              | Vec<SignalSubmission>             | A-13·A-15; 종목별 추정 목록                           |
-| EstimateRepository    | append_resolution | SignalTaskKey, EstimateOutcome                            | WriteCompleted                    | A-15; 같은 과제의 두 번째 판정은 Conflict             |
-| EstimateRepository    | resolution        | SignalTaskKey                                             | Option<EstimateOutcome>           | A-15; 판정한 과제는 다시 바꾸지 않음                  |
-| EstimateRepository    | store_calibration | CalibrationKey, Calibration                               | WriteCompleted                    | A-15; 모델·기간별 보정 자료                           |
-| EstimateRepository    | calibration       | CalibrationKey                                            | Option<Calibration>               | A-13; 기존 자료 조회                                  |
-| SignalRepository      | replace           | InstrumentId, [RaisedSignal]                              | WriteCompleted                    | A-13, S-07; 빈 목록은 현재 신호 해제                  |
-| SignalRepository      | current           | InstrumentId                                              | Vec<RaisedSignal>                 | A-14; 종목별 현재 신호                                |
-| ProposalRepository    | store_draft       | Proposal<Draft>, ValidationReport                         | WriteCompleted                    | A-14, S-07; 검증 권한은 저장하지 않음                 |
-| ProposalRepository    | draft             | ProposalId                                                | Option<Proposal<Draft>>           | O-04; 승인 시 반드시 재검증                           |
-| ValuationRepository   | append            | AccountId, ValuationSnapshot                              | WriteCompleted                    | A-16, S-18; 평가 기록 추가 전용                       |
-| ValuationRepository   | history           | AccountId, TimeInterval                                   | Vec<ValuationSnapshot>            | A-16; 빠진 날 재계산과 성과 조회                      |
-| SettingsRepository    | store_profile     | InvestorProfile                                           | WriteCompleted                    | A-17, S-10; 확인을 마친 성향 저장                     |
-| SettingsRepository    | profile           | 없음                                                      | Option<InvestorProfile>           | A-08·A-13; 부재는 호출자가 기본값 사용                |
-| AuditLog              | append            | AuditEntry                                                | WriteCompleted                    | O-05, S-08; 내구 저장 실패 시 전송 금지               |
-| AuditLog              | verify            | 없음                                                      | AuditIntegrity                    | S-16; Verified 또는 Tampered, 검증 자체 실패는 Err    |
-| SecretStore           | load              | SecretKey                                                 | Option<SecretValue>               | T-02, S-12; 미등록과 접근 실패 구분                   |
-| SecretStore           | store             | SecretKey, SecretValue 소유권                             | WriteCompleted                    | T-02, S-12; 비밀을 복제하지 않음                      |
-| SecretStore           | remove            | SecretKey                                                 | WriteCompleted                    | T-02, S-12; 부재 삭제는 성공                          |
-| Clock                 | now               | 없음                                                      | Timestamp                         | J-01, A-06~A-16; 벽시계만 제공                        |
-| Notifier              | notify            | Notification                                              | WriteCompleted                    | U-14; 새 신호·긴급 공시·브리핑 완료                   |
-| UserPresence          | confirm           | ConfirmationRequest                                       | ConfirmationOutcome               | A-17, O-17; 주문 요약 또는 위험 변경                  |
+| 포트 | 메서드 | 입력 | 성공 값 | 소비자·근거 |
+|---|---|---|---|---|
+| PortfolioRepository | record | AccountId, SyncRecord<Portfolio> | WriteCompleted | A-06, S-02; 성공·일부 실패·실패·접근 차단 기록 |
+| PortfolioRepository | latest | AccountId | Option<SyncRecord<Portfolio>> | A-08; 저장된 최신 결과 조회 |
+| TransactionRepository | record | AccountId, SyncRecord<SettledRowSet> | WriteCompleted | A-07, S-03; 멀티셋과 사라진 행 표시 보존 |
+| TransactionRepository | latest | AccountId | Option<SyncRecord<SettledRowSet>> | A-07·A-16; 기존 대조 결과 조회 |
+| MarketDataRepository | store_quote | InstrumentId, Quote | WriteCompleted | S-04; 현재가 사실 보존 |
+| MarketDataRepository | quote | InstrumentId | Option<Quote> | A-09·A-14; 최신 관측 조회 |
+| MarketDataRepository | store_candles | InstrumentId, [Candle] | WriteCompleted | S-04; 원시·수정·일봉·분봉 사실 보존 |
+| MarketDataRepository | candles | InstrumentId, TimeInterval, CandlePeriod, PriceAdjustment | Vec<Candle> | A-15·A-16; 기간·수정 기준이 같은 자료만 반환 |
+| MarketDataRepository | store_fx_rate | FxRate | WriteCompleted | S-04; 종류·출처·시각 보존 |
+| MarketDataRepository | fx_rate | FxPair, FxRateKind, FxRateQuery | Option<FxRate> | A-08·A-16; Latest는 최신, At은 그 시각 이하 최신 사실 |
+| NewsRepository | store | NewsItem | WriteCompleted | S-05; 봉인된 기사 보존 |
+| NewsRepository | for_instrument | InstrumentId | Vec<NewsItem> | A-13; 종목별 근거 조회 |
+| ThesisRepository | store | InstrumentId, Thesis | WriteCompleted | S-06; 이력을 포함한 노트 보존 |
+| ThesisRepository | load | InstrumentId | Option<Thesis> | A-13; 현재 노트와 이력 조회 |
+| EstimateRepository | append_submission | SignalSubmission | RecordOutcome | A-12; 거래 여부와 무관하게 추가 |
+| EstimateRepository | submissions | InstrumentId | Vec<SignalSubmission> | A-13·A-15; 종목별 추정 목록 |
+| EstimateRepository | append_resolution | SignalTaskKey, EstimateOutcome | RecordOutcome | A-15; 같은 과제의 두 번째 판정은 AlreadyRecorded |
+| EstimateRepository | resolution | SignalTaskKey | Option<EstimateOutcome> | A-15; 판정한 과제는 다시 바꾸지 않음 |
+| EstimateRepository | append_calibration | CalibrationKey, Calibration | RecordOutcome | A-15; 모델·기간별 보정 자료 |
+| EstimateRepository | calibration | CalibrationKey | Option<Calibration> | A-13; 기존 자료 조회 |
+| SignalRepository | replace | InstrumentId, [RaisedSignal] | WriteCompleted | A-13, S-07; 빈 목록은 현재 신호 해제 |
+| SignalRepository | current | InstrumentId | Vec<RaisedSignal> | A-14; 종목별 현재 신호 |
+| ProposalRepository | store_draft | Proposal<Draft> | WriteCompleted | A-14, S-07; 검증 권한은 저장하지 않음 |
+| ProposalRepository | draft | ProposalId | Option<Proposal<Draft>> | O-04; 승인 시 반드시 재검증 |
+| ValuationRepository | append | AccountId, ValuationSnapshot | RecordOutcome | A-16, S-18; 평가 기록 추가 전용 |
+| ValuationRepository | history | AccountId, TimeInterval | Vec<ValuationSnapshot> | A-16; 빠진 날 재계산과 성과 조회 |
+| SettingsRepository | store_profile | InvestorProfile | WriteCompleted | A-17, S-10; 확인을 마친 성향 저장 |
+| SettingsRepository | profile | 없음 | Option<InvestorProfile> | A-08·A-13; 부재는 호출자가 기본값 사용 |
+| SettingsRepository | store_risk_settings | &RiskSettings | WriteCompleted | A-17, S-10; 확인한 위험 설정을 저장 |
+| SettingsRepository | risk_settings | 없음 | Option<RiskSettings> | A-17, S-10; 변경 전 전체 위험 설정 조회 |
+| AuditLog | append | AuditEntry | RecordOutcome | O-05, S-08; 내구 저장 실패 시 전송 금지 |
+| AuditLog | verify | 없음 | AuditIntegrity | S-16; Verified 또는 Tampered, 검증 자체 실패는 Err |
+| SecretStore | load | SecretKey | Option<SecretValue> | T-02, S-12; 미등록과 접근 실패 구분 |
+| SecretStore | store | SecretKey, SecretValue 소유권 | WriteCompleted | T-02, S-12; 비밀을 복제하지 않음 |
+| SecretStore | remove | SecretKey | WriteCompleted | T-02, S-12; 부재 삭제는 성공 |
+| Clock | now | 없음 | Timestamp | J-01, A-06~A-16; 벽시계만 제공 |
+| Notifier | notify | Notification | WriteCompleted | U-14; 새 신호·긴급 공시·브리핑 완료 |
+| UserPresence | confirm_order | OrderSummary | OrderConfirmation | O-17; 주문만 본인 확인 |
+| UserPresence | confirm_risk_change | RiskChange | RiskChangeConfirmation | A-17; 위험 변경 확인 |
 
-저장소의 계좌·종목 키와 자료의 결합, 정렬, 트랜잭션, 중복 거부와 전체 이력 보존은 해당 S 어댑터 계약에서 검증한다. 이 trait 선언 자체가 DB의 원자성이나 외부 사실의 진위를 인증하지 않는다. 조회 목록은 시각 오름차순이며 동일 시각 기록의 안정적 순서는 어댑터가 보존한다. 판정·평가 추가에서 기존 행을 덮어쓰지 않는다. store_calibration도 같은 키의 새 보정표 버전을 추가하며 calibration은 최신 버전을 반환한다. 과거 보정표를 덮어쓰거나 지우지 않는다. SyncRecord는 시각과 네 결과를 보존하며 실패를 0원이나 빈 포트폴리오로 바꾸지 않는다. 마지막 성공 자료의 조회 정책과 실패 원인 상세는 A-06·A-07에서 확정한다.
+## 중복 기록과 무결성
 
-## 비밀과 의존성
+append 계열은 RecordOutcome::Recorded 또는 AlreadyRecorded를 정상 결과로 돌려준다. EstimateRepository의 같은 SignalTaskKey에 대한 두 번째 판정은 기존 판정을 바꾸지 않고 AlreadyRecorded다. append_calibration은 같은 키의 새 보정표 버전을 추가하고 calibration은 최신 버전을 반환한다. 과거 버전을 덮어쓰지 않는다. 동일한 기록의 재요청은 AlreadyRecorded이며 별도 논리 기록의 정렬·식별·원자성은 S 어댑터가 보장한다. AuditLog의 같은 AuditEntry 재요청도 추가 중복을 만들지 않는다.
 
-사용자는 이번 회차에서 secrecy 및 zeroize 추가와 필요한 보호 경로의 등록 변경을 승인했다. secrecy는 =0.10.3, 기본 기능만 사용하고 serde는 켜지 않는다. 전이 zeroize는 Cargo.lock의 정확한 버전과 체크섬으로 고정하며 alloc 기능만 사용한다. 둘 다 Apache-2.0 OR MIT이며 deny의 기존 라이선스 정책 안에 있다. 의존성 허용 목록에 두 crate만 추가한다. 다른 새 외부 crate는 추가하지 않는다.
+SystemFailure는 PermissionDenied, Unavailable(RetryDelay), InvalidData, RepositoryIntegrity, SecretIntegrity다. PermissionDenied는 권한 확인 조치, Unavailable은 원래 대기 시간이다. 나머지는 각각 BugDiagnostic::System의 InvalidStoredData, RepositoryIntegrity, SecretIntegrity에 대응한다. 토스 ResponseMismatch를 빌리지 않는다. SystemPort는 실제 실패 가능한 Repository·AuditLog·SecretStore·Notifier만 구분한다.
 
-SecretValue의 비공개 필드는 secrecy::SecretSlice<u8>다. 토큰 텍스트뿐 아니라 DB·HMAC 원시 키도 손실 없이 보관한다. 생성자는 이미 비밀로 감싼 바이트의 소유권을 받는다. 유일한 노출 메서드는 as_exposed_secret이며 빌린 바이트만 반환한다. Deref, AsRef, 변환·복제·직렬화를 제공하지 않는다. Debug는 직접 쓴 구현으로 SecretValue(<redacted>) 한 문자열만 출력하며 self나 비밀 길이를 읽지 않는다. derive(Debug)는 쓰지 않는다. secrecy가 Drop에서 zeroize를 수행한다. 반환된 참조를 어댑터가 복사하거나 HTTP 라이브러리에 전달한 뒤의 수명·헤더 set_sensitive는 T-02·S-12 책임이다.
+RepositoryIntegrity는 저장소 자체의 손상·일관성 실패이며 감사 로그 체인 내용의 변조 판정이 아니다. 감사 로그의 체인 변조는 Ok(AuditIntegrity::Tampered)로만 반환한다. generic IntegrityViolation이나 중복용 Conflict 오류는 없다. verify에서 저장 장치의 읽기 자체가 실패한 경우는 정상 변조 판정을 만들지 않고 I/O 실패를 반환한다. 감사 기록의 불변 상세 자료·원자적 승인 기록은 O-05·S-08·S-16이 확정한다.
 
-메인은 SEC-11의 비밀 유출 방지 취지를 고정 Debug 출력으로 지키도록 결정했다. 하네스의 예외 불가 missing_debug_implementations deny는 그대로 유지하고 expect를 제거한다. Debug 출력은 일반·pretty 형식과 값·길이에 무관한 상수이므로 비밀을 읽거나 출력하는 경로가 아니다. docs/design.md SEC-11과 docs/architecture.md 3.3을 이에 맞게 갱신하며 tasks.md A-02 문구는 메인이 병합 때 고친다.
+## 본인 확인과 위험 설정
 
-원시 타입 검사에는 SecretSlice<u8> 전용 newtype 필드·빌린 &[u8] 대응만 등록한다. 일반 원시 타입 허용 범위는 넓히지 않는다. Display·Clone·Serialize 부재는 외부 컴파일 실패와 각 trait 양성 대조군으로 고정한다. Debug 부재 실험은 제거한다. 새 dev 의존성을 앱에 추가하지 않으며 외부 시험 crate에서 저장소가 이미 사용하는 고정 serde와 proptest 버전으로 직렬화 경계와 속성 테스트를 확인한다. 시험은 오프라인으로 실행하고 자체 임시 폴더만 지운다.
+confirm_order는 봉인된 OrderSummary를 받고 OrderConfirmation을 반환한다. confirm_risk_change는 RiskChange를 받고 RiskChangeConfirmation을 반환한다. 두 결과는 서로 다른 타입이며 각각 Confirmed·Denied·Unavailable만 가진다. 본인 확인 불가는 Unavailable 한 경로로만 반환하며 별도 오류는 없다. 위험 설정 확인 결과를 주문 결과로 전달할 수 없다. Confirmed 값은 주문 전송 권한이나 저장 가능한 승인 토큰이 아니다.
 
-## 확인·알림·오류의 경계
+RiskChange는 EnableOrders·AllowMarketOrders·AllowHours·RelaxWeightCaps(WeightCaps)·IncreaseRiskAppetite(RiskAppetite)의 닫힌 요청이다. RiskSettings는 OrderPermission·SavedMarketOrderSetting·HoursPermissionState·WeightCaps·RiskAppetite 다섯 값을 저장한다. D-12의 WeightCaps·RiskAppetite, 기존 HoursPermissionState와 이번에 master로 받은 D-26의 SavedMarketOrderSetting을 재사용하고, 없던 주문 스위치만 최소 닫힌 타입 OrderPermission으로 추가했다. 공개 필드나 불린은 없다.
 
-주문 확인은 기존 봉인된 OrderSummary를 빌린다. 종목 이름·코드·시장·방향·수량·가격·예상 금액·수수료·계좌 뒤 4자리·주문 키 앞부분을 그대로 보존한다. 요약 창과 시스템 이유 문자열 구성은 O-07 책임이다. 위험 변경은 EnableOrders·AllowMarketOrders·AllowHours·RelaxWeightCaps·IncreaseRiskAppetite 다섯 종류와 목표 값만 받는다. 변경 방향·기존 값 비교와 실제 저장은 A-17이 담당한다. Confirmed는 저장·복원할 승인 토큰이 아니며 macOS 호출이나 주문 전송 권한도 아니다. Denied와 Unavailable을 서로 바꾸지 않는다.
+A-17은 저장된 위험 설정과 새 값을 비교하고 위험을 늘리는 변경을 확인한 뒤 저장한다. store_risk_settings는 다섯 설정을 한 번에 저장한다. profile이 노출하는 비중·위험 성향·몇 시간 단위 기간 설정은 같은 저장 사실을 반영해야 하며 별도 값으로 어긋나게 저장하지 않는다. 같은 사실의 조립과 트랜잭션은 S-10의 책임이다. 초기 부재를 처리하는 A-17은 주문·시장가의 안전한 초기값과 기존 기본 투자 성향을 사용한다.
 
-Notification은 페이로드 없는 세 종류다. 임의 본문·종목명·금액·계좌를 입력할 수 없으며 U-14가 종류별 고정 한국어 문구를 사용한다. 항목별 상세 안내는 앱 안의 재조회로 처리한다.
+AuditKind::RiskChangeConfirmationRecorded는 RiskChange와 RiskChangeConfirmation을 함께 보존한다. Denied·Unavailable도 기록하며 실제 변경 기록 RiskSettingsChanged와 구분한다. 주문용 PresenceRecorded는 OrderConfirmation만 받는다. A-04의 ScriptedPresence는 주문과 위험 변경을 별도 메서드·별도 결과 큐로 다루고 요청 종류별 호출을 기록해야 한다.
 
-SystemPortError는 포트 종류와 닫힌 원인만 가진다. PermissionDenied는 공통 권한 확인 조치, Unavailable은 원래 RetryDelay, InvalidData·Conflict·IntegrityViolation은 검증 실패 버그다. 토스 HTTP 오류로 변환하지 않는다. 임의 문자열·외부 오류·비밀·본문이 없다. 조회 부재는 오류 대신 정상 Option·Vec로 표현한다. 새 사용자 조치 종류가 필요한 경우 A-05 후속으로 추가하며 기존 exhaustive 테스트를 약하게 바꾸지 않는다.
+## 비밀 값과 위치 등록
 
-## 정의 대기와 인계
+SecretValue는 비공개 SecretSlice<u8> 필드 하나를 가진 application 타입이다. new(Vec<u8>)는 소유한 벡터를 이동해 내부에서 secrecy로 감싼다. 공개 생성자와 접근자에 secrecy 타입을 노출하지 않는다. 유일한 노출 메서드는 as_exposed_secret이며 빌린 &[u8]를 반환한다. Debug는 직접 쓴 구현으로 값·길이에 무관한 SecretValue(<redacted>)만 출력한다. 일반·pretty 형식과 이를 담은 derive(Debug) 타입에서도 동일하다. missing_debug_implementations deny를 유지하며 검사 끄기는 추가하지 않는다.
 
-| 저장소·계약           | 아직 없는 타입·메서드                                                                 | 받는 작업                      |
-| --------------------- | ------------------------------------------------------------------------------------- | ------------------------------ |
-| 거래내역 원본 저장    | 원본 응답·격리 행의 봉인된 영속 자료, 부분 대조의 원인·창 기록                        | A-07, S-03                     |
-| 원가·현금             | 로트·현금 원장·기업 행위·섹터 대응표의 최소 조회·재구축 계약                          | S-03, A-16, O-11               |
-| 뉴스·공시             | 공시 목록·검색 질의·묶음·전체 소스 키와 저장·검색 메서드                              | S-05, N-01, N-09               |
-| 수집 결과             | 실행·항목 ID와 실행별 수집 결과 보존·조회                                             | AI-14, S-09                    |
-| 추정 과제·실행 배정   | 봉인된 과제 ID·실행 ID, 배정·미제출·두 번째 제출 거부의 원자 계약                     | A-12, AI-17, S-09              |
-| 신호·제안             | 소비 기록과 전송 전 감사 기록을 하나의 트랜잭션으로 쓰는 승인 포트                    | O-18, S-07, S-08               |
-| 주문                  | SubmittedOrder·결과·외부 주문 관측의 영속 복원 계약                                   | O-11, O-19                     |
-| AI 작업·MCP 원장·대화 | 실행 ID, 사용량·메타데이터·메시지·인자/결과 해시의 봉인 타입과 추가 전용 계약         | AI-06, AI-08, S-09, M-02, C-02 |
-| 설정                  | 주문 스위치·시장가 허용의 봉인 상태, 주기·모델·알림·토스 스펙 해시                    | A-17, S-10, O-06               |
-| 감사 로그 확장        | 추정·검증 상세·전송 응답·위험 변경 확인 결과·검색어 검사 원장·조회와 체인 머리값 타입 | O-05, S-08, S-16, N-19         |
-| 시스템 본인 확인      | 시스템 이유 문자열 한도·서명 앱 동작 실측                                             | O-07, S-17, 사용자             |
+SecretKey와 SecretStore는 secret_port.rs로 분리한다. secret_store.rs에는 derive가 없고 SecretValue의 고유 impl과 수동 Debug impl 두 개만 둔다. 키는 TossClientId·TossClientSecret·TossAccessToken·DatabaseEncryptionKey·AuditHmacKey·DartApiKey·FredApiKey다. client_id도 키체인에 저장한다.
 
-## 미해결·사용자 확인 대상
+secrecy =0.10.3은 application에만 직접 의존할 수 있다. serde 기능은 켜지 않는다. 전이 zeroize 1.9.1은 alloc만 사용한다. 두 패키지의 라이선스는 Apache-2.0 OR MIT다. 다른 제품 crate는 application의 SecretValue를 사용한다. arch-check에 허용 사례 application과 거부 사례 mcp-server를 추가해 위치 규칙 자체의 회귀를 고정한다.
 
-추정 과제는 현재 SignalTaskKey라는 봉인된 사실 묶음으로 식별하며 실행 배정 권한을 뜻하지 않는다. A-12의 과제·실행 식별자가 정해지면 저장소 계약을 확정한다. 시간·수정 기준을 포함한 캐시 조회, 계좌·종목 결합과 중복·부분 실패 정책은 S 어댑터 테스트에서 입증해야 한다. 포트만 정의한 이번 회차를 저장소·키체인·본인 확인의 실행 검증으로 보지 않는다. 실제 키·계좌·API와 macOS 본인 확인 실측은 수행하지 않는다.
+새 외부 패키지는 추가하지 않는다. 직렬화 trait 부재의 컴파일 단언에는 작업 공간에 이미 잠긴 serde_core =1.0.229를 기능 없는 개발 의존성으로 사용한다. 작업 공간 serde 기능 통합 때문에 메타데이터에 보이는 syn·proc-macro2 경로는 기존 proptest 등록과 같은 방식으로 serde_core 경유 경로만 등록한다. 직접 proc macro 의존은 계속 금지한다. 원시 타입 형식 표에는 SecretSlice<u8>의 생성자 입력 Vec<u8> 대응만 추가한다. 이는 비밀 공개 생성자의 소유권 이동 경계이며 다른 원시 타입 허용 범위를 넓히지 않는다.
 
-## 검증과 인계
+## 조회와 저장의 단순화
 
-실제 작업 사본에서 새 테스트를 먼저 넣었을 때 E0432·E0433으로 종료코드 101을 확인한 뒤 포트를 구현했다. 고정 Debug 결정 뒤에는 일반·pretty·부모 Debug 테스트가 E0277로 컴파일되지 않음을 먼저 확인한 뒤 수동 구현을 넣었다. cargo test --locked -p application의 테스트는 기존·신규 테스트와 2,306개 바이트/길이 조합의 고정 출력 검사를 포함한다.
+fx_rate는 Option<Timestamp> 대신 FxRateQuery::Latest 또는 At(Timestamp)를 받는다. At은 지정 시각 이하 최신 사실이며 시각을 보존한다. candles는 TimeInterval·CandlePeriod·PriceAdjustment를 함께 받는다. 계좌·종목 결합과 정렬은 저장소 어댑터가 검증한다.
 
-외부 시험은 Display·Clone·Serialize 각 trait 양성 대조군과 SecretValue의 E0277 거부, 비공개 필드의 E0616 거부, 기본 기능과 serde 미활성화를 확인한다. Debug 속성 테스트 두 개는 각각 256회 임의 입력으로 값·길이에 무관한 일반·pretty 고정 출력과 derive(Debug) 부모의 고정 출력, 표식 붙인 비밀 원문·바이트 배열 표현의 부재를 확인한다. 모든 바이트 입력에 대해 출력이 동일한 상수라는 비간섭 조건을 사용하며 상수의 문자와 비밀의 한 바이트가 우연히 같은 것을 누출로 취급하지 않는다. 실행 명령은 node --test crates/application/tests/secret_traits.mjs다. 이 별도 회귀는 Cargo의 Rust 테스트 발견 대상이 아니므로 just check 결과와 구분한다.
+ProposalRepository는 Proposal<Draft>만 저장·조회한다. A-14가 만드는 제안의 사실은 저장하되 ValidationReport는 저장하지 않는다. O-04에서 최신 사실로 반드시 다시 검증하므로 과거 검증 권한이나 보고서를 복원하지 않는다. Notification은 페이로드 없는 NewSignal·UrgentDisclosure·BriefingFinished뿐이다.
 
-정확한 두 패키지 추가에 대해 just deny의 advisories·bans·licenses·sources가 통과했다. secrecy 0.10.3, 전이 zeroize 1.9.1만 잠금 파일에 추가됐으며 zeroize의 alloc 이외 기능과 secrecy의 serde를 켜지 않았다.
+## Rust 비밀 보호 검사
 
-변이 선택 코드를 확인하면 application/Cargo.toml과 통합 테스트 변경은 non-target crate input이므로 crate 전체로 넓어진다. 자동 변이는 실행하지 않았다. mktemp로 만든 전용 복사본에서 원본 대조군을 통과시킨 뒤, 포트·오류 원인의 생성/조회 매핑, 오류 분류와 대기 시간 유실, 비밀 바이트의 빈 값 치환과 첫 바이트 누락 등 25개 변형을 각각 컴파일하고 실행했다. 고정 Debug 문자열 변경, 비밀 바이트 노출, 길이 노출, pretty 형식에서만 노출하는 4개 변형을 더해 최신 master 병합 상태에서 다시 확인했다. 최종 결과는 검출 29, 생존 0, 컴파일 불가 0, 시간 초과 0이다. const fn 제약 때문에 컴파일되지 않은 첫 시도는 이 수에 포함하지 않았다. 임시 파일의 복사 시각 때문에 남은 이전 바이너리가 재사용되는 것을 막고 원본 대조군부터 다시 통과시켰다.
+Cargo가 발견하는 secret_protection 통합 테스트는 참조 수신 타입과 마커 추론의 모호성을 이용해 trait 구현이 생기면 컴파일이 실패하도록 한다. Clone·Copy·Display·Serialize·Deserialize·DeserializeOwned·AsRef<[u8]>·AsMut<[u8]>·Deref·DerefMut·PartialEq·Eq·Hash·PartialOrd·Ord·Default·From<Vec<u8>>·Into<Vec<u8>>·Borrow<[u8]>를 각각 검사한다. 소스 계약은 derive 부재, 두 impl만 존재, 비공개 필드, 공개 메서드 두 개와 생성자·노출 메서드의 정확한 서명을 고정한다.
 
-A-04·A-17·O-17은 공개 모듈 경로 application::user_presence::UserPresence를 사용한다. 현재 AuditEntry는 닫힌 종류·식별자·확인 결과·설정 목표를 보존하는 최소 계약이다. 이를 ORD-3의 전체 상세 증거로 취급하지 않으며, O-05·S-08·S-16이 정의 대기 표의 불변 상세 기록과 원자적 승인 기록을 확정한 뒤 전송 경로를 구현한다.
+secret_debug는 2,306개 바이트·길이 조합을 검사한다. secret_properties의 두 proptest는 testkit::property_cases()를 사용해 로컬에서 각각 256회, 전체 검사에서 각각 4096회 임의 입력으로 일반·pretty·상위 Debug의 고정 출력과 표식·바이트 배열 표현의 부재를 확인한다. 모든 입력에서 출력이 동일한 상수라는 비간섭 조건이며 상수의 한 문자와 비밀의 한 바이트가 우연히 같은 것은 누출로 취급하지 않는다. 이전 secret_traits.mjs는 삭제한다. 모든 비밀 보호 검사가 cargo test -p application과 just check의 테스트 컴파일·실행에 포함된다.
 
-프로젝트 설정과 세션 훅 신뢰 적용 자체는 미확인이다. 실제 Git 훅과 직접 실행한 검사 결과를 검증 근거로 사용한다. 사용자 지시대로 하위 에이전트나 독립 리뷰를 실행하지 않았다. 독립 적대적 리뷰와 비판은 메인의 후속 절차다.
+## 정의 대기·인계
 
-## 메인 결정 반영
+| 계약 | 인계 |
+|---|---|
+| 위험 변경 비교·확인 후 저장·부재 초기값 | A-17 |
+| 요청 종류별 호출 기록과 별도 결과 큐 | A-04 ScriptedPresence |
+| DB 내구성·정렬·원자성·위험 설정과 투자 성향의 일관된 조회 | S-02~S-10 |
+| 감사 상세 기록·추정 실행 식별자·원자적 승인 기록·체인 머리값 | O-05, O-18, S-08, S-09, S-16 |
+| 원가·현금 원장·기업 행위와 거래 원본·격리 행 저장 | A-07, A-16, O-11, S-03 |
+| 뉴스·공시 전체 질의·실행별 수집 결과·MCP·대화 영속 기록 | S-05, S-09, AI-06, AI-08, AI-14, M-02, C-02 |
+| 주기·모델·알림 설정과 토스 스펙 해시 | A-17, S-10, O-06 |
+| 실제 키체인·macOS 본인 확인 실측 | S-12, S-17, O-07, 사용자 |
 
-앞 회차 전체 검사는 개별 deny를 끄는 expect가 disable-check에 거부되어 중단됐다. 메인은 하네스 예외 대신 비밀 내용과 길이에 독립적인 수동 Debug를 승인했다. Debug가 없다는 이전 완료 기준과 실험은 이 결정으로 대체한다. Debug 예외를 위해 하네스의 허용 목록·검사 코드·기존 테스트를 바꾸지 않으며 새 검사 끄기도 없다. 정상 훅으로 전체 검사와 커밋을 재개한다.
+## 승인된 기존 테스트 변경
 
-의존성 등록은 기존 cargo-deny의 bans.allow와 잠금 파일에 한정한다. 초안에 추가했던 application 전용 external-allowlist는 반례 케이스가 없다는 기존 하네스 회귀에 검출됐으며, 요구사항에 없는 추가 구조 정책이므로 최종 변경에서 제거했다. 기존 구조 규칙과 검사·테스트는 그대로 유지한다.
+| 파일·테스트 | 전 → 후 |
+|---|---|
+| application/tests/error_class.rs: check_diagnostic_fields, classification_fields_are_closed_enums_or_time_span | BugDiagnostic 세 변형 → System의 명시적 분기와 세 닫힌 진단 기대 항목 추가. 기존 단언 유지 |
+| application/tests/ports_a02.rs: 오류·키·확인·감사 소진 검사 | 새 닫힌 타입·서명에 맞는 분기·정확한 키 목록·확인 결과·감사 변형으로 갱신. 필드 보존 단언 유지 |
+| application/tests/ports_a02_contract.rs: 네 계약 검사 | 동기 Clock, 확인 메서드 둘, 추가 전용 정상 결과, 위험 설정 두 메서드, 쿼리 타입, 보고서 없는 제안의 정확한 서명으로 갱신 |
+| application/tests/secret_debug.rs: 고정 출력 검사 | 생성자 입력 SecretSlice 변환 → 소유한 Vec 직접 전달. 출력·바이트 보존 단언 유지 |
+| application/tests/secret_traits.mjs | 비자동 Node 시험 → Cargo가 발견하는 Rust 타입 단언·소스 계약·속성 테스트로 이전 |
 
-외부 속성 테스트의 Rust 소스는 Node 시험 생성기 안에 보관하고 임시 crate의 test target으로 생성한다. 작업 공간 Cargo가 컴파일하지 않는 .rs 파일을 crates/application/tests 아래에 두면 test-diff가 unreachable로 거부하므로 이 배치를 사용한다. 속성 테스트 두 개는 생성 후 cargo test로 실제 실행하며, 작업 공간 자체에는 도달 가능한 secret_debug 통합 테스트와 2,306개 고정 조합 검사가 있다.
+메인은 승인된 닫힌 변형 추가에 필요한 소진 분기·기대 목록 추가, 승인된 이름·서명에 따른 호출부 수정과 정확한 목록·개수 갱신을 허용했다. 와일드카드 추가·단언 삭제·범위 완화는 하지 않는다. 최종 check-fast가 이 승인된 기계적 변경만 test-diff로 지적하면 그 외 선택된 검사를 통과시킨 뒤 해당 커밋 한 번에만 LEFTHOOK=0을 적용하고 커밋 메시지에 사유를 남기도록 승인했다. 하네스의 test-diff 규칙과 기존 단언 자체는 유지한다.
+
+## 손 변형 검증
+
+| 번호 | 손 변형 | 라이브러리 대조 컴파일 | Rust 보호·회귀 검사 | 결과 |
+|---|---|---|---|---|
+| 1 | construct-port-Repository | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 2 | read-port-Repository | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 3 | construct-port-AuditLog | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 4 | read-port-AuditLog | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 5 | construct-port-SecretStore | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 6 | read-port-SecretStore | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 7 | construct-port-Notifier | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 8 | read-port-Notifier | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 9 | construct-cause-PermissionDenied | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 10 | read-cause-PermissionDenied | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 11 | construct-cause-InvalidData | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 12 | read-cause-InvalidData | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 13 | construct-cause-RepositoryIntegrity | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 14 | read-cause-RepositoryIntegrity | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 15 | construct-cause-SecretIntegrity | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 16 | read-cause-SecretIntegrity | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 17 | permission-wait | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 18 | lost-known-delay | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 19 | wrong-diagnostic-InvalidStoredData | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 20 | wrong-diagnostic-RepositoryIntegrity | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 21 | wrong-diagnostic-SecretIntegrity | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 22 | required-clone | 0 | 컴파일 모호성 E0283, 종료 101 | 검출 |
+| 23 | required-public-field | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 24 | required-display | 0 | 컴파일 모호성 E0283, 종료 101 | 검출 |
+| 25 | required-asref | 0 | 컴파일 모호성 E0283, 종료 101 | 검출 |
+| 26 | required-partialeq | 0 | 컴파일 모호성 E0283, 종료 101 | 검출 |
+| 27 | debug-constant | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 28 | debug-bytes | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 29 | debug-length | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 30 | debug-pretty | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 31 | secret-empty | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 32 | secret-drop-first | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 33 | risk-orders | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 34 | risk-market_orders | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 35 | risk-hours | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 36 | risk-risk_appetite | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+| 37 | risk-caps | 0 | 테스트 단언 실패, 종료 101 | 검출 |
+
+원본 대조군과 모든 변형을 복구한 대조군은 통과했다. 37개 모두 라이브러리가 독립적으로 컴파일되는 유효 변형이며 검출 37·생존 0·컴파일 불가 0·시간 초과 0이다. Clone·Display·AsRef·PartialEq는 보호 단언이 추가 trait 구현을 컴파일 단계에서 거부한 것이며 라이브러리 자체의 컴파일 실패를 검출로 세지 않았다. pub 필드는 Rust 소스 계약이 검출한다. 자동 변이는 실행하지 않았다. H-46 이후 자동 선택 범위는 기준 대비 바뀐 대상 src 파일과 그 diff 영역이다. 참조 그래프나 매니페스트 변경으로 crate 전체를 확장하지 않는다. 이번 변경의 application·domain src 파일이 대상이며 테스트·하네스 지원 입력의 보완은 H-46·H-47 인계에 따른다.
+
+
+## 검사와 한계
+
+새 생성자와 Rust 보호 테스트를 먼저 적용했을 때 이전 공개 생성자에서 E0308을 확인한 뒤 구현했다. 프로젝트·세션 훅 신뢰 적용 자체는 미확인이다. 실제 실행한 검사 결과와 Git 훅 결과를 증거로 남긴다. 하위 에이전트·독립 적대적 리뷰·비판은 실행하지 않으며 후속 리뷰는 메인이 수행한다. 포트 정의를 DB·키체인·macOS 실행 검증으로 주장하지 않는다.

@@ -1,14 +1,14 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AuditEntry, AuditIntegrity, AuditKind, BugDiagnostic, ClassifiedError, ConfirmationOutcome,
-        ConfirmationRequest, ErrorClass, Notification, ResponseMismatch, RetryDelay, SecretKey,
-        SecretValue, SystemFailure, SystemPort, SystemPortError, UserAction,
+        AuditEntry, AuditIntegrity, AuditKind, BugDiagnostic, ClassifiedError, ErrorClass,
+        Notification, OrderConfirmation, RetryDelay, RiskChangeConfirmation, SecretKey,
+        SecretValue, SystemDiagnostic, SystemFailure, SystemPort, SystemPortError, UserAction,
     };
     use domain::{
         ClientOrderId, InstrumentId, InvestorProfile, Nanosecond, OffsetSeconds, ProposalId,
-        RiskAppetite, RiskSettingsChange, SpanSeconds, SyncOutcome, SyncRecord, TimeSpan,
-        Timestamp, UnixSeconds,
+        RiskAppetite, RiskChange, SpanSeconds, SyncOutcome, SyncRecord, TimeSpan, Timestamp,
+        UnixSeconds,
     };
 
     fn instant() -> Timestamp {
@@ -24,10 +24,14 @@ mod tests {
         match cause {
             SystemFailure::PermissionDenied => ErrorClass::UserAction(UserAction::CheckPermissions),
             SystemFailure::Unavailable(delay) => ErrorClass::Wait(delay),
-            SystemFailure::InvalidData
-            | SystemFailure::Conflict
-            | SystemFailure::IntegrityViolation => {
-                ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Validation))
+            SystemFailure::InvalidData => {
+                ErrorClass::Bug(BugDiagnostic::System(SystemDiagnostic::InvalidStoredData))
+            }
+            SystemFailure::RepositoryIntegrity => {
+                ErrorClass::Bug(BugDiagnostic::System(SystemDiagnostic::RepositoryIntegrity))
+            }
+            SystemFailure::SecretIntegrity => {
+                ErrorClass::Bug(BugDiagnostic::System(SystemDiagnostic::SecretIntegrity))
             }
         }
     }
@@ -37,9 +41,7 @@ mod tests {
             SystemPort::Repository => "repository",
             SystemPort::AuditLog => "audit",
             SystemPort::SecretStore => "secret",
-            SystemPort::Clock => "clock",
             SystemPort::Notifier => "notifier",
-            SystemPort::UserPresence => "presence",
         }
     }
 
@@ -65,9 +67,7 @@ mod tests {
             (SystemPort::Repository, "repository"),
             (SystemPort::AuditLog, "audit"),
             (SystemPort::SecretStore, "secret"),
-            (SystemPort::Clock, "clock"),
             (SystemPort::Notifier, "notifier"),
-            (SystemPort::UserPresence, "presence"),
         ] {
             assert_eq!(expected_port(port), name);
             for cause in [
@@ -75,8 +75,8 @@ mod tests {
                 SystemFailure::Unavailable(wait),
                 SystemFailure::Unavailable(RetryDelay::Unknown),
                 SystemFailure::InvalidData,
-                SystemFailure::Conflict,
-                SystemFailure::IntegrityViolation,
+                SystemFailure::RepositoryIntegrity,
+                SystemFailure::SecretIntegrity,
             ] {
                 let error = SystemPortError::new(port, cause);
                 assert_eq!(error.port(), port);
@@ -95,61 +95,41 @@ mod tests {
             &[255, 0, 128],
             b"  fake-secret  ".as_slice(),
         ] {
-            let value = SecretValue::new(secrecy::SecretSlice::from(fake.to_vec()));
+            let value = SecretValue::new(fake.to_vec());
             assert_eq!(value.as_exposed_secret(), fake);
         }
     }
 
     #[test]
     fn confirmation_has_exactly_two_requests_and_three_distinct_results() {
-        fn request_kind(request: &ConfirmationRequest<'_>) -> Notification {
-            match request {
-                ConfirmationRequest::OrderSummary(summary) => {
-                    let _: &domain::OrderSummary = summary;
-                    Notification::NewSignal
-                }
-                ConfirmationRequest::RiskSettingsChange(change) => {
-                    let _: &RiskSettingsChange = change;
-                    Notification::BriefingFinished
-                }
-            }
-        }
-        fn result_kind(result: ConfirmationOutcome) -> AuditIntegrity {
+        fn result_kind(result: OrderConfirmation) -> AuditIntegrity {
             match result {
-                ConfirmationOutcome::Confirmed => AuditIntegrity::Verified,
-                ConfirmationOutcome::Denied | ConfirmationOutcome::Unavailable => {
+                OrderConfirmation::Confirmed => AuditIntegrity::Verified,
+                OrderConfirmation::Denied | OrderConfirmation::Unavailable => {
                     AuditIntegrity::Tampered
                 }
             }
         }
         assert_eq!(
-            request_kind(&ConfirmationRequest::RiskSettingsChange(
-                &RiskSettingsChange::EnableOrders
-            )),
-            Notification::BriefingFinished
-        );
-        assert_eq!(
-            result_kind(ConfirmationOutcome::Confirmed),
+            result_kind(OrderConfirmation::Confirmed),
             AuditIntegrity::Verified
         );
         assert_eq!(
-            result_kind(ConfirmationOutcome::Denied),
+            result_kind(OrderConfirmation::Denied),
             AuditIntegrity::Tampered
         );
         assert_eq!(
-            result_kind(ConfirmationOutcome::Unavailable),
+            result_kind(OrderConfirmation::Unavailable),
             AuditIntegrity::Tampered
         );
-        assert_ne!(
-            ConfirmationOutcome::Denied,
-            ConfirmationOutcome::Unavailable
-        );
+        assert_ne!(OrderConfirmation::Denied, OrderConfirmation::Unavailable);
     }
 
     #[test]
     fn secret_keys_and_notifications_have_no_open_text_payload() {
         fn key(value: SecretKey) -> &'static str {
             match value {
+                SecretKey::TossClientId => "client-id",
                 SecretKey::TossClientSecret => "client-secret",
                 SecretKey::TossAccessToken => "access-token",
                 SecretKey::DatabaseEncryptionKey => "database-key",
@@ -166,6 +146,7 @@ mod tests {
             }
         }
         for (value, expected) in [
+            (SecretKey::TossClientId, "client-id"),
             (SecretKey::TossClientSecret, "client-secret"),
             (SecretKey::TossAccessToken, "access-token"),
             (SecretKey::DatabaseEncryptionKey, "database-key"),
@@ -184,29 +165,27 @@ mod tests {
         }
     }
 
-    fn risk_changes() -> Vec<RiskSettingsChange> {
+    fn risk_changes() -> Vec<RiskChange> {
         let profile = InvestorProfile::default();
         vec![
-            RiskSettingsChange::EnableOrders,
-            RiskSettingsChange::AllowMarketOrders,
-            RiskSettingsChange::AllowHours,
-            RiskSettingsChange::RelaxWeightCaps(profile.weight_caps()),
-            RiskSettingsChange::IncreaseRiskAppetite(RiskAppetite::Aggressive),
+            RiskChange::EnableOrders,
+            RiskChange::AllowMarketOrders,
+            RiskChange::AllowHours,
+            RiskChange::RelaxWeightCaps(profile.weight_caps()),
+            RiskChange::IncreaseRiskAppetite(RiskAppetite::Aggressive),
         ]
     }
 
     #[test]
     fn risk_requests_keep_target_values() {
-        fn target(change: &RiskSettingsChange) -> RiskSettingsChange {
+        fn target(change: &RiskChange) -> RiskChange {
             match change {
-                RiskSettingsChange::EnableOrders => RiskSettingsChange::EnableOrders,
-                RiskSettingsChange::AllowMarketOrders => RiskSettingsChange::AllowMarketOrders,
-                RiskSettingsChange::AllowHours => RiskSettingsChange::AllowHours,
-                RiskSettingsChange::RelaxWeightCaps(caps) => {
-                    RiskSettingsChange::RelaxWeightCaps(*caps)
-                }
-                RiskSettingsChange::IncreaseRiskAppetite(appetite) => {
-                    RiskSettingsChange::IncreaseRiskAppetite(*appetite)
+                RiskChange::EnableOrders => RiskChange::EnableOrders,
+                RiskChange::AllowMarketOrders => RiskChange::AllowMarketOrders,
+                RiskChange::AllowHours => RiskChange::AllowHours,
+                RiskChange::RelaxWeightCaps(caps) => RiskChange::RelaxWeightCaps(*caps),
+                RiskChange::IncreaseRiskAppetite(appetite) => {
+                    RiskChange::IncreaseRiskAppetite(*appetite)
                 }
             }
         }
@@ -230,9 +209,9 @@ mod tests {
             AuditKind::SubmissionResponseRecorded(order),
         ];
         for outcome in [
-            ConfirmationOutcome::Confirmed,
-            ConfirmationOutcome::Denied,
-            ConfirmationOutcome::Unavailable,
+            OrderConfirmation::Confirmed,
+            OrderConfirmation::Denied,
+            OrderConfirmation::Unavailable,
         ] {
             kinds.push(AuditKind::PresenceRecorded {
                 proposal: proposal.clone(),
@@ -240,6 +219,16 @@ mod tests {
             });
         }
         for change in risk_changes() {
+            for outcome in [
+                RiskChangeConfirmation::Confirmed,
+                RiskChangeConfirmation::Denied,
+                RiskChangeConfirmation::Unavailable,
+            ] {
+                kinds.push(AuditKind::RiskChangeConfirmationRecorded {
+                    change: change.clone(),
+                    outcome,
+                });
+            }
             kinds.push(AuditKind::RiskSettingsChanged(change));
         }
         kinds
@@ -261,6 +250,12 @@ mod tests {
                 AuditKind::SubmissionPrepared(id) => AuditKind::SubmissionPrepared(id.clone()),
                 AuditKind::SubmissionResponseRecorded(id) => {
                     AuditKind::SubmissionResponseRecorded(id.clone())
+                }
+                AuditKind::RiskChangeConfirmationRecorded { change, outcome } => {
+                    AuditKind::RiskChangeConfirmationRecorded {
+                        change: change.clone(),
+                        outcome: *outcome,
+                    }
                 }
                 AuditKind::RiskSettingsChanged(change) => {
                     AuditKind::RiskSettingsChanged(change.clone())

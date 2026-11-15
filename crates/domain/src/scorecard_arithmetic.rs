@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn perfect_and_opposite_theoretical_boundaries_for_4096_cases() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u32..=65536, 0_u8..2), |(count, binary)| {
                 let outcome = if binary == 1 {
                     crate::CalibrationOutcome::Hit

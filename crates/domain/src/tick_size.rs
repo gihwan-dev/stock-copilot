@@ -182,7 +182,7 @@ mod tests {
     }
     #[test]
     fn different_scales_match_independent_common_scale_integer_reference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u64..1_000_000, 1_u64..10_000, 0_u32..=8, 0_u32..=8),
                 |(coefficient, unit, price_scale, tick_scale)| {
@@ -245,7 +245,7 @@ mod tests {
     }
     #[test]
     fn integer_reference_proves_tick_bounds_and_direction_for_4096_cases() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u64..1_000_000, 1_u64..10_000, 0_u32..=8),
                 |(coefficient, unit, scale)| {

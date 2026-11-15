@@ -146,7 +146,37 @@ pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) ->
             .into_iter()
             .map(|line| Finding::at_line(path, line, Rule::TestModuleImpl)),
     );
+    if let Ok(stream) = source.parse::<TokenStream>() {
+        property_case_literals(stream, path, &mut findings);
+    }
     findings
+}
+
+fn property_case_literals(stream: TokenStream, path: &str, findings: &mut Vec<Finding>) {
+    let tokens: Vec<_> = stream.into_iter().collect();
+    for pair in tokens.array_windows::<2>() {
+        if let [
+            proc_macro2::TokenTree::Ident(name),
+            proc_macro2::TokenTree::Group(args),
+        ] = pair
+            && name == "with_cases"
+            && let Some(proc_macro2::TokenTree::Literal(value)) = args.stream().into_iter().next()
+            && value
+                .to_string()
+                .starts_with(|ch: char| ch.is_ascii_digit())
+        {
+            findings.push(Finding::at_line(
+                path,
+                value.span().start().line,
+                Rule::PropertyCasesLiteral,
+            ));
+        }
+    }
+    for token in tokens {
+        if let proc_macro2::TokenTree::Group(group) = token {
+            property_case_literals(group.stream(), path, findings);
+        }
+    }
 }
 
 fn relative_path(root: &Path, path: &Path) -> Result<String, CheckFailure> {

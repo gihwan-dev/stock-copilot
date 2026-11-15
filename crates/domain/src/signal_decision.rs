@@ -1155,7 +1155,7 @@ mod tests {
         let mapping = assignments();
         let types = facts();
         let calendar = calendars();
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     1_i64..=99,
@@ -1207,7 +1207,7 @@ mod tests {
         let calendar = calendars();
         let values = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
         let policy = policy(0);
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_i64..=99, 0_u8..3), |(percent, condition)| {
                 let source = u8::from(condition != 0);
                 let input = estimate(&eligible, percent, 0, 10, source);

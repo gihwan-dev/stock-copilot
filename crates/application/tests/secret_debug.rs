@@ -8,7 +8,7 @@ mod tests {
     }
 
     fn check_formats(bytes: &[u8]) {
-        let secret = SecretValue::new(bytes.to_vec().into());
+        let secret = SecretValue::new(bytes.to_vec());
         assert_eq!(format!("{secret:?}"), "SecretValue(<redacted>)");
         assert_eq!(format!("{secret:#?}"), "SecretValue(<redacted>)");
         assert_eq!(secret.as_exposed_secret(), bytes);

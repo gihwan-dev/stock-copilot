@@ -1,23 +1,27 @@
-use crate::SystemPortError;
-use domain::{OrderSummary, RiskSettingsChange};
+use domain::{OrderSummary, RiskChange};
 use std::future::Future;
 
-#[derive(Debug)]
-pub enum ConfirmationRequest<'summary> {
-    OrderSummary(&'summary OrderSummary),
-    RiskSettingsChange(&'summary RiskSettingsChange),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderConfirmation {
+    Confirmed,
+    Denied,
+    Unavailable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConfirmationOutcome {
+pub enum RiskChangeConfirmation {
     Confirmed,
     Denied,
     Unavailable,
 }
 
 pub trait UserPresence: Send + Sync {
-    fn confirm(
+    fn confirm_order(
         &self,
-        request: ConfirmationRequest<'_>,
-    ) -> impl Future<Output = Result<ConfirmationOutcome, SystemPortError>> + Send;
+        summary: OrderSummary,
+    ) -> impl Future<Output = OrderConfirmation> + Send;
+    fn confirm_risk_change(
+        &self,
+        change: RiskChange,
+    ) -> impl Future<Output = RiskChangeConfirmation> + Send;
 }

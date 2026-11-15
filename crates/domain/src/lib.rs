@@ -460,7 +460,7 @@ pub use sector_composition::{SectorAmount, SectorMember, SectorStockRow};
 pub use sector_composition::{SectorComposition, SectorCompositionScope};
 
 mod storage_records;
-pub use storage_records::{RiskSettingsChange, SyncOutcome, SyncRecord};
+pub use storage_records::{RiskChange, SyncOutcome, SyncRecord};
 
 mod signal_return_contract;
 
@@ -505,3 +505,43 @@ pub use scorecard_signal::{
 
 pub use signal_return::{SignalExcess, SignalReturnBasis};
 mod scorecard_signal_review;
+
+mod net_purchase;
+mod net_purchase_closed;
+mod net_purchase_daily;
+pub use net_purchase::{
+    NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope, NetPurchases,
+    net_purchase_amount, net_purchases,
+};
+pub use net_purchase_closed::{ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet};
+pub use net_purchase_daily::{
+    HoldingsDailyWithOrders, OrderDailyComparison, OrderDailyCurrency,
+    compare_holdings_daily_profit_with_orders, holdings_daily_profit_with_orders,
+};
+
+mod sell_quantity;
+pub use sell_quantity::{
+    NoSellQuantity, SellQuantityMode, SellQuantityPlan, SellTarget, calculate_sell_quantity,
+};
+
+mod limit_price;
+mod sell_quantity_review;
+pub use limit_price::{CalculatedLimitPrice, LimitPriceError, calculate_limit_price};
+mod limit_price_order;
+mod limit_price_review;
+pub use limit_price_order::{
+    CalculatedSellOrder, SellExecutionPrice, SellOrderCalculationError, bind_sell_limit,
+    bind_sell_market,
+};
+
+mod limit_price_policy;
+pub use limit_price_order::sell_order_into_intent;
+pub use limit_price_policy::{
+    MarketOrderPolicy, SavedMarketOrderPolicy, SavedMarketOrderSetting,
+    default_market_order_policy, restore_market_order_policy,
+};
+
+mod limit_price_revision;
+
+mod risk_settings;
+pub use risk_settings::{OrderPermission, RiskSettings};

@@ -33,7 +33,7 @@ impl<Value> SyncRecord<Value> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RiskSettingsChange {
+pub enum RiskChange {
     EnableOrders,
     AllowMarketOrders,
     AllowHours,

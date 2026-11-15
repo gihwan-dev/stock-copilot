@@ -1,9 +1,9 @@
-use crate::{SystemPortError, WriteCompleted};
+use crate::{RecordOutcome, SystemPortError, WriteCompleted};
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RaisedSignal, SettledRowSet, SignalSubmission, SignalTaskKey,
-    SyncRecord, Thesis, TimeInterval, Timestamp, ValidationReport, ValuationSnapshot,
+    Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
+    SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 use std::future::Future;
 
@@ -61,7 +61,7 @@ pub trait MarketDataRepository: Send + Sync {
         &self,
         pair: FxPair,
         kind: FxRateKind,
-        at: Option<Timestamp>,
+        at: FxRateQuery,
     ) -> impl Future<Output = Result<Option<FxRate>, SystemPortError>> + Send;
 }
 
@@ -92,7 +92,7 @@ pub trait EstimateRepository: Send + Sync {
     fn append_submission(
         &self,
         submission: &SignalSubmission,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
     fn submissions(
         &self,
         instrument: &InstrumentId,
@@ -101,16 +101,16 @@ pub trait EstimateRepository: Send + Sync {
         &self,
         task: &SignalTaskKey,
         outcome: &EstimateOutcome,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
     fn resolution(
         &self,
         task: &SignalTaskKey,
     ) -> impl Future<Output = Result<Option<EstimateOutcome>, SystemPortError>> + Send;
-    fn store_calibration(
+    fn append_calibration(
         &self,
         key: &CalibrationKey,
         calibration: &Calibration,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
     fn calibration(
         &self,
         key: &CalibrationKey,
@@ -133,7 +133,6 @@ pub trait ProposalRepository: Send + Sync {
     fn store_draft(
         &self,
         proposal: &Proposal<Draft>,
-        report: &ValidationReport,
     ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
     fn draft(
         &self,
@@ -146,7 +145,7 @@ pub trait ValuationRepository: Send + Sync {
         &self,
         account: &AccountId,
         snapshot: &ValuationSnapshot,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<RecordOutcome, SystemPortError>> + Send;
     fn history(
         &self,
         account: &AccountId,
@@ -162,4 +161,17 @@ pub trait SettingsRepository: Send + Sync {
     fn profile(
         &self,
     ) -> impl Future<Output = Result<Option<InvestorProfile>, SystemPortError>> + Send;
+    fn store_risk_settings(
+        &self,
+        settings: &RiskSettings,
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    fn risk_settings(
+        &self,
+    ) -> impl Future<Output = Result<Option<RiskSettings>, SystemPortError>> + Send;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FxRateQuery {
+    Latest,
+    At(Timestamp),
 }

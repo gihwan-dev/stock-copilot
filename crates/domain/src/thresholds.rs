@@ -289,7 +289,7 @@ pub(crate) mod tests {
     fn conservative_margin_overrides_both_larger_and_smaller_settings() {
         let insufficient = calibrated(29);
         let eligible = calibrated(30);
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(5_i64..=25), |setting| {
                 let configured = margin(&Decimal::new(setting, 2).to_string());
                 proptest::prop_assert_eq!(
@@ -316,7 +316,7 @@ pub(crate) mod tests {
 
     #[test]
     fn rational_reference_checks_thresholds_and_exact_cost_boundary() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     1_i64..=400,
@@ -724,7 +724,7 @@ pub(crate) mod tests {
         let task = task();
         let eligible = crate::CostEligibleTask::assess(task.clone(), &free_cost(crate::Market::Kr))
             .expect("비용 적격");
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(5_i64..=25, 1_i64..=99), |(setting, percent)| {
                 for count in [29_usize, 30_usize] {
                     let calibrated = calibrated_at(count, percent);

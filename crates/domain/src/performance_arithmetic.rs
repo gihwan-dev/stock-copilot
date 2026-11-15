@@ -756,7 +756,7 @@ mod contract_tests {
         );
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn no_flow_identity_and_partition_invariance(initial in 100_u32..10000,middle in 100_u32..10000,terminal in 100_u32..10000) {
             let start=Number::new(Decimal::from(initial)); let mid=Number::new(Decimal::from(middle)); let end=Number::new(Decimal::from(terminal));
@@ -776,7 +776,7 @@ mod rational_tests {
     use proptest::test_runner::Config;
     use rust_decimal::Decimal;
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn mwr_matches_independent_integer_rational_compounding(increment in 0_u32..11,exponent in 1_u32..7) {
             let initial=1000_u128.checked_pow(exponent).expect("정수");
@@ -798,7 +798,7 @@ mod cash_oracle_tests {
     use proptest::test_runner::Config;
     use rust_decimal::Decimal;
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn deposit_timing_matches_an_independent_exact_rational_root(increment in -10_i32..11_i32,half_period in 1_u32..5,deposit_units in 2_000_000_u128..100_000_000,scale in 0_u32..29) {
             let total_days=half_period.checked_mul(2).expect("기간");
