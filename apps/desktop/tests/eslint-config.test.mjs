@@ -76,6 +76,7 @@ const undisableable = [
 
   "local/no-comments",
   "local/no-money-coercion",
+  "local/number-display-boundary",
   "local/forbidden-file",
   "local/no-raw-types",
   "local/no-brand-creation",

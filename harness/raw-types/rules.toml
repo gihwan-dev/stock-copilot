@@ -13,6 +13,7 @@ external-types = []
 external-traits = []
 
 newtype-fields = [
+  "SecretSlice<u8>",
   "Date",
   "OffsetDateTime",
   "SignedDuration",
@@ -52,6 +53,8 @@ newtype-fields = [
 ]
 
 borrowed-forms = [
+  { owned = "SecretSlice<u8>", borrowed = "Vec<u8>" },
+  { owned = "SecretSlice<u8>", borrowed = "&[u8]" },
   { owned = "String", borrowed = "&str" },
   { owned = "Vec<u8>", borrowed = "&[u8]" },
   { owned = "PathBuf", borrowed = "&Path" },

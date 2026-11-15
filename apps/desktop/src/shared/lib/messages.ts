@@ -3,6 +3,23 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "number.jo": { ko: "조" as UiText },
+  "number.empty": { ko: "" as UiText },
+  "number.invalid": { ko: "값을 표시할 수 없음" as UiText },
+  "number.space": { ko: " " as UiText },
+  "number.openRate": { ko: " (" as UiText },
+  "number.closeRate": { ko: ")" as UiText },
+  "number.won": { ko: "원" as UiText },
+  "number.shares": { ko: "주" as UiText },
+  "number.man": { ko: "만" as UiText },
+  "number.eok": { ko: "억" as UiText },
+  "number.unavailable": { ko: "—" as UiText },
+  "number.up": { ko: "상승" as UiText },
+  "number.down": { ko: "하락" as UiText },
+  "number.flat": { ko: "보합" as UiText },
+  "number.upSymbol": { ko: "▲" as UiText },
+  "number.downSymbol": { ko: "▼" as UiText },
+  "number.flatSymbol": { ko: "–" as UiText },
   "ds.badgeNeutral": { ko: "보유 종목" as UiText },
   "ds.badgePrimary": { ko: "앱 계산" as UiText },
   "ds.badgeAlert": { ko: "값 오류" as UiText },

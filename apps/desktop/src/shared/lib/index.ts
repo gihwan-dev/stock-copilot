@@ -19,6 +19,7 @@ export type {
   DecimalParseError,
   Money,
   Price,
+  PercentDisplay,
   Probability,
   Quantity,
   Ratio,
@@ -26,6 +27,7 @@ export type {
 export {
   parseMoney,
   parsePrice,
+  parsePercentDisplay,
   parseProbability,
   parseQuantity,
   parseRatio,

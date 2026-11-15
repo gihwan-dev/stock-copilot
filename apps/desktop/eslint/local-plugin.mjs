@@ -1,3 +1,4 @@
+import { numberDisplayBoundary } from "./rules/number-display-boundary.mjs";
 import { ipcTestingBoundary } from "./rules/ipc-testing-boundary.mjs";
 import { emptyParser, forbiddenFile } from "./rules/forbidden-file.mjs";
 import { noBrandCreation } from "./rules/no-brand-creation.mjs";
@@ -12,6 +13,7 @@ import { testFileBoundary } from "./rules/test-file-boundary.mjs";
 export const local = {
   meta: { name: "local" },
   rules: {
+    "number-display-boundary": numberDisplayBoundary,
     "no-comments": noComments,
     "no-money-coercion": noMoneyCoercion,
     "forbidden-file": forbiddenFile,
