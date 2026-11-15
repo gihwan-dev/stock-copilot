@@ -1,41 +1,78 @@
-import { mkdtempSync, readdirSync, writeFileSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { createRequire } from "node:module";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join, basename } from "node:path";
+import { spawnSync } from "node:child_process";
+import { desktop, loadCatalog } from "./load.mjs";
 import { catalogProblems } from "./rules.mjs";
-const root = resolve(import.meta.dirname, "../..");
-const desktop = join(root, "apps/desktop");
-const require = createRequire(join(desktop, "package.json"));
-const { build } = await import(pathToFileURL(require.resolve("vite")).href);
-const folder = mkdtempSync(join(desktop, "node_modules/.ds07-"));
+const folder = mkdtempSync(join(desktop, "node_modules/.ds07-index-"));
 try {
-  const files = readdirSync(join(desktop, ".storybook/catalog")).filter(
-    (file) => file.endsWith(".stories.mjs"),
+  const run = spawnSync(
+    join(desktop, "node_modules/.bin/storybook"),
+    [
+      "build",
+      "--test",
+      "--disable-telemetry",
+      "--output-dir",
+      join(folder, "storybook"),
+    ],
+    { cwd: desktop, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
   );
-  const source = `import * as components from ${JSON.stringify(join(desktop, "src/shared/ds/index.ts"))};\nexport { components };\nimport * as sources from ${JSON.stringify(join(desktop, "src/shared/ds/stories.ts"))};\nexport const catalogStories=Object.values(sources).flat();\n${files.map((file, index) => `import * as page${index} from ${JSON.stringify(join(desktop, ".storybook/catalog", file))};`).join("\n")}\nexport const entries = [${files.map((file, index) => `...[page${index}.Light,page${index}.Dark].map(page=>({component:${JSON.stringify(file.replace(".stories.mjs", ""))},theme:page?.parameters?.theme,render:page?.render}))`).join(",")}];`;
-  const entry = join(folder, "entry.mjs");
-  writeFileSync(entry, source);
-  await build({
-    root: desktop,
-    configFile: false,
-    logLevel: "error",
-    build: {
-      ssr: entry,
-      outDir: join(folder, "out"),
-      rollupOptions: { output: { entryFileNames: "entry.mjs" } },
-    },
-  });
-  const loaded = await import(
-    pathToFileURL(join(folder, "out/entry.mjs")).href
+  if (run.status !== 0)
+    throw new Error(`Storybook 빌드 실패\n${run.stdout}\n${run.stderr}`);
+  const index = JSON.parse(
+    readFileSync(join(folder, "storybook/index.json"), "utf8"),
   );
+  const loaded = await loadCatalog();
+  const entries = Object.values(index.entries)
+    .filter((entry) => entry.type === "story")
+    .map((item) => {
+      const prefix = "./.storybook/catalog/";
+      const module = item.importPath.startsWith(prefix)
+        ? loaded.modules[item.importPath.slice(prefix.length)]
+        : undefined;
+      const page = module?.[item.exportName];
+      const rendered =
+        typeof page?.render === "function" ? page.render() : undefined;
+      return {
+        component: basename(item.importPath, ".stories.mjs"),
+        theme: page?.parameters?.theme,
+        sample: page?.parameters?.sample,
+        title: item.title.split("/").at(-1),
+        render: page?.render,
+        observedComponent: rendered?.props?.["data-catalog-component"],
+        observedTheme: rendered?.props?.["data-catalog-theme"],
+        observedSample: rendered?.props?.["data-catalog-sample"],
+        observedRender:
+          rendered?.props?.children?.props?.children?.props?.render,
+      };
+    });
   const problems = catalogProblems(
     Object.keys(loaded.components),
-    loaded.catalogStories,
-    loaded.entries,
+    loaded.samples,
+    entries,
+  );
+  mkdirSync(join(desktop, "../../target/DS-07"), { recursive: true });
+  writeFileSync(
+    join(desktop, "../../target/DS-07/index-verdict.json"),
+    JSON.stringify(
+      {
+        components: Object.keys(loaded.components),
+        samples: loaded.samples.length,
+        pages: entries.length,
+        problems,
+      },
+      null,
+      2,
+    ),
   );
   problems.forEach((problem) => process.stderr.write(`FAIL ${problem}\n`));
   process.stdout.write(
-    `ds-catalog: ${Object.keys(loaded.components).length} components, ${loaded.catalogStories.length} samples, ${loaded.entries.length} theme pages, ${problems.length} problems\n`,
+    `ds-catalog: ${Object.keys(loaded.components).length} components, ${loaded.samples.length} samples, ${entries.length} indexed theme pages, ${problems.length} problems\n`,
   );
   process.exitCode = problems.length === 0 ? 0 : 1;
 } finally {

@@ -57,6 +57,21 @@ const catalog = {
   "ds.hide": { ko: "가리기" as UiText },
   "ds.paste": { ko: "붙여넣기" as UiText },
   "ds.pasteError": { ko: "붙여넣지 못했어요. 직접 입력해 주세요" as UiText },
+  "catalog.holdings": { ko: "가상 보유 종목" as UiText },
+  "catalog.company": {
+    ko: "예시반도체장기성장산업기술연구개발통합솔루션보통주" as UiText,
+  },
+  "catalog.companyTwo": { ko: "예시생활건강" as UiText },
+  "catalog.companyThree": { ko: "예시미래에너지" as UiText },
+  "catalog.description": {
+    ko: "아래 내역은 화면을 확인하기 위한 가상 자료예요. 긴 종목 이름과 큰 금액도 끝까지 읽을 수 있어야 하며, 매수와 매도는 제안 내용을 살펴본 사람이 직접 승인해요." as UiText,
+  },
+  "catalog.amount": { ko: "평가 금액" as UiText },
+  "catalog.trend": { ko: "가상 자산의 날짜별 평가 추이" as UiText },
+  "catalog.parts": { ko: "가상 종목별 자산 구성" as UiText },
+  "catalog.firstDate": { ko: "11월 11일" as UiText },
+  "catalog.secondDate": { ko: "11월 12일" as UiText },
+  "catalog.thirdDate": { ko: "11월 13일" as UiText },
   "app.title": { ko: "주식 코파일럿" as UiText },
 } as const;
 

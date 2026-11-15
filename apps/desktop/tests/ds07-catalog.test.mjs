@@ -2,8 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { catalogProblems } from "../../../harness/ds-catalog/rules.mjs";
 const render = () => null;
-const sample = { component: "Card", themes: ["light", "dark"], render };
+const sample = {
+  sample: 0,
+  component: "Card",
+  themes: ["light", "dark"],
+  render,
+};
 const entries = ["light", "dark"].map((theme) => ({
+  sample: 0,
+  title: "Card",
+  observedComponent: "Card",
+  observedTheme: theme,
+  observedSample: 0,
+  observedRender: render,
   component: "Card",
   theme,
   render,
@@ -68,3 +79,27 @@ test("DS07 theme diagnostics name only the absent dark page", () => {
     "Card: dark 페이지 없음 또는 중복",
   ]);
 });
+for (const field of [
+  "title",
+  "observedComponent",
+  "observedTheme",
+  "observedSample",
+  "sample",
+  "observedRender",
+])
+  test(`DS07 rejects wrong actual ${field}`, () => {
+    const value =
+      field === "observedRender"
+        ? () => null
+        : field === "observedSample" || field === "sample"
+          ? 9
+          : "wrong";
+    assert.notDeepEqual(
+      catalogProblems(
+        ["Card"],
+        [sample],
+        [{ ...entries[0], [field]: value }, entries[1]],
+      ),
+      [],
+    );
+  });

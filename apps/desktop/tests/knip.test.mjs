@@ -111,6 +111,7 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/Button.stories.tsx src/shared/ds/Button.stories.tsx",
   "files src/shared/ds/Button.tsx src/shared/ds/Button.tsx",
   "files src/shared/ds/Card.tsx src/shared/ds/Card.tsx",
+  "files src/shared/ds/Catalog.stories.tsx src/shared/ds/Catalog.stories.tsx",
   "files src/shared/ds/Checkbox.stories.tsx src/shared/ds/Checkbox.stories.tsx",
   "files src/shared/ds/Checkbox.tsx src/shared/ds/Checkbox.tsx",
   "files src/shared/ds/Dialog.tsx src/shared/ds/Dialog.tsx",
@@ -195,7 +196,9 @@ test("the production allowlist holds exactly the documented skeleton entries, ea
 });
 
 test("the production run drops non-production entries and dropping any production flag makes a case fail", () => {
-  assert.deepEqual(productionConfig(appConfig).entry, []);
+  assert.deepEqual(productionConfig(appConfig).entry, [
+    "src/shared/ds/theme.css!",
+  ]);
   const survivors = withConfig(productionConfig(appConfig), (file) =>
     PRODUCTION_FLAGS.filter((flag) =>
       Object.entries(production).every(

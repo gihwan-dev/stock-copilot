@@ -41,6 +41,7 @@ const loads = { trend: load(500), parts: load(6) } as const;
 const invalid = load(501);
 type Story = {
   readonly component: keyof typeof components;
+  readonly theme: "light" | "dark";
   readonly state: "normal" | "empty" | "single" | "load" | "invalid";
   readonly themes: readonly ["light", "dark"];
   readonly render: (theme?: "light" | "dark") => ReactElement;
@@ -62,6 +63,7 @@ export const chartComponentStories: readonly Story[] = (
     (state) =>
       (["light", "dark"] as const).map((theme) => ({
         component,
+        theme,
         state,
         themes: ["light", "dark"] as const,
         render: (catalogTheme = theme): ReactElement => (

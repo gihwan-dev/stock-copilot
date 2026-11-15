@@ -4,40 +4,47 @@
 
 ## 결정
 
-Storybook과 React Vite 연결은 설계 5.2의 10.6.7을 정확히 고정한다. 새 런타임 의존성은 없다. `.storybook`은 개발 도구 경계이고 제품 src와 함께 배포되지 않는다. 기존의 타입 검사되는 이야기 배열을 소비하는 CSF 어댑터만 JavaScript 모듈로 둔다. 공개 컴포넌트 동작과 prop은 변경하지 않는다.
+Storybook과 React Vite 연결은 architecture 5.2의 10.6.7로 정확히 고정한다. 제품 런타임 의존성은 추가하지 않는다. `.storybook`은 개발 도구 경계다. 타입 검사되는 기존 DS 이야기 배열을 소비하는 CSF 어댑터만 JavaScript 모듈로 두며, 공개 컴포넌트의 동작과 prop은 바꾸지 않는다.
 
-architecture 5.1에서 구현된 레이아웃은 Card뿐이므로 첫 묶음으로 둔다. 이후 DS-03, DS-04, DS-05, DS-06, DS-18 순서다. 새 레이아웃 컴포넌트를 만들지 않는다. 컴포넌트마다 라이트·다크 두 페이지에 모든 기존 상태를 표시한다. 차트 render는 선택 테마를 받아 명시적 theme prop에 전달한다. 기존 호출은 기본값을 유지한다.
+구현된 레이아웃은 Card뿐이므로 첫 묶음으로 둔다. 이후 DS-03, DS-04, DS-05, DS-06, DS-18 순서로 기본·피드백·숫자·차트·콘텐츠를 배치한다. 공통 상위 묶음과 컴포넌트 순서를 Storybook storySort로 지정한다. 새 디자인과 레이아웃 컴포넌트는 만들지 않는다.
 
-`node harness/ds-catalog/check.mjs`가 실제 공개 런타임 내보내기와 실제 이야기 배열·CSF 모듈을 번들로 읽고 누락을 거부한다. `just check-ts`에 등록하여 전체·프런트 빠른 검사에서 실행한다. 위반 고정 자료는 새 테스트의 cases 배열이다. 시각 회귀와 넘침은 DS-15·DS-20·DS-12 인계다.
+각 예제를 라이트·다크의 개별 CSF 이야기로 노출한다. 모든 상태를 한 페이지에 동시에 그리면 열린 Dialog끼리 겹치므로 이 대안은 버린다. 기존 차트의 테마 축은 목록에서 한 번만 선택하고, 선택한 CSF 테마를 차트 속성으로 전달한다. 기존 이야기의 무인자 render는 그대로 유지한다. 예제 순서는 원본 묶음 이름의 정렬과 묶음 안 순서로 고정하며, CSF는 `node harness/ds-catalog/generate.mjs` 후 Prettier로 생성한다.
 
-실행: `pnpm -C apps/desktop exec storybook dev -p 6006`, 빌드: `pnpm -C apps/desktop exec storybook build --output-dir ../../target/DS-07/storybook`.
+`node harness/ds-catalog/check.mjs`가 실제 Storybook 빌드의 index.json을 읽는다. index에 실린 모든 export의 실제 render를 실행하여 공개 컴포넌트·예제·테마·원본 render 함수 연결을 비교한다. 원본 예제마다 index에 라이트·다크가 하나씩 있어야 한다. includeStories/excludeStories로 빠진 이야기, 추가 이야기의 잘못된 metadata, 잘못 연결된 render는 실패한다. 실제 importPath도 지정한 목록 모듈과 정확히 연결한다. decorator는 잘못된 테마를 기본값으로 숨기지 않고 거부한다.
+
+검사는 just check-ts와 보호된 check-list에 등록한다. 이 검사는 목록과 테마 연결을 증명하며 DS-15의 픽셀 기준 화면과 DS-20의 넘침 실측을 대체하지 않는다.
 
 ## 대응
 
-모든 공개 컴포넌트에 CSF 페이지를 이번에 추가했다. 원본 이야기의 누락은 없었다. 대응은 `.storybook/catalog/<공개 이름>.stories.mjs`의 Light·Dark다.
+모든 공개 컴포넌트의 CSF 페이지를 이번에 추가했다. 원본 이야기에는 공개 컴포넌트 누락이 없었다. 대응 파일은 `.storybook/catalog/<공개 이름>.stories.mjs`다. 각 파일의 개별 예제에 LightN·DarkN이 있다.
 
-| 원본 | 공개 컴포넌트 |
-|---|---|
-| Base | Icon, Text, Heading, Button, IconButton, Checkbox, Switch, Disclosure, SegmentedControl, Select, TextField |
-| Feedback | Card, Table, Dialog, EmptyState, Skeleton |
-| Status | Badge, StatusBar |
-| Numbers | Money, Percent, Quantity, Probability, PriceChange, DirectionBadge |
-| Charts | LineChart, AreaChart, DonutChart, Treemap |
-| Content | Markdown, ChatInput |
+| 원본 | 공개 컴포넌트 | 목록 예제 수 |
+|---|---|---|
+| Base | Icon, Text, Heading, Button, IconButton, Checkbox, Switch, Disclosure, SegmentedControl, Select, TextField | 393 |
+| Feedback | Card, Table, Dialog, EmptyState, Skeleton | 20 |
+| Status | Badge, StatusBar | 16 |
+| Numbers | Money, Percent, Quantity, Probability, PriceChange, DirectionBadge | 21 |
+| Charts | LineChart, AreaChart, DonutChart, Treemap | 20 (기존 테마 중복 축 제거) |
+| Content | Markdown, ChatInput | 6 |
+| Catalog 추가 자료 | Text, Heading, Card, Table, EmptyState, 위 차트 네 개 | 9 |
 
-큰 원화 금액·빈 차트·빈 표·긴 한국어 마크다운·긴 입력의 기존 가상 자료를 그대로 쓴다. 실제 계좌나 API는 사용하지 않는다.
+합계 공개 컴포넌트 30개, 목록 예제 485개, 실제 indexed CSF 970개다. 가상 보유 표는 긴 한국어 종목명과 987654321098원, 가상 날짜별 추이·종목별 구성은 서로 다른 이름과 값을 사용한다. 화면 문구는 messages.ts에만 추가한다. 실제 계좌·키·API는 사용하지 않는다.
 
-## 보호 파일과 테스트
+실행: `pnpm -C apps/desktop exec storybook dev -p 6006`. 빌드: `pnpm -C apps/desktop exec storybook build --output-dir ../../target/DS-07/storybook`.
 
-`package.json`, lockfile, TS 의존성 허용 목록은 승인된 Storybook 설치에 필요하다. justfile은 새 누락 검사를 등록한다. 생성 설정과 해시는 저장소 쓰기 모드로 재생성한다. 승인된 고정 목록 테스트 변경 1건: knip.test.mjs의 production 진입점 정확 기대를 [theme.css!]에서 []로 바꾼다. Storybook 직접 소비로 중복 진입점을 제거한 결과이며 동등성 단언은 유지한다. Storybook이 직접 읽는 theme.css·stories.ts의 중복 knip 진입점 두 개를 제거하고 검사의 정확한 config 기대도 동기화한다. 새 검사 단계를 check-list의 steps·justfile 기대에 추가한다. 기존 단언은 유지한다. 검사 끄기 0건이다. 프로젝트 및 세션 훅 신뢰는 확인 불가, Git 훅은 설치 완료다.
+## 보호 파일과 기존 테스트
 
-## 인계
+package.json·lockfile·TS 의존성 허용 목록은 승인된 Storybook 설치에 필요하다. justfile과 check-list 기대는 새 누락 검사 등록에 필요하다. 하네스 설정과 해시는 기존 생성기로 재생성한다.
 
-DS-15: 고정 브라우저 양 테마 시각 회귀. DS-20: 부하 자료·넘침 실측. DS-12: 상태 테스트·기준 화면까지 통합한 공개 목록 잠금. WKWebView와 VoiceOver 실측은 이번 결과로 증명하지 않는다.
+normal Knip은 Storybook의 실제 진입점에서 theme.css·stories.ts를 소비하므로 중복 수동 entry 두 개를 제거한다. productionConfig는 theme.css!를 명시적으로 유지하여 ADR 0026의 CSS 운영 진입점 정책을 보존한다. 기존 production 진입점 단언은 기준 master와 동일하다.
 
-## 검증
+승인된 기존 테스트 변경은 knip.test.mjs의 정확한 production 유예 목록에 Catalog.stories.tsx 한 항목을 추가한 것뿐이다(72 → 73). 기존 항목과 동등성 단언을 유지한다. 보호된 유예 목록에도 새 이야기 파일 한 항목만 등록한다. 검사 끄기와 훅 생략은 없다. 프로젝트·세션 훅 신뢰는 확인 불가이며, Git 훅은 설치했다.
 
-Storybook 정적 빌드 통과. 새 회귀 19/19. 변경분 변이는 프런트 빌드 후 종료 0, 실행 대상 Rust 변이 없음. 손 변형 21/21 컴파일·검출. 정상 훅 첫 통합 검사는 신규 검사 등록 목록과 knip의 중복 진입점 때문에 실패했고, 등록 목록 및 중복 설정을 보완한다.
+## 검증과 인계
+
+실제 index·CSF·테마·대표 자료 회귀 26/26, 등록·Knip 회귀와 타입·린트 통과. 독립 검사의 첫 전체 실행 중 기존 Rust 하네스 테스트 자식이 신호 9로 종료됐다. 해당 테스트의 단독 재실행과 이후 정상 커밋 훅 전체 검사는 통과했다. 원인은 확정하지 않았다.
+
+DS-15: 고정 브라우저의 양 테마 시각 회귀. DS-20: 전용 부하 자료·넘침 실측. DS-12: 상태 테스트·기준 화면까지 통합한 공개 목록 잠금. 실제 WKWebView와 VoiceOver는 NOT_RUN이다.
 
 ## 의존성
 
@@ -183,28 +190,34 @@ Storybook 정적 빌드 통과. 새 회귀 19/19. 변경분 변이는 프런트 
 
 ## 손 변형
 
-mktemp 복사본마다 node --check 후 새 테스트를 실제 실행했다. 21/21 컴파일·검출, 생존 0.
+수정된 검사 복사본마다 node --check 후 새 단위 회귀를 실제 실행했다. 27/27 컴파일·검출, 생존 0. 실제 index/CSF 위반 세 개도 별도 복사본에서 JavaScript 구문 검사를 통과한 뒤 등록 checker가 실패함을 확인했다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 |
 |---|---|---|
-| 1 | `stories.length === 0` → `stories.length !== 0` | ✖ DS07 complete public catalog accepts both themes (1.36075ms) |
-| 2 | `pages.length !== 2` → `pages.length === 2` | ✖ DS07 complete public catalog accepts both themes (3.554667ms) |
-| 3 | `page.theme === theme` → `page.theme !== theme` | ✖ DS07 theme diagnostics name only the absent dark page (1.375708ms) |
-| 4 | `).length !== 1` → `).length === 1` | ✖ DS07 complete public catalog accepts both themes (2.980959ms) |
-| 5 | `!components.includes(story.component)` → `components.includes(story.component)` | ✖ DS07 complete public catalog accepts both themes (2.420375ms) |
-| 6 | `typeof story.render !== "function"` → `typeof story.render === "function"` | ✖ DS07 complete public catalog accepts both themes (1.345416ms) |
-| 7 | `story.themes?.length !== 2` → `story.themes?.length === 2` | ✖ DS07 complete public catalog accepts both themes (1.423ms) |
-| 8 | `!story.themes.includes("light")` → `story.themes.includes("light")` | ✖ DS07 complete public catalog accepts both themes (1.334208ms) |
-| 9 | `!story.themes.includes("dark")` → `story.themes.includes("dark")` | ✖ DS07 complete public catalog accepts both themes (9.02175ms) |
-| 10 | `!components.includes(entry.component)` → `components.includes(entry.component)` | ✖ DS07 complete public catalog accepts both themes (2.746875ms) |
-| 11 | `typeof entry.render !== "function"` → `typeof entry.render === "function"` | ✖ DS07 complete public catalog accepts both themes (2.722042ms) |
-| 12 | `entry.theme !== "light"` → `entry.theme === "light"` | ✖ DS07 complete public catalog accepts both themes (2.740792ms) |
-| 13 | `entry.theme !== "dark"` → `entry.theme === "dark"` | ✖ DS07 complete public catalog accepts both themes (2.491833ms) |
-| 14 | `entry.theme !== "light" &&` → `entry.theme !== "light" &#124;&#124;` | ✖ DS07 complete public catalog accepts both themes (1.277958ms) |
-| 15 | `story.component === component` → `story.component !== component` | ✖ DS07 complete public catalog accepts both themes (2.100292ms) |
-| 16 | `entry.component === component` → `entry.component !== component` | ✖ DS07 complete public catalog accepts both themes (2.777792ms) |
-| 17 | `["light", "dark"]` → `["light", "other"]` | ✖ DS07 complete public catalog accepts both themes (2.642084ms) |
-| 18 | `for (const component of components)` → `for (const component of [])` | ✖ DS07 rejects missing public component (0.366833ms) |
-| 19 | `for (const story of samples)` → `for (const story of [])` | ✖ DS07 rejects missing light (0.713792ms) |
-| 20 | `return problems;` → `return [];` | ✖ DS07 rejects missing public component (0.381667ms) |
-| 21 | `const problems = [];` → `const problems = ["false positive"];` | ✖ DS07 complete public catalog accepts both themes (1.379208ms) |
+| 1 | `stories.length === 0` → `stories.length !== 0` | ✖ DS07 complete public catalog accepts both themes (1.3135ms) |
+| 2 | `pages.length !== 2` → `pages.length === 2` | ✖ DS07 complete public catalog accepts both themes (1.3555ms) |
+| 3 | `page.theme === theme` → `page.theme !== theme` | ✖ DS07 theme diagnostics name only the absent dark page (0.731542ms) |
+| 4 | `).length !== 1` → `).length === 1` | ✖ DS07 complete public catalog accepts both themes (1.270834ms) |
+| 5 | `!components.includes(story.component)` → `components.includes(story.component)` | ✖ DS07 complete public catalog accepts both themes (1.1895ms) |
+| 6 | `typeof story.render !== "function"` → `typeof story.render === "function"` | ✖ DS07 complete public catalog accepts both themes (1.226875ms) |
+| 7 | `story.themes?.length !== 2` → `story.themes?.length === 2` | ✖ DS07 complete public catalog accepts both themes (1.23575ms) |
+| 8 | `!story.themes.includes("light")` → `story.themes.includes("light")` | ✖ DS07 complete public catalog accepts both themes (1.247375ms) |
+| 9 | `!story.themes.includes("dark")` → `story.themes.includes("dark")` | ✖ DS07 complete public catalog accepts both themes (1.246541ms) |
+| 10 | `!components.includes(entry.component)` → `components.includes(entry.component)` | ✖ DS07 complete public catalog accepts both themes (1.207ms) |
+| 11 | `typeof entry.render !== "function"` → `typeof entry.render === "function"` | ✖ DS07 complete public catalog accepts both themes (1.326834ms) |
+| 12 | `entry.theme !== "light"` → `entry.theme === "light"` | ✖ DS07 complete public catalog accepts both themes (1.226083ms) |
+| 13 | `entry.theme !== "dark"` → `entry.theme === "dark"` | ✖ DS07 complete public catalog accepts both themes (1.180542ms) |
+| 14 | `entry.theme !== "light" &&` → `entry.theme !== "light" &#124;&#124;` | ✖ DS07 complete public catalog accepts both themes (1.272667ms) |
+| 15 | `story.component === component` → `story.component !== component` | ✖ DS07 complete public catalog accepts both themes (1.232ms) |
+| 16 | `entry.component === component` → `entry.component !== component` | ✖ DS07 complete public catalog accepts both themes (1.312417ms) |
+| 17 | `["light", "dark"]` → `["light", "other"]` | ✖ DS07 complete public catalog accepts both themes (1.183375ms) |
+| 18 | `for (const component of components)` → `for (const component of [])` | ✖ DS07 rejects missing public component (0.339ms) |
+| 19 | `for (const story of samples)` → `for (const story of [])` | ✖ DS07 rejects missing light (0.30175ms) |
+| 20 | `return problems;` → `return [];` | ✖ DS07 rejects missing public component (0.344417ms) |
+| 21 | `const problems = [];` → `const problems = ["false positive"];` | ✖ DS07 complete public catalog accepts both themes (1.220084ms) |
+| 22 | `entry.title !== entry.component` → `entry.title === entry.component` | ✖ DS07 complete public catalog accepts both themes (1.259917ms) |
+| 23 | `entry.observedComponent !== entry.component` → `entry.observedComponent === entry.component` | ✖ DS07 complete public catalog accepts both themes (1.320833ms) |
+| 24 | `entry.observedTheme !== entry.theme` → `entry.observedTheme === entry.theme` | ✖ DS07 complete public catalog accepts both themes (1.330791ms) |
+| 25 | `entry.observedSample !== entry.sample` → `entry.observedSample === entry.sample` | ✖ DS07 complete public catalog accepts both themes (1.399208ms) |
+| 26 | `entry.observedRender !== story?.render` → `entry.observedRender === story?.render` | ✖ DS07 complete public catalog accepts both themes (1.323833ms) |
+| 27 | `story === undefined` → `story !== undefined` | ✖ DS07 complete public catalog accepts both themes (1.290292ms) |

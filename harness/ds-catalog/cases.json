@@ -1,0 +1,19 @@
+[
+  {
+    "name": "실제 CSF 연결 바꾸기",
+    "file": "apps/desktop/.storybook/catalog/Card.stories.mjs",
+    "from": "renderCatalog(\"Card\", \"dark\", 0)",
+    "to": "renderCatalog(\"Button\", \"light\", 0)"
+  },
+  {
+    "name": "index에서 다크 제외",
+    "file": "apps/desktop/.storybook/catalog/Card.stories.mjs",
+    "from": "export default {",
+    "to": "export default { excludeStories: [\"Dark0\"],"
+  },
+  {
+    "name": "테마 없는 이야기 추가",
+    "file": "apps/desktop/.storybook/catalog/Card.stories.mjs",
+    "append": "\nexport const Extra = { name: \"추가\", render: () => renderCatalog(\"Card\", \"light\", 0) };\n"
+  }
+]
