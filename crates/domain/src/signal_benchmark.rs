@@ -33,6 +33,30 @@ impl SignalBenchmark {
             PerformanceCurrency::Native(currency),
         )
         .map_err(|_error| SignalReturnError::BenchmarkMismatch)?;
+        Self::from_series(series, snapshots, calendars, currency)
+    }
+    pub fn from_index_candles(
+        candles: &[crate::MarketIndicatorCandle],
+        snapshots: &[ValuationSnapshot],
+        calendars: &[MarketCalendar],
+    ) -> Result<Self, SignalReturnError> {
+        if calendars.len() > 4097 {
+            return Err(SignalReturnError::TooManyInputs);
+        }
+        let series = crate::index_benchmark_series(
+            candles,
+            snapshots,
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .map_err(|_error| SignalReturnError::BenchmarkMismatch)?;
+        Self::from_series(series, snapshots, calendars, Currency::Krw)
+    }
+    fn from_series(
+        series: BenchmarkSeries,
+        snapshots: &[ValuationSnapshot],
+        calendars: &[MarketCalendar],
+        currency: Currency,
+    ) -> Result<Self, SignalReturnError> {
         let closes = native_closes(calendars, currency)?;
         let mut ordered = snapshots.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|snapshot| snapshot.valuation_at());
@@ -52,25 +76,27 @@ impl SignalBenchmark {
         {
             return Err(SignalReturnError::BenchmarkMismatch);
         }
-        let segments = points
-            .iter()
-            .zip(points.iter().skip(1))
-            .zip(series.observations())
-            .map(|((start, end), value)| BenchmarkSegment {
-                start: *start,
-                end: *end,
-                value: value.value(),
-            })
-            .collect();
-        let dates = ordered
-            .iter()
-            .zip(&points)
-            .map(|(snapshot, at)| (snapshot.price_date(currency), *at))
-            .collect();
-        Ok(Self {
-            series,
-            segments,
-            dates,
+        crate::index_benchmark::validate_signal_benchmark_length(&series, &points).map(|()| {
+            let segments = points
+                .iter()
+                .zip(points.iter().skip(1))
+                .zip(series.observations())
+                .map(|((start, end), value)| BenchmarkSegment {
+                    start: *start,
+                    end: *end,
+                    value: value.value(),
+                })
+                .collect();
+            let dates = ordered
+                .iter()
+                .zip(&points)
+                .map(|(snapshot, at)| (snapshot.price_date(currency), *at))
+                .collect();
+            Self {
+                series,
+                segments,
+                dates,
+            }
         })
     }
     #[must_use]
@@ -175,6 +201,23 @@ mod tests {
         AdjustmentBasis, BenchmarkKind, Candle, CandleObservation, CandlePeriod, Currency,
         MarketCalendar, MarketSession, Ohlcv, SessionInformation, SignalReturnError,
     };
+    fn test_benchmark(
+        kind: BenchmarkKind,
+        candles: &[Candle],
+        snapshots: &[crate::ValuationSnapshot],
+        calendars: &[MarketCalendar],
+        currency: Currency,
+    ) -> Result<SignalBenchmark, SignalReturnError> {
+        match kind {
+            BenchmarkKind::Kospi | BenchmarkKind::Kosdaq => {
+                let bars = crate::index_benchmark::tests::index_candles(kind, candles);
+                SignalBenchmark::from_index_candles(&bars, snapshots, calendars)
+            }
+            BenchmarkKind::Sp500Etf | BenchmarkKind::Mixed => {
+                SignalBenchmark::from_candles(kind, candles, snapshots, calendars, currency)
+            }
+        }
+    }
     fn us_calendar(day: i64) -> MarketCalendar {
         let session = |index: i64| {
             MarketSession::try_new(
@@ -228,7 +271,7 @@ mod tests {
     }
     #[test]
     fn review_daily_close_same_day_is_zero_and_missing_end_is_unavailable() {
-        let benchmark = SignalBenchmark::from_candles(
+        let benchmark = test_benchmark(
             BenchmarkKind::Kospi,
             &prices(Currency::Krw, &["100", "110", "220"]),
             &[snapshot(61), snapshot(62), snapshot(63)],
@@ -264,6 +307,13 @@ mod tests {
         );
     }
     #[test]
+    fn maximum_index_calendar_count_reaches_source_validation() {
+        assert_eq!(
+            SignalBenchmark::from_index_candles(&[], &[], &vec![calendar(61); 4097]),
+            Err(SignalReturnError::BenchmarkMismatch)
+        );
+    }
+    #[test]
     fn d29_benchmark_requires_native_currency_and_exact_close_instants() {
         let dates = [snapshot(61), snapshot(62)];
         for (currency, kind, calendars) in [
@@ -274,14 +324,8 @@ mod tests {
                 vec![us_calendar(61)],
             ),
         ] {
-            let benchmark = SignalBenchmark::from_candles(
-                kind,
-                &candles(currency),
-                &dates,
-                &calendars,
-                currency,
-            )
-            .expect("같은 가격 시각");
+            let benchmark = test_benchmark(kind, &candles(currency), &dates, &calendars, currency)
+                .expect("같은 가격 시각");
             assert_eq!(benchmark.series().kind(), kind);
             assert_eq!(
                 benchmark
@@ -309,15 +353,15 @@ mod tests {
         let dates = [snapshot(61), snapshot(62)];
         let bars = candles(Currency::Krw);
         assert_eq!(
-            SignalBenchmark::from_candles(BenchmarkKind::Kospi, &bars, &dates, &[], Currency::Krw),
+            test_benchmark(BenchmarkKind::Kospi, &bars, &dates, &[], Currency::Krw),
             Err(SignalReturnError::BenchmarkMismatch)
         );
         assert_eq!(
-            SignalBenchmark::from_candles(BenchmarkKind::Kospi, &[], &dates, &[], Currency::Krw),
+            test_benchmark(BenchmarkKind::Kospi, &[], &dates, &[], Currency::Krw),
             Err(SignalReturnError::BenchmarkMismatch)
         );
         assert_eq!(
-            SignalBenchmark::from_candles(
+            test_benchmark(
                 BenchmarkKind::Kospi,
                 &bars,
                 &dates,
@@ -343,7 +387,7 @@ mod tests {
         .expect("서로 다른 사실");
         let conflict = MarketCalendar::try_new(row(60), altered, row(62)).expect("별도 달력");
         assert_eq!(
-            SignalBenchmark::from_candles(
+            test_benchmark(
                 BenchmarkKind::Kospi,
                 &bars,
                 &dates,
@@ -385,7 +429,7 @@ mod tests {
             MarketCalendar::try_new(empty(60), regular, empty(64)).expect("별도 달력")
         };
         assert_eq!(
-            SignalBenchmark::from_candles(
+            test_benchmark(
                 BenchmarkKind::Sp500Etf,
                 &candles(Currency::Usd),
                 &[snapshot(61), snapshot(62)],
@@ -403,7 +447,7 @@ mod tests {
             ],
         );
         let dates = [snapshot(61), snapshot(62), snapshot(63)];
-        let benchmark = SignalBenchmark::from_candles(
+        let benchmark = test_benchmark(
             BenchmarkKind::Kospi,
             &extreme,
             &dates,
@@ -419,7 +463,7 @@ mod tests {
 
     #[test]
     fn d42_calendar_limit_accepts_4097_consistent_facts() {
-        let benchmark = SignalBenchmark::from_candles(
+        let benchmark = test_benchmark(
             BenchmarkKind::Kospi,
             &prices(Currency::Krw, &["100", "125"]),
             &[snapshot(61), snapshot(62)],
@@ -462,7 +506,7 @@ mod tests {
             first.price_date(Currency::Krw),
             second.price_date(Currency::Krw)
         );
-        let benchmark = SignalBenchmark::from_candles(
+        let benchmark = test_benchmark(
             BenchmarkKind::Kospi,
             &prices(Currency::Krw, &["100", "125"]),
             &[first, second],

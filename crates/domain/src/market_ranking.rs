@@ -196,16 +196,8 @@ impl StockRanking {
             .collect::<Result<Vec<_>, _>>()?;
         items.sort_by_key(|row| row.rank);
         let mut symbols = BTreeSet::new();
-        let mut previous = RankingOrdinal::new(0);
-        let mut continuity = RankingContinuity::Continuous;
-        for (expected, item) in (1..).zip(&items) {
-            if item.rank <= previous {
-                return Err(MarketDataError::InvalidRank);
-            }
-            if item.rank.0 != expected {
-                continuity = RankingContinuity::Gaps;
-            }
-            previous = item.rank;
+        let continuity = ranking_continuity(items.iter().map(|item| item.rank))?;
+        for item in &items {
             if !symbols.insert(item.symbol.clone()) {
                 return Err(MarketDataError::DuplicateInstrument);
             }
@@ -280,16 +272,7 @@ fn ranking_item(
     if row.currency != currency {
         return Err(MarketDataError::InvalidCurrency);
     }
-    let change_rate = match row.change_rate {
-        None => RankingChange::Unavailable,
-        Some(input) => {
-            let value = Ratio::parse(&input).or(Err(MarketDataError::InvalidNumber))?;
-            if value.as_decimal() < rust_decimal::Decimal::NEGATIVE_ONE {
-                return Err(MarketDataError::InvalidNumber);
-            }
-            RankingChange::Available(value)
-        }
-    };
+    let change_rate = ranking_change(row.change_rate.as_ref())?;
     let basis = match unit {
         RankingUnit::Shares => RankingBasis::Shares(
             Quantity::parse(&row.volume).or(Err(MarketDataError::InvalidNumber))?,
@@ -365,6 +348,37 @@ pub enum RankingCautionFilter {
 pub enum RankingChange {
     Unavailable,
     Available(Ratio),
+}
+pub(crate) fn ranking_continuity(
+    ranks: impl Iterator<Item = RankingOrdinal>,
+) -> Result<RankingContinuity, MarketDataError> {
+    let mut previous = RankingOrdinal::new(0);
+    let mut continuity = RankingContinuity::Continuous;
+    for (expected, rank) in (1..).zip(ranks) {
+        if rank <= previous {
+            return Err(MarketDataError::InvalidRank);
+        }
+        if rank != RankingOrdinal::new(expected) {
+            continuity = RankingContinuity::Gaps;
+        }
+        previous = rank;
+    }
+    Ok(continuity)
+}
+
+pub(crate) fn ranking_change(
+    input: Option<&NumericInput>,
+) -> Result<RankingChange, MarketDataError> {
+    match input {
+        None => Ok(RankingChange::Unavailable),
+        Some(raw) => {
+            let value = Ratio::parse(raw).or(Err(MarketDataError::InvalidNumber))?;
+            if value.as_decimal() < rust_decimal::Decimal::NEGATIVE_ONE {
+                return Err(MarketDataError::InvalidNumber);
+            }
+            Ok(RankingChange::Available(value))
+        }
+    }
 }
 #[cfg(test)]
 mod tests {

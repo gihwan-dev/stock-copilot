@@ -286,6 +286,7 @@ pub struct IndicatorCandleRow {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarketIndicatorCandle {
+    pub(crate) start: Timestamp,
     raw_code: MasterCode,
     code: IndicatorCode,
     period: CandlePeriod,
@@ -295,7 +296,7 @@ pub struct MarketIndicatorCandle {
     close: IndicatorValue,
     volume: IndicatorVolume,
     observation: MarketObservation,
-    status: IndicatorCandleStatus,
+    pub(crate) status: IndicatorCandleStatus,
 }
 impl MarketIndicatorCandle {
     pub fn from_response(
@@ -333,6 +334,7 @@ impl MarketIndicatorCandle {
             volume: IndicatorVolume(
                 Quantity::parse(&row.volume).or(Err(MarketDataError::InvalidNumber))?,
             ),
+            start: row.timestamp,
             status: indicator_candle_status(row.timestamp, period, collected),
             observation: MarketObservation::from_response(Some(row.timestamp), collected)?,
         })
@@ -407,6 +409,19 @@ fn indicator_candle_status(
         }
     }
 }
+pub(crate) fn index_close_number(
+    candle: &MarketIndicatorCandle,
+) -> Result<crate::performance_arithmetic::Number, crate::PerformanceError> {
+    match candle.close {
+        IndicatorValue::Points(points) => Ok(crate::performance_arithmetic::Number::new(
+            points.0.as_decimal(),
+        )),
+        IndicatorValue::YieldPercent(_) | IndicatorValue::Unknown(_) => {
+            Err(crate::PerformanceError::InvalidBenchmark)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::market_index::{
