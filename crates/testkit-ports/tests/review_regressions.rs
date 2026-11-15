@@ -19,8 +19,8 @@ mod tests {
         Money, Nanosecond, NewsItem, NewsSource, NormalizedUrl, NumericInput, NxtTrading,
         OffsetSeconds, Ohlcv, OrderIntent, OrderPermission, OrderSide, OrderTerms,
         OutcomeAdjustment, OutcomeUnavailable, Policy, PolicySecurityFacts, Portfolio, Price,
-        PriceAdjustment, PriceObservation, Proposal, ProposalId, ProposalLifetime,
-        ProposalPriceRange, ProposedChange, Quantity, Quote, RaisedSignal, Ratio, ReportedHolding,
+        PriceAdjustment, Proposal, ProposalId, ProposalLifetime, ProposalPriceRange,
+        ProposedChange, Quantity, Quote, RaisedSignal, Ratio, ReportedHolding,
         ResolvedOrderInstrument, RiskAppetite, RiskChange, RiskSettings, SavedMarketOrderSetting,
         SectorAssignments, SessionData, SessionInformation, SignalContext, SignalDecision,
         SignalEstimate, SignalSourceLedger, SignalSubmission, SignalTaskKey, SignalTiming,
@@ -110,23 +110,41 @@ mod tests {
         ));
     }
     fn candle(seconds: i64, value: &str) -> Candle {
+        candle_for(
+            id("candle-a"),
+            seconds,
+            CandlePeriod::Minute,
+            PriceAdjustment::Raw,
+            value,
+        )
+    }
+    fn candle_for(
+        instrument: InstrumentId,
+        seconds: i64,
+        period: CandlePeriod,
+        adjustment: PriceAdjustment,
+        value: &str,
+    ) -> Candle {
         let price = Price::parse(&NumericInput::try_new(value).expect("숫자"), Currency::Krw)
             .expect("가격");
         Candle::try_new(
-            id("candle-a"),
-            CandleTime::try_new(at(seconds), CandlePeriod::Minute).expect("봉 시각"),
-            PriceAdjustment::Raw,
-            Ohlcv::try_new(
-                price,
-                price,
-                price,
-                price,
-                Quantity::parse(&NumericInput::try_new("7").expect("수량")).expect("수량"),
-            )
-            .expect("봉"),
+            instrument,
+            CandleTime::try_new(at(seconds), period).expect("봉 시각"),
+            adjustment,
+            Ohlcv::try_new(price, price, price, price, quantity("7")).expect("봉"),
             CandleObservation::new(at(300), CandleStatus::Finalized),
         )
         .expect("봉")
+    }
+    fn fx_rate(value: &str, pair: FxPair, kind: FxRateKind, start: i64, end: i64) -> FxRate {
+        FxRate::parse(
+            &NumericInput::try_new(value).expect("숫자"),
+            pair,
+            kind,
+            TimeInterval::try_new(at(start), at(end)).expect("기간"),
+            FxSource::TossOpenApi,
+        )
+        .expect("환율")
     }
     #[test]
     fn identical_candles_in_one_batch_are_stored_once() {
@@ -184,6 +202,13 @@ mod tests {
         })
         .expect("마스터")
     }
+    fn other_master() -> MasterInstrument {
+        let mut row = master().row().clone();
+        row.instrument_id = id("sample-b");
+        row.symbol = Symbol::try_new("000660").expect("다른 코드");
+        row.name = DisplayInstrumentName::try_new("다른 고정 종목").expect("이름");
+        MasterInstrument::try_new(row).expect("다른 마스터")
+    }
     fn instrument() -> ResolvedOrderInstrument {
         master().order_instrument().expect("종목")
     }
@@ -194,11 +219,6 @@ mod tests {
             OffsetSeconds::new(32400),
         )
         .expect("현지 시각")
-    }
-    fn observation(value: &str, time: Timestamp) -> PriceObservation {
-        master()
-            .price_observation(price(value), local(time))
-            .expect("관측")
     }
     fn local_midnight(value: i64) -> Timestamp {
         local(at(day(value)
@@ -244,11 +264,14 @@ mod tests {
         eligible_for("102")
     }
     fn eligible_for(high: &str) -> CostEligibleTask {
+        eligible_for_master(high, &master())
+    }
+    fn eligible_for_master(high: &str, source: &MasterInstrument) -> CostEligibleTask {
         let candles: Vec<_> = (0_i64..61)
             .map(|index| {
                 let fixture_price = price(if index % 2 == 0 { "100" } else { high });
                 Candle::try_new(
-                    id("sample-a"),
+                    source.row().instrument_id.clone(),
                     CandleTime::try_new(local_midnight(index), CandlePeriod::Daily)
                         .expect("일봉 시각"),
                     PriceAdjustment::Adjusted(AdjustmentBasis::new(day(61))),
@@ -267,7 +290,12 @@ mod tests {
             .collect();
         let volatility = Volatility::calculate(&candles).expect("변동성");
         let task = EstimateTask::create(
-            EstimateContext::new(observation("100", day(60)), day(60)),
+            EstimateContext::new(
+                source
+                    .price_observation(price("100"), local(day(60)))
+                    .expect("관측"),
+                day(60),
+            ),
             volatility,
             Horizon::new(HorizonSelection::FewDays),
             HoursPermission::default(),
@@ -431,7 +459,10 @@ mod tests {
         thesis
     }
     fn draft(sigma: &str) -> Proposal<Draft> {
-        let key = ProposalId::new(ClientOrderId::try_new("same-draft").expect("ID"));
+        draft_for("same-draft", sigma)
+    }
+    fn draft_for(key_text: &str, sigma: &str) -> Proposal<Draft> {
+        let key = ProposalId::new(ClientOrderId::try_new(key_text).expect("ID"));
         let intent = OrderIntent::new(
             AccountId::new(173),
             instrument(),
@@ -497,26 +528,60 @@ mod tests {
             (&id("thesis-a"), &id("thesis-b")),
             (&thesis(), &Thesis::new()),
         ));
+    }
+    #[test]
+    fn generic_proposal_contract_preserves_versions_and_keys() {
         let proposals = MemoryProposalRepository::default();
-        memory(proposals.script_store_draft(), 2);
-        memory(proposals.script_draft(), 3);
+        memory(proposals.script_store_draft(), 3);
+        memory(proposals.script_draft(), 4);
         run(contracts::scenarios::proposal_roundtrip(
             &proposals,
             (&draft("102"), &draft("107")),
+            &draft_for("other-draft", "113"),
         ));
+    }
+    #[test]
+    fn generic_candle_and_valuation_contracts_preserve_query_scope() {
+        let first_account = AccountId::new(17);
+        let other_account = AccountId::new(29);
         let candles = MemoryMarketDataRepository::default();
-        memory(candles.script_store_candles(), 2);
+        memory(candles.script_store_candles(), 6);
         memory(candles.script_candles(), 1);
         run(contracts::scenarios::candle_history(
             &candles,
-            &id("candle-a"),
-            TimeInterval::try_new(at(60), at(180)).expect("기간"),
-            (&candle(60, "103"), &candle(120, "127")),
-            (&candle(0, "97"), &candle(180, "131")),
+            contracts::scenarios::CandleHistoryFacts {
+                instrument: &id("candle-a"),
+                window: TimeInterval::try_new(at(0), at(120)).expect("기간"),
+                boundaries: (&candle(0, "103"), &candle(60, "127")),
+                outside: (&candle(-60, "97"), &candle(120, "131")),
+                distractors: &[
+                    candle_for(
+                        id("candle-b"),
+                        60,
+                        CandlePeriod::Minute,
+                        PriceAdjustment::Raw,
+                        "151",
+                    ),
+                    candle_for(
+                        id("candle-a"),
+                        0,
+                        CandlePeriod::Daily,
+                        PriceAdjustment::Raw,
+                        "157",
+                    ),
+                    candle_for(
+                        id("candle-a"),
+                        60,
+                        CandlePeriod::Minute,
+                        PriceAdjustment::Adjusted(AdjustmentBasis::new(at(300))),
+                        "163",
+                    ),
+                ],
+            },
         ));
         let valuations = MemoryValuationRepository::default();
         memory(valuations.script_append(), 6);
-        memory(valuations.script_history(), 1);
+        memory(valuations.script_history(), 2);
         run(contracts::scenarios::valuation_history(
             &valuations,
             (&first_account, &other_account),
@@ -525,24 +590,7 @@ mod tests {
             &snapshot(5),
         ));
     }
-    #[test]
-    fn generic_estimates_preserve_first_resolution_and_latest_calibration() {
-        let repository = MemoryEstimateRepository::default();
-        memory(repository.script_append_submission(), 2);
-        memory(repository.script_submissions(), 2);
-        memory(repository.script_append_resolution(), 2);
-        memory(repository.script_resolution(), 2);
-        let task = eligible();
-        run(contracts::scenarios::estimate_append_only(
-            &repository,
-            &submission(&task),
-            (
-                &EstimateOutcome::Unavailable(OutcomeUnavailable::MissingCandles),
-                &EstimateOutcome::Unavailable(OutcomeUnavailable::Calendar),
-            ),
-        ));
-        let key = calibration_key();
-        let first = Calibration::try_new(key.clone(), &[]).expect("첫 보정");
+    fn next_calibration(task: &CostEligibleTask, key: &CalibrationKey) -> Calibration {
         let calendars: Vec<_> = (60..=66).map(|day| calendar(day, &Market::Kr)).collect();
         let basis = AdjustmentBasis::new(local(day(66)));
         let adjustment =
@@ -577,13 +625,40 @@ mod tests {
                     .expect("확률"),
             )
             .unwrap_or_else(|| panic!("종결 판정 필요: {outcome:?}"));
-        let second = Calibration::try_new(key.clone(), &[fact]).expect("둘째 보정");
-        memory(repository.script_append_calibration(), 3);
-        memory(repository.script_calibration(), 2);
+        Calibration::try_new(key.clone(), &[fact]).expect("둘째 보정")
+    }
+    #[test]
+    fn generic_estimates_preserve_first_resolution_and_latest_calibration() {
+        let repository = MemoryEstimateRepository::default();
+        memory(repository.script_append_submission(), 3);
+        memory(repository.script_submissions(), 3);
+        memory(repository.script_append_resolution(), 3);
+        memory(repository.script_resolution(), 3);
+        let task = eligible();
+        run(contracts::scenarios::estimate_append_only(
+            &repository,
+            &submission(&task),
+            (
+                &EstimateOutcome::Unavailable(OutcomeUnavailable::MissingCandles),
+                &EstimateOutcome::Unavailable(OutcomeUnavailable::Calendar),
+            ),
+            &submission(&eligible_for_master("107", &other_master())),
+        ));
+        let key = calibration_key();
+        let first = Calibration::try_new(key.clone(), &[]).expect("첫 보정");
+        let second = next_calibration(&task, &key);
+        let other_key = CalibrationKey::new(
+            key.model().clone(),
+            Horizon::new(HorizonSelection::HalfYearOrMore),
+        );
+        let other = Calibration::try_new(other_key.clone(), &[]).expect("다른 키 보정");
+        memory(repository.script_append_calibration(), 4);
+        memory(repository.script_calibration(), 3);
         run(contracts::scenarios::calibration_versions(
             &repository,
             &key,
             (&first, &second),
+            (&other_key, &other),
         ));
     }
     #[test]
@@ -662,6 +737,9 @@ mod tests {
                 &presence, change, result,
             ));
         }
+    }
+    #[test]
+    fn news_contract_preserves_instrument_isolation_and_saved_facts() {
         let repository = MemoryNewsRepository::default();
         let instrument = id("news-c");
         let item = NewsItem::new(
@@ -672,44 +750,76 @@ mod tests {
         );
         repository.link(instrument.clone(), item.clone());
         repository.link(instrument.clone(), item.clone());
-        memory(repository.script_store(), 2);
-        memory(repository.script_for_instrument(), 2);
+        let other_item = NewsItem::new(
+            NewsSource::Yonhap,
+            NormalizedUrl::try_new("https://example.com/d").expect("주소"),
+            UntrustedText::try_new("다른 기사").expect("제목"),
+            None,
+        );
+        repository.link(id("news-other"), other_item.clone());
+        memory(repository.script_store(), 3);
+        memory(repository.script_for_instrument(), 3);
         run(contracts::scenarios::news_roundtrip(
             &repository,
-            &instrument,
-            &item,
+            (&instrument, &id("news-other")),
+            (&item, &other_item),
         ));
+    }
+    fn caps(limit: &str, warning: &str, sector: &str) -> domain::WeightCaps {
+        domain::WeightCaps::try_new(
+            domain::ProfileWeight::try_new(ratio(limit)).expect("종목 상한"),
+            domain::ProfileWeight::try_new(ratio(warning)).expect("주의 비중"),
+            domain::ProfileWeight::try_new(ratio(sector)).expect("섹터 상한"),
+        )
+        .expect("상한")
+    }
+    fn profile_hours(profile: &InvestorProfile, hours: HoursPermissionState) -> InvestorProfile {
+        let mut saved = profile.saved_state();
+        saved.hours_permission = hours;
+        InvestorProfile::restore_from_saved_state(saved).expect("저장된 성향")
     }
     #[test]
     fn settings_queries_reflect_the_same_shared_facts() {
         let repository = MemorySettingsRepository::default();
-        let initial = InvestorProfile::default();
-        let changed = initial.with_risk_appetite(RiskAppetite::Aggressive);
+        let initial = profile_hours(
+            &InvestorProfile::default()
+                .with_horizon(Horizon::new(HorizonSelection::HalfYearOrMore))
+                .expect("비기본 기간")
+                .with_risk_appetite(RiskAppetite::Conservative)
+                .with_weight_caps(caps("0.13", "0.07", "0.31")),
+            HoursPermissionState::Enabled,
+        );
+        let changed = profile_hours(
+            &initial
+                .with_risk_appetite(RiskAppetite::Aggressive)
+                .with_weight_caps(caps("0.23", "0.11", "0.47")),
+            HoursPermissionState::Disabled,
+        );
         let original = RiskSettings::new(
             OrderPermission::Disabled,
             SavedMarketOrderSetting::Disabled,
-            HoursPermissionState::Disabled,
+            initial.hours_permission().state(),
             initial.weight_caps(),
             initial.risk_appetite(),
         );
         let revised = RiskSettings::new(
             OrderPermission::Enabled,
-            SavedMarketOrderSetting::Disabled,
-            HoursPermissionState::Disabled,
+            SavedMarketOrderSetting::Enabled,
+            changed.hours_permission().state(),
             changed.weight_caps(),
             changed.risk_appetite(),
         );
         let restored = RiskSettings::new(
             OrderPermission::Enabled,
-            SavedMarketOrderSetting::Disabled,
-            HoursPermissionState::Disabled,
+            SavedMarketOrderSetting::Enabled,
+            initial.hours_permission().state(),
             initial.weight_caps(),
             initial.risk_appetite(),
         );
         memory(repository.script_store_profile(), 2);
         memory(repository.script_store_risk_settings(), 2);
-        memory(repository.script_profile(), 2);
-        memory(repository.script_risk_settings(), 2);
+        memory(repository.script_profile(), 3);
+        memory(repository.script_risk_settings(), 3);
         run(contracts::scenarios::settings_roundtrip(
             &repository,
             (&initial, &changed),
@@ -787,12 +897,83 @@ mod tests {
             )
             .expect("환율")
         };
-        memory(repository.script_store_fx_rate(), 2);
-        memory(repository.script_fx_rate(), 4);
+        memory(repository.script_store_fx_rate(), 4);
+        memory(repository.script_fx_rate(), 6);
         run(contracts::scenarios::fx_latest_not_after(
             &repository,
             (&rate("1391", 11, 31), &rate("1433", 23, 43)),
             (at(10), at(22)),
+            (
+                &fx_rate("0.0007", FxPair::KrwUsd, FxRateKind::Mid, 31, 51),
+                &fx_rate("1477", FxPair::UsdKrw, FxRateKind::Buy, 37, 57),
+            ),
+        ));
+    }
+    #[test]
+    fn settings_risk_first_populates_the_same_profile_facts() {
+        let repository = MemorySettingsRepository::default();
+        let expected = profile_hours(
+            &InvestorProfile::default()
+                .with_risk_appetite(RiskAppetite::Aggressive)
+                .with_weight_caps(caps("0.17", "0.09", "0.37")),
+            HoursPermissionState::Enabled,
+        );
+        let risk = RiskSettings::new(
+            OrderPermission::Enabled,
+            SavedMarketOrderSetting::Enabled,
+            HoursPermissionState::Enabled,
+            expected.weight_caps(),
+            expected.risk_appetite(),
+        );
+        memory(repository.script_profile(), 2);
+        memory(repository.script_risk_settings(), 2);
+        memory(repository.script_store_risk_settings(), 1);
+        run(contracts::scenarios::settings_risk_first(
+            &repository,
+            &risk,
+            &expected,
+        ));
+    }
+    #[test]
+    fn candle_store_rejects_mismatched_instrument_without_partial_write() {
+        let repository = MemoryMarketDataRepository::default();
+        memory(repository.script_store_candles(), 1);
+        memory(repository.script_candles(), 2);
+        let error = SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData);
+        run(contracts::market_data_repository_store_candles(
+            &repository,
+            &id("different-instrument"),
+            &[
+                candle_for(
+                    id("different-instrument"),
+                    0,
+                    CandlePeriod::Minute,
+                    PriceAdjustment::Raw,
+                    "157",
+                ),
+                candle(60, "103"),
+            ],
+            Err(error),
+        ));
+        run(contracts::market_data_repository_candles(
+            &repository,
+            &id("different-instrument"),
+            (
+                TimeInterval::try_new(at(0), at(120)).expect("기간"),
+                CandlePeriod::Minute,
+                PriceAdjustment::Raw,
+            ),
+            Ok(vec![]),
+        ));
+        run(contracts::market_data_repository_candles(
+            &repository,
+            &id("candle-a"),
+            (
+                TimeInterval::try_new(at(0), at(120)).expect("기간"),
+                CandlePeriod::Minute,
+                PriceAdjustment::Raw,
+            ),
+            Ok(vec![]),
         ));
     }
 }

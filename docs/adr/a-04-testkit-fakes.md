@@ -206,4 +206,46 @@ contracts::broker_read_buying_power(&broker, &account, Currency::Krw, Err(error)
 assert_eq!(broker.calls(), vec![BrokerReadCall::BuyingPower(account, Currency::Krw)]);
 ```
 
-메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 74개와 저장 의미의 제네릭 시나리오 15개다. 주문용 user_presence_order의 실제 실행은 앞서 기록한 차단이며 다른 계약 실행으로 대체했다고 세지 않는다.
+메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 74개와 저장 의미의 제네릭 시나리오 16개다. 주문용 user_presence_order의 실제 실행은 앞서 기록한 차단이며 다른 계약 실행으로 대체했다고 세지 않는다.
+
+## 독립 리뷰 2 이후 보강과 미확정 계약
+
+대상 1b7ae92의 새 Opus와 새 Codex 비판에서 초기 설정의 반대 조회 부재와 공개 시나리오의 키 격리 부족을 확인했다. 성향만 먼저 저장해도 위험 설정의 공유 사실을 만들고, 위험 설정만 먼저 저장해도 domain 기본 성향에 공유 사실을 반영한다. 최초 성향 저장에 아직 없던 주문·시장가 스위치는 Disabled로 채우며 기존 스위치는 보존한다. domain 복원 실패는 양쪽 상태를 바꾸기 전에 반환한다. 비기본 보유 기간·성향·비중·시간 허용을 서로 다른 값으로 검증하고, 후속 쓰기가 앞선 오류를 덮기 전에 즉시 읽는다. 위험 설정 선행 저장도 별도 공개 제네릭 시나리오로 검증한다.
+
+공개 저장 시나리오에는 다른 제안 ID·과제 키와 종목·보정 키·뉴스 종목·같은 기간의 다른 계좌를 함께 저장한다. 봉은 같은 시간 범위에 다른 종목·주기·수정 기준 자료를, 환율은 다른 통화쌍·종류 자료를 함께 둔다. 주 조회뿐 아니라 보조 키의 사실도 확인해 키 무시를 검출한다. 봉 인자 종목과 자료 종목이 어긋나는 입력은 보수적으로 InvalidData로 거부하고 묶음 전체를 저장하지 않는다. 공개 계약은 구체 오류 종류 대신 거부와 부분 저장 없음을 요구한다. S-04는 실제 어댑터 오류 분류를 정합화한다.
+
+완전 동일 봉의 멱등성은 정했지만 동일 OHLCV·봉 시각에서 collected_at만 다른 재수집, Provisional에서 Finalized로의 상태 변화, 값이 다른 수정 봉을 같은 키로 갱신·병합할지는 정하지 않았다. 현재 가짜는 완전 동일성 기준으로만 중복을 제거한다. 이 관측 메타데이터·상태까지 포함하는 키 정책은 S-03에 인계한다. 이력에서 재수집을 별개 관측으로 볼지 확정 전에는 키 갱신 규칙을 발명하지 않는다.
+
+Hours 보유 기간에서 시간 허용을 해제하면 domain 복원이 거부한다. 가짜는 InvalidData를 반환하며 양쪽 기존 값을 보존한다. 자동 기간 변경 여부와 입력 충돌의 오류 분류는 S-10에 인계한다. 보정 자료 A→B→A는 같은 사실 A의 재요청으로 AlreadyRecorded이며 최신 B를 유지한다. 같은 값을 가진 새 논리 버전과 동일 기록 재요청을 구별할 식별 계약은 S-06에 인계한다.
+
+Draft 한정 Clone과 가격 범위 읽기는 빌린 초안의 모든 사실을 보존하는 A-04 저장소 구현 범위다. 독립 비판자는 Draft 복제 성공과 Validated·ExecutionToken·OrderSummary·PendingOrderConfirmation 복제 실패, 비공개 생성·분해 실패를 실제 컴파일로 확인했다. 권한 확대 주장은 기각됐고 별도 명시 승인 이력이 없다는 관찰을 무승인 보호 변경으로 확대하지 않는다. 주문 확인의 정상 fixture 차단은 이 안전한 읽기·초안 복제와 별개로 유지한다.
+
+## 수정 2의 손 변형
+
+수정된 소스에서 기존 34개를 새 임시 복사본으로 다시 컴파일·실행하여 검출 34·생존 0을 확인했다. A-21 다섯 변형의 원복 scripted.rs도 현재 소스와 SHA-256이 같다. 아래 21개는 review_regressions의 공개 시나리오 실행만으로 검출했다. 세 집합의 서로 다른 실제 컴파일 성공 변형은 60개, 검출 60·생존 0이다. 각 집합의 기준·원복 테스트가 통과했고 변형 대상 소스 해시를 현재 소스와 대조했다.
+
+52번의 첫 단순 삭제는 사용하지 않는 helper가 생겨 컴파일 불가였다. 그 시도는 개수에 넣지 않는다. 같은 helper 결과를 계산한 뒤 버려 위험 설정을 None으로 만드는 동등한 결함으로 다시 컴파일·실행하여 검출했다. 로그와 JSON은 target/A-04/isolation-mutations-final.json 및 isolation-retry-mutations.json에 있다. 자동 변경분 변이의 test-diff 사전 차단은 이 손 변형 결과와 별도로 보고한다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 40 | 봉 종목 필터 삭제 | 컴파일 성공·검출 | tests::generic_candle_and_valuation_contracts_preserve_query_scope |
+| 41 | 봉 주기 필터 삭제 | 컴파일 성공·검출 | tests::generic_candle_and_valuation_contracts_preserve_query_scope |
+| 42 | 봉 수정 기준 필터 삭제 | 컴파일 성공·검출 | tests::generic_candle_and_valuation_contracts_preserve_query_scope |
+| 43 | 제출 조회 종목 무시 | 컴파일 성공·검출 | tests::generic_estimates_preserve_first_resolution_and_latest_calibration |
+| 44 | 판정 조회 과제 키 무시 | 컴파일 성공·검출 | tests::generic_estimates_preserve_first_resolution_and_latest_calibration |
+| 45 | 보정 조회 키 무시 | 컴파일 성공·검출 | tests::generic_estimates_preserve_first_resolution_and_latest_calibration |
+| 46 | 제안 조회 키 무시 | 컴파일 성공·검출 | tests::generic_proposal_contract_preserves_versions_and_keys |
+| 47 | 평가 조회 계좌 무시 | 컴파일 성공·검출 | tests::generic_candle_and_valuation_contracts_preserve_query_scope |
+| 48 | 뉴스 조회 종목 무시 | 컴파일 성공·검출 | tests::news_contract_preserves_instrument_isolation_and_saved_facts |
+| 49 | 환율 통화쌍 무시 | 컴파일 성공·검출 | tests::market_data_latest_queries_have_reusable_contract_sequences |
+| 50 | 환율 종류 무시 | 컴파일 성공·검출 | tests::market_data_latest_queries_have_reusable_contract_sequences |
+| 51 | 성향 기본값 대체 | 컴파일 성공·검출 | tests::settings_queries_reflect_the_same_shared_facts |
+| 52 | 성향 저장의 위험 설정 누락 | 컴파일 성공·검출 | tests::settings_queries_reflect_the_same_shared_facts |
+| 53 | 위험 저장의 성향 누락 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |
+| 54 | 봉 인자 불일치 검증 삭제 | 컴파일 성공·검출 | tests::candle_store_rejects_mismatched_instrument_without_partial_write, tests::generic_candle_and_valuation_contracts_preserve_query_scope |
+| 55 | 성향 저장 시 기존 주문 스위치 손실 | 컴파일 성공·검출 | tests::settings_queries_reflect_the_same_shared_facts |
+| 56 | 성향 저장 시 기존 시장가 스위치 손실 | 컴파일 성공·검출 | tests::settings_queries_reflect_the_same_shared_facts |
+| 57 | 위험 저장 시간 허용 사실 손실 | 컴파일 성공·검출 | tests::settings_queries_reflect_the_same_shared_facts, tests::settings_risk_first_populates_the_same_profile_facts |
+| 58 | 위험 저장 종목 상한 사실 손실 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |
+| 59 | 위험 저장 주의 비중 사실 손실 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |
+| 60 | 위험 저장 섹터 상한 사실 손실 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |

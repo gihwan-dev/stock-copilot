@@ -131,17 +131,15 @@ pub async fn thesis_roundtrip<P: ThesisRepository>(
 pub async fn proposal_roundtrip<P: ProposalRepository>(
     port: &P,
     versions: (&Proposal<Draft>, &Proposal<Draft>),
+    other: &Proposal<Draft>,
 ) {
     let (first, second) = versions;
-    assert_eq!(
-        first.id(),
-        second.id(),
-        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
-    );
+    assert_eq!(first.id(), second.id(), "같은 제안의 다른 저장 사실");
+    assert_ne!(first.id(), other.id(), "서로 다른 제안 키 증인");
     assert_ne!(
         crate::DraftRecord::from_draft(first),
         crate::DraftRecord::from_draft(second),
-        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+        "가격 범위 등 다른 사실 증인"
     );
     super::proposal_repository_draft(port, first.id(), Ok(None)).await;
     super::proposal_repository_store_draft(port, first, Ok(WriteCompleted)).await;
@@ -152,10 +150,17 @@ pub async fn proposal_roundtrip<P: ProposalRepository>(
     )
     .await;
     super::proposal_repository_store_draft(port, second, Ok(WriteCompleted)).await;
+    super::proposal_repository_store_draft(port, other, Ok(WriteCompleted)).await;
     super::proposal_repository_draft(
         port,
         first.id(),
         Ok(Some(crate::DraftRecord::from_draft(second))),
+    )
+    .await;
+    super::proposal_repository_draft(
+        port,
+        other.id(),
+        Ok(Some(crate::DraftRecord::from_draft(other))),
     )
     .await;
 }
@@ -164,63 +169,82 @@ pub async fn estimate_append_only<P: EstimateRepository>(
     port: &P,
     submission: &SignalSubmission,
     outcomes: (&EstimateOutcome, &EstimateOutcome),
+    other: &SignalSubmission,
 ) {
     let (first, second) = outcomes;
-    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
     let instrument = submission.task_key().task().volatility().instrument();
+    let other_instrument = other.task_key().task().volatility().instrument();
     let key = submission.task_key();
+    let other_key = other.task_key();
+    assert_ne!(first, second, "서로 다른 판정 증인");
+    assert_ne!(key, other_key, "서로 다른 과제 키 증인");
+    assert_ne!(instrument, other_instrument, "서로 다른 종목 증인");
     super::estimate_repository_submissions(port, instrument, Ok(vec![])).await;
     super::estimate_repository_resolution(port, key, Ok(None)).await;
-    super::estimate_repository_append_submission(port, submission, Ok(RecordOutcome::Recorded))
-        .await;
-    super::estimate_repository_append_submission(
-        port,
-        submission,
-        Ok(RecordOutcome::AlreadyRecorded),
-    )
-    .await;
+    for (value, expected) in [
+        (submission, RecordOutcome::Recorded),
+        (submission, RecordOutcome::AlreadyRecorded),
+        (other, RecordOutcome::Recorded),
+    ] {
+        super::estimate_repository_append_submission(port, value, Ok(expected)).await;
+    }
     super::estimate_repository_submissions(port, instrument, Ok(vec![submission.clone()])).await;
-    super::estimate_repository_append_resolution(port, key, first, Ok(RecordOutcome::Recorded))
-        .await;
-    super::estimate_repository_append_resolution(
-        port,
-        key,
-        second,
-        Ok(RecordOutcome::AlreadyRecorded),
-    )
-    .await;
+    super::estimate_repository_submissions(port, other_instrument, Ok(vec![other.clone()])).await;
+    for (task, outcome, expected) in [
+        (key, first, RecordOutcome::Recorded),
+        (key, second, RecordOutcome::AlreadyRecorded),
+        (other_key, second, RecordOutcome::Recorded),
+    ] {
+        super::estimate_repository_append_resolution(port, task, outcome, Ok(expected)).await;
+    }
     super::estimate_repository_resolution(port, key, Ok(Some(first.clone()))).await;
+    super::estimate_repository_resolution(port, other_key, Ok(Some(second.clone()))).await;
 }
 
 pub async fn calibration_versions<P: EstimateRepository>(
     port: &P,
     key: &CalibrationKey,
     versions: (&Calibration, &Calibration),
+    other: (&CalibrationKey, &Calibration),
 ) {
     let (first, second) = versions;
-    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    assert_ne!(first, second, "서로 다른 보정 버전 증인");
+    assert_ne!(key, other.0, "서로 다른 보정 키 증인");
     super::estimate_repository_calibration(port, key, Ok(None)).await;
-    super::estimate_repository_append_calibration(port, key, first, Ok(RecordOutcome::Recorded))
-        .await;
+    for (value, expected) in [
+        (first, RecordOutcome::Recorded),
+        (first, RecordOutcome::AlreadyRecorded),
+        (second, RecordOutcome::Recorded),
+    ] {
+        super::estimate_repository_append_calibration(port, key, value, Ok(expected)).await;
+    }
     super::estimate_repository_append_calibration(
         port,
-        key,
-        first,
-        Ok(RecordOutcome::AlreadyRecorded),
+        other.0,
+        other.1,
+        Ok(RecordOutcome::Recorded),
     )
     .await;
-    super::estimate_repository_append_calibration(port, key, second, Ok(RecordOutcome::Recorded))
-        .await;
     super::estimate_repository_calibration(port, key, Ok(Some(second.clone()))).await;
+    super::estimate_repository_calibration(port, other.0, Ok(Some(other.1.clone()))).await;
 }
 
-pub async fn candle_history<P: MarketDataRepository>(
-    port: &P,
-    instrument: &InstrumentId,
-    window: TimeInterval,
-    boundaries: (&Candle, &Candle),
-    outside: (&Candle, &Candle),
-) {
+#[derive(Debug, Clone, Copy)]
+pub struct CandleHistoryFacts<'facts> {
+    pub instrument: &'facts InstrumentId,
+    pub window: TimeInterval,
+    pub boundaries: (&'facts Candle, &'facts Candle),
+    pub outside: (&'facts Candle, &'facts Candle),
+    pub distractors: &'facts [Candle],
+}
+pub async fn candle_history<P: MarketDataRepository>(port: &P, facts: CandleHistoryFacts<'_>) {
+    let CandleHistoryFacts {
+        instrument,
+        window,
+        boundaries,
+        outside,
+        distractors,
+    } = facts;
     let (first, last) = boundaries;
     let ordered = vec![first.clone(), last.clone()];
     assert!(
@@ -237,6 +261,7 @@ pub async fn candle_history<P: MarketDataRepository>(
         window.end(),
         "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
     );
+    validate_candle_witnesses(instrument, window, first, distractors);
     let period = first.time().period();
     let adjustment = first.adjustment();
     let mut input = ordered.clone();
@@ -245,6 +270,21 @@ pub async fn candle_history<P: MarketDataRepository>(
     super::market_data_repository_store_candles(port, instrument, &input, Ok(WriteCompleted)).await;
     super::market_data_repository_store_candles(port, instrument, &ordered, Ok(WriteCompleted))
         .await;
+    for value in distractors
+        .iter()
+        .filter(|value| value.instrument() != instrument)
+    {
+        reject_candle_mismatch(port, instrument, value).await;
+    }
+    for value in distractors {
+        super::market_data_repository_store_candles(
+            port,
+            value.instrument(),
+            std::slice::from_ref(value),
+            Ok(WriteCompleted),
+        )
+        .await;
+    }
     super::market_data_repository_candles(
         port,
         instrument,
@@ -279,19 +319,35 @@ pub async fn valuation_history<P: ValuationRepository>(
         .await;
     }
     super::valuation_repository_append(port, account, outside, Ok(RecordOutcome::Recorded)).await;
-    super::valuation_repository_append(port, other, outside, Ok(RecordOutcome::Recorded)).await;
+    for snapshot in ordered.iter().take(1) {
+        super::valuation_repository_append(port, other, snapshot, Ok(RecordOutcome::Recorded))
+            .await;
+    }
     super::valuation_repository_history(port, account, window, Ok(ordered.to_vec())).await;
+    super::valuation_repository_history(
+        port,
+        other,
+        window,
+        Ok(ordered.iter().take(1).cloned().collect()),
+    )
+    .await;
 }
 
 pub async fn news_roundtrip<P: NewsRepository>(
     port: &P,
-    instrument: &InstrumentId,
-    item: &NewsItem,
+    instruments: (&InstrumentId, &InstrumentId),
+    items: (&NewsItem, &NewsItem),
 ) {
+    let (instrument, other) = instruments;
+    let (item, other_item) = items;
+    assert_ne!(instrument, other, "서로 다른 뉴스 종목 증인");
+    assert_ne!(item, other_item, "서로 다른 기사 증인");
     super::news_repository_for_instrument(port, instrument, Ok(vec![])).await;
-    super::news_repository_store(port, item, Ok(WriteCompleted)).await;
-    super::news_repository_store(port, item, Ok(WriteCompleted)).await;
+    for value in [item, item, other_item] {
+        super::news_repository_store(port, value, Ok(WriteCompleted)).await;
+    }
     super::news_repository_for_instrument(port, instrument, Ok(vec![item.clone()])).await;
+    super::news_repository_for_instrument(port, other, Ok(vec![other_item.clone()])).await;
 }
 
 pub async fn settings_roundtrip<P: SettingsRepository>(
@@ -312,6 +368,8 @@ pub async fn settings_roundtrip<P: SettingsRepository>(
     super::settings_repository_profile(port, Ok(None)).await;
     super::settings_repository_risk_settings(port, Ok(None)).await;
     super::settings_repository_store_profile(port, initial, Ok(WriteCompleted)).await;
+    super::settings_repository_profile(port, Ok(Some(initial.clone()))).await;
+    super::settings_repository_risk_settings(port, Ok(Some(*original))).await;
     super::settings_repository_store_risk_settings(port, original, Ok(WriteCompleted)).await;
     super::settings_repository_store_risk_settings(port, revised, Ok(WriteCompleted)).await;
     super::settings_repository_profile(port, Ok(Some(changed.clone()))).await;
@@ -405,6 +463,7 @@ pub async fn fx_latest_not_after<P: MarketDataRepository>(
     port: &P,
     rates: (&FxRate, &FxRate),
     queries: (Timestamp, Timestamp),
+    others: (&FxRate, &FxRate),
 ) {
     let (older, newer) = rates;
     let (before_all, between) = queries;
@@ -418,9 +477,15 @@ pub async fn fx_latest_not_after<P: MarketDataRepository>(
         older.as_of() <= between && between < newer.as_of(),
         "두 관측 사이 시각 증인"
     );
+    assert_ne!(older.pair(), others.0.pair(), "서로 다른 통화쌍 증인");
+    assert_ne!(older.kind(), others.1.kind(), "서로 다른 환율 종류 증인");
+    assert!(
+        others.0.as_of() > newer.as_of() && others.1.as_of() > newer.as_of(),
+        "다른 키의 더 최신 자료 증인"
+    );
     let pair = older.pair();
     let kind = older.kind();
-    for rate in [newer, older] {
+    for rate in [newer, older, others.0, others.1] {
         super::market_data_repository_store_fx_rate(port, rate, Ok(WriteCompleted)).await;
     }
     for (query, expected) in [
@@ -431,4 +496,73 @@ pub async fn fx_latest_not_after<P: MarketDataRepository>(
     ] {
         super::market_data_repository_fx_rate(port, pair, kind, query, Ok(expected)).await;
     }
+    for rate in <[_; 2]>::from(others) {
+        super::market_data_repository_fx_rate(
+            port,
+            rate.pair(),
+            rate.kind(),
+            FxRateQuery::Latest,
+            Ok(Some(*rate)),
+        )
+        .await;
+    }
+}
+
+pub async fn settings_risk_first<P: SettingsRepository>(
+    port: &P,
+    risk: &RiskSettings,
+    expected_profile: &InvestorProfile,
+) {
+    super::settings_repository_profile(port, Ok(None)).await;
+    super::settings_repository_risk_settings(port, Ok(None)).await;
+    super::settings_repository_store_risk_settings(port, risk, Ok(WriteCompleted)).await;
+    super::settings_repository_profile(port, Ok(Some(expected_profile.clone()))).await;
+    super::settings_repository_risk_settings(port, Ok(Some(*risk))).await;
+}
+
+async fn reject_candle_mismatch<P: MarketDataRepository>(
+    port: &P,
+    instrument: &InstrumentId,
+    value: &Candle,
+) {
+    assert!(
+        port.store_candles(instrument, std::slice::from_ref(value))
+            .await
+            .is_err(),
+        "저장 인자와 봉 종목 불일치는 거부"
+    );
+}
+fn validate_candle_witnesses(
+    instrument: &InstrumentId,
+    window: TimeInterval,
+    first: &Candle,
+    distractors: &[Candle],
+) {
+    assert!(
+        distractors
+            .iter()
+            .all(|value| value.time().timestamp() >= window.start()
+                && value.time().timestamp() < window.end()),
+        "방해 자료도 조회 기간 안에 위치"
+    );
+    assert!(
+        distractors
+            .iter()
+            .any(|value| value.instrument() != instrument),
+        "서로 다른 종목 봉 증인"
+    );
+    assert!(
+        distractors
+            .iter()
+            .any(|value| value.instrument() == instrument
+                && value.time().period() != first.time().period()),
+        "서로 다른 봉 주기 증인"
+    );
+    assert!(
+        distractors
+            .iter()
+            .any(|value| value.instrument() == instrument
+                && value.adjustment() != first.adjustment()),
+        "서로 다른 수정 기준 증인"
+    );
 }

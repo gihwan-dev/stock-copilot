@@ -274,6 +274,12 @@ impl MarketDataRepository for MemoryMarketDataRepository {
         {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
+                if candles.iter().any(|value| value.instrument() != instrument) {
+                    return Err(SystemPortError::new(
+                        application::SystemPort::Repository,
+                        application::SystemFailure::InvalidData,
+                    ));
+                }
                 let mut state = self.state.write();
                 append_candles(&mut state.candles, candles);
                 Ok(WriteCompleted)
@@ -963,6 +969,27 @@ impl ValuationRepository for MemoryValuationRepository {
         }
     }
 }
+fn risk_with_profile(previous: Option<RiskSettings>, profile: &InvestorProfile) -> RiskSettings {
+    RiskSettings::new(
+        previous.map_or(domain::OrderPermission::Disabled, RiskSettings::orders),
+        previous.map_or(
+            domain::SavedMarketOrderSetting::Disabled,
+            RiskSettings::market_orders,
+        ),
+        profile.hours_permission().state(),
+        profile.weight_caps(),
+        profile.risk_appetite(),
+    )
+}
+fn profile_after_risk_write(
+    previous: Option<&InvestorProfile>,
+    settings: RiskSettings,
+) -> Result<InvestorProfile, SystemPortError> {
+    match previous {
+        Some(profile) => profile_with_risk(profile, settings),
+        None => profile_with_risk(&InvestorProfile::default(), settings),
+    }
+}
 fn profile_with_risk(
     profile: &InvestorProfile,
     settings: RiskSettings,
@@ -1032,15 +1059,7 @@ impl SettingsRepository for MemorySettingsRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                if let Some(risk) = state.risk {
-                    state.risk = Some(RiskSettings::new(
-                        risk.orders(),
-                        risk.market_orders(),
-                        profile.hours_permission().state(),
-                        profile.weight_caps(),
-                        profile.risk_appetite(),
-                    ));
-                }
+                state.risk = Some(risk_with_profile(state.risk, profile));
                 state.profile = Some(profile.clone());
                 Ok(WriteCompleted)
             }
@@ -1071,12 +1090,8 @@ impl SettingsRepository for MemorySettingsRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                let profile = state
-                    .profile
-                    .as_ref()
-                    .map(|profile| profile_with_risk(profile, *settings))
-                    .transpose()?;
-                state.profile = profile;
+                let profile = profile_after_risk_write(state.profile.as_ref(), *settings)?;
+                state.profile = Some(profile);
                 state.risk = Some(*settings);
                 Ok(WriteCompleted)
             }
