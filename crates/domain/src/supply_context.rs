@@ -1,6 +1,6 @@
 use crate::{
-    CalendarDate, CreditDetail, KnownMarket, MarketDataError, MarketObservation, SupplyRate,
-    Symbol, Timestamp,
+    CalendarDate, CreditDetail, KnownMarket, MarketDataError, MarketObservation, OffsetSeconds,
+    SupplyRate, Symbol, Timestamp,
 };
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SupplyRatio {
@@ -26,9 +26,7 @@ impl SupplyContext {
         collected: Timestamp,
     ) -> Result<Self, MarketDataError> {
         crate::market_ranking::validate_market_symbol(&symbol, KnownMarket::Kr)?;
-        if date > updated.offset_calendar_date() {
-            return Err(MarketDataError::InvalidFlow);
-        }
+        validate_supply_date(date, updated)?;
         Ok(Self {
             symbol,
             date,
@@ -62,9 +60,7 @@ impl ProgramContext {
         collected: Timestamp,
     ) -> Result<Self, MarketDataError> {
         crate::market_ranking::validate_market_symbol(&symbol, KnownMarket::Kr)?;
-        if date > collected.offset_calendar_date() {
-            return Err(MarketDataError::InvalidFlow);
-        }
+        validate_supply_date(date, collected)?;
         Ok(Self {
             symbol,
             date,
@@ -83,4 +79,14 @@ impl ProgramContext {
     pub const fn observation(&self) -> MarketObservation {
         self.observation
     }
+}
+
+fn validate_supply_date(date: CalendarDate, timestamp: Timestamp) -> Result<(), MarketDataError> {
+    let market_date = timestamp
+        .date_at_offset(OffsetSeconds::new(32_400))
+        .or(Err(MarketDataError::InvalidFlow))?;
+    if date > market_date {
+        return Err(MarketDataError::InvalidFlow);
+    }
+    Ok(())
 }

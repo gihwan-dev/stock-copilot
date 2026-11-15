@@ -19,7 +19,7 @@ impl SupplyShares {
 }
 impl std::fmt::Display for SupplyShares {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0.as_decimal(), f)
+        std::fmt::Display::fmt(&self.0.as_decimal().normalize(), f)
     }
 }
 
@@ -41,7 +41,7 @@ impl SupplySignedShares {
 }
 impl std::fmt::Display for SupplySignedShares {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0.as_decimal(), f)
+        std::fmt::Display::fmt(&self.0.as_decimal().normalize(), f)
     }
 }
 
@@ -60,7 +60,7 @@ impl SupplyKrw {
 }
 impl std::fmt::Display for SupplyKrw {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0.as_decimal(), f)
+        std::fmt::Display::fmt(&self.0.as_decimal().normalize(), f)
     }
 }
 
@@ -265,5 +265,87 @@ mod supply_tests {
         assert_eq!(lending.repayment_quantity().to_string(), "67");
         assert_eq!(lending.balance_quantity().to_string(), "71");
         assert_eq!(lending.balance_amount().to_string(), "7300");
+    }
+    #[test]
+    fn supply_dates_use_korean_market_day_independent_of_timestamp_offset() {
+        let date = at(86_400).offset_calendar_date();
+        for ticker in ["005930", "000660"] {
+            let subject = Symbol::try_new(ticker).expect("국내 종목");
+            for (seconds, offset) in [
+                (55_800, 0_i32),
+                (55_800, 32_400_i32),
+                (86_400, 0_i32),
+                (86_400, 32_400_i32),
+            ] {
+                let stamp = Timestamp::from_parts(
+                    UnixSeconds::new(seconds),
+                    Nanosecond::new(0),
+                    OffsetSeconds::new(offset),
+                )
+                .expect("동일 순간의 표기");
+                let program =
+                    ProgramContext::from_response(subject.clone(), date, stamp).expect("한국 날짜");
+                assert_eq!(program.date(), date);
+                assert_eq!(program.symbol(), &subject);
+                assert_eq!(
+                    program.observation().collected_at().offset_seconds(),
+                    stamp.offset_seconds()
+                );
+                let daily = SupplyContext::from_response(subject.clone(), date, stamp, stamp)
+                    .expect("같은 한국 날짜");
+                assert_eq!(daily.date(), date);
+                assert_eq!(daily.symbol(), &subject);
+                assert_eq!(
+                    daily
+                        .observation()
+                        .server_at()
+                        .expect("갱신 시각")
+                        .offset_seconds(),
+                    stamp.offset_seconds()
+                );
+            }
+        }
+        let maximum = at(253_402_300_799);
+        ProgramContext::from_response(symbol(), date, maximum).expect_err("한국 날짜 표현 범위 밖");
+        SupplyContext::from_response(symbol(), date, maximum, maximum)
+            .expect_err("한국 날짜 표현 범위 밖");
+    }
+    #[test]
+    fn supply_date_uses_updated_day_and_rejects_offset_disguised_future() {
+        let date = at(86_400).offset_calendar_date();
+        SupplyContext::from_response(symbol(), date, at(0), at(172_800))
+            .expect_err("기준일은 수집일 아닌 갱신일과 비교");
+        SupplyContext::from_response(symbol(), at(0).offset_calendar_date(), at(0), at(172_800))
+            .expect("오래된 사실 보존");
+        let disguised = Timestamp::from_parts(
+            UnixSeconds::new(39_600),
+            Nanosecond::new(0),
+            OffsetSeconds::new(50_400),
+        )
+        .expect("한국에서는 아직 전날");
+        SupplyContext::from_response(symbol(), date, disguised, disguised)
+            .expect_err("갱신 시각 오프셋으로 미래 기준일 허용 금지");
+        ProgramContext::from_response(symbol(), date, disguised)
+            .expect_err("수집 시각 오프셋으로 미래 기준일 허용 금지");
+    }
+    #[test]
+    fn supply_integer_display_normalizes_scale_without_changing_values() {
+        for (input, expected) in [("5.0", "5"), ("0.0", "0"), ("-0.0", "0"), ("10.00", "10")] {
+            assert_eq!(shares(input).to_string(), expected);
+            assert_eq!(krw(input).to_string(), expected);
+            assert_eq!(
+                SupplySignedShares::parse(&num(input))
+                    .expect("정수")
+                    .to_string(),
+                expected
+            );
+        }
+        assert_eq!(
+            SupplySignedShares::parse(&num("-5.00"))
+                .expect("순매도")
+                .to_string(),
+            "-5"
+        );
+        assert_eq!(rate("0.123456789").to_string(), "0.123456789");
     }
 }
