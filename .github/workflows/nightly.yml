@@ -260,6 +260,11 @@
         {
           "name": "mutants without network",
           "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}"
+        },
+        {
+          "name": "mutation results",
+          "if": "always()",
+          "run": "node harness/ci/mutants-summary.mjs"
         }
       ]
     },

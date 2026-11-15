@@ -408,7 +408,7 @@ mod tests {
     }
     #[test]
     fn ranking_permutations_are_identical_and_ranks_have_no_gaps() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     0_usize..101,
@@ -787,7 +787,7 @@ mod review_tests {
     }
     #[test]
     fn arbitrary_gaps_are_strictly_ordered_and_input_permutations_normalize() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     proptest::collection::btree_set(1_usize..1000, 0..101),

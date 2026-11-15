@@ -124,12 +124,12 @@ fn automatic_base(root: &Path) -> Result<MergeBase, String> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum WorkBranch {
+pub(crate) enum WorkBranch {
     NamedWork,
     Other,
 }
 
-fn work_branch(root: &Path) -> Result<WorkBranch, String> {
+pub(crate) fn work_branch(root: &Path) -> Result<WorkBranch, String> {
     let mut symbolic = git_base::git(root);
     symbolic.args(["symbolic-ref", "--quiet", "HEAD"]);
     let finished = symbolic
@@ -142,7 +142,8 @@ fn work_branch(root: &Path) -> Result<WorkBranch, String> {
         return Err(String::from("symbolic-ref HEAD 실패"));
     }
     let branch = String::from_utf8_lossy(&finished.stdout);
-    if branch.trim().starts_with("refs/heads/") && branch.trim() != BASE_BRANCH {
+    if branch.trim().starts_with("refs/heads/") && !branch.trim().eq_ignore_ascii_case(BASE_BRANCH)
+    {
         Ok(WorkBranch::NamedWork)
     } else {
         Ok(WorkBranch::Other)
@@ -160,5 +161,17 @@ pub(crate) fn validate_command(base: &str, base_use: git_base::BaseUse) -> ExitC
                 Err(_) => ExitCode::FAILURE,
             }
         }
+    }
+}
+
+pub(crate) fn recipe_command() -> ExitCode {
+    let selected = toplevel().and_then(|root| work_branch(&root));
+    let recipe = match selected {
+        Ok(WorkBranch::NamedWork) => "check-fast",
+        Ok(WorkBranch::Other) | Err(_) => "check",
+    };
+    match writeln!(io::stdout().lock(), "{recipe}") {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::FAILURE,
     }
 }

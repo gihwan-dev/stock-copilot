@@ -731,7 +731,7 @@ mod tests {
     }
     #[test]
     fn integer_reference_headroom_is_maximal_and_order_independent() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u32..20, 0_u32..40), |(first_value, second_value)| {
                 let cash = 100_u32
                     .checked_sub(first_value)
@@ -836,7 +836,7 @@ mod tests {
     }
     #[test]
     fn rational_reference_matches_variable_caps_and_native_cent_boundary() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u32..100_000, 1_u32..100, 0_u32..100, 0_u32..100),
                 |(total, cap_percent, instrument_percent, sibling_percent)| {
@@ -1307,7 +1307,7 @@ mod tests {
     }
     #[test]
     fn generated_simultaneous_missing_axes_never_pass() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u32..10000, 1_u8..16), |(amount, missing)| {
                 let values = valuation(
                     vec![holding(
@@ -1425,7 +1425,7 @@ mod tests {
     }
     #[test]
     fn cash_floor_matches_independent_integer_room() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_u32..20, 0_u32..20, 1_u32..101),
                 |(first, second, minimum)| {

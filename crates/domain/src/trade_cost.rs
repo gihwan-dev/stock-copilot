@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn fee_ceiling_matches_independent_integer_minor_units() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_i64..=1_000_000, 0_i64..=100_000),
                 |(units, numerator)| {

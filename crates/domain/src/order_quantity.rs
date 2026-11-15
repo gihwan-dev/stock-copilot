@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn quantity_matches_independent_integer_table() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u32..1_000_000, 0_u32..=8), |(coefficient, scale)| {
                 let value =
                     rust_decimal::Decimal::from_i128_with_scale(i128::from(coefficient), scale);

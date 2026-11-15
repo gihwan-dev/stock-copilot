@@ -101,7 +101,7 @@ fn check_refuses_to_run_without_an_explicit_base() {
     }
     let check = recipe("check");
     assert_eq!(
-        check.first().map(String::as_str),
+        check.get(1).map(String::as_str),
         Some("check: check-node require-base check-ts"),
         "{check:?}"
     );
@@ -116,4 +116,37 @@ fn check_full_does_not_repeat_nightly_mutation_testing() {
             .any(|line| line == "\"{{ just_executable() }}\" mutants-all"),
         "{check_full:?}"
     );
+}
+
+#[test]
+fn full_check_forces_property_cases_and_fast_keeps_static_guards() {
+    let full = recipe("check");
+    assert_eq!(
+        full.first().map(String::as_str),
+        Some("[env(\"STOCK_COPILOT_PROPTEST_CASES\", \"4096\")]")
+    );
+    let fast = recipe("check-fast-static");
+    for stage in ["arch-check", "source-check", "raw-types", "disable-check"] {
+        assert!(fast.iter().any(|line| line.ends_with(stage)), "{stage}");
+    }
+    for forbidden in [
+        "coverage-check",
+        "check-ts",
+        "cargo nextest run --workspace",
+    ] {
+        assert!(
+            !fast.iter().any(|line| line.contains(forbidden)),
+            "{forbidden}"
+        );
+    }
+    let source = std::fs::read_to_string(repository_root().join("crates/xtask/src/fast_check.rs"))
+        .expect("fast source");
+    for required in [
+        "commit-guard",
+        "test-diff-fast",
+        "disable-report",
+        "hooks-installed",
+    ] {
+        assert!(source.contains(&format!("\"{required}\"")), "{required}");
+    }
 }

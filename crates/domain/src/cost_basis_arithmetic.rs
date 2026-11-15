@@ -441,7 +441,7 @@ mod tests {
             third.exact_quantity(),
             Err(LotError::Arithmetic(MoneyError::PrecisionLoss))
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_u64..1_000_000, 0_u32..=6, 1_u64..=1000, 1_u64..=1000),
                 |(coefficient, scale, old, new)| {
@@ -468,7 +468,7 @@ mod tests {
     }
     #[test]
     fn rounding_matches_independent_bounded_integer_division() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     0_u64..1_000_000_000,

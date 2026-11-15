@@ -90,7 +90,11 @@
       "shebang": false
     },
     "check": {
-      "attributes": [],
+      "attributes": [
+        {
+          "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
+        }
+      ],
       "body": [
         ["cargo fmt --all --check"],
         ["\"", [["call", "just_executable"]], "\" clippy Cargo.toml"],
@@ -145,6 +149,69 @@
       "private": false,
       "quiet": false,
       "namepath": "check",
+      "shebang": false
+    },
+    "check-fast": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- check-fast ",
+          [["call", "quote", ["variable", "base"]]],
+          " \"",
+          [["call", "just_executable"]],
+          "\""
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        },
+        {
+          "arguments": [],
+          "recipe": "require-base",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check-fast",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-fast",
+      "shebang": false
+    },
+    "check-fast-static": {
+      "attributes": [],
+      "body": [
+        ["\"", [["call", "just_executable"]], "\" deny"],
+        ["cargo run --locked --quiet --package xtask -- gen-schema --check"],
+        ["cargo fmt --all --check"],
+        ["\"", [["call", "just_executable"]], "\" arch-check"],
+        ["\"", [["call", "just_executable"]], "\" source-check"],
+        ["\"", [["call", "just_executable"]], "\" sql-check"],
+        ["\"", [["call", "just_executable"]], "\" migration-check"],
+        ["\"", [["call", "just_executable"]], "\" capability-check"],
+        ["\"", [["call", "just_executable"]], "\" raw-types"],
+        ["\"", [["call", "just_executable"]], "\" disable-check"],
+        ["node harness/generated-files/check.mjs"],
+        ["node harness/source-tree/check.mjs"],
+        ["node harness/config-files/check.mjs"],
+        ["node harness/claude-hooks/hashes.mjs"],
+        ["node harness/codex-hooks/config.mjs"],
+        ["node harness/ci/workflow-policy/check.mjs"],
+        ["node harness/ci/review-records/check.mjs"]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "check-fast-static",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-fast-static",
       "shebang": false
     },
     "check-full": {
@@ -402,7 +469,9 @@
           [["call", "just_executable"]],
           "\" commit-base)\"; STOCK_COPILOT_BASE_USE=commit \"",
           [["call", "just_executable"]],
-          "\" base=\"$base\" check"
+          "\" base=\"$base\" \"$(\"",
+          [["call", "just_executable"]],
+          "\" commit-recipe)\""
         ]
       ],
       "dependencies": [],
@@ -448,6 +517,25 @@
       "private": false,
       "quiet": false,
       "namepath": "commit-guard",
+      "shebang": false
+    },
+    "commit-recipe": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --manifest-path \"",
+          [["call", "justfile_directory"]],
+          "/Cargo.toml\" --package xtask -- commit-recipe"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "commit-recipe",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "commit-recipe",
       "shebang": false
     },
     "coverage-check": {
@@ -509,6 +597,26 @@
       "private": false,
       "quiet": false,
       "namepath": "disable-report",
+      "shebang": false
+    },
+    "disable-report-fast": {
+      "attributes": [],
+      "body": [
+        [
+          "\"",
+          [["call", "just_executable"]],
+          "\" disable-report-since ",
+          [["call", "quote", ["variable", "base"]]]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "disable-report-fast",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "disable-report-fast",
       "shebang": false
     },
     "disable-report-since": {
@@ -720,7 +828,11 @@
       "shebang": false
     },
     "linux-test": {
-      "attributes": [],
+      "attributes": [
+        {
+          "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
+        }
+      ],
       "body": [
         [
           "cargo nextest run --workspace --locked $(node harness/ci/linux/exclusions.mjs cargo) -E \"$(node harness/ci/linux/exclusions.mjs filter)\""
@@ -798,7 +910,11 @@
       "shebang": false
     },
     "mutants-shard": {
-      "attributes": [],
+      "attributes": [
+        {
+          "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
+        }
+      ],
       "body": [
         ["cargo run --locked --quiet --package xtask -- mutants --shard \"$1\""]
       ],
@@ -940,6 +1056,41 @@
       "private": false,
       "quiet": false,
       "namepath": "test-diff",
+      "shebang": false
+    },
+    "test-diff-fast": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- test-diff-selected ",
+          [["call", "quote", ["variable", "base"]]],
+          " \"$@\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-diff-fast",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "star",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "packages",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "test-diff-fast",
       "shebang": false
     },
     "tokens-contrast": {

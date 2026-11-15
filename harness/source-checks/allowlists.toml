@@ -67,7 +67,7 @@ reason = "D-11 표본 통계의 근사 연산을 봉인된 일간·연율·내�
 
 [[clock-environment]]
 path = "crates/xtask/src/mutants_check/environment.rs"
-names = ["clock-env:var"]
+names = ["clock-env:var:STOCK_COPILOT_MUTANTS_JOBS", "clock-env:now", "clock-env:elapsed"]
 reason = "H-42 변이 병렬 수를 낮추는 환경 변수 하나를 읽는 하네스 경계. 값 검증과 기본 상한은 순수 함수가 유지한다"
 
 [[decimal-arithmetic]]
@@ -92,3 +92,8 @@ reason = "D-22 정확 수수료 곱을 사용자에게 불리한 통화 최소 �
 [[decimal-arithmetic]]
 path = "crates/domain/src/concentration_arithmetic.rs"
 reason = "D-07 보유 구성비의 봉인된 근사 통계만 checked 연산하고 표시와 경계는 정확 정수 비율로 검증한다"
+
+[[clock-environment]]
+path = "crates/testkit/src/lib.rs"
+names = ["clock-env:var:STOCK_COPILOT_PROPTEST_CASES"]
+reason = "H-46 테스트 전용 횟수 도우미. 전용 상수 키만 읽고 전체 레시피는 4096을 강제한다"

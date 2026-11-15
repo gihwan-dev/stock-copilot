@@ -112,7 +112,7 @@ mod tests {
 
         #[test]
         fn amount_precision_matches_independent_cent_table() {
-            TestRunner::new(Config::with_cases(4096))
+            TestRunner::new(Config::with_cases(testkit::property_cases()))
                 .run(
                     &(-1_000_000_i64..=1_000_000, 0_u32..=8),
                     |(coefficient, scale)| {

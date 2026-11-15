@@ -377,7 +377,7 @@ mod tests {
         ] {
             let table = table(market, security);
             let strategy = proptest::prop_oneof![1_u64..=2_000_000, 1_u64..=1_000_000_000_000];
-            TestRunner::new(Config::with_cases(4096))
+            TestRunner::new(Config::with_cases(testkit::property_cases()))
                 .run(&strategy, |coefficient| {
                     reference_case(&table, kind, coefficient)
                 })

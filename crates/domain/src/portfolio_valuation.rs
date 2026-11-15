@@ -955,7 +955,7 @@ mod tests {
     }
     #[test]
     fn independent_integer_totals_are_permutation_invariant_and_partial_is_a_filtered_total() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_u32..10000, 1_u32..1000, 0_u32..10000, 1_u32..1000),
                 |(kr_quantity, kr_price, us_quantity, us_price)| {
@@ -1672,7 +1672,7 @@ mod tests {
     }
     #[test]
     fn review_generated_fractional_quantity_cost_report_and_fx_match_independent_integers() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     0_u32..1000,

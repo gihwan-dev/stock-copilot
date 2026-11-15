@@ -1023,7 +1023,7 @@ mod tests {
         bars
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn shuffled_inputs_match_linear_reference_and_append_is_monotone(states in proptest::collection::vec(0_u8..3,5), salt in any::<i64>()) {
             let factor=adjustment(1,1);
@@ -2227,7 +2227,7 @@ mod tests {
         .expect("만기")
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn intraminute_observations_and_near_boundary_paths_match_independent_reference(minute in 900_i64..904,second in 0_u64..60,codes in proptest::collection::vec(0_u8..8,4),hours in 0_u8..2,salt in any::<i64>()) {
             let observation=instant(61,minute).checked_add(crate::TimeSpan::try_new(crate::SpanSeconds::new(second),crate::Nanosecond::new(0)).expect("초")).expect("관측");

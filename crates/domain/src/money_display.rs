@@ -225,7 +225,7 @@ mod tests {
             (0_u32..10_u32, 0_u8..=27_u8)
                 .prop_map(|(lo, precision)| (Decimal::from_parts(lo, 0, 0, true, 28), precision))
         ];
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&values, |(value, precision)| {
                 let money = Money::new(Amount::new(value), Currency::Krw);
                 let shown = display_money(
@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn sub_half_unit_values_display_as_unsigned_zero() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_u8..=27_u8, 0_u32..5_u32, any::<bool>()),
                 |(precision, coefficient, negative)| {

@@ -19,7 +19,9 @@ const BASE_IDENTITY: [&str; 6] = [
     "commit.gpgsign=false",
 ];
 
-const BASE_STUB_RECIPES: &str = "fresh-build:
+const BASE_STUB_RECIPES: &str = "check-fast: check
+
+fresh-build:
     printf 'fresh-build\\n' >> hook.log
 
 check:
@@ -104,7 +106,7 @@ fn hooked_repository(name: &str) -> PathBuf {
     let directory = base_repository(name, "master");
     let real = repository_root().join("justfile");
     let justfile = format!(
-        "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nset positional-arguments\n\nbase := \"\"\n\ncommit-guard index=\"\":\n    just --justfile '{0}' --working-directory . commit-guard \"$1\"\n\ncommit-base:\n    just --justfile '{0}' --working-directory . commit-base\n\n{1}\n{BASE_STUB_RECIPES}",
+        "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nset positional-arguments\n\nbase := \"\"\n\ncommit-guard index=\"\":\n    just --justfile '{0}' --working-directory . commit-guard \"$1\"\n\ncommit-base:\n    just --justfile '{0}' --working-directory . commit-base\n\ncommit-recipe:\n    just --justfile '{0}' --working-directory . commit-recipe\n\n{1}\n{BASE_STUB_RECIPES}",
         real.display(),
         real_recipe("commit-check")
     );
