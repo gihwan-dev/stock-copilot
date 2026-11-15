@@ -305,6 +305,7 @@ pub(crate) fn run(
 
 fn configure_profile(command: &mut Command) {
     command
+        .env_remove("STOCK_COPILOT_PROPTEST_CASES")
         .env("CARGO_PROFILE_DEV_DEBUG", "0")
         .env("CARGO_PROFILE_TEST_DEBUG", "0")
         .env("CARGO_PROFILE_DEV_OPT_LEVEL", "1")
@@ -400,6 +401,28 @@ fn scope_for(
             "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/4|1/4|2/4|3/4>]",
         )),
     }
+}
+
+fn checked_scope(
+    root: &Path,
+    arguments: &[String],
+    base_use: crate::git_base::BaseUse,
+) -> Result<Scope, String> {
+    let scope = scope_for(root, arguments, base_use)?;
+    if let [flag, base] = arguments
+        && flag == "--in-diff"
+    {
+        let findings = crate::test_diff::check_for(root, base, base_use)?;
+        if !findings.is_empty() {
+            let details = findings
+                .iter()
+                .map(|finding| finding.rule.to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Err(format!("test-diff 실패: {details}"));
+        }
+    }
+    Ok(scope)
 }
 
 fn list_changed_mutants(
@@ -515,7 +538,7 @@ pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) 
         "mutants",
         workspace_root().and_then(|root| {
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
-            let scope = scope_for(&root, arguments, base_use)?;
+            let scope = checked_scope(&root, arguments, base_use)?;
             let outcomes = if let [flag, base] = arguments
                 && flag == "--in-diff"
             {

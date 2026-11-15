@@ -19,7 +19,9 @@ const BASE_IDENTITY: [&str; 6] = [
     "commit.gpgsign=false",
 ];
 
-const BASE_STUB_RECIPES: &str = "check-fast: check
+const BASE_STUB_RECIPES: &str = "check-fast:
+    printf 'check-fast\\n' >> hook.log
+    git show {{quote(base)}}:tests.txt | while IFS= read -r kept; do grep -qxF \"$kept\" tests.txt; done
 
 fresh-build:
     printf 'fresh-build\\n' >> hook.log
@@ -251,5 +253,25 @@ fn h44_review_real_auto_merge_still_rejects_work_test_changes() {
     git_text(&directory, &["switch", "work"]);
     let merged = run_git(&directory, &["merge", "--no-ff", "--no-edit", "master"]);
     assert!(!merged.status.success());
-    assert!(String::from_utf8_lossy(&merged.stderr).contains("recipe `check` failed"));
+    assert!(String::from_utf8_lossy(&merged.stderr).contains("recipe `check-fast` failed"));
+}
+
+#[test]
+fn hook_trace_distinguishes_full_from_fast() {
+    let directory = hooked_repository("h46-distinct-recipes");
+    fs::write(directory.join("tests.txt"), "kept\nfull\n").expect("full change");
+    assert!(commit_all(&directory, "full", "--verify"));
+    assert!(
+        fs::read_to_string(directory.join("hook.log"))
+            .expect("trace")
+            .lines()
+            .any(|line| line == "check")
+    );
+    fs::write(directory.join("hook.log"), "").expect("clear trace");
+    git_text(&directory, &["switch", "-c", "topic"]);
+    fs::write(directory.join("tests.txt"), "kept\nfull\nfast\n").expect("fast change");
+    assert!(commit_all(&directory, "fast", "--verify"));
+    let trace = fs::read_to_string(directory.join("hook.log")).expect("trace");
+    assert!(trace.lines().any(|line| line == "check-fast"));
+    assert!(!trace.lines().any(|line| line == "check"));
 }

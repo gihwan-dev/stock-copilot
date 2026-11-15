@@ -287,7 +287,7 @@ impl Walker<'_> {
             module: Vec::new(),
             enclosing: String::new(),
             directory: parent_directory(file),
-            testing: false,
+            testing: file == "crates/testkit/src/lib.rs",
         };
         self.walk_file(file, &location);
     }

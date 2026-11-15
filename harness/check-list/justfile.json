@@ -947,11 +947,7 @@
       "shebang": false
     },
     "mutants-shard": {
-      "attributes": [
-        {
-          "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
-        }
-      ],
+      "attributes": [],
       "body": [
         ["cargo run --locked --quiet --package xtask -- mutants --shard \"$1\""]
       ],

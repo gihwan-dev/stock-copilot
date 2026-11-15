@@ -225,7 +225,6 @@ gen-tokens:
 tokens-contrast:
     node harness/ds-tokens/contrast.mjs
 
-[env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 mutants-shard shard:
     cargo run --locked --quiet --package xtask -- mutants --shard "$1"
 

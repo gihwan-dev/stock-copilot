@@ -25,6 +25,9 @@ pub(crate) fn plan(
     let mut crates = BTreeSet::new();
     let mut frontend = Frontend::Unchanged;
     for path in paths {
+        if path == "crates/testkit/src/lib.rs" || path.starts_with("docs/") {
+            return Plan::Full;
+        }
         if Path::new(path).file_name().is_some_and(|file| {
             file == "Cargo.toml" || file == "package.json" || file == "pnpm-lock.yaml"
         }) {
@@ -326,7 +329,7 @@ mod tests {
                 &members,
                 &deps
             ),
-            Plan::Fast(BTreeSet::new(), Frontend::Unchanged)
+            Plan::Full
         );
     }
 }
@@ -457,5 +460,55 @@ mod execution_tests {
         git(&root, &["switch", "master"]);
         let master_base = crate::git_base::resolve_base(&root, "HEAD").expect("master baseline");
         assert_eq!(trace(&root, &master_base), ["commit-guard", "check"]);
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    #[test]
+    fn documents_and_property_helper_promote_full() {
+        for path in [
+            "docs/architecture.md",
+            "docs/design.md",
+            "docs/harness.md",
+            "docs/unknown.md",
+            "crates/testkit/src/lib.rs",
+        ] {
+            assert_eq!(
+                super::plan(
+                    &[String::from(path)].into(),
+                    &super::Members::from([(
+                        String::from("crates/testkit"),
+                        String::from("testkit")
+                    )]),
+                    &super::Dependencies::new()
+                ),
+                super::Plan::Full
+            );
+        }
+    }
+
+    #[test]
+    fn metadata_keeps_dev_and_build_reverse_dependencies() {
+        let root = crate::check_support::workspace_root().expect("root");
+        let (_, dependencies) = super::workspace_inputs(&root).expect("inputs");
+        let metadata = cargo_metadata::MetadataCommand::new()
+            .manifest_path(root.join("Cargo.toml"))
+            .no_deps()
+            .exec()
+            .expect("metadata");
+        let mut kinds = std::collections::BTreeSet::new();
+        for package in metadata.workspace_packages() {
+            for dependency in package
+                .dependencies
+                .iter()
+                .filter(|dependency| dependency.kind != cargo_metadata::DependencyKind::Normal)
+            {
+                assert!(dependencies[package.name.as_str()].contains(&dependency.name));
+                kinds.insert(format!("{:?}", dependency.kind));
+            }
+        }
+        assert!(kinds.contains("Development"));
+        assert!(kinds.contains("Build"));
     }
 }

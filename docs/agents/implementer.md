@@ -45,3 +45,18 @@
 5. 확신이 없는 부분과 범위 밖에서 발견한 문제
 
 Codex의 종료 훅은 작업 사본에서 `master`와 HEAD의 병합 기준으로 검사한다. 브리프 기준 SHA와 같은지는 메인이 확인한다. T3가 훅을 신뢰·적용하지 않았으면 종료 검사는 강제되지 않는다. 메인은 실제 `just check` 결과를 확인한다.
+
+
+H-46 리뷰 결정: master는 메인만 움직인다. 전진은 --no-ff 병합 커밋 또는 master의 직접 커밋으로만 하며, 이때 master 커밋 훅이 전체 검사를 실행한다. --ff-only, branch -f, update-ref는 커밋 훅 밖이다. 이를 사용한 전진은 CI의 master 전체 검사가 사후에 알리는 한계가 있다. 구현 담당은 push와 master ref 이동을 하지 않는다.
+
+밤 전체 변이는 완주 기록이 없다. 2026-11-13은 실패, 11-14는 네 조각이120분 부근에서 취소됐고 취소 전 한 조각에서 미검출18건이 확인됐다. 따라서 현재는 보완 장치로 작동한다고 볼 수 없다. 완주와 결과·취소 처리 보완은 H-47로 넘긴다. 변이 실행은 기본256회를 쓰며 상속된 전체 검사4096 환경을 제거한다.4096 강제는 전체 테스트 검사에만 적용한다.
+
+fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. docs/design.md의 소비 단계를 좁힐 근거는 이번 조사에서 확정하지 않았다. docs/harness.md 및 다른 문서도 테스트·정책에서 참조할 수 있다. 문서별 소비 단계가 빠지는 일을 막기 위해 docs/** 전체를 전체 검사로 승격한다. testkit 도우미 소스 변경도 전체로 승격한다.
+
+
+| 문서 | 확인한 소비자 | fast 단계 |
+|---|---|---|
+| docs/architecture.md | harness/ds-tokens/check.mjs | 전체 검사(ds-tokens 포함) |
+| docs/toss-openapi-1.2.28.json | xtask gen_schema_tests | 전체 검사(xtask 테스트 포함) |
+| docs/harness.md | Codex 설정·Claude 훅 정책/회귀 | 전체 검사 |
+| docs/design.md 및 나머지 docs/** | 소비 범위를 확정하지 못함 | 전체 승격 |

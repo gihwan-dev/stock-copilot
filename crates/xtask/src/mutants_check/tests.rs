@@ -288,3 +288,168 @@ fn support_only_workspace_changes_mark_all_nightly_targets() {
         BTreeSet::new()
     );
 }
+
+#[test]
+fn shard_selection_accepts_only_fixed_partition() {
+    for value in ["0/4", "1/4", "2/4", "3/4"] {
+        super::scope_for(
+            Path::new("."),
+            &[String::from("--shard"), String::from(value)],
+            crate::git_base::BaseUse::Ancestor,
+        )
+        .expect("valid shard");
+    }
+    for args in [
+        vec!["--shard", "4/4"],
+        vec!["--shard", "0/1"],
+        vec!["--baseline=skip"],
+        vec!["--shard", "0/4", "--baseline=skip"],
+    ] {
+        super::scope_for(
+            Path::new("."),
+            &args.into_iter().map(String::from).collect::<Vec<_>>(),
+            crate::git_base::BaseUse::Ancestor,
+        )
+        .expect_err("invalid shard");
+    }
+}
+
+#[test]
+fn environment_reads_only_jobs_key() {
+    use syn::visit::Visit;
+    struct Calls(Vec<String>);
+    impl<'ast> Visit<'ast> for Calls {
+        fn visit_expr_call(&mut self, i: &'ast syn::ExprCall) {
+            if let syn::Expr::Path(path) = i.func.as_ref()
+                && path.path.segments.last().is_some_and(|segment| {
+                    ["var", "var_os", "vars", "vars_os"]
+                        .contains(&segment.ident.to_string().as_str())
+                })
+            {
+                assert_eq!(path.path.segments.last().expect("call").ident, "var");
+                assert_eq!(i.args.len(), 1);
+                self.0
+                    .push(quote::ToTokens::to_token_stream(&i.args).to_string());
+            }
+            syn::visit::visit_expr_call(self, i);
+        }
+    }
+
+    let source =
+        fs::read_to_string(repository_root().join("crates/xtask/src/mutants_check/environment.rs"))
+            .expect("environment");
+    let mut calls = Calls(Vec::new());
+    calls.visit_file(&syn::parse_file(&source).expect("AST"));
+    assert_eq!(calls.0, ["\"STOCK_COPILOT_MUTANTS_JOBS\""]);
+    let mut command = std::process::Command::new("cargo");
+    super::configure_profile(&mut command);
+    assert!(
+        command
+            .get_envs()
+            .any(|(key, value)| key == "STOCK_COPILOT_PROPTEST_CASES" && value.is_none())
+    );
+}
+
+#[test]
+fn diff_patch_includes_committed_staged_worktree_and_untracked() {
+    use crate::git_base::{git, output};
+    let root = fresh_directory(&repository_root(), "h46-diff-patch");
+    for args in [
+        vec!["init"],
+        vec!["config", "user.name", "harness"],
+        vec!["config", "user.email", "harness@example.invalid"],
+    ] {
+        let mut command = git(&root);
+        command.args(args);
+        output(command, "git").expect("git");
+    }
+    fs::write(root.join("sample.rs"), "fn first() {}\n").expect("source");
+    for args in [
+        vec!["add", "."],
+        vec!["-c", "core.hooksPath=/dev/null", "commit", "-m", "base"],
+    ] {
+        let mut command = git(&root);
+        command.args(args);
+        output(command, "git").expect("git");
+    }
+    let base = crate::git_base::resolve_base(&root, "HEAD").expect("base");
+    for (file, source, commit) in [
+        ("committed.rs", "fn committed() {}", true),
+        ("staged.rs", "fn staged() {}", false),
+    ] {
+        fs::write(root.join(file), source).expect("source");
+        let mut command = git(&root);
+        command.args(["add", file]);
+        output(command, "add").expect("stage");
+        if commit {
+            let mut commit_command = git(&root);
+            commit_command.args(["-c", "core.hooksPath=/dev/null", "commit", "-m", "change"]);
+            output(commit_command, "commit").expect("commit");
+        }
+    }
+    fs::write(root.join("sample.rs"), "fn worktree() {}\n").expect("worktree");
+    fs::write(root.join("untracked.rs"), "fn untracked() {}\n").expect("untracked");
+    let patch = fs::read_to_string(super::diff_patch(&root, &base).expect("patch")).expect("read");
+    for expected in ["fn committed", "fn staged", "fn worktree", "fn untracked"] {
+        assert!(patch.contains(expected), "{expected}: {patch}");
+    }
+}
+
+#[test]
+fn diff_command_requires_test_diff_at_the_resolved_base() {
+    use crate::git_base::{git, output};
+    let root = fresh_directory(&repository_root(), "h43-addition-gate");
+    for (path, source) in [
+        (
+            "Cargo.lock",
+            "version = 4\n[[package]]\nname='domain'\nversion='0.1.0'\n",
+        ),
+        (
+            "Cargo.toml",
+            "[workspace]\nmembers=['crates/domain']\nresolver='2'\n",
+        ),
+        (
+            "crates/domain/Cargo.toml",
+            "[package]\nname='domain'\nversion='0.1.0'\nedition='2024'\n",
+        ),
+        (
+            ".cargo/mutants.toml",
+            "examine_globs=['crates/domain/src/**/*.rs']\n",
+        ),
+        ("crates/domain/src/lib.rs", "pub mod sample;"),
+        (
+            "crates/domain/src/sample.rs",
+            "pub fn value() -> usize { 1 } #[cfg(test)] mod tests { #[test] fn stable() { assert_eq!(super::value(), 1); } }",
+        ),
+    ] {
+        let full = root.join(path);
+        fs::create_dir_all(full.parent().expect("parent")).expect("directory");
+        fs::write(full, source).expect("source");
+    }
+    for args in [
+        vec!["init"],
+        vec!["add", "."],
+        vec![
+            "-c",
+            "user.name=Harness",
+            "-c",
+            "user.email=harness@example.invalid",
+            "commit",
+            "--no-verify",
+            "-m",
+            "fixture",
+        ],
+    ] {
+        let mut command = git(&root);
+        command.args(args);
+        output(command, "fixture").expect("git");
+    }
+    let args = [String::from("--in-diff"), String::from("HEAD")];
+    super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
+        .expect("baseline passes");
+    fs::write(root.join("crates/domain/src/sample.rs"), "pub fn value() -> usize { 1 } #[cfg(test)] mod tests { #[test] fn stable() { assert!(true); } }").expect("weaken test");
+    let error = super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
+        .expect_err("test-diff required");
+    assert!(error.contains("test-diff 실패"), "{error}");
+    assert!(error.contains("test-diff:modified"), "{error}");
+}

@@ -11,4 +11,5 @@ workspace = true
 domain = { path = "../domain" }
 
 [dev-dependencies]
+testkit = { path = "../testkit" }
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }

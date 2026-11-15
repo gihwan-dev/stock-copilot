@@ -186,12 +186,29 @@ pub(crate) fn validate_command(base: &str, base_use: git_base::BaseUse) -> ExitC
 
 pub(crate) fn recipe_command() -> ExitCode {
     let selected = toplevel().and_then(|root| fast_branch(&root));
-    let recipe = match selected {
-        Ok(WorkBranch::NamedWork) => "check-fast",
-        Ok(WorkBranch::Other) | Err(_) => "check",
-    };
+    let recipe = recipe_for(&selected);
     match writeln!(io::stdout().lock(), "{recipe}") {
         Ok(()) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
+    }
+}
+
+fn recipe_for(selected: &Result<WorkBranch, String>) -> &'static str {
+    match selected {
+        Ok(WorkBranch::NamedWork) => "check-fast",
+        Ok(WorkBranch::Other) | Err(_) => "check",
+    }
+}
+
+#[cfg(test)]
+mod recipe_tests {
+    #[test]
+    fn errors_select_full_check() {
+        assert_eq!(super::recipe_for(&Err(String::from("unknown"))), "check");
+        assert_eq!(super::recipe_for(&Ok(super::WorkBranch::Other)), "check");
+        assert_eq!(
+            super::recipe_for(&Ok(super::WorkBranch::NamedWork)),
+            "check-fast"
+        );
     }
 }

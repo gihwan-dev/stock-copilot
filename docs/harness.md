@@ -867,6 +867,21 @@ H-41 수정 2차에서 패치는 모든 줄을 분류하고 미분류 줄을 거
 
 ASCII 이름의 refs/heads/ 아래 비-master 브랜치만 커밋에서 fast를 선택한다. 대소문자만 다른 master 표기와 비ASCII 이름은 파일시스템 별칭을 보수적으로 전체 검사에 보낸다. 브랜치 판정 실패·detached HEAD·refs/heads/ 밖의 symbolic HEAD와 master는 전체다. Git 경로·설정 환경 변수는 기존 정규화 경계를 사용한다. fresh-build와 commit-guard는 기존 훅 순서를 유지하고 push-check와 CI는 전체 검사를 유지한다.
 
-fast는 바뀐 crate와 일반·빌드·개발 역의존 crate를 전이적으로 검사한다. Cargo 설정, 잠금 파일, 하네스, xtask, justfile, 훅, CI 및 해석할 수 없는 경로는 전체 검사로 승격한다. 제품 경로만 바뀌어도 정적 구조 검사는 전체에 적용한다. 커버리지는 전체 검사에 남긴다. 작업 브랜치 커밋이 전체 검사에서 실패할 수 있으며 master 병합 때 이를 잡는다.
+fast는 바뀐 crate와 일반·빌드·개발 역의존 crate를 전이적으로 검사한다. Cargo 설정, 잠금 파일, 하네스, xtask, justfile, 훅, CI 및 해석할 수 없는 경로는 전체 검사로 승격한다. 제품 경로만 바뀌어도 정적 구조 검사는 전체에 적용한다. 커버리지는 전체 검사에 남긴다. 작업 브랜치 커밋이 전체 검사에서 실패할 수 있으며 master --no-ff 병합 커밋 때 이를 잡는다.
 
 속성 테스트는 testkit의 property_cases 한곳에서 횟수를 정한다. 기본 256이며 전체 check 레시피는 STOCK_COPILOT_PROPTEST_CASES=4096을 내보내 4096을 강제한다. 설정된 다른 값도 4096으로 처리해 횟수를 낮추는 입력을 허용하지 않는다. 환경 읽기는 이 상수 키만 허용한다. 제품 테스트의 단언은 유지한다.
+
+
+H-46 리뷰 결정: master는 메인만 움직인다. 전진은 --no-ff 병합 커밋 또는 master의 직접 커밋으로만 하며, 이때 master 커밋 훅이 전체 검사를 실행한다. --ff-only, branch -f, update-ref는 커밋 훅 밖이다. 이를 사용한 전진은 CI의 master 전체 검사가 사후에 알리는 한계가 있다. 구현 담당은 push와 master ref 이동을 하지 않는다.
+
+밤 전체 변이는 완주 기록이 없다. 2026-11-13은 실패, 11-14는 네 조각이120분 부근에서 취소됐고 취소 전 한 조각에서 미검출18건이 확인됐다. 따라서 현재는 보완 장치로 작동한다고 볼 수 없다. 완주와 결과·취소 처리 보완은 H-47로 넘긴다. 변이 실행은 기본256회를 쓰며 상속된 전체 검사4096 환경을 제거한다.4096 강제는 전체 테스트 검사에만 적용한다.
+
+fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. docs/design.md의 소비 단계를 좁힐 근거는 이번 조사에서 확정하지 않았다. docs/harness.md 및 다른 문서도 테스트·정책에서 참조할 수 있다. 문서별 소비 단계가 빠지는 일을 막기 위해 docs/** 전체를 전체 검사로 승격한다. testkit 도우미 소스 변경도 전체로 승격한다.
+
+
+| 문서 | 확인한 소비자 | fast 단계 |
+|---|---|---|
+| docs/architecture.md | harness/ds-tokens/check.mjs | 전체 검사(ds-tokens 포함) |
+| docs/toss-openapi-1.2.28.json | xtask gen_schema_tests | 전체 검사(xtask 테스트 포함) |
+| docs/harness.md | Codex 설정·Claude 훅 정책/회귀 | 전체 검사 |
+| docs/design.md 및 나머지 docs/** | 소비 범위를 확정하지 못함 | 전체 승격 |

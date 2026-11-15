@@ -150,3 +150,10 @@ fn full_check_forces_property_cases_and_fast_keeps_static_guards() {
         assert!(source.contains(&format!("\"{required}\"")), "{required}");
     }
 }
+
+#[test]
+fn mutation_recipes_do_not_force_full_property_counts() {
+    for name in ["mutants-shard", "mutants-diff"] {
+        assert!(!recipe(name).iter().any(|line| line.contains("4096")));
+    }
+}

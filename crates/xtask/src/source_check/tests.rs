@@ -471,3 +471,29 @@ fn generated_code_is_exempt_only_from_what_it_emits() {
         BTreeSet::from([String::from("allow"), String::from("doc")])
     );
 }
+
+#[test]
+fn property_count_literals_are_rejected_including_macros() {
+    let root = repository_root();
+    let allowlists = Allowlists::load(&root).expect("allowlists");
+    for source in [
+        "fn sample() { Config::with_cases(4096); }",
+        "proptest! { #![proptest_config(Config::with_cases(0x100))] }",
+        "fn sample() { Config::with_cases(1_u32); }",
+    ] {
+        assert!(
+            check_source("crates/domain/src/sample.rs", source, &allowlists)
+                .iter()
+                .any(|finding| finding.rule == Rule::PropertyCasesLiteral)
+        );
+    }
+    assert!(
+        !check_source(
+            "crates/domain/src/sample.rs",
+            "fn sample() { Config::with_cases(testkit::property_cases()); }",
+            &allowlists
+        )
+        .iter()
+        .any(|finding| finding.rule == Rule::PropertyCasesLiteral)
+    );
+}
