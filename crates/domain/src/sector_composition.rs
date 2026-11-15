@@ -90,7 +90,7 @@ pub struct SectorStockRow {
     pub market_capitalization: Option<crate::NumericInput>,
     pub trading_amount: Option<crate::NumericInput>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SectorAmount {
     Unavailable,
     Available(crate::Money),
@@ -125,7 +125,9 @@ fn sector_member(row: SectorStockRow) -> Result<SectorMember, MarketDataError> {
         trading_amount: sector_amount(row.trading_amount.as_ref())?,
     })
 }
-fn sector_amount(input: Option<&crate::NumericInput>) -> Result<SectorAmount, MarketDataError> {
+pub(crate) fn sector_amount(
+    input: Option<&crate::NumericInput>,
+) -> Result<SectorAmount, MarketDataError> {
     match input {
         None => Ok(SectorAmount::Unavailable),
         Some(raw) => {
@@ -136,6 +138,14 @@ fn sector_amount(input: Option<&crate::NumericInput>) -> Result<SectorAmount, Ma
             }
             Ok(SectorAmount::Available(value))
         }
+    }
+}
+impl std::fmt::Debug for SectorAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unavailable => "Unavailable",
+            Self::Available(_) => "Available([REDACTED])",
+        })
     }
 }
 #[cfg(test)]
