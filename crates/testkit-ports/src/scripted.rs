@@ -3,19 +3,21 @@ use application::{
     BrokerRead, CollectedObservation, DataAvailability, FeedCursor, FeedSource, FinancialStatement,
     Fundamentals, FxRateQuery, HoldingsObservation, InformationError, MacroObservation,
     MacroSeries, MacroSeriesId, MarketInfo, NewsFeed, NewsMetadata, Notification, Notifier,
-    PortError, QuoteObservation, RankingQuery, SystemPortError, TransactionRead, WriteCompleted,
+    PortError, QuoteObservation, RankingQuery, SectorRankingQuery, SystemPortError,
+    TransactionRead, WriteCompleted,
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate, FxRateKind,
-    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, KnownMarket, MarketCalendar,
-    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates,
-    Orderbook, Portfolio, PriceAdjustment, PriceLimits, ProposalId, Quote, QuoteInstrument,
-    RaisedSignal, ResolvedOrderInstrument, RiskSettings, SectorComposition, SectorId,
-    SellableQuantityFact, SettledRowSet, SettlementWindow, SignalSubmission, SignalTaskKey,
-    StockRanking, StockWarnings, Symbol, SyncRecord, TimeInterval, Timestamp, TransactionFilter,
-    ValuationSnapshot,
+    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, InvestorTradingRankings,
+    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
+    MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
+    PriceLimits, ProposalId, Quote, QuoteInstrument, RaisedSignal, RankingLimit,
+    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
+    SectorEtfs, SectorId, SectorRanking, SellableQuantityFact, SettledRowSet, SettlementWindow,
+    SignalSubmission, SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, TimeInterval,
+    Timestamp, TransactionFilter, ValuationSnapshot,
 };
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrokerReadCall {
@@ -264,6 +266,12 @@ impl BrokerRead for ScriptedBrokerRead {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarketInfoCall {
+    InvestorTradingRankings(RankingLimit),
+    Sectors(),
+    Sector(SectorId, KnownMarket),
+    SectorRankings(SectorRankingQuery),
+    SectorEtfs(SectorId, KnownMarket),
+
     FxRate(FxPair, FxRateKind, Option<Timestamp>),
     OrderFxRates(),
     IndicatorQuotes(Vec<IndicatorCode>),
@@ -276,6 +284,12 @@ pub enum MarketInfoCall {
 }
 #[derive(Debug, Default)]
 pub struct ScriptedMarketInfo {
+    investor_trading_rankings: ScriptedMarketInfoInvestorTradingRankingsScript,
+    sectors: ScriptedMarketInfoSectorsScript,
+    sector: ScriptedMarketInfoSectorScript,
+    sector_rankings: ScriptedMarketInfoSectorRankingsScript,
+    sector_etfs: ScriptedMarketInfoSectorEtfsScript,
+
     fx_rate: ScriptedMarketInfoFxRateScript,
     order_fx_rates: ScriptedMarketInfoOrderFxRatesScript,
     indicator_quotes: ScriptedMarketInfoIndicatorQuotesScript,
@@ -288,6 +302,29 @@ pub struct ScriptedMarketInfo {
     calls: State<Vec<MarketInfoCall>>,
 }
 impl ScriptedMarketInfo {
+    #[must_use]
+    pub fn script_investor_trading_rankings(
+        &self,
+    ) -> &ScriptedMarketInfoInvestorTradingRankingsScript {
+        &self.investor_trading_rankings
+    }
+    #[must_use]
+    pub fn script_sectors(&self) -> &ScriptedMarketInfoSectorsScript {
+        &self.sectors
+    }
+    #[must_use]
+    pub fn script_sector(&self) -> &ScriptedMarketInfoSectorScript {
+        &self.sector
+    }
+    #[must_use]
+    pub fn script_sector_rankings(&self) -> &ScriptedMarketInfoSectorRankingsScript {
+        &self.sector_rankings
+    }
+    #[must_use]
+    pub fn script_sector_etfs(&self) -> &ScriptedMarketInfoSectorEtfsScript {
+        &self.sector_etfs
+    }
+
     #[must_use]
     pub fn script_indicator_quotes(&self) -> &ScriptedMarketInfoIndicatorQuotesScript {
         &self.indicator_quotes
@@ -332,6 +369,49 @@ impl ScriptedMarketInfo {
     }
 }
 impl MarketInfo for ScriptedMarketInfo {
+    async fn investor_trading_rankings(
+        &self,
+        limit: RankingLimit,
+    ) -> Result<InvestorTradingRankings, PortError> {
+        self.calls
+            .write()
+            .push(MarketInfoCall::InvestorTradingRankings(limit));
+        self.investor_trading_rankings.run((limit,)).await
+    }
+    async fn sectors(&self) -> Result<SectorCatalog, PortError> {
+        self.calls.write().push(MarketInfoCall::Sectors());
+        self.sectors.run(()).await
+    }
+    async fn sector(
+        &self,
+        sector: &SectorId,
+        market: KnownMarket,
+    ) -> Result<SectorDetail, PortError> {
+        self.calls
+            .write()
+            .push(MarketInfoCall::Sector(sector.clone(), market));
+        self.sector.run((sector.clone(), market)).await
+    }
+    async fn sector_rankings(
+        &self,
+        query: &SectorRankingQuery,
+    ) -> Result<SectorRanking, PortError> {
+        self.calls
+            .write()
+            .push(MarketInfoCall::SectorRankings(*query));
+        self.sector_rankings.run((*query,)).await
+    }
+    async fn sector_etfs(
+        &self,
+        sector: &SectorId,
+        market: KnownMarket,
+    ) -> Result<SectorEtfs, PortError> {
+        self.calls
+            .write()
+            .push(MarketInfoCall::SectorEtfs(sector.clone(), market));
+        self.sector_etfs.run((sector.clone(), market)).await
+    }
+
     async fn fx_rate(
         &self,
         pair: FxPair,
@@ -700,3 +780,12 @@ pub type ScriptedMarketInfoIndicatorQuotesScript =
     Script<(Vec<IndicatorCode>,), Result<Vec<MarketIndicatorQuote>, PortError>>;
 pub type ScriptedMarketInfoStockInvestorFlowScript =
     Script<(QuoteInstrument, CalendarDate, CalendarDate), Result<Vec<InvestorFlow>, PortError>>;
+pub type ScriptedMarketInfoInvestorTradingRankingsScript =
+    Script<(RankingLimit,), Result<InvestorTradingRankings, PortError>>;
+pub type ScriptedMarketInfoSectorsScript = Script<(), Result<SectorCatalog, PortError>>;
+pub type ScriptedMarketInfoSectorScript =
+    Script<(SectorId, KnownMarket), Result<SectorDetail, PortError>>;
+pub type ScriptedMarketInfoSectorRankingsScript =
+    Script<(SectorRankingQuery,), Result<SectorRanking, PortError>>;
+pub type ScriptedMarketInfoSectorEtfsScript =
+    Script<(SectorId, KnownMarket), Result<SectorEtfs, PortError>>;

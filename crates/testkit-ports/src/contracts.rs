@@ -5,19 +5,21 @@ use application::{
     HoldingsObservation, InformationError, MacroObservation, MacroSeries, MacroSeriesId,
     MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
     Notifier, PortError, PortfolioRepository, QuoteObservation, RankingQuery, RecordOutcome,
-    SettingsRepository, SignalRepository, SystemPortError, ThesisRepository, TransactionRead,
-    TransactionRepository, ValuationRepository, WriteCompleted,
+    SectorRankingQuery, SettingsRepository, SignalRepository, SystemPortError, ThesisRepository,
+    TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate, FxRateKind,
-    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, KnownMarket, MarketCalendar,
-    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates,
-    Orderbook, Portfolio, PriceAdjustment, PriceLimits, Quote, QuoteInstrument, RaisedSignal,
-    ResolvedOrderInstrument, RiskSettings, SectorComposition, SectorId, SellableQuantityFact,
-    SettledRowSet, SettlementWindow, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
-    Symbol, SyncRecord, Thesis, TimeInterval, Timestamp, TransactionFilter, ValuationSnapshot,
+    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, InvestorTradingRankings,
+    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
+    MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
+    PriceLimits, Quote, QuoteInstrument, RaisedSignal, RankingLimit, ResolvedOrderInstrument,
+    RiskSettings, SectorCatalog, SectorComposition, SectorDetail, SectorEtfs, SectorId,
+    SectorRanking, SellableQuantityFact, SettledRowSet, SettlementWindow, SignalSubmission,
+    SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval,
+    Timestamp, TransactionFilter, ValuationSnapshot,
 };
 pub async fn broker_read_accounts<P: BrokerRead>(
     port: &P,
@@ -796,5 +798,61 @@ pub fn broker_capabilities(
         port.support_for(capability),
         expected,
         "지원 표는 등록한 기능만 지원"
+    );
+}
+pub async fn market_info_investor_trading_rankings<P: MarketInfo>(
+    port: &P,
+    limit: RankingLimit,
+    expected: Result<InvestorTradingRankings, PortError>,
+) {
+    assert_eq!(
+        port.investor_trading_rankings(limit).await,
+        expected,
+        "ADR 0087 입력에 대응하는 사실과 오류 보존"
+    );
+}
+pub async fn market_info_sectors<P: MarketInfo>(
+    port: &P,
+    expected: Result<SectorCatalog, PortError>,
+) {
+    assert_eq!(
+        port.sectors().await,
+        expected,
+        "ADR 0087 입력에 대응하는 사실과 오류 보존"
+    );
+}
+pub async fn market_info_sector<P: MarketInfo>(
+    port: &P,
+    sector: &SectorId,
+    market: KnownMarket,
+    expected: Result<SectorDetail, PortError>,
+) {
+    assert_eq!(
+        port.sector(sector, market).await,
+        expected,
+        "ADR 0087 입력에 대응하는 사실과 오류 보존"
+    );
+}
+pub async fn market_info_sector_rankings<P: MarketInfo>(
+    port: &P,
+    query: &SectorRankingQuery,
+    expected: Result<SectorRanking, PortError>,
+) {
+    assert_eq!(
+        port.sector_rankings(query).await,
+        expected,
+        "ADR 0087 입력에 대응하는 사실과 오류 보존"
+    );
+}
+pub async fn market_info_sector_etfs<P: MarketInfo>(
+    port: &P,
+    sector: &SectorId,
+    market: KnownMarket,
+    expected: Result<SectorEtfs, PortError>,
+) {
+    assert_eq!(
+        port.sector_etfs(sector, market).await,
+        expected,
+        "ADR 0087 입력에 대응하는 사실과 오류 보존"
     );
 }

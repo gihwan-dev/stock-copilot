@@ -28,7 +28,7 @@ ScriptedPresence는 주문과 위험 변경에 서로 다른 결과 큐를 사�
 
 | 가짜 | 포트 |
 |---|---|
-| ScriptedBrokerRead, ScriptedMarketInfo | ADR 0055·0082의 읽기 메서드 24개 |
+| ScriptedBrokerRead, ScriptedMarketInfo | ADR 0055·0082·0087의 읽기 메서드 29개 |
 | BrokerCapabilities 값 | 기존 닫힌 지원 표를 직접 사용. 별도 IO 가짜가 필요하지 않음 |
 | MemoryPortfolioRepository 등 저장소 10개 | 메모리 저장·조회와 메서드별 대본 |
 | MemoryAuditLog | 감사 추가와 검증 대본 |
@@ -55,7 +55,7 @@ SecretValue는 기존 application 타입을 사용한다. 호출 기록은 Arc�
 
 contracts 모듈은 포트를 제네릭으로 받고 ADR의 입력·성공 값·부재·오류를 독립된 expected 사실과 대조하는 메서드별 함수를 공개한다. broker_read_*, market_info_*, 저장소 10개의 메서드, audit_log_*, secret_store_*, notifier_notify, news_feed_*, fundamentals_statements, macro_series_daily_values, clock_now, user_presence_order, user_presence_risk_change와 broker_capabilities가 있다. 어댑터는 녹화/고정 fixture에서 기대값을 만들고 같은 함수에 자기 구현을 전달한다. 가짜 출력에서 기대값을 추출하지 않는다.
 
-읽기 포트 24개는 오류와 실제 요청 인자 기록을 각각 검사한다. 중복 시세 슬롯의 성공·실패 보존도 검사한다. 시계·대본·메모리 상태·뉴스 정책·부재 구분·감사 중복·비밀 키 격리를 별도로 검사한다. 포트 trait 정의나 가짜 대본 자체가 실제 HTTP의 페이지 완전성·배치 제한·원본 진위를 강제한다고 주장하지 않는다.
+읽기 포트 29개는 오류와 실제 요청 인자 기록을 각각 검사한다. 중복 시세 슬롯의 성공·실패 보존도 검사한다. 시계·대본·메모리 상태·뉴스 정책·부재 구분·감사 중복·비밀 키 격리를 별도로 검사한다. 포트 trait 정의나 가짜 대본 자체가 실제 HTTP의 페이지 완전성·배치 제한·원본 진위를 강제한다고 주장하지 않는다.
 
 현재 domain의 공개 validate는 아직 외부 게이트를 Unknown으로 남긴다. 실제 PendingOrderConfirmation을 생산하는 주문 유스케이스 전에는 공개 소비자가 주문 요약을 만드는 정상 성공 fixture를 얻을 수 없다. 주문 결과 타입의 세 응답 FIFO는 공통 Script에서 실행하고, 주문 참조 계약 함수·열 필드 기록 변환과 가짜 trait impl은 컴파일로 확인한다. 실제 주문 요약을 통한 확인 호출 연동은 O-01·O-17에서 같은 공개 계약 함수로 검사한다. 이 한계를 숨기거나 내부 토큰 생성자를 공개하지 않는다.
 
@@ -172,3 +172,38 @@ DraftRecord는 가격 범위까지 기록한다. Proposal의 안전한 가격 �
 | 32 | 평가 이력 종료 포함 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
 | 33 | 논거 재생 삭제 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
 | 34 | 논거 확인을 거절로 변경 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
+
+## 최신 master A-21 통합
+
+master dc8f3f950294e9d3d1947b39c256868076d7de15의 MarketInfo 다섯 메서드를 반영한다: investor_trading_rankings, sectors, sector, sector_rankings, sector_etfs. ScriptedMarketInfo는 모두 합쳐 14개이며 BrokerRead 15개와 합쳐 읽기 메서드는 29개다. 각 추가 메서드는 독립 응답 큐·포트 전체 호출 열거형·메서드별 입력 기록·공개 제네릭 계약 함수를 제공한다. 빈 성공과 오류를 바꾸지 않는다. 새 기능 다섯 개도 명시적 BrokerCapabilities 값으로 검사한다.
+
+서로 다른 상한·시장·섹터 ID·기간·종류로 요청하고 오류 다음 성공을 순서대로 반환한다. 성공 fixture는 domain의 공개 응답 검증 생성자로 만들며 서버 시각이 없는 사실·nullable 등락률·ETF 순서·그룹별 rankedAt을 임의 계산으로 채우지 않는다. 실제 HTTP 식별·전체 계층 대조·신선도 의무는 ADR 0087의 T-09/T-10 인계다. 이 추가 통합에서도 주문 요약 생성·권한 경계는 바꾸지 않는다.
+
+A-21의 다섯 전달 경로도 새 mktemp 복사본에서 각 변형을 컴파일·실행했다. 다섯 개 모두 검출, 원복 기준 통과, scripted.rs 해시 일치다. 앞선 34개와 별개로 합쳐 실제 실행한 손 변형은 39개다. 자동 변경분 변이는 승인 test-diff 사전 검사와 별개로 통과를 주장하지 않는다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 35 | 투자자 랭킹 전체 기록 삭제 | 컴파일 성공·검출 | tests::investor_trading_rankings_preserves_success_error_arguments_and_order |
+| 36 | 섹터 목록 전체 기록 삭제 | 컴파일 성공·검출 | tests::sectors_preserves_success_error_arguments_and_order |
+| 37 | 섹터 상세 전달 시장 고정 | 컴파일 성공·검출 | tests::sector_preserves_success_error_arguments_and_order |
+| 38 | 섹터 랭킹 질의 고정 | 컴파일 성공·검출 | tests::sector_rankings_preserves_success_error_arguments_and_order |
+| 39 | 관련 ETF 전달 시장 고정 | 컴파일 성공·검출 | tests::sector_etfs_preserves_success_error_arguments_and_order |
+
+## 대본 사용 예
+
+아래는 비동기 테스트 안에서 원화 현금 조회만 실패시키는 예다. 실제 계좌·키를 사용하지 않는다. 테스트의 즉시 Future 구동 방식은 tests/core.rs와 같다.
+
+```rust
+let broker = ScriptedBrokerRead::default();
+let account = AccountId::new(17);
+let error = PortError::new(
+    ReadEndpoint::BuyingPower,
+    HttpStatus::Forbidden,
+    PortErrorKind::AccessDenied(AccessDenial::Forbidden),
+);
+broker.script_buying_power().push(Err(error));
+contracts::broker_read_buying_power(&broker, &account, Currency::Krw, Err(error)).await;
+assert_eq!(broker.calls(), vec![BrokerReadCall::BuyingPower(account, Currency::Krw)]);
+```
+
+메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 74개와 저장 의미의 제네릭 시나리오 15개다. 주문용 user_presence_order의 실제 실행은 앞서 기록한 차단이며 다른 계약 실행으로 대체했다고 세지 않는다.
