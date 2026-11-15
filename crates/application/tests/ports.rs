@@ -371,11 +371,11 @@ mod tests {
         }
         fn instruments(
             &self,
-            _market: KnownMarket,
+            market: KnownMarket,
         ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send {
             std::future::ready(outcome(
                 self.0,
-                MasterInstrumentFacts::try_new(vec![]).expect("빈 마스터"),
+                MasterInstrumentFacts::try_new(vec![a20_master(market)]).expect("마스터 목록"),
                 ReadEndpoint::Instruments,
             ))
         }
@@ -453,21 +453,16 @@ mod tests {
         }
         fn indicator_quotes(
             &self,
-            _codes: &[IndicatorCode],
+            codes: &[IndicatorCode],
         ) -> impl Future<Output = Result<Vec<MarketIndicatorQuote>, PortError>> + Send {
-            std::future::ready(outcome(
-                self.0,
-                vec![
-                    MarketIndicatorQuote::from_response(
-                        MasterCode::try_new("KOSPI").expect("지표"),
-                        &NumericInput::try_new("2571").expect("포인트"),
-                        None,
-                        instant(),
-                    )
-                    .expect("지수"),
-                ],
-                ReadEndpoint::IndicatorQuotes,
-            ))
+            let rows = codes
+                .iter()
+                .copied()
+                .map(a20_indicator_quote)
+                .collect::<Result<Vec<_>, _>>();
+            std::future::ready(
+                rows.and_then(|value| outcome(self.0, value, ReadEndpoint::IndicatorQuotes)),
+            )
         }
         fn indicator_candles(
             &self,
@@ -845,7 +840,9 @@ mod tests {
     #[test]
     fn a20_market_contract_methods_return_domain_results_and_send_futures() {
         let port = FakeBroker(Scenario::Failed);
-        let quote = quote_instrument();
+        let quote = a20_master(KnownMarket::Kr)
+            .quote_instrument()
+            .expect("국내 시세 식별");
         let sector = SectorId::try_new("fixture-sector").expect("섹터");
         let date = instant().offset_calendar_date();
         let query = application::RankingQuery::try_new(
@@ -1057,9 +1054,9 @@ mod tests {
         assert_eq!(warnings.warnings(), &[StockWarning::InvestmentRisk]);
         assert_eq!(
             ready(port.instruments(KnownMarket::Us))
-                .expect("빈 마스터")
+                .expect("마스터")
                 .instruments(),
-            []
+            &[a20_master(KnownMarket::Us)]
         );
         let book = ready(port.orderbook(&quote)).expect("호가");
         assert_eq!(book.instrument(), &quote);
@@ -1074,7 +1071,9 @@ mod tests {
     #[test]
     fn a20_market_success_keeps_units_and_request_identity() {
         let port = FakeBroker(Scenario::Complete);
-        let quote = quote_instrument();
+        let quote = a20_master(KnownMarket::Kr)
+            .quote_instrument()
+            .expect("국내 시세 식별");
         let indicators = ready(port.indicator_quotes(&[IndicatorCode::Kospi])).expect("지수");
         assert_eq!(
             indicators.first().expect("지수 행").code(),
@@ -1231,5 +1230,106 @@ mod tests {
                 domain::NetPurchaseIncomplete::Query(ClosedOrderIncomplete::MissingPages)
             ))
         );
+    }
+    #[test]
+    fn a20_indicator_batches_preserve_requested_order_duplicates_and_units() {
+        let requested = [
+            IndicatorCode::KrBond3Y,
+            IndicatorCode::Kosdaq,
+            IndicatorCode::Kospi,
+            IndicatorCode::KrBond3Y,
+        ];
+        let rows =
+            ready(FakeBroker(Scenario::Complete).indicator_quotes(&requested)).expect("지표 묶음");
+        assert_eq!(rows.len(), 4);
+        for (row, (code, unit)) in rows.iter().zip([
+            (IndicatorCode::KrBond3Y, IndicatorUnit::YieldPercent),
+            (IndicatorCode::Kosdaq, IndicatorUnit::IndexPoints),
+            (IndicatorCode::Kospi, IndicatorUnit::IndexPoints),
+            (IndicatorCode::KrBond3Y, IndicatorUnit::YieldPercent),
+        ]) {
+            assert_eq!(row.code(), code);
+            assert_eq!(row.unit(), unit);
+        }
+        assert_eq!(
+            ready(FakeBroker(Scenario::Complete).indicator_quotes(&[IndicatorCode::Unknown])),
+            Err(PortError::new(
+                ReadEndpoint::IndicatorQuotes,
+                HttpStatus::BadRequest,
+                PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery)
+            ))
+        );
+    }
+
+    fn a20_indicator_quote(code: IndicatorCode) -> Result<MarketIndicatorQuote, PortError> {
+        let (raw, number) = match code {
+            IndicatorCode::Kospi => ("KOSPI", "2571"),
+            IndicatorCode::Kosdaq => ("KOSDAQ", "731"),
+            IndicatorCode::KrBond2Y => ("KR_BOND_2Y", "2.3"),
+            IndicatorCode::KrBond3Y => ("KR_BOND_3Y", "3.7"),
+            IndicatorCode::KrBond5Y => ("KR_BOND_5Y", "4.1"),
+            IndicatorCode::KrBond10Y => ("KR_BOND_10Y", "4.3"),
+            IndicatorCode::KrBond20Y => ("KR_BOND_20Y", "4.7"),
+            IndicatorCode::KrBond30Y => ("KR_BOND_30Y", "5.1"),
+            IndicatorCode::Unknown => {
+                return Err(PortError::new(
+                    ReadEndpoint::IndicatorQuotes,
+                    HttpStatus::BadRequest,
+                    PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery),
+                ));
+            }
+        };
+        let raw_code = MasterCode::try_new(raw).map_err(|_error| a20_indicator_error())?;
+        let numeric = NumericInput::try_new(number).map_err(|_error| a20_indicator_error())?;
+        MarketIndicatorQuote::from_response(raw_code, &numeric, None, instant())
+            .map_err(|_error| a20_indicator_error())
+    }
+    fn a20_indicator_error() -> PortError {
+        PortError::new(
+            ReadEndpoint::IndicatorQuotes,
+            HttpStatus::Success,
+            PortErrorKind::InvalidResponse(ResponseMismatch::Validation),
+        )
+    }
+    fn a20_master(market: KnownMarket) -> MasterInstrument {
+        let (listing, symbol, currency, id) = match market {
+            KnownMarket::Kr => ("KOSPI", "005930", Currency::Krw, "fixture-kr-19"),
+            KnownMarket::Us => ("NASDAQ", "AAPL", Currency::Usd, "fixture-us-37"),
+        };
+        MasterInstrument::try_new(MasterInstrumentRow {
+            listing_market: MasterCode::try_new(listing).expect("시장"),
+            instrument_id: InstrumentId::try_new(id).expect("안정적 ID"),
+            symbol: Symbol::try_new(symbol).expect("종목"),
+            name: DisplayInstrumentName::try_new("고정 자료 종목").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: None,
+            observed_at: instant(),
+        })
+        .expect("시장별 마스터")
+    }
+    #[test]
+    fn a20_master_fee_and_calendar_keep_both_requested_markets() {
+        let port = FakeBroker(Scenario::Complete);
+        for market in [KnownMarket::Kr, KnownMarket::Us] {
+            let master = ready(port.instruments(market)).expect("마스터");
+            assert_eq!(master.instruments(), &[a20_master(market)]);
+            let fee = ready(port.commission_rate(&AccountId::new(89), market)).expect("수수료");
+            let expected = CommissionRateFact::from_commissions_result(
+                market.into(),
+                CostRate::try_new(
+                    Ratio::parse(&NumericInput::try_new("0.0017").expect("요율")).expect("요율"),
+                )
+                .expect("수수료율"),
+                CommissionValidity::try_new(None, None).expect("기간"),
+            );
+            assert_eq!(fee, expected);
+            let calendar = ready(port.calendar(market)).expect("달력");
+            assert_eq!(calendar.today().market(), market.into());
+        }
     }
 }

@@ -1,7 +1,8 @@
 # A-20 읽기 포트 2
 
 - 상태: 초안
-- 기준 SHA: `150b578babf37e2324e15165609799e0765e750e`, 브랜치 `a-20`.
+- 최초 구현 기준 SHA: `150b578babf37e2324e15165609799e0765e750e`, 브랜치 `a-20`.
+- 최종 master 병합 기준: `8ba1f6abf3b1050017b649d1d1a5fd63104a6363`. 2차 독립 리뷰 대상: `203067774d5b37b024ce4c7b48d5054cd0418e44`.
 - 메인 정정: 현재 병합된 domain 타입으로 정의 가능한 행만 구현한다. D-41 및 미정의 수급은 아래 정의 대기로 남긴다. domain 타입을 새로 만들지 않는다.
 
 ## 결정
@@ -108,10 +109,10 @@ mktemp -d 복사본에 최종 수정 소스·테스트를 복사해 한 번에 �
 | 18 | limit 고정 7 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
 | 19 | limit 고정 93 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
 | 20 | 미지 종류 허용 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
-| 21 | 미지 기간 허용 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
-| 22 | 실시간 상승만 제한 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
-| 23 | 실시간 하락만 제한 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
-| 24 | 실시간 조건 반전 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
+| 21 | TOP 실시간/미지 기간 허용 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
+| 22 | 일반 랭킹 미지 기간 허용 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
+| 23 | TOP 정상 기간 거부 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
+| 24 | 일반 정상 기간 거부 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
 | 25 | 오류 엔드포인트 교환 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
 | 26 | 오류 상태 교환 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
 | 27 | 오류 원인 교환 | 검출 (exit 101) | ranking_request_matches_domain_supported_combinations_and_preserves_every_field |
@@ -135,7 +136,7 @@ application 좁은 검사 45개 및 clippy 통과. test-diff는 승인된 기존
 | crates/application/tests/ports.rs | FakeBroker의 BrokerRead/MarketInfo impl | 필수 신규 메서드 및 확정 서명 추가, 기존 성공/불완전/실패 시나리오 유지 |
 | crates/application/tests/error_class.rs | expected_no_data | 기존 세 분기 유지 + 새 Order→NoData(Order) 소진 분기 |
 
-최초 정상 커밋 훅은 전체 워크스페이스 1,346/1,346, 커버리지 대상 945/945 및 coverage-check 위반 없음까지 통과한 뒤 승인된 test-diff 15건만 거부했다. test-diff 뒤의 disable-report·disable-report-since·hooks-installed도 별도 실행하여 확인한다. 지시문의 사전 승인에 따라 구현 커밋 한 건만 LEFTHOOK=0으로 만들며 커밋 메시지에 사유를 남긴다. 최종 정상 훅 통과는 후속 리뷰·병합 뒤 별도로 확보한다.
+최초 정상 커밋 훅은 전체 워크스페이스 1,346/1,346, 커버리지 대상 945/945 및 coverage-check 위반 없음까지 통과한 뒤 승인된 test-diff 15건만 거부했다. test-diff 뒤의 disable-report·disable-report-since·hooks-installed도 별도 실행하여 확인한다. 지시문의 사전 승인에 따라 구현 커밋 한 건만 LEFTHOOK=0으로 만들며 커밋 메시지에 사유를 남긴다. 최종 결과는 정상 훅 실행, 개별 실패 재검증, 승인된 test-diff 예외를 구분해 아래에 기록한다.
 
 ## 리뷰 수정 결정
 
@@ -150,3 +151,23 @@ application 좁은 검사 45개 및 clippy 통과. test-diff는 승인된 기존
 ## H-46 병합
 
 최종화 중 master 8ba1f6abf3b1050017b649d1d1a5fd63104a6363(Merge h-46)을 --no-ff로 받았다. lib.rs 충돌은 read_queries와 self_check 양쪽 선언을 모두 보존하고 .codex/config.toml·hashes.json은 공식 생성 스크립트로 재생성했다. 리뷰 수정분은 이 병합 트리에 함께 담는다. H-46이 fast를 선택하더라도 docs/설정 변경은 보수적으로 전체 검사로 승격하는 정책이므로 그 정책을 따른다. 손으로 전체 검사를 따로 반복하지 않는다. 이 작업이 추가한 테스트에는 속성 횟수 숫자 리터럴이 없다. master에서 병합된 domain/하네스 테스트 변경은 A-20 구현자가 수정한 것이 아니다.
+
+## 2차 사소 지적 평가와 인계
+
+2차 새 Opus 리뷰는 차단·중요 0건, 사소 5건(추정 1건)이다. application 53개와 clippy를 독립 실행했다. 손 변형 재현은 exporters/dynamic-target/cwd-unknown 훅에 막혀 미검증이고 우회하지 않았다. 이 독립 실행 범위를 작성자의 최종 손 변형 결과와 구분한다.
+
+- 요청 검증은 종류·기간을 와일드카드 없이 소진하는 match로 보완했다. application은 ADR 0068의 요청 지원 조합을 검증하고 domain은 응답 사실을 검증한다. 기존 domain impl은 바꾸지 않으며 새 enum 변형은 제품·테스트 양쪽의 소진 검사를 깨뜨려 검토를 요구한다.
+- 지표 가짜가 입력을 무시하던 예시를 수정했다. KRBond3Y/KOSDAQ/KOSPI/중복KRBond3Y의 요청 순서·단위·개수를 독립 기대값으로 검사하고 Unknown은 UnsupportedQuery다. KR/US 두 시장의 마스터·수수료 사실 동등성·캘린더 시장도 검증한다. 국내 수급 예시는 국내 QuoteInstrument를 사용한다. 실제 HTTP 전 지원 검사까지 구현한 증거로 주장하지 않는다.
+- 초기 기준 SHA는 최초 구현 기준이고 현재 수정 기준과 구분해 적었다. 초안 상태는 원 지시문의 명시 요구여서 유지한다. 메인은 이 초안을 채택·번호 부여할 때 architecture 3.3의 BrokerRead/MarketInfo 역할과 ADR0055의 임시·정의 대기 현황을 갱신한다. 이 초안은 해당 행의 현재 구현 계약이며 기존 확정 ADR 내용은 구현자가 고치지 않는다.
+- 병합+리뷰 수정이 함께 든 2030677은 독립 리뷰 대상 SHA로 고정한다. 이력은 다시 쓰지 않고 이번 사소 보완은 후속 커밋으로 분리한다.
+- T-15 수용 항목: CLOSED 역사 조회 범위·주문 유효 기간·CLOSED 전환 지연 및 평가 시작 OPEN 사실 같은 포괄 근거를 실측/계약으로 확정하고, 그 근거를 가진 정상 Complete 사례와 오래된 늦은 체결/근거 부족 Incomplete 사례를 모두 검사한다. 근거를 확보하지 못하면 보수적 Incomplete/NotCompared를 유지한다. 일간 대조가 항상 가능하다고 약속하거나 임의 주문 수명 상수를 넣지 않는다. 실제 키 실측은 사용자 몫이다.
+
+수정자는 사소 지적을 직접 보완하고 좁은 회귀/소진 조합/손 변형으로 검증했다. 추가 독립 에이전트는 실행하지 않았으며 최종 사소 보완분의 검증은 작성자 검증이다. 실제 어댑터 계약·기존 확정 문서 채택은 위 인계에 남는다.
+
+## 최종 검사와 커버리지 변동 인계
+
+최종 정상 커밋 훅은 master8ba1f6a 기준 check-fast를 실행했고 문서·설정 변경으로 전체 검사에 승격했다. 워크스페이스1303/1303은 통과했다. 커버리지 대상955/955 테스트는 통과했지만, A-20에서 변경하지 않은 domain/src/tick_size.rs:273의 속성 테스트 본체에서 remainder==0 분기가 미도달하여 최초 coverage-check는1건 실패했다. 이 실패를 승인 예외로 무시하지 않았다.
+
+소스·seed·기준을 바꾸지 않고 같은 STOCK_COPILOT_PROPTEST_CASES=4096으로 커버리지만 재검사했다. 누적 프로파일을 배제하려고 cargo-llvm-cov의 profraw 정리 후 새 실행을 추가 확인했다. 최종 새 실행은955/955·coverage-check 위반0이며, LCOV270행4096회/273행6회/275행4090회다. 기존 테스트나 커버리지 기준, 속성 횟수를 수정하지 않았다. tick_size.rs는 master와 차이가 없다. 난수 조건에 따라 테스트 본체의 줄 커버리지가 달라질 수 있는 기존 재현성 문제는 메인/하네스 후속으로 넘긴다. 임의 seed를 고르거나 실패 분기를 제외하지 않았다.
+
+정상 훅은 최초 커버리지 실패로 중단됐으므로, 실패한 커버리지의 새 프로파일 재검증과 그 뒤 test-diff·disable-report·disable-report-since·hooks-installed를 각각 실행했다. 마지막 test-diff는 승인된 호출부·헬퍼·필수 impl·Order 소진 분기의15건만 거부했고, 그 외 검사는 모두 통과했다. 최종 커밋은 이15건에 대한 원 지시문의 사전 승인에 따라 LEFTHOOK=0으로 만들며, 최초 실패와 재검증을 숨기지 않고 커밋 메시지에 남긴다. 전체 check-fast 명령 자체가 종료0이었다고 주장하지 않는다.

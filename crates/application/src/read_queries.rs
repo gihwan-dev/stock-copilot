@@ -17,17 +17,7 @@ impl RankingQuery {
         limit: RankingLimit,
         caution: RankingCautionFilter,
     ) -> Result<Self, PortError> {
-        if kind == RankingKind::Unknown
-            || duration == RankingDuration::Unknown
-            || ((kind == RankingKind::TopGainers || kind == RankingKind::TopLosers)
-                && duration == RankingDuration::Realtime)
-        {
-            return Err(PortError::new(
-                ReadEndpoint::Rankings,
-                HttpStatus::BadRequest,
-                PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery),
-            ));
-        }
+        validate_ranking_period(kind, duration)?;
         Ok(Self {
             kind,
             market,
@@ -55,5 +45,40 @@ impl RankingQuery {
     #[must_use]
     pub const fn caution_filter(self) -> RankingCautionFilter {
         self.caution
+    }
+}
+
+fn ranking_query_error() -> PortError {
+    PortError::new(
+        ReadEndpoint::Rankings,
+        HttpStatus::BadRequest,
+        PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery),
+    )
+}
+fn validate_ranking_period(kind: RankingKind, duration: RankingDuration) -> Result<(), PortError> {
+    match kind {
+        RankingKind::Unknown => Err(ranking_query_error()),
+        RankingKind::TopGainers | RankingKind::TopLosers => match duration {
+            RankingDuration::Realtime | RankingDuration::Unknown => Err(ranking_query_error()),
+            RankingDuration::Day
+            | RankingDuration::Week
+            | RankingDuration::Month
+            | RankingDuration::ThreeMonths
+            | RankingDuration::SixMonths
+            | RankingDuration::Year => Ok(()),
+        },
+        RankingKind::MarketTradingAmount
+        | RankingKind::MarketTradingVolume
+        | RankingKind::TossTradingAmount
+        | RankingKind::TossTradingVolume => match duration {
+            RankingDuration::Unknown => Err(ranking_query_error()),
+            RankingDuration::Realtime
+            | RankingDuration::Day
+            | RankingDuration::Week
+            | RankingDuration::Month
+            | RankingDuration::ThreeMonths
+            | RankingDuration::SixMonths
+            | RankingDuration::Year => Ok(()),
+        },
     }
 }
