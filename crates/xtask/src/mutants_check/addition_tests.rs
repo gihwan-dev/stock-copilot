@@ -477,3 +477,72 @@ fn opaque_macro_items_cannot_hide_impls_or_imports() {
         Change::Graph
     );
 }
+
+fn test_attribute_addition(attribute: &str) -> Result<std::collections::BTreeSet<String>, String> {
+    let before = files(&format!(
+        "#[cfg(test)] mod tests {{ #[test] #[{attribute}] fn stable() {{ panic!(\"expected\"); }} }}"
+    ));
+    let mut after = before.clone();
+    after.insert(
+        String::from("crates/domain/src/lib.rs"),
+        String::from("mod sample; mod fresh; pub use fresh::Fresh;"),
+    );
+    after.insert(
+        String::from("crates/domain/src/fresh.rs"),
+        String::from("pub struct Fresh;"),
+    );
+    select(&before, &after, &["lib", "fresh"])
+}
+
+#[test]
+fn literal_test_attributes_keep_new_file_scope() {
+    for attribute in [
+        "should_panic",
+        "should_panic(expected = \"expected\")",
+        "should_panic(expected = r#\"expected\"#)",
+        "ignore",
+        "ignore = \"reason\"",
+        "ignore = r#\"reason\"#",
+    ] {
+        assert_eq!(
+            test_attribute_addition(attribute).expect(attribute),
+            std::collections::BTreeSet::from([String::from("crates/domain/src/fresh.rs")]),
+            "{attribute}"
+        );
+    }
+}
+
+#[test]
+fn nonliteral_test_attributes_require_crate_fallback() {
+    for attribute in [
+        "should_panic(expected = some_macro!())",
+        "should_panic(expected = EXPECTED)",
+        "should_panic(expected = 1)",
+        "should_panic(expected = b\"bytes\")",
+        "should_panic(expected = true)",
+        "should_panic(expected = \"a\", expected = \"b\")",
+        "should_panic(expected = \"a\", unknown = \"b\")",
+        "should_panic(unknown = \"a\")",
+        "should_panic(expected)",
+        "should_panic()",
+        "should_panic[expected = \"a\"]",
+        "should_panic{expected = \"a\"}",
+        "should_panic(expected = (\"a\"))",
+        "should_panic(expected = \"a\",)",
+        "should_panic = \"a\"",
+        "ignore(reason = \"a\")",
+        "ignore = REASON",
+        "ignore = some_macro!()",
+        "ignore = 1",
+        "ignore = b\"bytes\"",
+        "ignore = true",
+        "ignore()",
+        "external::should_panic",
+        "external::ignore",
+        "other",
+    ] {
+        test_attribute_addition(attribute).expect_err(attribute);
+        let meta = syn::parse_str::<syn::Meta>(attribute).expect("attribute syntax");
+        assert!(!super::macro_tokens::attribute_known(&meta), "{attribute}");
+    }
+}

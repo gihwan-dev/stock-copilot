@@ -3,6 +3,15 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "ds.badgeNeutral": { ko: "보유 종목" as UiText },
+  "ds.badgePrimary": { ko: "앱 계산" as UiText },
+  "ds.badgeAlert": { ko: "값 오류" as UiText },
+  "ds.statusWarning": { ko: "자료가 오래됐어요" as UiText },
+  "ds.statusError": { ko: "토스에 연결하지 못했어요" as UiText },
+  "ds.statusInfo": { ko: "오늘은 휴장이에요" as UiText },
+  "ds.retry": { ko: "다시 시도" as UiText },
+  "ds.close": { ko: "닫기" as UiText },
+  "ds.tableEmpty": { ko: "표시할 항목이 없어요" as UiText },
   "ds.day": { ko: "하루" as UiText },
   "ds.month": { ko: "한 달" as UiText },
   "ds.year": { ko: "일 년" as UiText },

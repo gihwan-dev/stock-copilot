@@ -5,7 +5,7 @@ import {
   type BrandError,
   type Result,
 } from "../lib";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 
 export const inputEventValue = (
   event: Readonly<ChangeEvent<HTMLInputElement | HTMLSelectElement>>,
@@ -50,3 +50,16 @@ type ClipboardError = {
 };
 
 const clipboard = (): Clipboard | undefined => navigator.clipboard;
+
+export const focusDialogInput = (
+  ref: Readonly<RefObject<HTMLDivElement | null>>,
+): void => {
+  const popup = ref.current;
+  const target =
+    popup?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]),select:not([disabled]),textarea:not([disabled])',
+    ) ??
+    popup?.querySelector<HTMLElement>("button:not([disabled])") ??
+    popup;
+  target?.focus();
+};

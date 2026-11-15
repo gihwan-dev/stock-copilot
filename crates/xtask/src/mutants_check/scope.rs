@@ -77,8 +77,15 @@ pub(super) fn select_sources(
             return Err(String::from("crate-wide support input"));
         }
     }
-    let mut graph = super::graph::Graph::read(after)?;
-    graph.extend(super::graph::Graph::read(before)?);
+    let graph_sources = |sources: &super::graph::Sources| {
+        sources
+            .iter()
+            .filter(|(path, _)| path.starts_with(&format!("{directory}/src/")))
+            .map(|(path, source)| (path.clone(), source.clone()))
+            .collect()
+    };
+    let mut graph = super::graph::Graph::read(&graph_sources(after))?;
+    graph.extend(super::graph::Graph::read(&graph_sources(before))?);
     let additions = super::additions::Additions::read(before, after).ok_or("addition context")?;
     let mut selected = BTreeSet::new();
     let mut seeds = BTreeSet::new();
