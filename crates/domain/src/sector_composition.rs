@@ -90,7 +90,7 @@ pub struct SectorStockRow {
     pub market_capitalization: Option<crate::NumericInput>,
     pub trading_amount: Option<crate::NumericInput>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SectorAmount {
     Unavailable,
     Available(crate::Money),
@@ -125,7 +125,9 @@ fn sector_member(row: SectorStockRow) -> Result<SectorMember, MarketDataError> {
         trading_amount: sector_amount(row.trading_amount.as_ref())?,
     })
 }
-fn sector_amount(input: Option<&crate::NumericInput>) -> Result<SectorAmount, MarketDataError> {
+pub(crate) fn sector_amount(
+    input: Option<&crate::NumericInput>,
+) -> Result<SectorAmount, MarketDataError> {
     match input {
         None => Ok(SectorAmount::Unavailable),
         Some(raw) => {
@@ -136,6 +138,14 @@ fn sector_amount(input: Option<&crate::NumericInput>) -> Result<SectorAmount, Ma
             }
             Ok(SectorAmount::Available(value))
         }
+    }
+}
+impl std::fmt::Debug for SectorAmount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unavailable => "Unavailable",
+            Self::Available(_) => "Available([REDACTED])",
+        })
     }
 }
 #[cfg(test)]
@@ -384,5 +394,49 @@ mod tests {
         domestic
             .identified_member(&foreign)
             .expect_err("시장만 불일치");
+    }
+
+    #[test]
+    fn d42_zero_sector_money_remains_available_and_distinct_from_absence() {
+        let stamp = Timestamp::from_parts(
+            UnixSeconds::new(0),
+            Nanosecond::new(0),
+            OffsetSeconds::new(0),
+        )
+        .expect("시각");
+        for (cap, amount) in [
+            (Some("0"), Some("31")),
+            (Some("47"), Some("0")),
+            (None, Some("0")),
+            (Some("0"), None),
+        ] {
+            let fact = SectorComposition::from_stocks_response(
+                SectorId::try_new("100").expect("섹터"),
+                KnownMarket::Kr,
+                vec![crate::SectorStockRow {
+                    symbol: Symbol::try_new("005930").expect("종목"),
+                    currency: crate::Currency::Krw,
+                    market_capitalization: cap
+                        .map(|value| crate::NumericInput::try_new(value).expect("금액")),
+                    trading_amount: amount
+                        .map(|value| crate::NumericInput::try_new(value).expect("금액")),
+                }],
+                stamp,
+            )
+            .expect("영 금액 보존");
+            let expected = |text| match text {
+                None => crate::SectorAmount::Unavailable,
+                Some(value) => crate::SectorAmount::Available(
+                    crate::Money::parse(
+                        &crate::NumericInput::try_new(value).expect("입력"),
+                        crate::Currency::Krw,
+                    )
+                    .expect("원화"),
+                ),
+            };
+            let member = fact.stocks().first().expect("구성");
+            assert_eq!(member.market_capitalization(), expected(cap));
+            assert_eq!(member.trading_amount(), expected(amount));
+        }
     }
 }

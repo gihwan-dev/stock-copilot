@@ -297,6 +297,7 @@ fn render(data: &Json) -> Result<Generated, String> {
     css.push_str("}\n}\n\n:root[data-theme=\"dark\"] {\n");
     css.push_str(&dark);
     css.push_str("}\n\n");
+    css.push_str(&chart_theme_scopes(&light, &dark));
     utilities(data, &mut css)?;
     font_faces(data, &mut css)?;
     let mut types = String::new();
@@ -393,3 +394,12 @@ pub(crate) fn command(arguments: &[String]) -> ExitCode {
 
 #[cfg(test)]
 mod tests;
+
+fn chart_theme_scopes(light: &str, dark: &str) -> String {
+    format!(
+        "[data-chart-theme=\"light\"] {{\n{light}}}\n\n[data-chart-theme=\"dark\"] {{\n{dark}}}\n\n"
+    )
+}
+
+#[cfg(test)]
+mod chart_theme_tests;

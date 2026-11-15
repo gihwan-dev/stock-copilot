@@ -173,12 +173,12 @@ pub(crate) mod tests {
             })
             .collect::<Vec<_>>();
         let dates = days.iter().map(|day| snapshot(*day)).collect::<Vec<_>>();
-        crate::SignalBenchmark::from_candles(
-            crate::BenchmarkKind::Kospi,
-            &candles,
+        let indices =
+            crate::index_benchmark::tests::index_candles(crate::BenchmarkKind::Kospi, &candles);
+        crate::SignalBenchmark::from_index_candles(
+            &indices,
             &dates,
             &days.iter().map(|day| calendar(*day)).collect::<Vec<_>>(),
-            Currency::Krw,
         )
         .expect("동일 종가 기간")
     }
