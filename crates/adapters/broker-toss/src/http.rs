@@ -44,8 +44,8 @@ impl Resolve for LoopbackResolver {
 }
 
 pub struct TossHttpClient {
-    pub(crate) client: Client,
-    pub(crate) origin: Url,
+    client: Client,
+    origin: Url,
 }
 
 impl fmt::Debug for TossHttpClient {
@@ -218,6 +218,21 @@ impl TossHttpClient {
         Ok(Self { client, origin })
     }
 
+    pub(crate) async fn send_token(&self, body: SecretValue) -> Result<RawResponse, TossHttpError> {
+        let mut url = self.origin.clone();
+        url.set_path("/oauth2/token");
+        receive(
+            self.client
+                .post(url)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(body.as_exposed_secret().to_vec())
+                .send()
+                .await
+                .map_err(|_error| TossHttpError::Transport)?,
+        )
+        .await
+    }
+
     pub async fn get(
         &self,
         request: &ReadRequest,
@@ -279,12 +294,9 @@ pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawRespon
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        LoopbackResolver, RawResponse, ResponseHeaders, TossHttpClient, TossHttpError,
-        classify_status,
-    };
+    use super::{LoopbackResolver, RawResponse, ResponseHeaders, TossHttpError, classify_status};
+    use crate::TossEndpoint;
     use crate::endpoint::EndpointMode;
-    use crate::{ReadRequest, TossEndpoint};
     use application::{HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
     use reqwest::dns::Resolve;
 
@@ -292,12 +304,9 @@ mod tests {
     fn product_configuration_rejects_plaintext_before_connecting() {
         let probe = testkit::ConnectionProbe::bind().expect("listener");
         let endpoint = TossEndpoint::local(probe.port().expect("port")).expect("local endpoint");
-        let client = TossHttpClient {
-            client: super::configured_client(EndpointMode::Production)
-                .build()
-                .expect("client"),
-            origin: reqwest::Url::parse(endpoint.origin()).expect("local URL"),
-        };
+        let client = super::configured_client(EndpointMode::Production)
+            .build()
+            .expect("client");
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -306,14 +315,15 @@ mod tests {
             .block_on(async {
                 tokio::time::timeout(
                     std::time::Duration::from_secs(1),
-                    client.get(
-                        &ReadRequest::new(crate::ReadRoute::Accounts),
-                        &SecretValue::new(b"fake".to_vec()),
-                    ),
+                    client.get(endpoint.origin()).send(),
                 )
                 .await
             })
-            .expect("scheme refusal before I/O wait");
+            .expect("scheme refusal before I/O wait")
+            .map_err(|error| {
+                assert!(error.is_builder());
+                TossHttpError::Transport
+            });
         assert_eq!(outcome.expect_err("plaintext"), TossHttpError::Transport);
         assert_eq!(
             probe.observe().expect("listener status"),
@@ -463,6 +473,7 @@ mod tests {
             "http://localhost:99",
             "http://127.0.0.1:0",
             "http://user@127.0.0.1:99",
+            "http://:password@127.0.0.1:99",
             "http://127.0.0.1:99/path",
             "http://127.0.0.1:99/?token=bad",
             "http://127.0.0.1:99/#bad",
@@ -475,6 +486,10 @@ mod tests {
         }
         assert_eq!(
             super::validate_loopback(&reqwest::Url::parse("http://127.0.0.1:99").expect("URL")),
+            Ok(())
+        );
+        assert_eq!(
+            super::validate_loopback(&reqwest::Url::parse("http://127.0.0.1:80").expect("URL")),
             Ok(())
         );
     }

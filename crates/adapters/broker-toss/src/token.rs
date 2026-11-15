@@ -6,7 +6,6 @@ fn hex_digit(nibble: u8) -> u8 {
     }
 }
 
-use crate::http::receive;
 use crate::{RawResponse, TossHttpClient, TossHttpError};
 use application::SecretValue;
 
@@ -34,8 +33,6 @@ pub async fn issue_token(
     client_id: &SecretValue,
     client_secret: &SecretValue,
 ) -> Result<RawResponse, TossHttpError> {
-    let mut url = client.origin.clone();
-    url.set_path("/oauth2/token");
     let id = encode(client_id.as_exposed_secret());
     let secret = encode(client_secret.as_exposed_secret());
     let body = SecretValue::new(
@@ -47,15 +44,5 @@ pub async fn issue_token(
         ]
         .concat(),
     );
-    receive(
-        client
-            .client
-            .post(url)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(body.as_exposed_secret().to_vec())
-            .send()
-            .await
-            .map_err(|_error| TossHttpError::Transport)?,
-    )
-    .await
+    client.send_token(body).await
 }

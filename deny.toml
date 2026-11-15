@@ -53,7 +53,7 @@ allow = [
   { crate = "hyper-util", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "ipnet", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "mio", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
-  { crate = "pkg-config", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
+  { crate = "pkg-config", reason = "T-18: aws-lc-sys의 macOS 활성 빌드 의존성; aws-lc-rs → rustls → reqwest 전이" },
   { crate = "reqwest", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "slab", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "socket2", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },

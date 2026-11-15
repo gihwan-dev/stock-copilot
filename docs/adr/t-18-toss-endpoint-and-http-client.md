@@ -238,3 +238,44 @@ HTTPS 회귀는 실제 열린 루프백 수신기에 연결이 오지 않아야 
 | 50 | 프록시 프로브가 테스트0개 실행 | proxy_environment_is_ignored_in_a_fresh_process | 검출 |
 
 최초 master 수신 검사에서 전체1431/1431, 커버리지 대상1043/1043 및 coverage-check 위반 없음까지 통과했으나 실행 중 master가 전진해 마지막 test-diff가 이전 MERGE_HEAD의 기준 예외를 거부했다. 실패한 검사를 통과로 세지 않았다. 회차2 소유 경로의 트리를 보존한 뒤 미완료 병합을 취소하고 최신 master를 다시 받아 정상 훅으로 검증한다. master ref나 검사 규칙을 바꾸지 않았다.
+
+## 리뷰 3 수정 결정
+
+회차3 Opus는 중요2/사소1을 지적했다. 중요 항목의 반례 쓰기가 리뷰어 훅에 막혀 추정으로 보고됐다. 구현 담당은80fdb66의 별도 git archive 복사본에서 자식 모듈 생성자, 주소 변경 자유 함수, from_url 클라이언트 생성자를 추가해 외부 소비자 테스트를 실제 실행했다. 컴파일·arch-check·source-check·raw-types가 모두 통과해 두 경로를 확정했다. 실제 요청은 보내지 않았다. 새 검사로 같은 복사본을 검사하면 endpoint.rs, endpoint/sneak.rs, http.rs가 모두 위반으로 잡힌다.
+
+수정은 endpoint/http 모듈의 자식 모듈을 비공개 인라인 cfg(test) tests 하나로 닫고, 완전 수식·원시 식별자의 타입 경로도 정규화한다. 별칭 타입의 필드 조립, 자유 함수/상수의 필드 변경, 매크로로 감춘 선언도 거부한다. TossHttpClient의 필드는 모듈 비공개이며 직접 조립은 http.rs의 정식 new 안에만 허용한다. new/get/고정 send_token 외 클라이언트 구현을 거부한다. 클라이언트 내부 상태를 반환하는 다른 구현의 접근도 검사한다. 다른 모듈의 직접 조립은 별도 실제 Rust 컴파일에서 E0451로 실패했다. 기존 HTTPS 시험은 봉인을 뚫어 클라이언트를 조립하는 대신 실제 제품 빌더로 열린 루프백에 요청해 builder 거부·1초 이내 종료·연결0건을 단언한다. 기존 단언은 유지했다.
+
+토큰 발급의 외부 서명과 form 생성은 그대로이고 고정 POST만 private 필드에 접근하는 http.rs 내부 메서드로 옮겼다. HTTP 쓰기 허용은 이 작업의 두 파일(token.rs의 토큰 준비, http.rs의 고정 발급 전송)에 한정한다. 기존 token.rs 고정 자료와 그 기대값은 보존하고 새 http.rs 양성 자료로 추가 위치의 필요성을 검증한다. pkg-config 허용 사유는 실제 aws-lc-sys 빌드 전이로 고쳤다. 새 패키지나 기능은 더하지 않았다.
+
+이번 작업의 endpoint 검사 테스트 중 only_the_named_origin_constant_can_contain_the_host의 자유 함수 본문 바이트 문자열 사례는 Host 단일 기대값에서 Host+Production으로 강화했다. macros_escapes_c_strings_and_nested_constants_cannot_copy_the_host의 자유 함수3개도 같은 추가 위반을 정확히 단언한다. 기존 공개 상수 Host 사례는 별도 단언으로 보존했다. 외부 소비자 사례는6개에서7개로 늘려 from_url도 컴파일 실패로 고정했다. 허용한 모듈 비공개 필드·시험 모듈·완전 수식 정식 생성자의 양성 대조도 추가했다. 단언 삭제·와일드카드·검사 끄기는 없다.
+
+Opus 리뷰는 승인된 최대3회에서 멈춘다. 마지막 지적은 새 Codex 독립 비판에서 수정 전 반례와 수정 후 회귀 근거를 확인하도록 넘긴다. 회차3 Opus가 중요0이라고 보고한 것으로 바꾸지 않는다.
+
+## 최종 자동 변이 범위
+
+80fdb66에서 just mutants-diff dc8f3f950294e9d3d1947b39c256868076d7de15을 실제 실행해 종료0을 확인했다. catalog.json은 빈 배열이었다. 현재 자동 변이 설정은 domain/order-execution/application만 대상으로 하므로 T-18 adapter/xtask의 변이가 선택되지 않았다. 자동 검출 성공으로 보고하지 않으며 아래 실제 손 변형이 이 범위의 보완 증거다.
+
+## 추가 경계 손 변형
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 51 | 기본 포트80 정규화 무시 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 52 | 빈 사용자 이름의 비밀번호 검사 제거 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+
+기준과 복구가 모두 통과했다. 기본 포트80과 빈 사용자 이름/비밀번호 URL의 독립 기대 단언을 제품 시험 파일에도 반영했다.
+
+## 회차3 수정 후 손 변형
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 53 | 모듈 비공개 필드 판정을 반전 | arch_check::source::endpoint | 검출 |
+| 54 | 완전 수식 구현 경로 인식을 제거 | arch_check::source::endpoint | 검출 |
+| 55 | 자식 모듈 검사 제거 | arch_check::source::endpoint | 검출 |
+| 56 | 클라이언트 직접 조립 인식을 제거 | arch_check::source::endpoint | 검출 |
+| 57 | 자유 필드 접근의 제품/시험 범위 교환 | arch_check::source::endpoint | 검출 |
+| 58 | 클라이언트 닫힌 메서드 검사 제거 | arch_check::source::endpoint | 검출 |
+| 59 | 환경 프록시 무시 제거 | proxy_environment_is_ignored_in_a_fresh_process | 검출 |
+
+고유 손 변형은 총59개다. 위7개는 모두 실제 컴파일 후 검출했고 기준/복구도 통과했다. 최초 필드 가시성 반전이 좁은 시험에서 생존해 비공개 필드 양성 대조를 추가했다. 최초 메서드 검사 제거는 보조 함수 미사용으로 컴파일되지 않아 세지 않고, 참조를 유지한 무력화로 재실행했다. 중간 실행의 소스 문자열 불일치로 중단된 프로브도 완주로 세지 않았다. 최종6개 구조 변형은 모두 재실행했고, HTTPS/타임아웃/8MiB/헤더 민감성 기존6개도 봉인 수정 후 재실행해 검출했다.
+
+수정 회차3의 첫 정상 훅 전체 테스트는1438개 중1250개 실행 시점에 기존 Git 훅 통합 시험5개가 실패해 중단됐다. 하위 commit-base/commit-guard의 signal9가 관찰됐고188개는 실행되지 않았다. 소스 변경 없이 실패한5개를 좁게 다시 실행해5/5 통과했다. 원인은 확정하지 않았다. 빌드 병렬도만 CARGO_BUILD_JOBS=2로 제한해 동일 정상 훅 전체 검사를 다시 실행한다. 테스트 수·속성 반복 수·검사 규칙은 줄이지 않는다.

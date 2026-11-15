@@ -2,7 +2,7 @@
 mod tests {
     use std::fs;
 
-    fn cases() -> [(&'static str, &'static str, bool); 6] {
+    fn cases() -> [(&'static str, &'static str, bool); 7] {
         [
             (
                 "valid",
@@ -22,6 +22,11 @@ mod tests {
             (
                 "origin",
                 "fn main() { broker_toss::TossEndpoint::local(\"http://192.0.2.1\"); }",
+                false,
+            ),
+            (
+                "arbitrary_client",
+                "fn main() { broker_toss::TossHttpClient::from_url(\"https://example.invalid\"); }",
                 false,
             ),
             (
