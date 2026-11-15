@@ -42,12 +42,13 @@ SignalBenchmark는 두 입력 경로 뒤의 지점·구간 봉인을 공유한�
 
 ### D-41 추가 조회 사실
 
-투자자별 세 그룹은 서로 다른 MarketObservation을 소유한다. 순매수/순매도는 각각 닫힌 방향과 양의 정수 원화 금액으로 보존한다. 개인의 직전 영업일 자료를 다른 그룹 시각으로 덮지 않는다. KRX/NXT 통합·ETF 포함 범위를 보존하며 정규장 종료만으로 확정이라고 주장하지 않는다. 순위는 양수·유일, 종목은 목록별 유일, 금액 내림차순을 검증한다. 순위 공백은 Gaps이며 응답을 자르거나 다시 순위를 매기지 않는다.
+리뷰 회차 2에서 QueryValue<T>를 제거했다. nullable 금액은 D-37의 SectorAmount, 등락률은 RankingChange를 그대로 쓰고 섹터 부모·요약은 Option이다. 기간·랭킹 종류·투자자 구분도 기존 RankingDuration·RankingKind·InvestorClass를 재사용한다. 섹터 조회는 여섯 기간과 TopGainers/MarketTradingAmount만 생성자에서 허용한다. 정수 원화 금액, 그룹별 독립 집계 시각, 순위 빈자리와 서버 순서는 보존한다.
 
-섹터 목록의 Major/Middle/Minor와 부모를 보존하고, 전체 목록에서는 부모 존재와 바로 위 계층 관계를 검사한다. 상세 응답은 여섯 기간의 정확한 순서·nullable 소수비율과 선택 요약을 보존한다. 섹터 랭킹은 대분류·중분류 대상 표지와 하위 구성 미포함 범위, nullable 비율/거래대금/시가총액을 각각 보존한다. 미국 섹터 금액도 KRW만 허용한다. 서버 시각이 없는 섹터 API에는 MarketObservation::collected_only를 사용한다.
+순위 연속성·양수/중복 검증과 nullable 등락률 파서는 market_ranking의 공통 비공개(crate 내부) 함수로 합쳤다. 금액 파서는 sector_composition의 공통 함수를 쓴다. 별도 전달 함수나 제네릭 선택 값 타입은 두지 않는다. 섹터 랭킹의 순서 검사는 null을 건너뛰고 값이 있는 것끼리 내림차순을 비교한다. null을 0으로 대체하지 않는다. 상세 응답은 여섯 기간의 정확한 순서와 자기 부모 금지를 검사한다.
 
-ETF 목록은 관련 ETF의 심볼·이름과 서버 순서를 보존하고 하위 섹터 미포함을 명시한다. ETF 내부 자산 분해로 해석하지 않는다. 오류는 값이 없는 MarketDataError이며 숫자 입력 행·조회 사실·선택 후보의 Debug는 금액을 가린다. 새 외부 의존성과 검사 끄기는 없다.
+scope·hierarchy·InvestorRankingScope·항상 KRW인 별도 currency·의미가 다른 FlowLevel/FlowFinality 재사용 필드는 제거했다. 관련 ETF는 /sectors/{sectorId}/etfs의 목록이며 내부 보유 자산 분해가 아니다. 하위 섹터 미포함·대분류/중분류 랭킹·KRX/NXT ETF 포함·항상 KRW인 금액 등 고정된 API 의미는 이 문서와 어댑터 계약으로 남긴다. 금액이 있으면 Money가 KRW 단위를 보존하고 입력 행의 currency 검증은 유지한다.
 
+SectorAmount의 Debug는 금액 원문만 가린다. 섹터 식별자·이름·부모·요약과 미제공 여부는 읽을 수 있다. 새 랭킹 입력 행과 봉인된 순매수/순매도 항목도 금액 필드만 가린다. 투자자별 그룹은 각각 MarketObservation을 가지며 서버 시각이 없는 섹터 API는 collected_only로 보존한다. 공급자의 거짓 진술을 인증하거나 주식/섹터/ETF의 추가 조회 사실을 발명하지 않는다.
 
 ## 검증
 
@@ -120,39 +121,39 @@ master 8ba1f6abf3b1050017b649d1d1a5fd63104a6363의 H-46을 받았다. 이번 작
 | InvestorNetTradingRanking.netSellRankings | 예 | 아니오 | array | sell: NetTradingList(NetSell) |
 | NetBuyRankingItem.rank | 예 | 아니오 | integer | RankingOrdinal, 양수/중복 거부, Gaps 보존 |
 | NetBuyRankingItem.symbol | 예 | 아니오 | string | Symbol, 시장별 문법 검증 |
-| NetBuyRankingItem.currency | 예 | 아니오 | #/components/schemas/Currency | KRW 검증; 미국 섹터 금액도 KRW |
+| NetBuyRankingItem.currency | 예 | 아니오 | #/components/schemas/Currency | KRW 입력 검증, Money의 통화로 보존 |
 | NetBuyRankingItem.netBuyAmount | 예 | 아니오 | string | Money(KRW), 양의 정수, 매수 방향 별도 |
 | NetSellRankingItem.rank | 예 | 아니오 | integer | RankingOrdinal, 양수/중복 거부, Gaps 보존 |
 | NetSellRankingItem.symbol | 예 | 아니오 | string | Symbol, 시장별 문법 검증 |
-| NetSellRankingItem.currency | 예 | 아니오 | #/components/schemas/Currency | KRW 검증; 미국 섹터 금액도 KRW |
+| NetSellRankingItem.currency | 예 | 아니오 | #/components/schemas/Currency | KRW 입력 검증, Money의 통화로 보존 |
 | NetSellRankingItem.netSellAmount | 예 | 아니오 | string | Money(KRW), 양의 정수, 매도 방향 별도 |
 | SectorsResponse.sectors | 예 | 아니오 | array | SectorCatalog.sectors |
 | Sector.sectorId | 예 | 아니오 | string | SectorId |
 | Sector.name | 예 | 아니오 | string | DisplayInstrumentName |
 | Sector.depth | 예 | 아니오 | integer | SectorDepth Major/Middle/Minor |
-| Sector.parentSectorId | 예 | 예 | ['string', 'null'] | QueryValue<SectorId>, 대분류 null / 나머지 부모 필수 |
+| Sector.parentSectorId | 예 | 예 | ['string', 'null'] | Option<SectorId>, 대분류 null / 나머지 부모 필수 |
 | SectorDetailResponse.sectorId | 예 | 아니오 | string | SectorId |
 | SectorDetailResponse.name | 예 | 아니오 | string | DisplayInstrumentName |
 | SectorDetailResponse.depth | 예 | 아니오 | integer | SectorDepth Major/Middle/Minor |
-| SectorDetailResponse.parentSectorId | 예 | 예 | ['string', 'null'] | QueryValue<SectorId>, 대분류 null / 나머지 부모 필수 |
-| SectorDetailResponse.summary | 예 | 예 | ['string', 'null'] | QueryValue<DisplayInstrumentName> |
+| SectorDetailResponse.parentSectorId | 예 | 예 | ['string', 'null'] | Option<SectorId>, 대분류 null / 나머지 부모 필수 |
+| SectorDetailResponse.summary | 예 | 예 | ['string', 'null'] | Option<DisplayInstrumentName> |
 | SectorDetailResponse.performance | 예 | 아니오 | #/components/schemas/SectorPerformance | SectorDetail.rates |
 | SectorPerformance.changeRates | 예 | 아니오 | array | 정해진 순서 여섯 기간, 누락/중복/다른 순서 거부 |
-| SectorChangeRate.duration | 예 | 아니오 | ['1d', '1w', '1mo', '3mo', '6mo', '1y'] | SectorDuration 여섯 값 |
-| SectorChangeRate.changeRate | 예 | 예 | ['string', 'null'] | QueryValue<Ratio>, 소수비율을 그대로 보존 |
-| SectorEtfsResponse.etfs | 예 | 아니오 | array | SectorEtfs.etfs, 서버 순서 보존, DirectMembersOnly |
+| SectorChangeRate.duration | 예 | 아니오 | ['1d', '1w', '1mo', '3mo', '6mo', '1y'] | RankingDuration의 여섯 기간 검증 |
+| SectorChangeRate.changeRate | 예 | 예 | ['string', 'null'] | RankingChange, 소수비율을 그대로 보존 |
+| SectorEtfsResponse.etfs | 예 | 아니오 | array | SectorEtfs.etfs, 서버 순서 보존, API 의미는 하위 섹터 미포함 |
 | SectorEtf.symbol | 예 | 아니오 | string | Symbol, 시장별 문법 검증 |
 | SectorEtf.name | 예 | 아니오 | string | DisplayInstrumentName |
 | SectorRankingResponse.rankings | 예 | 아니오 | array | SectorRanking.items, 최대 100개, Gaps 보존 |
 | SectorRankingItem.rank | 예 | 아니오 | integer | RankingOrdinal, 양수/중복 거부, Gaps 보존 |
 | SectorRankingItem.sectorId | 예 | 아니오 | string | SectorId |
 | SectorRankingItem.name | 예 | 아니오 | string | DisplayInstrumentName |
-| SectorRankingItem.changeRate | 예 | 예 | ['string', 'null'] | QueryValue<Ratio>, 소수비율을 그대로 보존 |
-| SectorRankingItem.tradingAmount | 예 | 예 | ['string', 'null'] | QueryValue<Money(KRW)> |
-| SectorRankingItem.marketCapitalization | 예 | 예 | ['string', 'null'] | QueryValue<Money(KRW)>, 하위 섹터 미포함 표지 |
-| SectorRankingItem.currency | 예 | 아니오 | #/components/schemas/Currency | KRW 검증; 미국 섹터 금액도 KRW |
+| SectorRankingItem.changeRate | 예 | 예 | ['string', 'null'] | RankingChange, 소수비율을 그대로 보존 |
+| SectorRankingItem.tradingAmount | 예 | 예 | ['string', 'null'] | SectorAmount(Money(KRW)) |
+| SectorRankingItem.marketCapitalization | 예 | 예 | ['string', 'null'] | SectorAmount(Money(KRW)), 하위 섹터 미포함은 API 고정 의미 |
+| SectorRankingItem.currency | 예 | 아니오 | #/components/schemas/Currency | KRW 입력 검증; 별도 상수 필드는 제거하고 Money 단위로 보존 |
 
-요청 열거형: 투자자 랭킹 count는 RankingLimit(1..=100). 섹터 랭킹 type은 TopGainers / MarketTradingAmount, duration은 Day/Week/Month/ThreeMonths/SixMonths/Year, marketCountry는 KnownMarket이다. 소분류 제외 대상 범위는 어댑터가 섹터 목록과 대조한다. 응답이 depth를 주지 않으므로 랭킹에서 임의 계층을 발명하지 않는다.
+요청 열거형: 투자자 랭킹 count는 RankingLimit(1..=100). 섹터 랭킹 type은 TopGainers / MarketTradingAmount, duration은 RankingDuration의 Day/Week/Month/ThreeMonths/SixMonths/Year, marketCountry는 KnownMarket이다. 소분류 제외 대상 범위는 어댑터가 섹터 목록과 대조한다. 응답이 depth를 주지 않으므로 랭킹에서 임의 계층을 발명하지 않는다.
 
 SectorRankingItem.changeRate는 스키마상 nullable이지만 설명은 항상 값이 있다고 한다. 더 보수적으로 nullable을 보존하고 0을 발명하지 않는다. 거래대금도 nullable 그대로 보존한다. 투자자 랭킹 금액만 양의 정수로 제한한다.
 

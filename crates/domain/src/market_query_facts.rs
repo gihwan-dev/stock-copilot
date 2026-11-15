@@ -1,50 +1,26 @@
+use crate::market_ranking::ranking_change;
+use crate::sector_composition::sector_amount;
 use crate::{
-    Currency, DisplayInstrumentName, KnownMarket, MarketDataError, MarketObservation, Money,
-    NumericInput, RankingContinuity, RankingLimit, RankingOrdinal, Ratio, SectorId, Symbol,
-    Timestamp,
+    Currency, DisplayInstrumentName, InvestorClass, KnownMarket, MarketDataError,
+    MarketObservation, Money, NumericInput, RankingChange, RankingContinuity, RankingDuration,
+    RankingKind, RankingLimit, RankingOrdinal, SectorAmount, SectorId, Symbol, Timestamp,
 };
 use std::collections::BTreeSet;
+
+const SECTOR_PERIODS: [RankingDuration; 6] = [
+    RankingDuration::Day,
+    RankingDuration::Week,
+    RankingDuration::Month,
+    RankingDuration::ThreeMonths,
+    RankingDuration::SixMonths,
+    RankingDuration::Year,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SectorDepth {
     Major,
     Middle,
     Minor,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SectorDuration {
-    Day,
-    Week,
-    Month,
-    ThreeMonths,
-    SixMonths,
-    Year,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SectorRankingKind {
-    TopGainers,
-    MarketTradingAmount,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SectorQueryScope {
-    DirectMembersOnly,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SectorRankingHierarchy {
-    MajorAndMiddle,
-}
-#[derive(Clone, PartialEq, Eq)]
-pub enum QueryValue<Value> {
-    Unavailable,
-    Available(Value),
-}
-impl<Value> std::fmt::Debug for QueryValue<Value> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Unavailable => "Unavailable",
-            Self::Available(_) => "Available([REDACTED])",
-        })
-    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorMetadataRow {
@@ -58,7 +34,7 @@ pub struct SectorMetadata {
     id: SectorId,
     name: DisplayInstrumentName,
     depth: SectorDepth,
-    parent: QueryValue<SectorId>,
+    parent: Option<SectorId>,
 }
 fn metadata(row: SectorMetadataRow) -> Result<SectorMetadata, MarketDataError> {
     if (row.depth == SectorDepth::Major && row.parent.is_some())
@@ -71,9 +47,7 @@ fn metadata(row: SectorMetadataRow) -> Result<SectorMetadata, MarketDataError> {
         id: row.id,
         name: row.name,
         depth: row.depth,
-        parent: row
-            .parent
-            .map_or(QueryValue::Unavailable, QueryValue::Available),
+        parent: row.parent,
     })
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +92,7 @@ fn validate_sector_parent(
     sector: &SectorMetadata,
     sectors: &[SectorMetadata],
 ) -> Result<(), MarketDataError> {
-    let QueryValue::Available(parent_id) = &sector.parent else {
+    let Some(parent_id) = &sector.parent else {
         return Ok(());
     };
     let parent = sectors
@@ -149,19 +123,19 @@ fn depth_relation(parent: SectorDepth, child: SectorDepth) -> DepthRelation {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorRateRow {
-    pub duration: SectorDuration,
+    pub duration: RankingDuration,
     pub change_rate: Option<NumericInput>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorRate {
-    duration: SectorDuration,
-    change_rate: QueryValue<Ratio>,
+    duration: RankingDuration,
+    change_rate: RankingChange,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorDetail {
     metadata: SectorMetadata,
     market: KnownMarket,
-    summary: QueryValue<DisplayInstrumentName>,
+    summary: Option<DisplayInstrumentName>,
     rates: Vec<SectorRate>,
     observation: MarketObservation,
 }
@@ -173,19 +147,10 @@ impl SectorDetail {
         rate_rows: Vec<SectorRateRow>,
         collected: Timestamp,
     ) -> Result<Self, MarketDataError> {
-        let expected = [
-            SectorDuration::Day,
-            SectorDuration::Week,
-            SectorDuration::Month,
-            SectorDuration::ThreeMonths,
-            SectorDuration::SixMonths,
-            SectorDuration::Year,
-        ];
-        if rate_rows
+        if !rate_rows
             .iter()
             .map(|rate_row| rate_row.duration)
-            .collect::<Vec<_>>()
-            != expected
+            .eq(SECTOR_PERIODS)
         {
             return Err(MarketDataError::UnsupportedPeriod);
         }
@@ -194,14 +159,14 @@ impl SectorDetail {
             .map(|rate_row| {
                 Ok(SectorRate {
                     duration: rate_row.duration,
-                    change_rate: query_ratio(rate_row.change_rate.as_ref())?,
+                    change_rate: ranking_change(rate_row.change_rate.as_ref())?,
                 })
             })
             .collect::<Result<Vec<_>, MarketDataError>>()?;
         Ok(Self {
             metadata: metadata(row)?,
             market,
-            summary: summary.map_or(QueryValue::Unavailable, QueryValue::Available),
+            summary,
             rates,
             observation: MarketObservation::collected_only(collected),
         })
@@ -216,8 +181,8 @@ impl SectorDetail {
         self.market
     }
     #[must_use]
-    pub const fn summary(&self) -> &QueryValue<DisplayInstrumentName> {
-        &self.summary
+    pub const fn summary(&self) -> Option<&DisplayInstrumentName> {
+        self.summary.as_ref()
     }
     #[must_use]
     pub fn rates(&self) -> &[SectorRate] {
@@ -227,24 +192,6 @@ impl SectorDetail {
     pub const fn observation(&self) -> MarketObservation {
         self.observation
     }
-}
-fn query_ratio(input: Option<&NumericInput>) -> Result<QueryValue<Ratio>, MarketDataError> {
-    input.map_or(Ok(QueryValue::Unavailable), |raw| {
-        let value = Ratio::parse(raw).or(Err(MarketDataError::InvalidNumber))?;
-        if value.as_decimal() < rust_decimal::Decimal::NEGATIVE_ONE {
-            return Err(MarketDataError::InvalidNumber);
-        }
-        Ok(QueryValue::Available(value))
-    })
-}
-fn query_krw(input: Option<&NumericInput>) -> Result<QueryValue<Money>, MarketDataError> {
-    input.map_or(Ok(QueryValue::Unavailable), |raw| {
-        let value = Money::parse(raw, Currency::Krw).or(Err(MarketDataError::InvalidNumber))?;
-        if value.amount().as_decimal() < rust_decimal::Decimal::ZERO {
-            return Err(MarketDataError::InvalidNumber);
-        }
-        Ok(QueryValue::Available(value))
-    })
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorEtfRow {
@@ -261,7 +208,6 @@ pub struct SectorEtfs {
     sector: SectorId,
     market: KnownMarket,
     etfs: Vec<SectorEtf>,
-    scope: SectorQueryScope,
     observation: MarketObservation,
 }
 impl SectorEtfs {
@@ -287,7 +233,6 @@ impl SectorEtfs {
             sector,
             market,
             etfs,
-            scope: SectorQueryScope::DirectMembersOnly,
             observation: MarketObservation::collected_only(collected),
         })
     }
@@ -303,10 +248,6 @@ impl SectorEtfs {
     #[must_use]
     pub fn etfs(&self) -> &[SectorEtf] {
         &self.etfs
-    }
-    #[must_use]
-    pub const fn scope(&self) -> SectorQueryScope {
-        self.scope
     }
     #[must_use]
     pub const fn observation(&self) -> MarketObservation {
@@ -325,38 +266,36 @@ pub struct SectorRankingRow {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorRankingItem {
-    currency: Currency,
     rank: RankingOrdinal,
     sector: SectorId,
     name: DisplayInstrumentName,
-    change_rate: QueryValue<Ratio>,
-    trading_amount: QueryValue<Money>,
-    market_capitalization: QueryValue<Money>,
+    change_rate: RankingChange,
+    trading_amount: SectorAmount,
+    market_capitalization: SectorAmount,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorRanking {
-    kind: SectorRankingKind,
+    kind: RankingKind,
     market: KnownMarket,
-    duration: SectorDuration,
+    duration: RankingDuration,
     items: Vec<SectorRankingItem>,
     continuity: RankingContinuity,
-    scope: SectorQueryScope,
-    hierarchy: SectorRankingHierarchy,
     observation: MarketObservation,
 }
 impl SectorRanking {
-    #[must_use]
-    pub const fn hierarchy(&self) -> SectorRankingHierarchy {
-        self.hierarchy
-    }
-
     pub fn from_response(
-        kind: SectorRankingKind,
+        kind: RankingKind,
         market: KnownMarket,
-        duration: SectorDuration,
+        duration: RankingDuration,
         rows: Vec<SectorRankingRow>,
         collected: Timestamp,
     ) -> Result<Self, MarketDataError> {
+        if kind != RankingKind::TopGainers && kind != RankingKind::MarketTradingAmount {
+            return Err(MarketDataError::UnsupportedRanking);
+        }
+        if !SECTOR_PERIODS.contains(&duration) {
+            return Err(MarketDataError::UnsupportedPeriod);
+        }
         if rows.len() > 100 {
             return Err(MarketDataError::InvalidCount);
         }
@@ -365,7 +304,8 @@ impl SectorRanking {
             .map(sector_ranking_item)
             .collect::<Result<Vec<_>, _>>()?;
         items.sort_by_key(|row| row.rank);
-        let continuity = ranking_continuity(items.iter().map(|row| row.rank))?;
+        let continuity =
+            crate::market_ranking::ranking_continuity(items.iter().map(|row| row.rank))?;
         validate_sector_ranking_order(kind, &items)?;
         let mut seen = BTreeSet::new();
         for item in &items {
@@ -379,14 +319,12 @@ impl SectorRanking {
             duration,
             items,
             continuity,
-            scope: SectorQueryScope::DirectMembersOnly,
-            hierarchy: SectorRankingHierarchy::MajorAndMiddle,
             observation: MarketObservation::collected_only(collected),
         })
     }
 
     #[must_use]
-    pub const fn kind(&self) -> SectorRankingKind {
+    pub const fn kind(&self) -> RankingKind {
         self.kind
     }
     #[must_use]
@@ -394,7 +332,7 @@ impl SectorRanking {
         self.market
     }
     #[must_use]
-    pub const fn duration(&self) -> SectorDuration {
+    pub const fn duration(&self) -> RankingDuration {
         self.duration
     }
     #[must_use]
@@ -406,42 +344,33 @@ impl SectorRanking {
         self.continuity
     }
     #[must_use]
-    pub const fn scope(&self) -> SectorQueryScope {
-        self.scope
-    }
-    #[must_use]
     pub const fn observation(&self) -> MarketObservation {
         self.observation
     }
 }
 fn validate_sector_ranking_order(
-    kind: SectorRankingKind,
+    kind: RankingKind,
     items: &[SectorRankingItem],
 ) -> Result<(), MarketDataError> {
-    for (old, new) in items.iter().zip(items.iter().skip(1)) {
-        let comparison = match kind {
-            SectorRankingKind::TopGainers => {
-                if let (QueryValue::Available(left), QueryValue::Available(right)) =
-                    (&old.change_rate, &new.change_rate)
-                {
-                    Some(left.cmp(right))
-                } else {
-                    None
-                }
+    let values = items.iter().filter_map(|item| {
+        if kind == RankingKind::TopGainers {
+            match item.change_rate {
+                RankingChange::Available(value) => Some(value.as_decimal()),
+                RankingChange::Unavailable => None,
             }
-            SectorRankingKind::MarketTradingAmount => {
-                if let (QueryValue::Available(left), QueryValue::Available(right)) =
-                    (&old.trading_amount, &new.trading_amount)
-                {
-                    Some(left.amount().as_decimal().cmp(&right.amount().as_decimal()))
-                } else {
-                    None
-                }
+        } else {
+            match item.trading_amount {
+                SectorAmount::Available(value) => Some(value.amount().as_decimal()),
+                SectorAmount::Unavailable => None,
             }
-        };
-        if comparison == Some(std::cmp::Ordering::Less) {
+        }
+    });
+    let mut previous = None;
+    for value in values {
+        if previous.is_some_and(|old| old < value) {
             return Err(MarketDataError::InvalidRank);
         }
+        previous = Some(value);
     }
     Ok(())
 }
@@ -450,46 +379,18 @@ fn sector_ranking_item(row: SectorRankingRow) -> Result<SectorRankingItem, Marke
         return Err(MarketDataError::InvalidCurrency);
     }
     Ok(SectorRankingItem {
-        currency: row.currency,
         rank: row.rank,
         sector: row.sector,
         name: row.name,
-        change_rate: query_ratio(row.change_rate.as_ref())?,
-        trading_amount: query_krw(row.trading_amount.as_ref())?,
-        market_capitalization: query_krw(row.market_capitalization.as_ref())?,
+        change_rate: ranking_change(row.change_rate.as_ref())?,
+        trading_amount: sector_amount(row.trading_amount.as_ref())?,
+        market_capitalization: sector_amount(row.market_capitalization.as_ref())?,
     })
-}
-fn ranking_continuity(
-    ranks: impl Iterator<Item = RankingOrdinal>,
-) -> Result<RankingContinuity, MarketDataError> {
-    let mut previous = RankingOrdinal::new(0);
-    let mut continuity = RankingContinuity::Continuous;
-    for (expected, rank) in (1..).zip(ranks) {
-        if rank <= previous {
-            return Err(MarketDataError::InvalidRank);
-        }
-        if rank != RankingOrdinal::new(expected) {
-            continuity = RankingContinuity::Gaps;
-        }
-        previous = rank;
-    }
-    Ok(continuity)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RankingInvestor {
-    Foreigner,
-    Institution,
-    Individual,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetTradingDirection {
     NetBuy,
     NetSell,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InvestorRankingScope {
-    KrxAndNxtIncludingEtfs,
 }
 #[derive(Clone, PartialEq, Eq)]
 pub struct NetTradingRow {
@@ -518,9 +419,7 @@ pub struct InvestorGroupRow {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvestorRankingGroup {
-    level: crate::FlowLevel,
-    finality: crate::FlowFinality,
-    investor: RankingInvestor,
+    investor: InvestorClass,
     buy: NetTradingList,
     sell: NetTradingList,
     observation: MarketObservation,
@@ -531,7 +430,6 @@ pub struct InvestorTradingRankings {
     institution: InvestorRankingGroup,
     individual: InvestorRankingGroup,
     limit: RankingLimit,
-    scope: InvestorRankingScope,
 }
 impl InvestorTradingRankings {
     pub fn from_response(
@@ -542,16 +440,10 @@ impl InvestorTradingRankings {
         collected: Timestamp,
     ) -> Result<Self, MarketDataError> {
         Ok(Self {
-            foreigner: investor_group(RankingInvestor::Foreigner, foreigner, limit, collected)?,
-            institution: investor_group(
-                RankingInvestor::Institution,
-                institution,
-                limit,
-                collected,
-            )?,
-            individual: investor_group(RankingInvestor::Individual, individual, limit, collected)?,
+            foreigner: investor_group(InvestorClass::Foreigner, foreigner, limit, collected)?,
+            institution: investor_group(InvestorClass::Institution, institution, limit, collected)?,
+            individual: investor_group(InvestorClass::Individual, individual, limit, collected)?,
             limit,
-            scope: InvestorRankingScope::KrxAndNxtIncludingEtfs,
         })
     }
 
@@ -571,20 +463,14 @@ impl InvestorTradingRankings {
     pub const fn limit(&self) -> RankingLimit {
         self.limit
     }
-    #[must_use]
-    pub const fn scope(&self) -> InvestorRankingScope {
-        self.scope
-    }
 }
 fn investor_group(
-    investor: RankingInvestor,
+    investor: InvestorClass,
     row: InvestorGroupRow,
     limit: RankingLimit,
     collected: Timestamp,
 ) -> Result<InvestorRankingGroup, MarketDataError> {
     Ok(InvestorRankingGroup {
-        level: crate::FlowLevel::TopLevel,
-        finality: crate::FlowFinality::Unknown,
         investor,
         buy: net_trading_list(NetTradingDirection::NetBuy, row.net_buy, limit)?,
         sell: net_trading_list(NetTradingDirection::NetSell, row.net_sell, limit)?,
@@ -604,7 +490,7 @@ fn net_trading_list(
         .map(net_trading_item)
         .collect::<Result<Vec<_>, _>>()?;
     items.sort_by_key(|row| row.rank);
-    let continuity = ranking_continuity(items.iter().map(|row| row.rank))?;
+    let continuity = crate::market_ranking::ranking_continuity(items.iter().map(|row| row.rank))?;
     let mut seen = BTreeSet::new();
     for item in &items {
         if !seen.insert(item.symbol.clone()) {
@@ -654,18 +540,18 @@ impl SectorMetadata {
         self.depth
     }
     #[must_use]
-    pub const fn parent(&self) -> &QueryValue<SectorId> {
-        &self.parent
+    pub const fn parent(&self) -> Option<&SectorId> {
+        self.parent.as_ref()
     }
 }
 
 impl SectorRate {
     #[must_use]
-    pub const fn duration(&self) -> SectorDuration {
+    pub const fn duration(&self) -> RankingDuration {
         self.duration
     }
     #[must_use]
-    pub const fn change_rate(&self) -> &QueryValue<Ratio> {
+    pub const fn change_rate(&self) -> &RankingChange {
         &self.change_rate
     }
 }
@@ -683,11 +569,6 @@ impl SectorEtf {
 
 impl SectorRankingItem {
     #[must_use]
-    pub const fn currency(&self) -> Currency {
-        self.currency
-    }
-
-    #[must_use]
     pub const fn rank(&self) -> RankingOrdinal {
         self.rank
     }
@@ -700,15 +581,15 @@ impl SectorRankingItem {
         &self.name
     }
     #[must_use]
-    pub const fn change_rate(&self) -> &QueryValue<Ratio> {
+    pub const fn change_rate(&self) -> &RankingChange {
         &self.change_rate
     }
     #[must_use]
-    pub const fn trading_amount(&self) -> &QueryValue<Money> {
+    pub const fn trading_amount(&self) -> &SectorAmount {
         &self.trading_amount
     }
     #[must_use]
-    pub const fn market_capitalization(&self) -> &QueryValue<Money> {
+    pub const fn market_capitalization(&self) -> &SectorAmount {
         &self.market_capitalization
     }
 }
@@ -745,16 +626,7 @@ impl NetTradingList {
 
 impl InvestorRankingGroup {
     #[must_use]
-    pub const fn level(&self) -> crate::FlowLevel {
-        self.level
-    }
-    #[must_use]
-    pub const fn finality(&self) -> crate::FlowFinality {
-        self.finality
-    }
-
-    #[must_use]
-    pub const fn investor(&self) -> RankingInvestor {
+    pub const fn investor(&self) -> InvestorClass {
         self.investor
     }
     #[must_use]
@@ -773,30 +645,48 @@ impl InvestorRankingGroup {
 
 impl std::fmt::Debug for NetTradingRow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("NetTradingRow([REDACTED])")
+        f.debug_struct("NetTradingRow")
+            .field("rank", &self.rank)
+            .field("symbol", &self.symbol)
+            .field("currency", &self.currency)
+            .field("amount", &"[REDACTED]")
+            .finish()
     }
 }
 impl std::fmt::Debug for NetTradingItem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("NetTradingItem([REDACTED])")
+        f.debug_struct("NetTradingItem")
+            .field("rank", &self.rank)
+            .field("symbol", &self.symbol)
+            .field("amount", &"[REDACTED]")
+            .finish()
     }
 }
 impl std::fmt::Debug for SectorRankingRow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("SectorRankingRow([REDACTED])")
+        f.debug_struct("SectorRankingRow")
+            .field("rank", &self.rank)
+            .field("sector", &self.sector)
+            .field("name", &self.name)
+            .field("currency", &self.currency)
+            .field("change_rate", &self.change_rate)
+            .field("trading_amount", &"[REDACTED]")
+            .field("market_capitalization", &"[REDACTED]")
+            .finish()
     }
 }
 #[cfg(test)]
 mod tests {
     use super::{
-        Currency, DisplayInstrumentName, InvestorGroupRow, InvestorRankingScope,
-        InvestorTradingRankings, KnownMarket, MarketDataError, NetTradingDirection, NetTradingRow,
-        NumericInput, QueryValue, RankingContinuity, RankingInvestor, RankingLimit, RankingOrdinal,
-        Ratio, SectorCatalog, SectorDepth, SectorDetail, SectorDuration, SectorEtfRow, SectorEtfs,
-        SectorId, SectorMetadataRow, SectorQueryScope, SectorRanking, SectorRankingKind,
-        SectorRankingRow, SectorRateRow, Symbol, investor_group, net_trading_item,
-        net_trading_list, query_krw, query_ratio, sector_ranking_item,
+        Currency, DisplayInstrumentName, InvestorClass, InvestorGroupRow, InvestorTradingRankings,
+        KnownMarket, MarketDataError, NetTradingDirection, NetTradingRow, NumericInput,
+        RankingChange, RankingContinuity, RankingDuration, RankingKind, RankingLimit,
+        RankingOrdinal, SectorAmount, SectorCatalog, SectorDepth, SectorDetail, SectorEtfRow,
+        SectorEtfs, SectorId, SectorMetadataRow, SectorRanking, SectorRankingRow, SectorRateRow,
+        Symbol, investor_group, net_trading_item, net_trading_list, ranking_change, sector_amount,
+        sector_ranking_item,
     };
+    use crate::Ratio;
     use crate::valuation_snapshot::tests::at;
     fn num(text: &str) -> NumericInput {
         NumericInput::try_new(text).expect("숫자")
@@ -851,26 +741,19 @@ mod tests {
             at(6, 0),
         )
         .expect("랭킹");
-        assert_eq!(facts.scope(), InvestorRankingScope::KrxAndNxtIncludingEtfs);
         assert_eq!(facts.limit(), RankingLimit::try_new(5).expect("개수"));
         for (group, investor, day, buy, sell) in [
-            (
-                facts.foreigner(),
-                RankingInvestor::Foreigner,
-                2,
-                "111",
-                "222",
-            ),
+            (facts.foreigner(), InvestorClass::Foreigner, 2, "111", "222"),
             (
                 facts.institution(),
-                RankingInvestor::Institution,
+                InvestorClass::Institution,
                 3,
                 "333",
                 "444",
             ),
             (
                 facts.individual(),
-                RankingInvestor::Individual,
+                InvestorClass::Individual,
                 4,
                 "555",
                 "666",
@@ -960,7 +843,7 @@ mod tests {
         );
         assert_eq!(
             investor_group(
-                RankingInvestor::Foreigner,
+                InvestorClass::Foreigner,
                 group(9, "1", "2"),
                 limit,
                 at(2, 0)
@@ -983,18 +866,18 @@ mod tests {
         assert_eq!(row.id(), &id("100"));
         assert_eq!(row.name(), &name("100"));
         assert_eq!(row.depth(), SectorDepth::Middle);
-        assert_eq!(row.parent(), &QueryValue::Available(id("10")));
+        assert_eq!(row.parent(), Some(&id("10")));
         assert_eq!(catalog.observation().server_at(), None);
     }
     #[test]
     fn sector_detail_preserves_summary_and_six_rates() {
         let durations = [
-            SectorDuration::Day,
-            SectorDuration::Week,
-            SectorDuration::Month,
-            SectorDuration::ThreeMonths,
-            SectorDuration::SixMonths,
-            SectorDuration::Year,
+            RankingDuration::Day,
+            RankingDuration::Week,
+            RankingDuration::Month,
+            RankingDuration::ThreeMonths,
+            RankingDuration::SixMonths,
+            RankingDuration::Year,
         ];
         let rates = durations
             .into_iter()
@@ -1021,18 +904,18 @@ mod tests {
         .expect("상세");
         assert_eq!(detail.metadata().id(), &id("10"));
         assert_eq!(detail.market(), KnownMarket::Us);
-        assert_eq!(detail.summary(), &QueryValue::Available(name("요약")));
+        assert_eq!(detail.summary(), Some(&name("요약")));
         assert_eq!(detail.observation().collected_at(), at(5, 0));
         for (rate, duration) in detail.rates().iter().zip(durations) {
             assert_eq!(rate.duration(), duration);
         }
         assert_eq!(
             detail.rates().get(2).expect("월").change_rate(),
-            &QueryValue::Unavailable
+            &RankingChange::Unavailable
         );
         assert_eq!(
             detail.rates().first().expect("일").change_rate(),
-            &QueryValue::Available(Ratio::parse(&num("0.01")).expect("비율"))
+            &RankingChange::Available(Ratio::parse(&num("0.01")).expect("비율"))
         );
     }
     #[test]
@@ -1062,47 +945,42 @@ mod tests {
         )
         .expect_err("기간");
         assert_eq!(
-            query_ratio(Some(&num("-1.01"))),
+            ranking_change(Some(&num("-1.01"))),
             Err(MarketDataError::InvalidNumber)
         );
         assert_eq!(
-            query_ratio(Some(&num("bad"))),
+            ranking_change(Some(&num("bad"))),
             Err(MarketDataError::InvalidNumber)
         );
         assert_eq!(
-            query_ratio(Some(&num("-1"))),
-            Ok(QueryValue::Available(
+            ranking_change(Some(&num("-1"))),
+            Ok(RankingChange::Available(
                 Ratio::parse(&num("-1")).expect("전손")
             ))
         );
         assert_eq!(
-            query_krw(Some(&num("-1"))),
+            sector_amount(Some(&num("-1"))),
             Err(MarketDataError::InvalidNumber)
         );
         assert_eq!(
-            query_krw(Some(&num("bad"))),
+            sector_amount(Some(&num("bad"))),
             Err(MarketDataError::InvalidNumber)
         );
     }
     #[test]
-    fn sector_rankings_preserve_nullable_fields_krw_and_direct_scope() {
+    fn sector_rankings_preserve_nullable_fields_and_krw_amounts() {
         let facts = SectorRanking::from_response(
-            SectorRankingKind::TopGainers,
+            RankingKind::TopGainers,
             KnownMarket::Us,
-            SectorDuration::Month,
+            RankingDuration::Month,
             vec![ranking_row()],
             at(5, 0),
         )
         .expect("랭킹");
-        assert_eq!(
-            facts.hierarchy(),
-            crate::SectorRankingHierarchy::MajorAndMiddle
-        );
-        assert_eq!(facts.kind(), SectorRankingKind::TopGainers);
+        assert_eq!(facts.kind(), RankingKind::TopGainers);
         assert_eq!(facts.market(), KnownMarket::Us);
-        assert_eq!(facts.duration(), SectorDuration::Month);
+        assert_eq!(facts.duration(), RankingDuration::Month);
         assert_eq!(facts.continuity(), RankingContinuity::Gaps);
-        assert_eq!(facts.scope(), SectorQueryScope::DirectMembersOnly);
         assert_eq!(facts.observation().server_at(), None);
         let item = facts.items().first().expect("행");
         assert_eq!(item.rank(), RankingOrdinal::new(2));
@@ -1110,14 +988,14 @@ mod tests {
         assert_eq!(item.name(), &name("반도체"));
         assert_eq!(
             item.change_rate(),
-            &QueryValue::Available(Ratio::parse(&num("0.0179")).expect("비율"))
+            &RankingChange::Available(Ratio::parse(&num("0.0179")).expect("비율"))
         );
         for (value, expected) in [
             (item.trading_amount(), "2411"),
             (item.market_capitalization(), "6120"),
         ] {
             let expected_money = super::Money::parse(&num(expected), Currency::Krw).expect("금액");
-            assert_eq!(value, &QueryValue::Available(expected_money));
+            assert_eq!(value, &SectorAmount::Available(expected_money));
         }
     }
     #[test]
@@ -1127,9 +1005,9 @@ mod tests {
         row.trading_amount = None;
         row.market_capitalization = None;
         let empty = sector_ranking_item(row).expect("null");
-        assert_eq!(empty.change_rate(), &QueryValue::Unavailable);
-        assert_eq!(empty.trading_amount(), &QueryValue::Unavailable);
-        assert_eq!(empty.market_capitalization(), &QueryValue::Unavailable);
+        assert_eq!(empty.change_rate(), &RankingChange::Unavailable);
+        assert_eq!(empty.trading_amount(), &SectorAmount::Unavailable);
+        assert_eq!(empty.market_capitalization(), &SectorAmount::Unavailable);
         let mut wrong_currency = ranking_row();
         wrong_currency.currency = Currency::Usd;
         assert_eq!(
@@ -1138,9 +1016,9 @@ mod tests {
         );
         assert_eq!(
             SectorRanking::from_response(
-                SectorRankingKind::MarketTradingAmount,
+                RankingKind::MarketTradingAmount,
                 KnownMarket::Kr,
-                SectorDuration::Day,
+                RankingDuration::Day,
                 vec![ranking_row(); 101],
                 at(5, 0)
             ),
@@ -1148,9 +1026,9 @@ mod tests {
         );
         assert_eq!(
             SectorRanking::from_response(
-                SectorRankingKind::TopGainers,
+                RankingKind::TopGainers,
                 KnownMarket::Kr,
-                SectorDuration::Day,
+                RankingDuration::Day,
                 vec![ranking_row(); 2],
                 at(5, 0)
             ),
@@ -1160,9 +1038,9 @@ mod tests {
         second.rank = RankingOrdinal::new(3);
         assert_eq!(
             SectorRanking::from_response(
-                SectorRankingKind::TopGainers,
+                RankingKind::TopGainers,
                 KnownMarket::Kr,
-                SectorDuration::Day,
+                RankingDuration::Day,
                 vec![ranking_row(), second],
                 at(5, 0)
             ),
@@ -1185,7 +1063,6 @@ mod tests {
             .expect("ETF");
         assert_eq!(facts.sector(), &id("100"));
         assert_eq!(facts.market(), KnownMarket::Us);
-        assert_eq!(facts.scope(), SectorQueryScope::DirectMembersOnly);
         assert_eq!(facts.observation().server_at(), None);
         for (fact, row) in facts.etfs().iter().zip(&rows) {
             assert_eq!(fact.symbol(), &row.symbol);
@@ -1206,35 +1083,31 @@ mod tests {
         );
     }
     #[test]
-    fn debug_redacts_amount_rows_optional_values_and_group_finality() {
+    fn debug_redacts_only_money_and_keeps_identifiers_and_summary() {
         let row = net_row(1, "005930", "123456789");
-        assert_eq!(format!("{row:?}"), "NetTradingRow([REDACTED])");
-        assert_eq!(
-            format!("{:?}", ranking_row()),
-            "SectorRankingRow([REDACTED])"
-        );
+        let row_debug = format!("{row:?}");
+        assert!(row_debug.contains("005930"));
+        assert!(!row_debug.contains("123456789"));
+        let ranking_debug = format!("{:?}", ranking_row());
+        assert!(ranking_debug.contains("반도체"));
+        assert!(ranking_debug.contains("100"));
+        assert!(!ranking_debug.contains("2411"));
+        assert!(!ranking_debug.contains("6120"));
         let money = super::Money::parse(&num("123456789"), Currency::Krw).expect("금액");
         assert_eq!(
-            format!("{:?}", QueryValue::Available(money)),
+            format!("{:?}", SectorAmount::Available(money)),
             "Available([REDACTED])"
         );
-        assert_eq!(
-            format!("{:?}", QueryValue::<super::Money>::Unavailable),
-            "Unavailable"
-        );
-        let fact = investor_group(
-            RankingInvestor::Individual,
-            group(2, "1", "2"),
-            RankingLimit::try_new(1).expect("개수"),
+        assert_eq!(format!("{:?}", SectorAmount::Unavailable), "Unavailable");
+        let detail = SectorDetail::from_response(
+            meta("10", SectorDepth::Major, None),
+            KnownMarket::Kr,
+            Some(name("요약 문장")),
+            all_rate_rows(),
             at(5, 0),
         )
-        .expect("투자자");
-        assert_eq!(fact.level(), crate::FlowLevel::TopLevel);
-        assert_eq!(fact.finality(), crate::FlowFinality::Unknown);
-        assert_eq!(
-            sector_ranking_item(ranking_row()).expect("행").currency(),
-            Currency::Krw
-        );
+        .expect("상세");
+        assert!(format!("{detail:?}").contains("요약 문장"));
     }
     #[test]
     fn sector_ranking_rejects_known_basis_reversals_without_erasing_nulls() {
@@ -1247,15 +1120,12 @@ mod tests {
         second.sector = id("200");
         second.change_rate = Some(num("0.02"));
         second.trading_amount = Some(num("20"));
-        for kind in [
-            SectorRankingKind::TopGainers,
-            SectorRankingKind::MarketTradingAmount,
-        ] {
+        for kind in [RankingKind::TopGainers, RankingKind::MarketTradingAmount] {
             assert_eq!(
                 SectorRanking::from_response(
                     kind,
                     KnownMarket::Kr,
-                    SectorDuration::Day,
+                    RankingDuration::Day,
                     vec![first.clone(), second.clone()],
                     at(5, 0)
                 ),
@@ -1264,9 +1134,9 @@ mod tests {
         }
         second.change_rate = None;
         SectorRanking::from_response(
-            SectorRankingKind::TopGainers,
+            RankingKind::TopGainers,
             KnownMarket::Kr,
-            SectorDuration::Day,
+            RankingDuration::Day,
             vec![first, second],
             at(5, 0),
         )
@@ -1274,12 +1144,12 @@ mod tests {
     }
     fn all_rate_rows() -> Vec<SectorRateRow> {
         [
-            SectorDuration::Day,
-            SectorDuration::Week,
-            SectorDuration::Month,
-            SectorDuration::ThreeMonths,
-            SectorDuration::SixMonths,
-            SectorDuration::Year,
+            RankingDuration::Day,
+            RankingDuration::Week,
+            RankingDuration::Month,
+            RankingDuration::ThreeMonths,
+            RankingDuration::SixMonths,
+            RankingDuration::Year,
         ]
         .into_iter()
         .map(|duration| SectorRateRow {
@@ -1344,7 +1214,7 @@ mod tests {
         invalid.net_sell.first_mut().expect("매도").amount = num("bad");
         assert_eq!(
             investor_group(
-                RankingInvestor::Foreigner,
+                InvestorClass::Foreigner,
                 invalid,
                 RankingLimit::try_new(5).expect("개수"),
                 at(6, 0)
@@ -1363,9 +1233,9 @@ mod tests {
         for row in [invalid_rate, invalid_amount, invalid_capitalization] {
             assert_eq!(
                 SectorRanking::from_response(
-                    SectorRankingKind::TopGainers,
+                    RankingKind::TopGainers,
                     KnownMarket::Kr,
-                    SectorDuration::Day,
+                    RankingDuration::Day,
                     vec![row],
                     at(5, 0)
                 ),
@@ -1376,9 +1246,9 @@ mod tests {
         wrong_unit.currency = Currency::Usd;
         assert_eq!(
             SectorRanking::from_response(
-                SectorRankingKind::TopGainers,
+                RankingKind::TopGainers,
                 KnownMarket::Kr,
-                SectorDuration::Day,
+                RankingDuration::Day,
                 vec![wrong_unit],
                 at(5, 0)
             ),
@@ -1392,9 +1262,9 @@ mod tests {
         second.trading_amount = None;
         assert_eq!(
             SectorRanking::from_response(
-                SectorRankingKind::MarketTradingAmount,
+                RankingKind::MarketTradingAmount,
                 KnownMarket::Kr,
-                SectorDuration::Day,
+                RankingDuration::Day,
                 vec![first, second],
                 at(5, 0)
             )
@@ -1423,5 +1293,123 @@ mod tests {
             proptest::prop_assert_eq!(list.items().first().expect("행").amount().amount().as_decimal().to_string(),text);
             proptest::prop_assert_eq!(list.continuity(),if rank==1 {RankingContinuity::Continuous} else {RankingContinuity::Gaps});
         }
+    }
+    #[test]
+    fn review_rank_order_compares_available_values_across_nulls() {
+        for kind in [RankingKind::TopGainers, RankingKind::MarketTradingAmount] {
+            let mut first = ranking_row();
+            first.rank = RankingOrdinal::new(1);
+            first.change_rate = Some(num("0.01"));
+            first.trading_amount = Some(num("10"));
+            let mut missing = ranking_row();
+            missing.rank = RankingOrdinal::new(2);
+            missing.sector = id("200");
+            missing.change_rate = None;
+            missing.trading_amount = None;
+            let mut last = ranking_row();
+            last.rank = RankingOrdinal::new(3);
+            last.sector = id("300");
+            last.change_rate = Some(num("0.02"));
+            last.trading_amount = Some(num("20"));
+            assert_eq!(
+                SectorRanking::from_response(
+                    kind,
+                    KnownMarket::Kr,
+                    RankingDuration::Day,
+                    vec![first.clone(), missing.clone(), last.clone()],
+                    at(5, 0)
+                ),
+                Err(MarketDataError::InvalidRank)
+            );
+            first.change_rate = Some(num("0.03"));
+            first.trading_amount = Some(num("30"));
+            let facts = SectorRanking::from_response(
+                kind,
+                KnownMarket::Kr,
+                RankingDuration::Day,
+                vec![first, missing, last],
+                at(5, 0),
+            )
+            .expect("null 너머 내림차순");
+            assert_eq!(facts.items().len(), 3);
+        }
+    }
+    #[test]
+    fn review_detail_rejects_self_parent_for_non_major_depths() {
+        for depth in [SectorDepth::Middle, SectorDepth::Minor] {
+            assert_eq!(
+                SectorDetail::from_response(
+                    meta("10", depth, Some("10")),
+                    KnownMarket::Kr,
+                    None,
+                    all_rate_rows(),
+                    at(5, 0)
+                ),
+                Err(MarketDataError::InvalidRange)
+            );
+        }
+    }
+    #[test]
+    fn review_sector_queries_reject_unsupported_shared_request_values() {
+        for kind in [
+            RankingKind::MarketTradingVolume,
+            RankingKind::TossTradingAmount,
+            RankingKind::TossTradingVolume,
+            RankingKind::TopLosers,
+            RankingKind::Unknown,
+        ] {
+            assert_eq!(
+                SectorRanking::from_response(
+                    kind,
+                    KnownMarket::Kr,
+                    RankingDuration::Day,
+                    vec![],
+                    at(5, 0)
+                ),
+                Err(MarketDataError::UnsupportedRanking)
+            );
+        }
+        for duration in [RankingDuration::Realtime, RankingDuration::Unknown] {
+            assert_eq!(
+                SectorRanking::from_response(
+                    RankingKind::TopGainers,
+                    KnownMarket::Kr,
+                    duration,
+                    vec![],
+                    at(5, 0)
+                ),
+                Err(MarketDataError::UnsupportedPeriod)
+            );
+        }
+    }
+    #[test]
+    fn review_sector_detail_rejects_a_seventh_rate() {
+        let mut rows = all_rate_rows();
+        rows.push(SectorRateRow {
+            duration: RankingDuration::Day,
+            change_rate: Some(num("0")),
+        });
+        assert_eq!(
+            SectorDetail::from_response(
+                meta("10", SectorDepth::Major, None),
+                KnownMarket::Kr,
+                None,
+                rows,
+                at(5, 0)
+            ),
+            Err(MarketDataError::UnsupportedPeriod)
+        );
+    }
+    #[test]
+    fn review_shared_amount_and_change_types_preserve_zero_and_unavailable() {
+        assert_eq!(sector_amount(None), Ok(SectorAmount::Unavailable));
+        assert_eq!(ranking_change(None), Ok(RankingChange::Unavailable));
+        assert_eq!(
+            sector_amount(Some(&num("0"))),
+            Ok(SectorAmount::Available(crate::Money::new(
+                crate::Amount::new(rust_decimal::Decimal::ZERO),
+                Currency::Krw
+            )))
+        );
     }
 }

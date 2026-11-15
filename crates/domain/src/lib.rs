@@ -554,12 +554,10 @@ pub use sector_selection::{
 
 mod market_query_facts;
 pub use market_query_facts::{
-    InvestorGroupRow, InvestorRankingGroup, InvestorRankingScope, InvestorTradingRankings,
-    NetTradingDirection, NetTradingItem, NetTradingList, NetTradingRow, QueryValue,
-    RankingInvestor, SectorCatalog, SectorDepth, SectorDetail, SectorDuration, SectorEtf,
-    SectorEtfRow, SectorEtfs, SectorMetadata, SectorMetadataRow, SectorQueryScope, SectorRanking,
-    SectorRankingHierarchy, SectorRankingItem, SectorRankingKind, SectorRankingRow, SectorRate,
-    SectorRateRow,
+    InvestorGroupRow, InvestorRankingGroup, InvestorTradingRankings, NetTradingDirection,
+    NetTradingItem, NetTradingList, NetTradingRow, SectorCatalog, SectorDepth, SectorDetail,
+    SectorEtf, SectorEtfRow, SectorEtfs, SectorMetadata, SectorMetadataRow, SectorRanking,
+    SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
 mod risk_settings;
