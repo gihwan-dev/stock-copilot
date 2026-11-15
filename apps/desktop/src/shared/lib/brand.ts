@@ -58,3 +58,4 @@ export const parseChartDecimal = (
 export const chartCoordinate = (input: number): ChartCoordinate =>
   input as ChartCoordinate;
 export const chartPath = (input: string): ChartPath => input as ChartPath;
+export type FormattedNumber = string & Brand<"FormattedNumber">;

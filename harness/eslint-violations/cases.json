@@ -110,7 +110,8 @@
       "@typescript-eslint/restrict-plus-operands",
       "guard/no-number-conversion",
       "guard/no-unary-plus",
-      "local/no-money-coercion"
+      "local/no-money-coercion",
+      "local/number-display-boundary"
     ],
     "파일 종류": ["guard/forbidden-extension", "local/forbidden-file"],
     "네트워크": ["guard/no-global-object", "guard/no-network"],
@@ -3669,8 +3670,10 @@
       ]
     },
     "src/shared/lib/format.ts": {
-      "row": "허용 목록",
-      "expect": []
+      "row": "숫자",
+      "expect": [
+        "local/number-display-boundary :: 숫자 표시는 부동소수점 변환과 Intl 반올림 없이 문자열로 처리한다."
+      ]
     },
     "src/shared/lib/hangul.ts": {
       "row": "원시 타입",
@@ -3959,6 +3962,23 @@
     },
     "src/shared/ds/Treemap.tsx": {
       "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/lib/reader-export.ts": {
+      "row": "숫자",
+      "expect": [
+        "local/number-display-boundary :: 표시용 십진수 읽기는 money.ts와 format.ts만 사용한다. 화면은 DS 숫자 컴포넌트를 쓴다."
+      ]
+    },
+    "src/shared/lib/formatter-export.ts": {
+      "row": "숫자",
+      "expect": [
+        "local/number-display-boundary :: 숫자 형식화 함수와 타입은 shared/ds/Numbers.tsx 내부에서만 쓴다.",
+        "boundaries/dependencies :: lib에서 lib의 format.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ds/Numbers.tsx": {
+      "row": "숫자",
       "expect": []
     }
   }

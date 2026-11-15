@@ -12,7 +12,7 @@
 1. Claude Design 산출물은 **사람이 읽는 규칙(README) + 자체 형식의 `tokens.json` + 미리보기용 컴포넌트 번들(전역 `window.StockCopilot`, React 18, ES5 스타일 JS)**이다. 공식 문서에는 토큰 형식 명세가 없다. 그래서 그대로 옮길 수 있는 것은 `tokens.json`뿐이다. 컴포넌트는 금액을 JS 부동소수점으로 계산하고 하네스 규칙(인라인 스타일, 인덱스 키, 계산)을 어기므로 **명세로만 쓰고 다시 짠다**.
 2. 토큰은 **Tailwind v4 `@theme`(4.3.5)에서 `--*: initial`로 기본 테마를 지우고 `tokens.json`에서 생성**하는 방식을 추천한다. 이렇게 하면 토큰 밖 클래스(`bg-red-500`, `p-5`, `text-sm`)는 아예 생성되지 않는다. `eslint-plugin-better-tailwindcss` 4.11.0의 `no-unknown-classes`와 `no-restricted-classes`가 임의 값, 불투명도 수식어, `dark:`까지 린트 오류로 잡는 것을 실행해서 확인했다(15건 전부 검출). 다만 숫자를 그대로 받는 유틸리티(`opacity-45`, `z-10`, `duration-600` 등)는 테마를 지워도 살아남으므로 따로 막아야 한다.
 3. 컴포넌트 기반은 **Base UI 1.9.0**을 추천한다. Combobox가 있고 IME 조합 처리 코드가 들어 있다(소스에서 확인). Radix에는 Combobox가 없다. 차트는 **Recharts 3.10.1**(선·영역·도넛·트리맵. SVG라서 CSS 변수가 바로 먹는다)과 **Lightweight Charts 5.3.0**(캔들 전용)을 함께 쓰기를 추천한다. Canvas는 `var()` 색을 해석하지 못한다는 것을 WebKit에서 확인했다.
-4. 숫자 표기는 **Rust가 준 십진수 문자열을 `Intl.NumberFormat`에 문자열 그대로 넘기면 부동소수점 없이 정확히 형식화된다**(Safari 15.4+. 실험으로 확인). 다만 ko-KR의 빼기 기호는 하이픈(U+002D)이므로 U+2212로 바꿔야 한다. 만·억 혼합 표기와 `원` 접미는 직접 만들어야 한다.
+4. **제품 결정(DS-05 리뷰): 코어가 확정한 십진수 표시값을 문자열 연산으로만 형식화한다.** `Intl.NumberFormat`과 숫자 변환·프런트 반올림을 금지한다. 빼기는 U+2212다. 원화 정수에만 만·억·조 compact를 적용하며 USD·소수점이 있는 값은 full로 표시한다. 아래 Intl 실험은 당시의 비교 자료로 보존한다.
 5. 바꿔야 할 설계: 디자인 README의 "비중·수익률·손익은 컴포넌트가 계산"과 "주문 버튼은 UI에 없다"는 architecture 1·5장과 design 6장(승인 흐름)과 충돌한다. 디자인 쪽을 고쳐야 한다(Remix). 또한 harness 4.2 디자인 시스템 규칙을 구체 규칙 목록(아래 3.4)으로 바꾸고, `tokens.json → tokens.css/tokens.ts` 생성기를 `xtask`에 넣고, 그 생성물을 보호 경로로 지정해야 한다.
 
 ## 2. 질문별 답
@@ -200,10 +200,10 @@ percent 문자열 "0.024349" (exceptZero, 2자리) → "+2.43%"
 ```
 
 - 문자열을 넘기면 정확한 십진수로 형식화된다는 것은 MDN에도 적혀 있다 ([MDN format](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/format)). browser-compat-data 기준 Safari 15.4부터 지원한다(`format.number_parameter-string_decimal`, `roundingMode`, `signDisplay: negative`). macOS의 WKWebView는 Safari와 같은 엔진이므로 지원 범위 안이다. 다만 **실제 Tauri WKWebView에서 같은 결과가 나오는지는 미확인**이다(실험은 Node와 Playwright WebKit에서 했다).
-- R-11이 정한 대로 비율은 소수 비율(`0.1516`)로 오므로, `style: "percent"`를 문자열에 적용하면 곱셈 없이 정확하다.
-- 따라서 `shared/lib/format`은 **산술 없이** 다음만 한다: `Intl.NumberFormat(...).formatToParts(decimalString)` → `minusSign`을 U+2212로 바꾼다 → `원`/`$`/`주`/`%`를 붙인다. 만·억 혼합 표기(`8,431만 2,500원`)는 Intl에 없으므로, 정수부 문자열을 뒤에서 4자리씩 자르는 문자열 처리로 만든다(숫자 변환 없음).
+- R-11의 소수 비율 `0.1516`과 표시용 퍼센트 숫자 `15.16`은 구별한다. 제품은 코어가 환산·반올림한 `PercentDisplay`를 보내고, Percent·Probability·PriceChange.rate는 이 불투명 표시 타입만 받는다. 소수 비율 Ratio·Probability는 타입 오류다. 확률 표시는 디자인 명세대로 1~99의 정수만 허용한다.
+- 제품의 `shared/lib/format`은 문자열의 부호·정수부·소수부를 분리해 쉼표·단위를 붙이고 자릿수를 그대로 보존한다. `Intl`·Number·parseFloat·parseInt를 쓰지 않는다. 원화 정수 compact는 뒤에서 네 자리씩 만·억·조로 나눈다. 화면이 이 형식화 API를 직접 가져오는 길은 금지하고 Numbers.tsx에서만 소비한다.
 - 글꼴 검사 (`scripts/feat.py`, fonttools): fontsource의 IBM Plex Sans KR 라틴 하위 집합(400·600)에는 GSUB `tnum` 기능이 없다. 대신 숫자 0–9의 폭이 모두 600으로 같아서 원래 고정 폭이다. `+`와 `−`(U+2212)도 600으로 숫자와 같지만, 하이픈(U+002D)은 399다. **U+2212를 써야 부호가 있는 숫자의 세로 정렬이 맞는다.** ▲(U+25B2)와 ▼(U+25BC)는 라틴 하위 집합에 없고 한국어 하위 집합(113번, 110번)에 있다. 폰트를 로컬로 묶을 때 이 하위 집합을 빼먹으면 대체 글꼴로 그려진다.
-- **결정 필요**: 실제 값이 `-0.001%`이고 2자리로 반올림하면 글자는 `0.00%`인데 코어가 보낸 방향이 `down`이면 파란 ▼가 붙는다. 방향을 "표시 단위로 반올림한 값" 기준으로 정할지 코어 쪽에서 정해야 한다(R-11과 함께).
+- **확정(ADR 0025·DS-05 리뷰)**: 코어가 원래 변화량으로 정한 방향을 유지하고 표시 0의 부호만 제거한다. 0이 아닌 값과 방향이 어긋나면 전체를 경고색 `—`와 접근성 이름으로 표시한다. 방향 prop으로 부호를 바꾸지 않는다.
 
 ### 2.6 채팅 화면
 
@@ -284,7 +284,7 @@ percent 문자열 "0.024349" (exceptZero, 2자리) → "+2.43%"
 | 9 | 기본 HTML 요소 금지: `button`, `input`, `select`, `textarea`, `a`, `table`, `svg`, `img` | `no-restricted-syntax` `JSXOpeningElement[name.name=/^(...)$/]` | 미실행 |
 | 10 | 라이브러리 직접 가져오기 금지: `@base-ui/*`, `recharts`, `lightweight-charts`, `react-markdown`, `lucide-react` | `no-restricted-imports` (features) | 미실행 |
 | 11 | ref 콜백 화살표 함수 금지 (효과 우회) | `no-restricted-syntax` `JSXAttribute[name.name='ref'] > JSXExpressionContainer > ArrowFunctionExpression` | 미실행 |
-| 12 | `Intl`, `toLocaleString`, `toFixed` 금지. 형식 변환은 `shared/lib/format`만 | `no-restricted-globals`, `no-restricted-properties` | 미실행 |
+| 12 | 숫자 `Intl`·변환·반올림 금지. 문자열 형식화는 `shared/lib/format`에서 하고 Numbers.tsx만 소비 | `no-restricted-globals`, `no-restricted-properties` | 미실행 |
 | 13 | 하이픈 빼기 금지: JSX 텍스트의 `-\d` | `no-restricted-syntax` `JSXText[value=/-\d/]` | 미실행 |
 | 14 | 이모지 금지 (README 말투 규칙) | `no-restricted-syntax` 유니코드 정규식 | 미실행 |
 | 15 | `shared/ds`의 CSS: `color-no-hex`, `declaration-strict-value`, `var()` 이름이 생성 토큰 목록에 있어야 함 | stylelint 18 + `xtask` | 앞의 둘은 실험에서 검출 |
@@ -418,7 +418,7 @@ percent 문자열 "0.024349" (exceptZero, 2자리) → "+2.43%"
 - Claude Design의 토큰·번들·핸드오프 묶음 형식에 대한 공식 명세. `bundle.css`의 변수 정의를 누가 어떻게 넣는지.
 - `/design-sync`가 코드에서 Claude Design으로 보낼 때 `tokens.json`을 어떤 형식으로 쓰는지.
 - WKWebView에서 Base UI Combobox와 직접 만든 채팅 입력창의 한글 IME 동작(조합 중 Enter, 조합 확정 직후 Enter).
-- 실제 Tauri WKWebView에서의 `Intl.NumberFormat` 문자열 십진수 결과(Node와 Playwright WebKit에서만 확인).
+- 실제 Tauri WKWebView에서 문자열 형식화 결과, U+2212, 고정폭 숫자, 라이트·다크를 확인한다(DS-16).
 - macOS 시스템 글자 크기 설정이 WKWebView에 전달되는지.
 - Base UI 부품 중 R-16 CSP(`style-src 'self'`)에 막히는 것이 있는지.
 - 토스증권 앱의 실제 만·억, 부호, 등락률 표기.

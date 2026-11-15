@@ -26,3 +26,11 @@ export type { ChartPoint } from "./chart-types";
 export { lineCoordinates } from "./LineChart";
 export { donutArcs } from "./DonutChart";
 export { treemapRectangles } from "./Treemap";
+export {
+  Money,
+  Percent,
+  Quantity,
+  Probability,
+  PriceChange,
+  DirectionBadge,
+} from "./Numbers";

@@ -113,6 +113,11 @@ export const boundaryPolicies = ({
   { allow: { dependency: { relationship: { from: "internal" } } } },
   ...elementPolicies(dependencies, entryFile),
   ...featurePolicies(features),
+  { disallow: { to: { file: { path: "src/shared/lib/format.ts" } } } },
+  {
+    from: { file: { path: "src/shared/ds/Numbers.tsx" } },
+    allow: { to: { file: { path: "src/shared/lib/format.ts" } } },
+  },
   { disallow: { to: { file: { path: "src/shared/platform/input.ts" } } } },
   {
     from: {

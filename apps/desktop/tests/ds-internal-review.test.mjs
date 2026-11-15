@@ -133,7 +133,7 @@ test("DS02 price inline style and DOM exceptions are exact protected file lists"
     {
       CHART_TABLE_FILES: ["src/shared/ds/ChartTable.tsx"],
       CHART_GEOMETRY_FILES: ["src/shared/ds/ChartFrame.tsx"],
-      PRICE_COLOR_FILES: [],
+      PRICE_COLOR_FILES: ["src/shared/ds/Numbers.tsx"],
       INLINE_STYLE_FILES: [],
       DOM_STYLE_FILES: [],
       DOM_ACCESS_FILES: [

@@ -774,15 +774,17 @@ apps/desktop/src/
 
 | 규칙 | 내용 | 근거 |
 |---|---|---|
-| 금액 타입 | `Money`, `Quantity`, `Price`, `Ratio`, `Probability`는 비공개 symbol 키를 가진 **불투명 객체**다. 문자열 브랜드로 만들지 않는다. 문자열 브랜드는 `parseFloat`와 `+`가 타입 검사를 통과한다 | I-15, R-08 |
+| 금액 타입 | `Money`, `Quantity`, `Price`, `Ratio`, `Probability`, `PercentDisplay`는 비공개 symbol 키를 가진 **불투명 객체**다. 문자열 브랜드로 만들지 않는다. 문자열 브랜드는 `parseFloat`와 `+`가 타입 검사를 통과한다 | I-15, R-08 |
 | 만드는 곳 | `shared/lib/money.ts` 하나. IPC DTO의 십진수 문자열을 파싱해서만 만든다. 타입 술어 허용 목록의 유일한 파일이고 보호 파일이다 | R-08 |
 | 할 수 있는 것 | 형식 바꾸기뿐이다. 산술, 비교, 숫자 변환은 로컬 린트 규칙이 막는다 | R-08 |
-| 형식 | 십진수 문자열을 `Intl.NumberFormat`에 문자열 그대로 넘긴다. 부동소수점을 거치지 않는다. 빼기 기호는 U+2212로 바꾼다. 만·억 혼합 표기와 `원` 접미는 직접 만든다 | R-14 2.5 |
-| 방향과 색 | 상승·하락·보합은 코어가 보낸 값으로 정한다. 표시 단위로 반올림하면 0이 되는 값의 방향 규칙은 아직 정하지 않았다(R-14). D-01·DS-05에서 정한다 | R-14 |
+| 형식 | 코어가 환산·반올림·자릿수를 확정한 십진수 문자열을 문자열 연산으로만 표시한다. `Intl.NumberFormat`·숫자 변환·프런트 반올림을 금지한다. 음수 부호는 U+2212이며 원화 정수의 compact만 만·억·조를 쓴다. USD와 소수점이 있는 값은 full로 표시한다. `Percent`·`Probability`·`PriceChange.rate`는 소수 비율 `Ratio`·`Probability`와 키가 다른 표시 전용 `PercentDisplay`만 받는다 | R-14 2.5 |
+| 방향과 색 | 상승·하락·보합은 코어가 보낸 값으로 정한다. 표시 0의 숫자 부호만 제거하고 원래 방향은 유지한다(ADR 0025). 0이 아닌 값과 방향이 어긋나면 전체 표시를 경고색 `—`와 접근성 이름으로 닫는다. `Money`·`Percent`의 선택 direction에도 같은 규칙을 쓴다. 방향으로 숫자 부호를 덮어쓰지 않는다 | R-14 |
 | ID와 종목 코드 | 산술과 무관하므로 Zod 브랜드 문자열로 충분하다 | R-08 |
 | 그 밖의 모든 값 | 타입 자리에 `string`·`number`·`bigint`를 쓰지 않는다. 생성된 `bindings.ts`의 원시 타입은 `shared/ipc`의 Zod 스키마가 브랜드로 바꾸고, `features`는 브랜드 타입만 받는다. `boolean`도 쓰지 않고 리터럴 유니온으로 쓴다(`disabled: boolean`이 아니라 `state: 'enabled' \| 'disabled'`). 화면 문구는 `UiText` 브랜드이고 `messages.ts`(문구 키마다 언어별 문장)에만 있어 다국어를 바로 붙일 수 있다. `shared/ds`의 props도 브랜드와 리터럴 유니온만 받는다. `design/`의 타입 선언에 있는 불린 props(`judged`, `over`, `dense` 등)는 앱의 `shared/ds`에서 리터럴 유니온으로 옮긴다 | harness 4.2 |
 
-WKWebView에서의 한글 입력과 `Intl` 결과는 S-05에서 실제 창으로 확인한다.
+`format.ts`는 `shared/ds/Numbers.tsx`만 가져온다. 화면은 DS 컴포넌트만 조립하며 `FormattedNumber`의 JSX 표시는 `shared/ds` 안에서만 허용한다. 확률은 디자인 명세대로 표시 전용 퍼센트 1~99의 정수만 표시한다.
+
+WKWebView에서의 한글 입력과 문자열 형식화 결과·U+2212·고정폭 숫자·테마는 S-05에서 실제 창으로 확인한다.
 
 ## 6. 데이터
 
