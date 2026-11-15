@@ -20,9 +20,9 @@ pub enum BenchmarkDividends {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BenchmarkSeries {
-    kind: BenchmarkKind,
-    currency: PerformanceCurrency,
-    dates: Vec<CalendarDate>,
+    pub(crate) kind: BenchmarkKind,
+    pub(crate) currency: PerformanceCurrency,
+    pub(crate) dates: Vec<CalendarDate>,
     pub(crate) returns: Vec<PerformanceValue>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

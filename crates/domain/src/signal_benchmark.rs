@@ -52,25 +52,27 @@ impl SignalBenchmark {
         {
             return Err(SignalReturnError::BenchmarkMismatch);
         }
-        let segments = points
-            .iter()
-            .zip(points.iter().skip(1))
-            .zip(series.observations())
-            .map(|((start, end), value)| BenchmarkSegment {
-                start: *start,
-                end: *end,
-                value: value.value(),
-            })
-            .collect();
-        let dates = ordered
-            .iter()
-            .zip(&points)
-            .map(|(snapshot, at)| (snapshot.price_date(currency), *at))
-            .collect();
-        Ok(Self {
-            series,
-            segments,
-            dates,
+        crate::index_benchmark::validate_signal_benchmark_length(&series, &points).map(|()| {
+            let segments = points
+                .iter()
+                .zip(points.iter().skip(1))
+                .zip(series.observations())
+                .map(|((start, end), value)| BenchmarkSegment {
+                    start: *start,
+                    end: *end,
+                    value: value.value(),
+                })
+                .collect();
+            let dates = ordered
+                .iter()
+                .zip(&points)
+                .map(|(snapshot, at)| (snapshot.price_date(currency), *at))
+                .collect();
+            Self {
+                series,
+                segments,
+                dates,
+            }
         })
     }
     #[must_use]
