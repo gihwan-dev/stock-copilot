@@ -307,6 +307,13 @@ mod tests {
         );
     }
     #[test]
+    fn maximum_index_calendar_count_reaches_source_validation() {
+        assert_eq!(
+            SignalBenchmark::from_index_candles(&[], &[], &vec![calendar(61); 4097]),
+            Err(SignalReturnError::BenchmarkMismatch)
+        );
+    }
+    #[test]
     fn d29_benchmark_requires_native_currency_and_exact_close_instants() {
         let dates = [snapshot(61), snapshot(62)];
         for (currency, kind, calendars) in [

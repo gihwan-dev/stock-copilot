@@ -298,6 +298,36 @@ pub(crate) mod tests {
         );
     }
     #[test]
+    fn maximum_input_count_reaches_index_validation() {
+        let fixture = fixture_window(
+            vec![],
+            ("100", "100"),
+            ("100", "100"),
+            SettlementWindow::try_new(date(2), date(5)).expect("기간"),
+        );
+        let snapshots = [
+            snapshot(&fixture, 2, &[], "1000"),
+            snapshot(&fixture, 5, &[], "1000"),
+        ];
+        let bars = [finalized(2, "2000"), finalized(5, "2200")];
+        assert_eq!(
+            index_benchmark_series(
+                &vec![bars[0].clone(); 4097],
+                &snapshots,
+                PerformanceCurrency::ConvertedKrw
+            ),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+        assert_eq!(
+            index_benchmark_series(
+                &bars,
+                &vec![snapshots[0].clone(); 4097],
+                PerformanceCurrency::ConvertedKrw
+            ),
+            Err(PerformanceError::InvalidPeriod)
+        );
+    }
+    #[test]
     fn index_path_rejects_invalid_period_and_limits() {
         let fixture = fixture_window(
             vec![],
