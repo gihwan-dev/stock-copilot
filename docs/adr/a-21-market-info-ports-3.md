@@ -55,6 +55,9 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 - T-09: sectors는 전체 계층 목록이다. 누락/검증 실패 행을 버리고 완전한 목록으로 만들지 않는다. 사용자에게 보이는 섹터는 ADR 0085의 Major이며 필터링·소속 결정은 D-40 소비자가 한다. sector는 응답 ID와 요청 ID·시장을 결합하고 여섯 기간 및 nullable 값을 보존한다. 없는 섹터는 NotFound(Sector), 식별 불일치는 InvalidResponse(Validation)다.
 - T-10: sector_rankings는 대분류/중분류만 대상이다. depth가 없는 랭킹 응답에 임의 계층을 붙이지 말고 T-09 목록과 대조한다. 타입과 서버 응답의 종류·시장·기간을 맞추며 null을 0으로 바꾸지 않는다. 금액은 KRW(미국도 환산값)이며 순위/금액 비교는 domain이 한다.
 - T-09: sector_etfs는 관련 ETF 목록이며 ETF 내부 보유 자산 분해가 아니다. 요청 섹터·시장, KRX/NXT 포함, 하위 섹터 미포함을 유지한다. 직전 분기 시총 순서라는 서버 의미를 보존하고 분기 날짜·시총을 발명하지 않는다. 심볼과 마스터 연결은 어댑터 책임이다.
+- T-09: sector·sector_etfs 및 기존 sector_composition의 SectorId는 domain에서 출력 가능한 ASCII 최대 64바이트를 허용하므로 HTTP 경계의 더 좁은 제약을 대신하지 않는다. 요청 전에 `^[A-Za-z0-9_-]{1,40}$`를 검증하고, 불일치하면 해당 ReadEndpoint의 InvalidRequest(MalformedRequest)로 거부하여 HTTP를 보내지 않는다. `../accounts`, 쿼리/fragment 문자, 41~64바이트 입력도 거부한다. 검증된 ID만 URL 경로 세그먼트 API로 넣고 원문 문자열로 경로·쿼리를 조립하지 않는다. 이 작업은 기존 domain 식별자의 의미나 공개 생성자를 바꾸지 않는다.
+- T-10: sector_rankings의 각 ID를 유효한 SectorCatalog의 id/depth와 대조한다. 목록에 없는 ID 또는 Minor 응답은 SectorRankings의 InvalidResponse(Validation)로 전체 실패하며 행을 버리거나 Major로 추정하지 않는다. 대조용 목록 조회가 실패하면 원 status/kind·RetryDelay를 보존하여 SectorRankings에 귀속한 바깥 Err를 반환하고 검증되지 않은 성공 랭킹을 내지 않는다. Major/Middle의 원 랭킹은 그대로 반환하며 새 depth 래퍼를 만들지 않는다. A-09/G-07/M-04는 기존 ID 접근자와 SectorCatalog를 결합해 Major만 사용자 섹터로 표시한다. 소비자의 목록 조회가 실패하면 섹터 표시를 보류하며 Middle을 Major로 표시하거나 순위를 재부여하지 않는다.
+- T-10/A-09/G-07/M-04: 스키마 설명은 자료 없는 섹터의 changeRate를 서버가 0으로 줄 수 있다고 한다. 받은 0은 그대로 보존하되 실제 보합이나 자료 존재의 증거로 단정하지 않는다. null과 서버 0을 서로 바꾸거나, 추가 근거 없이 0을 NoData로 복원하지 않는다.
 - 모든 새 응답의 수집 시각은 Clock에서 받는다. 서버 시각 없는 섹터 API는 Unknown을 유지한다. 허용 신선도와 오래됨 표시는 A-09/G-07/M-04 소비자가 결정한다. 실패한 페이지/행을 누락시키거나 완전 성공으로 가장하지 않는다.
 
 ## 정의 대기
@@ -76,3 +79,43 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 ## 검증
 
 프로젝트 파일 hooks=true 및 Git 훅 설치 확인. 프로젝트 신뢰와 세션 훅 런타임 적용은 확인할 수 없으며 통과를 주장하지 않는다. 홈 설정/자격 증명을 읽거나 수정하지 않았다. 기존 tests/ports.rs의 FakeBroker에 다섯 필수 impl을 추가했으며 기존 단언·테스트 함수는 변경하지 않았다. 외부 의존성·검사 끄기 추가 없음.
+
+## 리뷰 반영
+
+독립 Opus 리뷰와 Codex 비판을 거쳐 HTTP 경계의 식별자 검증, 계층 대조 실패/소비자 표시, 서버 0의 의미를 위 의무에 명시했다. 서로 다른 섹터 ID 두 개와 두 시장의 상세/관련 ETF 반환 식별을 테스트에 더했다. ADR 직접 읽기 및 무번호 초안 관련 지적은 implementer 규칙과 구체 승인에 따라 기각했다. 테스트의 기대 서명은 문서 자동 파서가 아니며, 29개 계약 행은 별도 대조로 확인한다.
+
+## 손 변형 실제 실행
+
+최종 소스의 분기·허용 경계·반환 필드·오류를 임시 복사본에서 바꿔 27개를 각각 실제 컴파일·실행했다. 별도 빌드 디렉터리를 사용했고 매 로그에 application 재컴파일을 확인했다. 27개 모두 컴파일 성공 후 검출됐다. 원본으로 application 산출물을 지운 뒤 같은 테스트를 재컴파일하여 기준 통과도 확인했다. 임시 복사본 제거 완료. 앞선 matches! 구현과 공유 빌드 디렉터리 실험은 최종 집계에서 제외한다. 개별 로그는 target/A-21/final-hand-NN.log, 집계는 final-hand-results.json, 기준은 isolated-baseline.log다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|
+| 1 | TopGainers / MarketTradingVolume 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 2 | TopGainers / TossTradingAmount 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 3 | TopGainers / TossTradingVolume 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 4 | TopGainers / TopLosers 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 5 | TopGainers / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 6 | MarketTradingAmount / MarketTradingVolume 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 7 | MarketTradingAmount / TossTradingAmount 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 8 | MarketTradingAmount / TossTradingVolume 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 9 | MarketTradingAmount / TopLosers 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 10 | MarketTradingAmount / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 11 | Day / Realtime 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 12 | Day / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 13 | Week / Realtime 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 14 | Week / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 15 | Month / Realtime 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 16 | Month / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 17 | ThreeMonths / Realtime 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 18 | ThreeMonths / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 19 | SixMonths / Realtime 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 20 | SixMonths / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 21 | Year / Realtime 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 22 | Year / Unknown 허용/거절 교환 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 23 | 종류 반환 고정 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 24 | 기간 반환 고정 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 25 | 오류 endpoint 바꿈 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 26 | 오류 status 바꿈 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+| 27 | 거절 원인 바꿈 | sector_query_accepts_exactly_two_kinds_and_six_periods_and_keeps_identity |
+
+추가 가짜 검증은 원본 제품 소스의 위 27개 손 변형과 별도다. 새 두 시장·두 ID 테스트는 상세/관련 ETF 가짜의 시장 KR 고정과 ID 고정 4개를 실제 컴파일 후 모두 검출했고 복구 대조군은 통과했다. target/A-21/fake-probe-results.json과 개별 로그에 기록했다.

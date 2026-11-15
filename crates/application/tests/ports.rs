@@ -1488,4 +1488,21 @@ mod tests {
             Err(failure(ReadEndpoint::SectorEtfs))
         );
     }
+    #[test]
+    fn a21_sector_detail_and_related_etfs_keep_both_markets_and_distinct_ids() {
+        let port = FakeBroker(Scenario::Complete);
+        for sector in [
+            SectorId::try_new("sector-21").expect("첫 ID"),
+            SectorId::try_new("sector-93").expect("다른 ID"),
+        ] {
+            for market in [KnownMarket::Kr, KnownMarket::Us] {
+                let detail = ready(port.sector(&sector, market)).expect("상세");
+                assert_eq!(detail.metadata().id(), &sector);
+                assert_eq!(detail.market(), market);
+                let etfs = ready(port.sector_etfs(&sector, market)).expect("ETF");
+                assert_eq!(etfs.sector(), &sector);
+                assert_eq!(etfs.market(), market);
+            }
+        }
+    }
 }
