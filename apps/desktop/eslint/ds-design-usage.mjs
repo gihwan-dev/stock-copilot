@@ -81,6 +81,12 @@ export const iconUtilities = [
 const declaration = (property) =>
   property === "width/height" ? ["width", "height"] : [property];
 export const designUtilities = (tokens) => [
+  ["status-sentence", "min-width", "0"],
+  ["status-sentence", "overflow-wrap", "anywhere"],
+  ["dialog-overlay", "position", "fixed"],
+  ["dialog-overlay", "inset", "0"],
+  ["skeleton-line", "height", "var(--text-size-sm)"],
+  ["border-b-hairline", "border-bottom-width", "var(--border-width-hairline)"],
   [
     "transition-disclosure",
     "transition",
