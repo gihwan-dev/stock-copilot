@@ -66,3 +66,59 @@ test("DS06 기하 예외는 ChartFrame의 경로와 viewBox만이다", async () 
     outside.messages.some((m) => m.ruleId === "ds/no-presentation-props"),
   );
 });
+
+test("DS06 원문 표시 예외는 차트의 두 표시 파일에만 적용된다", async () => {
+  const engine = new ESLint({ cwd: desktopRoot });
+  for (const [path, allowed] of [
+    ["src/shared/ds/ChartFrame.tsx", true],
+    ["src/shared/ds/ChartTable.tsx", true],
+    ["src/shared/ds/AreaChart.tsx", false],
+    ["src/app/main.tsx", false],
+  ]) {
+    const source =
+      readFileSync(join(desktopRoot, path), "utf8") +
+      '\nimport {parseChartDecimal} from "' +
+      (path.startsWith("src/app") ? "../shared/lib" : "../lib") +
+      '";\nconst probeDecimal=parseChartDecimal("1");\nexport const DecimalProbe=():import("react").ReactElement|null=>probeDecimal.kind==="ok"?<>{probeDecimal.value}</>:null;\n';
+    const [result] = await engine.lintText(source, { filePath: path });
+    assert.equal(
+      result.messages.some((m) => m.ruleId === "local/no-ui-text"),
+      !allowed,
+      path,
+    );
+  }
+});
+
+test("DS06 숨은 표와 SVG의 비례·포인터 예외는 승인 파일만 허용한다", async () => {
+  const engine = new ESLint({ cwd: desktopRoot });
+  for (const [path, allowed] of [
+    ["src/shared/ds/ChartTable.tsx", true],
+    ["src/shared/ds/AreaChart.tsx", false],
+  ]) {
+    const [result] = await engine.lintText(
+      'const Probe=()=> <table className="sr-only"/>;',
+      { filePath: path },
+    );
+    assert.equal(
+      result.messages.some(
+        (m) => m.ruleId === "better-tailwindcss/no-restricted-classes",
+      ),
+      !allowed,
+      path,
+    );
+  }
+  const path = "src/shared/ds/ChartFrame.tsx";
+  const source = readFileSync(join(desktopRoot, path), "utf8");
+  for (const [from, to] of [
+    ['vectorEffect="non-scaling-stroke"', 'vectorEffect="arbitrary"'],
+    ['pointerEvents="all"', 'pointerEvents="arbitrary"'],
+  ]) {
+    const [result] = await engine.lintText(source.replace(from, to), {
+      filePath: path,
+    });
+    assert.ok(
+      result.messages.some((m) => m.ruleId === "ds/no-presentation-props"),
+      to,
+    );
+  }
+});

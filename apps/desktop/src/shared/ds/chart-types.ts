@@ -1,5 +1,12 @@
-import type { ChartDecimal, ChartCoordinate, ChartPath, UiText } from "../lib";
+import type {
+  ChartDecimal,
+  ChartCoordinate,
+  ChartPath,
+  UiText,
+  EntityId,
+} from "../lib";
 export type ChartPoint = {
+  readonly id: EntityId;
   readonly label: UiText;
   readonly value: ChartDecimal;
 };
@@ -20,9 +27,17 @@ export type ChartMark = ChartPoint & {
   readonly path: ChartPath;
   readonly order: "first" | "second" | "third" | "fourth" | "fifth" | "sixth";
 };
+export type ChartAxisLabels = {
+  readonly minimum: ChartDecimal;
+  readonly maximum: ChartDecimal;
+  readonly first: UiText;
+  readonly last: UiText;
+};
 export type ChartGeometry =
   | {
       readonly kind: "ready";
+      readonly layout: "trend" | "donut" | "treemap";
+      readonly axes?: ChartAxisLabels;
       readonly marks: readonly ChartMark[];
       readonly path?: ChartPath;
       readonly area?: ChartPath;

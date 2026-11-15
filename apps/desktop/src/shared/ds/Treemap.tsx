@@ -65,7 +65,7 @@ export const Treemap = (props: ChartProps): ReactElement => {
       theme={props.theme}
       geometry={
         geometry.kind === "ready"
-          ? { kind: "ready", marks: geometry.rectangles }
+          ? { kind: "ready", layout: "treemap", marks: geometry.rectangles }
           : geometry
       }
     />

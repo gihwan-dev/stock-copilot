@@ -13,3 +13,5 @@ export const ICON_GEOMETRY_FILES = [
 ];
 
 export const CHART_GEOMETRY_FILES = ["src/shared/ds/ChartFrame.tsx"];
+
+export const CHART_TABLE_FILES = ["src/shared/ds/ChartTable.tsx"];

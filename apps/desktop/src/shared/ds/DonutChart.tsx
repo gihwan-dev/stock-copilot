@@ -75,7 +75,7 @@ export const DonutChart = (props: ChartProps): ReactElement => {
       theme={props.theme}
       geometry={
         geometry.kind === "ready"
-          ? { kind: "ready", marks: geometry.arcs }
+          ? { kind: "ready", layout: "donut", marks: geometry.arcs }
           : geometry
       }
     />

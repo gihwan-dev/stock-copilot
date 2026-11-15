@@ -3,6 +3,37 @@ import assert from "node:assert/strict";
 import { componentsDom } from "./ds-components-dom.mjs";
 import { desktopRoot } from "./paths.mjs";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { compile } from "tailwindcss";
+
+const tokensCss = readFileSync(
+  join(desktopRoot, "src/shared/ds/tokens.css"),
+  "utf8",
+);
+const themeCss = readFileSync(
+  join(desktopRoot, "src/shared/ds/theme.css"),
+  "utf8",
+).replace(/^@import[^;]*;$/gmu, "");
+const builder = await compile(
+  `${readFileSync(join(desktopRoot, "node_modules/tailwindcss/theme.css"), "utf8")}\n${tokensCss}\n${themeCss}\n@tailwind utilities;`,
+);
+const chartCss = builder.build([
+  "w-full",
+  "h-chart-height",
+  "fill-none",
+  "fill-chart-1",
+  "fill-chart-2",
+  "fill-chart-3",
+  "fill-chart-4",
+  "fill-chart-5",
+  "fill-chart-6",
+  "stroke-current",
+  "stroke-focus-ring",
+  "stroke-icon",
+  "opacity-area",
+  "sr-only",
+  "text-chart-1",
+]);
 
 const source = `
 import {createElement} from 'react';
@@ -12,8 +43,12 @@ import {lineCoordinates} from '${join(desktopRoot, "src/shared/ds/LineChart.tsx"
 import {donutArcs} from '${join(desktopRoot, "src/shared/ds/DonutChart.tsx")}';
 import {treemapRectangles} from '${join(desktopRoot, "src/shared/ds/Treemap.tsx")}';
 import {text,parseChartDecimal} from LIB_ENTRY;
-window.geometry={lineCoordinates,donutArcs,treemapRectangles};
-window.draw=(name,data,theme='light')=>render(createElement({LineChart,AreaChart,DonutChart,Treemap}[name],{data,theme,label:text('app.title','ko'),empty:text('ds.tableEmpty','ko')}));
+const identify=data=>data.map((point,i)=>({...point,id:point.id??String(i)}));
+window.geometry=Object.fromEntries(Object.entries({lineCoordinates,donutArcs,treemapRectangles}).map(([key,fn])=>[key,data=>fn(identify(data))]));
+const style=document.createElement('style');style.textContent=${JSON.stringify(chartCss)};document.head.append(style);
+window.rootTheme=theme=>document.documentElement.dataset.theme=theme;
+window.draw=(name,data,theme='light')=>render(createElement({LineChart,AreaChart,DonutChart,Treemap}[name],{data:identify(data),theme,label:text('app.title','ko'),empty:text('ds.tableEmpty','ko')}));
+window.change=(view,name,data)=>view.rerender(createElement({LineChart,AreaChart,DonutChart,Treemap}[name],{data:identify(data),theme:'light',label:text('app.title','ko'),empty:text('ds.tableEmpty','ko')}));
 window.fire=fireEvent;window.cleanup=cleanup;window.decimal=parseChartDecimal;
 `;
 
@@ -40,6 +75,8 @@ test("DS06 좌표 경계와 배치 보존 속성", () => {
     );
     assert.equal(line.minimum, -3);
     assert.equal(line.maximum, 5);
+    assert.equal(line.minimumValue, "-3");
+    assert.equal(line.maximumValue, "5");
     assert.deepEqual(
       Array.from(lineCoordinates(data([7])).points, (p) => [p.x, p.y]),
       [[50, 30]],
@@ -49,11 +86,19 @@ test("DS06 좌표 경계와 배치 보존 속성", () => {
       [30, 30],
     );
     assert.equal(lineCoordinates([]).kind, "empty");
+    const padded = lineCoordinates(data(["100.000000000000000"]));
+    assert.equal(padded.kind, "ready");
+    assert.equal(padded.points[0].value, "100.000000000000000");
+    assert.equal(
+      lineCoordinates(data(["0." + "0".repeat(1000) + "1"])).kind,
+      "invalid",
+    );
+
     assert.equal(lineCoordinates(data(Array(500).fill(1))).kind, "ready");
     assert.equal(
       lineCoordinates([
-        { label: "a", value: "1" },
-        { label: "a", value: "2" },
+        { id: "same", label: "a", value: "1" },
+        { id: "same", label: "a", value: "2" },
       ]).kind,
       "invalid",
     );
@@ -176,14 +221,62 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
           view.container.querySelector("table").textContent,
           /첫 항목12\.125둘째 항목23\.875/,
         );
-        const marks = view.container.querySelectorAll('[tabindex="0"]');
+        const marks = view.container.querySelectorAll(
+          'svg path[pointer-events="all"]',
+        );
         assert.equal(marks.length, 2);
-        w.fire.focus(marks[0]);
+        assert.equal(view.container.querySelectorAll("button").length, 1);
+        assert.equal(
+          view.container.querySelectorAll("svg [tabindex]").length,
+          0,
+        );
+        const button = view.container.querySelector("button");
+        w.fire.focus(button);
         assert.match(
           view.container.querySelector("[role=status]").textContent,
           /첫 항목.*12\.125/,
         );
-        w.fire.blur(marks[0]);
+        w.fire.keyDown(button, { key: "ArrowRight" });
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /둘째 항목.*23\.875/,
+        );
+        w.fire.keyDown(button, { key: "ArrowRight" });
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /첫 항목.*12\.125/,
+        );
+        w.fire.keyDown(button, { key: "End" });
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /둘째 항목.*23\.875/,
+        );
+        w.fire.keyDown(button, { key: "Home" });
+        assert.equal(w.fire.keyDown(button, { key: "ArrowLeft" }), false);
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /둘째 항목.*23\.875/,
+        );
+        w.fire.keyDown(button, { key: "ArrowUp" });
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /첫 항목.*12\.125/,
+        );
+        w.fire.keyDown(button, { key: "ArrowDown" });
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /둘째 항목.*23\.875/,
+        );
+        assert.equal(w.fire.keyDown(button, { key: "Tab" }), true);
+        w.fire.keyDown(button, { key: "Home" });
+
+        w.fire.pointerEnter(marks[1]);
+        assert.match(
+          view.container.querySelector("[role=status]").textContent,
+          /첫 항목.*12\.125/,
+        );
+        w.fire.pointerLeave(marks[1]);
+        w.fire.blur(button);
         assert.equal(
           view.container.querySelector("[role=status]").textContent,
           "",
@@ -198,11 +291,76 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
           view.container.querySelector("[role=status]").textContent,
           "",
         );
+        if (component === "DonutChart" || component === "Treemap") {
+          const row = view.container.querySelector("tbody tr");
+          w.fire.pointerEnter(row);
+          assert.match(
+            view.container.querySelector("[role=status]").textContent,
+            /첫 항목.*12\.125/,
+          );
+          assert.equal(
+            view.container
+              .querySelector('svg path[pointer-events="none"]')
+              .getAttribute("d"),
+            marks[0].getAttribute("d"),
+          );
+          w.fire.pointerLeave(row);
+        }
         assert.match(view.container.innerHTML, /chart-1/);
+        w.rootTheme(theme === "light" ? "dark" : "light");
+        const figure = view.container.querySelector("figure");
+        const inputTokens = JSON.parse(
+          readFileSync(join(desktopRoot, "design-tokens/tokens.json"), "utf8"),
+        );
+        const series = inputTokens.color.tokens.find(
+          (token) => token.name === "chart-1",
+        );
         assert.equal(
-          view.container.querySelector("figure").getAttribute("data-theme"),
+          w.getComputedStyle(figure).getPropertyValue("--color-chart-1").trim(),
+          series.value[theme],
+        );
+        const svg = view.container.querySelector("svg");
+        assert.equal(
+          svg.getAttribute("preserveAspectRatio"),
+          component === "DonutChart" ? "xMidYMid meet" : "none",
+        );
+        if (component === "LineChart" || component === "AreaChart")
+          assert.equal(
+            view.container.querySelector("table").className,
+            "sr-only",
+          );
+        if (component === "Treemap")
+          assert.match(view.container.textContent, /왼쪽부터 아래 목록의 순서/);
+        if (component === "DonutChart")
+          assert.match(
+            view.container.textContent,
+            /시계 방향으로 아래 목록의 순서/,
+          );
+
+        assert.equal(
+          view.container
+            .querySelector("figure")
+            .getAttribute("data-chart-theme"),
           theme,
         );
+        if (component === "LineChart" || component === "AreaChart") {
+          const context = view.container.cloneNode(true);
+          for (const node of context.querySelectorAll(
+            "table,svg,[role=status]",
+          ))
+            node.remove();
+          assert.match(
+            context.textContent,
+            /첫 항목\s*둘째 항목[\s\S]*최소 · 12\.125[\s\S]*최대 · 23\.875/,
+          );
+
+          assert.match(view.container.textContent, /최소 · 12\.125/);
+          assert.match(view.container.textContent, /최대 · 23\.875/);
+          assert.equal(
+            view.container.querySelector("figure").getAttribute("aria-label"),
+            "주식 코파일럿",
+          );
+        }
         if (component === "LineChart")
           assert.equal(
             view.container.querySelector("svg>path").getAttribute("d"),
@@ -222,9 +380,82 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
         assert.equal(empty.container.querySelector("svg[role=img]"), null);
         w.cleanup();
         const bad = w.draw(component, [{ label: "a", value: "bad" }]);
-        assert.match(bad.container.textContent, /차트 값을 읽을 수 없어요/);
+        assert.match(bad.container.textContent, /차트를 그릴 수 없어요/);
         assert.equal(bad.container.querySelector("svg[role=img]"), null);
         w.cleanup();
       }
   }
+});
+
+test("DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시한다", () => {
+  const w = runtime.open();
+  const data = Array.from({ length: 500 }, (_, i) => ({
+    id: String(i),
+    label: `항목${i}`,
+    value: String(i + 10),
+  }));
+  const view = w.draw("LineChart", data);
+  const button = view.container.querySelector("button");
+  const status = () =>
+    view.container.querySelector("[role=status]").textContent;
+  assert.equal(view.container.querySelectorAll("button").length, 1);
+  assert.equal(view.container.querySelectorAll("svg [tabindex]").length, 0);
+  assert.equal(view.container.querySelector("table").className, "sr-only");
+  w.fire.focus(button);
+  assert.match(status(), /항목0.*10/);
+  assert.equal(w.fire.keyDown(button, { key: "ArrowRight" }), false);
+  assert.match(status(), /항목1.*11/);
+  w.fire.keyDown(button, { key: "Tab" });
+  assert.match(status(), /항목1.*11/);
+  w.fire.keyDown(button, { key: "ArrowUp" });
+  assert.match(status(), /항목0.*10/);
+  w.fire.keyDown(button, { key: "End" });
+  assert.match(status(), /항목499.*509/);
+  w.fire.keyDown(button, { key: "ArrowRight" });
+  assert.match(status(), /항목0.*10/);
+  w.fire.keyDown(button, { key: "ArrowLeft" });
+  assert.match(status(), /항목499.*509/);
+  w.fire.keyDown(button, { key: "Home" });
+  assert.match(status(), /항목0.*10/);
+  w.change(view, "LineChart", [
+    { id: "0", label: "갱신", value: "99" },
+    { id: "1", label: "다음", value: "22" },
+  ]);
+  assert.match(status(), /갱신.*99/);
+  w.change(view, "LineChart", [{ id: "1", label: "다음", value: "22" }]);
+  assert.equal(status(), "");
+  const mark = view.container.querySelector('path[pointer-events="all"]');
+  w.fire.pointerEnter(mark);
+  assert.match(status(), /다음.*22/);
+  w.fire.pointerLeave(mark);
+  w.fire.keyDown(button, { key: "ArrowLeft" });
+  assert.match(status(), /다음.*22/);
+  w.cleanup();
+});
+
+test("DS06 한 점은 채워지고 밀집 선의 기본 마커는 선을 덮지 않는다", () => {
+  const w = runtime.open();
+  const single = w.draw("LineChart", [{ label: "중앙", value: "7" }]);
+  const point = single.container.querySelector('path[pointer-events="all"]');
+  const fill = w.getComputedStyle(point).fill;
+  assert.ok(fill !== "" && fill !== "none", fill);
+  w.cleanup();
+  const dense = w.draw(
+    "LineChart",
+    Array.from({ length: 500 }, (_, index) => ({
+      label: `점${index}`,
+      value: "7",
+    })),
+  );
+  const line = dense.container.querySelector("svg>path");
+  assert.equal(line.getAttribute("vector-effect"), "non-scaling-stroke");
+  assert.ok(
+    w.getComputedStyle(line).stroke !== "" &&
+      w.getComputedStyle(line).stroke !== "none",
+  );
+  for (const mark of dense.container.querySelectorAll(
+    'path[pointer-events="all"]',
+  ))
+    assert.equal(w.getComputedStyle(mark).fill, "none");
+  w.cleanup();
 });

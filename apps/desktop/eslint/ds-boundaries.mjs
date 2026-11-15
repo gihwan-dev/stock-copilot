@@ -246,6 +246,18 @@ export const boundaryRules = {
             ["d", "viewBox"].includes(key)
           )
             return;
+          if (
+            ctx.options[0]?.geometry === "chart" &&
+            key === "vectorEffect" &&
+            node.value?.value === "non-scaling-stroke"
+          )
+            return;
+          if (
+            ctx.options[0]?.geometry === "chart" &&
+            key === "pointerEvents" &&
+            ["all", "none"].includes(node.value?.value)
+          )
+            return;
           if (geometry && ctx.options[0]?.geometry === "allow") {
             const v = node.value;
             const valid = ["d", "viewBox", "points"].includes(key)
