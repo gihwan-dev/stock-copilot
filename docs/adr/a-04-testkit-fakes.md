@@ -4,7 +4,7 @@
 
 ## 결정
 
-기준은 580a19874ee4ad32c21c4c3f83a0a4142b3a4858이다. testkit은 기존 속성 테스트 도우미만 가진 잎으로 두며 작업 공간 crate에 의존하지 않는다. 포트 가짜와 공개 계약 검사는 testkit-ports로 분리하고 application과 domain에만 일반 의존한다. 새 외부 패키지·비동기 런타임·기능·실제 API 호출은 추가하지 않는다. 기존 property_cases 도우미는 그대로 둔다.
+기준은 580a19874ee4ad32c21c4c3f83a0a4142b3a4858이다. testkit은 작업 공간 crate에 의존하지 않는 잎으로 둔다. 포트 가짜와 공개 계약 검사는 testkit-ports로 분리하고 application과 domain에만 일반 의존한다. 새 외부 패키지·비동기 런타임·기능·실제 API 호출은 추가하지 않는다. 기존 property_cases 도우미는 그대로 둔다.
 
 메인 결정에 따라 세션 훅 미적용을 중단 사유로 사용하지 않는다. 세션 훅 상태는 **미적용 확인됨(차단돼야 할 `git -c core.hooksPath=/tmp status`가 실행됨)**이다. 프로젝트 신뢰와 훅 정의 신뢰의 저장 상태나 미적용 원인은 단정하지 않는다. 정상 Git 훅을 실행하며 보호 규칙 무단 변경, master 이동, push, PR, 홈 설정 변경을 하지 않는다.
 
@@ -28,7 +28,7 @@ ScriptedPresence는 주문과 위험 변경에 서로 다른 결과 큐를 사�
 
 | 가짜 | 포트 |
 |---|---|
-| ScriptedBrokerRead, ScriptedMarketInfo | ADR 0055·0082·0087의 읽기 메서드 29개 |
+| ScriptedBrokerRead, ScriptedMarketInfo | ADR 0055·0082·0087·0090의 읽기 메서드 33개 |
 | BrokerCapabilities 값 | 기존 닫힌 지원 표를 직접 사용. 별도 IO 가짜가 필요하지 않음 |
 | MemoryPortfolioRepository 등 저장소 10개 | 메모리 저장·조회와 메서드별 대본 |
 | MemoryAuditLog | 감사 추가와 검증 대본 |
@@ -55,7 +55,7 @@ SecretValue는 기존 application 타입을 사용한다. 호출 기록은 Arc�
 
 contracts 모듈은 포트를 제네릭으로 받고 ADR의 입력·성공 값·부재·오류를 독립된 expected 사실과 대조하는 메서드별 함수를 공개한다. broker_read_*, market_info_*, 저장소 10개의 메서드, audit_log_*, secret_store_*, notifier_notify, news_feed_*, fundamentals_statements, macro_series_daily_values, clock_now, user_presence_order, user_presence_risk_change와 broker_capabilities가 있다. 어댑터는 녹화/고정 fixture에서 기대값을 만들고 같은 함수에 자기 구현을 전달한다. 가짜 출력에서 기대값을 추출하지 않는다.
 
-읽기 포트 29개는 오류와 실제 요청 인자 기록을 각각 검사한다. 중복 시세 슬롯의 성공·실패 보존도 검사한다. 시계·대본·메모리 상태·뉴스 정책·부재 구분·감사 중복·비밀 키 격리를 별도로 검사한다. 포트 trait 정의나 가짜 대본 자체가 실제 HTTP의 페이지 완전성·배치 제한·원본 진위를 강제한다고 주장하지 않는다.
+읽기 포트 33개는 오류와 실제 요청 인자 기록을 각각 검사한다. 중복 시세 슬롯의 성공·실패 보존도 검사한다. 시계·대본·메모리 상태·뉴스 정책·부재 구분·감사 중복·비밀 키 격리를 별도로 검사한다. 포트 trait 정의나 가짜 대본 자체가 실제 HTTP의 페이지 완전성·배치 제한·원본 진위를 강제한다고 주장하지 않는다.
 
 현재 domain의 공개 validate는 아직 외부 게이트를 Unknown으로 남긴다. 실제 PendingOrderConfirmation을 생산하는 주문 유스케이스 전에는 공개 소비자가 주문 요약을 만드는 정상 성공 fixture를 얻을 수 없다. 주문 결과 타입의 세 응답 FIFO는 공통 Script에서 실행하고, 주문 참조 계약 함수·열 필드 기록 변환과 가짜 trait impl은 컴파일로 확인한다. 실제 주문 요약을 통한 확인 호출 연동은 O-01·O-04·O-17과 A-14 연동 유스케이스 테스트로 인계한다. 메인 결정에 따라 이 실행 미검증은 A-04 차단으로 세지 않는다. 이 한계를 숨기거나 내부 토큰 생성자를 공개하지 않는다.
 
@@ -206,7 +206,7 @@ contracts::broker_read_buying_power(&broker, &account, Currency::Krw, Err(error)
 assert_eq!(broker.calls(), vec![BrokerReadCall::BuyingPower(account, Currency::Krw)]);
 ```
 
-메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 74개와 저장 의미의 제네릭 시나리오 16개다. 주문용 user_presence_order의 실제 실행은 앞서 명시한 주문 경로 작업의 인계이며 다른 계약 실행으로 대체했다고 세지 않는다.
+메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 78개와 저장 의미의 제네릭 시나리오 16개다. 주문용 user_presence_order의 실제 실행은 앞서 명시한 주문 경로 작업의 인계이며 다른 계약 실행으로 대체했다고 세지 않는다.
 
 ## 독립 리뷰 2 이후 보강과 미확정 계약
 
@@ -293,3 +293,40 @@ Draft 한정 Clone과 가격 범위 읽기는 빌린 초안의 모든 사실을 
 마지막 master 확인 때 c1666b81906978001baec1db506c0060b8dcf764의 T-18이 들어왔다. 공용 arch-check의 새 endpoint 검사와 A-04의 정확한 상대 경로 본인 확인 보호 검사를 모두 보존한다. 양쪽 사례 목록을 합치며 새 factory 금지 사례와 포트 가짜 의존 금지 사례를 지우지 않는다. Codex 설정과 보호 해시는 공식 쓰기 명령으로 다시 만든다. 포트 가짜·계약·회귀와 application/domain은 이 통합에서 바뀌지 않아 손 변형 대상 소스·증인은 유지된다. 새 testkit HTTP 도우미에도 작업 공간 의존은 없다. 병합 트리의 실제 정상 훅 결과는 병합 커밋 메시지와 최종 보고에 적는다.
 
 병합 해결 뒤 포트 68개와 xtask 선택 18개(사례 전수·규칙 원소 제거 포함)가 통과했고 arch-check 위반은 0건이다. A-04 손 변형 대상 소스와 증인 테스트의 해시는 통합 전과 일치한다.
+
+T-18 병합은 정상 훅 전체 테스트 1508개·커버리지 1049개와 검사·cargo-deny 네 검사를 통과했다. 정상 훅의 자동 기준은 master 동시 전진 때문에 공통 선조 dc8f3f9였고 승인 test-diff 두 건에서만 종료했다. 후속 검사까지 확인한 뒤 해당 커밋 한정 예외로 4615eff를 만들었다.
+
+그 사이 들어온 DS-18의 master c4a0eda8da81702588c61a6650466dae1e9cdeb7도 --no-ff로 받는다. 충돌은 Codex 설정·보호 해시 두 생성물뿐이며 공식 명령으로 다시 만든다. 화면·lint·DS 문서 변경은 master에서 받은 그대로 유지한다. A-04 포트 가짜·계약·증인과 변형 대상 소스 해시는 변하지 않는다. 이 최종 병합의 실제 정상 훅 결과는 병합 커밋 메시지와 최종 보고에 남긴다.
+
+DS-18 병합의 전체 검사 전 D-44가 master에 추가돼, 준비 중이던 병합을 정리하고 두 작업을 포함하는 bec3895a13aaa0150616c5a3403739c91a2fc78c를 받았다. 충돌은 같은 두 생성물뿐이다. A-04 기록을 보존하고 생성물을 공식 명령으로 재생성한다. D-44에서 받은 domain 코드와 테스트를 직접 수정하지 않는다.
+
+## D-44 필수 MarketInfo 메서드 정합화
+
+최신 master의 ADR 0090은 program_trades, short_selling, credit_trades, securities_lending을 MarketInfo에 추가했다. 통합 직후 컴파일에서 네 필수 항목 누락(E0046)을 확인했고 ScriptedMarketInfo에 독립 대본·전체 호출 변형·메서드별 인자 기록·공개 제네릭 계약 함수를 추가했다. MarketInfo는 18개, BrokerRead와 합쳐 33개 읽기 메서드다. 공개 메서드별 계약은 78개다. 실제 어댑터의 국내 종목·기간·페이지 검증을 가짜가 다시 구현하지 않는다.
+
+새 테스트 다섯 개는 네 메서드 각각의 오류→서로 다른 필드를 가진 실제 자료→빈 성공과 종목·포함 날짜 창·호출 순서, 기능 네 개의 명시적 지원 값을 검사한다. ProgramContext의 서버 시각 부재, 공매도 분모 부재와 보고 비율, 신용 한쪽 NoData와 기관 대차를 domain의 검증된 값 그대로 보존한다. 모든 포트 테스트 73개와 clippy가 통과했다. 네 메서드 누락의 컴파일 red를 실제 확인했으며 새 테스트 선작성 red로 과장하지 않는다. 이 필수 정합화는 최신 포트를 채우는 A-04 범위이며 4차 리뷰는 추가하지 않는다.
+
+## D-44 통합 뒤 최종 손 변형
+
+필수 네 메서드를 반영한 소스에서 기존 67개를 모두 다시 컴파일·실행하고 새 전달 경로의 변형 12개를 더 실행했다. 서로 다른 79개가 컴파일 후 전부 검출됐으며 생존 0·시간 초과 0이다. 각 집합의 기준·원복 테스트가 통과했고 변형 대상 소스 및 해당 증인 파일의 해시가 현재 파일과 같다. 최종 결과는 target/A-04/final-mutations.json과 final-mutation-source-proof.json이다. 기존 67개와 D-44 자체 domain 작업의 29개 변형을 섞어 세지 않는다. 아래 12개는 A-04 가짜에서 직접 바꿔 실행한 별도 증인이다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 68 | program_trades 전체 호출 기록 삭제 | 컴파일 성공·검출 | tests::program_trades_preserves_facts_empty_error_arguments_and_order |
+| 69 | program_trades 기간 인자 뒤바꿈 | 컴파일 성공·검출 | tests::program_trades_preserves_facts_empty_error_arguments_and_order |
+| 70 | program_trades 성공 사실을 빈 목록으로 대체 | 컴파일 성공·검출 | tests::program_trades_preserves_facts_empty_error_arguments_and_order |
+| 71 | short_selling 전체 호출 기록 삭제 | 컴파일 성공·검출 | tests::short_selling_preserves_facts_empty_error_arguments_and_order |
+| 72 | short_selling 기간 인자 뒤바꿈 | 컴파일 성공·검출 | tests::short_selling_preserves_facts_empty_error_arguments_and_order |
+| 73 | short_selling 성공 사실을 빈 목록으로 대체 | 컴파일 성공·검출 | tests::short_selling_preserves_facts_empty_error_arguments_and_order |
+| 74 | credit_trades 전체 호출 기록 삭제 | 컴파일 성공·검출 | tests::credit_trades_preserves_facts_empty_error_arguments_and_order |
+| 75 | credit_trades 기간 인자 뒤바꿈 | 컴파일 성공·검출 | tests::credit_trades_preserves_facts_empty_error_arguments_and_order |
+| 76 | credit_trades 성공 사실을 빈 목록으로 대체 | 컴파일 성공·검출 | tests::credit_trades_preserves_facts_empty_error_arguments_and_order |
+| 77 | securities_lending 전체 호출 기록 삭제 | 컴파일 성공·검출 | tests::securities_lending_preserves_facts_empty_error_arguments_and_order |
+| 78 | securities_lending 기간 인자 뒤바꿈 | 컴파일 성공·검출 | tests::securities_lending_preserves_facts_empty_error_arguments_and_order |
+| 79 | securities_lending 성공 사실을 빈 목록으로 대체 | 컴파일 성공·검출 | tests::securities_lending_preserves_facts_empty_error_arguments_and_order |
+
+## 최신 병합 정상 훅의 일시 실패 재검증
+
+DS-18·D-44 통합 첫 정상 훅은 1523개 중 1326개를 실행해 1320개 통과·기존 Git 훅 회귀 여섯 개 실패로 멈췄고 197개는 미실행이었다. 한 실패에는 하위 cargo가 signal 9로 종료된 출력이 있다. 원인을 메모리나 소스 결함으로 단정하지 않는다. 커버리지·test-diff 전에 끝났으므로 승인된 커밋 예외도 사용하지 않았다.
+
+같은 코드·속성 4096회·commit 환경에서 실패 여섯 개를 순차 실행한 결과와 기본 병렬 재실행 결과는 각각 6/6 통과다. 기존 테스트·훅 소스는 수정하지 않는다. 재실행은 CARGO_BUILD_JOBS=2로 빌드 자원만 제한하고, 테스트 선택·nextest 기본 병렬 설정·속성 횟수·검사 항목은 유지한 정상 커밋 훅으로 수행한다. 실패 로그는 target/A-04/final-ds18-d44-hook-failure1.log, 격리 결과는 merge-hook-six-retry.log와 merge-hook-six-parallel.log에 보존한다. 전체 재실행 실제 결과는 최종 병합 커밋 메시지와 보고에 남긴다.

@@ -9,15 +9,16 @@ use application::{
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
-    CommissionRateFact, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate, FxRateKind,
-    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, InvestorTradingRankings,
-    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
-    MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
-    PriceLimits, ProposalId, Quote, QuoteInstrument, RaisedSignal, RankingLimit,
-    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
-    SectorEtfs, SectorId, SectorRanking, SellableQuantityFact, SettledRowSet, SettlementWindow,
-    SignalSubmission, SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, TimeInterval,
-    Timestamp, TransactionFilter, ValuationSnapshot,
+    CommissionRateFact, CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate,
+    FxRateKind, IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile,
+    InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
+    MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
+    PriceAdjustment, PriceLimits, ProgramTrade, ProposalId, Quote, QuoteInstrument, RaisedSignal,
+    RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition,
+    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
+    SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking,
+    StockWarnings, Symbol, SyncRecord, TimeInterval, Timestamp, TransactionFilter,
+    ValuationSnapshot,
 };
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrokerReadCall {
@@ -266,6 +267,10 @@ impl BrokerRead for ScriptedBrokerRead {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarketInfoCall {
+    SecuritiesLending(QuoteInstrument, CalendarDate, CalendarDate),
+    CreditTrades(QuoteInstrument, CalendarDate, CalendarDate),
+    ShortSelling(QuoteInstrument, CalendarDate, CalendarDate),
+    ProgramTrades(QuoteInstrument, CalendarDate, CalendarDate),
     InvestorTradingRankings(RankingLimit),
     Sectors(),
     Sector(SectorId, KnownMarket),
@@ -284,6 +289,10 @@ pub enum MarketInfoCall {
 }
 #[derive(Debug, Default)]
 pub struct ScriptedMarketInfo {
+    securities_lending: ScriptedMarketInfoSecuritiesLendingScript,
+    credit_trades: ScriptedMarketInfoCreditTradesScript,
+    short_selling: ScriptedMarketInfoShortSellingScript,
+    program_trades: ScriptedMarketInfoProgramTradesScript,
     investor_trading_rankings: ScriptedMarketInfoInvestorTradingRankingsScript,
     sectors: ScriptedMarketInfoSectorsScript,
     sector: ScriptedMarketInfoSectorScript,
@@ -302,6 +311,22 @@ pub struct ScriptedMarketInfo {
     calls: State<Vec<MarketInfoCall>>,
 }
 impl ScriptedMarketInfo {
+    #[must_use]
+    pub fn script_securities_lending(&self) -> &ScriptedMarketInfoSecuritiesLendingScript {
+        &self.securities_lending
+    }
+    #[must_use]
+    pub fn script_credit_trades(&self) -> &ScriptedMarketInfoCreditTradesScript {
+        &self.credit_trades
+    }
+    #[must_use]
+    pub fn script_short_selling(&self) -> &ScriptedMarketInfoShortSellingScript {
+        &self.short_selling
+    }
+    #[must_use]
+    pub fn script_program_trades(&self) -> &ScriptedMarketInfoProgramTradesScript {
+        &self.program_trades
+    }
     #[must_use]
     pub fn script_investor_trading_rankings(
         &self,
@@ -369,6 +394,66 @@ impl ScriptedMarketInfo {
     }
 }
 impl MarketInfo for ScriptedMarketInfo {
+    async fn securities_lending(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> Result<Vec<SecuritiesLending>, PortError> {
+        self.calls.write().push(MarketInfoCall::SecuritiesLending(
+            instrument.clone(),
+            from,
+            through,
+        ));
+        self.securities_lending
+            .run((instrument.clone(), from, through))
+            .await
+    }
+    async fn credit_trades(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> Result<Vec<CreditTrade>, PortError> {
+        self.calls.write().push(MarketInfoCall::CreditTrades(
+            instrument.clone(),
+            from,
+            through,
+        ));
+        self.credit_trades
+            .run((instrument.clone(), from, through))
+            .await
+    }
+    async fn short_selling(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> Result<Vec<ShortSelling>, PortError> {
+        self.calls.write().push(MarketInfoCall::ShortSelling(
+            instrument.clone(),
+            from,
+            through,
+        ));
+        self.short_selling
+            .run((instrument.clone(), from, through))
+            .await
+    }
+    async fn program_trades(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> Result<Vec<ProgramTrade>, PortError> {
+        self.calls.write().push(MarketInfoCall::ProgramTrades(
+            instrument.clone(),
+            from,
+            through,
+        ));
+        self.program_trades
+            .run((instrument.clone(), from, through))
+            .await
+    }
     async fn investor_trading_rankings(
         &self,
         limit: RankingLimit,
@@ -789,3 +874,17 @@ pub type ScriptedMarketInfoSectorRankingsScript =
     Script<(SectorRankingQuery,), Result<SectorRanking, PortError>>;
 pub type ScriptedMarketInfoSectorEtfsScript =
     Script<(SectorId, KnownMarket), Result<SectorEtfs, PortError>>;
+
+pub type ScriptedMarketInfoProgramTradesScript =
+    Script<(QuoteInstrument, CalendarDate, CalendarDate), Result<Vec<ProgramTrade>, PortError>>;
+
+pub type ScriptedMarketInfoShortSellingScript =
+    Script<(QuoteInstrument, CalendarDate, CalendarDate), Result<Vec<ShortSelling>, PortError>>;
+
+pub type ScriptedMarketInfoCreditTradesScript =
+    Script<(QuoteInstrument, CalendarDate, CalendarDate), Result<Vec<CreditTrade>, PortError>>;
+
+pub type ScriptedMarketInfoSecuritiesLendingScript = Script<
+    (QuoteInstrument, CalendarDate, CalendarDate),
+    Result<Vec<SecuritiesLending>, PortError>,
+>;

@@ -11,15 +11,15 @@ use application::{
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
-    CommissionRateFact, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate, FxRateKind,
-    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, InvestorTradingRankings,
-    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
-    MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
-    PriceLimits, Quote, QuoteInstrument, RaisedSignal, RankingLimit, ResolvedOrderInstrument,
-    RiskSettings, SectorCatalog, SectorComposition, SectorDetail, SectorEtfs, SectorId,
-    SectorRanking, SellableQuantityFact, SettledRowSet, SettlementWindow, SignalSubmission,
-    SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval,
-    Timestamp, TransactionFilter, ValuationSnapshot,
+    CommissionRateFact, CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate,
+    FxRateKind, IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile,
+    InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
+    MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
+    PriceAdjustment, PriceLimits, ProgramTrade, Quote, QuoteInstrument, RaisedSignal, RankingLimit,
+    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
+    SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
+    SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
+    Symbol, SyncRecord, Thesis, TimeInterval, Timestamp, TransactionFilter, ValuationSnapshot,
 };
 pub async fn broker_read_accounts<P: BrokerRead>(
     port: &P,
@@ -854,5 +854,61 @@ pub async fn market_info_sector_etfs<P: MarketInfo>(
         port.sector_etfs(sector, market).await,
         expected,
         "ADR 0087 입력에 대응하는 사실과 오류 보존"
+    );
+}
+
+pub async fn market_info_program_trades<P: MarketInfo>(
+    port: &P,
+    instrument: &QuoteInstrument,
+    from: CalendarDate,
+    through: CalendarDate,
+    expected: Result<Vec<ProgramTrade>, PortError>,
+) {
+    assert_eq!(
+        port.program_trades(instrument, from, through).await,
+        expected,
+        "ADR 0090 사실·부재·오류와 요청 의미 보존"
+    );
+}
+
+pub async fn market_info_short_selling<P: MarketInfo>(
+    port: &P,
+    instrument: &QuoteInstrument,
+    from: CalendarDate,
+    through: CalendarDate,
+    expected: Result<Vec<ShortSelling>, PortError>,
+) {
+    assert_eq!(
+        port.short_selling(instrument, from, through).await,
+        expected,
+        "ADR 0090 사실·부재·오류와 요청 의미 보존"
+    );
+}
+
+pub async fn market_info_credit_trades<P: MarketInfo>(
+    port: &P,
+    instrument: &QuoteInstrument,
+    from: CalendarDate,
+    through: CalendarDate,
+    expected: Result<Vec<CreditTrade>, PortError>,
+) {
+    assert_eq!(
+        port.credit_trades(instrument, from, through).await,
+        expected,
+        "ADR 0090 사실·부재·오류와 요청 의미 보존"
+    );
+}
+
+pub async fn market_info_securities_lending<P: MarketInfo>(
+    port: &P,
+    instrument: &QuoteInstrument,
+    from: CalendarDate,
+    through: CalendarDate,
+    expected: Result<Vec<SecuritiesLending>, PortError>,
+) {
+    assert_eq!(
+        port.securities_lending(instrument, from, through).await,
+        expected,
+        "ADR 0090 사실·부재·오류와 요청 의미 보존"
     );
 }

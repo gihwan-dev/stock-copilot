@@ -13,6 +13,13 @@ const names = (group) => tokens[group].tokens.map((t) => t.name);
 export const DS_KEYWORDS = [
   "sr-only",
   "status-sentence",
+  "markdown-content",
+  "markdown-bullets",
+  "markdown-ordered",
+  "markdown-quote",
+  "chat-content",
+  "chat-input",
+  "markdown-link",
   "whitespace-nowrap",
   "h-chart-height-sm",
   "h-chart-height",

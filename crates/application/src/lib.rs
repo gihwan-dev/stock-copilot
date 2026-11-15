@@ -2,13 +2,14 @@ mod observations;
 mod port_error;
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, Currency, FlowInterval,
-    FxPair, FxRate, FxRateKind, IndicatorCode, InvestorFlow, InvestorTradingRankings, KnownMarket,
-    MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrumentFacts,
-    OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, QuoteInstrument, RankingLimit,
-    ResolvedOrderInstrument, SectorCatalog, SectorComposition, SectorDetail, SectorEtfs, SectorId,
-    SectorRanking, SellableQuantityFact, SettlementWindow, StockRanking, StockWarnings,
-    TimeInterval, Timestamp, TransactionFilter,
+    CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, CreditTrade, Currency,
+    FlowInterval, FxPair, FxRate, FxRateKind, IndicatorCode, InvestorFlow, InvestorTradingRankings,
+    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
+    MasterInstrumentFacts, OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, ProgramTrade,
+    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog, SectorComposition,
+    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
+    SettlementWindow, ShortSelling, StockRanking, StockWarnings, TimeInterval, Timestamp,
+    TransactionFilter,
 };
 pub use observations::{
     HoldingsObservation, IncompleteReason, IncompleteTransactions, QuarantinedTransaction,
@@ -47,6 +48,10 @@ pub enum BrokerCapability {
     Sector,
     SectorRankings,
     SectorEtfs,
+    ProgramTrades,
+    ShortSelling,
+    CreditTrades,
+    SecuritiesLending,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +149,31 @@ pub trait BrokerRead: Send + Sync {
 }
 
 pub trait MarketInfo: Send + Sync {
+    fn program_trades(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> impl Future<Output = Result<Vec<ProgramTrade>, PortError>> + Send;
+    fn short_selling(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> impl Future<Output = Result<Vec<ShortSelling>, PortError>> + Send;
+    fn credit_trades(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> impl Future<Output = Result<Vec<CreditTrade>, PortError>> + Send;
+    fn securities_lending(
+        &self,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
+    ) -> impl Future<Output = Result<Vec<SecuritiesLending>, PortError>> + Send;
+
     fn investor_trading_rankings(
         &self,
         limit: RankingLimit,
