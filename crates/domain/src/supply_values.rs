@@ -347,5 +347,31 @@ mod supply_tests {
             "-5"
         );
         assert_eq!(rate("0.123456789").to_string(), "0.123456789");
+        for input in ["0.50", "1.0", "0.00000"] {
+            assert_eq!(rate(input).to_string(), input);
+        }
+    }
+
+    #[test]
+    fn supply_kst_midnight_boundary_is_exact_for_every_timestamp_representation() {
+        let date = at(86_400).offset_calendar_date();
+        for offset in [-43_200_i32, 0_i32, 32_400_i32, 50_400_i32] {
+            let before = Timestamp::from_parts(
+                UnixSeconds::new(53_999),
+                Nanosecond::new(0),
+                OffsetSeconds::new(offset),
+            )
+            .expect("한국 자정 직전");
+            let midnight = Timestamp::from_parts(
+                UnixSeconds::new(54_000),
+                Nanosecond::new(0),
+                OffsetSeconds::new(offset),
+            )
+            .expect("한국 자정");
+            ProgramContext::from_response(symbol(), date, before).expect_err("다음 날 거부");
+            SupplyContext::from_response(symbol(), date, before, before).expect_err("다음 날 거부");
+            ProgramContext::from_response(symbol(), date, midnight).expect("같은 날 수락");
+            SupplyContext::from_response(symbol(), date, midnight, midnight).expect("같은 날 수락");
+        }
     }
 }

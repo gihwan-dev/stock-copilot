@@ -32,7 +32,7 @@ A-04는 후속 testkit 가짜에 새 메서드를 반영한다. A-09/G-07/M-04�
 시작 pnpm frozen install 및 lefthook install 성공. 프로젝트 신뢰와 세션 훅 신뢰 적용은 확인할 수 없다. 홈 설정이나 인증 파일은 읽거나 수정하지 않았다. Git 커밋 훅과 실제 실행한 검사로 검증한다. 새 외부 의존성과 검사 끄기는 없다.
 ## 손 변형 결과
 
-리뷰 수정 제품 코드를 mktemp -d 복사본에서 한 번에 하나씩 변경하고 cargo test --locked -p domain --lib supply_tests로 실제 실행했다. 기준·복구 대조군 모두 통과. 27개 모두 컴파일 후 테스트 실패로 검출됐고 생존 0·컴파일 불가 0이다. 24번은 리뷰어가 발견한 updated→collected 생존을 잡는 보강이다. 이후 회귀 테스트의 중첩·숫자 타입만 정리했으며 제품 부분의 바이트 일치를 확인하고 최종 수급 테스트 7개를 다시 통과시켰다.
+최종 제품 코드와 테스트를 mktemp -d 복사본에서 한 번에 하나씩 변경하고 cargo test --locked -p domain --lib supply_tests로 실제 실행했다. 기준·복구 대조군 모두 통과. 29개 모두 컴파일 후 테스트 실패로 검출됐고 생존 0·컴파일 불가 0이다. 24번은 첫 리뷰가 발견한 updated→collected 생존, 28·29번은 재리뷰에서 독립 확인한 비등가 생존을 잡는 보강이다. 최종 복사본의 여섯 파일이 현재 소스·테스트와 바이트 일치함을 확인했다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
 |---|---|---|---|
@@ -52,17 +52,19 @@ A-04는 후속 testkit 가짜에 새 메서드를 반영한다. A-09/G-07/M-04�
 | 14 | balance_quantity 접근자 → execution_quantity | supply_values::supply_tests::supply_short_credit_and_lending_preserve_every_distinct_field | 검출 |
 | 15 | volume_rate 접근자 → amount_rate | supply_values::supply_tests::supply_short_credit_and_lending_preserve_every_distinct_field | 검출 |
 | 16 | amount_rate 접근자 → volume_rate | supply_values::supply_tests::supply_short_credit_and_lending_preserve_every_distinct_field | 검출 |
-| 17 | 주식 수 0 거부 | supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values, supply_values::supply_tests::supply_program_validates_reported_net_and_keeps_two_trading_groups, supply_values::supply_tests::supply_numeric_units_boundaries_and_missing_values | 검출 |
+| 17 | 주식 수 0 거부 | supply_values::supply_tests::supply_program_validates_reported_net_and_keeps_two_trading_groups, supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values, supply_values::supply_tests::supply_numeric_units_boundaries_and_missing_values | 검출 |
 | 18 | 주식 정수 검사 반전 | supply_values::supply_tests::supply_program_validates_reported_net_and_keeps_two_trading_groups, supply_values::supply_tests::supply_numeric_units_boundaries_and_missing_values, supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values, supply_values::supply_tests::supply_short_credit_and_lending_preserve_every_distinct_field | 검출 |
-| 19 | 비율 1 거부 | supply_values::supply_tests::supply_numeric_units_boundaries_and_missing_values | 검출 |
+| 19 | 비율 1 거부 | supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values, supply_values::supply_tests::supply_numeric_units_boundaries_and_missing_values | 검출 |
 | 20 | 비율 상한 제거 | supply_values::supply_tests::supply_numeric_units_boundaries_and_missing_values | 검출 |
-| 21 | KST 기준일 검사 반전 | supply_values::supply_tests::supply_date_uses_updated_day_and_rejects_offset_disguised_future, supply_values::supply_tests::supply_context_preserves_dates_and_distinct_observation_clocks | 검출 |
-| 22 | KST를 UTC 날짜로 오판 | supply_values::supply_tests::supply_dates_use_korean_market_day_independent_of_timestamp_offset | 검출 |
+| 21 | KST 기준일 검사 반전 | supply_values::supply_tests::supply_date_uses_updated_day_and_rejects_offset_disguised_future, supply_values::supply_tests::supply_context_preserves_dates_and_distinct_observation_clocks, supply_values::supply_tests::supply_kst_midnight_boundary_is_exact_for_every_timestamp_representation | 검출 |
+| 22 | KST를 UTC 날짜로 오판 | supply_values::supply_tests::supply_dates_use_korean_market_day_independent_of_timestamp_offset, supply_values::supply_tests::supply_kst_midnight_boundary_is_exact_for_every_timestamp_representation | 검출 |
 | 23 | 프로그램 순수량 일치 반전 | supply_values::supply_tests::supply_program_validates_reported_net_and_keeps_two_trading_groups | 검출 |
 | 24 | 갱신일 대신 수집일 사용 | supply_values::supply_tests::supply_date_uses_updated_day_and_rejects_offset_disguised_future | 검출 |
 | 25 | SupplyShares 정수 표시 정규화 제거 | supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values | 검출 |
 | 26 | SupplySignedShares 정수 표시 정규화 제거 | supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values | 검출 |
 | 27 | SupplyKrw 정수 표시 정규화 제거 | supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values | 검출 |
+| 28 | KST를 +10:00 날짜로 오판 | supply_values::supply_tests::supply_kst_midnight_boundary_is_exact_for_every_timestamp_representation | 검출 |
+| 29 | 비율 표시 자릿수 정규화 | supply_values::supply_tests::supply_integer_display_normalizes_scale_without_changing_values | 검출 |
 
 ## 포트와 경계 검증
 
