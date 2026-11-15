@@ -6,11 +6,15 @@
 
 ### D-39 지수 일봉
 
-D-37의 응답 생성자는 일봉을 Unknown으로 둔다. 캔들의 필수 시작 시각은 원 응답의 Timestamp로 보존하고, 지표 현재가에도 쓰이는 nullable 관측 시각과 구별한다. finalize_index_day는 같은 KST 날짜의 국내 정규장 세션이 있고 종료 시각이 수집 시각보다 엄격히 앞설 때만 KOSPI/KOSDAQ 일봉을 Finalized로 봉인한다. 세션 종료와 수집이 같은 시각이면 거부한다. 장 종료의 실제 공급 근거는 T-08 책임이며, 단순히 시작 시각이 과거라는 이유로 확정하지 않는다.
+리뷰 회차 2에서 종목 Candle 경로는 Sp500Etf의 조정된 USD 일봉에만 남긴다. BenchmarkSeries::from_candles와 이를 사용하는 SignalBenchmark::from_candles는 Kospi/Kosdaq를 InvalidBenchmark/BenchmarkMismatch로 거부한다. 국내 신호에는 확정 MarketIndicatorCandle을 받는 SignalBenchmark::from_index_candles를 사용한다. D-29 시나리오와 기존 국내 비교 테스트는 단언을 유지한 채 이 경로로 옮긴다.
 
-index_benchmark_series는 확정 지수 일봉만 받아 D-09의 checked 포인트 비율 수익률을 재사용한다. 지수 포인트를 Money·Price로 바꾸지 않는다. 동일 지수·유일한 KST 날짜·전체 스냅샷 가격일 대응을 요구하며 혼합 지수, 진행 중/미확정, 분봉, 금리, 누락과 날짜 중복을 거부한다. 반환 날짜는 전체 결제일을 유지한다. 입력 4097개 상한과 최소 두 스냅샷은 D-09와 같다. Native USD는 거부하고 Native KRW/ConvertedKrw만 허용한다.
+finalize_index_day는 D-10·D-31의 봉인된 MarketCalendar에서 today의 국내 정규장 종료를 찾는다. 지수 일봉의 timestamp가 그 거래일의 KST 날짜에 속하고 종료가 수집 시각보다 엄격히 앞서야 한다. 일봉 timestamp가 정규장 시작 이후이거나 마감 시각이어도 같은 거래일이면 허용한다. 장전·시간외 종료를 확정 근거로 쓰지 않는다. KST 자정과 자정 직전/직후를 독립 경계 입력으로 검사해 UTC 날짜나 ±1초 오프셋으로 거래일이 바뀌지 않게 고정한다. 단, MarketCalendar도 공개 생성자로 만들 수 있으므로 확정은 호출자가 넘긴 달력의 세션에 근거한다. 실제 일봉의 시각 표기와 확정 근거는 T-08 실측이다. 어댑터의 거짓 진술까지 인증하지 않는다.
 
-SignalBenchmark::from_candles는 길이 검증 결과에 기존 zip·봉인 블록을 map으로 연결한다. 검증이 성공한 경우에만 기존 계산을 실행하며 다른 계산·입력 정책은 바꾸지 않는다. 관측 수+1과 지점 수가 다르면 BenchmarkMismatch이며 양방향 불일치와 빈 지점을 회귀로 검사한다. 기존 캔들 생성자와 그 테스트는 보존한다. 레거시 Candle 기반 국내 지수 입력의 식별 인증은 기존 ADR 0062의 어댑터 책임이 남으며 새 조회 소비자는 지수 전용 경로를 사용한다.
+index_benchmark_series는 KOSPI/KOSDAQ의 Finalized 일봉만 받아 가격일을 KRW 기준으로 맞춘다. 지수 포인트를 Money·Price로 바꾸지 않는다. 동일 지수·유일한 KST 날짜·전체 스냅샷 가격일 대응을 요구하며 진행 중/미확정, 분봉, 금리, 혼합 지수, 누락과 중복 날짜를 거부한다. 입력 4097개 상한과 최소 두 스냅샷은 D-09와 같다. Native USD는 거부한다.
+
+정렬·결제일·수익률 계산은 BenchmarkSeries의 crate 내부 생성자 하나로 합쳤다. kind/currency/dates는 다시 비공개다. ETF의 환산 입력만 Money를 거쳐 기존 환산식을 적용한다. 반환 관측 날짜는 가격일이 아닌 결제일을 보존한다. 한국만 휴장/미국만 휴장인 혼합 달력 반례로 가격일 통화와 휴장 이월을 구별한다.
+
+SignalBenchmark는 두 입력 경로 뒤의 지점·구간 봉인을 공유한다. zip 앞에서 관측 수+1과 지점 수를 검사하고 불일치면 BenchmarkMismatch다. 정규장 종가 지점을 사용하며 휴장으로 같은 종가가 이월되는 지점을 보존한다.
 
 ### D-40 섹터 선택
 
@@ -39,7 +43,9 @@ ETF 목록은 관련 ETF의 심볼·이름과 서버 순서를 보존하고 하�
 - T-08: 실제 지수 일봉의 날짜와 장 종료 증거를 조회 세션에 연결한다.
 - A-09·A-15·E-08: 국내 지수 벤치마크에는 index_benchmark_series를 사용한다. 종목 거래소에 맞춘 KOSPI/KOSDAQ 선택은 ADR 0072의 후속 계약이다.
 
-## 손 변형
+## 초기 회차 손 변형
+
+아래는 0d46eb8 이전 코드의 실제 실행 기록이며 리뷰 수정 후의 결과와 구분한다. 수정 회차 결과는 문서 끝에 추가한다.
 
 D-39의 최종 손 변형 결과는 아래 표에 기록한다. D-40·D-41은 해당 커밋에서 덧붙인다.
 
@@ -167,3 +173,25 @@ D-41 인계: T-10은 required/nullable 디코딩과 응답별 집계 시각·KRW
 최종 코드 복사본에서 새 속성 테스트를 testkit::property_cases()로 전환한 상태로 다시 실행했다. 전체 검사 환경변수 STOCK_COPILOT_PROPTEST_CASES를 제거해 기본 256회를 사용했다. 기준 테스트는 D-39 새 모듈 9개, D-40 6개, D-41 16개가 각각 통과했다. 위 표는 이 재실행 결과로 갱신했다. D-39 13개·D-40 9개·D-41 13개, 합계 35개가 모두 실제 컴파일 후 테스트 실패로 검출됐다. 최종 집계의 생존과 컴파일 실패는 각각 0개다. 앞서 컴파일되지 않았거나 패턴이 맞지 않았던 시도는 포함하지 않는다. 자동 변이는 실행하지 않았다.
 
 실행별 로그와 소스 해시는 작업 사본의 target/D-39/final-mutations 및 final-mutation-source-hashes.json에 보존했다. 프로젝트 보호 설정은 기존 생성 스크립트로 재생성했고, 기존 테스트 본문 변경·검사 끄기·훅 우회·외부 패키지 추가는 없다. master에서 받은 H-46의 기존 테스트 전환은 이번 작업의 직접 수정에 포함하지 않는다.
+
+## 리뷰 회차 2 기존 테스트 이관
+
+master c27ad60470b68e1bfc394d99a612270f798d5916 대비 test-diff는 승인된 생성 경로 변경 13건(테스트 12개·지원 함수 1개)이다. 단언과 기대 수치는 보존한다. 파일별 상세는 다음과 같다.
+
+| 파일 | 테스트 또는 지원 함수 | 전 → 후 |
+|---|---|---|
+| crates/domain/src/benchmark.rs | duplicate_dates_and_missing_prices_are_rejected | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | excess_return_and_mixed_inputs_propagate_period_errors | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | missing_stock_history_cannot_be_used_for_mixed_weights | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | mixed_benchmark_rejects_incomplete_account_facts | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | price_overflow_and_expired_fx_never_form_benchmark_values | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | public_mixed_uses_only_its_performance_equities_even_with_cash | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | research_example_ten_matches_converted_and_mixed_benchmark_legs | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/benchmark.rs | series_rejects_misalignment_duplicates_and_input_limits | BenchmarkSeries::from_candles(Kospi/Kosdaq, Candle) → 확정 지수 fixture와 index_benchmark_series |
+| crates/domain/src/signal_benchmark.rs | d29_benchmark_rejects_missing_conflicting_and_excess_calendar_facts | SignalBenchmark::from_candles의 국내 fixture → from_index_candles; ETF 입력 유지 |
+| crates/domain/src/signal_benchmark.rs | d29_benchmark_rejects_reversed_native_points_and_linked_overflow | SignalBenchmark::from_candles의 국내 fixture → from_index_candles; ETF 입력 유지 |
+| crates/domain/src/signal_benchmark.rs | d29_benchmark_requires_native_currency_and_exact_close_instants | SignalBenchmark::from_candles의 국내 fixture → from_index_candles; ETF 입력 유지 |
+| crates/domain/src/signal_benchmark.rs | review_daily_close_same_day_is_zero_and_missing_end_is_unavailable | SignalBenchmark::from_candles의 국내 fixture → from_index_candles; ETF 입력 유지 |
+| crates/domain/src/signal_return_scenarios.rs | tests::benchmark 지원 함수 | 국내 시나리오의 Candle 벤치마크 → 확정 지수 일봉 벤치마크 |
+
+회귀 증거: 종목 봉 위장 거부 테스트는 수정 전 InvalidPeriod가 반환되어 실패했고 수정 후 InvalidBenchmark로 통과한다. 벤치마크·국내 신호 집중 테스트와 린트 결과는 작업 사본 target/D-39/review-d39-*에 보존한다.

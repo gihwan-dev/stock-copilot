@@ -1,18 +1,19 @@
 use crate::{
     BenchmarkKind, BenchmarkSeries, CandlePeriod, Currency, IndicatorCandleStatus, IndicatorCode,
-    Market, MarketIndicatorCandle, MarketSession, MarketState, OffsetSeconds, PerformanceCurrency,
+    Market, MarketCalendar, MarketIndicatorCandle, MarketState, OffsetSeconds, PerformanceCurrency,
     PerformanceError, ValuationSnapshot,
 };
 use std::collections::BTreeMap;
 
 pub fn finalize_index_day(
     mut candle: MarketIndicatorCandle,
-    session: &MarketSession,
+    calendar: &MarketCalendar,
 ) -> Result<MarketIndicatorCandle, PerformanceError> {
     let start = candle.start;
     let date = start
         .date_at_offset(OffsetSeconds::new(32400))
         .or(Err(PerformanceError::InvalidBenchmark))?;
+    let session = calendar.today();
     let regular = session
         .sessions()
         .iter()
@@ -22,7 +23,6 @@ pub fn finalize_index_day(
         || index_kind(candle.code()).is_err()
         || session.market() != Market::Kr
         || session.date() != date
-        || start > regular.session().interval().start()
         || regular.session().interval().end() >= candle.observation().collected_at()
     {
         return Err(PerformanceError::InvalidBenchmark);
@@ -45,38 +45,11 @@ pub fn index_benchmark_series(
         return Err(PerformanceError::BenchmarkMismatch);
     }
     let prices = index_prices(candles, first)?;
-    let mut ordered = snapshots.iter().collect::<Vec<_>>();
-    ordered.sort_by_key(|snapshot| snapshot.valuation_at());
-    if ordered.len() < 2 {
-        return Err(PerformanceError::InvalidPeriod);
-    }
-    let mut dates = Vec::new();
-    let mut values = Vec::new();
-    for snapshot in ordered {
-        dates.push(snapshot.settlement_date());
-        values.push(
-            *prices
-                .get(&snapshot.price_date(Currency::Krw))
-                .ok_or(PerformanceError::BenchmarkMismatch)?,
-        );
-    }
-    if dates
-        .iter()
-        .zip(dates.iter().skip(1))
-        .any(|(old, new)| old >= new)
-    {
-        return Err(PerformanceError::InvalidPeriod);
-    }
-    let returns = values
-        .iter()
-        .zip(values.iter().skip(1))
-        .map(|(old, new)| crate::performance_arithmetic::price_return(*old, *new))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(BenchmarkSeries {
-        kind,
-        currency,
-        dates,
-        returns,
+    BenchmarkSeries::from_snapshots(kind, currency, snapshots, |snapshot| {
+        prices
+            .get(&snapshot.price_date(Currency::Krw))
+            .copied()
+            .ok_or(PerformanceError::BenchmarkMismatch)
     })
 }
 
@@ -127,7 +100,7 @@ pub(crate) fn validate_signal_benchmark_length(
     Ok(())
 }
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{finalize_index_day, index_benchmark_series};
     use crate::valuation_snapshot::tests::{at, date, fixture_window, snapshot};
     use crate::{
@@ -174,10 +147,64 @@ mod tests {
         )
         .expect("장")
     }
+    fn calendar(day: i64) -> crate::MarketCalendar {
+        crate::MarketCalendar::try_new(
+            session(day.checked_sub(1).expect("전일")),
+            session(day),
+            session(day.checked_add(1).expect("익일")),
+        )
+        .expect("달력")
+    }
+    pub(crate) fn index_candles(
+        kind: BenchmarkKind,
+        candles: &[crate::Candle],
+    ) -> Vec<MarketIndicatorCandle> {
+        let code = if kind == BenchmarkKind::Kosdaq {
+            "KOSDAQ"
+        } else {
+            "KOSPI"
+        };
+        candles
+            .iter()
+            .map(|bar| {
+                let number = |price: crate::Price| {
+                    NumericInput::try_new(&price.as_money().amount().as_decimal().to_string())
+                        .expect("지수 fixture 값")
+                };
+                let row = IndicatorCandleRow {
+                    timestamp: bar.time().timestamp(),
+                    open: number(bar.values().open()),
+                    high: number(bar.values().high()),
+                    low: number(bar.values().low()),
+                    close: number(bar.values().close()),
+                    volume: num("7"),
+                };
+                let mut value = MarketIndicatorCandle::from_response(
+                    MasterCode::try_new(code).expect("지수"),
+                    bar.time().period(),
+                    &row,
+                    bar.collected_at(),
+                )
+                .expect("지수 fixture");
+                assert_eq!(bar.status(), crate::CandleStatus::Finalized);
+                assert_eq!(bar.values().currency(), Currency::Krw);
+                value.status = IndicatorCandleStatus::Finalized;
+                value
+            })
+            .collect()
+    }
+    pub(crate) fn series_from_candles(
+        kind: BenchmarkKind,
+        candles: &[crate::Candle],
+        snapshots: &[crate::ValuationSnapshot],
+        currency: PerformanceCurrency,
+    ) -> Result<crate::BenchmarkSeries, PerformanceError> {
+        index_benchmark_series(&index_candles(kind, candles), snapshots, currency)
+    }
     fn finalized(day: i64, price: &str) -> MarketIndicatorCandle {
         finalize_index_day(
             candle(day, price, "KOSPI", CandlePeriod::Daily),
-            &session(day),
+            &calendar(day),
         )
         .expect("확정")
     }
@@ -206,7 +233,7 @@ mod tests {
             assert_eq!(point.end(), date(5));
             assert_eq!(point.value().to_string(), "0.100000");
             assert_eq!(
-                finalize_index_day(bars[0].clone(), &session(2))
+                finalize_index_day(bars[0].clone(), &calendar(2))
                     .expect("멱등")
                     .status(),
                 IndicatorCandleStatus::Finalized
@@ -246,7 +273,7 @@ mod tests {
         }
         let other = finalize_index_day(
             candle(5, "2300", "KOSDAQ", CandlePeriod::Daily),
-            &session(5),
+            &calendar(5),
         )
         .expect("코스닥");
         assert_eq!(
@@ -314,7 +341,7 @@ mod tests {
         let kosdaq = [2, 5].map(|day| {
             finalize_index_day(
                 candle(day, "2000", "KOSDAQ", CandlePeriod::Daily),
-                &session(day),
+                &calendar(day),
             )
             .expect("확정")
         });
@@ -333,13 +360,13 @@ mod tests {
             (candle(2, "2", "KR_BOND_2Y", CandlePeriod::Daily), 2),
         ] {
             assert_eq!(
-                finalize_index_day(bar, &session(day)),
+                finalize_index_day(bar, &calendar(day)),
                 Err(PerformanceError::InvalidBenchmark)
             );
         }
         let raw = candle(20, "100", "KOSPI", CandlePeriod::Daily);
         assert_eq!(
-            finalize_index_day(raw, &session(20)),
+            finalize_index_day(raw, &calendar(20)),
             Err(PerformanceError::InvalidBenchmark)
         );
         let closed = MarketSession::try_new(
@@ -352,7 +379,10 @@ mod tests {
         )
         .expect("휴장");
         assert_eq!(
-            finalize_index_day(candle(2, "100", "KOSPI", CandlePeriod::Daily), &closed),
+            finalize_index_day(
+                candle(2, "100", "KOSPI", CandlePeriod::Daily),
+                &crate::MarketCalendar::try_new(session(1), closed, session(3)).expect("휴장 달력")
+            ),
             Err(PerformanceError::InvalidBenchmark)
         );
     }
@@ -383,8 +413,8 @@ mod tests {
         );
     }
     #[test]
-    fn finality_rejects_equal_close_and_late_bar_start() {
-        for (start, collected) in [(at(2, 0), at(2, 2)), (at(2, 3), at(20, 0))] {
+    fn finality_rejects_equal_close_and_accepts_same_day_labels() {
+        for (start, collected) in [(at(2, 0), at(2, 1)), (at(2, 0), at(2, 2))] {
             let row = IndicatorCandleRow {
                 timestamp: start,
                 open: num("100"),
@@ -401,7 +431,7 @@ mod tests {
             )
             .expect("봉");
             assert_eq!(
-                finalize_index_day(bar, &session(2)),
+                finalize_index_day(bar, &calendar(2)),
                 Err(PerformanceError::InvalidBenchmark)
             );
         }
@@ -430,7 +460,7 @@ mod tests {
         )
         .expect("봉");
         assert_eq!(
-            finalize_index_day(extreme.clone(), &session(2)),
+            finalize_index_day(extreme.clone(), &calendar(2)),
             Err(PerformanceError::InvalidBenchmark)
         );
         extreme.status = IndicatorCandleStatus::Finalized;
@@ -490,15 +520,25 @@ mod length_tests {
     use crate::{BenchmarkKind, BenchmarkSeries, PerformanceCurrency};
     #[test]
     fn signal_zip_rejects_both_shorter_and_longer_point_lists() {
-        let zero = crate::PerformanceValue::from_number(
-            crate::performance_arithmetic::Number::new(rust_decimal::Decimal::ZERO),
+        let fixture = crate::valuation_snapshot::tests::fixture_window(
+            vec![],
+            ("100", "100"),
+            ("100", "100"),
+            crate::SettlementWindow::try_new(date(2), date(4)).expect("기간"),
         );
-        let series = BenchmarkSeries {
-            kind: BenchmarkKind::Kospi,
-            currency: PerformanceCurrency::ConvertedKrw,
-            dates: vec![date(2), date(3), date(4)],
-            returns: vec![zero; 2],
-        };
+        let snapshots = [2, 3, 4]
+            .map(|day| crate::valuation_snapshot::tests::snapshot(&fixture, day, &[], "1000"));
+        let series = BenchmarkSeries::from_snapshots(
+            BenchmarkKind::Kospi,
+            PerformanceCurrency::ConvertedKrw,
+            &snapshots,
+            |_| {
+                Ok(crate::performance_arithmetic::Number::new(
+                    rust_decimal::Decimal::ONE,
+                ))
+            },
+        )
+        .expect("시계열");
         for count in [0, 1, 2, 4] {
             assert_eq!(
                 validate_signal_benchmark_length(&series, &vec![at(2, 0); count]),
@@ -509,5 +549,364 @@ mod length_tests {
             validate_signal_benchmark_length(&series, &[at(2, 0); 3]),
             Ok(())
         );
+    }
+}
+
+#[cfg(test)]
+mod path_regression_tests {
+    #[test]
+    fn legacy_domestic_candle_path_is_closed() {
+        let bar = crate::signal_return_scenarios::tests::bar(
+            2,
+            0,
+            crate::CandlePeriod::Daily,
+            "100",
+            crate::AdjustmentBasis::new(crate::signal_return_contract::tests::instant(20, 4)),
+        );
+        for kind in [crate::BenchmarkKind::Kospi, crate::BenchmarkKind::Kosdaq] {
+            assert_eq!(
+                crate::BenchmarkSeries::from_candles(
+                    kind,
+                    std::slice::from_ref(&bar),
+                    &[],
+                    crate::PerformanceCurrency::Native(crate::Currency::Krw)
+                ),
+                Err(crate::PerformanceError::InvalidBenchmark)
+            );
+        }
+    }
+}
+#[cfg(test)]
+mod review_tests {
+    use crate::valuation_snapshot::tests::{at, date};
+    use crate::{
+        BenchmarkKind, BenchmarkSeries, Candle, CandleObservation, CandlePeriod, CandleStatus,
+        CandleTime, Currency, IndicatorCandleRow, IndicatorCandleStatus, MarketCalendar,
+        MarketIndicatorCandle, MarketSession, MasterCode, NumericInput, Ohlcv, PerformanceCurrency,
+        PerformanceError, SessionData, SessionInformation, SignalBenchmark, SignalReturnError,
+        TimeInterval,
+    };
+    fn num(value: &str) -> NumericInput {
+        NumericInput::try_new(value).expect("수치")
+    }
+    fn row(day: i64, market: crate::KnownMarket, closed: Option<i64>) -> MarketSession {
+        let part = |start, end| {
+            Some(
+                SessionData::try_new(
+                    TimeInterval::try_new(at(day, start), at(day, end)).expect("구간"),
+                    None,
+                )
+                .expect("세션"),
+            )
+        };
+        let information = match (market, closed == Some(day)) {
+            (crate::KnownMarket::Kr, false) => SessionInformation::Kr {
+                pre_market: part(0, 1),
+                regular_market: part(1, 2),
+                after_market: part(2, 3),
+            },
+            (crate::KnownMarket::Kr, true) => SessionInformation::Kr {
+                pre_market: None,
+                regular_market: None,
+                after_market: None,
+            },
+            (crate::KnownMarket::Us, false) => SessionInformation::Us {
+                day_market: None,
+                pre_market: part(0, 1),
+                regular_market: part(1, 2),
+                after_market: part(2, 3),
+            },
+            (crate::KnownMarket::Us, true) => SessionInformation::Us {
+                day_market: None,
+                pre_market: None,
+                regular_market: None,
+                after_market: None,
+            },
+        };
+        MarketSession::try_new(date(day), information).expect("시장 세션")
+    }
+    fn calendar(day: i64, market: crate::KnownMarket, closed: Option<i64>) -> MarketCalendar {
+        let previous_day = day.checked_sub(1).expect("전일");
+        let next_day = day.checked_add(1).expect("다음날");
+        let previous = if Some(previous_day) == closed {
+            previous_day.checked_sub(1).expect("휴장 전일")
+        } else {
+            previous_day
+        };
+        let next = if Some(next_day) == closed {
+            next_day.checked_add(1).expect("휴장 다음날")
+        } else {
+            next_day
+        };
+        MarketCalendar::try_new(
+            row(previous, market, closed),
+            row(day, market, closed),
+            row(next, market, closed),
+        )
+        .expect("달력")
+    }
+    fn raw(day: i64, hour: i64, collected: crate::Timestamp, close: &str) -> MarketIndicatorCandle {
+        raw_at(at(day, hour), collected, close)
+    }
+    fn raw_at(
+        timestamp: crate::Timestamp,
+        collected: crate::Timestamp,
+        close: &str,
+    ) -> MarketIndicatorCandle {
+        MarketIndicatorCandle::from_response(
+            MasterCode::try_new("KOSPI").expect("지수"),
+            CandlePeriod::Daily,
+            &IndicatorCandleRow {
+                timestamp,
+                open: num("99"),
+                high: num("900"),
+                low: num("1"),
+                close: num(close),
+                volume: num("17"),
+            },
+            collected,
+        )
+        .expect("일봉")
+    }
+    fn legacy() -> Candle {
+        let price = crate::candle::tests::price("100", Currency::Krw);
+        Candle::try_new(
+            crate::InstrumentId::try_new("index-disguised").expect("ID"),
+            CandleTime::try_new(at(2, 0), CandlePeriod::Daily).expect("일봉"),
+            crate::PriceAdjustment::Raw,
+            Ohlcv::try_new(
+                price,
+                price,
+                price,
+                price,
+                crate::Quantity::parse(&num("7")).expect("수량"),
+            )
+            .expect("가격"),
+            CandleObservation::new(at(20, 0), CandleStatus::Finalized),
+        )
+        .expect("종목 봉")
+    }
+    #[test]
+    fn legacy_candle_paths_reject_both_domestic_indices() {
+        for kind in [BenchmarkKind::Kospi, BenchmarkKind::Kosdaq] {
+            assert_eq!(
+                BenchmarkSeries::from_candles(
+                    kind,
+                    &[legacy()],
+                    &[],
+                    PerformanceCurrency::Native(Currency::Krw)
+                ),
+                Err(PerformanceError::InvalidBenchmark)
+            );
+            assert_eq!(
+                SignalBenchmark::from_candles(kind, &[legacy()], &[], &[], Currency::Krw),
+                Err(SignalReturnError::BenchmarkMismatch)
+            );
+        }
+    }
+    #[test]
+    fn regular_close_controls_finality_and_same_day_labels_are_accepted() {
+        let kr = calendar(2, crate::KnownMarket::Kr, None);
+        assert_eq!(
+            crate::finalize_index_day(raw(2, 0, at(2, 1), "100"), &kr),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+        assert_eq!(
+            crate::finalize_index_day(raw(2, 0, at(2, 2), "100"), &kr),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+        for hour in [0, 1, 2, 3, 10] {
+            assert_eq!(
+                crate::finalize_index_day(raw(2, hour, at(20, 0), "100"), &kr)
+                    .expect("같은 거래일 표기")
+                    .status(),
+                IndicatorCandleStatus::Finalized
+            );
+        }
+        assert_eq!(
+            crate::finalize_index_day(raw(2, 0, at(2, 3), "100"), &kr)
+                .expect("시간외 종료 이전 수집도 정규장 뒤")
+                .status(),
+            IndicatorCandleStatus::Finalized
+        );
+        let us = calendar(2, crate::KnownMarket::Us, None);
+        assert_eq!(
+            crate::finalize_index_day(raw(2, 0, at(20, 0), "100"), &us),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+        assert_eq!(
+            crate::finalize_index_day(
+                raw(2, 0, at(20, 0), "100"),
+                &calendar(3, crate::KnownMarket::Kr, None)
+            ),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+        assert_eq!(
+            crate::finalize_index_day(
+                raw(2, 0, at(20, 0), "100"),
+                &calendar(2, crate::KnownMarket::Kr, Some(2))
+            ),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+    }
+    fn holiday_fixture() -> (
+        Vec<MarketCalendar>,
+        Vec<crate::ValuationSnapshot>,
+        [MarketIndicatorCandle; 3],
+    ) {
+        let calendars = (2..=5)
+            .map(|day| calendar(day, crate::KnownMarket::Kr, Some(3)))
+            .collect::<Vec<_>>();
+        let snapshots = (2..=5)
+            .map(|day| {
+                let kr = calendar(day, crate::KnownMarket::Kr, Some(3));
+                let us = calendar(day, crate::KnownMarket::Us, Some(4));
+                let dates = crate::SnapshotCalendar::new(&kr, &us).expect("혼합 휴장 달력");
+                let now = at(day, 7);
+                let portfolio = crate::Portfolio::new(
+                    vec![],
+                    crate::BuyingPower::new(
+                        crate::candle::tests::price("100", Currency::Krw).as_money(),
+                        now,
+                    ),
+                    crate::BuyingPower::new(
+                        crate::candle::tests::price("1", Currency::Usd).as_money(),
+                        now,
+                    ),
+                )
+                .expect("잔고");
+                crate::ValuationSnapshot::observe(&dates, &portfolio.evaluate(None), now, None)
+                    .expect("평가")
+            })
+            .collect::<Vec<_>>();
+        let bars = [(2, "100"), (4, "120"), (5, "150")].map(|(day, value)| {
+            crate::finalize_index_day(
+                raw(day, 2, at(20, 0), value),
+                &calendar(day, crate::KnownMarket::Kr, Some(3)),
+            )
+            .expect("지수 확정")
+        });
+        (calendars, snapshots, bars)
+    }
+    #[test]
+    fn holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates() {
+        let (calendars, snapshots, bars) = holiday_fixture();
+        let kr_dates = snapshots
+            .iter()
+            .map(|snapshot| snapshot.price_date(Currency::Krw))
+            .collect::<Vec<_>>();
+        let us_dates = snapshots
+            .iter()
+            .map(|snapshot| snapshot.price_date(Currency::Usd))
+            .collect::<Vec<_>>();
+        assert_eq!(kr_dates, vec![date(2), date(2), date(4), date(5)]);
+        assert_eq!(us_dates, vec![date(2), date(3), date(3), date(5)]);
+        let series = crate::index_benchmark_series(
+            &bars,
+            &snapshots,
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("국내 비교");
+        assert_eq!(
+            series
+                .observations()
+                .map(|observation| (
+                    observation.start(),
+                    observation.end(),
+                    observation.value().to_string()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (date(2), date(3), "0.000000".into()),
+                (date(3), date(4), "0.200000".into()),
+                (date(4), date(5), "0.250000".into())
+            ]
+        );
+        let mut reversed = snapshots.clone();
+        reversed.reverse();
+        assert_eq!(
+            crate::index_benchmark_series(
+                &bars,
+                &reversed,
+                PerformanceCurrency::Native(Currency::Krw)
+            ),
+            Ok(series.clone())
+        );
+        let signal = SignalBenchmark::from_index_candles(&bars, &snapshots, &calendars)
+            .expect("국내 신호 경로");
+        assert_eq!(signal.series(), &series);
+        assert_eq!(
+            signal
+                .between_dates(date(2), date(5), Currency::Krw)
+                .expect("휴장 포함 연결")
+                .to_string(),
+            "0.500000"
+        );
+        assert_eq!(
+            signal
+                .between(at(2, 2), at(5, 2), Currency::Krw)
+                .expect("정규장 종가 구간")
+                .to_string(),
+            "0.500000"
+        );
+    }
+    #[test]
+    fn unconfirmed_index_candles_cannot_form_a_signal() {
+        let (calendars, snapshots, _bars) = holiday_fixture();
+        let raw_bars = [raw(2, 2, at(20, 0), "100"), raw(5, 2, at(20, 0), "150")];
+        assert_eq!(
+            SignalBenchmark::from_index_candles(&raw_bars, &snapshots, &calendars),
+            Err(SignalReturnError::BenchmarkMismatch)
+        );
+    }
+    #[test]
+    fn etf_candle_path_requires_usd_even_with_adjusted_prices() {
+        let original = legacy();
+        let adjusted = Candle::try_new(
+            original.instrument().clone(),
+            original.time(),
+            crate::PriceAdjustment::Adjusted(crate::AdjustmentBasis::new(at(20, 0))),
+            original.values(),
+            CandleObservation::new(at(20, 0), CandleStatus::Finalized),
+        )
+        .expect("조정 봉");
+        assert_eq!(
+            BenchmarkSeries::from_candles(
+                BenchmarkKind::Sp500Etf,
+                &[adjusted],
+                &[],
+                PerformanceCurrency::Native(Currency::Krw)
+            ),
+            Err(PerformanceError::InvalidBenchmark)
+        );
+    }
+    #[test]
+    fn same_trading_day_uses_exact_kst_midnight_boundaries() {
+        let market = calendar(2, crate::KnownMarket::Kr, None);
+        let last = at(2, 14)
+            .checked_add(
+                crate::TimeSpan::try_new(crate::SpanSeconds::new(3599), crate::Nanosecond::new(0))
+                    .expect("자정 직전"),
+            )
+            .expect("시각");
+        for timestamp in [at(1, 15), last] {
+            assert_eq!(
+                crate::finalize_index_day(raw_at(timestamp, at(20, 0), "100"), &market)
+                    .expect("거래일 내부")
+                    .status(),
+                IndicatorCandleStatus::Finalized
+            );
+        }
+        for timestamp in [
+            at(1, 15)
+                .checked_sub(crate::TimeSpan::NANOSECOND)
+                .expect("전일"),
+            at(2, 15),
+        ] {
+            assert_eq!(
+                crate::finalize_index_day(raw_at(timestamp, at(20, 0), "100"), &market),
+                Err(PerformanceError::InvalidBenchmark)
+            );
+        }
     }
 }
