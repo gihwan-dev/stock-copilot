@@ -691,3 +691,11 @@ findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/sr
 [[case]]
 name = "schema-public-extern"
 findings = [{ rule = "schema-surface", subject = "crates/adapters/broker-toss/src/lib.rs" }]
+
+[[case]]
+name = "secrecy-outside-application"
+findings = [{ rule = "external-location", subject = "mcp-server => secrecy" }]
+
+[[case]]
+name = "secrecy-in-application"
+findings = []
