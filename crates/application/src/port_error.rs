@@ -27,6 +27,11 @@ pub enum ReadEndpoint {
     IndicatorInvestorFlow,
     SectorComposition,
     Calendar,
+    InvestorTradingRankings,
+    Sectors,
+    Sector,
+    SectorRankings,
+    SectorEtfs,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
