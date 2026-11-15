@@ -82,3 +82,62 @@ fn validate_ranking_period(kind: RankingKind, duration: RankingDuration) -> Resu
         },
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SectorRankingQuery {
+    kind: RankingKind,
+    market: KnownMarket,
+    duration: RankingDuration,
+}
+impl SectorRankingQuery {
+    pub fn try_new(
+        kind: RankingKind,
+        market: KnownMarket,
+        duration: RankingDuration,
+    ) -> Result<Self, PortError> {
+        match kind {
+            RankingKind::TopGainers | RankingKind::MarketTradingAmount => {}
+            RankingKind::MarketTradingVolume
+            | RankingKind::TossTradingAmount
+            | RankingKind::TossTradingVolume
+            | RankingKind::TopLosers
+            | RankingKind::Unknown => return Err(sector_ranking_query_error()),
+        }
+        match duration {
+            RankingDuration::Day
+            | RankingDuration::Week
+            | RankingDuration::Month
+            | RankingDuration::ThreeMonths
+            | RankingDuration::SixMonths
+            | RankingDuration::Year => {}
+            RankingDuration::Realtime | RankingDuration::Unknown => {
+                return Err(sector_ranking_query_error());
+            }
+        }
+        Ok(Self {
+            kind,
+            market,
+            duration,
+        })
+    }
+    #[must_use]
+    pub const fn kind(self) -> RankingKind {
+        self.kind
+    }
+    #[must_use]
+    pub const fn market(self) -> KnownMarket {
+        self.market
+    }
+    #[must_use]
+    pub const fn duration(self) -> RankingDuration {
+        self.duration
+    }
+}
+
+fn sector_ranking_query_error() -> PortError {
+    PortError::new(
+        ReadEndpoint::SectorRankings,
+        HttpStatus::BadRequest,
+        PortErrorKind::InvalidRequest(RequestRejection::UnsupportedQuery),
+    )
+}
