@@ -216,7 +216,8 @@ fn select_major(
     };
     let winner = rest.iter().fold(first, |winner, candidate| {
         if capitalization(candidate) > capitalization(winner)
-            || (capitalization(candidate) == capitalization(winner) && candidate.id < winner.id)
+            || (capitalization(candidate) == capitalization(winner)
+                && candidate.id.cmp(&winner.id) == std::cmp::Ordering::Less)
         {
             candidate
         } else {
