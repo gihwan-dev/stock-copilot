@@ -175,6 +175,17 @@ pub(crate) fn buy_quantity_fee(
         .map_err(TradeCostError::Arithmetic)
 }
 
+pub fn signal_return_cost(
+    commission_input: Option<CommissionRateFact>,
+    tax_input: Option<TradeTaxFact>,
+    period: crate::EstimateCostPeriod,
+) -> Result<crate::SignalReturnCost, TradeCostError> {
+    let commission = commission_input.ok_or(TradeCostError::UnknownComponent)?;
+    let tax = tax_input.ok_or(TradeCostError::UnknownComponent)?;
+    let cost = TradeCost::from_facts(Some(commission.clone()), Some(tax.clone()), period)?;
+    crate::signal_return::cost_rates(cost, commission.rate, tax.buy, tax.sell)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

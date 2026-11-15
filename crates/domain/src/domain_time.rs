@@ -273,6 +273,15 @@ pub(crate) fn performance_weekday(date: CalendarDate) -> DayNumber {
     DayNumber(date.0.weekday().number_from_monday())
 }
 
+pub(crate) fn virtual_exit_minute_start(value: Timestamp) -> Timestamp {
+    Timestamp(
+        value
+            .0
+            .saturating_sub(SignedDuration::seconds(i64::from(value.0.second())))
+            .saturating_sub(SignedDuration::nanoseconds(i64::from(value.0.nanosecond()))),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
