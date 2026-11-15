@@ -223,7 +223,7 @@ xtask가 실패시키는 것 (`proc-macro2` 토큰 트리를 재귀로 돌아서
 | `xtask capability-check` | - | 생성된 명령 목록과 capability의 명령 허용 항목(같은 목록에서 생성)이 같은지. `build.rs`가 명령 목록을 생성 파일에서 읽는지. 위험한 권한은 [architecture.md](architecture.md) 3.6의 목록이고 있으면 실패. `tauri.conf.json`에 `app.security.capabilities` 명시 (R-05) |
 | `xtask migration-check` | - | 적용된 마이그레이션 불변 (R-06) |
 | SQL 검사 | - | `store-sqlite`의 SQL 상수에서 금액 열에 `sum`, `avg`, `ORDER BY`, 산술 금지 (R-06) |
-| 문자열 위치 검사 | - | `tossinvest.com`은 조립 루트와 `toss-smoke`에만 (6.2). 공개 IP 확인 서비스 주소는 조립 루트에만 (design 5.1, 서비스는 U-07에서 정함). 토스 주문 경로는 문자열이 아니라 HTTP 메서드와 경로의 조합으로 본다: 쓰기 메서드와 주문·조건주문의 생성·정정·취소 경로는 `broker-toss-trade`에만, 예외는 토큰 발급 (architecture.md 3.2) |
+| 문자열 위치 검사 | - | 토스 호스트 리터럴은 `broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 상수에만 (6.2). 공개 IP 확인 서비스 주소는 조립 루트에만 (design 5.1, 서비스는 U-07에서 정함). 토스 주문 경로는 문자열이 아니라 HTTP 메서드와 경로의 조합으로 본다: 쓰기 메서드와 주문·조건주문의 생성·정정·취소 경로는 `broker-toss-trade`에만, 예외는 토큰 발급 (architecture.md 3.2) |
 | 시각·환경 변수 검사 | - | 현재 시각 함수(서드파티 포함)와 `env::var`·`env::var_os` 계열이 보호된 파일 허용 목록 밖에 있으면 실패 (3.1) |
 
 xtask의 외부 의존은 `cargo_metadata`, `syn`, `proc-macro2`, `ra-ap-rustc_lexer`, `toml`(R-09 6.3)과 스키마 생성에 쓰는 `typify`(기본 기능 끔), `schemars`, `serde_json`, `quote`, `sha2`다(ADR 0053). 작업 공간 crate에는 의존하지 않는다(architecture.md 3.2).
@@ -473,7 +473,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 
 | 겹 | 방법 |
 |---|---|
-| 1. 구조 | `broker-toss`는 기본 URL을 `TossEndpoint` 생성자 인자로만 받는다. 실제 주소 생성자는 조립 루트에서만 보인다. 테스트와 `testkit`은 `TossEndpoint::local(addr)`만 만들 수 있다. xtask가 조립 루트(`src-tauri/src/main.rs`)와 `toss-smoke` 밖의 `tossinvest.com` 문자열을 실패시킨다 |
+| 1. 구조 | `broker-toss`는 봉인된 `TossEndpoint`를 주입받는다. 공개 `TossEndpoint::production()`은 인자가 없고, 실제 주소 상수는 `crates/adapters/broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 하나다. 호출·별칭·함수 참조는 `apps/desktop/src-tauri/src/main.rs`에만 허용한다. 다른 crate의 특정 파일을 허용하는 Rust 가시성이 없어 컴파일 차단이 아닌 `xtask arch-check`로 강제한다. 테스트와 `testkit`은 `TossEndpoint::local(port)`로 IPv4 루프백만 만든다. 임의 URL 생성자는 없다. 실제 호스트 리터럴은 해당 상수 밖에서 실패한다 |
 | 2. HTTP 클라이언트 | 제품 클라이언트는 `https_only(true)`. 테스트 클라이언트는 루프백만 허용하는 `dns_resolver`를 주입한다. cfg 분기가 아니라 생성자 주입이다 |
 | 3. OS | macOS: 루트 `.cargo/config.toml`의 `target.aarch64-apple-darwin.runner`로 모든 테스트 실행 파일을 `sandbox-exec` 네트워크 차단 프로필 안에서 돌린다. 자식 프로세스(가짜 AI CLI 포함)도 물려받는다. 루프백과 Unix 소켓은 열어 둔다. Linux CI: 컨테이너 `--network none`이나 `unshare -n` |
 

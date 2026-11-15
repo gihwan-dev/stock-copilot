@@ -1,3 +1,1 @@
-fn main() {
-    let base = "https://openapi.tossinvest.com";
-}
+fn main() { let endpoint = broker_toss::TossEndpoint::production(); }

@@ -15,5 +15,9 @@ time = { version = "=0.3.55", default-features = false, features = ["std", "pars
 broker-toss-schema = { path = "../broker-toss-schema" }
 serde_json.workspace = true
 
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time"] }
+
 [dev-dependencies]
+testkit = { path = "../../testkit" }
 serde.workspace = true

@@ -1,0 +1,168 @@
+# T-18 TossEndpoint와 HTTP 클라이언트
+
+- 상태: 초안
+- 최초 기준: ecb6e5a73b3fe5a394d55c0803bb203ad984cdf6
+
+## 결정
+
+메인 후속 결정에 따라 작업 절이 승인한 reqwest 및 TLS/런타임 전이 패키지는 일반 새 외부 패키지 금지의 예외다. reqwest =0.13.5는 기존 잠금 버전을 직접 의존성으로 사용한다. default-features=false, features=[rustls]다. HTTP/1만 사용하고 JSON·쿠키·압축·시스템 프록시 기능은 켜지 않는다. tokio =1.54.1은 기존 잠금 버전이며 기본 기능 없이 rt/time만 직접 켠다. 작업 공간의 Tauri 기능 통합으로 나타나는 추가 전이 경로와 직접 켠 기능을 구분한다.
+
+reqwest의 설치된 매니페스트에서 rustls 기능은 rustls-platform-verifier와 기본 AWS-LC 제공자를 선택한다. macOS에서는 플랫폼 신뢰 저장소의 인증서 검증을 사용한다. reqwest가 제공하는 기본 권장 제공자 구성을 그대로 사용해 별도의 직접 TLS/소켓 API와 전역 제공자 설치를 추가하지 않는다. rustls-no-provider는 별도 제공자 설치와 직접 TLS 의존을 요구하므로 선택하지 않는다. OpenSSL과 native-tls는 링크하지 않는다. 잠금의 ring/quinn 및 다른 운영체제 패키지는 Cargo의 전체 대상/선택적 의존 해석에 포함될 수 있으므로 잠금 존재와 macOS 활성 제품 그래프를 구분한다.
+
+TossEndpoint의 필드는 비공개이며 외부 생성 수단은 production()과 local(port)뿐이다. 제품 생성자는 인자 없이 고정 주소 상수 하나를 쓴다. local은 0 포트를 거부하고 1~65535에서 127.0.0.1만 만든다. 임의 URL·호스트·IP 문자열 생성자는 없다. 루프백 테스트 resolver는 localhost만 127.0.0.1로 해석하고 다른 이름은 로컬 오류로 거부한다. 숫자 IP는 DNS를 우회하므로 생성자 자체의 루프백 고정이 첫 방어다.
+
+Rust는 다른 crate의 특정 파일만 허용하는 가시성을 제공하지 않는다. feature는 하네스가 금지한다. 메인은 공개 production 생성자를 승인하고 호출 위치를 구조 검사로 강제하도록 계약을 변경했다. 컴파일 차단이라고 주장하지 않는다. 조립 파일은 apps/desktop/src-tauri/src/main.rs 하나이며 호출 없이 함수 값으로 참조하거나 use 별칭/타입 별칭/원시 식별자/매크로에서 사용하는 경우도 검사한다. 보수적으로 production 식별자는 제품 생성용 이름으로 예약한다. 호스트 상수는 endpoint.rs의 PRODUCTION_ORIGIN만 허용한다. 이전 조립 루트와 toss-smoke 호스트 허용은 제거했다.
+
+| 실제 컴파일 실험 | 결과 |
+|---|---|
+| 라이브러리 pub(crate) production을 별도 composition_root에서 호출 | E0624, 컴파일 실패 |
+| 같은 타입의 public local을 외부 consumer에서 호출 | 컴파일 성공 |
+| production을 pub으로 바꾼 뒤 composition_root에서 호출 | 컴파일 성공 |
+| 동일 public production을 일반 외부 consumer에서 호출 | 컴파일 성공 |
+
+실험은 target/T-18/visibility-yfe663fe에 있다. 제품 소스의 문자열 우회로가 아니라 계약 선택의 근거다.
+
+| 구성 | 제품 | 테스트 |
+|---|---|---|
+| 주소 | 고정 HTTPS 상수 | 127.0.0.1과 주입 포트 |
+| HTTPS 전용 | 켬 | 루프백 평문 허용 |
+| resolver | 시스템 | localhost만 루프백 반환 |
+| 리다이렉트 | 금지 | 금지 |
+| 시스템/환경 프록시 | no_proxy, 관련 기능 끔 | 동일 |
+| 연결/전체 제한 | 5초/30초 | 동일 |
+| 인증서 검증 | rustls 플랫폼 검증, 끄기 없음 | TLS 사용 시 동일 |
+| HTTP 버전 | HTTP/1 | HTTP/1 |
+
+타임아웃 수치는 기존 문서에 없어 보수적인 연결 5초·전체 30초로 정한다. 원시 본문은 8MiB 상한을 두고 초과하면 본문 없는 닫힌 오류를 반환한다. 리다이렉트는 따라가지 않고 원시 3xx를 반환한다.
+
+## 공개 API와 경계
+
+요청 수단은 TossHttpClient::get(ReadRequest, SecretValue)와 issue_token(client, client_id, client_secret)뿐이다. ReadRoute는 닫힌 GET 경로 목록, RouteId는 단일 경로 조각 검증, QueryKey는 스펙의 닫힌 쿼리 이름이다. 계좌 헤더도 SecretValue를 받는다. 임의 메서드·임의 경로·임의 헤더 및 내부 reqwest 클라이언트는 외부에서 접근하지 못한다. 토큰 발급은 고정 /oauth2/token의 client_credentials form 요청이다.
+
+RawResponse는 상태·Retry-After·세 가지 rate-limit 헤더·본문 바이트를 보존한다. read_error/token_error는 기존 T-04 매퍼 서명을 연결한다. 토큰·계좌 헤더는 sensitive이며 transport 오류는 원본 reqwest 오류를 보관하지 않는다. 요청·응답의 Debug는 고정 문자열이다. 키와 토큰을 URL에 붙이지 않는다. 실제 토스 요청과 실제 자격 증명은 사용하지 않는다.
+
+## 의존성 등록
+
+아래는 최초 기준 잠금과 비교해 추가된 이름/버전 전체다. 정확한 전이 버전은 Cargo.lock으로 고정한다. 기존 잠금에 있었지만 macOS 제품에서 새로 활성화된 reqwest/tokio 전이 패키지도 deny 허용 목록에 등록했다. 출처는 기존 crates.io 한 곳뿐이다. AWS-LC와 untrusted 배포본의 실행 가능한 보조 파일은 개별 경로와 SHA-256으로만 등록하며 파일군 전체 예외는 두지 않는다. 등록이 해당 스크립트를 제품에서 실행한다는 뜻은 아니다.
+
+| 이름 | 버전 | 라이선스 |
+|---|---|---|
+| aws-lc-rs | 1.19.0 | ISC AND (Apache-2.0 OR ISC) |
+| aws-lc-sys | 0.47.0 | ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) |
+| cfg_aliases | 0.2.2 | MIT |
+| cmake | 0.1.58 | MIT OR Apache-2.0 |
+| fs_extra | 1.3.0 | MIT |
+| getrandom | 0.2.17 | MIT OR Apache-2.0 |
+| hyper-rustls | 0.27.9 | Apache-2.0 OR ISC OR MIT |
+| jni | 0.22.4 | MIT OR Apache-2.0 |
+| jni-macros | 0.22.4 | MIT OR Apache-2.0 |
+| jobserver | 0.1.35 | MIT OR Apache-2.0 |
+| lru-slab | 0.1.2 | MIT OR Apache-2.0 OR Zlib |
+| openssl-probe | 0.2.2 | MIT OR Apache-2.0 |
+| ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
+| quinn | 0.11.9 | MIT OR Apache-2.0 |
+| quinn-proto | 0.11.14 | MIT OR Apache-2.0 |
+| quinn-udp | 0.5.14 | MIT OR Apache-2.0 |
+| rand | 0.9.5 | MIT OR Apache-2.0 |
+| rand_chacha | 0.9.0 | MIT OR Apache-2.0 |
+| rand_core | 0.9.5 | MIT OR Apache-2.0 |
+| ring | 0.17.14 | Apache-2.0 AND ISC |
+| rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
+| rustls-native-certs | 0.8.3 | Apache-2.0 OR ISC OR MIT |
+| rustls-pki-types | 1.16.0 | MIT OR Apache-2.0 |
+| rustls-platform-verifier | 0.7.0 | MIT OR Apache-2.0 |
+| rustls-platform-verifier-android | 0.1.1 | MIT OR Apache-2.0 |
+| rustls-webpki | 0.103.16 | ISC |
+| schannel | 0.1.30 | MIT |
+| security-framework | 3.7.0 | MIT OR Apache-2.0 |
+| security-framework-sys | 2.17.0 | MIT OR Apache-2.0 |
+| simd_cesu8 | 1.2.0 | Apache-2.0 OR MIT |
+| simdutf8 | 0.1.5 | MIT OR Apache-2.0 |
+| subtle | 2.6.1 | BSD-3-Clause |
+| tokio-rustls | 0.26.4 | MIT OR Apache-2.0 |
+| untrusted | 0.9.0 | ISC |
+| webpki-root-certs | 1.0.12 | CDLA-Permissive-2.0 |
+| windows-sys | 0.52.0 | MIT OR Apache-2.0 |
+| windows-sys | 0.60.2 | MIT OR Apache-2.0 |
+| windows-targets | 0.52.6 | MIT OR Apache-2.0 |
+| windows-targets | 0.53.5 | MIT OR Apache-2.0 |
+| windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
+| windows_aarch64_gnullvm | 0.53.1 | MIT OR Apache-2.0 |
+| windows_aarch64_msvc | 0.52.6 | MIT OR Apache-2.0 |
+| windows_aarch64_msvc | 0.53.1 | MIT OR Apache-2.0 |
+| windows_i686_gnu | 0.52.6 | MIT OR Apache-2.0 |
+| windows_i686_gnu | 0.53.1 | MIT OR Apache-2.0 |
+| windows_i686_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
+| windows_i686_gnullvm | 0.53.1 | MIT OR Apache-2.0 |
+| windows_i686_msvc | 0.52.6 | MIT OR Apache-2.0 |
+| windows_i686_msvc | 0.53.1 | MIT OR Apache-2.0 |
+| windows_x86_64_gnu | 0.52.6 | MIT OR Apache-2.0 |
+| windows_x86_64_gnu | 0.53.1 | MIT OR Apache-2.0 |
+| windows_x86_64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
+| windows_x86_64_gnullvm | 0.53.1 | MIT OR Apache-2.0 |
+| windows_x86_64_msvc | 0.52.6 | MIT OR Apache-2.0 |
+| windows_x86_64_msvc | 0.53.1 | MIT OR Apache-2.0 |
+| zerocopy | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
+| zerocopy-derive | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
+
+## 보호 파일과 기존 고정 자료
+
+- deny.toml: 승인된 제품 HTTPS 의존성·빌드 스크립트·개별 배포 파일 해시 등록.
+- harness/arch-check/rules.toml: 호스트 위치를 단일 상수 파일로 변경. HTTP/TLS는 reqwest를 통하는 경로만 허용하며, 플랫폼 인증서 검증의 security-framework 및 작업 공간 기능 통합의 절차 매크로/런타임 소켓 경로를 한정 등록.
+- 기존 tossinvest-host-in-main-and-toss-smoke-pass 고정 자료: 실제 호스트 문자열을 없애고 main의 production 참조와 toss-smoke의 local 호출로 변경. 새 계약의 단일 상수 파일을 같은 고정 자료에 추가. 기존 테스트 단언을 느슨하게 하지 않는다.
+- .codex/config.toml, harness/sandbox/lock-fragment.json, harness/claude-hooks/hashes.json: 저장소 공식 생성기로만 갱신.
+
+## 인계
+
+- T-02: 토큰 응답 파싱, 저장, 만료, 단일 발급, 재발급 순서를 구현한다. 토큰 발급 전송 함수는 그 절차를 실행하지 않는다.
+- T-03: 원시 제한 헤더의 검증·속도 제한·재시도 정책을 구현한다.
+- T-05/T-07/T-08/T-09/T-10/T-11/T-15: 포트 입력을 닫힌 경로·쿼리·헤더에 연결하고 응답 파싱 및 요청 사실 결합을 구현한다. 전송 성공이 응답 의미 검증은 아니다.
+- T-20: 녹화 계약 테스트 틀을 확장한다. 이번 가짜 서버는 루프백의 원시 전송 검증 도우미다.
+
+## 검증 기록
+
+초기 공개 API 미정의 E0432로 회귀 red를 확인했다. 프로젝트 설정 hooks=true는 확인했으나 현재 세션의 프로젝트/훅 신뢰 적용은 확인할 수 없다. 시작 frozen install과 lefthook install은 성공했다. 홈 설정·인증 파일은 읽거나 고치지 않았다. 제품 검사와 리뷰/변이의 최종 결과는 이어서 기록한다.
+
+## 손 변형 결과
+
+mktemp -d로 만든 복사본에서 최초 기준 실행 및 복구 실행을 통과했다. 아래 28개는 모두 실제 컴파일 후 지정 테스트 실패로 검출했다. 생존 0, 컴파일 불가 0이다. 원시 결과는 target/T-18/manual-results.json과 manual-logs에 있다. 표의 문자열은 제품의 닫힌 분기 선택을 바꾸는 변형이다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+
+| 1 | Accounts GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 2 | Holdings GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 3 | Transactions GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 4 | Quotes GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 5 | Candles GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 6 | BuyingPower GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 7 | SellableQuantity GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 8 | Orders GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 9 | FxRate GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 10 | Orderbook GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 11 | PriceLimits GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 12 | CommissionRate GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 13 | Instruments GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 14 | Stocks GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 15 | Rankings GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 16 | Sectors GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 17 | SectorRankings GET 경로 교환 | request::tests::closed_routes_match_the_openapi_get_paths | 검출 |
+| 18 | Symbol 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 19 | Symbols 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 20 | Cursor 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 21 | Limit 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 22 | Status 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 23 | Market 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 24 | Currency 쿼리 키 교환 | request::tests::all_query_keys_are_closed_and_exact | 검출 |
+| 25 | ID 상한 128 포함 거부 | request::tests::dynamic_identifiers_cannot_escape_their_single_path_segment | 검출 |
+| 26 | 점 경로 조각 허용 | request::tests::dynamic_identifiers_cannot_escape_their_single_path_segment | 검출 |
+| 27 | 상위 경로 조각 허용 | request::tests::dynamic_identifiers_cannot_escape_their_single_path_segment | 검출 |
+| 28 | 포트 0 허용 | tests::zero_port_and_invalid_secret_are_closed_errors | 검출 |
+
+## 자체 리뷰 보완과 최초 정상 훅
+
+호스트 검사에 매크로 토큰의 이스케이프 리터럴·C 문자열과 endpoint.rs의 중첩 동명 상수 우회가 남아 있음을 자체 리뷰에서 확인했다. 회귀 테스트를 먼저 실행해 1실패/2통과를 확인한 뒤 매크로 문자열 해석과 최상위 비공개 단일 문자열 상수만 허용하도록 보완했다. compiler visibility를 추가로 주장하지 않는다.
+
+최초 정상 커밋 훅은 fresh-build·commit-guard를 통과하고 전체 check로 승격했다. 프런트 검사와 Rust 빌드 뒤 cargo-deny가 추가 배포 실행 파일 두 개(proptest의 테스트 보조 스크립트, tracing의 매크로 테스트 보조 스크립트)를 지적해 실패했다. 이 실패를 숨기거나 훅을 끄지 않았다. 개별 경로·SHA-256 등록으로 고쳤고 전체 정상 훅을 다시 실행한다. 별도 조립 루트 좁은 테스트는 최초에 frontendDist 부재로 컴파일이 실패했으며 정상 전체 검사의 프런트 빌드 뒤 결과와 구분한다.
+
+macOS 활성 normal/build 의존 그래프에서 rustls 0.23.46, rustls-platform-verifier 0.7.0, security-framework 3.7.0, AWS-LC 1.19.0/0.47.0을 확인했다. OpenSSL, native-tls, ring, quinn은 이 활성 그래프에 없다. 잠금 전체 목록과 실제 macOS 활성 그래프를 구분한다.

@@ -18,3 +18,14 @@ fn main() -> Result<(), tauri::Error> {
     app.run(|_, _| {});
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn composition_root_constructs_the_fixed_product_endpoint_without_sending_requests() {
+        let endpoint = broker_toss::TossEndpoint::production();
+        assert!(format!("{endpoint:?}").contains("Production"));
+        let client = broker_toss::TossHttpClient::new(&endpoint).expect("product configuration");
+        assert_eq!(format!("{client:?}"), "TossHttpClient(<redacted>)");
+    }
+}

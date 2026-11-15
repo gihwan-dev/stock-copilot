@@ -195,13 +195,16 @@ externals = [
     "tokio-native-tls",
     "openssl",
     "socket2",
+    "security-framework",
+    "syn",
+    "proc-macro2",
 ]
 through = "reqwest"
 reason = "HTTP를 쓸 수 있는 세 crate는 HTTP·TLS·소켓 계열을 reqwest를 통해서만 들인다(architecture.md 3.2 HTTP 클라이언트, R-15 2.7의 reqwest 0.13.5 ClientBuilder)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
-externals = ["reqwest", "hyper", "hyper-util", "socket2"]
+externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework"]
 through = "tauri"
 reason = "tauri 2.12.5가 Android·iOS 대상에서만 쓰는 reqwest와 그 의존(hyper-util → hyper, socket2), 그리고 tauri → tokio → socket2. cargo metadata는 모든 대상을 그래프에 넣는다"
 
@@ -219,7 +222,7 @@ reason = "src-tauri/build.rs의 빌드 의존 tauri-build → tauri-utils(cargo_
 
 [[external-location-exception]]
 crates = ["src-tauri"]
-externals = ["reqwest", "hyper", "hyper-util", "socket2", "cargo_metadata", "toml", "syn", "proc-macro2"]
+externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework", "cargo_metadata", "toml", "syn", "proc-macro2"]
 through = "tauri-specta"
 reason = "tauri-specta 2.0.0-rc.28은 tauri(specta 기능)에 의존하므로 위의 tauri 예외와 같은 전이 crate를 들인다. 절차 매크로(tauri-specta-macros)도 syn, proc-macro2를 쓴다 (ADR 0016)"
 
@@ -343,8 +346,8 @@ module-paths = [
 
 [source.toss-host]
 needle = "tossinvest.com"
-allowed-crates = ["toss-smoke"]
-allowed-files = ["apps/desktop/src-tauri/src/main.rs"]
+allowed-crates = []
+allowed-files = ["crates/adapters/broker-toss/src/endpoint.rs"]
 
 [[external-location-exception]]
 crates = ["domain"]
@@ -407,3 +410,9 @@ crates = ["application"]
 externals = ["syn", "proc-macro2"]
 through = "serde_core"
 reason = "A-02 직렬화 trait 부재의 컴파일 단언 전용 개발 의존성. 기능 없는 serde_core에도 작업 공간 serde 기능 통합으로 보이는 절차 매크로 경로이며 제품은 serde 기능을 켜지 않는다"
+
+[[external-location-exception]]
+crates = ["broker-toss"]
+externals = ["socket2", "syn", "proc-macro2"]
+through = "tokio"
+reason = "T-18: reqwest 실행용 tokio 런타임의 소켓 전이 의존성"

@@ -57,3 +57,10 @@ mod tests {
         assert_eq!(cases_for(Some("4096")), 4096);
     }
 }
+
+mod http_server;
+pub use http_server::{LocalHttpServer, compile_probe, proxy_probe};
+
+pub fn test_executable() -> std::io::Result<std::path::PathBuf> {
+    std::env::current_exe()
+}

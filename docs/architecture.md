@@ -512,6 +512,8 @@ UI 이벤트 DTO에는 종류와 **계좌 키가 아닌 ID의 문자열 표현**
 | `src-tauri` | 직접 의존하지 않는다. `broker-toss-trade`의 구현체를 만들어 `approval-command`에 넘기고, 승인 서비스를 IPC 명령에 연결만 한다 |
 | 그 밖 전부 | 전이 그래프에도 나타나지 않는다 |
 
+`TossEndpoint::production()`은 `broker-toss`의 인자 없는 공개 생성자다. 실제 주소 상수는 `crates/adapters/broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 하나다. 호출·별칭·함수 참조는 `apps/desktop/src-tauri/src/main.rs`에서만 허용하고 `xtask arch-check`가 강제한다. Rust에는 다른 crate의 특정 파일만 허용하는 가시성이 없으므로 컴파일 차단이 아닌 구조 검사다. 문자열 URL 생성자는 없다. 테스트는 `TossEndpoint::local(port)`로 IPv4 루프백만 만든다. 제품 HTTP는 reqwest 0.13.5의 rustls·플랫폼 인증서 검증을 사용하며 HTTPS 전용, 리다이렉트·프록시 금지, 연결 5초·전체 30초다. 기본 기능을 끄고 rustls만 켜며 HTTP/1만 사용한다. JSON·쿠키·압축·시스템 프록시 기능은 켜지 않는다.
+
 `broker-toss`(읽기)는 공개 API에 GET과 토큰 발급만 둔다. 주문 경로 요청은 `broker-toss-trade`에만 있다. 그래서 `toss-smoke`나 읽기 어댑터를 손에 넣어도 주문을 만들 수 없다(R-01).
 
 ### 4.3 타입
