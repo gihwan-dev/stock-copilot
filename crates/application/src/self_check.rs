@@ -1,40 +1,77 @@
 use crate::{
-    CredentialSource, ErrorClass, FeedSource, InformationError, IsolationFailure, ResetTime,
-    UserAction,
+    AiUsage, BugDiagnostic, CredentialSource, ErrorClass, FeedSource, InformationError,
+    IsolationFailure, MissingData, RetryDelay, UserAction,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelfCheckKind {
-    TossKey,
-    AllowedIp,
-    DuplicateKeyUse,
-    ClaudeCodeInstallation,
-    ClaudeCodeLogin,
-    AiEnvironment,
-    AiUsageLimit,
-    OrderPrerequisites,
+pub enum CheckState<Problem> {
+    Healthy,
+    Problem(Problem),
+    Waiting(RetryDelay),
+    Bug(BugDiagnostic),
+    NoData(MissingData),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TossKeyProblem {
+    InvalidKey,
+    Permissions,
+    AccountNotFound,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IpProblem {
+    NotAllowed,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DuplicateKeyProblem {
+    CompetingProgram,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaudeInstallProblem {
+    NotInstalled,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaudeLoginProblem {
+    LoginRequired,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiEnvironmentProblem {
+    Tools,
+    McpServers,
+    Plugins,
+    Skills,
+    SlashCommands,
+    PermissionMode,
+    ApiKeySource,
+    CliVersion,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderPrerequisiteProblem {
+    RiskNotice,
+    ExchangeIntegration,
+    DollarBuyingPower,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelfCheckInput {
+    pub toss_key: CheckState<TossKeyProblem>,
+    pub allowed_ip: CheckState<IpProblem>,
+    pub duplicate_key_use: CheckState<DuplicateKeyProblem>,
+    pub claude_install: CheckState<ClaudeInstallProblem>,
+    pub claude_login: CheckState<ClaudeLoginProblem>,
+    pub ai_environment: CheckState<AiEnvironmentProblem>,
+    pub ai_usage: AiUsage,
+    pub order_prerequisite: CheckState<OrderPrerequisiteProblem>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfCheckAction {
-    ReplaceTossKey,
+    TossKey(TossKeyProblem),
     RegisterIp,
     StopOtherProgram,
     InstallClaudeCode,
     LoginClaudeCode,
-    ReviewRiskNotice,
-    IntegrateExchange,
-    ProvideDollarBuyingPower,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelfCheckObservation {
-    Healthy,
-    NeedsAction(SelfCheckAction),
-    Classified(ErrorClass),
-    Waiting(ResetTime),
-    EnvironmentRejected(IsolationFailure),
-    OptionalCredential(CredentialSource),
+    OrderPrerequisite(OrderPrerequisiteProblem),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,118 +81,58 @@ pub enum NewsCheckState {
     NoData,
     Failed(InformationError),
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NewsCheckRecord {
-    pub source: FeedSource,
-    pub state: NewsCheckState,
+pub enum SourceCheckRecord {
+    Feed {
+        source: FeedSource,
+        state: NewsCheckState,
+    },
+    OptionalCredential(CredentialSource),
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SelfCheckRecord {
-    pub check: SelfCheckKind,
-    pub observation: SelfCheckObservation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SelfCheckProblem {
-    pub check: SelfCheckKind,
-    pub action: SelfCheckAction,
-    pub resumes_at: ResetTime,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfCheckResult {
-    pub banner: Option<SelfCheckProblem>,
-    pub records: [SelfCheckRecord; 8],
-    pub news: Vec<NewsCheckRecord>,
+    pub banner: Option<SelfCheckAction>,
+    pub records: SelfCheckInput,
+    pub sources: Vec<SourceCheckRecord>,
 }
 
 #[must_use]
 pub fn evaluate_self_check(
-    observations: [SelfCheckObservation; 8],
-    news: Vec<NewsCheckRecord>,
+    records: SelfCheckInput,
+    sources: Vec<SourceCheckRecord>,
 ) -> SelfCheckResult {
-    let [
-        key,
-        ip,
-        duplicate,
-        installation,
-        login,
-        environment,
-        usage,
-        order,
-    ] = observations;
-    let records = [
-        (SelfCheckKind::TossKey, key),
-        (SelfCheckKind::AllowedIp, ip),
-        (SelfCheckKind::DuplicateKeyUse, duplicate),
-        (SelfCheckKind::ClaudeCodeInstallation, installation),
-        (SelfCheckKind::ClaudeCodeLogin, login),
-        (SelfCheckKind::AiEnvironment, environment),
-        (SelfCheckKind::AiUsageLimit, usage),
-        (SelfCheckKind::OrderPrerequisites, order),
-    ]
-    .map(|(check, observation)| SelfCheckRecord { check, observation });
-    let banner = records.iter().find_map(problem);
+    let banner = match records {
+        SelfCheckInput {
+            toss_key: CheckState::Problem(problem),
+            ..
+        } => Some(SelfCheckAction::TossKey(problem)),
+        SelfCheckInput {
+            allowed_ip: CheckState::Problem(IpProblem::NotAllowed),
+            ..
+        } => Some(SelfCheckAction::RegisterIp),
+        SelfCheckInput {
+            duplicate_key_use: CheckState::Problem(DuplicateKeyProblem::CompetingProgram),
+            ..
+        } => Some(SelfCheckAction::StopOtherProgram),
+        SelfCheckInput {
+            claude_install: CheckState::Problem(ClaudeInstallProblem::NotInstalled),
+            ..
+        } => Some(SelfCheckAction::InstallClaudeCode),
+        SelfCheckInput {
+            claude_login: CheckState::Problem(ClaudeLoginProblem::LoginRequired),
+            ..
+        } => Some(SelfCheckAction::LoginClaudeCode),
+        SelfCheckInput {
+            order_prerequisite: CheckState::Problem(problem),
+            ..
+        } => Some(SelfCheckAction::OrderPrerequisite(problem)),
+        _ => None,
+    };
     SelfCheckResult {
         banner,
         records,
-        news,
+        sources,
     }
-}
-
-fn problem(record: &SelfCheckRecord) -> Option<SelfCheckProblem> {
-    let candidate = match record.observation {
-        SelfCheckObservation::Healthy
-        | SelfCheckObservation::Waiting(_)
-        | SelfCheckObservation::EnvironmentRejected(_)
-        | SelfCheckObservation::OptionalCredential(_) => None,
-        SelfCheckObservation::NeedsAction(action) => Some(action),
-        SelfCheckObservation::Classified(class) => match class {
-            ErrorClass::Wait(_) | ErrorClass::Bug(_) | ErrorClass::NoData(_) => None,
-            ErrorClass::UserAction(action) => match action {
-                UserAction::CheckCredentials => Some(SelfCheckAction::ReplaceTossKey),
-                UserAction::CheckIpAllowlist => Some(SelfCheckAction::RegisterIp),
-                UserAction::StopCompetingKeyUse => Some(SelfCheckAction::StopOtherProgram),
-                UserAction::CheckAccount | UserAction::CheckPermissions => None,
-            },
-        },
-    }?;
-    match (record.check, candidate) {
-        (SelfCheckKind::TossKey, SelfCheckAction::ReplaceTossKey)
-        | (SelfCheckKind::AllowedIp, SelfCheckAction::RegisterIp)
-        | (SelfCheckKind::DuplicateKeyUse, SelfCheckAction::StopOtherProgram)
-        | (SelfCheckKind::ClaudeCodeInstallation, SelfCheckAction::InstallClaudeCode)
-        | (SelfCheckKind::ClaudeCodeLogin, SelfCheckAction::LoginClaudeCode)
-        | (
-            SelfCheckKind::OrderPrerequisites,
-            SelfCheckAction::ReviewRiskNotice
-            | SelfCheckAction::IntegrateExchange
-            | SelfCheckAction::ProvideDollarBuyingPower,
-        ) => Some(SelfCheckProblem {
-            check: record.check,
-            action: candidate,
-            resumes_at: ResetTime::NotProvided,
-        }),
-        (
-            SelfCheckKind::TossKey
-            | SelfCheckKind::AllowedIp
-            | SelfCheckKind::DuplicateKeyUse
-            | SelfCheckKind::ClaudeCodeInstallation
-            | SelfCheckKind::ClaudeCodeLogin
-            | SelfCheckKind::AiEnvironment
-            | SelfCheckKind::AiUsageLimit
-            | SelfCheckKind::OrderPrerequisites,
-            _,
-        ) => None,
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelfCheckChangeCause {
-    BrokerConnection,
-    OtherCheck,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,39 +140,67 @@ pub enum SelfCheckChange {
     Unchanged,
     Publish,
 }
-
 #[must_use]
-pub fn self_check_change(
-    previous: &SelfCheckResult,
-    next: &SelfCheckResult,
-    cause: SelfCheckChangeCause,
-) -> SelfCheckChange {
-    match cause {
-        SelfCheckChangeCause::BrokerConnection => SelfCheckChange::Unchanged,
-        SelfCheckChangeCause::OtherCheck => {
-            if previous.records[3..] == next.records[3..] {
-                SelfCheckChange::Unchanged
-            } else {
-                SelfCheckChange::Publish
-            }
-        }
+pub fn self_check_change(previous: &SelfCheckResult, next: &SelfCheckResult) -> SelfCheckChange {
+    let before = previous.records;
+    let after = next.records;
+    if before.claude_install == after.claude_install
+        && before.claude_login == after.claude_login
+        && before.ai_environment == after.ai_environment
+        && before.ai_usage == after.ai_usage
+        && before.order_prerequisite == after.order_prerequisite
+    {
+        SelfCheckChange::Unchanged
+    } else {
+        SelfCheckChange::Publish
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelfCheckDifference {
-    Same,
-    Changed,
+pub enum TossCheckObservation {
+    Key(CheckState<TossKeyProblem>),
+    Ip(CheckState<IpProblem>),
+    DuplicateKey(CheckState<DuplicateKeyProblem>),
+}
+#[must_use]
+pub fn toss_check_observation(class: ErrorClass) -> TossCheckObservation {
+    use CheckState::{Bug, NoData, Problem, Waiting};
+    use TossCheckObservation::{DuplicateKey, Ip, Key};
+    match class {
+        ErrorClass::UserAction(action) => match action {
+            UserAction::CheckCredentials => Key(Problem(TossKeyProblem::InvalidKey)),
+            UserAction::CheckPermissions => Key(Problem(TossKeyProblem::Permissions)),
+            UserAction::CheckAccount => Key(Problem(TossKeyProblem::AccountNotFound)),
+            UserAction::CheckIpAllowlist => Ip(Problem(IpProblem::NotAllowed)),
+            UserAction::StopCompetingKeyUse => {
+                DuplicateKey(Problem(DuplicateKeyProblem::CompetingProgram))
+            }
+        },
+        ErrorClass::Wait(delay) => Key(Waiting(delay)),
+        ErrorClass::Bug(reason) => Key(Bug(reason)),
+        ErrorClass::NoData(data) => Key(NoData(data)),
+    }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiCheckObservation {
+    Install(ClaudeInstallProblem),
+    Login(ClaudeLoginProblem),
+    Environment(AiEnvironmentProblem),
+}
 #[must_use]
-pub fn self_check_difference(
-    previous: &SelfCheckResult,
-    next: &SelfCheckResult,
-) -> SelfCheckDifference {
-    if previous == next {
-        SelfCheckDifference::Same
-    } else {
-        SelfCheckDifference::Changed
+pub fn isolation_check_observation(failure: IsolationFailure) -> AiCheckObservation {
+    use AiCheckObservation::{Environment, Install, Login};
+    match failure {
+        IsolationFailure::NotInstalled => Install(ClaudeInstallProblem::NotInstalled),
+        IsolationFailure::LoginRequired => Login(ClaudeLoginProblem::LoginRequired),
+        IsolationFailure::Tools => Environment(AiEnvironmentProblem::Tools),
+        IsolationFailure::McpServers => Environment(AiEnvironmentProblem::McpServers),
+        IsolationFailure::Plugins => Environment(AiEnvironmentProblem::Plugins),
+        IsolationFailure::Skills => Environment(AiEnvironmentProblem::Skills),
+        IsolationFailure::SlashCommands => Environment(AiEnvironmentProblem::SlashCommands),
+        IsolationFailure::PermissionMode => Environment(AiEnvironmentProblem::PermissionMode),
+        IsolationFailure::ApiKeySource => Environment(AiEnvironmentProblem::ApiKeySource),
+        IsolationFailure::CliVersion => Environment(AiEnvironmentProblem::CliVersion),
     }
 }
