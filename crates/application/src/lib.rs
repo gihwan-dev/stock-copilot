@@ -132,3 +132,12 @@ pub use event_bus::{
     DeliveryFailure, DeliveryReport, EventBus, EventBusBuilder, EventSubscriber, SubscriberFailure,
     SubscriptionId,
 };
+
+mod self_check;
+pub use self_check::{
+    AiCheckObservation, AiEnvironmentProblem, CheckState, ClaudeInstallProblem, ClaudeLoginProblem,
+    DuplicateKeyProblem, IpProblem, NewsCheckState, OrderPrerequisiteProblem, SelfCheckAction,
+    SelfCheckChange, SelfCheckInput, SelfCheckResult, SourceCheckRecord, TossCheckObservation,
+    TossKeyProblem, evaluate_self_check, isolation_check_observation, self_check_change,
+    toss_check_observation,
+};

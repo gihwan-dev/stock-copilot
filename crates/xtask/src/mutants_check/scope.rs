@@ -1,12 +1,6 @@
+use super::Scope;
 use std::collections::BTreeSet;
 use std::path::Path;
-
-use proc_macro2::TokenStream;
-
-use crate::check_support::read_text;
-use crate::git_base::{git, listed_paths, output};
-
-use super::{Scope, selected_globs, touched_crates};
 
 pub(super) fn matches_target(glob: &str, file: &str) -> bool {
     glob.strip_suffix("/**/*.rs").map_or_else(
@@ -18,188 +12,21 @@ pub(super) fn matches_target(glob: &str, file: &str) -> bool {
     )
 }
 
-fn without_exports(source: &str) -> Option<String> {
-    let mut parsed = syn::parse_file(source).ok()?;
-    parsed.items.retain(|item| !removable_export(item));
-    let tokens: TokenStream = syn::parse_quote!(#parsed);
-    Some(tokens.to_string())
-}
-
-fn removable_export(item: &syn::Item) -> bool {
-    let syn::Item::Use(import) = item else {
-        return false;
-    };
-    match &import.vis {
-        syn::Visibility::Public(_) => import.attrs.is_empty(),
-        syn::Visibility::Restricted(_) | syn::Visibility::Inherited => false,
-    }
-}
-
-fn test_support(path: &str, source: &str) -> bool {
-    path.split('/').any(|part| part.contains("test"))
-        || syn::parse_file(source).is_ok_and(|file| !file.attrs.is_empty())
-}
-
-fn narrow_crate(
-    root: &Path,
-    base: &str,
-    globs: &[String],
-    changed: &BTreeSet<String>,
-    directory: &str,
-) -> Result<BTreeSet<String>, String> {
-    let before = snapshot(root, directory, Some(base))?;
-    let after = snapshot(root, directory, None)?;
-    select_sources(&before, &after, globs, changed, directory)
-}
-
-pub(super) fn select_sources(
-    before: &super::graph::Sources,
-    after: &super::graph::Sources,
-    globs: &[String],
-    changed: &BTreeSet<String>,
-    directory: &str,
-) -> Result<BTreeSet<String>, String> {
-    let prefix = format!("{directory}/");
-    let touched: Vec<&String> = changed
-        .iter()
-        .filter(|path| path.starts_with(&prefix))
-        .collect();
-    for path in &touched {
-        if !path.starts_with(&format!("{directory}/src/"))
-            || (!before.contains_key(*path) && !globs.iter().any(|glob| matches_target(glob, path)))
-        {
-            return Err(String::from("non-target crate input"));
-        }
-        let source = after
-            .get(*path)
-            .ok_or("missing, deleted, or non-Rust input")?;
-        if test_support(path, source) || path.contains(['*', '?', '[', ']', '{', '}']) {
-            return Err(String::from("crate-wide support input"));
-        }
-    }
-    let graph_sources = |sources: &super::graph::Sources| {
-        sources
-            .iter()
-            .filter(|(path, _)| path.starts_with(&format!("{directory}/src/")))
-            .map(|(path, source)| (path.clone(), source.clone()))
-            .collect()
-    };
-    let mut graph = super::graph::Graph::read(&graph_sources(after))?;
-    graph.extend(super::graph::Graph::read(&graph_sources(before))?);
-    let additions = super::additions::Additions::read(before, after).ok_or("addition context")?;
-    let mut selected = BTreeSet::new();
-    let mut seeds = BTreeSet::new();
-    for path in touched {
-        match additions.classify(path) {
-            super::additions::Change::OnlyFile => {
-                graph.outward(&BTreeSet::from([path.clone()]))?;
-                if globs.iter().any(|glob| matches_target(glob, path)) {
-                    selected.insert(path.clone());
-                }
-            }
-            super::additions::Change::Registration => {}
-            super::additions::Change::Graph => {
-                if path.ends_with("/lib.rs") && !unchanged_lib(before.get(path), after.get(path)) {
-                    return Err(String::from("lib structure changed"));
-                }
-                seeds.insert(path.clone());
-            }
-        }
-    }
-    if !seeds.is_empty() {
-        selected.extend(
-            graph
-                .selected(&seeds)?
-                .into_iter()
-                .filter(|path| globs.iter().any(|glob| matches_target(glob, path))),
-        );
-    }
-    Ok(selected)
-}
-
-fn unchanged_lib(before: Option<&String>, after: Option<&String>) -> bool {
-    before
-        .zip(after)
-        .and_then(|(left, right)| without_exports(left).zip(without_exports(right)))
-        .is_some_and(|(left, right)| left == right)
-}
-
-pub(super) fn snapshot(
-    root: &Path,
-    directory: &str,
-    base: Option<&str>,
-) -> Result<super::graph::Sources, String> {
-    let paths = match base {
-        None => listed_paths(root)?,
-        Some(commit) => {
-            let mut command = git(root);
-            command.args([
-                "ls-tree",
-                "-r",
-                "--name-only",
-                "-z",
-                commit,
-                "--",
-                directory,
-            ]);
-            String::from_utf8(output(command, "ls-tree")?)
-                .map_err(|error| error.to_string())?
-                .split('\0')
-                .filter(|path| !path.is_empty())
-                .map(String::from)
-                .collect()
-        }
-    };
-    paths
-        .into_iter()
-        .filter(|path| {
-            path.starts_with(&format!("{directory}/"))
-                && Path::new(path).extension().is_some_and(|ext| ext == "rs")
-        })
-        .map(|path| {
-            let source = match base {
-                None => read_text(&root.join(&path))?,
-                Some(commit) => {
-                    let mut command = git(root);
-                    command.args(["show", &format!("{commit}:{path}")]);
-                    String::from_utf8(output(command, "show")?)
-                        .map_err(|error| error.to_string())?
-                }
-            };
-            Ok((path, source))
-        })
-        .collect()
-}
-
 pub(super) fn diff_scope(
     root: &Path,
-    base: &str,
+    _base: &str,
     globs: &[String],
     changed: &BTreeSet<String>,
 ) -> Scope {
-    if changed.iter().any(|path| {
-        [
-            "Cargo.toml",
-            "Cargo.lock",
-            "rust-toolchain.toml",
-            ".cargo/mutants.toml",
-            ".config/nextest.toml",
-        ]
-        .contains(&path.as_str())
-    }) {
-        return Scope::Everything;
-    }
-    let mut selected = BTreeSet::new();
-    for directory in touched_crates(globs, changed) {
-        match narrow_crate(root, base, globs, changed, &directory) {
-            Ok(files) => selected.extend(files),
-            Err(_) => selected.extend(selected_globs(
-                globs,
-                &Scope::Crates(BTreeSet::from([directory])),
-            )),
-        }
-    }
-    Scope::Files(selected)
+    Scope::Files(
+        changed
+            .iter()
+            .filter(|file| {
+                root.join(file).is_file() && globs.iter().any(|glob| matches_target(glob, file))
+            })
+            .cloned()
+            .collect(),
+    )
 }
 
 pub(super) fn jobs_for(cores: usize, override_value: Option<&str>) -> Result<usize, String> {
@@ -215,5 +42,65 @@ pub(super) fn jobs_for(cores: usize, override_value: Option<&str>) -> Result<usi
             .ok_or_else(|| {
                 format!("STOCK_COPILOT_MUTANTS_JOBS는 ASCII 정수 1..={maximum}이어야 한다: {value}")
             }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{diff_scope, jobs_for};
+    use crate::harness_workspace_tests::{fresh_directory, repository_root};
+    use crate::mutants_check::Scope;
+    use std::collections::BTreeSet;
+    #[test]
+    fn changed_src_files_are_selected_without_reference_expansion() {
+        let root = fresh_directory(&repository_root(), "h46-scope");
+        std::fs::create_dir_all(root.join("crates/domain/src")).expect("directory");
+        for name in ["a.rs", "b.rs", "lib.rs"] {
+            std::fs::write(root.join("crates/domain/src").join(name), "").expect("source");
+        }
+        let paths = [
+            "crates/domain/src/a.rs",
+            "crates/domain/src/lib.rs",
+            "crates/domain/tests/test.rs",
+            "crates/domain/src/deleted.rs",
+            "Cargo.toml",
+        ]
+        .map(String::from)
+        .into();
+        assert_eq!(
+            diff_scope(
+                &root,
+                "base",
+                &[String::from("crates/domain/src/**/*.rs")],
+                &paths
+            ),
+            Scope::Files(
+                ["crates/domain/src/a.rs", "crates/domain/src/lib.rs"]
+                    .map(String::from)
+                    .into()
+            )
+        );
+        assert_eq!(
+            diff_scope(
+                &root,
+                "base",
+                &[String::from("crates/domain/src/**/*.rs")],
+                &BTreeSet::from([String::from("crates/domain/tests/a.rs")])
+            ),
+            Scope::Files(BTreeSet::new())
+        );
+    }
+    #[test]
+    fn bounded_parallelism_rejects_injected_or_excessive_values() {
+        assert_eq!(jobs_for(1, None), Ok(1));
+        assert_eq!(jobs_for(64, None), Ok(6));
+        assert_eq!(jobs_for(4, Some("2")), Ok(2));
+        for value in ["0", "3", "-1", " 1", "1;true"] {
+            assert!(
+                jobs_for(4, Some(value))
+                    .expect_err("reject invalid jobs")
+                    .contains("ASCII")
+            );
+        }
     }
 }

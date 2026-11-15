@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AllocationInstrument {
-    market: Market,
-    symbol: Symbol,
+    pub(crate) market: Market,
+    pub(crate) symbol: Symbol,
 }
 impl AllocationInstrument {
     #[must_use]
@@ -40,18 +40,20 @@ impl InstrumentClassification {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorAssignment {
-    instrument: AllocationInstrument,
-    classification: InstrumentClassification,
+    pub(crate) instrument: AllocationInstrument,
+    pub(crate) classification: InstrumentClassification,
+    pub(crate) membership: crate::SectorMembership,
 }
 impl SectorAssignment {
     #[must_use]
-    pub fn new(
-        instrument: &ResolvedOrderInstrument,
+    pub(crate) fn new<Identity: crate::sector_selection::AssignmentIdentity>(
+        instrument: &Identity,
         classification: InstrumentClassification,
     ) -> Self {
         Self {
-            instrument: AllocationInstrument::new(instrument),
+            instrument: instrument.allocation_identity(),
             classification,
+            membership: crate::SectorMembership::Unspecified,
         }
     }
     #[must_use]
@@ -68,11 +70,16 @@ pub enum SectorAssignmentsError {
     DuplicateInstrument,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SectorAssignments(BTreeMap<AllocationInstrument, InstrumentClassification>);
+pub struct SectorAssignments(
+    pub(crate) BTreeMap<AllocationInstrument, InstrumentClassification>,
+    pub(crate) BTreeMap<AllocationInstrument, crate::SectorMembership>,
+);
 impl SectorAssignments {
     pub fn try_new(assignments: Vec<SectorAssignment>) -> Result<Self, SectorAssignmentsError> {
         let mut values = BTreeMap::new();
+        let mut memberships = BTreeMap::new();
         for assignment in assignments {
+            memberships.insert(assignment.instrument.clone(), assignment.membership);
             if values
                 .insert(assignment.instrument, assignment.classification)
                 .is_some()
@@ -80,7 +87,7 @@ impl SectorAssignments {
                 return Err(SectorAssignmentsError::DuplicateInstrument);
             }
         }
-        Ok(Self(values))
+        Ok(Self(values, memberships))
     }
     #[must_use]
     pub fn classification(

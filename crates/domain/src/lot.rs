@@ -1726,7 +1726,7 @@ mod tests {
     #[test]
     fn corporate_split_inverse_preserves_whole_quantities_and_total_cost() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(1024))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u64..1000, 2_u64..1000, 1_u64..1000),
                 |(lots, new, cost)| {
@@ -1771,7 +1771,7 @@ mod tests {
     #[test]
     fn moving_average_pool_conserves_cost_for_generated_fractional_sales() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(3000))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     1_u64..100_000,
@@ -1798,7 +1798,7 @@ mod tests {
     #[test]
     fn fifo_generated_nondivisible_fees_and_fractional_quantities_conserve_cost() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(3000))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     1_u64..100_000,
@@ -2881,7 +2881,7 @@ mod tests {
     #[test]
     fn fifo_interleaved_fractional_buys_and_sales_match_independent_queue() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(1024))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &proptest::collection::vec((1_u64..1000, 1_u64..1_000_000, 1_u64..1000), 1..8),
                 |steps| {

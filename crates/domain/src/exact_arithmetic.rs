@@ -432,6 +432,32 @@ fn allocation_multiple(mut value: Magnitude, units: &AllocationUnits) -> Magnitu
     value
 }
 
+pub(crate) fn compare_sector_fractions(
+    left: Amount,
+    left_total: Amount,
+    right: Amount,
+    right_total: Amount,
+) -> std::cmp::Ordering {
+    let first = sector_scaled_product(left, right_total, product_scale(right, left_total));
+    let second = sector_scaled_product(right, left_total, product_scale(left, right_total));
+    first.cmp(&second)
+}
+fn sector_scaled_product(left: Amount, right: Amount, scale: Scale) -> Magnitude {
+    let mut result = Magnitude::product(left, right);
+    for _place in 0..scale.0 {
+        let mut carry = Limb(0);
+        for digit in &mut result.0 {
+            let total = u64::from(digit.0)
+                .wrapping_mul(10)
+                .wrapping_add(u64::from(carry.0));
+            let (low, high) = split_word(Word(total));
+            *digit = low;
+            carry = high;
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod allocation_remainder_tests {
     use super::{AllocationRemainder, allocation_parts};
@@ -466,7 +492,7 @@ mod allocation_remainder_tests {
     #[test]
     fn allocation_remainders_match_independent_integer_coefficients() {
         assert_integer_remainder(47, 29016);
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u32..1_000_000, 1_u32..1_000_000), |(seed, total)| {
                 assert_integer_remainder(seed.checked_rem(total).expect("양수 분모"), total);
                 Ok(())
@@ -847,7 +873,7 @@ mod tests {
 
     #[test]
     fn independent_decimal_integer_product_matches_all_public_multiplications() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(decimal_strategy(), decimal_strategy(), any::<bool>()),
                 |(left, right, usd)| {
@@ -939,7 +965,7 @@ mod tests {
             );
         }
 
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(decimal_strategy(), decimal_strategy()),
                 |(left, right)| {
@@ -1351,7 +1377,7 @@ mod tests {
         ] {
             let successes = std::cell::Cell::new(0_usize);
             let nonunit_successes = std::cell::Cell::new(0_usize);
-            TestRunner::new(Config::with_cases(4096))
+            TestRunner::new(Config::with_cases(testkit::property_cases_at_least(4096)))
                 .run(&samples(kind), |sample| {
                     let value = exercise_sample(&sample);
                     successes.set(

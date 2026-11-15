@@ -14,7 +14,12 @@ SignalBenchmark::from_candles는 길이 검증 결과에 기존 zip·봉인 블�
 
 ### D-40 섹터 선택
 
-구현 예정.
+구성 조회(SectorComposition)와 종목 마스터의 시장·심볼이 일치한 행만 후보가 된다. design의 섹터 상한·쏠림 절과 ADR 0049에는 다중 소속 선택 규칙이 없어, 지시문의 기본값인 LargestCompositionWeightThenSectorId를 채택한다. API가 별도 구성 비중을 주지 않으므로 같은 구성 조회의 해당 종목 시가총액 / 구성 전체 시가총액 합을 구성 비중으로 정의한다. 거래대금을 분모로 섞지 않는다. nullable 시가총액이 하나라도 없거나 합계가 0이면 MissingWeight다. 합을 정확히 표현할 수 없으면 Arithmetic이며 반올림한 값을 선택에 쓰지 않는다.
+
+후보 간 비중은 정확한 정수 계수의 교차 곱으로 비교한다. 기존 exact_arithmetic의 384비트 Magnitude를 재사용하는 자유 함수만 추가한다. 양의 96비트 계수 두 개의 곱(192비트 미만)에 최대 소수 56자리 정렬(187비트 미만)을 더해도 384비트 안이다. 이 범위에서 최상위 캐리는 항상 0이므로 전용 정수 자리 이동은 실패하지 않는 비교 연산이다. 범용 fallible 이동의 불가능한 오류를 반복 전파하지 않는다. 분자·분모의 스케일이 서로 다른 예와 MAX 계수의 캐리를 독립된 동률 예로 검사한다. 근사 나눗셈으로 동률을 만들지 않는다. 동률은 SectorId의 기존 Ord(대소문자를 구분한 식별자 순)로 작은 값을 택한다. 입력 순서와 무관하다.
+
+SectorAssignment::new는 crate 내부로 닫고 조회 식별과 기존 주문 식별을 내부 AssignmentIdentity 규약으로 받는다. 주문 전송 식별을 새로 만들거나 노출하지 않는다. 공개 생성 경로는 sector_assignment_from_compositions다. 반환값의 Single/Multiple 표지를 SectorAssignments로 수집한 뒤에도 별도 대응표로 보존한다. Unspecified는 내부 레거시 생성 결과의 표지이며 새 공개 경로는 반환하지 않는다. 기존 테스트 본문·단언은 바꾸지 않는다. 생성자가 crate 밖에서 쓰인 테스트는 현재 없다. 기존 impl의 최소 변경은 생성자 폐쇄·메타데이터 초기화와 목록의 메타데이터 수집뿐이다.
+
 
 ### D-41 추가 조회 사실
 
@@ -52,3 +57,25 @@ D-39의 최종 손 변형 결과는 아래 표에 기록한다. D-40·D-41은 �
 | D39-11 | ordered.len() < 2 -> ordered.len() < 1 | index_rejects_a_single_snapshot | 컴파일 성공·검출 |
 | D39-12 | regular.session().interval().end() >= candle.observation().collected_at() -> regular.session().interval().end() > candle.observation().collected_at() | finality_rejects_equal_close_and_late_bar_start | 컴파일 성공·검출 |
 | D39-13 | start > regular.session().interval().start() -> start < regular.session().interval().start() | index_range_and_arithmetic_errors_are_closed, finality_rejects_equal_close_and_late_bar_start, index_rejects_a_single_snapshot, index_path_rejects_invalid_period_and_limits, index_path_preserves_points_and_rejects_unconfirmed_or_misaligned_inputs, index_path_rejects_invalid_sources, index_returns_match_independent_integer_ratio | 컴파일 성공·검출 |
+
+### D-40 검증과 손 변형
+
+집중 테스트 6개 통과, 독립 정수 교차 곱 속성 대조 4096회. 새 파일 집중 줄 커버리지 244/244(100%). 외부 crate의 허용 경로는 컴파일 성공, 기존 SectorAssignment::new는 E0624로 거부된다. 기존 테스트 본문 변경과 test-diff 예외는 없다. 새 의존성과 허용 목록 항목도 없다.
+
+| 번호 | 바꾼 것 | 검출 테스트 | 결과 |
+|---|---|---|---|
+| D40-01 | order == Ordering::Less -> order == Ordering::Greater | fractional_weights_and_wide_products_preserve_exact_order, largest_weight_wins_ties_use_id_and_multiple_membership_survives, selection_matches_independent_integer_cross_products | 컴파일 성공·검출 |
+| D40-02 | candidate.id > previous.id -> candidate.id < previous.id | largest_weight_wins_ties_use_id_and_multiple_membership_survives | 컴파일 성공·검출 |
+| D40-03 | membership = SectorMembership::Multiple -> membership = SectorMembership::Single | largest_weight_wins_ties_use_id_and_multiple_membership_survives | 컴파일 성공·검출 |
+| D40-04 | let mut membership = SectorMembership::Single -> let mut membership = SectorMembership::Multiple | largest_weight_wins_ties_use_id_and_multiple_membership_survives | 컴파일 성공·검출 |
+| D40-05 | if !sectors.insert -> if sectors.insert | fractional_weights_and_wide_products_preserve_exact_order, largest_weight_wins_ties_use_id_and_multiple_membership_survives, missing_weights_membership_duplicates_and_unknown_master_are_closed, selection_matches_independent_integer_cross_products | 컴파일 성공·검출 |
+| D40-06 | <= rust_decimal::Decimal::ZERO -> < rust_decimal::Decimal::ZERO | missing_weights_membership_duplicates_and_unknown_master_are_closed | 컴파일 성공·검출 |
+| D40-07 | member.symbol() == symbol -> member.symbol() != symbol | fractional_weights_and_wide_products_preserve_exact_order, largest_weight_wins_ties_use_id_and_multiple_membership_survives, selection_matches_independent_integer_cross_products | 컴파일 성공·검출 |
+| D40-08 | 섹터 교차 곱의 십진 자리 이동 배율 10을 9로 변경 | fractional_weights_and_wide_products_preserve_exact_order | 컴파일 성공·검출 |
+| D40-09 | 섹터 교차 곱의 앞자리 캐리 기여를 0으로 변경 | fractional_weights_and_wide_products_preserve_exact_order | 컴파일 성공·검출 |
+
+D-40 인계: T-09는 종목의 전체 후보 섹터 조회를 공급한다. Single/Multiple은 전달된 조회 집합에서 관측한 소속 수이며 전체 섹터 조회의 완전성을 인증하지 않는다. 시가총액이 누락되면 비중이나 소속을 추측하지 않는다. A-09는 선택 결과와 다중 소속 표지를 함께 소비한다. ETF·펀드를 구성 주식으로 분해하지 않는 ADR 0043의 원칙은 유지한다.
+
+## H-46 실행 규약
+
+master 8ba1f6abf3b1050017b649d1d1a5fd63104a6363의 H-46을 받았다. 이번 작업의 속성 테스트는 testkit::property_cases()를 사용한다. 기본 실행은 256회, 전체 검사 환경은 4096회이며, 앞의 4096회 및 손 변형 기록은 실제 당시 실행 결과다. domain에는 H-46이 이미 내부 testkit 개발 의존성을 추가했으므로 별도 의존성이나 패키지를 더하지 않는다. 작업 브랜치 검사는 check-fast를 사용하고 검사 계획이 요구하는 승격은 그대로 따른다.

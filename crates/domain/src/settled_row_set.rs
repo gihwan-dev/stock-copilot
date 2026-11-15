@@ -602,7 +602,7 @@ mod tests {
         );
     }
     proptest! {
-        #![proptest_config(ProptestConfig::with_cases(256))]
+        #![proptest_config(ProptestConfig::with_cases(testkit::property_cases()))]
         #[test]
         fn mixed_windows_filters_pending_and_missing_history_match_independent_counts(
             old in collection::vec((1_u8..29, 0_u8..12, proptest::bool::ANY), 0..24),

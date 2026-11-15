@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn wide_words_match_independent_u128_arithmetic() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     proptest::arbitrary::any::<u64>(),

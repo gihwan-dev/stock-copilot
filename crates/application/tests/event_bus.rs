@@ -379,7 +379,7 @@ mod tests {
         let _report = builder.build().publish(DomainEvent::SettingsChanged);
     }
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn arbitrary_publications_equal_each_subscribers_filtered_sequence(
             published in proptest::collection::vec(proptest::sample::select(events()),0..64),

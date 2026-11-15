@@ -540,3 +540,10 @@ pub use limit_price_policy::{
 mod index_benchmark;
 mod limit_price_revision;
 pub use index_benchmark::{finalize_index_day, index_benchmark_series};
+
+mod sector_selection;
+pub use sector_selection::{
+    SectorMembership, SectorSelectionError, SectorSelectionRule,
+    sector_assignment_from_compositions, sector_assignments_membership, sector_membership,
+    sector_selection_rule,
+};

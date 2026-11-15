@@ -938,7 +938,7 @@ mod tests {
     }
     #[test]
     fn appended_later_judgments_preserve_selected_prefix_and_count() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&generated_rows(), |rows| {
                 let before = selected(&rows);
                 let latest = rows
@@ -963,7 +963,7 @@ mod tests {
     }
     #[test]
     fn selected_estimates_are_pairwise_non_overlapping() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&generated_rows(), |rows| {
                 let counted = selected(&rows);
                 proptest::prop_assert!(
@@ -985,7 +985,7 @@ mod tests {
     }
     #[test]
     fn input_permutations_and_offset_spellings_preserve_canonical_results() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&generated_rows(), |rows| {
                 let expected = selected(&rows);
                 let mut reversed = rows;
@@ -1004,7 +1004,7 @@ mod tests {
     }
     #[test]
     fn selection_matches_independent_elimination_reference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&generated_rows(), |rows| {
                 proptest::prop_assert_eq!(selected(&rows), reference(&rows));
                 Ok(())

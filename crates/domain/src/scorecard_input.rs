@@ -784,7 +784,7 @@ pub(crate) mod tests {
             ready(&expected.cards()[0]).expect("30건").brier().as_str(),
             "0.3600"
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u8..100, 0_u8..2), |(percent, reverse)| {
                 let mut input = baseline.clone();
                 input.push(observation(31, percent, &late[0]));

@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn arbitrary_decimals_preserve_exact_arithmetic_and_currency() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     decimals(),
@@ -363,7 +363,7 @@ mod tests {
                 Err(AmountError::NotRepresentable)
             );
         }
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&decimals(), |value| {
                 let text = value.to_string();
                 let parsed = Amount::parse(&AmountInput::new(&text)).expect("canonical decimal");
@@ -637,7 +637,7 @@ mod oracle_tests {
 
     #[test]
     fn independent_256_bit_reference_matches_exact_sum_and_difference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&inputs(), |(left, right)| {
                 let first = Money::new(Amount::new(left), Currency::Usd);
                 let second = Money::new(Amount::new(right), Currency::Usd);

@@ -469,7 +469,7 @@ mod tests {
         );
     }
     proptest::proptest! {
-        #![proptest_config(proptest::test_runner::Config::with_cases(4096))]
+        #![proptest_config(proptest::test_runner::Config::with_cases(testkit::property_cases()))]
         #[test]
         fn index_returns_match_independent_integer_ratio(old in 1_u32..10000, new in 1_u32..10000) {
             let fixture=fixture_window(vec![],("100","100"),("100","100"),SettlementWindow::try_new(date(2),date(5)).expect("기간"));
