@@ -25,6 +25,15 @@ mod tests {
     fn composition_root_constructs_the_fixed_product_endpoint_without_sending_requests() {
         let endpoint = broker_toss::TossEndpoint::production();
         assert!(format!("{endpoint:?}").contains("Production"));
+        let spec: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string("../../../docs/toss-openapi-1.2.28.json").expect("spec"),
+        )
+        .expect("JSON");
+        let expected_origin = spec["servers"][0]["url"].as_str().expect("origin");
+        assert_eq!(
+            format!("{endpoint:?}"),
+            format!("TossEndpoint {{ origin: {expected_origin:?}, mode: Production }}")
+        );
         let client = broker_toss::TossHttpClient::new(&endpoint).expect("product configuration");
         assert_eq!(format!("{client:?}"), "TossHttpClient(<redacted>)");
     }

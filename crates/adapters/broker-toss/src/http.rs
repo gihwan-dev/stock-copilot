@@ -57,7 +57,7 @@ impl fmt::Debug for TossHttpClient {
 pub struct RawResponse {
     status: u16,
     headers: ResponseHeaders,
-    body: Vec<u8>,
+    body: SecretValue,
 }
 
 impl fmt::Debug for RawResponse {
@@ -78,6 +78,13 @@ impl fmt::Debug for ResponseHeaders {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ResponseHeaders(<redacted>)")
     }
+}
+
+fn sensitive_header(value: &SecretValue) -> Result<HeaderValue, TossHttpError> {
+    let mut header = HeaderValue::try_from(value.as_exposed_secret())
+        .map_err(|_error| TossHttpError::InvalidCredential)?;
+    header.set_sensitive(true);
+    Ok(header)
 }
 
 fn header(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -116,7 +123,7 @@ impl RawResponse {
         &self.headers
     }
     #[must_use]
-    pub fn body(&self) -> &[u8] {
+    pub const fn body(&self) -> &SecretValue {
         &self.body
     }
     #[must_use]
@@ -138,7 +145,7 @@ impl RawResponse {
         )
     }
     fn error_body(&self) -> TossErrorBody {
-        match std::str::from_utf8(&self.body) {
+        match std::str::from_utf8(self.body.as_exposed_secret()) {
             Ok(body) => TossErrorBody::parse(body),
             Err(_error) => TossErrorBody::parse("invalid-json"),
         }
@@ -164,21 +171,26 @@ fn classify_status(status: u16) -> HttpStatus {
     }
 }
 
+fn configured_client(mode: EndpointMode) -> reqwest::ClientBuilder {
+    let builder = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(30))
+        .http1_only();
+    match mode {
+        EndpointMode::Production => builder.https_only(true),
+        EndpointMode::Loopback => builder
+            .https_only(false)
+            .dns_resolver(Arc::new(LoopbackResolver)),
+    }
+}
+
 impl TossHttpClient {
     pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> {
         let origin =
-            Url::parse(&endpoint.origin).map_err(|_error| TossHttpError::InvalidEndpoint)?;
-        let mut builder = Client::builder()
-            .https_only(endpoint.mode == EndpointMode::Production)
-            .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(30))
-            .http1_only();
-        if endpoint.mode == EndpointMode::Loopback {
-            builder = builder.dns_resolver(Arc::new(LoopbackResolver));
-        }
-        let client = builder
+            Url::parse(endpoint.origin()).map_err(|_error| TossHttpError::InvalidEndpoint)?;
+        let client = configured_client(endpoint.mode())
             .build()
             .map_err(|_error| TossHttpError::Configuration)?;
         Ok(Self { client, origin })
@@ -190,16 +202,13 @@ impl TossHttpClient {
         token: &SecretValue,
     ) -> Result<RawResponse, TossHttpError> {
         let url = request.url(&self.origin);
-        let mut authorization =
-            HeaderValue::try_from([b"Bearer ", token.as_exposed_secret()].concat().as_slice())
-                .map_err(|_error| TossHttpError::InvalidCredential)?;
-        authorization.set_sensitive(true);
+        let authorization_bytes =
+            SecretValue::new([b"Bearer ", token.as_exposed_secret()].concat());
+        let authorization = sensitive_header(&authorization_bytes)?;
         let builder = self.client.get(url).header(AUTHORIZATION, authorization);
         let authenticated = match request.account() {
             Some(account) => {
-                let mut value = HeaderValue::try_from(account.as_exposed_secret())
-                    .map_err(|_error| TossHttpError::InvalidCredential)?;
-                value.set_sensitive(true);
+                let value = sensitive_header(account)?;
                 builder.header("X-Tossinvest-Account", value)
             }
             None => builder,
@@ -222,21 +231,28 @@ pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawRespon
         remaining: header(response.headers(), "X-RateLimit-Remaining"),
         reset: header(response.headers(), "X-RateLimit-Reset"),
     };
-    let mut body = Vec::new();
+    let mut chunks = Vec::new();
+    let mut length = 0_usize;
     while let Some(chunk) = response
         .chunk()
         .await
         .map_err(|_error| TossHttpError::Transport)?
     {
-        if body.len().saturating_add(chunk.len()) > 8_388_608 {
+        if length.saturating_add(chunk.len()) > 8_388_608 {
             return Err(TossHttpError::ResponseTooLarge);
         }
-        body.extend_from_slice(&chunk);
+        length = length.saturating_add(chunk.len());
+        chunks.push(SecretValue::new(chunk.to_vec()));
     }
     Ok(RawResponse {
         status,
         headers,
-        body,
+        body: SecretValue::new(
+            chunks
+                .iter()
+                .flat_map(|chunk| chunk.as_exposed_secret().iter().copied())
+                .collect(),
+        ),
     })
 }
 
@@ -247,38 +263,51 @@ mod tests {
         classify_status,
     };
     use crate::endpoint::EndpointMode;
-    use crate::{ReadRequest, TossEndpoint, map_toss_read_error, map_toss_token_error};
+    use crate::{ReadRequest, TossEndpoint};
     use application::{HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
     use reqwest::dns::Resolve;
 
     #[test]
     fn product_configuration_rejects_plaintext_before_connecting() {
-        let endpoint = TossEndpoint {
-            origin: "http://127.0.0.1:1".to_owned(),
-            mode: EndpointMode::Production,
+        let probe = testkit::ConnectionProbe::bind().expect("listener");
+        let endpoint = TossEndpoint::local(probe.port().expect("port")).expect("local endpoint");
+        let client = TossHttpClient {
+            client: super::configured_client(EndpointMode::Production)
+                .build()
+                .expect("client"),
+            origin: reqwest::Url::parse(endpoint.origin()).expect("local URL"),
         };
-        let client = TossHttpClient::new(&endpoint).expect("client");
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("runtime");
-        assert_eq!(
-            runtime
-                .block_on(client.get(
-                    &ReadRequest::new(crate::ReadRoute::Accounts),
-                    &SecretValue::new(b"fake".to_vec())
-                ))
-                .expect_err("plaintext"),
-            TossHttpError::Transport
-        );
-        assert_eq!(
-            TossHttpClient::new(&TossEndpoint {
-                origin: "invalid origin".to_owned(),
-                mode: EndpointMode::Production
+        let outcome = runtime
+            .block_on(async {
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(1),
+                    client.get(
+                        &ReadRequest::new(crate::ReadRoute::Accounts),
+                        &SecretValue::new(b"fake".to_vec()),
+                    ),
+                )
+                .await
             })
-            .expect_err("invalid"),
-            TossHttpError::InvalidEndpoint
+            .expect("scheme refusal before I/O wait");
+        assert_eq!(outcome.expect_err("plaintext"), TossHttpError::Transport);
+        assert_eq!(
+            probe.observe().expect("listener status"),
+            testkit::ConnectionObservation::NoConnection
         );
+    }
+
+    #[test]
+    fn actual_builder_has_the_documented_timeouts_and_http_version() {
+        for mode in [EndpointMode::Production, EndpointMode::Loopback] {
+            let config = format!("{:?}", super::configured_client(mode));
+            assert!(config.contains("connect_timeout: 5s"), "{config}");
+            assert!(config.contains("timeout: 30s"), "{config}");
+            assert!(config.contains("http1_only: true"), "{config}");
+        }
     }
 
     #[test]
@@ -319,40 +348,90 @@ mod tests {
         ] {
             assert_eq!(classify_status(code), expected);
         }
-        for body in [
-            b"{\"error\":{\"code\":\"invalid-token\"}}".to_vec(),
-            b"{\"error\":\"invalid_client\"}".to_vec(),
-            vec![255],
-            Vec::new(),
-        ] {
-            let response = RawResponse {
+    }
+
+    #[test]
+    fn raw_error_body_preserves_known_code_and_distinct_diagnostic_ids() {
+        let response = RawResponse {
+            status: 401,
+            headers: ResponseHeaders::default(),
+            body: SecretValue::new(br#"{"error":{"code":"invalid-token","requestId":"req-731","referenceId":"ref-419"}}"#.to_vec()),
+        };
+        let mapped = response.read_error(ReadEndpoint::Accounts, RetryDelay::Unknown);
+        assert_eq!(
+            mapped.port_error().kind(),
+            application::PortErrorKind::InvalidRequest(application::RequestRejection::InvalidToken)
+        );
+        assert_eq!(mapped.code_recognition(), crate::CodeRecognition::Known);
+        assert_eq!(
+            mapped
+                .diagnostics()
+                .request_id()
+                .expect("request ID")
+                .as_str(),
+            "req-731"
+        );
+        assert_eq!(
+            mapped
+                .diagnostics()
+                .reference_id()
+                .expect("reference ID")
+                .as_str(),
+            "ref-419"
+        );
+    }
+
+    #[test]
+    fn raw_oauth_and_malformed_bodies_keep_independent_error_classification() {
+        let token = RawResponse {
+            status: 401,
+            headers: ResponseHeaders::default(),
+            body: SecretValue::new(
+                br#"{"error":"invalid_client","requestId":"oauth-51"}"#.to_vec(),
+            ),
+        };
+        assert_eq!(
+            token
+                .token_error(ReadEndpoint::Accounts, RetryDelay::Unknown)
+                .port_error()
+                .kind(),
+            application::PortErrorKind::AccessDenied(application::AccessDenial::InvalidCredentials)
+        );
+        for bytes in [vec![255], Vec::new()] {
+            let malformed = RawResponse {
                 status: 401,
                 headers: ResponseHeaders::default(),
-                body,
+                body: SecretValue::new(bytes),
             };
-            let parsed = response.error_body();
             assert_eq!(
-                response.read_error(ReadEndpoint::Accounts, RetryDelay::Unknown),
-                map_toss_read_error(
-                    ReadEndpoint::Accounts,
-                    HttpStatus::Unauthorized,
-                    parsed.clone(),
-                    RetryDelay::Unknown
-                )
+                malformed
+                    .read_error(ReadEndpoint::Accounts, RetryDelay::Unknown)
+                    .port_error()
+                    .kind(),
+                application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Schema)
             );
             assert_eq!(
-                response.token_error(ReadEndpoint::Accounts, RetryDelay::Unknown),
-                map_toss_token_error(
-                    ReadEndpoint::Accounts,
-                    HttpStatus::Unauthorized,
-                    parsed,
-                    RetryDelay::Unknown
-                )
+                malformed
+                    .read_error(ReadEndpoint::Accounts, RetryDelay::Unknown)
+                    .code_recognition(),
+                crate::CodeRecognition::Absent
             );
         }
         assert_eq!(
             format!("{:?}", ResponseHeaders::default()),
             "ResponseHeaders(<redacted>)"
+        );
+    }
+    #[test]
+    fn secret_headers_are_sensitive_and_reject_line_injection() {
+        let header = super::sensitive_header(&SecretValue::new(b"fake-header-913".to_vec()))
+            .expect("header");
+        assert!(header.is_sensitive());
+        assert_eq!(format!("{header:?}"), "Sensitive");
+        assert_eq!(
+            super::sensitive_header(&SecretValue::new(b"bad\r\nvalue".to_vec()))
+                .expect_err("invalid"),
+            TossHttpError::InvalidCredential
         );
     }
 }

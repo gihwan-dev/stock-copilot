@@ -20,7 +20,7 @@ mod tests {
             .block_on(client.get(&request, &token))
             .expect("response");
         assert_eq!(response.status(), 429);
-        assert_eq!(response.body(), b"raw!");
+        assert_eq!(response.body().as_exposed_secret(), b"raw!");
         assert_eq!(response.headers().retry_after(), Some("17"));
         assert_eq!(response.headers().limit(), Some("23"));
         assert_eq!(response.headers().remaining(), Some("11"));
@@ -93,7 +93,7 @@ mod tests {
                 &SecretValue::new(b"k&=\xFF".to_vec()),
             ))
             .expect("token");
-        assert_eq!(response.body(), b"token");
+        assert_eq!(response.body().as_exposed_secret(), b"token");
         let request = String::from_utf8(server.finish().expect("received bytes")).expect("utf8");
         assert!(request.starts_with("POST /oauth2/token HTTP/1.1\r\n"));
         assert!(
@@ -125,7 +125,7 @@ mod tests {
             .block_on(client.get(&request, &SecretValue::new(b"bearer-937".to_vec())))
             .expect("response");
         assert_eq!(response.status(), 204);
-        assert_eq!(response.body(), b"");
+        assert_eq!(response.body().as_exposed_secret(), b"");
         assert_eq!(response.headers().retry_after(), None);
         let received = String::from_utf8(server.finish().expect("received bytes")).expect("utf8");
         assert!(

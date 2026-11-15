@@ -166,3 +166,51 @@ mktemp -d로 만든 복사본에서 최초 기준 실행 및 복구 실행을 �
 최초 정상 커밋 훅은 fresh-build·commit-guard를 통과하고 전체 check로 승격했다. 프런트 검사와 Rust 빌드 뒤 cargo-deny가 추가 배포 실행 파일 두 개(proptest의 테스트 보조 스크립트, tracing의 매크로 테스트 보조 스크립트)를 지적해 실패했다. 이 실패를 숨기거나 훅을 끄지 않았다. 개별 경로·SHA-256 등록으로 고쳤고 전체 정상 훅을 다시 실행한다. 별도 조립 루트 좁은 테스트는 최초에 frontendDist 부재로 컴파일이 실패했으며 정상 전체 검사의 프런트 빌드 뒤 결과와 구분한다.
 
 macOS 활성 normal/build 의존 그래프에서 rustls 0.23.46, rustls-platform-verifier 0.7.0, security-framework 3.7.0, AWS-LC 1.19.0/0.47.0을 확인했다. OpenSSL, native-tls, ring, quinn은 이 활성 그래프에 없다. 잠금 전체 목록과 실제 macOS 활성 그래프를 구분한다.
+
+## 리뷰 1 수정 결정
+
+독립 Opus 지적 11건을 새 Codex가 비판했다. 추가 생성 경로 검출 누락과 토큰 응답의 일반 바이트 소유를 차단으로 수용했다. include 단독 검사 누락은 전체 source-check가 이미 막으므로 전체 하네스 우회로 해석하지 않는다. 나머지 검증 누락과 문서 사유를 보완한다. 판정표는 docs/reviews/T-18.md에 있다.
+
+endpoint의 필드는 같은 crate의 다른 모듈에서도 조립할 수 없게 닫았다. 지정 상수와 Production 변형의 참조는 endpoint.rs의 정식 inherent production 생성자 안으로 한정한다. Default·추가 생성자·상수 반환 함수를 음성 자료로 고정한다. 이 가시성은 조립 파일에서의 생성자 참조 제한을 대체하지 않고 보완한다.
+
+원시 본문은 읽기/토큰 구분 없이 SecretValue로 보관한다. 수신 중 각 소유 조각도 SecretValue이며 오류나 크기 초과로 중단돼도 소유 조각은 삭제된다. body()는 SecretValue 참조를 돌려주므로 바이트 파싱은 as_exposed_secret()를 명시해야 한다. T-02의 JSON 파싱·토큰 만료 관리는 구현하지 않는다. HTTP SDK 내부의 버퍼 복사까지 지울 수 있다고 주장하지 않는다.
+
+HTTPS 회귀는 실제 열린 루프백 수신기에 연결이 오지 않아야 통과한다. 타임아웃은 실제 빌드에 사용하는 reqwest ClientBuilder의 설정을 설치된 고정 버전의 Debug로 직접 확인한다. 실제 5초·30초 경과 또는 OS TCP 연결 지연을 실측한 테스트라고 주장하지 않는다. 본문 상한은 가짜 서버로 정확히 8MiB 허용·다음 1바이트 거부를 확인한다. 오류 매핑 연결은 알려진 코드와 서로 다른 진단 ID를 독립 결과로 단언한다.
+
+외부 소비자 컴파일 실험은 현재 소스 경로를 의존하는 독립 crate로 실행한다. 작업 공간 잠금 사본을 쓰고 offline cargo check로 컴파일해 파일 수정 시각으로 rlib을 고르지 않는다.
+
+## 추가 인계
+
+- T-12/T-13: 새 계약은 toss-smoke의 직접 production 참조와 호스트 리터럴을 허용하지 않는다. 현재 toss-smoke는 루프백만 구성할 수 있다. 실제 연결 명령을 만들기 전에 메인이 별도 조립 진입점을 승인할지 또는 앱 조립 경로를 재사용할지 결정하고 해당 작업의 문서·구조 검사 계약을 함께 갱신해야 한다. 기존 tasks H-22와 ADR 0007 문구도 그때 정합화한다. 이번 작업은 승인된 한 파일 제한을 임의로 넓히지 않는다.
+- T-03: 현재 Transport는 원본 오류나 URL·본문을 보관하지 않는 닫힌 전송 실패다. 재시도/사용자 표시를 구현할 때 보안 실패와 일시 장애의 추가 분류가 필요한지 검토한다. 현 범위에 재시도 정책을 만들지 않는다.
+
+## 보강 손 변형 기록
+
+추가 구조 검사 손 변형의 최초 실행은 검출 4, 생존 2, 컴파일 불가 1이었다. 두 경로 상수는 테스트가 구현 상수를 공유해 놓쳤다. 문서의 고정 경로를 독립 기대값으로 검사하도록 보강했고, 필드가 사용되지 않아 컴파일 불가였던 호스트 변형은 필드를 유지하는 잘못된 호스트 판정으로 바꿨다. 재실행 7개는 모두 컴파일 후 검출됐고 기준·복구도 통과했다. 컴파일 불가를 검출 수에 포함하지 않는다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 29 | 조립 파일 경로 교환 | arch_check::source::endpoint::tests | 검출 |
+| 30 | 상수 허용 파일 경로 교환 | arch_check::source::endpoint::tests | 검출 |
+| 31 | 매크로 생성자 위치 조건 반전 | arch_check::source::endpoint::tests | 검출 |
+| 32 | 호스트 검사 문자열 교환 | arch_check::source::endpoint::tests | 검출 |
+| 33 | 상수 이름 판정 반전 | arch_check::source::endpoint::tests | 검출 |
+| 34 | 비공개 대신 공개 상수 허용 | arch_check::source::endpoint::tests | 검출 |
+| 35 | 상수 파일 또는 조건을 그리고로 교환 | arch_check::source::endpoint::tests | 검출 |
+
+## 리뷰 수정 손 변형과 좁은 검사
+
+수정본에서 경로·쿼리·ID·포트 손 변형 28개를 다시 실행해 전부 컴파일 후 검출했고 기준/복구도 통과했다. 구조 검사 7개도 보강된 독립 경로 기대값을 포함한 현재 소스로 재실행해 전부 검출했다. 다음 8개는 리뷰 지적을 직접 깨뜨리는 추가 변형이며 모두 실제 컴파일 후 지정 테스트가 실패했다. 각 실행의 기준/복구 테스트도 통과했다. 고유 손 변형은 총43개다. 동일 변형 재실행을 새 개수로 세지 않는다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 36 | 제품 HTTPS 제한 해제 | product_configuration_rejects_plaintext_before_connecting | 검출 |
+| 37 | 연결 제한 5초를 1초로 변경 | actual_builder_has_the_documented_timeouts_and_http_version | 검출 |
+| 38 | 전체 제한 30초를 1초로 변경 | actual_builder_has_the_documented_timeouts_and_http_version | 검출 |
+| 39 | 정확히 8MiB 거부 | body_limit_includes_exactly_eight_mib_and_rejects_the_next_byte | 검출 |
+| 40 | 8MiB 다음 바이트 허용 | body_limit_includes_exactly_eight_mib_and_rejects_the_next_byte | 검출 |
+| 41 | 비밀 헤더 sensitive 해제 | secret_headers_are_sensitive_and_reject_line_injection | 검출 |
+| 42 | 오류 본문을 항상 Missing으로 바꿈 | raw_error_body_preserves_known_code_and_distinct_diagnostic_ids | 검출 |
+| 43 | 추가 생성자와 상수 사용 검사를 무력화 | secondary_constructors_and_origin_exports_are_rejected | 검출 |
+
+수정 후 broker-toss nextest 57/57, xtask endpoint 검사 5/5, 기존 구조 고정 자료 및 규칙 요소 제거 검사 6/6이 통과했다. 관련 clippy, source-check, arch-check도 통과했다. 이 결과를 다음 정상 커밋 전체 검사나 독립 재리뷰와 혼동하지 않는다.

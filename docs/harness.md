@@ -473,7 +473,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 
 | 겹 | 방법 |
 |---|---|
-| 1. 구조 | `broker-toss`는 봉인된 `TossEndpoint`를 주입받는다. 공개 `TossEndpoint::production()`은 인자가 없고, 실제 주소 상수는 `crates/adapters/broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 하나다. 호출·별칭·함수 참조는 `apps/desktop/src-tauri/src/main.rs`에만 허용한다. 다른 crate의 특정 파일을 허용하는 Rust 가시성이 없어 컴파일 차단이 아닌 `xtask arch-check`로 강제한다. 테스트와 `testkit`은 `TossEndpoint::local(port)`로 IPv4 루프백만 만든다. 임의 URL 생성자는 없다. 실제 호스트 리터럴은 해당 상수 밖에서 실패한다 |
+| 1. 구조 | `broker-toss`는 봉인된 `TossEndpoint`를 주입받는다. 공개 `TossEndpoint::production()`은 인자가 없고, 실제 주소 상수는 `crates/adapters/broker-toss/src/endpoint.rs`의 `PRODUCTION_ORIGIN` 하나다. 호출·별칭·함수 참조는 `apps/desktop/src-tauri/src/main.rs`에만 허용한다. 다른 crate의 특정 파일을 허용하는 Rust 가시성이 없어 컴파일 차단이 아닌 `xtask arch-check`로 강제한다. 테스트와 `testkit`은 `TossEndpoint::local(port)`로 IPv4 루프백만 만든다. 임의 URL 생성자는 없다. 상수와 Production 참조를 정식 생성자 안으로 제한해 추가 생성자나 상수 반환 경로를 거부한다. 실제 호스트 리터럴은 해당 상수 밖에서 실패한다 |
 | 2. HTTP 클라이언트 | 제품 클라이언트는 `https_only(true)`. 테스트 클라이언트는 루프백만 허용하는 `dns_resolver`를 주입한다. cfg 분기가 아니라 생성자 주입이다 |
 | 3. OS | macOS: 루트 `.cargo/config.toml`의 `target.aarch64-apple-darwin.runner`로 모든 테스트 실행 파일을 `sandbox-exec` 네트워크 차단 프로필 안에서 돌린다. 자식 프로세스(가짜 AI CLI 포함)도 물려받는다. 루프백과 Unix 소켓은 열어 둔다. Linux CI: 컨테이너 `--network none`이나 `unshare -n` |
 

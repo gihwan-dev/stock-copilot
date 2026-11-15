@@ -59,7 +59,9 @@ mod tests {
 }
 
 mod http_server;
-pub use http_server::{LocalHttpServer, compile_probe, proxy_probe};
+pub use http_server::{
+    ConnectionObservation, ConnectionProbe, LocalHttpServer, check_consumer, proxy_probe,
+};
 
 pub fn test_executable() -> std::io::Result<std::path::PathBuf> {
     std::env::current_exe()

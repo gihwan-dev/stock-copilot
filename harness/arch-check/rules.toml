@@ -200,13 +200,13 @@ externals = [
     "proc-macro2",
 ]
 through = "reqwest"
-reason = "HTTP를 쓸 수 있는 세 crate는 HTTP·TLS·소켓 계열을 reqwest를 통해서만 들인다(architecture.md 3.2 HTTP 클라이언트, R-15 2.7의 reqwest 0.13.5 ClientBuilder)"
+reason = "HTTP 세 crate의 전송·TLS는 reqwest 경유만 허용한다. security-framework는 macOS 플랫폼 검증, syn/proc-macro2는 전체 대상 JNI 및 기능 통합의 절차 매크로 경로다 (T-18, architecture 3.2)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
 externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework"]
 through = "tauri"
-reason = "tauri 2.12.5가 Android·iOS 대상에서만 쓰는 reqwest와 그 의존(hyper-util → hyper, socket2), 그리고 tauri → tokio → socket2. cargo metadata는 모든 대상을 그래프에 넣는다"
+reason = "tauri의 Android·iOS reqwest 의존은 전체 대상 metadata에 포함된다. broker-toss가 켠 reqwest rustls 기능의 작업 공간 통합으로 TLS와 플랫폼 검증도 이 경로에 나타난다. 직접 HTTP/TLS 의존을 허용하지 않는다 (T-18)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
@@ -415,4 +415,4 @@ reason = "A-02 직렬화 trait 부재의 컴파일 단언 전용 개발 의존�
 crates = ["broker-toss"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
-reason = "T-18: reqwest 실행용 tokio 런타임의 소켓 전이 의존성"
+reason = "T-18: tokio 런타임의 socket2 및 작업 공간 tokio-macros 기능 통합으로 생기는 syn/proc-macro2 경로"

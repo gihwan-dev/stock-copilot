@@ -19,6 +19,8 @@ fn production_reference(tokens: TokenStream) -> bool {
 struct EndpointCheck<'a> {
     relative: &'a str,
     needle: &'a str,
+    endpoint_impl: bool,
+    constructor: bool,
     findings: BTreeSet<Rule>,
 }
 
@@ -47,6 +49,14 @@ impl EndpointCheck<'_> {
                 {
                     self.findings.insert(Rule::TossProduction);
                 }
+                TokenTree::Ident(ident)
+                    if self.relative == ENDPOINT
+                        && !self.constructor
+                        && (ident.unraw() == "PRODUCTION_ORIGIN"
+                            || ident.unraw() == "Production") =>
+                {
+                    self.findings.insert(Rule::TossProduction);
+                }
                 TokenTree::Ident(_) | TokenTree::Punct(_) => {}
             }
         }
@@ -54,6 +64,30 @@ impl EndpointCheck<'_> {
 }
 
 impl<'ast> Visit<'ast> for EndpointCheck<'_> {
+    fn visit_item_use(&mut self, i: &'ast syn::ItemUse) {
+        if self.relative == ENDPOINT && !self.constructor {
+            use quote::ToTokens;
+            self.macro_tokens(i.to_token_stream());
+        }
+        visit::visit_item_use(self, i);
+    }
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        let outer = self.endpoint_impl;
+        self.endpoint_impl = i.trait_.is_none()
+            && if let syn::Type::Path(value) = i.self_ty.as_ref() {
+                value.path.is_ident("TossEndpoint")
+            } else {
+                false
+            };
+        visit::visit_item_impl(self, i);
+        self.endpoint_impl = outer;
+    }
+    fn visit_impl_item_fn(&mut self, i: &'ast syn::ImplItemFn) {
+        let outer = self.constructor;
+        self.constructor = self.endpoint_impl && i.sig.ident.unraw() == "production";
+        visit::visit_impl_item_fn(self, i);
+        self.constructor = outer;
+    }
     fn visit_lit_str(&mut self, i: &'ast LitStr) {
         self.host(&i.value());
     }
@@ -71,6 +105,14 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
             && i.segments
                 .iter()
                 .any(|segment| segment.ident.unraw() == "production")
+        {
+            self.findings.insert(Rule::TossProduction);
+        }
+        if self.relative == ENDPOINT
+            && !self.constructor
+            && i.segments.iter().any(|part| {
+                part.ident.unraw() == "PRODUCTION_ORIGIN" || part.ident.unraw() == "Production"
+            })
         {
             self.findings.insert(Rule::TossProduction);
         }
@@ -106,6 +148,8 @@ pub(super) fn check(
     let mut scan = EndpointCheck {
         relative,
         needle,
+        endpoint_impl: false,
+        constructor: false,
         findings: BTreeSet::new(),
     };
     for item in &file.items {
@@ -215,5 +259,37 @@ mod tests {
             findings(ENDPOINT, "fn f() { custom!(TossEndpoint::production()); }"),
             BTreeSet::from([Rule::TossProduction])
         );
+    }
+    #[test]
+    fn literal_contract_locations_are_independent_of_the_checker_constants() {
+        let reference = "fn f() { let factory = broker_toss::TossEndpoint::production; }";
+        assert!(findings("apps/desktop/src-tauri/src/main.rs", reference).is_empty());
+        assert_eq!(
+            findings("apps/desktop/src-tauri/src/lib.rs", reference),
+            BTreeSet::from([Rule::TossProduction])
+        );
+        let origin = "const PRODUCTION_ORIGIN: &str = \"https://openapi.HOST\";";
+        assert!(findings("crates/adapters/broker-toss/src/endpoint.rs", origin).is_empty());
+        assert_eq!(
+            findings("crates/adapters/broker-toss/src/other.rs", origin),
+            BTreeSet::from([Rule::TossHost])
+        );
+    }
+
+    #[test]
+    fn secondary_constructors_and_origin_exports_are_rejected() {
+        for source in [
+            "impl Default for TossEndpoint { fn default() -> Self { Self { origin: PRODUCTION_ORIGIN.to_owned(), mode: EndpointMode::Production } } }",
+            "use self::PRODUCTION_ORIGIN as O; pub fn leaked() -> &'static str { O }",
+            "use self::EndpointMode::Production as P; impl Default for TossEndpoint { fn default() -> Self { Self { origin: String::new(), mode: P } } }",
+            "pub fn real_origin() -> &'static str { PRODUCTION_ORIGIN }",
+            "impl TossEndpoint { pub fn extra() -> Self { Self { origin: PRODUCTION_ORIGIN.to_owned(), mode: EndpointMode::Production } } }",
+        ] {
+            assert_eq!(
+                findings(ENDPOINT, source),
+                BTreeSet::from([Rule::TossProduction])
+            );
+        }
+        assert!(findings(ENDPOINT, "impl TossEndpoint { pub fn production() -> Self { Self { origin: PRODUCTION_ORIGIN.to_owned(), mode: EndpointMode::Production } } }").is_empty());
     }
 }

@@ -79,19 +79,42 @@ pub fn proxy_probe(
         .status()
 }
 
-pub fn compile_probe(
-    input: &std::path::Path,
-    library: &std::path::Path,
-    dependencies: &std::path::Path,
-    output: &std::path::Path,
+pub fn check_consumer(
+    manifest: &std::path::Path,
+    target: &std::path::Path,
 ) -> io::Result<std::process::Output> {
-    std::process::Command::new("rustc")
-        .arg(input)
-        .args(["--edition=2024", "--emit=metadata", "--extern"])
-        .arg(format!("broker_toss={}", library.display()))
-        .arg("-L")
-        .arg(format!("dependency={}", dependencies.display()))
-        .arg("-o")
-        .arg(output)
+    std::process::Command::new("cargo")
+        .args(["check", "--offline", "--quiet", "--manifest-path"])
+        .arg(manifest)
+        .arg("--target-dir")
+        .arg(target)
         .output()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionObservation {
+    NoConnection,
+    Connected,
+}
+
+#[derive(Debug)]
+pub struct ConnectionProbe(TcpListener);
+impl ConnectionProbe {
+    pub fn bind() -> io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        Ok(Self(listener))
+    }
+    pub fn port(&self) -> io::Result<u16> {
+        Ok(self.0.local_addr()?.port())
+    }
+    pub fn observe(&self) -> io::Result<ConnectionObservation> {
+        match self.0.accept() {
+            Ok((_stream, _address)) => Ok(ConnectionObservation::Connected),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                Ok(ConnectionObservation::NoConnection)
+            }
+            Err(error) => Err(error),
+        }
+    }
 }
