@@ -3980,6 +3980,10 @@
     "src/shared/ds/Numbers.tsx": {
       "row": "숫자",
       "expect": []
+    },
+    "src/shared/ds/Markdown.tsx": {
+      "row": "원시 타입",
+      "expect": []
     }
   }
 }
