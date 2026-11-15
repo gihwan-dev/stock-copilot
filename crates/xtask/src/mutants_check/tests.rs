@@ -243,3 +243,48 @@ fn mutation_profile_keeps_debug_assertions_and_overflow_checks() {
         );
     }
 }
+
+#[test]
+fn support_only_workspace_changes_mark_all_nightly_targets() {
+    let globs = [
+        "crates/domain/src/**/*.rs",
+        "crates/application/src/**/*.rs",
+        "crates/order-execution/src/**/*.rs",
+    ]
+    .map(String::from);
+    let all = [
+        "crates/domain",
+        "crates/application",
+        "crates/order-execution",
+    ]
+    .map(String::from)
+    .into();
+    for path in [
+        "Cargo.lock",
+        "Cargo.toml",
+        ".cargo/mutants.toml",
+        ".config/nextest.toml",
+        "harness/rules.json",
+        "crates/xtask/src/main.rs",
+        "justfile",
+        "lefthook.yml",
+        ".github/workflows/nightly.yml",
+    ] {
+        assert_eq!(
+            super::touched_crates(&globs, &BTreeSet::from([String::from(path)])),
+            all,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        super::touched_crates(
+            &globs,
+            &BTreeSet::from([String::from("crates/domain/tests/a.rs")])
+        ),
+        BTreeSet::from([String::from("crates/domain")])
+    );
+    assert_eq!(
+        super::touched_crates(&globs, &BTreeSet::from([String::from("docs/design.md")])),
+        BTreeSet::new()
+    );
+}

@@ -196,13 +196,35 @@ pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
         .collect()
 }
 
+fn workspace_support(path: &str) -> bool {
+    [
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+        "justfile",
+        "lefthook.yml",
+    ]
+    .contains(&path)
+        || [
+            ".cargo/",
+            ".config/",
+            "harness/",
+            "crates/xtask/",
+            ".github/",
+        ]
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
+}
+
 pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BTreeSet<String> {
     globs
         .iter()
         .map(|glob| crate_of(glob))
         .filter(|directory| {
             let prefix = format!("{directory}/");
-            changed.iter().any(|path| path.starts_with(&prefix))
+            changed
+                .iter()
+                .any(|path| path.starts_with(&prefix) || workspace_support(path))
         })
         .collect()
 }

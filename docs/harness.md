@@ -776,7 +776,7 @@ Claude 적대적 리뷰어는 `isolation: worktree`(정의 파일)로 임시 작
 | 승인된 변경 | 기존 테스트를 바꾸는 커밋은 사용자 서명 커밋만 CI를 통과한다 (7.6과 같은 검증) | CI |
 | 구현을 베낀 테스트 | 변이 테스트로 드러난다(베낀 테스트는 변이를 죽이지 못한다). 테스트 입력 리터럴을 구현에서 다시 쓰는지 찾는 xtask 검사는 효과가 확인되지 않아 두지 않는다 | `just check-full`, 리뷰 |
 
-커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 `check` 전체에 전달한다. 평소에는 `merge-base HEAD refs/heads/master`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 로컬 `master` 끝을 쓴다.
+커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 선택된 전체 또는 fast 검사에 전달한다. 평소에는 `merge-base HEAD refs/heads/master`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 로컬 `master` 끝을 쓴다.
 
 - `MERGE_HEAD`가 있으면 소문자 40자리 ID인 내용 줄 하나가 정확히 로컬 `master` 끝이어야 한다. 마지막 줄바꿈 없음·LF·CRLF를 받는다. 다른 형식·다중 부모에는 기존 기준을 쓰고, 읽기 실패는 오류로 중단한다.
 - `MERGE_HEAD` 파일이 없으면 `master` 끝을 SHA로 고정해 실행한 `git merge-tree --write-tree HEAD <끝>`이 충돌 없이 성공하고, 나온 트리 ID가 `git write-tree`의 인덱스 트리 ID와 같아야 한다. 일반 커밋에서도 같은 조건으로 검사한다. `master`가 HEAD의 조상이면 인덱스가 HEAD와 같은 경우에만 참이며 기존 분기점과 같다. 비조상이면 결과 트리 전체가 작업 HEAD와 `master`를 합친 내용이므로 `master` 대비 작업 브랜치 변경이 모두 심사된다.
@@ -865,7 +865,7 @@ H-41 수정 2차에서 패치는 모든 줄을 분류하고 미분류 줄을 거
 
 ### H-46 검사 단계
 
-이름 있는 refs/heads/ 아래의 비-master 브랜치만 커밋에서 fast를 선택한다. 브랜치 판정 실패·detached HEAD·refs/heads/ 밖의 symbolic HEAD와 master는 전체다. Git 경로·설정 환경 변수는 기존 정규화 경계를 사용한다. fresh-build와 commit-guard는 기존 훅 순서를 유지하고 push-check와 CI는 전체 검사를 유지한다.
+ASCII 이름의 refs/heads/ 아래 비-master 브랜치만 커밋에서 fast를 선택한다. 대소문자만 다른 master 표기와 비ASCII 이름은 파일시스템 별칭을 보수적으로 전체 검사에 보낸다. 브랜치 판정 실패·detached HEAD·refs/heads/ 밖의 symbolic HEAD와 master는 전체다. Git 경로·설정 환경 변수는 기존 정규화 경계를 사용한다. fresh-build와 commit-guard는 기존 훅 순서를 유지하고 push-check와 CI는 전체 검사를 유지한다.
 
 fast는 바뀐 crate와 일반·빌드·개발 역의존 crate를 전이적으로 검사한다. Cargo 설정, 잠금 파일, 하네스, xtask, justfile, 훅, CI 및 해석할 수 없는 경로는 전체 검사로 승격한다. 제품 경로만 바뀌어도 정적 구조 검사는 전체에 적용한다. 커버리지는 전체 검사에 남긴다. 작업 브랜치 커밋이 전체 검사에서 실패할 수 있으며 master 병합 때 이를 잡는다.
 

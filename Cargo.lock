@@ -51,6 +51,7 @@ name = "application"
 version = "0.1.0"
 dependencies = [
  "domain",
+ "proptest",
 ]
 
 [[package]]
@@ -177,6 +178,7 @@ dependencies = [
 name = "broker-toss"
 version = "0.1.0"
 dependencies = [
+ "application",
  "broker-toss-schema",
  "domain",
  "serde",

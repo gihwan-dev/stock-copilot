@@ -712,6 +712,67 @@ pub(crate) fn buy_signal_interval_from(
     schedule_at(task, start, calendars).map(|value| value.interval)
 }
 
+pub fn virtual_exit_adjustment(
+    signal: &crate::VirtualExitSignal,
+    basis: AdjustmentBasis,
+    actions: &[OutcomeCorporateAction],
+) -> Result<OutcomeAdjustment, OutcomeUnavailable> {
+    let at = signal.entry().observed_at();
+    if *basis.as_timestamp() < at
+        || actions
+            .iter()
+            .any(|fact| fact.instrument() != signal.task().volatility().instrument())
+    {
+        return Err(OutcomeUnavailable::Adjustment);
+    }
+    let relevant = actions
+        .iter()
+        .filter(|fact| fact.action().date() > at.offset_calendar_date())
+        .cloned()
+        .collect::<Vec<_>>();
+    OutcomeAdjustment::from_actions(signal.task(), basis, &relevant).map(|mut adjustment| {
+        adjustment.reference_at = at;
+        adjustment
+    })
+}
+pub(crate) fn virtual_exit_inputs<'a>(
+    signal: &crate::VirtualExitSignal,
+    calendars: &[MarketCalendar],
+    adjustment: &OutcomeAdjustment,
+    candles: &'a [Candle],
+) -> Result<
+    (
+        TimeInterval,
+        Vec<crate::virtual_exit::VirtualExitSession>,
+        Vec<&'a Candle>,
+    ),
+    OutcomeUnavailable,
+> {
+    let task = signal.task();
+    let schedule = schedule_at(task, signal.entry().observed_at(), calendars)?;
+    if schedule.interval.end() != signal.maturity() {
+        return Err(OutcomeUnavailable::Calendar);
+    }
+    let bars = validated_candles(task, adjustment, candles, &schedule)?;
+    if bars
+        .iter()
+        .any(|bar| bar.values().volume().as_decimal().is_zero())
+    {
+        return Err(OutcomeUnavailable::MissingCandles);
+    }
+    let sessions = schedule
+        .rows
+        .iter()
+        .filter_map(|row| {
+            regular(row).map(|interval| crate::virtual_exit::VirtualExitSession {
+                date: row.date(),
+                interval,
+            })
+        })
+        .collect();
+    Ok((schedule.interval, sessions, bars))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::candle::tests::{at, price, series};
