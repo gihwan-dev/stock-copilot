@@ -91,3 +91,22 @@ mod error_class;
 pub use error_class::{
     BugDiagnostic, ClassifiedError, ErrorClass, UserAction, classify_port_error,
 };
+
+mod system_port_error;
+pub use system_port_error::{SystemFailure, SystemPort, SystemPortError, WriteCompleted};
+mod clock;
+pub use clock::Clock;
+mod notifier;
+pub use notifier::{Notification, Notifier};
+mod secret_store;
+pub use secret_store::{SecretKey, SecretStore, SecretValue};
+pub mod user_presence;
+pub use user_presence::{ConfirmationOutcome, ConfirmationRequest};
+mod audit_log;
+pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
+mod storage_ports;
+pub use storage_ports::{
+    EstimateRepository, MarketDataRepository, NewsRepository, PortfolioRepository,
+    ProposalRepository, SettingsRepository, SignalRepository, ThesisRepository,
+    TransactionRepository, ValuationRepository,
+};

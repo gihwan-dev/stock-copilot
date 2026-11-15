@@ -9,3 +9,4 @@ workspace = true
 
 [dependencies]
 domain = { path = "../domain" }
+secrecy = "=0.10.3"

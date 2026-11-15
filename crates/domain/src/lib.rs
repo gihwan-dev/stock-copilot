@@ -458,3 +458,6 @@ pub use market_ranking::RankingResponseInput;
 pub use market_ranking::{RankingCautionFilter, RankingChange, RankingContinuity};
 pub use sector_composition::{SectorAmount, SectorMember, SectorStockRow};
 pub use sector_composition::{SectorComposition, SectorCompositionScope};
+
+mod storage_records;
+pub use storage_records::{RiskSettingsChange, SyncOutcome, SyncRecord};

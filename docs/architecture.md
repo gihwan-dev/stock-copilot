@@ -305,7 +305,7 @@ stock-copilot/
 | `AiProvider` | `run(RunSpec)`, `resume`, `usage`, `interrupt`, `verify_isolation` | `ai-claude-code`, `ai-codex` | 실행 파일 경로를 주입받는다(R-15). `RunSpec`에 실행 종류가 들어간다 |
 | 저장소 포트 | 도메인 객체 저장·조회 | `store-sqlite` | - |
 | `AuditLog` | 추가만 되는 기록, 변조 탐지 | `store-sqlite` | 6.3 |
-| `SecretStore` | 비밀 값 | `secrets-keychain` | 비밀은 `secrecy` 래퍼. `Debug`, `Display`, `Serialize`, `Clone` 없음(R-16 Q4) |
+| `SecretStore` | 비밀 값 | `secrets-keychain` | 비밀은 `secrecy` 래퍼. `Debug`는 값과 길이에 의존하지 않는 고정 문자열만 출력하고 `Display`·`Serialize`·`Clone`은 없다(R-16 Q4) |
 | `Clock` | 현재 벽시계 시각 | 시스템 | 테스트는 `SteppedClock` |
 | `Notifier` | macOS 알림 | `src-tauri/platform`(`tauri-plugin-notification` 2.8.1, Rust에서만 호출) | - |
 | `UserPresence` | `confirm(ConfirmationRequest) → Confirmed / Denied / Unavailable` | `platform-macos` | 요청은 주문 요약 또는 위험 설정 변경. 주문은 네이티브 요약 창 + macOS 본인 확인, 위험 설정 변경은 네이티브 확인 창만(SEC-12, P-9). 4.5 |
