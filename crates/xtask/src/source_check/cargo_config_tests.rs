@@ -26,12 +26,10 @@ const DOCUMENTED_FORBIDDEN_MUTANTS_KEYS: [&str; 6] = [
     "additional_cargo_args",
 ];
 
-const MUTATION_TARGET_GLOBS: [&str; 5] = [
+const MUTATION_TARGET_GLOBS: [&str; 3] = [
     "crates/domain/src/**/*.rs",
     "crates/order-execution/src/**/*.rs",
-    "crates/application/src/error_class.rs",
-    "crates/application/src/order_gate.rs",
-    "crates/application/src/order_gate/**/*.rs",
+    "crates/application/src/**/*.rs",
 ];
 
 #[derive(Debug)]

@@ -1,61 +1,68 @@
-# H-45: 테스트 속성 해석과 오류 분류의 변이 범위
+# H-45: 테스트 속성과 실제 crate의 추가 전용 변이 범위
 - 상태: 초안
 
 ## 결정
 
-ADR 0054의 닫힌 속성 표에 아래 형태만 추가한다. 기준·현재 Graph::read가 성공해야 추가 전용 판정으로 진행하는 순서는 유지한다.
+ADR 0054의 추가 전용 규칙을 실제 domain에서도 적용하도록 그래프 입력과 위치 의존 판정을 고친다. 변경 전·후 그래프의 합집합, 외향 전이 폐쇄·내향 직접 참조, 해석 실패 시 전체 확장, 기존 테스트 보호, 생존·시간 초과 정책은 유지한다.
 
-| 속성 형태 | 안전 논증 |
-|---|---|
-| should_panic | 테스트 실행기의 패닉 기대 여부를 표시한다. 다른 앱 항목을 새로 참조하지 않는다 |
-| should_panic(expected = "문자열") | 단일 expected 키와 문자열 리터럴만 허용한다. 문자열은 패닉 메시지 부분 비교용 자료이며 코드 경로로 해석되지 않는다 |
-| ignore | 테스트 실행기의 기본 실행 여부를 표시하며 참조를 주입하지 않는다 |
-| ignore = "문자열" | 문자열은 무시 이유 자료다. 다른 앱 항목을 참조하지 않는다 |
+### A: 그래프와 통합 테스트의 경계
 
-일반 문자열과 raw 문자열을 허용한다. should_panic 목록은 괄호만 허용하고 MetaNameValue 하나를 완전히 파싱한다. 키는 expected 하나이며 값은 Expr::Lit의 Lit::Str만 허용한다. ignore의 목록형은 허용하지 않는다. 매크로 호출·경로·괄호 식·바이트 문자열·숫자·불린·알 수 없는 키·중복 키·뒤 쉼표·빈 목록·대괄호/중괄호·한정 경로는 보수적으로 전체 범위로 돌린다. 표준 의미보다 좁은 허용이다.
+snapshot은 crate 전체 Rust 파일을 보존한다. Graph::read에 전달할 때만 정확히 crate/src/ 아래로 한정한다. 통합 테스트는 별도 crate여서 src가 직접 참조할 수 없다. #[path]가 우회하면 기존 그래프 해석 실패로 전체 확장하고 include!는 기존 source-check가 금지한다. 두 전제는 새 고정 회귀로 검사한다.
 
-이 판정은 참조 그래프를 만들 수 있는지에 관한 것이다. 테스트의 실행 여부를 승인하지 않는다. source-check의 ignore 금지와 기존 테스트 변경 금지는 유지한다. 새 테스트 속성 외의 기존 허용 표는 넓히지 않는다.
+Additions의 prior_ids와 Symbols 입력에는 tests/를 계속 넣는다. 통합 테스트가 사용하던 이름을 새 공개 이름으로 가리는 등록은 여전히 거부한다. tests/·examples/·benches/·build.rs·Cargo.toml·지원 자료가 변경되면 그래프 계산 전에 기존 규칙대로 전체 확장한다. src 내부의 mod.rs·미지 속성·해석 불가 매크로는 종전대로 전체 확장한다.
 
-## 바꾼 것과 유지한 것
+### B: 위치 의존의 의미
 
-.cargo/mutants.toml의 공통 대상에 application/src/error_class.rs를 추가한다. ADR 0063에서 인계한 포트 오류 분류는 사용자 조치·대기·버그·데이터 없음과 재시도 대기 자료를 결정한다. 주문 게이트만 검사해서는 이 분류의 오류를 탐지하지 못하므로 변경분과 밤 전체 변이에 모두 포함한다. 동일 목록을 사용하는 0/4~3/4 분할은 자동으로 새 파일의 변이를 나누므로 CI나 justfile 변경은 필요 없다.
+기존 소스의 모든 토큰 그룹을 재귀적으로 읽는다. line!·file!·module_path!·column!은 식별자 뒤 !와 토큰 그룹이 실제로 있을 때만 위치 의존이다. 일반 변수·클로저 매개변수 line, file, module_path와 line != 0은 위치 의존이 아니다.
 
-고정 대상 목록을 검증하는 기존 테스트의 상수에 새 파일을 추가한다. 메인이 승인한 범위대로 any_change_in_a_target_crate_mutates_its_whole_scope의 기대 목록에도 같은 파일 한 항목만 추가한다. 그 밖의 기존 본문과 단언은 유지한다. 회귀는 실제 domain을 읽지 않는 고정 Sources 입력에 새 함수로 추가한다. 제품 코드·제품 테스트·승인된 대상 목록 외 기존 mutants_check 테스트 본문·생존 허용 목록·조각 수·시간 제한·jobs는 바꾸지 않는다. docs/tasks.md·docs/progress.md와 H-44 파일은 수정하지 않는다.
+Location의 한정 경로와 track_caller 속성, 위치 매크로·Location import 및 재내보내기를 감지한다. import의 원래 이름을 읽으므로 별칭도 포함한다. std/core 자체 별칭, panic 모듈 별칭 및 표준 glob import는 보수적으로 위치 의존으로 본다. 다른 파일의 alias chain도 최초 위치 import가 기존 소스에 남으므로 감지한다. 매크로 안의 매크로 호출과 macro_rules 본문도 토큰 재귀로 읽는다. use 토큰을 완전히 해석하지 못하면 위치 의존으로 판정한다.
 
-## ADR 0054와의 관계
+이 판정은 정밀한 Rust 이름 해석기가 아니다. 다른 namespace의 Location 경로, 동명 항목 import 등 확신할 수 없는 입력은 과선택할 수 있다. 알 수 없는 매크로·속성은 별도의 기존 그래프 규칙도 전체 확장한다.
 
-0054의 미등록 should_panic 때문에 전체 fallback이 발생한다는 미해결을 닫는다. 참조 토큰 수집·전후 그래프 합집합·추가 전용 검증·불확실성 fallback은 그대로다. 모든 domain 변경이 좁아진다고 주장하지 않는다. 기존 항목 변경과 불확실한 입력은 여전히 넓게 선택될 수 있다.
+### 속성
 
-## 검증
+should_panic은 인자 없음 또는 괄호 안 expected = 문자열 리터럴 하나만 허용한다. ignore는 인자 없음 또는 = 문자열 리터럴만 허용한다. 일반·raw 문자열 모두 접미사가 없어야 한다. 문자열은 패닉 메시지 부분 비교나 무시 이유 자료이며 앱 참조를 생성하지 않는다. 근거는 [Rust Reference](https://doc.rust-lang.org/reference/attributes/testing.html)다.
 
-고정 fixture에서 허용 여섯 형태는 lib 등록과 새 파일 추가만 선택하며, 비리터럴·알 수 없는 키·중복·잘못된 구분자 등은 select_sources 오류로 crate fallback을 요구한다. 별도 실측과 손 변형의 명령·결과는 작업 사본 target/h45에 둔다.
+경로·매크로·비문자열·괄호 식·알 수 없는 키·중복 키·뒤 쉼표·빈 목록·다른 구분자·한정 속성 경로·접미사 문자열은 보수적으로 전체 확장한다. 제품 소스의 ignore 금지는 유지한다. 새 파일 내부의 속성과 기존 테스트 모듈에 추가한 새 테스트의 속성도 고정 입력으로 검사한다.
 
-## 미해결
+### application 대상과 검출력의 한계
 
-표준 속성 전체나 허용하지 않은 구문의 정밀 해석은 다루지 않는다. 뒤 쉼표 등 추가 형태가 필요하면 안전 근거와 독립 회귀를 먼저 추가한다. ignore가 제품 소스에서 필요하다는 결정은 하지 않는다.
+실제 파일이 없는 application/order_gate.rs·order_gate/**의 대상을 application/src/**/*.rs로 바꾼다. 현재 lib.rs·observations.rs·port_error.rs·error_class.rs와 앞으로 추가할 유스케이스·포트가 자동 포함된다. 기존 테스트 변경은 메인이 승인한 대상 기대 목록·상수 값 변경만 한다. 네 조각과 CI·justfile 실행 방식은 유지한다.
 
+error_class.rs의 현재 생성 변이 2개는 Default::default()로 본문을 대체하며 모두 ErrorClass: Default 미구현(E0277)으로 unviable이다. 따라서 오류별 매핑 검증은 crates/application/tests/error_class.rs의 exhaustive expected_class·원인별 기대 함수와 every_leaf_matches_the_decision_table에 의존한다. 자동 변이에서 missed 0이라는 결과가 매핑 검출력을 증명하지 않는다.
 
-## 실측과 검증 결과
+application 전체의 실제 실행은 총 13개 중 caught 1·unviable 12·missed 0·timeout 0이다. 새로 포함된 11개는 caught 1·unviable 10이다. 잡힌 변이는 HoldingsObservation::holdings가 빈 슬라이스를 돌려주도록 바꾼 것이다. 미검출이 없어 제품 테스트를 추가하지 않았다. 기존 제품 테스트 본문과 생존 허용 목록은 바꾸지 않았다.
 
-Rust Reference의 테스트 속성 설명에 따르면 should_panic의 expected 문자열은 패닉 메시지의 부분 문자열 비교 자료이며 ignore의 문자열은 무시 이유다: https://doc.rust-lang.org/reference/attributes/testing.html . 허용 표는 요청된 형태만 수용하며 표준의 다른 형태를 자동으로 추가하지 않는다.
+## 회귀와 우회 입력
 
-시작 기준 856cad43913e3275e835f9c2151d801c32d7cc29의 전체 check는 1,058개 테스트와 커버리지 실행 722개, coverage-check 및 test-diff를 통과했다. 이후 master 257bd4c94999034745f75fb7df2c1fb545138919를 정상 병합 훅으로 받았다.
+실제 제품 소스를 읽는 영구 그래프 테스트는 없으므로 새 회귀는 고정 Sources를 쓴다. tests/x/mod.rs와 |line| 클로저가 있는 crate에 should_panic 테스트를 가진 새 파일과 mod 등록을 추가하면 새 파일만 선택한다. 실제 최신 domain을 읽은 별도 일회성 실측도 같은 결과를 단언한다.
 
-다음 값은 각 병합의 첫 부모와 해당 병합 판 사이 domain 변경을 실제 git 객체에서 읽고, 동일한 scope/graph/additions 소스의 select_sources를 실행한 뒤 해당 판의 git archive에서 cargo mutants --no-config --list --json으로 열거한 결과다. 변이 본체를 실행한 수가 아니다. 일회성 계산기는 target/h45/audit에 있고 제품 소스를 변경하지 않는다.
+A의 전체 확장을 유지해야 하는 입력 10개는 tests/x/mod.rs·tests/other.rs·build.rs·tests/renamed.rs·tests/deleted.rs·tests/nested/data.rs·examples/demo.rs·benches/speed.rs·Cargo.toml·settings.json 변경이다. 추가로 통합 테스트의 기존 이름을 새 공개 타입으로 가리는 등록, src의 #[path]·include! 우회를 검사한다.
 
-| 변경 | 기준 첫 부모 | 수정 전 파일/변이 | 수정 후 파일/변이 |
+B의 새 테스트는 line/file/module_path/column 호출, 표준 한정 호출, 중첩 column!, macro alias import, core 재내보내기, group import, Location 타입·panic 모듈·std 자체 별칭, panic self 별칭, raw line 별칭, 표준 glob, Location::caller, track_caller, macro_rules 본문, 본문 안 alias import, 해석 불가 use 메타변수, alias chain을 각각 위치 의존으로 직접 단언하고 추가 전용 판정을 막는다. 다른 파일의 재내보내기도 별도로 검사한다.
+
+weak_test_example_leaves_surviving_mutants는 이 작업 사본의 관련 테스트 실행에서 통과했다. 리뷰어 임시 사본의 실패 원인은 재현되지 않아 확정하지 않았다. 해당 기존 테스트는 수정하지 않았다.
+
+## 미해결과 유지한 경계
+
+원인 A(통합 테스트 mod.rs 유입)와 B(일반 line 식별자 오인)는 해결했다. 반면 src 내부의 모듈·매크로 불확실성과 실제 위치 의존·이름 가리기·기존 impl 변경 등 기존 보수적 규칙은 유지한다. 모든 변경이 추가 전용이라는 주장을 하지 않는다.
+
+새 의존성·새 검사 끄기·제품 소스 변경은 없다. docs/tasks.md·docs/progress.md·H-44 작업 파일은 수정하지 않는다.
+
+## 실제 범위와 분할 실측
+
+로컬 master는 257bd4c94999034745f75fb7df2c1fb545138919이며 git merge --no-ff --no-edit master는 이미 포함된 상태로 끝났다. 실제 domain의 이 판에 새 h45_scope_probe.rs(should_panic 테스트 포함)와 lib 끝의 mod 한 줄만 추가한 입력을 선택기에 주어 Ok({새 파일})를 확인했다. 영구 회귀는 위 고정 입력을 사용한다.
+
+세 변경의 기준은 각 head와 위 master의 실제 merge-base다. 선택기 소스 사본으로 변경 전·후 git 객체를 읽고, 각 head의 git archive에서 cargo mutants --no-config --list --json으로 열거했다. 변이 본체 실행 수가 아니다.
+
+| 변경 head | 기준 | 수정 전 파일/변이 | 수정 후 파일/변이 |
 |---|---|---|---|
-| D-17 09583ca386f869a5c7bdbb6a20e6d920ef98bd22 | 792a35b5da51e9a8fff146793a172d1c2e210fc1 | 90 / 2860 | 89 / 2852 |
-| D-25 c1b3a5992a3047649d31f56bae8539d1c62f1287 | 6a33bc1b1ec4ef9dd055b60f10c0f93aba350a20 | 99 / 3040 | 99 / 3040 |
-| D-36 6e966736fd33f1aa9143c595835016be0fbb5dd7 | c1b3a5992a3047649d31f56bae8539d1c62f1287 | 102 / 3066 | 102 / 3066 |
-| D-18 257bd4c94999034745f75fb7df2c1fb545138919 | edd57f84fc68b66a417291424006f6f463b67938 | 114 / 3533 | 114 / 3533 |
+| D-35 0e2d0ccfff2aef4ba314bb646d920857a6a74a76 | 856cad43913e3275e835f9c2151d801c32d7cc29 | 4 / 71 | 4 / 71 |
+| D-37 59bac7204792b0920bf3586402cbe856c50285d1 | 257bd4c94999034745f75fb7df2c1fb545138919 | 118 / 3762 | 117 / 3761 |
+| D-29 506a953696530563f280b1c6e8096eb70a87745b | 856cad43913e3275e835f9c2151d801c32d7cc29 | 113 / 3631 | 113 / 3631 |
 
-D-17・D-25・D-36은 수정 후 그래프 읽기에 성공한다. D-25와 D-36은 기존 항목 수정과 추가 전용 판정 실패 때문에 그래프 범위가 넓게 유지된다. D-36에서 새 세 파일과 lib 등록만 분리한 진단 입력도 broker_account.rs와 cash_observation.rs가 Graph, cash_observation_failure.rs만 OnlyFile, lib.rs는 Registration으로 판정됐다. 이 진단 입력은 실제 전체 diff와 구분한다.
+D-35는 이전 판에도 좁았고 그대로 유지한다. D-37은 mod.rs 전체 fallback이 해소되고 lib 등록도 Registration이 됐으나 investor_flow·market_index·market_ranking의 테스트 도우미 num이 기존 예약 이름과 충돌해 Graph로 판정되므로 넓게 남는다. D-29는 bootstrap의 Cluster·sample, signal_return_contract의 task·candle, signal_return_scenarios의 task·sample이 기존 예약 이름과 충돌해 Graph로 판정되며 나머지 추가 항목과 혼합 선택된다. 이 예약 집합은 타입·외부 경로·별칭의 가림을 막는 기존 과대 근사다. 이 별도 보수성은 A·B 수정 범위에서 약하게 바꾸지 않는다.
 
-최신 D-18은 D-34에서 추가된 tests/order_gate_support/mod.rs 때문에 Graph::read의 기존 mod.rs 확장 규칙에 걸린다. should_panic 문제는 고쳤지만 최신 domain의 모든 추가 전용 작업이 좁아졌다고 주장하지 않는다. 다른 보수적 규칙을 약하게 바꾸지 않았다.
+현재 공통 설정은 전체 3546개, 네 조각 887·887·887·885개이며 합집합이 전체와 같고 서로 겹치지 않는다. application 13개는 0/4에 들어간다. 실측·변이·반례 로그는 작업 사본 target/h45-review에 둔다.
 
-새 속성 분기를 제거하거나 넓히는 손 변형 15개는 동일한 scope/graph/additions 소스와 새 고정 테스트 두 함수를 복사한 독립 scratch에서 모두 컴파일 후 테스트 실패로 검출했다. 원복 뒤 두 테스트가 통과했다. 분기 제거, bare/payload 거부, 임의 키/값/구분자 허용, name-value/list 과허용, 임의 리터럴/경로/매크로/괄호 식 허용을 각각 검사했다. target/h45/manual.json에 소스 SHA-256과 개별 결과를 기록했다. 기존 테스트 본문을 손 변형하지 않았다.
-
-error_class.rs 단독 cargo-mutants 실행은 2개 모두 ErrorClass: Default 미구현(E0277)으로 unviable이었다. baseline은 통과했고 missed 0, timeout 0, caught 0이다. 두 변이는 ClassifiedError::class와 classify_port_error의 본문을 Default::default()로 대체한다. 테스트가 분기 변이를 잡았다는 증거로 해석하지 않는다. 제품 테스트나 생존 허용 목록을 추가하지 않았다.
-
-남는 범위 문제는 최신 테스트 지원 mod.rs와 기존 추가 전용 검증의 보수성이다. 이 작업에서는 별도 그래프 정책 변경을 하지 않는다.
+최종 손 변형 15개는 실제 xtask 소스에서 그래프 src 필터·기준/현재 필터·기존 이름 보존·위치 탐지·호출 구분·토큰 재귀·import·column·Location·track_caller·별칭 원래 이름·미해석 use·문자열 접미사 검사를 제거하거나 넓혀 실행했다. 모두 컴파일 후 새 회귀 테스트 실패로 검출했고 원복 SHA-256을 확인했다. 실험에는 cargo-mutants와 같은 cap-lints를 사용했으며 커밋된 검사 끄기는 추가하지 않았다.

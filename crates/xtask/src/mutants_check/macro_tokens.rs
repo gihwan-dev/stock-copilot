@@ -104,10 +104,10 @@ fn string_literal(value: &syn::Expr) -> bool {
     let syn::Expr::Lit(literal) = value else {
         return false;
     };
-    let syn::Lit::Str(_) = &literal.lit else {
+    let syn::Lit::Str(text) = &literal.lit else {
         return false;
     };
-    true
+    text.suffix().is_empty()
 }
 
 pub(super) fn identifiers(tokens: TokenStream) -> BTreeSet<String> {
