@@ -1,14 +1,18 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        DeliveryFailureCause, EventBus, EventDeliveryFailure, EventPublisher, EventSubscriber,
-        SubscriberError,
+        DeliveryFailure, DeliveryReport, EventBus, EventBusBuilder, EventSubscriber,
+        SubscriberFailure,
     };
     use domain::{DomainEvent, DomainEventKind};
     use proptest::{prop_assert_eq, proptest, test_runner::Config};
     use std::{
-        collections::{BTreeMap, BTreeSet},
-        sync::mpsc::{Receiver, Sender, channel},
+        collections::BTreeSet,
+        sync::{
+            Arc,
+            mpsc::{Receiver, Sender, channel},
+        },
+        thread,
     };
 
     #[derive(Debug)]
@@ -30,58 +34,30 @@ mod tests {
             self.receiver.try_iter().collect()
         }
     }
-    #[derive(Debug)]
     struct RecordingSubscriber(Sender<DomainEvent>);
     impl EventSubscriber for RecordingSubscriber {
-        fn on_event(
-            &self,
-            event: &DomainEvent,
-            _publisher: &mut EventPublisher<'_>,
-        ) -> Result<(), SubscriberError> {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
             match self.0.send(event.clone()) {
                 Ok(()) => Ok(()),
-                Err(_closed) => Err(SubscriberError::Unavailable),
+                Err(_closed) => Err(SubscriberFailure::Unavailable),
             }
         }
     }
-
-    #[derive(Debug, Clone, Copy)]
-    enum Reaction {
-        Success,
-        Reject,
-        Panic,
+    struct Unavailable;
+    impl EventSubscriber for Unavailable {
+        fn on_event(&self, _event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            Err(SubscriberFailure::Unavailable)
+        }
     }
-    #[derive(Debug)]
-    struct Reactive {
-        outgoing: BTreeMap<DomainEventKind, Vec<DomainEvent>>,
-        reaction: Reaction,
-    }
-    impl EventSubscriber for Reactive {
-        fn on_event(
-            &self,
-            event: &DomainEvent,
-            publisher: &mut EventPublisher<'_>,
-        ) -> Result<(), SubscriberError> {
-            for next in self
-                .outgoing
-                .get(&expected_kind(event))
-                .into_iter()
-                .flatten()
-            {
-                publisher.publish(next.clone());
-            }
-            match self.reaction {
-                Reaction::Success => Ok(()),
-                Reaction::Reject => Err(SubscriberError::Unavailable),
-                Reaction::Panic => unwind_subscriber(),
+    struct OrderedSubscriber(usize, Sender<(usize, DomainEvent)>);
+    impl EventSubscriber for OrderedSubscriber {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            match self.1.send((self.0, event.clone())) {
+                Ok(()) => Ok(()),
+                Err(_closed) => Err(SubscriberFailure::Unavailable),
             }
         }
     }
-
-    fn unwind_subscriber() -> ! {
-        panic!("가짜 구독자 패닉");
-    }
-
     fn globals() -> Vec<DomainEvent> {
         vec![
             DomainEvent::BrokerConnectionChanged,
@@ -219,15 +195,17 @@ mod tests {
 
     #[test]
     fn all_kinds_deliver_exact_payloads_only_to_matching_subscribers() {
-        let mut bus = EventBus::default();
+        let mut builder = EventBusBuilder::default();
         let receivers: Vec<_> = kinds()
             .into_iter()
             .map(|kind| {
                 let receiver = Recording::default();
-                let _subscription = bus.subscribe(BTreeSet::from([kind]), receiver.subscriber());
+                let _subscription =
+                    builder.subscribe(BTreeSet::from([kind]), receiver.subscriber());
                 (kind, receiver)
             })
             .collect();
+        let bus = builder.build();
         let mut published = events();
         published.push(DomainEvent::PortfolioSyncRecorded(domain::AccountId::new(
             99,
@@ -236,7 +214,7 @@ mod tests {
             domain::InstrumentId::try_new("another").expect("다른 가짜 ID"),
         ));
         for event in &published {
-            bus.publish(event.clone());
+            assert_eq!(bus.publish(event.clone()), DeliveryReport::default());
         }
         assert_eq!(receivers.len(), 38);
         for (kind, receiver) in receivers {
@@ -247,65 +225,44 @@ mod tests {
                 .collect();
             assert_eq!(receiver.received(), expected);
         }
-        assert_eq!(bus.take_failures(), vec![]);
     }
-
-    #[derive(Debug)]
     struct AdditionalSubscriber(RecordingSubscriber);
     impl EventSubscriber for AdditionalSubscriber {
-        fn on_event(
-            &self,
-            event: &DomainEvent,
-            publisher: &mut EventPublisher<'_>,
-        ) -> Result<(), SubscriberError> {
-            self.0.on_event(event, publisher)
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            self.0.on_event(event)
         }
     }
     #[test]
-    fn new_subscriber_requires_only_its_implementation_and_registration() {
-        let mut bus = EventBus::default();
+    fn additional_subscriber_needs_only_implementation_and_builder_registration() {
+        let mut builder = EventBusBuilder::default();
         let existing = Recording::default();
         let added = Recording::default();
-        let first = bus.subscribe(kinds(), existing.subscriber());
-        bus.publish(DomainEvent::SettingsChanged);
-        let second = bus.subscribe(kinds(), AdditionalSubscriber(added.subscriber()));
+        let first = builder.subscribe(kinds(), existing.subscriber());
+        let second = builder.subscribe(kinds(), AdditionalSubscriber(added.subscriber()));
         assert_ne!(first, second);
-        bus.publish(DomainEvent::PolicyChanged);
+        let bus = builder.build();
         assert_eq!(
-            existing.received(),
-            vec![DomainEvent::SettingsChanged, DomainEvent::PolicyChanged]
+            bus.publish(DomainEvent::SettingsChanged),
+            DeliveryReport::default()
         );
-        assert_eq!(added.received(), vec![DomainEvent::PolicyChanged]);
-    }
-
-    #[derive(Debug)]
-    struct OrderedSubscriber(usize, Sender<(usize, DomainEvent)>);
-    impl EventSubscriber for OrderedSubscriber {
-        fn on_event(
-            &self,
-            event: &DomainEvent,
-            _publisher: &mut EventPublisher<'_>,
-        ) -> Result<(), SubscriberError> {
-            match self.1.send((self.0, event.clone())) {
-                Ok(()) => Ok(()),
-                Err(_closed) => Err(SubscriberError::Unavailable),
-            }
-        }
+        assert_eq!(existing.received(), vec![DomainEvent::SettingsChanged]);
+        assert_eq!(added.received(), vec![DomainEvent::SettingsChanged]);
     }
     #[test]
-    fn delivery_order_is_publication_then_registration_order() {
-        let mut bus = EventBus::default();
+    fn publication_and_registration_order_are_deterministic_without_coalescing() {
+        let mut builder = EventBusBuilder::default();
         let (sender, trace) = channel();
         for tag in [3, 1, 2] {
-            let _subscription = bus.subscribe(kinds(), OrderedSubscriber(tag, sender.clone()));
+            let _subscription = builder.subscribe(kinds(), OrderedSubscriber(tag, sender.clone()));
         }
+        let bus = builder.build();
         let published = vec![
             DomainEvent::StoredDataChanged,
-            DomainEvent::SettingsChanged,
             DomainEvent::StoredDataChanged,
+            DomainEvent::SettingsChanged,
         ];
         for event in &published {
-            bus.publish(event.clone());
+            assert_eq!(bus.publish(event.clone()), DeliveryReport::default());
         }
         let expected: Vec<_> = published
             .into_iter()
@@ -314,249 +271,131 @@ mod tests {
         assert_eq!(trace.try_iter().collect::<Vec<_>>(), expected);
     }
     #[test]
-    fn absent_and_empty_subscriptions_are_noops_and_duplicate_registrations_are_distinct() {
-        let mut bus = EventBus::default();
-        bus.publish(DomainEvent::SettingsChanged);
+    fn empty_subscriptions_receive_nothing_and_duplicate_registrations_remain_distinct() {
+        assert_eq!(
+            EventBusBuilder::default()
+                .build()
+                .publish(DomainEvent::SettingsChanged),
+            DeliveryReport::default()
+        );
+        let mut builder = EventBusBuilder::default();
         let empty = Recording::default();
         let repeated = Recording::default();
-        let _empty_id = bus.subscribe(BTreeSet::new(), empty.subscriber());
-        let first = bus.subscribe(kinds(), repeated.subscriber());
-        let second = bus.subscribe(kinds(), repeated.subscriber());
+        let _empty = builder.subscribe(BTreeSet::new(), empty.subscriber());
+        let first = builder.subscribe(kinds(), repeated.subscriber());
+        let second = builder.subscribe(kinds(), repeated.subscriber());
         assert_ne!(first, second);
-        bus.publish(DomainEvent::SettingsChanged);
+        let bus = builder.build();
+        assert_eq!(
+            bus.publish(DomainEvent::SettingsChanged),
+            DeliveryReport::default()
+        );
         assert_eq!(empty.received(), vec![]);
         assert_eq!(
             repeated.received(),
             vec![DomainEvent::SettingsChanged, DomainEvent::SettingsChanged]
         );
-        assert_eq!(bus.take_failures(), vec![]);
     }
     #[test]
-    fn failures_are_isolated_ordered_drained_and_keep_already_queued_events() {
-        let mut bus = EventBus::default();
-        let first = bus.subscribe(
-            BTreeSet::from([DomainEventKind::SettingsChanged]),
-            Reactive {
-                outgoing: BTreeMap::from([(
-                    DomainEventKind::SettingsChanged,
-                    vec![DomainEvent::PolicyChanged],
-                )]),
-                reaction: Reaction::Reject,
-            },
-        );
-        let second = bus.subscribe(
-            BTreeSet::from([DomainEventKind::SettingsChanged]),
-            Reactive {
-                outgoing: BTreeMap::from([(
-                    DomainEventKind::SettingsChanged,
-                    vec![DomainEvent::OrderSwitchChanged],
-                )]),
-                reaction: Reaction::Panic,
-            },
-        );
+    fn report_is_per_publication_and_failures_do_not_stop_later_subscribers() {
+        let mut builder = EventBusBuilder::default();
         let healthy = Recording::default();
-        let _healthy_id = bus.subscribe(kinds(), healthy.subscriber());
-        for _ in 0_usize..2 {
-            bus.publish(DomainEvent::SettingsChanged);
-            assert_eq!(
-                bus.take_failures(),
-                vec![
-                    EventDeliveryFailure {
-                        subscription: first,
-                        event: DomainEvent::SettingsChanged,
-                        cause: DeliveryFailureCause::Subscriber(SubscriberError::Unavailable)
-                    },
-                    EventDeliveryFailure {
-                        subscription: second,
-                        event: DomainEvent::SettingsChanged,
-                        cause: DeliveryFailureCause::Panicked
-                    },
-                ]
-            );
-            assert_eq!(bus.take_failures(), vec![]);
-        }
+        let first = builder.subscribe(kinds(), Unavailable);
+        let _healthy = builder.subscribe(kinds(), healthy.subscriber());
+        let second = builder.subscribe(
+            BTreeSet::from([DomainEventKind::SettingsChanged]),
+            Unavailable,
+        );
+        let bus = builder.build();
+        let expected = DeliveryReport {
+            failures: vec![
+                DeliveryFailure {
+                    subscription: first,
+                    cause: SubscriberFailure::Unavailable,
+                },
+                DeliveryFailure {
+                    subscription: second,
+                    cause: SubscriberFailure::Unavailable,
+                },
+            ],
+        };
+        assert_eq!(bus.publish(DomainEvent::SettingsChanged), expected);
+        assert_eq!(
+            bus.publish(DomainEvent::PolicyChanged),
+            DeliveryReport {
+                failures: vec![DeliveryFailure {
+                    subscription: first,
+                    cause: SubscriberFailure::Unavailable
+                }]
+            }
+        );
+        assert_eq!(bus.publish(DomainEvent::SettingsChanged), expected);
         assert_eq!(
             healthy.received(),
             vec![
                 DomainEvent::SettingsChanged,
                 DomainEvent::PolicyChanged,
-                DomainEvent::OrderSwitchChanged,
-                DomainEvent::SettingsChanged,
-                DomainEvent::PolicyChanged,
-                DomainEvent::OrderSwitchChanged
+                DomainEvent::SettingsChanged
             ]
         );
     }
+    fn assert_send_sync<Value: Send + Sync>() {}
     #[test]
-    fn failures_accumulate_across_publications_until_taken() {
-        let mut bus = EventBus::default();
-        let subscription = bus.subscribe(
-            kinds(),
-            Reactive {
-                outgoing: BTreeMap::new(),
-                reaction: Reaction::Reject,
-            },
-        );
-        let published = vec![DomainEvent::SettingsChanged, DomainEvent::PolicyChanged];
-        for event in &published {
-            bus.publish(event.clone());
-        }
-        let expected: Vec<_> = published
-            .into_iter()
-            .map(|event| EventDeliveryFailure {
-                subscription,
-                event,
-                cause: DeliveryFailureCause::Subscriber(SubscriberError::Unavailable),
-            })
-            .collect();
-        assert_eq!(bus.take_failures(), expected);
-        assert_eq!(bus.take_failures(), vec![]);
-    }
-    #[derive(Debug)]
-    struct Chain(std::cell::Cell<usize>);
-    impl EventSubscriber for Chain {
-        fn on_event(
-            &self,
-            event: &DomainEvent,
-            publisher: &mut EventPublisher<'_>,
-        ) -> Result<(), SubscriberError> {
-            if let Some(remaining) = self.0.get().checked_sub(1) {
-                self.0.set(remaining);
-                publisher.publish(event.clone());
-            }
-            Ok(())
-        }
-    }
-    #[test]
-    fn long_republication_chain_does_not_recurse() {
-        let mut bus = EventBus::default();
-        let _chain = bus.subscribe(kinds(), Chain(std::cell::Cell::new(8192)));
+    fn immutable_bus_and_arc_can_publish_on_another_thread() {
+        assert_send_sync::<EventBus>();
+        assert_send_sync::<Arc<EventBus>>();
+        let mut builder = EventBusBuilder::default();
         let receiver = Recording::default();
-        let _receiver = bus.subscribe(kinds(), receiver.subscriber());
-        bus.publish(DomainEvent::SettingsChanged);
+        let _subscription = builder.subscribe(kinds(), receiver.subscriber());
+        let bus = Arc::new(builder.build());
+        let shared = Arc::clone(&bus);
+        let report = thread::spawn(move || shared.publish(DomainEvent::SettingsChanged))
+            .join()
+            .expect("발행 스레드");
+        assert_eq!(report, DeliveryReport::default());
+        assert_eq!(
+            bus.publish(DomainEvent::PolicyChanged),
+            DeliveryReport::default()
+        );
         assert_eq!(
             receiver.received(),
-            vec![DomainEvent::SettingsChanged; 8193]
+            vec![DomainEvent::SettingsChanged, DomainEvent::PolicyChanged]
         );
-        assert_eq!(bus.take_failures(), vec![]);
     }
-    #[test]
-    fn nested_publications_are_fifo_after_all_current_subscribers() {
-        let mut bus = EventBus::default();
-        let _relay = bus.subscribe(
-            kinds(),
-            Reactive {
-                outgoing: BTreeMap::from([
-                    (
-                        DomainEventKind::SettingsChanged,
-                        vec![DomainEvent::PolicyChanged, DomainEvent::OrderSwitchChanged],
-                    ),
-                    (
-                        DomainEventKind::PolicyChanged,
-                        vec![DomainEvent::StoredDataChanged],
-                    ),
-                ]),
-                reaction: Reaction::Success,
-            },
-        );
-        let _second_relay = bus.subscribe(
-            kinds(),
-            Reactive {
-                outgoing: BTreeMap::from([(
-                    DomainEventKind::SettingsChanged,
-                    vec![DomainEvent::WatchlistChanged],
-                )]),
-                reaction: Reaction::Success,
-            },
-        );
-        let receiver = Recording::default();
-        let _receiver = bus.subscribe(kinds(), receiver.subscriber());
-        bus.publish(DomainEvent::SettingsChanged);
-        assert_eq!(
-            receiver.received(),
-            vec![
-                DomainEvent::SettingsChanged,
-                DomainEvent::PolicyChanged,
-                DomainEvent::OrderSwitchChanged,
-                DomainEvent::WatchlistChanged,
-                DomainEvent::StoredDataChanged
-            ]
-        );
-        assert_eq!(bus.take_failures(), vec![]);
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum FakeConnection {
-        Connected,
-        Blocked,
-        Expired,
-        ActionRequired,
-    }
-    fn expected_connection_events(
-        previous: FakeConnection,
-        current: FakeConnection,
-    ) -> Vec<DomainEvent> {
-        if previous == current {
-            vec![]
-        } else {
-            vec![DomainEvent::BrokerConnectionChanged]
+    struct Panicking;
+    impl EventSubscriber for Panicking {
+        fn on_event(&self, _event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            subscriber_bug()
         }
     }
-    #[test]
-    fn broker_helper_emits_one_change_including_recovery_and_no_self_check() {
-        let states = [
-            FakeConnection::Connected,
-            FakeConnection::Blocked,
-            FakeConnection::Expired,
-            FakeConnection::ActionRequired,
-        ];
-        for previous in states {
-            for current in states {
-                let mut bus = EventBus::default();
-                let receiver = Recording::default();
-                let _receiver = bus.subscribe(kinds(), receiver.subscriber());
-                bus.publish_broker_connection_change(&previous, &current);
-                let expected = expected_connection_events(previous, current);
-                assert_eq!(receiver.received(), expected);
-                assert_eq!(bus.take_failures(), vec![]);
-            }
-        }
+    fn subscriber_bug() -> ! {
+        panic!("구독자 버그");
     }
     #[test]
-    fn ordinary_publications_are_not_coalesced() {
-        let mut bus = EventBus::default();
-        let receiver = Recording::default();
-        let _receiver = bus.subscribe(kinds(), receiver.subscriber());
-        bus.publish(DomainEvent::BrokerConnectionChanged);
-        bus.publish(DomainEvent::BrokerConnectionChanged);
-        assert_eq!(
-            receiver.received(),
-            vec![
-                DomainEvent::BrokerConnectionChanged,
-                DomainEvent::BrokerConnectionChanged
-            ]
-        );
+    #[should_panic(expected = "구독자 버그")]
+    fn subscriber_panics_propagate() {
+        let mut builder = EventBusBuilder::default();
+        let _subscription = builder.subscribe(kinds(), Panicking);
+        let _report = builder.build().publish(DomainEvent::SettingsChanged);
     }
     proptest! {
         #![proptest_config(Config::with_cases(4096))]
         #[test]
         fn arbitrary_publications_equal_each_subscribers_filtered_sequence(
-            published in proptest::collection::vec(proptest::sample::select(events()), 0..64),
-            filters in proptest::collection::vec(
-                proptest::collection::btree_set(proptest::sample::select(kinds().into_iter().collect::<Vec<_>>()), 0..=38), 0..8),
+            published in proptest::collection::vec(proptest::sample::select(events()),0..64),
+            filters in proptest::collection::vec(proptest::collection::btree_set(proptest::sample::select(kinds().into_iter().collect::<Vec<_>>()),0..=38),0..8),
         ) {
-            let mut bus = EventBus::default();
-            let receivers: Vec<_> = filters.iter().map(|filter| {
-                let receiver = Recording::default();
-                let _subscription = bus.subscribe(filter.clone(), receiver.subscriber());
-                receiver
+            let mut builder=EventBusBuilder::default();
+            let receivers:Vec<_>=filters.iter().map(|filter| {
+                let receiver=Recording::default();
+                let _subscription=builder.subscribe(filter.clone(),receiver.subscriber()); receiver
             }).collect();
-            for event in &published { bus.publish(event.clone()); }
-            for (filter, receiver) in filters.iter().zip(receivers) {
-                let expected: Vec<_> = published.iter().filter(|event| filter.contains(&expected_kind(event))).cloned().collect();
-                prop_assert_eq!(&receiver.received(), &expected);
+            let bus=builder.build();
+            for event in published.iter().flat_map(|event|[event,event]) { prop_assert_eq!(bus.publish(event.clone()),DeliveryReport::default()); }
+            for (filter,receiver) in filters.iter().zip(receivers) {
+                let expected:Vec<_>=published.iter().filter(|event|filter.contains(&expected_kind(event))).flat_map(|event|[event.clone(),event.clone()]).collect();
+                prop_assert_eq!(receiver.received(),expected);
             }
-            prop_assert_eq!(bus.take_failures(), vec![]);
         }
     }
 }

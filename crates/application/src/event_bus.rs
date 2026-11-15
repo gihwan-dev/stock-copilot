@@ -1,132 +1,79 @@
 use domain::{DomainEvent, DomainEventKind};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    fmt::Debug,
-    panic::{AssertUnwindSafe, catch_unwind},
+    collections::{BTreeMap, BTreeSet},
+    fmt::{self, Debug, Formatter},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SubscriptionId(usize);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubscriberError {
+pub enum SubscriberFailure {
     Unavailable,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeliveryFailureCause {
-    Subscriber(SubscriberError),
-    Panicked,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EventDeliveryFailure {
+pub struct DeliveryFailure {
     pub subscription: SubscriptionId,
-    pub event: DomainEvent,
-    pub cause: DeliveryFailureCause,
+    pub cause: SubscriberFailure,
+}
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct DeliveryReport {
+    pub failures: Vec<DeliveryFailure>,
 }
 
-pub trait EventSubscriber: Debug {
-    fn on_event(
-        &self,
-        event: &DomainEvent,
-        publisher: &mut EventPublisher<'_>,
-    ) -> Result<(), SubscriberError>;
+pub trait EventSubscriber: Send + Sync {
+    fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure>;
 }
-
-#[derive(Debug)]
-pub struct EventPublisher<'queue> {
-    pending: &'queue mut Vec<DomainEvent>,
+#[derive(Default)]
+pub struct EventBus {
+    subscribers: Vec<Box<dyn EventSubscriber>>,
+    subscriptions: BTreeMap<DomainEventKind, BTreeSet<SubscriptionId>>,
 }
-
-impl EventPublisher<'_> {
-    pub fn publish(&mut self, event: DomainEvent) {
-        self.pending.push(event);
+impl Debug for EventBus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.subscriptions.fmt(f)
     }
 }
-
-#[derive(Debug)]
-struct Registration {
-    id: SubscriptionId,
-    subscriber: Box<dyn EventSubscriber>,
-}
-
 #[derive(Debug, Default)]
-pub struct EventBus {
-    registrations: Vec<Registration>,
-    subscriptions: BTreeMap<DomainEventKind, BTreeSet<SubscriptionId>>,
-    failures: Vec<EventDeliveryFailure>,
-}
-
-impl EventBus {
+pub struct EventBusBuilder(EventBus);
+impl EventBusBuilder {
     pub fn subscribe<Subscriber: EventSubscriber + 'static>(
         &mut self,
         kinds: BTreeSet<DomainEventKind>,
         subscriber: Subscriber,
     ) -> SubscriptionId {
-        let id = SubscriptionId(self.registrations.len());
-        let registration = Registration {
-            id,
-            subscriber: Box::new(subscriber),
-        };
+        let id = SubscriptionId(self.0.subscribers.len());
+        self.0.subscribers.push(Box::new(subscriber));
         for kind in kinds {
-            self.subscriptions.entry(kind).or_default().extend([id]);
+            self.0.subscriptions.entry(kind).or_default().extend([id]);
         }
-        self.registrations.push(registration);
         id
     }
-
-    pub fn publish(&mut self, event: DomainEvent) {
-        let mut pending = VecDeque::from([event]);
-        while let Some(next) = pending.pop_front() {
-            let mut followups = Vec::new();
-            self.deliver(&next, &mut followups);
-            pending.extend(followups);
-        }
-    }
-
-    fn deliver(&mut self, event: &DomainEvent, pending: &mut Vec<DomainEvent>) {
-        let Some(subscriptions) = self.subscriptions.get(&event.kind()) else {
-            return;
-        };
-        for registration in &self.registrations {
-            if !subscriptions.contains(&registration.id) {
-                continue;
-            }
-            let mut publisher = EventPublisher { pending };
-            let result = catch_unwind(AssertUnwindSafe(|| {
-                registration.subscriber.on_event(event, &mut publisher)
-            }));
-            let cause = match result {
-                Ok(Ok(())) => continue,
-                Ok(Err(error)) => DeliveryFailureCause::Subscriber(error),
-                Err(_) => DeliveryFailureCause::Panicked,
-            };
-            self.failures.push(EventDeliveryFailure {
-                subscription: registration.id,
-                event: event.clone(),
-                cause,
-            });
-        }
-    }
-
-    pub fn publish_broker_connection_change<State: Eq>(
-        &mut self,
-        previous: &State,
-        current: &State,
-    ) {
-        if previous != current {
-            self.publish(DomainEvent::BrokerConnectionChanged);
-        }
-    }
-
     #[must_use]
-    pub fn take_failures(&mut self) -> Vec<EventDeliveryFailure> {
-        let mut failures = Vec::new();
-        while let Some(failure) = self.failures.pop() {
-            failures.push(failure);
-        }
-        failures.reverse();
-        failures
+    pub fn build(self) -> EventBus {
+        self.0
+    }
+}
+impl EventBus {
+    #[must_use]
+    pub fn publish(&self, event: DomainEvent) -> DeliveryReport {
+        let Some(subscriptions) = self.subscriptions.get(&event.kind()) else {
+            return DeliveryReport::default();
+        };
+        let failures = self
+            .subscribers
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| subscriptions.contains(&SubscriptionId(*index)))
+            .filter_map(move |(index, subscriber)| {
+                subscriber
+                    .on_event(&event)
+                    .err()
+                    .map(|cause| DeliveryFailure {
+                        subscription: SubscriptionId(index),
+                        cause,
+                    })
+            })
+            .collect();
+        DeliveryReport { failures }
     }
 }
