@@ -153,3 +153,21 @@ C-05/C-11 인계 보완: linkAllowed/onOpenLink 주소는 마크다운 파서의
 | 32 | Markdown.tsx | `components={components}` → `components={{ ...components, a: (data: LinkContent): ReactElement => <MarkdownLink href={data.href} node={data.node}>{data.children}</MarkdownLink> }}` | KILLED: DS18 streaming preserves link and code nodes and focus (13.590292ms) |
 
 회차 2 좁은 회귀는 DOM·실제 생성 CSS 17/17, 생성 검사 4/4, tsc·eslint·knip 통과다. 변경분 변이도 종료 0이며 DS-18에 실행 Rust 변이는 없다. 추가 라이선스 자료는 직접 1개·전이 74개를 로컬 설치 메타데이터로 확인했다.
+
+## 회차 3 이름 판정 보완
+
+이미지 표시 문자열과 AST의 읽을 내용 판정을 imageLabel/valuePresent 하나로 통일한다. 공백·NBSP·Default Ignorable 문자만 있는 alt는 src로 대체하며, 표시 문자열까지 비면 버튼을 만들지 않는다. 읽을 글자가 있는 원문은 바꾸지 않고, 가시성 검사에서만 Default Ignorable을 제외한다. 따라서 ZWJ 이모지와 읽을 글자가 섞인 링크의 원문도 보존한다.
+
+마지막 소규모 patch는 세 번째 새 Codex 비판자가 원본/수정본 19개 회귀와 181개 독립 조합으로 해결을 검증했다. 네 번째 Opus 리뷰는 최대 세 회차 지시에 따라 실행하지 않았다. 대상 브라우저의 실제 IME·VoiceOver·빠른 연속 Enter와 inline-block 줄 배치는 여전히 실측 인계다. 보호 파일의 사용자 승인과 암호학적 서명은 다르며, 현재 서명 잠금 전 작업 브랜치 결과를 메인이 서명 반영 절차로 이관한다.
+
+## 마지막 patch 손 변형
+
+현재 source 복사본에서 앞선 32개와 새 이름 판정 3개를 합쳐 35개를 각각 tsc 컴파일·실행했고 전부 검출했다. 생존·컴파일 실패·시간 초과 0이다. 새 변형의 실제 실행 결과는 다음과 같다.
+
+| 번호 | 대상 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|---|
+| 33 | Markdown.tsx | `valuePresent(alt) === "present" ? alt : src` → `alt === undefined &#124;&#124; alt === "" ? src : alt` | KILLED: DS18 blank image alt uses a readable URL in standalone and nested links (13.429125ms) |
+| 34 | Markdown.tsx | `.replace(/\p{Default_Ignorable_Code_Point}/gu, "")` → `` | KILLED: DS18 blank image alt uses a readable URL in standalone and nested links (20.924875ms) |
+| 35 | Markdown.tsx | `imageLabel(node.properties?.alt, node.properties?.src)` → `imageLabel(node.properties?.alt, undefined)` | KILLED: DS18 blank image alt uses a readable URL in standalone and nested links (14.071458ms) |
+
+최종 좁은 DOM·CSS 회귀 19/19, 타입·소스 린트·리뷰 형식 통과. 변경분 변이는 종료 0이며 실행 Rust 변이는 없다.

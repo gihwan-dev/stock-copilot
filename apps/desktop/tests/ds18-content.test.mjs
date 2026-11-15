@@ -301,3 +301,35 @@ test("DS18 semantic nodes retain hierarchy and nondefault list start", async () 
   assert.equal(w.document.querySelector("ol").getAttribute("start"), "3");
   assert.ok(w.document.querySelector("p").classList.contains("my-space-3"));
 });
+
+test("DS18 blank image alt uses a readable URL in standalone and nested links", async () => {
+  const w = fixture.open();
+  for (const alt of [" ", "&nbsp;", "\u200b"]) {
+    await w.act(() => w.markdown(`![${alt}](https://i.test/image)`));
+    let buttons = w.document.querySelectorAll("button");
+    assert.equal(buttons.length, 1);
+    assert.equal(buttons[0].textContent, "https://i.test/image");
+    await w.act(() => w.fire.click(buttons[0]));
+    assert.deepEqual(Array.from(w.calls), ["https://i.test/image"]);
+    await w.act(() =>
+      w.markdown(`[![${alt}](https://i.test/image)](https://a.test/article)`),
+    );
+    buttons = w.document.querySelectorAll("button");
+    assert.equal(buttons.length, 1);
+    assert.equal(buttons[0].textContent, "https://i.test/image");
+    assert.equal(w.document.querySelectorAll("button button").length, 0);
+    await w.act(() => w.fire.click(buttons[0]));
+    assert.deepEqual(Array.from(w.calls), ["https://a.test/article"]);
+    await w.act(() => w.markdown(`![${alt}]()`));
+    assert.equal(w.document.querySelectorAll("button").length, 0);
+  }
+});
+test("DS18 invisible link text cannot create a tab target", async () => {
+  const w = fixture.open();
+  for (const label of ["\u200b", "\u2060", "\u00ad", "\u200b&nbsp;"]) {
+    await w.act(() => w.markdown(`[${label}](https://a.test)`));
+    assert.equal(w.document.querySelectorAll("button,a").length, 0);
+  }
+  await w.act(() => w.markdown("[보이는 글\u200b](https://a.test)"));
+  assert.equal(w.document.querySelectorAll("button").length, 1);
+});

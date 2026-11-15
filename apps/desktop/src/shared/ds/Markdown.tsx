@@ -44,9 +44,9 @@ const MarkdownImage = ({ src, alt }: ImageContent): ReactElement => {
   const props = use(MarkdownContext);
   const nesting = use(LinkContext);
   const url = parseExternalUrl(src);
-  const label = parseFreeText(alt === undefined || alt === "" ? src : alt);
-  const imageText = label.kind === "ok" ? label.value : emptyFreeText;
-  return nesting === "outside" &&
+  const imageText = imageLabel(alt, src);
+  return valuePresent(imageText) === "present" &&
+    nesting === "outside" &&
     props !== undefined &&
     url.kind === "ok" &&
     props.linkAllowed(url.value) === "allow" ? (
@@ -64,7 +64,14 @@ const MarkdownImage = ({ src, alt }: ImageContent): ReactElement => {
   );
 };
 const valuePresent = (value: unknown): "present" | "empty" =>
-  typeof value === "string" && value.trim() !== "" ? "present" : "empty";
+  typeof value === "string" &&
+  value.replace(/\p{Default_Ignorable_Code_Point}/gu, "").trim() !== ""
+    ? "present"
+    : "empty";
+const imageLabel = (alt: unknown, src: unknown): FreeText => {
+  const label = parseFreeText(valuePresent(alt) === "present" ? alt : src);
+  return label.kind === "ok" ? label.value : emptyFreeText;
+};
 const hasChildren = (
   children: readonly ContentNode[] | undefined,
 ): "present" | "empty" =>
@@ -74,12 +81,8 @@ const hasChildren = (
 const hasContent = (node: ContentNode): "present" | "empty" => {
   if (node.type === "text") return valuePresent(node.value);
   if (node.type !== "element") return "empty";
-  if (
-    node.tagName === "img" &&
-    (valuePresent(node.properties?.alt) === "present" ||
-      valuePresent(node.properties?.src) === "present")
-  )
-    return "present";
+  if (node.tagName === "img")
+    return valuePresent(imageLabel(node.properties?.alt, node.properties?.src));
   return hasChildren(node.children);
 };
 const MarkdownLink = ({ href, children, node }: LinkContent): ReactElement => {
