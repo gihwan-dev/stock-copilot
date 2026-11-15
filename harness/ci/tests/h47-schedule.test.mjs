@@ -16,13 +16,17 @@ test("H47 daily and weekly schedules and manual choices are bounded and explicit
   assert.equal(w.on.workflow_dispatch.inputs.mode.default, "daily");
   assert.ok(w.jobs.mutants.if.includes("0 14 * * 0"));
   assert.ok(w.jobs["mutants-daily"].if.includes("0 18 * * *"));
-  assert.equal(w.jobs["mutants-daily"].strategy, undefined);
-  assert.equal(w.jobs["mutants-daily"]["timeout-minutes"], 180);
+  assert.deepEqual(w.jobs["mutants-daily"].strategy, {
+    "fail-fast": false,
+    matrix: { shard: "${{ fromJSON(needs.daily-plan.outputs.shards) }}" },
+  });
+  assert.equal(w.jobs["mutants-daily"]["timeout-minutes"], 360);
   assert.equal(w.jobs["mutants-daily"].steps[0].with.ref, "${{ github.sha }}");
   assert.equal(w.jobs["mutants-daily"].steps[0].with["fetch-depth"], 0);
   assert.equal(w.jobs["mutants-daily"].steps.at(-1).if, "always()");
   assert.deepEqual(w.jobs["notify-mutants"].needs, [
     "mutants",
+    "daily-plan",
     "mutants-daily",
   ]);
 });
@@ -97,7 +101,10 @@ test("H47 daily summary requires range evidence and preserves cancellation and c
     spawnSync("mkdir", ["-p", directory]);
     writeFileSync(join(directory, "../catalog.json"), JSON.stringify(catalog));
     if (receipt !== null)
-      writeFileSync(join(directory, "../daily.json"), JSON.stringify(receipt));
+      writeFileSync(
+        join(directory, "../daily.json"),
+        JSON.stringify({ shard: "0/1", ...receipt }),
+      );
     writeFileSync(join(directory, "mutants.json"), JSON.stringify(planned));
     for (const name of ["missed", "timeout", "caught", "unviable"])
       writeFileSync(join(directory, `${name}.txt`), "");
@@ -112,7 +119,7 @@ test("H47 daily summary requires range evidence and preserves cancellation and c
       env: {
         ...process.env,
         MUTATION_MODE: "daily",
-        MUTATION_SHARD: "daily",
+        MUTATION_SHARD: "0/1",
         MUTATION_OUTCOME: outcome,
       },
     });

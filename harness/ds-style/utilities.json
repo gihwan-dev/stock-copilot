@@ -3161,6 +3161,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:sr-only",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:status-sentence",
       "kind": "allowed",
       "generated": "yes"
@@ -6917,6 +6922,11 @@
     },
     {
       "name": "@content-wide:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:sr-only",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -10687,6 +10697,11 @@
     },
     {
       "name": "active:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:sr-only",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -15036,6 +15051,11 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:sr-only",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:status-sentence",
       "kind": "allowed",
       "generated": "yes"
@@ -19016,6 +19036,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:sr-only",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:status-sentence",
       "kind": "allowed",
       "generated": "yes"
@@ -22772,6 +22797,11 @@
     },
     {
       "name": "focus:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:sr-only",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -26872,6 +26902,11 @@
     },
     {
       "name": "hover:space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:sr-only",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -31101,6 +31136,11 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:sr-only",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:status-sentence",
       "kind": "allowed",
       "generated": "yes"
@@ -33342,6 +33382,11 @@
     },
     {
       "name": "space-y-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "sr-only",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -37106,6 +37151,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:sr-only",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:status-sentence",
       "kind": "allowed",
       "generated": "yes"
@@ -40866,6 +40916,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:sr-only",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:status-sentence",
       "kind": "allowed",
       "generated": "yes"
@@ -43947,6 +44002,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:sr-only",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:status-sentence",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -46856,6 +46915,10 @@
     },
     {
       "selector": ".\\@content-wide\\:skeleton-line",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:sr-only",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -49776,6 +49839,10 @@
     },
     {
       "selector": ".active\\:skeleton-line:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:sr-only:active",
       "context": []
     },
     {
@@ -53155,6 +53222,10 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:sr-only:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:status-sentence:disabled",
       "context": []
     },
@@ -56243,6 +56314,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:sr-only:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:status-sentence:focus-visible",
       "context": []
     },
@@ -59152,6 +59227,10 @@
     },
     {
       "selector": ".focus\\:skeleton-line:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:sr-only:focus",
       "context": []
     },
     {
@@ -62336,6 +62415,10 @@
     },
     {
       "selector": ".hover\\:skeleton-line:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:sr-only:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -65623,6 +65706,10 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:sr-only",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:status-sentence",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
@@ -67316,6 +67403,10 @@
     },
     {
       "selector": ".skeleton-line",
+      "context": []
+    },
+    {
+      "selector": ".sr-only",
       "context": []
     },
     {
@@ -70224,6 +70315,10 @@
     },
     {
       "selector": ".window-lg\\:skeleton-line",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:sr-only",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -73139,6 +73234,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:sr-only",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:status-sentence",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -74721,6 +74820,14 @@
     {
       "selector": ":where(.window-md\\:space-y-space-9 > :not(:last-child))",
       "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": "[data-chart-theme=\"dark\"]",
+      "context": []
+    },
+    {
+      "selector": "[data-chart-theme=\"light\"]",
+      "context": []
     },
     {
       "selector": "html[data-text-scale=\"100\"]",

@@ -113,9 +113,15 @@ const stepFindings = (job, step, policy, toolSpec) => {
       ? []
       : [finding("condition", job)]),
     ...(step["timeout-minutes"] === undefined ||
-    (["mutants", "mutants-daily"].includes(job) &&
+    (job === "mutants" &&
       step.name === "mutants without network" &&
-      step["timeout-minutes"] === 160)
+      step["timeout-minutes"] === 160) ||
+    (job === "mutants-daily" &&
+      step.name === "mutants without network" &&
+      step["timeout-minutes"] === 330) ||
+    (job === "daily-plan" &&
+      step.name === "daily plan" &&
+      step["timeout-minutes"] === 15)
       ? []
       : [finding("timeout", job)]),
     ...valueFindings(step.env, policy, job),
@@ -168,15 +174,21 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   return [
     ...keyFindings(
       job,
-      path === ".github/workflows/nightly.yml" && name === "mutants"
+      path === ".github/workflows/nightly.yml" &&
+        ["mutants", "mutants-daily"].includes(name)
         ? [...policy.jobKeys, "strategy"]
         : policy.jobKeys,
       policy.requiredJobKeys,
       `jobs.${name}`,
     ),
     ...(path !== ".github/workflows/nightly.yml" ||
-    name !== "mutants" ||
-    isDeepStrictEqual(job.strategy, policy.mutationStrategy)
+    !["mutants", "mutants-daily"].includes(name) ||
+    isDeepStrictEqual(
+      job.strategy,
+      name === "mutants"
+        ? policy.mutationStrategy
+        : policy.dailyMutationStrategy,
+    )
       ? []
       : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)
@@ -185,7 +197,12 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
     ...(policy.runners.includes(job["runs-on"])
       ? []
       : [finding("runner", name)]),
-    ...(Number.isInteger(timeout) && timeout > 0 && timeout <= policy.maxTimeout
+    ...(Number.isInteger(timeout) &&
+    timeout > 0 &&
+    timeout <=
+      (path === ".github/workflows/nightly.yml" && name === "mutants-daily"
+        ? 360
+        : policy.maxTimeout)
       ? []
       : [finding("timeout", name)]),
     ...(job.needs === undefined ||

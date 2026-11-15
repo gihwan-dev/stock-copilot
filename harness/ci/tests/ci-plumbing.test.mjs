@@ -392,7 +392,10 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
       },
     },
   });
-  assert.equal(nightly.jobs.macos.if, "needs.changes.outputs.changed == 'yes'");
+  assert.equal(
+    nightly.jobs.macos.if,
+    "github.event.schedule == '0 18 * * *' && needs.changes.outputs.changed == 'yes'",
+  );
   assert.ok(runs(nightly.jobs.macos).includes("just base=HEAD check"));
   assert.ok(
     runs(nightly.jobs.mutants).includes(

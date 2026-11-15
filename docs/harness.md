@@ -288,7 +288,7 @@ cargo-vet은 쓰지 않는다. 버전마다 감사 비용이 커서 개인 앱�
 | 타입 술어 파일 목록 | `TSTypePredicate` | `shared/lib/money.ts` (`` `${number}` ``로 좁히는 곳 하나) |
 | 원시 타입 파일 목록 | `local/no-raw-types` | `shared/lib/brand.ts`, `shared/lib/money.ts`, `shared/lib/format.ts`, `shared/ipc`의 스키마 파일, 생성된 `bindings.ts`. `shared/ds`에서는 제3자 컴포넌트를 감싸는 파일만 사용자 승인으로 추가한다 |
 | `throw` 허용 목록 | `no-throw-statements` | 비어 있다 |
-| 차트 좌표 변환 파일 목록 | `shared/ds` 안의 숫자 변환 금지 | 비어 있다. 차트 컴포넌트 작업(DS-06, DS-17)이 사용자 승인으로 추가한다 |
+| 차트 좌표 변환 파일 목록 | `shared/ds` 안의 숫자 변환 금지 | `shared/ds/LineChart.tsx`, `shared/ds/DonutChart.tsx`, `shared/ds/Treemap.tsx` (DS-06). AreaChart는 선 좌표 함수를 사용하며 별도 변환을 하지 않는다 |
 
 `throw` 허용 목록이 비어 있는 이유: 오류 경계는 `react-error-boundary` 의존성으로 해결하고 클래스를 직접 쓰지 않는다. TanStack Router의 `redirect`는 반환 형태로 쓴다. TanStack Query의 `queryFn`은 `Promise<Result>`를 돌려주고 거절하지 않는다. 화면은 `status`와 `data.ok`를 둘 다 본다. 재시도는 코어(Rust)가 맡는다 (R-08 2.6). TanStack Router `notFound()`를 던지지 않고 쓸 수 있는지는 미확인이라, 필요해지면 그때 판단한다.
 
@@ -501,11 +501,11 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
 | 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 모든 `src/**/*.rs`. application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 일일 변경분·주간 전체 변이 양쪽에 포함한다 (ADR 0063) |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
-| 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 바뀐 대상 src 파일의 diff 영역과 겹치는 변이만 고른다. CI 매일: 지난24시간 master 변경분을 한 작업으로. 일요일 밤: 전체를 독립된128조각으로. 수동 실행은 daily/full 선택 (H-47) |
+| 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 바뀐 대상 src 파일의 diff 영역과 겹치는 변이만 고른다. CI 매일: 지난24시간 master 변경분을 선택량에 따라1~8작업으로. 일요일 밤: 전체를 독립된128조각으로. 수동 실행은 daily/full 선택 (H-47) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
 | 코드로 건너뛰기 | `#[mutants::skip]`, `cfg_attr` 형태 모두 xtask가 실패시킨다 |
 
-H-46에서 참조 그래프·추가 전용 선택기를 제거했다. 변경분은 대상 src 파일과 diff 영역의 교집합만 검사한다. `cargo mutants --in-diff`는 변경 영역과 겹치는 변이에 적용하며, 테스트 코드 변경으로 다른 파일의 변이가 살아남는 영향은 검증하지 못한다. 테스트·지원 파일만 바뀐 crate는 주간 전체 실행 대상임을 출력한다. 변경분 실행의 전체 시간 제한은 20분이다. 제한 때 자신이 만든 프로세스 그룹만 종료하고 실패한다. 매일은 지난24시간의 변경분, 전체는 주1회다. 일일 기준은 master 첫 부모 이력에서24시간 전 커밋이며 얕은 이력은 먼저 가져온다. 그 이전 커밋이 없는 첫날은 빈 트리부터, 변경이 없으면 변경 없음으로 성공한다. 일일은 기존 파일·diff 교집합 선택을 재사용하고 한 작업으로160분 단계·180분 작업 제한을 둔다. 주간128조각은 같은 전체 대상을 나눈다. 성공 종료한 빈 조각은 대상 없음으로 표시하며, 자료 유실·취소·불완전 실행은 실패로 구분한다. 미검출·시간 초과 실패 정책을 유지하며 결과는 Actions 로그와 작업 요약에 남긴다.
+H-46에서 참조 그래프·추가 전용 선택기를 제거했다. 변경분은 대상 src 파일과 diff 영역의 교집합만 검사한다. `cargo mutants --in-diff`는 변경 영역과 겹치는 변이에 적용하며, 테스트 코드 변경으로 다른 파일의 변이가 살아남는 영향은 검증하지 못한다. 테스트·지원 파일만 바뀐 crate는 주간 전체 실행 대상임을 출력한다. 변경분 실행의 전체 시간 제한은 20분이다. 제한 때 자신이 만든 프로세스 그룹만 종료하고 실패한다. 매일은 지난24시간의 변경분, 전체는 주1회다. 일일 기준은 master 첫 부모 이력에서24시간 전 커밋이며 얕은 이력은 먼저 가져온다. 그 이전 커밋이 없는 첫날은 빈 트리부터, 변경이 없으면 변경 없음으로 성공한다. 일일은 실행 생성 시각에서 예약18:00 UTC를 복원한 기준으로 기존 파일·diff 교집합 선택을 재사용한다. 계획 작업이 변이를 열거하고100개당 한 조각, 최대8개를 만든다. 일일 변이 단계330분·작업360분이며 계획 작업은30분이다. GitHub 실행 메타데이터 조회의 Actions 읽기 권한은 계획 작업에만 둔다. 일반 macOS/Linux 검사는 일일 cron에서만 돌린다. 주간128조각은 같은 전체 대상을 나눈다. 성공 종료한 빈 조각은 대상 없음으로 표시하며, 자료 유실·취소·불완전 실행은 실패로 구분한다. 미검출·시간 초과 실패 정책을 유지하며 결과는 Actions 로그와 작업 요약에 남긴다.
 
 `error_class.rs`에서 현재 생성되는 변이 2개는 모두 `ErrorClass: Default` 미구현으로 컴파일되지 않는다. 오류별 매핑 검증은 자동 변이가 아니라 `crates/application/tests/error_class.rs`의 exhaustive 기대 함수와 `every_leaf_matches_the_decision_table`에 의존한다. 생성된 변이의 미검출 0건을 매핑 검출력의 증거로 해석하지 않는다.
 

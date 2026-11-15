@@ -4,11 +4,11 @@
 
 ## 현행 결정: 일일 변경분과 주간 전체
 
-메인 결정으로 매일은 지난24시간의 master 변경분만 한 작업으로 검사하고 전체는 주1회128분할로 실행한다. 일일 cron은18:00 UTC(매일03:00 KST), 주간은일요일14:00 UTC(일요일23:00 KST)다. workflow_dispatch의 mode는 daily/full이며 기본daily다. 두 모드 모두 master 이벤트의 고정 github.sha를 checkout하고 ref가 refs/heads/master인지 검증한다. 수동 실행도 master에서 요청해야 하며 다른 브랜치는 명시적으로 실패한다. 128개 작업이 서로 다른 master 끝을 읽는 경쟁을 막는다. 정상 macOS/Linux 검사는 기존대로 유지한다.
+메인 결정으로 매일은 지난24시간의 master 변경분을 선택량에 따라1~8작업으로 검사하고 전체는 주1회128분할로 실행한다. 일일 cron은18:00 UTC(매일03:00 KST), 주간은일요일14:00 UTC(일요일23:00 KST)다. workflow_dispatch의 mode는 daily/full이며 기본daily다. 두 모드 모두 master 이벤트의 고정 github.sha를 checkout하고 ref가 refs/heads/master인지 검증한다. 수동 실행도 master에서 요청해야 하며 다른 브랜치는 명시적으로 실패한다. 128개 작업이 서로 다른 master 끝을 읽는 경쟁을 막는다. 정상 macOS/Linux 검사는 기존 일일 cron에서만 유지하고 주간·수동 실행에서는 중복하지 않는다.
 
-일일은 Git의 master 첫 부모 이력에서 실행 시각24시간 전의 마지막 커밋을 고른다. checkout은fetch-depth0이고 얕은 복제면 fetch --unshallow origin을 먼저 수행한다. 가져오기 실패는 성공이나 빈 구간으로 바꾸지 않는다. 과거 커밋이 없는 저장소 첫24시간은 initial로 표시해 빈 트리부터 모든 현재 대상 소스를 고른다. 기준HEAD와 같거나 선택 변이가0이면 변경 없음이다. 기존 diff_scope·diff_patch·list_changed_mutants를 재사용하여 대상 src와 diff 영역의 교집합을 검사한다.
+일일은 Git의 master 첫 부모 이력에서 고정된 예약 기준24시간 전의 마지막 커밋을 고른다. checkout은fetch-depth0이고 얕은 복제면 fetch --unshallow origin을 먼저 수행한다. 가져오기 실패는 성공이나 빈 구간으로 바꾸지 않는다. 과거 커밋이 없는 저장소 첫24시간은 initial로 표시해 빈 트리부터 모든 현재 대상 소스를 고른다. 기준HEAD와 같거나 선택 변이가0이면 변경 없음이다. 기존 diff_scope·diff_patch·list_changed_mutants를 재사용하여 대상 src와 diff 영역의 교집합을 검사한다.
 
-일일은 한 작업(상한8 이하)으로 시작하고 단계160분·작업180분 제한이다. 작업 브랜치 mutants-diff의20분·test-diff 선행 검사는 유지한다. 일일은 이미 master에 반영된 승인 테스트 변경을 다시 거부하지 않으며 선택 로직과 missed/timeout evaluate를 재사용한다. 주간 전체·일일 모두 기본256회, 미검출·시간 초과 실패, always 요약을 유지한다. 일일의 catalog는 실제 diff 선택 목록이며 빈 목록은 유효한 기준·HEAD 영수증과 빈 결과가 함께 있을 때만 변경 없음이다. 선택 목록이 양수인데 계획이 비면 실패한다. 아래 이전 회차의 전체 매일 실행 계획은 이 결정으로 대체된다.
+일일 계획 단계는15분·작업은30분이며 실제 선택 변이100개당 한 작업을 만들고1~8개로 제한한다. 일일 변이 단계330분·작업360분 제한이다. 주간 전체는160분·180분을 유지한다. 작업 브랜치 mutants-diff의20분·test-diff 선행 검사는 유지한다. 일일은 이미 master에 반영된 승인 테스트 변경을 다시 거부하지 않으며 선택 로직과 missed/timeout evaluate를 재사용한다. 주간 전체·일일 모두 기본256회, 미검출·시간 초과 실패, always 요약을 유지한다. 일일의 catalog는 실제 diff 선택 목록이며 빈 목록은 유효한 기준·HEAD 영수증과 빈 결과가 함께 있을 때만 변경 없음이다. 선택 목록이 양수인데 계획이 비면 실패한다. 아래 이전 회차의 전체 매일 실행 계획은 이 결정으로 대체된다.
 
 ## 기준과 진단
 
@@ -251,3 +251,53 @@ master0739990을 합친 소스의 실제 catalog는4471개다. ceil(4471/128)=35
 | S29 | throw new Error("변이 실행은 master의 고정된 실행 SHA가 필요하다"); → ; | H47 manual mutation runs require the pinned master snapshot | 컴파일 후 검출(exit1) |
 
 4회차 정상 통합 검사: master580a19874ee4ad32c21c4c3f83a0a4142b3a4858 기준 workspace1332/1332(114.931초), coverage975/975(86.911초), coverage-check 위반0. 실제128분할 목록 회귀81.443초 통과. 전체 정상 훅631.62초 뒤 승인된 test-diff 정확4건(기존 정확분할·deadline 테스트2건, 훅 fixture 헬퍼2건)에서 exit1이었다. 이4건 외 문제는 없고 후속 disable-report·disable-report-since·hooks-installed도 통과했다. 새 끄기0. 지시문의 해당 커밋 예외를 적용하고 사유를 커밋 메시지에 남긴다. 전체 명령이 exit0이었다고 표현하지 않는다.
+
+## 단일 Opus 리뷰 반영
+
+[일일·주간 Opus 리뷰](t3-thread://v2/6d045176-96ef-48cf-b853-22f631ce6b65/thread:delegated-task:command%3Amcp%3Acb0ccb1b-e346-4f2a-b148-260c0dd56a5d%3Adelegate-task%3A951635ea-8a33-47fb-ba55-a28b6aeecfa1)는 중요1·보통1·낮음1을 지적했다. 추가 Opus는 띄우지 않는다.
+
+중요1은 수용해 적응 분할을 구현했다. 실제 CLI로 edd57f84fc68b66a417291424006f6f463b67938→현재 대상 소스에서936개, c1b3a5992a3047649d31f56bae8539d1c62f1287→현재 대상 소스에서1431개를 독립 재열거했다. 각각8개의 실제 CLI 목록은117개씩8개,179개씩7개와178개이며 비중복과 전체 합집합을 모두 확인했다. 변이는 실행하지 않은 목록 실측이다.
+
+분할만으로는1431개의 느린 경로가160분에 들어오지 않으므로 일일에만 단계330분·작업360분을 적용한다. 179×172초÷2=256.567분, 변이 비용20% 여유와 baseline10분을 더하면317.88분으로330분 안이다. 준비·요약은 작업360분과의30분 차이에 둔다. 936개는 조각117개이므로167.7분+baseline으로 추정한다. GitHub의 [단계 제한 최대360분](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepstimeout-minutes) 안이다. 다른 작업의 기존180분 정책과 주간160/180분은 유지하며 일일 작업만 정확히 예외를 둔다. 이 계산은 원격 실측 완주 보장이 아니다. 8조각 상한보다 더 큰 변경일은 기한을 넘으면 실패·불완전 요약을 남기며 대상을 버리거나 검사 강도를 낮추지 않는다.
+
+보통2 중 설치·큐 지연의 틈은 수정했다. 계획 작업은 [자신의 실행 메타데이터](https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run)의 created_at을 읽어 일일18:00 UTC 예약 기준을 고정한다. worker는 그때 정한 base와 고정 SHA를 모두 재사용하므로 도구 설치나 worker 큐 대기에 따라 기준이 움직이지 않는다. 수동 실행은 생성 시각 그대로다. 조회 실패는 현재 시각으로 대체하지 않고 실패한다. Actions 읽기 권한은 이 메타데이터 작업에만 부여한다.
+
+늦게 push한 옛 날짜 커밋·커밋 시계 역행·누락된 예약 실행은 main이 지정한 Git 커밋 날짜 기반24시간 선택의 한계로 남는다. 마지막 성공 SHA 방식으로 몰래 바꾸거나24시간을 임의로 늘리지 않는다. 이때 변경 없음은 해당 커밋 시각 창의 선택 변이0개를 뜻하며 최근 push 전체 검사 완료를 보장하지 않는다. 주간 전체가 최대7일 뒤 보완한다.
+
+낮음3은 수정했다. 일반 changes/macOS/Linux/notify는 기존 일일 cron에만 실행되고 주간·수동 변이에서 중복되지 않는다. 일일 plan과worker는 일반 검사 결과에 의존하지 않으며 plan 실패도 변이 알림 대상으로 포함한다. 일일 실제 계획과 catalog의 정확한 조각별 name/file 목록을 대조해 다른 필터로 비어 버리는 실행도 성공으로 숨기지 않는다.
+
+### 적응 분할 수정의 손 변형
+
+별도 mktemp 복사본에서 계획·요약의24개 JS 변형을 node --check 뒤 실제 h47-plan 회귀로 실행했다. 처음에 요약의 선택 수를 조각 수로 바꾼 변형이 생존해 서로 다른5/1 값을 단언하는 회귀를 보강했고, 전체24개를 재실행해 모두 검출했다. 실제 Rust valid_shard 함수와 기존 해당 테스트를 그대로 추출해 rustc로 컴파일한 정상은0, 상한9·마지막 인덱스 포함·비교 반전3변형은 각각101로 실패했다. 아래27개는 모두 컴파일 가능한 실제 실행이며 이전 회차29개와 구분한다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| A1 | Math.min(8, → Math.min(9, | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A2 | Math.max(1, → Math.max(0, | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A3 | Math.ceil(count / 100) → Math.floor(count / 100) | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A4 | count / 100 → count / 1000 | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A5 | !Number.isSafeInteger(count) → Number.isSafeInteger(count) | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A6 | ${index}/${total} → ${index + 1}/${total} | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A7 | Math.ceil(catalog.length / total) → Math.floor(catalog.length / total) | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A8 | index * chunk, → (index + 1) * chunk, | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A9 | index >= total → index > total | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A10 | [1-8] → [1-9] | H47 adaptive daily shards are bounded complete nonoverlapping and budget actual review windows | 검출 |
+| A11 | date.getUTCDate(), 18 → date.getUTCDate(), 17 | H47 scheduled anchors ignore installation queue delay and preserve manual creation time | 검출 |
+| A12 | anchor > date → anchor < date | H47 scheduled anchors ignore installation queue delay and preserve manual creation time | 검출 |
+| A13 | anchor.getUTCDate() - 1 → anchor.getUTCDate() + 1 | H47 scheduled anchors ignore installation queue delay and preserve manual creation time | 검출 |
+| A14 | event === "workflow_dispatch" → event === "schedule" | H47 scheduled anchors ignore installation queue delay and preserve manual creation time | 검출 |
+| A15 | typeof createdAt !== "string" → typeof createdAt !== "number" | H47 scheduled anchors ignore installation queue delay and preserve manual creation time | 검출 |
+| A16 | ".created_at" → ".run_started_at" | H47 planner reads run metadata once emits a bounded matrix and fails closed | 검출 |
+| A17 | result.status !== 0 → result.status === 0 | H47 planner reads run metadata once emits a bounded matrix and fails closed | 검출 |
+| A18 | run.status !== 0 → run.status === 0 | H47 planner reads run metadata once emits a bounded matrix and fails closed | 검출 |
+| A19 | count: catalog.length → count: shards.length | H47 planner reads run metadata once emits a bounded matrix and fails closed | 검출 |
+| A20 | "target/mutants/plan.json" → "target/mutants/wrong-plan.json" | H47 planner reads run metadata once emits a bounded matrix and fails closed | 검출 |
+| A21 | sliceFor(catalog, receipt.shard) → catalog | H47 plan summaries fail closed and daily shards validate exact planned identities | 검출 |
+| A22 | receipt.shard !== process.env.MUTATION_SHARD → receipt.shard === process.env.MUTATION_SHARD | H47 plan summaries fail closed and daily shards validate exact planned identities | 검출 |
+| A23 | JSON.stringify(shardsFor(catalog.length)) → JSON.stringify([]) | H47 plan summaries fail closed and daily shards validate exact planned identities | 검출 |
+| A24 | 선택 변이: ${catalog.length} → 선택 변이: ${plan.shards.length} | H47 plan summaries fail closed and daily shards validate exact planned identities | 검출 |
+| R1 | valid_shard 상한8→9 | daily_shards_are_canonical_and_never_exceed_eight | 컴파일 후 검출(exit101) |
+| R2 | 인덱스 끝 포함 | daily_shards_are_canonical_and_never_exceed_eight | 컴파일 후 검출(exit101) |
+| R3 | 조각 문자열 비교 반전 | daily_shards_are_canonical_and_never_exceed_eight | 컴파일 후 검출(exit101) |
+
+Opus 수정 중 master가 D-42·DS-06을 포함한 ecb6e5a73b3fe5a394d55c0803bb203ad984cdf6로 전진했다. 이전 기준으로 진행하던 본인 검사 그룹만 확인 후 SIGINT로 중단했고, 중단된 bootstrap 임시 폴더만 정리했다. 이를 통과로 세지 않는다. 최신 master를 --no-ff로 추가 병합해 받은 도메인·차트·문서 변경을 보존하고 다시 통합 검사한다.

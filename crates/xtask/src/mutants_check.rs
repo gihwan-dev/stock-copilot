@@ -60,6 +60,7 @@ pub(crate) enum Scope {
     Sharded(String),
     Files(BTreeSet<String>),
     DailyFiles(BTreeSet<String>),
+    DailySharded(BTreeSet<String>, String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,14 +187,14 @@ pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
-    if let Scope::Files(files) | Scope::DailyFiles(files) = scope {
+    if let Scope::Files(files) | Scope::DailyFiles(files) | Scope::DailySharded(files, _) = scope {
         return files.iter().cloned().collect();
     }
     globs
         .iter()
         .filter(|_| match scope {
             Scope::Everything | Scope::Sharded(_) => true,
-            Scope::Files(_) | Scope::DailyFiles(_) => false,
+            Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => false,
         })
         .cloned()
         .collect()
@@ -332,7 +333,7 @@ fn prepare_output(
         fs::remove_dir_all(results).map_err(|error| error.to_string())?;
     }
     match scope {
-        Scope::Files(_) | Scope::DailyFiles(_) => {}
+        Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => {}
         Scope::Everything | Scope::Sharded(_) => catalog::prepare(root, globs, ignore, &output)?,
     }
     Ok(output)
@@ -347,7 +348,9 @@ fn run_with_diff(
     let globs = selected_globs(&target_globs(workspace)?, scope);
     if globs.is_empty() {
         return match scope {
-            Scope::Files(_) | Scope::DailyFiles(_) => Ok(Outcomes::default()),
+            Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => {
+                Ok(Outcomes::default())
+            }
             Scope::Everything | Scope::Sharded(_) => Err(String::from("밤 전체 변이 대상이 없다")),
         };
     }
@@ -371,7 +374,7 @@ fn run_with_diff(
         .stdin(Stdio::null());
     configure_profile(&mut command);
     configure_parallelism(&mut command, workspace, &globs)?;
-    if let Scope::Sharded(shard) = scope {
+    if let Scope::Sharded(shard) | Scope::DailySharded(_, shard) = scope {
         command.arg("--shard").arg(shard);
     }
     for glob in &globs {
@@ -386,9 +389,10 @@ fn run_with_diff(
     let results = output.join("mutants.out");
     let status = match scope {
         Scope::Files(_) => environment::run_bounded(command)?,
-        Scope::Everything | Scope::Sharded(_) | Scope::DailyFiles(_) => {
-            command.status().map_err(|error| error.to_string())?
-        }
+        Scope::Everything
+        | Scope::Sharded(_)
+        | Scope::DailyFiles(_)
+        | Scope::DailySharded(_, _) => command.status().map_err(|error| error.to_string())?,
     };
     let written = match status.code() {
         Some(PASSED) => Written::WhenTested,
@@ -459,7 +463,14 @@ fn list_changed_mutants(
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
-        .args(["mutants", "--no-config", "--list", "--json", "--in-diff"])
+        .args([
+            "mutants",
+            "--no-config",
+            "--no-shuffle",
+            "--list",
+            "--json",
+            "--in-diff",
+        ])
         .arg(patch);
     for file in globs {
         command.arg("--file").arg(file);
@@ -561,10 +572,11 @@ pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) 
     report(
         "mutants",
         workspace_root().and_then(|root| {
-            if let [flag, base] = arguments
-                && flag == "--daily"
+            if arguments
+                .first()
+                .is_some_and(|flag| flag.starts_with("--daily"))
             {
-                return daily::check(&root, base, base_use);
+                return daily::dispatch(&root, arguments, base_use);
             }
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
             let scope = checked_scope(&root, arguments, base_use)?;

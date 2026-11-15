@@ -48,6 +48,10 @@
     },
     ".github/workflows/nightly.yml#notify-mutants": {
       "issues": "write"
+    },
+    ".github/workflows/nightly.yml#daily-plan": {
+      "contents": "read",
+      "actions": "read"
     }
   },
   "conditions": [
@@ -60,7 +64,10 @@
     "hashFiles('base-tools/harness/ci/signatures/from-base.mjs') == ''",
     "needs.changes.outputs.changed == 'yes'",
     "github.event.schedule == '0 14 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')",
-    "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')"
+    "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
+    "github.event.schedule == '0 18 * * *'",
+    "github.event.schedule == '0 18 * * *' && needs.changes.outputs.changed == 'yes'",
+    "failure() && github.event.schedule == '0 18 * * *'"
   ],
   "commands": [
     "echo '서명 검사 비활성: 기준 checkout에 harness/ci/signatures/from-base.mjs가 없다'",
@@ -82,8 +89,8 @@
     "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 신뢰 자료 %s, 범위 시작 %s (%s)\\n' \"$verified\" \"$base\" \"$kind\"\nprintf 'tools=%s\\nbase=%s\\nkind=%s\\n' \"$verified\" \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
     "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
     "node harness/ci/mutants-summary.mjs",
-    "node harness/ci/mutation-range.mjs",
-    "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\"",
+    "node harness/ci/mutation-range.mjs plan",
+    "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
     "node harness/ci/mutation-range.mjs verify"
   ],
   "expressions": [
@@ -102,7 +109,13 @@
     "${{ steps.changed.outputs.changed }}",
     "${{ steps.range.outputs.base }}",
     "${{ steps.mutation.outcome }}",
-    "${{ matrix.shard }}"
+    "${{ matrix.shard }}",
+    "${{ steps.plan.outputs.base }}",
+    "${{ steps.plan.outputs.shards }}",
+    "${{ steps.plan.outputs.count }}",
+    "${{ steps.plan.outputs.anchor }}",
+    "${{ steps.plan.outcome }}",
+    "${{ needs.daily-plan.outputs.base }}"
   ],
   "envNames": [
     "BASE",
@@ -396,11 +409,12 @@
               "id": "changed",
               "run": "node harness/ci/ci-range.mjs changed"
             }
-          ]
+          ],
+          "if": "github.event.schedule == '0 18 * * *'"
         },
         "macos": {
           "needs": ["changes"],
-          "if": "needs.changes.outputs.changed == 'yes'",
+          "if": "github.event.schedule == '0 18 * * *' && needs.changes.outputs.changed == 'yes'",
           "runs-on": "macos-15",
           "timeout-minutes": 90,
           "steps": [
@@ -510,11 +524,12 @@
               "name": "linux tests without network",
               "run": "node harness/ci/linux/offline.mjs just linux-test"
             }
-          ]
+          ],
+          "if": "github.event.schedule == '0 18 * * *'"
         },
         "notify": {
           "needs": ["changes", "macos", "linux"],
-          "if": "failure()",
+          "if": "failure() && github.event.schedule == '0 18 * * *'",
           "runs-on": "ubuntu-24.04",
           "timeout-minutes": 10,
           "permissions": {
@@ -761,7 +776,7 @@
           "if": "github.event.schedule == '0 14 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')"
         },
         "notify-mutants": {
-          "needs": ["mutants", "mutants-daily"],
+          "needs": ["mutants", "daily-plan", "mutants-daily"],
           "if": "failure()",
           "runs-on": "ubuntu-24.04",
           "timeout-minutes": 10,
@@ -806,7 +821,7 @@
         },
         "mutants-daily": {
           "runs-on": "ubuntu-24.04-arm",
-          "timeout-minutes": 180,
+          "timeout-minutes": 360,
           "steps": [
             {
               "name": "checkout",
@@ -856,17 +871,13 @@
               "run": "node harness/ci/tools.mjs fetch"
             },
             {
-              "name": "daily range",
-              "id": "range",
-              "run": "node harness/ci/mutation-range.mjs"
-            },
-            {
               "name": "mutants without network",
-              "run": "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\"",
+              "run": "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
               "id": "mutation",
-              "timeout-minutes": 160,
+              "timeout-minutes": 330,
               "env": {
-                "MUTATION_BASE": "${{ steps.range.outputs.base }}"
+                "MUTATION_BASE": "${{ needs.daily-plan.outputs.base }}",
+                "MUTATION_SHARD": "${{ matrix.shard }}"
               }
             },
             {
@@ -875,12 +886,102 @@
               "run": "node harness/ci/mutants-summary.mjs",
               "env": {
                 "MUTATION_OUTCOME": "${{ steps.mutation.outcome }}",
-                "MUTATION_SHARD": "daily",
+                "MUTATION_SHARD": "${{ matrix.shard }}",
                 "MUTATION_MODE": "daily"
               }
             }
           ],
-          "if": "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')"
+          "if": "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
+          "needs": ["daily-plan"],
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
+            }
+          }
+        },
+        "daily-plan": {
+          "runs-on": "ubuntu-24.04-arm",
+          "timeout-minutes": 30,
+          "steps": [
+            {
+              "name": "checkout",
+              "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "with": {
+                "fetch-depth": 0,
+                "persist-credentials": false,
+                "ref": "${{ github.sha }}"
+              }
+            },
+            {
+              "name": "node",
+              "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+              "with": {
+                "node-version-file": ".node-version"
+              }
+            },
+            {
+              "name": "master snapshot",
+              "run": "node harness/ci/mutation-range.mjs verify",
+              "env": {
+                "REF": "${{ github.ref }}",
+                "SHA": "${{ github.sha }}"
+              }
+            },
+            {
+              "name": "pnpm",
+              "run": "node harness/ci/tools.mjs pnpm"
+            },
+            {
+              "name": "tools",
+              "uses": "taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39",
+              "with": {
+                "tool": "just@1.59.0,cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1"
+              }
+            },
+            {
+              "name": "cargo-mutants",
+              "run": "node harness/ci/tools.mjs cargo-install"
+            },
+            {
+              "name": "lefthook",
+              "run": "node harness/ci/tools.mjs lefthook"
+            },
+            {
+              "name": "fetch",
+              "run": "node harness/ci/tools.mjs fetch"
+            },
+            {
+              "name": "daily plan",
+              "id": "plan",
+              "run": "node harness/ci/mutation-range.mjs plan",
+              "env": {
+                "GH_TOKEN": "${{ github.token }}"
+              },
+              "timeout-minutes": 15
+            },
+            {
+              "name": "mutation results",
+              "if": "always()",
+              "run": "node harness/ci/mutants-summary.mjs",
+              "env": {
+                "MUTATION_OUTCOME": "${{ steps.plan.outcome }}",
+                "MUTATION_SHARD": "plan",
+                "MUTATION_MODE": "plan"
+              }
+            }
+          ],
+          "if": "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
+          "permissions": {
+            "contents": "read",
+            "actions": "read"
+          },
+          "outputs": {
+            "base": "${{ steps.plan.outputs.base }}",
+            "shards": "${{ steps.plan.outputs.shards }}",
+            "count": "${{ steps.plan.outputs.count }}",
+            "anchor": "${{ steps.plan.outputs.anchor }}"
+          }
         }
       }
     },
@@ -1156,6 +1257,17 @@
       "job": "mutants-daily",
       "name": "mutation results",
       "run": "node harness/ci/mutants-summary.mjs"
+    },
+    {
+      "job": "daily-plan",
+      "name": "mutation results",
+      "run": "node harness/ci/mutants-summary.mjs"
     }
-  ]
+  ],
+  "dailyMutationStrategy": {
+    "fail-fast": false,
+    "matrix": {
+      "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
+    }
+  }
 }

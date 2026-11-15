@@ -63,3 +63,25 @@ export const focusDialogInput = (
     popup;
   target?.focus();
 };
+
+export const chartNavigation = (
+  event: Readonly<KeyboardEvent<HTMLButtonElement>>,
+): "next" | "previous" | "first" | "last" | "ignore" => {
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    event.preventDefault();
+    return "next";
+  }
+  if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    event.preventDefault();
+    return "previous";
+  }
+  if (event.key === "Home") {
+    event.preventDefault();
+    return "first";
+  }
+  if (event.key === "End") {
+    event.preventDefault();
+    return "last";
+  }
+  return "ignore";
+};

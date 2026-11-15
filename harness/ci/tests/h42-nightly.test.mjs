@@ -28,7 +28,11 @@ test("H-42 mutation shards run independently and notify with their own title", (
       shard: Array.from({ length: 128 }, (_, index) => `${index}/128`),
     },
   });
-  assert.deepEqual(jobs["notify-mutants"].needs, ["mutants", "mutants-daily"]);
+  assert.deepEqual(jobs["notify-mutants"].needs, [
+    "mutants",
+    "daily-plan",
+    "mutants-daily",
+  ]);
   assert.equal(jobs["notify-mutants"].if, "failure()");
   assert.equal(jobs["notify-mutants"].steps[2].env.TITLE, "밤 변이 검사 실패");
   assert.ok(

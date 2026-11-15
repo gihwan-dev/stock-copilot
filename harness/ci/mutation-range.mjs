@@ -1,3 +1,4 @@
+import { preparePlan } from "./mutation-plan.mjs";
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -35,6 +36,8 @@ export const verifySnapshot = (root, ref, sha) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv[2] === "verify") {
     verifySnapshot(process.cwd(), process.env.REF, process.env.SHA);
+  } else if (process.argv[2] === "plan") {
+    preparePlan(process.cwd(), dailyRange);
   } else {
     const base = dailyRange(process.cwd());
     process.stdout.write(`지난 24시간 기준: ${base}\n`);

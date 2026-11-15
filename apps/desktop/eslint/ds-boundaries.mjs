@@ -206,7 +206,7 @@ export const boundaryRules = {
       schema: [
         {
           type: "object",
-          properties: { geometry: { enum: ["allow", "forbid"] } },
+          properties: { geometry: { enum: ["allow", "forbid", "chart"] } },
           additionalProperties: false,
         },
       ],
@@ -240,6 +240,24 @@ export const boundaryRules = {
             ].includes(key) ||
             (["rect", "circle", "ellipse", "line"].includes(tag.name) &&
               ["width", "height"].includes(key));
+          if (
+            geometry &&
+            ctx.options[0]?.geometry === "chart" &&
+            ["d", "viewBox"].includes(key)
+          )
+            return;
+          if (
+            ctx.options[0]?.geometry === "chart" &&
+            key === "vectorEffect" &&
+            node.value?.value === "non-scaling-stroke"
+          )
+            return;
+          if (
+            ctx.options[0]?.geometry === "chart" &&
+            key === "pointerEvents" &&
+            ["all", "none"].includes(node.value?.value)
+          )
+            return;
           if (geometry && ctx.options[0]?.geometry === "allow") {
             const v = node.value;
             const valid = ["d", "viewBox", "points"].includes(key)
