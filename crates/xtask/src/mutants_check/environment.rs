@@ -84,7 +84,9 @@ mod tests {
 
     impl Drop for OwnedChild {
         fn drop(&mut self) {
-            let _kill_result = self.0.kill();
+            if self.0.try_wait().is_ok_and(|state| state.is_none()) {
+                let _kill_result = self.0.kill();
+            }
             let _wait_result = self.0.wait();
         }
     }
@@ -92,28 +94,30 @@ mod tests {
     struct Fixture {
         runner: OwnedChild,
         pid_file: std::path::PathBuf,
+        release_file: std::path::PathBuf,
     }
 
     impl Drop for Fixture {
         fn drop(&mut self) {
-            let _interrupt_result = super::signal_group(&self.runner.0, "-INT");
+            let _released = std::fs::write(&self.release_file, "release");
             if let Ok(pid) = std::fs::read_to_string(&self.pid_file) {
-                let _kill_result = std::process::Command::new("/bin/kill")
-                    .args(["-KILL", "--", pid.trim()])
-                    .status();
+                let _cleanup_result = wait_until(
+                    || !child_state(&pid).success(),
+                    "release owned fixture child",
+                );
             }
         }
     }
 
-    fn wait_until(mut condition: impl FnMut() -> bool, description: &str) {
+    fn wait_until(mut condition: impl FnMut() -> bool, description: &str) -> Result<(), String> {
         let start = std::time::Instant::now();
         while !condition() {
-            assert!(
-                start.elapsed() < std::time::Duration::from_secs(180),
-                "{description}"
-            );
+            if start.elapsed() >= std::time::Duration::from_secs(180) {
+                return Err(String::from(description));
+            }
             std::thread::park_timeout(std::time::Duration::from_millis(100));
         }
+        Ok(())
     }
 
     fn metadata(directory: &std::path::Path, args: &[&str], name: &str) {
@@ -138,7 +142,7 @@ mod tests {
             "[package]\nname=\"h47-owner-fixture\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n",
         )
         .expect("manifest");
-        std::fs::write(directory.join("src/lib.rs"), "#[test] fn waits() { std::fs::write(\"child.pid\", std::process::id().to_string()).expect(\"pid\"); loop { std::thread::park(); } }").expect("fixture");
+        std::fs::write(directory.join("src/lib.rs"), "#[test] fn waits() { std::fs::write(\"child.pid\", std::process::id().to_string()).expect(\"pid\"); while !std::path::Path::new(\"release\").exists() { std::thread::park_timeout(std::time::Duration::from_millis(100)); } }").expect("fixture");
         generate_lockfile(&directory.join("Cargo.toml"));
         metadata(
             &directory,
@@ -173,6 +177,7 @@ mod tests {
         Fixture {
             runner: OwnedChild(runner),
             pid_file: directory.join("child.pid"),
+            release_file: directory.join("release"),
         }
     }
 
@@ -193,7 +198,8 @@ mod tests {
                     .is_ok_and(|pid| pid.trim().parse::<u32>().is_ok())
             },
             "nextest test must start before timing deadline",
-        );
+        )
+        .expect("nextest test ready");
         let child = std::fs::read_to_string(&fixture.pid_file).expect("nextest test child PID");
         let mut unrelated = OwnedChild(
             std::process::Command::new("/bin/cat")
@@ -208,10 +214,6 @@ mod tests {
             std::time::Instant::now(),
         )
         .expect_err("deadline failure");
-        wait_until(
-            || !child_state(&child).success(),
-            "nextest child must terminate after deadline",
-        );
         let state = child_state(&child);
         let sentinel = unrelated.0.try_wait().expect("sentinel state");
         unrelated.0.kill().expect("sentinel cleanup");

@@ -6,16 +6,27 @@ const read = (name) => readFileSync(join(directory, name), "utf8");
 let state = "불완전";
 try {
   const planned = JSON.parse(read("mutants.json"));
-  const outcomes = JSON.parse(read("outcomes.json"));
   if (
     Array.isArray(planned) &&
-    planned.length > 0 &&
-    outcomes.total_mutants === planned.length &&
-    outcomes.outcomes.some(
-      (entry) => entry.scenario === "Baseline" && entry.summary === "Success",
+    planned.length === 0 &&
+    !existsSync(join(directory, "outcomes.json")) &&
+    ["missed.txt", "timeout.txt", "caught.txt", "unviable.txt"].every(
+      (name) => existsSync(join(directory, name)) && read(name).trim() === "",
     )
   )
-    state = "완주";
+    state = "대상 없음";
+  else {
+    const outcomes = JSON.parse(read("outcomes.json"));
+    if (
+      Array.isArray(planned) &&
+      planned.length > 0 &&
+      outcomes.total_mutants === planned.length &&
+      outcomes.outcomes.some(
+        (entry) => entry.scenario === "Baseline" && entry.summary === "Success",
+      )
+    )
+      state = "완주";
+  }
 } catch {
   state = "불완전";
 }
@@ -32,6 +43,9 @@ process.stdout.write(summary);
 if (process.env.GITHUB_STEP_SUMMARY !== undefined) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
 }
-if (outcome !== undefined && (outcome !== "success" || state !== "완주")) {
+if (
+  outcome !== undefined &&
+  (outcome !== "success" || !["완주", "대상 없음"].includes(state))
+) {
   process.exitCode = 1;
 }

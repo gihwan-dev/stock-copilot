@@ -75,7 +75,7 @@ D-42와 이후 작업은 현행 미검출의 테스트 보강을 받는다. 밤 
 
 메인의 추가 지시로 `mutants_check::environment::tests::deadline_stops_nextest_child_groups_and_preserves_unrelated_pid`의 기존 본문 변경을 승인받았다. 단언은 유지하고 준비·대기 방식을 바꾼다. 기존 코드는 fixture 사전 빌드 후 다시 cargo nextest run을 실행하며 4초 안에 테스트 자식이 시작할 것으로 가정했다. Cargo 캐시 잠금과 재빌드가 지연되면 child.pid가 없고, 자식이 시작되기 전에 부모를 종료해 FAIL 또는 LEAK가 될 수 있었다. 무관한 sleep60도 부하에 따라 자연 종료할 수 있었다.
 
-빌드와 Cargo·바이너리 메타데이터 준비는 기한 측정 전에 끝낸다. 실행은 cargo-nextest에 두 메타데이터 파일을 직접 넘기며 CARGO=/bin/false로 재빌드나 Cargo 호출이 생기면 실패하게 한다. PID 파일이 실제 테스트 자식의 PID를 담을 때까지 최대180초 조건 대기 후 기한 검사를 시작한다. 자식은 고정60초 sleep 대신 명시적으로 종료될 때까지 park한다. 무관한 프로세스도 파이프가 열린 cat으로 유지한다. 기한30초 뒤 자식 종료를 최대180초 조건 대기로 확인한다. 기존의 기한 실패·자식 종료·무관한 PID 생존 단언은 그대로다. 정상 종료 명령의 1초 상한도30초로 바꾼다. 준비 실패나 단언 실패에도 소유 PID를 정리하고 reap하는 테스트 전용 가드를 둔다.
+빌드와 Cargo·바이너리 메타데이터 준비는 기한 측정 전에 끝낸다. 실행은 cargo-nextest에 두 메타데이터 파일을 직접 넘기며 CARGO=/bin/false로 재빌드나 Cargo 호출이 생기면 실패하게 한다. PID 파일이 실제 테스트 자식의 PID를 담을 때까지 최대180초 조건 대기 후 기한 검사를 시작한다. 자식은 고정60초 sleep 대신 release 파일이 생길 때까지 조건 대기한다. 무관한 프로세스도 파이프가 열린 cat으로 유지한다. 기한 함수가 반환한 직후의 자식 상태를 즉시 판정한다. 최대180초 조건 대기는 실패한 fixture 정리에만 사용하며 판정에 유예를 주지 않는다. 기존의 기한 실패·자식 종료·무관한 PID 생존 단언은 그대로다. 정상 종료 명령의 1초 상한도30초로 바꾼다. 준비 실패나 단언 실패에도 release 파일로 fixture 자식을 해제하고 소유 Child를 정리·reap하는 테스트 전용 가드를 둔다. 이미 종료된 숫자 PID·PGID에 신호를 보내지 않는다.
 
 운영 기한 계산은 기존 시작 시점을 유지한 채 wait_with_limit으로 분리했다. 테스트만 자식 준비 뒤 같은 종료 루프를 사용한다. 운영20분·SIGINT·SIGKILL 실패 정책은 유지한다. 추가 보호 변경은 crates/xtask/src/mutants_check/environment.rs다.
 
@@ -89,3 +89,23 @@ D-42와 이후 작업은 현행 미검출의 테스트 보강을 받는다. 밤 
 정상 커밋 훅의 전체 검사에서1294/1294 workspace 테스트와945/945 커버리지 테스트가 통과했고 coverage-check 위반은 없다. 최종 test-diff는 승인된 두 Rust 기존 테스트의 본문 변경만 지적한다: shard_selection_accepts_only_fixed_partition의 정확한 분할 목록 갱신과 추가 승인된 deadline_stops_nextest_child_groups_and_preserves_unrelated_pid의 대기 방식 변경. 새 import의 shadowing 두 건은 완전한 경로 표기로 제거하고 test-diff를 다시 실행해 위 두 건만 남는 것을 확인했다. 이 표기 변경 뒤 xtask 전체 대상 Clippy도 통과했다.
 
 나머지 전체 검사 단계는 통과했고, test-diff 뒤 단계인 disable-report·disable-report-since·hooks-installed도 따로 통과했다. 새 끄기는0건이다. 사용자가 지시한 승인 예외에 따라 이 승인된 기존 테스트 변경을 담는 구현 커밋 하나만 LEFTHOOK=0으로 만들고 사유를 커밋 메시지에 남긴다. 리뷰·기록 정리 뒤 최종 커밋은 정상 훅의 전체 검사를 통과시킨다. 전체 just check가 승인 예외 없이 이미 통과했다고 주장하지 않는다.
+
+
+## 1차 리뷰 반영
+
+새 Opus와 새 Codex 비판에서 중요2건을 확정했다. 반환 후 자식 소멸 대기를 판정 앞에 두어 검출력이 약해진 부분을 고쳤다. 정상 코드22.04초 통과, 같은 컴파일 가능한 러너만 종료하는 손변형은31.99초에 `nextest child survived deadline`으로 실패했다. 자식 해제용 파일은 테스트 판정 뒤 정리할 때만 쓰므로 나중 소멸이 판정을 바꾸지 않는다. PID 신호 정리 대신 파일을 통한 fixture 해제를 쓴다.
+
+Slice는 대상 수가 조금 달라져도 빈 조각이 생긴다(4445개면127번,4481개면125~127번). 정상 빈 실행은 mutants.json=[]와 빈 결과 파일4개를 쓰고 outcomes.json·baseline을 만들지 않는다. 정확히 이 산출물과 단계의 성공 종료를 확인한 경우에만 대상 없음으로 성공 처리한다. 목록·결과 파일 유실, 모순된 결과, 실패·취소는 계속 실패다. 실제 빈 CLI 실행을 회귀로 추가했다. 128조각의 비중복·합집합은 빈 조각을 허용하더라도 그대로 유지된다.
+
+분할 회귀는 xtask와 같은 no-config·cap-lints·nextest·명시 file 인자로 맞췄다. 129회 CLI 실행의158~381초 비용은 기록하고, 실제 전체128조각 증거를 유지하기로 했다. 현재 config/명시 방식 대상4452개가 같음은 비판에서 독립 확인됐다. 문서의 네 조각 설명은128로 바로잡았다. ADR 번호·초안 지적은 사용자 명시 지시에 따라 기각했다. 상세 평가와 측정은 docs/reviews/H-47.md에 있다.
+
+수정 뒤 JavaScript 손변형은 임시 복사본에서26개를 node --check로 컴파일 가능한지 확인한 뒤 실제 실행했고 모두 검출됐다. 종료 신호 제거·러너만 kill하는 별도 Rust 변형도 실제 컴파일·실행해 검출했다. 아래 추가 표는1차 표의 뒤에 붙이는 수정 회차 증거다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 22 | 빈 목록 길이0 판정을 반대로 | H47 successful empty slices | 검출 |
+| 23 | outcomes 부재 조건을 존재로 | H47 successful empty slices | 검출 |
+| 24 | 빈 결과 파일 every를 some으로 | H47 successful empty slices | 검출 |
+| 25 | 빈 결과 내용 비교를 반대로 | H47 successful empty slices | 검출 |
+| 26 | 대상 없음 상태를 불완전으로 | H47 successful empty slices | 검출 |
+| 27 | SIGINT 제거와 그룹 KILL을 러너만 kill로 교체 | deadline_stops_nextest_child_groups_and_preserves_unrelated_pid | 검출, exit101 |
