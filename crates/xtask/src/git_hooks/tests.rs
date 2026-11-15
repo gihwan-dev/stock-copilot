@@ -144,7 +144,8 @@ enum Hooks {
 }
 
 fn repository(name: &str, hooks: Hooks) -> PathBuf {
-    let directory = fresh_directory(&repository_root(), name).join("repository");
+    let root = crate::harness_workspace_tests::unique_directory(&repository_root(), name);
+    let directory = fresh_directory(&root, name).join("repository");
     fs::create_dir_all(&directory).expect("create repository");
     git(&directory, &["init", "--quiet", "--initial-branch=main"]);
     fs::copy(
@@ -1674,4 +1675,24 @@ fn h44_review_require_base_cli_stays_strict_in_commit_environment() {
     let recipe_result = recipe.output().expect("require-base recipe");
     assert!(!recipe_result.status.success());
     assert!(String::from_utf8_lossy(&recipe_result.stderr).contains("HEAD의 조상이 아니다"));
+}
+
+#[test]
+fn hook_fixture_creation_preserves_another_repository() {
+    let first = repository("h47-overlapping-hook-fixture", Hooks::Absent);
+    fs::write(first.join("live.txt"), "first fixture stays intact").expect("live fixture marker");
+    let second = repository("h47-overlapping-hook-fixture", Hooks::Absent);
+    assert_ne!(
+        first, second,
+        "separate executions must never share a fixture path"
+    );
+    assert_eq!(
+        fs::read_to_string(first.join("live.txt")).expect("first fixture preserved"),
+        "first fixture stays intact"
+    );
+    assert_eq!(git(&first, &["rev-parse", "--is-inside-work-tree"]), "true");
+    assert_eq!(
+        git(&second, &["rev-parse", "--is-inside-work-tree"]),
+        "true"
+    );
 }

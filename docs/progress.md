@@ -80,6 +80,7 @@ Claude Code 샌드박스는 아직 꺼져 있다. 복사본 실측에서 작업 
 | H-44 | 완료 | aeff12b | [H-44](reviews/H-44.md) | 구현 담당: `master` 병합은 `git merge --no-ff --no-edit master` 한 번으로 정상 훅 통과. 한계: 승인받아 지운 테스트를 약하게 되살리는 변경은 잡지 못함 |
 | H-45 | 완료 | dc82f12 | [H-45](reviews/H-45.md) | H-46: 변경분 변이를 바뀐 파일 기준으로 단순화하고 밤 실행 확인. 구현 담당: application은 `src` 전체가 변이 대상 |
 | H-46 | 완료 | f482e8a | [H-46](reviews/H-46.md) | 구현 담당: 작업 브랜치 커밋은 `check-fast`, 횟수는 `testkit::property_cases()`. 메인: `master`는 `--no-ff` 병합 커밋으로만 전진. H-47: 밤 전체 변이 완주. D-42: 변이 미검출 보강 |
+| H-47 | 완료 | 68ccea6 | [H-47](reviews/H-47.md) | 원격 확인: 메타데이터 API 권한, 계획 소요 시간, 조각별 완주 시간, 강제 취소 시 요약 유무. 원래 SIGKILL 원인은 미해결 관찰 |
 
 T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않는다.
 

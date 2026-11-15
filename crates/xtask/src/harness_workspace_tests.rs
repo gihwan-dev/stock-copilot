@@ -25,6 +25,14 @@ pub(crate) fn fresh_directory(root: &Path, name: &str) -> PathBuf {
     directory
 }
 
+pub(crate) fn unique_directory(root: &Path, name: &str) -> PathBuf {
+    let parent = root.join("target").join("harness");
+    fs::create_dir_all(&parent).expect("create harness parent");
+    PrivateDirectory::create_in(&parent, name)
+        .and_then(|directory| directory.child("fixture"))
+        .expect("unique harness directory")
+}
+
 pub(crate) fn outside_git_directory() -> PathBuf {
     PrivateDirectory::create("stock-copilot-harness-git")
         .and_then(|private| private.child("git"))
