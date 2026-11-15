@@ -75,6 +75,10 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
   assert.deepEqual(policy.jobPermissions, {
     ".github/workflows/ci.yml#notify": { issues: "write" },
     ".github/workflows/nightly.yml#notify": { issues: "write" },
+    ".github/workflows/nightly.yml#daily-plan": {
+      contents: "read",
+      actions: "read",
+    },
     ".github/workflows/nightly.yml#notify-mutants": { issues: "write" },
     ".github/workflows/signatures.yml#notify": { issues: "write" },
     ".github/workflows/signatures.yml#signatures": {
@@ -86,6 +90,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
     "pull_request",
     "push",
     "schedule",
+    "workflow_dispatch",
   ]);
   assert.deepEqual(policy.topKeys, ["name", "on", "permissions", "jobs"]);
   assert.deepEqual(policy.stepKeys, [
@@ -96,6 +101,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
     "run",
     "env",
     "if",
+    "timeout-minutes",
   ]);
   Object.values(policy.actions).forEach((action) =>
     assert.match(action.sha, /^[0-9a-f]{40}$/u),
@@ -109,7 +115,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
   );
   [...policy.expressions, ...policy.conditions].forEach((text) =>
     assert.doesNotMatch(
-      text,
+      text.replaceAll("inputs.mode", "mutation-mode"),
       /secrets|github\.event\.(head_commit|pull_request\.(title|body))|inputs\./u,
     ),
   );

@@ -378,8 +378,24 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
       /^node base-tools\/harness\/ci\/notify\.mjs$/u,
     ),
   );
-  assert.deepEqual(nightly.on, { schedule: [{ cron: "0 18 * * *" }] });
-  assert.equal(nightly.jobs.macos.if, "needs.changes.outputs.changed == 'yes'");
+  assert.deepEqual(nightly.on, {
+    schedule: [{ cron: "0 18 * * *" }, { cron: "0 14 * * 0" }],
+    workflow_dispatch: {
+      inputs: {
+        mode: {
+          description: "변이 검사 범위",
+          type: "choice",
+          required: true,
+          default: "daily",
+          options: ["daily", "full"],
+        },
+      },
+    },
+  });
+  assert.equal(
+    nightly.jobs.macos.if,
+    "github.event.schedule == '0 18 * * *' && needs.changes.outputs.changed == 'yes'",
+  );
   assert.ok(runs(nightly.jobs.macos).includes("just base=HEAD check"));
   assert.ok(
     runs(nightly.jobs.mutants).includes(
