@@ -15,7 +15,7 @@ export const ChatInput = (props: Props): ReactElement => {
     if (
       props.status === "sending" ||
       value.trim() === "" ||
-      composition !== "idle"
+      composition === "composing"
     )
       return;
     setValue(emptyFreeText);
@@ -27,7 +27,7 @@ export const ChatInput = (props: Props): ReactElement => {
         {text("chat.label", "ko")}
         <textarea
           value={value}
-          disabled={props.status === "sending"}
+          readOnly={props.status === "sending"}
           onChange={(event): void => {
             const next = chatEventValue(event);
             if (props.status !== "sending" && next.kind === "ok") {
@@ -44,7 +44,7 @@ export const ChatInput = (props: Props): ReactElement => {
             if (chatCommit(event, composition) === "commit") send();
             if (composition === "ending") setComposition("idle");
           }}
-          className="status-sentence w-full chat-content rounded-md border-hairline border-solid border-line-strong bg-surface-sunken px-space-3 py-space-2 text-body focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled"
+          className="status-sentence w-full chat-content chat-input rounded-md border-hairline border-solid border-line-strong bg-surface-sunken px-space-3 py-space-2 text-body focus-visible:outline-solid focus-visible:outline-focus focus-visible:outline-focus-ring focus-visible:outline-offset-focus disabled:opacity-disabled"
         />
       </label>
       <Button

@@ -401,6 +401,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -4177,6 +4182,11 @@
     },
     {
       "name": "@content-wide:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:chat-input",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -7967,6 +7977,11 @@
     },
     {
       "name": "active:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:chat-input",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11771,6 +11786,11 @@
       "generated": "yes"
     },
     {
+      "name": "chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -12337,6 +12357,11 @@
     },
     {
       "name": "disabled:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:chat-input",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -16341,6 +16366,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -20117,6 +20147,11 @@
     },
     {
       "name": "focus:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:chat-input",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -24237,6 +24272,11 @@
     },
     {
       "name": "hover:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:chat-input",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -28492,6 +28532,11 @@
     },
     {
       "name": "motion-reduce:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:chat-input",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -34526,6 +34571,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -38306,6 +38356,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:chat-input",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -42055,6 +42110,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:chat-input",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:cursor-not-allowed",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -44980,6 +45039,10 @@
     },
     {
       "selector": ".\\@content-wide\\:chat-content",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:chat-input",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -47916,6 +47979,10 @@
     },
     {
       "selector": ".active\\:chat-content:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:chat-input:active",
       "context": []
     },
     {
@@ -50859,6 +50926,10 @@
       "context": []
     },
     {
+      "selector": ".chat-input",
+      "context": []
+    },
+    {
       "selector": ".cursor-not-allowed",
       "context": []
     },
@@ -51312,6 +51383,10 @@
     },
     {
       "selector": ".disabled\\:chat-content:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:chat-input:disabled",
       "context": []
     },
     {
@@ -54419,6 +54494,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:chat-input:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:cursor-not-allowed:focus-visible",
       "context": []
     },
@@ -57344,6 +57423,10 @@
     },
     {
       "selector": ".focus\\:chat-content:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:chat-input:focus",
       "context": []
     },
     {
@@ -60544,6 +60627,10 @@
     },
     {
       "selector": ".hover\\:chat-content:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:chat-input:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -63852,6 +63939,10 @@
     },
     {
       "selector": ".motion-reduce\\:chat-content",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:chat-input",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -68479,6 +68570,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:chat-input",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:cursor-not-allowed",
       "context": ["@media (width >= 80rem)"]
     },
@@ -71404,6 +71499,10 @@
     },
     {
       "selector": ".window-md\\:chat-content",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:chat-input",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

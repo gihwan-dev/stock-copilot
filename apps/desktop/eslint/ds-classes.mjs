@@ -15,6 +15,7 @@ export const DS_KEYWORDS = [
   "status-sentence",
   "markdown-content",
   "chat-content",
+  "chat-input",
   "markdown-link",
   "whitespace-nowrap",
   "h-chart-height-sm",

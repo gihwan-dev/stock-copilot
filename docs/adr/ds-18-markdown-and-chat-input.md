@@ -6,7 +6,7 @@
 
 Markdown은 FreeText content, ExternalUrl을 받는 linkAllowed(allow/deny), onOpenLink 세 속성이다. https만 경계에서 파싱하며 수집 목록 판정과 외부 열기는 화면·코어에 남긴다. 원시 HTML은 skipHtml로 생략하고 이미지는 alt(없으면 주소)의 콜백 버튼으로 표시한다. a/href나 img/src는 만들지 않는다. 자동 링크도 같은 판정을 거친다. 승인된 플러그인은 없으므로 CommonMark만 사용한다. GFM 표는 일반 문장, 각주 문법은 CommonMark 참조 정의 규칙을 따른다. 코드 블록과 긴 낱말은 줄바꿈한다.
 
-ChatInput은 onSend(FreeText), status?(ready/sending, 기본 ready)만 받는다. IME isComposing·229·조합 시작 및 종료 직후 Enter를 막는다. Shift+Enter는 기본 줄바꿈이다. 공백만인 입력은 보내지 않고, 전송한 원문은 trim하지 않는다. 전송 뒤 입력을 비우며 sending 동안 입력·버튼을 잠근다. 길이 제한은 문서에 없어 추가하지 않는다.
+ChatInput은 onSend(FreeText), status?(ready/sending, 기본 ready)만 받는다. IME isComposing·229·조합 시작 및 종료 직후 Enter를 막는다. Shift+Enter는 기본 줄바꿈이다. 공백만인 입력은 보내지 않고, 전송한 원문은 trim하지 않는다. 전송 뒤 입력을 비우며 sending 동안 입력은 readOnly, 전송 버튼은 disabled로 둔다. 길이 제한은 문서에 없어 추가하지 않는다.
 
 react-markdown 10.1.0을 정확히 고정했다. 직접 의존의 라이선스는 MIT다. 전이 의존성은 잠금 파일에 기록된다. 새 플러그인은 없다.
 
@@ -14,7 +14,7 @@ react-markdown 10.1.0을 정확히 고정했다. 직접 의존의 라이선스�
 
 ## 인계
 
-- C-03/C-05/C-11: 수집 목록 판정·open_external 연결, sending 상태 소유.
+- C-03/C-05/C-11: 수집 목록 판정·open_external 연결, sending 상태 소유. C-03은 받은 원문의 실패 보존·재시도 UX를 정한다. C-05/C-11은 수집 목록과 코어가 공유할 URL 동일성·정규화 기준을 정한다.
 - DS-07/DS-15: 양 테마 이야기의 실제 브라우저 시각 회귀.
 - DS-19/DS-20: 이 기준에는 shared/ds/testing과 넘침 검사 구현이 없다. jsdom을 실제 CSS 넘침 증거로 세지 않는다. 자동 넘침 실측 NOT_RUN.
 - 문서 정리: docs/security.md가 없어 SEC-10은 design.md를 기준으로 읽었다.
@@ -59,3 +59,46 @@ react-markdown 10.1.0을 정확히 고정했다. 직접 의존의 라이선스�
 기존 고정 스냅샷 승인 변경: ds-generation.test.mjs의 CSS entry 기대 문자열에 DS-18 줄바꿈 유틸리티 9개 선언을 추가했다. 기존 선언과 단언은 유지했다. 승인 test-diff 대상은 총 3개 파일이다.
 
 기존 승인 테스트 추가 갱신: ds-screen-bootstrap.test.mjs의 input 공개 함수 목록과 반환 목록에 chatEventValue·chatCommit을 추가하고 lib 스텁에 parseFreeText·FreeText 재수출을 더했다. 기존 단언 유지. 승인 test-diff 파일은 knip/local-allowlists/ds-generation/ds-screen-bootstrap 4개다. raw 허용목록 삭제 증거는 새 harness/eslint-violations/src/shared/ds/Markdown.tsx와 cases.json의 통과 항목이다.
+
+## 리뷰 수정 결정
+
+조합 상태가 composing일 때만 버튼을 막고 ending은 즉시 전송한다. ending은 textarea에서 다음 키를 소비할 때 idle로 돌아가며, 이 상태에서 소비하는 Enter만 기본 동작을 취소한다. 조합 확정 중의 native Enter와 Shift+Enter는 기본 동작을 유지한다. 실제 macOS IME 이벤트 순서는 C-03에서 실측한다.
+
+Markdown은 두 개의 내부 Context로 렌더 정책과 링크 자손 여부를 전달한다. 링크 자손 이미지는 글자만 표시하여 바깥 버튼 하나만 존재한다. 단독 이미지는 기존 허용 판정·콜백 버튼을 유지한다. DOM 조상 검사·이벤트 버블링 차단·플러그인·새 공개 prop은 쓰지 않는다. 이미지 버튼에도 같은 focus-visible 토큰을 적용한다.
+
+입력은 기존 min/max 높이 토큰을 적용하고 resize를 막는다. sending은 readOnly로 입력 편집을 막아 포커스 가능한 상태를 유지한다. 실패 복구용 새 prop이나 비동기 반환 계약은 만들지 않는다. onSend에 원문을 넘긴 뒤 입력을 비우며, 화면이 받은 원문을 보존한다.
+
+마크다운 부하는 단락 구분 후 100번 반복해 제목과 코드 블록이 각각 100개인지 양 테마에서 검사한다. ChatInput 부하 이야기의 draft 메타데이터를 테스트가 입력해 긴 글을 렌더한다. DS-07은 이 draft를 이야기 상호작용으로 연결한다. jsdom 렌더를 CSS 넘침·시각 회귀로 세지 않는다.
+
+## 리뷰 수정 후 손 변형
+
+수정 후 최종 트리 복사본에서 24개를 각각 tsc로 컴파일하고 ds18-content 회귀를 실제 실행했다. 전부 검출됐고 생존·컴파일 실패·시간 초과는 0이다. 앞선 21개 표는 첫 구현 검증 기록이다.
+
+| 번호 | 대상 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|---|
+| 1 | ChatInput.tsx | `props.status === "sending" &#124;&#124;` → `false &#124;&#124;` | KILLED: DS18 pending draft blocks send and edits while sending (16.386917ms) |
+| 2 | ChatInput.tsx | `value.trim() === "" &#124;&#124;` → `false &#124;&#124;` | KILLED: DS18 chat rejects blanks and sending, sends original text once (63.802625ms) |
+| 3 | ChatInput.tsx | `composition === "composing"` → `false` | KILLED: DS18 pending draft blocks send and edits while sending (23.401791ms) |
+| 4 | ChatInput.tsx | `setValue(emptyFreeText);` → `setValue(value);` | KILLED: DS18 chat rejects blanks and sending, sends original text once (27.508041ms) |
+| 5 | ChatInput.tsx | `props.onSend(value);` → `props.onSend(emptyFreeText);` | KILLED: DS18 chat rejects blanks and sending, sends original text once (39.66675ms) |
+| 6 | ChatInput.tsx | `props.onSend(value);` → `return;` | KILLED: DS18 chat rejects blanks and sending, sends original text once (22.999208ms) |
+| 7 | ChatInput.tsx | `readOnly={props.status === "sending"}` → `readOnly={false}` | KILLED: DS18 chat rejects blanks and sending, sends original text once (26.638792ms) |
+| 8 | ChatInput.tsx | `props.status !== "sending" && next.kind === "ok"` → `next.kind === "ok"` | KILLED: DS18 pending draft blocks send and edits while sending (16.222875ms) |
+| 9 | ChatInput.tsx | `setComposition("composing");` → `setComposition("idle");` | KILLED: DS18 IME and Shift Enter never send (35.602292ms) |
+| 10 | ChatInput.tsx | `setComposition("ending");` → `setComposition("idle");` | KILLED: DS18 IME and Shift Enter never send (22.266833ms) |
+| 11 | ChatInput.tsx | `if (composition === "ending") setComposition("idle");` → `if (composition === "composing") setComposition("idle");` | KILLED: DS18 IME and Shift Enter never send (20.926666ms) |
+| 12 | input.ts | `event.key !== "Enter" &#124;&#124; event.shiftKey` → `event.key !== "Enter"` | KILLED: DS18 IME and Shift Enter never send (31.507709ms) |
+| 13 | input.ts | `event.key !== "Enter" &#124;&#124; event.shiftKey` → `event.shiftKey` | KILLED: DS18 IME and Shift Enter never send (29.280208ms) |
+| 14 | input.ts | `if (composition === "ending") event.preventDefault();` → `if (composition === "ending") return "ignore";` | KILLED: DS18 ending Enter is consumed while Shift Enter remains native (18.566292ms) |
+| 15 | Markdown.tsx | `skipHtml` → `skipHtml={false}` | KILLED: DS18 markdown excludes HTML and remote images, uses callback only (264.809625ms) |
+| 16 | Markdown.tsx | `props.linkAllowed(url.value) === "allow"` → `props.linkAllowed(url.value) === "deny"` | KILLED: DS18 markdown excludes HTML and remote images, uses callback only (239.30875ms) |
+| 17 | Markdown.tsx | `props.onOpenLink(url.value);` → `return;` | KILLED: DS18 markdown excludes HTML and remote images, uses callback only (244.647791ms) |
+| 18 | Markdown.tsx | `parseExternalUrl(src)` → `parseExternalUrl(undefined)` | KILLED: DS18 markdown excludes HTML and remote images, uses callback only (236.113292ms) |
+| 19 | Markdown.tsx | `<pre className="chat-content">{children}</pre>` → `<span>{children}</span>` | KILLED: DS18 code, footnotes and table syntax remain readable (25.063875ms) |
+| 20 | brand.ts | `/^https$/u` → `/^(https&#124;http)$/u` | KILLED: DS18 denied and unsafe addresses stay readable without actions (50.21225ms) |
+| 21 | Markdown.tsx | `nesting === "outside"` → `nesting === "inside"` | KILLED: DS18 markdown excludes HTML and remote images, uses callback only (242.601833ms) |
+| 22 | Markdown.tsx | `<LinkContext value="inside">` → `<LinkContext value="outside">` | KILLED: DS18 image inside a link has one interactive target (16.112959ms) |
+| 23 | ChatInput.tsx | `chat-content chat-input` → `chat-content` | KILLED: DS18 stories render both themes with mixed markdown and long draft (114.638917ms) |
+| 24 | ChatInput.tsx | `composition === "composing"` → `composition !== "idle"` | KILLED: DS18 completed composition permits one button send (15.850583ms) |
+
+최종 변경분 변이 명령도 종료 0과 `mutants: 위반 없음`을 반환했다. Rust 변이 대상은 없으므로 프런트엔드 변이 검출로 세지 않는다. 좁은 회귀는 ds18-content 11/11, ds-generation 4/4, tsc·eslint·ds-style·review-records 통과다. 기존 고정 CSS 기대값에 chat-input의 min-height/max-height/resize 정확 선언을 추가했고 이전 선언·단언은 유지했다.

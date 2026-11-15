@@ -81,6 +81,9 @@ export const iconUtilities = [
 const declaration = (property) =>
   property === "width/height" ? ["width", "height"] : [property];
 export const designUtilities = (tokens) => [
+  ["chat-input", "min-height", "var(--spacing-chat-input-min)"],
+  ["chat-input", "max-height", "var(--spacing-chat-input-max)"],
+  ["chat-input", "resize", "none"],
   ["markdown-content", "min-width", "0"],
   ["markdown-content", "max-width", "var(--spacing-prose-max)"],
   ["markdown-content", "overflow-wrap", "anywhere"],

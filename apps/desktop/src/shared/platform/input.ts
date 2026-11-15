@@ -100,8 +100,10 @@ export const chatCommit = (
     event.nativeEvent.isComposing ||
     legacyComposition(event.nativeEvent) === "composing" ||
     composition !== "idle"
-  )
+  ) {
+    if (composition === "ending") event.preventDefault();
     return "ignore";
+  }
   event.preventDefault();
   return "commit";
 };

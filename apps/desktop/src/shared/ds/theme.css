@@ -2,6 +2,18 @@
 @import "./tokens.css";
 @source "../../";
 
+@utility chat-input {
+  min-height: var(--spacing-chat-input-min);
+}
+
+@utility chat-input {
+  max-height: var(--spacing-chat-input-max);
+}
+
+@utility chat-input {
+  resize: none;
+}
+
 @utility markdown-content {
   min-width: 0;
 }
