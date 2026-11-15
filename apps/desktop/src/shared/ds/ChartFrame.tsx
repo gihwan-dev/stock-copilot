@@ -30,13 +30,13 @@ export const ChartFrame = (props: Props): ReactElement => {
         role="img"
         aria-label={props.label}
         viewBox="0 0 100 60"
-        className="w-full h-chart-height fill-none stroke-current text-chart-1 stroke-icon"
+        className="w-full h-chart-height fill-none text-chart-1 stroke-icon"
       >
         {props.geometry.area === undefined ? null : (
           <path d={props.geometry.area} className="fill-chart-1 opacity-area" />
         )}
         {props.geometry.path === undefined ? null : (
-          <path d={props.geometry.path} />
+          <path d={props.geometry.path} className="stroke-current" />
         )}
         <ChartMarks
           marks={props.geometry.marks}
@@ -100,10 +100,10 @@ const ChartMarks = (props: {
 );
 
 const partClasses = {
-  first: "fill-chart-1 stroke-surface focus:stroke-focus-ring",
-  second: "fill-chart-2 stroke-surface focus:stroke-focus-ring",
-  third: "fill-chart-3 stroke-surface focus:stroke-focus-ring",
-  fourth: "fill-chart-4 stroke-surface focus:stroke-focus-ring",
-  fifth: "fill-chart-5 stroke-surface focus:stroke-focus-ring",
-  sixth: "fill-chart-6 stroke-surface focus:stroke-focus-ring",
+  first: "fill-chart-1 focus:stroke-focus-ring",
+  second: "fill-chart-2 focus:stroke-focus-ring",
+  third: "fill-chart-3 focus:stroke-focus-ring",
+  fourth: "fill-chart-4 focus:stroke-focus-ring",
+  fifth: "fill-chart-5 focus:stroke-focus-ring",
+  sixth: "fill-chart-6 focus:stroke-focus-ring",
 } as const;
