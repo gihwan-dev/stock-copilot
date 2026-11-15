@@ -16,7 +16,11 @@ export const TYPE_PREDICATE_ALLOWLIST = ["src/shared/lib/money.ts"];
 
 export const THROW_ALLOWLIST = ["src/shared/ipc/testing/fakes.ts"];
 
-export const CHART_NUMBER_ALLOWLIST = [];
+export const CHART_NUMBER_ALLOWLIST = [
+  "src/shared/ds/LineChart.tsx",
+  "src/shared/ds/DonutChart.tsx",
+  "src/shared/ds/Treemap.tsx",
+];
 
 export const RAW_TYPE_ALLOWLIST = [
   "src/shared/platform/input.ts",

@@ -140,5 +140,8 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
   ...listed(lists.ICON_GEOMETRY_FILES, {
     "ds/no-presentation-props": ["error", { geometry: "allow" }],
   }),
+  ...listed(lists.CHART_GEOMETRY_FILES ?? [], {
+    "ds/no-presentation-props": ["error", { geometry: "chart" }],
+  }),
   ...listed(lists.DOM_STYLE_FILES, { "ds/no-dom-styling": "off" }),
 ];

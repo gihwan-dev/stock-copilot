@@ -3948,6 +3948,18 @@
       "expect": [
         "boundaries/dependencies :: app에서 platform의 input.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
       ]
+    },
+    "src/shared/ds/LineChart.tsx": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ds/DonutChart.tsx": {
+      "row": "허용 목록",
+      "expect": []
+    },
+    "src/shared/ds/Treemap.tsx": {
+      "row": "허용 목록",
+      "expect": []
     }
   }
 }

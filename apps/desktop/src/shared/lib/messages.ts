@@ -3,6 +3,8 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "ds.chartInvalid": { ko: "차트 값을 읽을 수 없어요" as UiText },
+  "ds.chartSeparator": { ko: " · " as UiText },
   "ds.badgeNeutral": { ko: "보유 종목" as UiText },
   "ds.badgePrimary": { ko: "앱 계산" as UiText },
   "ds.badgeAlert": { ko: "값 오류" as UiText },

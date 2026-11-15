@@ -650,6 +650,7 @@ apps/desktop/src/
 | 계산 금지 | TS는 금액·비중·확률을 계산하지 않는다. 코어가 계산한 값을 받아 형식만 바꾼다 |
 | IPC 한 곳 | Tauri 호출은 `shared/ipc`에서만 한다. 타입은 Rust에서 생성한다. 응답은 Zod `safeParse`로 검증한다 |
 | 기능 격리 | `features/a`는 `features/b`를 가져올 수 없다. 공유할 것은 `shared`로 내린다 |
+| SVG 차트 | 선·영역·도넛·트리맵은 외부 의존성 없이 직접 그린 SVG다. viewBox로 폭에 맞추고, 원문 값을 대체 표와 초점·포인터 상세에 표시한다 |
 | 차트 숫자 | 차트 좌표는 코어가 표시 전용 십진수 문자열로 따로 보낸다. 숫자로 바꾸는 것은 디자인 시스템 차트 컴포넌트 안에서만 한다. 금액 타입을 숫자로 바꾸지 않는다. 방향(상승·하락·보합)도 코어가 보낸다 |
 | 채팅 카드 | 카드는 마크다운에서 파싱하지 않는다. 코어 이벤트의 ID로만 그린다 |
 | 디자인 시스템 | `features`와 `app`은 `shared/ds`의 컴포넌트를 조립만 한다. HTML 태그, `className`, `style`을 쓰지 않는다 ([harness.md](harness.md) 4.4) |
@@ -757,7 +758,7 @@ apps/desktop/src/
 | 경계 스키마 | Zod 4.6.7, `safeParse`만 | R-08 |
 | 오류 경계 | `react-error-boundary` (클래스를 직접 쓰지 않기 위해) | R-08 |
 | 컴포넌트 기반 | Base UI 1.9.0 | R-14 |
-| 차트 | Recharts 3.10.1 (선, 영역, 도넛, 트리맵), Lightweight Charts 5.3.0 (캔들만) | R-14 |
+| 차트 | 의존성 없이 직접 그린 SVG (선, 영역, 도넛, 트리맵), Lightweight Charts 5.3.0 (캔들만) | R-14 |
 | 토큰 | Tailwind CSS 4.3.5 `@theme`에 `--*: initial`, `design/`의 `tokens.json`에서 `xtask gen-tokens`로 생성 | R-14 |
 | 채팅 마크다운 | react-markdown 10.1.0, 원시 HTML 끔 | R-14, R-16 |
 | 아이콘 | lucide-react 1.72.0 | R-14 |

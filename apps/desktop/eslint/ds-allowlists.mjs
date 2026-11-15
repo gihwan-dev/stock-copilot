@@ -11,3 +11,5 @@ export const ICON_GEOMETRY_FILES = [
   "src/shared/ds/icon-paths-1.tsx",
   "src/shared/ds/icon-paths-2.tsx",
 ];
+
+export const CHART_GEOMETRY_FILES = ["src/shared/ds/ChartFrame.tsx"];

@@ -43,3 +43,18 @@ export const parseInputValue = (
   input: unknown,
 ): Result<InputValue, BrandError> =>
   fromParse(inputValueSchema.safeParse(input));
+
+export type ChartDecimal = string & Brand<"ChartDecimal">;
+export type ChartCoordinate = number & Brand<"ChartCoordinate">;
+export type ChartPath = string & Brand<"ChartPath">;
+const chartDecimalSchema = z
+  .string()
+  .regex(/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u)
+  .brand<"ChartDecimal">();
+export const parseChartDecimal = (
+  input: unknown,
+): Result<ChartDecimal, BrandError> =>
+  fromParse(chartDecimalSchema.safeParse(input));
+export const chartCoordinate = (input: number): ChartCoordinate =>
+  input as ChartCoordinate;
+export const chartPath = (input: string): ChartPath => input as ChartPath;

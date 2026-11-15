@@ -16,3 +16,13 @@ export { EmptyState } from "./EmptyState";
 export { Skeleton } from "./Skeleton";
 export { Badge } from "./Badge";
 export { StatusBar } from "./StatusBar";
+
+export { LineChart } from "./LineChart";
+export { AreaChart } from "./AreaChart";
+export { DonutChart } from "./DonutChart";
+export { Treemap } from "./Treemap";
+export type { ChartPoint } from "./chart-types";
+
+export { lineCoordinates } from "./LineChart";
+export { donutArcs } from "./DonutChart";
+export { treemapRectangles } from "./Treemap";
