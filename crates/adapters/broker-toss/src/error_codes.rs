@@ -12,6 +12,9 @@ pub enum ApiErrorCode {
     CancelRestricted,
     ConditionalOrderNotFound,
     ConfirmHighValueRequired,
+    ConditionAlreadyMet,
+    DuplicateConditionalOrder,
+    InsufficientSellableQuantity,
     EdgeBlocked,
     EdgeRateLimitExceeded,
     ExchangeRateNotFound,
@@ -74,6 +77,15 @@ impl ApiErrorCode {
         (
             "confirm-high-value-required",
             Self::ConfirmHighValueRequired,
+        ),
+        ("condition-already-met", Self::ConditionAlreadyMet),
+        (
+            "duplicate-conditional-order",
+            Self::DuplicateConditionalOrder,
+        ),
+        (
+            "insufficient-sellable-quantity",
+            Self::InsufficientSellableQuantity,
         ),
         ("edge-blocked", Self::EdgeBlocked),
         ("edge-rate-limit-exceeded", Self::EdgeRateLimitExceeded),
@@ -151,6 +163,8 @@ impl From<&str> for ApiErrorCode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OAuthErrorCode {
+    ServerError,
+    TemporarilyUnavailable,
     AccessDenied,
     InvalidClient,
     InvalidGrant,
@@ -161,6 +175,8 @@ pub enum OAuthErrorCode {
 }
 impl OAuthErrorCode {
     const KNOWN: &'static [(&'static str, Self)] = &[
+        ("server_error", Self::ServerError),
+        ("temporarily_unavailable", Self::TemporarilyUnavailable),
         ("access_denied", Self::AccessDenied),
         ("invalid_client", Self::InvalidClient),
         ("invalid_grant", Self::InvalidGrant),

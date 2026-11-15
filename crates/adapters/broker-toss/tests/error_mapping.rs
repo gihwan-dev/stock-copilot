@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AccessDenial, BugDiagnostic, ClassifiedError, ErrorClass, HttpStatus, MissingData,
-        PortErrorKind, ReadEndpoint, RequestRejection, ResponseMismatch, RetryDelay,
-        UnavailableCause,
+        BugDiagnostic, ClassifiedError, ErrorClass, HttpStatus, MissingData, PortErrorKind,
+        ReadEndpoint, ResponseMismatch, RetryDelay, UnavailableCause,
     };
-    use broker_toss::{ApiErrorCode, DiagnosticId, OAuthErrorCode, TossErrorBody, map_toss_error};
+    use broker_toss::{
+        ApiErrorCode, DiagnosticId, OAuthErrorCode, TossErrorBody, map_toss_read_error,
+        map_toss_token_error,
+    };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
 
@@ -16,111 +18,129 @@ mod tests {
     }
 
     fn mapped(code: &str, status: HttpStatus) -> PortErrorKind {
-        map_toss_error(ReadEndpoint::Quotes, status, api(code), RetryDelay::Unknown)
+        map_toss_read_error(ReadEndpoint::Quotes, status, api(code), RetryDelay::Unknown)
             .port_error()
             .kind()
     }
 
-    use AccessDenial::{
-        AccountNotFound, Forbidden, IpNotAllowed, LoginUserNotFound, TokenRevokedRepeated,
-    };
     use HttpStatus::{BadRequest, NotFound, Unauthorized};
-    use PortErrorKind::{AccessDenied, InvalidRequest};
-    use RequestRejection::{
-        EdgeBlocked, MalformedRequest, MissingAccountHeader, UnsupportedContentType,
-        UnsupportedQuery,
-    };
-    const READ_CASES: &[(&str, HttpStatus, PortErrorKind)] = &[
-        (
-            "invalid-request",
-            BadRequest,
-            InvalidRequest(MalformedRequest),
-        ),
-        (
-            "account-header-required",
-            BadRequest,
-            InvalidRequest(MissingAccountHeader),
-        ),
-        (
-            "unsupported-ranking-duration",
-            BadRequest,
-            InvalidRequest(UnsupportedQuery),
-        ),
-        (
-            "unsupported-symbol",
-            BadRequest,
-            InvalidRequest(UnsupportedQuery),
-        ),
-        (
-            "unsupported-market",
-            BadRequest,
-            InvalidRequest(UnsupportedQuery),
-        ),
-        (
-            "unsupported-date",
-            BadRequest,
-            InvalidRequest(UnsupportedQuery),
-        ),
-        (
-            "invalid-token",
-            Unauthorized,
-            InvalidRequest(RequestRejection::InvalidToken),
-        ),
-        (
-            "token-revoked",
-            Unauthorized,
-            AccessDenied(TokenRevokedRepeated),
-        ),
-        (
-            "login-user-not-found",
-            Unauthorized,
-            AccessDenied(LoginUserNotFound),
-        ),
-        (
-            "ip-not-allowed",
-            HttpStatus::Forbidden,
-            AccessDenied(IpNotAllowed),
-        ),
-        ("forbidden", HttpStatus::Forbidden, AccessDenied(Forbidden)),
-        ("account-not-found", NotFound, AccessDenied(AccountNotFound)),
-        (
-            "stock-not-found",
-            NotFound,
-            PortErrorKind::NotFound(MissingData::Stock),
-        ),
-        (
-            "exchange-rate-not-found",
-            NotFound,
-            PortErrorKind::NotFound(MissingData::ExchangeRate),
-        ),
-        (
-            "sector-not-found",
-            NotFound,
-            PortErrorKind::NotFound(MissingData::Sector),
-        ),
-        (
-            "unsupported-content-type",
-            HttpStatus::UnsupportedMediaType,
-            InvalidRequest(UnsupportedContentType),
-        ),
-        ("edge-blocked", Unauthorized, InvalidRequest(EdgeBlocked)),
-        (
-            "edge-blocked",
-            HttpStatus::Forbidden,
-            InvalidRequest(EdgeBlocked),
-        ),
-        ("edge-blocked", NotFound, InvalidRequest(EdgeBlocked)),
-        (
-            "edge-blocked",
-            HttpStatus::UriTooLong,
-            InvalidRequest(EdgeBlocked),
-        ),
-    ];
+
+    fn document_rows(path: &str) -> Vec<(String, HttpStatus, String)> {
+        let input = std::fs::read_to_string(path).expect("local error table");
+        let mut rows = Vec::new();
+        for line in input.lines().filter(|line| line.starts_with('|')) {
+            let cells: Vec<_> = line.split('|').map(str::trim).collect();
+            let Some(status) = cells.get(1).and_then(|cell| document_status(cell)) else {
+                continue;
+            };
+            let Some(code_cell) = cells.get(2) else {
+                continue;
+            };
+            let label = cells
+                .iter()
+                .rev()
+                .find(|cell| !cell.is_empty())
+                .expect("classification");
+            for code in backtick_codes(code_cell) {
+                rows.push((code, status, (*label).to_owned()));
+            }
+        }
+        assert!(!rows.is_empty(), "document error rows");
+        rows
+    }
+
+    fn document_status(cell: &str) -> Option<HttpStatus> {
+        match cell.split_whitespace().next()? {
+            "400" => Some(BadRequest),
+            "401" => Some(Unauthorized),
+            "403" => Some(HttpStatus::Forbidden),
+            "404" => Some(NotFound),
+            "409" => Some(HttpStatus::Conflict),
+            "414" => Some(HttpStatus::UriTooLong),
+            "415" => Some(HttpStatus::UnsupportedMediaType),
+            "422" => Some(HttpStatus::Unprocessable),
+            "429" => Some(HttpStatus::RateLimited),
+            "500" => Some(HttpStatus::ServerError),
+            _other => None,
+        }
+    }
+
+    fn backtick_codes(cell: &str) -> Vec<String> {
+        cell.split('`')
+            .enumerate()
+            .filter(|(position, _token)| !position.is_multiple_of(2))
+            .map(|(_position, token)| token)
+            .filter(|token| {
+                !token.is_empty()
+                    && token
+                        .bytes()
+                        .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
+            })
+            .map(str::to_owned)
+            .collect()
+    }
+
+    fn documented_class(label: &str) -> ErrorClass {
+        if label.contains("버그") {
+            ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Schema))
+        } else if label.contains("사용자") {
+            ErrorClass::UserAction(application::UserAction::CheckCredentials)
+        } else if label.contains("기다리면") {
+            ErrorClass::Wait(RetryDelay::Unknown)
+        } else if label.contains("데이터 없음") {
+            ErrorClass::NoData(MissingData::Stock)
+        } else if label.contains("상황별") || label.contains("상태 변화") {
+            ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Validation))
+        } else {
+            panic!("unclassified document row: {label}");
+        }
+    }
+
     #[test]
     fn read_codes_follow_the_a01_and_a05_cause_table() {
-        for &(code, status, expected) in READ_CASES {
-            assert_eq!(mapped(code, status), expected, "{code}");
+        let rows = document_rows("../../../docs/research/R-01-toss-open-api.md");
+        let mut covered = BTreeSet::new();
+        for (code, status, label) in rows {
+            let expected = if ORDER_CODES.contains(&code.as_str()) {
+                ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Validation))
+            } else {
+                documented_class(&label)
+            };
+            let error = map_toss_read_error(
+                ReadEndpoint::Quotes,
+                status,
+                api(&code),
+                RetryDelay::Unknown,
+            );
+            assert_eq!(
+                std::mem::discriminant(&error.class()),
+                std::mem::discriminant(&expected),
+                "{code}: R-01 {label}"
+            );
+            let _inserted = covered.insert(code);
         }
+        for code in ORDER_CODES {
+            let error = map_toss_read_error(
+                ReadEndpoint::Quotes,
+                HttpStatus::Unprocessable,
+                api(code),
+                RetryDelay::Unknown,
+            );
+            assert_eq!(
+                error.class(),
+                ErrorClass::Bug(BugDiagnostic::Response(ResponseMismatch::Validation)),
+                "order response {code}"
+            );
+            let _inserted = covered.insert((*code).to_owned());
+        }
+        assert_eq!(
+            covered,
+            ApiErrorCode::known()
+                .iter()
+                .map(|(code, _variant)| (*code).to_owned())
+                .collect(),
+            "every known code class tested"
+        );
     }
 
     #[test]
@@ -156,7 +176,7 @@ mod tests {
                 UnavailableCause::Maintenance,
             ),
         ] {
-            let error = map_toss_error(ReadEndpoint::Holdings, status, api(code), retry);
+            let error = map_toss_read_error(ReadEndpoint::Holdings, status, api(code), retry);
             assert_eq!(
                 error.port_error().kind(),
                 PortErrorKind::Unavailable { cause, retry },
@@ -172,45 +192,48 @@ mod tests {
         }
     }
 
+    const ORDER_CODES: &[&str] = &[
+        "account-restricted",
+        "insufficient-sellable-quantity",
+        "duplicate-conditional-order",
+        "condition-already-met",
+        "already-canceled",
+        "already-filled",
+        "already-modified",
+        "already-processing",
+        "already-rejected",
+        "amount-order-outside-regular-hours",
+        "cancel-restricted",
+        "conditional-order-not-found",
+        "confirm-high-value-required",
+        "fractional-quantity-outside-regular-hours",
+        "fractional-quantity-scale-exceeded",
+        "idempotency-key-conflict",
+        "insufficient-buying-power",
+        "investor-exchange-not-integrated",
+        "market-not-supported-for-stock",
+        "max-order-amount-exceeded",
+        "modify-restricted",
+        "opposite-pending-order-exists",
+        "order-hours-closed",
+        "order-not-found",
+        "order-type-not-allowed",
+        "prerequisite-required",
+        "price-out-of-range",
+        "request-in-progress",
+        "stock-restricted",
+        "us-modify-quantity-not-supported",
+        "order-limit-exceeded",
+    ];
     #[test]
     fn write_only_codes_are_unexpected_responses_on_the_read_port() {
-        let codes = [
-            "account-restricted",
-            "already-canceled",
-            "already-filled",
-            "already-modified",
-            "already-processing",
-            "already-rejected",
-            "amount-order-outside-regular-hours",
-            "cancel-restricted",
-            "conditional-order-not-found",
-            "confirm-high-value-required",
-            "fractional-quantity-outside-regular-hours",
-            "fractional-quantity-scale-exceeded",
-            "idempotency-key-conflict",
-            "insufficient-buying-power",
-            "investor-exchange-not-integrated",
-            "market-not-supported-for-stock",
-            "max-order-amount-exceeded",
-            "modify-restricted",
-            "opposite-pending-order-exists",
-            "order-hours-closed",
-            "order-not-found",
-            "order-type-not-allowed",
-            "prerequisite-required",
-            "price-out-of-range",
-            "request-in-progress",
-            "stock-restricted",
-            "us-modify-quantity-not-supported",
-            "order-limit-exceeded",
-        ];
-        for code in codes {
+        for &code in ORDER_CODES {
             assert_ne!(
                 ApiErrorCode::from(code),
                 ApiErrorCode::Unknown,
                 "known {code}"
             );
-            let error = map_toss_error(
+            let error = map_toss_read_error(
                 ReadEndpoint::Accounts,
                 HttpStatus::Unprocessable,
                 api(code),
@@ -320,11 +343,11 @@ mod tests {
 
     #[test]
     fn oauth_unknowns_mismatches_and_diagnostics_are_sanitized() {
-        for code in ["future_code", "server_error", "temporarily_unavailable"] {
+        for code in ["future_code", ""] {
             let raw = json!({"error":code,"error_description":"SECRET_DESCRIPTION","error_uri":"SECRET_URI","requestId":"req-1","referenceId":"ref.1"});
             let body = TossErrorBody::parse(&raw.to_string());
             assert!(!format!("{body:?}").contains("SECRET"), "body sanitized");
-            let error = map_toss_error(
+            let error = map_toss_token_error(
                 ReadEndpoint::Accounts,
                 HttpStatus::ServerError,
                 body,
@@ -332,8 +355,11 @@ mod tests {
             );
             assert_eq!(
                 error.port_error().kind(),
-                PortErrorKind::InvalidResponse(ResponseMismatch::Schema),
-                "unknown conservative"
+                PortErrorKind::Unavailable {
+                    cause: UnavailableCause::ServerError,
+                    retry: RetryDelay::Unknown
+                },
+                "unknown follows HTTP"
             );
             assert_eq!(
                 error.diagnostics().request_id().map(DiagnosticId::as_str),
@@ -347,7 +373,7 @@ mod tests {
             );
         }
         let body = TossErrorBody::parse(r#"{"error":"invalid_client"}"#);
-        let error = map_toss_error(
+        let error = map_toss_token_error(
             ReadEndpoint::Accounts,
             HttpStatus::Success,
             body,
@@ -369,15 +395,15 @@ mod tests {
         let mut expected = BTreeSet::new();
         collect_spec_codes(&spec, &mut expected);
         assert_eq!(expected.len(), 45, "review code inventory changes");
-        for extra in [
-            "edge-blocked",
-            "ip-not-allowed",
-            "unsupported-content-type",
-            "edge-rate-limit-exceeded",
-            "order-limit-exceeded",
+        for path in [
+            "../../../docs/research/R-01-toss-open-api.md",
+            "../../../docs/toss-openapi-overview.md",
         ] {
-            let _inserted = expected.insert(extra.to_owned());
+            for (code, _status, _label) in document_rows(path) {
+                let _inserted = expected.insert(code);
+            }
         }
+        assert_eq!(expected.len(), 53, "spec 45 plus document supplements 8");
         let actual: BTreeSet<_> = ApiErrorCode::known()
             .iter()
             .map(|(name, code)| {
@@ -390,10 +416,13 @@ mod tests {
             .pointer("/components/schemas/OAuth2ErrorResponse/properties/error/enum")
             .and_then(Value::as_array)
             .expect("OAuth enum");
-        let oauth_expected: BTreeSet<_> = oauth
+        let mut oauth_expected: BTreeSet<_> = oauth
             .iter()
             .map(|value| value.as_str().expect("code"))
             .collect();
+        assert_eq!(oauth_expected.len(), 6, "spec OAuth codes");
+        let _server = oauth_expected.insert("server_error");
+        let _temporary = oauth_expected.insert("temporarily_unavailable");
         let oauth_actual: BTreeSet<_> = OAuthErrorCode::known()
             .iter()
             .map(|(name, _code)| *name)
@@ -434,7 +463,8 @@ mod tests {
             let body = TossErrorBody::parse(
                 &json!({"error":code,"error_description":"OAUTH_SECRET_SENTINEL"}).to_string(),
             );
-            let error = map_toss_error(ReadEndpoint::Accounts, status, body, RetryDelay::Unknown);
+            let error =
+                map_toss_token_error(ReadEndpoint::Accounts, status, body, RetryDelay::Unknown);
             assert_eq!(format!("{:?}", error.class()), expected, "{code}");
             assert!(
                 !format!("{error:?} {error}").contains("OAUTH_SECRET_SENTINEL"),
@@ -459,7 +489,7 @@ mod tests {
             if let Some(id) = reference_value {
                 body["error"]["referenceId"] = json!(id);
             }
-            let error = map_toss_error(
+            let error = map_toss_read_error(
                 ReadEndpoint::Quotes,
                 BadRequest,
                 TossErrorBody::parse(&body.to_string()),
@@ -504,7 +534,7 @@ mod tests {
                 "valid identifier"
             );
         }
-        let error = map_toss_error(
+        let error = map_toss_read_error(
             ReadEndpoint::Quotes,
             BadRequest,
             TossErrorBody::parse(
@@ -525,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn status_body_mismatches_and_unknown_codes_never_authorize_waiting() {
+    fn status_mismatches_and_unknown_codes_follow_http() {
         for status in [
             HttpStatus::Success,
             HttpStatus::Informational,
@@ -552,8 +582,11 @@ mod tests {
             assert_eq!(ApiErrorCode::from(code), ApiErrorCode::Unknown, "unknown");
             assert_eq!(
                 mapped(code, HttpStatus::ServerError),
-                PortErrorKind::InvalidResponse(ResponseMismatch::Schema),
-                "unknown code"
+                PortErrorKind::Unavailable {
+                    cause: UnavailableCause::ServerError,
+                    retry: RetryDelay::Unknown
+                },
+                "unknown code follows status"
             );
         }
     }
@@ -565,7 +598,7 @@ mod tests {
             "<html>SECRET</html>",
             "{}",
             r#"{"error":null}"#,
-            r#"{"error":{"code":"invalid-request","message":42}}"#,
+            r#"{"error":{"code":42,"message":"hidden"}}"#,
         ] {
             for (status, expected) in [
                 (
@@ -587,7 +620,7 @@ mod tests {
                     PortErrorKind::InvalidResponse(ResponseMismatch::Schema),
                 ),
             ] {
-                let error = map_toss_error(
+                let error = map_toss_read_error(
                     ReadEndpoint::Accounts,
                     status,
                     TossErrorBody::parse(raw),
@@ -596,7 +629,7 @@ mod tests {
                 assert_eq!(error.port_error().kind(), expected, "{status:?} {raw}");
             }
         }
-        let error = map_toss_error(
+        let error = map_toss_read_error(
             ReadEndpoint::Accounts,
             HttpStatus::NotReceived,
             TossErrorBody::parse(""),

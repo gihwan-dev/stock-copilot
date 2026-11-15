@@ -2,7 +2,6 @@ use application::{
     AccessDenial, ClassifiedError, ErrorClass, HttpStatus, MissingData, PortError, PortErrorKind,
     ReadEndpoint, RequestRejection, ResponseMismatch, RetryDelay, UnavailableCause,
 };
-use broker_toss_schema::types::{ErrorResponse, OAuth2ErrorResponse, OAuth2ErrorResponseError};
 use serde_json::Value;
 use std::fmt;
 
@@ -62,10 +61,13 @@ impl DiagnosticIds {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TossErrorBody {
     Missing,
-    Malformed,
+    Malformed {
+        diagnostics: DiagnosticIds,
+    },
     Api {
         code: ApiErrorCode,
         diagnostics: DiagnosticIds,
+        cursor: CursorHint,
     },
     OAuth {
         code: OAuthErrorCode,
@@ -79,53 +81,71 @@ impl TossErrorBody {
         if body.is_empty() {
             return Self::Missing;
         }
-        let Ok(mut value) = serde_json::from_str::<Value>(body) else {
-            return Self::Malformed;
+        let Ok(value) = serde_json::from_str::<Value>(body) else {
+            return Self::Malformed {
+                diagnostics: DiagnosticIds::default(),
+            };
         };
-        if value.get("error").is_some_and(Value::is_object) {
-            let diagnostics = value
-                .get("error")
-                .map_or_else(DiagnosticIds::default, DiagnosticIds::parse);
-            if let Some(object) = value.get_mut("error").and_then(Value::as_object_mut) {
-                let _previous = object.insert("requestId".to_owned(), Value::String(String::new()));
-            }
-            return serde_json::from_value::<ErrorResponse>(value).map_or(
-                Self::Malformed,
-                |response| Self::Api {
-                    code: ApiErrorCode::from(response.error.code.as_str()),
-                    diagnostics,
-                },
-            );
+        if let Some(error) = value.get("error").filter(|error| error.is_object()) {
+            let diagnostics = DiagnosticIds::parse(error);
+            let Some(raw_code) = error.get("code").and_then(Value::as_str) else {
+                return Self::Malformed { diagnostics };
+            };
+            let code = ApiErrorCode::from(raw_code);
+            let cursor = if code == InvalidRequest
+                && error.pointer("/data/field").and_then(Value::as_str) == Some("cursor")
+            {
+                CursorHint::Invalid
+            } else {
+                CursorHint::Unspecified
+            };
+            return Self::Api {
+                code,
+                diagnostics,
+                cursor,
+            };
         }
         let diagnostics = DiagnosticIds::parse(&value);
-        serde_json::from_value::<OAuth2ErrorResponse>(value).map_or(Self::Malformed, |response| {
-            Self::OAuth {
-                code: oauth_code(response.error),
+        match value.get("error").and_then(Value::as_str) {
+            Some(code) => Self::OAuth {
+                code: OAuthErrorCode::from(code),
                 diagnostics,
-            }
-        })
+            },
+            None => Self::Malformed { diagnostics },
+        }
     }
 }
 
-fn oauth_code(code: OAuth2ErrorResponseError) -> OAuthErrorCode {
-    match code {
-        OAuth2ErrorResponseError::InvalidRequest => OAuthErrorCode::InvalidRequest,
-        OAuth2ErrorResponseError::InvalidClient => OAuthErrorCode::InvalidClient,
-        OAuth2ErrorResponseError::InvalidGrant => OAuthErrorCode::InvalidGrant,
-        OAuth2ErrorResponseError::UnauthorizedClient => OAuthErrorCode::UnauthorizedClient,
-        OAuth2ErrorResponseError::UnsupportedGrantType => OAuthErrorCode::UnsupportedGrantType,
-        OAuth2ErrorResponseError::AccessDenied => OAuthErrorCode::AccessDenied,
-        OAuth2ErrorResponseError::Unknown(_value) => OAuthErrorCode::Unknown,
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CodeRecognition {
+    Known,
+    Unknown,
+    Absent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorHint {
+    Invalid,
+    Unspecified,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TossMappedError {
     port: PortError,
     diagnostics: DiagnosticIds,
+    recognition: CodeRecognition,
+    cursor: CursorHint,
 }
 
 impl TossMappedError {
+    #[must_use]
+    pub const fn code_recognition(&self) -> CodeRecognition {
+        self.recognition
+    }
+    #[must_use]
+    pub const fn cursor_hint(&self) -> CursorHint {
+        self.cursor
+    }
     #[must_use]
     pub const fn port_error(&self) -> PortError {
         self.port
@@ -228,10 +248,11 @@ fn mismatch(cause: ResponseMismatch) -> (StatusRule, PortErrorKind) {
 use ApiErrorCode::{
     AccountHeaderRequired, AccountNotFound, AccountRestricted, AlreadyCanceled, AlreadyFilled,
     AlreadyModified, AlreadyProcessing, AlreadyRejected, AmountOrderOutsideRegularHours,
-    CancelRestricted, ConditionalOrderNotFound, ConfirmHighValueRequired, EdgeBlocked,
-    EdgeRateLimitExceeded, ExchangeRateNotFound, ExpiredToken, Forbidden,
-    FractionalQuantityOutsideRegularHours, FractionalQuantityScaleExceeded, IdempotencyKeyConflict,
-    InsufficientBuyingPower, InternalError, InvalidRequest, InvalidToken,
+    CancelRestricted, ConditionAlreadyMet, ConditionalOrderNotFound, ConfirmHighValueRequired,
+    DuplicateConditionalOrder, EdgeBlocked, EdgeRateLimitExceeded, ExchangeRateNotFound,
+    ExpiredToken, Forbidden, FractionalQuantityOutsideRegularHours,
+    FractionalQuantityScaleExceeded, IdempotencyKeyConflict, InsufficientBuyingPower,
+    InsufficientSellableQuantity, InternalError, InvalidRequest, InvalidToken,
     InvestorExchangeNotIntegrated, IpNotAllowed, LoginUserNotFound, Maintenance,
     MarketNotSupportedForStock, MaxOrderAmountExceeded, ModifyRestricted,
     OppositePendingOrderExists, OrderHoursClosed, OrderLimitExceeded, OrderNotFound,
@@ -241,7 +262,18 @@ use ApiErrorCode::{
     UnsupportedSymbol, UsModifyQuantityNotSupported,
 };
 
-fn api_mapping(code: ApiErrorCode, retry: RetryDelay) -> (StatusRule, PortErrorKind) {
+fn edge_blocked() -> (StatusRule, PortErrorKind) {
+    (
+        StatusRule::Edge,
+        PortErrorKind::InvalidRequest(RequestRejection::EdgeBlocked),
+    )
+}
+
+fn api_mapping(
+    code: ApiErrorCode,
+    status: HttpStatus,
+    retry: RetryDelay,
+) -> (StatusRule, PortErrorKind) {
     use HttpStatus::{BadRequest, RateLimited, ServerError, Unauthorized, UnsupportedMediaType};
     match code {
         InvalidRequest => rejected(BadRequest, RequestRejection::MalformedRequest),
@@ -259,10 +291,7 @@ fn api_mapping(code: ApiErrorCode, retry: RetryDelay) -> (StatusRule, PortErrorK
         StockNotFound => missing(MissingData::Stock),
         ExchangeRateNotFound => missing(MissingData::ExchangeRate),
         SectorNotFound => missing(MissingData::Sector),
-        EdgeBlocked => (
-            StatusRule::Edge,
-            PortErrorKind::InvalidRequest(RequestRejection::EdgeBlocked),
-        ),
+        EdgeBlocked => edge_blocked(),
         UnsupportedContentType => rejected(
             UnsupportedMediaType,
             RequestRejection::UnsupportedContentType,
@@ -299,12 +328,19 @@ fn api_mapping(code: ApiErrorCode, retry: RetryDelay) -> (StatusRule, PortErrorK
         | PriceOutOfRange
         | RequestInProgress
         | StockRestricted
-        | UsModifyQuantityNotSupported => mismatch(ResponseMismatch::Validation),
-        Unknown => mismatch(ResponseMismatch::Schema),
+        | UsModifyQuantityNotSupported
+        | ConditionAlreadyMet
+        | DuplicateConditionalOrder
+        | InsufficientSellableQuantity => mismatch(ResponseMismatch::Validation),
+        Unknown => (StatusRule::Failure, no_body(status, retry)),
     }
 }
 
-fn oauth_mapping(code: OAuthErrorCode) -> (StatusRule, PortErrorKind) {
+fn oauth_mapping(
+    code: OAuthErrorCode,
+    status: HttpStatus,
+    retry: RetryDelay,
+) -> (StatusRule, PortErrorKind) {
     match code {
         OAuthErrorCode::InvalidClient => (
             StatusRule::Exact(HttpStatus::Unauthorized),
@@ -322,10 +358,11 @@ fn oauth_mapping(code: OAuthErrorCode) -> (StatusRule, PortErrorKind) {
             StatusRule::Exact(HttpStatus::BadRequest),
             PortErrorKind::InvalidRequest(RequestRejection::MalformedRequest),
         ),
-        OAuthErrorCode::Unknown => (
+        OAuthErrorCode::ServerError | OAuthErrorCode::TemporarilyUnavailable => (
             StatusRule::Failure,
-            PortErrorKind::InvalidResponse(ResponseMismatch::Schema),
+            unavailable(UnavailableCause::ServerError, retry),
         ),
+        OAuthErrorCode::Unknown => (StatusRule::Failure, no_body(status, retry)),
     }
 }
 
@@ -349,31 +386,104 @@ fn no_body(status: HttpStatus, retry: RetryDelay) -> PortErrorKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExpectedEnvelope {
+    Read,
+    Token,
+}
+
 #[must_use]
-pub fn map_toss_error(
+pub fn map_toss_read_error(
     endpoint: ReadEndpoint,
     status: HttpStatus,
     body: TossErrorBody,
     retry: RetryDelay,
 ) -> TossMappedError {
+    map_body(endpoint, status, body, retry, ExpectedEnvelope::Read)
+}
+
+#[must_use]
+pub fn map_toss_token_error(
+    endpoint: ReadEndpoint,
+    status: HttpStatus,
+    body: TossErrorBody,
+    retry: RetryDelay,
+) -> TossMappedError {
+    map_body(endpoint, status, body, retry, ExpectedEnvelope::Token)
+}
+
+fn api_for_envelope(
+    envelope: ExpectedEnvelope,
+    code: ApiErrorCode,
+    status: HttpStatus,
+    retry: RetryDelay,
+) -> (StatusRule, PortErrorKind) {
+    match envelope {
+        ExpectedEnvelope::Read => api_mapping(code, status, retry),
+        ExpectedEnvelope::Token => {
+            if status == HttpStatus::RateLimited {
+                api_mapping(code, status, retry)
+            } else {
+                mismatch(ResponseMismatch::Schema)
+            }
+        }
+    }
+}
+
+fn oauth_for_envelope(
+    envelope: ExpectedEnvelope,
+    code: OAuthErrorCode,
+    status: HttpStatus,
+    retry: RetryDelay,
+) -> (StatusRule, PortErrorKind) {
+    match envelope {
+        ExpectedEnvelope::Read => mismatch(ResponseMismatch::Schema),
+        ExpectedEnvelope::Token => oauth_mapping(code, status, retry),
+    }
+}
+
+fn map_body(
+    endpoint: ReadEndpoint,
+    status: HttpStatus,
+    body: TossErrorBody,
+    retry: RetryDelay,
+    envelope: ExpectedEnvelope,
+) -> TossMappedError {
+    let mut recognition = CodeRecognition::Absent;
+    let mut cursor = CursorHint::Unspecified;
     let (rule, kind, diagnostics) = match body {
         TossErrorBody::Missing => {
             return TossMappedError {
                 port: PortError::new(endpoint, status, no_body(status, retry)),
                 diagnostics: DiagnosticIds::default(),
+                recognition,
+                cursor,
             };
         }
-        TossErrorBody::Malformed => (
-            StatusRule::Failure,
-            no_body(status, retry),
-            DiagnosticIds::default(),
-        ),
-        TossErrorBody::Api { code, diagnostics } => {
-            let (rule, kind) = api_mapping(code, retry);
+        TossErrorBody::Malformed { diagnostics } => {
+            (StatusRule::Failure, no_body(status, retry), diagnostics)
+        }
+        TossErrorBody::Api {
+            code,
+            diagnostics,
+            cursor: observed_cursor,
+        } => {
+            recognition = if code == Unknown {
+                CodeRecognition::Unknown
+            } else {
+                CodeRecognition::Known
+            };
+            cursor = observed_cursor;
+            let (rule, kind) = api_for_envelope(envelope, code, status, retry);
             (rule, kind, diagnostics)
         }
         TossErrorBody::OAuth { code, diagnostics } => {
-            let (rule, kind) = oauth_mapping(code);
+            recognition = if code == OAuthErrorCode::Unknown {
+                CodeRecognition::Unknown
+            } else {
+                CodeRecognition::Known
+            };
+            let (rule, kind) = oauth_for_envelope(envelope, code, status, retry);
             (rule, kind, diagnostics)
         }
     };
@@ -385,5 +495,7 @@ pub fn map_toss_error(
     TossMappedError {
         port: PortError::new(endpoint, status, normalized_kind),
         diagnostics,
+        recognition,
+        cursor,
     }
 }
