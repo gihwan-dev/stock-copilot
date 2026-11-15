@@ -436,6 +436,102 @@ mod tests {
         }
     }
     impl MarketInfo for FakeBroker {
+        fn investor_trading_rankings(
+            &self,
+            limit: RankingLimit,
+        ) -> impl Future<Output = Result<domain::InvestorTradingRankings, PortError>> + Send
+        {
+            let group = || domain::InvestorGroupRow {
+                net_buy: vec![],
+                net_sell: vec![],
+                ranked_at: None,
+            };
+            std::future::ready(outcome(
+                self.0,
+                domain::InvestorTradingRankings::from_response(
+                    group(),
+                    group(),
+                    group(),
+                    limit,
+                    instant(),
+                )
+                .expect("투자자 랭킹"),
+                ReadEndpoint::InvestorTradingRankings,
+            ))
+        }
+        fn sectors(&self) -> impl Future<Output = Result<domain::SectorCatalog, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                domain::SectorCatalog::from_response(vec![], instant()).expect("목록"),
+                ReadEndpoint::Sectors,
+            ))
+        }
+        fn sector(
+            &self,
+            sector: &SectorId,
+            market: KnownMarket,
+        ) -> impl Future<Output = Result<domain::SectorDetail, PortError>> + Send {
+            let rates = [
+                RankingDuration::Day,
+                RankingDuration::Week,
+                RankingDuration::Month,
+                RankingDuration::ThreeMonths,
+                RankingDuration::SixMonths,
+                RankingDuration::Year,
+            ]
+            .into_iter()
+            .map(|duration| domain::SectorRateRow {
+                duration,
+                change_rate: None,
+            })
+            .collect();
+            std::future::ready(outcome(
+                self.0,
+                domain::SectorDetail::from_response(
+                    domain::SectorMetadataRow {
+                        id: sector.clone(),
+                        name: DisplayInstrumentName::try_new("분류").expect("이름"),
+                        depth: domain::SectorDepth::Major,
+                        parent: None,
+                    },
+                    market,
+                    None,
+                    rates,
+                    instant(),
+                )
+                .expect("상세"),
+                ReadEndpoint::Sector,
+            ))
+        }
+        fn sector_rankings(
+            &self,
+            query: &application::SectorRankingQuery,
+        ) -> impl Future<Output = Result<domain::SectorRanking, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                domain::SectorRanking::from_response(
+                    query.kind(),
+                    query.market(),
+                    query.duration(),
+                    vec![],
+                    instant(),
+                )
+                .expect("섹터 랭킹"),
+                ReadEndpoint::SectorRankings,
+            ))
+        }
+        fn sector_etfs(
+            &self,
+            sector: &SectorId,
+            market: KnownMarket,
+        ) -> impl Future<Output = Result<domain::SectorEtfs, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                domain::SectorEtfs::from_response(sector.clone(), market, vec![], instant())
+                    .expect("ETF 목록"),
+                ReadEndpoint::SectorEtfs,
+            ))
+        }
         fn fx_rate(
             &self,
             _pair: FxPair,
@@ -1331,5 +1427,65 @@ mod tests {
             let calendar = ready(port.calendar(market)).expect("달력");
             assert_eq!(calendar.today().market(), market.into());
         }
+    }
+    #[test]
+    fn a21_methods_keep_domain_types_send_errors_and_request_identity() {
+        let sector = SectorId::try_new("sector-21").expect("식별자");
+        let query = application::SectorRankingQuery::try_new(
+            RankingKind::MarketTradingAmount,
+            KnownMarket::Us,
+            RankingDuration::SixMonths,
+        )
+        .expect("요청");
+        let limit = RankingLimit::try_new(37).expect("개수");
+        let port = FakeBroker(Scenario::Complete);
+        let investors: domain::InvestorTradingRankings =
+            ready(port.investor_trading_rankings(limit)).expect("투자자");
+        assert_eq!(investors.limit(), limit);
+        assert_eq!(
+            investors.foreigner().investor(),
+            domain::InvestorClass::Foreigner
+        );
+        assert_eq!(
+            investors.institution().investor(),
+            domain::InvestorClass::Institution
+        );
+        assert_eq!(
+            investors.individual().investor(),
+            domain::InvestorClass::Individual
+        );
+        let catalog: domain::SectorCatalog = ready(port.sectors()).expect("목록");
+        assert_eq!(catalog.sectors(), &[]);
+        let detail: domain::SectorDetail =
+            ready(port.sector(&sector, KnownMarket::Kr)).expect("상세");
+        assert_eq!(detail.metadata().id(), &sector);
+        assert_eq!(detail.market(), KnownMarket::Kr);
+        let ranking: domain::SectorRanking = ready(port.sector_rankings(&query)).expect("랭킹");
+        assert_eq!(ranking.kind(), RankingKind::MarketTradingAmount);
+        assert_eq!(ranking.market(), KnownMarket::Us);
+        assert_eq!(ranking.duration(), RankingDuration::SixMonths);
+        let etfs: domain::SectorEtfs =
+            ready(port.sector_etfs(&sector, KnownMarket::Us)).expect("ETF");
+        assert_eq!(etfs.sector(), &sector);
+        assert_eq!(etfs.market(), KnownMarket::Us);
+        assert_eq!(etfs.observation().collected_at(), instant());
+        let failed = FakeBroker(Scenario::Failed);
+        assert_eq!(
+            ready(failed.investor_trading_rankings(limit)),
+            Err(failure(ReadEndpoint::InvestorTradingRankings))
+        );
+        assert_eq!(ready(failed.sectors()), Err(failure(ReadEndpoint::Sectors)));
+        assert_eq!(
+            ready(failed.sector(&sector, KnownMarket::Kr)),
+            Err(failure(ReadEndpoint::Sector))
+        );
+        assert_eq!(
+            ready(failed.sector_rankings(&query)),
+            Err(failure(ReadEndpoint::SectorRankings))
+        );
+        assert_eq!(
+            ready(failed.sector_etfs(&sector, KnownMarket::Us)),
+            Err(failure(ReadEndpoint::SectorEtfs))
+        );
     }
 }
