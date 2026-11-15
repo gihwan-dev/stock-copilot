@@ -432,32 +432,6 @@ fn allocation_multiple(mut value: Magnitude, units: &AllocationUnits) -> Magnitu
     value
 }
 
-pub(crate) fn compare_sector_fractions(
-    left: Amount,
-    left_total: Amount,
-    right: Amount,
-    right_total: Amount,
-) -> std::cmp::Ordering {
-    let first = sector_scaled_product(left, right_total, product_scale(right, left_total));
-    let second = sector_scaled_product(right, left_total, product_scale(left, right_total));
-    first.cmp(&second)
-}
-fn sector_scaled_product(left: Amount, right: Amount, scale: Scale) -> Magnitude {
-    let mut result = Magnitude::product(left, right);
-    for _place in 0..scale.0 {
-        let mut carry = Limb(0);
-        for digit in &mut result.0 {
-            let total = u64::from(digit.0)
-                .wrapping_mul(10)
-                .wrapping_add(u64::from(carry.0));
-            let (low, high) = split_word(Word(total));
-            *digit = low;
-            carry = high;
-        }
-    }
-    result
-}
-
 #[cfg(test)]
 mod allocation_remainder_tests {
     use super::{AllocationRemainder, allocation_parts};

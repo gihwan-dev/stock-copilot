@@ -40,9 +40,9 @@ impl InstrumentClassification {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SectorAssignment {
-    pub(crate) instrument: AllocationInstrument,
-    pub(crate) classification: InstrumentClassification,
-    pub(crate) membership: crate::SectorMembership,
+    instrument: AllocationInstrument,
+    classification: InstrumentClassification,
+    pub(crate) details: Option<crate::sector_selection::AssignmentDetails>,
 }
 impl SectorAssignment {
     #[must_use]
@@ -53,7 +53,7 @@ impl SectorAssignment {
         Self {
             instrument: instrument.allocation_identity(),
             classification,
-            membership: crate::SectorMembership::Unspecified,
+            details: None,
         }
     }
     #[must_use]
@@ -72,14 +72,16 @@ pub enum SectorAssignmentsError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SectorAssignments(
     pub(crate) BTreeMap<AllocationInstrument, InstrumentClassification>,
-    pub(crate) BTreeMap<AllocationInstrument, crate::SectorMembership>,
+    pub(crate) BTreeMap<AllocationInstrument, crate::sector_selection::AssignmentDetails>,
 );
 impl SectorAssignments {
     pub fn try_new(assignments: Vec<SectorAssignment>) -> Result<Self, SectorAssignmentsError> {
         let mut values = BTreeMap::new();
         let mut memberships = BTreeMap::new();
         for assignment in assignments {
-            memberships.insert(assignment.instrument.clone(), assignment.membership);
+            if let Some(details) = assignment.details {
+                memberships.insert(assignment.instrument.clone(), details);
+            }
             if values
                 .insert(assignment.instrument, assignment.classification)
                 .is_some()

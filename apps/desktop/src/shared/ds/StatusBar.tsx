@@ -1,3 +1,4 @@
+import type { Action } from "./control-types";
 import type { ReactElement } from "react";
 import type { UiText } from "../lib";
 import { Button } from "./Button";
@@ -7,11 +8,7 @@ type Tone = "warning" | "error" | "info";
 type Props = {
   readonly tone?: Tone;
   readonly children?: UiText;
-  readonly action?: {
-    readonly label: UiText;
-    readonly onPress: () => void;
-    readonly disabled?: "enabled" | "disabled";
-  };
+  readonly action?: Action;
 };
 const styles = {
   warning:

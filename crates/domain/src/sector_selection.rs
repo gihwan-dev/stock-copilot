@@ -1,10 +1,8 @@
 use crate::{
-    AllocationInstrument, Amount, Currency, InstrumentClassification, MasterInstrument,
-    SectorAmount, SectorAssignment, SectorComposition, SectorId,
+    AllocationInstrument, Currency, InstrumentClassification, MasterInstrument, SectorAssignment,
+    SectorCatalog, SectorComposition, SectorDepth, SectorId,
 };
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
-
 pub(crate) trait AssignmentIdentity {
     fn allocation_identity(&self) -> AllocationInstrument;
 }
@@ -21,345 +19,657 @@ impl AssignmentIdentity for crate::QuoteInstrument {
         }
     }
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SectorMembership {
-    Unspecified,
     Single,
     Multiple,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SectorSelectionRule {
-    LargestCompositionWeightThenSectorId,
+    LargestMajorCapitalizationThenSectorId,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SectorAssignmentReason {
+    SingleMajorSector,
+    LargestMajorCapitalization,
+    CapitalizationUnavailable,
+    EtfFundFromMaster,
+    NoMajorMembership,
+    UnknownSecurityType,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SectorSelectionError {
-    MissingMembership,
-    MissingWeight,
     DuplicateSector,
     InvalidMaster,
-    Arithmetic,
+    InvalidCatalog,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AssignmentDetails {
+    pub(crate) membership: Option<SectorMembership>,
+    pub(crate) reason: SectorAssignmentReason,
 }
 #[derive(Clone, PartialEq, Eq)]
 struct Candidate {
     id: SectorId,
-    value: Amount,
-    total: Amount,
+    capitalization: Option<crate::Money>,
 }
-
+impl std::fmt::Debug for Candidate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Candidate")
+            .field("id", &self.id)
+            .field("capitalization", &"[REDACTED]")
+            .finish()
+    }
+}
 #[must_use]
-pub const fn sector_membership(assignment: &SectorAssignment) -> SectorMembership {
-    assignment.membership
+pub fn sector_membership(assignment: &SectorAssignment) -> Option<SectorMembership> {
+    assignment.details?.membership
+}
+#[must_use]
+pub fn sector_assignment_reason(assignment: &SectorAssignment) -> Option<SectorAssignmentReason> {
+    assignment.details.map(|details| details.reason)
 }
 #[must_use]
 pub const fn sector_selection_rule() -> SectorSelectionRule {
-    SectorSelectionRule::LargestCompositionWeightThenSectorId
-}
-
-pub fn sector_assignment_from_compositions(
-    master: &MasterInstrument,
-    compositions: &[SectorComposition],
-) -> Result<SectorAssignment, SectorSelectionError> {
-    let identity = master
-        .quote_instrument()
-        .or(Err(SectorSelectionError::InvalidMaster))?;
-    let mut selected: Option<Candidate> = None;
-    let mut sectors = BTreeSet::new();
-    let mut membership = SectorMembership::Single;
-    for composition in compositions {
-        if composition.market() != *identity.market()
-            || !composition.symbols().contains(identity.symbol())
-        {
-            continue;
-        }
-        if !sectors.insert(composition.sector().clone()) {
-            return Err(SectorSelectionError::DuplicateSector);
-        }
-        let candidate = composition_candidate(composition, identity.symbol())?;
-        if let Some(previous) = &selected {
-            membership = SectorMembership::Multiple;
-            let order = crate::exact_arithmetic::compare_sector_fractions(
-                candidate.value,
-                candidate.total,
-                previous.value,
-                previous.total,
-            );
-            if order == Ordering::Less || (order == Ordering::Equal && candidate.id > previous.id) {
-                continue;
-            }
-        }
-        selected = Some(candidate);
-    }
-    let winner = selected.ok_or(SectorSelectionError::MissingMembership)?;
-    let mut assignment =
-        SectorAssignment::new(&identity, InstrumentClassification::Sector(winner.id));
-    assignment.membership = membership;
-    Ok(assignment)
-}
-
-fn composition_candidate(
-    composition: &SectorComposition,
-    symbol: &crate::Symbol,
-) -> Result<Candidate, SectorSelectionError> {
-    let mut total = crate::Money::new(Amount::new(rust_decimal::Decimal::ZERO), Currency::Krw);
-    let mut selected = None;
-    for member in composition.stocks() {
-        let value = match member.market_capitalization() {
-            SectorAmount::Unavailable => return Err(SectorSelectionError::MissingWeight),
-            SectorAmount::Available(value) => value,
-        };
-        total = total
-            .checked_add(&value)
-            .or(Err(SectorSelectionError::Arithmetic))?;
-        if member.symbol() == symbol {
-            selected = Some(value.amount());
-        }
-    }
-    if total.amount().as_decimal() <= rust_decimal::Decimal::ZERO {
-        return Err(SectorSelectionError::MissingWeight);
-    }
-    Ok(Candidate {
-        id: composition.sector().clone(),
-        value: selected.ok_or(SectorSelectionError::MissingMembership)?,
-        total: total.amount(),
-    })
+    SectorSelectionRule::LargestMajorCapitalizationThenSectorId
 }
 #[must_use]
 pub fn sector_assignments_membership(
     assignments: &crate::SectorAssignments,
     instrument: &AllocationInstrument,
 ) -> Option<SectorMembership> {
-    assignments.1.get(instrument).copied()
+    assignments.1.get(instrument)?.membership
 }
-
-impl std::fmt::Debug for Candidate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Candidate([REDACTED])")
+#[must_use]
+pub fn sector_assignments_reason(
+    assignments: &crate::SectorAssignments,
+    instrument: &AllocationInstrument,
+) -> Option<SectorAssignmentReason> {
+    assignments.1.get(instrument).map(|details| details.reason)
+}
+pub fn sector_assignment_from_compositions(
+    master: &MasterInstrument,
+    catalog: &SectorCatalog,
+    compositions: &[SectorComposition],
+) -> Result<SectorAssignment, SectorSelectionError> {
+    let identity = master
+        .quote_instrument()
+        .or(Err(SectorSelectionError::InvalidMaster))?;
+    if let Some((classification, reason)) = master_classification(master) {
+        return Ok(assignment(&identity, classification, None, reason));
     }
+    let candidates = major_candidates(&identity, catalog, compositions)?;
+    let Some((winner, membership, reason)) = select_major(&candidates) else {
+        return Ok(assignment(
+            &identity,
+            InstrumentClassification::Unclassified,
+            None,
+            SectorAssignmentReason::NoMajorMembership,
+        ));
+    };
+    Ok(assignment(
+        &identity,
+        InstrumentClassification::Sector(winner.id.clone()),
+        Some(membership),
+        reason,
+    ))
+}
+fn assignment(
+    identity: &crate::QuoteInstrument,
+    classification: InstrumentClassification,
+    membership: Option<SectorMembership>,
+    reason: SectorAssignmentReason,
+) -> SectorAssignment {
+    let mut result = SectorAssignment::new(identity, classification);
+    result.details = Some(AssignmentDetails { membership, reason });
+    result
+}
+fn master_classification(
+    master: &MasterInstrument,
+) -> Option<(InstrumentClassification, SectorAssignmentReason)> {
+    match master.row().security_type.known() {
+        Some(
+            crate::ExcludedSecurityType::Etf
+            | crate::ExcludedSecurityType::ForeignEtf
+            | crate::ExcludedSecurityType::InfrastructureFund,
+        ) => {
+            return Some((
+                InstrumentClassification::EtfFund,
+                SectorAssignmentReason::EtfFundFromMaster,
+            ));
+        }
+        None => {
+            return Some((
+                InstrumentClassification::Unclassified,
+                SectorAssignmentReason::UnknownSecurityType,
+            ));
+        }
+        Some(
+            crate::ExcludedSecurityType::Stock
+            | crate::ExcludedSecurityType::ForeignStock
+            | crate::ExcludedSecurityType::DepositaryReceipt
+            | crate::ExcludedSecurityType::Reit
+            | crate::ExcludedSecurityType::Etn
+            | crate::ExcludedSecurityType::StockWarrants,
+        ) => (),
+    }
+    None
+}
+fn major_candidates(
+    identity: &crate::QuoteInstrument,
+    catalog: &SectorCatalog,
+    compositions: &[SectorComposition],
+) -> Result<Vec<Candidate>, SectorSelectionError> {
+    let mut candidates = Vec::new();
+    let mut seen = BTreeSet::new();
+    for composition in compositions {
+        if composition.market() != *identity.market()
+            || !composition.symbols().contains(identity.symbol())
+        {
+            continue;
+        }
+        let sector = catalog
+            .sectors()
+            .iter()
+            .find(|sector| sector.id() == composition.sector())
+            .ok_or(SectorSelectionError::InvalidCatalog)?;
+        if sector.depth() != SectorDepth::Major {
+            continue;
+        }
+        if !seen.insert(sector.id().clone()) {
+            return Err(SectorSelectionError::DuplicateSector);
+        }
+        candidates.push(Candidate {
+            id: sector.id().clone(),
+            capitalization: total_capitalization(composition),
+        });
+    }
+    Ok(candidates)
+}
+fn select_major(
+    candidates: &[Candidate],
+) -> Option<(&Candidate, SectorMembership, SectorAssignmentReason)> {
+    let (first, rest) = candidates.split_first()?;
+    let membership = match rest.len() {
+        0 => SectorMembership::Single,
+        _ => SectorMembership::Multiple,
+    };
+    let reason = if candidates
+        .iter()
+        .any(|candidate| candidate.capitalization.is_none())
+    {
+        SectorAssignmentReason::CapitalizationUnavailable
+    } else if membership == SectorMembership::Single {
+        SectorAssignmentReason::SingleMajorSector
+    } else {
+        SectorAssignmentReason::LargestMajorCapitalization
+    };
+    let capitalization = |candidate: &Candidate| match reason {
+        SectorAssignmentReason::LargestMajorCapitalization => candidate
+            .capitalization
+            .map(|value| value.amount().as_decimal()),
+        SectorAssignmentReason::SingleMajorSector
+        | SectorAssignmentReason::CapitalizationUnavailable
+        | SectorAssignmentReason::EtfFundFromMaster
+        | SectorAssignmentReason::NoMajorMembership
+        | SectorAssignmentReason::UnknownSecurityType => None,
+    };
+    let winner = rest.iter().fold(first, |winner, candidate| {
+        if capitalization(candidate) > capitalization(winner)
+            || (capitalization(candidate) == capitalization(winner) && candidate.id < winner.id)
+        {
+            candidate
+        } else {
+            winner
+        }
+    });
+    Some((winner, membership, reason))
+}
+fn total_capitalization(composition: &SectorComposition) -> Option<crate::Money> {
+    let values = composition
+        .stocks()
+        .iter()
+        .map(|member| match member.market_capitalization() {
+            crate::SectorAmount::Unavailable => None,
+            crate::SectorAmount::Available(value) => Some(value),
+        })
+        .collect::<Option<Vec<_>>>()?;
+    values.into_iter().try_fold(
+        crate::Money::new(
+            crate::Amount::new(rust_decimal::Decimal::ZERO),
+            Currency::Krw,
+        ),
+        |total, value| total.checked_add(&value).ok(),
+    )
 }
 #[cfg(test)]
 mod tests {
     use super::{
-        SectorMembership, SectorSelectionError, SectorSelectionRule,
-        sector_assignment_from_compositions, sector_assignments_membership, sector_membership,
+        SectorAssignmentReason, SectorMembership, SectorSelectionError, SectorSelectionRule,
+        sector_assignment_from_compositions, sector_assignment_reason,
+        sector_assignments_membership, sector_assignments_reason, sector_membership,
         sector_selection_rule,
     };
     use crate::valuation_snapshot::tests::at;
     use crate::{
-        CommonShare, Currency, DisplayInstrumentName, InstrumentClassification, InstrumentId,
-        KnownMarket, ListingStatus, Market, MasterCode, MasterInstrument, MasterInstrumentRow,
-        MasterSecurityType, NumericInput, SectorComposition, SectorId, SectorStockRow, Symbol,
+        Currency, InstrumentClassification, KnownMarket, MasterCode, MasterInstrument,
+        NumericInput, SectorCatalog, SectorComposition, SectorDepth, SectorId, SectorMetadataRow,
+        SectorStockRow, Symbol,
     };
-    fn master() -> MasterInstrument {
-        MasterInstrument::try_new(MasterInstrumentRow {
-            listing_market: MasterCode::try_new("KOSPI").expect("시장"),
-            symbol: Symbol::try_new("005930").expect("종목"),
-            instrument_id: InstrumentId::try_new("stable").expect("식별"),
-            name: DisplayInstrumentName::try_new("테스트").expect("이름"),
-            security_type: MasterSecurityType::from_code(
-                MasterCode::try_new("STOCK").expect("유형"),
+    fn id(value: &str) -> SectorId {
+        SectorId::try_new(value).expect("섹터")
+    }
+    fn master(symbol: &str, market: KnownMarket, kind: &str) -> MasterInstrument {
+        MasterInstrument::try_new(crate::MasterInstrumentRow {
+            listing_market: MasterCode::try_new(match market {
+                KnownMarket::Kr => "KOSPI",
+                KnownMarket::Us => "NASDAQ",
+            })
+            .expect("시장"),
+            symbol: Symbol::try_new(symbol).expect("심볼"),
+            instrument_id: crate::InstrumentId::try_new("stable").expect("ID"),
+            name: crate::DisplayInstrumentName::try_new("종목").expect("이름"),
+            security_type: crate::MasterSecurityType::from_code(
+                MasterCode::try_new(kind).expect("유형"),
             ),
-            currency: Currency::Krw,
-            listing_status: ListingStatus::Active,
-            common_share: CommonShare::Common,
+            currency: match market {
+                KnownMarket::Kr => Currency::Krw,
+                KnownMarket::Us => Currency::Usd,
+            },
+            listing_status: crate::ListingStatus::Active,
+            common_share: crate::CommonShare::Common,
             korean_detail: None,
             observed_at: at(2, 0),
         })
         .expect("마스터")
     }
-    fn composition(id: &str, first: Option<&str>, second: Option<&str>) -> SectorComposition {
+    fn catalog() -> SectorCatalog {
+        SectorCatalog::from_response(
+            [
+                ("A", SectorDepth::Major, None),
+                ("B", SectorDepth::Major, None),
+                ("a", SectorDepth::Middle, Some("A")),
+                ("x", SectorDepth::Minor, Some("a")),
+                ("y", SectorDepth::Minor, Some("a")),
+            ]
+            .into_iter()
+            .map(|(value, depth, parent)| SectorMetadataRow {
+                id: id(value),
+                name: crate::DisplayInstrumentName::try_new(value).expect("이름"),
+                depth,
+                parent: parent.map(id),
+            })
+            .collect(),
+            at(2, 0),
+        )
+        .expect("전체 목록")
+    }
+    fn composition(
+        sector: &str,
+        market: KnownMarket,
+        rows: &[(&str, Option<&str>)],
+    ) -> SectorComposition {
         SectorComposition::from_stocks_response(
-            SectorId::try_new(id).expect("섹터"),
-            KnownMarket::Kr,
-            [("005930", first), ("000660", second)]
+            id(sector),
+            market,
+            rows.iter()
                 .map(|(symbol, value)| SectorStockRow {
-                    symbol: Symbol::try_new(symbol).expect("심볼"),
+                    symbol: Symbol::try_new(symbol).expect("종목"),
                     currency: Currency::Krw,
                     market_capitalization: value
-                        .map(|text| NumericInput::try_new(text).expect("수치")),
+                        .map(|text| NumericInput::try_new(text).expect("시총")),
                     trading_amount: None,
                 })
-                .into(),
+                .collect(),
             at(2, 0),
         )
         .expect("구성")
     }
+    fn kr(sector: &str, first: Option<&str>, second: Option<&str>) -> SectorComposition {
+        composition(
+            sector,
+            KnownMarket::Kr,
+            &[("005930", first), ("000660", second)],
+        )
+    }
+    fn classify(symbol: &str, rows: &[SectorComposition]) -> crate::SectorAssignment {
+        sector_assignment_from_compositions(
+            &master(symbol, KnownMarket::Kr, "STOCK"),
+            &catalog(),
+            rows,
+        )
+        .expect("분류")
+    }
+    fn semiconductor_compositions() -> [SectorComposition; 3] {
+        [
+            kr("A", Some("600"), Some("400")),
+            composition("x", KnownMarket::Kr, &[("005930", Some("600"))]),
+            composition("y", KnownMarket::Kr, &[("000660", Some("400"))]),
+        ]
+    }
     #[test]
-    fn largest_weight_wins_ties_use_id_and_multiple_membership_survives() {
+    fn samsung_and_hynix_stay_in_the_same_major_sector() {
+        let rows = semiconductor_compositions();
+        for symbol in ["005930", "000660"] {
+            let result = classify(symbol, &rows);
+            assert_eq!(
+                result.classification(),
+                &InstrumentClassification::Sector(id("A"))
+            );
+            assert_eq!(sector_membership(&result), Some(SectorMembership::Single));
+            assert_eq!(
+                sector_assignment_reason(&result),
+                Some(SectorAssignmentReason::SingleMajorSector)
+            );
+        }
+    }
+    #[test]
+    fn larger_major_total_wins_even_when_member_weight_is_smaller() {
         let rows = [
-            composition("B", Some("10"), Some("30")),
-            composition("A", Some("20"), Some("60")),
-            composition("C", Some("30"), Some("20")),
+            kr("A", Some("100"), Some("900")),
+            kr("B", Some("100"), Some("100")),
         ];
-        let assignment = sector_assignment_from_compositions(&master(), &rows).expect("선택");
+        let result = classify("005930", &rows);
         assert_eq!(
-            assignment.classification(),
-            &InstrumentClassification::Sector(SectorId::try_new("C").expect("섹터"))
+            result.classification(),
+            &InstrumentClassification::Sector(id("A"))
         );
-        assert_eq!(sector_membership(&assignment), SectorMembership::Multiple);
-        assert_eq!(assignment.instrument().symbol().as_str(), "005930");
-        assert_eq!(assignment.instrument().market(), &Market::Kr);
+        assert_eq!(sector_membership(&result), Some(SectorMembership::Multiple));
         assert_eq!(
-            sector_selection_rule(),
-            SectorSelectionRule::LargestCompositionWeightThenSectorId
+            sector_assignment_reason(&result),
+            Some(SectorAssignmentReason::LargestMajorCapitalization)
         );
-        let collection = crate::SectorAssignments::try_new(vec![assignment.clone()]).expect("목록");
+        let values = crate::SectorAssignments::try_new(vec![result.clone()]).expect("목록");
         assert_eq!(
-            sector_assignments_membership(&collection, assignment.instrument()),
+            sector_assignments_membership(&values, result.instrument()),
             Some(SectorMembership::Multiple)
         );
-        let tied = sector_assignment_from_compositions(&master(), &rows[..2]).expect("동률");
         assert_eq!(
-            tied.classification(),
-            &InstrumentClassification::Sector(SectorId::try_new("A").expect("섹터"))
+            sector_assignments_reason(&values, result.instrument()),
+            Some(SectorAssignmentReason::LargestMajorCapitalization)
         );
-        let single = sector_assignment_from_compositions(&master(), &rows[..1]).expect("하나");
-        assert_eq!(sector_membership(&single), SectorMembership::Single);
+        assert_eq!(
+            sector_selection_rule(),
+            SectorSelectionRule::LargestMajorCapitalizationThenSectorId
+        );
         let mut reverse = rows.to_vec();
         reverse.reverse();
+        assert_eq!(classify("005930", &reverse), result);
+    }
+    #[test]
+    fn equal_totals_and_missing_totals_use_sector_id_order() {
+        for rows in [
+            [kr("B", Some("2"), Some("8")), kr("A", Some("9"), Some("1"))],
+            [kr("B", Some("2"), None), kr("A", Some("9"), Some("1000"))],
+            [kr("B", Some("99999"), Some("8")), kr("A", Some("9"), None)],
+        ] {
+            let result = classify("005930", &rows);
+            assert_eq!(
+                result.classification(),
+                &InstrumentClassification::Sector(id("A"))
+            );
+            assert_eq!(sector_membership(&result), Some(SectorMembership::Multiple));
+            let mut reverse = rows.to_vec();
+            reverse.reverse();
+            assert_eq!(classify("005930", &reverse), result);
+        }
         assert_eq!(
-            sector_assignment_from_compositions(&master(), &reverse),
-            Ok(assignment)
+            sector_assignment_reason(&classify(
+                "005930",
+                &[kr("B", None, Some("2")), kr("A", Some("1"), Some("100"))]
+            )),
+            Some(SectorAssignmentReason::CapitalizationUnavailable)
         );
     }
     #[test]
-    fn missing_weights_membership_duplicates_and_unknown_master_are_closed() {
+    fn single_membership_does_not_need_peer_capitalization() {
+        let result = classify("005930", &[kr("A", Some("2"), None)]);
         assert_eq!(
-            sector_assignment_from_compositions(&master(), &[]),
-            Err(SectorSelectionError::MissingMembership)
+            result.classification(),
+            &InstrumentClassification::Sector(id("A"))
         );
-        for row in [
-            composition("A", None, Some("1")),
-            composition("A", Some("1"), None),
-            composition("A", Some("0"), Some("0")),
-        ] {
+        assert_eq!(sector_membership(&result), Some(SectorMembership::Single));
+        assert_eq!(
+            sector_assignment_reason(&result),
+            Some(SectorAssignmentReason::CapitalizationUnavailable)
+        );
+    }
+    #[test]
+    fn etf_and_fund_classification_comes_from_master() {
+        for kind in ["ETF", "FOREIGN_ETF", "INFRASTRUCTURE_FUND"] {
+            let result = sector_assignment_from_compositions(
+                &master("005930", KnownMarket::Kr, kind),
+                &catalog(),
+                &[],
+            )
+            .expect("ETF 펀드");
+            assert_eq!(result.classification(), &InstrumentClassification::EtfFund);
+            assert_eq!(sector_membership(&result), None);
             assert_eq!(
-                sector_assignment_from_compositions(&master(), &[row]),
-                Err(SectorSelectionError::MissingWeight)
+                sector_assignment_reason(&result),
+                Some(SectorAssignmentReason::EtfFundFromMaster)
             );
         }
-        let row = composition("A", Some("2"), Some("3"));
+    }
+    #[test]
+    fn missing_major_and_unknown_type_remain_explicitly_unclassified() {
+        for rows in [
+            vec![],
+            vec![kr("a", Some("1"), Some("2"))],
+            vec![composition("A", KnownMarket::Kr, &[("000660", Some("1"))])],
+        ] {
+            let result = classify("005930", &rows);
+            assert_eq!(
+                result.classification(),
+                &InstrumentClassification::Unclassified
+            );
+            assert_eq!(
+                sector_assignment_reason(&result),
+                Some(SectorAssignmentReason::NoMajorMembership)
+            );
+        }
+        let result = sector_assignment_from_compositions(
+            &master("005930", KnownMarket::Kr, "UNKNOWN"),
+            &catalog(),
+            &[kr("A", Some("1"), Some("2"))],
+        )
+        .expect("미분류");
         assert_eq!(
-            sector_assignment_from_compositions(&master(), &[row.clone(), row]),
-            Err(SectorSelectionError::DuplicateSector)
+            result.classification(),
+            &InstrumentClassification::Unclassified
         );
-        let huge = composition("A", Some("79228162514264337593543950335"), Some("1"));
         assert_eq!(
-            sector_assignment_from_compositions(&master(), &[huge]),
-            Err(SectorSelectionError::Arithmetic)
+            sector_assignment_reason(&result),
+            Some(SectorAssignmentReason::UnknownSecurityType)
         );
-        let mut input = master().row().clone();
-        input.listing_market = MasterCode::try_new("OTHER").expect("시장");
+    }
+    #[test]
+    fn identical_symbols_from_other_markets_are_not_memberships() {
+        let rows = [composition(
+            "A",
+            KnownMarket::Us,
+            &[("ABCDEF", Some("100"))],
+        )];
+        let result = sector_assignment_from_compositions(
+            &master("ABCDEF", KnownMarket::Kr, "STOCK"),
+            &catalog(),
+            &rows,
+        )
+        .expect("시장 분리");
+        assert_eq!(
+            result.classification(),
+            &InstrumentClassification::Unclassified
+        );
+        let matching = sector_assignment_from_compositions(
+            &master("ABCDEF", KnownMarket::Us, "FOREIGN_STOCK"),
+            &catalog(),
+            &rows,
+        )
+        .expect("같은 시장");
+        assert_eq!(
+            matching.classification(),
+            &InstrumentClassification::Sector(id("A"))
+        );
+    }
+    #[test]
+    fn invalid_catalog_duplicates_overflow_and_master_are_closed() {
+        let instrument_master = master("005930", KnownMarket::Kr, "STOCK");
+        let row = kr("A", Some("1"), Some("2"));
         assert_eq!(
             sector_assignment_from_compositions(
-                &MasterInstrument::try_new(input).expect("마스터"),
+                &instrument_master,
+                &catalog(),
+                &[row.clone(), row]
+            ),
+            Err(SectorSelectionError::DuplicateSector)
+        );
+        assert_eq!(
+            sector_assignment_from_compositions(
+                &instrument_master,
+                &catalog(),
+                &[kr("missing", Some("1"), Some("2"))]
+            ),
+            Err(SectorSelectionError::InvalidCatalog)
+        );
+        let overflow = classify(
+            "005930",
+            &[
+                kr("A", Some("79228162514264337593543950335"), Some("1")),
+                kr("B", Some("1"), Some("1")),
+            ],
+        );
+        assert_eq!(
+            overflow.classification(),
+            &InstrumentClassification::Sector(id("A"))
+        );
+        assert_eq!(
+            sector_assignment_reason(&overflow),
+            Some(SectorAssignmentReason::CapitalizationUnavailable)
+        );
+        let mut invalid_master_row = instrument_master.row().clone();
+        invalid_master_row.listing_market = MasterCode::try_new("UNKNOWN").expect("시장");
+        assert_eq!(
+            sector_assignment_from_compositions(
+                &MasterInstrument::try_new(invalid_master_row).expect("마스터"),
+                &catalog(),
                 &[]
             ),
             Err(SectorSelectionError::InvalidMaster)
         );
     }
     #[test]
-    fn selection_candidates_redact_amounts_and_ignore_unrelated_members() {
-        let composition = composition("A", Some("123456789"), Some("333"));
-        let candidate =
-            super::composition_candidate(&composition, &Symbol::try_new("005930").expect("심볼"))
-                .expect("후보");
-        assert_eq!(format!("{candidate:?}"), "Candidate([REDACTED])");
-        let unrelated = SectorComposition::from_stocks_response(
-            SectorId::try_new("B").expect("섹터"),
-            KnownMarket::Us,
-            vec![],
-            at(2, 0),
+    fn legacy_internal_metadata_is_absent_and_candidate_debug_only_redacts_money() {
+        let instrument = crate::ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("ABC").expect("심볼"),
+            crate::Market::Us,
         )
-        .expect("구성");
+        .expect("식별");
+        let legacy =
+            crate::SectorAssignment::new(&instrument, InstrumentClassification::Unclassified);
+        assert_eq!(sector_membership(&legacy), None);
+        assert_eq!(sector_assignment_reason(&legacy), None);
+        let values = crate::SectorAssignments::try_new(vec![legacy.clone()]).expect("목록");
         assert_eq!(
-            sector_assignment_from_compositions(&master(), &[unrelated]),
-            Err(SectorSelectionError::MissingMembership)
+            sector_assignments_membership(&values, legacy.instrument()),
+            None
         );
+        assert_eq!(
+            sector_assignments_reason(&values, legacy.instrument()),
+            None
+        );
+        let candidate = super::Candidate {
+            id: id("visible-sector"),
+            capitalization: Some(
+                crate::Money::parse(
+                    &NumericInput::try_new("123456789").expect("수치"),
+                    Currency::Krw,
+                )
+                .expect("금액"),
+            ),
+        };
+        let debug = format!("{candidate:?}");
+        assert!(debug.contains("visible-sector"));
+        assert!(!debug.contains("123456789"));
+    }
+    fn held(symbol: &str, amount: &str) -> crate::Holding {
+        let money = |value| {
+            crate::Money::parse(&NumericInput::try_new(value).expect("수치"), Currency::Krw)
+                .expect("금액")
+        };
+        let instrument = crate::ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new(symbol).expect("종목"),
+            crate::Market::Kr,
+        )
+        .expect("식별");
+        let report = crate::ReportedHolding::new(
+            money(amount),
+            money("0"),
+            crate::Ratio::parse(&NumericInput::try_new("0").expect("수익률")).expect("수익률"),
+        )
+        .expect("보유 평가");
+        crate::Holding::new(
+            instrument,
+            crate::Quantity::parse(&NumericInput::try_new("1").expect("수량")).expect("수량"),
+            crate::AcquisitionPrice::try_new(money("0")).expect("원가"),
+            crate::HoldingObservation::new(None, Some(report), at(2, 0)),
+        )
+        .expect("보유")
+    }
+    fn semiconductor_allocation(assignments: &crate::SectorAssignments) -> crate::Allocation {
+        let cash = |value, currency| {
+            crate::Money::parse(&NumericInput::try_new(value).expect("수치"), currency)
+                .expect("현금")
+        };
+        let portfolio = crate::Portfolio::new(
+            vec![held("005930", "200"), held("000660", "200")],
+            crate::BuyingPower::new(cash("600", Currency::Krw), at(2, 0)),
+            crate::BuyingPower::new(cash("0", Currency::Usd), at(2, 0)),
+        )
+        .expect("포트폴리오");
+        crate::Allocation::new(&portfolio.evaluate(None), assignments)
     }
     #[test]
-    fn fractional_weights_and_wide_products_preserve_exact_order() {
-        let rows = [
-            composition("A", Some("0.1"), Some("0.2")),
-            composition("B", Some("0.2"), Some("0.3")),
-        ];
-        let result = sector_assignment_from_compositions(&master(), &rows).expect("분수 선택");
+    fn asset_sector_cap_combines_samsung_and_hynix_instead_of_splitting_subsectors() {
+        let rows = semiconductor_compositions();
+        let assignments = crate::SectorAssignments::try_new(
+            ["005930", "000660"]
+                .map(|symbol| classify(symbol, &rows))
+                .into(),
+        )
+        .expect("섹터 대응");
+        let allocation = semiconductor_allocation(&assignments);
+        let sectors = allocation.assets().sectors().as_ref().expect("자산 섹터");
+        let semiconductor = sectors
+            .entries()
+            .iter()
+            .find(|entry| entry.key() == &crate::AllocationSector::Classified(id("A")))
+            .expect("같은 대분류");
+        assert_eq!(semiconductor.display().units().as_u32(), 4000);
         assert_eq!(
-            result.classification(),
-            &InstrumentClassification::Sector(SectorId::try_new("B").expect("섹터"))
-        );
-        let amount = |text| {
-            crate::Money::parse(&NumericInput::try_new(text).expect("수치"), Currency::Krw)
-                .expect("금액")
-                .amount()
-        };
-        let unbalanced = [
-            composition("A", Some("1"), Some("0.4")),
-            composition("B", Some("0.7"), Some("0.3")),
-        ];
-        assert_eq!(
-            sector_assignment_from_compositions(&master(), &unbalanced)
-                .expect("다른 스케일")
-                .classification(),
-            &InstrumentClassification::Sector(SectorId::try_new("A").expect("섹터"))
-        );
-        assert_eq!(
-            crate::exact_arithmetic::compare_sector_fractions(
-                amount("7922816251426433759354395033"),
-                amount("0.1"),
-                amount("79228162514264337593543950330"),
-                amount("1")
+            semiconductor.weight().cmp_profile_weight(
+                &crate::ProfileWeight::parse(&NumericInput::try_new("0.3").expect("상한"))
+                    .expect("상한")
             ),
-            std::cmp::Ordering::Equal
-        );
-        let maximum = amount("79228162514264337593543950335");
-        let tiny = amount("0.0000000000000000000000000001");
-        assert_eq!(
-            crate::exact_arithmetic::compare_sector_fractions(maximum, tiny, tiny, maximum),
             std::cmp::Ordering::Greater
         );
         assert_eq!(
-            crate::exact_arithmetic::compare_sector_fractions(tiny, maximum, maximum, tiny),
-            std::cmp::Ordering::Less
-        );
-        assert_eq!(
-            super::composition_candidate(&rows[0], &Symbol::try_new("000001").expect("심볼")),
-            Err(SectorSelectionError::MissingMembership)
-        );
-    }
-    #[test]
-    fn internal_order_identity_constructor_preserves_legacy_keys() {
-        let mut row = master().row().clone();
-        row.korean_detail = Some(crate::KoreanMasterDetail {
-            liquidation: crate::LiquidationTrading::Regular,
-            krx: crate::TradingSuspension::Clear,
-            nxt: crate::NxtTrading::Unsupported,
-        });
-        let resolved = MasterInstrument::try_new(row)
-            .expect("마스터")
-            .order_instrument()
-            .expect("식별");
-        let assignment =
-            crate::SectorAssignment::new(&resolved, InstrumentClassification::Unclassified);
-        assert_eq!(
-            assignment.instrument(),
-            &crate::AllocationInstrument::new(&resolved)
-        );
-        assert_eq!(
-            sector_membership(&assignment),
-            SectorMembership::Unspecified
+            allocation
+                .holdings()
+                .sectors()
+                .as_ref()
+                .expect("보유 구성")
+                .entries()
+                .len(),
+            1
         );
     }
     proptest::proptest! {
         #![proptest_config(proptest::test_runner::Config::with_cases(testkit::property_cases()))]
         #[test]
-        fn selection_matches_independent_integer_cross_products(first in 1_u32..10000,first_other in 1_u32..10000,second in 1_u32..10000,second_other in 1_u32..10000) {
-            let rows=[composition("A",Some(&first.to_string()),Some(&first_other.to_string())),composition("B",Some(&second.to_string()),Some(&second_other.to_string()))];
-            let left=u64::from(first).checked_mul(u64::from(second).checked_add(u64::from(second_other)).expect("합")).expect("곱");
-            let right=u64::from(second).checked_mul(u64::from(first).checked_add(u64::from(first_other)).expect("합")).expect("곱");
-            let expected=if left>=right {"A"} else {"B"};
-            let selected=sector_assignment_from_compositions(&master(),&rows).expect("선택");
-            proptest::prop_assert_eq!(selected.classification(),&InstrumentClassification::Sector(SectorId::try_new(expected).expect("섹터")));
+        fn selection_matches_independent_major_totals(first_total in 1_u32..10000,second_total in 1_u32..10000) {
+            let rows=[kr("B",Some("1"),Some(&second_total.to_string())),kr("A",Some("1"),Some(&first_total.to_string()))];let expected=if first_total>=second_total {"A"} else {"B"};
+            let actual=classify("005930",&rows);let expected_classification=InstrumentClassification::Sector(id(expected));
+            proptest::prop_assert_eq!(actual.classification(),&expected_classification);
         }
     }
 }

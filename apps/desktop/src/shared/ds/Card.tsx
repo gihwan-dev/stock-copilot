@@ -1,9 +1,11 @@
+import type { Action } from "./control-types";
+import { Button } from "./Button";
 import type { ReactElement } from "react";
 import type { UiText } from "../lib";
 import { Heading } from "./Heading";
 type Props = {
   readonly title?: UiText;
-  readonly actions?: ReactElement;
+  readonly actions?: Action;
   readonly children: ReactElement | readonly ReactElement[];
 };
 export const Card = (props: Props): ReactElement => (
@@ -15,7 +17,15 @@ export const Card = (props: Props): ReactElement => (
             <Heading level={3}>{props.title}</Heading>
           </div>
         )}
-        {props.actions}
+        {props.actions === undefined ? null : (
+          <Button
+            size="control-height-sm"
+            onClick={props.actions.onPress}
+            disabled={props.actions.disabled ?? "enabled"}
+          >
+            {props.actions.label}
+          </Button>
+        )}
       </header>
     ) : null}
     <div className="p-space-4 flex flex-col gap-space-4">{props.children}</div>

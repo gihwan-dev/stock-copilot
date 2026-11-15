@@ -458,6 +458,10 @@ pub use market_ranking::RankingResponseInput;
 pub use market_ranking::{RankingCautionFilter, RankingChange, RankingContinuity};
 pub use sector_composition::{SectorAmount, SectorMember, SectorStockRow};
 pub use sector_composition::{SectorComposition, SectorCompositionScope};
+
+mod storage_records;
+pub use storage_records::{RiskChange, SyncOutcome, SyncRecord};
+
 mod signal_return_contract;
 
 mod bootstrap;
@@ -543,9 +547,9 @@ pub use index_benchmark::{finalize_index_day, index_benchmark_series};
 
 mod sector_selection;
 pub use sector_selection::{
-    SectorMembership, SectorSelectionError, SectorSelectionRule,
-    sector_assignment_from_compositions, sector_assignments_membership, sector_membership,
-    sector_selection_rule,
+    SectorAssignmentReason, SectorMembership, SectorSelectionError, SectorSelectionRule,
+    sector_assignment_from_compositions, sector_assignment_reason, sector_assignments_membership,
+    sector_assignments_reason, sector_membership, sector_selection_rule,
 };
 
 mod market_query_facts;
@@ -557,3 +561,6 @@ pub use market_query_facts::{
     SectorRankingHierarchy, SectorRankingItem, SectorRankingKind, SectorRankingRow, SectorRate,
     SectorRateRow,
 };
+
+mod risk_settings;
+pub use risk_settings::{OrderPermission, RiskSettings};
