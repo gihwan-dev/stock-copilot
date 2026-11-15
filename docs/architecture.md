@@ -374,7 +374,63 @@ v0.1의 `Idea`, `ProposalOutcome`은 없앤다. 장이 닫혀 있을 때의 신�
 
 코어 안의 일은 `DomainEvent`로 알린다. 스케줄러 트리거와 UI 갱신이 모두 이것을 구독한다. 새 반응을 추가할 때 기존 코드를 고치지 않고 구독자를 추가한다.
 
-예: `PortfolioSynced`, `ValuationSnapshotTaken`, `PriceMoved`, `DisclosureArrived`, `NewsClusterGrew`, `CollectionFinished`, `EstimateSubmitted`, `SignalRaised`, `SignalCleared`, `ProposalCreated`, `ProposalExpired`, `OrderSubmitted`, `OrderFilled`, `OrderOutcomeUnknown`, `EstimateResolved`, `AiJobFinished`, `AiQuotaExhausted`, `BrokerAccessBlocked`. 닫힌 목록은 D-18에서 확정한다.
+다음은 닫힌 목록이다. `DomainEventKind`는 코드에 있는 각 변형과 같은 이름으로 일대일 대응하고 `DomainEvent::kind()`로 얻는다. 정의 대기 행은 코드와 종류 열거형에 넣지 않는다. 문서-코드 검사는 이름과 페이로드 타입, 전체 행의 중복, 고정된 정의 대기 이름 집합을 대조한다.
+
+각 이벤트는 상태 변경이 저장·반영된 뒤 내는 변경 알림이며 승인이나 주문 전송 권한이 아니다. 페이로드는 기존 식별자 또는 닫힌 종류뿐이다. 종목·계좌 키를 받는 구독자는 그 키에 속한 현재 상태와 기록 목록을 다시 읽는다. 개별 신호·추정·스냅샷·외부 주문 ID가 없어도 이 조회 범위로 회복한다. 전역 단일 자원은 ID 없이 종류만 보내고 해당 전역 상태를 다시 읽는다.
+
+| 변형 | 싣는 ID·종류 | 내는 곳·발생 조건 | 구독자 | 근거 | 정의 대기 여부 | 소유 작업 | 키 재조회 방식을 쓰지 않은 이유 |
+|---|---|---|---|---|---|---|---|
+| `PortfolioSyncRecorded` | `AccountId` | A-06이 성공·일부 실패·실패·접근 차단 어느 동기화 결과든 저장했을 때 | 스케줄러, UI 갱신 | A-06의 성공·일부 실패·접근 차단 경로, design 5.2 | 아니오 | - | - |
+| `TransactionsSyncRecorded` | `AccountId` | A-07이 성공·일부 실패·실패·접근 차단 어느 대조 결과든 저장했을 때 | UI 갱신 | A-07, design 5.2의 14일 창 대조와 사라진 행 표시 | 아니오 | - | - |
+| `PriceUpdated` | `InstrumentId` | 시세 수집기가 새 시세를 저장했을 때 | UI 갱신 | design 5.2, U-13 | 아니오 | - | - |
+| `PriceMoved` | `InstrumentId` | N-12가 보유 종목 하루 변동 기준 충족을 기록했을 때 | 스케줄러, UI 갱신 | design 5.3의 하루 ±5% | 아니오 | - | - |
+| `DisclosureArrived` | `DisclosureKey` | 공시 수집기가 신규·정정 공시 원시 도착을 저장했을 때 | UI 갱신 | design 5.4의 공시 저장; 등급 판정은 N-12만 수행 | 아니오 | - | - |
+| `NewsActivityIncreased` | `InstrumentId` | N-12가 같은 종목 뉴스 급증을 기록했을 때 | 스케줄러, UI 갱신 | design 5.3의 1시간 5건 | 아니오 | - | - |
+| `ProposalCreated` | `ProposalId` | A-14가 새 주문 제안을 저장했을 때 | UI 갱신 | A-14, design 6.4 | 아니오 | - | - |
+| `ProposalExpired` | `ProposalId` | 예약 점검이 시간·가격 범위 만료를 기록할 때 | UI 갱신 | design 6.5의 10분·변동성 범위 만료; 주체는 보수적 초안, O-04 인계 | 아니오 | - | - |
+| `ProposalApproved` | `ProposalId` | 승인 서비스가 본인 확인 성공을 감사 기록했을 때 | UI 갱신 | architecture 4.4, SEC-8 | 아니오 | - | - |
+| `ProposalRejected` | `ProposalId` | 승인 서비스가 사용자 거절·확인 취소를 기록했을 때 | UI 갱신 | SEC-8, O-04 | 아니오 | - | - |
+| `ProposalSkipped` | `ProposalId` | 넘기기 유스케이스가 사용자 선택을 저장했을 때 | UI 갱신 | design 6.5, E-10 | 아니오 | - | - |
+| `OrderSubmitted` | `ClientOrderId` | 주문 실행이 전송 사실을 기록했을 때 | 스케줄러, UI 갱신 | design 5.2의 주문 직후 동기화, ORD-2 | 아니오 | - | - |
+| `OrderOutcomeUnknown` | `ClientOrderId` | 주문 실행이 전송 결과 미확정을 저장했을 때 | 스케줄러, UI 갱신 | ORD-2, O-19 | 아니오 | - | - |
+| `BrokerConnectionChanged` | 없음 | 토스 연결 관리가 차단·만료·사용자 조치 필요·차단 해제·재발급 성공 등 연결 상태 변경을 저장했을 때 | 스케줄러, UI 갱신 | design 2.6의 1~3번, API-3, REL-1 | 아니오 | - | - |
+| `SettingsChanged` | 없음 | 설정 유스케이스가 일반·성향·예약·알림 설정 변경을 저장했을 때 | 스케줄러, UI 갱신(설정을 전부 다시 읽음) | design 8장, A-17, J-10, N-14 | 아니오 | - | - |
+| `PolicyChanged` | 없음 | 원칙 설정이 변경을 저장했을 때 | 스케줄러, UI 갱신 | design 6.2, 8장 | 아니오 | - | - |
+| `OrderSwitchChanged` | 없음 | 설정 유스케이스가 주문 켜기·끄기를 저장했을 때 | UI 갱신 | ORD-5, O-06 | 아니오 | - | - |
+| `WatchlistChanged` | 없음 | J-09가 관심 종목 목록 변경을 저장했을 때 | 스케줄러, UI 갱신 | J-09의 수집·감시·추정 대상 반영 | 아니오 | - | - |
+| `ThesisUpdated` | `InstrumentId` | J-02가 해당 종목 논거 노트 차분·이력을 저장했을 때 | UI 갱신 | J-02, J-08 | 아니오 | - | - |
+| `SelfCheckChanged` | 없음 | A-19가 토스 연결 밖의 자체 점검 항목 변경을 저장했을 때 | UI 갱신 | design 2.6의 4~8번, U-21, U-27; 토스 연결 사건은 제외 | 아니오 | - | - |
+| `MarketSessionChanged` | `KnownMarket` | 장 운영 조회가 개장·마감 전이를 저장했을 때 | 스케줄러, UI 갱신 | A-14, design 6.4; KnownMarket은 닫힌 시장 종류 | 아니오 | - | - |
+| `SignalRaised` | `InstrumentId` | A-13이 해당 종목의 새 신호를 저장했을 때 | UI 갱신, 알림 | A-13의 종목별 재계산, UX-3 | 아니오 | - | - |
+| `SignalCleared` | `InstrumentId` | A-13이 해당 종목의 신호 해제를 저장했을 때 | UI 갱신 | A-13; 종목의 현재 신호를 다시 읽음 | 아니오 | - | - |
+| `EstimateSubmitted` | `InstrumentId` | A-12가 해당 종목의 추정 제출을 저장했을 때 | 스케줄러, UI 갱신 | A-12; 종목의 추정들을 다시 읽음 | 아니오 | - | - |
+| `EstimateResolved` | `InstrumentId` | A-15가 해당 종목의 최종 판정과 보정표를 저장했을 때 | UI 갱신 | A-15, ACC-9; 종목의 판정들을 다시 읽음 | 아니오 | - | - |
+| `ValuationSnapshotTaken` | `AccountId` | A-16이 해당 계좌의 일별 조회·재계산 기록을 저장했을 때 | UI 갱신 | A-16, J-11; 계좌의 평가 기록을 다시 읽음 | 아니오 | - | - |
+| `OrderRejected` | `ClientOrderId` | 주문 실행이 이 앱이 낸 주문의 거절·사전 요건 실패를 저장했을 때 | UI 갱신 | design 2.6의 8번, ORD-2; 이 앱의 주문 기록을 다시 읽음 | 아니오 | - | - |
+| `OrderOutcomeResolved` | `ClientOrderId` | O-19가 미확정 결과를 대조로 확정하거나 확인 불가로 굳혔을 때 | 스케줄러, UI 갱신 | ORD-2, O-19의 하나로 확정되지 않으면 확인 불가와 같은 종목 새 주문 차단 | 아니오 | - | - |
+| `OrderFilled` | `AccountId` | 주문 조회·웹소켓 대조가 해당 계좌의 체결 변화를 저장했을 때 | 스케줄러, UI 갱신 | T-17, design 5.2; 이 앱 밖에서 낸 주문도 포함, 계좌 주문을 다시 읽음 | 아니오 | - | - |
+| `OrderCancelled` | `AccountId` | 주문 조회·웹소켓 대조가 해당 계좌의 외부·DAY 취소 변화를 저장했을 때 | 스케줄러, UI 갱신 | design 6.5; 이 앱 밖에서 낸 주문도 포함, 계좌 주문을 다시 읽음 | 아니오 | - | - |
+| `OrderModified` | `AccountId` | 주문 조회·웹소켓 대조가 해당 계좌의 외부 정정 변화를 저장했을 때 | 스케줄러, UI 갱신 | design 6.5; 이 앱 밖에서 낸 주문도 포함, 계좌 주문을 다시 읽음 | 아니오 | - | - |
+| `CollectionFinished` | `InformationSource` | 수집 실행기가 소스 종류별 수집 결과를 저장했을 때 | 스케줄러, UI 갱신 | design 4.4, AI-14; 기존 닫힌 InformationSource로 해당 종류의 수집 결과를 다시 읽음 | 아니오 | - | - |
+| `NewsClusterGrew` | `InstrumentId` | N-09가 해당 종목의 사건 묶음 증가를 저장했을 때 | UI 갱신 | design 5.4의 같은 종목·48시간 묶음; 종목의 사건 묶음들을 다시 읽음 | 아니오 | - | - |
+| `AiBudgetChanged` | 없음 | AI 작업 큐가 예약 비율 도달·구독 한도 초과·재개 등 예산 상태 변경을 저장했을 때 | 스케줄러, UI 갱신(고급 상태) | design 4.3의 한도에 걸리면 대기하고 재개 시각에 이어 감, AI-2, REL-4; 전역 예산을 다시 읽음 | 아니오 | - | - |
+| `AccountSelectionChanged` | 없음 | U-22가 선택 계좌 변경을 저장했을 때 | 스케줄러, UI 갱신(계좌 키를 쓰는 모든 조회 무효화) | design 2.5의 계좌가 여럿이면 고급 설정에서 바꿀 수 있음, U-22 | 아니오 | - | - |
+| `StoredDataChanged` | 없음 | U-15 전체 삭제 또는 S-11 백업 복구 절차가 저장소 교체를 완료했을 때 | 스케줄러, UI 갱신(저장 데이터 조회 전체 무효화) | design 8장 시스템의 전체 삭제, U-15, S-11의 복구 테스트; 새 복원 화면을 추가하는 계약이 아님 | 아니오 | - | - |
+| `FxRateUpdated` | `FxPair` | 환율 수집·캐시가 해당 통화쌍의 환율을 저장했을 때 | UI 갱신(해당 통화쌍의 모든 환율 종류 재조회) | ACC-3의 쓴 환율 종류·시각 표시, T-08, S-04, A-08 | 아니오 | - | - |
+| `DisclosureTriggerRecorded` | `DisclosureKey` | N-12가 보유 종목의 긴급·높음 공시 기준 충족을 판정해 기록했을 때 | 스케줄러, UI 갱신, 알림(기록된 긴급만) | design 5.3의 보유 종목 긴급·높음 공시 즉시, 정정 한 단계 낮춤; UX-3 긴급 공시 알림 | 아니오 | - | - |
+| `AiJobFinished` | 미정(AI 작업 ID) | AI 실행기가 작업 종료 결과를 저장했을 때 | 스케줄러, UI 갱신 | architecture 2.3의 실행 ID, AI-7 동시 채팅·예약 실행 | 정의 대기 | AI-17 | 동시 실행이 둘이므로 단일 현재 작업 키가 없고, 어느 실행의 후속 단계를 이어갈지 구별할 실행 ID·조회 계약이 필요함 |
+| `BriefingFinished` | 미정(브리핑 ID) | J-03이 브리핑 결과를 저장했을 때 | UI 갱신, 알림 | UX-3, J-07의 현재·지난 브리핑 카드 | 정의 대기 | J-03 | 현재·지난 브리핑이 함께 남아 최신 카드 조회만으로 알릴 완료 기록을 특정할 수 없음; 브리핑 ID와 완료 조회 계약 필요 |
+| `SourceStatusChanged` | 미정(통합 소스 종류) | 수집기가 소스별 성공·실패·마지막 성공을 저장했을 때 | UI 갱신(고급 상태) | REL-5, N-01 소스 레지스트리 | 정의 대기 | N-01 | InformationSource는 웹·뉴스·공시만 구분해 재무·미 재무부·FRED 등 전체 소스를 식별하지 못함; 통합 소스 종류와 상태 조회 계약 필요 |
+
+토스 연결의 한 상태 변경에는 `BrokerConnectionChanged` 하나만 낸다. 차단·만료·사용자 조치 필요뿐 아니라 차단 해제·재발급 성공도 같은 이벤트다. 토스 연결 상태가 바뀌었다는 이유로 `SelfCheckChanged`를 함께 내지 않는다. `SelfCheckChanged`는 토스 연결 밖의 자체 점검 항목에만 쓴다. 동기화 결과 저장과 연결 상태 변경이 각각 실제 발생하면 각각의 사건이며, 오류를 관측한 모든 호출마다 연결 이벤트를 중복 발행하지 않는다.
+
+`PortfolioSyncRecorded`·`TransactionsSyncRecorded`는 성공 여부를 이름으로 판정하지 않는다. 성공·일부 실패·실패·접근 차단 어느 결과든 저장하면 하나를 내고 구독자가 결과를 다시 읽는다. 계좌 선택 변경은 `AccountSelectionChanged`로 계좌 키를 쓰는 모든 조회를 무효화하며, 전체 삭제·백업 복구의 저장소 교체는 `StoredDataChanged`로 저장 데이터 조회 전체를 무효화한다. 단순 백업 파일 생성은 저장소 교체가 아니므로 이 이벤트를 내지 않는다. `SettingsChanged` 구독자는 설정을 전부 다시 읽는다. `AiBudgetChanged`는 예약 작업 비율 도달·구독 한도 초과·재개를 전역 예산 상태 변경 하나로 알리며 주 화면 알림을 내지 않는다.
+
+공시 등급과 트리거 판정은 N-12 한 곳에 둔다. `DisclosureArrived`는 원시 도착의 UI 갱신만 알린다. N-12가 보유 여부·긴급/높음·정정 한 단계 하향을 판정해 충족 사실을 저장한 뒤 `DisclosureTriggerRecorded`를 낸다. 구독자는 그 판정 기록을 읽으며 등급을 다시 계산하지 않는다. 스케줄러는 기록된 긴급·높음에 반응하고 알림은 UX-3의 기록된 긴급에만 반응한다. 가격·뉴스도 N-12가 기록한 기준 충족 사실로 깨운다. 알림은 UX-3의 새 신호·긴급 공시·브리핑 완료만 수행한다.
+
+`ProposalApproved`는 감사 사실일 뿐 승인 상태나 전송 권한이 아니다. 승인과 전송은 기존 경로에서 한 번에 끝낸다. `ProposalRejected`는 사람의 확인 거절, `OrderRejected`는 이 앱이 낸 주문의 거절이다. `OrderOutcomeResolved`는 미확정 결과의 대조 확정 또는 확인 불가 확정을 알린다. `OrderFilled`·`OrderCancelled`·`OrderModified`는 이 앱 밖에서 낸 주문까지 포함한 해당 계좌의 관측 변화이며 구독자가 계좌 주문 목록을 다시 읽는다. 이 앱의 정정·취소 전송 기능을 추가하지 않는다. 킬 스위치는 ORD-5의 `OrderSwitchChanged`로 표현한다.
+
+UI 이벤트 DTO에는 종류와 **계좌 키가 아닌 ID의 문자열 표현**만 싣는다. domain 이벤트의 `AccountId`는 UI DTO에서 제외한다. 계좌는 하나만 선택되므로 UI는 선택 계좌 조회를 무효화하고 다시 읽는다. accountSeq를 문자열로 바꾸어 보내지도 않는다(ADR 0022의 숫자 키를 화면이나 AI에 보내야 한다는 뜻은 아니다, ADR 0016의 i64 내보내기 거부). 문자열 표현은 경계 변환이며 domain의 ID 타입을 바꾸지 않는다. 닫힌 소스·시장·통화쌍 종류의 DTO 표현과 DTO 타입 자체는 U-02가 정한다. 종류·식별자 외의 금액, 수량, 가격, 계좌번호, 종목 이름, AI 글은 싣지 않는다. 실패 원인·재개 시각도 재조회한다. 직렬화·IPC 변환은 A-10/U-02에 인계하며 domain에는 직렬화 파생을 추가하지 않는다.
 
 | 전달 대상 | 방식 | 근거 |
 |---|---|---|
