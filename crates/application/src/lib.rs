@@ -126,3 +126,9 @@ pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
     TokenCount, TokenUsage, ToolStatus,
 };
+
+mod event_bus;
+pub use event_bus::{
+    DeliveryFailure, DeliveryReport, EventBus, EventBusBuilder, EventSubscriber, SubscriberFailure,
+    SubscriptionId,
+};
