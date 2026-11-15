@@ -177,6 +177,7 @@ dependencies = [
 name = "broker-toss"
 version = "0.1.0"
 dependencies = [
+ "application",
  "broker-toss-schema",
  "domain",
  "serde",
