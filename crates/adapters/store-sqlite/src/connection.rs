@@ -9,6 +9,7 @@ pub(crate) use crate::failure::integrity;
 
 const RAW_KEY_PREFIX: &str = "x'";
 const RAW_KEY_SUFFIX: &str = "'";
+const FILE_NOT_FOUND: i32 = 2;
 
 #[derive(Clone, Copy)]
 pub(crate) enum Access {
@@ -116,6 +117,7 @@ fn verify_parent(path: &DatabasePath) -> Result<(), SystemPortError> {
 }
 
 fn prepare_file(path: &DatabasePath, access: Access) -> Result<(), SystemPortError> {
+    verify_sidecars(path)?;
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
     match access {
@@ -137,6 +139,25 @@ fn prepare_file(path: &DatabasePath, access: Access) -> Result<(), SystemPortErr
     } else {
         Err(integrity())
     }
+}
+
+fn verify_sidecars(path: &DatabasePath) -> Result<(), SystemPortError> {
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar = path.as_path().as_os_str().to_owned();
+        sidecar.push(suffix);
+        match std::fs::symlink_metadata(&sidecar) {
+            Ok(metadata) => {
+                if !metadata.is_file() {
+                    return Err(integrity());
+                }
+            }
+            Err(error) => match error.raw_os_error() {
+                Some(FILE_NOT_FOUND) => {}
+                Some(_) | None => return Err(failure::io(&error)),
+            },
+        }
+    }
+    Ok(())
 }
 
 fn verify_access(connection: &Connection, access: Access) -> Result<(), SystemPortError> {
@@ -179,6 +200,22 @@ mod tests {
     use crate::sql;
     use application::SecretValue;
     use rusqlite::Connection;
+
+    #[test]
+    fn sidecar_paths_must_be_owned_regular_files() {
+        let fixture = crate::tests::Fixture::new();
+        let path = crate::DatabasePath::new(fixture.path());
+        let target = fixture.path().with_file_name("regular-target");
+        std::fs::write(&target, b"sidecar target").expect("regular file");
+        for filename in ["store.db-wal", "store.db-shm"] {
+            let sidecar = fixture.path().with_file_name(filename);
+            std::os::unix::fs::symlink(&target, &sidecar).expect("symlink");
+            let result = super::verify_sidecars(&path);
+            std::fs::remove_file(&sidecar).expect("remove symlink");
+            assert_eq!(result, Err(integrity()));
+        }
+        assert_eq!(super::verify_sidecars(&path), Ok(()));
+    }
 
     #[test]
     fn parent_verification_requires_a_directory_with_write_permission() {

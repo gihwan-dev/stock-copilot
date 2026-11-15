@@ -3,6 +3,72 @@ use crate::{Database, DatabasePath};
 use application::SystemFailure;
 use std::os::unix::fs::PermissionsExt;
 
+fn assert_sidecar_directory_is_integrity(filename: &str) {
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let encrypted_length = {
+        let database = Database::open(&path, &key()).expect("encrypted database");
+        super::runtime()
+            .block_on(
+                database
+                    .write(|transaction| transaction.execute_batch(crate::sql::tests::CREATE_TEST)),
+            )
+            .expect("initialize encrypted database");
+        std::fs::metadata(path.as_path())
+            .expect("initialized file")
+            .len()
+    };
+    assert!(encrypted_length > 0);
+    let sidecar = fixture.0.join(filename);
+    if sidecar.exists() {
+        std::fs::remove_file(&sidecar).expect("remove closed sidecar");
+    }
+    std::fs::create_dir_all(&sidecar).expect("directory collision");
+    assert_eq!(
+        Database::open(&path, &key())
+            .expect_err("directory is not a sidecar file")
+            .failure(),
+        SystemFailure::RepositoryIntegrity
+    );
+}
+
+#[test]
+fn wal_sidecar_directory_is_a_storage_layout_failure() {
+    assert_sidecar_directory_is_integrity("store.db-wal");
+}
+
+#[test]
+fn shm_sidecar_directory_is_a_storage_layout_failure() {
+    assert_sidecar_directory_is_integrity("store.db-shm");
+}
+
+#[test]
+fn regular_sidecar_files_preserve_a_live_encrypted_database() {
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let database = Database::open(&path, &key()).expect("encrypted database");
+    let rt = super::runtime();
+    rt.block_on(database.write(|transaction| {
+        transaction.execute_batch(crate::sql::tests::CREATE_TEST)?;
+        transaction.execute(crate::sql::tests::INSERT_TEST, ["sidecar-preserved-30617"])?;
+        Ok(())
+    }))
+    .expect("write marker");
+    for filename in ["store.db-wal", "store.db-shm"] {
+        assert!(fixture.0.join(filename).is_file());
+    }
+    let reopened = Database::open(&path, &key()).expect("regular sidecars are allowed");
+    assert_eq!(
+        rt.block_on(reopened.read(|connection| {
+            connection.query_row(crate::sql::tests::VALUE_TEST, [], |row| {
+                row.get::<_, String>(0)
+            })
+        }))
+        .expect("preserved marker"),
+        "sidecar-preserved-30617"
+    );
+}
+
 #[test]
 fn readonly_parent_rejects_new_and_existing_database_with_permission_action() {
     let fixture = Fixture::new();
