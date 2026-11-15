@@ -52,7 +52,7 @@ SectorAmount의 Debug는 금액 원문만 가린다. 섹터 식별자·이름·�
 
 ## 검증
 
-실계좌·실제 API·새 의존성·자동 변이 사용 없음. 직접 전체 검사는 반복하지 않고 정상 커밋 훅의 검사를 받는다. 프로젝트 설정과 훅의 세션 신뢰 적용 여부는 별도 런타임 증거가 없으므로 Git 훅의 실제 결과와 구분한다.
+실계좌·실제 API·새 외부 의존성 사용 없음. 직접 전체 검사는 반복하지 않고 정상 커밋 훅의 검사를 받는다. 초기 회차와 리뷰 수정 회차의 검증을 구분하며 자동 변이의 게이트 결과와 별도 실행 결과는 문서 끝에 기록한다. 프로젝트 설정과 훅의 세션 신뢰 적용 여부는 별도 런타임 증거가 없으므로 Git 훅의 실제 결과와 구분한다.
 
 ## 인계
 
@@ -159,7 +159,7 @@ SectorRankingItem.changeRate는 스키마상 nullable이지만 설명은 항상 
 
 ETF 구성은 해당 스펙의 /sectors/{sectorId}/etfs가 주는 관련 ETF 목록이다. ETF 내부 보유 종목이나 비중 응답은 이 스펙에 없으며 그런 분해를 주장하지 않는다. 직전 분기 시가총액 정렬은 서버 순서를 보존하고 분기 날짜나 시가총액을 만들지 않는다.
 
-### D-41 검증과 손 변형
+### 초기 회차 D-41 검증과 손 변형
 
 집중 테스트 16개 통과, 원화 정수 보존과 순위 빈자리 속성 대조 4096회. 새 파일 집중 줄 커버리지 967/967(100%). 알려진 랭킹 기준값의 역전 반례는 구현 전 테스트 실패를 확인한 뒤 두 기준 모두 거부하도록 고쳤다. nullable 기준값은 그대로 보존한다. 신규 입력 행·사실·선택 후보 Debug에 금액 원문이 없음을 확인한다. 외부 crate에서 지수 봉 확정 상태·BenchmarkSeries.kind·섹터 랭킹 필드 직접 수정은 E0616으로 거부된다.
 
@@ -211,3 +211,92 @@ master c27ad60470b68e1bfc394d99a612270f798d5916 대비 test-diff는 승인된 �
 | crates/domain/src/signal_return_scenarios.rs | tests::benchmark 지원 함수 | 국내 시나리오의 Candle 벤치마크 → 확정 지수 일봉 벤치마크 |
 
 회귀 증거: 종목 봉 위장 거부 테스트는 수정 전 InvalidPeriod가 반환되어 실패했고 수정 후 InvalidBenchmark로 통과한다. 벤치마크·국내 신호 집중 테스트와 린트 결과는 작업 사본 target/D-39/review-d39-*에 보존한다.
+
+## 리뷰 수정 회차 최종 손 변형
+
+수정된 코드의 Git 추적 파일 복사본에서 작업별 기준 테스트를 먼저 통과시켰다. 무거운 실행은 순차 처리했고 속성 테스트는 H-46 기본 횟수를 사용했다. D-39 16개, D-40 14개, D-41 15개, 총 45개 모두 실제 컴파일 뒤 테스트 실패로 검출됐다. 생존·컴파일 실패·시간 제한은 각각 0개다. 메인 리뷰의 생존 축 여섯 개(가격일 통화, 결제일, 시장, 정규장 선택, 동일 심볼의 다른 시장, 상세 자기 부모)를 포함하며 null 사이 역전도 별도로 검증했다.
+
+| 번호 | 바꾼 것 | 검출 테스트(대표) | 결과 |
+|---|---|---|---|
+| R2-D39-01 | 종목 봉의 ETF 종류 제한 제거: 지수 종류를 USD 종목 봉으로 위장 | domestic_kinds_cannot_relabel_adjusted_usd_candles | 컴파일 성공·검출 |
+| R2-D39-02 | 리뷰 생존: 국내 지수 가격일 통화 KRW → USD | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D39-03 | 리뷰 생존: 결제일 → 국내 가격일 | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D39-04 | 리뷰 생존: 미국 세션의 시장 검사 무력화 | regular_close_controls_finality_and_same_day_labels_are_accepted | 컴파일 성공·검출 |
+| R2-D39-05 | 리뷰 생존: 장전까지 정규장 선택 후보로 허용 | regular_close_controls_finality_and_same_day_labels_are_accepted | 컴파일 성공·검출 |
+| R2-D39-06 | 수집 시각과 정규장 종료가 같은 봉을 확정 | regular_close_controls_finality_and_same_day_labels_are_accepted | 컴파일 성공·검출 |
+| R2-D39-07 | 진행 중·미확정 입력의 확정 상태 검사 제거 | index_path_rejects_invalid_sources | 컴파일 성공·검출 |
+| R2-D39-08 | 벤치마크 입력의 일봉 검사 제거 | index_path_rejects_invalid_sources | 컴파일 성공·검출 |
+| R2-D39-09 | 동일 지수 검사 반전 | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D39-10 | 공유 수익률 계산의 분모·분자 역전 | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D39-11 | 지수 봉 4097개 상한을 한 개 완화 | series_rejects_misalignment_duplicates_and_input_limits | 컴파일 성공·검출 |
+| R2-D39-12 | 스냅샷 4097개 상한을 한 개 완화 | series_rejects_misalignment_duplicates_and_input_limits | 컴파일 성공·검출 |
+| R2-D39-13 | 신호 zip 길이 검사 반전 | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D39-14 | 지수 벤치마크 통화 제한 반전 | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D39-15 | KOSPI를 KOSDAQ로 재표지 | missing_stock_history_cannot_be_used_for_mixed_weights | 컴파일 성공·검출 |
+| R2-D39-16 | 국내 신호의 종가 달력을 미국 시장으로 변경 | holiday_carry_uses_krw_price_dates_and_preserves_settlement_dates | 컴파일 성공·검출 |
+| R2-D40-01 | 대분류 필터 반전: 하위 섹터 선택 | asset_sector_cap_combines_samsung_and_hynix_instead_of_splitting_subsectors | 컴파일 성공·검출 |
+| R2-D40-02 | 전체 시가총액이 작은 대분류를 선택 | larger_major_total_wins_even_when_member_weight_is_smaller | 컴파일 성공·검출 |
+| R2-D40-03 | 전체 시총 동률과 미제공의 식별자 순 역전 | equal_totals_and_missing_totals_use_sector_id_order | 컴파일 성공·검출 |
+| R2-D40-04 | 일부 시가총액 미제공에서 전체 식별자 fallback 누락 | equal_totals_and_missing_totals_use_sector_id_order | 컴파일 성공·검출 |
+| R2-D40-05 | 리뷰 생존: 같은 심볼의 다른 시장 구성을 허용 | identical_symbols_from_other_markets_are_not_memberships | 컴파일 성공·검출 |
+| R2-D40-06 | 소속 심볼 검사를 무력화 | missing_major_and_unknown_type_remain_explicitly_unclassified | 컴파일 성공·검출 |
+| R2-D40-07 | 마스터의 ETF·펀드를 미분류로 잘못 분류 | etf_and_fund_classification_comes_from_master | 컴파일 성공·검출 |
+| R2-D40-08 | 대분류 소속 없는 일반 종목을 ETF로 잘못 분류 | identical_symbols_from_other_markets_are_not_memberships | 컴파일 성공·검출 |
+| R2-D40-09 | 단일 대분류를 여러 대분류로 표지 | samsung_and_hynix_stay_in_the_same_major_sector | 컴파일 성공·검출 |
+| R2-D40-10 | 시가총액 미제공 표지와 fallback 제거 | equal_totals_and_missing_totals_use_sector_id_order | 컴파일 성공·검출 |
+| R2-D40-11 | 대분류 조회 중복 검사 반전 | asset_sector_cap_combines_samsung_and_hynix_instead_of_splitting_subsectors | 컴파일 성공·검출 |
+| R2-D40-12 | 대분류 전체 시총 합산을 차감으로 변경 | larger_major_total_wins_even_when_member_weight_is_smaller | 컴파일 성공·검출 |
+| R2-D40-13 | 분류 결과의 소속·이유 메타데이터 유실 | equal_totals_and_missing_totals_use_sector_id_order | 컴파일 성공·검출 |
+| R2-D40-14 | 알려지지 않은 마스터 유형을 ETF로 추측 | missing_major_and_unknown_type_remain_explicitly_unclassified | 컴파일 성공·검출 |
+| R2-D41-01 | 리뷰 생존: 중·소분류 상세의 자기 부모 검사 제거 | review_detail_rejects_self_parent_for_non_major_depths | 컴파일 성공·검출 |
+| R2-D41-02 | null 행에서 이전 비교값을 지워 null 너머 역전을 허용 | review_rank_order_compares_available_values_across_nulls | 컴파일 성공·검출 |
+| R2-D41-03 | 공통 순위 검사에서 0과 중복 순위 허용 | investor_invalid_values_order_counts_currency_and_identity_are_closed | 컴파일 성공·검출 |
+| R2-D41-04 | 공통 순위 빈자리 판정 반전 | investor_groups_keep_independent_times_directions_units_and_gaps | 컴파일 성공·검출 |
+| R2-D41-05 | 순매도 랭킹을 순매수 방향으로 표지 | investor_groups_keep_independent_times_directions_units_and_gaps | 컴파일 성공·검출 |
+| R2-D41-06 | 투자자 그룹별 서버 집계 시각을 수집 시각으로 덮기 | investor_empty_groups_preserve_unavailable_time | 컴파일 성공·검출 |
+| R2-D41-07 | 투자자 랭킹의 0원 금액을 허용 | investor_invalid_values_order_counts_currency_and_identity_are_closed | 컴파일 성공·검출 |
+| R2-D41-08 | 투자자 랭킹의 소수 원화 금액을 허용 | investor_invalid_values_order_counts_currency_and_identity_are_closed | 컴파일 성공·검출 |
+| R2-D41-09 | 섹터 랭킹 최대 100개 상한을 한 개 완화 | sector_rankings_preserve_nulls_and_reject_invalid_inputs | 컴파일 성공·검출 |
+| R2-D41-10 | 일곱 번째 기간 수익률을 조용히 무시 | review_sector_detail_rejects_a_seventh_rate | 컴파일 성공·검출 |
+| R2-D41-11 | 공통 섹터 금액 파서의 KRW 단위를 USD로 변경 | review_shared_amount_and_change_types_preserve_zero_and_unavailable | 컴파일 성공·검출 |
+| R2-D41-12 | 공통 등락률 파서에서 -1 경계를 잘못 거부 | sector_metadata_and_rates_reject_invalid_hierarchy_and_periods | 컴파일 성공·검출 |
+| R2-D41-13 | 서로 다른 거래대금·시가총액 필드를 바꾸어 봉인 | review_rank_order_compares_available_values_across_nulls | 컴파일 성공·검출 |
+| R2-D41-14 | Debug가 금액 외 섹터 이름까지 가림 | debug_redacts_only_money_and_keeps_identifiers_and_summary | 컴파일 성공·검출 |
+| R2-D41-15 | 공통 SectorAmount Debug에서 금액 원문 노출 | debug_redacts_only_money_and_keeps_identifiers_and_summary | 컴파일 성공·검출 |
+
+변형별 전체 실패 테스트와 로그는 target/D-39/review-hand-mutants/results.json, 소스 해시는 source-hashes.json에 있다. 임시 소스 복사본은 실행 종료 시 제거했고 cleanup.json으로 확인했다. 단순 컴파일 실패를 검출로 세지 않았다.
+
+## 자체 Opus 리뷰의 평가
+
+0d46eb8..66ede36을 새 Claude Opus 5.5가 읽기 전용으로 독립 리뷰했다. 구현 보고서·ADR 초안·실행 로그는 전달하지 않았다. 원본 집계는 D-39 차단 0·중요 0·사소 1, D-40 차단 0·중요 1·사소 2, D-41 전부 0이다. 실행 검사는 하지 않았다.
+
+D-40 중요 지적은 구성원 한 개라도 시총 null이면 ID 순이 되는 점이다. 사용자가 확정한 “구성원 시가총액 미제공이면 섹터 식별자 순으로만 정하고 표지”와 이 ADR의 기존 규칙에 해당하므로 기각한다. 제공된 값만 합산해 전체 시총으로 잘못 부르거나 별도 응답 의존성을 추가하지 않는다. 단일 소속은 Single과 실제 섹터를 보존하면서 CapitalizationUnavailable 이유도 유지한다. 이 이유는 선택 실패가 아니라 구성 시총의 미제공을 나타낸다.
+
+SectorId 동률 순은 기존 SectorId::Ord인 문자열 순이다. 예를 들어 같은 시총의 "9"와 "10"은 "10"을 고른다. OpenAPI의 섹터 목록 응답 자체가 숫자 순이라는 계약과 선택의 결정적 동률 순을 구분한다. 이 변경에서 전역 SectorId 의미나 기존 소비자의 정렬을 바꾸지 않는다.
+
+D-39의 사소 지적은 기존 Sp500Etf 이름표만으로 실제 S&P500 추종 ETF인지 인증하지 못한다는 점이다. 허용 심볼을 임의로 발명하지 않고 A-09·A-15·E-08의 ETF 벤치마크 선택/출처 계약에 인계한다. 이번에 닫은 국내 지수의 종목 봉 위장 경로와는 구분한다.
+
+리뷰 기록은 docs/reviews/D-39.md·D-40.md·D-41.md에 원본 등급과 평가를 함께 보존한다. 추가 차단·중요 수용 지적은 남지 않았다. 리뷰 이후 추가한 자동 변이 경계 테스트는 구현자 검증이며 Opus 재리뷰를 주장하지 않는다.
+
+## 리뷰 수정 회차 자동 변이
+
+기준은 master 580a19874ee4ad32c21c4c3f83a0a4142b3a4858이다. `just mutants-diff 580a19874ee4ad32c21c4c3f83a0a4142b3a4858`를 실제 한 번 실행했으나 선행 test-diff가 승인된 생성 경로 이관 13건을 지적해 변이 실행 전에 종료됐다. 이 명령의 통과를 주장하지 않는다. 하네스·기준·허용 목록을 고치지 않았다.
+
+그 게이트 결과와 별개로 동일한 변경분 패치·대상 Rust 파일·H-46 프로필(opt-level 1, debug 0, overflow/debug assertions 유지, nextest, jobs 2, 테스트 스레드 4)로 cargo-mutants 진단을 실행했다. 기준 테스트를 통과한 첫 실행은 198개 중 검출 106·미검출 8·컴파일 불가 84·시간 초과 0이다. 실제 실행 시간은 약 16분이다. 미검출별 처리는 다음과 같다.
+
+| 미검출 | 처리 | 재검증 |
+|---|---|---|
+| SignalBenchmark 지수 달력 >4097 → >=4097 | 정확히 4097개에서 입력 원천 검증까지 도달하는 반례 추가 | 검출 |
+| 지수 봉 >4097 → >=4097 | 정확히 4097개에서 중복 봉 오류를 구분하는 반례 추가 | 검출 |
+| 지수 스냅샷 >4097 → >=4097 | 정확히 4097개에서 잘못된 기간 오류를 구분하는 반례 추가 | 검출 |
+| 대분류 동률 ID < → <= | 후보 ID 중복을 먼저 거부해 관찰 가능한 차이가 없음. cmp == Less로 순서 비교를 명시하여 중복 경계 연산 제거 | 해당 변형 소멸, 변경 비교의 변이 검증 |
+| SectorEtfs::etfs가 빈 목록 반환 | zip만으로는 빈 목록이 통과하므로 공개 반환 목록의 전체 심볼을 정확히 대조하는 테스트 추가 | 검출 |
+| 섹터 랭킹 >100 → >=100 | 서로 다른 100개 섹터가 전부 반환되는 정상 경계 추가 | 검출 |
+| 투자자 랭킹 금액 < → <= | 요청 개수만큼의 순매수·순매도 동률이 세 투자자 그룹 모두에서 보존되는 반례 추가 | 검출 |
+| NetTradingItem Debug가 빈 출력 | 금액은 가리고 심볼·순위·가림 표지가 남는지 명시적으로 검사 | 검출 |
+
+추가 테스트의 기준 실행은 benchmark 48개·sector_selection 11개·market_query_facts 25개가 통과했다. 최종 소스는 196개를 열거했다. cargo-mutants의 iterate로 이전에 판정한 항목을 재사용하고 신규/미판정 11개를 실제 다시 실행하여 검출 10·컴파일 불가 1·미검출 0·시간 초과 0을 얻었다(기준 테스트 다시 통과, 약 3분). 이전 판정에는 컴파일 불가도 포함되므로 이를 검출로 부풀리지 않는다.
+
+최종 열거된 196개 각각을 이전 또는 재실행의 동일 변형 이름과 대조했고 빠진 항목은 0개다. 최종 소스의 집계는 검출 112개·컴파일 불가 84개·미검출 0개·시간 초과 0개다. 기록한 11개 소스 파일의 SHA-256도 현재 파일과 일치한다. 컴파일 불가 84개는 실행 테스트에 잡힌 변형으로 세지 않는다. 증거는 target/D-39/review-mutants-diff.log, review-auto/round1, review-auto/mutants.out, review-auto/final-aggregate.json과 receipt.json이다.
+
+최종 자동 변이 보강과 ID 비교 단순화 뒤 손 변형 45개를 같은 방식으로 다시 실행했다. D-39 16개·D-40 14개·D-41 15개 모두 컴파일 성공 후 검출됐으며 새 소스 해시가 현재 파일과 일치한다. 실행용 임시 소스 복사본은 제거했다. 최종 결과는 review-hand-final-run.log와 review-hand-mutants/results.json이다.

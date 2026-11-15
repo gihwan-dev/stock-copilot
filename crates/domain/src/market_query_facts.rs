@@ -779,6 +779,45 @@ mod tests {
         assert!(!format!("{facts:?}").contains("666"));
     }
     #[test]
+    fn investor_rankings_preserve_equal_amount_ties_at_the_requested_limit() {
+        let row = InvestorGroupRow {
+            ranked_at: None,
+            net_buy: vec![net_row(1, "005930", "100"), net_row(2, "000660", "100")],
+            net_sell: vec![net_row(1, "000660", "200"), net_row(2, "005930", "200")],
+        };
+        let facts = InvestorTradingRankings::from_response(
+            row.clone(),
+            row.clone(),
+            row,
+            RankingLimit::try_new(2).expect("개수"),
+            at(6, 0),
+        )
+        .expect("동률 허용");
+        for group in [facts.foreigner(), facts.institution(), facts.individual()] {
+            assert_eq!(group.buy().items().len(), 2);
+            assert_eq!(group.sell().items().len(), 2);
+            assert_eq!(
+                group.buy().items().first().expect("첫 매수").amount(),
+                group.buy().items().get(1).expect("둘째 매수").amount()
+            );
+            assert_eq!(
+                group.sell().items().first().expect("첫 매도").amount(),
+                group.sell().items().get(1).expect("둘째 매도").amount()
+            );
+            assert_eq!(group.buy().continuity(), RankingContinuity::Continuous);
+            assert_eq!(group.sell().continuity(), RankingContinuity::Continuous);
+        }
+    }
+    #[test]
+    fn investor_item_debug_preserves_identity_while_hiding_money() {
+        let item = net_trading_item(net_row(7, "005930", "123456789")).expect("종목");
+        let rendered = format!("{item:?}");
+        assert!(rendered.contains("005930"));
+        assert!(rendered.contains("rank"));
+        assert!(rendered.contains("[REDACTED]"));
+        assert!(!rendered.contains("123456789"));
+    }
+    #[test]
     fn investor_empty_groups_preserve_unavailable_time() {
         let empty = InvestorGroupRow {
             ranked_at: None,
@@ -1045,6 +1084,53 @@ mod tests {
                 at(5, 0)
             ),
             Err(MarketDataError::DuplicateInstrument)
+        );
+    }
+    #[test]
+    fn sector_ranking_accepts_the_full_hundred_rows() {
+        let rows = (1..=100)
+            .map(|rank| {
+                let mut row = ranking_row();
+                row.rank = RankingOrdinal::new(rank);
+                row.sector = id(&format!("{rank}"));
+                row
+            })
+            .collect();
+        let ranking = SectorRanking::from_response(
+            RankingKind::MarketTradingAmount,
+            KnownMarket::Kr,
+            RankingDuration::Day,
+            rows,
+            at(5, 0),
+        )
+        .expect("100개 랭킹");
+        assert_eq!(ranking.items().len(), 100);
+        assert_eq!(
+            ranking.items().last().expect("마지막").rank(),
+            RankingOrdinal::new(100)
+        );
+    }
+    #[test]
+    fn sector_etfs_public_list_preserves_every_related_fund() {
+        let rows = vec![
+            SectorEtfRow {
+                symbol: Symbol::try_new("SPY").expect("심볼"),
+                name: name("첫 ETF"),
+            },
+            SectorEtfRow {
+                symbol: Symbol::try_new("IVV").expect("심볼"),
+                name: name("둘째 ETF"),
+            },
+        ];
+        let facts = SectorEtfs::from_response(id("100"), KnownMarket::Us, rows, at(5, 0))
+            .expect("관련 ETF");
+        assert_eq!(
+            facts
+                .etfs()
+                .iter()
+                .map(|fund| fund.symbol().as_str())
+                .collect::<Vec<_>>(),
+            vec!["SPY", "IVV"]
         );
     }
     #[test]
