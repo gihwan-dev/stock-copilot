@@ -72,7 +72,7 @@ mod tests {
     }
     #[test]
     fn fractional_us_sell_never_exceeds_available_quantity() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_u32..100_000, 1_u32..100_000),
                 |(available, requested)| {

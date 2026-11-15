@@ -452,7 +452,7 @@ mod tests {
         ] {
             assert_case(values, 999);
         }
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &proptest::collection::vec(
                     proptest::prop_oneof![

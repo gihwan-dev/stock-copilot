@@ -11,6 +11,7 @@ pub(crate) enum ExpectProblem {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Rule {
     Comment,
+    PropertyCasesLiteral,
     Unparsable,
     Attribute(String),
     Expect(ExpectProblem),
@@ -40,6 +41,7 @@ pub(crate) enum Rule {
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::PropertyCasesLiteral => f.write_str("property-cases-literal"),
             Self::Comment => f.write_str("comment"),
             Self::Unparsable => f.write_str("unparsable"),
             Self::Attribute(name) => write!(f, "attribute:{name}"),

@@ -101,7 +101,15 @@ const stepFindings = (job, step, policy, toolSpec) => {
   const found = [
     ...keyFindings(step, policy.stepKeys, ["name"], where),
     ...("uses" in step === "run" in step ? [finding("step-shape", job)] : []),
-    ...(step.if === undefined || policy.conditions.includes(step.if)
+    ...(step.if === undefined ||
+    policy.conditions.includes(step.if) ||
+    (step.if === "always()" &&
+      policy.alwaysSteps.some(
+        (allowed) =>
+          allowed.job === job &&
+          allowed.name === step.name &&
+          allowed.run === step.run,
+      ))
       ? []
       : [finding("condition", job)]),
     ...valueFindings(step.env, policy, job),

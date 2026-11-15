@@ -926,7 +926,7 @@ mod tests {
     }
     #[test]
     fn plans_are_maximal_and_final_policy_passes_independent_integer_reference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(10_000_i64..1_000_000, 1_i64..1000, 0_usize..2),
                 |(cash, price, conservative)| {
@@ -1183,7 +1183,7 @@ mod tests {
             fixture.calculate(&vec![first.clone(); 65_537]),
             BuyQuantityDecision::None(NoBuyQuantity::Indeterminate)
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_usize..3), |rotation| {
                 let mut records = vec![first.clone(), second.clone(), third.clone()];
                 records.rotate_left(rotation);
@@ -1198,7 +1198,7 @@ mod tests {
     }
     #[test]
     fn us_cash_cap_is_independent_of_krw_when_target_is_nonbinding() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(100_000_000_i64..200_000_000, 1_i64..100), |(krw, usd)| {
                 let left = Fixture::new(Market::Us, krw, usd, 1, (30, 0));
                 let right = Fixture::new(Market::Us, 100_000_000, usd, 1, (30, 0));
@@ -1302,7 +1302,7 @@ mod tests {
     }
     #[test]
     fn all_constraints_match_rational_maximum_and_one_more_share_fails() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(100_000_i64..1_000_000_000, 1_i64..100, 1_i64..5, 0_i64..100),
                 |(krw, usd, price, fee)| {

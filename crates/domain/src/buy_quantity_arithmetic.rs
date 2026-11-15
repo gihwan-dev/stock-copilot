@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn target_is_always_floored_against_independent_rational() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(0_i64..1_000_000_000, 0_u32..=6, 0_usize..3),
                 |(coefficient, scale, risk)| {
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn bounded_search_returns_largest_whole_quantity() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u64..1_000_000, 1_u64..10000), |(budget, price)| {
                 let result = maximum_quantity(
                     crate::Quantity::try_new(Decimal::MAX).expect("상한"),

@@ -42,7 +42,8 @@
 | 명령 | 내용 | 누가 부르는가 |
 |---|---|---|
 | `just lint-file <경로>` | 바뀐 파일 하나의 형식과 린트 | `PostToolUse` 편집 훅 |
-| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
+| `just check` | 환경 고정, 형식, 린트, 타입, xtask 구조 검사, 테스트(경로 고정 포함), 커버리지, 생성물 차이, 기존 테스트 변경 검사 | Codex Stop, master 커밋 훅, CI `master` 푸시와 밤(macOS). Linux 푸시는 `just linux-check`·`just linux-test` |
+| `just check-fast` | 기준 대비 변경 crate와 역의존 crate의 clippy·nextest, 빠른 정적 검사, test-diff·끄기 보고·commit-guard·hooks-installed. 프런트 변경 때 TS 검사. 하네스·설정·미지 경로는 전체 승격. 커버리지는 전체 검사에서 유지 | 작업 브랜치 커밋, 구현 중 |
 | `just check-full` | `just check` + 변이 테스트(기준 브랜치 대비 변경분) + 컨테이너 시각 회귀 + 순환 의존 검사 | 푸시 훅, CI |
 
 `just check`의 공통 규칙:
@@ -61,7 +62,8 @@
 
 | 언제 | 어디서 | 내용 |
 |---|---|---|
-| 에이전트 훅, 커밋 훅 | 로컬 macOS | `just check` |
+| 작업 브랜치 커밋 훅 | 로컬 macOS | `just check-fast` (하네스·설정 변경은 전체 승격) |
+| master·detached HEAD 커밋, 에이전트 종료 훅 | 로컬 macOS | `just check` |
 | 푸시 훅 | 로컬 macOS | `just check-full` |
 | CI 푸시마다 | Linux arm64 | 보호 경로 서명 검사 (7.6), 리뷰 기록 검사, 작업 흐름 정책, 플랫폼 중립 crate 묶음의 형식·린트·deny·xtask 검사·테스트(네트워크 이름공간 안). 컨테이너 시각 회귀는 DS-15에서 더한다 (ADR 0020) |
 | CI `master` 푸시와 밤 | macOS | `lefthook install` 뒤 전체 `just check`. `src-tauri` 경로 고정 테스트, 앱 빌드, E2E 연기 테스트, WKWebView 스크린샷 보관(비교하지 않음)은 해당 작업(U-03 등)에서 더한다 |
@@ -499,13 +501,11 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
 | 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 모든 `src/**/*.rs`. application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 변경분·밤 전체 변이 양쪽에 포함한다 (ADR 0063) |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
-| 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 변경 전·후 참조 그래프에서 변경 파일이 쓰는 파일은 전이적으로, 변경 파일을 쓰는 파일은 직접 한 단계까지 고르고, 해석할 수 없으면 crate 전체로 넓힌다. CI 밤: 전체를 독립된 네 조각으로 (ADR 0042) |
+| 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 바뀐 대상 src 파일의 diff 영역과 겹치는 변이만 고른다. CI 밤: 전체를 독립된 네 조각으로 (ADR 0042) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
 | 코드로 건너뛰기 | `#[mutants::skip]`, `cfg_attr` 형태 모두 xtask가 실패시킨다 |
 
-추가 전용 판정 전에 기준·현재 그래프를 모두 검사한다 (ADR 0054). 내장 테스트 속성 `should_panic`은 인자 없음 또는 괄호 안 `expected = 문자열 리터럴` 하나만, `ignore`는 인자 없음 또는 `= 문자열 리터럴`만 참조를 숨기지 않는 형태로 해석한다. 일반 문자열과 raw 문자열을 허용한다. 경로·매크로·비문자열·알 수 없는 키·중복 키·다른 구분자 등은 crate 전체로 넓힌다. 이는 범위 해석 규칙이며 제품 소스의 `ignore` 금지를 바꾸지 않는다. 밤 네 조각은 같은 대상 목록을 나누며 조각 수·생존 및 시간 초과 정책은 유지한다.
-
-참조 그래프는 crate의 `src/`만 읽는다. 별도 crate인 통합 테스트의 `tests/**/mod.rs`는 그래프 입력에서 제외하지만 추가 전용 판정의 기존 식별자 집합에는 계속 넣는다. 통합 테스트·지원 파일의 변경은 종전대로 crate 전체다. `#[path]`는 해석 실패로 전체 확장하고 `include!`는 source-check가 금지한다. 위치 의존은 일반 `line`·`file` 식별자가 아니라 실제 `line!`·`file!`·`module_path!`·`column!`, Location 경로, track_caller 속성 및 관련 import·재내보내기·불확실한 토큰으로 판정한다. 접미사가 붙은 속성 문자열은 허용하지 않는다.
+H-46에서 참조 그래프·추가 전용 선택기를 제거했다. 변경분은 대상 src 파일과 diff 영역의 교집합만 검사한다. `cargo mutants --in-diff`는 변경 영역과 겹치는 변이에 적용하며, 테스트 코드 변경으로 다른 파일의 변이가 살아남는 영향은 검증하지 못한다. 테스트·지원 파일만 바뀐 crate는 밤 전체 실행 대상임을 출력한다. 변경분 실행의 전체 시간 제한은 20분이다. 제한 때 자신이 만든 프로세스 그룹만 종료하고 실패한다. 밤 네 조각은 같은 전체 대상을 나눈다. 미검출·시간 초과 실패 정책을 유지하며 결과는 Actions 로그와 작업 요약에 남긴다.
 
 `error_class.rs`에서 현재 생성되는 변이 2개는 모두 `ErrorClass: Default` 미구현으로 컴파일되지 않는다. 오류별 매핑 검증은 자동 변이가 아니라 `crates/application/tests/error_class.rs`의 exhaustive 기대 함수와 `every_leaf_matches_the_decision_table`에 의존한다. 생성된 변이의 미검출 0건을 매핑 검출력의 증거로 해석하지 않는다.
 
@@ -776,7 +776,7 @@ Claude 적대적 리뷰어는 `isolation: worktree`(정의 파일)로 임시 작
 | 승인된 변경 | 기존 테스트를 바꾸는 커밋은 사용자 서명 커밋만 CI를 통과한다 (7.6과 같은 검증) | CI |
 | 구현을 베낀 테스트 | 변이 테스트로 드러난다(베낀 테스트는 변이를 죽이지 못한다). 테스트 입력 리터럴을 구현에서 다시 쓰는지 찾는 xtask 검사는 효과가 확인되지 않아 두지 않는다 | `just check-full`, 리뷰 |
 
-커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 `check` 전체에 전달한다. 평소에는 `merge-base HEAD refs/heads/master`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 로컬 `master` 끝을 쓴다.
+커밋·병합 커밋 훅은 `commit-base`가 선택한 40자리 커밋을 선택된 전체 또는 fast 검사에 전달한다. 평소에는 `merge-base HEAD refs/heads/master`다. 이름 있는 현재 작업 브랜치가 `master`가 아닐 때 다음 두 경로에서만 로컬 `master` 끝을 쓴다.
 
 - `MERGE_HEAD`가 있으면 소문자 40자리 ID인 내용 줄 하나가 정확히 로컬 `master` 끝이어야 한다. 마지막 줄바꿈 없음·LF·CRLF를 받는다. 다른 형식·다중 부모에는 기존 기준을 쓰고, 읽기 실패는 오류로 중단한다.
 - `MERGE_HEAD` 파일이 없으면 `master` 끝을 SHA로 고정해 실행한 `git merge-tree --write-tree HEAD <끝>`이 충돌 없이 성공하고, 나온 트리 ID가 `git write-tree`의 인덱스 트리 ID와 같아야 한다. 일반 커밋에서도 같은 조건으로 검사한다. `master`가 HEAD의 조상이면 인덱스가 HEAD와 같은 경우에만 참이며 기존 분기점과 같다. 비조상이면 결과 트리 전체가 작업 HEAD와 `master`를 합친 내용이므로 `master` 대비 작업 브랜치 변경이 모두 심사된다.
@@ -861,3 +861,27 @@ Codex 프로필의 읽기 전용 대상은 기존 `protectedDenies` 계산과 �
 H-41 수정 2차에서 패치는 모든 줄을 분류하고 미분류 줄을 거부한다. 공유 셸 코어는 codex·patch·xargs, git apply·am과 find의 쓰기·삭제·실행을 막는다. 필요한 헤드리스 실험은 검토된 just 레시피로 실행한다. 래퍼는 Git·Node·import 실패에 PreToolUse deny·Stop block과 종료 0을 낸다. Git 관리 폴더 전체 대신 필요한 파일만 쓰고 HEAD 본문은 읽기 전용이다.
 
 정책 대응은 harness/codex-hooks/policy-coverage.json으로 고정한다. 비홈 경로와 glob도 빼지 않는다. 미분류 항목은 실패한다. 해시는 Git 추적 파일만 계산한다. 새 파일은 스테이징한 뒤 생성한다. 하네스 프로필은 작업 뒤 사용자가 지우고 잠금 전 명시적 --codex-user-config prelock을 실행한다. 설정·훅 출처 실측은 ADR 0021 C를 따른다.
+
+
+### H-46 검사 단계
+
+ASCII 이름의 refs/heads/ 아래 비-master 브랜치만 커밋에서 fast를 선택한다. 대소문자만 다른 master 표기와 비ASCII 이름은 파일시스템 별칭을 보수적으로 전체 검사에 보낸다. 브랜치 판정 실패·detached HEAD·refs/heads/ 밖의 symbolic HEAD와 master는 전체다. Git 경로·설정 환경 변수는 기존 정규화 경계를 사용한다. fresh-build와 commit-guard는 기존 훅 순서를 유지하고 push-check와 CI는 전체 검사를 유지한다.
+
+fast는 바뀐 crate와 일반·빌드·개발 역의존 crate를 전이적으로 검사한다. Cargo 설정, 잠금 파일, 하네스, xtask, justfile, 훅, CI 및 해석할 수 없는 경로는 전체 검사로 승격한다. 제품 경로만 바뀌어도 정적 구조 검사는 전체에 적용한다. 커버리지는 전체 검사에 남긴다. 작업 브랜치 커밋이 전체 검사에서 실패할 수 있으며 master --no-ff 병합 커밋 때 이를 잡는다.
+
+속성 테스트는 testkit의 property_cases 한곳에서 횟수를 정한다. 기본 256이며 전체 check 레시피는 STOCK_COPILOT_PROPTEST_CASES=4096을 내보내 4096을 강제한다. 설정된 다른 값도 4096으로 처리해 횟수를 낮추는 입력을 허용하지 않는다. 환경 읽기는 이 상수 키만 허용한다. 제품 테스트의 단언은 유지한다.
+
+
+H-46 리뷰 결정: master는 메인만 움직인다. 전진은 --no-ff 병합 커밋 또는 master의 직접 커밋으로만 하며, 이때 master 커밋 훅이 전체 검사를 실행한다. --ff-only, branch -f, update-ref는 커밋 훅 밖이다. 이를 사용한 전진은 CI의 master 전체 검사가 사후에 알리는 한계가 있다. 구현 담당은 push와 master ref 이동을 하지 않는다.
+
+밤 전체 변이는 완주 기록이 없다. 2026-11-13은 실패, 11-14는 네 조각이120분 부근에서 취소됐고 취소 전 한 조각에서 미검출18건이 확인됐다. 따라서 현재는 보완 장치로 작동한다고 볼 수 없다. 완주와 결과·취소 처리 보완은 H-47로 넘긴다. 변이 실행은 기본256회를 쓰며 상속된 전체 검사4096 환경을 제거한다.4096 강제는 전체 테스트 검사에만 적용한다.
+
+fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. docs/design.md의 소비 단계를 좁힐 근거는 이번 조사에서 확정하지 않았다. docs/harness.md 및 다른 문서도 테스트·정책에서 참조할 수 있다. 문서별 소비 단계가 빠지는 일을 막기 위해 docs/** 전체를 전체 검사로 승격한다. testkit 도우미 소스 변경도 전체로 승격한다.
+
+
+| 문서 | 확인한 소비자 | fast 단계 |
+|---|---|---|
+| docs/architecture.md | harness/ds-tokens/check.mjs | 전체 검사(ds-tokens 포함) |
+| docs/toss-openapi-1.2.28.json | xtask gen_schema_tests | 전체 검사(xtask 테스트 포함) |
+| docs/harness.md | Codex 설정·Claude 훅 정책/회귀 | 전체 검사 |
+| docs/design.md 및 나머지 docs/** | 소비 범위를 확정하지 못함 | 전체 승격 |

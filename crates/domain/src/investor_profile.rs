@@ -432,7 +432,7 @@ mod review_tests {
 
     #[test]
     fn restore_ranges_match_independent_integer_reference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(-2_i64..=102, -2_i64..=102, -2_i64..=102),
                 |(cap, warning, sector)| {

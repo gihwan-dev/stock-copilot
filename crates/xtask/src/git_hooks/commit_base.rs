@@ -124,12 +124,26 @@ fn automatic_base(root: &Path) -> Result<MergeBase, String> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum WorkBranch {
+pub(crate) enum WorkBranch {
     NamedWork,
     Other,
 }
 
-fn work_branch(root: &Path) -> Result<WorkBranch, String> {
+#[derive(Clone, Copy)]
+enum BranchPolicy {
+    Comparison,
+    Fast,
+}
+
+pub(crate) fn work_branch(root: &Path) -> Result<WorkBranch, String> {
+    classified_branch(root, BranchPolicy::Comparison)
+}
+
+pub(crate) fn fast_branch(root: &Path) -> Result<WorkBranch, String> {
+    classified_branch(root, BranchPolicy::Fast)
+}
+
+fn classified_branch(root: &Path, policy: BranchPolicy) -> Result<WorkBranch, String> {
     let mut symbolic = git_base::git(root);
     symbolic.args(["symbolic-ref", "--quiet", "HEAD"]);
     let finished = symbolic
@@ -142,7 +156,14 @@ fn work_branch(root: &Path) -> Result<WorkBranch, String> {
         return Err(String::from("symbolic-ref HEAD 실패"));
     }
     let branch = String::from_utf8_lossy(&finished.stdout);
-    if branch.trim().starts_with("refs/heads/") && branch.trim() != BASE_BRANCH {
+    let known_name = match policy {
+        BranchPolicy::Comparison => true,
+        BranchPolicy::Fast => branch.trim().is_ascii(),
+    };
+    if known_name
+        && branch.trim().starts_with("refs/heads/")
+        && !branch.trim().eq_ignore_ascii_case(BASE_BRANCH)
+    {
         Ok(WorkBranch::NamedWork)
     } else {
         Ok(WorkBranch::Other)
@@ -160,5 +181,34 @@ pub(crate) fn validate_command(base: &str, base_use: git_base::BaseUse) -> ExitC
                 Err(_) => ExitCode::FAILURE,
             }
         }
+    }
+}
+
+pub(crate) fn recipe_command() -> ExitCode {
+    let selected = toplevel().and_then(|root| fast_branch(&root));
+    let recipe = recipe_for(&selected);
+    match writeln!(io::stdout().lock(), "{recipe}") {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::FAILURE,
+    }
+}
+
+fn recipe_for(selected: &Result<WorkBranch, String>) -> &'static str {
+    match selected {
+        Ok(WorkBranch::NamedWork) => "check-fast",
+        Ok(WorkBranch::Other) | Err(_) => "check",
+    }
+}
+
+#[cfg(test)]
+mod recipe_tests {
+    #[test]
+    fn errors_select_full_check() {
+        assert_eq!(super::recipe_for(&Err(String::from("unknown"))), "check");
+        assert_eq!(super::recipe_for(&Ok(super::WorkBranch::Other)), "check");
+        assert_eq!(
+            super::recipe_for(&Ok(super::WorkBranch::NamedWork)),
+            "check-fast"
+        );
     }
 }
