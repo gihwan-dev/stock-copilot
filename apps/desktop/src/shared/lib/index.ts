@@ -36,3 +36,6 @@ export type { Err, Ok, Result } from "./result";
 export { err, ok } from "./result";
 export type { InputValue } from "./brand";
 export { emptyInputValue, parseInputValue } from "./brand";
+
+export type { ChartDecimal, ChartCoordinate, ChartPath } from "./brand";
+export { parseChartDecimal, chartCoordinate, chartPath } from "./brand";

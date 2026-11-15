@@ -29,6 +29,10 @@ export const DS_RULES = {
             "(^|:)(text|bg|border|fill|stroke|outline|ring|decoration)-(up|down|on-up|on-down)(-|$)",
           message: "가격색은 가격 파일 허용 목록에서만 쓴다.",
         },
+        {
+          pattern: "(^|:)sr-only$",
+          message: "숨은 표는 차트 대체 표 파일에서만 쓴다.",
+        },
       ],
     },
   ],
@@ -132,13 +136,26 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
       {
         restrict: DS_RULES[
           "better-tailwindcss/no-restricted-classes"
-        ][1].restrict.slice(0, 2),
+        ][1].restrict.filter((_, index) => index !== 2),
+      },
+    ],
+  }),
+  ...listed(lists.CHART_TABLE_FILES ?? [], {
+    "better-tailwindcss/no-restricted-classes": [
+      "error",
+      {
+        restrict: DS_RULES[
+          "better-tailwindcss/no-restricted-classes"
+        ][1].restrict.slice(0, 3),
       },
     ],
   }),
   ...listed(lists.INLINE_STYLE_FILES, { "ds/no-inline-style": "off" }),
   ...listed(lists.ICON_GEOMETRY_FILES, {
     "ds/no-presentation-props": ["error", { geometry: "allow" }],
+  }),
+  ...listed(lists.CHART_GEOMETRY_FILES ?? [], {
+    "ds/no-presentation-props": ["error", { geometry: "chart" }],
   }),
   ...listed(lists.DOM_STYLE_FILES, { "ds/no-dom-styling": "off" }),
 ];

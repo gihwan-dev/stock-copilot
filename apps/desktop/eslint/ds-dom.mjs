@@ -131,9 +131,12 @@ export const noDomValues = {
               ? checker.getAliasedSymbol(reference)
               : reference;
           if (
-            ["inputEventValue", "inputCommit", "focusDialogInput"].includes(
-              symbol?.name,
-            ) &&
+            [
+              "inputEventValue",
+              "inputCommit",
+              "focusDialogInput",
+              "chartNavigation",
+            ].includes(symbol?.name) &&
             (symbol?.declarations ?? []).some(
               (d) =>
                 d.getSourceFile().fileName ===

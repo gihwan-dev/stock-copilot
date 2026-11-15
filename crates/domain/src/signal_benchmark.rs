@@ -460,4 +460,69 @@ mod tests {
             Err(SignalReturnError::Arithmetic)
         );
     }
+
+    #[test]
+    fn d42_calendar_limit_accepts_4097_consistent_facts() {
+        let benchmark = test_benchmark(
+            BenchmarkKind::Kospi,
+            &prices(Currency::Krw, &["100", "125"]),
+            &[snapshot(61), snapshot(62)],
+            &vec![calendar(61); 4097],
+            Currency::Krw,
+        )
+        .expect("포함 상한");
+        assert_eq!(
+            benchmark
+                .between_dates(row(61).date(), row(62).date(), Currency::Krw)
+                .expect("종가 수익률")
+                .to_string(),
+            "0.250000"
+        );
+    }
+    #[test]
+    fn d42_distinct_settlement_days_can_share_the_previous_market_close() {
+        let now = instant(62, 1);
+        let kr = calendar(62);
+        let us = us_calendar(62);
+        let dates = crate::SnapshotCalendar::new(&kr, &us).expect("양 시장 달력");
+        let portfolio = crate::Portfolio::new(
+            Vec::new(),
+            crate::BuyingPower::new(
+                crate::candle::tests::price("137", Currency::Krw).as_money(),
+                now,
+            ),
+            crate::BuyingPower::new(
+                crate::candle::tests::price("29", Currency::Usd).as_money(),
+                now,
+            ),
+        )
+        .expect("포트폴리오");
+        let second =
+            crate::ValuationSnapshot::observe(&dates, &portfolio.evaluate(None), now, None)
+                .expect("장중 관측");
+        let first = snapshot(61);
+        assert_ne!(first.settlement_date(), second.settlement_date());
+        assert_eq!(
+            first.price_date(Currency::Krw),
+            second.price_date(Currency::Krw)
+        );
+        let benchmark = test_benchmark(
+            BenchmarkKind::Kospi,
+            &prices(Currency::Krw, &["100", "125"]),
+            &[first, second],
+            &[calendar(61), calendar(62)],
+            Currency::Krw,
+        )
+        .expect("같은 종가 연결");
+        assert_eq!(
+            benchmark
+                .series()
+                .observations()
+                .next()
+                .expect("구간")
+                .value()
+                .to_string(),
+            "0.000000"
+        );
+    }
 }

@@ -288,7 +288,7 @@ cargo-vet은 쓰지 않는다. 버전마다 감사 비용이 커서 개인 앱�
 | 타입 술어 파일 목록 | `TSTypePredicate` | `shared/lib/money.ts` (`` `${number}` ``로 좁히는 곳 하나) |
 | 원시 타입 파일 목록 | `local/no-raw-types` | `shared/lib/brand.ts`, `shared/lib/money.ts`, `shared/lib/format.ts`, `shared/ipc`의 스키마 파일, 생성된 `bindings.ts`. `shared/ds`에서는 제3자 컴포넌트를 감싸는 파일만 사용자 승인으로 추가한다 |
 | `throw` 허용 목록 | `no-throw-statements` | 비어 있다 |
-| 차트 좌표 변환 파일 목록 | `shared/ds` 안의 숫자 변환 금지 | 비어 있다. 차트 컴포넌트 작업(DS-06, DS-17)이 사용자 승인으로 추가한다 |
+| 차트 좌표 변환 파일 목록 | `shared/ds` 안의 숫자 변환 금지 | `shared/ds/LineChart.tsx`, `shared/ds/DonutChart.tsx`, `shared/ds/Treemap.tsx` (DS-06). AreaChart는 선 좌표 함수를 사용하며 별도 변환을 하지 않는다 |
 
 `throw` 허용 목록이 비어 있는 이유: 오류 경계는 `react-error-boundary` 의존성으로 해결하고 클래스를 직접 쓰지 않는다. TanStack Router의 `redirect`는 반환 형태로 쓴다. TanStack Query의 `queryFn`은 `Promise<Result>`를 돌려주고 거절하지 않는다. 화면은 `status`와 `data.ok`를 둘 다 본다. 재시도는 코어(Rust)가 맡는다 (R-08 2.6). TanStack Router `notFound()`를 던지지 않고 쓸 수 있는지는 미확인이라, 필요해지면 그때 판단한다.
 
