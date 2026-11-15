@@ -1,0 +1,52 @@
+[
+  {
+    "file": "src/app/probe.ts",
+    "code": "import {readDecimalForNumberDisplay as read} from '../shared/lib/money';export const value=read;",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/app/probe.ts",
+    "code": "export {readDecimalForNumberDisplay as read} from '../shared/lib/money';",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/app/probe.ts",
+    "code": "export const value=Number('0.1');",
+    "rule": "guard/no-number-conversion"
+  },
+  {
+    "file": "src/app/probe.ts",
+    "code": "export const value=parseFloat('0.1');",
+    "rule": "guard/no-number-conversion"
+  },
+  {
+    "file": "src/shared/lib/format.ts",
+    "code": "export const value=Number('0.1');",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/shared/lib/format.ts",
+    "code": "export const value=parseFloat('0.1');",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/shared/lib/format.ts",
+    "code": "export const value=new Intl.NumberFormat();",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/shared/lib/format.ts",
+    "code": "import {readDecimalForNumberDisplay} from './money';export const value=readDecimalForNumberDisplay;",
+    "rule": null
+  },
+  {
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "export const Probe=()=> <span className='text-up'/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "file": "src/app/screen.tsx",
+    "code": "export const Probe=()=> <span className='text-down'/>;",
+    "rule": "ds/no-screen-props"
+  }
+]

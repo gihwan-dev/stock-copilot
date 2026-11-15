@@ -43,3 +43,5 @@ export const parseInputValue = (
   input: unknown,
 ): Result<InputValue, BrandError> =>
   fromParse(inputValueSchema.safeParse(input));
+
+export type FormattedNumber = string & Brand<"FormattedNumber">;

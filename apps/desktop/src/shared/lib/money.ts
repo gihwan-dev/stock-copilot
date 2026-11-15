@@ -30,7 +30,7 @@ export type DecimalParseError =
   | { readonly kind: "malformed-decimal" }
   | { readonly kind: "unknown-currency" };
 
-const decimalPattern = /^-?(0|[1-9]\d*)(\.\d+)?$/u;
+const decimalPattern = /^-?(0|[1-9]\d*)(\.\d+)?$(?![\s\S])/u;
 
 const isDecimal = (input: string): input is Decimal =>
   decimalPattern.test(input);
@@ -90,3 +90,13 @@ export const parseProbability = (
   input: string,
 ): Result<Probability, DecimalParseError> =>
   mapDecimal(input, (decimal) => ({ [probabilityKey]: decimal }));
+
+export const readDecimalForNumberDisplay = (
+  value: Money | Price | Quantity | Ratio | Probability,
+): Decimal => {
+  if (moneyKey in value) return value[moneyKey];
+  if (priceKey in value) return value[priceKey];
+  if (quantityKey in value) return value[quantityKey];
+  if (ratioKey in value) return value[ratioKey];
+  return value[probabilityKey];
+};

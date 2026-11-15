@@ -1,7 +1,7 @@
 import { brandNamesOf, typeFlags as F } from "../types.mjs";
 
 const HANGUL = /\p{Script=Hangul}/u;
-const TEXT_BRANDS = ["UiText"];
+const TEXT_BRANDS = ["UiText", "FormattedNumber"];
 const STRING_LIKE =
   F.String | F.StringLiteral | F.TemplateLiteral | F.StringMapping;
 const JSX_PARENTS = new Set(["JSXElement", "JSXFragment"]);

@@ -16,3 +16,11 @@ export { EmptyState } from "./EmptyState";
 export { Skeleton } from "./Skeleton";
 export { Badge } from "./Badge";
 export { StatusBar } from "./StatusBar";
+export {
+  Money,
+  Percent,
+  Quantity,
+  Probability,
+  PriceChange,
+  DirectionBadge,
+} from "./Numbers";
