@@ -24,7 +24,7 @@ export type ButtonProps = {
 export type Action = {
   readonly label: UiText;
   readonly onPress: () => void;
-  readonly disabled?: "enabled" | "disabled";
+  readonly disabled?: Availability;
 };
 export type DialogActions = {
   readonly confirm?: Action;

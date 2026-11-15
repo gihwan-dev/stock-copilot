@@ -14,9 +14,10 @@ window.q=Object.fromEntries(Object.entries(queries).map(([name,query])=>[name,(.
 const title=text("app.title","ko"), label=text("ds.description","ko"), cancel=text("ds.close","ko");
 window.show=(name,disabled,cancelDisabled=disabled)=>{cleanup();window.calls=[];const action={label,onPress:()=>window.calls.push("confirm"),disabled};const back={label:cancel,onPress:()=>window.calls.push("cancel"),disabled:cancelDisabled};
 if(name==="Dialog")return render(h(Dialog,{open:"open",title,actions:{confirm:action,cancel:back}},h(Text,null,title)));
-if(name==="Card")return render(h(Card,{actions:action},h(Text,null,title)));
+if(name==="Card")return render(h(Card,{title,actions:action},h(Text,null,title)));
 if(name==="StatusBar")return render(h(StatusBar,{action},title));
 return render(h(EmptyState,{title,action}));};
+window.dialog=(mode)=>{cleanup();window.calls=[];const confirm={label,onPress:()=>window.calls.push("confirm")};const back={label:cancel,onPress:()=>window.calls.push("cancel")};const actions=mode==="none"?undefined:mode==="empty"?{}:mode==="confirm"?{confirm}:mode==="cancel"?{cancel:back}:{confirm,cancel:back};return render(h(Dialog,{open:"open",title,actions},h(Text,null,title)));};
 `);
 });
 after(() => fixture?.close());
@@ -30,6 +31,12 @@ for (const name of ["Card", "EmptyState", "Dialog", "StatusBar"]) {
         exact: true,
       });
       assert.equal(button.getAttribute("type"), "button");
+      assert.equal(
+        button.classList.contains(
+          name === "Dialog" ? "h-control-height" : "h-control-height-sm",
+        ),
+        true,
+      );
       assert.equal(
         button.classList.contains(
           name === "Dialog" ? "bg-primary" : "bg-surface",
@@ -77,4 +84,62 @@ test("DS21 Dialog keeps confirmation and cancellation independent", async () => 
       confirmState === "enabled" ? ["confirm"] : ["cancel"],
     );
   }
+});
+
+test("DS21 Dialog starts on cancel and Enter cannot confirm implicitly", async () => {
+  const w = fixture.open();
+  await w.act(() => w.dialog("both"));
+  const buttons = w.q.getAllByRole("button");
+  assert.deepEqual(
+    Array.from(buttons, (button) => button.textContent),
+    ["닫기", "설명을 확인해 주세요"],
+  );
+  assert.equal(w.document.activeElement, buttons[0]);
+  await w.act(() => w.user.keyboard("{Enter}"));
+  assert.deepEqual(Array.from(w.calls), ["cancel"]);
+  await w.act(() => w.user.keyboard("{Escape}"));
+  assert.deepEqual(Array.from(w.calls), ["cancel"]);
+  await w.act(() => w.user.tab());
+  assert.equal(w.document.activeElement, buttons[1]);
+  await w.act(() => w.user.keyboard("{Enter}"));
+  assert.deepEqual(Array.from(w.calls), ["cancel", "confirm"]);
+});
+for (const mode of ["cancel", "confirm", "none", "empty"]) {
+  test(`DS21 Dialog ${mode} action combination has no decorative empty footer`, async () => {
+    const w = fixture.open();
+    await w.act(() => w.dialog(mode));
+    const buttons = w.q.queryAllByRole("button");
+    const present = mode === "cancel" || mode === "confirm";
+    assert.equal(buttons.length, present ? 1 : 0);
+    assert.equal(w.document.querySelector("footer") !== null, present);
+    if (present) {
+      assert.equal(
+        buttons[0].textContent,
+        mode === "cancel" ? "닫기" : "설명을 확인해 주세요",
+      );
+      assert.equal(
+        buttons[0].classList.contains(
+          mode === "cancel" ? "bg-surface" : "bg-primary",
+        ),
+        true,
+      );
+      assert.equal(buttons[0].classList.contains("h-control-height"), true);
+      await w.act(() => w.user.click(buttons[0]));
+      assert.deepEqual(Array.from(w.calls), [mode]);
+    }
+  });
+}
+test("DS21 Card keeps its heading before its small action", async () => {
+  const w = fixture.open();
+  await w.act(() => w.show("Card"));
+  const header = w.document.querySelector("header");
+  assert.equal(header.children.length, 2);
+  assert.equal(
+    header.children[0].querySelector("h3").textContent,
+    "주식 코파일럿",
+  );
+  assert.equal(
+    header.children[1],
+    w.q.getByRole("button", { name: "설명을 확인해 주세요", exact: true }),
+  );
 });

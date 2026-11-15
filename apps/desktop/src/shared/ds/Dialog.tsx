@@ -74,7 +74,9 @@ export const Dialog = (props: Props): ReactElement => {
 const DialogFooter = (props: {
   readonly actions: DialogActions | undefined;
 }): ReactElement | null =>
-  props.actions === undefined ? null : (
+  props.actions === undefined ||
+  (props.actions.cancel === undefined &&
+    props.actions.confirm === undefined) ? null : (
     <footer className="flex justify-end gap-space-2 px-space-5 py-space-3 border-t-hairline border-solid border-line">
       {props.actions.cancel === undefined ? null : (
         <Button

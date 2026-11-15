@@ -10,6 +10,8 @@ Card.actions와 EmptyState.action은 StatusBar.action에서 추출한 Action을 
 
 Card·EmptyState·StatusBar는 기존 sm 크기, Dialog는 기본 크기다. Dialog 슬롯 버튼은 type=button이며 Enter가 폼을 제출하거나 확인 콜백을 자동 실행하지 않는다. 취소 자리도 이름만으로 닫지 않고 명시된 콜백을 실행한다. 초점·Escape·배경·닫기 동작은 기존 구현을 유지한다.
 
+닫기만 있는 대화 상자는 cancel 자리를 쓴다. 디자인 preview의 primary 표시에 맞추려고 닫기를 confirm에 넣지 않는다. 사용자 승인에 따라 이 구현의 자리별 의미가 표시 원본보다 앞선다. 두 자리가 모두 비었으면 footer를 그리지 않는다. Action.disabled는 기존 Availability 타입을 공유한다.
+
 ## 검증
 
 기존 ds04-components의 makeAction 자료를 JSX에서 객체로 바꾼다. 기존 단언은 그대로다. 이야기 호출부 네 곳(Card 두 곳, EmptyState 한 곳, Dialog 한 곳)과 기존 테스트 자료 한 곳을 이관한다. 화면 사용처는 없다.
@@ -19,11 +21,12 @@ Card·EmptyState·StatusBar는 기존 sm 크기, Dialog는 기본 크기다. Dia
 ## 인계
 
 - DS-20: 이 기준 트리에는 shared/ds/testing과 넘침 검사 구현이 없다. 넘침 검사는 NOT_RUN이다. jsdom 이야기 렌더를 실제 CSS 넘침 검증으로 세지 않는다.
+- 메인 문서 정리: ADR 0069의 열린 동작 요소와 DS-21 후속 문구는 당시 범위의 기록이며, 병합 시 이 ADR의 최종 번호로 후속 결정을 연결한다. 기존 확정 ADR은 이번 작업에서 수정하지 않는다.
 - DS-15·DS-16: 실제 양 테마 시각 회귀와 WKWebView 접근성은 해당 작업에서 실측한다.
 
 ## 손 변형
 
-mktemp 복사본에서 각 변형을 TypeScript로 컴파일한 뒤 ds21-actions 테스트를 실행했다. 최초 실행에서 취소 disabled 무시 변형이 생존하여 새 테스트를 보강했다. 재개 후 자리별 primary/secondary 고정과 서로 다른 confirm/cancel 비활성 상태를 검증하도록 보강한 최종 자료로 29개를 다시 실행했다. 전부 컴파일됐으며 전부 검출됐다.
+mktemp 복사본에서 각 변형을 TypeScript로 컴파일한 뒤 ds21-actions 테스트를 실행했다. 최초 실행에서 취소 disabled 무시 변형이 생존하여 새 테스트를 보강했다. 재개 후 자리별 primary/secondary 고정과 서로 다른 confirm/cancel 비활성 상태를 검증하도록 보강한 최종 자료로 29개를 다시 실행했다. 리뷰 수정 후 빈 footer·단독 취소·크기·버튼 순서 변형을 더해 최종 36개를 실행했다. 앞선 키보드 전체 조합 실행 중 종료되지 않은 실행은 집계하지 않았다. 최종 실행은 변형별 해당 테스트를 선택하고 제한 시간을 두었다. 적용 문자열이 줄바꿈과 일치하지 않았던 30번은 적용을 고쳐 별도 재실행했다. 최종 36개 전부 컴파일·검출됐으며 생존·시간 초과는 0이다.
 
 | 번호 | 대상 | 바꾼 것 | 결과 |
 |---|---|---|---|
@@ -56,3 +59,10 @@ mktemp 복사본에서 각 변형을 TypeScript로 컴파일한 뒤 ds21-actions
 | 27 | Dialog | `variant="secondary" → variant="primary"` | KILLED (ds21-actions) |
 | 28 | Dialog | `disabled={props.actions.confirm.disabled ?? "enabled"} → disabled={props.actions.cancel?.disabled ?? "enabled"}` | KILLED (ds21-actions) |
 | 29 | Dialog | `disabled={props.actions.cancel.disabled ?? "enabled"} → disabled={props.actions.confirm?.disabled ?? "enabled"}` | KILLED (ds21-actions) |
+| 30 | Dialog | `props.actions.cancel === undefined &&     props.actions.confirm === undefined → false` | KILLED (ds21-actions) |
+| 31 | Dialog | `props.actions === undefined \|\| → props.actions === undefined \|\| props.actions.confirm === undefined \|\|` | KILLED (ds21-actions) |
+| 32 | Card | `size="control-height-sm" → ` | KILLED (ds21-actions) |
+| 33 | EmptyState | `size="control-height-sm" → ` | KILLED (ds21-actions) |
+| 34 | Dialog | `variant="primary" → size="control-height-sm" variant="primary"` | KILLED (ds21-actions) |
+| 35 | Dialog | `Dialog 버튼 블록 순서 교환` | KILLED (ds21-actions) |
+| 36 | Card | `Card 버튼 블록 순서 교환` | KILLED (ds21-actions) |
