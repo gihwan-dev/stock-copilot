@@ -190,3 +190,64 @@ fn commit_hook_without_master_is_rejected() {
         "no master means no commit"
     );
 }
+
+#[test]
+fn h44_real_merge_hook_accepts_incoming_approved_changes() {
+    let directory = hooked_repository("h44-real-merge-hook");
+    git_text(&directory, &["switch", "-c", "work"]);
+    fs::write(directory.join("work.txt"), "work\n").expect("work");
+    git_text(&directory, &["add", "--all"]);
+    assert!(commit_all(&directory, "work", "--verify"));
+    git_text(&directory, &["switch", "master"]);
+    fs::write(directory.join("tests.txt"), "approved\n").expect("approved test update");
+    assert!(commit_all(&directory, "approved", "--no-verify"));
+    git_text(&directory, &["switch", "work"]);
+    git_text(&directory, &["merge", "--no-ff", "--no-commit", "master"]);
+    let merged = run_git(&directory, &["commit", "--quiet", "-m", "merge master"]);
+    assert!(
+        merged.status.success(),
+        "{}",
+        String::from_utf8_lossy(&merged.stderr)
+    );
+    let tip = git_text(&directory, &["rev-parse", "master"]);
+    assert_eq!(commit_base(&directory), Ok(tip));
+}
+
+#[test]
+fn h44_review_real_auto_merge_passes_with_one_merge_command() {
+    let directory = hooked_repository("h44-review-real-auto");
+    git_text(&directory, &["switch", "-c", "work"]);
+    fs::write(directory.join("work.txt"), "work\n").expect("work");
+    git_text(&directory, &["add", "--all"]);
+    assert!(commit_all(&directory, "work", "--verify"));
+    git_text(&directory, &["switch", "master"]);
+    fs::write(directory.join("tests.txt"), "approved\n").expect("approved");
+    assert!(commit_all(&directory, "approved", "--no-verify"));
+    git_text(&directory, &["switch", "work"]);
+    let merged = run_git(&directory, &["merge", "--no-ff", "--no-edit", "master"]);
+    assert!(
+        merged.status.success(),
+        "{}",
+        String::from_utf8_lossy(&merged.stderr)
+    );
+    assert_eq!(
+        commit_base(&directory),
+        Ok(git_text(&directory, &["rev-parse", "master"]))
+    );
+}
+
+#[test]
+fn h44_review_real_auto_merge_still_rejects_work_test_changes() {
+    let directory = hooked_repository("h44-review-real-auto-reject");
+    git_text(&directory, &["switch", "-c", "work"]);
+    fs::write(directory.join("tests.txt"), "weakened\n").expect("work test change");
+    assert!(commit_all(&directory, "work", "--no-verify"));
+    git_text(&directory, &["switch", "master"]);
+    fs::write(directory.join("approved.txt"), "approved\n").expect("master");
+    git_text(&directory, &["add", "--all"]);
+    assert!(commit_all(&directory, "master", "--no-verify"));
+    git_text(&directory, &["switch", "work"]);
+    let merged = run_git(&directory, &["merge", "--no-ff", "--no-edit", "master"]);
+    assert!(!merged.status.success());
+    assert!(String::from_utf8_lossy(&merged.stderr).contains("recipe `check` failed"));
+}

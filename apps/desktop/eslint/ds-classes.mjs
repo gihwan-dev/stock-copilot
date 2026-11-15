@@ -11,6 +11,14 @@ const combine = (prefixes, names) =>
   prefixes.flatMap((p) => names.map((n) => `${p}-${n}`));
 const names = (group) => tokens[group].tokens.map((t) => t.name);
 export const DS_KEYWORDS = [
+  "status-sentence",
+  "whitespace-nowrap",
+  "h-chart-height-sm",
+  "h-chart-height",
+  "h-chart-height-lg",
+  "dialog-overlay",
+  "skeleton-line",
+  "border-b-hairline",
   "fill-none",
   "stroke-current",
   ...iconUtilities.map(([name]) => name),

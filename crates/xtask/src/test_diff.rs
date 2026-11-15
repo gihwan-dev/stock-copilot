@@ -13,7 +13,7 @@ use std::process::{ExitCode, Stdio};
 use std::thread;
 
 use crate::check_support::{Finding, report, workspace_root};
-use crate::git_base::{git, output, resolve_base};
+use crate::git_base::{git, output};
 use crate::nextest_list::list_tests;
 use crates::crate_roots;
 pub(crate) use modules::STANDARD_MACROS;
@@ -367,7 +367,15 @@ pub(crate) fn base_files(root: &Path, commit: &str) -> Result<Files, String> {
 }
 
 pub(crate) fn check(root: &Path, base: &str) -> Result<BTreeSet<Finding<Rule>>, String> {
-    let commit = resolve_base(root, base)?;
+    check_for(root, base, crate::git_base::BaseUse::Ancestor)
+}
+
+pub(crate) fn check_for(
+    root: &Path,
+    base: &str,
+    base_use: crate::git_base::BaseUse,
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
     let before = base_files(root, &commit)?;
     let mut findings = compare_sources(&texts(&before), &texts(&current_files(root)?));
     let expected: BTreeSet<String> = scan(&before).tests.keys().cloned().collect();
@@ -425,11 +433,14 @@ pub(crate) fn changes_command(arguments: &[String]) -> ExitCode {
     )
 }
 
-pub(crate) fn command(arguments: &[String]) -> ExitCode {
+pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
     report(
         "test-diff",
         match arguments {
-            [base] => workspace_root().and_then(|root| check(&root, base)),
+            [base] => workspace_root().and_then(|root| match base_use {
+                crate::git_base::BaseUse::Ancestor => check(&root, base),
+                crate::git_base::BaseUse::Commit => check_for(&root, base, base_use),
+            }),
             _ => Err(String::from("사용법: xtask test-diff <HEAD|커밋 ID>")),
         },
     )

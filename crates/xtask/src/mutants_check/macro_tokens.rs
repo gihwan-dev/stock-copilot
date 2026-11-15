@@ -50,6 +50,28 @@ const DERIVES: &[&str] = &[
 ];
 
 pub(super) fn attribute_known(meta: &syn::Meta) -> bool {
+    if crate::rust_names::path_is(meta.path(), "should_panic") {
+        return match meta {
+            syn::Meta::Path(_) => true,
+            syn::Meta::List(list) => {
+                let syn::MacroDelimiter::Paren(_) = list.delimiter else {
+                    return false;
+                };
+                syn::parse2::<syn::MetaNameValue>(list.tokens.clone()).is_ok_and(|argument| {
+                    crate::rust_names::path_is(&argument.path, "expected")
+                        && string_literal(&argument.value)
+                })
+            }
+            syn::Meta::NameValue(_) => false,
+        };
+    }
+    if crate::rust_names::path_is(meta.path(), "ignore") {
+        return match meta {
+            syn::Meta::Path(_) => true,
+            syn::Meta::NameValue(value) => string_literal(&value.value),
+            syn::Meta::List(_) => false,
+        };
+    }
     if crate::rust_names::path_is(meta.path(), "derive") {
         let syn::Meta::List(list) = meta else {
             return false;
@@ -76,6 +98,16 @@ pub(super) fn attribute_known(meta: &syn::Meta) -> bool {
     ]
     .iter()
     .any(|name| crate::rust_names::path_is(meta.path(), name))
+}
+
+fn string_literal(value: &syn::Expr) -> bool {
+    let syn::Expr::Lit(literal) = value else {
+        return false;
+    };
+    let syn::Lit::Str(text) = &literal.lit else {
+        return false;
+    };
+    text.suffix().is_empty()
 }
 
 pub(super) fn identifiers(tokens: TokenStream) -> BTreeSet<String> {
