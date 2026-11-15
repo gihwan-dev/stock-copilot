@@ -435,6 +435,13 @@ mod tests {
 
     fn check_diagnostic_fields(diagnostic: BugDiagnostic) {
         match diagnostic {
+            BugDiagnostic::System(value) => match value {
+                application::SystemDiagnostic::InvalidStoredData
+                | application::SystemDiagnostic::RepositoryIntegrity
+                | application::SystemDiagnostic::SecretIntegrity => {
+                    require_type::<application::SystemDiagnostic>(value);
+                }
+            },
             BugDiagnostic::Response(value) => require_type::<ResponseMismatch>(value),
             BugDiagnostic::Request(value) => require_type::<RequestRejection>(value),
             BugDiagnostic::UnsupportedCapability(value) => require_type::<BrokerCapability>(value),
@@ -458,6 +465,13 @@ mod tests {
 
     #[test]
     fn classification_fields_are_closed_enums_or_time_span() {
+        for diagnostic in [
+            application::SystemDiagnostic::InvalidStoredData,
+            application::SystemDiagnostic::RepositoryIntegrity,
+            application::SystemDiagnostic::SecretIntegrity,
+        ] {
+            check_class_fields(ErrorClass::Bug(BugDiagnostic::System(diagnostic)));
+        }
         for (kind, _) in cases() {
             check_class_fields(expected_class(kind));
             check_class_fields(classify_port_error(PortError::new(

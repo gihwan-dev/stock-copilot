@@ -134,7 +134,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | DS-11 | 레이아웃 컴포넌트 (사용자 승인): `Page`, `Section`, `Grid`, `GridItem`, `Stack`, `Inline`, `Split`, `Card`, `Toolbar`, `ScrollArea`, `Divider` | 받는 값이 architecture 5.1 표와 같음. 격자 열 수는 3·4·6·8·9·12만 컴파일됨. 본문 폭 구간(컨테이너 쿼리)별 기준 화면. `ScrollArea`는 Base UI ScrollArea 래퍼이고 막대가 폭을 차지하지 않음(막대 유무로 내용 폭이 같음). 자식 래퍼의 `min-width: 0` 기준 예제가 넘침 검사를 통과 | DS-10, DS-15, DS-20 |
 | DS-19 | 스크롤·넘침 정적 규칙 (사용자 승인) | harness 4.4 #18~25마다 위반 예제 실패: 허용 목록 밖의 `overflow-*`·`truncate`, `absolute`·`fixed`, 길이를 준 `h-*`·`w-*`, `h-screen`, `whitespace-nowrap`, 음수 여백, 화면 코드의 `ScrollArea` 가져오기. 허용 목록 파일에서는 통과 | DS-02, DS-09 |
 | DS-20 | 넘침 검사 함수와 부하 자료 (사용자 승인) | `shared/ds/testing`의 넘침 검사가 harness 4.4의 일곱 확인을 함. 일부러 넘치게 만든 예제(고정 높이 안의 긴 글, `min-width` 없는 flex 자식, 조상에 잘린 팝오버, 겹친 세로 스크롤, 겹친 버튼)가 각각 실패. 부하 자료 파일이 보호 경로에 있음. 부하 이야기가 없는 컴포넌트는 `ds-check` 실패 | DS-15, DS-19 |
-| DS-21 | `Card`·`EmptyState`·`Dialog`의 동작 슬롯을 닫힌 계약으로 | `action`·`actions`가 임의 `ReactElement`가 아니라 라벨·동작·변형의 닫힌 값을 받음. 임의 요소를 넣는 위반 예제가 실패 (ADR 0069, DS-03 후속) | DS-03, DS-04 |
+| DS-21 | `Card`·`EmptyState`·`Dialog`의 동작 슬롯을 닫힌 계약으로 | `action`·`actions`가 임의 `ReactElement`가 아니라 라벨·동작·변형의 닫힌 값을 받음. 임의 요소를 넣는 위반 예제가 실패 (ADR 0069, DS-03 후속) Dialog는 confirm·cancel 두 자리(confirm은 primary, cancel은 secondary로 고정), Card와 EmptyState는 동작 하나 (ADR 0081) | DS-03, DS-04 |
 | DS-08 | `AppShell` (사용자 승인): 사이드바(종목 목록 자리), 본문, 채팅 패널, 창 폭별 동작, 창 최소 크기 960 × 640 | 사이드바에 화면 전환 메뉴가 없음 (design 2.4, P-10). 창 폭 세 구간의 기준 화면을 사용자가 디자인과 대조해 승인 (architecture 5.1) | DS-03, DS-04, DS-11 |
 | DS-12 | `xtask ds-check`와 공개 목록 잠금 (사용자 승인) | 컴포넌트마다 목록 항목, 라이트·다크 기준 화면, 상태 테스트 중 하나라도 없으면 실패. 에이전트의 `shared/ds/index.ts` 편집이 거부됨 (harness 4.4 #12). 부하 이야기와 넘침 검사 통과도 확인 | DS-07, DS-15, DS-20 |
 | DS-17 | 캔들 차트와 Canvas 테마 래퍼 (사용자 승인) | Lightweight Charts는 `shared/ds` 래퍼로만 쓰임. `shared/platform`의 허용 목록 파일이 테마를 읽어 넘기고 테마가 바뀌면 다시 그림 (architecture 5.2) | DS-06, U-05 |
@@ -191,7 +191,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | ID | 작업 | 완료 기준 | 선행 |
 |---|---|---|---|
 | A-01 | 포트 정의: `BrokerRead`, `MarketInfo`, `BrokerCapabilities` | architecture 3.3과 일치. `BrokerTrade`는 여기 없음(`order-execution`이 정의) | D-05, D-10, D-11 |
-| A-02 | 포트 정의: 저장소, `AuditLog`, `SecretStore`, `Clock`, `Notifier`, `UserPresence` | architecture 3.3과 일치. `UserPresence`의 요청은 주문 요약과 위험 설정 변경 두 종류. 비밀 값 타입에 `Debug`·`Display`·`Serialize`·`Clone`이 없음 (SEC-11) | D-18 |
+| A-02 | 포트 정의: 저장소, `AuditLog`, `SecretStore`, `Clock`, `Notifier`, `UserPresence` | architecture 3.3과 일치. `UserPresence`의 요청은 주문 요약과 위험 설정 변경 두 종류. 비밀 값 타입의 `Debug`는 고정 문자열만 내고 `Display`·`Serialize`·`Clone`은 없음 (SEC-11). 본인 확인은 주문용과 위험 설정 변경용 메서드가 따로 있고 결과 타입도 다름. 중복 기록은 오류가 아니라 `AlreadyRecorded`. `Clock`은 동기 (ADR 0080) | D-18 |
 | A-03 | 포트 정의: `NewsFeed`(메타데이터 포함), `Fundamentals`, `MacroSeries`, `AiProvider`(`RunSpec`에 실행 종류) | architecture 3.3과 일치. 뉴스 포트는 공시 키를 보존하고 커서를 받아 다음 커서를 돌려줌. AI 실행의 첫 사건은 격리 점검 결과 (ADR 0071) | D-15 |
 | A-04 | `testkit` 1: 포트 가짜, `SteppedClock`, `ScriptedPresence` (사용자 승인: 본인 확인 가짜는 보호 파일) | `testkit`의 의존 그래프에 `order-execution`이 없음(arch-check). `ScriptedPresence`가 대본대로 `Confirmed`·`Denied`·`Unavailable`을 돌려주고 호출 횟수를 기록 (I-14, architecture 3.2) | A-01 ~ A-03 |
 | A-11 | `testkit` 2: 가짜 AI CLI 실행 파일 | 녹화한 stream-json 재생 모드와 대본 MCP 클라이언트 모드. 실행 파일 경로 주입으로만 바뀌고 `PATH`를 바꾸지 않음 (harness 6.1) | A-03 |

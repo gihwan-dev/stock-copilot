@@ -275,6 +275,7 @@ stock-copilot/
 | `tauri-plugin-wdio-webdriver` 등 자동화 플러그인 | `e2e-app`만 | HTTP로 앱을 조종할 수 있다(R-15) |
 | `rmcp` | `mcp-server`. `testkit`은 클라이언트 기능만 | R-04 |
 | `rusqlite`, `libsqlite3-sys` | `store-sqlite` | R-06 |
+| `secrecy` | `application`만 | 비밀 값의 내부 저장. 다른 crate는 application의 소유권 생성자를 사용한다 |
 | `security-framework` | `secrets-keychain` | R-16 |
 | `objc2-local-authentication`, `rfd` | `platform-macos` | R-16 |
 | HTTP 클라이언트 | `broker-toss`, `broker-toss-trade`, `sources` | 기본 URL을 주입받는다(R-15) |
@@ -305,10 +306,10 @@ stock-copilot/
 | `AiProvider` | `run(RunSpec)`, `resume(spec, history, message)`, `usage`, `interrupt`, `verify_isolation` | `ai-claude-code`, `ai-codex` | 실행 파일 경로를 주입받는다(R-15). `RunSpec`에 실행 종류·모델·추론 강도·작업 목적이 들어간다 |
 | 저장소 포트 | 도메인 객체 저장·조회 | `store-sqlite` | - |
 | `AuditLog` | 추가만 되는 기록, 변조 탐지 | `store-sqlite` | 6.3 |
-| `SecretStore` | 비밀 값 | `secrets-keychain` | 비밀은 `secrecy` 래퍼. `Debug`, `Display`, `Serialize`, `Clone` 없음(R-16 Q4) |
-| `Clock` | 현재 벽시계 시각 | 시스템 | 테스트는 `SteppedClock` |
+| `SecretStore` | `load`, `store`, `remove` | `secrets-keychain` | application의 `SecretValue`로 감싼다. 생성자는 소유한 `Vec<u8>`를 받고 내부에서 `secrecy`로 감싼다. `Debug`는 값·길이에 무관한 고정 문자열만 출력하며 `Display`·`Serialize`·`Clone`은 없다 |
+| `Clock` | `now() → Timestamp`, 동기·실패 없음 | 시스템 | 현재 벽시계 시각. 테스트는 `SteppedClock` |
 | `Notifier` | macOS 알림 | `src-tauri/platform`(`tauri-plugin-notification` 2.8.1, Rust에서만 호출) | - |
-| `UserPresence` | `confirm(ConfirmationRequest) → Confirmed / Denied / Unavailable` | `platform-macos` | 요청은 주문 요약 또는 위험 설정 변경. 주문은 네이티브 요약 창 + macOS 본인 확인, 위험 설정 변경은 네이티브 확인 창만(SEC-12, P-9). 4.5 |
+| `UserPresence` | `confirm_order(OrderSummary) → OrderConfirmation`, `confirm_risk_change(RiskChange) → RiskChangeConfirmation` | `platform-macos` | 두 결과는 서로 다른 타입이며 각각 `Confirmed / Denied / Unavailable`. 오류 채널은 없다. 주문은 요약 창과 본인 확인, 위험 변경은 확인 창만 사용한다(SEC-12, P-9). A-04는 종류별 호출을 기록한다. 4.5 |
 
 - 스트림 이벤트 `AiEvent`: 첫 사건 `IsolationChecked(Passed | Rejected(IsolationFailure))`(거절 뒤에는 사건 없음), `ActualModel`, `TextDelta`, `ToolCall{server, tool, args, result, status}`, `WebSearch{query, action}`, `TokenUsage`, `Quota`, `RateLimited{resets_at}`, `ModelRerouted`, `McpUnavailable`, 그리고 모르는 type을 담는 명시 변형 `Unknown`(R-02, R-03). 녹화한 스트림을 테스트 고정 자료로 쓴다.
 - 뉴스 소스와 예약 작업은 레지스트리에 등록한다. 새 소스나 작업은 구현 하나와 등록 한 줄로 추가된다. 경로 고정 테스트는 이 레지스트리에서 대상 목록을 가져온다(4.6).

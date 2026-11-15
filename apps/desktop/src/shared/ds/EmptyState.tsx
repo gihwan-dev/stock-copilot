@@ -1,3 +1,5 @@
+import type { Action } from "./control-types";
+import { Button } from "./Button";
 import type { ReactElement } from "react";
 import type { UiText } from "../lib";
 import type { IconName } from "./icon-paths";
@@ -6,7 +8,7 @@ type Props = {
   readonly title: UiText;
   readonly icon?: IconName;
   readonly children?: UiText;
-  readonly action?: ReactElement;
+  readonly action?: Action;
 };
 export const EmptyState = (props: Props): ReactElement => (
   <div className="flex flex-col items-center gap-space-2 py-space-10 px-space-6 text-center text-ink-muted">
@@ -18,7 +20,15 @@ export const EmptyState = (props: Props): ReactElement => (
       <p className="text-body-sm max-w-dialog-width">{props.children}</p>
     )}
     {props.action === undefined ? null : (
-      <div className="mt-space-2">{props.action}</div>
+      <div className="mt-space-2">
+        <Button
+          size="control-height-sm"
+          onClick={props.action.onPress}
+          disabled={props.action.disabled ?? "enabled"}
+        >
+          {props.action.label}
+        </Button>
+      </div>
     )}
   </div>
 );
