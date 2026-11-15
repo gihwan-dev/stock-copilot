@@ -91,3 +91,9 @@ mod error_class;
 pub use error_class::{
     BugDiagnostic, ClassifiedError, ErrorClass, UserAction, classify_port_error,
 };
+
+mod event_bus;
+pub use event_bus::{
+    DeliveryFailureCause, EventBus, EventDeliveryFailure, EventPublisher, EventSubscriber,
+    SubscriberError, SubscriptionId,
+};
