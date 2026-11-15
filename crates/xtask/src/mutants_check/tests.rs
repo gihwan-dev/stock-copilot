@@ -467,3 +467,92 @@ fn nightly_partition_rejects_noncanonical_and_old_shards() {
         .expect_err("noncanonical shard");
     }
 }
+
+#[test]
+fn nightly_rejects_an_empty_catalog_and_clears_previous_evidence() {
+    let directory = fresh_directory(&repository_root(), "h47-zero-catalog");
+    fs::create_dir_all(directory.join("src")).expect("source");
+    fs::create_dir_all(directory.join(".cargo")).expect("settings");
+    fs::write(
+        directory.join("Cargo.toml"),
+        "[package]\nname=\"h47-zero\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n",
+    )
+    .expect("manifest");
+    fs::write(
+        directory.join("src/lib.rs"),
+        "pub fn positive(value: i32) -> bool { value > 0 }\n",
+    )
+    .expect("source");
+    fs::copy(
+        repository_root().join(".cargo/mutants.toml"),
+        directory.join(".cargo/mutants.toml"),
+    )
+    .expect("unchanged configured targets");
+    generate_lockfile(&directory.join("Cargo.toml"));
+    let output = directory.join("target/mutants");
+    fs::create_dir_all(output.join("mutants.out")).expect("old output");
+    fs::write(
+        output.join("catalog.json"),
+        "[{\"name\":\"old\",\"file\":\"old.rs\"}]",
+    )
+    .expect("old catalog");
+    let failure = run(
+        &directory,
+        &Scope::Sharded(String::from("127/128")),
+        IgnoreFiles::Disregarded,
+    )
+    .expect_err("empty global catalog must fail");
+    assert!(
+        failure.contains("밤 전체 변이 목록이 비어 있다"),
+        "{failure}"
+    );
+    assert!(!output.join("catalog.json").exists());
+    assert!(!output.join("mutants.out").exists());
+}
+
+#[test]
+fn nightly_allows_an_empty_shard_only_after_a_nonempty_catalog() {
+    let directory = fresh_directory(&repository_root(), "h47-empty-shard");
+    fs::create_dir_all(directory.join("src")).expect("source");
+    fs::create_dir_all(directory.join(".cargo")).expect("settings");
+    fs::write(
+        directory.join("Cargo.toml"),
+        "[package]\nname=\"h47-empty\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n",
+    )
+    .expect("manifest");
+    fs::write(
+        directory.join("src/lib.rs"),
+        "pub fn positive(value: i32) -> bool { value > 0 }\n",
+    )
+    .expect("source");
+    fs::write(
+        directory.join(".cargo/mutants.toml"),
+        "examine_globs = [\"src/**/*.rs\"]\n",
+    )
+    .expect("fixture target");
+    generate_lockfile(&directory.join("Cargo.toml"));
+    assert_eq!(
+        run(
+            &directory,
+            &Scope::Sharded(String::from("127/128")),
+            IgnoreFiles::Disregarded
+        )
+        .expect("legitimate empty shard"),
+        Outcomes::default()
+    );
+    let catalog: serde_json::Value = serde_json::from_slice(
+        &fs::read(directory.join("target/mutants/catalog.json")).expect("catalog receipt"),
+    )
+    .expect("catalog JSON");
+    let empty: &[serde_json::Value] = &[];
+    assert_ne!(
+        catalog.as_array().expect("catalog entries").as_slice(),
+        empty
+    );
+    assert_eq!(
+        fs::read_to_string(directory.join("target/mutants/mutants.out/mutants.json"))
+            .expect("shard list")
+            .trim(),
+        "[]"
+    );
+}

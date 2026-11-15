@@ -91,14 +91,24 @@ mod tests {
         }
     }
 
+    #[derive(PartialEq, Eq)]
+    enum FixtureState {
+        Active,
+        Finished,
+    }
+
     struct Fixture {
         runner: OwnedChild,
         pid_file: std::path::PathBuf,
         release_file: std::path::PathBuf,
+        state: FixtureState,
     }
 
     impl Drop for Fixture {
         fn drop(&mut self) {
+            if self.state == FixtureState::Finished {
+                return;
+            }
             let _released = std::fs::write(&self.release_file, "release");
             if let Ok(pid) = std::fs::read_to_string(&self.pid_file) {
                 let _cleanup_result = wait_until(
@@ -178,6 +188,7 @@ mod tests {
             runner: OwnedChild(runner),
             pid_file: directory.join("child.pid"),
             release_file: directory.join("release"),
+            state: FixtureState::Active,
         }
     }
 
@@ -215,6 +226,9 @@ mod tests {
         )
         .expect_err("deadline failure");
         let state = child_state(&child);
+        if !state.success() {
+            fixture.state = FixtureState::Finished;
+        }
         let sentinel = unrelated.0.try_wait().expect("sentinel state");
         unrelated.0.kill().expect("sentinel cleanup");
         unrelated.0.wait().expect("sentinel reaped");
@@ -227,6 +241,31 @@ mod tests {
             super::run_with_limit(passing, std::time::Duration::from_secs(30))
                 .expect("complete child")
                 .success()
+        );
+    }
+
+    #[test]
+    fn finished_fixture_cleanup_does_not_observe_a_reused_pid() {
+        let directory = fresh_directory(&repository_root(), "h47-finished-fixture");
+        let pid_file = directory.join("child.pid");
+        let release_file = directory.join("release");
+        std::fs::write(&pid_file, std::process::id().to_string()).expect("live PID stand-in");
+        let mut runner = std::process::Command::new("/bin/sh")
+            .args(["-c", "exit 0"])
+            .spawn()
+            .expect("owned runner");
+        runner.wait().expect("already reaped runner");
+        {
+            let _fixture = Fixture {
+                runner: OwnedChild(runner),
+                pid_file,
+                release_file: release_file.clone(),
+                state: FixtureState::Finished,
+            };
+        }
+        assert!(
+            !release_file.exists(),
+            "finished fixture never enters release or PID polling"
         );
     }
 }

@@ -10,10 +10,19 @@ import { installActionSpec, readTools } from "../tools.mjs";
 const root = resolve(".");
 const workflow = () =>
   JSON.parse(readFileSync(".github/workflows/nightly.yml", "utf8"));
-const runSummary = (outcome, files = {}) => {
+const runSummary = (
+  outcome,
+  files = {},
+  catalog = JSON.stringify([
+    { name: "src/a.rs:12:9: replace >", file: "src/a.rs" },
+    { name: "src/b.rs:21:3: replace +", file: "src/b.rs" },
+  ]),
+) => {
   const folder = mkdtempSync(join(tmpdir(), "h47-summary-"));
   const directory = join(folder, "target/mutants/mutants.out");
   mkdirSync(directory, { recursive: true });
+  if (catalog !== null)
+    writeFileSync(join(directory, "../catalog.json"), catalog);
   for (const [name, text] of Object.entries(files))
     writeFileSync(join(directory, name), text);
   const summary = join(folder, "summary.md");
@@ -188,21 +197,24 @@ test("H47 successful empty slices have an explicit empty result without baseline
 
 test("H47 cargo-mutants partitions cover the exact full set without overlap", () => {
   const list = (shard) => {
-    const args = [
-      "mutants",
-      "--no-config",
-      "--cap-lints=true",
-      "--test-tool=nextest",
-      "--list",
-      "--json",
-      "--no-shuffle",
-      "--file",
-      "crates/domain/src/**/*.rs",
-      "--file",
-      "crates/order-execution/src/**/*.rs",
-      "--file",
-      "crates/application/src/**/*.rs",
-    ];
+    const args =
+      shard === undefined
+        ? ["mutants", "--list", "--json", "--no-shuffle"]
+        : [
+            "mutants",
+            "--no-config",
+            "--cap-lints=true",
+            "--test-tool=nextest",
+            "--list",
+            "--json",
+            "--no-shuffle",
+            "--file",
+            "crates/domain/src/**/*.rs",
+            "--file",
+            "crates/order-execution/src/**/*.rs",
+            "--file",
+            "crates/application/src/**/*.rs",
+          ];
     if (shard !== undefined) args.push("--shard", shard);
     const result = spawnSync("cargo", args, {
       encoding: "utf8",
@@ -212,6 +224,10 @@ test("H47 cargo-mutants partitions cover the exact full set without overlap", ()
     return JSON.parse(result.stdout).map((entry) => entry.name);
   };
   const all = list();
+  assert.ok(
+    all.length > 0,
+    "the configured full mutation catalog must not be empty",
+  );
   const seen = new Set();
   for (const shard of workflow().jobs.mutants.strategy.matrix.shard) {
     for (const name of list(shard)) {
@@ -255,6 +271,14 @@ test("H47 actual empty slice artifacts are successful without outcomes", () => {
     { cwd: folder, encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
+  const catalog = spawnSync(
+    "cargo",
+    ["mutants", "--no-config", "--list", "--json"],
+    { cwd: folder, encoding: "utf8" },
+  );
+  assert.equal(catalog.status, 0, catalog.stderr);
+  assert.ok(JSON.parse(catalog.stdout).length > 0);
+  writeFileSync(join(folder, "target/mutants/catalog.json"), catalog.stdout);
   const directory = join(folder, "target/mutants/mutants.out");
   assert.deepEqual(
     JSON.parse(readFileSync(join(directory, "mutants.json"), "utf8")),
@@ -278,4 +302,29 @@ test("H47 actual empty slice artifacts are successful without outcomes", () => {
   assert.equal(report.status, 0, report.stderr);
   assert.match(report.stdout, /대상 없음/u);
   assert.equal(readFileSync(summary, "utf8"), report.stdout);
+});
+
+test("H47 missing empty or malformed global catalogs never validate an empty shard", () => {
+  const files = {
+    "mutants.json": "[]",
+    "missed.txt": "",
+    "timeout.txt": "",
+    "caught.txt": "",
+    "unviable.txt": "",
+  };
+  for (const catalog of [
+    null,
+    "[]",
+    "{}",
+    "{",
+    "[null]",
+    '[{"name":"good","file":"src/good.rs"},null]',
+    '[{"name":"n"}]',
+    '[{"file":"src/a.rs"}]',
+    '[{"name":"", "file":"src/a.rs"}]',
+  ]) {
+    const result = runSummary("success", files, catalog);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /불완전/u);
+  }
 });

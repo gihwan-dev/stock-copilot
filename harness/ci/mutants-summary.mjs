@@ -5,6 +5,18 @@ const directory = "target/mutants/mutants.out";
 const read = (name) => readFileSync(join(directory, name), "utf8");
 let state = "불완전";
 try {
+  const catalog = JSON.parse(read("../catalog.json"));
+  if (
+    !Array.isArray(catalog) ||
+    catalog.length === 0 ||
+    !catalog.every((entry) =>
+      ["name", "file"].every(
+        (field) =>
+          typeof entry?.[field] === "string" && entry[field].length > 0,
+      ),
+    )
+  )
+    throw new Error("밤 전체 변이 목록이 없다");
   const planned = JSON.parse(read("mutants.json"));
   if (
     Array.isArray(planned) &&

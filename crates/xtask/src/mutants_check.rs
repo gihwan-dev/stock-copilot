@@ -1,3 +1,4 @@
+mod catalog;
 mod environment;
 mod scope;
 use scope::{diff_scope, jobs_for};
@@ -316,6 +317,25 @@ fn configure_profile(command: &mut Command) {
         .env("CARGO_PROFILE_TEST_OVERFLOW_CHECKS", "true");
 }
 
+fn prepare_output(
+    root: &Path,
+    scope: &Scope,
+    ignore: IgnoreFiles,
+    globs: &[String],
+) -> Result<std::path::PathBuf, String> {
+    let output = root.join(OUTPUT_DIRECTORY);
+    fs::create_dir_all(&output).map_err(|error| error.to_string())?;
+    let results = output.join("mutants.out");
+    if results.exists() {
+        fs::remove_dir_all(results).map_err(|error| error.to_string())?;
+    }
+    match scope {
+        Scope::Files(_) => {}
+        Scope::Everything | Scope::Sharded(_) => catalog::prepare(root, globs, ignore, &output)?,
+    }
+    Ok(output)
+}
+
 fn run_with_diff(
     workspace: &Path,
     scope: &Scope,
@@ -324,14 +344,12 @@ fn run_with_diff(
 ) -> Result<Outcomes, String> {
     let globs = selected_globs(&target_globs(workspace)?, scope);
     if globs.is_empty() {
-        return Ok(Outcomes::default());
+        return match scope {
+            Scope::Files(_) => Ok(Outcomes::default()),
+            Scope::Everything | Scope::Sharded(_) => Err(String::from("밤 전체 변이 대상이 없다")),
+        };
     }
-    let output = workspace.join(OUTPUT_DIRECTORY);
-    fs::create_dir_all(&output).map_err(|error| format!("{}: {error}", output.display()))?;
-    let results = output.join("mutants.out");
-    if results.exists() {
-        fs::remove_dir_all(&results).map_err(|error| format!("{}: {error}", results.display()))?;
-    }
+    let output = prepare_output(workspace, scope, ignore, &globs)?;
     let mut command = Command::new("cargo");
     command
         .current_dir(workspace)
@@ -363,6 +381,7 @@ fn run_with_diff(
     if let Some(file) = patch {
         command.arg("--in-diff").arg(file);
     }
+    let results = output.join("mutants.out");
     let status = match scope {
         Scope::Files(_) => environment::run_bounded(command)?,
         Scope::Everything | Scope::Sharded(_) => {
