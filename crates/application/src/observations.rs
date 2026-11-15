@@ -1,28 +1,8 @@
 use crate::PortError;
 use domain::{
-    AccountDisplayFact, AccountId, CompleteTransactionResponse, Holding, Quote, ReportedPortfolio,
-    ResolvedOrderInstrument, SettlementWindow, TransactionBatch, TransactionFilter, UntrustedText,
+    AccountId, CompleteTransactionResponse, Holding, Quote, QuoteInstrument, ReportedPortfolio,
+    SettlementWindow, TransactionBatch, TransactionFilter, UntrustedText,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccountObservation {
-    account: AccountId,
-    display: AccountDisplayFact,
-}
-impl AccountObservation {
-    #[must_use]
-    pub const fn from_broker_result(account: AccountId, display: AccountDisplayFact) -> Self {
-        Self { account, display }
-    }
-    #[must_use]
-    pub const fn account(&self) -> &AccountId {
-        &self.account
-    }
-    #[must_use]
-    pub const fn display(&self) -> &AccountDisplayFact {
-        &self.display
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HoldingsObservation {
@@ -74,6 +54,6 @@ pub enum TransactionRead {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuoteObservation {
-    pub instrument: ResolvedOrderInstrument,
+    pub instrument: QuoteInstrument,
     pub result: Result<Quote, PortError>,
 }

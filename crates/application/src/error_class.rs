@@ -58,9 +58,10 @@ pub fn classify_port_error(error: PortError) -> ErrorClass {
             | UnavailableCause::Network => ErrorClass::Wait(retry),
         },
         PortErrorKind::NotFound(data) => match data {
-            MissingData::Stock | MissingData::ExchangeRate | MissingData::Sector => {
-                ErrorClass::NoData(data)
-            }
+            MissingData::Stock
+            | MissingData::ExchangeRate
+            | MissingData::Sector
+            | MissingData::Order => ErrorClass::NoData(data),
         },
         PortErrorKind::InvalidResponse(mismatch) => match mismatch {
             ResponseMismatch::Schema | ResponseMismatch::Validation => {
