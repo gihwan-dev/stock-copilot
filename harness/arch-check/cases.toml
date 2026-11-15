@@ -482,7 +482,7 @@ findings = [
 ]
 
 [[case]]
-name = "tossinvest-host-in-main-and-toss-smoke-pass"
+name = "toss-endpoint-origin-and-root-factory-pass"
 findings = []
 
 [[case]]
@@ -743,3 +743,19 @@ findings = [{ rule = "dev-edge", subject = "testkit -> testkit-ports" }]
 [[case]]
 name = "user-presence-impl-outside-protected-file"
 findings = [{ rule = "user-presence-impl", subject = "crates/testkit-ports/src/lib.rs" }]
+
+[[case]]
+name = "toss-endpoint-extra-factories-fail"
+findings = [{ rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint.rs" }]
+
+[[case]]
+name = "toss-http-canonical-client-pass"
+findings = []
+
+[[case]]
+name = "toss-child-module-and-client-factory-fail"
+findings = [
+    { rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint.rs" },
+    { rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint/sneak.rs" },
+    { rule = "toss-production", subject = "crates/adapters/broker-toss/src/http.rs" },
+]
