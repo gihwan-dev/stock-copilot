@@ -497,11 +497,17 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 항목 | 규칙 |
 |---|---|
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
-| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 주문 게이트 모듈 |
+| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 모든 `src/**/*.rs`. application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 변경분·밤 전체 변이 양쪽에 포함한다 (ADR 0063) |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
 | 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 변경 전·후 참조 그래프에서 변경 파일이 쓰는 파일은 전이적으로, 변경 파일을 쓰는 파일은 직접 한 단계까지 고르고, 해석할 수 없으면 crate 전체로 넓힌다. CI 밤: 전체를 독립된 네 조각으로 (ADR 0042) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
 | 코드로 건너뛰기 | `#[mutants::skip]`, `cfg_attr` 형태 모두 xtask가 실패시킨다 |
+
+추가 전용 판정 전에 기준·현재 그래프를 모두 검사한다 (ADR 0054). 내장 테스트 속성 `should_panic`은 인자 없음 또는 괄호 안 `expected = 문자열 리터럴` 하나만, `ignore`는 인자 없음 또는 `= 문자열 리터럴`만 참조를 숨기지 않는 형태로 해석한다. 일반 문자열과 raw 문자열을 허용한다. 경로·매크로·비문자열·알 수 없는 키·중복 키·다른 구분자 등은 crate 전체로 넓힌다. 이는 범위 해석 규칙이며 제품 소스의 `ignore` 금지를 바꾸지 않는다. 밤 네 조각은 같은 대상 목록을 나누며 조각 수·생존 및 시간 초과 정책은 유지한다.
+
+참조 그래프는 crate의 `src/`만 읽는다. 별도 crate인 통합 테스트의 `tests/**/mod.rs`는 그래프 입력에서 제외하지만 추가 전용 판정의 기존 식별자 집합에는 계속 넣는다. 통합 테스트·지원 파일의 변경은 종전대로 crate 전체다. `#[path]`는 해석 실패로 전체 확장하고 `include!`는 source-check가 금지한다. 위치 의존은 일반 `line`·`file` 식별자가 아니라 실제 `line!`·`file!`·`module_path!`·`column!`, Location 경로, track_caller 속성 및 관련 import·재내보내기·불확실한 토큰으로 판정한다. 접미사가 붙은 속성 문자열은 허용하지 않는다.
+
+`error_class.rs`에서 현재 생성되는 변이 2개는 모두 `ErrorClass: Default` 미구현으로 컴파일되지 않는다. 오류별 매핑 검증은 자동 변이가 아니라 `crates/application/tests/error_class.rs`의 exhaustive 기대 함수와 `every_leaf_matches_the_decision_table`에 의존한다. 생성된 변이의 미검출 0건을 매핑 검출력의 증거로 해석하지 않는다.
 
 승인을 생략하는 변이체가 unviable(컴파일 불가)로 나오는 것은 실패가 아니라 타입이 승인 생략을 표현할 수 없다는 증거다.
 

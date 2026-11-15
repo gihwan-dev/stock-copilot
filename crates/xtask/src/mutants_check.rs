@@ -4,11 +4,14 @@ mod addition_tests;
 mod additions;
 mod environment;
 mod graph;
+mod location_tokens;
 mod macro_tokens;
 #[cfg(test)]
 mod macros_tests;
 #[cfg(test)]
 mod review_tests;
+#[cfg(test)]
+mod revision_tests;
 mod scope;
 use scope::{diff_scope, jobs_for};
 
