@@ -77,7 +77,7 @@ mod tests {
         let directory = fresh_directory(&repository_root(), "h46-owned-nextest");
         std::fs::create_dir_all(directory.join("src")).expect("fixture source");
         std::fs::write(directory.join("Cargo.toml"), "[package]\nname=\"h46-owner-fixture\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n").expect("manifest");
-        std::fs::write(directory.join("src/lib.rs"), "#[test] fn waits() { std::fs::write(\"child.pid\", std::process::id().to_string()).expect(\"pid\"); std::thread::sleep(std::time::Duration::from_secs(60)); }").expect("fixture");
+        std::fs::write(directory.join("src/lib.rs"), "#[test] fn waits() { std::fs::write(\"child.pid\", std::process::id().to_string()).expect(\"pid\"); std::thread::sleep(std::time::Duration::from_secs(900)); }").expect("fixture");
         generate_lockfile(&directory.join("Cargo.toml"));
         let built = std::process::Command::new("cargo")
             .current_dir(&directory)
@@ -86,7 +86,7 @@ mod tests {
             .expect("fixture build");
         assert!(built.success());
         let mut unrelated = std::process::Command::new("/bin/sleep")
-            .arg("60")
+            .arg("900")
             .process_group(0)
             .spawn()
             .expect("unrelated sentinel");
@@ -94,7 +94,7 @@ mod tests {
         command
             .current_dir(&directory)
             .args(["nextest", "run", "--locked"]);
-        let failure = super::run_with_limit(command, std::time::Duration::from_secs(4))
+        let failure = super::run_with_limit(command, std::time::Duration::from_secs(60))
             .expect_err("deadline failure");
         let child =
             std::fs::read_to_string(directory.join("child.pid")).expect("nextest test child PID");
