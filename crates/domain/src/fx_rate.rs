@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn independent_integer_product_and_metadata_hold_for_4096_cases() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     -1_000_000_000_i64..=1_000_000_000,

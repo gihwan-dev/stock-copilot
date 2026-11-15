@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn thirty_boundary_and_best_worst_predictions_for_4096_cases() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_usize..40, 0_u8..2), |(length, binary)| {
                 let rows: Vec<_> = (0..length)
                     .map(|index| row(index, if binary == 1 { 99 } else { 1 }, outcome(binary)))
@@ -722,7 +722,7 @@ mod tests {
     }
     #[test]
     fn rational_reference_order_invariance_range_and_all_bins_for_4096_cases() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &proptest::collection::vec((1_u8..100, 0_u8..2), 30..70),
                 |input| {

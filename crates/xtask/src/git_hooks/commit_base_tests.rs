@@ -19,7 +19,11 @@ const BASE_IDENTITY: [&str; 6] = [
     "commit.gpgsign=false",
 ];
 
-const BASE_STUB_RECIPES: &str = "fresh-build:
+const BASE_STUB_RECIPES: &str = "check-fast:
+    printf 'check-fast\\n' >> hook.log
+    git show {{quote(base)}}:tests.txt | while IFS= read -r kept; do grep -qxF \"$kept\" tests.txt; done
+
+fresh-build:
     printf 'fresh-build\\n' >> hook.log
 
 check:
@@ -104,7 +108,7 @@ fn hooked_repository(name: &str) -> PathBuf {
     let directory = base_repository(name, "master");
     let real = repository_root().join("justfile");
     let justfile = format!(
-        "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nset positional-arguments\n\nbase := \"\"\n\ncommit-guard index=\"\":\n    just --justfile '{0}' --working-directory . commit-guard \"$1\"\n\ncommit-base:\n    just --justfile '{0}' --working-directory . commit-base\n\n{1}\n{BASE_STUB_RECIPES}",
+        "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nset positional-arguments\n\nbase := \"\"\n\ncommit-guard index=\"\":\n    just --justfile '{0}' --working-directory . commit-guard \"$1\"\n\ncommit-base:\n    just --justfile '{0}' --working-directory . commit-base\n\ncommit-recipe:\n    just --justfile '{0}' --working-directory . commit-recipe\n\n{1}\n{BASE_STUB_RECIPES}",
         real.display(),
         real_recipe("commit-check")
     );
@@ -249,5 +253,25 @@ fn h44_review_real_auto_merge_still_rejects_work_test_changes() {
     git_text(&directory, &["switch", "work"]);
     let merged = run_git(&directory, &["merge", "--no-ff", "--no-edit", "master"]);
     assert!(!merged.status.success());
-    assert!(String::from_utf8_lossy(&merged.stderr).contains("recipe `check` failed"));
+    assert!(String::from_utf8_lossy(&merged.stderr).contains("recipe `check-fast` failed"));
+}
+
+#[test]
+fn hook_trace_distinguishes_full_from_fast() {
+    let directory = hooked_repository("h46-distinct-recipes");
+    fs::write(directory.join("tests.txt"), "kept\nfull\n").expect("full change");
+    assert!(commit_all(&directory, "full", "--verify"));
+    assert!(
+        fs::read_to_string(directory.join("hook.log"))
+            .expect("trace")
+            .lines()
+            .any(|line| line == "check")
+    );
+    fs::write(directory.join("hook.log"), "").expect("clear trace");
+    git_text(&directory, &["switch", "-c", "topic"]);
+    fs::write(directory.join("tests.txt"), "kept\nfull\nfast\n").expect("fast change");
+    assert!(commit_all(&directory, "fast", "--verify"));
+    let trace = fs::read_to_string(directory.join("hook.log")).expect("trace");
+    assert!(trace.lines().any(|line| line == "check-fast"));
+    assert!(!trace.lines().any(|line| line == "check"));
 }

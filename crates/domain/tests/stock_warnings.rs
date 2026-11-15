@@ -115,7 +115,7 @@ mod tests {
     }
     #[test]
     fn arbitrary_warning_permutations_and_duplicates_preserve_the_set() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&proptest::collection::vec(0_u8..4, 0..30), |values| {
                 let stock = instrument(KnownMarket::Kr, "005930");
                 let warnings: Vec<_> = values

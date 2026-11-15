@@ -223,7 +223,7 @@ mod tests {
         }
         let config = Config {
             rng_seed: RngSeed::Fixed(0x00d1_1006),
-            ..Config::with_cases(4096)
+            ..Config::with_cases(testkit::property_cases())
         };
         TestRunner::new(config)
             .run(
@@ -345,7 +345,7 @@ mod tests {
         let maximum = Cell::new(Decimal::ZERO);
         let config = Config {
             rng_seed: RngSeed::Fixed(0x00d1_1007),
-            ..Config::with_cases(1024)
+            ..Config::with_cases(testkit::property_cases())
         };
         TestRunner::new(config)
             .run(

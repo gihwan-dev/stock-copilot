@@ -503,7 +503,7 @@ mod tests {
     }
 
     proptest! {
-        #![proptest_config(Config::with_cases(4096))]
+        #![proptest_config(Config::with_cases(testkit::property_cases()))]
         #[test]
         fn derivations_round_trip_one_row(symbol in "[0-9A-Z]{6}", id in "[a-z]{1,32}", name in "[가-힣]{1,20}", security in sample::select(vec![("ETF", ExcludedSecurityType::Etf), ("ETN", ExcludedSecurityType::Etn), ("FOREIGN_STOCK", ExcludedSecurityType::ForeignStock)])) {
             let mut input = row();

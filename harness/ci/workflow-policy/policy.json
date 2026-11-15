@@ -68,7 +68,8 @@
     "node harness/ci/tools.mjs lefthook",
     "node harness/ci/tools.mjs pnpm",
     "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 신뢰 자료 %s, 범위 시작 %s (%s)\\n' \"$verified\" \"$base\" \"$kind\"\nprintf 'tools=%s\\nbase=%s\\nkind=%s\\n' \"$verified\" \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
-    "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}"
+    "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+    "node harness/ci/mutants-summary.mjs"
   ],
   "expressions": [
     "${{ github.event.before }}",
@@ -570,6 +571,11 @@
             {
               "name": "mutants without network",
               "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}"
+            },
+            {
+              "name": "mutation results",
+              "if": "always()",
+              "run": "node harness/ci/mutants-summary.mjs"
             }
           ]
         },
@@ -751,5 +757,12 @@
     "matrix": {
       "shard": ["0/4", "1/4", "2/4", "3/4"]
     }
-  }
+  },
+  "alwaysSteps": [
+    {
+      "job": "mutants",
+      "name": "mutation results",
+      "run": "node harness/ci/mutants-summary.mjs"
+    }
+  ]
 }

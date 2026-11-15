@@ -46,6 +46,7 @@ export RUSTC_WORKSPACE_WRAPPER := ""
 
 base := ""
 
+[env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 check: check-node require-base check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
@@ -161,7 +162,7 @@ commit-base:
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-base
 
 commit-check:
-    base="$("{{just_executable()}}" commit-base)"; STOCK_COPILOT_BASE_USE=commit "{{just_executable()}}" base="$base" check
+    base="$("{{just_executable()}}" commit-base)"; STOCK_COPILOT_BASE_USE=commit "{{just_executable()}}" base="$base" "$("{{just_executable()}}" commit-recipe)"
 
 push-check:
     base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
@@ -208,6 +209,7 @@ linux-check: check-node
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
 
+[env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 linux-test:
     cargo nextest run --workspace --locked $(node harness/ci/linux/exclusions.mjs cargo) -E "$(node harness/ci/linux/exclusions.mjs filter)"
 
@@ -225,3 +227,39 @@ tokens-contrast:
 
 mutants-shard shard:
     cargo run --locked --quiet --package xtask -- mutants --shard "$1"
+
+check-fast: check-node require-base
+    cargo run --locked --quiet --package xtask -- check-fast {{quote(base)}} "{{just_executable()}}"
+
+check-fast-static:
+    "{{just_executable()}}" deny
+    cargo run --locked --quiet --package xtask -- gen-schema --check
+    cargo fmt --all --check
+    "{{just_executable()}}" arch-check
+    "{{just_executable()}}" source-check
+    "{{just_executable()}}" sql-check
+    "{{just_executable()}}" migration-check
+    "{{just_executable()}}" capability-check
+    "{{just_executable()}}" raw-types
+    "{{just_executable()}}" disable-check
+    node harness/source-tree/check.mjs
+    node harness/config-files/check.mjs
+    node harness/claude-hooks/hashes.mjs
+    node harness/codex-hooks/config.mjs
+    node harness/ci/workflow-policy/check.mjs
+    node harness/ci/review-records/check.mjs
+
+test-diff-fast *packages:
+    cargo run --locked --quiet --package xtask -- test-diff-selected {{quote(base)}} "$@"
+
+disable-report-fast:
+    "{{just_executable()}}" disable-report-since {{quote(base)}}
+
+commit-recipe:
+    cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-recipe
+
+frontend-build: check-pnpm
+    pnpm -C apps/desktop exec vite build
+
+check-fast-generated: frontend-build
+    node harness/generated-files/check.mjs

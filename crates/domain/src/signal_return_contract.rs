@@ -300,7 +300,7 @@ pub(crate) mod tests {
         let source = task();
         let rates = cost("0", "0", "0");
         let index = benchmark();
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u32..1_000_000), |value| {
                 let fill = crate::virtual_exit::tests::virtual_exit_fixture_fill(
                     &source,

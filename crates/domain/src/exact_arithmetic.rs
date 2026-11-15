@@ -466,7 +466,7 @@ mod allocation_remainder_tests {
     #[test]
     fn allocation_remainders_match_independent_integer_coefficients() {
         assert_integer_remainder(47, 29016);
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u32..1_000_000, 1_u32..1_000_000), |(seed, total)| {
                 assert_integer_remainder(seed.checked_rem(total).expect("양수 분모"), total);
                 Ok(())
@@ -847,7 +847,7 @@ mod tests {
 
     #[test]
     fn independent_decimal_integer_product_matches_all_public_multiplications() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(decimal_strategy(), decimal_strategy(), any::<bool>()),
                 |(left, right, usd)| {
@@ -939,7 +939,7 @@ mod tests {
             );
         }
 
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(decimal_strategy(), decimal_strategy()),
                 |(left, right)| {
@@ -1351,7 +1351,7 @@ mod tests {
         ] {
             let successes = std::cell::Cell::new(0_usize);
             let nonunit_successes = std::cell::Cell::new(0_usize);
-            TestRunner::new(Config::with_cases(4096))
+            TestRunner::new(Config::with_cases(testkit::property_cases_at_least(4096)))
                 .run(&samples(kind), |sample| {
                     let value = exercise_sample(&sample);
                     successes.set(
