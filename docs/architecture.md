@@ -275,6 +275,7 @@ stock-copilot/
 | `tauri-plugin-wdio-webdriver` 등 자동화 플러그인 | `e2e-app`만 | HTTP로 앱을 조종할 수 있다(R-15) |
 | `rmcp` | `mcp-server`. `testkit`은 클라이언트 기능만 | R-04 |
 | `rusqlite`, `libsqlite3-sys` | `store-sqlite` | R-06 |
+| `secrecy` | `application`만 | 비밀 값의 내부 저장. 다른 crate는 application의 소유권 생성자를 사용한다 |
 | `security-framework` | `secrets-keychain` | R-16 |
 | `objc2-local-authentication`, `rfd` | `platform-macos` | R-16 |
 | HTTP 클라이언트 | `broker-toss`, `broker-toss-trade`, `sources` | 기본 URL을 주입받는다(R-15) |
@@ -305,10 +306,10 @@ stock-copilot/
 | `AiProvider` | `run(RunSpec)`, `resume(spec, history, message)`, `usage`, `interrupt`, `verify_isolation` | `ai-claude-code`, `ai-codex` | 실행 파일 경로를 주입받는다(R-15). `RunSpec`에 실행 종류·모델·추론 강도·작업 목적이 들어간다 |
 | 저장소 포트 | 도메인 객체 저장·조회 | `store-sqlite` | - |
 | `AuditLog` | 추가만 되는 기록, 변조 탐지 | `store-sqlite` | 6.3 |
-| `SecretStore` | 비밀 값 | `secrets-keychain` | 비밀은 `secrecy` 래퍼. `Debug`, `Display`, `Serialize`, `Clone` 없음(R-16 Q4) |
-| `Clock` | 현재 벽시계 시각 | 시스템 | 테스트는 `SteppedClock` |
+| `SecretStore` | `load`, `store`, `remove` | `secrets-keychain` | application의 `SecretValue`로 감싼다. 생성자는 소유한 `Vec<u8>`를 받고 내부에서 `secrecy`로 감싼다. `Debug`는 값·길이에 무관한 고정 문자열만 출력하며 `Display`·`Serialize`·`Clone`은 없다 |
+| `Clock` | `now() → Timestamp`, 동기·실패 없음 | 시스템 | 현재 벽시계 시각. 테스트는 `SteppedClock` |
 | `Notifier` | macOS 알림 | `src-tauri/platform`(`tauri-plugin-notification` 2.8.1, Rust에서만 호출) | - |
-| `UserPresence` | `confirm(ConfirmationRequest) → Confirmed / Denied / Unavailable` | `platform-macos` | 요청은 주문 요약 또는 위험 설정 변경. 주문은 네이티브 요약 창 + macOS 본인 확인, 위험 설정 변경은 네이티브 확인 창만(SEC-12, P-9). 4.5 |
+| `UserPresence` | `confirm_order(OrderSummary) → OrderConfirmation`, `confirm_risk_change(RiskChange) → RiskChangeConfirmation` | `platform-macos` | 두 결과는 서로 다른 타입이며 각각 `Confirmed / Denied / Unavailable`. 오류 채널은 없다. 주문은 요약 창과 본인 확인, 위험 변경은 확인 창만 사용한다(SEC-12, P-9). A-04는 종류별 호출을 기록한다. 4.5 |
 
 - 스트림 이벤트 `AiEvent`: 첫 사건 `IsolationChecked(Passed | Rejected(IsolationFailure))`(거절 뒤에는 사건 없음), `ActualModel`, `TextDelta`, `ToolCall{server, tool, args, result, status}`, `WebSearch{query, action}`, `TokenUsage`, `Quota`, `RateLimited{resets_at}`, `ModelRerouted`, `McpUnavailable`, 그리고 모르는 type을 담는 명시 변형 `Unknown`(R-02, R-03). 녹화한 스트림을 테스트 고정 자료로 쓴다.
 - 뉴스 소스와 예약 작업은 레지스트리에 등록한다. 새 소스나 작업은 구현 하나와 등록 한 줄로 추가된다. 경로 고정 테스트는 이 레지스트리에서 대상 목록을 가져온다(4.6).
@@ -772,15 +773,17 @@ apps/desktop/src/
 
 | 규칙 | 내용 | 근거 |
 |---|---|---|
-| 금액 타입 | `Money`, `Quantity`, `Price`, `Ratio`, `Probability`는 비공개 symbol 키를 가진 **불투명 객체**다. 문자열 브랜드로 만들지 않는다. 문자열 브랜드는 `parseFloat`와 `+`가 타입 검사를 통과한다 | I-15, R-08 |
+| 금액 타입 | `Money`, `Quantity`, `Price`, `Ratio`, `Probability`, `PercentDisplay`는 비공개 symbol 키를 가진 **불투명 객체**다. 문자열 브랜드로 만들지 않는다. 문자열 브랜드는 `parseFloat`와 `+`가 타입 검사를 통과한다 | I-15, R-08 |
 | 만드는 곳 | `shared/lib/money.ts` 하나. IPC DTO의 십진수 문자열을 파싱해서만 만든다. 타입 술어 허용 목록의 유일한 파일이고 보호 파일이다 | R-08 |
 | 할 수 있는 것 | 형식 바꾸기뿐이다. 산술, 비교, 숫자 변환은 로컬 린트 규칙이 막는다 | R-08 |
-| 형식 | 십진수 문자열을 `Intl.NumberFormat`에 문자열 그대로 넘긴다. 부동소수점을 거치지 않는다. 빼기 기호는 U+2212로 바꾼다. 만·억 혼합 표기와 `원` 접미는 직접 만든다 | R-14 2.5 |
-| 방향과 색 | 상승·하락·보합은 코어가 보낸 값으로 정한다. 표시 단위로 반올림하면 0이 되는 값의 방향 규칙은 아직 정하지 않았다(R-14). D-01·DS-05에서 정한다 | R-14 |
+| 형식 | 코어가 환산·반올림·자릿수를 확정한 십진수 문자열을 문자열 연산으로만 표시한다. `Intl.NumberFormat`·숫자 변환·프런트 반올림을 금지한다. 음수 부호는 U+2212이며 원화 정수의 compact만 만·억·조를 쓴다. USD와 소수점이 있는 값은 full로 표시한다. `Percent`·`Probability`·`PriceChange.rate`는 소수 비율 `Ratio`·`Probability`와 키가 다른 표시 전용 `PercentDisplay`만 받는다 | R-14 2.5 |
+| 방향과 색 | 상승·하락·보합은 코어가 보낸 값으로 정한다. 표시 0의 숫자 부호만 제거하고 원래 방향은 유지한다(ADR 0025). 0이 아닌 값과 방향이 어긋나면 전체 표시를 경고색 `—`와 접근성 이름으로 닫는다. `Money`·`Percent`의 선택 direction에도 같은 규칙을 쓴다. 방향으로 숫자 부호를 덮어쓰지 않는다 | R-14 |
 | ID와 종목 코드 | 산술과 무관하므로 Zod 브랜드 문자열로 충분하다 | R-08 |
 | 그 밖의 모든 값 | 타입 자리에 `string`·`number`·`bigint`를 쓰지 않는다. 생성된 `bindings.ts`의 원시 타입은 `shared/ipc`의 Zod 스키마가 브랜드로 바꾸고, `features`는 브랜드 타입만 받는다. `boolean`도 쓰지 않고 리터럴 유니온으로 쓴다(`disabled: boolean`이 아니라 `state: 'enabled' \| 'disabled'`). 화면 문구는 `UiText` 브랜드이고 `messages.ts`(문구 키마다 언어별 문장)에만 있어 다국어를 바로 붙일 수 있다. `shared/ds`의 props도 브랜드와 리터럴 유니온만 받는다. `design/`의 타입 선언에 있는 불린 props(`judged`, `over`, `dense` 등)는 앱의 `shared/ds`에서 리터럴 유니온으로 옮긴다 | harness 4.2 |
 
-WKWebView에서의 한글 입력과 `Intl` 결과는 S-05에서 실제 창으로 확인한다.
+`format.ts`는 `shared/ds/Numbers.tsx`만 가져온다. 화면은 DS 컴포넌트만 조립하며 `FormattedNumber`의 JSX 표시는 `shared/ds` 안에서만 허용한다. 확률은 디자인 명세대로 표시 전용 퍼센트 1~99의 정수만 표시한다.
+
+WKWebView에서의 한글 입력과 문자열 형식화 결과·U+2212·고정폭 숫자·테마는 S-05에서 실제 창으로 확인한다.
 
 ## 6. 데이터
 

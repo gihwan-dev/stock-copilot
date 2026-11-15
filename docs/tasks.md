@@ -126,7 +126,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | DS-10 | 디자인 시스템 린트 3: 공개 props (사용자 승인) | harness 4.4 #9~11 위반 예제 실패. 토큰 이름이 사라지면 쓰던 코드가 컴파일 오류 (#10) DS 컴포넌트의 `ref` prop 타입은 `RefObject`만(콜백 ref를 받지 않음, 타입 테스트) (ADR 0009). | DS-09, DS-13 |
 | DS-03 | 기본 컴포넌트 1 (사용자 승인): 글자, 버튼, 입력, 선택, 토글, 펼침(고급 설정용), 아이콘. 디자인 산출물에 있는 것만 | 컴포넌트마다 상태별 테스트와 목록 화면 항목 | DS-10, DS-13 |
 | DS-04 | 기본 컴포넌트 2 (사용자 승인): 카드, 표, 배지, 상태 띠, 대화 상자, 빈 상태, 뼈대 로딩 | 같음 | DS-10, DS-13 |
-| DS-05 | 숫자 표시 컴포넌트 (사용자 승인): 금액, 등락률, 수량, 확률, 만·억 표기, 상승·하락 색 | 십진수 문자열을 부동소수점 없이 형식화, 빼기는 U+2212 (architecture 5.3). 방향은 코어가 보낸 값으로만. R-11·R-14 표기 예제와 일치 (UX-1). 반올림 뒤 0이 되는 값의 방향 규칙이 D-01의 ADR과 같음 표시 함수(`shared/lib/format.ts`)는 받은 자릿수를 그대로 쓰고 부호·쉼표·단위만 붙임. `Intl` 기본값의 반올림을 쓰지 않음. 0으로 보이는 음수의 부호 처리 (ADR 0012). | DS-10, DS-13, D-01 |
+| DS-05 | 숫자 표시 컴포넌트 (사용자 승인): 금액, 등락률, 수량, 확률, 만·억 표기, 상승·하락 색 | 십진수 문자열을 부동소수점 없이 형식화, 빼기는 U+2212 (architecture 5.3). 방향은 코어가 보낸 값으로만. R-11·R-14 표기 예제와 일치 (UX-1). 반올림 뒤 0이 되는 값의 방향 규칙이 D-01의 ADR과 같음 표시 함수(`shared/lib/format.ts`)는 받은 자릿수를 그대로 쓰고 부호·쉼표·단위만 붙임. `Intl` 기본값의 반올림을 쓰지 않음. 0으로 보이는 음수의 부호 처리 (ADR 0012). 값의 부호와 방향이 어긋나면 `—`. 퍼센트는 표시 전용 타입만 받음. 확률은 1~99 정수만. 만·억·조 축약은 원화 전용. `Intl`을 쓰지 않고 문자열 연산으로 형식화 (ADR 0079) | DS-10, DS-13, D-01 |
 | DS-06 | 차트 컴포넌트 (사용자 승인): 선, 영역, 도넛, 트리맵 (Recharts) | 토큰 색만 사용, 빈 데이터 처리. 좌표는 코어가 보낸 십진수 문자열이고 숫자 변환은 차트 컴포넌트 파일(보호된 허용 목록) 안에서만 함. 테마 값은 속성으로 받음 (architecture 5장, harness 4.2) | DS-10, DS-13 |
 | DS-18 | 마크다운 표시와 채팅 입력 (사용자 승인) | react-markdown 래퍼: 원시 HTML 끔, 이미지는 링크 글자, 링크는 콜백 속성으로만 열고 링크로 만들지 여부는 속성으로 받음(수집 목록 판정은 화면 코드와 코어). 채팅 입력: 한글 조합 중 Enter로 보내지 않음. 상태별 테스트와 목록 화면 항목 (SEC-10, architecture 5장) 자유 입력 문장용 브랜드(채팅 입력)를 `shared/lib/brand.ts`에 추가 (ADR 0012). | DS-10, DS-13 |
 | DS-07 | 컴포넌트 목록 화면 (Storybook) | 모든 공개 컴포넌트가 목록에 있음. 이야기마다 라이트·다크 | DS-03 ~ DS-06, DS-18 |
@@ -134,11 +134,11 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | DS-11 | 레이아웃 컴포넌트 (사용자 승인): `Page`, `Section`, `Grid`, `GridItem`, `Stack`, `Inline`, `Split`, `Card`, `Toolbar`, `ScrollArea`, `Divider` | 받는 값이 architecture 5.1 표와 같음. 격자 열 수는 3·4·6·8·9·12만 컴파일됨. 본문 폭 구간(컨테이너 쿼리)별 기준 화면. `ScrollArea`는 Base UI ScrollArea 래퍼이고 막대가 폭을 차지하지 않음(막대 유무로 내용 폭이 같음). 자식 래퍼의 `min-width: 0` 기준 예제가 넘침 검사를 통과 | DS-10, DS-15, DS-20 |
 | DS-19 | 스크롤·넘침 정적 규칙 (사용자 승인) | harness 4.4 #18~25마다 위반 예제 실패: 허용 목록 밖의 `overflow-*`·`truncate`, `absolute`·`fixed`, 길이를 준 `h-*`·`w-*`, `h-screen`, `whitespace-nowrap`, 음수 여백, 화면 코드의 `ScrollArea` 가져오기. 허용 목록 파일에서는 통과 | DS-02, DS-09 |
 | DS-20 | 넘침 검사 함수와 부하 자료 (사용자 승인) | `shared/ds/testing`의 넘침 검사가 harness 4.4의 일곱 확인을 함. 일부러 넘치게 만든 예제(고정 높이 안의 긴 글, `min-width` 없는 flex 자식, 조상에 잘린 팝오버, 겹친 세로 스크롤, 겹친 버튼)가 각각 실패. 부하 자료 파일이 보호 경로에 있음. 부하 이야기가 없는 컴포넌트는 `ds-check` 실패 | DS-15, DS-19 |
-| DS-21 | `Card`·`EmptyState`·`Dialog`의 동작 슬롯을 닫힌 계약으로 | `action`·`actions`가 임의 `ReactElement`가 아니라 라벨·동작·변형의 닫힌 값을 받음. 임의 요소를 넣는 위반 예제가 실패 (ADR 0069, DS-03 후속) | DS-03, DS-04 |
+| DS-21 | `Card`·`EmptyState`·`Dialog`의 동작 슬롯을 닫힌 계약으로 | `action`·`actions`가 임의 `ReactElement`가 아니라 라벨·동작·변형의 닫힌 값을 받음. 임의 요소를 넣는 위반 예제가 실패 (ADR 0069, DS-03 후속) Dialog는 confirm·cancel 두 자리(confirm은 primary, cancel은 secondary로 고정), Card와 EmptyState는 동작 하나 (ADR 0081) | DS-03, DS-04 |
 | DS-08 | `AppShell` (사용자 승인): 사이드바(종목 목록 자리), 본문, 채팅 패널, 창 폭별 동작, 창 최소 크기 960 × 640 | 사이드바에 화면 전환 메뉴가 없음 (design 2.4, P-10). 창 폭 세 구간의 기준 화면을 사용자가 디자인과 대조해 승인 (architecture 5.1) | DS-03, DS-04, DS-11 |
 | DS-12 | `xtask ds-check`와 공개 목록 잠금 (사용자 승인) | 컴포넌트마다 목록 항목, 라이트·다크 기준 화면, 상태 테스트 중 하나라도 없으면 실패. 에이전트의 `shared/ds/index.ts` 편집이 거부됨 (harness 4.4 #12). 부하 이야기와 넘침 검사 통과도 확인 | DS-07, DS-15, DS-20 |
 | DS-17 | 캔들 차트와 Canvas 테마 래퍼 (사용자 승인) | Lightweight Charts는 `shared/ds` 래퍼로만 쓰임. `shared/platform`의 허용 목록 파일이 테마를 읽어 넘기고 테마가 바뀌면 다시 그림 (architecture 5.2) | DS-06, U-05 |
-| DS-16 | 실측 S-05 (담당: 사용자): 실제 WKWebView 창의 한글 입력과 숫자 형식 | 한글 조합 입력과 `Intl` 결과를 기록. 다르면 DS-05 수정 작업을 추가 | DS-05, U-04 |
+| DS-16 | 실측 S-05 (담당: 사용자): 실제 WKWebView 창의 한글 입력과 숫자 형식 | 한글 조합 입력과 숫자 표시(DS-05의 문자열 형식화 결과: 쉼표, U+2212, 만·억·조, 고정폭 숫자)를 실제 창에서 기록. 문서 예제와 다르게 보이면 DS-05 수정 작업을 추가 (ADR 0079) | DS-05, U-04 |
 
 ## D. 도메인 (`crates/domain`)
 
@@ -191,7 +191,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | ID | 작업 | 완료 기준 | 선행 |
 |---|---|---|---|
 | A-01 | 포트 정의: `BrokerRead`, `MarketInfo`, `BrokerCapabilities` | architecture 3.3과 일치. `BrokerTrade`는 여기 없음(`order-execution`이 정의) | D-05, D-10, D-11 |
-| A-02 | 포트 정의: 저장소, `AuditLog`, `SecretStore`, `Clock`, `Notifier`, `UserPresence` | architecture 3.3과 일치. `UserPresence`의 요청은 주문 요약과 위험 설정 변경 두 종류. 비밀 값 타입에 `Debug`·`Display`·`Serialize`·`Clone`이 없음 (SEC-11) | D-18 |
+| A-02 | 포트 정의: 저장소, `AuditLog`, `SecretStore`, `Clock`, `Notifier`, `UserPresence` | architecture 3.3과 일치. `UserPresence`의 요청은 주문 요약과 위험 설정 변경 두 종류. 비밀 값 타입의 `Debug`는 고정 문자열만 내고 `Display`·`Serialize`·`Clone`은 없음 (SEC-11). 본인 확인은 주문용과 위험 설정 변경용 메서드가 따로 있고 결과 타입도 다름. 중복 기록은 오류가 아니라 `AlreadyRecorded`. `Clock`은 동기 (ADR 0080) | D-18 |
 | A-03 | 포트 정의: `NewsFeed`(메타데이터 포함), `Fundamentals`, `MacroSeries`, `AiProvider`(`RunSpec`에 실행 종류) | architecture 3.3과 일치. 뉴스 포트는 공시 키를 보존하고 커서를 받아 다음 커서를 돌려줌. AI 실행의 첫 사건은 격리 점검 결과 (ADR 0071) | D-15 |
 | A-04 | `testkit` 1: 포트 가짜, `SteppedClock`, `ScriptedPresence` (사용자 승인: 본인 확인 가짜는 보호 파일) | `testkit`의 의존 그래프에 `order-execution`이 없음(arch-check). `ScriptedPresence`가 대본대로 `Confirmed`·`Denied`·`Unavailable`을 돌려주고 호출 횟수를 기록 (I-14, architecture 3.2) | A-01 ~ A-03 |
 | A-11 | `testkit` 2: 가짜 AI CLI 실행 파일 | 녹화한 stream-json 재생 모드와 대본 MCP 클라이언트 모드. 실행 파일 경로 주입으로만 바뀌고 `PATH`를 바꾸지 않음 (harness 6.1) | A-03 |

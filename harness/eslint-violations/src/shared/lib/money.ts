@@ -6,3 +6,6 @@ export type Money = {
   readonly [moneyKey]: `${number}`;
 };
 export { z as moneyZod } from "zod";
+
+export const readDecimalForNumberDisplay = (value: Money): `${number}` =>
+  value[moneyKey];
