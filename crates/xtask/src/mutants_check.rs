@@ -4,11 +4,14 @@ mod addition_tests;
 mod additions;
 mod environment;
 mod graph;
+mod location_tokens;
 mod macro_tokens;
 #[cfg(test)]
 mod macros_tests;
 #[cfg(test)]
 mod review_tests;
+#[cfg(test)]
+mod revision_tests;
 mod scope;
 use scope::{diff_scope, jobs_for};
 
@@ -369,8 +372,17 @@ fn checked_scope(root: &Path, arguments: &[String]) -> Result<Scope, String> {
     if flag != "--in-diff" {
         return scope_for(root, arguments);
     }
-    let commit = resolve_base(root, base)?;
-    let findings = crate::test_diff::check(root, &commit)?;
+    checked_diff_scope(root, flag, base, crate::git_base::BaseUse::Ancestor)
+}
+
+fn checked_diff_scope(
+    root: &Path,
+    flag: &str,
+    base: &str,
+    base_use: crate::git_base::BaseUse,
+) -> Result<Scope, String> {
+    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+    let findings = crate::test_diff::check_for(root, &commit, base_use)?;
     if !findings.is_empty() {
         return Err(format!(
             "추가 전용 범위의 전제인 test-diff 실패:\n{}",
@@ -381,15 +393,26 @@ fn checked_scope(root: &Path, arguments: &[String]) -> Result<Scope, String> {
                 .join("\n")
         ));
     }
-    scope_for(root, &[flag.clone(), commit])
+    match base_use {
+        crate::git_base::BaseUse::Ancestor => scope_for(root, &[String::from(flag), commit]),
+        crate::git_base::BaseUse::Commit => {
+            let changed = changed_paths(root, &commit)?;
+            Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
+        }
+    }
 }
 
-pub(crate) fn command(arguments: &[String]) -> ExitCode {
+pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
     report(
         "mutants",
         workspace_root().and_then(|root| {
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
-            let scope = checked_scope(&root, arguments)?;
+            let scope = match (arguments, base_use) {
+                ([flag, base], crate::git_base::BaseUse::Commit) if flag == "--in-diff" => {
+                    checked_diff_scope(&root, flag, base, base_use)?
+                }
+                _ => checked_scope(&root, arguments)?,
+            };
             let outcomes = run(&root, &scope, IgnoreFiles::Respected)?;
             evaluate(&outcomes, &survivors)
         }),

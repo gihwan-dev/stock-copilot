@@ -28,9 +28,7 @@ impl<'a> Additions<'a> {
         let mut location_sensitive = false;
         for source in before.values() {
             let names = macro_tokens::identifiers(source.parse().ok()?);
-            location_sensitive |= ["file", "line", "module_path"]
-                .iter()
-                .any(|name| names.contains(*name));
+            location_sensitive |= super::location_tokens::sensitive(source.parse().ok()?);
             prior_ids.extend(names);
         }
         Some(Self {

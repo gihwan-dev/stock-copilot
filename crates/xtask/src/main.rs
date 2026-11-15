@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -26,6 +27,22 @@ mod workspace_sources;
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let selected_use = match std::env::var("STOCK_COPILOT_BASE_USE") {
+        Ok(value) => git_base::BaseUse::parse(&value),
+        Err(std::env::VarError::NotPresent) => Ok(git_base::BaseUse::Ancestor),
+        Err(error) => Err(format!("기준 종류를 읽지 못했다: {error}")),
+    };
+    let base_use = match selected_use {
+        Ok(base_use) => base_use,
+        Err(failure) => {
+            let written =
+                writeln!(std::io::stderr().lock(), "{failure}").map(|()| ExitCode::FAILURE);
+            return match written {
+                Ok(code) => code,
+                Err(_) => ExitCode::FAILURE,
+            };
+        }
+    };
     match arguments.as_slice() {
         [command, rest @ ..] if command == "gen-schema" => gen_schema::command(rest),
         [command, rest @ ..] if command == "gen-tokens" => gen_tokens::command(rest),
@@ -38,15 +55,21 @@ fn main() -> ExitCode {
         [command] if command == "raw-types" => raw_types::command(),
         [command] if command == "disable-check" => disable_control::check_command(),
         [command, rest @ ..] if command == "disable-report" => {
-            disable_control::report_command(rest)
+            disable_control::report_command(rest, base_use)
         }
         [command, rest @ ..] if command == "lint-file" => lint_file::command(rest),
         [command] if command == "hooks-installed" => git_hooks::installed_command(),
         [command] if command == "push-base" => git_hooks::push_base_command(),
+        [command, base] if command == "require-base" => {
+            git_hooks::commit_base::validate_command(base, git_base::BaseUse::Ancestor)
+        }
+        [command, base] if command == "require-comparison-base" => {
+            git_hooks::commit_base::validate_command(base, base_use)
+        }
         [command] if command == "commit-base" => git_hooks::commit_base::command(),
         [command, rest @ ..] if command == "commit-guard" => commit_guard::command(rest),
-        [command, rest @ ..] if command == "mutants" => mutants_check::command(rest),
-        [command, rest @ ..] if command == "test-diff" => test_diff::command(rest),
+        [command, rest @ ..] if command == "mutants" => mutants_check::command(rest, base_use),
+        [command, rest @ ..] if command == "test-diff" => test_diff::command(rest, base_use),
         [command, rest @ ..] if command == "test-changes" => test_diff::changes_command(rest),
         [command, rest @ ..] if command == "manifest-changes" => manifest_changes::command(rest),
         _ => arch_check::usage(),
