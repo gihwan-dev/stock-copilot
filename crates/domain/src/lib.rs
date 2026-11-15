@@ -501,3 +501,9 @@ pub use scorecard_signal::{
 
 pub use signal_return::{SignalExcess, SignalReturnBasis};
 mod scorecard_signal_review;
+
+mod net_purchase;
+pub use net_purchase::{
+    ClosedOrderEvidence, NetPurchaseAmount, NetPurchaseError, NetPurchaseScope,
+    holdings_daily_profit_with_orders, net_purchase_amount,
+};
