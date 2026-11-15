@@ -26,6 +26,10 @@ mod tests {
             .filter(|value| !value.is_empty())
             .collect();
         let expected: Vec<String> = [
+            "fn program_trades(&self, instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate) -> impl Future<Output = Result<Vec<ProgramTrade>, PortError>> + Send",
+            "fn short_selling(&self, instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate) -> impl Future<Output = Result<Vec<ShortSelling>, PortError>> + Send",
+            "fn credit_trades(&self, instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate) -> impl Future<Output = Result<Vec<CreditTrade>, PortError>> + Send",
+            "fn securities_lending(&self, instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate) -> impl Future<Output = Result<Vec<SecuritiesLending>, PortError>> + Send",
             "fn investor_trading_rankings(&self, limit: RankingLimit) -> impl Future<Output = Result<InvestorTradingRankings, PortError>> + Send",
             "fn sectors(&self) -> impl Future<Output = Result<SectorCatalog, PortError>> + Send",
             "fn sector(&self, sector: &SectorId, market: KnownMarket) -> impl Future<Output = Result<SectorDetail, PortError>> + Send",

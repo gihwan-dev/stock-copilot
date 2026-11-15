@@ -272,6 +272,22 @@
     {
       "issue": "files src/shared/ds/chart-types.ts src/shared/ds/chart-types.ts",
       "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+    },
+    {
+      "issue": "dependencies package.json react-markdown",
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+    },
+    {
+      "issue": "files src/shared/ds/ChatInput.tsx src/shared/ds/ChatInput.tsx",
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
     }
   ]
 }

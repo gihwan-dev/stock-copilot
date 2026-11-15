@@ -61,6 +61,10 @@
         "@base-ui/react": {
           "target": "@base-ui/react",
           "reason": "DS-03 기반 컴포넌트 (architecture 5.2 Base UI 1.9.0)"
+        },
+        "react-markdown": {
+          "target": "react-markdown",
+          "reason": "DS-18 Markdown wrapper (architecture 5.2 10.1.0)"
         }
       },
       "devDependencies": {

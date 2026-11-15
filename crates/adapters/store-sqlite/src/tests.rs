@@ -1,3 +1,5 @@
+mod open_contract;
+
 use super::{Database, DatabasePath, sql};
 use application::SecretValue;
 use std::path::PathBuf;

@@ -758,7 +758,7 @@
               "run": "node harness/ci/tools.mjs fetch"
             },
             {
-              "name": "mutants without network",
+              "name": "mutants with sandboxed tests",
               "run": "just mutants-shard ${{ matrix.shard }}",
               "id": "mutation",
               "timeout-minutes": 160
@@ -871,7 +871,7 @@
               "run": "node harness/ci/tools.mjs fetch"
             },
             {
-              "name": "mutants without network",
+              "name": "mutants with sandboxed tests",
               "run": "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
               "id": "mutation",
               "timeout-minutes": 330,

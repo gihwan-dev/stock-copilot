@@ -59,3 +59,17 @@ export const chartCoordinate = (input: number): ChartCoordinate =>
   input as ChartCoordinate;
 export const chartPath = (input: string): ChartPath => input as ChartPath;
 export type FormattedNumber = string & Brand<"FormattedNumber">;
+
+export type FreeText = string & Brand<"FreeText">;
+const freeTextSchema = z.string().brand<"FreeText">();
+export const parseFreeText = (input: unknown): Result<FreeText, BrandError> =>
+  fromParse(freeTextSchema.safeParse(input));
+export const emptyFreeText = "" as FreeText;
+export type ExternalUrl = string & Brand<"ExternalUrl">;
+const externalUrlSchema = z
+  .url({ protocol: /^https$/u })
+  .brand<"ExternalUrl">();
+export const parseExternalUrl = (
+  input: unknown,
+): Result<ExternalUrl, BrandError> =>
+  fromParse(externalUrlSchema.safeParse(input));

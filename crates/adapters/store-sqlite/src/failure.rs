@@ -5,6 +5,8 @@ const PRIMARY_CODE_MASK: i32 = 0xff;
 const OPERATION_NOT_PERMITTED: i32 = 1;
 const ACCESS_DENIED: i32 = 13;
 const READ_ONLY_FILESYSTEM: i32 = 30;
+const NOT_A_DIRECTORY: i32 = 20;
+const IS_A_DIRECTORY: i32 = 21;
 
 pub(crate) const fn integrity() -> SystemPortError {
     SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity)
@@ -44,6 +46,7 @@ pub(crate) fn sqlite(error: &rusqlite::Error) -> SystemPortError {
 pub(crate) fn io(error: &std::io::Error) -> SystemPortError {
     match error.raw_os_error() {
         Some(OPERATION_NOT_PERMITTED | ACCESS_DENIED | READ_ONLY_FILESYSTEM) => permission(),
+        Some(NOT_A_DIRECTORY | IS_A_DIRECTORY) => integrity(),
         Some(_) | None => unavailable(),
     }
 }
@@ -66,6 +69,13 @@ pub(crate) fn join(error: &tokio::task::JoinError) -> SystemPortError {
 #[cfg(test)]
 mod tests {
     use super::{integrity, io, join, permission, unavailable};
+
+    #[test]
+    fn storage_layout_io_errors_preserve_integrity_failure() {
+        for code in [20_i32, 21_i32] {
+            assert_eq!(io(&std::io::Error::from_raw_os_error(code)), integrity());
+        }
+    }
 
     #[test]
     fn task_cancellation_is_unavailable_and_panic_is_integrity() {

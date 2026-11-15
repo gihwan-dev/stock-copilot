@@ -83,7 +83,7 @@ test("H47 timeout reserve and policy accept only the mutation step budget", () =
     Array.from({ length: 128 }, (_, i) => `${i}/128`),
   );
   for (const [name, timeout] of [
-    ["mutants without network", 181],
+    ["mutants with sandboxed tests", 181],
     ["checkout", 160],
   ]) {
     const changed = workflow();

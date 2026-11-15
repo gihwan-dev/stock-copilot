@@ -258,7 +258,7 @@
           "run": "node harness/ci/tools.mjs fetch"
         },
         {
-          "name": "mutants without network",
+          "name": "mutants with sandboxed tests",
           "run": "just mutants-shard ${{ matrix.shard }}"
         }
       ]

@@ -1,9 +1,14 @@
 use crate::{DatabasePath, failure, sql};
 use application::{SecretValue, SystemFailure, SystemPort, SystemPortError};
 use rusqlite::{Connection, OpenFlags};
+use std::os::unix::fs::OpenOptionsExt;
+use std::path::Path;
 use zeroize::Zeroizing;
 
 pub(crate) use crate::failure::integrity;
+
+const RAW_KEY_PREFIX: &str = "x'";
+const RAW_KEY_SUFFIX: &str = "'";
 
 #[derive(Clone, Copy)]
 pub(crate) enum Access {
@@ -33,21 +38,26 @@ fn verify_text(connection: &Connection, sql: &str, expected: &str) -> Result<(),
     }
 }
 
-fn apply_key(connection: &Connection, key: &SecretValue) -> Result<(), SystemPortError> {
+fn validate_key(key: &SecretValue) -> Result<(), SystemPortError> {
     if key.as_exposed_secret().len() != 32 {
         return Err(SystemPortError::new(
             SystemPort::Repository,
             SystemFailure::SecretIntegrity,
         ));
     }
+    Ok(())
+}
+
+fn apply_key(connection: &Connection, key: &SecretValue) -> Result<(), SystemPortError> {
+    validate_key(key)?;
     let mut statement = Zeroizing::new(String::with_capacity(67));
-    statement.push_str(sql::KEY_PREFIX);
+    statement.push_str(RAW_KEY_PREFIX);
     for byte in key.as_exposed_secret() {
         for nibble in [byte >> 4_u8, byte & 15] {
             statement.push(char::from_digit(u32::from(nibble), 16).ok_or_else(integrity)?);
         }
     }
-    statement.push_str(sql::KEY_SUFFIX);
+    statement.push_str(RAW_KEY_SUFFIX);
     connection
         .key(None::<&str>, statement.as_bytes(), false)
         .map_err(|error| failure::sqlite(&error))
@@ -58,29 +68,16 @@ pub(crate) fn open(
     key: &SecretValue,
     access: Access,
 ) -> Result<Connection, SystemPortError> {
+    validate_key(key)?;
+    prepare_file(path, access)?;
     let flags = match access {
         Access::Read => OpenFlags::SQLITE_OPEN_READ_ONLY,
         Access::Write => OpenFlags::SQLITE_OPEN_READ_WRITE.union(OpenFlags::SQLITE_OPEN_CREATE),
     }
     .union(OpenFlags::SQLITE_OPEN_NO_MUTEX);
-    let connection = Connection::open_with_flags(path.as_path(), flags).map_err(|error| {
-        if error.sqlite_error_code() == Some(rusqlite::ErrorCode::CannotOpen) {
-            let mut options = std::fs::OpenOptions::new();
-            options.read(true);
-            match access {
-                Access::Write => {
-                    options.write(true);
-                }
-                Access::Read => {}
-            }
-            match options.open(path.as_path()) {
-                Err(probe) => failure::io(&probe),
-                Ok(_) => failure::unavailable(),
-            }
-        } else {
-            failure::sqlite(&error)
-        }
-    })?;
+    let connection = Connection::open_with_flags(path.as_path(), flags)
+        .map_err(|error| failure::sqlite(&error))?;
+    verify_access(&connection, access)?;
     connection
         .execute_batch(sql::SET_CIPHER_MEMORY)
         .map_err(|error| failure::sqlite(&error))?;
@@ -100,6 +97,59 @@ pub(crate) fn open(
         Access::Write => {}
     }
     Ok(connection)
+}
+
+fn verify_parent(path: &DatabasePath) -> Result<(), SystemPortError> {
+    let parent = path
+        .as_path()
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let metadata = std::fs::metadata(parent).map_err(|error| failure::io(&error))?;
+    if !metadata.is_dir() {
+        return Err(integrity());
+    }
+    if metadata.permissions().readonly() {
+        return Err(failure::permission());
+    }
+    Ok(())
+}
+
+fn prepare_file(path: &DatabasePath, access: Access) -> Result<(), SystemPortError> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    match access {
+        Access::Write => {
+            verify_parent(path)?;
+            options.write(true).create(true).truncate(false).mode(0o600);
+        }
+        Access::Read => {}
+    }
+    let file = options
+        .open(path.as_path())
+        .map_err(|error| failure::io(&error))?;
+    if file
+        .metadata()
+        .map_err(|error| failure::io(&error))?
+        .is_file()
+    {
+        Ok(())
+    } else {
+        Err(integrity())
+    }
+}
+
+fn verify_access(connection: &Connection, access: Access) -> Result<(), SystemPortError> {
+    match (
+        access,
+        connection
+            .is_readonly("main")
+            .map_err(|error| failure::sqlite(&error))?,
+    ) {
+        (Access::Read, true) | (Access::Write, false) => Ok(()),
+        (Access::Write, true) => Err(failure::permission()),
+        (Access::Read, false) => Err(integrity()),
+    }
 }
 
 fn configure(connection: &Connection) -> Result<(), SystemPortError> {
@@ -129,6 +179,47 @@ mod tests {
     use crate::sql;
     use application::SecretValue;
     use rusqlite::Connection;
+
+    #[test]
+    fn parent_verification_requires_a_directory_with_write_permission() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = crate::tests::Fixture::new();
+        let path = crate::DatabasePath::new(fixture.path());
+        assert_eq!(super::verify_parent(&path), Ok(()));
+        let relative = crate::DatabasePath::new(std::path::PathBuf::from("s01-parent-check.db"));
+        assert_eq!(super::verify_parent(&relative), Ok(()));
+        let parent = fixture.path().parent().expect("parent").to_path_buf();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o500)).expect("deny");
+        let result = super::verify_parent(&path);
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).expect("restore");
+        assert_eq!(result, Err(crate::failure::permission()));
+        let component = parent.join("file-parent");
+        std::fs::write(&component, b"not a directory").expect("file");
+        assert_eq!(
+            super::verify_parent(&crate::DatabasePath::new(component.join("store.db"))),
+            Err(integrity())
+        );
+    }
+
+    #[test]
+    fn access_verification_rejects_sqlite_readonly_fallback_and_wrong_reader_mode() {
+        let fixture = crate::tests::Fixture::new();
+        let path = crate::DatabasePath::new(fixture.path());
+        let secret = SecretValue::new(vec![71; 32]);
+        let writer = super::open(&path, &secret, super::Access::Write).expect("writer");
+        let reader = super::open(&path, &secret, super::Access::Read).expect("reader");
+        assert_eq!(super::verify_access(&writer, super::Access::Write), Ok(()));
+        assert_eq!(super::verify_access(&reader, super::Access::Read), Ok(()));
+        assert_eq!(
+            super::verify_access(&reader, super::Access::Write),
+            Err(crate::failure::permission())
+        );
+        assert_eq!(
+            super::verify_access(&writer, super::Access::Read),
+            Err(integrity())
+        );
+    }
 
     #[test]
     fn key_material_never_enters_the_sql_parser() {

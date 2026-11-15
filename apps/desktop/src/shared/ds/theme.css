@@ -2,6 +2,86 @@
 @import "./tokens.css";
 @source "../../";
 
+@utility markdown-bullets {
+  list-style-type: disc;
+}
+
+@utility markdown-bullets {
+  padding-inline-start: var(--spacing-space-6);
+}
+
+@utility markdown-ordered {
+  list-style-type: decimal;
+}
+
+@utility markdown-ordered {
+  padding-inline-start: var(--spacing-space-6);
+}
+
+@utility markdown-quote {
+  border-inline-start-width: var(--border-width-hairline);
+}
+
+@utility markdown-quote {
+  border-inline-start-style: solid;
+}
+
+@utility markdown-quote {
+  border-inline-start-color: var(--color-line-strong);
+}
+
+@utility markdown-quote {
+  padding-inline-start: var(--spacing-space-3);
+}
+
+@utility chat-input {
+  min-height: var(--spacing-chat-input-min);
+}
+
+@utility chat-input {
+  max-height: var(--spacing-chat-input-max);
+}
+
+@utility chat-input {
+  resize: none;
+}
+
+@utility markdown-content {
+  min-width: 0;
+}
+
+@utility markdown-content {
+  max-width: var(--spacing-prose-max);
+}
+
+@utility markdown-content {
+  overflow-wrap: anywhere;
+}
+
+@utility chat-content {
+  min-width: 0;
+}
+
+@utility chat-content {
+  white-space: pre-wrap;
+}
+
+@utility chat-content {
+  overflow-wrap: anywhere;
+}
+
+@utility markdown-link {
+  white-space: normal;
+}
+
+@utility markdown-link {
+  overflow-wrap: anywhere;
+}
+
+@utility markdown-link {
+  text-decoration-line: underline;
+}
+
 @utility status-sentence {
   min-width: 0;
 }

@@ -119,6 +119,8 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
         "pasteInputValue",
         "focusDialogInput",
         "chartNavigation",
+        "chatEventValue",
+        "chatCommit",
       ],
     );
     const returns = inputExports.map((entry) =>
@@ -133,10 +135,12 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
       ["void"],
       ["void"],
       ['"ignore" | "next" | "previous" | "first" | "last"'],
+      ["Result<FreeText, BrandError>"],
+      ['"commit" | "ignore"'],
     ]);
     writeFileSync(
       join(folder, "src/shared/lib/index.ts"),
-      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId} from "./brand"; export type {InputValue,BrandError} from "./brand"; export {err} from "./result"; export type {Result} from "./result";',
+      'import type {z} from "zod"; export type UiText=string & Readonly<z.core.$brand<"UiText">>; export {parseInputValue,parseEntityId,parseFreeText} from "./brand"; export type {InputValue,BrandError,FreeText} from "./brand"; export {err} from "./result"; export type {Result} from "./result";',
     );
     const ds = join(folder, "src/shared/ds/Probe.tsx");
     writeFileSync(
