@@ -32,6 +32,10 @@ pub enum ReadEndpoint {
     Sector,
     SectorRankings,
     SectorEtfs,
+    ProgramTrades,
+    ShortSelling,
+    CreditTrades,
+    SecuritiesLending,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
