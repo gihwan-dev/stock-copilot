@@ -42,6 +42,14 @@ fn run_with_limit(
         .process_group(0)
         .spawn()
         .map_err(|error| error.to_string())?;
+    wait_with_limit(&mut child, limit, start)
+}
+
+fn wait_with_limit(
+    child: &mut std::process::Child,
+    limit: std::time::Duration,
+    start: std::time::Instant,
+) -> Result<std::process::ExitStatus, String> {
     let grace = limit
         .checked_div(2)
         .unwrap_or(std::time::Duration::ZERO)
@@ -55,11 +63,11 @@ fn run_with_limit(
             };
         }
         if interrupted == Interrupt::Pending && start.elapsed() >= limit.saturating_sub(grace) {
-            signal_group(&child, "-INT")?;
+            signal_group(child, "-INT")?;
             interrupted = Interrupt::Sent;
         }
         if start.elapsed() >= limit {
-            signal_group(&child, "-KILL")?;
+            signal_group(child, "-KILL")?;
             child.wait().map_err(|error| error.to_string())?;
             return Err(String::from("변경분 변이 검사 20분 제한 초과"));
         }
@@ -72,47 +80,149 @@ mod tests {
     use crate::harness_workspace_tests::{fresh_directory, generate_lockfile, repository_root};
     use std::os::unix::process::CommandExt;
 
-    #[test]
-    fn deadline_stops_nextest_child_groups_and_preserves_unrelated_pid() {
-        let directory = fresh_directory(&repository_root(), "h46-owned-nextest");
+    struct OwnedChild(std::process::Child);
+
+    impl Drop for OwnedChild {
+        fn drop(&mut self) {
+            let _kill_result = self.0.kill();
+            let _wait_result = self.0.wait();
+        }
+    }
+
+    struct Fixture {
+        runner: OwnedChild,
+        pid_file: std::path::PathBuf,
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _interrupt_result = super::signal_group(&self.runner.0, "-INT");
+            if let Ok(pid) = std::fs::read_to_string(&self.pid_file) {
+                let _kill_result = std::process::Command::new("/bin/kill")
+                    .args(["-KILL", "--", pid.trim()])
+                    .status();
+            }
+        }
+    }
+
+    fn wait_until(mut condition: impl FnMut() -> bool, description: &str) {
+        let start = std::time::Instant::now();
+        while !condition() {
+            assert!(
+                start.elapsed() < std::time::Duration::from_secs(180),
+                "{description}"
+            );
+            std::thread::park_timeout(std::time::Duration::from_millis(100));
+        }
+    }
+
+    fn metadata(directory: &std::path::Path, args: &[&str], name: &str) {
+        let output = std::process::Command::new("cargo")
+            .current_dir(directory)
+            .args(args)
+            .output()
+            .expect("metadata");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::fs::write(directory.join(name), output.stdout).expect("metadata file");
+    }
+
+    fn fixture() -> Fixture {
+        let directory = fresh_directory(&repository_root(), "h47-owned-nextest");
         std::fs::create_dir_all(directory.join("src")).expect("fixture source");
-        std::fs::write(directory.join("Cargo.toml"), "[package]\nname=\"h46-owner-fixture\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n").expect("manifest");
-        std::fs::write(directory.join("src/lib.rs"), "#[test] fn waits() { std::fs::write(\"child.pid\", std::process::id().to_string()).expect(\"pid\"); std::thread::sleep(std::time::Duration::from_secs(60)); }").expect("fixture");
+        std::fs::write(
+            directory.join("Cargo.toml"),
+            "[package]\nname=\"h47-owner-fixture\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n",
+        )
+        .expect("manifest");
+        std::fs::write(directory.join("src/lib.rs"), "#[test] fn waits() { std::fs::write(\"child.pid\", std::process::id().to_string()).expect(\"pid\"); loop { std::thread::park(); } }").expect("fixture");
         generate_lockfile(&directory.join("Cargo.toml"));
-        let built = std::process::Command::new("cargo")
+        metadata(
+            &directory,
+            &["metadata", "--format-version=1", "--no-deps", "--locked"],
+            "cargo.json",
+        );
+        metadata(
+            &directory,
+            &[
+                "nextest",
+                "list",
+                "--list-type=binaries-only",
+                "--message-format=json",
+                "--locked",
+            ],
+            "binaries.json",
+        );
+        let runner = std::process::Command::new("cargo-nextest")
+            .env("CARGO", "/bin/false")
             .current_dir(&directory)
-            .args(["nextest", "run", "--no-run", "--locked"])
-            .status()
-            .expect("fixture build");
-        assert!(built.success());
-        let mut unrelated = std::process::Command::new("/bin/sleep")
-            .arg("60")
+            .args([
+                "nextest",
+                "run",
+                "--cargo-metadata",
+                "cargo.json",
+                "--binaries-metadata",
+                "binaries.json",
+            ])
             .process_group(0)
             .spawn()
-            .expect("unrelated sentinel");
-        let mut command = std::process::Command::new("cargo");
-        command
-            .current_dir(&directory)
-            .args(["nextest", "run", "--locked"]);
-        let failure = super::run_with_limit(command, std::time::Duration::from_secs(4))
-            .expect_err("deadline failure");
-        let child =
-            std::fs::read_to_string(directory.join("child.pid")).expect("nextest test child PID");
-        let state = std::process::Command::new("/bin/kill")
-            .args(["-0", "--", child.trim()])
+            .expect("prebuilt nextest fixture");
+        Fixture {
+            runner: OwnedChild(runner),
+            pid_file: directory.join("child.pid"),
+        }
+    }
+
+    fn child_state(pid: &str) -> std::process::ExitStatus {
+        std::process::Command::new("/bin/kill")
+            .args(["-0", "--", pid.trim()])
             .stderr(std::process::Stdio::null())
             .status()
-            .expect("child state");
-        let sentinel = unrelated.try_wait().expect("sentinel state");
-        unrelated.kill().expect("sentinel cleanup");
-        unrelated.wait().expect("sentinel reaped");
+            .expect("child state")
+    }
+
+    #[test]
+    fn deadline_stops_nextest_child_groups_and_preserves_unrelated_pid() {
+        let mut fixture = fixture();
+        wait_until(
+            || {
+                std::fs::read_to_string(&fixture.pid_file)
+                    .is_ok_and(|pid| pid.trim().parse::<u32>().is_ok())
+            },
+            "nextest test must start before timing deadline",
+        );
+        let child = std::fs::read_to_string(&fixture.pid_file).expect("nextest test child PID");
+        let mut unrelated = OwnedChild(
+            std::process::Command::new("/bin/cat")
+                .stdin(std::process::Stdio::piped())
+                .process_group(0)
+                .spawn()
+                .expect("unrelated sentinel"),
+        );
+        let failure = super::wait_with_limit(
+            &mut fixture.runner.0,
+            std::time::Duration::from_secs(30),
+            std::time::Instant::now(),
+        )
+        .expect_err("deadline failure");
+        wait_until(
+            || !child_state(&child).success(),
+            "nextest child must terminate after deadline",
+        );
+        let state = child_state(&child);
+        let sentinel = unrelated.0.try_wait().expect("sentinel state");
+        unrelated.0.kill().expect("sentinel cleanup");
+        unrelated.0.wait().expect("sentinel reaped");
         assert!(failure.contains("20분 제한 초과"), "{failure}");
         assert_eq!(sentinel, None, "unrelated PID survives");
         assert!(!state.success(), "nextest child survived deadline");
         let mut passing = std::process::Command::new("/bin/sh");
         passing.args(["-c", "exit 0"]);
         assert!(
-            super::run_with_limit(passing, std::time::Duration::from_secs(1))
+            super::run_with_limit(passing, std::time::Duration::from_secs(30))
                 .expect("complete child")
                 .success()
         );

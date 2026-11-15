@@ -291,16 +291,16 @@ fn support_only_workspace_changes_mark_all_nightly_targets() {
 
 #[test]
 fn shard_selection_accepts_only_fixed_partition() {
-    for value in ["0/4", "1/4", "2/4", "3/4"] {
+    for value in (0_u16..128).map(|index| format!("{index}/128")) {
         super::scope_for(
             Path::new("."),
-            &[String::from("--shard"), String::from(value)],
+            &[String::from("--shard"), value],
             crate::git_base::BaseUse::Ancestor,
         )
         .expect("valid shard");
     }
     for args in [
-        vec!["--shard", "4/4"],
+        vec!["--shard", "128/128"],
         vec!["--shard", "0/1"],
         vec!["--baseline=skip"],
         vec!["--shard", "0/4", "--baseline=skip"],
@@ -452,4 +452,18 @@ fn diff_command_requires_test_diff_at_the_resolved_base() {
         .expect_err("test-diff required");
     assert!(error.contains("test-diff 실패"), "{error}");
     assert!(error.contains("test-diff:modified"), "{error}");
+}
+
+#[test]
+fn nightly_partition_rejects_noncanonical_and_old_shards() {
+    for value in [
+        "-1/128", "00/128", "127/129", "0/4", "128/128", "0/127", " 0/128", "0/128 ",
+    ] {
+        super::scope_for(
+            Path::new("."),
+            &[String::from("--shard"), String::from(value)],
+            crate::git_base::BaseUse::Ancestor,
+        )
+        .expect_err("noncanonical shard");
+    }
 }

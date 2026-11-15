@@ -18,10 +18,12 @@ test("H-42 mutation shards run independently and notify with their own title", (
   const jobs = workflow().jobs;
   assert.equal(jobs.mutants.needs, undefined);
   assert.equal(jobs.mutants.if, undefined);
-  assert.equal(jobs.mutants["timeout-minutes"], 120);
+  assert.equal(jobs.mutants["timeout-minutes"], 180);
   assert.deepEqual(jobs.mutants.strategy, {
     "fail-fast": false,
-    matrix: { shard: ["0/4", "1/4", "2/4", "3/4"] },
+    matrix: {
+      shard: Array.from({ length: 128 }, (_, index) => `${index}/128`),
+    },
   });
   assert.deepEqual(jobs["notify-mutants"].needs, ["mutants"]);
   assert.equal(jobs["notify-mutants"].if, "failure()");

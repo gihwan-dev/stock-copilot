@@ -388,7 +388,7 @@ fn scope_for(
     match arguments {
         [] => Ok(Scope::Everything),
         [flag, shard]
-            if flag == "--shard" && ["0/4", "1/4", "2/4", "3/4"].contains(&shard.as_str()) =>
+            if flag == "--shard" && (0_u16..128).any(|index| shard == &format!("{index}/128")) =>
         {
             Ok(Scope::Sharded(shard.clone()))
         }
@@ -398,7 +398,7 @@ fn scope_for(
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
         _ => Err(String::from(
-            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/4|1/4|2/4|3/4>]",
+            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/128..127/128>]",
         )),
     }
 }

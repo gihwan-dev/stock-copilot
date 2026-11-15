@@ -112,6 +112,12 @@ const stepFindings = (job, step, policy, toolSpec) => {
       ))
       ? []
       : [finding("condition", job)]),
+    ...(step["timeout-minutes"] === undefined ||
+    (job === "mutants" &&
+      step.name === "mutants without network" &&
+      step["timeout-minutes"] === 160)
+      ? []
+      : [finding("timeout", job)]),
     ...valueFindings(step.env, policy, job),
     ...Object.keys(isObject(step.env) ? step.env : {})
       .filter((name) => !policy.envNames.includes(name))

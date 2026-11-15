@@ -96,6 +96,7 @@ test("the policy is an allowlist that pins the reviewed actions and grants issue
     "run",
     "env",
     "if",
+    "timeout-minutes",
   ]);
   Object.values(policy.actions).forEach((action) =>
     assert.match(action.sha, /^[0-9a-f]{40}$/u),
