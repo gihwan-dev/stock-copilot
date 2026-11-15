@@ -300,3 +300,20 @@ D-39의 사소 지적은 기존 Sp500Etf 이름표만으로 실제 S&P500 추종
 최종 열거된 196개 각각을 이전 또는 재실행의 동일 변형 이름과 대조했고 빠진 항목은 0개다. 최종 소스의 집계는 검출 112개·컴파일 불가 84개·미검출 0개·시간 초과 0개다. 기록한 11개 소스 파일의 SHA-256도 현재 파일과 일치한다. 컴파일 불가 84개는 실행 테스트에 잡힌 변형으로 세지 않는다. 증거는 target/D-39/review-mutants-diff.log, review-auto/round1, review-auto/mutants.out, review-auto/final-aggregate.json과 receipt.json이다.
 
 최종 자동 변이 보강과 ID 비교 단순화 뒤 손 변형 45개를 같은 방식으로 다시 실행했다. D-39 16개·D-40 14개·D-41 15개 모두 컴파일 성공 후 검출됐으며 새 소스 해시가 현재 파일과 일치한다. 실행용 임시 소스 복사본은 제거했다. 최종 결과는 review-hand-final-run.log와 review-hand-mutants/results.json이다.
+
+## D-42 병합 호환성 (회차 3)
+
+기존 최종 커밋 61297bae438c97c0855ecc01a00886d477e16f02에서 최신 master ecb6e5a73b3fe5a394d55c0803bb203ad984cdf6(D-42·DS-06 포함)을 받았다. 소스는 자동 병합됐고 생성물 두 파일의 충돌은 기존 config → sandbox fragment → hashes 스크립트로 재생성했다. 호환성 코드 병합 커밋은 67ddafb70df6f9fb7e41c6ea52723f24ef121d29다.
+
+첫 cargo test -p domain은 단위 테스트 950개 통과·2개 실패였다. 실패 원인은 D-42의 아래 두 테스트가 KOSPI를 종목 봉 생성자로 넣은 것이며, D-39에서 의도대로 닫힌 경로가 BenchmarkMismatch를 반환했다. 생성자 호출 두 줄만 기존 test_benchmark 도우미로 옮겼다. 이 도우미는 KOSPI/KOSDAQ fixture를 확정 지수 봉으로 변환해 SignalBenchmark::from_index_candles에 넘긴다. 두 함수는 이 호출명 변경을 제외하면 master 원문과 바이트 단위로 같다.
+
+새 master 대비 승인된 test-diff는 정확히 15건(테스트 14개·지원 함수 1개)이다. 이전 13건에 늘어난 항목은 다음 두 개뿐이며 단언과 기대 수치는 보존했다.
+
+| 파일 | 테스트 | 전 → 후 | 유지한 검증 |
+|---|---|---|---|
+| crates/domain/src/signal_benchmark.rs | d42_calendar_limit_accepts_4097_consistent_facts | SignalBenchmark::from_candles(Kospi, Candle) → test_benchmark의 지수 분기 → SignalBenchmark::from_index_candles | 달력 4097개 허용, 수익률 0.250000 |
+| crates/domain/src/signal_benchmark.rs | d42_distinct_settlement_days_can_share_the_previous_market_close | SignalBenchmark::from_candles(Kospi, Candle) → test_benchmark의 지수 분기 → SignalBenchmark::from_index_candles | 결제일 상이·가격일 동일, 수익률 0.000000 |
+
+수정 뒤 cargo test -p domain은 단위 952개·통합 16개 통과, doctest 0개다. D-37과 공유하는 market_ranking·sector_composition의 영 금액/거래량 예제와 virtual_exit·signal_return_review의 D-42 예제는 수정 없이 통과했다. 정상 병합 커밋 훅은 워크스페이스 1392개·커버리지 대상 1043개와 커버리지 게이트까지 통과했고, test-diff의 승인된 15건만 남았다. 후속 disable-report·새 master 이후 새 끄기 0건·hooks-installed도 통과한 뒤 그 커밋에만 LEFTHOOK=0을 적용하고 사유를 메시지에 남겼다. 병합 뒤 master가 실제 조상인 상태의 별도 test-diff도 15건으로 일치했다.
+
+원본 실패·수정 후 통과·정상 훅·이관 증거는 작업 사본 target/D-39/d42-domain-red.log, d42-domain-green.log, d42-merge-normal-hook.log, d42-new-master-test-diff.log와 d42-compatibility.json이다. 위 손 변형·자동 변이 표는 회차 2의 실행 기록이며 이번 회차의 호환성 실행 검증과 구분한다.
