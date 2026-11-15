@@ -1,4 +1,5 @@
 mod connection;
+mod failure;
 mod sql;
 mod worker;
 
@@ -58,12 +59,19 @@ impl Database {
         T: Send + 'static,
         F: FnOnce(&Connection) -> rusqlite::Result<T> + Send + 'static,
     {
-        let connection = Arc::clone(&self.reader).lock_owned().await;
+        let mut connection = Arc::clone(&self.reader).lock_owned().await;
         tokio::task::spawn_blocking(move || {
-            operation(&connection).map_err(|_error| connection::integrity())
+            let transaction = connection
+                .transaction()
+                .map_err(|error| failure::sqlite(&error))?;
+            let value = operation(&transaction).map_err(|error| failure::read(&error))?;
+            transaction
+                .commit()
+                .map_err(|error| failure::sqlite(&error))?;
+            Ok(value)
         })
         .await
-        .map_err(|_error| connection::integrity())?
+        .map_err(|error| failure::join(&error))?
     }
 
     pub(crate) async fn write<T, F>(&self, operation: F) -> Result<T, SystemPortError>

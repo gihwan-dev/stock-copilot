@@ -1,5 +1,5 @@
-pub(crate) const KEY_PREFIX: &str = "PRAGMA key = \"x'";
-pub(crate) const KEY_SUFFIX: &str = "'\"";
+pub(crate) const KEY_PREFIX: &str = "x'";
+pub(crate) const KEY_SUFFIX: &str = "'";
 pub(crate) const PROVIDER: &str = "PRAGMA cipher_provider";
 pub(crate) const TEMP_STORE: &str = "PRAGMA temp_store";
 pub(crate) const SET_TEMP_STORE: &str = "PRAGMA temp_store = 2";

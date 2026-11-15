@@ -205,7 +205,7 @@
       ]
     },
     "mutants": {
-      "runs-on": "ubuntu-24.04-arm",
+      "runs-on": "macos-15",
       "timeout-minutes": 120,
       "strategy": {
         "fail-fast": true,
@@ -259,7 +259,7 @@
         },
         {
           "name": "mutants without network",
-          "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}"
+          "run": "just mutants-shard ${{ matrix.shard }}"
         }
       ]
     },

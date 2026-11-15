@@ -87,10 +87,10 @@
     "node harness/ci/tools.mjs lefthook",
     "node harness/ci/tools.mjs pnpm",
     "set -euo pipefail\ngh api \"repos/$GITHUB_REPOSITORY/actions/workflows/signatures.yml/runs?branch=master&event=push&status=success&per_page=100\" --jq '.workflow_runs[].head_sha' > \"$RUNNER_TEMP/verified-runs\"\nmaster_push=no\nif [ \"$EVENT_NAME\" = push ] && [ \"$REF\" = refs/heads/master ]; then master_push=yes; fi\nverified=''\nwhile read -r sha; do if git cat-file -e \"$sha^{commit}\" 2>/dev/null && { [ \"$master_push\" = no ] || git merge-base --is-ancestor \"$sha\" \"$HEAD\"; }; then verified=\"$sha\"; break; fi; done < \"$RUNNER_TEMP/verified-runs\"\nkind=verified\nif [ -z \"$verified\" ]; then if [ -s \"$RUNNER_TEMP/verified-runs\" ]; then echo '서명 검사가 통과한 master 커밋 가운데 기준이 될 것이 없다' >&2; exit 1; fi; kind=unverified; if [ \"$master_push\" = yes ]; then verified=\"$BEFORE\"; else verified=\"$(git rev-parse refs/remotes/origin/master)\"; fi; fi\nif [ \"$master_push\" = yes ]; then base=\"$verified\"; else base=\"$(git merge-base \"$verified\" \"$HEAD\")\"; fi\nprintf '서명 검사 신뢰 자료 %s, 범위 시작 %s (%s)\\n' \"$verified\" \"$base\" \"$kind\"\nprintf 'tools=%s\\nbase=%s\\nkind=%s\\n' \"$verified\" \"$base\" \"$kind\" >> \"$GITHUB_OUTPUT\"",
-    "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+    "just mutants-shard ${{ matrix.shard }}",
     "node harness/ci/mutants-summary.mjs",
     "node harness/ci/mutation-range.mjs plan",
-    "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
+    "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
     "node harness/ci/mutation-range.mjs verify"
   ],
   "expressions": [
@@ -572,7 +572,7 @@
           ]
         },
         "mutants": {
-          "runs-on": "ubuntu-24.04-arm",
+          "runs-on": "macos-15",
           "timeout-minutes": 180,
           "strategy": {
             "fail-fast": false,
@@ -759,7 +759,7 @@
             },
             {
               "name": "mutants without network",
-              "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+              "run": "just mutants-shard ${{ matrix.shard }}",
               "id": "mutation",
               "timeout-minutes": 160
             },
@@ -820,7 +820,7 @@
           ]
         },
         "mutants-daily": {
-          "runs-on": "ubuntu-24.04-arm",
+          "runs-on": "macos-15",
           "timeout-minutes": 360,
           "steps": [
             {
@@ -872,7 +872,7 @@
             },
             {
               "name": "mutants without network",
-              "run": "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
+              "run": "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
               "id": "mutation",
               "timeout-minutes": 330,
               "env": {

@@ -1,7 +1,9 @@
-use crate::{DatabasePath, sql};
+use crate::{DatabasePath, failure, sql};
 use application::{SecretValue, SystemFailure, SystemPort, SystemPortError};
 use rusqlite::{Connection, OpenFlags};
 use zeroize::Zeroizing;
+
+pub(crate) use crate::failure::integrity;
 
 #[derive(Clone, Copy)]
 pub(crate) enum Access {
@@ -9,14 +11,10 @@ pub(crate) enum Access {
     Write,
 }
 
-pub(crate) const fn integrity() -> SystemPortError {
-    SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity)
-}
-
 fn verify_number(connection: &Connection, sql: &str, expected: i64) -> Result<(), SystemPortError> {
     let actual: i64 = connection
         .query_row(sql, [], |row| row.get(0))
-        .map_err(|_error| integrity())?;
+        .map_err(|error| failure::sqlite(&error))?;
     if actual == expected {
         Ok(())
     } else {
@@ -27,7 +25,7 @@ fn verify_number(connection: &Connection, sql: &str, expected: i64) -> Result<()
 fn verify_text(connection: &Connection, sql: &str, expected: &str) -> Result<(), SystemPortError> {
     let actual: String = connection
         .query_row(sql, [], |row| row.get(0))
-        .map_err(|_error| integrity())?;
+        .map_err(|error| failure::sqlite(&error))?;
     if actual == expected {
         Ok(())
     } else {
@@ -42,7 +40,7 @@ fn apply_key(connection: &Connection, key: &SecretValue) -> Result<(), SystemPor
             SystemFailure::SecretIntegrity,
         ));
     }
-    let mut statement = Zeroizing::new(String::with_capacity(84));
+    let mut statement = Zeroizing::new(String::with_capacity(67));
     statement.push_str(sql::KEY_PREFIX);
     for byte in key.as_exposed_secret() {
         for nibble in [byte >> 4_u8, byte & 15] {
@@ -51,8 +49,8 @@ fn apply_key(connection: &Connection, key: &SecretValue) -> Result<(), SystemPor
     }
     statement.push_str(sql::KEY_SUFFIX);
     connection
-        .execute_batch(&statement)
-        .map_err(|_error| integrity())
+        .key(None::<&str>, statement.as_bytes(), false)
+        .map_err(|error| failure::sqlite(&error))
 }
 
 pub(crate) fn open(
@@ -65,18 +63,38 @@ pub(crate) fn open(
         Access::Write => OpenFlags::SQLITE_OPEN_READ_WRITE.union(OpenFlags::SQLITE_OPEN_CREATE),
     }
     .union(OpenFlags::SQLITE_OPEN_NO_MUTEX);
-    let connection =
-        Connection::open_with_flags(path.as_path(), flags).map_err(|_error| integrity())?;
+    let connection = Connection::open_with_flags(path.as_path(), flags).map_err(|error| {
+        if error.sqlite_error_code() == Some(rusqlite::ErrorCode::CannotOpen) {
+            let mut options = std::fs::OpenOptions::new();
+            options.read(true);
+            match access {
+                Access::Write => {
+                    options.write(true);
+                }
+                Access::Read => {}
+            }
+            match options.open(path.as_path()) {
+                Err(probe) => failure::io(&probe),
+                Ok(_) => failure::unavailable(),
+            }
+        } else {
+            failure::sqlite(&error)
+        }
+    })?;
+    connection
+        .execute_batch(sql::SET_CIPHER_MEMORY)
+        .map_err(|error| failure::sqlite(&error))?;
+    verify_text(&connection, sql::CIPHER_MEMORY, "1")?;
     apply_key(&connection, key)?;
     configure(&connection)?;
     let _: i64 = connection
         .query_row(sql::SCHEMA, [], |row| row.get(0))
-        .map_err(|_error| integrity())?;
+        .map_err(|error| failure::sqlite(&error))?;
     match access {
         Access::Read => {
             connection
                 .execute_batch(sql::SET_QUERY_ONLY)
-                .map_err(|_error| integrity())?;
+                .map_err(|error| failure::sqlite(&error))?;
             verify_number(&connection, sql::QUERY_ONLY, 1)?;
         }
         Access::Write => {}
@@ -87,14 +105,13 @@ pub(crate) fn open(
 fn configure(connection: &Connection) -> Result<(), SystemPortError> {
     verify_text(connection, sql::PROVIDER, "commoncrypto")?;
     for statement in [
-        sql::SET_CIPHER_MEMORY,
         sql::SET_TEMP_STORE,
         sql::SET_FOREIGN_KEYS,
         sql::SET_SYNCHRONOUS,
     ] {
         connection
             .execute_batch(statement)
-            .map_err(|_error| integrity())?;
+            .map_err(|error| failure::sqlite(&error))?;
     }
     verify_text(connection, sql::CIPHER_MEMORY, "1")?;
     verify_number(connection, sql::TEMP_STORE, 2)?;
@@ -112,6 +129,18 @@ mod tests {
     use crate::sql;
     use application::SecretValue;
     use rusqlite::Connection;
+
+    #[test]
+    fn key_material_never_enters_the_sql_parser() {
+        let mut connection = Connection::open_in_memory().expect("connection");
+        connection
+            .authorizer(Some(|_context: rusqlite::hooks::AuthContext<'_>| {
+                rusqlite::hooks::Authorization::Deny
+            }))
+            .expect("authorizer");
+        apply_key(&connection, &SecretValue::new(vec![71; 32]))
+            .expect("raw key bypasses SQL parser and authorizer");
+    }
 
     #[test]
     fn numeric_setting_verification_rejects_mismatch_and_missing_rows() {

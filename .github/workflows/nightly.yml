@@ -224,7 +224,7 @@
       ]
     },
     "mutants": {
-      "runs-on": "ubuntu-24.04-arm",
+      "runs-on": "macos-15",
       "timeout-minutes": 180,
       "strategy": {
         "fail-fast": false,
@@ -411,7 +411,7 @@
         },
         {
           "name": "mutants without network",
-          "run": "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+          "run": "just mutants-shard ${{ matrix.shard }}",
           "id": "mutation",
           "timeout-minutes": 160
         },
@@ -476,7 +476,7 @@
       ]
     },
     "mutants-daily": {
-      "runs-on": "ubuntu-24.04-arm",
+      "runs-on": "macos-15",
       "timeout-minutes": 360,
       "steps": [
         {
@@ -528,7 +528,7 @@
         },
         {
           "name": "mutants without network",
-          "run": "node harness/ci/linux/offline.mjs just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
+          "run": "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
           "id": "mutation",
           "timeout-minutes": 330,
           "env": {

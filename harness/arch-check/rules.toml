@@ -311,7 +311,7 @@ allowed-files = []
 allowed-crates = ["ai-claude-code", "ai-codex", "src-tauri", "testkit", "xtask"]
 
 [source.http-socket]
-crates = ["broker-toss", "broker-toss-trade", "sources"]
+crates = ["broker-toss", "broker-toss-trade", "sources", "store-sqlite"]
 identifiers = [
     "TcpStream",
     "TcpListener",

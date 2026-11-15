@@ -325,3 +325,203 @@ fn database_secret_and_failure_debug_remain_fixed() {
         "SystemPortError { port: Repository, failure: RepositoryIntegrity }"
     );
 }
+
+#[test]
+fn permission_failures_require_permission_action() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = Fixture::new();
+    let denied = fixture.0.join("denied");
+    std::fs::create_dir_all(&denied).expect("directory");
+    std::fs::set_permissions(&denied, std::fs::Permissions::from_mode(0o0)).expect("deny");
+    let result = Database::open(&DatabasePath::new(denied.join("store.db")), &key());
+    std::fs::set_permissions(&denied, std::fs::Permissions::from_mode(0o700)).expect("restore");
+    assert_eq!(
+        result.expect_err("permission denied").failure(),
+        application::SystemFailure::PermissionDenied
+    );
+}
+
+#[test]
+fn one_read_callback_observes_one_snapshot_across_a_writer_commit() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key()).expect("open");
+    rt.block_on(db.write(|transaction| transaction.execute_batch(sql::tests::CREATE_TEST)))
+        .expect("schema");
+    let (observed, after_first) = std::sync::mpsc::channel();
+    let (committed, after_commit) = std::sync::mpsc::channel();
+    let pending = db.read(move |connection| {
+        let first = connection.query_row(sql::tests::COUNT_TEST, [], |row| row.get::<_, i64>(0))?;
+        observed.send(()).expect("first query");
+        after_commit.recv().expect("commit finished");
+        let second =
+            connection.query_row(sql::tests::COUNT_TEST, [], |row| row.get::<_, i64>(0))?;
+        Ok((first, second))
+    });
+    let counts = std::thread::scope(|scope| {
+        let reader = scope.spawn(|| rt.block_on(pending));
+        after_first.recv().expect("first query finished");
+        rt.block_on(db.write(|transaction| {
+            transaction.execute(sql::tests::INSERT_TEST, ["between-queries"])
+        }))
+        .expect("commit while read snapshot remains open");
+        committed.send(()).expect("release second query");
+        reader.join().expect("reader").expect("snapshot")
+    });
+    assert_eq!(counts, (0, 0));
+    assert_eq!(
+        rt.block_on(db.read(|connection| {
+            connection.query_row(sql::tests::COUNT_TEST, [], |row| row.get::<_, i64>(0))
+        }))
+        .expect("new snapshot"),
+        1
+    );
+}
+
+#[test]
+fn writer_connection_applies_and_verifies_the_complete_pragma_contract() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key()).expect("open");
+    runtime()
+        .block_on(db.write(|transaction| {
+            for (statement, expected) in [
+                (sql::TEMP_STORE, 2_i64),
+                (sql::FOREIGN_KEYS, 1),
+                (sql::SYNCHRONOUS, 2),
+                (sql::QUERY_ONLY, 0),
+            ] {
+                let actual: i64 = transaction.query_row(statement, [], |row| row.get(0))?;
+                assert_eq!(actual, expected);
+            }
+            for (statement, expected) in [
+                (sql::PROVIDER, "commoncrypto"),
+                (sql::JOURNAL, "wal"),
+                (sql::CIPHER_MEMORY, "1"),
+                (sql::CIPHER_HMAC, "1"),
+                (sql::PAGE_SIZE, "4096"),
+            ] {
+                let actual: String = transaction.query_row(statement, [], |row| row.get(0))?;
+                assert_eq!(actual, expected);
+            }
+            Ok(())
+        }))
+        .expect("writer contract");
+}
+
+fn sqlite_failure_cases() -> [(i32, application::SystemFailure); 15] {
+    use application::{RetryDelay, SystemFailure};
+    use rusqlite::ffi;
+    [
+        (ffi::SQLITE_PERM, SystemFailure::PermissionDenied),
+        (ffi::SQLITE_READONLY, SystemFailure::PermissionDenied),
+        (
+            ffi::SQLITE_READONLY_ROLLBACK,
+            SystemFailure::PermissionDenied,
+        ),
+        (ffi::SQLITE_AUTH, SystemFailure::PermissionDenied),
+        (
+            ffi::SQLITE_BUSY,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_LOCKED,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_NOMEM,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_INTERRUPT,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_IOERR,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_FULL,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_CANTOPEN,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (
+            ffi::SQLITE_PROTOCOL,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ),
+        (ffi::SQLITE_CORRUPT, SystemFailure::RepositoryIntegrity),
+        (ffi::SQLITE_NOTADB, SystemFailure::RepositoryIntegrity),
+        (ffi::SQLITE_MISUSE, SystemFailure::RepositoryIntegrity),
+    ]
+}
+
+#[test]
+fn sqlite_failures_preserve_permission_availability_and_integrity() {
+    use application::{RetryDelay, SystemFailure};
+    use rusqlite::ffi;
+
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key()).expect("open");
+    let rt = runtime();
+    for (code, expected) in sqlite_failure_cases() {
+        let error = move || {
+            rusqlite::Error::SqliteFailure(
+                ffi::Error::new(code),
+                Some(String::from("sensitive failure detail")),
+            )
+        };
+        assert_eq!(
+            rt.block_on(db.write(move |_| Err::<(), _>(error())))
+                .expect_err("write failure")
+                .failure(),
+            expected
+        );
+        assert_eq!(
+            rt.block_on(db.read(move |_| Err::<(), _>(error())))
+                .expect_err("read failure")
+                .failure(),
+            if code == ffi::SQLITE_READONLY {
+                SystemFailure::RepositoryIntegrity
+            } else {
+                expected
+            }
+        );
+    }
+    assert_eq!(
+        Database::open(
+            &DatabasePath::new(fixture.0.join("absent/store.db")),
+            &key()
+        )
+        .expect_err("missing parent")
+        .failure(),
+        SystemFailure::Unavailable(RetryDelay::Unknown)
+    );
+}
+
+#[test]
+fn cancelling_a_response_does_not_cancel_an_accepted_write() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key()).expect("open");
+    let rt = runtime();
+    rt.block_on(db.write(|transaction| transaction.execute_batch(sql::tests::CREATE_TEST)))
+        .expect("schema");
+    {
+        let _pending = db
+            .writer
+            .submit(|transaction| {
+                transaction.execute(sql::tests::INSERT_TEST, ["accepted-before-cancellation"])
+            })
+            .expect("accepted");
+    };
+    rt.block_on(db.write(|_| Ok(()))).expect("FIFO barrier");
+    assert_eq!(
+        rt.block_on(db.read(|connection| {
+            connection.query_row(sql::tests::COUNT_TEST, [], |row| row.get::<_, i64>(0))
+        }))
+        .expect("count"),
+        1
+    );
+}

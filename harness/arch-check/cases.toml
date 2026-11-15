@@ -702,3 +702,7 @@ findings = [{ rule = "external-location", subject = "mcp-server => secrecy" }]
 [[case]]
 name = "secrecy-in-application"
 findings = []
+
+[[case]]
+name = "store-sqlite-socket-bypass"
+findings = [{ rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/lib.rs" }]

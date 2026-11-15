@@ -1,4 +1,4 @@
-use crate::{DatabasePath, connection};
+use crate::{DatabasePath, connection, failure};
 use application::{SecretValue, SystemPortError};
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 use std::sync::mpsc::{self, Sender};
@@ -27,7 +27,7 @@ impl Writer {
                     job(&mut connection);
                 }
             })
-            .map_err(|_error| connection::integrity())?;
+            .map_err(|error| failure::io(&error))?;
         Ok(Self {
             requests,
             thread: Some(thread),
@@ -41,7 +41,7 @@ impl Writer {
     {
         self.submit(operation)?
             .await
-            .map_err(|_error| connection::integrity())?
+            .map_err(|_error| failure::integrity())?
     }
 
     pub(crate) fn submit<T, F>(
@@ -61,14 +61,14 @@ impl Writer {
                 transaction.commit()?;
                 Ok(value)
             })()
-            .map_err(|_error: rusqlite::Error| connection::integrity());
+            .map_err(|error| failure::sqlite(&error));
             match sender.send(result) {
                 Ok(()) | Err(_) => {}
             }
         });
         self.requests
             .send(Request::Run(job))
-            .map_err(|_error| connection::integrity())?;
+            .map_err(|_error| failure::integrity())?;
         Ok(receiver)
     }
 }
