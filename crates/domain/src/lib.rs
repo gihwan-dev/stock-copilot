@@ -503,7 +503,14 @@ pub use signal_return::{SignalExcess, SignalReturnBasis};
 mod scorecard_signal_review;
 
 mod net_purchase;
+mod net_purchase_closed;
+mod net_purchase_daily;
 pub use net_purchase::{
-    ClosedOrderEvidence, NetPurchaseAmount, NetPurchaseError, NetPurchaseScope,
-    holdings_daily_profit_with_orders, net_purchase_amount,
+    NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope, NetPurchases,
+    net_purchase_amount, net_purchases,
+};
+pub use net_purchase_closed::{ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet};
+pub use net_purchase_daily::{
+    HoldingsDailyWithOrders, OrderDailyComparison, OrderDailyCurrency,
+    compare_holdings_daily_profit_with_orders, holdings_daily_profit_with_orders,
 };

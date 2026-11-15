@@ -1,57 +1,55 @@
 use crate::{
-    AccountId, BrokerOrder, BrokerOrderMoney, BrokerOrderSet, Currency, Money, MoneyError,
-    OrderSide, ResolvedOrderInstrument, SnapshotError, Timestamp, ValuationSnapshot,
+    BrokerOrder, BrokerOrderMoney, ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet,
+    Currency, Money, MoneyError, OrderSide, ResolvedOrderInstrument, SnapshotError, TimeInterval,
 };
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NetPurchaseError {
+pub enum NetPurchaseIncomplete {
     MissingTotal,
     UnallocatableExecution,
-    IncompleteQuery,
     MissingExecutionTime,
+    Query(ClosedOrderIncomplete),
+    OutsideQueryRange,
+    ObservationTooEarly,
+    Snapshot(SnapshotError),
+    KrwSummaryNotComparable,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetPurchaseInputError {
     AccountMismatch,
-    WrongPeriod,
-    InvalidExecutionTime,
+    NonClosedOrder,
+    DuplicateOrder,
+    ObservationMismatch,
+    InvalidTime,
+    ZeroFillMismatch,
     Arithmetic(MoneyError),
     Snapshot(SnapshotError),
 }
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct ClosedOrderEvidence {
-    facts: BrokerOrderSet,
-    previous: Timestamp,
-    current: Timestamp,
-}
-impl ClosedOrderEvidence {
-    pub(crate) fn new(facts: BrokerOrderSet, previous: Timestamp, current: Timestamp) -> Self {
-        Self {
-            facts,
-            previous,
-            current,
-        }
-    }
-}
-impl fmt::Debug for ClosedOrderEvidence {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClosedOrderEvidence")
-            .finish_non_exhaustive()
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetPurchaseError {
+    Incomplete(NetPurchaseIncomplete),
+    InvalidInput(NetPurchaseInputError),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct NetPurchaseAmount(Result<Money, NetPurchaseError>);
-impl NetPurchaseAmount {
-    pub const fn amount(self) -> Result<Money, NetPurchaseError> {
-        self.0
+pub struct NetPurchases {
+    kr: Result<Money, NetPurchaseError>,
+    us: Result<Money, NetPurchaseError>,
+}
+impl NetPurchases {
+    pub const fn currency(self, currency: Currency) -> Result<Money, NetPurchaseError> {
+        match currency {
+            Currency::Krw => self.kr,
+            Currency::Usd => self.us,
+        }
     }
 }
-impl fmt::Debug for NetPurchaseAmount {
+impl fmt::Debug for NetPurchases {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NetPurchaseAmount").finish_non_exhaustive()
+        f.debug_struct("NetPurchases").finish_non_exhaustive()
     }
 }
-
 #[derive(Debug, Clone, Copy)]
 pub enum NetPurchaseScope<'a> {
     Instrument(&'a ResolvedOrderInstrument),
@@ -84,102 +82,78 @@ enum Inclusion {
     Included,
     Excluded,
 }
-
 #[must_use]
-pub fn net_purchase_amount(
-    read: (&BrokerOrderSet, &AccountId),
-    period: (Timestamp, Timestamp),
-    evidence: Option<&ClosedOrderEvidence>,
-    scope: NetPurchaseScope<'_>,
-) -> NetPurchaseAmount {
-    NetPurchaseAmount(calculate(read, period, evidence, scope))
+pub fn net_purchases(orders: &ClosedOrderSet, period: TimeInterval) -> NetPurchases {
+    NetPurchases {
+        kr: net_purchase_amount(orders, period, NetPurchaseScope::Currency(Currency::Krw)),
+        us: net_purchase_amount(orders, period, NetPurchaseScope::Currency(Currency::Usd)),
+    }
 }
-fn calculate(
-    read: (&BrokerOrderSet, &AccountId),
-    period: (Timestamp, Timestamp),
-    evidence: Option<&ClosedOrderEvidence>,
+pub fn net_purchase_amount(
+    orders: &ClosedOrderSet,
+    period: TimeInterval,
     scope: NetPurchaseScope<'_>,
 ) -> Result<Money, NetPurchaseError> {
-    let (facts, account) = read;
-    let (previous, current) = period;
-    if facts.account_id() != account {
-        return Err(NetPurchaseError::AccountMismatch);
-    }
-    if previous >= current {
-        return Err(NetPurchaseError::WrongPeriod);
-    }
-    if facts.observed_at() < current {
-        return Err(NetPurchaseError::IncompleteQuery);
-    }
-    let expected = ClosedOrderEvidence::new(facts.clone(), previous, current);
-    if evidence != Some(&expected) {
-        return Err(NetPurchaseError::IncompleteQuery);
-    }
+    validate_query(orders, period).map_err(NetPurchaseError::Incomplete)?;
     let mut total = crate::holding::zero(scope.currency());
-    for order in facts.orders().values() {
-        if scope.includes(order) == Inclusion::Excluded {
+    for order in orders.orders().values() {
+        if scope.includes(order) == Inclusion::Excluded
+            || order.ordered_at() > period.end()
+            || order.filled_quantity().as_decimal().is_zero()
+        {
             continue;
         }
-        let Some(at) = order.filled_at() else {
-            return Err(NetPurchaseError::MissingExecutionTime);
-        };
-        if at < order.ordered_at() || at > order.observed_at() {
-            return Err(NetPurchaseError::InvalidExecutionTime);
-        }
-        if at <= previous {
+        let at = order.filled_at().ok_or(NetPurchaseError::Incomplete(
+            NetPurchaseIncomplete::MissingExecutionTime,
+        ))?;
+        if at <= period.start() {
             continue;
         }
-        if order.ordered_at() <= previous || at > current {
-            return Err(NetPurchaseError::UnallocatableExecution);
+        if order.ordered_at() <= period.start() || at > period.end() {
+            return Err(NetPurchaseError::Incomplete(
+                NetPurchaseIncomplete::UnallocatableExecution,
+            ));
         }
         let BrokerOrderMoney::Known(amount) = order.filled_amount() else {
-            return Err(NetPurchaseError::MissingTotal);
+            return Err(NetPurchaseError::Incomplete(
+                NetPurchaseIncomplete::MissingTotal,
+            ));
         };
         total = match order.side() {
             OrderSide::Buy => total.checked_add(&amount),
             OrderSide::Sell => total.checked_sub(&amount),
         }
-        .map_err(NetPurchaseError::Arithmetic)?;
+        .map_err(|error| {
+            NetPurchaseError::InvalidInput(NetPurchaseInputError::Arithmetic(error))
+        })?;
     }
     Ok(total)
 }
-
-pub fn holdings_daily_profit_with_orders(
-    today: &ValuationSnapshot,
-    previous: Option<&ValuationSnapshot>,
-    read: (&BrokerOrderSet, &AccountId),
-    evidence: Option<&ClosedOrderEvidence>,
-    currency: Currency,
-) -> Result<Money, NetPurchaseError> {
-    let (_, old) = crate::daily_profit::validated_previous(today, previous)
-        .map_err(NetPurchaseError::Snapshot)?;
-    let net = net_purchase_amount(
-        read,
-        (old.valuation_at(), today.valuation_at()),
-        evidence,
-        NetPurchaseScope::Currency(currency),
-    )
-    .amount()?;
-    today
-        .stock_value(currency)
-        .map_err(NetPurchaseError::Snapshot)?
-        .checked_sub(
-            &old.stock_value(currency)
-                .map_err(NetPurchaseError::Snapshot)?,
-        )
-        .and_then(|change| change.checked_sub(&net))
-        .map_err(NetPurchaseError::Arithmetic)
+fn validate_query(
+    orders: &ClosedOrderSet,
+    period: TimeInterval,
+) -> Result<(), NetPurchaseIncomplete> {
+    if orders.observed_at() < period.end() {
+        return Err(NetPurchaseIncomplete::ObservationTooEarly);
+    }
+    if let ClosedOrderCompleteness::Incomplete(reason) = orders.completeness() {
+        return Err(NetPurchaseIncomplete::Query(reason));
+    }
+    if orders.covered().start() > period.start() || orders.covered().end() < period.end() {
+        return Err(NetPurchaseIncomplete::OutsideQueryRange);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
-        ClosedOrderEvidence, NetPurchaseError, NetPurchaseScope, holdings_daily_profit_with_orders,
-        net_purchase_amount,
+        NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope,
+        net_purchase_amount, net_purchases,
     };
     use crate::{
-        AccountId, BrokerOrderMoney, BrokerOrderSet, Money, MoneyError, OrderSide, SnapshotError,
-        ValuationSnapshot,
+        AccountId, BrokerOrder, BrokerOrderMoney, ClosedOrderCompleteness, ClosedOrderIncomplete,
+        ClosedOrderSet, TimeInterval,
     };
     use crate::{
         CommonShare, Currency, DisplayInstrumentName, InstrumentId, KnownMarket,
@@ -187,6 +161,7 @@ mod tests {
         MasterInstrumentRow, MasterSecurityType, Nanosecond, NxtTrading, OffsetSeconds,
         ResolvedOrderInstrument, Symbol, Timestamp, TradingSuspension, UnixSeconds,
     };
+    use crate::{Money, OrderSide};
     pub(crate) fn at() -> Timestamp {
         Timestamp::from_parts(
             UnixSeconds::new(100),
@@ -229,11 +204,10 @@ mod tests {
 
     use crate::{
         BrokerOrderId, BrokerOrderPrice, BrokerOrderRow, BrokerOrderSize, BrokerOrderStatus,
-        BrokerOrderTime, BrokerOrderType, BrokerTimeInForce, NumericInput, OpenOrderCoverage,
-        Price, Quantity,
+        BrokerOrderTime, BrokerOrderType, BrokerTimeInForce, NumericInput, Price, Quantity,
     };
     use rust_decimal::Decimal;
-    fn time(text: i64) -> Timestamp {
+    pub(crate) fn time(text: i64) -> Timestamp {
         Timestamp::from_parts(
             UnixSeconds::new(text),
             Nanosecond::new(0),
@@ -241,10 +215,10 @@ mod tests {
         )
         .expect("시각")
     }
-    fn money(text: &str, currency: Currency) -> Money {
+    pub(crate) fn money(text: &str, currency: Currency) -> Money {
         Money::parse(&NumericInput::try_new(text).expect("입력"), currency).expect("금액")
     }
-    fn row(id: &str, side: OrderSide, amount: &str, at: i64) -> BrokerOrderRow {
+    pub(crate) fn row(id: &str, side: OrderSide, amount: &str, at: i64) -> BrokerOrderRow {
         BrokerOrderRow {
             account_id: AccountId::new(7),
             order_id: BrokerOrderId::try_new(id).expect("주문"),
@@ -267,225 +241,189 @@ mod tests {
             observed_at: time(300),
         }
     }
-    fn facts(rows: Vec<BrokerOrderRow>) -> BrokerOrderSet {
-        BrokerOrderSet::from_open_lookup_result(
-            AccountId::new(7),
-            rows,
-            OpenOrderCoverage::Incomplete,
-            time(300),
-        )
-        .expect("봉인")
+
+    pub(crate) fn interval(start: i64, end: i64) -> TimeInterval {
+        TimeInterval::try_new(time(start), time(end)).expect("구간")
     }
-    fn calc(orders: &BrokerOrderSet) -> Result<Money, NetPurchaseError> {
-        let evidence = ClosedOrderEvidence::new(orders.clone(), time(100), time(200));
+    pub(crate) fn facts(rows: Vec<BrokerOrderRow>) -> ClosedOrderSet {
+        ClosedOrderSet::new(
+            AccountId::new(7),
+            rows.into_iter()
+                .map(|input| BrokerOrder::from_lookup_result(input).expect("사실"))
+                .collect(),
+            interval(0, 300),
+            time(300),
+            ClosedOrderCompleteness::Complete,
+        )
+        .expect("종료 집합")
+    }
+    fn calc(orders: &ClosedOrderSet) -> Result<Money, NetPurchaseError> {
         net_purchase_amount(
-            (orders, &AccountId::new(7)),
-            (time(100), time(200)),
-            Some(&evidence),
+            orders,
+            interval(100, 200),
             NetPurchaseScope::Currency(Currency::Krw),
         )
-        .amount()
+    }
+    fn incomplete(reason: NetPurchaseIncomplete) -> Result<Money, NetPurchaseError> {
+        Err(NetPurchaseError::Incomplete(reason))
     }
     #[test]
-    fn boundaries_totals_sides_and_scope() {
-        let mut left = row("left", OrderSide::Buy, "999", 100);
-        left.ordered_at = time(90);
-        let orders = facts(vec![
-            left,
-            row("buy", OrderSide::Buy, "157", 200),
-            row("sell", OrderSide::Sell, "31", 150),
-        ]);
-        assert_eq!(calc(&orders), Ok(money("126", Currency::Krw)));
-        let evidence = ClosedOrderEvidence::new(orders.clone(), time(100), time(200));
-        let target = instrument(KnownMarket::Kr, "005930");
+    fn review_zero_fill_and_future_orders_are_exact_zero() {
+        let mut canceled = row("canceled", OrderSide::Buy, "0", 150);
+        canceled.status = BrokerOrderStatus::Canceled;
+        canceled.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("수량");
+        canceled.filled_at = None;
+        canceled.filled_amount = BrokerOrderMoney::Absent;
         assert_eq!(
-            net_purchase_amount(
-                (&orders, &AccountId::new(7)),
-                (time(100), time(200)),
-                Some(&evidence),
-                NetPurchaseScope::Instrument(&target)
-            )
-            .amount(),
-            calc(&orders)
-        );
-        let other = instrument(KnownMarket::Kr, "000660");
-        assert_eq!(
-            net_purchase_amount(
-                (&orders, &AccountId::new(7)),
-                (time(100), time(200)),
-                Some(&evidence),
-                NetPurchaseScope::Instrument(&other)
-            )
-            .amount(),
+            calc(&facts(vec![canceled.clone()])),
             Ok(money("0", Currency::Krw))
         );
+        canceled.filled_amount = BrokerOrderMoney::Known(money("0", Currency::Krw));
+        let mut future = row("future", OrderSide::Buy, "83", 250);
+        future.ordered_at = time(240);
         assert_eq!(
-            net_purchase_amount(
-                (&orders, &AccountId::new(7)),
-                (time(100), time(200)),
-                Some(&evidence),
-                NetPurchaseScope::Currency(Currency::Usd)
-            )
-            .amount(),
-            Ok(money("0", Currency::Usd))
-        );
-        assert_eq!(calc(&facts(vec![])), Ok(money("0", Currency::Krw)));
-        assert_eq!(
-            calc(&facts(vec![row("s", OrderSide::Sell, "31", 150)])),
-            Ok(money("-31", Currency::Krw))
-        );
-        assert_eq!(
-            calc(&facts(vec![
-                row("buy", OrderSide::Buy, "31", 150),
-                row("sell", OrderSide::Sell, "31", 160)
-            ])),
+            calc(&facts(vec![canceled, future])),
             Ok(money("0", Currency::Krw))
         );
     }
     #[test]
-    fn incomplete_and_period_evidence() {
-        let base = row("sell", OrderSide::Buy, "157", 150);
-        for (input, err) in [
+    fn realistic_day_is_complete_and_order_independent() {
+        let mut canceled = row("cancel", OrderSide::Buy, "0", 150);
+        canceled.status = BrokerOrderStatus::Canceled;
+        canceled.filled_quantity = Quantity::try_new(Decimal::ZERO).expect("수량");
+        canceled.filled_at = None;
+        canceled.filled_amount = BrokerOrderMoney::Absent;
+        let mut future = row("future", OrderSide::Buy, "9999", 250);
+        future.ordered_at = time(240);
+        let mut yesterday = row("old", OrderSide::Sell, "777", 90);
+        yesterday.ordered_at = time(60);
+        let rows = vec![
+            row("buy1", OrderSide::Buy, "157", 160),
+            row("buy2", OrderSide::Buy, "89", 200),
+            row("sell", OrderSide::Sell, "31", 180),
+            canceled,
+            future,
+            yesterday,
+        ];
+        assert_eq!(calc(&facts(rows.clone())), Ok(money("215", Currency::Krw)));
+        assert_eq!(
+            calc(&facts(rows.into_iter().rev().collect())),
+            Ok(money("215", Currency::Krw))
+        );
+    }
+    #[test]
+    fn time_order_table() {
+        for (ordered, filled, expected) in [
+            (60, 90, Ok(money("0", Currency::Krw))),
+            (90, 100, Ok(money("0", Currency::Krw))),
+            (110, 110, Ok(money("41", Currency::Krw))),
+            (110, 200, Ok(money("41", Currency::Krw))),
             (
-                {
-                    let mut input = base.clone();
-                    input.filled_amount = BrokerOrderMoney::Absent;
-                    input
-                },
-                NetPurchaseError::MissingTotal,
+                100,
+                170,
+                incomplete(NetPurchaseIncomplete::UnallocatableExecution),
             ),
             (
-                {
-                    let mut input = base.clone();
-                    input.filled_at = None;
-                    input
-                },
-                NetPurchaseError::MissingExecutionTime,
+                90,
+                170,
+                incomplete(NetPurchaseIncomplete::UnallocatableExecution),
             ),
             (
-                {
-                    let mut input = base.clone();
-                    input.ordered_at = time(100);
-                    input
-                },
-                NetPurchaseError::UnallocatableExecution,
+                110,
+                201,
+                incomplete(NetPurchaseIncomplete::UnallocatableExecution),
             ),
             (
-                {
-                    let mut input = base.clone();
-                    input.filled_at = Some(time(201));
-                    input
-                },
-                NetPurchaseError::UnallocatableExecution,
+                90,
+                250,
+                incomplete(NetPurchaseIncomplete::UnallocatableExecution),
             ),
-            (
-                {
-                    let mut input = base.clone();
-                    input.filled_at = Some(time(109));
-                    input
-                },
-                NetPurchaseError::InvalidExecutionTime,
-            ),
-            (
-                {
-                    let mut input = base;
-                    input.filled_at = Some(time(301));
-                    input
-                },
-                NetPurchaseError::InvalidExecutionTime,
-            ),
+            (201, 250, Ok(money("0", Currency::Krw))),
+            (300, 300, Ok(money("0", Currency::Krw))),
         ] {
-            assert_eq!(calc(&facts(vec![input])), Err(err));
+            let mut input = row("table", OrderSide::Buy, "41", filled);
+            input.ordered_at = time(ordered);
+            assert_eq!(
+                calc(&facts(vec![input])),
+                expected,
+                "o={ordered}, f={filled}"
+            );
         }
     }
     #[test]
-    fn evidence_account_and_period_are_bound() {
-        let base = row("buy", OrderSide::Buy, "157", 150);
-        let orders = facts(vec![base]);
-        let evidence = ClosedOrderEvidence::new(orders.clone(), time(100), time(200));
-        let run = |account, prev, curr, proof| {
-            net_purchase_amount(
-                (&orders, &account),
-                (time(prev), time(curr)),
-                proof,
-                NetPurchaseScope::Currency(Currency::Krw),
-            )
-            .amount()
-        };
+    fn missing_time_total_and_query_remain_incomplete() {
+        let mut input = row("missing", OrderSide::Buy, "41", 150);
+        input.filled_at = None;
         assert_eq!(
-            run(AccountId::new(7), 100, 200, None),
-            Err(NetPurchaseError::IncompleteQuery)
+            calc(&facts(vec![input.clone()])),
+            incomplete(NetPurchaseIncomplete::MissingExecutionTime)
         );
+        input.filled_at = Some(time(150));
+        input.filled_amount = BrokerOrderMoney::Absent;
         assert_eq!(
-            run(AccountId::new(8), 100, 200, Some(&evidence)),
-            Err(NetPurchaseError::AccountMismatch)
+            calc(&facts(vec![input])),
+            incomplete(NetPurchaseIncomplete::MissingTotal)
         );
-        assert_eq!(
-            run(AccountId::new(7), 200, 200, Some(&evidence)),
-            Err(NetPurchaseError::WrongPeriod)
-        );
-        assert_eq!(
-            run(AccountId::new(7), 201, 200, Some(&evidence)),
-            Err(NetPurchaseError::WrongPeriod)
-        );
-        assert_eq!(
-            run(AccountId::new(7), 99, 200, Some(&evidence)),
-            Err(NetPurchaseError::IncompleteQuery)
-        );
-        assert_eq!(
-            run(AccountId::new(7), 100, 201, Some(&evidence)),
-            Err(NetPurchaseError::IncompleteQuery)
-        );
-        assert_eq!(
-            run(AccountId::new(7), 100, 301, Some(&evidence)),
-            Err(NetPurchaseError::IncompleteQuery)
-        );
-    }
-    #[test]
-    fn evidence_dataset_debug_and_mixed_account() {
-        let orders = facts(vec![row("buy", OrderSide::Buy, "157", 150)]);
-        let evidence = ClosedOrderEvidence::new(orders.clone(), time(100), time(200));
-        let run = |account, prev, curr, proof| {
-            net_purchase_amount(
-                (&orders, &account),
-                (time(prev), time(curr)),
-                proof,
-                NetPurchaseScope::Currency(Currency::Krw),
-            )
-            .amount()
-        };
-        let other = ClosedOrderEvidence::new(facts(vec![]), time(100), time(200));
-        assert_eq!(
-            run(AccountId::new(7), 100, 200, Some(&other)),
-            Err(NetPurchaseError::IncompleteQuery)
-        );
-        assert_eq!(format!("{evidence:?}"), "ClosedOrderEvidence { .. }");
-        assert_eq!(
-            format!(
-                "{:?}",
-                net_purchase_amount(
-                    (&orders, &AccountId::new(7)),
-                    (time(100), time(200)),
-                    Some(&evidence),
-                    NetPurchaseScope::Currency(Currency::Krw)
-                )
-            ),
-            "NetPurchaseAmount { .. }"
-        );
-        let mut wrong = row("bad", OrderSide::Buy, "1", 150);
-        wrong.account_id = AccountId::new(8);
-        assert_eq!(
-            BrokerOrderSet::from_open_lookup_result(
+        let mut orders = facts(vec![]);
+        for reason in [
+            ClosedOrderIncomplete::MissingPages,
+            ClosedOrderIncomplete::RejectedRows,
+            ClosedOrderIncomplete::RequestFailed,
+        ] {
+            orders = ClosedOrderSet::new(
                 AccountId::new(7),
-                vec![wrong],
-                OpenOrderCoverage::Incomplete,
-                time(300)
-            ),
-            Err(crate::BrokerOrderError::AccountMismatch)
+                vec![],
+                interval(0, 300),
+                time(300),
+                ClosedOrderCompleteness::Incomplete(reason),
+            )
+            .expect("불완전");
+            assert_eq!(
+                calc(&orders),
+                incomplete(NetPurchaseIncomplete::Query(reason))
+            );
+        }
+        assert_eq!(
+            orders.completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::RequestFailed)
         );
     }
     #[test]
-    fn amount_order_native_currency_and_precision_failures() {
+    fn coverage_and_observation_boundaries() {
+        for (start, end, observed, expected) in [
+            (100, 200, 200, Ok(money("0", Currency::Krw))),
+            (
+                101,
+                200,
+                200,
+                incomplete(NetPurchaseIncomplete::OutsideQueryRange),
+            ),
+            (
+                100,
+                199,
+                300,
+                incomplete(NetPurchaseIncomplete::OutsideQueryRange),
+            ),
+            (
+                0,
+                190,
+                199,
+                incomplete(NetPurchaseIncomplete::ObservationTooEarly),
+            ),
+        ] {
+            let orders = ClosedOrderSet::new(
+                AccountId::new(7),
+                vec![],
+                interval(start, end),
+                time(observed),
+                ClosedOrderCompleteness::Complete,
+            )
+            .expect("범위");
+            assert_eq!(calc(&orders), expected);
+        }
+    }
+    #[test]
+    fn scopes_native_amount_orders_and_arithmetic() {
         let mut usd = row("usd", OrderSide::Buy, "1", 170);
         usd.instrument = instrument(KnownMarket::Us, "AAPL");
         usd.average_filled_price = None;
@@ -494,26 +432,44 @@ mod tests {
             reported_quantity: Quantity::try_new(Decimal::ZERO).expect("수량"),
             order_amount: money("99", Currency::Usd),
         };
-        usd.status = BrokerOrderStatus::PartialFilled;
         let orders = facts(vec![usd, row("kr", OrderSide::Buy, "71", 180)]);
-        let evidence = ClosedOrderEvidence::new(orders.clone(), time(100), time(200));
-        assert_eq!(calc(&orders), Ok(money("71", Currency::Krw)));
+        let sums = net_purchases(&orders, interval(100, 200));
+        assert_eq!(sums.currency(Currency::Krw), Ok(money("71", Currency::Krw)));
+        assert_eq!(
+            sums.currency(Currency::Usd),
+            Ok(money("43.21", Currency::Usd))
+        );
+        let other = instrument(KnownMarket::Kr, "000660");
+        let target = instrument(KnownMarket::Kr, "005930");
         assert_eq!(
             net_purchase_amount(
-                (&orders, &AccountId::new(7)),
-                (time(100), time(200)),
-                Some(&evidence),
-                NetPurchaseScope::Currency(Currency::Usd)
-            )
-            .amount(),
-            Ok(money("43.21", Currency::Usd))
+                &orders,
+                interval(100, 200),
+                NetPurchaseScope::Instrument(&other)
+            ),
+            Ok(money("0", Currency::Krw))
+        );
+        assert_eq!(
+            net_purchase_amount(
+                &orders,
+                interval(100, 200),
+                NetPurchaseScope::Instrument(&target)
+            ),
+            Ok(money("71", Currency::Krw))
+        );
+        assert_eq!(format!("{sums:?}"), "NetPurchases { .. }");
+        assert_eq!(
+            format!("{:?}", NetPurchaseScope::Currency(Currency::Usd)),
+            "Currency(Usd)"
         );
         assert_eq!(
             calc(&facts(vec![
-                row("buy", OrderSide::Buy, "79228162514264337593543950335", 150),
-                row("sell", OrderSide::Buy, "1", 160)
+                row("a", OrderSide::Buy, "79228162514264337593543950335", 150),
+                row("b", OrderSide::Buy, "1", 160)
             ])),
-            Err(NetPurchaseError::Arithmetic(MoneyError::Overflow))
+            Err(NetPurchaseError::InvalidInput(
+                NetPurchaseInputError::Arithmetic(crate::MoneyError::Overflow)
+            ))
         );
     }
     #[test]
@@ -525,221 +481,124 @@ mod tests {
         TestRunner::new(Config::with_cases(4096))
             .run(
                 &(1_i64..100_000, 1_i64..100_000, 1_i64..100_000),
-                |(buy, sell, third)| {
+                |(first, second, sold)| {
                     let rows = vec![
-                        row("buy", OrderSide::Buy, &buy.to_string(), 120),
-                        row("sell", OrderSide::Sell, &sell.to_string(), 170),
-                        row("currency", OrderSide::Buy, &third.to_string(), 200),
+                        row("buy1", OrderSide::Buy, &first.to_string(), 120),
+                        row("buy2", OrderSide::Buy, &second.to_string(), 200),
+                        row("sell", OrderSide::Sell, &sold.to_string(), 170),
                     ];
-                    let expected = money(&(buy - sell + third).to_string(), Currency::Krw);
+                    let expected = money(&(first + second - sold).to_string(), Currency::Krw);
                     prop_assert_eq!(calc(&facts(rows.clone())), Ok(expected));
                     prop_assert_eq!(calc(&facts(rows.into_iter().rev().collect())), Ok(expected));
                     Ok(())
                 },
             )
-            .expect("독립 정수 대조");
+            .expect("独立 정수");
     }
-    #[test]
-    fn daily_connection_propagates_incomplete() {
-        use crate::valuation_snapshot::tests::{at as day_at, observed};
-        let old = observed(2, "999", "0");
-        let today = observed(3, "123", "0");
-        let orders = BrokerOrderSet::from_open_lookup_result(
+
+    fn assert_time_ordering(ordered: i64, filled: i64, observed: i64) {
+        let mut input = row("matrix", OrderSide::Buy, "41", filled);
+        input.ordered_at = time(ordered);
+        input.observed_at = time(observed);
+        let sealed = ClosedOrderSet::new(
             AccountId::new(7),
-            vec![],
-            OpenOrderCoverage::Incomplete,
-            day_at(3, 7),
-        )
-        .expect("사실");
-        let evidence =
-            ClosedOrderEvidence::new(orders.clone(), old.valuation_at(), today.valuation_at());
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &today,
-                Some(&old),
-                (&orders, &AccountId::new(7)),
-                Some(&evidence),
-                Currency::Krw
-            ),
+            vec![BrokerOrder::from_lookup_result(input).expect("행")],
+            interval(0, observed),
+            time(observed),
+            ClosedOrderCompleteness::Complete,
+        );
+        if ordered > observed || filled < ordered || filled > observed {
+            assert_eq!(sealed, Err(NetPurchaseInputError::InvalidTime));
+            return;
+        }
+        let expected = if observed < 200 {
+            incomplete(NetPurchaseIncomplete::ObservationTooEarly)
+        } else if ordered > 200 || filled <= 100 {
             Ok(money("0", Currency::Krw))
-        );
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &today,
-                Some(&old),
-                (&orders, &AccountId::new(7)),
-                None,
-                Currency::Krw
-            ),
-            Err(NetPurchaseError::IncompleteQuery)
-        );
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &today,
-                None,
-                (&orders, &AccountId::new(7)),
-                None,
-                Currency::Krw
-            ),
-            Err(NetPurchaseError::Snapshot(SnapshotError::MissingPrevious))
-        );
-    }
-    fn valuation(day: i64, kr: &str, usd: Option<&str>) -> ValuationSnapshot {
-        use crate::valuation_snapshot::tests::{at as day_at, calendar};
-        use crate::{AcquisitionPrice, BuyingPower, Holding, HoldingObservation, Portfolio};
-        let holding = |market, symbol, currency, price: Option<&str>| {
-            Holding::new(
-                instrument(market, symbol),
-                Quantity::try_new(Decimal::ONE).expect("수량"),
-                AcquisitionPrice::try_new(money("11", currency)).expect("취득"),
-                HoldingObservation::new(
-                    price.map(|value| Price::try_new(money(value, currency)).expect("가격")),
-                    None,
-                    day_at(day, 7),
-                ),
-            )
-            .expect("보유")
+        } else if ordered <= 100 || filled > 200 {
+            incomplete(NetPurchaseIncomplete::UnallocatableExecution)
+        } else {
+            Ok(money("41", Currency::Krw))
         };
-        let portfolio = Portfolio::new(
-            vec![
-                holding(KnownMarket::Kr, "005930", Currency::Krw, Some(kr)),
-                holding(KnownMarket::Us, "AAPL", Currency::Usd, usd),
-            ],
-            BuyingPower::new(money("0", Currency::Krw), day_at(day, 7)),
-            BuyingPower::new(money("0", Currency::Usd), day_at(day, 7)),
-        )
-        .expect("포트");
-        ValuationSnapshot::observe(
-            &calendar(day),
-            &portfolio.evaluate(None),
-            day_at(day, 7),
-            None,
-        )
-        .expect("평가")
+        assert_eq!(
+            calc(&sealed.expect("유효 시각")),
+            expected,
+            "o={ordered}, f={filled}, R={observed}"
+        );
     }
-    fn daily_inputs() -> (
-        ValuationSnapshot,
-        ValuationSnapshot,
-        BrokerOrderSet,
-        ClosedOrderEvidence,
-    ) {
-        use crate::valuation_snapshot::tests::at as day_at;
-        let old = valuation(2, "1400", Some("7000"));
-        let today = valuation(3, "1700", Some("6500"));
-        let mut buy = row("buy", OrderSide::Buy, "157", 150);
-        buy.ordered_at = day_at(2, 8);
-        buy.filled_at = Some(day_at(3, 7));
-        buy.observed_at = day_at(3, 8);
-        let mut sell = buy.clone();
-        sell.order_id = BrokerOrderId::try_new("sell").expect("키");
-        sell.side = OrderSide::Sell;
-        sell.filled_at = Some(day_at(3, 6));
-        sell.filled_amount = BrokerOrderMoney::Known(money("31", Currency::Krw));
-        let orders = BrokerOrderSet::from_open_lookup_result(
+    #[test]
+    fn every_time_ordering_including_equalities_matches_the_decision_table() {
+        let instants = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275];
+        for ordered in instants {
+            for filled in instants {
+                assert_observation_orderings(ordered, filled, &instants);
+            }
+        }
+    }
+
+    fn assert_observation_orderings(ordered: i64, filled: i64, instants: &[i64]) {
+        for observed in instants {
+            assert_time_ordering(ordered, filled, *observed);
+        }
+    }
+    fn assert_missing_time(ordered: i64, observed: i64, quantity: u32) {
+        let mut input = row("missing", OrderSide::Buy, "0", 150);
+        input.ordered_at = time(ordered);
+        input.observed_at = time(observed);
+        input.filled_quantity = Quantity::try_new(Decimal::from(quantity)).expect("수량");
+        input.filled_at = None;
+        input.filled_amount = BrokerOrderMoney::Absent;
+        let sealed = ClosedOrderSet::new(
             AccountId::new(7),
-            vec![buy, sell],
-            OpenOrderCoverage::Incomplete,
-            day_at(3, 8),
-        )
-        .expect("주문");
-        let evidence =
-            ClosedOrderEvidence::new(orders.clone(), old.valuation_at(), today.valuation_at());
-        (old, today, orders, evidence)
-    }
-    #[test]
-    fn daily_formula_and_adr52_native_currency_example() {
-        let (old, today, orders, evidence) = daily_inputs();
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &today,
-                Some(&old),
-                (&orders, &AccountId::new(7)),
-                Some(&evidence),
-                Currency::Krw
-            ),
-            Ok(money("174", Currency::Krw))
+            vec![BrokerOrder::from_lookup_result(input).expect("행")],
+            interval(0, observed),
+            time(observed),
+            ClosedOrderCompleteness::Complete,
         );
+        if ordered > observed {
+            assert_eq!(sealed, Err(NetPurchaseInputError::InvalidTime));
+            return;
+        }
+        let expected = if observed < 200 {
+            incomplete(NetPurchaseIncomplete::ObservationTooEarly)
+        } else if quantity == 0 || ordered > 200 {
+            Ok(money("0", Currency::Krw))
+        } else {
+            incomplete(NetPurchaseIncomplete::MissingExecutionTime)
+        };
         assert_eq!(
-            holdings_daily_profit_with_orders(
-                &today,
-                Some(&old),
-                (&orders, &AccountId::new(7)),
-                Some(&evidence),
-                Currency::Usd
-            ),
-            Ok(money("-500", Currency::Usd))
+            calc(&sealed.expect("행")),
+            expected,
+            "o={ordered}, R={observed}, q={quantity}"
         );
     }
     #[test]
-    fn daily_snapshot_errors() {
-        let (old, today, orders, evidence) = daily_inputs();
-        let missing = valuation(3, "1700", None);
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &missing,
-                Some(&old),
-                (&orders, &AccountId::new(7)),
-                Some(&evidence),
-                Currency::Usd
-            ),
-            Err(NetPurchaseError::Snapshot(
-                SnapshotError::IncompleteValuation
-            ))
-        );
-        let old_missing = valuation(2, "1400", None);
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &today,
-                Some(&old_missing),
-                (&orders, &AccountId::new(7)),
-                Some(&evidence),
-                Currency::Usd
-            ),
-            Err(NetPurchaseError::Snapshot(
-                SnapshotError::IncompleteValuation
-            ))
-        );
-        assert_eq!(
-            holdings_daily_profit_with_orders(
-                &old,
-                Some(&today),
-                (&orders, &AccountId::new(7)),
-                Some(&evidence),
-                Currency::Krw
-            ),
-            Err(NetPurchaseError::Snapshot(SnapshotError::WrongPeriod))
-        );
+    fn missing_fill_time_table_distinguishes_zero_and_nonzero_execution() {
+        let instants = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275];
+        for ordered in instants {
+            for observed in instants {
+                assert_missing_time(ordered, observed, 0);
+                assert_missing_time(ordered, observed, 3);
+            }
+        }
     }
+
     #[test]
-    fn equal_order_fill_and_observation_times_are_valid() {
-        let mut input = row("edge", OrderSide::Buy, "23", 200);
-        input.ordered_at = time(200);
-        input.observed_at = time(200);
-        let orders = BrokerOrderSet::from_open_lookup_result(
-            AccountId::new(7),
-            vec![input],
-            OpenOrderCoverage::Incomplete,
-            time(200),
-        )
-        .expect("경계");
-        assert_eq!(calc(&orders), Ok(money("23", Currency::Krw)));
+    fn past_execution_needs_no_total_and_canceled_partial_execution_is_counted() {
+        let mut past = row("past", OrderSide::Buy, "9", 100);
+        past.ordered_at = time(50);
+        past.filled_amount = BrokerOrderMoney::Absent;
+        assert_eq!(calc(&facts(vec![past])), Ok(money("0", Currency::Krw)));
+        let mut partial = row("partial", OrderSide::Buy, "37", 150);
+        partial.status = BrokerOrderStatus::Canceled;
         assert_eq!(
-            format!("{:?}", NetPurchaseScope::Currency(Currency::Krw)),
-            "Currency(Krw)"
+            calc(&facts(vec![partial.clone()])),
+            Ok(money("37", Currency::Krw))
         );
-    }
-    #[test]
-    fn cumulative_partial_fill_crossing_start_remains_incomplete() {
-        let mut partial = row("partial", OrderSide::Buy, "81", 170);
-        partial.status = BrokerOrderStatus::PartialFilled;
         partial.ordered_at = time(90);
         assert_eq!(
             calc(&facts(vec![partial])),
-            Err(NetPurchaseError::UnallocatableExecution)
+            incomplete(NetPurchaseIncomplete::UnallocatableExecution)
         );
-        let mut past = row("past", OrderSide::Buy, "5", 99);
-        past.ordered_at = time(80);
-        past.filled_amount = BrokerOrderMoney::Absent;
-        assert_eq!(calc(&facts(vec![past])), Ok(money("0", Currency::Krw)));
     }
 }
