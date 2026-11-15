@@ -14,7 +14,7 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 
 ## 계약 표
 
-모든 출력은 Result<출력, PortError>의 성공 값이다. 공통 오류 E는 ADR 0063대로 AccessDenied→UserAction, Unavailable→Wait(원 RetryDelay), InvalidRequest/InvalidResponse/Unsupported→Bug, NotFound→NoData다. 아래는 A-20의 24개와 이번 다섯 개를 합친 전체 표다.
+모든 출력은 Result<출력, PortError>의 성공 값이다. 공통 오류 E는 ADR 0063대로 AccessDenied→UserAction, Unavailable→Wait(원 RetryDelay), InvalidRequest/InvalidResponse/Unsupported→Bug, NotFound→NoData다. 아래는 A-20의 24개, A-21의 다섯 개와 D-44의 네 개를 합친 전체 표다.
 
 | 포트 | 메서드 | 입력 | 출력 | 결합 의무·신선도·완전성 | 오류 분류 | 받는 어댑터 작업 |
 |---|---|---|---|---|---|---|
@@ -48,6 +48,11 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 | MarketInfo | sector_rankings | query: &SectorRankingQuery | SectorRanking | 요청 종류·시장·기간, 대분류/중분류·TopN·순위 빈자리·nullable 금액/등락률·수집 시각 | E | T-10 |
 | MarketInfo | sector_etfs | sector: &SectorId, market: KnownMarket | SectorEtfs | 요청 ID·시장, 관련 ETF 서버 순서, 하위 섹터 미포함·서버 시각 Unknown·수집 시각 | E | T-09 |
 
+| MarketInfo | program_trades | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<ProgramTrade> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. 서버 시각 Unknown, KRX만 | E | T-10 |
+| MarketInfo | short_selling | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<ShortSelling> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. updatedAt 보존 | E | T-10 |
+| MarketInfo | credit_trades | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<CreditTrade> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. updatedAt 보존 | E | T-10 |
+| MarketInfo | securities_lending | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<SecuritiesLending> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. updatedAt 보존 | E | T-10 |
+
 ## 어댑터 의무
 
 기존 24개 메서드는 ADR 0082의 결합·페이지·오류 의무를 유지한다. 새 다섯 메서드는 다음을 추가한다.
@@ -61,14 +66,14 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 - T-10/A-09/G-07/M-04: 스키마 설명은 자료 없는 섹터의 changeRate를 서버가 0으로 줄 수 있다고 한다. 받은 0은 그대로 보존하되 실제 보합이나 자료 존재의 증거로 단정하지 않는다. null과 서버 0을 서로 바꾸거나, 추가 근거 없이 0을 NoData로 복원하지 않는다.
 - 모든 새 응답의 수집 시각은 Clock에서 받는다. 서버 시각 없는 섹터 API는 Unknown을 유지한다. 허용 신선도와 오래됨 표시는 A-09/G-07/M-04 소비자가 결정한다. 실패한 페이지/행을 누락시키거나 완전 성공으로 가장하지 않는다.
 
-## 정의 대기
+## 정의 대기 해소 (D-44)
 
 | 행 | 필요한 봉인 타입 | 받는 작업 |
 |---|---|---|
-| 프로그램 수급 | 단위·집계 기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
-| 공매도 수급 | 수량·금액·기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
-| 신용 수급 | 잔고·증감·기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
-| 대차 수급 | 수량·잔고·기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
+| 프로그램 수급 | ProgramTrade로 정의 완료, program_trades 계약 참조 | D-44 → T-10 |
+| 공매도 수급 | ShortSelling로 정의 완료, short_selling 계약 참조 | D-44 → T-10 |
+| 신용 수급 | CreditTrade로 정의 완료, credit_trades 계약 참조 | D-44 → T-10 |
+| 대차 수급 | SecuritiesLending로 정의 완료, securities_lending 계약 참조 | D-44 → T-10 |
 
 ## 인계
 
