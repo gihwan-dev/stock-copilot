@@ -3,11 +3,12 @@ mod port_error;
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, Currency, FlowInterval,
-    FxPair, FxRate, FxRateKind, IndicatorCode, InvestorFlow, KnownMarket, MarketCalendar,
-    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrumentFacts, OrderFxRates, Orderbook,
-    PriceAdjustment, PriceLimits, QuoteInstrument, ResolvedOrderInstrument, SectorComposition,
-    SectorId, SellableQuantityFact, SettlementWindow, StockRanking, StockWarnings, TimeInterval,
-    Timestamp, TransactionFilter,
+    FxPair, FxRate, FxRateKind, IndicatorCode, InvestorFlow, InvestorTradingRankings, KnownMarket,
+    MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrumentFacts,
+    OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, QuoteInstrument, RankingLimit,
+    ResolvedOrderInstrument, SectorCatalog, SectorComposition, SectorDetail, SectorEtfs, SectorId,
+    SectorRanking, SellableQuantityFact, SettlementWindow, StockRanking, StockWarnings,
+    TimeInterval, Timestamp, TransactionFilter,
 };
 pub use observations::{
     HoldingsObservation, IncompleteReason, IncompleteTransactions, QuarantinedTransaction,
@@ -41,6 +42,11 @@ pub enum BrokerCapability {
     IndicatorInvestorFlow,
     SectorComposition,
     Calendar,
+    InvestorTradingRankings,
+    Sectors,
+    Sector,
+    SectorRankings,
+    SectorEtfs,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +144,26 @@ pub trait BrokerRead: Send + Sync {
 }
 
 pub trait MarketInfo: Send + Sync {
+    fn investor_trading_rankings(
+        &self,
+        limit: RankingLimit,
+    ) -> impl Future<Output = Result<InvestorTradingRankings, PortError>> + Send;
+    fn sectors(&self) -> impl Future<Output = Result<SectorCatalog, PortError>> + Send;
+    fn sector(
+        &self,
+        sector: &SectorId,
+        market: KnownMarket,
+    ) -> impl Future<Output = Result<SectorDetail, PortError>> + Send;
+    fn sector_rankings(
+        &self,
+        query: &SectorRankingQuery,
+    ) -> impl Future<Output = Result<SectorRanking, PortError>> + Send;
+    fn sector_etfs(
+        &self,
+        sector: &SectorId,
+        market: KnownMarket,
+    ) -> impl Future<Output = Result<SectorEtfs, PortError>> + Send;
+
     fn fx_rate(
         &self,
         pair: FxPair,
@@ -253,7 +279,7 @@ pub use event_bus::{
 };
 
 mod read_queries;
-pub use read_queries::RankingQuery;
+pub use read_queries::{RankingQuery, SectorRankingQuery};
 mod self_check;
 pub use self_check::{
     AiCheckObservation, AiEnvironmentProblem, CheckState, ClaudeInstallProblem, ClaudeLoginProblem,
