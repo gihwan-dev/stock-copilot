@@ -458,3 +458,46 @@ pub use market_ranking::RankingResponseInput;
 pub use market_ranking::{RankingCautionFilter, RankingChange, RankingContinuity};
 pub use sector_composition::{SectorAmount, SectorMember, SectorStockRow};
 pub use sector_composition::{SectorComposition, SectorCompositionScope};
+mod signal_return_contract;
+
+mod bootstrap;
+pub use bootstrap::{BootstrapInterval, BootstrapSeed, EdgeDirection, EdgeInterval};
+
+mod virtual_exit;
+pub use virtual_exit::{VirtualExit, VirtualExitFill, virtual_exit};
+
+mod signal_return;
+pub use signal_return::{ScorecardEdge, SignalReturnCount};
+pub use signal_return::{
+    SignalReturn, SignalReturnCost, SignalReturnError, scorecard_edge, signal_return,
+};
+pub use trade_cost::signal_return_cost;
+
+mod signal_return_scenarios;
+pub use virtual_exit::{MaturityExit, StopExit, TargetExit};
+pub use virtual_exit::{VirtualExitSignal, VirtualExitSignalError};
+
+pub use estimate_outcome::virtual_exit_adjustment;
+
+mod signal_benchmark;
+pub use signal_benchmark::SignalBenchmark;
+pub use signal_return::ScorecardReturnObservation;
+
+mod signal_return_boundaries;
+
+pub use bootstrap::BootstrapValue;
+
+pub use bootstrap::{WithheldCount, WithheldReason};
+pub use signal_return::BenchmarkAlignment;
+
+mod signal_return_review;
+
+pub use virtual_exit::VirtualExitMoment;
+
+mod scorecard_signal;
+pub use scorecard_signal::{
+    ScorecardSignalDirection, ScorecardSignalIdentity, ScorecardSignalRecord, ScorecardTaskId,
+};
+
+pub use signal_return::{SignalExcess, SignalReturnBasis};
+mod scorecard_signal_review;
