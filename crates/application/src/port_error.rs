@@ -11,6 +11,22 @@ pub enum ReadEndpoint {
     BuyingPower,
     FxRate,
     OrderFxRates,
+    SellableQuantity,
+    OpenOrders,
+    ClosedOrders,
+    Order,
+    StockWarnings,
+    Instruments,
+    Orderbook,
+    PriceLimits,
+    CommissionRate,
+    IndicatorQuotes,
+    IndicatorCandles,
+    Rankings,
+    StockInvestorFlow,
+    IndicatorInvestorFlow,
+    SectorComposition,
+    Calendar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +75,7 @@ pub enum RetryDelay {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MissingData {
+    Order,
     Stock,
     ExchangeRate,
     Sector,

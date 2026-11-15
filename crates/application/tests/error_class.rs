@@ -268,6 +268,7 @@ mod tests {
             MissingData::Stock => ErrorClass::NoData(MissingData::Stock),
             MissingData::ExchangeRate => ErrorClass::NoData(MissingData::ExchangeRate),
             MissingData::Sector => ErrorClass::NoData(MissingData::Sector),
+            MissingData::Order => ErrorClass::NoData(MissingData::Order),
         }
     }
 

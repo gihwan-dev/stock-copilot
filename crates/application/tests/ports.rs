@@ -1,21 +1,33 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AccessDenial, AccountObservation, BrokerCapabilities, BrokerCapability, BrokerRead,
-        CapabilitySupport, HoldingsObservation, HttpStatus, IncompleteReason,
-        IncompleteTransactions, MarketInfo, MissingData, PortError, PortErrorKind,
-        QuarantinedTransaction, QuoteObservation, ReadEndpoint, RequestRejection, ResponseMismatch,
-        RetryDelay, TransactionRead, UnavailableCause,
+        AccessDenial, BrokerCapabilities, BrokerCapability, BrokerRead, CapabilitySupport,
+        HoldingsObservation, HttpStatus, IncompleteReason, IncompleteTransactions, MarketInfo,
+        MissingData, PortError, PortErrorKind, QuarantinedTransaction, QuoteObservation,
+        ReadEndpoint, RequestRejection, ResponseMismatch, RetryDelay, TransactionRead,
+        UnavailableCause,
     };
     use domain::{
-        AccountId, AcquisitionPrice, BrokerAccountNumberInput, BrokerAccountRow,
-        BrokerAccountTypeCode, BuyingPower, Cancellation, Candle, CandlePeriod,
-        CompleteTransactionResponse, CompletionAttestation, Currency, CurrencyAmounts, FxPair,
-        FxRate, FxRateKind, FxSource, Holding, HoldingObservation, Market, Money, Nanosecond,
-        NumericInput, OffsetSeconds, OrderFxRates, PriceAdjustment, Quantity, Quote,
-        ReportedPortfolio, ResolvedOrderInstrument, Settlement, SettlementWindow, SpanSeconds,
-        Symbol, TimeInterval, TimeSpan, Timestamp, Transaction, TransactionBatch, TransactionData,
-        TransactionFilter, TransactionKind, UnixSeconds, UntrustedText,
+        AccountId, AcquisitionPrice, BrokerAccountNumberInput, BrokerAccountRow, BrokerAccountRows,
+        BrokerAccountTypeCode, BrokerOrder, BrokerOrderId, BrokerOrderMoney, BrokerOrderPrice,
+        BrokerOrderRow, BrokerOrderSet, BrokerOrderSize, BrokerOrderStatus, BrokerOrderTime,
+        BrokerOrderType, BrokerTimeInForce, BuyingPower, CalendarDate, Cancellation, Candle,
+        CandlePeriod, ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet,
+        CommissionRateFact, CommissionValidity, CommonShare, CompleteTransactionResponse,
+        CompletionAttestation, CostRate, Currency, CurrencyAmounts, DisplayInstrumentName,
+        FlowInterval, FxPair, FxRate, FxRateKind, FxSource, Holding, HoldingObservation,
+        IndicatorCode, IndicatorUnit, InstrumentId, InvestorFlow, KnownMarket, ListingStatus,
+        Market, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote, MarketSession,
+        MasterCode, MasterInstrument, MasterInstrumentFacts, MasterInstrumentRow,
+        MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds, OpenOrderCoverage,
+        OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment, PriceLimitRange,
+        PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument, RankingCautionFilter,
+        RankingDuration, RankingKind, RankingLimit, RankingResponseInput, Ratio, ReportedPortfolio,
+        ResolvedOrderInstrument, SectorComposition, SectorCompositionScope, SectorId,
+        SellableQuantityFact, SessionInformation, Settlement, SettlementWindow, SpanSeconds,
+        StockRanking, StockWarning, StockWarnings, Symbol, TimeInterval, TimeSpan, Timestamp,
+        Transaction, TransactionBatch, TransactionData, TransactionFilter, TransactionKind,
+        UnixSeconds, UntrustedText,
     };
     use std::{
         collections::BTreeSet,
@@ -46,34 +58,50 @@ mod tests {
         Money::parse(&NumericInput::try_new("0").expect("숫자"), currency).expect("금액")
     }
     fn instrument() -> ResolvedOrderInstrument {
-        master_instrument(
-            Symbol::try_new("AAPL").expect("종목"),
-            domain::InstrumentId::try_new("fixture-aapl").expect("고정 자료 키"),
-        )
-    }
-    fn master_instrument(
-        symbol: Symbol,
-        instrument_id: domain::InstrumentId,
-    ) -> ResolvedOrderInstrument {
-        domain::MasterInstrument::try_new(domain::MasterInstrumentRow {
-            listing_market: domain::MasterCode::try_new("NASDAQ").expect("시장"),
-            instrument_id,
-            symbol,
-            name: domain::DisplayInstrumentName::try_new("고정 자료 종목").expect("이름"),
-            security_type: domain::MasterSecurityType::from_code(
-                domain::MasterCode::try_new("STOCK").expect("유형"),
+        MasterInstrument::try_new(MasterInstrumentRow {
+            listing_market: MasterCode::try_new("NASDAQ").expect("시장"),
+            instrument_id: InstrumentId::try_new("fixture-aapl").expect("ID"),
+            symbol: Symbol::try_new("AAPL").expect("종목"),
+            name: DisplayInstrumentName::try_new("고정 자료 종목").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
             ),
             currency: Currency::Usd,
-            listing_status: domain::ListingStatus::Active,
-            common_share: domain::CommonShare::Common,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
             korean_detail: None,
             observed_at: instant(),
         })
         .expect("마스터")
         .order_instrument()
+        .expect("주문 식별")
+    }
+    fn master_instrument(symbol: Symbol, instrument_id: InstrumentId) -> QuoteInstrument {
+        MasterInstrument::try_new(MasterInstrumentRow {
+            listing_market: MasterCode::try_new("NASDAQ").expect("시장"),
+            instrument_id,
+            symbol,
+            name: DisplayInstrumentName::try_new("고정 자료 종목").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency: Currency::Usd,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: None,
+            observed_at: instant(),
+        })
+        .expect("마스터")
+        .quote_instrument()
         .expect("종목 사실")
     }
 
+    fn quote_instrument() -> QuoteInstrument {
+        master_instrument(
+            Symbol::try_new("AAPL").expect("종목"),
+            InstrumentId::try_new("fixture-aapl").expect("ID"),
+        )
+    }
     fn fx(kind: FxRateKind) -> FxRate {
         FxRate::parse(
             &NumericInput::try_new("1375").expect("환율"),
@@ -94,17 +122,15 @@ mod tests {
             },
         )
     }
-    fn account() -> AccountObservation {
+    fn account() -> BrokerAccountRow {
         let key = AccountId::new(7);
-        let display = BrokerAccountRow::from_broker_account_result(
-            key.clone(),
+        BrokerAccountRow::from_broker_account_result(
+            key,
             BrokerAccountTypeCode::new("BROKERAGE"),
             BrokerAccountNumberInput::new("12345678".to_owned()),
             instant(),
         )
         .expect("가짜 계좌")
-        .display_fact();
-        AccountObservation::from_broker_result(key, display)
     }
     fn holdings() -> HoldingsObservation {
         let held = Holding::new(
@@ -165,8 +191,8 @@ mod tests {
             Scenario::Complete | Scenario::Incomplete(_) => Ok(value),
         }
     }
-    fn quoted(value: &ResolvedOrderInstrument) -> QuoteObservation {
-        let result = if value == &instrument() {
+    fn quoted(value: &QuoteInstrument) -> QuoteObservation {
+        let result = if value == &quote_instrument() {
             Ok(
                 Quote::try_new(value.symbol().clone(), Currency::Usd, None, None, instant())
                     .expect("현재가 관측"),
@@ -184,10 +210,12 @@ mod tests {
         }
     }
     impl BrokerRead for FakeBroker {
-        fn accounts(
-            &self,
-        ) -> impl Future<Output = Result<Vec<AccountObservation>, PortError>> + Send {
-            std::future::ready(outcome(self.0, vec![account()], ReadEndpoint::Accounts))
+        fn accounts(&self) -> impl Future<Output = Result<BrokerAccountRows, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                BrokerAccountRows::try_new(vec![account()]).expect("계좌 행"),
+                ReadEndpoint::Accounts,
+            ))
         }
         fn holdings(
             &self,
@@ -228,7 +256,7 @@ mod tests {
         }
         fn quotes(
             &self,
-            instruments: &[ResolvedOrderInstrument],
+            instruments: &[QuoteInstrument],
         ) -> impl Future<Output = Result<Vec<QuoteObservation>, PortError>> + Send {
             let result = if instruments.is_empty() || instruments.len() > 200 {
                 Err(PortError::new(
@@ -247,7 +275,7 @@ mod tests {
         }
         fn candles(
             &self,
-            _instrument: &ResolvedOrderInstrument,
+            _instrument: &QuoteInstrument,
             _window: TimeInterval,
             _period: CandlePeriod,
             _adjustment: PriceAdjustment,
@@ -265,6 +293,147 @@ mod tests {
                 ReadEndpoint::BuyingPower,
             ))
         }
+        fn sellable_quantity(
+            &self,
+            account: &AccountId,
+            instrument: &ResolvedOrderInstrument,
+        ) -> impl Future<Output = Result<SellableQuantityFact, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                SellableQuantityFact::from_lookup_result(
+                    account.clone(),
+                    instrument.clone(),
+                    Quantity::parse(&NumericInput::try_new("17").expect("수량")).expect("수량"),
+                    instant(),
+                )
+                .expect("매도 가능 사실"),
+                ReadEndpoint::SellableQuantity,
+            ))
+        }
+        fn open_orders(
+            &self,
+            account: &AccountId,
+        ) -> impl Future<Output = Result<BrokerOrderSet, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                BrokerOrderSet::from_open_lookup_result(
+                    account.clone(),
+                    vec![],
+                    OpenOrderCoverage::Incomplete,
+                    instant(),
+                )
+                .expect("미체결 집합"),
+                ReadEndpoint::OpenOrders,
+            ))
+        }
+        fn closed_orders(
+            &self,
+            account: &AccountId,
+            ordered_window: TimeInterval,
+        ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                ClosedOrderSet::new(
+                    account.clone(),
+                    vec![],
+                    ordered_window,
+                    ordered_window.end(),
+                    ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages),
+                )
+                .expect("종료 집합"),
+                ReadEndpoint::ClosedOrders,
+            ))
+        }
+        fn order(
+            &self,
+            account: &AccountId,
+            order_id: &BrokerOrderId,
+        ) -> impl Future<Output = Result<BrokerOrder, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                a20_order(account, order_id),
+                ReadEndpoint::Order,
+            ))
+        }
+        fn stock_warnings(
+            &self,
+            instrument: &ResolvedOrderInstrument,
+        ) -> impl Future<Output = Result<StockWarnings, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                StockWarnings::from_lookup_result(
+                    instrument.clone(),
+                    vec![StockWarning::InvestmentRisk],
+                    instant(),
+                ),
+                ReadEndpoint::StockWarnings,
+            ))
+        }
+        fn instruments(
+            &self,
+            _market: KnownMarket,
+        ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                MasterInstrumentFacts::try_new(vec![]).expect("빈 마스터"),
+                ReadEndpoint::Instruments,
+            ))
+        }
+        fn orderbook(
+            &self,
+            instrument: &QuoteInstrument,
+        ) -> impl Future<Output = Result<Orderbook, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                Orderbook::try_new(OrderbookInput {
+                    instrument: instrument.clone(),
+                    currency: instrument.currency(),
+                    asks: vec![],
+                    bids: vec![],
+                    timestamp: None,
+                    collected_at: instant(),
+                })
+                .expect("호가 없음"),
+                ReadEndpoint::Orderbook,
+            ))
+        }
+        fn price_limits(
+            &self,
+            instrument: &QuoteInstrument,
+        ) -> impl Future<Output = Result<PriceLimits, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                PriceLimits::try_new(PriceLimitsInput {
+                    instrument: instrument.clone(),
+                    currency: Currency::Usd,
+                    lower: None,
+                    upper: None,
+                    timestamp: instant(),
+                    collected_at: instant(),
+                })
+                .expect("미국 제한 없음"),
+                ReadEndpoint::PriceLimits,
+            ))
+        }
+        fn commission_rate(
+            &self,
+            _account: &AccountId,
+            market: KnownMarket,
+        ) -> impl Future<Output = Result<CommissionRateFact, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                CommissionRateFact::from_commissions_result(
+                    market.into(),
+                    CostRate::try_new(
+                        Ratio::parse(&NumericInput::try_new("0.0017").expect("비율"))
+                            .expect("비율"),
+                    )
+                    .expect("수수료율"),
+                    CommissionValidity::try_new(None, None).expect("기간"),
+                ),
+                ReadEndpoint::CommissionRate,
+            ))
+        }
     }
     impl MarketInfo for FakeBroker {
         fn fx_rate(
@@ -280,6 +449,91 @@ mod tests {
                 self.0,
                 OrderFxRates::from_broker_fx_result(fx(FxRateKind::Buy), fx(FxRateKind::Mid)),
                 ReadEndpoint::OrderFxRates,
+            ))
+        }
+        fn indicator_quotes(
+            &self,
+            _codes: &[IndicatorCode],
+        ) -> impl Future<Output = Result<Vec<MarketIndicatorQuote>, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                vec![
+                    MarketIndicatorQuote::from_response(
+                        MasterCode::try_new("KOSPI").expect("지표"),
+                        &NumericInput::try_new("2571").expect("포인트"),
+                        None,
+                        instant(),
+                    )
+                    .expect("지수"),
+                ],
+                ReadEndpoint::IndicatorQuotes,
+            ))
+        }
+        fn indicator_candles(
+            &self,
+            _code: IndicatorCode,
+            _window: TimeInterval,
+            _period: CandlePeriod,
+        ) -> impl Future<Output = Result<Vec<MarketIndicatorCandle>, PortError>> + Send {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::IndicatorCandles))
+        }
+        fn rankings(
+            &self,
+            query: &application::RankingQuery,
+        ) -> impl Future<Output = Result<StockRanking, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                StockRanking::from_response(RankingResponseInput {
+                    kind: MasterCode::try_new("TOP_LOSERS").expect("종류"),
+                    market: query.market(),
+                    duration: MasterCode::try_new("1w").expect("기간"),
+                    limit: query.limit(),
+                    rows: vec![],
+                    ranked_at: None,
+                    collected: instant(),
+                    caution_filter: query.caution_filter(),
+                })
+                .expect("랭킹"),
+                ReadEndpoint::Rankings,
+            ))
+        }
+        fn stock_investor_flow(
+            &self,
+            _instrument: &QuoteInstrument,
+            _from: CalendarDate,
+            _through: CalendarDate,
+        ) -> impl Future<Output = Result<Vec<InvestorFlow>, PortError>> + Send {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::StockInvestorFlow))
+        }
+        fn indicator_investor_flow(
+            &self,
+            _code: IndicatorCode,
+            _from: CalendarDate,
+            _through: CalendarDate,
+            _interval: FlowInterval,
+        ) -> impl Future<Output = Result<Vec<InvestorFlow>, PortError>> + Send {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::IndicatorInvestorFlow))
+        }
+        fn sector_composition(
+            &self,
+            sector: &SectorId,
+            market: KnownMarket,
+        ) -> impl Future<Output = Result<SectorComposition, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                SectorComposition::from_stocks_response(sector.clone(), market, vec![], instant())
+                    .expect("섹터 구성"),
+                ReadEndpoint::SectorComposition,
+            ))
+        }
+        fn calendar(
+            &self,
+            market: KnownMarket,
+        ) -> impl Future<Output = Result<MarketCalendar, PortError>> + Send {
+            std::future::ready(outcome(
+                self.0,
+                a20_calendar(market),
+                ReadEndpoint::Calendar,
             ))
         }
     }
@@ -303,10 +557,10 @@ mod tests {
     #[test]
     fn successful_facts_survive_a_separate_cash_failure() {
         let port = FakeBroker(Scenario::Complete);
-        let accounts: Vec<AccountObservation> = ready(port.accounts()).expect("계좌");
-        let first = accounts.first().expect("첫 계좌");
+        let accounts: BrokerAccountRows = ready(port.accounts()).expect("계좌");
+        let first = accounts.rows().first().expect("첫 계좌");
         assert_eq!(first.account(), &AccountId::new(7));
-        assert_eq!(first.display(), account().display());
+        assert_eq!(first.display_fact(), account().display_fact());
         let snapshot: HoldingsObservation = ready(port.holdings(first.account())).expect("보유");
         let broken_cash: Result<BuyingPower, PortError> =
             ready(FakeBroker(Scenario::Failed).buying_power(first.account(), Currency::Usd));
@@ -330,7 +584,8 @@ mod tests {
         }
         .expect("완전 응답 예상");
         assert_eq!(complete.rows(), &received());
-        let quotes: Vec<QuoteObservation> = ready(port.quotes(&[instrument()])).expect("현재가");
+        let quotes: Vec<QuoteObservation> =
+            ready(port.quotes(&[quote_instrument()])).expect("현재가");
         assert_eq!(
             quotes
                 .first()
@@ -342,7 +597,7 @@ mod tests {
             instrument().symbol()
         );
         let candles: Vec<Candle> = ready(port.candles(
-            &instrument(),
+            &quote_instrument(),
             interval(),
             CandlePeriod::Daily,
             PriceAdjustment::Raw,
@@ -401,9 +656,10 @@ mod tests {
         let port = FakeBroker(Scenario::Complete);
         let missing = master_instrument(
             Symbol::try_new("MSFT").expect("종목"),
-            domain::InstrumentId::try_new("fixture-msft").expect("고정 자료 키"),
+            InstrumentId::try_new("fixture-msft").expect("고정 자료 키"),
         );
-        let batch = ready(port.quotes(&[instrument(), missing.clone()])).expect("종목별 결과");
+        let batch =
+            ready(port.quotes(&[quote_instrument(), missing.clone()])).expect("종목별 결과");
         assert_eq!(
             batch
                 .first()
@@ -424,7 +680,7 @@ mod tests {
             ))
         );
         assert_eq!(
-            ready(port.quotes(&vec![instrument(); 200]))
+            ready(port.quotes(&vec![quote_instrument(); 200]))
                 .expect("상한")
                 .len(),
             200
@@ -434,7 +690,10 @@ mod tests {
             HttpStatus::BadRequest,
             PortErrorKind::InvalidRequest(RequestRejection::BatchLimitExceeded),
         );
-        assert_eq!(ready(port.quotes(&vec![instrument(); 201])), Err(expected));
+        assert_eq!(
+            ready(port.quotes(&vec![quote_instrument(); 201])),
+            Err(expected)
+        );
         assert_eq!(ready(port.quotes(&[])), Err(expected));
     }
     #[test]
@@ -453,12 +712,12 @@ mod tests {
             Some(failure(ReadEndpoint::Transactions))
         );
         assert_eq!(
-            ready(port.quotes(&[instrument()])).err(),
+            ready(port.quotes(&[quote_instrument()])).err(),
             Some(failure(ReadEndpoint::Quotes))
         );
         assert_eq!(
             ready(port.candles(
-                &instrument(),
+                &quote_instrument(),
                 interval(),
                 CandlePeriod::Minute,
                 PriceAdjustment::Raw
@@ -549,5 +808,321 @@ mod tests {
             assert_eq!(error.status(), HttpStatus::BadRequest);
             assert_eq!(error.kind(), kind);
         }
+    }
+    #[test]
+    fn a20_broker_contract_methods_return_domain_results_and_send_futures() {
+        let port = FakeBroker(Scenario::Failed);
+        let account = AccountId::new(19);
+        let stock = instrument();
+        let quote = quote_instrument();
+        let id = BrokerOrderId::try_new("fixture-order-73").expect("주문 키");
+        let sellable_quantity: Result<SellableQuantityFact, PortError> =
+            ready(port.sellable_quantity(&account, &stock));
+        assert_eq!(
+            sellable_quantity,
+            Err(failure(ReadEndpoint::SellableQuantity))
+        );
+        let open_orders: Result<BrokerOrderSet, PortError> = ready(port.open_orders(&account));
+        assert_eq!(open_orders, Err(failure(ReadEndpoint::OpenOrders)));
+        let closed_orders: Result<ClosedOrderSet, PortError> =
+            ready(port.closed_orders(&account, interval()));
+        assert_eq!(closed_orders, Err(failure(ReadEndpoint::ClosedOrders)));
+        let order: Result<BrokerOrder, PortError> = ready(port.order(&account, &id));
+        assert_eq!(order, Err(failure(ReadEndpoint::Order)));
+        let stock_warnings: Result<StockWarnings, PortError> = ready(port.stock_warnings(&stock));
+        assert_eq!(stock_warnings, Err(failure(ReadEndpoint::StockWarnings)));
+        let instruments: Result<MasterInstrumentFacts, PortError> =
+            ready(port.instruments(KnownMarket::Us));
+        assert_eq!(instruments, Err(failure(ReadEndpoint::Instruments)));
+        let orderbook: Result<Orderbook, PortError> = ready(port.orderbook(&quote));
+        assert_eq!(orderbook, Err(failure(ReadEndpoint::Orderbook)));
+        let price_limits: Result<PriceLimits, PortError> = ready(port.price_limits(&quote));
+        assert_eq!(price_limits, Err(failure(ReadEndpoint::PriceLimits)));
+        let commission_rate: Result<CommissionRateFact, PortError> =
+            ready(port.commission_rate(&account, KnownMarket::Us));
+        assert_eq!(commission_rate, Err(failure(ReadEndpoint::CommissionRate)));
+    }
+    #[test]
+    fn a20_market_contract_methods_return_domain_results_and_send_futures() {
+        let port = FakeBroker(Scenario::Failed);
+        let quote = quote_instrument();
+        let sector = SectorId::try_new("fixture-sector").expect("섹터");
+        let date = instant().offset_calendar_date();
+        let query = application::RankingQuery::try_new(
+            RankingKind::TopLosers,
+            KnownMarket::Us,
+            RankingDuration::Week,
+            RankingLimit::try_new(37).expect("개수"),
+            RankingCautionFilter::Excluded,
+        )
+        .expect("랭킹 쿼리");
+        let indicator_quotes: Result<Vec<MarketIndicatorQuote>, PortError> =
+            ready(port.indicator_quotes(&[IndicatorCode::Kospi, IndicatorCode::KrBond3Y]));
+        assert_eq!(
+            indicator_quotes,
+            Err(failure(ReadEndpoint::IndicatorQuotes))
+        );
+        let indicator_candles: Result<Vec<MarketIndicatorCandle>, PortError> =
+            ready(port.indicator_candles(IndicatorCode::Kosdaq, interval(), CandlePeriod::Minute));
+        assert_eq!(
+            indicator_candles,
+            Err(failure(ReadEndpoint::IndicatorCandles))
+        );
+        let rankings: Result<StockRanking, PortError> = ready(port.rankings(&query));
+        assert_eq!(rankings, Err(failure(ReadEndpoint::Rankings)));
+        let stock_investor_flow: Result<Vec<InvestorFlow>, PortError> =
+            ready(port.stock_investor_flow(&quote, date, date));
+        assert_eq!(
+            stock_investor_flow,
+            Err(failure(ReadEndpoint::StockInvestorFlow))
+        );
+        let indicator_investor_flow: Result<Vec<InvestorFlow>, PortError> = ready(
+            port.indicator_investor_flow(IndicatorCode::Kospi, date, date, FlowInterval::Week),
+        );
+        assert_eq!(
+            indicator_investor_flow,
+            Err(failure(ReadEndpoint::IndicatorInvestorFlow))
+        );
+        let sector_composition: Result<SectorComposition, PortError> =
+            ready(port.sector_composition(&sector, KnownMarket::Kr));
+        assert_eq!(
+            sector_composition,
+            Err(failure(ReadEndpoint::SectorComposition))
+        );
+        let calendar: Result<MarketCalendar, PortError> = ready(port.calendar(KnownMarket::Us));
+        assert_eq!(calendar, Err(failure(ReadEndpoint::Calendar)));
+    }
+    fn a20_features() -> Vec<(BrokerCapability, ReadEndpoint)> {
+        vec![
+            (
+                BrokerCapability::SellableQuantity,
+                ReadEndpoint::SellableQuantity,
+            ),
+            (BrokerCapability::OpenOrders, ReadEndpoint::OpenOrders),
+            (BrokerCapability::ClosedOrders, ReadEndpoint::ClosedOrders),
+            (BrokerCapability::Order, ReadEndpoint::Order),
+            (BrokerCapability::StockWarnings, ReadEndpoint::StockWarnings),
+            (BrokerCapability::Instruments, ReadEndpoint::Instruments),
+            (BrokerCapability::Orderbook, ReadEndpoint::Orderbook),
+            (BrokerCapability::PriceLimits, ReadEndpoint::PriceLimits),
+            (
+                BrokerCapability::CommissionRate,
+                ReadEndpoint::CommissionRate,
+            ),
+            (
+                BrokerCapability::IndicatorQuotes,
+                ReadEndpoint::IndicatorQuotes,
+            ),
+            (
+                BrokerCapability::IndicatorCandles,
+                ReadEndpoint::IndicatorCandles,
+            ),
+            (BrokerCapability::Rankings, ReadEndpoint::Rankings),
+            (
+                BrokerCapability::StockInvestorFlow,
+                ReadEndpoint::StockInvestorFlow,
+            ),
+            (
+                BrokerCapability::IndicatorInvestorFlow,
+                ReadEndpoint::IndicatorInvestorFlow,
+            ),
+            (
+                BrokerCapability::SectorComposition,
+                ReadEndpoint::SectorComposition,
+            ),
+            (BrokerCapability::Calendar, ReadEndpoint::Calendar),
+        ]
+    }
+    #[test]
+    fn a20_capabilities_and_new_endpoint_errors_preserve_closed_classification() {
+        for (capability, endpoint) in a20_features() {
+            assert_eq!(
+                BrokerCapabilities::new(BTreeSet::from([capability])).support_for(capability),
+                CapabilitySupport::Supported
+            );
+            assert_eq!(
+                BrokerCapabilities::new(BTreeSet::new()).support_for(capability),
+                CapabilitySupport::Unsupported
+            );
+            assert_eq!(
+                application::classify_port_error(PortError::new(
+                    endpoint,
+                    HttpStatus::BadRequest,
+                    PortErrorKind::Unsupported(capability)
+                )),
+                application::ErrorClass::Bug(application::BugDiagnostic::UnsupportedCapability(
+                    capability
+                ))
+            );
+        }
+        assert_eq!(
+            application::classify_port_error(PortError::new(
+                ReadEndpoint::Order,
+                HttpStatus::NotFound,
+                PortErrorKind::NotFound(MissingData::Order)
+            )),
+            application::ErrorClass::NoData(MissingData::Order)
+        );
+    }
+    fn a20_order(account: &AccountId, id: &BrokerOrderId) -> BrokerOrder {
+        BrokerOrder::from_lookup_result(BrokerOrderRow {
+            account_id: account.clone(),
+            order_id: id.clone(),
+            instrument: instrument(),
+            side: OrderSide::Sell,
+            status: BrokerOrderStatus::Canceled,
+            size: BrokerOrderSize::Quantity(
+                Quantity::parse(&NumericInput::try_new("13").expect("수량")).expect("수량"),
+            ),
+            filled_quantity: Quantity::parse(&NumericInput::try_new("0").expect("미체결"))
+                .expect("수량"),
+            average_filled_price: None,
+            filled_amount: BrokerOrderMoney::Absent,
+            filled_at: None,
+            ordered_at: instant(),
+            canceled_at: BrokerOrderTime::Absent,
+            price: BrokerOrderPrice::Absent,
+            order_type: BrokerOrderType::Market,
+            time_in_force: BrokerTimeInForce::Day,
+            observed_at: instant(),
+        })
+        .expect("종료 주문")
+    }
+    fn a20_calendar(market: KnownMarket) -> MarketCalendar {
+        let info = match market {
+            KnownMarket::Kr => SessionInformation::Kr {
+                pre_market: None,
+                regular_market: None,
+                after_market: None,
+            },
+            KnownMarket::Us => SessionInformation::Us {
+                day_market: None,
+                pre_market: None,
+                regular_market: None,
+                after_market: None,
+            },
+        };
+        let first = instant().offset_calendar_date();
+        let second = instant()
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(86_400), Nanosecond::new(0)).expect("하루"),
+            )
+            .expect("둘째")
+            .offset_calendar_date();
+        let third = instant()
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(172_800), Nanosecond::new(0)).expect("이틀"),
+            )
+            .expect("셋째")
+            .offset_calendar_date();
+        MarketCalendar::try_new(
+            MarketSession::try_new(first, info).expect("전일"),
+            MarketSession::try_new(second, info).expect("당일"),
+            MarketSession::try_new(third, info).expect("다음 날"),
+        )
+        .expect("달력")
+    }
+    #[test]
+    fn a20_success_keeps_bound_facts_incomplete_orders_and_unknown_server_times() {
+        let port = FakeBroker(Scenario::Complete);
+        let account = AccountId::new(73);
+        let stock = instrument();
+        let quote = quote_instrument();
+        let id = BrokerOrderId::try_new("fixture-37").expect("주문 ID");
+        let sellable = ready(port.sellable_quantity(&account, &stock)).expect("매도가능");
+        assert_eq!(sellable.account_id(), &account);
+        assert_eq!(sellable.instrument(), &stock);
+        assert_eq!(
+            sellable.quantity(),
+            Quantity::parse(&NumericInput::try_new("17").expect("수량")).expect("수량")
+        );
+        assert_eq!(sellable.observed_at(), instant());
+        let open = ready(port.open_orders(&account)).expect("미체결");
+        assert_eq!(open.account_id(), &account);
+        assert_eq!(open.coverage(), OpenOrderCoverage::Incomplete);
+        let closed = ready(port.closed_orders(&account, interval())).expect("종료");
+        assert_eq!(closed.account_id(), &account);
+        assert_eq!(closed.covered(), interval());
+        assert_eq!(closed.observed_at(), interval().end());
+        assert_eq!(
+            closed.completeness(),
+            ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
+        );
+        let order = ready(port.order(&account, &id)).expect("단건");
+        assert_eq!(order.account_id(), &account);
+        assert_eq!(order.order_id(), &id);
+        assert_eq!(order.instrument(), &stock);
+        let warnings = ready(port.stock_warnings(&stock)).expect("경고");
+        assert_eq!(warnings.instrument(), &stock);
+        assert_eq!(warnings.warnings(), &[StockWarning::InvestmentRisk]);
+        assert_eq!(
+            ready(port.instruments(KnownMarket::Us))
+                .expect("빈 마스터")
+                .instruments(),
+            []
+        );
+        let book = ready(port.orderbook(&quote)).expect("호가");
+        assert_eq!(book.instrument(), &quote);
+        assert_eq!(book.timestamp(), None);
+        assert_eq!(book.collected_at(), instant());
+        let limits = ready(port.price_limits(&quote)).expect("가격 제한");
+        assert_eq!(limits.instrument(), &quote);
+        assert_eq!(limits.range(), PriceLimitRange::Unlimited);
+        let _commission: CommissionRateFact =
+            ready(port.commission_rate(&account, KnownMarket::Us)).expect("수수료율");
+    }
+    #[test]
+    fn a20_market_success_keeps_units_and_request_identity() {
+        let port = FakeBroker(Scenario::Complete);
+        let quote = quote_instrument();
+        let indicators = ready(port.indicator_quotes(&[IndicatorCode::Kospi])).expect("지수");
+        assert_eq!(
+            indicators.first().expect("지수 행").code(),
+            IndicatorCode::Kospi
+        );
+        assert_eq!(
+            indicators.first().expect("지수 행").unit(),
+            IndicatorUnit::IndexPoints
+        );
+        assert_eq!(
+            ready(port.indicator_candles(IndicatorCode::Kospi, interval(), CandlePeriod::Daily))
+                .expect("빈 봉"),
+            []
+        );
+        let query = application::RankingQuery::try_new(
+            RankingKind::TopLosers,
+            KnownMarket::Us,
+            RankingDuration::Week,
+            RankingLimit::try_new(37).expect("개수"),
+            RankingCautionFilter::Excluded,
+        )
+        .expect("요청");
+        let ranked = ready(port.rankings(&query)).expect("랭킹");
+        assert_eq!(ranked.kind(), query.kind());
+        assert_eq!(ranked.market(), query.market());
+        assert_eq!(ranked.duration(), query.duration());
+        assert_eq!(ranked.limit(), query.limit());
+        assert_eq!(ranked.caution_filter(), query.caution_filter());
+        let day = instant().offset_calendar_date();
+        assert_eq!(
+            ready(port.stock_investor_flow(&quote, day, day)).expect("빈 수급"),
+            []
+        );
+        assert_eq!(
+            ready(port.indicator_investor_flow(IndicatorCode::Kospi, day, day, FlowInterval::Week))
+                .expect("빈 시장 수급"),
+            []
+        );
+        let sector = SectorId::try_new("fixture-19").expect("섹터 ID");
+        let composition = ready(port.sector_composition(&sector, KnownMarket::Us)).expect("구성");
+        assert_eq!(composition.sector(), &sector);
+        assert_eq!(composition.market(), KnownMarket::Us);
+        assert_eq!(
+            composition.scope(),
+            SectorCompositionScope::IncludingDescendants
+        );
+        let calendar = ready(port.calendar(KnownMarket::Us)).expect("달력");
+        assert_eq!(calendar.today().market(), Market::Us);
+        assert_eq!(calendar.today().sessions(), []);
     }
 }
