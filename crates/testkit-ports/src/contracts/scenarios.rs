@@ -264,18 +264,18 @@ pub async fn candle_history<P: MarketDataRepository>(port: &P, facts: CandleHist
     validate_candle_witnesses(instrument, window, first, distractors);
     let period = first.time().period();
     let adjustment = first.adjustment();
+    for value in distractors
+        .iter()
+        .filter(|value| value.instrument() != instrument)
+    {
+        reject_candle_mismatch(port, instrument, (first, value), window).await;
+    }
     let mut input = ordered.clone();
     input.reverse();
     input.extend([outside.0.clone(), outside.1.clone(), first.clone()]);
     super::market_data_repository_store_candles(port, instrument, &input, Ok(WriteCompleted)).await;
     super::market_data_repository_store_candles(port, instrument, &ordered, Ok(WriteCompleted))
         .await;
-    for value in distractors
-        .iter()
-        .filter(|value| value.instrument() != instrument)
-    {
-        reject_candle_mismatch(port, instrument, value).await;
-    }
     for value in distractors {
         super::market_data_repository_store_candles(
             port,
@@ -371,7 +371,9 @@ pub async fn settings_roundtrip<P: SettingsRepository>(
     super::settings_repository_profile(port, Ok(Some(initial.clone()))).await;
     super::settings_repository_risk_settings(port, Ok(Some(*original))).await;
     super::settings_repository_store_risk_settings(port, original, Ok(WriteCompleted)).await;
+    super::settings_repository_risk_settings(port, Ok(Some(*original))).await;
     super::settings_repository_store_risk_settings(port, revised, Ok(WriteCompleted)).await;
+    super::settings_repository_risk_settings(port, Ok(Some(*revised))).await;
     super::settings_repository_profile(port, Ok(Some(changed.clone()))).await;
     super::settings_repository_store_profile(port, initial, Ok(WriteCompleted)).await;
     super::settings_repository_risk_settings(port, Ok(Some(*restored))).await;
@@ -523,14 +525,29 @@ pub async fn settings_risk_first<P: SettingsRepository>(
 async fn reject_candle_mismatch<P: MarketDataRepository>(
     port: &P,
     instrument: &InstrumentId,
-    value: &Candle,
+    values: (&Candle, &Candle),
+    window: TimeInterval,
 ) {
+    let (matching, other) = values;
     assert!(
-        port.store_candles(instrument, std::slice::from_ref(value))
+        port.store_candles(instrument, &[matching.clone(), other.clone()])
             .await
             .is_err(),
         "저장 인자와 봉 종목 불일치는 거부"
     );
+    for value in [matching, other] {
+        assert_eq!(
+            port.candles(
+                value.instrument(),
+                window,
+                value.time().period(),
+                value.adjustment()
+            )
+            .await,
+            Ok(vec![]),
+            "거부된 봉 묶음은 어느 종목에도 저장되지 않음"
+        );
+    }
 }
 fn validate_candle_witnesses(
     instrument: &InstrumentId,

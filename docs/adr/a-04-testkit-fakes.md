@@ -57,7 +57,7 @@ contracts 모듈은 포트를 제네릭으로 받고 ADR의 입력·성공 값·
 
 읽기 포트 29개는 오류와 실제 요청 인자 기록을 각각 검사한다. 중복 시세 슬롯의 성공·실패 보존도 검사한다. 시계·대본·메모리 상태·뉴스 정책·부재 구분·감사 중복·비밀 키 격리를 별도로 검사한다. 포트 trait 정의나 가짜 대본 자체가 실제 HTTP의 페이지 완전성·배치 제한·원본 진위를 강제한다고 주장하지 않는다.
 
-현재 domain의 공개 validate는 아직 외부 게이트를 Unknown으로 남긴다. 실제 PendingOrderConfirmation을 생산하는 주문 유스케이스 전에는 공개 소비자가 주문 요약을 만드는 정상 성공 fixture를 얻을 수 없다. 주문 결과 타입의 세 응답 FIFO는 공통 Script에서 실행하고, 주문 참조 계약 함수·열 필드 기록 변환과 가짜 trait impl은 컴파일로 확인한다. 실제 주문 요약을 통한 확인 호출 연동은 O-01·O-17에서 같은 공개 계약 함수로 검사한다. 이 한계를 숨기거나 내부 토큰 생성자를 공개하지 않는다.
+현재 domain의 공개 validate는 아직 외부 게이트를 Unknown으로 남긴다. 실제 PendingOrderConfirmation을 생산하는 주문 유스케이스 전에는 공개 소비자가 주문 요약을 만드는 정상 성공 fixture를 얻을 수 없다. 주문 결과 타입의 세 응답 FIFO는 공통 Script에서 실행하고, 주문 참조 계약 함수·열 필드 기록 변환과 가짜 trait impl은 컴파일로 확인한다. 실제 주문 요약을 통한 확인 호출 연동은 O-01·O-04·O-17과 A-14 연동 유스케이스 테스트로 인계한다. 메인 결정에 따라 이 실행 미검증은 A-04 차단으로 세지 않는다. 이 한계를 숨기거나 내부 토큰 생성자를 공개하지 않는다.
 
 ## 보호 등록과 검사
 
@@ -74,7 +74,7 @@ contracts 모듈은 포트를 제네릭으로 받고 ADR의 입력·성공 값·
 | T·S 묶음 | 녹화·메모리 fixture의 기대 사실로 공개 contracts 함수를 실제 어댑터에 실행 |
 | S-05 | 기사와 종목의 연결 생성·저장 입력 계약 확정 |
 | S-10 | 투자 성향과 위험 설정의 단일 저장 사실·트랜잭션 계약을 실제 저장소에서 강제 |
-| O-01·O-17 | 정상 주문 게이트가 생산한 PendingOrderConfirmation의 요약 참조를 이용해 확인·기록 계약 연동 |
+| O-01·O-04·O-17, A-14 연동 유스케이스 테스트 | 정상 초안→검증→요약 경로에서 실제 confirm_order와 공개 user_presence_order 계약 실행. 세 응답 FIFO, 요청 기록 열 필드·종류·횟수·순서 대응 검증 |
 
 ## 손 변형
 
@@ -155,7 +155,7 @@ DraftRecord는 가격 범위까지 기록한다. Proposal의 안전한 가격 �
 
 본인 확인 impl의 testkit-ports 허용은 보호된 scripted_presence.rs 한 파일로 한정한다. 공통 Script 엔진과 lib 모듈 연결도 보호 등록·해시에 포함한다. 다른 파일의 impl을 거부하는 음성 사례와 보호 파일의 정상 구현 양성 사례를 함께 검사한다. open-issues I-14의 경로는 사용자가 승인한 testkit-ports 구조와 기계적으로 맞춘다.
 
-주문 확인의 정상 실행 fixture는 여전히 미해결이다. 공개 validate는 외부 게이트를 Unknown으로 남기므로 외부 테스트에서 토큰과 PendingOrderConfirmation을 만들 수 없다. 단독 요약 생성이나 토큰 공개는 사용자 금지 경계이며 추가하지 않는다. 주문 결과 FIFO의 공통 대본 시험과 컴파일 확인을 실제 confirm_order 실행으로 세지 않는다. 독립 리뷰 1의 지적 7은 남은 차단이다.
+주문 확인의 정상 실행 fixture는 여전히 미해결이다. 공개 validate는 외부 게이트를 Unknown으로 남기므로 외부 테스트에서 토큰과 PendingOrderConfirmation을 만들 수 없다. 단독 요약 생성이나 토큰 공개는 사용자 금지 경계이며 추가하지 않는다. 주문 결과 FIFO의 공통 대본 시험과 컴파일 확인을 실제 confirm_order 실행으로 세지 않는다. 독립 리뷰 1 당시 차단으로 기록했으나, 메인의 마무리 결정에 따라 A-04의 차단이 아닌 주문 경로 작업의 필수 검증 인계로 닫는다.
 
 ## 리뷰 반례의 손 변형 재검증
 
@@ -206,7 +206,7 @@ contracts::broker_read_buying_power(&broker, &account, Currency::Krw, Err(error)
 assert_eq!(broker.calls(), vec![BrokerReadCall::BuyingPower(account, Currency::Krw)]);
 ```
 
-메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 74개와 저장 의미의 제네릭 시나리오 16개다. 주문용 user_presence_order의 실제 실행은 앞서 기록한 차단이며 다른 계약 실행으로 대체했다고 세지 않는다.
+메모리 저장소는 script_<메서드>().push(MemoryReply::Memory)로 실제 저장 의미를 선택하거나 MemoryReply::Return(Err(error))로 한 호출의 오류를 선택한다. 등록하지 않은 호출은 즉시 실패한다. 계약 함수는 메서드별 74개와 저장 의미의 제네릭 시나리오 16개다. 주문용 user_presence_order의 실제 실행은 앞서 명시한 주문 경로 작업의 인계이며 다른 계약 실행으로 대체했다고 세지 않는다.
 
 ## 독립 리뷰 2 이후 보강과 미확정 계약
 
@@ -218,7 +218,7 @@ assert_eq!(broker.calls(), vec![BrokerReadCall::BuyingPower(account, Currency::K
 
 Hours 보유 기간에서 시간 허용을 해제하면 domain 복원이 거부한다. 가짜는 InvalidData를 반환하며 양쪽 기존 값을 보존한다. 자동 기간 변경 여부와 입력 충돌의 오류 분류는 S-10에 인계한다. 보정 자료 A→B→A는 같은 사실 A의 재요청으로 AlreadyRecorded이며 최신 B를 유지한다. 같은 값을 가진 새 논리 버전과 동일 기록 재요청을 구별할 식별 계약은 S-06에 인계한다.
 
-Draft 한정 Clone과 가격 범위 읽기는 빌린 초안의 모든 사실을 보존하는 A-04 저장소 구현 범위다. 독립 비판자는 Draft 복제 성공과 Validated·ExecutionToken·OrderSummary·PendingOrderConfirmation 복제 실패, 비공개 생성·분해 실패를 실제 컴파일로 확인했다. 권한 확대 주장은 기각됐고 별도 명시 승인 이력이 없다는 관찰을 무승인 보호 변경으로 확대하지 않는다. 주문 확인의 정상 fixture 차단은 이 안전한 읽기·초안 복제와 별개로 유지한다.
+Draft 한정 Clone과 가격 범위 읽기는 빌린 초안의 모든 사실을 보존하는 A-04 저장소 구현 범위다. 독립 비판자는 Draft 복제 성공과 Validated·ExecutionToken·OrderSummary·PendingOrderConfirmation 복제 실패, 비공개 생성·분해 실패를 실제 컴파일로 확인했다. 권한 확대 주장은 기각됐고 별도 명시 승인 이력이 없다는 관찰을 무승인 보호 변경으로 확대하지 않는다. 주문 확인의 정상 fixture 검증은 이 안전한 읽기·초안 복제와 별개로 주문 경로 작업에 인계한다.
 
 ## 수정 2의 손 변형
 
@@ -249,3 +249,35 @@ Draft 한정 Clone과 가격 범위 읽기는 빌린 초안의 모든 사실을 
 | 58 | 위험 저장 종목 상한 사실 손실 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |
 | 59 | 위험 저장 주의 비중 사실 손실 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |
 | 60 | 위험 저장 섹터 상한 사실 손실 | 컴파일 성공·검출 | tests::settings_risk_first_populates_the_same_profile_facts, tests::settings_queries_reflect_the_same_shared_facts |
+
+## 메인 마무리 결정: 주문 확인 실행 검증의 인계
+
+정상 공개 domain API로 요약을 얻을 수 없는 동안에는 요약 단독 생성·Clone·토큰 분해 공개 금지를 우선한다. 메인은 이로 인한 주문 확인 실행 미검증을 A-04 차단이 아닌 인계로 닫았다. 실행한 적 없는 주문 확인을 통과로 바꾸지는 않는다.
+
+넘긴 검증은 정상 초안→검증→요약 경로에서 얻은 PendingOrderConfirmation.summary() 참조로 ScriptedPresence::confirm_order 및 contracts::user_presence_order를 실행하고, Confirmed·Denied·Unavailable의 FIFO 응답, PresenceCall::Order와 호출 횟수·순서, 기록 열 필드(종목명·심볼·시장·방향·수량·지정가·예상 금액·예상 수수료·계좌 끝자리·주문 키 접두사)의 일치를 확인하는 것이다. 받는 작업은 O-01(정상 게이트), O-04(초안→요약), O-17(확인 연동)이며 A-14와 연결되는 A-06 이후 유스케이스 테스트에서 같은 공개 계약 함수를 실행한다. 테스트는 testkit-ports/tests/ 또는 별도 테스트 crate에 두고 application/domain의 개발 의존 금지를 지킨다.
+
+리뷰는 3차 Opus와 새 Codex 비판으로 끝낸다. 그 회차에서 실행으로 재현된 차단·중요만 수정하고, 수정 뒤 전체 검사와 손 변형으로 확인한다. 4차 재리뷰는 하지 않으며 미재현·사소 지적은 판정만 기록한다.
+
+## 독립 리뷰 3의 실행 확정 중요 지적 수정
+
+재사용 공개 봉 계약은 정상 쓰기 전에 요청 종목 봉과 다른 종목 봉을 섞어 저장을 요청하고 거부 직후 양쪽 종목을 조회한다. 어느 쪽에도 기록이 생기지 않아야 하며, 뒤의 정상 저장이나 중복 제거가 오류 호출의 흔적을 가리지 않게 한다. 실제 메모리 가짜의 쓰기 전 검사는 이미 이 의미를 지켰으므로 저장 구현은 바꾸지 않는다. 위험 설정 계약도 각 성공 쓰기 직후, 다른 쓰기가 상태를 덮기 전에 위험 설정을 즉시 조회한다.
+
+잘못된 어댑터 세 형태(전체 봉·맞는 종목 봉·다른 종목 봉을 먼저 저장한 뒤 오류 반환)와 위험 조회 캐시를 다음 성향 쓰기까지 갱신하지 않는 형태를 회귀 시험한다. 수정 전 공개 계약을 사용한 임시 복사본에서 네 오답 모두가 계약을 통과함을 확인했고, 보강 뒤 네 오답을 거부하며 실제 가짜는 포트 테스트 68개를 통과했다. 소스·테스트에 검사 끄기를 추가하지 않았다.
+
+공개 증인 전제조건의 한 축 격리와 설정 제외 목록·스위치 변화 강제는 사소 지적이다. 현재 고정 증인의 키 격리는 확인됐고 실제 가짜는 제외 목록을 보존한다. 메인 결정에 따라 이번에는 수정하지 않고 판정만 남긴다. T·S의 실제 어댑터 계약 호출은 독립 축을 가진 증인을 유지하고 S-10은 비기본 제외 목록·스위치 변경 증인을 포함한다. 4차 리뷰는 하지 않는다.
+
+## 최종 소스의 손 변형 재검증
+
+수정 3의 최종 소스와 회귀 증인으로 기존 34개·A-21 다섯 개·격리 및 설정 21개를 재실행하고 아래 계약 변형 일곱 개를 더 실행했다. 서로 다른 67개 전부가 컴파일된 뒤 검출됐으며 생존 0·시간 초과 0이다. 각 임시 복사본의 기준·원복 검사가 통과했고 변형 대상 소스 및 해당 회귀 테스트 파일의 SHA-256이 현재 파일과 같다. target/A-04/final-mutations.json과 final-mutation-source-proof.json에 결과를 보존한다. 이전 실행에서 컴파일 불가였던 단순 삭제를 검출로 세지 않았고, 컴파일 가능한 동등 결함의 실제 결과만 최종 67개에 포함한다.
+
+임시 복사본에서 현재 회귀 네 개와 수정 전 9218cb0의 공개 계약을 조합한 red 대조군은 네 오답 모두를 허용했다. 같은 회귀가 수정 후에는 의도한 계약 단언으로 각각 거부됨을 확인했다. 첫 추가 증인의 정상 저장 동작을 다듬는 과정의 실험 실패는 최종 개수에 포함하지 않는다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 61 | 거부 후 다른 종목 조회 누락 | 컴파일 성공·검출 | tests::public_contract_rejects_only_other_candles_written_before_error |
+| 62 | 거부 후 인자 종목 조회 누락 | 컴파일 성공·검출 | tests::public_contract_rejects_only_matching_candles_written_before_error |
+| 63 | 거부 후 조회 결과를 빈 목록으로 덮음 | 컴파일 성공·검출 | tests::public_contract_rejects_only_other_candles_written_before_error, tests::public_contract_rejects_candles_written_before_error, tests::public_contract_rejects_only_matching_candles_written_before_error |
+| 64 | 거부 묶음의 정상 종목 증인 제거 | 컴파일 성공·검출 | tests::public_contract_rejects_only_matching_candles_written_before_error |
+| 65 | 거부 묶음의 다른 종목 증인 제거 | 컴파일 성공·검출 | tests::generic_candle_and_valuation_contracts_preserve_query_scope, tests::public_contract_rejects_candles_written_before_error, tests::public_contract_rejects_only_matching_candles_written_before_error, tests::public_contract_rejects_only_other_candles_written_before_error |
+| 66 | 위험 변경 직후 조회 삭제 | 컴파일 성공·검출 | tests::public_contract_rejects_stale_risk_after_successful_write |
+| 67 | 위험 변경 직후 과거 설정 기대 | 컴파일 성공·검출 | tests::public_contract_rejects_stale_risk_after_successful_write, tests::settings_queries_reflect_the_same_shared_facts |

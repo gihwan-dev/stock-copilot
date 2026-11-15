@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AuditEntry, AuditKind, RiskChangeConfirmation, SecretKey, SecretValue, SignalRepository,
-        SystemFailure, SystemPort, SystemPortError, WriteCompleted,
+        AuditEntry, AuditKind, FxRateQuery, MarketDataRepository, RiskChangeConfirmation,
+        SecretKey, SecretValue, SettingsRepository, SignalRepository, SystemFailure, SystemPort,
+        SystemPortError, WriteCompleted,
     };
     use domain::{
         AccountId, AcquisitionPrice, AdjustmentBasis, AiProbability, AiProbabilityInput,
@@ -540,15 +541,9 @@ mod tests {
             &draft_for("other-draft", "113"),
         ));
     }
-    #[test]
-    fn generic_candle_and_valuation_contracts_preserve_query_scope() {
-        let first_account = AccountId::new(17);
-        let other_account = AccountId::new(29);
-        let candles = MemoryMarketDataRepository::default();
-        memory(candles.script_store_candles(), 6);
-        memory(candles.script_candles(), 1);
+    fn run_candle_contract<P: MarketDataRepository>(candles: &P) {
         run(contracts::scenarios::candle_history(
-            &candles,
+            candles,
             contracts::scenarios::CandleHistoryFacts {
                 instrument: &id("candle-a"),
                 window: TimeInterval::try_new(at(0), at(120)).expect("기간"),
@@ -579,6 +574,15 @@ mod tests {
                 ],
             },
         ));
+    }
+    #[test]
+    fn generic_candle_and_valuation_contracts_preserve_query_scope() {
+        let first_account = AccountId::new(17);
+        let other_account = AccountId::new(29);
+        let candles = MemoryMarketDataRepository::default();
+        memory(candles.script_store_candles(), 6);
+        memory(candles.script_candles(), 3);
+        run_candle_contract(&candles);
         let valuations = MemoryValuationRepository::default();
         memory(valuations.script_append(), 6);
         memory(valuations.script_history(), 2);
@@ -778,9 +782,7 @@ mod tests {
         saved.hours_permission = hours;
         InvestorProfile::restore_from_saved_state(saved).expect("저장된 성향")
     }
-    #[test]
-    fn settings_queries_reflect_the_same_shared_facts() {
-        let repository = MemorySettingsRepository::default();
+    fn run_settings_contract<P: SettingsRepository>(repository: &P) {
         let initial = profile_hours(
             &InvestorProfile::default()
                 .with_horizon(Horizon::new(HorizonSelection::HalfYearOrMore))
@@ -816,15 +818,20 @@ mod tests {
             initial.weight_caps(),
             initial.risk_appetite(),
         );
-        memory(repository.script_store_profile(), 2);
-        memory(repository.script_store_risk_settings(), 2);
-        memory(repository.script_profile(), 3);
-        memory(repository.script_risk_settings(), 3);
         run(contracts::scenarios::settings_roundtrip(
-            &repository,
+            repository,
             (&initial, &changed),
             (&original, &revised, &restored),
         ));
+    }
+    #[test]
+    fn settings_queries_reflect_the_same_shared_facts() {
+        let repository = MemorySettingsRepository::default();
+        memory(repository.script_store_profile(), 2);
+        memory(repository.script_store_risk_settings(), 2);
+        memory(repository.script_profile(), 3);
+        memory(repository.script_risk_settings(), 5);
+        run_settings_contract(&repository);
     }
     #[test]
     fn audit_and_secret_lifecycles_are_reusable_generic_scenarios() {
@@ -975,5 +982,154 @@ mod tests {
             ),
             Ok(vec![]),
         ));
+    }
+
+    enum PartialCandleWrite {
+        All,
+        Matching,
+        Other,
+    }
+    impl PartialCandleWrite {
+        fn selected<'candle>(
+            &self,
+            instrument: &InstrumentId,
+            candle: &'candle Candle,
+        ) -> Option<&'candle Candle> {
+            match self {
+                Self::All => Some(candle),
+                Self::Matching => (candle.instrument() == instrument).then_some(candle),
+                Self::Other => (candle.instrument() != instrument).then_some(candle),
+            }
+        }
+    }
+    struct PartialCandles {
+        inner: MemoryMarketDataRepository,
+        mode: PartialCandleWrite,
+    }
+    impl MarketDataRepository for PartialCandles {
+        async fn store_quote(
+            &self,
+            instrument: &InstrumentId,
+            quote: &Quote,
+        ) -> Result<WriteCompleted, SystemPortError> {
+            self.inner.store_quote(instrument, quote).await
+        }
+        async fn quote(&self, instrument: &InstrumentId) -> Result<Option<Quote>, SystemPortError> {
+            self.inner.quote(instrument).await
+        }
+        async fn store_candles(
+            &self,
+            instrument: &InstrumentId,
+            candles: &[Candle],
+        ) -> Result<WriteCompleted, SystemPortError> {
+            let mode = if candles.iter().any(|value| value.instrument() != instrument) {
+                &self.mode
+            } else {
+                &PartialCandleWrite::All
+            };
+            for value in candles
+                .iter()
+                .filter_map(|candle| mode.selected(instrument, candle))
+            {
+                self.inner
+                    .store_candles(value.instrument(), std::slice::from_ref(value))
+                    .await?;
+            }
+            if candles.iter().any(|value| value.instrument() != instrument) {
+                return Err(SystemPortError::new(
+                    SystemPort::Repository,
+                    SystemFailure::InvalidData,
+                ));
+            }
+            Ok(WriteCompleted)
+        }
+        async fn candles(
+            &self,
+            instrument: &InstrumentId,
+            window: TimeInterval,
+            period: CandlePeriod,
+            adjustment: PriceAdjustment,
+        ) -> Result<Vec<Candle>, SystemPortError> {
+            self.inner
+                .candles(instrument, window, period, adjustment)
+                .await
+        }
+        async fn store_fx_rate(&self, rate: &FxRate) -> Result<WriteCompleted, SystemPortError> {
+            self.inner.store_fx_rate(rate).await
+        }
+        async fn fx_rate(
+            &self,
+            pair: FxPair,
+            kind: FxRateKind,
+            at: FxRateQuery,
+        ) -> Result<Option<FxRate>, SystemPortError> {
+            self.inner.fx_rate(pair, kind, at).await
+        }
+    }
+    fn partial_candle_contract(mode: PartialCandleWrite) {
+        let inner = MemoryMarketDataRepository::default();
+        memory(inner.script_store_candles(), 32);
+        memory(inner.script_candles(), 16);
+        run_candle_contract(&PartialCandles { inner, mode });
+    }
+    #[test]
+    #[should_panic(expected = "거부된 봉 묶음은 어느 종목에도 저장되지 않음")]
+    fn public_contract_rejects_candles_written_before_error() {
+        partial_candle_contract(PartialCandleWrite::All);
+    }
+    #[test]
+    #[should_panic(expected = "거부된 봉 묶음은 어느 종목에도 저장되지 않음")]
+    fn public_contract_rejects_only_matching_candles_written_before_error() {
+        partial_candle_contract(PartialCandleWrite::Matching);
+    }
+    #[test]
+    #[should_panic(expected = "거부된 봉 묶음은 어느 종목에도 저장되지 않음")]
+    fn public_contract_rejects_only_other_candles_written_before_error() {
+        partial_candle_contract(PartialCandleWrite::Other);
+    }
+    #[derive(Default)]
+    struct StaleRisk {
+        inner: MemorySettingsRepository,
+        cached: std::sync::RwLock<Option<RiskSettings>>,
+    }
+    impl SettingsRepository for StaleRisk {
+        async fn store_profile(
+            &self,
+            profile: &InvestorProfile,
+        ) -> Result<WriteCompleted, SystemPortError> {
+            let result = self.inner.store_profile(profile).await?;
+            let current = self.inner.risk_settings().await?;
+            *self.cached.write().expect("캐시 잠금") = current;
+            Ok(result)
+        }
+        async fn profile(&self) -> Result<Option<InvestorProfile>, SystemPortError> {
+            self.inner.profile().await
+        }
+        async fn store_risk_settings(
+            &self,
+            settings: &RiskSettings,
+        ) -> Result<WriteCompleted, SystemPortError> {
+            let result = self.inner.store_risk_settings(settings).await?;
+            let current = self.inner.risk_settings().await?;
+            let mut cached = self.cached.write().expect("캐시 잠금");
+            if cached.is_none() {
+                *cached = current;
+            }
+            Ok(result)
+        }
+        async fn risk_settings(&self) -> Result<Option<RiskSettings>, SystemPortError> {
+            let current = *self.cached.read().expect("캐시 잠금");
+            std::future::ready(Ok(current)).await
+        }
+    }
+    #[test]
+    #[should_panic(expected = "ADR 포트 계약: 입력에 대응하는 사실과 오류를 보존")]
+    fn public_contract_rejects_stale_risk_after_successful_write() {
+        let port = StaleRisk::default();
+        memory(port.inner.script_store_profile(), 2);
+        memory(port.inner.script_store_risk_settings(), 2);
+        memory(port.inner.script_profile(), 3);
+        memory(port.inner.script_risk_settings(), 8);
+        run_settings_contract(&port);
     }
 }
