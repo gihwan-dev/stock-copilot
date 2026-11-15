@@ -159,11 +159,7 @@ const ChartPlot = (props: PlotProps): ReactElement => (
     )}
     <ChartMarks
       marks={props.geometry.marks}
-      mode={
-        props.geometry.layout === "trend" && props.geometry.marks.length !== 1
-          ? "trend"
-          : "parts"
-      }
+      mode={props.geometry.layout === "trend" ? "trend" : "parts"}
       onHover={props.onHover}
     />
     {props.active === undefined ? null : (

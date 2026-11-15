@@ -405,7 +405,7 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
         );
         w.cleanup();
         const bad = w.draw(component, [{ label: "a", value: "bad" }], theme);
-        assert.match(bad.container.textContent, /차트를 그릴 수 없어요/);
+        assert.match(bad.container.textContent, /차트 값을 읽을 수 없어요/);
         assert.equal(bad.container.querySelector("svg[role=img]"), null);
         assert.equal(
           w.getComputedStyle(bad.container.querySelector("figure"))
@@ -452,24 +452,33 @@ test("DS06 500점에서도 탭은 하나이며 ID로 현재 데이터를 표시�
     { id: "1", label: "다음", value: "22" },
   ]);
   assert.match(status(), /갱신.*99/);
-  w.change(view, "LineChart", [{ id: "1", label: "다음", value: "22" }]);
+  w.change(view, "LineChart", [
+    { id: "1", label: "다음", value: "22" },
+    { id: "2", label: "새 마지막", value: "33" },
+  ]);
   assert.equal(status(), "");
   const mark = view.container.querySelector('path[pointer-events="all"]');
   w.fire.pointerEnter(mark);
   assert.match(status(), /다음.*22/);
   w.fire.pointerLeave(mark);
   w.fire.keyDown(button, { key: "ArrowLeft" });
-  assert.match(status(), /다음.*22/);
+  assert.match(status(), /새 마지막.*33/);
+  w.change(view, "LineChart", [{ id: "1", label: "다음", value: "22" }]);
+  assert.equal(view.container.querySelectorAll("svg[role=img]").length, 0);
+  assert.equal(view.container.querySelectorAll("button").length, 0);
   w.cleanup();
 });
 
-test("DS06 한 점은 채워지고 밀집 선의 기본 마커는 선을 덮지 않는다", () => {
+test("DS06 한 점 추이는 빈 상태이고 밀집 선의 기본 마커는 선을 덮지 않는다", () => {
   const w = runtime.open();
-  const single = w.draw("LineChart", [{ label: "중앙", value: "7" }]);
-  const point = single.container.querySelector('path[pointer-events="all"]');
-  const fill = w.getComputedStyle(point).fill;
-  assert.ok(fill !== "" && fill !== "none", fill);
-  w.cleanup();
+  for (const component of ["LineChart", "AreaChart"]) {
+    const single = w.draw(component, [{ label: "중앙", value: "7" }]);
+    assert.equal(single.container.querySelectorAll("svg[role=img]").length, 0);
+    assert.equal(single.container.querySelectorAll("button").length, 0);
+    assert.equal(single.container.querySelectorAll("table").length, 0);
+    assert.match(single.container.textContent, /표시할 항목이 없어요/);
+    w.cleanup();
+  }
   const dense = w.draw(
     "LineChart",
     Array.from({ length: 500 }, (_, index) => ({

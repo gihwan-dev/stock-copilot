@@ -15,7 +15,7 @@ const catalog = {
   "ds.chartTreemapOrder": {
     ko: "왼쪽부터 아래 목록의 순서예요. 값이 0인 항목은 제외해요" as UiText,
   },
-  "ds.chartInvalid": { ko: "차트를 그릴 수 없어요" as UiText },
+  "ds.chartInvalid": { ko: "차트 값을 읽을 수 없어요" as UiText },
   "ds.chartSeparator": { ko: " · " as UiText },
   "number.jo": { ko: "조" as UiText },
   "number.empty": { ko: "" as UiText },

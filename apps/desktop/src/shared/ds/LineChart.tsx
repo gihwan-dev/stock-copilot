@@ -102,6 +102,7 @@ export const lineGeometry = (
 ): ChartGeometry => {
   const geometry = lineCoordinates(props.data);
   if (geometry.kind !== "ready") return geometry;
+  if (geometry.points.length < 2) return { kind: "empty" };
   const first = geometry.points.at(0);
   const last = geometry.points.at(-1);
   if (first === undefined || last === undefined) return { kind: "invalid" };
