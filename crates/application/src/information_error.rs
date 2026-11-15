@@ -1,19 +1,28 @@
 use crate::{
-    BugDiagnostic, ClassifiedError, ErrorClass, RequestRejection, ResponseMismatch, RetryDelay,
+    BugDiagnostic, ClassifiedError, ErrorClass, ResetTime, ResponseMismatch, RetryDelay, UserAction,
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialSource {
+    Dart,
+    Fred,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentifierError {
+    InvalidFormat,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InformationError {
-    Unavailable(RetryDelay),
+    Unavailable(ResetTime),
     InvalidResponse(ResponseMismatch),
-    InvalidIdentifier,
+    InvalidCredential(CredentialSource),
 }
 impl ClassifiedError for InformationError {
     fn class(&self) -> ErrorClass {
         match *self {
-            Self::Unavailable(retry) => ErrorClass::Wait(retry),
+            Self::Unavailable(_reset) => ErrorClass::Wait(RetryDelay::Unknown),
             Self::InvalidResponse(reason) => ErrorClass::Bug(BugDiagnostic::Response(reason)),
-            Self::InvalidIdentifier => {
-                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::MalformedRequest))
+            Self::InvalidCredential(_source) => {
+                ErrorClass::UserAction(UserAction::CheckCredentials)
             }
         }
     }

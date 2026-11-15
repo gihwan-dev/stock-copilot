@@ -1,6 +1,8 @@
 import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
-import tailwind from "eslint-plugin-better-tailwindcss";
+import rawTailwind from "eslint-plugin-better-tailwindcss";
+import { tokenTailwind } from "./ds-tailwind.mjs";
+const tailwind = tokenTailwind(rawTailwind);
 import tseslint from "typescript-eslint";
 import { DS_CLASSES, DS_VARIANTS } from "./ds-classes.mjs";
 import { dsPlugin } from "./ds-plugin.mjs";
@@ -81,6 +83,7 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     },
     plugins: { "better-tailwindcss": tailwind, ds: dsPlugin },
     settings: {
+      "ds/price-color-files": lists.PRICE_COLOR_FILES,
       "better-tailwindcss": {
         cwd: new URL("../", import.meta.url).pathname,
         entryPoint: DS_ENTRY,

@@ -1,206 +1,404 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        AiRunId, BugDiagnostic, ClassifiedError, CollectedObservation, ErrorClass, FinancialLine,
-        FinancialStatement, InformationError, MacroObservation, MacroSeriesId, MetricFact,
-        MetricSource, MetricUnit, MetricValue, PublicationTime, RequestRejection, ResponseMismatch,
-        RetryDelay, RunInput, RunKind, RunSpec,
+        AiEvent, AiRunId, AiUsage, AnalysisPrompt, BugDiagnostic, ChatHistory, ChatMessage,
+        ChatRole, ClassifiedError, CollectedEntry, CollectedObservation, CollectionQuery,
+        CollectionTopic, CredentialSource, ErrorClass, FinancialFact, FinancialLine,
+        FinancialSource, FinancialStatement, FinancialUnit, IdentifierError, InformationError,
+        MacroFact, MacroObservation, MacroSeriesId, MacroSource, MacroUnit, MetricValue, ModelName,
+        ModelSelection, PromptError, PublicationTime, ReasoningEffort, ResetTime, ResponseMismatch,
+        RetryDelay, RunInput, RunKind, RunPurpose, RunSpec, StoredUserMessage, TokenCount,
+        TokenUsage, UserAction, UserMessageId, Utilization,
     };
     use domain::{
         Amount, AmountInput, CalendarDate, CalendarYear, DayNumber, MonthNumber, Nanosecond,
         NormalizedUrl, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText,
     };
-
-    fn instant() -> Timestamp {
-        Timestamp::from_parts(
-            UnixSeconds::new(100),
-            Nanosecond::new(0),
-            OffsetSeconds::new(0),
-        )
-        .expect("시각")
+    fn stamp(value: UnixSeconds) -> Timestamp {
+        Timestamp::from_parts(value, Nanosecond::new(0), OffsetSeconds::new(0)).expect("시각")
     }
-    fn day() -> CalendarDate {
-        CalendarDate::from_parts(
-            CalendarYear::new(2026),
-            MonthNumber::new(11),
-            DayNumber::new(15),
-        )
-        .expect("기준일")
+    fn day(value: DayNumber) -> CalendarDate {
+        CalendarDate::from_parts(CalendarYear::new(2026), MonthNumber::new(11), value)
+            .expect("날짜")
     }
-    fn text() -> UntrustedText {
-        UntrustedText::try_new("비밀 원문").expect("본문")
+    fn text(value: &str) -> UntrustedText {
+        UntrustedText::try_new(value).expect("텍스트")
     }
     fn value() -> MetricValue {
         MetricValue::new(Amount::parse(&AmountInput::new("-12.50")).expect("수치"))
     }
     #[test]
-    fn news_preserves_domain_item_and_absent_publication_time() {
-        let item = domain::CollectedItem::from_web(
-            NormalizedUrl::try_new("https://example.com/a").expect("주소"),
-            text(),
-            Some(text()),
-        );
-        for published in [
-            PublicationTime::NotProvided,
-            PublicationTime::Known(instant()),
-        ] {
-            let result = CollectedObservation::new(item.clone(), published, instant());
-            assert_eq!(result.item(), &item);
-            assert_eq!(result.published_at(), published);
-            assert_eq!(result.collected_at(), instant());
-            assert!(!format!("{result:?}").contains("비밀 원문"));
-        }
-    }
-    #[test]
-    fn facts_preserve_unit_date_source_and_exact_value() {
-        for unit in [
-            MetricUnit::Currency(domain::Currency::Krw),
-            MetricUnit::Currency(domain::Currency::Usd),
-            MetricUnit::Percent,
-            MetricUnit::IndexPoints,
-            MetricUnit::Multiple,
-            MetricUnit::Count,
-        ] {
-            for source in [
-                MetricSource::Dart,
-                MetricSource::UsTreasury,
-                MetricSource::Fred,
-                MetricSource::TossEtf(Symbol::try_new("SPY").expect("ETF")),
-            ] {
-                let fact = MetricFact::new(value(), unit, day(), source.clone());
-                assert_eq!(fact.value(), &value());
-                assert_eq!(fact.unit(), unit);
-                assert_eq!(fact.as_of(), day());
-                assert_eq!(fact.source(), &source);
+    fn identifiers_check_every_ascii_character_and_length_boundaries() {
+        let allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-";
+        for byte in 0_u8..=127 {
+            let character = char::from(byte);
+            let input = format!("x{character}y");
+            if allowed.contains(character) {
+                assert_eq!(AiRunId::try_new(&input).expect("실행 ID").as_str(), input);
+                assert_eq!(
+                    MacroSeriesId::try_new(&input).expect("계열 ID").as_str(),
+                    input
+                );
+                assert_eq!(ModelName::try_new(&input).expect("모델").as_str(), input);
+                assert_eq!(
+                    UserMessageId::try_new(&input).expect("메시지 ID").as_str(),
+                    input
+                );
+            } else {
+                assert_bad_identifiers(&input);
             }
         }
-    }
-    fn expected_kind(spec: &RunSpec) -> RunKind {
-        match spec.input() {
-            RunInput::Collection(_) => RunKind::Collection,
-            RunInput::Analysis {
-                prompt: _prompt,
-                assignments: _assignments,
-            } => RunKind::Analysis,
+        for invalid in ["", "한글", "é", "a+b", "a@b", "a:b", &"z".repeat(129)] {
+            assert_bad_identifiers(invalid);
         }
-    }
-    #[test]
-    fn run_kinds_are_collection_and_analysis_without_environment_details() {
-        for input in [
-            RunInput::Collection(text()),
-            RunInput::Analysis {
-                prompt: text(),
-                assignments: vec![],
-            },
-        ] {
-            let spec = RunSpec::new(AiRunId::try_new("run-1").expect("실행"), input.clone());
-            assert_eq!(spec.id().as_str(), "run-1");
-            assert_eq!(spec.input(), &input);
-            assert_eq!(spec.kind(), expected_kind(&spec));
-            assert!(!format!("{spec:?}").contains("비밀 원문"));
-        }
-    }
-    #[test]
-    fn identifiers_reject_empty_long_and_non_identifier_text() {
-        for invalid in ["", "a/b", "a b", "한글", "a\n", &"a".repeat(129)] {
+        for valid in ["0", "a", "_", ".", "-", &"z".repeat(128)] {
+            assert_eq!(AiRunId::try_new(valid).expect("실행 ID").as_str(), valid);
             assert_eq!(
-                AiRunId::try_new(invalid),
-                Err(InformationError::InvalidIdentifier)
+                MacroSeriesId::try_new(valid).expect("계열 ID").as_str(),
+                valid
+            );
+            assert_eq!(ModelName::try_new(valid).expect("모델").as_str(), valid);
+            assert_eq!(
+                UserMessageId::try_new(valid).expect("메시지 ID").as_str(),
+                valid
             );
         }
-        for valid in ["a", "run-1", "RUN_2.x", &"a".repeat(128)] {
-            assert_eq!(AiRunId::try_new(valid).expect("식별자").as_str(), valid);
-        }
     }
-    fn expected_class(error: InformationError) -> ErrorClass {
-        match error {
-            InformationError::Unavailable(retry) => ErrorClass::Wait(retry),
-            InformationError::InvalidResponse(reason) => {
-                ErrorClass::Bug(BugDiagnostic::Response(reason))
-            }
-            InformationError::InvalidIdentifier => {
-                ErrorClass::Bug(BugDiagnostic::Request(RequestRejection::MalformedRequest))
-            }
-        }
-    }
-    #[test]
-    fn every_error_class_preserves_closed_reason_and_retry() {
-        for error in [
-            InformationError::Unavailable(RetryDelay::Unknown),
-            InformationError::Unavailable(RetryDelay::Known(
-                domain::TimeSpan::try_new(domain::SpanSeconds::new(7), Nanosecond::new(123))
-                    .expect("대기"),
-            )),
-            InformationError::InvalidResponse(ResponseMismatch::Schema),
-            InformationError::InvalidResponse(ResponseMismatch::Validation),
-            InformationError::InvalidIdentifier,
-        ] {
-            assert_eq!(error.class(), expected_class(error));
-        }
-    }
-    #[test]
-    fn financial_and_macro_envelopes_keep_their_identity_and_fields() {
-        let fact = MetricFact::new(value(), MetricUnit::Percent, day(), MetricSource::Fred);
+    fn assert_bad_identifiers(input: &str) {
+        assert_eq!(AiRunId::try_new(input), Err(IdentifierError::InvalidFormat));
         assert_eq!(
-            value().amount(),
-            &Amount::parse(&AmountInput::new("-12.50")).expect("수치")
+            MacroSeriesId::try_new(input),
+            Err(IdentifierError::InvalidFormat)
         );
-        let line = FinancialLine::new(text(), fact.clone());
-        assert_eq!(line.label(), &text());
-        assert_eq!(line.fact(), &fact);
-        let statement = FinancialStatement::new(
-            Symbol::try_new("AAPL").expect("종목"),
-            day(),
-            vec![line.clone()],
+        assert_eq!(
+            ModelName::try_new(input),
+            Err(IdentifierError::InvalidFormat)
         );
-        assert_eq!(statement.symbol(), &Symbol::try_new("AAPL").expect("종목"));
-        assert_eq!(statement.period_end(), day());
-        assert_eq!(statement.lines(), &vec![line]);
-        let series = MacroSeriesId::try_new("DGS10").expect("계열");
-        let observation = MacroObservation::new(series.clone(), fact.clone());
-        assert_eq!(observation.series(), &series);
-        assert_eq!(observation.fact(), &fact);
+        assert_eq!(
+            UserMessageId::try_new(input),
+            Err(IdentifierError::InvalidFormat)
+        );
     }
-    fn unit_name(unit: MetricUnit) -> &'static str {
-        match unit {
-            MetricUnit::Currency(domain::Currency::Krw) => "KRW",
-            MetricUnit::Currency(domain::Currency::Usd) => "USD",
-            MetricUnit::Percent => "percent",
-            MetricUnit::IndexPoints => "points",
-            MetricUnit::Multiple => "multiple",
-            MetricUnit::Count => "count",
+    #[test]
+    fn news_and_disclosures_preserve_identity_and_distinct_times() {
+        let receipts = [
+            domain::ReceiptNo::Dart(
+                domain::DartReceiptNo::try_new("20261115000001").expect("DART"),
+            ),
+            domain::ReceiptNo::Kind(
+                domain::KindReceiptNo::try_new("20261115000001").expect("KIND"),
+            ),
+            domain::ReceiptNo::SecEdgar(
+                domain::SecEdgarReceiptNo::try_new("0000320193-26-000003").expect("SEC"),
+            ),
+        ];
+        let mut keys = vec![];
+        for receipt in receipts {
+            let disclosure = domain::Disclosure::new(
+                receipt.clone(),
+                NormalizedUrl::try_new("https://example.com/disclosure").expect("주소"),
+                text("공시 제목"),
+                Some(text("비밀 본문")),
+            );
+            let observed = CollectedObservation::new(
+                CollectedEntry::Disclosure(disclosure),
+                PublicationTime::Known(stamp(UnixSeconds::new(11))),
+                stamp(UnixSeconds::new(99)),
+            );
+            let CollectedEntry::Disclosure(item) = observed.entry() else {
+                panic!("공시 키를 보존해야 함")
+            };
+            assert_eq!(item.key().receipt_no(), &receipt);
+            assert_eq!(item.key().source(), receipt.source());
+            keys.push(item.key().clone());
+            assert_times_and_redaction(&observed);
+        }
+        assert_ne!(keys.first(), keys.get(1));
+    }
+    #[test]
+    fn news_sources_preserve_identity_and_distinct_times() {
+        for source in [
+            domain::NewsSource::Hankyung,
+            domain::NewsSource::Maekyung,
+            domain::NewsSource::Yonhap,
+            domain::NewsSource::Edaily,
+            domain::NewsSource::BankOfKorea,
+            domain::NewsSource::FederalReserve,
+            domain::NewsSource::GoogleNews,
+            domain::NewsSource::YahooFinance,
+        ] {
+            let news = domain::NewsItem::new(
+                source.clone(),
+                NormalizedUrl::try_new("https://example.com/news").expect("주소"),
+                text("기사"),
+                Some(text("비밀 본문")),
+            );
+            let observed = CollectedObservation::new(
+                CollectedEntry::News(news),
+                PublicationTime::Known(stamp(UnixSeconds::new(11))),
+                stamp(UnixSeconds::new(99)),
+            );
+            let CollectedEntry::News(item) = observed.entry() else {
+                panic!("기사를 보존해야 함")
+            };
+            assert_eq!(
+                item.collected().source(),
+                &domain::InformationSource::News(source)
+            );
+            assert_eq!(item.collected().url().as_str(), "https://example.com/news");
+            assert_times_and_redaction(&observed);
         }
     }
-    fn source_name(source: MetricSource) -> &'static str {
-        match source {
-            MetricSource::Dart => "DART",
-            MetricSource::UsTreasury => "Treasury",
-            MetricSource::Fred => "FRED",
-            MetricSource::TossEtf(_symbol) => "ETF approximation",
+    fn assert_times_and_redaction(observed: &CollectedObservation) {
+        assert_eq!(
+            observed.published_at(),
+            PublicationTime::Known(stamp(UnixSeconds::new(11)))
+        );
+        assert_eq!(observed.collected_at(), stamp(UnixSeconds::new(99)));
+        assert!(!format!("{observed:?}").contains("비밀 본문"));
+    }
+    #[test]
+    fn missing_publication_does_not_replace_collection_time() {
+        let news = domain::NewsItem::new(
+            domain::NewsSource::Edaily,
+            NormalizedUrl::try_new("https://example.com/none").expect("주소"),
+            text("기사"),
+            None,
+        );
+        let observed = CollectedObservation::new(
+            CollectedEntry::News(news),
+            PublicationTime::NotProvided,
+            stamp(UnixSeconds::new(42)),
+        );
+        assert_eq!(observed.published_at(), PublicationTime::NotProvided);
+        assert_eq!(observed.collected_at(), stamp(UnixSeconds::new(42)));
+    }
+    #[test]
+    fn financial_period_symbol_and_row_date_remain_independent() {
+        for name in ["MSFT", "NVDA"] {
+            for unit in [
+                FinancialUnit::Currency(domain::Currency::Krw),
+                FinancialUnit::Currency(domain::Currency::Usd),
+                FinancialUnit::Percent,
+                FinancialUnit::Multiple,
+                FinancialUnit::Count,
+            ] {
+                let fact = FinancialFact::new(
+                    value(),
+                    unit,
+                    day(DayNumber::new(10)),
+                    FinancialSource::Dart,
+                );
+                assert_eq!(
+                    fact.value().amount(),
+                    &Amount::parse(&AmountInput::new("-12.50")).expect("수치")
+                );
+                assert_eq!(fact.unit(), unit);
+                assert_eq!(fact.source(), FinancialSource::Dart);
+                assert_eq!(fact.as_of(), day(DayNumber::new(10)));
+                let line = FinancialLine::new(text("외부 계정명"), fact.clone());
+                assert_eq!(line.label(), &text("외부 계정명"));
+                assert_eq!(line.fact(), &fact);
+                let statement = FinancialStatement::new(
+                    Symbol::try_new(name).expect("종목"),
+                    day(DayNumber::new(15)),
+                    vec![line.clone()],
+                );
+                assert_eq!(statement.symbol().as_str(), name);
+                assert_eq!(statement.period_end(), day(DayNumber::new(15)));
+                assert_eq!(statement.lines(), &vec![line]);
+            }
         }
     }
     #[test]
-    fn units_and_sources_have_exhaustive_contract_expectations() {
-        for (unit, expected) in [
-            (MetricUnit::Currency(domain::Currency::Krw), "KRW"),
-            (MetricUnit::Currency(domain::Currency::Usd), "USD"),
-            (MetricUnit::Percent, "percent"),
-            (MetricUnit::IndexPoints, "points"),
-            (MetricUnit::Multiple, "multiple"),
-            (MetricUnit::Count, "count"),
+    fn macro_facts_preserve_etf_symbol_and_official_provenance() {
+        for source in [
+            MacroSource::UsTreasury,
+            MacroSource::Fred,
+            MacroSource::TossEtf(Symbol::try_new("QQQ").expect("ETF")),
+            MacroSource::TossEtf(Symbol::try_new("VT").expect("ETF")),
         ] {
-            assert_eq!(unit_name(unit), expected);
+            for unit in [MacroUnit::Percent, MacroUnit::IndexPoints, MacroUnit::Usd] {
+                let fact = MacroFact::new(value(), unit, day(DayNumber::new(12)), source.clone());
+                assert_eq!(fact.value(), &value());
+                assert_eq!(fact.unit(), unit);
+                assert_eq!(fact.source(), &source);
+                assert_eq!(fact.as_of(), day(DayNumber::new(12)));
+                let observation = MacroObservation::new(
+                    MacroSeriesId::try_new("DGS2").expect("계열"),
+                    fact.clone(),
+                );
+                assert_eq!(observation.series().as_str(), "DGS2");
+                assert_eq!(observation.fact(), &fact);
+            }
         }
-        for (source, expected) in [
-            (MetricSource::Dart, "DART"),
-            (MetricSource::UsTreasury, "Treasury"),
-            (MetricSource::Fred, "FRED"),
-            (
-                MetricSource::TossEtf(Symbol::try_new("SPY").expect("ETF")),
-                "ETF approximation",
-            ),
+    }
+    #[test]
+    fn errors_preserve_credential_source_and_absolute_reset_time() {
+        for source in [CredentialSource::Dart, CredentialSource::Fred] {
+            let error = InformationError::InvalidCredential(source);
+            assert_eq!(
+                error.class(),
+                ErrorClass::UserAction(UserAction::CheckCredentials)
+            );
+            let InformationError::InvalidCredential(actual) = error else {
+                panic!("자격 원인 보존")
+            };
+            assert_eq!(actual, source);
+        }
+        for resets in [
+            ResetTime::NotProvided,
+            ResetTime::Known(stamp(UnixSeconds::new(321))),
         ] {
-            assert_eq!(source_name(source), expected);
+            let error = InformationError::Unavailable(resets);
+            assert_eq!(error.class(), ErrorClass::Wait(RetryDelay::Unknown));
+            let InformationError::Unavailable(actual) = error else {
+                panic!("절대 시각 보존")
+            };
+            assert_eq!(actual, resets);
         }
+        for mismatch in [ResponseMismatch::Schema, ResponseMismatch::Validation] {
+            assert_eq!(
+                InformationError::InvalidResponse(mismatch).class(),
+                ErrorClass::Bug(BugDiagnostic::Response(mismatch))
+            );
+        }
+    }
+    #[test]
+    fn collection_queries_separate_code_topics_from_stored_user_messages() {
+        let query = CollectionQuery::CodeTopics {
+            instruments: vec![Symbol::try_new("MSFT").expect("종목")],
+            topics: vec![
+                CollectionTopic::CompanyNews,
+                CollectionTopic::Earnings,
+                CollectionTopic::Disclosures,
+            ],
+        };
+        let spec = spec(RunInput::Collection(query.clone()));
+        assert_eq!(spec.kind(), RunKind::Collection);
+        assert_eq!(spec.input(), &RunInput::Collection(query));
+        let stored = StoredUserMessage::from_store_result(
+            UserMessageId::try_new("message-7").expect("ID"),
+            text("사용자가 직접 저장한 원문 123"),
+        );
+        assert_eq!(stored.id().as_str(), "message-7");
+        assert_eq!(
+            stored.text().as_untrusted_str(),
+            "사용자가 직접 저장한 원문 123"
+        );
+        let input = RunInput::Collection(CollectionQuery::UserMessage(stored));
+        assert_eq!(spec_with(input.clone()).input(), &input);
+    }
+    fn spec(input: RunInput) -> RunSpec {
+        spec_with(input)
+    }
+    fn spec_with(input: RunInput) -> RunSpec {
+        RunSpec::new(
+            AiRunId::try_new("run-42").expect("실행"),
+            input,
+            ModelSelection::Named(ModelName::try_new("claude-opus-5-5").expect("모델")),
+            ReasoningEffort::High,
+            RunPurpose::DeepResearch,
+        )
+    }
+    #[test]
+    fn analysis_spec_and_prompt_preserve_model_effort_and_purpose() {
+        let prompt = AnalysisPrompt::try_new("비밀 분석 프롬프트").expect("프롬프트");
+        assert_eq!(prompt.as_str(), "비밀 분석 프롬프트");
+        let spec = spec(RunInput::Analysis(prompt));
+        assert_eq!(spec.kind(), RunKind::Analysis);
+        assert_eq!(spec.id().as_str(), "run-42");
+        assert_eq!(
+            spec.model(),
+            &ModelSelection::Named(ModelName::try_new("claude-opus-5-5").expect("모델"))
+        );
+        assert_eq!(spec.effort(), ReasoningEffort::High);
+        assert_eq!(spec.purpose(), RunPurpose::DeepResearch);
+        assert!(!format!("{spec:?}").contains("비밀 분석 프롬프트"));
+        assert_eq!(AnalysisPrompt::try_new(""), Err(PromptError::Empty));
+        assert_eq!(
+            AnalysisPrompt::try_new(&"x".repeat(65_537)),
+            Err(PromptError::TooLong)
+        );
+        assert_eq!(
+            AnalysisPrompt::try_new(&"x".repeat(65_536))
+                .expect("상한")
+                .as_str()
+                .len(),
+            65_536
+        );
+    }
+    #[test]
+    fn history_keeps_roles_order_and_exact_untrusted_text() {
+        let history = ChatHistory::new(vec![
+            ChatMessage::new(ChatRole::User, text("사용자\u{200b}")),
+            ChatMessage::new(ChatRole::Assistant, text("비서")),
+            ChatMessage::new(ChatRole::User, text("다음 사용자")),
+        ]);
+        assert_eq!(
+            history
+                .messages()
+                .iter()
+                .map(ChatMessage::role)
+                .collect::<Vec<_>>(),
+            vec![ChatRole::User, ChatRole::Assistant, ChatRole::User]
+        );
+        assert_eq!(
+            history
+                .messages()
+                .iter()
+                .map(|message| message.text().as_untrusted_str())
+                .collect::<Vec<_>>(),
+            vec!["사용자\u{200b}", "비서", "다음 사용자"]
+        );
+        assert!(!format!("{history:?}").contains("다음 사용자"));
+        assert_eq!(ChatHistory::new(vec![]).messages(), &[]);
+    }
+    #[test]
+    fn usage_reuses_domain_zero_to_one_validation_and_absolute_reset() {
+        for number in ["0", "0.001", "0.7", "1"] {
+            let ratio = domain::Ratio::parse(&domain::NumericInput::try_new(number).expect("숫자"))
+                .expect("비율");
+            let probability = domain::Probability::try_new(ratio.as_decimal()).expect("0~1");
+            let utilization = Utilization::new(probability);
+            assert_eq!(utilization.as_probability(), &probability);
+            let AiUsage::Available(actual) = AiUsage::Available(utilization) else {
+                panic!("사용률 보존")
+            };
+            assert_eq!(actual.as_probability(), &probability);
+        }
+        for number in ["-0.001", "1.001"] {
+            let ratio = domain::Ratio::parse(&domain::NumericInput::try_new(number).expect("숫자"))
+                .expect("비율");
+            assert_eq!(
+                domain::Probability::try_new(ratio.as_decimal()),
+                Err(domain::ProbabilityError::OutOfRange)
+            );
+        }
+        let resets = ResetTime::Known(stamp(UnixSeconds::new(404)));
+        assert_eq!(
+            AiUsage::Waiting(resets),
+            AiUsage::Waiting(ResetTime::Known(stamp(UnixSeconds::new(404))))
+        );
+    }
+    #[test]
+    fn tokens_and_actual_model_are_distinct_result_facts() {
+        let usage = TokenUsage::new(
+            TokenCount::new(11),
+            TokenCount::new(22),
+            TokenCount::new(33),
+            TokenCount::new(44),
+        );
+        assert_eq!(*usage.input().as_u64(), 11);
+        assert_eq!(*usage.output().as_u64(), 22);
+        assert_eq!(*usage.cache_read().as_u64(), 33);
+        assert_eq!(*usage.cache_creation().as_u64(), 44);
+        let model = ModelName::try_new("claude-sonnet-5-5").expect("실제 모델");
+        let event = AiEvent::ActualModel(model.clone());
+        assert_eq!(event, AiEvent::ActualModel(model));
+        assert_ne!(
+            event,
+            AiEvent::ActualModel(ModelName::try_new("claude-opus-5-5").expect("요청 모델"))
+        );
     }
 }

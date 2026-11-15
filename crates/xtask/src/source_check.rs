@@ -5,6 +5,7 @@ mod decimal_arithmetic;
 mod decimal_methods;
 #[cfg(test)]
 mod decimal_methods_tests;
+mod environment_keys;
 mod failure;
 mod finding;
 mod globs;
@@ -119,17 +120,21 @@ pub(crate) fn check_source(path: &str, source: &str, allowlists: &Allowlists) ->
     };
     match source.parse::<TokenStream>() {
         Ok(stream) => findings.extend(
-            token_rules(stream, scope)
-                .into_iter()
-                .filter(|(_, rule)| {
-                    generated_exempt(attributes, rule, allowlists) == Exemption::Checked
-                })
-                .filter(|(_, rule)| {
-                    allowlists
-                        .clock_names(path)
-                        .is_none_or(|allowed| !allowed.contains(&rule.to_string()))
-                })
-                .map(|(line, rule)| Finding::at_line(path, line, rule)),
+            environment_keys::filter(
+                source,
+                token_rules(stream, scope),
+                allowlists.clock_names(path),
+            )
+            .into_iter()
+            .filter(|(_, rule)| {
+                generated_exempt(attributes, rule, allowlists) == Exemption::Checked
+            })
+            .filter(|(_, rule)| {
+                allowlists
+                    .clock_names(path)
+                    .is_none_or(|allowed| !allowed.contains(&rule.to_string()))
+            })
+            .map(|(line, rule)| Finding::at_line(path, line, rule)),
         ),
         Err(_) => findings.push(Finding::whole_file(path, Rule::Unparsable)),
     }

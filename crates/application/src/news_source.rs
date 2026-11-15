@@ -1,6 +1,33 @@
-use crate::InformationError;
-use domain::{CollectedItem, TimeSpan, Timestamp};
+use crate::{DataAvailability, InformationError};
+use domain::{Disclosure, DisclosureSource, NewsItem, TimeSpan, Timestamp};
 use std::future::Future;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CollectedEntry {
+    News(NewsItem),
+    Disclosure(Disclosure),
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeedSource {
+    News(domain::NewsSource),
+    Disclosure(DisclosureSource),
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedPosition(domain::UntrustedText);
+impl FeedPosition {
+    #[must_use]
+    pub const fn new(value: domain::UntrustedText) -> Self {
+        Self(value)
+    }
+    #[must_use]
+    pub const fn as_untrusted_text(&self) -> &domain::UntrustedText {
+        &self.0
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeedCursor {
+    Start,
+    Continue(FeedPosition),
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PublicationTime {
     Known(Timestamp),
@@ -69,26 +96,26 @@ impl NewsMetadata {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CollectedObservation {
-    item: CollectedItem,
+    entry: CollectedEntry,
     published_at: PublicationTime,
     collected_at: Timestamp,
 }
 impl CollectedObservation {
     #[must_use]
     pub const fn new(
-        item: CollectedItem,
+        entry: CollectedEntry,
         published_at: PublicationTime,
         collected_at: Timestamp,
     ) -> Self {
         Self {
-            item,
+            entry,
             published_at,
             collected_at,
         }
     }
     #[must_use]
-    pub const fn item(&self) -> &CollectedItem {
-        &self.item
+    pub const fn entry(&self) -> &CollectedEntry {
+        &self.entry
     }
     #[must_use]
     pub const fn published_at(&self) -> PublicationTime {
@@ -100,9 +127,16 @@ impl CollectedObservation {
     }
 }
 
-pub trait NewsSource: Send + Sync {
+pub trait NewsFeed: Send + Sync {
+    fn source(&self) -> FeedSource;
     fn metadata(&self) -> NewsMetadata;
     fn new_items(
         &self,
-    ) -> impl Future<Output = Result<Vec<CollectedObservation>, InformationError>> + Send;
+        since: FeedCursor,
+    ) -> impl Future<
+        Output = Result<
+            DataAvailability<(Vec<CollectedObservation>, FeedCursor)>,
+            InformationError,
+        >,
+    > + Send;
 }

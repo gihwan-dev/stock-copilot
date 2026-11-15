@@ -2,19 +2,15 @@ use crate::{DataAvailability, InformationError};
 use domain::{Amount, CalendarDate, Currency, Symbol};
 use std::future::Future;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MetricUnit {
+pub enum FinancialUnit {
     Currency(Currency),
     Percent,
-    IndexPoints,
     Multiple,
     Count,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MetricSource {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FinancialSource {
     Dart,
-    UsTreasury,
-    Fred,
-    TossEtf(Symbol),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetricValue(Amount);
@@ -29,19 +25,19 @@ impl MetricValue {
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MetricFact {
+pub struct FinancialFact {
     value: MetricValue,
-    unit: MetricUnit,
+    unit: FinancialUnit,
     as_of: CalendarDate,
-    source: MetricSource,
+    source: FinancialSource,
 }
-impl MetricFact {
+impl FinancialFact {
     #[must_use]
     pub const fn new(
         value: MetricValue,
-        unit: MetricUnit,
+        unit: FinancialUnit,
         as_of: CalendarDate,
-        source: MetricSource,
+        source: FinancialSource,
     ) -> Self {
         Self {
             value,
@@ -55,7 +51,7 @@ impl MetricFact {
         &self.value
     }
     #[must_use]
-    pub const fn unit(&self) -> MetricUnit {
+    pub const fn unit(&self) -> FinancialUnit {
         self.unit
     }
     #[must_use]
@@ -63,18 +59,18 @@ impl MetricFact {
         self.as_of
     }
     #[must_use]
-    pub const fn source(&self) -> &MetricSource {
-        &self.source
+    pub const fn source(&self) -> FinancialSource {
+        self.source
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FinancialLine {
     label: domain::UntrustedText,
-    fact: MetricFact,
+    fact: FinancialFact,
 }
 impl FinancialLine {
     #[must_use]
-    pub const fn new(label: domain::UntrustedText, fact: MetricFact) -> Self {
+    pub const fn new(label: domain::UntrustedText, fact: FinancialFact) -> Self {
         Self { label, fact }
     }
     #[must_use]
@@ -82,7 +78,7 @@ impl FinancialLine {
         &self.label
     }
     #[must_use]
-    pub const fn fact(&self) -> &MetricFact {
+    pub const fn fact(&self) -> &FinancialFact {
         &self.fact
     }
 }

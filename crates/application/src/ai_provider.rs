@@ -1,101 +1,23 @@
-use crate::{InformationError, RetryDelay};
-use domain::{EstimateTask, Timestamp, UntrustedText};
+use crate::{AiRunId, ChatHistory, InformationError, ModelName, RunKind, RunSpec, Utilization};
+use domain::{Timestamp, UntrustedText};
 use std::future::Future;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RunKind {
-    Collection,
-    Analysis,
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AiRunId(String);
-impl AiRunId {
-    pub fn try_new(value: &str) -> Result<Self, InformationError> {
-        if value.is_empty()
-            || value.len() > 128
-            || !value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
-        {
-            return Err(InformationError::InvalidIdentifier);
-        }
-        Ok(Self(value.to_owned()))
-    }
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RunInput {
-    Collection(UntrustedText),
-    Analysis {
-        prompt: UntrustedText,
-        assignments: Vec<EstimateTask>,
-    },
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RunSpec {
-    id: AiRunId,
-    input: RunInput,
-}
-impl RunSpec {
-    #[must_use]
-    pub const fn new(id: AiRunId, input: RunInput) -> Self {
-        Self { id, input }
-    }
-    #[must_use]
-    pub const fn id(&self) -> &AiRunId {
-        &self.id
-    }
-    #[must_use]
-    pub fn kind(&self) -> RunKind {
-        run_kind(self)
-    }
-    #[must_use]
-    pub const fn input(&self) -> &RunInput {
-        &self.input
-    }
-}
-
-#[must_use]
-pub fn run_kind(spec: &RunSpec) -> RunKind {
-    match spec.input() {
-        RunInput::Collection(_) => RunKind::Collection,
-        RunInput::Analysis {
-            prompt: _prompt,
-            assignments: _assignments,
-        } => RunKind::Analysis,
-    }
+pub enum IsolationFailure {
+    Tools,
+    McpServers,
+    Plugins,
+    Skills,
+    SlashCommands,
+    PermissionMode,
+    ApiKeySource,
+    CliVersion,
+    LoginRequired,
+    NotInstalled,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IsolationCheck {
     Passed,
-    Rejected,
-    LoginRequired,
-    NotInstalled,
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AiEvent {
-    TextDelta(UntrustedText),
-    ToolCall {
-        server: UntrustedText,
-        tool: UntrustedText,
-        args: UntrustedText,
-        result: UntrustedText,
-        status: ToolStatus,
-    },
-    WebSearch {
-        query: UntrustedText,
-        action: UntrustedText,
-    },
-    TokenUsage(TokenCount),
-    Quota(AiUsage),
-    RateLimited {
-        resets_at: ResetTime,
-    },
-    ModelRerouted(UntrustedText),
-    McpUnavailable,
-    Unknown(UntrustedText),
+    Rejected(IsolationFailure),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolStatus {
@@ -120,11 +42,75 @@ impl TokenCount {
         &self.0
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenUsage {
+    input: TokenCount,
+    output: TokenCount,
+    cache_read: TokenCount,
+    cache_creation: TokenCount,
+}
+impl TokenUsage {
+    #[must_use]
+    pub const fn new(
+        input: TokenCount,
+        output: TokenCount,
+        cache_read: TokenCount,
+        cache_creation: TokenCount,
+    ) -> Self {
+        Self {
+            input,
+            output,
+            cache_read,
+            cache_creation,
+        }
+    }
+    #[must_use]
+    pub const fn input(&self) -> TokenCount {
+        self.input
+    }
+    #[must_use]
+    pub const fn output(&self) -> TokenCount {
+        self.output
+    }
+    #[must_use]
+    pub const fn cache_read(&self) -> TokenCount {
+        self.cache_read
+    }
+    #[must_use]
+    pub const fn cache_creation(&self) -> TokenCount {
+        self.cache_creation
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiUsage {
     Unknown,
-    Available,
-    Waiting(RetryDelay),
+    Available(Utilization),
+    Waiting(ResetTime),
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AiEvent {
+    IsolationChecked(IsolationCheck),
+    TextDelta(UntrustedText),
+    ToolCall {
+        server: UntrustedText,
+        tool: UntrustedText,
+        args: UntrustedText,
+        result: UntrustedText,
+        status: ToolStatus,
+    },
+    WebSearch {
+        query: UntrustedText,
+        action: UntrustedText,
+    },
+    TokenUsage(TokenUsage),
+    Quota(AiUsage),
+    RateLimited {
+        resets_at: ResetTime,
+    },
+    ModelRerouted(ModelName),
+    ActualModel(ModelName),
+    McpUnavailable,
+    Unknown(UntrustedText),
 }
 pub trait AiEventStream: Send {
     fn next(&mut self) -> impl Future<Output = Result<Option<AiEvent>, InformationError>> + Send;
@@ -138,6 +124,7 @@ pub trait AiProvider: Send + Sync {
     fn resume(
         &self,
         spec: RunSpec,
+        history: ChatHistory,
         message: UntrustedText,
     ) -> impl Future<Output = Result<Self::Stream, InformationError>> + Send;
     fn usage(&self) -> impl Future<Output = Result<AiUsage, InformationError>> + Send;

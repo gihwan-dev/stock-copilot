@@ -93,25 +93,36 @@ pub use error_class::{
 };
 
 mod information_error;
-pub use information_error::{DataAvailability, InformationError};
+pub use information_error::{
+    CredentialSource, DataAvailability, IdentifierError, InformationError,
+};
 
 mod news_source;
 pub use news_source::{
-    AiReadPolicy, CollectedObservation, ConditionalGet, NewsMetadata, NewsSource, PublicationTime,
-    Retention, UserAgentRequirement,
+    AiReadPolicy, CollectedEntry, CollectedObservation, ConditionalGet, FeedCursor, FeedPosition,
+    FeedSource, NewsFeed, NewsMetadata, PublicationTime, Retention, UserAgentRequirement,
 };
 
 mod fundamentals;
 pub use fundamentals::{
-    FinancialLine, FinancialStatement, Fundamentals, MetricFact, MetricSource, MetricUnit,
+    FinancialFact, FinancialLine, FinancialSource, FinancialStatement, FinancialUnit, Fundamentals,
     MetricValue,
 };
 
 mod macro_series;
-pub use macro_series::{MacroObservation, MacroSeries, MacroSeriesId};
+pub use macro_series::{
+    MacroFact, MacroObservation, MacroSeries, MacroSeriesId, MacroSource, MacroUnit,
+};
+
+mod ai_request;
+pub use ai_request::{
+    AiRunId, AnalysisPrompt, ChatHistory, ChatMessage, ChatRole, CollectionQuery, CollectionTopic,
+    ModelName, ModelSelection, PromptError, ReasoningEffort, RunInput, RunKind, RunPurpose,
+    RunSpec, StoredUserMessage, UserMessageId, Utilization,
+};
 
 mod ai_provider;
 pub use ai_provider::{
-    AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, IsolationCheck, ResetTime, RunInput,
-    RunKind, RunSpec, TokenCount, ToolStatus, run_kind,
+    AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
+    TokenCount, TokenUsage, ToolStatus,
 };
