@@ -101,4 +101,64 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn d42_multiple_missing_comparisons_preserve_the_withheld_count() {
+        let records = [0_i64, 7, 14]
+            .into_iter()
+            .map(|shift| sample(shift, "99").0)
+            .collect::<Vec<_>>();
+        let edge = crate::scorecard_edge(
+            &key(),
+            &records,
+            &[],
+            instant(500, 4),
+            BootstrapSeed::new(42),
+        )
+        .expect("복수 보류");
+        assert_eq!(
+            edge.confidence(),
+            &BootstrapInterval::Withheld(
+                WithheldReason::IncomparableSamples,
+                WithheldCount::new(3)
+            )
+        );
+        assert_eq!(WithheldCount::new(3).as_usize(), 3);
+        assert_eq!(edge.unavailable().as_usize(), 3);
+    }
+    #[test]
+    fn d42_each_combined_cost_side_has_an_independent_inclusive_limit() {
+        let rate = |text| {
+            crate::CostRate::try_new(
+                crate::Ratio::parse(&crate::NumericInput::try_new(text).expect("입력"))
+                    .expect("비율"),
+            )
+            .expect("요율")
+        };
+        for (buy, sell, expected) in [
+            ("0.5", "0", Err(crate::TradeCostError::InvalidRate)),
+            ("0", "0.5", Err(crate::TradeCostError::InvalidRate)),
+            ("0.4", "0.1", Ok(())),
+            ("0.1", "0.4", Ok(())),
+        ] {
+            let result = crate::signal_return_cost(
+                Some(crate::CommissionRateFact::from_commissions_result(
+                    crate::Market::Kr,
+                    rate("0.6"),
+                    crate::CommissionValidity::try_new(None, None).expect("기간"),
+                )),
+                Some(crate::TradeTaxFact::from_schedule_result(
+                    crate::Market::Kr,
+                    rate(buy),
+                    rate(sell),
+                )),
+                crate::EstimateCostPeriod::from_calendar_result(
+                    &crate::signal_return_contract::tests::task(),
+                    instant(66, 4),
+                )
+                .expect("만기"),
+            );
+            assert_eq!(result.map(|_| ()), expected);
+        }
+    }
 }
