@@ -127,6 +127,7 @@ T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않�
 | D-36 | 완료 | 9eae35b | [D-36](reviews/D-36.md) | A-06: `PortError`를 `CashObservationFailure`로 변환해 `Portfolio` 조립. A-08: 관측 시각 차이 검사와 현금 실패 안내. A-20: `accounts`의 출력을 `BrokerAccountRows`로. 하네스: 원시 계좌번호 입력의 호출 위치 제한 |
 | D-37 | 완료 | 59bac72 | [D-37](reviews/D-37.md) | D-39: 지수 봉을 벤치마크로. D-40: 섹터 소속 생성 경로. D-41: 나머지 조회 타입. T-08·T-10: 지표 시각·값 0, 동순위·합계 차이 실측 |
 | D-38 | 완료 | bdc0da1 | [D-38](reviews/D-38.md) | T-15: 종료 주문 조회의 완전성·`PartialFilled` 계약·수수료 포함 여부 실측. A-16: 스냅샷과 계좌 결합. A-08: 대조 API 소비와 "계산 불가" 표시 |
+| D-42 | 완료 | 826513b | [D-42](reviews/D-42.md) | H-47: bootstrap 변이의 시간 초과(4스레드). 후속: `investor_flow.rs`의 중복 조건 정리 |
 
 ## 유스케이스
 

@@ -872,4 +872,18 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn d42_equal_net_does_not_excuse_wrong_buy_and_sell_totals() {
+        let mut rows = details();
+        rows.push(stock_row("institution", "8", "1", "7"));
+        assert_eq!(stock(rows), Err(crate::MarketDataError::InvalidFlow));
+        let mut exact = details();
+        exact.push(stock_row("institution", "7", "0", "7"));
+        let fact = stock(exact).expect("정확한 기관 합계");
+        let institution = fact.top_level().first().expect("기관");
+        assert_eq!(institution.buy().to_string(), "7");
+        assert_eq!(institution.sell().to_string(), "0");
+        assert_eq!(institution.net().to_string(), "7");
+    }
 }

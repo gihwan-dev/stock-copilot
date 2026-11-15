@@ -1219,4 +1219,127 @@ mod maturity_tests {
             VirtualExit::Unavailable(OutcomeUnavailable::MissingCandles)
         );
     }
+
+    #[test]
+    fn d42_elapsed_intraday_maturity_still_uses_the_minute_close() {
+        let signal = crate::virtual_exit::tests::signal_fixture(
+            source(),
+            price("110", Currency::Krw),
+            price("90", Currency::Krw),
+            instant(62, 1),
+        )
+        .expect("장중 신호");
+        let basis = AdjustmentBasis::new(instant(62, 1));
+        let adjusted = crate::virtual_exit_adjustment(&signal, basis, &[]).expect("조정");
+        let bars = [bar(62, 1, CandlePeriod::Minute, "103", basis)];
+        let fill = crate::virtual_exit(
+            &signal,
+            &[calendar(61), calendar(62)],
+            &adjusted,
+            &bars,
+            instant(63, 4),
+        )
+        .into_fill()
+        .expect("지난 장중 만기");
+        assert_eq!(fill.price(), price("103", Currency::Krw));
+        assert_eq!(fill.moment(), super::VirtualExitMoment::At(instant(62, 1)));
+    }
+}
+
+#[cfg(test)]
+mod d42_tests {
+    use crate::candle::tests::price;
+    use crate::signal_return_contract::tests::{
+        adjustment, calendars, candle, entry_bars, instant, task,
+    };
+    use crate::signal_return_scenarios::tests::{bar, calendar};
+    use crate::{CandlePeriod, Currency, VirtualExit, VirtualExitSignal};
+    #[test]
+    fn d42_daily_selection_uses_the_current_trading_day() {
+        let signal = super::tests::signal_fixture(
+            task(),
+            price("110", Currency::Krw),
+            price("90", Currency::Krw),
+            instant(66, 4),
+        )
+        .expect("신호");
+        let mut bars = entry_bars();
+        bars.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["101", "104", "99", "103"],
+        ));
+        bars.push(candle(
+            63,
+            0,
+            CandlePeriod::Daily,
+            ["102", "111", "98", "109"],
+        ));
+        let exit = crate::virtual_exit(&signal, &calendars(), &adjustment(), &bars, instant(66, 4));
+        assert_eq!(
+            crate::signal_return_contract::tests::exit_summary(&exit).0,
+            "target"
+        );
+        let target = exit.into_fill().expect("두 번째 거래일 목표 도달");
+        assert_eq!(target.price(), price("110", Currency::Krw));
+        assert_eq!(
+            target.moment(),
+            super::VirtualExitMoment::TradingDay(instant(63, 0).offset_calendar_date())
+        );
+    }
+    #[test]
+    fn d42_regular_session_intraday_entry_is_not_a_close() {
+        let days = [calendar(61)];
+        assert_eq!(
+            super::entry_close(instant(61, 3), &days),
+            crate::CheckResult::Failed
+        );
+        assert_eq!(
+            super::entry_close(instant(61, 4), &days),
+            crate::CheckResult::Passed
+        );
+    }
+    #[test]
+    fn d42_sell_minutes_and_daily_rows_wait_for_the_recorded_maturity() {
+        let record = crate::scorecard_signal_review::tests::record(
+            0,
+            crate::ScorecardSignalDirection::SellAvoidance,
+            "0",
+        );
+        let signal = VirtualExitSignal::from_record(&record).expect("매도 기록");
+        let basis = crate::AdjustmentBasis::new(instant(67, 4));
+        let adjusted = crate::virtual_exit_adjustment(&signal, basis, &[]).expect("조정");
+        let days = (61_i64..=67).map(calendar).collect::<Vec<_>>();
+        let mut bars = (1_i64..=4)
+            .map(|minute| bar(61, minute, CandlePeriod::Minute, "101", basis))
+            .collect::<Vec<_>>();
+        bars.extend((62_i64..=66).map(|day| bar(day, 0, CandlePeriod::Daily, "103", basis)));
+        bars.push(bar(67, 0, CandlePeriod::Daily, "107", basis));
+        bars.extend(
+            ["102", "104", "106", "107"]
+                .into_iter()
+                .zip(1_i64..=4)
+                .map(|(close, minute)| bar(67, minute, CandlePeriod::Minute, close, basis)),
+        );
+        for now in [
+            instant(61, 2),
+            instant(62, 4),
+            instant(66, 4),
+            instant(67, 2),
+        ] {
+            assert_eq!(
+                crate::virtual_exit(&signal, &days, &adjusted, &bars, now),
+                VirtualExit::Ongoing
+            );
+        }
+        let exit = crate::virtual_exit(&signal, &days, &adjusted, &bars, instant(67, 4));
+        assert_eq!(
+            crate::signal_return_contract::tests::exit_summary(&exit).0,
+            "maturity"
+        );
+        let value = exit.into_fill().expect("기록된 만기에만 청산");
+        assert_eq!(value.price(), price("107", Currency::Krw));
+        assert_eq!(value.moment(), super::VirtualExitMoment::At(instant(67, 4)));
+    }
 }

@@ -828,4 +828,32 @@ mod review_tests {
             )
             .expect("4096회");
     }
+
+    #[test]
+    fn d42_zero_amount_and_volume_are_available_ranking_facts() {
+        for (kind, volume, amount, expected) in [
+            (
+                "MARKET_TRADING_AMOUNT",
+                "11",
+                "0",
+                super::RankingBasis::Amount(
+                    crate::Money::parse(&num("0"), Currency::Krw).expect("영 금액"),
+                ),
+            ),
+            (
+                "MARKET_TRADING_VOLUME",
+                "0",
+                "23",
+                super::RankingBasis::Shares(crate::Quantity::parse(&num("0")).expect("영 수량")),
+            ),
+        ] {
+            let mut request = input();
+            request.kind = code(kind);
+            let row = request.rows.first_mut().expect("행");
+            row.volume = num(volume);
+            row.amount = num(amount);
+            let ranking = StockRanking::from_response(request).expect("영 기준값 허용");
+            assert_eq!(ranking.items().first().expect("행").basis(), expected);
+        }
+    }
 }
