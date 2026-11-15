@@ -547,3 +547,13 @@ pub use sector_selection::{
     sector_assignment_from_compositions, sector_assignments_membership, sector_membership,
     sector_selection_rule,
 };
+
+mod market_query_facts;
+pub use market_query_facts::{
+    InvestorGroupRow, InvestorRankingGroup, InvestorRankingScope, InvestorTradingRankings,
+    NetTradingDirection, NetTradingItem, NetTradingList, NetTradingRow, QueryValue,
+    RankingInvestor, SectorCatalog, SectorDepth, SectorDetail, SectorDuration, SectorEtf,
+    SectorEtfRow, SectorEtfs, SectorMetadata, SectorMetadataRow, SectorQueryScope, SectorRanking,
+    SectorRankingHierarchy, SectorRankingItem, SectorRankingKind, SectorRankingRow, SectorRate,
+    SectorRateRow,
+};
