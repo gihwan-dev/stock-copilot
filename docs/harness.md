@@ -610,7 +610,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 위 경로 안에 있어도 보호하는 것:
 
-- 경로 고정 테스트 파일, 주문·본인 확인 가짜(`crates/trade-fakes/`, `testkit-ports`의 `ScriptedPresence`) (6.5)
+- 경로 고정 테스트 파일, 주문·본인 확인 가짜(`crates/trade-fakes/`, `testkit-ports`의 `ScriptedPresence`와 공통 `script.rs`·`lib.rs`) (6.5)
 - `crates/xtask/`, `crates/adapters/broker-toss-schema/`(생성 경로)
 - UX-6 금지어 목록과 예외 목록 (6.9)
 - `shared/ds/index.ts`, `shared/ds/tokens.css`, `shared/ds/tokens.ts`, 시각 회귀 기준 이미지 (4.4)

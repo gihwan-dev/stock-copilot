@@ -1559,5 +1559,31 @@
     "rules": ["protected-path"],
     "role": "implementer",
     "lock": "on"
+  },
+  {
+    "path": "{root}/crates/testkit-ports/src/script.rs",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/crates/testkit-ports/src/script.rs",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/crates/testkit-ports/src/lib.rs",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/crates/testkit-ports/src/lib.rs",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
   }
 ]

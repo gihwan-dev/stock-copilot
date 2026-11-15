@@ -287,7 +287,8 @@ crates = ["approval-command", "broker-toss-trade", "trade-fakes"]
 [source.user-presence]
 trait-name = "UserPresence"
 defining-crate = "application"
-impl-crates = ["platform-macos", "testkit-ports"]
+impl-crates = ["platform-macos"]
+impl-files = ["crates/testkit-ports/src/scripted_presence.rs"]
 
 [source.toss-order]
 write-means = [

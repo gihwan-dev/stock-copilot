@@ -13,3 +13,13 @@ test("ScriptedPresence is included in protected hashes with its actual content",
     .digest("hex");
   assert.equal(currentHashes(repoRoot)[path], expected);
 });
+
+test("Presence script engine and module wiring are protected by actual hashes", () => {
+  for (const name of ["script.rs", "lib.rs"]) {
+    const path = `crates/testkit-ports/src/${name}`;
+    const expected = createHash("sha256")
+      .update(readFileSync(join(repoRoot, path)))
+      .digest("hex");
+    assert.equal(currentHashes(repoRoot)[path], expected);
+  }
+});

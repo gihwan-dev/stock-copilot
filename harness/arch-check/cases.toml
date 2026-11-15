@@ -739,3 +739,7 @@ findings = [
 [[case]]
 name = "leaf-testkit-dev-depends-on-testkit-ports"
 findings = [{ rule = "dev-edge", subject = "testkit -> testkit-ports" }]
+
+[[case]]
+name = "user-presence-impl-outside-protected-file"
+findings = [{ rule = "user-presence-impl", subject = "crates/testkit-ports/src/lib.rs" }]

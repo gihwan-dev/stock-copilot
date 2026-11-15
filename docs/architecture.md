@@ -256,7 +256,7 @@ A-04 메인 결정: 개발 의존까지 포함한 그래프의 순환을 없애�
 - 보낸 주문을 기록하는 `RecordingBroker`는 `trade-fakes`에 있고 `ApprovedOrder`를 받기만 한다.
 - `testkit`, `testkit-ports`와 `trade-fakes`는 `cfg`나 `[features]` 없이 보통 crate로 만든다. harness.md 3.2의 `cfg` 금지와 충돌하지 않는다.
 - 제품 실행 파일에 가짜가 들어가지 않는 근거: 개발 의존은 bin 대상에서 쓸 수 없고, `arch-check`가 제품 bin(`src-tauri` main)의 일반 의존 그래프에 `testkit`·`testkit-ports`·`trade-fakes`가 있으면 실패시킨다.
-- 승인 없이 주문이 나가지 않는 근거: `ApprovedOrder`는 `approve_and_submit` 안에서 `UserPresence::confirm`이 `Confirmed`를 돌려준 뒤에만 생긴다(4.3). `UserPresence` 구현(`impl UserPresence`)은 `platform-macos`와 `testkit-ports`에만 둘 수 있고 `xtask`가 검사한다. 이 검사를 피하지 못하도록 `UserPresence`를 다른 이름으로 가져오는 것(`use … as`)과 다시 내보내는 것(`pub use`)을 금지하고 `xtask`가 검사한다. `main.rs`는 `platform-macos`의 구현만 넘긴다(RV-6).
+- 승인 없이 주문이 나가지 않는 근거: `ApprovedOrder`는 `approve_and_submit` 안에서 `UserPresence::confirm`이 `Confirmed`를 돌려준 뒤에만 생긴다(4.3). `UserPresence` 구현(`impl UserPresence`)은 `platform-macos`와 보호된 `crates/testkit-ports/src/scripted_presence.rs`에만 둘 수 있고 `xtask`가 검사한다. 이 검사를 피하지 못하도록 `UserPresence`를 다른 이름으로 가져오는 것(`use … as`)과 다시 내보내는 것(`pub use`)을 금지하고 `xtask`가 검사한다. `main.rs`는 `platform-macos`의 구현만 넘긴다(RV-6).
 
 **의존할 수 없는 것 (직접·전이 모두)**
 

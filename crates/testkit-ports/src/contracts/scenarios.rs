@@ -1,0 +1,434 @@
+use application::{
+    AuditEntry, AuditLog, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
+    PortfolioRepository, ProposalRepository, RecordOutcome, SecretKey, SecretStore, SecretValue,
+    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
+    ValuationRepository, WriteCompleted,
+};
+use domain::{
+    AccountId, Calibration, CalibrationKey, Candle, Draft, EstimateOutcome, FxRate, InstrumentId,
+    InvestorProfile, NewsItem, Portfolio, Proposal, Quote, RaisedSignal, RiskSettings,
+    SettledRowSet, SignalSubmission, SyncRecord, Thesis, TimeInterval, Timestamp,
+    ValuationSnapshot,
+};
+
+pub async fn portfolio_latest<P: PortfolioRepository>(
+    port: &P,
+    accounts: (&AccountId, &AccountId),
+    records: (&SyncRecord<Portfolio>, &SyncRecord<Portfolio>),
+) {
+    let (account, other) = accounts;
+    let (older, newer) = records;
+    assert_ne!(
+        account, other,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert!(
+        older.recorded_at() < newer.recorded_at(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    super::portfolio_repository_latest(port, account, Ok(None)).await;
+    for record in [newer, older] {
+        super::portfolio_repository_record(port, account, record, Ok(WriteCompleted)).await;
+    }
+    super::portfolio_repository_record(port, other, older, Ok(WriteCompleted)).await;
+    super::portfolio_repository_latest(port, account, Ok(Some(newer.clone()))).await;
+    super::portfolio_repository_latest(port, other, Ok(Some(older.clone()))).await;
+}
+
+pub async fn transaction_latest<P: TransactionRepository>(
+    port: &P,
+    accounts: (&AccountId, &AccountId),
+    records: (&SyncRecord<SettledRowSet>, &SyncRecord<SettledRowSet>),
+) {
+    let (account, other) = accounts;
+    let (older, newer) = records;
+    assert_ne!(
+        account, other,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert!(
+        older.recorded_at() < newer.recorded_at(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    super::transaction_repository_latest(port, account, Ok(None)).await;
+    for record in [newer, older] {
+        super::transaction_repository_record(port, account, record, Ok(WriteCompleted)).await;
+    }
+    super::transaction_repository_record(port, other, older, Ok(WriteCompleted)).await;
+    super::transaction_repository_latest(port, account, Ok(Some(newer.clone()))).await;
+    super::transaction_repository_latest(port, other, Ok(Some(older.clone()))).await;
+}
+
+pub async fn signal_replacement<P: SignalRepository>(
+    port: &P,
+    instruments: (&InstrumentId, &InstrumentId),
+    versions: (&[RaisedSignal], &[RaisedSignal]),
+) {
+    let (instrument, other) = instruments;
+    let (first, second) = versions;
+    assert_ne!(
+        instrument, other,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_ne!(first, [], "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    assert_ne!(second, [], "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    super::signal_repository_current(port, instrument, Ok(vec![])).await;
+    super::signal_repository_replace(port, instrument, first, Ok(WriteCompleted)).await;
+    super::signal_repository_current(port, instrument, Ok(first.to_vec())).await;
+    super::signal_repository_replace(port, other, first, Ok(WriteCompleted)).await;
+    super::signal_repository_replace(port, instrument, second, Ok(WriteCompleted)).await;
+    super::signal_repository_current(port, instrument, Ok(second.to_vec())).await;
+    super::signal_repository_replace(port, instrument, &[], Ok(WriteCompleted)).await;
+    super::signal_repository_current(port, instrument, Ok(vec![])).await;
+    super::signal_repository_current(port, other, Ok(first.to_vec())).await;
+}
+
+pub async fn thesis_roundtrip<P: ThesisRepository>(
+    port: &P,
+    instruments: (&InstrumentId, &InstrumentId),
+    versions: (&Thesis, &Thesis),
+) {
+    let (instrument, other) = instruments;
+    let (first, second) = versions;
+    assert_ne!(
+        instrument, other,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_ne!(
+        first.history(),
+        [],
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    super::thesis_repository_load(port, instrument, Ok(None)).await;
+    super::thesis_repository_store(port, instrument, first, Ok(WriteCompleted)).await;
+    assert_eq!(
+        port.load(instrument)
+            .await
+            .as_ref()
+            .map(|value| value.as_ref()),
+        Ok(Some(first)),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    super::thesis_repository_store(port, other, first, Ok(WriteCompleted)).await;
+    super::thesis_repository_store(port, instrument, second, Ok(WriteCompleted)).await;
+    assert_eq!(
+        port.load(instrument)
+            .await
+            .as_ref()
+            .map(|value| value.as_ref()),
+        Ok(Some(second)),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_eq!(
+        port.load(other).await.as_ref().map(|value| value.as_ref()),
+        Ok(Some(first)),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+}
+
+pub async fn proposal_roundtrip<P: ProposalRepository>(
+    port: &P,
+    versions: (&Proposal<Draft>, &Proposal<Draft>),
+) {
+    let (first, second) = versions;
+    assert_eq!(
+        first.id(),
+        second.id(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_ne!(
+        crate::DraftRecord::from_draft(first),
+        crate::DraftRecord::from_draft(second),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    super::proposal_repository_draft(port, first.id(), Ok(None)).await;
+    super::proposal_repository_store_draft(port, first, Ok(WriteCompleted)).await;
+    super::proposal_repository_draft(
+        port,
+        first.id(),
+        Ok(Some(crate::DraftRecord::from_draft(first))),
+    )
+    .await;
+    super::proposal_repository_store_draft(port, second, Ok(WriteCompleted)).await;
+    super::proposal_repository_draft(
+        port,
+        first.id(),
+        Ok(Some(crate::DraftRecord::from_draft(second))),
+    )
+    .await;
+}
+
+pub async fn estimate_append_only<P: EstimateRepository>(
+    port: &P,
+    submission: &SignalSubmission,
+    outcomes: (&EstimateOutcome, &EstimateOutcome),
+) {
+    let (first, second) = outcomes;
+    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    let instrument = submission.task_key().task().volatility().instrument();
+    let key = submission.task_key();
+    super::estimate_repository_submissions(port, instrument, Ok(vec![])).await;
+    super::estimate_repository_resolution(port, key, Ok(None)).await;
+    super::estimate_repository_append_submission(port, submission, Ok(RecordOutcome::Recorded))
+        .await;
+    super::estimate_repository_append_submission(
+        port,
+        submission,
+        Ok(RecordOutcome::AlreadyRecorded),
+    )
+    .await;
+    super::estimate_repository_submissions(port, instrument, Ok(vec![submission.clone()])).await;
+    super::estimate_repository_append_resolution(port, key, first, Ok(RecordOutcome::Recorded))
+        .await;
+    super::estimate_repository_append_resolution(
+        port,
+        key,
+        second,
+        Ok(RecordOutcome::AlreadyRecorded),
+    )
+    .await;
+    super::estimate_repository_resolution(port, key, Ok(Some(first.clone()))).await;
+}
+
+pub async fn calibration_versions<P: EstimateRepository>(
+    port: &P,
+    key: &CalibrationKey,
+    versions: (&Calibration, &Calibration),
+) {
+    let (first, second) = versions;
+    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    super::estimate_repository_calibration(port, key, Ok(None)).await;
+    super::estimate_repository_append_calibration(port, key, first, Ok(RecordOutcome::Recorded))
+        .await;
+    super::estimate_repository_append_calibration(
+        port,
+        key,
+        first,
+        Ok(RecordOutcome::AlreadyRecorded),
+    )
+    .await;
+    super::estimate_repository_append_calibration(port, key, second, Ok(RecordOutcome::Recorded))
+        .await;
+    super::estimate_repository_calibration(port, key, Ok(Some(second.clone()))).await;
+}
+
+pub async fn candle_history<P: MarketDataRepository>(
+    port: &P,
+    instrument: &InstrumentId,
+    window: TimeInterval,
+    boundaries: (&Candle, &Candle),
+    outside: (&Candle, &Candle),
+) {
+    let (first, last) = boundaries;
+    let ordered = vec![first.clone(), last.clone()];
+    assert!(
+        first.time().timestamp() < last.time().timestamp(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_eq!(
+        first.time().timestamp(),
+        window.start(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_eq!(
+        outside.1.time().timestamp(),
+        window.end(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    let period = first.time().period();
+    let adjustment = first.adjustment();
+    let mut input = ordered.clone();
+    input.reverse();
+    input.extend([outside.0.clone(), outside.1.clone(), first.clone()]);
+    super::market_data_repository_store_candles(port, instrument, &input, Ok(WriteCompleted)).await;
+    super::market_data_repository_store_candles(port, instrument, &ordered, Ok(WriteCompleted))
+        .await;
+    super::market_data_repository_candles(
+        port,
+        instrument,
+        (window, period, adjustment),
+        Ok(ordered.clone()),
+    )
+    .await;
+}
+
+pub async fn valuation_history<P: ValuationRepository>(
+    port: &P,
+    accounts: (&AccountId, &AccountId),
+    window: TimeInterval,
+    ordered: &[ValuationSnapshot],
+    outside: &ValuationSnapshot,
+) {
+    let (account, other) = accounts;
+    assert_ne!(
+        account, other,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_ne!(ordered, [], "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    for snapshot in ordered.iter().rev() {
+        super::valuation_repository_append(port, account, snapshot, Ok(RecordOutcome::Recorded))
+            .await;
+        super::valuation_repository_append(
+            port,
+            account,
+            snapshot,
+            Ok(RecordOutcome::AlreadyRecorded),
+        )
+        .await;
+    }
+    super::valuation_repository_append(port, account, outside, Ok(RecordOutcome::Recorded)).await;
+    super::valuation_repository_append(port, other, outside, Ok(RecordOutcome::Recorded)).await;
+    super::valuation_repository_history(port, account, window, Ok(ordered.to_vec())).await;
+}
+
+pub async fn news_roundtrip<P: NewsRepository>(
+    port: &P,
+    instrument: &InstrumentId,
+    item: &NewsItem,
+) {
+    super::news_repository_for_instrument(port, instrument, Ok(vec![])).await;
+    super::news_repository_store(port, item, Ok(WriteCompleted)).await;
+    super::news_repository_store(port, item, Ok(WriteCompleted)).await;
+    super::news_repository_for_instrument(port, instrument, Ok(vec![item.clone()])).await;
+}
+
+pub async fn settings_roundtrip<P: SettingsRepository>(
+    port: &P,
+    profiles: (&InvestorProfile, &InvestorProfile),
+    risks: (&RiskSettings, &RiskSettings, &RiskSettings),
+) {
+    let (initial, changed) = profiles;
+    let (original, revised, restored) = risks;
+    assert_ne!(
+        initial, changed,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    assert_ne!(
+        original, revised,
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    super::settings_repository_profile(port, Ok(None)).await;
+    super::settings_repository_risk_settings(port, Ok(None)).await;
+    super::settings_repository_store_profile(port, initial, Ok(WriteCompleted)).await;
+    super::settings_repository_store_risk_settings(port, original, Ok(WriteCompleted)).await;
+    super::settings_repository_store_risk_settings(port, revised, Ok(WriteCompleted)).await;
+    super::settings_repository_profile(port, Ok(Some(changed.clone()))).await;
+    super::settings_repository_store_profile(port, initial, Ok(WriteCompleted)).await;
+    super::settings_repository_risk_settings(port, Ok(Some(*restored))).await;
+}
+
+pub async fn audit_append_only<P: AuditLog>(port: &P, entries: (&AuditEntry, &AuditEntry)) {
+    let (first, second) = entries;
+    assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    super::audit_log_append(port, first, Ok(RecordOutcome::Recorded)).await;
+    super::audit_log_append(port, first, Ok(RecordOutcome::AlreadyRecorded)).await;
+    super::audit_log_append(port, second, Ok(RecordOutcome::Recorded)).await;
+}
+
+pub async fn secret_lifecycle<P: SecretStore>(
+    port: &P,
+    keys: (SecretKey, SecretKey),
+    values: (&SecretValue, &SecretValue),
+) {
+    let (key, other) = keys;
+    let (first, second) = values;
+    assert_ne!(key, other, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
+    assert_ne!(
+        first.as_exposed_secret(),
+        second.as_exposed_secret(),
+        "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
+    );
+    super::secret_store_load(port, key, Ok(None)).await;
+    super::secret_store_store(
+        port,
+        key,
+        SecretValue::new(first.as_exposed_secret().to_vec()),
+        Ok(WriteCompleted),
+    )
+    .await;
+    super::secret_store_store(
+        port,
+        other,
+        SecretValue::new(first.as_exposed_secret().to_vec()),
+        Ok(WriteCompleted),
+    )
+    .await;
+    super::secret_store_store(
+        port,
+        key,
+        SecretValue::new(second.as_exposed_secret().to_vec()),
+        Ok(WriteCompleted),
+    )
+    .await;
+    super::secret_store_load(
+        port,
+        key,
+        Ok(Some(SecretValue::new(second.as_exposed_secret().to_vec()))),
+    )
+    .await;
+    super::secret_store_remove(port, key, Ok(WriteCompleted)).await;
+    super::secret_store_remove(port, key, Ok(WriteCompleted)).await;
+    super::secret_store_load(port, key, Ok(None)).await;
+    super::secret_store_load(
+        port,
+        other,
+        Ok(Some(SecretValue::new(first.as_exposed_secret().to_vec()))),
+    )
+    .await;
+}
+
+pub async fn quote_latest<P: MarketDataRepository>(
+    port: &P,
+    instruments: (&InstrumentId, &InstrumentId),
+    quotes: (&Quote, &Quote),
+) {
+    let (instrument, other) = instruments;
+    let (older, newer) = quotes;
+    assert_ne!(instrument, other, "서로 다른 종목 증인");
+    assert!(
+        older.collected_at() < newer.collected_at(),
+        "서로 다른 수집 시각 증인"
+    );
+    super::market_data_repository_quote(port, instrument, Ok(None)).await;
+    for quote in [newer, older] {
+        super::market_data_repository_store_quote(port, instrument, quote, Ok(WriteCompleted))
+            .await;
+    }
+    super::market_data_repository_store_quote(port, other, older, Ok(WriteCompleted)).await;
+    super::market_data_repository_quote(port, instrument, Ok(Some(newer.clone()))).await;
+    super::market_data_repository_quote(port, other, Ok(Some(older.clone()))).await;
+}
+
+pub async fn fx_latest_not_after<P: MarketDataRepository>(
+    port: &P,
+    rates: (&FxRate, &FxRate),
+    queries: (Timestamp, Timestamp),
+) {
+    let (older, newer) = rates;
+    let (before_all, between) = queries;
+    assert_eq!(older.pair(), newer.pair(), "같은 통화쌍 증인");
+    assert_eq!(older.kind(), newer.kind(), "같은 환율 종류 증인");
+    assert!(
+        before_all < older.as_of() && older.as_of() < newer.as_of(),
+        "이전·최신 시각 증인"
+    );
+    assert!(
+        older.as_of() <= between && between < newer.as_of(),
+        "두 관측 사이 시각 증인"
+    );
+    let pair = older.pair();
+    let kind = older.kind();
+    for rate in [newer, older] {
+        super::market_data_repository_store_fx_rate(port, rate, Ok(WriteCompleted)).await;
+    }
+    for (query, expected) in [
+        (FxRateQuery::Latest, Some(*newer)),
+        (FxRateQuery::At(newer.as_of()), Some(*newer)),
+        (FxRateQuery::At(between), Some(*older)),
+        (FxRateQuery::At(before_all), None),
+    ] {
+        super::market_data_repository_fx_rate(port, pair, kind, query, Ok(expected)).await;
+    }
+}

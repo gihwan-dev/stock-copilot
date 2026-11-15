@@ -587,7 +587,7 @@ pub enum SignalRepositoryCall {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProposalRepositoryCall {
-    StoreDraft(crate::DraftRecord),
+    StoreDraft(Box<crate::DraftRecord>),
     Draft(ProposalId),
 }
 

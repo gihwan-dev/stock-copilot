@@ -47,7 +47,7 @@ MemoryReply::Memory를 명시적으로 넣으면 포트 계약의 저장·조회
 
 Thesis는 공개 Clone이 없으므로 HistoryEntry 사실만 저장하고 ADR 0030에 따라 domain의 공개 적용·확인·거절 API로 복원한다. 가짜가 논거 규칙을 구현하지 않는다. Proposal<Draft>는 빌린 저장 입력을 소유한 초안 조회로 보존하기 위해 Draft에만 한정한 Clone impl을 domain에 추가한다. 비공개 range를 포함해 복사하며 새 회귀가 모든 사실과 재검증 보고의 동등성을 확인한다. Validated·ExecutionToken·OrderSummary·PendingOrderConfirmation의 복제나 생성 경계를 넓히지 않는다.
 
-NewsRepository의 저장 입력 NewsItem에는 종목 연결 정보가 없다. 메모리 가짜는 기사 제목·본문·URL에서 종목을 추측하지 않는다. 테스트가 link로 명시한 종목 연결 사실만 for_instrument에서 반환한다. store는 기사 자체를 보관한다. 실제 저장소의 종목 연결 생성·보관 계약은 S-05 인계다.
+NewsRepository의 저장 입력 NewsItem에는 종목 연결 정보가 없다. 메모리 가짜는 기사 제목·본문·URL에서 종목을 추측하지 않는다. link는 종목 연결 메타데이터만 등록한다. for_instrument는 그 연결 중 store가 성공한 기사만 반환한다. 저장 전이나 실패한 저장은 조회에 나타나지 않는다. 동일 기사 중복 저장과 연결은 결과를 늘리지 않는다. 실제 저장소의 종목 연결 생성·보관 계약은 S-05 인계다.
 
 SecretValue는 기존 application 타입을 사용한다. 호출 기록은 Arc로 소유권을 보존하며 Debug는 기존 비밀 가림을 따른다. load는 가짜 메모리 경계에서 노출된 바이트를 새 SecretValue로 감싼다. 실제 키나 계좌 자료를 넣지 않는다.
 
@@ -123,7 +123,7 @@ contracts 모듈은 포트를 제네릭으로 받고 ADR의 입력·성공 값·
 
 master와의 분기 기준 580a19874ee4ad32c21c4c3f83a0a4142b3a4858에 대해 test-diff-selected를 실제 실행한 결과는 승인된 A-02 서명 기대 문자열 변경 1건뿐이었다. 최신 master 735ea38189edbf15d34238dd14ac49bb02c9e94f 자체는 아직 HEAD의 조상이 아니어서 해당 끝을 직접 기준으로 한 실행은 조상 검사에서 중단됐다. 최신 master 병합 후의 판정과 혼동하지 않는다.
 
-아직 구현 커밋은 없고 변경은 미커밋 상태다. 독립 Opus 리뷰·Codex 비판·재리뷰와 최신 master의 --no-ff 병합은 미실행이다. C1의 주문 요약 정정은 해결됐으며 현재 차단 사유는 이 검사 도구 오류다. 메인/하네스 담당은 검사 범위를 유지하는 엔진 수정을 먼저 제공하고 A-04가 같은 정상 훅을 재실행하도록 인계한다.
+이 절은 구조 분리 승인 전의 실패 기록이다. 이후 결정으로 이 도구 오류를 해결했고 구현 2a3a376과 최신 master e2b9405 병합 091f01a를 만들었다. 정상 훅은 전체 검사와 커버리지를 통과한 뒤 승인된 test-diff 두 건에서만 중단했다. 나머지 후속 검사까지 확인한 뒤 브리프가 승인한 해당 커밋 한정 예외를 커밋 메시지에 기록했다.
 
 변경분 자동 변이 명령 just mutants-diff 580a19874ee4ad32c21c4c3f83a0a4142b3a4858도 실제 실행했다. 사전 test-diff가 승인된 서명 기대 문자열 변경 1건을 거부해 변이 실행 전에 종료 1이었다. 변이 검사 통과나 변이 개수 0으로 기록하지 않는다. 최종 손 변형 대상 소스 4개의 SHA-256은 복구한 실험 복사본과 현재 작업 사본에서 일치했다.
 
@@ -142,3 +142,33 @@ architecture와 tasks의 A-06 이후 행에 가짜를 쓰는 유스케이스 테
 이 결정이 앞 절의 cargo-deny 차단 상태를 해결한다. 아직 독립 리뷰를 실행하기 전이므로, 구현 커밋 이후 새 Opus 리뷰와 Codex 비판을 수행한다. 최신 master를 병합할 때 A-21이 추가한 MarketInfo 메서드가 있으면 가짜·호출 기록·공개 계약 검사까지 함께 추가한다.
 
 구조 분리 뒤 정상 훅의 전체 nextest는 1368개 중1367개 통과, workspace_members_match_architecture_layout 한 건이 새crate를 기존 고정목록에서 찾지 못해 실패했다. 기존 ARCHITECTURE_CRATES의22개 항목과 assert_eq는 유지하고 testkit-ports 항목 하나와 정확한 길이23을 추가했다. 이는 승인된 구조 변경에 따른 고정목록 갱신이다.
+
+## 독립 리뷰 1 이후 보강
+
+Opus 5.5와 별도 Codex gpt-6.1-sol이 계약 시나리오 부족과 테스트 누락을 재현했다. 메서드별 비교 함수에 더해 contracts::scenarios에 저장·조회 순서를 가진 제네릭 시나리오를 공개한다. 포트만 받아 동작하며 메모리 가짜에 의존하지 않는다. 서로 다른 계좌·종목·버전, 비어 있지 않은 신호, 가격 범위가 다른 같은 키의 초안, 확인·거절 이력을 증인으로 쓴다. 정상 기대값은 원본 fixture에서 가져오며 가짜의 복원 결과로 만들지 않는다. 쓰기를 버리는 신호 구현과 가격 범위를 바꾼 조회 결과를 거부하는 테스트를 실제 실행한다.
+
+DraftRecord는 가격 범위까지 기록한다. Proposal의 안전한 가격 범위 읽기 접근자를 추가했다. Draft 한정 Clone은 빌린 초안 저장 계약을 소유한 조회로 보존하는 구현상 필요이며 검증 권한은 복사하지 않는다. OrderSummary·Validated·토큰의 복제나 생성 경계는 유지한다.
+
+같은 봉의 일괄·분할 저장 결과가 달라지지 않도록 완전히 동일한 봉은 입력 묶음 안에서도 한 번만 저장한다. 값이 다른 수정 봉의 키별 병합 정책은 정하지 않고 S-03에 넘긴다. 별도 동시 호출 사이에 업무적인 순서를 만들지 않으며 순서에 의존하는 대본은 테스트가 호출을 직렬화한다.
+
+투자 성향과 위험 설정은 공유하는 비중·위험 성향·시간 허용 사실을 함께 반영한다. domain의 저장 상태 복원 API로 검증하며 복원이 거부되는 변경은 InvalidData로 반환하고 상태를 보존한다. 가짜가 계산이나 사용자 승인 규칙을 다시 구현하지 않는다.
+
+본인 확인 impl의 testkit-ports 허용은 보호된 scripted_presence.rs 한 파일로 한정한다. 공통 Script 엔진과 lib 모듈 연결도 보호 등록·해시에 포함한다. 다른 파일의 impl을 거부하는 음성 사례와 보호 파일의 정상 구현 양성 사례를 함께 검사한다. open-issues I-14의 경로는 사용자가 승인한 testkit-ports 구조와 기계적으로 맞춘다.
+
+주문 확인의 정상 실행 fixture는 여전히 미해결이다. 공개 validate는 외부 게이트를 Unknown으로 남기므로 외부 테스트에서 토큰과 PendingOrderConfirmation을 만들 수 없다. 단독 요약 생성이나 토큰 공개는 사용자 금지 경계이며 추가하지 않는다. 주문 결과 FIFO의 공통 대본 시험과 컴파일 확인을 실제 confirm_order 실행으로 세지 않는다. 독립 리뷰 1의 지적 7은 남은 차단이다.
+
+## 리뷰 반례의 손 변형 재검증
+
+새 임시 복사본에서 기존 25개와 독립 비판자가 생존시킨 9개를 합쳐 34개를 각각 컴파일하고 core·memory·review_regressions 테스트로 실행했다. 컴파일 불가 0·검출 34·생존 0이며 원복 후 기준 테스트도 통과했다. 아래 아홉 개는 최초 25개의 검출에 섞어 생존이 없었던 것처럼 보고하지 않는다. 비판 당시에는 기존 memory 테스트가 놓쳤고 새 계약 시나리오가 검출했다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 26 | 논거 최신 순서 누락 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
+| 27 | 보정 최신 순서 누락 | 컴파일 성공·검출 | tests::generic_estimates_preserve_first_resolution_and_latest_calibration |
+| 28 | 신호 최신 순서 누락 | 컴파일 성공·검출 | tests::generic_signal_contract_requires_nonempty_replacement_and_clearing |
+| 29 | 제안 최신 순서 누락 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
+| 30 | 최초 판정 중복 조건 반전 | 컴파일 성공·검출 | tests::generic_estimates_preserve_first_resolution_and_latest_calibration |
+| 31 | 봉 종료 포함 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
+| 32 | 평가 이력 종료 포함 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
+| 33 | 논거 재생 삭제 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |
+| 34 | 논거 확인을 거절로 변경 | 컴파일 성공·검출 | tests::generic_memory_scenarios_preserve_state_and_boundaries |

@@ -1,3 +1,4 @@
+pub mod scenarios;
 use application::{
     AuditEntry, AuditIntegrity, AuditLog, BrokerRead, CollectedObservation, DataAvailability,
     EstimateRepository, FeedCursor, FeedSource, FinancialStatement, Fundamentals, FxRateQuery,

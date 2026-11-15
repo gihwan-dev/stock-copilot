@@ -10,6 +10,13 @@ use domain::{
     Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
     SignalTaskKey, SyncRecord, Thesis, TimeInterval, ValuationSnapshot,
 };
+fn append_candles(stored: &mut Vec<Candle>, incoming: &[Candle]) {
+    for value in incoming {
+        if !stored.contains(value) {
+            stored.push(value.clone());
+        }
+    }
+}
 #[derive(Debug)]
 pub enum MemoryReply<O> {
     Memory,
@@ -268,12 +275,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                let additions: Vec<_> = candles
-                    .iter()
-                    .filter(|value| !state.candles.contains(value))
-                    .cloned()
-                    .collect();
-                state.candles.extend(additions);
+                append_candles(&mut state.candles, candles);
                 Ok(WriteCompleted)
             }
         }
@@ -393,7 +395,11 @@ impl MemoryNewsRepository {
         self.calls.write().clone()
     }
     pub fn link(&self, instrument: InstrumentId, item: NewsItem) {
-        self.state.write().linked.push((instrument, item));
+        let mut state = self.state.write();
+        let link = (instrument, item);
+        if !state.linked.contains(&link) {
+            state.linked.push(link);
+        }
     }
 }
 impl NewsRepository for MemoryNewsRepository {
@@ -428,7 +434,7 @@ impl NewsRepository for MemoryNewsRepository {
                 Ok(state
                     .linked
                     .iter()
-                    .filter(|(key, _)| key == instrument)
+                    .filter(|(key, value)| key == instrument && state.items.contains(value))
                     .map(|(_, value)| value.clone())
                     .collect())
             }
@@ -831,7 +837,7 @@ impl ProposalRepository for MemoryProposalRepository {
         self.calls
             .write()
             .push(crate::scripted::ProposalRepositoryCall::StoreDraft(
-                crate::DraftRecord::from_draft(proposal),
+                Box::new(crate::DraftRecord::from_draft(proposal)),
             ));
         match self
             .store_draft
@@ -957,6 +963,23 @@ impl ValuationRepository for MemoryValuationRepository {
         }
     }
 }
+fn profile_with_risk(
+    profile: &InvestorProfile,
+    settings: RiskSettings,
+) -> Result<InvestorProfile, SystemPortError> {
+    let mut saved = profile.saved_state();
+    saved.hours_permission = settings.hours();
+    saved.risk_appetite = settings.risk_appetite();
+    saved.instrument_cap = settings.weight_caps().instrument_cap().as_ratio();
+    saved.instrument_warning = settings.weight_caps().instrument_warning().as_ratio();
+    saved.sector_cap = settings.weight_caps().sector_cap().as_ratio();
+    InvestorProfile::restore_from_saved_state(saved).map_err(|_error| {
+        SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )
+    })
+}
 #[derive(Debug, Default)]
 struct SettingsRepositoryState {
     profile: Option<InvestorProfile>,
@@ -1009,6 +1032,15 @@ impl SettingsRepository for MemorySettingsRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
+                if let Some(risk) = state.risk {
+                    state.risk = Some(RiskSettings::new(
+                        risk.orders(),
+                        risk.market_orders(),
+                        profile.hours_permission().state(),
+                        profile.weight_caps(),
+                        profile.risk_appetite(),
+                    ));
+                }
                 state.profile = Some(profile.clone());
                 Ok(WriteCompleted)
             }
@@ -1039,6 +1071,12 @@ impl SettingsRepository for MemorySettingsRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
+                let profile = state
+                    .profile
+                    .as_ref()
+                    .map(|profile| profile_with_risk(profile, *settings))
+                    .transpose()?;
+                state.profile = profile;
                 state.risk = Some(*settings);
                 Ok(WriteCompleted)
             }

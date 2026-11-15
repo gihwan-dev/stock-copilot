@@ -126,6 +126,10 @@ impl<State> Proposal<State> {
     pub fn expires_at(&self) -> Timestamp {
         self.expires_at
     }
+    #[must_use]
+    pub fn price_range(&self) -> &ProposalPriceRange {
+        &self.range
+    }
     fn expiry(&self, now: Timestamp) -> CheckResult {
         if now < self.created_at || now >= self.expires_at {
             CheckResult::Failed
@@ -1124,6 +1128,11 @@ mod tests {
         assert_eq!(copied.created_at(), original.created_at(), "생성 시각 보존");
         assert_eq!(copied.expires_at(), original.expires_at(), "만료 시각 보존");
         assert_eq!(copied.range, original.range, "비공개 가격 범위 보존");
+        assert_eq!(
+            original.price_range(),
+            &original.range,
+            "저장용 읽기 접근자는 전체 범위 보존"
+        );
         for current in [
             observation("97", 0),
             observation("103", 4),

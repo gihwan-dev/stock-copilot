@@ -38,6 +38,8 @@
         "./clippy.toml",
         "./crates/adapters/broker-toss-schema",
         "./crates/adapters/store-sqlite/migrations.lock",
+        "./crates/testkit-ports/src/lib.rs",
+        "./crates/testkit-ports/src/script.rs",
         "./crates/testkit-ports/src/scripted_presence.rs",
         "./crates/trade-fakes",
         "./crates/xtask",
