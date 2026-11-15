@@ -86,6 +86,14 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
+      "issue": "files src/shared/ds/Numbers.stories.tsx src/shared/ds/Numbers.stories.tsx",
+      "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Numbers.tsx src/shared/ds/Numbers.tsx",
+      "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
+    },
+    {
       "issue": "files src/shared/ds/SegmentedControl.stories.tsx src/shared/ds/SegmentedControl.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
@@ -208,6 +216,10 @@
     {
       "issue": "files src/shared/lib/brand.ts src/shared/lib/brand.ts",
       "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+    },
+    {
+      "issue": "files src/shared/lib/format.ts src/shared/lib/format.ts",
+      "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
     },
     {
       "issue": "files src/shared/lib/index.ts src/shared/lib/index.ts",

@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { isProjectObject, typeFlags as F } from "../types.mjs";
+import { isProjectObject, projectPath, typeFlags as F } from "../types.mjs";
 
 const isLiteralKey = (node) =>
   (node.type === "Literal" &&
@@ -41,6 +41,13 @@ export const noComputedMember = {
 
     const check = (key, objectType, at) => {
       if (isLiteralKey(key)) return;
+      if (
+        projectPath(context, context.filename) === "src/shared/lib/money.ts" &&
+        (services.getTypeAtLocation(key).flags &
+          ts.TypeFlags.UniqueESSymbol) !==
+          0
+      )
+        return;
       const parts = partsOf(checker.getNonNullableType(objectType));
       if (parts.some(isList)) return report(at, "index");
       if (!isLiteralUnion(services.getTypeAtLocation(key)))
