@@ -1,3 +1,5 @@
+import type { DialogActions } from "./control-types";
+import { Button } from "./Button";
 import { useRef, type ReactElement } from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { focusDialogInput } from "../platform/input";
@@ -9,7 +11,7 @@ type Props = {
   readonly title: UiText;
   readonly onClose?: (reason: CloseReason) => void;
   readonly children: ReactElement | readonly ReactElement[];
-  readonly actions?: ReactElement;
+  readonly actions?: DialogActions;
   readonly wide?: "normal" | "wide";
 };
 const widths = {
@@ -61,14 +63,36 @@ export const Dialog = (props: Props): ReactElement => {
             <div className="p-space-5 flex flex-col gap-space-4">
               {props.children}
             </div>
-            {props.actions === undefined ? null : (
-              <footer className="flex justify-end gap-space-2 px-space-5 py-space-3 border-t-hairline border-solid border-line">
-                {props.actions}
-              </footer>
-            )}
+            <DialogFooter actions={props.actions} />
           </BaseDialog.Popup>
         </BaseDialog.Viewport>
       </BaseDialog.Portal>
     </BaseDialog.Root>
   );
 };
+
+const DialogFooter = (props: {
+  readonly actions: DialogActions | undefined;
+}): ReactElement | null =>
+  props.actions === undefined ? null : (
+    <footer className="flex justify-end gap-space-2 px-space-5 py-space-3 border-t-hairline border-solid border-line">
+      {props.actions.cancel === undefined ? null : (
+        <Button
+          variant="secondary"
+          onClick={props.actions.cancel.onPress}
+          disabled={props.actions.cancel.disabled ?? "enabled"}
+        >
+          {props.actions.cancel.label}
+        </Button>
+      )}
+      {props.actions.confirm === undefined ? null : (
+        <Button
+          variant="primary"
+          onClick={props.actions.confirm.onPress}
+          disabled={props.actions.confirm.disabled ?? "enabled"}
+        >
+          {props.actions.confirm.label}
+        </Button>
+      )}
+    </footer>
+  );

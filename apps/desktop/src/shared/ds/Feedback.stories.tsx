@@ -6,7 +6,7 @@ import { Dialog } from "./Dialog";
 import { EmptyState } from "./EmptyState";
 import { Skeleton } from "./Skeleton";
 import { Text } from "./Text";
-import { Button } from "./Button";
+import type { Action } from "./control-types";
 import { TextField } from "./TextField";
 type Story = {
   readonly component: "Card" | "Table" | "Dialog" | "EmptyState" | "Skeleton";
@@ -16,9 +16,12 @@ type Story = {
 };
 const title = text("app.title", "ko");
 const description = text("ds.description", "ko");
-const action = (
-  <Button size="control-height-sm">{text("ds.close", "ko")}</Button>
-);
+const action: Action = {
+  label: text("ds.close", "ko"),
+  onPress: (): void => {
+    return;
+  },
+};
 const content = <Text>{description}</Text>;
 const DialogStory = (props: {
   readonly initial: "open" | "closed";
@@ -33,7 +36,14 @@ const DialogStory = (props: {
       onClose={(): void => {
         setOpen("closed");
       }}
-      actions={action}
+      actions={{
+        cancel: {
+          label: action.label,
+          onPress: (): void => {
+            setOpen("closed");
+          },
+        },
+      }}
     >
       <TextField label={description} />
     </Dialog>

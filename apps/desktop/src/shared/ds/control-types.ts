@@ -20,3 +20,13 @@ export type ButtonProps = {
   readonly onClick?: () => void;
   readonly "aria-label"?: UiText;
 };
+
+export type Action = {
+  readonly label: UiText;
+  readonly onPress: () => void;
+  readonly disabled?: "enabled" | "disabled";
+};
+export type DialogActions = {
+  readonly confirm?: Action;
+  readonly cancel?: Action;
+};
