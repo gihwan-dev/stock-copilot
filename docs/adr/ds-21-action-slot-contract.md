@@ -12,6 +12,10 @@ Card·EmptyState·StatusBar는 기존 sm 크기, Dialog는 기본 크기다. Dia
 
 닫기만 있는 대화 상자는 cancel 자리를 쓴다. 디자인 preview의 primary 표시에 맞추려고 닫기를 confirm에 넣지 않는다. 사용자 승인에 따라 이 구현의 자리별 의미가 표시 원본보다 앞선다. 두 자리가 모두 비었으면 footer를 그리지 않는다. Action.disabled는 기존 Availability 타입을 공유한다.
 
+입력과 닫기 버튼이 없으면 첫 활성 버튼에 초점을 보내는 기존 규칙을 유지한다. confirm만 활성인 경우에는 confirm 초점과 Enter 실행을 허용하며, 두 액션이 모두 활성이면 cancel부터 시작한다. 같은 대상을 같은 동작으로 닫는 머리 X와 footer는 같은 접근성 이름을 허용한다. 다른 동작을 같은 이름으로 표시하는 것은 이 정책에 포함하지 않는다.
+
+normal Dialog 이야기는 두 액션, wide 이야기는 cancel만 표시한다. 이야기 수 20개와 Dialog 4개는 유지하며 양 테마에서 이름·순서·변형과 닫기 콜백을 검사한다.
+
 ## 검증
 
 기존 ds04-components의 makeAction 자료를 JSX에서 객체로 바꾼다. 기존 단언은 그대로다. 이야기 호출부 네 곳(Card 두 곳, EmptyState 한 곳, Dialog 한 곳)과 기존 테스트 자료 한 곳을 이관한다. 화면 사용처는 없다.
@@ -26,7 +30,7 @@ Card·EmptyState·StatusBar는 기존 sm 크기, Dialog는 기본 크기다. Dia
 
 ## 손 변형
 
-mktemp 복사본에서 각 변형을 TypeScript로 컴파일한 뒤 ds21-actions 테스트를 실행했다. 최초 실행에서 취소 disabled 무시 변형이 생존하여 새 테스트를 보강했다. 재개 후 자리별 primary/secondary 고정과 서로 다른 confirm/cancel 비활성 상태를 검증하도록 보강한 최종 자료로 29개를 다시 실행했다. 리뷰 수정 후 빈 footer·단독 취소·크기·버튼 순서 변형을 더해 최종 36개를 실행했다. 앞선 키보드 전체 조합 실행 중 종료되지 않은 실행은 집계하지 않았다. 최종 실행은 변형별 해당 테스트를 선택하고 제한 시간을 두었다. 적용 문자열이 줄바꿈과 일치하지 않았던 30번은 적용을 고쳐 별도 재실행했다. 최종 36개 전부 컴파일·검출됐으며 생존·시간 초과는 0이다.
+mktemp 복사본에서 각 변형을 TypeScript로 컴파일한 뒤 ds21-actions 테스트를 실행했다. 최초 실행에서 취소 disabled 무시 변형이 생존하여 새 테스트를 보강했다. 재개 후 자리별 primary/secondary 고정과 서로 다른 confirm/cancel 비활성 상태를 검증하도록 보강한 최종 자료로 29개를 다시 실행했다. 리뷰 수정 후 빈 footer·단독 취소·크기·버튼 순서 변형을 더해 36개를 실행했다. 두 번째 비판 이후 이야기 분기·confirm 라벨·닫기 콜백 변형 3개를 더해 최종 39개를 실행했다. 앞선 키보드 전체 조합 실행 중 종료되지 않은 실행은 집계하지 않았다. 최종 실행은 변형별 해당 테스트를 선택하고 제한 시간을 두었다. 적용 문자열이 줄바꿈과 일치하지 않았던 30번은 적용을 고쳐 별도 재실행했다. 39번은 최초 시간 초과를 성공으로 세지 않았다. 닫힘 확인을 DOM 객체와 null의 직접 비교 대신 동일 조건의 불린 단언으로 표현한 뒤 재실행하여 실패 단언과 정상 종료를 확인했다. 최종 39개 전부 컴파일·검출됐으며 생존·시간 초과는 0이다.
 
 | 번호 | 대상 | 바꾼 것 | 결과 |
 |---|---|---|---|
@@ -66,3 +70,6 @@ mktemp 복사본에서 각 변형을 TypeScript로 컴파일한 뒤 ds21-actions
 | 34 | Dialog | `variant="primary" → size="control-height-sm" variant="primary"` | KILLED (ds21-actions) |
 | 35 | Dialog | `Dialog 버튼 블록 순서 교환` | KILLED (ds21-actions) |
 | 36 | Card | `Card 버튼 블록 순서 교환` | KILLED (ds21-actions) |
+| 37 | Feedback.stories | `props.wide === "normal" → props.wide !== "normal"` | KILLED (ds21-actions) |
+| 38 | Feedback.stories | `confirm: { label: description, onPress: close } → confirm: { label: title, onPress: close }` | KILLED (ds21-actions) |
+| 39 | Feedback.stories | `confirm: { label: description, onPress: close } → confirm: { label: description, onPress: (): void => { return; } }` | KILLED (ds21-actions) |

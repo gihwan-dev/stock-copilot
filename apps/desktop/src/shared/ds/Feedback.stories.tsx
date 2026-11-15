@@ -28,6 +28,10 @@ const DialogStory = (props: {
   readonly wide: "normal" | "wide";
 }): ReactElement => {
   const [open, setOpen] = useState(props.initial);
+  const close = (): void => {
+    setOpen("closed");
+  };
+  const cancel: Action = { label: action.label, onPress: close };
   return (
     <Dialog
       open={open}
@@ -36,14 +40,11 @@ const DialogStory = (props: {
       onClose={(): void => {
         setOpen("closed");
       }}
-      actions={{
-        cancel: {
-          label: action.label,
-          onPress: (): void => {
-            setOpen("closed");
-          },
-        },
-      }}
+      actions={
+        props.wide === "normal"
+          ? { cancel, confirm: { label: description, onPress: close } }
+          : { cancel }
+      }
     >
       <TextField label={description} />
     </Dialog>

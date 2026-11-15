@@ -9,6 +9,7 @@ import {render,cleanup,act,queries} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {Card,EmptyState,Dialog,StatusBar,Text} from DS_ENTRY;
 import {text} from LIB_ENTRY;
+import {feedbackComponentStories} from STORY_ENTRY;
 window.cleanup=cleanup;window.act=act;window.user=userEvent.setup({document});
 window.q=Object.fromEntries(Object.entries(queries).map(([name,query])=>[name,(...args)=>query(document.body,...args)]));
 const title=text("app.title","ko"), label=text("ds.description","ko"), cancel=text("ds.close","ko");
@@ -17,7 +18,8 @@ if(name==="Dialog")return render(h(Dialog,{open:"open",title,actions:{confirm:ac
 if(name==="Card")return render(h(Card,{title,actions:action},h(Text,null,title)));
 if(name==="StatusBar")return render(h(StatusBar,{action},title));
 return render(h(EmptyState,{title,action}));};
-window.dialog=(mode)=>{cleanup();window.calls=[];const confirm={label,onPress:()=>window.calls.push("confirm")};const back={label:cancel,onPress:()=>window.calls.push("cancel")};const actions=mode==="none"?undefined:mode==="empty"?{}:mode==="confirm"?{confirm}:mode==="cancel"?{cancel:back}:{confirm,cancel:back};return render(h(Dialog,{open:"open",title,actions},h(Text,null,title)));};
+window.renderStory=(index,theme)=>{cleanup();document.documentElement.dataset.theme=theme;render(feedbackComponentStories[index].render());};
+window.dialog=(mode)=>{cleanup();window.calls=[];const confirm={label,onPress:()=>window.calls.push("confirm")};const back={label:cancel,onPress:()=>window.calls.push("cancel"),disabled:mode==="disabledCancel"?"disabled":"enabled"};const actions=mode==="none"?undefined:mode==="empty"?{}:mode==="confirm"?{confirm}:mode==="cancel"?{cancel:back}:{confirm,cancel:back};return render(h(Dialog,{open:"open",title,actions},h(Text,null,title)));};
 `);
 });
 after(() => fixture?.close());
@@ -86,7 +88,7 @@ test("DS21 Dialog keeps confirmation and cancellation independent", async () => 
   }
 });
 
-test("DS21 Dialog starts on cancel and Enter cannot confirm implicitly", async () => {
+test("DS21 Dialog with both actions enabled starts on cancel", async () => {
   const w = fixture.open();
   await w.act(() => w.dialog("both"));
   const buttons = w.q.getAllByRole("button");
@@ -142,4 +144,38 @@ test("DS21 Card keeps its heading before its small action", async () => {
     header.children[1],
     w.q.getByRole("button", { name: "설명을 확인해 주세요", exact: true }),
   );
+});
+
+for (const mode of ["confirm", "disabledCancel"]) {
+  test(`DS21 Dialog ${mode} keeps the first enabled button focus and Enter behavior`, async () => {
+    const w = fixture.open();
+    await w.act(() => w.dialog(mode));
+    const confirm = w.q.getByRole("button", {
+      name: "설명을 확인해 주세요",
+      exact: true,
+    });
+    assert.equal(w.document.activeElement, confirm);
+    await w.act(() => w.user.keyboard("{Enter}"));
+    assert.deepEqual(Array.from(w.calls), ["confirm"]);
+  });
+}
+test("DS21 normal and wide stories cover both actions and cancel only in both themes", async () => {
+  const w = fixture.open();
+  for (const theme of ["light", "dark"]) {
+    for (const [index, names, variants] of [
+      [7, ["닫기", "설명을 확인해 주세요"], ["bg-surface", "bg-primary"]],
+      [9, ["닫기"], ["bg-surface"]],
+    ]) {
+      await w.act(() => w.renderStory(index, theme));
+      const buttons = w.document.querySelectorAll("footer button");
+      assert.deepEqual(
+        Array.from(buttons, (button) => button.textContent),
+        names,
+      );
+      for (const [position, variant] of variants.entries())
+        assert.equal(buttons[position].classList.contains(variant), true);
+      await w.act(() => w.user.click(buttons[buttons.length - 1]));
+      assert.equal(w.q.queryByRole("dialog") === null, true);
+    }
+  }
 });
