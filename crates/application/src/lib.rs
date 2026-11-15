@@ -132,3 +132,11 @@ pub use event_bus::{
     DeliveryFailure, DeliveryReport, EventBus, EventBusBuilder, EventSubscriber, SubscriberFailure,
     SubscriptionId,
 };
+
+mod self_check;
+pub use self_check::{
+    NewsCheckRecord, NewsCheckState, SelfCheckAction, SelfCheckChange, SelfCheckChangeCause,
+    SelfCheckKind, SelfCheckObservation, SelfCheckProblem, SelfCheckRecord, SelfCheckResult,
+    evaluate_self_check, self_check_change,
+};
+pub use self_check::{SelfCheckDifference, self_check_difference};
