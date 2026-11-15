@@ -281,3 +281,9 @@ Draft 한정 Clone과 가격 범위 읽기는 빌린 초안의 모든 사실을 
 | 65 | 거부 묶음의 다른 종목 증인 제거 | 컴파일 성공·검출 | tests::generic_candle_and_valuation_contracts_preserve_query_scope, tests::public_contract_rejects_candles_written_before_error, tests::public_contract_rejects_only_matching_candles_written_before_error, tests::public_contract_rejects_only_other_candles_written_before_error |
 | 66 | 위험 변경 직후 조회 삭제 | 컴파일 성공·검출 | tests::public_contract_rejects_stale_risk_after_successful_write |
 | 67 | 위험 변경 직후 과거 설정 기대 | 컴파일 성공·검출 | tests::public_contract_rejects_stale_risk_after_successful_write, tests::settings_queries_reflect_the_same_shared_facts |
+
+## 수정 3 정상 훅과 종료 기록
+
+소스 커밋 aa0ea64b891704dbe8e9e5448e5937479166d951의 정상 훅은 전체 테스트 1478개, 커버리지 테스트 1049개와 커버리지 검사, cargo-deny 네 검사를 통과했다. 승인된 test-diff 두 건에서 종료 1이었고, 나머지 끄기 보고·새 끄기 0·훅 설치를 확인한 뒤 브리프의 커밋 한정 예외를 적용했다. 최신 master dc8f3f950294e9d3d1947b39c256868076d7de15에 대한 --no-ff 병합 명령은 Already up to date였다. master 참조를 옮기거나 push하지 않았다.
+
+같은 소스에서 변경분 자동 변이도 실행했으나 승인 test-diff 두 건의 사전 검사로 종료하여 변이 실행은 NOT_RUN이다. 손 변형 67개 컴파일·검출 결과와 섞어 자동 변이 통과로 표현하지 않는다. 3차 비판에서 실행으로 확정된 중요 두 건은 수정했고, 주문 확인 검증은 메인의 수용 결정으로 명시한 O·A 작업에 인계했다. 사소 두 건은 판정만 남겼으며 4차 리뷰를 추가하지 않았다.
