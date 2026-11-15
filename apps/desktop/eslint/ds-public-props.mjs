@@ -707,6 +707,20 @@ export const publicProps = {
           symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0
             ? checker.getAliasedSymbol(symbol)
             : symbol;
+        if (
+          resolved?.declarations?.some((d) =>
+            /\/node_modules\/react-markdown\//u.test(
+              d
+                .getSourceFile()
+                .fileName.replaceAll(String.fromCharCode(92), "/"),
+            ),
+          ) &&
+          node.name.name === "components" &&
+          ctx.filename
+            .replaceAll(String.fromCharCode(92), "/")
+            .endsWith("/src/shared/ds/Markdown.tsx")
+        )
+          return;
         const internalLibrary = from(
           resolved,
           /\/node_modules\/@base-ui\/react\//u,

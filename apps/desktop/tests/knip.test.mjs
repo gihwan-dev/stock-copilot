@@ -171,6 +171,10 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/LineChart.tsx src/shared/ds/LineChart.tsx",
   "files src/shared/ds/Treemap.tsx src/shared/ds/Treemap.tsx",
   "files src/shared/ds/chart-types.ts src/shared/ds/chart-types.ts",
+  "dependencies package.json react-markdown",
+  "files src/shared/ds/ChatInput.tsx src/shared/ds/ChatInput.tsx",
+  "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
+  "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

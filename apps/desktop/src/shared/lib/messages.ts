@@ -3,6 +3,12 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "chat.example": {
+    ko: "## 오늘의 소식\n\n[출처](https://example.test/article)\n\n![사진](https://example.test/image)\n\n```text\n긴코드와긴낱말의표시\n```" as UiText,
+  },
+  "chat.label": { ko: "메시지" as UiText },
+  "chat.send": { ko: "보내기" as UiText },
+  "chat.sending": { ko: "보내는 중" as UiText },
   "ds.chartMinimum": { ko: "최소" as UiText },
   "ds.chartMaximum": { ko: "최대" as UiText },
   "ds.chartExplore": { ko: "차트 항목 살펴보기" as UiText },

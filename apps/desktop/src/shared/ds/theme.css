@@ -2,6 +2,42 @@
 @import "./tokens.css";
 @source "../../";
 
+@utility markdown-content {
+  min-width: 0;
+}
+
+@utility markdown-content {
+  max-width: var(--spacing-prose-max);
+}
+
+@utility markdown-content {
+  overflow-wrap: anywhere;
+}
+
+@utility chat-content {
+  min-width: 0;
+}
+
+@utility chat-content {
+  white-space: pre-wrap;
+}
+
+@utility chat-content {
+  overflow-wrap: anywhere;
+}
+
+@utility markdown-link {
+  white-space: normal;
+}
+
+@utility markdown-link {
+  overflow-wrap: anywhere;
+}
+
+@utility markdown-link {
+  text-decoration-line: underline;
+}
+
 @utility status-sentence {
   min-width: 0;
 }

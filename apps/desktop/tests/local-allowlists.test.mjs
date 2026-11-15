@@ -36,6 +36,7 @@ const expectedLists = {
     "src/shared/ds/Treemap.tsx",
   ],
   RAW_TYPE_ALLOWLIST: [
+    "src/shared/ds/Markdown.tsx",
     "src/shared/platform/input.ts",
     "src/shared/lib/brand.ts",
     "src/shared/lib/money.ts",

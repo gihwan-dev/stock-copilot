@@ -124,6 +124,7 @@ export const boundaryPolicies = ({
       file: {
         path: [
           "src/shared/ds/TextField.tsx",
+          "src/shared/ds/ChatInput.tsx",
           "src/shared/ds/Select.tsx",
           "src/shared/ds/Dialog.tsx",
           "src/shared/ds/ChartFrame.tsx",

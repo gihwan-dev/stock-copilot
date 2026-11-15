@@ -1,7 +1,9 @@
 import {
   parseInputValue,
+  parseFreeText,
   err,
   type InputValue,
+  type FreeText,
   type BrandError,
   type Result,
 } from "../lib";
@@ -84,4 +86,22 @@ export const chartNavigation = (
     return "last";
   }
   return "ignore";
+};
+
+export const chatEventValue = (
+  event: Readonly<ChangeEvent<HTMLTextAreaElement>>,
+): Result<FreeText, BrandError> => parseFreeText(event.currentTarget.value);
+export const chatCommit = (
+  event: Readonly<KeyboardEvent<HTMLTextAreaElement>>,
+  composition: "idle" | "composing" | "ending",
+): "commit" | "ignore" => {
+  if (event.key !== "Enter" || event.shiftKey) return "ignore";
+  if (
+    event.nativeEvent.isComposing ||
+    legacyComposition(event.nativeEvent) === "composing" ||
+    composition !== "idle"
+  )
+    return "ignore";
+  event.preventDefault();
+  return "commit";
 };

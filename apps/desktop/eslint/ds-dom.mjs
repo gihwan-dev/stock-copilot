@@ -133,6 +133,8 @@ export const noDomValues = {
           if (
             [
               "inputEventValue",
+              "chatEventValue",
+              "chatCommit",
               "inputCommit",
               "focusDialogInput",
               "chartNavigation",

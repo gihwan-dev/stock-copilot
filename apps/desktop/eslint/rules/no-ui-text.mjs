@@ -50,10 +50,16 @@ export const noUiText = {
   },
   create: (context) => {
     const [{ screen }] = context.options;
+    const contentBoundary =
+      projectPath(context, context.filename) === "src/shared/ds/Markdown.tsx";
     const brands = /^src\/shared\/ds\//u.test(
       projectPath(context, context.filename),
     )
-      ? [...TEXT_BRANDS, "FormattedNumber"]
+      ? [
+          ...TEXT_BRANDS,
+          "FormattedNumber",
+          ...(contentBoundary ? ["FreeText"] : []),
+        ]
       : TEXT_BRANDS;
     const report = (node, messageId) => context.report({ node, messageId });
     return {
@@ -71,6 +77,12 @@ export const noUiText = {
       },
       JSXExpressionContainer: (node) => {
         if (screen !== "on" || !JSX_PARENTS.has(node.parent.type)) return;
+        if (
+          contentBoundary &&
+          node.expression.type === "Identifier" &&
+          node.expression.name === "children"
+        )
+          return;
         if (node.expression.type === "JSXEmptyExpression") return;
         const services = context.sourceCode.parserServices;
         const typed =

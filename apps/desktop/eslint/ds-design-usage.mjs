@@ -81,6 +81,15 @@ export const iconUtilities = [
 const declaration = (property) =>
   property === "width/height" ? ["width", "height"] : [property];
 export const designUtilities = (tokens) => [
+  ["markdown-content", "min-width", "0"],
+  ["markdown-content", "max-width", "var(--spacing-prose-max)"],
+  ["markdown-content", "overflow-wrap", "anywhere"],
+  ["chat-content", "min-width", "0"],
+  ["chat-content", "white-space", "pre-wrap"],
+  ["chat-content", "overflow-wrap", "anywhere"],
+  ["markdown-link", "white-space", "normal"],
+  ["markdown-link", "overflow-wrap", "anywhere"],
+  ["markdown-link", "text-decoration-line", "underline"],
   ["status-sentence", "min-width", "0"],
   ["status-sentence", "overflow-wrap", "anywhere"],
   ["dialog-overlay", "position", "fixed"],

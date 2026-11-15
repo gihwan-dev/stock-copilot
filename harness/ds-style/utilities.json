@@ -396,6 +396,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -1272,6 +1277,16 @@
     },
     {
       "name": "@content-medium:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -4161,6 +4176,11 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -5037,6 +5057,16 @@
     },
     {
       "name": "@content-wide:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -7936,6 +7966,11 @@
       "generated": "yes"
     },
     {
+      "name": "active:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -8812,6 +8847,16 @@
     },
     {
       "name": "active:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -11721,6 +11766,11 @@
       "generated": "yes"
     },
     {
+      "name": "chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -12282,6 +12332,11 @@
     },
     {
       "name": "disabled:bottom-space-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:chat-content",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -13162,6 +13217,16 @@
     },
     {
       "name": "disabled:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -16271,6 +16336,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -17147,6 +17217,16 @@
     },
     {
       "name": "focus-visible:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -20036,6 +20116,11 @@
       "generated": "yes"
     },
     {
+      "name": "focus:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -20912,6 +20997,16 @@
     },
     {
       "name": "focus:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -24141,6 +24236,11 @@
       "generated": "yes"
     },
     {
+      "name": "hover:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -25017,6 +25117,16 @@
     },
     {
       "name": "hover:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27691,6 +27801,16 @@
       "generated": "yes"
     },
     {
+      "name": "markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "max-h-chat-input-max",
       "kind": "allowed",
       "generated": "yes"
@@ -28367,6 +28487,11 @@
     },
     {
       "name": "motion-reduce:bottom-space-6",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:chat-content",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -29247,6 +29372,16 @@
     },
     {
       "name": "motion-reduce:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -34386,6 +34521,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -35262,6 +35402,16 @@
     },
     {
       "name": "window-lg:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -38151,6 +38301,11 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:chat-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:cursor-not-allowed",
       "kind": "allowed",
       "generated": "yes"
@@ -39027,6 +39182,16 @@
     },
     {
       "name": "window-md:m-space-9",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:markdown-content",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:markdown-link",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -41886,6 +42051,10 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:chat-content",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:cursor-not-allowed",
       "context": ["@container (width >= 56.25rem)"]
     },
@@ -42587,6 +42756,14 @@
     },
     {
       "selector": ".\\@content-medium\\:m-space-9",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:markdown-content",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:markdown-link",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -44802,6 +44979,10 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:chat-content",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:cursor-not-allowed",
       "context": ["@container (width >= 75rem)"]
     },
@@ -45503,6 +45684,14 @@
     },
     {
       "selector": ".\\@content-wide\\:m-space-9",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:markdown-content",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:markdown-link",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -47726,6 +47915,10 @@
       "context": []
     },
     {
+      "selector": ".active\\:chat-content:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:cursor-not-allowed:active",
       "context": []
     },
@@ -48427,6 +48620,14 @@
     },
     {
       "selector": ".active\\:m-space-9:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:markdown-content:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:markdown-link:active",
       "context": []
     },
     {
@@ -50654,6 +50855,10 @@
       "context": []
     },
     {
+      "selector": ".chat-content",
+      "context": []
+    },
+    {
       "selector": ".cursor-not-allowed",
       "context": []
     },
@@ -51103,6 +51308,10 @@
     },
     {
       "selector": ".disabled\\:bottom-space-6:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:chat-content:disabled",
       "context": []
     },
     {
@@ -51807,6 +52016,14 @@
     },
     {
       "selector": ".disabled\\:m-space-9:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:markdown-content:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:markdown-link:disabled",
       "context": []
     },
     {
@@ -54198,6 +54415,10 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:chat-content:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:cursor-not-allowed:focus-visible",
       "context": []
     },
@@ -54899,6 +55120,14 @@
     },
     {
       "selector": ".focus-visible\\:m-space-9:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:markdown-content:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:markdown-link:focus-visible",
       "context": []
     },
     {
@@ -57114,6 +57343,10 @@
       "context": []
     },
     {
+      "selector": ".focus\\:chat-content:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:cursor-not-allowed:focus",
       "context": []
     },
@@ -57815,6 +58048,14 @@
     },
     {
       "selector": ".focus\\:m-space-9:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:markdown-content:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:markdown-link:focus",
       "context": []
     },
     {
@@ -60302,6 +60543,10 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:chat-content:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:cursor-not-allowed:hover",
       "context": ["@media (hover: hover)"]
     },
@@ -61003,6 +61248,14 @@
     },
     {
       "selector": ".hover\\:m-space-9:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:markdown-content:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:markdown-link:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -63046,6 +63299,14 @@
       "context": []
     },
     {
+      "selector": ".markdown-content",
+      "context": []
+    },
+    {
+      "selector": ".markdown-link",
+      "context": []
+    },
+    {
       "selector": ".max-h-chat-input-max",
       "context": []
     },
@@ -63587,6 +63848,10 @@
     },
     {
       "selector": ".motion-reduce\\:bottom-space-6",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:chat-content",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -64291,6 +64556,14 @@
     },
     {
       "selector": ".motion-reduce\\:m-space-9",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:markdown-content",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:markdown-link",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -68202,6 +68475,10 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:chat-content",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:cursor-not-allowed",
       "context": ["@media (width >= 80rem)"]
     },
@@ -68903,6 +69180,14 @@
     },
     {
       "selector": ".window-lg\\:m-space-9",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:markdown-content",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:markdown-link",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -71118,6 +71403,10 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:chat-content",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:cursor-not-allowed",
       "context": ["@media (width >= 67.5rem)"]
     },
@@ -71819,6 +72108,14 @@
     },
     {
       "selector": ".window-md\\:m-space-9",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:markdown-content",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:markdown-link",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
