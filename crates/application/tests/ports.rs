@@ -329,15 +329,15 @@ mod tests {
         fn closed_orders(
             &self,
             account: &AccountId,
-            ordered_window: TimeInterval,
+            _evaluation_window: TimeInterval,
         ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send {
             std::future::ready(outcome(
                 self.0,
                 ClosedOrderSet::new(
                     account.clone(),
                     vec![],
-                    ordered_window,
-                    ordered_window.end(),
+                    interval(),
+                    a20_observed(),
                     ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages),
                 )
                 .expect("종료 집합"),
@@ -484,9 +484,9 @@ mod tests {
             std::future::ready(outcome(
                 self.0,
                 StockRanking::from_response(RankingResponseInput {
-                    kind: MasterCode::try_new("TOP_LOSERS").expect("종류"),
+                    kind: a20_ranking_kind(query.kind()),
                     market: query.market(),
-                    duration: MasterCode::try_new("1w").expect("기간"),
+                    duration: a20_ranking_duration(query.duration()),
                     limit: query.limit(),
                     rows: vec![],
                     ranked_at: None,
@@ -1043,7 +1043,7 @@ mod tests {
         let closed = ready(port.closed_orders(&account, interval())).expect("종료");
         assert_eq!(closed.account_id(), &account);
         assert_eq!(closed.covered(), interval());
-        assert_eq!(closed.observed_at(), interval().end());
+        assert_eq!(closed.observed_at(), a20_observed());
         assert_eq!(
             closed.completeness(),
             ClosedOrderCompleteness::Incomplete(ClosedOrderIncomplete::MissingPages)
@@ -1124,5 +1124,112 @@ mod tests {
         let calendar = ready(port.calendar(KnownMarket::Us)).expect("달력");
         assert_eq!(calendar.today().market(), Market::Us);
         assert_eq!(calendar.today().sessions(), []);
+    }
+    #[test]
+    fn a20_distinct_ranking_requests_keep_their_response_identity() {
+        let port = FakeBroker(Scenario::Complete);
+        for (kind, duration, market, count, caution) in [
+            (
+                RankingKind::MarketTradingVolume,
+                RankingDuration::Day,
+                KnownMarket::Kr,
+                19,
+                RankingCautionFilter::Included,
+            ),
+            (
+                RankingKind::TopLosers,
+                RankingDuration::Week,
+                KnownMarket::Us,
+                37,
+                RankingCautionFilter::Excluded,
+            ),
+            (
+                RankingKind::TossTradingAmount,
+                RankingDuration::Realtime,
+                KnownMarket::Us,
+                61,
+                RankingCautionFilter::Included,
+            ),
+        ] {
+            let query = application::RankingQuery::try_new(
+                kind,
+                market,
+                duration,
+                RankingLimit::try_new(count).expect("개수"),
+                caution,
+            )
+            .expect("유효 조회");
+            let response = ready(port.rankings(&query)).expect("응답");
+            assert_eq!(response.kind(), kind);
+            assert_eq!(response.duration(), duration);
+            assert_eq!(response.market(), market);
+            assert_eq!(response.limit(), query.limit());
+            assert_eq!(response.caution_filter(), caution);
+        }
+    }
+
+    fn a20_ranking_kind(kind: RankingKind) -> MasterCode {
+        MasterCode::try_new(match kind {
+            RankingKind::MarketTradingAmount => "MARKET_TRADING_AMOUNT",
+            RankingKind::MarketTradingVolume => "MARKET_TRADING_VOLUME",
+            RankingKind::TossTradingAmount => "TOSS_SECURITIES_TRADING_AMOUNT",
+            RankingKind::TossTradingVolume => "TOSS_SECURITIES_TRADING_VOLUME",
+            RankingKind::TopGainers => "TOP_GAINERS",
+            RankingKind::TopLosers => "TOP_LOSERS",
+            RankingKind::Unknown => "UNKNOWN",
+        })
+        .expect("종류 코드")
+    }
+    fn a20_ranking_duration(duration: RankingDuration) -> MasterCode {
+        MasterCode::try_new(match duration {
+            RankingDuration::Realtime => "realtime",
+            RankingDuration::Day => "1d",
+            RankingDuration::Week => "1w",
+            RankingDuration::Month => "1mo",
+            RankingDuration::ThreeMonths => "3mo",
+            RankingDuration::SixMonths => "6mo",
+            RankingDuration::Year => "1y",
+            RankingDuration::Unknown => "unknown",
+        })
+        .expect("기간 코드")
+    }
+    fn a20_observed() -> Timestamp {
+        instant()
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(71), Nanosecond::new(0)).expect("관측 간격"),
+            )
+            .expect("응답 관측 시각")
+    }
+    #[test]
+    fn a20_evaluation_request_does_not_fabricate_response_coverage_or_observation() {
+        let start = instant()
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(11), Nanosecond::new(0)).expect("시작 간격"),
+            )
+            .expect("평가 시작");
+        let end = instant()
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(23), Nanosecond::new(0)).expect("종료 간격"),
+            )
+            .expect("평가 끝");
+        let evaluation = TimeInterval::try_new(start, end).expect("평가 구간");
+        let account = AccountId::new(83);
+        let response = ready(FakeBroker(Scenario::Complete).closed_orders(&account, evaluation))
+            .expect("부분 조회");
+        assert_eq!(response.account_id(), &account);
+        assert_eq!(response.covered(), interval());
+        assert_eq!(response.observed_at(), a20_observed());
+        assert_ne!(response.covered(), evaluation);
+        assert_ne!(response.observed_at(), evaluation.end());
+        assert_eq!(
+            domain::net_purchase_amount(
+                &response,
+                evaluation,
+                domain::NetPurchaseScope::Currency(Currency::Usd)
+            ),
+            Err(domain::NetPurchaseError::Incomplete(
+                domain::NetPurchaseIncomplete::Query(ClosedOrderIncomplete::MissingPages)
+            ))
+        );
     }
 }

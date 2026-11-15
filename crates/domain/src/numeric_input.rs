@@ -79,7 +79,7 @@ mod tests {
 
     #[test]
     fn independent_integer_coefficients_preserve_exact_values_and_ranges() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     -79_228_162_514_264_337_593_543_950_335_i128

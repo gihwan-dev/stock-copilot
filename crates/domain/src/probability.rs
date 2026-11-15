@@ -173,7 +173,7 @@ mod tests {
                 parts.scale
             )),
         ];
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&decimals, |value| {
                 let parts = value.unpack();
                 let coefficient = u128::from(parts.lo)
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn probability_comparison_matches_integer_ordering() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_i64..=10_000, 0_i64..=10_000), |(left, right)| {
                 let first = Probability::try_new(Decimal::new(left, 4)).expect("유효 확률");
                 let second = Probability::try_new(Decimal::new(right, 4)).expect("유효 확률");

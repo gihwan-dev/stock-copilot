@@ -107,7 +107,7 @@ pub trait BrokerRead: Send + Sync {
     fn closed_orders(
         &self,
         account: &AccountId,
-        ordered_window: TimeInterval,
+        evaluation_window: TimeInterval,
     ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send;
     fn order(
         &self,
@@ -231,3 +231,11 @@ pub use event_bus::{
 
 mod read_queries;
 pub use read_queries::RankingQuery;
+mod self_check;
+pub use self_check::{
+    AiCheckObservation, AiEnvironmentProblem, CheckState, ClaudeInstallProblem, ClaudeLoginProblem,
+    DuplicateKeyProblem, IpProblem, NewsCheckState, OrderPrerequisiteProblem, SelfCheckAction,
+    SelfCheckChange, SelfCheckInput, SelfCheckResult, SourceCheckRecord, TossCheckObservation,
+    TossKeyProblem, evaluate_self_check, isolation_check_observation, self_check_change,
+    toss_check_observation,
+};

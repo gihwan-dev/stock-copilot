@@ -174,7 +174,7 @@ mod tests {
     }
     #[test]
     fn variable_limits_match_independent_integer_reference() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(2_u32..899_000, 1_u32..900_000, 1_u32..5000),
                 |(bid, lower, width)| {
@@ -232,7 +232,7 @@ mod tests {
     }
     #[test]
     fn fractional_us_quantity_matches_independent_microshare_integers() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(100_u64..1_000_000_000, 10_u64..1_000_000_000),
                 |(held, available)| {
@@ -469,7 +469,7 @@ mod tests {
     }
     #[test]
     fn us_prices_match_independent_integer_ticks_for_4096_cases() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(100_u32..2_000_000), |bid| {
                 let ask = bid + 7;
                 let ask_value = Decimal::from_i128_with_scale(i128::from(ask), 5);

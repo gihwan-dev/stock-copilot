@@ -369,3 +369,73 @@ fn stale_build_directories_do_not_affect_the_verdict() {
         "{expected:?}"
     );
 }
+
+#[test]
+fn fast_listing_keeps_missing_test_detection_for_selected_package() {
+    let (directory, base) = committed_repository("h46-selected-list");
+    edit(&directory, LIBRARY, EXTRA_DECLARATION, "");
+    let findings = super::check_fast(
+        &directory,
+        &base,
+        crate::git_base::BaseUse::Ancestor,
+        &[String::from("sample")],
+    )
+    .expect("selected test-diff");
+    assert!(
+        shown(&findings)
+            .iter()
+            .any(|rule| rule.starts_with("test-diff:not-listed:")),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn fast_static_comparison_still_covers_unselected_sources() {
+    let (directory, base) = committed_repository("h46-selected-source");
+    let source = fs::read_to_string(directory.join(LIBRARY)).expect("source");
+    fs::write(
+        directory.join(LIBRARY),
+        source.replace(
+            "assert_eq!(super::add(1, 2), 3",
+            "assert_eq!(super::add(1, 2), 4",
+        ),
+    )
+    .expect("weaken source");
+    let findings = super::check_fast(&directory, &base, crate::git_base::BaseUse::Ancestor, &[])
+        .expect("static test-diff");
+    assert!(!findings.is_empty(), "{source}");
+}
+
+#[test]
+fn property_helper_body_is_test_support() {
+    let root = repository_root();
+    let file = "crates/testkit/src/lib.rs";
+    let source = fs::read_to_string(root.join(file)).expect("helper");
+    let end = source.find("\n}\n").expect("function end") + 3;
+    let changed = format!(
+        "#[must_use]\npub fn property_cases() -> u32 {{ cases_for(None) }}\n{}",
+        source.get(end..).expect("function boundary")
+    );
+    let before = super::Files::from([
+        (
+            String::from("Cargo.toml"),
+            b"[workspace]\nmembers=[\"crates/testkit\"]".to_vec(),
+        ),
+        (
+            String::from("crates/testkit/Cargo.toml"),
+            b"[package]\nname=\"testkit\"\nversion=\"0.1.0\"".to_vec(),
+        ),
+        (String::from(file), source.into_bytes()),
+    ]);
+    let mut after = before.clone();
+    after.insert(String::from(file), changed.into_bytes());
+    assert!(
+        super::compare_files(&before, &after)
+            .0
+            .iter()
+            .any(|finding| finding
+                .rule
+                .to_string()
+                .starts_with("test-diff:support-modified:"))
+    );
+}

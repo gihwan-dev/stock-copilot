@@ -975,7 +975,7 @@ mod tests {
             -720_i32..841_i32,
             -3600_i64..259_200_i64,
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&strategy, |(lengths, nanos, offset, point)| {
                 let (calendar, reference) = generated(&lengths, nanos, offset);
                 let seconds = 1_774_310_400_i64.checked_add(point).expect("표본 시각");
@@ -996,7 +996,7 @@ mod tests {
             0_u32..1_000_000_000,
             -720_i32..841_i32,
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&strategy, |(lengths, nanos, offset)| {
                 let (calendar, reference) = generated(&lengths, nanos, offset);
                 let mut expected: Vec<i128> = reference

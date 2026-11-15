@@ -1631,7 +1631,7 @@ mod tests {
     }
     #[test]
     fn generated_public_allocations_match_independent_integers_and_arbitrary_permutations() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     proptest::collection::vec(

@@ -5214,5 +5214,23 @@
     "command": "find . -name '*.rs' -print",
     "decision": "allow",
     "rules": []
+  },
+  {
+    "command": "git merge --ff-only master",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git update-ref refs/heads/master HEAD",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin h-46",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
   }
 ]

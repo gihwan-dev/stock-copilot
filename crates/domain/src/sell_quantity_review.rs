@@ -158,7 +158,7 @@ pub(crate) mod tests {
     #[test]
     fn sell_matches_independent_integer_reference() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(100_u32..100_000, 1_u32..100_000, 1_u32..=100),
                 |(held, available, percent)| {

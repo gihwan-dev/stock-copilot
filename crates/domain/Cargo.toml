@@ -12,4 +12,5 @@ time = { version = "=0.3.55", default-features = false }
 rust_decimal = { version = "=1.43.0", default-features = false }
 
 [dev-dependencies]
+testkit = { path = "../testkit" }
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }

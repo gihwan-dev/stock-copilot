@@ -383,6 +383,42 @@ pub(crate) fn check_for(
     Ok(findings)
 }
 
+pub(crate) fn check_fast(
+    root: &Path,
+    base: &str,
+    base_use: crate::git_base::BaseUse,
+    packages: &[String],
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+    let before = base_files(root, &commit)?;
+    let mut findings = compare_sources(&texts(&before), &texts(&current_files(root)?));
+    if !packages.is_empty() {
+        let expected = scan(&before)
+            .tests
+            .into_keys()
+            .filter(|id| {
+                packages.iter().any(|package| {
+                    id.starts_with(&format!("{package} "))
+                        || id.starts_with(&format!("{package}::"))
+                })
+            })
+            .collect();
+        findings.extend(compare_lists(&expected, &list_tests(root, packages, None)?));
+    }
+    Ok(findings)
+}
+
+pub(crate) fn selected_command(
+    base: &str,
+    packages: &[String],
+    base_use: crate::git_base::BaseUse,
+) -> ExitCode {
+    report(
+        "test-diff",
+        workspace_root().and_then(|root| check_fast(&root, base, base_use, packages)),
+    )
+}
+
 fn existed_at_base(base_files: &Files, base: &Scan, finding: &Finding<Rule>) -> bool {
     match &finding.rule {
         Rule::Removed(id) | Rule::Modified(id) => base.tests.contains_key(id),

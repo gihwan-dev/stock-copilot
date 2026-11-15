@@ -440,7 +440,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn threshold_matches_independent_integer_oracle() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(0_u64..200_000_000), |offset| {
                 let amount = offset + 1;
                 let token = kr_limit(&amount.to_string(), OrderSide::Buy);
@@ -882,7 +882,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn usd_threshold_matches_independent_integer_product() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u64..100_000, 500_u64..3000, 500_u64..3000),
                 |(dollars, buy, mid)| {
@@ -919,7 +919,7 @@ pub(crate) mod tests {
     }
     #[test]
     fn indeterminate_fx_never_falls_through_to_not_required() {
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u64..100_000, 0_u8..3), |(dollars, failure)| {
                 let token = token_amount(&dollars.to_string());
                 let invalid = rate("1", FxRateKind::Mid);

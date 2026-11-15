@@ -877,7 +877,7 @@ mod tests {
     #[test]
     fn mixed_history_prefix_failure_atomicity_replay_and_pending_isolation() {
         let strategy = proptest::collection::vec((0_u8..10, 0_u8..8), 0..64);
-        TestRunner::new(Config::with_cases(256))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&strategy, |steps| {
                 let mut thesis = Thesis::new();
                 for (operation, key) in steps {
@@ -2143,7 +2143,7 @@ mod state_property_tests {
             0_u8..8,
             proptest::collection::vec(step, 1..25),
         );
-        TestRunner::new(Config::with_cases(128))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&strategy, |(length, index, value, steps)| {
                 let mut thesis = initial();
                 injected_failure(

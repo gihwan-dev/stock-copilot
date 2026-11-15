@@ -458,3 +458,6 @@ pub(crate) fn push_base_command() -> ExitCode {
         Err(_) => ExitCode::FAILURE,
     }
 }
+
+#[cfg(test)]
+mod fast_tests;

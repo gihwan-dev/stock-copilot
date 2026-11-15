@@ -1495,7 +1495,7 @@ mod tests {
     #[test]
     fn property_matches_independent_reference_after_variance_preserving_time_rescaling() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(
                     0..CASES.len() + IMAGE_CASES.len(),

@@ -269,7 +269,7 @@ mod tests {
             ]),
             0..30,
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&strategy, |input| {
                 let rows: Vec<_> = input
                     .iter()

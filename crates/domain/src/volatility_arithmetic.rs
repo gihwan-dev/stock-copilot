@@ -165,7 +165,7 @@ mod tests {
             actual.0.checked_sub(expected).expect("차이").abs() < Decimal::new(1, 24),
             "독립 상수"
         );
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_i64..=1_000_000_000, 0_u32..=28),
                 |(coefficient, scale)| {
@@ -308,7 +308,7 @@ mod tests {
     fn generated_statistics_match_independent_pairwise_variance() {
         use crate::Volatility;
         use crate::candle::tests::series;
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &proptest::collection::vec(1_u32..=10_000, 3..17),
                 |prices| {

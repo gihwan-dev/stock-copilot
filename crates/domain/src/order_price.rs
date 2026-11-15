@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn prices_match_independent_integer_tick_table() {
         use proptest::test_runner::{Config, TestRunner};
-        TestRunner::new(Config::with_cases(4096))
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(&(1_u32..=200_000, 0_u32..=6), |(coefficient, scale)| {
                 let denominator = 10_u64.pow(scale);
                 let integer = u64::from(coefficient) % denominator == 0;
