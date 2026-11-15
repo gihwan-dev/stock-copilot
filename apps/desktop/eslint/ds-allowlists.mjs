@@ -1,4 +1,4 @@
-export const PRICE_COLOR_FILES = [];
+export const PRICE_COLOR_FILES = ["src/shared/ds/Numbers.tsx"];
 export const INLINE_STYLE_FILES = [];
 export const DOM_STYLE_FILES = [];
 export const DOM_ACCESS_FILES = [

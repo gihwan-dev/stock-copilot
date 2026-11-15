@@ -50,6 +50,7 @@ const UNDISABLEABLE_RULES = [
   "ds/no-message-format",
   "local/no-comments",
   "local/no-money-coercion",
+  "local/number-display-boundary",
   "local/forbidden-file",
   "local/no-raw-types",
   "local/no-brand-creation",
@@ -205,6 +206,7 @@ export const appConfig = (
       rules: {
         ...boundaryRules(boundaryTables),
         "local/no-comments": "error",
+        "local/number-display-boundary": "error",
         "local/no-money-coercion": [
           "error",
           { moneyFile: MONEY_FILE, keyReaders: MONEY_KEY_READERS },

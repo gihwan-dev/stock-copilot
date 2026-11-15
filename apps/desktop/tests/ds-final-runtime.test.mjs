@@ -138,7 +138,19 @@ test("DS02 final DOM routes fail real lint after native typecheck and approved i
       'export const unit=():string=>new Intl.NumberFormat("fr",{style:"unit",unit:"meter"}).format(1);',
     );
     assert.equal(compile().status, 0);
-    assert.deepEqual((await lint.lintFiles([format]))[0].messages, []);
+    assert.deepEqual((await lint.lintFiles([format]))[0].messages, [
+      {
+        ruleId: "local/number-display-boundary",
+        severity: 2,
+        message:
+          "숫자 표시는 부동소수점 변환과 Intl 반올림 없이 문자열로 처리한다.",
+        line: 1,
+        column: 34,
+        endLine: 1,
+        endColumn: 38,
+        messageId: "conversion",
+      },
+    ]);
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

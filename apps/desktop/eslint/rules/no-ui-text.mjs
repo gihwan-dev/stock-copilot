@@ -1,4 +1,4 @@
-import { brandNamesOf, typeFlags as F } from "../types.mjs";
+import { brandNamesOf, projectPath, typeFlags as F } from "../types.mjs";
 
 const HANGUL = /\p{Script=Hangul}/u;
 const TEXT_BRANDS = ["UiText"];
@@ -10,13 +10,13 @@ const isTextExpression = (expression) =>
   (expression.type === "Literal" && typeof expression.value === "string") ||
   expression.type === "TemplateLiteral";
 
-const unbrandedText = (checker, type, depth = 0) => {
+const unbrandedText = (checker, type, brands, depth = 0) => {
   if (depth > 6) return false;
-  const next = (inner) => unbrandedText(checker, inner, depth + 1);
+  const next = (inner) => unbrandedText(checker, inner, brands, depth + 1);
   if (type.isUnion()) return type.types.some(next);
   if (type.isIntersection())
     return (
-      !brandNamesOf(checker, type).some((name) => TEXT_BRANDS.includes(name)) &&
+      !brandNamesOf(checker, type).some((name) => brands.includes(name)) &&
       type.types.some(next)
     );
   if ((type.flags & STRING_LIKE) !== 0) return true;
@@ -50,6 +50,11 @@ export const noUiText = {
   },
   create: (context) => {
     const [{ screen }] = context.options;
+    const brands = /^src\/shared\/ds\//u.test(
+      projectPath(context, context.filename),
+    )
+      ? [...TEXT_BRANDS, "FormattedNumber"]
+      : TEXT_BRANDS;
     const report = (node, messageId) => context.report({ node, messageId });
     return {
       Literal: (node) => {
@@ -76,6 +81,7 @@ export const noUiText = {
             unbrandedText(
               services.program.getTypeChecker(),
               services.getTypeAtLocation(node.expression),
+              brands,
             ))
         )
           report(node, "jsxText");
