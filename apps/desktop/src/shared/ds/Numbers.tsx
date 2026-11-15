@@ -107,6 +107,8 @@ export const ChartNumber = (props: {
     direction={undefined}
   />
 );
+export const chartNumberText = (value: ChartDecimal): Display["text"] =>
+  formatNumber({ kind: "decimal", value }).text;
 export const Probability = (props: {
   readonly value: PercentDisplay;
 }): ReactElement => (

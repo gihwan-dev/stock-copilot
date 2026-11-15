@@ -43,7 +43,7 @@ test("DS06 기하 예외는 ChartFrame의 경로와 viewBox만이다", async () 
   const [clean] = await engine.lintText(source, { filePath: path });
   assert.equal(clean.errorCount, 0, JSON.stringify(clean.messages));
   for (const [from, to, rule] of [
-    ['viewBox="0 0 100 60"', "width={999}", "ds/no-presentation-props"],
+    ['viewBox="-1 -1 102 62"', "width={999}", "ds/no-presentation-props"],
     [
       "fill-chart-1",
       "fill-red-500",
@@ -67,10 +67,10 @@ test("DS06 기하 예외는 ChartFrame의 경로와 viewBox만이다", async () 
   );
 });
 
-test("DS06 원문 표시 예외는 SVG title을 담는 ChartFrame에만 적용된다", async () => {
+test("DS06 원문 직접 표시는 모든 화면과 차트 파일에서 금지된다", async () => {
   const engine = new ESLint({ cwd: desktopRoot });
   for (const [path, allowed] of [
-    ["src/shared/ds/ChartFrame.tsx", true],
+    ["src/shared/ds/ChartFrame.tsx", false],
     ["src/shared/ds/ChartTable.tsx", false],
     ["src/shared/ds/AreaChart.tsx", false],
     ["src/app/main.tsx", false],

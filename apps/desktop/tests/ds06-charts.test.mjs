@@ -19,6 +19,7 @@ const builder = await compile(
 );
 const chartCss = builder.build([
   "w-full",
+  "bg-surface",
   "h-chart-height",
   "fill-none",
   "fill-chart-1",
@@ -29,6 +30,7 @@ const chartCss = builder.build([
   "fill-chart-6",
   "stroke-current",
   "stroke-focus-ring",
+  "stroke-surface",
   "stroke-icon",
   "opacity-area",
   "sr-only",
@@ -39,12 +41,12 @@ const source = `
 import {createElement} from 'react';
 import {render, fireEvent, cleanup} from '@testing-library/react';
 import {LineChart,AreaChart,DonutChart,Treemap} from DS_ENTRY;
-import {lineCoordinates} from '${join(desktopRoot, "src/shared/ds/LineChart.tsx")}';
-import {donutArcs} from '${join(desktopRoot, "src/shared/ds/DonutChart.tsx")}';
-import {treemapRectangles} from '${join(desktopRoot, "src/shared/ds/Treemap.tsx")}';
+import * as publicDs from DS_ENTRY;
+window.publicGeometry=["lineCoordinates","donutArcs","treemapRectangles"].filter(key=>key in publicDs);
+import {geometry as pureGeometry} from '${join(desktopRoot, "tests/ds06-geometry-fixture.ts")}';
 import {text,parseChartDecimal} from LIB_ENTRY;
 const identify=data=>data.map((point,i)=>({...point,id:point.id??String(i)}));
-window.geometry=Object.fromEntries(Object.entries({lineCoordinates,donutArcs,treemapRectangles}).map(([key,fn])=>[key,data=>fn(identify(data))]));
+window.geometry=Object.fromEntries(Object.entries(pureGeometry).map(([key,fn])=>[key,data=>fn(identify(data))]));
 const style=document.createElement('style');style.textContent=${JSON.stringify(chartCss)};document.head.append(style);
 window.rootTheme=theme=>document.documentElement.dataset.theme=theme;
 window.draw=(name,data,theme='light')=>render(createElement({LineChart,AreaChart,DonutChart,Treemap}[name],{data:identify(data),theme,label:text('app.title','ko'),empty:text('ds.tableEmpty','ko')}));
@@ -60,6 +62,7 @@ after(() => runtime.close());
 test("DS06 좌표 경계와 배치 보존 속성", () => {
   {
     const w = runtime.open();
+    assert.deepEqual(Array.from(w.publicGeometry), []);
     const { lineCoordinates, donutArcs, treemapRectangles } = w.geometry;
     const data = (values) =>
       values.map((value, i) => ({ label: `항목${i}`, value: String(value) }));
@@ -213,10 +216,18 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
           view.container.querySelector("[role=img]").getAttribute("aria-label"),
           "주식 코파일럿",
         );
-        assert.equal(
-          view.container.querySelector("[role=img]").getAttribute("viewBox"),
-          "0 0 100 60",
+        const [left, top, width, height] = view.container
+          .querySelector("[role=img]")
+          .getAttribute("viewBox")
+          .split(" ")
+          .map(Number);
+        assert.ok(
+          left < 0 && top < 0 && left + width > 100 && top + height > 60,
         );
+        const namedButton = view.getByRole("button", {
+          name: "차트 항목 살펴보기 · 주식 코파일럿",
+        });
+        assert.ok(namedButton);
         assert.match(
           view.container.querySelector("table").textContent,
           /첫 항목12\.125둘째 항목23\.875/,
@@ -319,6 +330,15 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
           w.getComputedStyle(figure).getPropertyValue("--color-chart-1").trim(),
           series.value[theme],
         );
+        const surface = inputTokens.color.tokens.find(
+          (token) => token.name === "surface",
+        ).value[theme];
+        const background = `rgb(${surface
+          .slice(1)
+          .match(/../gu)
+          .map((pair) => parseInt(pair, 16))
+          .join(", ")})`;
+        assert.equal(w.getComputedStyle(figure).backgroundColor, background);
         const svg = view.container.querySelector("svg");
         assert.equal(
           svg.getAttribute("preserveAspectRatio"),
@@ -375,13 +395,23 @@ test("DS06 접근성, 원문, 키보드와 포인터 표시", async () => {
           assert.match(marks[1].getAttribute("class"), /fill-chart-2/);
 
         w.cleanup();
-        const empty = w.draw(component, []);
+        const empty = w.draw(component, [], theme);
         assert.match(empty.container.textContent, /표시할 항목이 없어요/);
         assert.equal(empty.container.querySelector("svg[role=img]"), null);
+        assert.equal(
+          w.getComputedStyle(empty.container.querySelector("figure"))
+            .backgroundColor,
+          background,
+        );
         w.cleanup();
-        const bad = w.draw(component, [{ label: "a", value: "bad" }]);
+        const bad = w.draw(component, [{ label: "a", value: "bad" }], theme);
         assert.match(bad.container.textContent, /차트를 그릴 수 없어요/);
         assert.equal(bad.container.querySelector("svg[role=img]"), null);
+        assert.equal(
+          w.getComputedStyle(bad.container.querySelector("figure"))
+            .backgroundColor,
+          background,
+        );
         w.cleanup();
       }
   }
@@ -520,8 +550,94 @@ test("DS06 숫자 라벨은 좌표 재변환 없이 DS05 표시를 쓴다", () =
     }
     assert.equal(
       view.container.querySelector("svg title").textContent,
-      "원문 첫 항목 · 12345.600",
+      "원문 첫 항목 · 12,345.600",
     );
     w.cleanup();
   }
+});
+
+test("DS06 선택 윤곽은 조각과 대비되고 경계 밖 여백이 있다", () => {
+  const luminance = (color) => {
+    const channels = color.startsWith("#")
+      ? color
+          .slice(1)
+          .match(/../gu)
+          .map((pair) => parseInt(pair, 16))
+      : color
+          .match(/[\d.]+/gu)
+          .slice(0, 3)
+          .map(Number);
+    return channels
+      .map((channel) => channel / 255)
+      .map((part) =>
+        part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4,
+      )
+      .reduce(
+        (sum, part, index) => sum + part * [0.2126, 0.7152, 0.0722][index],
+        0,
+      );
+  };
+  const contrast = (first, second) =>
+    (Math.max(luminance(first), luminance(second)) + 0.05) /
+    (Math.min(luminance(first), luminance(second)) + 0.05);
+  const w = runtime.open();
+  for (const theme of ["light", "dark"])
+    for (const component of ["DonutChart", "Treemap"]) {
+      const view = w.draw(
+        component,
+        Array.from({ length: 6 }, (_, index) => ({
+          label: `선택 항목${index}`,
+          value: String(index + 1),
+        })),
+        theme,
+      );
+      const button = view.container.querySelector("button");
+      w.fire.focus(button);
+      const figure = view.container.querySelector("figure");
+      const themeStyle = w.getComputedStyle(figure);
+      for (let index = 0; index < 6; index++) {
+        const outline = view.container.querySelector(
+          'svg path[pointer-events="none"]',
+        );
+        const stroke = w.getComputedStyle(outline).stroke;
+        assert.equal(
+          outline.getAttribute("vector-effect"),
+          "non-scaling-stroke",
+        );
+        const fill = themeStyle
+          .getPropertyValue(`--color-chart-${index + 1}`)
+          .trim();
+        assert.ok(contrast(stroke, fill) >= 3, `${theme} chart-${index + 1}`);
+        w.fire.keyDown(button, { key: "ArrowRight" });
+      }
+      const [left, top, width, height] = view.container
+        .querySelector("svg")
+        .getAttribute("viewBox")
+        .split(" ")
+        .map(Number);
+      assert.ok(left < 0 && top < 0 && left + width > 100 && top + height > 60);
+      w.cleanup();
+    }
+  for (const theme of ["light", "dark"])
+    for (const component of ["LineChart", "AreaChart"]) {
+      const view = w.draw(
+        component,
+        [
+          { label: "추이 첫 항목", value: "12.50" },
+          { label: "추이 끝 항목", value: "23.75" },
+        ],
+        theme,
+      );
+      w.fire.focus(view.container.querySelector("button"));
+      const outline = view.container.querySelector(
+        'svg path[pointer-events="none"]',
+      );
+      const stroke = w.getComputedStyle(outline).stroke;
+      const background = w
+        .getComputedStyle(view.container.querySelector("figure"))
+        .getPropertyValue("--color-surface")
+        .trim();
+      assert.ok(contrast(stroke, background) >= 3, `${theme} ${component}`);
+      w.cleanup();
+    }
 });

@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
-import type { ChartProps, ChartPoint } from "./chart-types";
+import type { ChartProps, ChartPoint, ChartAxisLabels } from "./chart-types";
 import { ChartNumber } from "./Numbers";
+import { text } from "../lib";
 type Props = ChartProps & {
   readonly onHighlight: (point: ChartPoint | undefined) => void;
   readonly layout: "trend" | "donut" | "treemap";
@@ -35,3 +36,30 @@ const classes = {
   donut: "w-full text-body-sm tabular-nums",
   treemap: "w-full text-body-sm tabular-nums",
 } as const;
+
+export const ChartAxes = (props: {
+  readonly axes: ChartAxisLabels;
+}): ReactElement => (
+  <div className="flex flex-col gap-space-1">
+    <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
+      <span className="text-caption text-ink-muted status-sentence">
+        {props.axes.first}
+      </span>
+      <span className="text-caption text-ink-muted status-sentence">
+        {props.axes.last}
+      </span>
+    </div>
+    <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
+      <span className="text-caption text-ink-muted status-sentence">
+        {text("ds.chartMinimum", "ko")}
+        {text("ds.chartSeparator", "ko")}
+        <ChartNumber value={props.axes.minimum} />
+      </span>
+      <span className="text-caption text-ink-muted status-sentence">
+        {text("ds.chartMaximum", "ko")}
+        {text("ds.chartSeparator", "ko")}
+        <ChartNumber value={props.axes.maximum} />
+      </span>
+    </div>
+  </div>
+);

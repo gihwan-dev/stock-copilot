@@ -1,15 +1,10 @@
 import { useId, useState, type ReactElement } from "react";
 import { text } from "../lib";
-import type {
-  ChartProps,
-  ChartGeometry,
-  ChartMark,
-  ChartAxisLabels,
-} from "./chart-types";
+import type { ChartProps, ChartGeometry, ChartMark } from "./chart-types";
 import { chartNavigation } from "../platform/input";
 import { EmptyState } from "./EmptyState";
-import { ChartTable } from "./ChartTable";
-import { ChartNumber } from "./Numbers";
+import { ChartTable, ChartAxes } from "./ChartTable";
+import { ChartNumber, chartNumberText } from "./Numbers";
 type Props = ChartProps & { readonly geometry: ChartGeometry };
 type Ready = ChartProps & {
   readonly geometry: Extract<ChartGeometry, { readonly kind: "ready" }>;
@@ -18,7 +13,7 @@ export const ChartFrame = (props: Props): ReactElement => (
   <figure
     aria-label={props.label}
     data-chart-theme={props.theme}
-    className="@container w-full max-w-full text-ink"
+    className="@container w-full max-w-full bg-surface text-ink"
   >
     {props.geometry.kind === "ready" ? (
       <ChartContent
@@ -107,7 +102,6 @@ const ChartNavigation = (props: NavigationProps): ReactElement => {
     <>
       <button
         type="button"
-        aria-label={props.label}
         aria-describedby={id}
         className="text-body-sm text-primary rounded-sm px-space-2 py-space-1 focus-visible:outline-focus"
         onFocus={(): void => {
@@ -122,6 +116,8 @@ const ChartNavigation = (props: NavigationProps): ReactElement => {
         }}
       >
         {text("ds.chartExplore", "ko")}
+        {text("ds.chartSeparator", "ko")}
+        {props.label}
       </button>
       <p id={id} role="status" className="text-body-sm status-sentence">
         {props.selected === undefined ? null : (
@@ -145,7 +141,7 @@ const ChartPlot = (props: PlotProps): ReactElement => (
   <svg
     role="img"
     aria-label={props.label}
-    viewBox="0 0 100 60"
+    viewBox="-1 -1 102 62"
     preserveAspectRatio={
       props.geometry.layout === "donut" ? "xMidYMid meet" : "none"
     }
@@ -175,7 +171,11 @@ const ChartPlot = (props: PlotProps): ReactElement => (
         d={props.active.path}
         pointerEvents="none"
         vectorEffect="non-scaling-stroke"
-        className="fill-none stroke-focus-ring"
+        className={
+          props.geometry.layout === "trend"
+            ? "fill-none stroke-focus-ring"
+            : "fill-none stroke-surface"
+        }
       />
     )}
   </svg>
@@ -204,7 +204,7 @@ const ChartMarks = (props: {
         <title>
           {mark.label}
           {text("ds.chartSeparator", "ko")}
-          {mark.value}
+          {chartNumberText(mark.value)}
         </title>
       </path>
     ))}
@@ -223,28 +223,3 @@ const orderMessages = {
   donut: "ds.chartDonutOrder",
   treemap: "ds.chartTreemapOrder",
 } as const;
-
-const ChartAxes = (props: { readonly axes: ChartAxisLabels }): ReactElement => (
-  <div className="flex flex-col gap-space-1">
-    <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
-      <span className="text-caption text-ink-muted status-sentence">
-        {props.axes.first}
-      </span>
-      <span className="text-caption text-ink-muted status-sentence">
-        {props.axes.last}
-      </span>
-    </div>
-    <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
-      <span className="text-caption text-ink-muted status-sentence">
-        {text("ds.chartMinimum", "ko")}
-        {text("ds.chartSeparator", "ko")}
-        <ChartNumber value={props.axes.minimum} />
-      </span>
-      <span className="text-caption text-ink-muted status-sentence">
-        {text("ds.chartMaximum", "ko")}
-        {text("ds.chartSeparator", "ko")}
-        <ChartNumber value={props.axes.maximum} />
-      </span>
-    </div>
-  </div>
-);

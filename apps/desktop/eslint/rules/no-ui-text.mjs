@@ -50,14 +50,11 @@ export const noUiText = {
   },
   create: (context) => {
     const [{ screen }] = context.options;
-    const file = projectPath(context, context.filename);
-    const formattedBrands = /^src\/shared\/ds\//u.test(file)
+    const brands = /^src\/shared\/ds\//u.test(
+      projectPath(context, context.filename),
+    )
       ? [...TEXT_BRANDS, "FormattedNumber"]
       : TEXT_BRANDS;
-    const brands =
-      file === "src/shared/ds/ChartFrame.tsx"
-        ? [...formattedBrands, "ChartDecimal"]
-        : formattedBrands;
     const report = (node, messageId) => context.report({ node, messageId });
     return {
       Literal: (node) => {
