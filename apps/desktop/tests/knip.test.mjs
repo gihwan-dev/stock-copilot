@@ -195,9 +195,7 @@ test("the production allowlist holds exactly the documented skeleton entries, ea
 });
 
 test("the production run drops non-production entries and dropping any production flag makes a case fail", () => {
-  assert.deepEqual(productionConfig(appConfig).entry, [
-    "src/shared/ds/theme.css!",
-  ]);
+  assert.deepEqual(productionConfig(appConfig).entry, []);
   const survivors = withConfig(productionConfig(appConfig), (file) =>
     PRODUCTION_FLAGS.filter((flag) =>
       Object.entries(production).every(

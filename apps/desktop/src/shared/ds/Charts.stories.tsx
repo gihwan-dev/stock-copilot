@@ -43,7 +43,7 @@ type Story = {
   readonly component: keyof typeof components;
   readonly state: "normal" | "empty" | "single" | "load" | "invalid";
   readonly themes: readonly ["light", "dark"];
-  readonly render: () => ReactElement;
+  readonly render: (theme?: "light" | "dark") => ReactElement;
 };
 export const chartComponentStories: readonly Story[] = (
   ["LineChart", "AreaChart", "DonutChart", "Treemap"] as const
@@ -64,12 +64,12 @@ export const chartComponentStories: readonly Story[] = (
         component,
         state,
         themes: ["light", "dark"] as const,
-        render: (): ReactElement => (
+        render: (catalogTheme = theme): ReactElement => (
           <Component
             data={data[state]}
             label={text("app.title", "ko")}
             empty={text("ds.tableEmpty", "ko")}
-            theme={theme}
+            theme={catalogTheme}
           />
         ),
       })),

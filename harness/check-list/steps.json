@@ -52,6 +52,16 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/ds-catalog/check.mjs",
+      "kind": "check",
+      "cases": "apps/desktop/tests/ds07-catalog.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/ds07-catalog.test.mjs",
+        "name": "DS07 complete public catalog accepts both themes"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "node harness/ds-style/check.mjs",
       "kind": "check",
       "cases": "apps/desktop/tests/ds-style.test.mjs",
