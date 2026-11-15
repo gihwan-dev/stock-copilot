@@ -41,6 +41,8 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow-workspace = true
 allow = [
+  { crate = "secrecy", reason = "A-02: application의 비밀 값 래퍼, =0.10.3, serde 기능 없음" },
+  { crate = "zeroize", reason = "A-02: secrecy의 비밀 메모리 삭제 전이 의존성, 잠금 파일의 1.9.1, alloc만 사용" },
   { crate = "regress", reason = "typify 생성 문자열의 패턴 검증: 생성 도구와 생성 타입이 사용" },
   { crate = "typify", reason = "xtask의 OpenAPI 스키마 생성 진입점, 기본 macro 기능 끔" },
   { crate = "typify-impl", reason = "typify의 생성 엔진 전이 의존성, 제품 crate에 사용 금지" },

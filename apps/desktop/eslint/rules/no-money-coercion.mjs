@@ -159,6 +159,7 @@ export const noMoneyCoercion = {
         const nullCheck =
           NULLISH_COMPARISON.has(node.operator) &&
           (isNullish(node.left) || isNullish(node.right));
+        if (here === moneyFile && node.operator === "in") return;
         if (money && !nullCheck) report(node, "operator");
       },
       AssignmentExpression: (node) => {

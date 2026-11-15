@@ -17,7 +17,7 @@ window.q=Object.fromEntries(Object.entries(queries).map(([name,query])=>[name,(.
 window.user=userEvent.setup({document});
 window.stories=feedbackComponentStories;
 window.renderStory=(index,theme)=>{cleanup();document.documentElement.dataset.theme=theme;render(feedbackComponentStories[index].render());};
-window.makeAction=(disabled="enabled")=>h(Button,{disabled,onClick:()=>window.calls.push("action")},description);
+window.makeAction=(disabled="enabled")=>({disabled,onPress:()=>window.calls.push("action"),label:description});
 window.show=(name,props={})=>{cleanup();window.calls=[];
 if(name==="Card")return render(h(Card,props,h(Text,null,description)));
 if(name==="EmptyState")return render(h(EmptyState,{title:label,...props}));

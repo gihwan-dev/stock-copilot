@@ -22,6 +22,7 @@ pub enum UserAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BugDiagnostic {
+    System(crate::SystemDiagnostic),
     Response(ResponseMismatch),
     Request(RequestRejection),
     UnsupportedCapability(BrokerCapability),

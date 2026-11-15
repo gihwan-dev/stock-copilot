@@ -458,6 +458,10 @@ pub use market_ranking::RankingResponseInput;
 pub use market_ranking::{RankingCautionFilter, RankingChange, RankingContinuity};
 pub use sector_composition::{SectorAmount, SectorMember, SectorStockRow};
 pub use sector_composition::{SectorComposition, SectorCompositionScope};
+
+mod storage_records;
+pub use storage_records::{RiskChange, SyncOutcome, SyncRecord};
+
 mod signal_return_contract;
 
 mod bootstrap;
@@ -538,3 +542,6 @@ pub use limit_price_policy::{
 };
 
 mod limit_price_revision;
+
+mod risk_settings;
+pub use risk_settings::{OrderPermission, RiskSettings};
