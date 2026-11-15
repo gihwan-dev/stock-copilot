@@ -55,17 +55,13 @@ impl BenchmarkSeries {
         if candles.len() > 4097 || snapshots.len() > 4097 {
             return Err(PerformanceError::TooManyInputs);
         }
-        let first = candles.first().ok_or(PerformanceError::InvalidBenchmark)?;
-        let native = first.values().currency();
-        if kind == BenchmarkKind::Sp500Etf && first.adjustment() == crate::PriceAdjustment::Raw {
+        if kind != BenchmarkKind::Sp500Etf {
             return Err(PerformanceError::InvalidBenchmark);
         }
-        match (kind, native) {
-            (BenchmarkKind::Kospi | BenchmarkKind::Kosdaq, Currency::Krw)
-            | (BenchmarkKind::Sp500Etf, Currency::Usd) => (),
-            (BenchmarkKind::Kospi | BenchmarkKind::Kosdaq, Currency::Usd)
-            | (BenchmarkKind::Sp500Etf, Currency::Krw)
-            | (BenchmarkKind::Mixed, _) => return Err(PerformanceError::InvalidBenchmark),
+        let first = candles.first().ok_or(PerformanceError::InvalidBenchmark)?;
+        let native = first.values().currency();
+        if first.adjustment() == crate::PriceAdjustment::Raw || native != Currency::Usd {
+            return Err(PerformanceError::InvalidBenchmark);
         }
         if let PerformanceCurrency::Native(unit) = currency
             && unit != native
@@ -73,32 +69,42 @@ impl BenchmarkSeries {
             return Err(PerformanceError::BenchmarkMismatch);
         }
         let prices = candle_prices(candles, first)?;
+        Self::from_snapshots(kind, currency, snapshots, |snapshot| {
+            let price = *prices
+                .get(&snapshot.price_date(native))
+                .ok_or(PerformanceError::BenchmarkMismatch)?;
+            let amount = benchmark_money(price, snapshot, currency)?;
+            Ok(Number::new(amount.amount().as_decimal()))
+        })
+    }
+    pub(crate) fn from_snapshots(
+        kind: BenchmarkKind,
+        currency: PerformanceCurrency,
+        snapshots: &[ValuationSnapshot],
+        value_at: impl Fn(&ValuationSnapshot) -> Result<Number, PerformanceError>,
+    ) -> Result<Self, PerformanceError> {
         let mut ordered = snapshots.iter().collect::<Vec<_>>();
         ordered.sort_by_key(|snapshot| snapshot.valuation_at());
         if ordered.len() < 2 {
             return Err(PerformanceError::InvalidPeriod);
         }
-        let mut values = Vec::new();
         let mut dates = Vec::new();
+        let mut values = Vec::new();
         for snapshot in ordered {
-            let price = *prices
-                .get(&snapshot.price_date(native))
-                .ok_or(PerformanceError::BenchmarkMismatch)?;
-            let amount = benchmark_money(price, snapshot, currency)?;
             dates.push(snapshot.settlement_date());
-            values.push(Number::new(amount.amount().as_decimal()));
+            values.push(value_at(snapshot)?);
         }
         if dates
             .iter()
             .zip(dates.iter().skip(1))
-            .any(|(old, today)| old >= today)
+            .any(|(old, new)| old >= new)
         {
             return Err(PerformanceError::InvalidPeriod);
         }
         let returns = values
             .iter()
             .zip(values.iter().skip(1))
-            .map(|(old, today)| price_return(*old, *today))
+            .map(|(old, new)| price_return(*old, *new))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             kind,
@@ -270,6 +276,7 @@ pub(crate) fn alignment(
 #[cfg(test)]
 mod tests {
     use super::{BenchmarkKind, BenchmarkSeries};
+    use crate::index_benchmark::tests::series_from_candles as index_series;
     use crate::valuation_snapshot::tests::{at, date, fixture_window, money, snapshot};
     use crate::{
         AdjustmentBasis, Candle, CandleObservation, CandlePeriod, CandleStatus, CandleTime,
@@ -374,7 +381,7 @@ mod tests {
     fn research_example_ten_matches_converted_and_mixed_benchmark_legs() {
         let data = equity_fixture();
         let snapshots = equity_snapshots(&data);
-        let kr = BenchmarkSeries::from_candles(
+        let kr = index_series(
             BenchmarkKind::Kospi,
             &candles(Currency::Krw, &["100", "100", "100", "101"]),
             &snapshots,
@@ -519,7 +526,7 @@ mod tests {
         let prices = candles(Currency::Krw, &["100", "100", "100", "101"]);
         let native = PerformanceCurrency::Native(Currency::Krw);
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 &vec![prices.first().expect("봉").clone(); 4098],
                 &snapshots,
@@ -528,7 +535,7 @@ mod tests {
             Err(PerformanceError::TooManyInputs)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 &prices,
                 &vec![snapshots.first().expect("스냅샷").clone(); 4098],
@@ -537,7 +544,7 @@ mod tests {
             Err(PerformanceError::TooManyInputs)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 &prices,
                 &snapshots,
@@ -546,11 +553,11 @@ mod tests {
             Err(PerformanceError::BenchmarkMismatch)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(BenchmarkKind::Kospi, &prices, &[], native),
+            index_series(BenchmarkKind::Kospi, &prices, &[], native),
             Err(PerformanceError::InvalidPeriod)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 &prices,
                 std::slice::from_ref(snapshots.first().expect("스냅샷")),
@@ -579,11 +586,11 @@ mod tests {
             snapshots.first().expect("시작").clone(),
         ];
         assert_eq!(
-            BenchmarkSeries::from_candles(BenchmarkKind::Kospi, &prices, &duplicate, native),
+            index_series(BenchmarkKind::Kospi, &prices, &duplicate, native),
             Err(PerformanceError::InvalidPeriod)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 &[
                     prices.first().expect("봉").clone(),
@@ -595,7 +602,7 @@ mod tests {
             Err(PerformanceError::InvalidBenchmark)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 std::slice::from_ref(prices.first().expect("봉")),
                 &snapshots,
@@ -604,7 +611,7 @@ mod tests {
             Err(PerformanceError::BenchmarkMismatch)
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(BenchmarkKind::Kosdaq, &prices, &snapshots, native)
+            index_series(BenchmarkKind::Kosdaq, &prices, &snapshots, native)
                 .expect("코스닥")
                 .kind(),
             BenchmarkKind::Kosdaq
@@ -755,7 +762,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            BenchmarkSeries::from_candles(
+            index_series(
                 BenchmarkKind::Kospi,
                 &prices,
                 &snapshots,
@@ -802,7 +809,7 @@ mod tests {
             Currency::Krw,
             &["0.0000000000000000000000000001", "1", "1", "100"],
         );
-        let benchmark = BenchmarkSeries::from_candles(
+        let benchmark = index_series(
             BenchmarkKind::Kospi,
             &prices,
             &snapshots,
@@ -835,7 +842,7 @@ mod tests {
             snapshot(&data, 3, &[], "1000"),
             snapshot(&data, 5, &[], "1000"),
         ];
-        let benchmark = BenchmarkSeries::from_candles(
+        let benchmark = index_series(
             BenchmarkKind::Kospi,
             &candles(Currency::Krw, &["100", "100", "100", "100"]),
             &snapshots,
@@ -997,7 +1004,7 @@ mod tests {
             SettlementWindow::try_new(date(2), date(5)).expect("기간"),
         );
         let snapshots = equity_snapshots(&data);
-        let kr = BenchmarkSeries::from_candles(
+        let kr = index_series(
             BenchmarkKind::Kospi,
             &candles(Currency::Krw, &["100", "100", "100", "101"]),
             &snapshots,
@@ -1145,7 +1152,7 @@ mod tests {
                 snapshot(&data, 5, &[], "1000"),
             ];
             let good = equity_snapshots(&data);
-            let kr = BenchmarkSeries::from_candles(
+            let kr = index_series(
                 BenchmarkKind::Kospi,
                 &candles(Currency::Krw, &["1"; 4]),
                 &good,
@@ -1164,6 +1171,92 @@ mod tests {
                 Err(crate::PerformanceError::Snapshot(
                     crate::SnapshotError::MissingHistory
                 ))
+            );
+        }
+    }
+    #[test]
+    fn etf_path_retains_input_limits_currency_and_source_rejections() {
+        let data = fixture_window(
+            vec![],
+            ("100", "100"),
+            ("100", "100"),
+            SettlementWindow::try_new(date(2), date(5)).expect("기간"),
+        );
+        let snapshots = [
+            snapshot(&data, 2, &[], "1000"),
+            snapshot(&data, 5, &[], "1000"),
+        ];
+        let prices = candles(Currency::Usd, &["100", "100", "100", "101"]);
+        let first = prices.first().expect("봉").clone();
+        let currency = PerformanceCurrency::Native(Currency::Usd);
+        for (bars, dates) in [
+            (vec![first.clone(); 4098], snapshots.to_vec()),
+            (prices.clone(), vec![snapshots[0].clone(); 4098]),
+        ] {
+            assert_eq!(
+                BenchmarkSeries::from_candles(BenchmarkKind::Sp500Etf, &bars, &dates, currency),
+                Err(crate::PerformanceError::TooManyInputs)
+            );
+        }
+        assert_eq!(
+            BenchmarkSeries::from_candles(
+                BenchmarkKind::Sp500Etf,
+                &prices,
+                &snapshots,
+                PerformanceCurrency::Native(Currency::Krw)
+            ),
+            Err(crate::PerformanceError::BenchmarkMismatch)
+        );
+        assert_eq!(
+            BenchmarkSeries::from_candles(
+                BenchmarkKind::Sp500Etf,
+                &[first.clone(), first.clone()],
+                &snapshots,
+                currency
+            ),
+            Err(crate::PerformanceError::InvalidBenchmark)
+        );
+        assert_eq!(
+            BenchmarkSeries::from_candles(BenchmarkKind::Sp500Etf, &[first], &snapshots, currency),
+            Err(crate::PerformanceError::BenchmarkMismatch)
+        );
+        assert_eq!(
+            crate::SignalBenchmark::from_candles(
+                BenchmarkKind::Sp500Etf,
+                &prices,
+                &snapshots,
+                &vec![crate::signal_return_scenarios::tests::calendar(61); 4098],
+                Currency::Usd
+            ),
+            Err(crate::SignalReturnError::TooManyInputs)
+        );
+    }
+    #[test]
+    fn domestic_kinds_cannot_relabel_adjusted_usd_candles() {
+        let data = fixture_window(
+            vec![],
+            ("100", "100"),
+            ("100", "100"),
+            SettlementWindow::try_new(date(2), date(5)).expect("기간"),
+        );
+        let snapshots = [
+            snapshot(&data, 2, &[], "1000"),
+            snapshot(&data, 5, &[], "1000"),
+        ];
+        let prices = candles(Currency::Usd, &["100", "100", "100", "101"]);
+        for kind in [
+            BenchmarkKind::Kospi,
+            BenchmarkKind::Kosdaq,
+            BenchmarkKind::Mixed,
+        ] {
+            assert_eq!(
+                BenchmarkSeries::from_candles(
+                    kind,
+                    &prices,
+                    &snapshots,
+                    PerformanceCurrency::Native(Currency::Usd)
+                ),
+                Err(crate::PerformanceError::InvalidBenchmark)
             );
         }
     }

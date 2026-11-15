@@ -168,6 +168,9 @@ mod tests {
             "tests::local_transport_preserves_status_headers_and_bytes_without_debug_secrets",
         )
         .expect("proxy probe");
-        assert!(status.success());
+        assert!(status.status.success());
+        let output = String::from_utf8_lossy(&status.stdout);
+        assert!(output.contains("running 1 test\n"), "{output}");
+        assert!(output.contains("1 passed; 0 failed"), "{output}");
     }
 }

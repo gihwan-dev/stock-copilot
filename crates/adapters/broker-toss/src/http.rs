@@ -186,10 +186,32 @@ fn configured_client(mode: EndpointMode) -> reqwest::ClientBuilder {
     }
 }
 
+fn validate_loopback(origin: &Url) -> Result<(), TossHttpError> {
+    let address = origin
+        .host_str()
+        .and_then(|host| host.parse::<IpAddr>().ok());
+    if origin.scheme() != "http"
+        || !address.is_some_and(|ip| ip.is_loopback())
+        || origin.port_or_known_default().is_none_or(|port| port == 0)
+        || !origin.username().is_empty()
+        || origin.password().is_some()
+        || origin.path() != "/"
+        || origin.query().is_some()
+        || origin.fragment().is_some()
+    {
+        return Err(TossHttpError::InvalidEndpoint);
+    }
+    Ok(())
+}
+
 impl TossHttpClient {
     pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> {
         let origin =
             Url::parse(endpoint.origin()).map_err(|_error| TossHttpError::InvalidEndpoint)?;
+        match endpoint.mode() {
+            EndpointMode::Production => {}
+            EndpointMode::Loopback => validate_loopback(&origin)?,
+        }
         let client = configured_client(endpoint.mode())
             .build()
             .map_err(|_error| TossHttpError::Configuration)?;
@@ -244,15 +266,14 @@ pub(crate) async fn receive(mut response: reqwest::Response) -> Result<RawRespon
         length = length.saturating_add(chunk.len());
         chunks.push(SecretValue::new(chunk.to_vec()));
     }
+    let mut body = Vec::with_capacity(length);
+    for chunk in &chunks {
+        body.extend_from_slice(chunk.as_exposed_secret());
+    }
     Ok(RawResponse {
         status,
         headers,
-        body: SecretValue::new(
-            chunks
-                .iter()
-                .flat_map(|chunk| chunk.as_exposed_secret().iter().copied())
-                .collect(),
-        ),
+        body: SecretValue::new(body),
     })
 }
 
@@ -432,6 +453,29 @@ mod tests {
             super::sensitive_header(&SecretValue::new(b"bad\r\nvalue".to_vec()))
                 .expect_err("invalid"),
             TossHttpError::InvalidCredential
+        );
+    }
+    #[test]
+    fn loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials() {
+        for origin in [
+            "http://192.0.2.1:99",
+            "https://127.0.0.1:99",
+            "http://localhost:99",
+            "http://127.0.0.1:0",
+            "http://user@127.0.0.1:99",
+            "http://127.0.0.1:99/path",
+            "http://127.0.0.1:99/?token=bad",
+            "http://127.0.0.1:99/#bad",
+        ] {
+            assert_eq!(
+                super::validate_loopback(&reqwest::Url::parse(origin).expect("URL"))
+                    .expect_err("invalid origin"),
+                TossHttpError::InvalidEndpoint
+            );
+        }
+        assert_eq!(
+            super::validate_loopback(&reqwest::Url::parse("http://127.0.0.1:99").expect("URL")),
+            Ok(())
         );
     }
 }

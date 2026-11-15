@@ -62,10 +62,7 @@ impl LocalHttpServer {
     }
 }
 
-pub fn proxy_probe(
-    executable: &std::path::Path,
-    test: &str,
-) -> io::Result<std::process::ExitStatus> {
+pub fn proxy_probe(executable: &std::path::Path, test: &str) -> io::Result<std::process::Output> {
     std::process::Command::new(executable)
         .args(["--exact", test])
         .env("HTTP_PROXY", "http://192.0.2.1:9")
@@ -76,7 +73,7 @@ pub fn proxy_probe(
         .env("all_proxy", "http://192.0.2.6:9")
         .env("NO_PROXY", "")
         .env("no_proxy", "")
-        .status()
+        .output()
 }
 
 pub fn check_consumer(

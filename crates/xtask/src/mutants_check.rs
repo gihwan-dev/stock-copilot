@@ -1,3 +1,5 @@
+mod catalog;
+mod daily;
 mod environment;
 mod scope;
 use scope::{diff_scope, jobs_for};
@@ -57,6 +59,8 @@ pub(crate) enum Scope {
     Everything,
     Sharded(String),
     Files(BTreeSet<String>),
+    DailyFiles(BTreeSet<String>),
+    DailySharded(BTreeSet<String>, String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,14 +187,14 @@ pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
-    if let Scope::Files(files) = scope {
+    if let Scope::Files(files) | Scope::DailyFiles(files) | Scope::DailySharded(files, _) = scope {
         return files.iter().cloned().collect();
     }
     globs
         .iter()
         .filter(|_| match scope {
             Scope::Everything | Scope::Sharded(_) => true,
-            Scope::Files(_) => false,
+            Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => false,
         })
         .cloned()
         .collect()
@@ -316,6 +320,25 @@ fn configure_profile(command: &mut Command) {
         .env("CARGO_PROFILE_TEST_OVERFLOW_CHECKS", "true");
 }
 
+fn prepare_output(
+    root: &Path,
+    scope: &Scope,
+    ignore: IgnoreFiles,
+    globs: &[String],
+) -> Result<std::path::PathBuf, String> {
+    let output = root.join(OUTPUT_DIRECTORY);
+    fs::create_dir_all(&output).map_err(|error| error.to_string())?;
+    let results = output.join("mutants.out");
+    if results.exists() {
+        fs::remove_dir_all(results).map_err(|error| error.to_string())?;
+    }
+    match scope {
+        Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => {}
+        Scope::Everything | Scope::Sharded(_) => catalog::prepare(root, globs, ignore, &output)?,
+    }
+    Ok(output)
+}
+
 fn run_with_diff(
     workspace: &Path,
     scope: &Scope,
@@ -324,14 +347,14 @@ fn run_with_diff(
 ) -> Result<Outcomes, String> {
     let globs = selected_globs(&target_globs(workspace)?, scope);
     if globs.is_empty() {
-        return Ok(Outcomes::default());
+        return match scope {
+            Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => {
+                Ok(Outcomes::default())
+            }
+            Scope::Everything | Scope::Sharded(_) => Err(String::from("밤 전체 변이 대상이 없다")),
+        };
     }
-    let output = workspace.join(OUTPUT_DIRECTORY);
-    fs::create_dir_all(&output).map_err(|error| format!("{}: {error}", output.display()))?;
-    let results = output.join("mutants.out");
-    if results.exists() {
-        fs::remove_dir_all(&results).map_err(|error| format!("{}: {error}", results.display()))?;
-    }
+    let output = prepare_output(workspace, scope, ignore, &globs)?;
     let mut command = Command::new("cargo");
     command
         .current_dir(workspace)
@@ -351,7 +374,7 @@ fn run_with_diff(
         .stdin(Stdio::null());
     configure_profile(&mut command);
     configure_parallelism(&mut command, workspace, &globs)?;
-    if let Scope::Sharded(shard) = scope {
+    if let Scope::Sharded(shard) | Scope::DailySharded(_, shard) = scope {
         command.arg("--shard").arg(shard);
     }
     for glob in &globs {
@@ -363,11 +386,13 @@ fn run_with_diff(
     if let Some(file) = patch {
         command.arg("--in-diff").arg(file);
     }
+    let results = output.join("mutants.out");
     let status = match scope {
         Scope::Files(_) => environment::run_bounded(command)?,
-        Scope::Everything | Scope::Sharded(_) => {
-            command.status().map_err(|error| error.to_string())?
-        }
+        Scope::Everything
+        | Scope::Sharded(_)
+        | Scope::DailyFiles(_)
+        | Scope::DailySharded(_, _) => command.status().map_err(|error| error.to_string())?,
     };
     let written = match status.code() {
         Some(PASSED) => Written::WhenTested,
@@ -388,7 +413,7 @@ fn scope_for(
     match arguments {
         [] => Ok(Scope::Everything),
         [flag, shard]
-            if flag == "--shard" && ["0/4", "1/4", "2/4", "3/4"].contains(&shard.as_str()) =>
+            if flag == "--shard" && (0_u16..128).any(|index| shard == &format!("{index}/128")) =>
         {
             Ok(Scope::Sharded(shard.clone()))
         }
@@ -398,7 +423,7 @@ fn scope_for(
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
         _ => Err(String::from(
-            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/4|1/4|2/4|3/4>]",
+            "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/128..127/128> | --daily <커밋 ID|initial>]",
         )),
     }
 }
@@ -432,12 +457,20 @@ fn list_changed_mutants(
 ) -> Result<BTreeSet<String>, String> {
     let globs = selected_globs(&target_globs(root)?, scope);
     if globs.is_empty() {
+        daily::catalog(root, b"[]")?;
         return Ok(BTreeSet::new());
     }
     let mut command = Command::new("cargo");
     command
         .current_dir(root)
-        .args(["mutants", "--no-config", "--list", "--json", "--in-diff"])
+        .args([
+            "mutants",
+            "--no-config",
+            "--no-shuffle",
+            "--list",
+            "--json",
+            "--in-diff",
+        ])
         .arg(patch);
     for file in globs {
         command.arg("--file").arg(file);
@@ -452,6 +485,7 @@ fn list_changed_mutants(
     if output.stdout.is_empty()
         && String::from_utf8_lossy(&output.stderr).contains("No mutants to filter")
     {
+        daily::catalog(root, b"[]")?;
         writeln!(std::io::stdout().lock(), "mutants: 선택 변이 0개")
             .map_err(|error| error.to_string())?;
         return Ok(BTreeSet::new());
@@ -459,6 +493,7 @@ fn list_changed_mutants(
     let parsed: serde_json::Value =
         serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
     let entries = parsed.as_array().ok_or("변이 열거 목록이 아니다")?;
+    daily::catalog(root, &output.stdout)?;
     writeln!(
         std::io::stdout().lock(),
         "mutants: 선택 변이 {}개",
@@ -487,7 +522,7 @@ fn report_nightly_targets(
     for directory in touched_crates(&globs, &changed).difference(mutated) {
         writeln!(
             std::io::stdout().lock(),
-            "mutants: {directory}는 밤 전체 실행 대상"
+            "mutants: {directory}는 주간 전체 실행 대상"
         )
         .map_err(|error| error.to_string())?;
     }
@@ -537,6 +572,12 @@ pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) 
     report(
         "mutants",
         workspace_root().and_then(|root| {
+            if arguments
+                .first()
+                .is_some_and(|flag| flag.starts_with("--daily"))
+            {
+                return daily::dispatch(&root, arguments, base_use);
+            }
             let survivors = load_survivors(&root, SURVIVORS_FILE)?;
             let scope = checked_scope(&root, arguments, base_use)?;
             let outcomes = if let [flag, base] = arguments

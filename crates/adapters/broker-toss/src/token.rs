@@ -11,7 +11,7 @@ use crate::{RawResponse, TossHttpClient, TossHttpError};
 use application::SecretValue;
 
 fn encode(value: &[u8]) -> SecretValue {
-    let mut encoded = Vec::new();
+    let mut encoded = Vec::with_capacity(value.len().saturating_mul(3));
     for byte in value {
         match byte {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {

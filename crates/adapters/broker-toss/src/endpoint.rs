@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn local_ports_are_bounded_by_the_type_and_always_make_loopback() {
-        for port in [1, 49153, u16::MAX] {
+        for port in [1, 80, 49153, u16::MAX] {
             let endpoint = TossEndpoint::local(port).expect("endpoint");
             assert_eq!(endpoint.mode, EndpointMode::Loopback);
             assert_eq!(endpoint.origin, format!("http://127.0.0.1:{port}"));

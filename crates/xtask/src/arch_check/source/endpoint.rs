@@ -21,6 +21,7 @@ struct EndpointCheck<'a> {
     needle: &'a str,
     endpoint_impl: bool,
     constructor: bool,
+    creation: bool,
     findings: BTreeSet<Rule>,
 }
 
@@ -64,6 +65,46 @@ impl EndpointCheck<'_> {
 }
 
 impl<'ast> Visit<'ast> for EndpointCheck<'_> {
+    fn visit_item(&mut self, i: &'ast syn::Item) {
+        let outer = (self.constructor, self.creation);
+        self.constructor = false;
+        self.creation = false;
+        visit::visit_item(self, i);
+        (self.constructor, self.creation) = outer;
+    }
+    fn visit_expr_struct(&mut self, i: &'ast syn::ExprStruct) {
+        if self.relative == ENDPOINT
+            && !self.creation
+            && i.path
+                .segments
+                .last()
+                .is_some_and(|part| part.ident == "TossEndpoint" || part.ident == "Self")
+        {
+            self.findings.insert(Rule::TossProduction);
+        }
+        visit::visit_expr_struct(self, i);
+    }
+    fn visit_item_struct(&mut self, i: &'ast syn::ItemStruct) {
+        if self.relative == ENDPOINT
+            && i.ident == "TossEndpoint"
+            && i.attrs.iter().any(|attr| !debug_derive(attr))
+        {
+            self.findings.insert(Rule::TossProduction);
+        }
+        visit::visit_item_struct(self, i);
+    }
+    fn visit_item_type(&mut self, i: &'ast syn::ItemType) {
+        if self.relative == ENDPOINT {
+            self.findings.insert(Rule::TossProduction);
+        }
+        visit::visit_item_type(self, i);
+    }
+    fn visit_use_rename(&mut self, i: &'ast syn::UseRename) {
+        if self.relative == ENDPOINT {
+            self.findings.insert(Rule::TossProduction);
+        }
+        visit::visit_use_rename(self, i);
+    }
     fn visit_item_use(&mut self, i: &'ast syn::ItemUse) {
         if self.relative == ENDPOINT && !self.constructor {
             use quote::ToTokens;
@@ -79,14 +120,23 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
             } else {
                 false
             };
+        if self.relative == ENDPOINT
+            && let syn::Type::Path(value) = i.self_ty.as_ref()
+            && value.path.is_ident("TossEndpoint")
+            && (i.trait_.is_some() || i.items.iter().any(|item| !closed_endpoint_method(item)))
+        {
+            self.findings.insert(Rule::TossProduction);
+        }
         visit::visit_item_impl(self, i);
         self.endpoint_impl = outer;
     }
     fn visit_impl_item_fn(&mut self, i: &'ast syn::ImplItemFn) {
-        let outer = self.constructor;
+        let outer = (self.constructor, self.creation);
+        self.creation =
+            self.endpoint_impl && (i.sig.ident == "production" || i.sig.ident == "local");
         self.constructor = self.endpoint_impl && i.sig.ident.unraw() == "production";
         visit::visit_impl_item_fn(self, i);
-        self.constructor = outer;
+        (self.constructor, self.creation) = outer;
     }
     fn visit_lit_str(&mut self, i: &'ast LitStr) {
         self.host(&i.value());
@@ -120,6 +170,31 @@ impl<'ast> Visit<'ast> for EndpointCheck<'_> {
     }
 }
 
+fn debug_derive(attr: &syn::Attribute) -> bool {
+    if !attr.path().is_ident("derive") {
+        return false;
+    }
+    attr.parse_args_with(syn::punctuated::Punctuated::<Path, syn::Token![,]>::parse_terminated)
+        .is_ok_and(|paths| {
+            paths.len() == 1 && paths.first().is_some_and(|path| path.is_ident("Debug"))
+        })
+}
+
+fn closed_endpoint_method(item: &syn::ImplItem) -> bool {
+    use quote::ToTokens;
+    let syn::ImplItem::Fn(method) = item else {
+        return false;
+    };
+    let signature = method.sig.to_token_stream().to_string();
+    [
+        "fn production () -> Self",
+        "fn local (port : u16) -> Result < Self , TossHttpError >",
+        "fn origin (& self) -> & str",
+        "const fn mode (& self) -> EndpointMode",
+    ]
+    .contains(&signature.as_str())
+}
+
 fn origin_constant(item: &syn::Item) -> bool {
     let syn::Item::Const(value) = item else {
         return false;
@@ -150,6 +225,7 @@ pub(super) fn check(
         needle,
         endpoint_impl: false,
         constructor: false,
+        creation: false,
         findings: BTreeSet::new(),
     };
     for item in &file.items {
@@ -291,5 +367,22 @@ mod tests {
             );
         }
         assert!(findings(ENDPOINT, "impl TossEndpoint { pub fn production() -> Self { Self { origin: PRODUCTION_ORIGIN.to_owned(), mode: EndpointMode::Production } } }").is_empty());
+    }
+    #[test]
+    fn nested_items_and_arbitrary_origin_factories_cannot_inherit_creation_rights() {
+        for source in [
+            "impl TossEndpoint { pub fn production() -> Self { impl TossEndpoint { pub const MAKE: fn() -> TossEndpoint = || TossEndpoint { origin: PRODUCTION_ORIGIN.to_owned(), mode: EndpointMode::Production }; } Self { origin: PRODUCTION_ORIGIN.to_owned(), mode: EndpointMode::Production } } }",
+            "impl TossEndpoint { pub fn any(o: &str) -> Self { Self { origin: o.to_owned(), mode: EndpointMode::Loopback } } }",
+            "pub fn any(o: &str) -> TossEndpoint { TossEndpoint { origin: o.to_owned(), mode: EndpointMode::Loopback } }",
+            "#[derive(Debug, serde::Deserialize)] pub struct TossEndpoint { origin: String, mode: EndpointMode }",
+            "type Other = TossEndpoint;",
+            "use self::TossEndpoint as Other;",
+            "impl From<&str> for TossEndpoint { fn from(o: &str) -> Self { Self { origin: o.to_owned(), mode: EndpointMode::Loopback } } }",
+        ] {
+            assert_eq!(
+                findings(ENDPOINT, source),
+                BTreeSet::from([Rule::TossProduction])
+            );
+        }
     }
 }

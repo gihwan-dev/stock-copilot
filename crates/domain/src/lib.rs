@@ -541,7 +541,24 @@ pub use limit_price_policy::{
     default_market_order_policy, restore_market_order_policy,
 };
 
+mod index_benchmark;
 mod limit_price_revision;
+pub use index_benchmark::{finalize_index_day, index_benchmark_series};
+
+mod sector_selection;
+pub use sector_selection::{
+    SectorAssignmentReason, SectorMembership, SectorSelectionError, SectorSelectionRule,
+    sector_assignment_from_compositions, sector_assignment_reason, sector_assignments_membership,
+    sector_assignments_reason, sector_membership, sector_selection_rule,
+};
+
+mod market_query_facts;
+pub use market_query_facts::{
+    InvestorGroupRow, InvestorRankingGroup, InvestorTradingRankings, NetTradingDirection,
+    NetTradingItem, NetTradingList, NetTradingRow, SectorCatalog, SectorDepth, SectorDetail,
+    SectorEtf, SectorEtfRow, SectorEtfs, SectorMetadata, SectorMetadataRow, SectorRanking,
+    SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
+};
 
 mod risk_settings;
 pub use risk_settings::{OrderPermission, RiskSettings};

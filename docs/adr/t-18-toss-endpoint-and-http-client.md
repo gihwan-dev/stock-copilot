@@ -30,7 +30,7 @@ Rust는 다른 crate의 특정 파일만 허용하는 가시성을 제공하지 
 | 리다이렉트 | 금지 | 금지 |
 | 시스템/환경 프록시 | no_proxy, 관련 기능 끔 | 동일 |
 | 연결/전체 제한 | 5초/30초 | 동일 |
-| 인증서 검증 | rustls 플랫폼 검증, 끄기 없음 | TLS 사용 시 동일 |
+| 인증서 검증 | rustls 플랫폼 검증, 끄기 없음 | 평문 루프백만 사용 |
 | HTTP 버전 | HTTP/1 | HTTP/1 |
 
 타임아웃 수치는 기존 문서에 없어 보수적인 연결 5초·전체 30초로 정한다. 원시 본문은 8MiB 상한을 두고 초과하면 본문 없는 닫힌 오류를 반환한다. 리다이렉트는 따라가지 않고 원시 3xx를 반환한다.
@@ -109,7 +109,7 @@ RawResponse는 상태·Retry-After·세 가지 rate-limit 헤더·본문 바이�
 
 - deny.toml: 승인된 제품 HTTPS 의존성·빌드 스크립트·개별 배포 파일 해시 등록.
 - harness/arch-check/rules.toml: 호스트 위치를 단일 상수 파일로 변경. HTTP/TLS는 reqwest를 통하는 경로만 허용하며, 플랫폼 인증서 검증의 security-framework 및 작업 공간 기능 통합의 절차 매크로/런타임 소켓 경로를 한정 등록.
-- 기존 tossinvest-host-in-main-and-toss-smoke-pass 고정 자료: 실제 호스트 문자열을 없애고 main의 production 참조와 toss-smoke의 local 호출로 변경. 새 계약의 단일 상수 파일을 같은 고정 자료에 추가. 기존 테스트 단언을 느슨하게 하지 않는다.
+- 기존 tossinvest-host-in-main-and-toss-smoke-pass 고정 자료를 toss-endpoint-origin-and-root-factory-pass로 이름을 맞춤: 실제 호스트 문자열을 없애고 main의 production 참조와 toss-smoke의 local 호출로 변경. 새 계약의 단일 상수 파일을 같은 고정 자료에 추가. 기존 테스트 단언을 느슨하게 하지 않는다.
 - .codex/config.toml, harness/sandbox/lock-fragment.json, harness/claude-hooks/hashes.json: 저장소 공식 생성기로만 갱신.
 
 ## 인계
@@ -214,3 +214,27 @@ HTTPS 회귀는 실제 열린 루프백 수신기에 연결이 오지 않아야 
 | 43 | 추가 생성자와 상수 사용 검사를 무력화 | secondary_constructors_and_origin_exports_are_rejected | 검출 |
 
 수정 후 broker-toss nextest 57/57, xtask endpoint 검사 5/5, 기존 구조 고정 자료 및 규칙 요소 제거 검사 6/6이 통과했다. 관련 clippy, source-check, arch-check도 통과했다. 이 결과를 다음 정상 커밋 전체 검사나 독립 재리뷰와 혼동하지 않는다.
+
+## 리뷰 2 수정 결정
+
+정식 생성자 내부의 중첩 impl이 방문자의 권한 상태를 상속하는 반례를 재현하는 회귀가 수정 전 실패했다. Item 경계에서 권한을 초기화하고, TossEndpoint의 직접 구현은 production/local/origin/mode의 현재 서명으로만 닫았다. 연관 상수·trait 생성자·별칭과 Debug 외 derive, 허용 밖 구조체 조립도 거부한다. 이 계약은 새로운 생성 경로를 임의로 추가하지 못하게 하는 보호된 구조 검사이며 Rust의 friend 가시성이라고 주장하지 않는다.
+
+루프백 origin은 Client 생성 시에도 숫자 loopback IP, HTTP, 유효 포트, 빈 사용자 정보, 루트 경로 및 query/fragment 없음으로 다시 검증한다. local(port)는 여전히127.0.0.1만 만들고0을 거부한다. HTTP 기본 포트80은 URL 정규화로 port()가 사라지므로 알려진 기본 포트까지 검증해 유효한80을 보존한다.
+
+프록시 프로브는 자식 libtest의1개 실행/1개 통과를 확인한다. 자체 비밀 인코딩·결합 버퍼는 필요한 용량을 미리 할당한다. AWS-LC와 macOS 활성 패키지는 현재 normal/build 그래프로 별도 표시하며 선택적·다른 대상 항목을 비활성으로 구분한다. 양성 고정 자료 이름을 새 계약에 맞추고 중첩/임의 origin 생성자의 음성 cases 자료를 추가했다.
+
+## 회차2 수정 후 추가 손 변형
+
+앞선 고유43개에 아래7개를 더해 총50개를 실제 컴파일 후 검출했다. mktemp 복사본에서 기준/복구 테스트도 통과했다. 동일 변형의 재실행은 개수에 더하지 않는다. 숫자 IP 판정을 단순 삭제한 첫 시도는 미사용 변수로 컴파일되지 않아 제외하고, 판정 반전 변형으로 검증했다. 기존 구조 검사7개도 현재 검사 소스로 재실행해 전부 검출했다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 44 | 숫자 IP 루프백 판정 반전 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 45 | 평문 스킴 제한 제거 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 46 | 0 포트 거부 제거 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 47 | 경로 제한 제거 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 48 | 쿼리 제한 제거 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 49 | fragment 제한 제거 | loopback_validation_rejects_forged_nonlocal_origins_and_url_credentials | 검출 |
+| 50 | 프록시 프로브가 테스트0개 실행 | proxy_environment_is_ignored_in_a_fresh_process | 검출 |
+
+최초 master 수신 검사에서 전체1431/1431, 커버리지 대상1043/1043 및 coverage-check 위반 없음까지 통과했으나 실행 중 master가 전진해 마지막 test-diff가 이전 MERGE_HEAD의 기준 예외를 거부했다. 실패한 검사를 통과로 세지 않았다. 회차2 소유 경로의 트리를 보존한 뒤 미완료 병합을 취소하고 최신 master를 다시 받아 정상 훅으로 검증한다. master ref나 검사 규칙을 바꾸지 않았다.
