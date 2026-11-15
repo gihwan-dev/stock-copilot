@@ -33,9 +33,10 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "a07d334d560a5415aecf3558a39ed8a05507484fd644e0b0f6de43aecf6a14ce",
   ".claude/hooks/subagent-start.mjs": "837a26d6ab79331429ca714ba9fa663bd4310e46aa5cfa5e8e6a85662a2a87f7",
-  ".codex/config.toml": "307c68bbe5657d55ef1892044aa30cc4ede2ab661d5b0abd84304600dc92f1b6",
+  ".codex/config.toml": "351f9139f24ac5405693265e2184358fe9050624bab6ad7d1d19918b9e197dc6",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
-  "harness/agent-writable.txt": "de43dd0c1e2f361057ceb168224f088e2e0b4a169d18b77e35c5537db39caa48",
+  "crates/testkit-ports/src/scripted_presence.rs": "0a72ecf84c037ad257178d57e0f9f3ad4683be1cb7dfeff60ce8964a7cc3d92f",
+  "harness/agent-writable.txt": "a6486c31329e3b92b41144a054219e266c6118b3c3057c3a278485c4caafa328",
   "harness/claude-hooks/agent-rules.json": "083f56b11c43377855d5487e9c2deffd061cc9d02b95712fd92110bce083b7fe",
   "harness/claude-hooks/lock.txt": "b470b84cf0cd3189e10615bffea7d5cbd9f61134ba1c2cfd513ddd45b776a5f6",
   "harness/claude-hooks/rules.json": "85f116810c2474844affcf77b378e4005d61b27d563a0f38b6e314c70ba1a761",
@@ -63,6 +64,6 @@
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "1f57fef22ec8edd9a7f66295af0e3f91a2726d69716a1c5126a8af02db88f3ed",
   "harness/codex-regression/run.mjs": "b43d193ecfb5684c82d808f30884d09bf6805faa5d2774172efb22a83e5a977b",
-  "harness/sandbox/lock-fragment.json": "3332fb8b4c668f6c906a86912ba471e1a1264c5093b6f1a5d6e24a6019302254",
+  "harness/sandbox/lock-fragment.json": "ebd6e8244a0e01e2c652afab4bc5ca233a38abc595331ed0d08831ef8363c2bf",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }

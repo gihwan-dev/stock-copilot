@@ -1,0 +1,12 @@
+[package]
+name = "testkit-ports"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }

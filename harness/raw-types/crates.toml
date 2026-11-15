@@ -85,3 +85,7 @@ reason = "하네스 명령. 대상 밖 (브리프 H-39)"
 [[outside]]
 crate = "e2e-app"
 reason = "E2E 전용 조립. 대상 밖 (harness.md 3.4)"
+
+[[outside]]
+crate = "testkit-ports"
+reason = "A-04 포트 가짜와 계약 검사. 제품 타입 경계가 아닌 테스트 지원 crate (harness.md 3.4)"
