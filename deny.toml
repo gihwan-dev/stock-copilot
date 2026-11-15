@@ -22,6 +22,7 @@ version = 2
 confidence-threshold = 0.93
 allow = ["Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib"]
 exceptions = [
+  { crate = "sqlcipher-src", allow = ["blessing", "WTFPL"] },
   { crate = "cssparser", allow = ["MPL-2.0"] },
   { crate = "cssparser-macros", allow = ["MPL-2.0"] },
   { crate = "dtoa-short", allow = ["MPL-2.0"] },
@@ -41,6 +42,15 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow-workspace = true
 allow = [
+  { crate = "pkg-config", reason = "S-01: libsqlite3-sys 빌드의 기존 잠금 패키지" },
+  { crate = "rsqlite-vfs", reason = "S-01: rusqlite 0.42.0의 wasm 대상 전이 의존성" },
+  { crate = "sqlite-wasm-rs", reason = "S-01: rusqlite 0.42.0의 wasm 대상 전이 의존성" },
+  { crate = "rusqlite", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "libsqlite3-sys", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "sqlcipher-src", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "vcpkg", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "fallible-iterator", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "fallible-streaming-iterator", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
   { crate = "secrecy", reason = "A-02: application의 비밀 값 래퍼, =0.10.3, serde 기능 없음" },
   { crate = "zeroize", reason = "A-02: secrecy의 비밀 메모리 삭제 전이 의존성, 잠금 파일의 1.9.1, alloc만 사용" },
   { crate = "regress", reason = "typify 생성 문자열의 패턴 검증: 생성 도구와 생성 타입이 사용" },
@@ -285,6 +295,7 @@ skip-tree = []
 
 [bans.build]
 allow-build-scripts = [
+  { crate = "libsqlite3-sys" },
   { crate = "num-traits" },
   { crate = "rust_decimal" },
   { crate = "anyhow" },
@@ -330,6 +341,7 @@ include-dependencies = true
 include-workspace = true
 include-archives = true
 bypass = [
+  { crate = "vcpkg", allow = [{ path = "setup_vcp.sh", checksum = "ec7aea336259bd8c9ba05eedd6ec8d2931b631b4f3a457928a750c963762f701" }, { path = "tests/run.sh", checksum = "180f06cc36ce579f22a2282dbe69fe7538f440a8fceb9d65373be1adf83616b3" }, { path = "tests/vcpkgrs_target.sh", checksum = "4f3e1e7d5f2362d03c6d26c0c18c0a04fce4add7f9257f6ee62329e3724c6582" }] },
   { crate = "cookie", allow = [{ path = "scripts/test.sh", checksum = "a76191d56d96c32efcb6883e0983e86beb4c6842e6e5c5a8bfded4c8183ff6f6" }] },
   { crate = "bit-vec", allow = [{ path = "crusader.sh", checksum = "e656dcb62d5122a64d55f837992e63cfd3beee37cf74c5ab6ff178a3c7ef943e" }] },
 ]

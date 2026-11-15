@@ -214,6 +214,8 @@ test("H47 cargo-mutants partitions cover the exact full set without overlap", ()
             "crates/order-execution/src/**/*.rs",
             "--file",
             "crates/application/src/**/*.rs",
+            "--file",
+            "crates/adapters/store-sqlite/src/**/*.rs",
           ];
     if (shard !== undefined) args.push("--shard", shard);
     const result = spawnSync("cargo", args, {
