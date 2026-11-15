@@ -4,6 +4,7 @@ const moneyKey: unique symbol = Symbol("money");
 const quantityKey: unique symbol = Symbol("quantity");
 const priceKey: unique symbol = Symbol("price");
 const ratioKey: unique symbol = Symbol("ratio");
+const percentDisplayKey: unique symbol = Symbol("percent-display");
 const probabilityKey: unique symbol = Symbol("probability");
 
 export type Currency = "KRW" | "USD";
@@ -24,18 +25,20 @@ export type Quantity = { readonly [quantityKey]: Decimal };
 
 export type Ratio = { readonly [ratioKey]: Decimal };
 
+export type PercentDisplay = { readonly [percentDisplayKey]: Decimal };
+
 export type Probability = { readonly [probabilityKey]: Decimal };
 
 export type DecimalParseError =
   | { readonly kind: "malformed-decimal" }
   | { readonly kind: "unknown-currency" };
 
-const decimalPattern = /^-?(0|[1-9]\d*)(\.\d+)?$(?![\s\S])/u;
+const decimalPattern = /^-?(0|[1-9]\d*)(\.\d+)?$/u;
 
-const isDecimal = (input: string): input is Decimal =>
-  decimalPattern.test(input);
+const isDecimal = (input: unknown): input is Decimal =>
+  typeof input === "string" && decimalPattern.test(input);
 
-const parseDecimal = (input: string): Result<Decimal, DecimalParseError> =>
+const parseDecimal = (input: unknown): Result<Decimal, DecimalParseError> =>
   isDecimal(input) ? ok(input) : err({ kind: "malformed-decimal" });
 
 const parseCurrency = (input: string): Result<Currency, DecimalParseError> => {
@@ -91,12 +94,18 @@ export const parseProbability = (
 ): Result<Probability, DecimalParseError> =>
   mapDecimal(input, (decimal) => ({ [probabilityKey]: decimal }));
 
+export const parsePercentDisplay = (
+  input: string,
+): Result<PercentDisplay, DecimalParseError> =>
+  mapDecimal(input, (decimal) => ({ [percentDisplayKey]: decimal }));
+
 export const readDecimalForNumberDisplay = (
-  value: Money | Price | Quantity | Ratio | Probability,
-): Decimal => {
+  value: Money | Price | Quantity | PercentDisplay | null | undefined,
+): Decimal | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
   if (moneyKey in value) return value[moneyKey];
   if (priceKey in value) return value[priceKey];
   if (quantityKey in value) return value[quantityKey];
-  if (ratioKey in value) return value[ratioKey];
-  return value[probabilityKey];
+  if (percentDisplayKey in value) return value[percentDisplayKey];
+  return undefined;
 };

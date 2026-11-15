@@ -1,10 +1,12 @@
 import ts from "typescript";
-import { projectPath } from "../types.mjs";
+import { projectPath, declaredIn } from "../types.mjs";
 export const numberDisplayBoundary = {
   meta: {
     type: "problem",
     schema: [],
     messages: {
+      formatter:
+        "숫자 형식화 함수와 타입은 shared/ds/Numbers.tsx 내부에서만 쓴다.",
       reader:
         "표시용 십진수 읽기는 money.ts와 format.ts만 사용한다. 화면은 DS 숫자 컴포넌트를 쓴다.",
       conversion:
@@ -27,7 +29,7 @@ export const numberDisplayBoundary = {
           ["Number", "parseFloat", "parseInt", "Intl"].includes(node.name)
         )
           context.report({ node, messageId: "conversion" });
-        if (mayRead) return;
+
         const symbol = checker.getSymbolAtLocation(
           services.esTreeNodeToTSNodeMap.get(node),
         );
@@ -35,13 +37,25 @@ export const numberDisplayBoundary = {
           symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0
             ? checker.getAliasedSymbol(symbol)
             : symbol;
+        const formatting = declaredIn(context, resolved, [
+          "src/shared/lib/format.ts",
+        ]);
+        const exporting = node.parent.type === "ExportSpecifier";
+        if (
+          formatting &&
+          (exporting ||
+            !["src/shared/lib/format.ts", "src/shared/ds/Numbers.tsx"].includes(
+              here,
+            ))
+        )
+          context.report({ node, messageId: "formatter" });
+        if (mayRead) return;
         if (
           (resolved?.declarations ?? []).some(
             (d) =>
               d.name?.getText() === "readDecimalForNumberDisplay" &&
-              /\/src\/shared\/lib\/money\.ts$/u.test(
-                d.getSourceFile().fileName,
-              ),
+              projectPath(context, d.getSourceFile().fileName) ===
+                "src/shared/lib/money.ts",
           )
         )
           context.report({ node, messageId: "reader" });

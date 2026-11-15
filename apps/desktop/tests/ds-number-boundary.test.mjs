@@ -20,6 +20,15 @@ test("DS05 reader access, conversion and price color boundaries reject violation
       join(folder, "src/shared/lib"),
       { recursive: true },
     );
+    mkdirSync(join(folder, "src/other"), { recursive: true });
+    writeFileSync(
+      join(folder, "src/other/money.ts"),
+      'export const readDecimalForNumberDisplay=():"fake"=>"fake";',
+    );
+    const originalFormat = readFileSync(
+      join(desktopRoot, "src/shared/lib/format.ts"),
+      "utf8",
+    );
     const project = join(folder, "tsconfig.json");
     writeFileSync(
       project,
@@ -54,7 +63,12 @@ test("DS05 reader access, conversion and price color boundaries reject violation
         "utf8",
       ),
     );
-    for (const entry of cases) {
+    const ordered = [
+      ...cases.filter((entry) => entry.file !== "src/shared/lib/format.ts"),
+      ...cases.filter((entry) => entry.file === "src/shared/lib/format.ts"),
+    ];
+    for (const entry of ordered) {
+      writeFileSync(join(folder, "src/shared/lib/format.ts"), originalFormat);
       const source = join(folder, entry.file);
       mkdirSync(dirname(source), { recursive: true });
       writeFileSync(source, entry.code);

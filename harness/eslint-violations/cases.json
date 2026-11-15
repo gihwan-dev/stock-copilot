@@ -3957,6 +3957,17 @@
       "expect": [
         "local/number-display-boundary :: 표시용 십진수 읽기는 money.ts와 format.ts만 사용한다. 화면은 DS 숫자 컴포넌트를 쓴다."
       ]
+    },
+    "src/shared/lib/formatter-export.ts": {
+      "row": "숫자",
+      "expect": [
+        "local/number-display-boundary :: 숫자 형식화 함수와 타입은 shared/ds/Numbers.tsx 내부에서만 쓴다.",
+        "boundaries/dependencies :: lib에서 lib의 format.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다."
+      ]
+    },
+    "src/shared/ds/Numbers.tsx": {
+      "row": "숫자",
+      "expect": []
     }
   }
 }

@@ -3,6 +3,9 @@ import type { UiText } from "./brand";
 export type Locale = "ko";
 
 const catalog = {
+  "number.jo": { ko: "조" as UiText },
+  "number.empty": { ko: "" as UiText },
+  "number.invalid": { ko: "값을 표시할 수 없음" as UiText },
   "number.space": { ko: " " as UiText },
   "number.openRate": { ko: " (" as UiText },
   "number.closeRate": { ko: ")" as UiText },

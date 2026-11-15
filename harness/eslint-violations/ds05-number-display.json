@@ -48,5 +48,70 @@
     "file": "src/app/screen.tsx",
     "code": "export const Probe=()=> <span className='text-down'/>;",
     "rule": "ds/no-screen-props"
+  },
+  {
+    "file": "src/shared/lib/format.ts",
+    "code": "export const value=parseInt(\"1\",10);",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/shared/lib/format.ts",
+    "code": "const alias=parseInt;export const value=alias(\"1\",10);",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/app/formatter.ts",
+    "code": "import {formatNumber as f} from \"../shared/lib/format\";export const value=f;",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/features/home/ui/Formatter.tsx",
+    "code": "import {formatNumber} from \"../../../shared/lib/format\";export const value=formatNumber;",
+    "rule": "boundaries/dependencies"
+  },
+  {
+    "file": "src/shared/ds/Formatter.tsx",
+    "code": "export {formatNumber as leak} from \"../lib/format\";",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/shared/ds/Numbers.tsx",
+    "code": "import {formatNumber} from \"../lib/format\";const result=formatNumber({kind:\"unavailable\"});export const value=result.kind;",
+    "rule": null
+  },
+  {
+    "file": "src/shared/ds/Numbers.tsx",
+    "code": "export {formatNumber as leak} from \"../lib/format\";",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/app/fake.ts",
+    "code": "const readDecimalForNumberDisplay=():\"fake\"=>\"fake\";export const value=readDecimalForNumberDisplay();",
+    "rule": null
+  },
+  {
+    "file": "src/app/fake-source.ts",
+    "code": "import {readDecimalForNumberDisplay} from \"../other/money\";export const value=readDecimalForNumberDisplay();",
+    "rule": null
+  },
+  {
+    "file": "src/app/text.tsx",
+    "code": "import type {FormattedNumber} from \"../shared/lib/brand\";export const Probe=(props:{readonly value:FormattedNumber})=><span>{props.value}</span>;",
+    "rule": "local/no-ui-text"
+  },
+  {
+    "file": "src/shared/lib/other-format.ts",
+    "code": "export const value=Number(\"1\");",
+    "rule": null
+  },
+  {
+    "file": "src/app/string-export.ts",
+    "code": "export {\"readDecimalForNumberDisplay\" as leak} from \"../shared/lib/money\";",
+    "rule": "local/number-display-boundary"
+  },
+  {
+    "file": "src/app/string-import.ts",
+    "code": "import {\"readDecimalForNumberDisplay\" as read} from \"../shared/lib/money\";export const value=read;",
+    "rule": "local/number-display-boundary"
   }
 ]
