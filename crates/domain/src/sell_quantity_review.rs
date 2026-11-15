@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::orderbook::tests::at;
     use crate::{
         AccountId, AcquisitionPrice, Currency, Holding, HoldingObservation, KnownMarket, Market,
@@ -10,7 +10,7 @@ mod tests {
     fn quantity(value: &str) -> Quantity {
         Quantity::parse(&NumericInput::try_new(value).expect("입력")).expect("수량")
     }
-    fn fixture(
+    pub(crate) fn fixture(
         market: KnownMarket,
         held: &str,
         available: &str,

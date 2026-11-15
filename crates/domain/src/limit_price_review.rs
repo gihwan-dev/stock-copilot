@@ -1,16 +1,20 @@
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::orderbook::tests::{at, master, price};
     use crate::{
         AccountId, AcquisitionPrice, Currency, Holding, HoldingObservation, KnownMarket,
-        LimitPriceError, Market, MarketOrderPolicy, NumericInput, OrderSide, Orderbook,
-        OrderbookInput, OrderbookLevelInput, PriceLimits, PriceLimitsInput, Quantity,
-        ResolvedOrderInstrument, SellExecutionPrice, SellOrderCalculationError, SellQuantityMode,
-        SellTarget, SellableQuantityFact, Symbol, TickAlignment, TickSizeError, TickTable,
-        TimeSpan, bind_sell_limit, bind_sell_market, calculate_limit_price,
-        calculate_sell_quantity, tick_alignment,
+        LimitPriceError, Market, NumericInput, OrderSide, Orderbook, OrderbookInput,
+        OrderbookLevelInput, PriceLimits, PriceLimitsInput, Quantity, ResolvedOrderInstrument,
+        SellExecutionPrice, SellOrderCalculationError, SellQuantityMode, SellTarget,
+        SellableQuantityFact, Symbol, TickAlignment, TickSizeError, TickTable, TimeSpan,
+        bind_sell_limit, bind_sell_market, calculate_limit_price, calculate_sell_quantity,
+        tick_alignment,
     };
-    fn book(market: KnownMarket, ask: &str, bid: &str) -> (Orderbook, TickTable, PriceLimits) {
+    pub(crate) fn book(
+        market: KnownMarket,
+        ask: &str,
+        bid: &str,
+    ) -> (Orderbook, TickTable, PriceLimits) {
         let master_value = master(market, "STOCK", "stable");
         let instrument_value = master_value.quote_instrument().expect("종목");
         let currency = instrument_value.currency();
@@ -198,10 +202,22 @@ mod tests {
             Err(SellOrderCalculationError::DifferentDirection)
         );
         assert_eq!(
-            bind_sell_market(plan.clone(), MarketOrderPolicy::Disabled),
+            bind_sell_market(
+                plan.clone(),
+                crate::default_market_order_policy(crate::Policy::new(
+                    crate::InvestorProfile::default()
+                ))
+            ),
             Err(SellOrderCalculationError::MarketDisabled)
         );
-        let market = bind_sell_market(plan, MarketOrderPolicy::Enabled).expect("시장가");
+        let market = bind_sell_market(
+            plan,
+            crate::restore_market_order_policy(crate::SavedMarketOrderPolicy {
+                policy: crate::Policy::new(crate::InvestorProfile::default()),
+                market_orders: crate::SavedMarketOrderSetting::Enabled,
+            }),
+        )
+        .expect("시장가");
         assert_eq!(market.price(), SellExecutionPrice::Market);
     }
     #[test]
@@ -302,7 +318,13 @@ mod tests {
             bind_sell_limit(plan, &other),
             Err(SellOrderCalculationError::DifferentInstrument)
         );
-        assert_eq!(MarketOrderPolicy::default(), MarketOrderPolicy::Disabled);
+        assert_eq!(
+            crate::default_market_order_policy(crate::Policy::new(
+                crate::InvestorProfile::default()
+            ))
+            .setting(),
+            crate::SavedMarketOrderSetting::Disabled
+        );
         assert_eq!(
             format!("{:?}", SellExecutionPrice::Market),
             "SellExecutionPrice(..)"

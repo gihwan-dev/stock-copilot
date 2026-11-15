@@ -22,6 +22,7 @@ pub enum NoSellQuantity {
 #[derive(Clone, PartialEq, Eq)]
 pub struct SellQuantityPlan {
     account: AccountId,
+    currency: crate::Currency,
     instrument: ResolvedOrderInstrument,
     quantity: SellOrderQuantity,
 }
@@ -40,6 +41,10 @@ impl SellQuantityPlan {
         &self.instrument
     }
     #[must_use]
+    pub(crate) const fn currency(&self) -> crate::Currency {
+        self.currency
+    }
+    #[must_use]
     pub const fn quantity(&self) -> SellOrderQuantity {
         self.quantity
     }
@@ -54,10 +59,11 @@ pub fn calculate_sell_quantity(
     if fact.account_id() != account || fact.instrument() != holding.instrument() {
         return Err(NoSellQuantity::DifferentFact);
     }
-    if holding.instrument().market() == Market::Kr
-        && holding.quantity().as_decimal().normalize().scale() != 0
-    {
-        return Err(NoSellQuantity::FractionalDomestic);
+    match holding.instrument().market() {
+        Market::Kr if holding.quantity().as_decimal().normalize().scale() != 0 => {
+            return Err(NoSellQuantity::FractionalDomestic);
+        }
+        Market::Kr | Market::Us | Market::Unknown(_) => {}
     }
     let held = holding.quantity().as_decimal();
     let desired = match target {
@@ -72,19 +78,22 @@ pub fn calculate_sell_quantity(
     let precision = match (holding.instrument().market(), mode) {
         (Market::Us, SellQuantityMode::FractionalMarket) => 6,
         (Market::Kr | Market::Unknown(_), SellQuantityMode::FractionalMarket)
-        | (_, SellQuantityMode::Whole) => 0,
+        | (Market::Kr | Market::Us | Market::Unknown(_), SellQuantityMode::Whole) => 0,
     };
-    let value = desired
-        .min(held)
-        .min(fact.quantity().as_decimal())
-        .round_dp_with_strategy(precision, rust_decimal::RoundingStrategy::ToZero);
+    let bounded = desired.min(held).min(fact.quantity().as_decimal());
+    let scale = bounded.scale().min(precision);
+    let coefficient =
+        (scale..bounded.scale()).fold(bounded.mantissa(), |digits, _place| digits.wrapping_div(10));
+    let value = rust_decimal::Decimal::from_i128_with_scale(coefficient, scale);
     let quantity = Quantity::try_new(value)
         .map_err(|_error| NoSellQuantity::Arithmetic)
-        .and_then(|bounded| {
-            SellOrderQuantity::try_new(bounded).map_err(|_error| NoSellQuantity::BelowMinimumUnit)
+        .and_then(|quantity_value| {
+            SellOrderQuantity::try_new(quantity_value)
+                .map_err(|_error| NoSellQuantity::BelowMinimumUnit)
         })?;
     Ok(SellQuantityPlan {
         account: account.clone(),
+        currency: holding.currency(),
         instrument: holding.instrument().clone(),
         quantity,
     })
