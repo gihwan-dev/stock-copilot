@@ -1,3 +1,4 @@
+mod support;
 #[cfg(test)]
 mod tests {
     use application::SecretValue;
@@ -12,9 +13,13 @@ mod tests {
                     .into_bytes();
             wire.extend(std::iter::repeat_n(b'X', size));
             let server = LocalHttpServer::start(wire).expect("server");
-            let client =
-                TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                    .expect("client");
+            let time = crate::support::time();
+            let client = TossHttpClient::new(
+                &TossEndpoint::local(server.port()).expect("endpoint"),
+                std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+                time,
+            )
+            .expect("client");
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
