@@ -81,6 +81,18 @@ export const iconUtilities = [
 const declaration = (property) =>
   property === "width/height" ? ["width", "height"] : [property];
 export const designUtilities = (tokens) => [
+  ["markdown-bullets", "list-style-type", "disc"],
+  ["markdown-bullets", "padding-inline-start", "var(--spacing-space-6)"],
+  ["markdown-ordered", "list-style-type", "decimal"],
+  ["markdown-ordered", "padding-inline-start", "var(--spacing-space-6)"],
+  [
+    "markdown-quote",
+    "border-inline-start-width",
+    "var(--border-width-hairline)",
+  ],
+  ["markdown-quote", "border-inline-start-style", "solid"],
+  ["markdown-quote", "border-inline-start-color", "var(--color-line-strong)"],
+  ["markdown-quote", "padding-inline-start", "var(--spacing-space-3)"],
   ["chat-input", "min-height", "var(--spacing-chat-input-min)"],
   ["chat-input", "max-height", "var(--spacing-chat-input-max)"],
   ["chat-input", "resize", "none"],

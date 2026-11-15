@@ -10,7 +10,8 @@ import {Markdown,ChatInput} from DS_ENTRY;
 import {parseFreeText} from LIB_ENTRY;
 import {contentComponentStories} from STORY_ENTRY;
 window.cleanup=cleanup;window.act=act;window.fire=fireEvent;
-window.markdown=(value,allowed="allow")=>{cleanup();window.calls=[];render(h(Markdown,{content:parseFreeText(value).value,linkAllowed:()=>allowed,onOpenLink:url=>window.calls.push(url)}));};
+window.markdown=(value,allowed="allow")=>{cleanup();window.calls=[];window.markdownView=render(h(Markdown,{content:parseFreeText(value).value,linkAllowed:()=>allowed,onOpenLink:url=>window.calls.push(url)}));};
+window.updateMarkdown=value=>window.markdownView.rerender(h(Markdown,{content:parseFreeText(value).value,linkAllowed:()=>"allow",onOpenLink:url=>window.calls.push(url)}));
 window.chat=(status="ready")=>{cleanup();window.calls=[];window.chatView=render(h(ChatInput,{status,onSend:value=>window.calls.push(value)}));};
 window.setStatus=(status)=>window.chatView.rerender(h(ChatInput,{status,onSend:value=>window.calls.push(value)}));
 window.stories=contentComponentStories;
@@ -201,6 +202,7 @@ test("DS18 stories render both themes with mixed markdown and long draft", async
       if (story.component === "Markdown" && story.state === "stress") {
         assert.equal(w.document.querySelectorAll("h2").length, 100);
         assert.equal(w.document.querySelectorAll("pre").length, 100);
+        assert.equal(w.document.querySelectorAll("button").length, 100);
       }
       if (story.component === "ChatInput") {
         assert.ok(w.input().classList.contains("chat-input"));
@@ -214,9 +216,88 @@ test("DS18 sending keeps the draft focusable and read only", async () => {
   await w.act(() => w.chat());
   w.input().focus();
   await w.act(() => w.setStatus("sending"));
-  assert.equal(w.document.activeElement, w.input());
+  assert.equal(w.document.activeElement === w.input(), true);
   assert.equal(w.input().readOnly, true);
   await w.act(() => w.setStatus("ready"));
   assert.equal(w.input().readOnly, false);
-  assert.equal(w.document.activeElement, w.input());
+  assert.equal(w.document.activeElement === w.input(), true);
+});
+
+test("DS18 old composition cannot consume Enter after focus or send", async () => {
+  const w = fixture.open();
+  await w.act(() => w.chat());
+  await w.act(() => w.fire.compositionStart(w.input()));
+  await w.act(() => w.fire.change(w.input(), { target: { value: "안녕" } }));
+  await w.act(() => w.fire.compositionEnd(w.input()));
+  await w.act(() => w.fire.blur(w.input()));
+  await w.act(() => w.fire.focus(w.input()));
+  await w.act(() => w.fire.keyDown(w.input(), { key: "Enter" }));
+  assert.deepEqual(Array.from(w.calls), ["안녕"]);
+  await w.act(() => w.fire.compositionStart(w.input()));
+  await w.act(() => w.fire.change(w.input(), { target: { value: "두 번째" } }));
+  await w.act(() => w.fire.compositionEnd(w.input()));
+  await w.act(() => w.fire.click(w.send()));
+  await w.act(() =>
+    w.fire.change(w.input(), { target: { value: "붙여넣기" } }),
+  );
+  await w.act(() => w.fire.keyDown(w.input(), { key: "Enter" }));
+  assert.deepEqual(Array.from(w.calls), ["안녕", "두 번째", "붙여넣기"]);
+});
+test("DS18 streaming preserves link and code nodes and focus", async () => {
+  const w = fixture.open();
+  const initial = "[출처](https://a.test)\n\n```text\n원문\n```";
+  await w.act(() => w.markdown(initial));
+  const button = w.document.querySelector("button"),
+    pre = w.document.querySelector("pre");
+  button.focus();
+  await w.act(() => w.updateMarkdown(initial + "\n\n추가 문단"));
+  assert.equal(w.document.querySelector("button") === button, true);
+  assert.equal(w.document.querySelector("pre") === pre, true);
+  assert.equal(w.document.activeElement === button, true);
+});
+test("DS18 empty link names never create unnamed tab targets", async () => {
+  const w = fixture.open();
+  for (const value of [
+    "[](https://a.test)",
+    "[ ](https://a.test)",
+    "[![]()](https://a.test)",
+  ]) {
+    await w.act(() => w.markdown(value));
+    assert.equal(w.document.querySelectorAll("button,a").length, 0);
+  }
+});
+test("DS18 stress story renders a multiline draft without metadata injection", async () => {
+  const w = fixture.open();
+  for (const theme of ["light", "dark"]) {
+    const i = Array.from(w.stories).findIndex(
+      (s) => s.component === "ChatInput" && s.state === "stress",
+    );
+    await w.act(() => w.story(i, theme));
+    assert.ok(w.input().value.length > 1000);
+    assert.ok(w.input().value.includes("\n"));
+  }
+});
+
+test("DS18 semantic nodes retain hierarchy and nondefault list start", async () => {
+  const w = fixture.open();
+  await w.act(() =>
+    w.markdown(
+      "# 하나\n\n## 둘\n\n### 셋\n\n#### 넷\n\n##### 다섯\n\n###### 여섯\n\n3. 순서\n4. 다음\n\n- 항목\n\n> 인용\n\n문단 `코드`",
+    ),
+  );
+  for (const [tag, token] of [
+    ["h1", "text-title-lg"],
+    ["h2", "text-title-md"],
+    ["h3", "text-title-sm"],
+    ["h4", "text-title-sm"],
+    ["h5", "text-title-sm"],
+    ["h6", "text-title-sm"],
+    ["ol", "markdown-ordered"],
+    ["ul", "markdown-bullets"],
+    ["blockquote", "markdown-quote"],
+    ["code", "font-mono"],
+  ])
+    assert.ok(w.document.querySelector(tag).classList.contains(token));
+  assert.equal(w.document.querySelector("ol").getAttribute("start"), "3");
+  assert.ok(w.document.querySelector("p").classList.contains("my-space-3"));
 });

@@ -1286,12 +1286,27 @@
       "generated": "yes"
     },
     {
+      "name": "@content-medium:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-medium:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "@content-medium:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-medium:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -5071,12 +5086,27 @@
       "generated": "yes"
     },
     {
+      "name": "@content-wide:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "@content-wide:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "@content-wide:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "@content-wide:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -8866,12 +8896,27 @@
       "generated": "yes"
     },
     {
+      "name": "active:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "active:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "active:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "active:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -13246,12 +13291,27 @@
       "generated": "yes"
     },
     {
+      "name": "disabled:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "disabled:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "disabled:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "disabled:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -17251,12 +17311,27 @@
       "generated": "yes"
     },
     {
+      "name": "focus-visible:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus-visible:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "focus-visible:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus-visible:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -21036,12 +21111,27 @@
       "generated": "yes"
     },
     {
+      "name": "focus:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "focus:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "focus:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "focus:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -25161,12 +25251,27 @@
       "generated": "yes"
     },
     {
+      "name": "hover:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "hover:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "hover:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "hover:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -27841,12 +27946,27 @@
       "generated": "yes"
     },
     {
+      "name": "markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -29421,12 +29541,27 @@
       "generated": "yes"
     },
     {
+      "name": "motion-reduce:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "motion-reduce:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "motion-reduce:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "motion-reduce:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -35456,12 +35591,27 @@
       "generated": "yes"
     },
     {
+      "name": "window-lg:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-lg:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "window-lg:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-lg:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -39241,12 +39391,27 @@
       "generated": "yes"
     },
     {
+      "name": "window-md:markdown-bullets",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
       "name": "window-md:markdown-content",
       "kind": "allowed",
       "generated": "yes"
     },
     {
       "name": "window-md:markdown-link",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:markdown-ordered",
+      "kind": "allowed",
+      "generated": "yes"
+    },
+    {
+      "name": "window-md:markdown-quote",
       "kind": "allowed",
       "generated": "yes"
     },
@@ -42818,11 +42983,23 @@
       "context": ["@container (width >= 56.25rem)"]
     },
     {
+      "selector": ".\\@content-medium\\:markdown-bullets",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
       "selector": ".\\@content-medium\\:markdown-content",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
       "selector": ".\\@content-medium\\:markdown-link",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:markdown-ordered",
+      "context": ["@container (width >= 56.25rem)"]
+    },
+    {
+      "selector": ".\\@content-medium\\:markdown-quote",
       "context": ["@container (width >= 56.25rem)"]
     },
     {
@@ -45750,11 +45927,23 @@
       "context": ["@container (width >= 75rem)"]
     },
     {
+      "selector": ".\\@content-wide\\:markdown-bullets",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
       "selector": ".\\@content-wide\\:markdown-content",
       "context": ["@container (width >= 75rem)"]
     },
     {
       "selector": ".\\@content-wide\\:markdown-link",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:markdown-ordered",
+      "context": ["@container (width >= 75rem)"]
+    },
+    {
+      "selector": ".\\@content-wide\\:markdown-quote",
       "context": ["@container (width >= 75rem)"]
     },
     {
@@ -48690,11 +48879,23 @@
       "context": []
     },
     {
+      "selector": ".active\\:markdown-bullets:active",
+      "context": []
+    },
+    {
       "selector": ".active\\:markdown-content:active",
       "context": []
     },
     {
       "selector": ".active\\:markdown-link:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:markdown-ordered:active",
+      "context": []
+    },
+    {
+      "selector": ".active\\:markdown-quote:active",
       "context": []
     },
     {
@@ -52094,11 +52295,23 @@
       "context": []
     },
     {
+      "selector": ".disabled\\:markdown-bullets:disabled",
+      "context": []
+    },
+    {
       "selector": ".disabled\\:markdown-content:disabled",
       "context": []
     },
     {
       "selector": ".disabled\\:markdown-link:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:markdown-ordered:disabled",
+      "context": []
+    },
+    {
+      "selector": ".disabled\\:markdown-quote:disabled",
       "context": []
     },
     {
@@ -55202,11 +55415,23 @@
       "context": []
     },
     {
+      "selector": ".focus-visible\\:markdown-bullets:focus-visible",
+      "context": []
+    },
+    {
       "selector": ".focus-visible\\:markdown-content:focus-visible",
       "context": []
     },
     {
       "selector": ".focus-visible\\:markdown-link:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:markdown-ordered:focus-visible",
+      "context": []
+    },
+    {
+      "selector": ".focus-visible\\:markdown-quote:focus-visible",
       "context": []
     },
     {
@@ -58134,11 +58359,23 @@
       "context": []
     },
     {
+      "selector": ".focus\\:markdown-bullets:focus",
+      "context": []
+    },
+    {
       "selector": ".focus\\:markdown-content:focus",
       "context": []
     },
     {
       "selector": ".focus\\:markdown-link:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:markdown-ordered:focus",
+      "context": []
+    },
+    {
+      "selector": ".focus\\:markdown-quote:focus",
       "context": []
     },
     {
@@ -61338,11 +61575,23 @@
       "context": ["@media (hover: hover)"]
     },
     {
+      "selector": ".hover\\:markdown-bullets:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
       "selector": ".hover\\:markdown-content:hover",
       "context": ["@media (hover: hover)"]
     },
     {
       "selector": ".hover\\:markdown-link:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:markdown-ordered:hover",
+      "context": ["@media (hover: hover)"]
+    },
+    {
+      "selector": ".hover\\:markdown-quote:hover",
       "context": ["@media (hover: hover)"]
     },
     {
@@ -63386,11 +63635,23 @@
       "context": []
     },
     {
+      "selector": ".markdown-bullets",
+      "context": []
+    },
+    {
       "selector": ".markdown-content",
       "context": []
     },
     {
       "selector": ".markdown-link",
+      "context": []
+    },
+    {
+      "selector": ".markdown-ordered",
+      "context": []
+    },
+    {
+      "selector": ".markdown-quote",
       "context": []
     },
     {
@@ -64650,11 +64911,23 @@
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
+      "selector": ".motion-reduce\\:markdown-bullets",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
       "selector": ".motion-reduce\\:markdown-content",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
       "selector": ".motion-reduce\\:markdown-link",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:markdown-ordered",
+      "context": ["@media (prefers-reduced-motion: reduce)"]
+    },
+    {
+      "selector": ".motion-reduce\\:markdown-quote",
       "context": ["@media (prefers-reduced-motion: reduce)"]
     },
     {
@@ -69278,11 +69551,23 @@
       "context": ["@media (width >= 80rem)"]
     },
     {
+      "selector": ".window-lg\\:markdown-bullets",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
       "selector": ".window-lg\\:markdown-content",
       "context": ["@media (width >= 80rem)"]
     },
     {
       "selector": ".window-lg\\:markdown-link",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:markdown-ordered",
+      "context": ["@media (width >= 80rem)"]
+    },
+    {
+      "selector": ".window-lg\\:markdown-quote",
       "context": ["@media (width >= 80rem)"]
     },
     {
@@ -72210,11 +72495,23 @@
       "context": ["@media (width >= 67.5rem)"]
     },
     {
+      "selector": ".window-md\\:markdown-bullets",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
       "selector": ".window-md\\:markdown-content",
       "context": ["@media (width >= 67.5rem)"]
     },
     {
       "selector": ".window-md\\:markdown-link",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:markdown-ordered",
+      "context": ["@media (width >= 67.5rem)"]
+    },
+    {
+      "selector": ".window-md\\:markdown-quote",
       "context": ["@media (width >= 67.5rem)"]
     },
     {

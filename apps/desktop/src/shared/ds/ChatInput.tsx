@@ -1,16 +1,20 @@
 import { useState, type ReactElement } from "react";
 import { chatCommit, chatEventValue } from "../platform/input";
-import { emptyFreeText, text, type FreeText } from "../lib";
+import { emptyFreeText, parseFreeText, text, type FreeText } from "../lib";
 import { Button } from "./Button";
 type Props = {
   readonly onSend: (value: FreeText) => void;
   readonly status?: "ready" | "sending";
 };
-export const ChatInput = (props: Props): ReactElement => {
-  const [value, setValue] = useState(emptyFreeText);
+type EditorProps = Props & { readonly initialDraft: FreeText };
+const ChatEditor = (props: EditorProps): ReactElement => {
+  const [value, setValue] = useState(props.initialDraft);
   const [composition, setComposition] = useState<
     "idle" | "composing" | "ending"
   >("idle");
+  const resetComposition = (): void => {
+    setComposition("idle");
+  };
   const send = (): void => {
     if (
       props.status === "sending" ||
@@ -18,6 +22,7 @@ export const ChatInput = (props: Props): ReactElement => {
       composition === "composing"
     )
       return;
+    setComposition("idle");
     setValue(emptyFreeText);
     props.onSend(value);
   };
@@ -40,6 +45,8 @@ export const ChatInput = (props: Props): ReactElement => {
           onCompositionEnd={(): void => {
             setComposition("ending");
           }}
+          onBlur={resetComposition}
+          onFocus={resetComposition}
           onKeyDown={(event): void => {
             if (chatCommit(event, composition) === "commit") send();
             if (composition === "ending") setComposition("idle");
@@ -60,3 +67,33 @@ export const ChatInput = (props: Props): ReactElement => {
     </div>
   );
 };
+
+export const ChatInput = (props: Props): ReactElement => (
+  <ChatEditor
+    onSend={props.onSend}
+    status={props.status ?? "ready"}
+    initialDraft={emptyFreeText}
+  />
+);
+const longDraft = parseFreeText((text("chat.label", "ko") + "\n").repeat(1000));
+type DraftStory = {
+  readonly component: "ChatInput";
+  readonly state: "stress";
+  readonly themes: readonly ["light", "dark"];
+  readonly render: () => ReactElement;
+};
+export const chatInputStressStories: readonly DraftStory[] = [
+  {
+    component: "ChatInput",
+    state: "stress",
+    themes: ["light", "dark"],
+    render: (): ReactElement => (
+      <ChatEditor
+        initialDraft={longDraft.kind === "ok" ? longDraft.value : emptyFreeText}
+        onSend={(): void => {
+          return;
+        }}
+      />
+    ),
+  },
+];

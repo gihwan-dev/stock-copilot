@@ -275,19 +275,19 @@
     },
     {
       "issue": "dependencies package.json react-markdown",
-      "reason": "DS-18 first consumer C-03 and DS-07 pending"
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
     },
     {
       "issue": "files src/shared/ds/ChatInput.tsx src/shared/ds/ChatInput.tsx",
-      "reason": "DS-18 first consumer C-03 and DS-07 pending"
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
     },
     {
       "issue": "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
-      "reason": "DS-18 first consumer C-03 and DS-07 pending"
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
     },
     {
       "issue": "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
-      "reason": "DS-18 first consumer C-03 and DS-07 pending"
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
     }
   ]
 }
