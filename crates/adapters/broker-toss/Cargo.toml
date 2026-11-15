@@ -8,11 +8,12 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+application = { path = "../../application" }
 domain = { path = "../../domain" }
 time = { version = "=0.3.55", default-features = false, features = ["std", "parsing"] }
 
 broker-toss-schema = { path = "../broker-toss-schema" }
+serde_json.workspace = true
 
 [dev-dependencies]
 serde.workspace = true
-serde_json.workspace = true
