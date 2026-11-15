@@ -96,3 +96,7 @@ reason = "D-07 보유 구성비의 봉인된 근사 통계만 checked 연산하�
 [[decimal-arithmetic]]
 path = "crates/domain/src/bootstrap.rs"
 reason = "D-29 날짜 묶음 재표본과 독립 정수 유리수 기준값의 성과 비율 검사. 금액으로 반환하지 않는다"
+
+[[decimal-rounding]]
+path = "crates/domain/src/sell_quantity.rs"
+reason = "D-26 매도 수량을 주문 가능 정수 또는 소수 6자리로 내림"

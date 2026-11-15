@@ -501,3 +501,18 @@ pub use scorecard_signal::{
 
 pub use signal_return::{SignalExcess, SignalReturnBasis};
 mod scorecard_signal_review;
+
+mod sell_quantity;
+pub use sell_quantity::{
+    NoSellQuantity, SellQuantityMode, SellQuantityPlan, SellTarget, calculate_sell_quantity,
+};
+
+mod limit_price;
+mod sell_quantity_review;
+pub use limit_price::{CalculatedLimitPrice, LimitPriceError, calculate_limit_price};
+mod limit_price_order;
+mod limit_price_review;
+pub use limit_price_order::{
+    CalculatedSellOrder, MarketOrderPolicy, SellExecutionPrice, SellOrderCalculationError,
+    bind_sell_limit, bind_sell_market,
+};
