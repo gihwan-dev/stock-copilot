@@ -6,6 +6,7 @@ publish.workspace = true
 default-run = "src-tauri"
 
 [dependencies]
+broker-toss = { path = "../../../crates/adapters/broker-toss" }
 tauri = { workspace = true }
 tauri-specta = { workspace = true }
 specta = { workspace = true }

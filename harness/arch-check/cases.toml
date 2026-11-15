@@ -482,7 +482,7 @@ findings = [
 ]
 
 [[case]]
-name = "tossinvest-host-in-main-and-toss-smoke-pass"
+name = "toss-endpoint-origin-and-root-factory-pass"
 findings = []
 
 [[case]]
@@ -699,3 +699,19 @@ findings = [{ rule = "external-location", subject = "mcp-server => secrecy" }]
 [[case]]
 name = "secrecy-in-application"
 findings = []
+
+[[case]]
+name = "toss-endpoint-extra-factories-fail"
+findings = [{ rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint.rs" }]
+
+[[case]]
+name = "toss-http-canonical-client-pass"
+findings = []
+
+[[case]]
+name = "toss-child-module-and-client-factory-fail"
+findings = [
+    { rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint.rs" },
+    { rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint/sneak.rs" },
+    { rule = "toss-production", subject = "crates/adapters/broker-toss/src/http.rs" },
+]

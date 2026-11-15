@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 mod ast;
+mod endpoint;
 mod schema_surface;
 
 use proc_macro2::{TokenStream, TokenTree};
@@ -79,6 +80,11 @@ fn scan_rust(
         findings.insert(Finding::new(Rule::SourceParse, String::from(relative)));
         return None;
     };
+    findings.extend(
+        endpoint::check(relative, &file, &stream, &rules.host_needle)
+            .into_iter()
+            .map(|rule| Finding::new(rule, String::from(relative))),
+    );
     let mut ast = AstRules::new(rules, crate_name, &file);
     ast.visit_file(&file);
     findings.extend(
