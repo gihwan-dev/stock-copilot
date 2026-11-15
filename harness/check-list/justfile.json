@@ -183,6 +183,25 @@
       "namepath": "check-fast",
       "shebang": false
     },
+    "check-fast-generated": {
+      "attributes": [],
+      "body": [["node harness/generated-files/check.mjs"]],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "frontend-build",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check-fast-generated",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "check-fast-generated",
+      "shebang": false
+    },
     "check-fast-static": {
       "attributes": [],
       "body": [
@@ -196,7 +215,6 @@
         ["\"", [["call", "just_executable"]], "\" capability-check"],
         ["\"", [["call", "just_executable"]], "\" raw-types"],
         ["\"", [["call", "just_executable"]], "\" disable-check"],
-        ["node harness/generated-files/check.mjs"],
         ["node harness/source-tree/check.mjs"],
         ["node harness/config-files/check.mjs"],
         ["node harness/claude-hooks/hashes.mjs"],
@@ -703,6 +721,25 @@
       "private": false,
       "quiet": false,
       "namepath": "fresh-node",
+      "shebang": false
+    },
+    "frontend-build": {
+      "attributes": [],
+      "body": [["pnpm -C apps/desktop exec vite build"]],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-pnpm",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "frontend-build",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "frontend-build",
       "shebang": false
     },
     "gen-bindings": {

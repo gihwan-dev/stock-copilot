@@ -218,3 +218,28 @@ fn weak_test_example_leaves_surviving_mutants() {
     let survivors = load_survivors(&directory, "survivors.toml").expect("load example survivors");
     assert_eq!(shown(evaluate(&outcomes, &survivors)), BTreeSet::new());
 }
+
+#[test]
+fn mutation_profile_keeps_debug_assertions_and_overflow_checks() {
+    let mut command = std::process::Command::new("cargo");
+    super::configure_profile(&mut command);
+    for (key, value) in [
+        ("CARGO_PROFILE_DEV_DEBUG", "0"),
+        ("CARGO_PROFILE_TEST_DEBUG", "0"),
+        ("CARGO_PROFILE_DEV_OPT_LEVEL", "1"),
+        ("CARGO_PROFILE_TEST_OPT_LEVEL", "1"),
+        ("CARGO_PROFILE_DEV_DEBUG_ASSERTIONS", "true"),
+        ("CARGO_PROFILE_TEST_DEBUG_ASSERTIONS", "true"),
+        ("CARGO_PROFILE_DEV_OVERFLOW_CHECKS", "true"),
+        ("CARGO_PROFILE_TEST_OVERFLOW_CHECKS", "true"),
+    ] {
+        assert_eq!(
+            command
+                .get_envs()
+                .find(|(name, _)| *name == std::ffi::OsStr::new(key))
+                .and_then(|(_, actual)| actual),
+            Some(std::ffi::OsStr::new(value)),
+            "{key}"
+        );
+    }
+}

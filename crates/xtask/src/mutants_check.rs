@@ -246,7 +246,7 @@ fn configure_parallelism(
         .get();
     let override_jobs = environment::jobs_override()?;
     let jobs = jobs_for(cores, override_jobs.as_deref())?;
-    let multiplier = jobs.saturating_mul(5);
+    let multiplier = 5_usize;
     let test_threads = cores.checked_div(jobs).unwrap_or(1).clamp(1, 4);
     let mut files = BTreeSet::new();
     for directory in globs.iter().map(|glob| crate_of(glob)) {
@@ -281,6 +281,18 @@ pub(crate) fn run(
     run_with_diff(workspace, scope, ignore, None)
 }
 
+fn configure_profile(command: &mut Command) {
+    command
+        .env("CARGO_PROFILE_DEV_DEBUG", "0")
+        .env("CARGO_PROFILE_TEST_DEBUG", "0")
+        .env("CARGO_PROFILE_DEV_OPT_LEVEL", "1")
+        .env("CARGO_PROFILE_TEST_OPT_LEVEL", "1")
+        .env("CARGO_PROFILE_DEV_DEBUG_ASSERTIONS", "true")
+        .env("CARGO_PROFILE_TEST_DEBUG_ASSERTIONS", "true")
+        .env("CARGO_PROFILE_DEV_OVERFLOW_CHECKS", "true")
+        .env("CARGO_PROFILE_TEST_OVERFLOW_CHECKS", "true");
+}
+
 fn run_with_diff(
     workspace: &Path,
     scope: &Scope,
@@ -307,14 +319,14 @@ fn run_with_diff(
             "--test-tool=nextest",
             "--no-shuffle",
             "--colors=never",
+            "--cargo-arg=--build-jobs=1",
         ])
         .arg("--dir")
         .arg(workspace)
         .arg("--output")
         .arg(&output)
-        .env("CARGO_PROFILE_DEV_DEBUG", "0")
-        .env("CARGO_PROFILE_TEST_DEBUG", "0")
         .stdin(Stdio::null());
+    configure_profile(&mut command);
     configure_parallelism(&mut command, workspace, &globs)?;
     if let Scope::Sharded(shard) = scope {
         command.arg("--shard").arg(shard);

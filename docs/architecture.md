@@ -299,10 +299,10 @@ stock-copilot/
 | `BrokerRead` | 계좌, 보유, 거래내역, 시세, 랭킹, 매수가능금액 | `broker-toss` | 증권사 기능 차이는 `BrokerCapabilities`로 |
 | `BrokerTrade` | 주문 생성만. `ApprovedOrder`만 받는다. 정정·취소는 1차 범위 밖이다([design.md](design.md) 6.5) | `broker-toss-trade` | `order-execution`이 정의 |
 | `MarketInfo` | 장 운영 시간, 환율, 국내 지수 | `broker-toss` | 미국 지수는 토스에 없다. 장중은 토스의 미국 ETF 시세로 대신한다(I-18) |
-| `MacroSeries` | 미국 금리·지수의 일별 값 | `sources`(미 재무부, FRED) | FRED 키가 없으면 그 값만 빠진다(P-5) |
-| `NewsSource` | 한 소스의 새 항목 | `sources` | 메타데이터: `retention`, `allow_ai_read`, `supports_conditional_get`, `requires_user_agent` (R-07) |
-| `Fundamentals` | 재무제표 | `sources`(DART) | DART 키는 선택 사항 |
-| `AiProvider` | `run(RunSpec)`, `resume`, `usage`, `interrupt`, `verify_isolation` | `ai-claude-code`, `ai-codex` | 실행 파일 경로를 주입받는다(R-15). `RunSpec`에 실행 종류가 들어간다 |
+| `MacroSeries` | `daily_values(series, from, through)` — 미국 금리·지수의 일별 값 | `sources`(미 재무부, FRED) | FRED 키가 없으면 그 값만 빠진다(P-5) |
+| `NewsFeed` | `source`, `metadata`, `new_items(since: FeedCursor)` — 한 소스의 뉴스·공시와 다음 커서 | `sources` | 메타데이터: `retention`, `allow_ai_read`, `supports_conditional_get`, `requires_user_agent` (R-07) |
+| `Fundamentals` | `statements(symbol, period_end)` — 재무제표 | `sources`(DART) | DART 키는 선택 사항 |
+| `AiProvider` | `run(RunSpec)`, `resume(spec, history, message)`, `usage`, `interrupt`, `verify_isolation` | `ai-claude-code`, `ai-codex` | 실행 파일 경로를 주입받는다(R-15). `RunSpec`에 실행 종류·모델·추론 강도·작업 목적이 들어간다 |
 | 저장소 포트 | 도메인 객체 저장·조회 | `store-sqlite` | - |
 | `AuditLog` | 추가만 되는 기록, 변조 탐지 | `store-sqlite` | 6.3 |
 | `SecretStore` | 비밀 값 | `secrets-keychain` | 비밀은 `secrecy` 래퍼. `Debug`, `Display`, `Serialize`, `Clone` 없음(R-16 Q4) |
@@ -310,7 +310,7 @@ stock-copilot/
 | `Notifier` | macOS 알림 | `src-tauri/platform`(`tauri-plugin-notification` 2.8.1, Rust에서만 호출) | - |
 | `UserPresence` | `confirm(ConfirmationRequest) → Confirmed / Denied / Unavailable` | `platform-macos` | 요청은 주문 요약 또는 위험 설정 변경. 주문은 네이티브 요약 창 + macOS 본인 확인, 위험 설정 변경은 네이티브 확인 창만(SEC-12, P-9). 4.5 |
 
-- 스트림 이벤트 `AiEvent`: `TextDelta`, `ToolCall{server, tool, args, result, status}`, `WebSearch{query, action}`, `TokenUsage`, `Quota`, `RateLimited{resets_at}`, `ModelRerouted`, `McpUnavailable`, 그리고 모르는 type을 담는 명시 변형 `Unknown`(R-02, R-03). 녹화한 스트림을 테스트 고정 자료로 쓴다.
+- 스트림 이벤트 `AiEvent`: 첫 사건 `IsolationChecked(Passed | Rejected(IsolationFailure))`(거절 뒤에는 사건 없음), `ActualModel`, `TextDelta`, `ToolCall{server, tool, args, result, status}`, `WebSearch{query, action}`, `TokenUsage`, `Quota`, `RateLimited{resets_at}`, `ModelRerouted`, `McpUnavailable`, 그리고 모르는 type을 담는 명시 변형 `Unknown`(R-02, R-03). 녹화한 스트림을 테스트 고정 자료로 쓴다.
 - 뉴스 소스와 예약 작업은 레지스트리에 등록한다. 새 소스나 작업은 구현 하나와 등록 한 줄로 추가된다. 경로 고정 테스트는 이 레지스트리에서 대상 목록을 가져온다(4.6).
 
 #### 읽기 포트의 메서드 계약 (ADR 0055)

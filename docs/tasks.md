@@ -190,7 +190,7 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 |---|---|---|---|
 | A-01 | 포트 정의: `BrokerRead`, `MarketInfo`, `BrokerCapabilities` | architecture 3.3과 일치. `BrokerTrade`는 여기 없음(`order-execution`이 정의) | D-05, D-10, D-11 |
 | A-02 | 포트 정의: 저장소, `AuditLog`, `SecretStore`, `Clock`, `Notifier`, `UserPresence` | architecture 3.3과 일치. `UserPresence`의 요청은 주문 요약과 위험 설정 변경 두 종류. 비밀 값 타입에 `Debug`·`Display`·`Serialize`·`Clone`이 없음 (SEC-11) | D-18 |
-| A-03 | 포트 정의: `NewsSource`(메타데이터 포함), `Fundamentals`, `MacroSeries`, `AiProvider`(`RunSpec`에 실행 종류) | architecture 3.3과 일치 | D-15 |
+| A-03 | 포트 정의: `NewsFeed`(메타데이터 포함), `Fundamentals`, `MacroSeries`, `AiProvider`(`RunSpec`에 실행 종류) | architecture 3.3과 일치. 뉴스 포트는 공시 키를 보존하고 커서를 받아 다음 커서를 돌려줌. AI 실행의 첫 사건은 격리 점검 결과 (ADR 0071) | D-15 |
 | A-04 | `testkit` 1: 포트 가짜, `SteppedClock`, `ScriptedPresence` (사용자 승인: 본인 확인 가짜는 보호 파일) | `testkit`의 의존 그래프에 `order-execution`이 없음(arch-check). `ScriptedPresence`가 대본대로 `Confirmed`·`Denied`·`Unavailable`을 돌려주고 호출 횟수를 기록 (I-14, architecture 3.2) | A-01 ~ A-03 |
 | A-11 | `testkit` 2: 가짜 AI CLI 실행 파일 | 녹화한 stream-json 재생 모드와 대본 MCP 클라이언트 모드. 실행 파일 경로 주입으로만 바뀌고 `PATH`를 바꾸지 않음 (harness 6.1) | A-03 |
 | A-05 | 오류 분류 (사용자 조치, 대기, 버그, 데이터 없음) | 모든 포트 오류가 사용자 조치·대기·버그 또는 R-01 Q7의 데이터 없음으로 분류. 데이터 없음은 상태 띠에 올리지 않고 해당 조회의 빈 결과로 처리. 오류 값에 비밀과 요청·응답 본문이 없음 (architecture 3.8, ADR 0063) | A-01 |

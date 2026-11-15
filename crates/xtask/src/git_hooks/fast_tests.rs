@@ -1,4 +1,4 @@
-use super::commit_base::{WorkBranch, work_branch};
+use super::commit_base::{WorkBranch, fast_branch};
 use crate::git_base;
 use crate::harness_workspace_tests::{
     fresh_directory, place_git_directory_outside, repository_root,
@@ -38,20 +38,22 @@ fn master_detached_symbolic_alias_and_worktree_are_classified_from_git() {
         &root,
         &["-c", "core.hooksPath=/dev/null", "commit", "-m", "first"],
     );
-    assert_eq!(work_branch(&root), Ok(WorkBranch::Other));
+    assert_eq!(fast_branch(&root), Ok(WorkBranch::Other));
     for name in ["topic", "master-topic", "check-fast"] {
         git(&root, &["checkout", "-b", name]);
-        assert_eq!(work_branch(&root), Ok(WorkBranch::NamedWork), "{name}");
+        assert_eq!(fast_branch(&root), Ok(WorkBranch::NamedWork), "{name}");
     }
+    git(&root, &["symbolic-ref", "HEAD", "refs/heads/maſter"]);
+    assert_eq!(fast_branch(&root), Ok(WorkBranch::Other));
     git(&root, &["symbolic-ref", "HEAD", "refs/heads/Master"]);
-    assert_eq!(work_branch(&root), Ok(WorkBranch::Other));
+    assert_eq!(fast_branch(&root), Ok(WorkBranch::Other));
     git(&root, &["symbolic-ref", "HEAD", "refs/heads/master"]);
     git(&root, &["checkout", "--detach"]);
-    assert_eq!(work_branch(&root), Ok(WorkBranch::Other));
+    assert_eq!(fast_branch(&root), Ok(WorkBranch::Other));
     let tip = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["update-ref", "refs/custom/work", &tip]);
     git(&root, &["symbolic-ref", "HEAD", "refs/custom/work"]);
-    assert_eq!(work_branch(&root), Ok(WorkBranch::Other));
+    assert_eq!(fast_branch(&root), Ok(WorkBranch::Other));
     git(&root, &["symbolic-ref", "HEAD", "refs/heads/master"]);
     let linked = root.parent().expect("parent").join("linked");
     git(
@@ -64,8 +66,8 @@ fn master_detached_symbolic_alias_and_worktree_are_classified_from_git() {
             linked.to_str().expect("utf8"),
         ],
     );
-    assert_eq!(work_branch(&linked), Ok(WorkBranch::NamedWork));
-    assert_eq!(work_branch(&root), Ok(WorkBranch::Other));
+    assert_eq!(fast_branch(&linked), Ok(WorkBranch::NamedWork));
+    assert_eq!(fast_branch(&root), Ok(WorkBranch::Other));
     for variable in git_base::REDIRECTING_VARIABLES {
         let mut command =
             git_base::git_with(&root, &[(String::from(variable), String::from("injected"))]);

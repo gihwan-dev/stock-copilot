@@ -243,7 +243,6 @@ check-fast-static:
     "{{just_executable()}}" capability-check
     "{{just_executable()}}" raw-types
     "{{just_executable()}}" disable-check
-    node harness/generated-files/check.mjs
     node harness/source-tree/check.mjs
     node harness/config-files/check.mjs
     node harness/claude-hooks/hashes.mjs
@@ -259,3 +258,9 @@ disable-report-fast:
 
 commit-recipe:
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-recipe
+
+frontend-build: check-pnpm
+    pnpm -C apps/desktop exec vite build
+
+check-fast-generated: frontend-build
+    node harness/generated-files/check.mjs
