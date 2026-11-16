@@ -190,14 +190,19 @@ mod tests {
         Result<application::TransactionRead, application::PortError>,
         String,
     ) {
+        read_filtered(responses, &TransactionFilter::all())
+    }
+    fn read_filtered(
+        responses: Vec<Vec<u8>>,
+        filter: &TransactionFilter,
+    ) -> (
+        Result<application::TransactionRead, application::PortError>,
+        String,
+    ) {
         let mut scripted = vec![issued()];
         scripted.extend(responses);
         let server = ScriptedHttpServer::start(scripted).expect("server");
-        let outcome_4 = run(adapter(&server).transactions(
-            &AccountId::new(731),
-            window(),
-            &TransactionFilter::all(),
-        ));
+        let outcome_4 = run(adapter(&server).transactions(&AccountId::new(731), window(), filter));
         let requests = String::from_utf8(server.finish().expect("requests")).expect("UTF8");
         (outcome_4, requests)
     }
@@ -573,5 +578,195 @@ mod tests {
         );
         assert_eq!(received.received[0].as_slice().len(), 1);
         assert_eq!(requests.matches("GET /api/v1/transactions?").count(), 8192);
+    }
+
+    #[test]
+    fn filter_violation_never_enters_partial_batches() {
+        let filter = TransactionFilter::only(vec![domain::TransactionKind::Buy]).expect("filter");
+        for next in [Value::Null, json!("later")] {
+            let mut valid = row();
+            valid["transactionType"] = json!("BUY");
+            let (result, _) = read_filtered(
+                vec![
+                    ok(page(json!([valid]), json!("a"))),
+                    ok(page(json!([row()]), next)),
+                ],
+                &filter,
+            );
+            let received = partial(result);
+            assert_eq!(
+                received.reason,
+                application::IncompleteReason::PageInterrupted
+            );
+            assert_eq!(received.received.len(), 1);
+            assert_eq!(received.received[0].as_slice().len(), 1);
+            assert_eq!(
+                received.received[0].as_slice()[0].data().kind,
+                domain::TransactionKind::Buy
+            );
+            assert_eq!(received.filter, filter);
+        }
+    }
+    #[test]
+    fn filter_violation_with_quarantine_keeps_only_valid_batches() {
+        let filter = TransactionFilter::only(vec![domain::TransactionKind::Buy]).expect("filter");
+        let mut valid = row();
+        valid["transactionType"] = json!("BUY");
+        let mut unknown = valid.clone();
+        unknown["currency"] = json!("EUR");
+        let (result, _) = read_filtered(
+            vec![ok(page(json!([valid, unknown, row()]), Value::Null))],
+            &filter,
+        );
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::PageInterrupted
+        );
+        assert_eq!(received.quarantined.len(), 1);
+        assert_eq!(received.received[0].as_slice().len(), 1);
+        assert_eq!(
+            received.received[0].as_slice()[0].data().kind,
+            domain::TransactionKind::Buy
+        );
+    }
+    #[test]
+    fn repeated_cursor_wins_over_row_overflow() {
+        let (result, _) = read_responses(vec![
+            ok(page(json!([row()]), json!("a"))),
+            ok(page(json!(vec![row(); 4096]), json!("a"))),
+        ]);
+        let rejected = match result {
+            Err(error) => error,
+            Ok(application::TransactionRead::Complete(_)) => panic!("repeated cursor was complete"),
+            Ok(application::TransactionRead::Incomplete(_)) => {
+                panic!("repeated cursor was partial")
+            }
+        };
+        assert_eq!(
+            rejected.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+    }
+    #[test]
+    fn second_cursor_error_preserves_server_error_mapping() {
+        let (result, _) = read_responses(vec![
+            ok(page(json!([row()]), json!("a"))),
+            cursor_error(),
+            ok(page(json!([row()]), json!("b"))),
+            cursor_error(),
+        ]);
+        let rejected = result.expect_err("retry exhausted");
+        assert_eq!(rejected.endpoint(), application::ReadEndpoint::Transactions);
+        assert_eq!(rejected.status(), application::HttpStatus::BadRequest);
+        assert_eq!(
+            rejected.kind(),
+            application::PortErrorKind::InvalidRequest(
+                application::RequestRejection::MalformedRequest
+            )
+        );
+    }
+    #[test]
+    fn unknown_currency_is_quarantined_before_other_schema_failures() {
+        let mut unknown = row();
+        unknown["currency"] = json!("EUR");
+        unknown["amount"] = json!("1".repeat(31));
+        let original = unknown.to_string();
+        let (result, _) = read_responses(vec![ok(page(json!([unknown]), Value::Null))]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::QuarantinedRows
+        );
+        let application::QuarantinedTransaction::UnknownCurrency(chunks) = &received.quarantined[0];
+        assert_eq!(
+            chunks
+                .iter()
+                .map(domain::UntrustedText::as_untrusted_str)
+                .collect::<String>(),
+            original
+        );
+        let mut known = row();
+        known["amount"] = json!("1".repeat(31));
+        read_responses(vec![ok(page(json!([known]), Value::Null))])
+            .0
+            .expect_err("known currency still validates schema");
+    }
+
+    #[test]
+    fn non_cursor_bad_request_does_not_restart_or_discard_rows() {
+        let rejected = response(
+            "400 Bad Request",
+            &json!({"error":{"code":"invalid-request","message":"합성","data":{"field":"limit"}}}),
+        );
+        let (result, requests) =
+            read_responses(vec![ok(page(json!([row()]), json!("a"))), rejected]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::PageInterrupted
+        );
+        assert_eq!(received.received[0].as_slice().len(), 1);
+        assert_eq!(requests.matches("GET /api/v1/transactions?").count(), 2);
+    }
+    #[test]
+    fn exactly_the_row_limit_can_be_complete() {
+        let completed = complete(vec![page(json!(vec![row(); 4096]), Value::Null)]);
+        assert_eq!(completed.rows().as_slice().len(), 4096);
+    }
+
+    #[test]
+    fn malformed_currency_types_do_not_become_unknown_currency_codes() {
+        for currency in [
+            json!(123_i32),
+            json!(true),
+            Value::Null,
+            json!({}),
+            json!([]),
+        ] {
+            let mut invalid_row = row();
+            invalid_row["currency"] = currency;
+            let (result, _) = read_responses(vec![ok(page(json!([invalid_row]), Value::Null))]);
+            result.expect_err("currency must be a string code");
+        }
+    }
+
+    #[test]
+    fn inconsistent_metadata_preserves_the_current_page_rows() {
+        for mut body in [
+            page(json!([row()]), Value::Null),
+            page(json!([row()]), json!("next")),
+        ] {
+            let has_cursor = body
+                .pointer("/result/nextCursor")
+                .expect("cursor")
+                .is_string();
+            body["result"]["hasNext"] = json!(!has_cursor);
+            let (result, _) = read_responses(vec![ok(body)]);
+            let received = partial(result);
+            assert_eq!(
+                received.reason,
+                application::IncompleteReason::PageInterrupted
+            );
+            assert_eq!(received.received[0].as_slice().len(), 1);
+        }
+    }
+    #[test]
+    fn repeated_cursor_is_rejected_even_with_a_conflicting_end_flag() {
+        let mut repeated = page(json!([row()]), json!("a"));
+        repeated["result"]["hasNext"] = json!(false);
+        let (result, _) = read_responses(vec![ok(page(json!([row()]), json!("a"))), ok(repeated)]);
+        match result {
+            Err(error) => assert_eq!(
+                error.kind(),
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation
+                )
+            ),
+            Ok(application::TransactionRead::Complete(_)) => panic!("repeated cursor was complete"),
+            Ok(application::TransactionRead::Incomplete(_)) => {
+                panic!("repeated cursor was partial")
+            }
+        }
     }
 }

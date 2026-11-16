@@ -68,14 +68,26 @@ fn transactions_request(
     request
 }
 impl Pages {
-    fn append(&mut self, body: &[u8], window: SettlementWindow) -> Result<(), PageFault> {
+    fn append(
+        &mut self,
+        body: &[u8],
+        window: SettlementWindow,
+        filter: &TransactionFilter,
+    ) -> Result<(), PageFault> {
         let envelope: Envelope = serde_json::from_slice(body).map_err(|_error| invalid())?;
         if envelope.error.is_some_and(|error| !error.is_null()) {
             return Err(invalid().into());
         }
         let page = envelope.result;
+        if page
+            .next_cursor
+            .as_str()
+            .is_some_and(|next| self.seen.contains(next))
+        {
+            return Err(PageFault::RepeatedCursor);
+        }
         for source in page.transactions {
-            self.append_row(source, window)?;
+            self.append_row(source, window, filter)?;
         }
         if self.rows.len() > 4096 || self.quarantined.len() > 4096 {
             return Err(PageFault::RowLimit);
@@ -83,33 +95,42 @@ impl Pages {
         self.cursor = match (page.has_next, page.next_cursor) {
             (false, Value::Null) => None,
             (true, Value::String(next)) if !next.is_empty() => {
-                if !self.seen.insert(next.clone()) {
-                    return Err(PageFault::RepeatedCursor);
-                }
+                self.seen.insert(next.clone());
                 Some(next)
             }
             _ => return Err(invalid().into()),
         };
         Ok(())
     }
-    fn append_row(&mut self, source: Box<RawValue>, window: SettlementWindow) -> Conversion<()> {
+    fn append_row(
+        &mut self,
+        source: Box<RawValue>,
+        window: SettlementWindow,
+        filter: &TransactionFilter,
+    ) -> Conversion<()> {
         let value: Value = serde_json::from_str(source.get()).map_err(|_error| invalid())?;
         if !row::in_scope(&value, window)? {
             return Ok(());
         }
-        let _decoded: broker_toss_schema::types::Transaction =
-            serde_json::from_value(value.clone()).map_err(|_error| invalid())?;
-        if field(&value, "currency")?.as_str() != Some("KRW")
-            && field(&value, "currency")?.as_str() != Some("USD")
-        {
+        let currency = field(&value, "currency")?.as_str().ok_or_else(invalid)?;
+        if currency != "KRW" && currency != "USD" {
             self.quarantined
                 .push(QuarantinedTransaction::UnknownCurrency(quarantine(
                     source.get(),
                 )?));
             return Ok(());
         }
+        let _decoded: broker_toss_schema::types::Transaction =
+            serde_json::from_value(value.clone()).map_err(|_error| invalid())?;
+        let transaction = row::convert(&value)?;
+        if filter
+            .selected_kinds()
+            .is_some_and(|kinds| !kinds.contains(&transaction.data().kind))
+        {
+            return Err(invalid());
+        }
         self.rows.push(row::ParsedTransaction {
-            transaction: row::convert(&value)?,
+            transaction,
             source,
         });
         Ok(())
@@ -207,22 +228,17 @@ pub(crate) async fn fetch<Store: SecretStore, Time: Clock, Renewal: TokenRenewal
         };
         if cursor_error(&response, &pages) {
             if restarted {
-                return Err(invalid());
+                return Err(read_failure(&response));
             }
             restarted = true;
             pages = Pages::default();
             continue;
         }
         if !(200..300).contains(&response.status()) {
-            let error = response
-                .read_error(
-                    ReadEndpoint::Transactions,
-                    crate::account_read::retry_delay(response.headers().retry_after()),
-                )
-                .port_error();
+            let error = read_failure(&response);
             return pages.interrupted(account, window, filter, error);
         }
-        match pages.append(response.body().as_exposed_secret(), window) {
+        match pages.append(response.body().as_exposed_secret(), window, filter) {
             Ok(()) => {}
             Err(PageFault::Interrupted(error)) => {
                 return pages.interrupted(account, window, filter, error);
@@ -243,11 +259,22 @@ pub(crate) async fn fetch<Store: SecretStore, Time: Clock, Renewal: TokenRenewal
     }
     pages.interrupted(account, window, filter, invalid())
 }
+fn read_failure(response: &crate::RawResponse) -> PortError {
+    response
+        .read_error(
+            ReadEndpoint::Transactions,
+            crate::account_read::retry_delay(response.headers().retry_after()),
+        )
+        .port_error()
+}
 fn cursor_error(response: &crate::RawResponse, pages: &Pages) -> bool {
     response.status() == 400
         && pages.cursor.is_some()
         && serde_json::from_slice::<Value>(response.body().as_exposed_secret()).is_ok_and(|body| {
             body.pointer("/error/code").and_then(Value::as_str) == Some("invalid-request")
+                && body
+                    .pointer("/error/data/field")
+                    .is_none_or(|field| field.as_str() == Some("cursor"))
         })
 }
 pub(crate) fn field<'a>(value: &'a Value, key: &str) -> Conversion<&'a Value> {
@@ -291,6 +318,7 @@ mod tests {
             .append(
                 body.as_bytes(),
                 SettlementWindow::try_new(start, end).expect("window"),
+                &domain::TransactionFilter::all(),
             )
             .expect("page");
         assert_eq!(pages.rows[0].source.get(), source);
@@ -306,6 +334,7 @@ mod tests {
             .append(
                 unknown_body.as_bytes(),
                 SettlementWindow::try_new(start, end).expect("window"),
+                &domain::TransactionFilter::all(),
             )
             .expect("page");
         let application::QuarantinedTransaction::UnknownCurrency(chunks) =
