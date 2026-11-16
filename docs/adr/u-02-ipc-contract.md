@@ -4,7 +4,7 @@
 
 ## 결정
 
-기준 SHA는 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a다. 기존 app_version 하나에 닫힌 current 조회 입력을 연결하고 기존 조립 루트에 UiEvent 하나를 등록한다. 입력은 serde deny_unknown_fields로 추가 필드를 거부한다. specta skip_attr = "serde"는 이 DTO의 serde 메타데이터만 생략한다. 필드명 변경이나 태그가 없는 DTO에서 TS 모양은 동일하며 serde의 런타임 거부는 유지한다. 수동으로 필드 목록을 복제하는 Type 구현보다 단순하고 끌 수 없는 disallowed_macros를 끄지 않는다. serde rename/tag/flatten을 추가하면 이 결정을 다시 검증해야 한다.
+최초 작업 기준 SHA는 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a다. 기존 app_version 하나에 닫힌 current 조회 입력을 연결하고 기존 조립 루트에 UiEvent 하나를 등록한다. 입력은 serde deny_unknown_fields로 추가 필드를 거부한다. specta skip_attr = "serde"는 이 DTO의 serde 메타데이터만 생략한다. 필드명 변경이나 태그가 없는 DTO에서 TS 모양은 동일하며 serde의 런타임 거부는 유지한다. 수동으로 필드 목록을 복제하는 Type 구현보다 단순하고 끌 수 없는 disallowed_macros를 끄지 않는다. serde rename/tag/flatten을 추가하면 이 결정을 다시 검증해야 한다.
 
 ErrorHandlingMode::Result를 유지한다. application ErrorClass의 네 분류를 user-fixable, retryable, bug, no-data로 옮긴다. 진단·대기 시간·원문·경로·계좌 키는 내보내지 않는다. no-data는 조회 빈 상태이며 상태 띠에 올리지 않는 처리는 U-04에 인계한다.
 
@@ -50,27 +50,36 @@ H-13 생성기·재생성 바이트 비교를 유지하고 이벤트로 인해 �
 
 메인이 afc9a3f9841832585bcc48fe122e4f36cd27b367에서 기존 세 하네스 테스트의 미사용 번호 예시를 9999로 수정했다. 해당 테스트를 직접 수정하지 않고 master를 정상 훅으로 병합했다. 수신 병합 커밋은 674d0a8f277d83afe81db3859b4c440268b5a0e9다. 병합 중 전용 stash에 보존한 구현 20개 파일은 --index로 복원했고 원래 스테이징 패치와 바이트 단위로 동일함을 확인했다. 전용 stash는 확인 뒤 제거했다. 기존 막힘은 해소되었고 정상 구현 커밋 검사와 독립 리뷰를 재개한다.
 
+## 1회차 검토 반영
+
+생성 파일의 타입 참조를 별도 typeImports 목록으로 명시한다. 기존 runtime import 목록을 넓히지 않고 TSImportType에 같은 허용 경계를 적용한다. webview와 window의 타입 참조는 고정된 두 생성 파일에서만 허용하며 responses 및 이웃 파일에는 적용하지 않는다. 기존 고정 항목 수 단언은 새 metadata 한 개를 정확히 반영하고 별도 테스트가 경로·값·개수를 고정한다.
+
+UiEvent와 딸린 DTO는 Serialize·Type만 갖는다. Deserialize는 단방향 전송에 필요 없어 제거했다. mock 제품 조립을 Ready까지 실행한 다음 이벤트를 발행해 실제 payload를 관측하고, 수명 주기를 정리한 뒤 창을 닫는 회귀를 추가한다. 테스트 파일 한 곳에만 이벤트 관측 API를 등록하며 제품 권한은 추가하지 않는다.
+
+입력 DTO의 정상 query 모양과 알 수 없는 내부 필드는 기존 역직렬화 테스트가 고정한다. Tauri의 바깥 invoke 인자 객체는 입력 DTO와 구분한다. O-08은 승인 명령에서 바깥·안쪽 추가 키를 실제 IPC 경로로 검증해야 한다. 향후 금액·수량 DTO는 십진수 문자열 경계 검증을 해당 작업에서 추가한다.
+
 ## 손 변형
 
-| 번호 | 바꾼 것                                      | 잡은 테스트                                                                                                    | 결과 |
-| ---- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
-| 1    | PortfolioSyncRecorded -> 다른 이벤트 종류    | ipc::event::tests::event_contract_group_0, ipc::event::tests::account_events_never_serialize_the_account_key   | 검출 |
-| 2    | TransactionsSyncRecorded -> 다른 이벤트 종류 | ipc::event::tests::event_contract_group_0, ipc::event::tests::account_events_never_serialize_the_account_key   | 검출 |
-| 3    | PriceUpdated -> 다른 이벤트 종류             | ipc::event::tests::event_contract_group_0, ipc::event::tests::non_account_identifiers_keep_their_exact_strings | 검출 |
-| 4    | PriceMoved -> 다른 이벤트 종류               | ipc::event::tests::event_contract_group_3                                                                      | 검출 |
-| 5    | OrderSubmitted -> 다른 이벤트 종류           | ipc::event::tests::non_account_identifiers_keep_their_exact_strings, ipc::event::tests::event_contract_group_9 | 검출 |
-| 6    | BrokerConnectionChanged -> 다른 이벤트 종류  | ipc::event::tests::event_contract_group_12                                                                     | 검출 |
-| 7    | SettingsChanged -> 다른 이벤트 종류          | ipc::event::tests::event_contract_group_12                                                                     | 검출 |
-| 8    | PolicyChanged -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_12                                                                     | 검출 |
-| 9    | OrderSwitchChanged -> 다른 이벤트 종류       | ipc::event::tests::event_contract_group_15                                                                     | 검출 |
-| 10   | WatchlistChanged -> 다른 이벤트 종류         | ipc::event::tests::event_contract_group_15                                                                     | 검출 |
-| 11   | ThesisUpdated -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_15                                                                     | 검출 |
-| 12   | SelfCheckChanged -> 다른 이벤트 종류         | ipc::event::tests::event_contract_group_18                                                                     | 검출 |
-| 13   | SignalRaised -> 다른 이벤트 종류             | ipc::event::tests::event_contract_group_18                                                                     | 검출 |
-| 14   | SignalCleared -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_21                                                                     | 검출 |
-| 15   | EstimateSubmitted -> 다른 이벤트 종류        | ipc::event::tests::event_contract_group_21                                                                     | 검출 |
-| 16   | EstimateResolved -> 다른 이벤트 종류         | ipc::event::tests::event_contract_group_21                                                                     | 검출 |
-| 17   | ValuationSnapshotTaken -> 다른 이벤트 종류   | ipc::event::tests::event_contract_group_24, ipc::event::tests::account_events_never_serialize_the_account_key  | 검출 |
-| 18   | OrderRejected -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_24                                                                     | 검출 |
-| 19   | OrderFilled -> 다른 이벤트 종류              | ipc::event::tests::account_events_never_serialize_the_account_key, ipc::event::tests::event_contract_group_27  | 검출 |
-| 20   | OrderCancelled -> 다른 이벤트 종류           | ipc::event::tests::event_contract_group_27, ipc::event::tests::account_events_never_serialize_the_account_key  | 검출 |
+| 번호 | 바꾼 것                                      | 잡은 테스트                                                                                                    | 결과                                     |
+| ---- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 1    | PortfolioSyncRecorded -> 다른 이벤트 종류    | ipc::event::tests::event_contract_group_0, ipc::event::tests::account_events_never_serialize_the_account_key   | 검출                                     |
+| 2    | TransactionsSyncRecorded -> 다른 이벤트 종류 | ipc::event::tests::event_contract_group_0, ipc::event::tests::account_events_never_serialize_the_account_key   | 검출                                     |
+| 3    | PriceUpdated -> 다른 이벤트 종류             | ipc::event::tests::event_contract_group_0, ipc::event::tests::non_account_identifiers_keep_their_exact_strings | 검출                                     |
+| 4    | PriceMoved -> 다른 이벤트 종류               | ipc::event::tests::event_contract_group_3                                                                      | 검출                                     |
+| 5    | OrderSubmitted -> 다른 이벤트 종류           | ipc::event::tests::non_account_identifiers_keep_their_exact_strings, ipc::event::tests::event_contract_group_9 | 검출                                     |
+| 6    | BrokerConnectionChanged -> 다른 이벤트 종류  | ipc::event::tests::event_contract_group_12                                                                     | 검출                                     |
+| 7    | SettingsChanged -> 다른 이벤트 종류          | ipc::event::tests::event_contract_group_12                                                                     | 검출                                     |
+| 8    | PolicyChanged -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_12                                                                     | 검출                                     |
+| 9    | OrderSwitchChanged -> 다른 이벤트 종류       | ipc::event::tests::event_contract_group_15                                                                     | 검출                                     |
+| 10   | WatchlistChanged -> 다른 이벤트 종류         | ipc::event::tests::event_contract_group_15                                                                     | 검출                                     |
+| 11   | ThesisUpdated -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_15                                                                     | 검출                                     |
+| 12   | SelfCheckChanged -> 다른 이벤트 종류         | ipc::event::tests::event_contract_group_18                                                                     | 검출                                     |
+| 13   | SignalRaised -> 다른 이벤트 종류             | ipc::event::tests::event_contract_group_18                                                                     | 검출                                     |
+| 14   | SignalCleared -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_21                                                                     | 검출                                     |
+| 15   | EstimateSubmitted -> 다른 이벤트 종류        | ipc::event::tests::event_contract_group_21                                                                     | 검출                                     |
+| 16   | EstimateResolved -> 다른 이벤트 종류         | ipc::event::tests::event_contract_group_21                                                                     | 검출                                     |
+| 17   | ValuationSnapshotTaken -> 다른 이벤트 종류   | ipc::event::tests::event_contract_group_24, ipc::event::tests::account_events_never_serialize_the_account_key  | 검출                                     |
+| 18   | OrderRejected -> 다른 이벤트 종류            | ipc::event::tests::event_contract_group_24                                                                     | 검출                                     |
+| 19   | OrderFilled -> 다른 이벤트 종류              | ipc::event::tests::account_events_never_serialize_the_account_key, ipc::event::tests::event_contract_group_27  | 검출                                     |
+| 20   | OrderCancelled -> 다른 이벤트 종류           | ipc::event::tests::event_contract_group_27, ipc::event::tests::account_events_never_serialize_the_account_key  | 검출                                     |
+| 21   | 제품 조립의 mount_events 호출 제거           | tests::ipc_contract::product_assembly_mounts_the_event_and_emits_only_its_wire_payload                         | 컴파일 후 EventRegistry 누락 실패로 검출 |

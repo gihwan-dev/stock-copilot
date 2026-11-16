@@ -1,8 +1,8 @@
 use domain::DomainEvent;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use specta::Type;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum UiMarket {
     Kr,
     Us,
@@ -17,7 +17,7 @@ impl From<domain::KnownMarket> for UiMarket {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum UiFxPair {
     UsdKrw,
     KrwUsd,
@@ -32,7 +32,7 @@ impl From<domain::FxPair> for UiFxPair {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum UiDisclosureSource {
     Kind,
     Dart,
@@ -49,7 +49,7 @@ impl From<domain::DisclosureSource> for UiDisclosureSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum UiNewsSource {
     Hankyung,
     Maekyung,
@@ -76,7 +76,7 @@ impl From<domain::NewsSource> for UiNewsSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum UiInformationSource {
     Web,
     News(UiNewsSource),
@@ -93,7 +93,7 @@ impl From<domain::InformationSource> for UiInformationSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct UiDisclosureKey {
     pub source: UiDisclosureSource,
     pub receipt_no: String,
@@ -114,7 +114,7 @@ impl From<domain::DisclosureKey> for UiDisclosureKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type, tauri_specta::Event)]
 pub enum UiEvent {
     PortfolioSyncRecorded,
     TransactionsSyncRecorded,

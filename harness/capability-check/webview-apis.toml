@@ -64,8 +64,8 @@ names = [
     "Emitter",
     "Listener",
 ]
-allowed-files = []
-reason = "코어 → UI 이벤트. U-05가 사용자 승인으로 허용 파일을 더한다"
+allowed-files = ["src/tests/ipc_contract.rs"]
+reason = "U-02 제품 조립의 모의 이벤트 발행 회귀만 허용한다. 제품 발행·구독 파일은 U-05가 등록한다"
 
 [[api]]
 names = ["WebviewWindowBuilder"]

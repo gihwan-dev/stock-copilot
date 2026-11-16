@@ -67,7 +67,9 @@ test("the generated file list holds exactly the IPC outputs of gen-bindings", ()
   assert.deepEqual(
     list.files.filter(
       (entry) =>
-        Object.keys(entry).length !== (entry.imports === undefined ? 2 : 3),
+        Object.keys(entry).length !==
+        (entry.imports === undefined ? 2 : 3) +
+          (entry.typeImports === undefined ? 0 : 1),
     ),
     [],
   );
@@ -260,4 +262,71 @@ test("regenerating from the current Rust source reproduces the committed files",
   const outRoot = scratchRoot("test");
   assert.deepEqual(generateInto(outRoot), []);
   assert.deepEqual(compareGenerated(outRoot), []);
+});
+
+test("generated type imports are limited to the pinned event helper modules", async () => {
+  for (const path of [
+    "src/shared/ipc/bindings.ts",
+    "src/shared/ipc/testing/mockBindings.ts",
+  ]) {
+    for (const [module, name] of [
+      ["@tauri-apps/api/webview", "Webview"],
+      ["@tauri-apps/api/window", "Window"],
+    ]) {
+      assert.deepEqual(
+        await lintGenerated(
+          path,
+          `export type Probe = import("${module}").${name};`,
+        ),
+        [],
+      );
+      assert.ok(
+        (
+          await lintGenerated(path, `import type { ${name} } from "${module}";`)
+        ).some((message) => message.includes("가져올 수 있는 모듈")),
+      );
+    }
+    for (const module of [
+      "./testing/mockBindings",
+      "./schema",
+      "@tauri-apps/api/mocks",
+    ]) {
+      assert.deepEqual(
+        await lintGenerated(
+          path,
+          `export type Probe = import("${module}").Probe;`,
+        ),
+        [
+          "no-restricted-syntax :: 생성물: 허용 목록 밖의 타입 모듈을 가져오지 않는다.",
+        ],
+      );
+    }
+  }
+  assert.deepEqual(
+    await lintGenerated(
+      "src/shared/ipc/testing/responses.ts",
+      'export type Probe = import("@tauri-apps/api/window").Window;',
+    ),
+    [
+      "no-restricted-syntax :: 생성물: 허용 목록 밖의 타입 모듈을 가져오지 않는다.",
+    ],
+  );
+});
+
+test("the event helper type imports are pinned to the two generated bindings", () => {
+  assert.deepEqual(
+    readList()
+      .files.filter((entry) => entry.typeImports !== undefined)
+      .map((entry) => [entry.path, entry.typeImports]),
+    [
+      [
+        "apps/desktop/src/shared/ipc/bindings.ts",
+        ["@tauri-apps/api/webview", "@tauri-apps/api/window"],
+      ],
+      [
+        "apps/desktop/src/shared/ipc/testing/mockBindings.ts",
+        ["@tauri-apps/api/webview", "@tauri-apps/api/window"],
+      ],
+    ],
+  );
 });
