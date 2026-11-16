@@ -15,7 +15,7 @@ const facts = {
   resolveCommit: (value) => value,
   passedTargets: new Map(),
   reportDigests: new Set(),
-  t3Threads: new Map([["owned", { branch: "topic" }]]),
+  t3Threads: new Map([["owned", { branch: "topic", role: "implementation" }]]),
   worktreeForBranch: () => "/owned/topic",
   isAncestor: () => true,
   headOf: () => revised,
@@ -141,4 +141,22 @@ test("R8 legacy delegation rejects target project environment options and unappr
     Object.assign(invalid.tool_input, extra);
     assert.ok(orchestrationFindings(invalid, rules, facts).length);
   }
+});
+
+test("review and unknown owned threads cannot be resumed", () => {
+  const input = {
+    tool_name: "mcp__t3_code__t3_thread_send",
+    tool_input: {
+      threadId: "owned",
+      message: `- 기준 커밋: ${base}, 브랜치 \`topic\``,
+    },
+  };
+  for (const role of ["review", undefined])
+    assert.equal(
+      orchestrationFindings(input, rules, {
+        ...facts,
+        t3Threads: new Map([["owned", { branch: "topic", role }]]),
+      }).length,
+      1,
+    );
 });

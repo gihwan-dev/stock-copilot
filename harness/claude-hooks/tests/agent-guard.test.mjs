@@ -236,7 +236,7 @@ test("guard-agent.mjs denies like Claude Code expects and queues allowed impleme
     state,
   );
   assert.equal(reviewer.output, undefined);
-  assert.equal(existsSync(join(state, "records", "pending-s1-t3.json")), false);
+  assert.equal(existsSync(join(state, "records", "pending-s1-t3.json")), true);
   const broken = spawnSync(
     process.execPath,
     [join(repoRoot, ".claude/hooks/guard-agent.mjs")],

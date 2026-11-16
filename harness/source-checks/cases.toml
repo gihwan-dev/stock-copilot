@@ -366,7 +366,7 @@ expect = []
 [[source]]
 example = "clean-clock-env-allowlisted.rs"
 path = "apps/desktop/src-tauri/src/platform/clock.rs"
-expect = ["clock-env:now", "clock-env:var"]
+expect = ["clock-env:var"]
 
 [[source]]
 example = "clock-system-time.rs"
@@ -858,3 +858,18 @@ expect = ["file:nested-gitignore"]
 example = "attribute-allow.rs"
 path = "crates/adapters/broker-toss-schema-extra/src/generated.rs"
 expect = ["attribute:allow"]
+
+[[source]]
+example = "clock-system-time.rs"
+path = "crates/adapters/platform-macos/src/other.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-system-time.rs"
+path = "apps/desktop/src-tauri/src/main.rs"
+expect = ["clock-env:now"]
+
+[[source]]
+example = "clock-system-time.rs"
+path = "crates/adapters/platform-macos/src/system_clock.rs"
+expect = []

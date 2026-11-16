@@ -1,0 +1,13 @@
+[package]
+name = "ai-claude-code"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+application = { path = "../../application" }
+domain = { path = "../../domain" }
+tokio = { version = "0.1.0", features = ["process"] }
+
+[dev-dependencies]
+testkit = { path = "../../testkit" }

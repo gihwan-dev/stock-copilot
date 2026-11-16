@@ -12,3 +12,5 @@ application = { path = "../../application" }
 rusqlite = { version = "=0.42.0", default-features = false, features = ["bundled-sqlcipher", "backup", "hooks", "codec"] }
 tokio = { version = "=1.54.1", default-features = false, features = ["rt", "sync"] }
 zeroize = { version = "=1.9.1", default-features = false, features = ["alloc"] }
+domain = { path = "../../domain" }
+sha2 = { version = "=0.10.9", default-features = false }

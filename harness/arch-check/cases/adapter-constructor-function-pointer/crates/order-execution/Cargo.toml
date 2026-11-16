@@ -1,0 +1,13 @@
+[package]
+name = "order-execution"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }
+
+[dev-dependencies]
+testkit-ports = { path = "../testkit-ports" }
+testkit = { path = "../testkit" }

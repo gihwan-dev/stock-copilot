@@ -58,7 +58,7 @@ export const baseVerdict = (brief, facts, rules) => {
   };
 };
 
-const reportProblems = (prompt, rules, reportDigests) => {
+export const reportProblems = (prompt, rules, reportDigests) => {
   const lines = prompt.split("\n").map(normalized);
   const done = normalized(rules.reportFirstLines.done);
   const blocked = normalized(rules.reportFirstLines.blocked);
