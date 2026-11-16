@@ -10,15 +10,15 @@
 
 `Clock`에서 얻은 시각과 기존 `SettledRowSet::reconcile`만 사용한다. 완전 응답의 계좌·창·필터가 요청과 같은지 확인한 뒤 대조하며 멀티셋이나 창 계산을 다시 구현하지 않는다. 불완전 응답은 수신 페이지와 격리 자료를 그대로 보존하고 사라짐 대조를 호출하지 않는다. 포트 오류도 보존하며 이전 행 상태를 없애지 않는다. 브로커 호출 전의 저장 상태 계좌 불일치와 역행 시각은 수신 관측이 없는 사전조건 오류로 저장·이벤트 없이 거부한다. 응답 수신 뒤 범위 불일치·대조 오류는 이전 상태, 받은 응답과 거부 이유를 함께 저장한 뒤 실패 결과 이벤트를 한 번 낸다. 저장 실패는 이벤트 없이 호출자에게 반환한다.
 
-`TransactionSyncRecord`에 시각, 요청한 결제일 창, 마지막 정상 행 상태, 원래 관측 결과, 대조 결과 또는 거부 이유를 함께 저장한다. 대조 결과에는 기존 도메인 경고·변경·취소 후보가 남는다. 포트 오류의 종류를 보존하므로 접근 차단과 일시적 실패를 성공으로 바꾸지 않는다. 기록 저장 성공 뒤 `TransactionsSyncRecorded(AccountId)`를 한 번 발행하며 `DeliveryReport`를 호출자에게 반환한다. 구독자 실패는 저장 결과를 되돌리지 않고 재발행하지 않는다. 이는 영속 이벤트 로그나 프로세스 종료를 넘는 정확히 한 번 전달의 보장이 아니다(ADR 0065).
+`TransactionSyncRecord`에 시각, 요청한 결제일 창, 마지막 정상 행 상태, 원래 관측 결과, 대조 결과 또는 거부 이유를 함께 저장한다. 필드는 비공개이고 `from_observation`이 기존 도메인 대조로 일관된 기록을 만든다. S-03은 보존한 관측을 이전 상태에 다시 적용해 기록을 재구성할 수 있다. 읽기 접근자만 공개하며 관측과 대조 상태를 따로 조작하는 생성 경로는 두지 않는다. 대조 결과에는 기존 도메인 경고·변경·취소 후보가 남는다. 포트 오류의 종류를 보존하므로 접근 차단과 일시적 실패를 성공으로 바꾸지 않는다. 기록 저장 성공 뒤 `TransactionsSyncRecorded(AccountId)`를 한 번 발행하며 `DeliveryReport`를 호출자에게 반환한다. 구독자 실패는 저장 결과를 되돌리지 않고 재발행하지 않는다. 이는 영속 이벤트 로그나 프로세스 종료를 넘는 정확히 한 번 전달의 보장이 아니다(ADR 0065).
 
 ## 저장 포트
 
-기존 `TransactionRepository`는 `SyncRecord<SettledRowSet>`의 최신 결과만 조회한다. `Failed`·`AccessBlocked`에는 이전 행 상태가 없고, 수신한 불완전 페이지·격리 원문·대조 경고를 함께 보존할 수 없다. 기존 포트와 가짜·테스트를 변경하는 대신 `TransactionRepository`를 상위 트레이트로 요구하는 최소 확장 `TransactionSyncRepository`를 추가한다. 별도 저장소를 만드는 계약이 아니다. 같은 어댑터 객체가 두 조회를 구현한다. `record_sync`는 상세 기록과 `record.summary()`를 기존 저장 포트의 최신 결과에 한 트랜잭션으로 반영해야 한다. `summary()`는 정상 대조를 Complete, 불완전 수신을 Partial(직전 정상 상태), 접근 거부를 AccessBlocked, 그 밖의 포트 실패와 수신 후 거부를 Failed로 보존한다. A-16의 기존 latest 조회도 같은 저장 완료 결과를 읽는다.
+기존 `TransactionRepository`는 `SyncRecord<SettledRowSet>`의 최신 결과만 조회한다. `Failed`·`AccessBlocked`에는 이전 행 상태가 없고, 수신한 불완전 페이지·격리 원문·대조 경고를 함께 보존할 수 없다. 기존 포트와 가짜·테스트를 변경하는 대신 `TransactionRepository`를 상위 트레이트로 요구하는 최소 확장 `TransactionSyncRepository`를 추가한다. 별도 저장소를 만드는 계약이 아니다. 같은 어댑터 객체가 두 조회를 구현한다. `record_sync`는 상세 기록과 `record.summary()`를 기존 저장 포트의 최신 결과에 한 트랜잭션으로 반영해야 한다. `summary()`는 정상 대조를 Complete, 불완전 수신을 Partial(직전 정상 상태), 접근 거부를 AccessBlocked, 그 밖의 포트 실패와 수신 후 거부를 Failed로 보존한다. A-16의 기존 latest 조회도 같은 저장 완료 결과를 읽는다. 기존 record 메서드 자체를 타입에서 없애는 변경은 이 작업 범위가 아니다. A-07은 record_sync로만 기록하며 실제 어댑터가 두 API의 정합성과 원자성을 지켜야 한다. 로컬 테스트로 S-03의 실제 원자성을 입증했다고 주장하지 않는다.
 
 - `state(account)`는 마지막 정상 행 상태를 반환하며 최초에는 해당 계좌의 빈 `SettledRowSet`을 반환한다. 직전 기록이 실패나 불완전이어도 정상 상태를 유지한다.
 - `latest_sync(account)`는 마지막 상세 관측 기록을 반환하며 처음에는 None이다. 이벤트 구독자는 이 경로로 경고·격리·접근 차단·실패 원인·요청 창을 다시 읽는다.
-- `record_sync(account, previous, record)`는 관측 기록 추가와 상태 갱신을 한 트랜잭션으로 처리한다. 현재 상태가 `previous`와 같은지 검사하고 다르면 저장 없이 기존 `SystemPortError`를 반환한다. 호출 성공은 전체 저장 완료를 뜻한다. 계좌별 동시 실행에서 오래된 상태의 덮어쓰기를 허용하지 않는다.
+- `record_sync(account, previous, previous_recorded_at, record)`는 관측 기록 추가와 상태 갱신을 한 트랜잭션으로 처리한다. 현재 상태가 `previous`와 같은지와 최신 상세 기록 시각이 `previous_recorded_at`과 같은지를 함께 검사하고 다르면 저장 없이 기존 `SystemPortError`를 반환한다. 새 기록이 현재 최신 관측보다 과거여도 거부한다. 실패·불완전 결과는 정상 행 상태가 같아도 최신 관측 시각 비교로 충돌을 검출한다. 같은 관측 시각은 허용하며 그 동률의 최신 조회는 마지막 저장으로 정한다. 호출 성공은 전체 저장 완료를 뜻한다. 계좌별 동시 실행에서 오래된 상태나 관측 시각의 덮어쓰기를 허용하지 않는다. 유스케이스도 마지막 정상 대조와 최신 관측 모두보다 이른 Clock 시각을 브로커 호출 전에 거부한다.
 - 실패·불완전 관측에서도 `record.state`는 `previous`와 같다. 완전 응답에서만 새 대조 상태로 바꾼다. S-03 어댑터는 이 계약을 구현해야 한다. 테스트용 구현은 이 작업의 통합 테스트 파일 안에만 둔다.
 
 ## 정의 대기
@@ -78,3 +78,12 @@ D-44는 수급 타입 작업이다. 지시문이 가리킨 KST 기준은 ADR 009
 | 20 | read clock twice | 컴파일 성공·검출 | new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields, broker_failure_and_access_denial_are_recorded_without_erasing_state, incomplete_cursor_preserves_received_rows_without_disappearance, duplicate_disappearance_preserves_both_boundaries_and_outside_rows, new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields, broker_failure_and_access_denial_are_recorded_without_erasing_state, incomplete_cursor_preserves_received_rows_without_disappearance, duplicate_disappearance_preserves_both_boundaries_and_outside_rows |
 | 21 | drop reconciliation evidence | 컴파일 성공·검출 | duplicate_disappearance_preserves_both_boundaries_and_outside_rows, new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields, duplicate_disappearance_preserves_both_boundaries_and_outside_rows, new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields |
 | 22 | wrong response filter request | 컴파일 성공·검출 | incomplete_cursor_preserves_received_rows_without_disappearance, duplicate_disappearance_preserves_both_boundaries_and_outside_rows, broker_failure_and_access_denial_are_recorded_without_erasing_state, new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields, incomplete_cursor_preserves_received_rows_without_disappearance, duplicate_disappearance_preserves_both_boundaries_and_outside_rows, broker_failure_and_access_denial_are_recorded_without_erasing_state, new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields |
+
+
+## 2차 리뷰 수정
+
+최신 정상 행 상태가 바뀌지 않는 실패·부분 수신의 역순 저장을 로컬 가짜에서 재현했다. 현재는 정상 상태와 최신 상세 관측 시각을 함께 비교하고 저장 시각의 역행도 거부한다. 교차 실행은 완전·불완전·실패의 9개 조합으로 확인한다. 실패50 뒤 실패45의 사전 거부를 먼저 실패하는 회귀로 확인했다.
+
+`TooMuchHistory`는 공개 복원 API로 백만 행을 만든 뒤 새 행을 받아 직접 검증한다. 실패 시 원래 상태·받은 응답·거부 이유와 Failed 요약을 저장하고 이벤트를 한 번 낸다. 전체 필터를 쓰는 이 경로의 TooManyRows는 별도 도달 가능한 누락으로 세지 않는다. 불완전 응답에는 합성 UnknownCurrency 격리 자료를 넣어 관측 전체 보존을 검증한다.
+
+로컬 저장소 fixture는 단일 계좌를 주입한다. 범용 다계좌 저장소 시험의 대체물이 아니며, S-03과 ADR 0091의 범용 저장소 계약 검사는 별도다. Partial 요약은 명시적으로 직전 정상 상태이며 수신된 부분 자료는 latest_sync에서만 조회한다.

@@ -16,14 +16,56 @@ pub enum TransactionSyncRejection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransactionSyncRecord {
-    pub recorded_at: Timestamp,
-    pub window: SettlementWindow,
-    pub state: SettledRowSet,
-    pub observation: Result<TransactionRead, PortError>,
-    pub reconciliation: Result<Option<Reconciliation>, TransactionSyncRejection>,
+    recorded_at: Timestamp,
+    window: SettlementWindow,
+    state: SettledRowSet,
+    observation: Result<TransactionRead, PortError>,
+    reconciliation: Result<Option<Reconciliation>, TransactionSyncRejection>,
 }
 
 impl TransactionSyncRecord {
+    #[must_use]
+    pub fn from_observation(
+        previous: &SettledRowSet,
+        window: SettlementWindow,
+        recorded_at: Timestamp,
+        observation: Result<TransactionRead, PortError>,
+    ) -> Self {
+        let reconciliation = reconcile_observation(previous, window, recorded_at, &observation);
+        let state = match &reconciliation {
+            Ok(Some(result)) => result.state().clone(),
+            Ok(None) | Err(_) => previous.clone(),
+        };
+        Self {
+            recorded_at,
+            window,
+            state,
+            observation,
+            reconciliation,
+        }
+    }
+    #[must_use]
+    pub const fn recorded_at(&self) -> Timestamp {
+        self.recorded_at
+    }
+    #[must_use]
+    pub const fn window(&self) -> SettlementWindow {
+        self.window
+    }
+    #[must_use]
+    pub const fn state(&self) -> &SettledRowSet {
+        &self.state
+    }
+    #[must_use]
+    pub const fn observation(&self) -> &Result<TransactionRead, PortError> {
+        &self.observation
+    }
+    #[must_use]
+    pub const fn reconciliation(
+        &self,
+    ) -> &Result<Option<Reconciliation>, TransactionSyncRejection> {
+        &self.reconciliation
+    }
     #[must_use]
     pub fn summary(&self) -> SyncRecord<SettledRowSet> {
         if self.reconciliation.is_err() {
@@ -57,6 +99,7 @@ pub trait TransactionSyncRepository: TransactionRepository {
         &self,
         account: &AccountId,
         previous: &SettledRowSet,
+        previous_recorded_at: Option<Timestamp>,
         record: &TransactionSyncRecord,
     ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
 }
@@ -65,7 +108,7 @@ pub trait TransactionSyncRepository: TransactionRepository {
 pub enum TransactionSyncError {
     Repository(SystemPortError),
     Reconciliation(ReconciliationError),
-    ResponseScopeMismatch,
+    StoredAccountMismatch,
 }
 
 #[derive(Debug)]
@@ -90,10 +133,24 @@ impl<Broker: BrokerRead, Repository: TransactionSyncRepository, Time: Clock>
             .await
             .map_err(TransactionSyncError::Repository)?;
         if state.account_id() != account {
-            return Err(TransactionSyncError::ResponseScopeMismatch);
+            return Err(TransactionSyncError::StoredAccountMismatch);
         }
+        let latest = self
+            .repository
+            .latest_sync(account)
+            .await
+            .map_err(TransactionSyncError::Repository)?;
+        if latest
+            .as_ref()
+            .is_some_and(|record| record.state.account_id() != account)
+        {
+            return Err(TransactionSyncError::StoredAccountMismatch);
+        }
+        let previous_recorded_at = latest.map(|record| record.recorded_at);
         let at = self.clock.now();
-        if state.last_synchronized_at().is_some_and(|last| at < last) {
+        if state.last_synchronized_at().is_some_and(|last| at < last)
+            || previous_recorded_at.is_some_and(|last| at < last)
+        {
             return Err(TransactionSyncError::Reconciliation(
                 ReconciliationError::InvalidHistory,
             ));
@@ -102,20 +159,9 @@ impl<Broker: BrokerRead, Repository: TransactionSyncRepository, Time: Clock>
             .broker
             .transactions(account, window, &TransactionFilter::all())
             .await;
-        let reconciliation = reconcile_observation(&state, window, at, &observation);
-        let next_state = match &reconciliation {
-            Ok(Some(result)) => result.state().clone(),
-            Ok(None) | Err(_) => state.clone(),
-        };
-        let record = TransactionSyncRecord {
-            recorded_at: at,
-            window,
-            state: next_state,
-            observation,
-            reconciliation,
-        };
+        let record = TransactionSyncRecord::from_observation(&state, window, at, observation);
         self.repository
-            .record_sync(account, &state, &record)
+            .record_sync(account, &state, previous_recorded_at, &record)
             .await
             .map_err(TransactionSyncError::Repository)?;
         Ok(self
