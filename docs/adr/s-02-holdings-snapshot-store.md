@@ -58,6 +58,35 @@ architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으�
 
 전체 검사로 승격된 check-fast: 프런트·정책·구조·SQL·마이그레이션·1665 테스트·커버리지 통과. test-diff만 위16건으로 실패. 이 커밋에만 사용자 지시의 LEFTHOOK=0 예외를 쓰며 규칙을 변경하지 않는다. 자동 변이는 test-diff 단계에서 중단되었다.
 
+## 1차 리뷰 수정
+
+DB 소유권은 조립 루트에 두고 저장소가 공유 차용한다. 외부 공개 API의 명시적 종료 회귀, 원시 TEXT와 offset 보존 단언, 나노초 역순 삽입·자료 KST 자정 경계, 다른 계좌의 손상 격리 회귀를 추가했다. 조회 SQL은 계좌 조건으로 먼저 거른다. ADR의 승인 목록 누락1행을 보충했다. 저장소가 주문용 종목 권한 타입을 복원하거나 PortfolioRepository를 새로 정의하지 않는 범위는 사용자 지시대로 유지한다. 서명 옵션과 ADR 초안 이름도 사용자 지정 그대로다.
+
+1차 수정 후 검사는 crate81/81·clippy 통과, 전체1669/1669(속성4096·동시실행4), 커버리지1059/1059·위반 없음이다. 정상 훅의 기존 Git 훅 회귀2건 실패와 재실행 경위는 리뷰 기록에 구분했다. test-diff는 기존 승인16건이며 신규 승인 대상은 추가되지 않았다. 수정 소스의 손 변형도 유효22개 전부 재검출, 전후 대조군은11개 통과했다. 조립 루트는 공유 차용한 저장소들의 사용이 끝난 뒤 원래 Database::close를 호출한다.
+
+
+## 앱 상태 조립과 축소 실패 계약
+
+Database를 소유한 앱 상태의 메서드에서 호출마다 HoldingsStore를 잠시 빌린다. 상태를 Arc로 공유하거나 비동기 작업으로 옮기는 일과 저장소의 짧은 차용은 양립한다. 작업 종료 후 상태에서 Database 소유권을 꺼내 close한다. 차용 저장소 자체에 static 수명을 요구하거나 Database를 leak하지 않는다. 이 조립 패턴은 2차 비판의 Tauri manage 컴파일·tokio spawn 저장·close·재열기 탐침에서 확인했으며 실제 데스크톱 이벤트 검증은 U-01/U-08에 인계한다.
+
+축소는 저장소 전체를 한 트랜잭션으로 다루며 어느 계좌든 손상된 헤더가 있으면 RepositoryIntegrity로 끝나 원본 전부를 보존한다. J-13은 이 실패를 숨기거나 손상 자료를 건너뛰지 않는다. 계좌별 부분 성공은 별도 계약 없이는 추가하지 않는다. 숫자 CHECK의 정규 십진수는 architecture6.3의 문법을 뜻하므로 앞자리0과 음의0을 허용한다. 단일 표준 표기로 정규화하지 않으며 최초 scale을 보존한다.
+
+2차 리뷰의 새 제품 지적은 독립 실행 비판으로 모두 기각됐다. 예외 적용의 직접 로그·초기 실패·최종 통과는 docs/reviews/S-02.md에 분리해 기록했다. 프로젝트 신뢰·현재 세션 훅 적용 미확인은 통과 주장으로 바꾸지 않는다.
+
+
+최신 master520c8df를 수신한 트리의 정상 훅은 전체1695/1695·커버리지1059/1059와 다른 검사를 통과하고 승인test-diff16건만 실패했다. 최종 커밋 예외와 이후 SHA 기준 전체 check를 분리한다. 병합 중 S-02 제품 코드 변경은 없고 기존 master의 새 테스트·규칙은 보존했다. 실패·중단·재실행 경위는 리뷰 기록에 남겼다.
+
+
+최종 커밋 기준 전체 검사에서 기존 ADR 보호 테스트가 미사용 번호로 가정한0099를 master의 새 ADR0099가 소비한 충돌을 재현했다. 준비 인자의 새 번호만 현재 미사용9999로 바꾸고 단언은 그대로 유지한다. 사용자 사전 승인(d)에 해당하며 최종 사전 승인 변경은 초기16건과 이 Node 준비1건이다. 실제 test-diff 출력은16건이며 이 Node fixture 변경은 출력에 포함되지 않아 직접 diff로 대조했다. 이 fixture 외 제품 코드와 기존 단언의 변경은 없다.
+
+- H-20 인계: 최종 test-diff 출력은 Rust16건이며 이번 Node mjs fixture 한 인자 변경은 검출되지 않았다. 하네스 범위 확대는 이 저장소 작업에서 하지 않고 별도 검토한다.
+
+최종 검사 중 master가 A-06 병합 afc9a3f로 전진해 해당 버전을 다시 수신했다. A-06에 동일한 ADR9999 fixture 갱신이 포함돼 최신 master 대비 Node fixture의 별도 차이는 없다. 앞선 사전 승인 내역과 실패·통과·취소 이력은 보존한다. A-06 유스케이스 구현은 병합됐고, 실제 보유 저장소의 PortfolioRepository 연결·현금·계좌 평가·SyncRecord 조립은 후속 연결로 인계한다.
+
+
+최신 afc9a3f 수신 트리의 정상 훅은 전체1715개와 커버리지1061개를 모두 통과했고 승인test-diff16건만 실패했다. 이름 집합을 ADR표와 직접 대조했다. 이 병합 커밋 예외 이후 최종 SHA 기준 전체 check의 실제 결과를 최종 보고로 제공한다. S-02 제품 코드·SQL은 독립 리뷰 대상 그대로이며 master를 이동하거나 푸시하지 않는다.
+
+
 ## 손 변형
 
 임시 사본에서 전후 대조군 각각 신규 7개 통과. 컴파일 가능한 22개 전부 검출, 컴파일불가 1개는 제외했다. 자동 mutants-diff는 사전 승인된 기존 테스트 변경16건을 test-diff가 거부해 변이를 실행하지 못했다. 자동 변이 통과로 표시하지 않는다.
@@ -86,31 +115,3 @@ architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으�
 | 21 | item.quantity.as_decimal().to_string() -> item.acquisition_price.money().amount().as_decimal().to_string() | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 22 | report_value.profit().amount() -> report_value.valuation().amount() | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 23 | daily_value.rate().as_decimal() -> Ratio::parse(&NumericInput::try_new("0").expect("input")).expect("rate").as_decimal() |  | 컴파일불가 |
-
-## 1차 리뷰 수정
-
-DB 소유권은 조립 루트에 두고 저장소가 공유 차용한다. 외부 공개 API의 명시적 종료 회귀, 원시 TEXT와 offset 보존 단언, 나노초 역순 삽입·자료 KST 자정 경계, 다른 계좌의 손상 격리 회귀를 추가했다. 조회 SQL은 계좌 조건으로 먼저 거른다. ADR의 승인 목록 누락1행을 보충했다. 저장소가 주문용 종목 권한 타입을 복원하거나 PortfolioRepository를 새로 정의하지 않는 범위는 사용자 지시대로 유지한다. 서명 옵션과 ADR 초안 이름도 사용자 지정 그대로다.
-
-1차 수정 후 검사는 crate81/81·clippy 통과, 전체1669/1669(속성4096·동시실행4), 커버리지1059/1059·위반 없음이다. 정상 훅의 기존 Git 훅 회귀2건 실패와 재실행 경위는 리뷰 기록에 구분했다. test-diff는 기존 승인16건이며 신규 승인 대상은 추가되지 않았다. 수정 소스의 손 변형도 유효22개 전부 재검출, 전후 대조군은11개 통과했다. 조립 루트는 공유 차용한 저장소들의 사용이 끝난 뒤 원래 Database::close를 호출한다.
-
-
-## 앱 상태 조립과 축소 실패 계약
-
-Database를 소유한 앱 상태의 메서드에서 호출마다 HoldingsStore를 잠시 빌린다. 상태를 Arc로 공유하거나 비동기 작업으로 옮기는 일과 저장소의 짧은 차용은 양립한다. 작업 종료 후 상태에서 Database 소유권을 꺼내 close한다. 차용 저장소 자체에 static 수명을 요구하거나 Database를 leak하지 않는다. 이 조립 패턴은 2차 비판의 Tauri manage 컴파일·tokio spawn 저장·close·재열기 탐침에서 확인했으며 실제 데스크톱 이벤트 검증은 U-01/U-08에 인계한다.
-
-축소는 저장소 전체를 한 트랜잭션으로 다루며 어느 계좌든 손상된 헤더가 있으면 RepositoryIntegrity로 끝나 원본 전부를 보존한다. J-13은 이 실패를 숨기거나 손상 자료를 건너뛰지 않는다. 계좌별 부분 성공은 별도 계약 없이는 추가하지 않는다. 숫자 CHECK의 정규 십진수는 architecture6.3의 문법을 뜻하므로 앞자리0과 음의0을 허용한다. 단일 표준 표기로 정규화하지 않으며 최초 scale을 보존한다.
-
-2차 리뷰의 새 제품 지적은 독립 실행 비판으로 모두 기각됐다. 예외 적용의 직접 로그·초기 실패·최종 통과는 docs/reviews/S-02.md에 분리해 기록했다. 프로젝트 신뢰·현재 세션 훅 적용 미확인은 통과 주장으로 바꾸지 않는다.
-
-
-최신 master520c8df를 수신한 트리의 정상 훅은 전체1695/1695·커버리지1059/1059와 다른 검사를 통과하고 승인test-diff16건만 실패했다. 최종 커밋 예외와 이후 SHA 기준 전체 check를 분리한다. 병합 중 S-02 제품 코드 변경은 없고 기존 master의 새 테스트·규칙은 보존했다. 실패·중단·재실행 경위는 리뷰 기록에 남겼다.
-
-
-최종 커밋 기준 전체 검사에서 기존 ADR 보호 테스트가 미사용 번호로 가정한0099를 master의 새 ADR0099가 소비한 충돌을 재현했다. 준비 인자의 새 번호만 현재 미사용9999로 바꾸고 단언은 그대로 유지한다. 사용자 사전 승인(d)에 해당하며 최종 사전 승인 변경은 초기16건과 이 Node 준비1건이다. 실제 test-diff 출력은16건이며 이 Node fixture 변경은 출력에 포함되지 않아 직접 diff로 대조했다. 이 fixture 외 제품 코드와 기존 단언의 변경은 없다.
-
-- H-20 인계: 최종 test-diff 출력은 Rust16건이며 이번 Node mjs fixture 한 인자 변경은 검출되지 않았다. 하네스 범위 확대는 이 저장소 작업에서 하지 않고 별도 검토한다.
-
-최종 검사 중 master가 A-06 병합 afc9a3f로 전진해 해당 버전을 다시 수신했다. A-06에 동일한 ADR9999 fixture 갱신이 포함돼 최신 master 대비 Node fixture의 별도 차이는 없다. 앞선 사전 승인 내역과 실패·통과·취소 이력은 보존한다. A-06 유스케이스 구현은 병합됐고, 실제 보유 저장소의 PortfolioRepository 연결·현금·계좌 평가·SyncRecord 조립은 후속 연결로 인계한다.
-
-
-최신 afc9a3f 수신 트리의 정상 훅은 전체1715개와 커버리지1061개를 모두 통과했고 승인test-diff16건만 실패했다. 이름 집합을 ADR표와 직접 대조했다. 이 병합 커밋 예외 이후 최종 SHA 기준 전체 check의 실제 결과를 최종 보고로 제공한다. S-02 제품 코드·SQL은 독립 리뷰 대상 그대로이며 master를 이동하거나 푸시하지 않는다.
