@@ -12,6 +12,7 @@ pub struct TossAccountRead<Store, Time, Renewal> {
     tokens: TokenManager<Store, Time, Renewal>,
     clock: Time,
     master: MasterInstrumentFacts,
+    candle_sessions: Vec<domain::MarketSession>,
 }
 impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Renewal> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -28,6 +29,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
             tokens,
             clock,
             master,
+            candle_sessions: Vec::new(),
         }
     }
     async fn read(
@@ -75,8 +77,35 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         crate::holding_read::holdings(&value, &self.master, self.clock.now())
     }
     #[must_use]
+    pub fn with_candle_sessions(mut self, sessions: Vec<domain::MarketSession>) -> Self {
+        self.candle_sessions = sessions;
+        self
+    }
+    pub(crate) async fn market_read(
+        &self,
+        request: ReadRequest,
+        endpoint: ReadEndpoint,
+    ) -> Result<serde_json::Value, PortError> {
+        self.read(request, endpoint).await
+    }
+    pub(crate) fn market_now(&self) -> Timestamp {
+        self.clock.now()
+    }
+    pub(crate) fn market_sessions(&self) -> &[domain::MarketSession] {
+        &self.candle_sessions
+    }
+    #[must_use]
     pub fn capabilities() -> application::BrokerCapabilities {
-        application::BrokerCapabilities::new(std::collections::BTreeSet::new())
+        application::BrokerCapabilities::new(
+            [
+                application::BrokerCapability::DailyCandles,
+                application::BrokerCapability::MinuteCandles,
+                application::BrokerCapability::AdjustedHistory,
+                application::BrokerCapability::RawHistory,
+            ]
+            .into_iter()
+            .collect(),
+        )
     }
 }
 fn retry_delay(header: Option<&str>) -> RetryDelay {

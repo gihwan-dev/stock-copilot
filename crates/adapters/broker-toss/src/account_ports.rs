@@ -31,28 +31,20 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
             PortErrorKind::InvalidRequest(application::RequestRejection::UnsupportedQuery),
         )))
     }
-    fn quotes(
+    async fn quotes(
         &self,
-        _instruments: &[QuoteInstrument],
-    ) -> impl Future<Output = Result<Vec<QuoteObservation>, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::Quotes,
-            HttpStatus::NotReceived,
-            PortErrorKind::InvalidRequest(application::RequestRejection::UnsupportedQuery),
-        )))
+        instruments: &[QuoteInstrument],
+    ) -> Result<Vec<QuoteObservation>, PortError> {
+        crate::market_read::quotes(self, instruments).await
     }
-    fn candles(
+    async fn candles(
         &self,
-        _instrument: &QuoteInstrument,
-        _window: TimeInterval,
-        _period: CandlePeriod,
-        _adjustment: PriceAdjustment,
-    ) -> impl Future<Output = Result<Vec<Candle>, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::Candles,
-            HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::DailyCandles),
-        )))
+        instrument: &QuoteInstrument,
+        window: TimeInterval,
+        period: CandlePeriod,
+        adjustment: PriceAdjustment,
+    ) -> Result<Vec<Candle>, PortError> {
+        crate::market_read::candles(self, instrument, window, period, adjustment).await
     }
     fn buying_power(
         &self,
