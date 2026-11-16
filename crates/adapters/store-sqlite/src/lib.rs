@@ -1,5 +1,7 @@
 mod connection;
 mod failure;
+mod migration;
+mod schema;
 mod sql;
 mod worker;
 
@@ -39,13 +41,29 @@ impl std::fmt::Debug for Database {
 }
 
 impl Database {
-    pub fn open(path: &DatabasePath, key: &SecretValue) -> Result<Self, SystemPortError> {
-        let writer = Writer::open(path, key)?;
+    pub fn open(
+        path: &DatabasePath,
+        key: &SecretValue,
+        clock: &dyn application::Clock,
+    ) -> Result<Self, SystemPortError> {
+        let writer = Writer::open_migrated(path, key, clock.now())?;
         let reader = connection::open(path, key, connection::Access::Read)?;
         Ok(Self {
             writer,
             reader: Arc::new(Mutex::new(reader)),
         })
+    }
+
+    pub async fn close(self) -> Result<application::WriteCompleted, SystemPortError> {
+        tokio::task::spawn_blocking(move || {
+            let Self {
+                writer,
+                reader: _reader,
+            } = self;
+            writer.close()
+        })
+        .await
+        .map_err(|error| failure::join(&error))?
     }
 
     pub async fn check(&self) -> Result<application::WriteCompleted, SystemPortError> {
@@ -82,3 +100,6 @@ impl Database {
         self.writer.execute(operation).await
     }
 }
+
+#[cfg(test)]
+mod migration_tests;
