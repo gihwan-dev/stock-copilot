@@ -204,7 +204,9 @@ fn authorize(
 ) -> rusqlite::hooks::Authorization {
     use rusqlite::hooks::{AuthAction, Authorization};
     match action {
-        AuthAction::Transaction { .. } | AuthAction::Savepoint { .. } => {
+        AuthAction::Transaction { .. }
+        | AuthAction::Savepoint { .. }
+        | AuthAction::Pragma { .. } => {
             if guarded.load(Ordering::Relaxed) {
                 Authorization::Deny
             } else {
@@ -230,7 +232,6 @@ fn authorize(
         | AuthAction::DropTrigger { .. }
         | AuthAction::DropView { .. }
         | AuthAction::Insert { .. }
-        | AuthAction::Pragma { .. }
         | AuthAction::Read { .. }
         | AuthAction::Select
         | AuthAction::Update { .. }

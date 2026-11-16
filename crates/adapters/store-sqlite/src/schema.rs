@@ -81,6 +81,9 @@ pub(crate) fn validate(ddl: &str) -> rusqlite::Result<()> {
 
 fn table_body(ddl: &str) -> rusqlite::Result<&str> {
     let (header, after_open) = ddl.split_once('(').ok_or(rusqlite::Error::InvalidQuery)?;
+    if !header.is_ascii() || header.split_ascii_whitespace().count() != 3 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
     let table = header
         .split_whitespace()
         .nth(2)
@@ -122,6 +125,7 @@ fn columns(body: &str) -> rusqlite::Result<Vec<String>> {
                 continue;
             }
             TextContext::Syntax => match symbol {
+                non_ascii if !non_ascii.is_ascii() => return Err(rusqlite::Error::InvalidQuery),
                 '\'' => context = TextContext::Literal,
                 '"' | '`' | '[' => return Err(rusqlite::Error::InvalidQuery),
                 '-' if remaining.peek() == Some(&'-') => return Err(rusqlite::Error::InvalidQuery),
@@ -315,5 +319,13 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(names, super::MONEY_SEGMENTS);
+    }
+    #[test]
+    fn malformed_column_boundaries_fail_closed() {
+        for body in ["a INTEGER)", "a INTEGER(", "a TEXT DEFAULT '"] {
+            super::columns(body).expect_err("malformed boundary");
+        }
+        super::columns("a INTEGER DEFAULT (17), b TEXT DEFAULT '한글''가격'")
+            .expect("balanced supported body");
     }
 }

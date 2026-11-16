@@ -42,3 +42,18 @@ pub(crate) const NEGATIVE_DEFAULT: &str =
 pub(crate) const DIVISION_DEFAULT: &str =
     "CREATE TABLE divided_literal (id INTEGER DEFAULT (21 / 3)) STRICT";
 pub(crate) const REPAIR_LEDGER: &str = "UPDATE migration_ledger SET number = 1, name = '0001_migration_ledger.sql', sha256 = 'f059233e48dd3cd2f492b96f916d760c19a109861b52707d6901f2bc0c6b2501'; CREATE TABLE partial (id INTEGER) STRICT";
+
+pub(crate) const HEADER_BLOCK: &str =
+    "CREATE TABLE x /*(z'*/ (a INTEGER, price REAL /*'*/ , b INTEGER) STRICT";
+pub(crate) const HEADER_LINE: &str =
+    "CREATE TABLE x --(z'\n (a INTEGER, amount TEXT --'\n , b INTEGER) STRICT";
+pub(crate) const HEADER_DEPTH: &str = "CREATE TABLE x /*(*/ (a INTEGER, price REAL) STRICT";
+pub(crate) const HEADER_LITERAL: &str = "CREATE TABLE x /*('*/ (a INTEGER, price REAL) STRICT";
+pub(crate) const HEADER_UNDERFLOW: &str =
+    "CREATE TABLE x /*(z'*/ (price REAL, a INTEGER DEFAULT (1 /*'*/ )) STRICT";
+pub(crate) const UNICODE_SPACE: &str = "CREATE TABLE x (a\u{3000}price REAL) STRICT";
+pub(crate) const UNICODE_NBSP: &str = "CREATE TABLE x (a\u{00a0}price REAL) STRICT";
+pub(crate) const UNICODE_TEXT: &str =
+    "CREATE TABLE localized (note TEXT DEFAULT '한글　가격') STRICT";
+pub(crate) const IGNORE_CHECKS: &str = "PRAGMA ignore_check_constraints = 1";
+pub(crate) const CHECK_STATE: &str = "PRAGMA ignore_check_constraints";
