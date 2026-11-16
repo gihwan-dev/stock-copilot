@@ -49,9 +49,12 @@ mod tests {
         .expect("시각")
     }
     fn session(day: i64, market: &Market) -> MarketSession {
+        session_with_close(day, market, 1)
+    }
+    fn session_with_close(day: i64, market: &Market, close: i64) -> MarketSession {
         let data = Some(
             SessionData::try_new(
-                TimeInterval::try_new(at(day, 0), at(day, 1)).expect("구간"),
+                TimeInterval::try_new(at(day, 0), at(day, close)).expect("구간"),
                 None,
             )
             .expect("장"),
@@ -81,6 +84,17 @@ mod tests {
             .expect("달력")
         };
         SnapshotCalendar::new(&make(&Market::Kr), &make(&Market::Us)).expect("평가 달력")
+    }
+    fn calendar_closes(kr: i64, us: i64) -> SnapshotCalendar {
+        let make = |market: &Market, close| {
+            MarketCalendar::try_new(
+                session_with_close(2, market, close),
+                session_with_close(3, market, close),
+                session_with_close(4, market, close),
+            )
+            .expect("달력")
+        };
+        SnapshotCalendar::new(&make(&Market::Kr, kr), &make(&Market::Us, us)).expect("평가 달력")
     }
     fn portfolio() -> Portfolio {
         let power = |text, currency| {
@@ -345,35 +359,62 @@ mod tests {
     fn assert_saved(
         repo: &MemoryValuationRepository,
         result: &Result<application::ValuationSnapshotReport, ValuationSnapshotError>,
+        events: usize,
+        stored: usize,
     ) {
-        assert_eq!(repo.calls().len(), usize::from(result.is_ok()));
+        let expected = usize::from(result.is_ok());
+        assert_eq!(repo.calls().len(), expected);
+        assert_eq!(events, expected);
+        assert_eq!(stored, expected);
     }
     fn take_saved(
         saved: Timestamp,
         now: Timestamp,
         fx: Option<domain::FxRate>,
     ) -> Result<application::ValuationSnapshotReport, ValuationSnapshotError> {
+        take_record(held(saved), saved, now, fx, &calendar(3))
+    }
+    fn take_record(
+        portfolio: Portfolio,
+        saved: Timestamp,
+        now: Timestamp,
+        fx: Option<domain::FxRate>,
+        dates: &SnapshotCalendar,
+    ) -> Result<application::ValuationSnapshotReport, ValuationSnapshotError> {
         let store = MemoryPortfolioRepository::default();
         store
             .script_latest()
             .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
                 saved,
-                SyncOutcome::Complete(held(saved)),
+                SyncOutcome::Complete(portfolio),
             )))));
         let market = MemoryMarketDataRepository::default();
         market.script_fx_rate().push(MemoryReply::Return(Ok(fx)));
-        let repo = MemoryValuationRepository::default();
+        let repo = Arc::new(MemoryValuationRepository::default());
+        let (sender, events) = channel();
+        let (order, stored) = channel();
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            BTreeSet::from([DomainEventKind::ValuationSnapshotTaken]),
+            Observer {
+                repository: Arc::clone(&repo),
+                events: sender,
+                order,
+            },
+        );
+        let bus = builder.build();
         repo.script_append().push(MemoryReply::Memory);
         let clock = SteppedClock::new(now);
-        let result = run(TakeValuationSnapshot::new(
-            &store,
-            &market,
-            &repo,
-            &clock,
-            &application::EventBus::default(),
-        )
-        .execute(&AccountId::new(83), &calendar(3)));
-        assert_saved(&repo, &result);
+        let result = run(
+            TakeValuationSnapshot::new(&store, &market, repo.as_ref(), &clock, &bus)
+                .execute(&AccountId::new(83), dates),
+        );
+        assert_saved(
+            repo.as_ref(),
+            &result,
+            events.try_iter().count(),
+            stored.try_iter().count(),
+        );
         result
     }
     #[test]
@@ -386,21 +427,10 @@ mod tests {
         }
     }
     #[test]
-    fn preclose_record_keeps_its_time_and_awaiting_price_basis() {
-        let snapshot = take_saved(at(3, 0), at(3, 2), None).expect("기록").snapshot;
-        assert_eq!(snapshot.valuation_at(), at(3, 0));
-        assert_eq!(snapshot.recorded_at(), at(3, 0));
+    fn preclose_record_is_definition_pending_without_append() {
         assert_eq!(
-            snapshot.price_basis(Currency::Usd),
-            domain::SnapshotPriceBasis::AwaitingSession
-        );
-        assert_eq!(
-            snapshot.price_date(Currency::Usd),
-            at(2, 0).offset_calendar_date()
-        );
-        assert_eq!(
-            snapshot.stock_value(Currency::Usd),
-            Ok(money("51", Currency::Usd))
+            take_saved(at(3, 0), at(3, 2), None),
+            Err(ValuationSnapshotError::PriceBasisDefinitionPending)
         );
     }
     #[test]
@@ -439,5 +469,29 @@ mod tests {
         let report = take_saved(at(3, 1), at(3, 1), None).expect("경계 기록");
         assert_eq!(report.snapshot.valuation_at(), at(3, 1));
         assert_eq!(report.recorded, RecordOutcome::Recorded);
+    }
+    #[test]
+    fn old_holding_price_cannot_be_relabelled_by_a_newer_sync_record() {
+        assert_eq!(
+            take_record(held(at(3, 0)), at(3, 1), at(3, 2), None, &calendar(3)),
+            Err(ValuationSnapshotError::PriceBasisDefinitionPending)
+        );
+        assert_eq!(
+            take_record(held(at(2, 2)), at(3, 1), at(3, 2), None, &calendar(3)),
+            Err(ValuationSnapshotError::PriceBasisDefinitionPending)
+        );
+        assert_eq!(
+            take_record(held(at(3, 2)), at(3, 1), at(3, 2), None, &calendar(3)),
+            Err(ValuationSnapshotError::Snapshot(SnapshotError::WrongPeriod))
+        );
+    }
+    #[test]
+    fn either_market_awaiting_close_is_pending_without_storage_or_event() {
+        for dates in [calendar_closes(3, 1), calendar_closes(1, 3)] {
+            assert_eq!(
+                take_record(held(at(3, 2)), at(3, 2), at(3, 4), None, &dates),
+                Err(ValuationSnapshotError::PriceBasisDefinitionPending)
+            );
+        }
     }
 }

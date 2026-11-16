@@ -36,15 +36,29 @@ ValuationRepository.append 성공 후 ValuationSnapshotTaken(account)를 한 번
 
 ## 1차 리뷰 반영
 
-새 Opus 리뷰와 새 Codex 비판에서 과거·마감 전 자료를 현재 시각으로 바꾸는 결함을 실행으로 확인했다. 자료 시각을 observe에 전달해 달력이 다른 날짜의 자료는 WrongPeriod이고 마감 전 자료는 AwaitingSession으로 보존한다. 현재 시각으로 가격 기준을 올리지 않는다. observe는 평가·기록 시각을 하나만 받으므로 이 경로의 recorded_at 역시 원래 자료 시각이다. 실제 append 실행 시각을 별도로 보존할 기존 계약은 없으며 새 domain API를 만들지 않는다.
+새 Opus 리뷰와 새 Codex 비판에서 과거·마감 전 자료를 현재 시각으로 바꾸는 결함을 실행으로 확인했다. 1차 수정은 자료 시각을 observe에 전달했으나, 2차 리뷰에서 장중 값과 직전 종가 기준의 불일치를 확인해 아래와 같이 저장 전에 거부하도록 바꿨다. 현재 시각으로 가격 기준을 올리지 않는다. observe는 평가·기록 시각을 하나만 받으므로 이 경로의 recorded_at 역시 원래 자료 시각이다. 실제 append 실행 시각을 별도로 보존할 기존 계약은 없으며 새 domain API를 만들지 않는다.
 
 SyncRecord 시각과 개별 HoldingObservation 시각의 정합·신선도 검증 함수는 없다. 이 변경만으로 모든 보유 가격이 동시 관측되었다고 보장하지 않으며 D-31/A-06에서 관측 시각의 일관성·가격 기준 계약을 확정해야 한다. 임계값을 추측하거나 오래된 가격을 재계산으로 위장하지 않는다.
 
 외화 보유 3주 × 17달러 = 51달러, Mid1300에서 66300원·Approximate·환율 보존을 고정한다. observe의 fx 제거 변형은 실제 회귀이며 evaluate의 fx 제거는 이 소비 경로에서 동등해 검출 실패로 세지 않는다.
 
+## 2차 리뷰 반영
+
+관측값에 직전 종가·AwaitingSession/HolidayCarry를 붙여 일별 기록으로 저장하지 않는다. 양 시장의 SnapshotPriceBasis가 CurrentSession일 때만 append할 수 있다. 각 Holding의 관측 시각이 SyncRecord 시각보다 미래이면 거부하며, 기존 calendar.price_date로 계산한 실제 관측 가격일이 스냅샷의 같은 통화 가격일과 달라도 거부한다. 가격·날짜를 추측하거나 application에서 다시 계산하지 않는다.
+
+장중·휴장 관측의 정확한 가격 기준이나 직전 종가 증거 계약은 없다. 해당 입력은 application의 닫힌 PriceBasisDefinitionPending으로 저장·이벤트 없이 반환한다. 이는 '채우지 못함'의 영속 기록이 아니며 그 포트 계약은 여전히 정의 대기다. 시장 하나라도 CurrentSession이 아니면 보유가 없어도 보수적으로 거부한다. 보유·요약 금액의 통화별 0 판정 정책을 application에 추가하지 않는다.
+
+| 기준 | 상태 | 인계 |
+|---|---|---|
+| 양 시장 CurrentSession이며 보유 관측 가격일이 일치하는 일별 기록 | 충족 | 기존 observe·append·계좌 이벤트 사용 |
+| 장중·휴장 이월 관측의 일별 기록 | 정의 대기 | D-31/A-16/J-11: 관측 가격 기준·직전 종가 증거·시장별 완료 여부 계약 |
+| 일부 종목의 관측 시각이 동기화 시각과 다름 | 충족 | 기존 domain 가격일과 미래 여부를 대조, 불일치는 저장하지 않음 |
+
+2차 사소 지적의 두 원인 합류는 확인했으나 J-11 소비 구현·원인별 재시도 계약이 없어 오동작은 불확실이다. AGENTS12 직접 위반이라는 근거는 비판자가 기각했고, 메인은 이 기각을 유지한다. J-11이 원인별 처리를 정의할 때 분리 필요성을 평가하며 현재 오류 체계를 임의로 확장하지 않는다.
+
 ## 손 변형 실제 실행
 
-수정 후 mktemp 복사본에서 기준·원복 테스트 통과, 서로 다른24개 모두 컴파일 후 검출, 생존·시간초과·컴파일불가0개. 각 결과는 target/A-16/hand-results.json과 hand-*.log다.
+2차 수정 후 mktemp 복사본에서 기준·원복 테스트가 통과했고, 서로 다른28개 모두 컴파일 후 검출됐다. 생존·시간초과·컴파일불가0개. 결과는 target/A-16/hand-results.json과 hand-*.log에 있다. 같은 소스의 자동 변이는8개 중6개 검출·2개 컴파일불가·생존0·시간초과0이다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 |
 |---|---|---|
@@ -67,10 +81,12 @@ SyncRecord 시각과 개별 HoldingObservation 시각의 정합·신선도 검�
 | 17 | UnavailablePortfolio -> ValuationSnapshotError::Snapshot(SnapshotError::WrongPeriod) | missing_failed_blocked_and_repository_errors_do_not_write_or_publish |
 | 18 | UnavailablePortfolio -> ValuationSnapshotError::Repository(SystemPortError::new(crate::SystemPort::Repository, crate::SystemFailure::InvalidData)) | missing_failed_blocked_and_repository_errors_do_not_write_or_publish |
 | 19 | event account | records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure |
-| 20 | event kind | records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure |
-| 21 | observation time replaced with now | preclose_record_keeps_its_time_and_awaiting_price_basis, stale_and_future_records_cannot_be_relabelled_as_current_observations, foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence, records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure |
-| 22 | future guard removes equality boundary | observation_at_clock_boundary_is_allowed |
-| 23 | future guard inverted | preclose_record_keeps_its_time_and_awaiting_price_basis, foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence, stale_and_future_records_cannot_be_relabelled_as_current_observations, records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure, market_snapshot_and_append_errors_are_preserved |
+| 20 | event kind | records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure, observation_at_clock_boundary_is_allowed, foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence |
+| 21 | observation time replaced with now | stale_and_future_records_cannot_be_relabelled_as_current_observations, foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence, either_market_awaiting_close_is_pending_without_storage_or_event, old_holding_price_cannot_be_relabelled_by_a_newer_sync_record, records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure |
+| 22 | future guard removes equality boundary | observation_at_clock_boundary_is_allowed, foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence |
+| 23 | future guard inverted | foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence, either_market_awaiting_close_is_pending_without_storage_or_event, stale_and_future_records_cannot_be_relabelled_as_current_observations, old_holding_price_cannot_be_relabelled_by_a_newer_sync_record, preclose_record_is_definition_pending_without_append, records_domain_snapshot_before_one_account_event_and_preserves_delivery_failure, market_snapshot_and_append_errors_are_preserved |
 | 24 | observe drops fx | foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence |
-
-자동 변이에서 Clock 비교 연산자3개가 application 검사에 잡히지 않아, 가짜가 필요 없는 순수 시간 검증과 과거·동일·미래 단위 테스트를 추가했다. 재실행은3개 검출·2개 컴파일불가·생존0·시간초과0이다. 이 코드에서 위 손 변형24개도 다시 전부 컴파일·검출하고 원복 통과를 확인했다.
+| 25 | KR basis validation removed | either_market_awaiting_close_is_pending_without_storage_or_event |
+| 26 | USD basis validation removed | either_market_awaiting_close_is_pending_without_storage_or_event |
+| 27 | holding future guard removed | old_holding_price_cannot_be_relabelled_by_a_newer_sync_record |
+| 28 | holding price date comparison inverted | foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence, observation_at_clock_boundary_is_allowed, old_holding_price_cannot_be_relabelled_by_a_newer_sync_record |

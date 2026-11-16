@@ -3,8 +3,8 @@ use crate::{
     RecordOutcome, SystemPortError, ValuationRepository,
 };
 use domain::{
-    AccountId, DomainEvent, FxPair, FxRateKind, SnapshotCalendar, SnapshotError, SyncOutcome,
-    Timestamp, ValuationSnapshot,
+    AccountId, CalendarDate, Currency, DomainEvent, FxPair, FxRateKind, SnapshotCalendar,
+    SnapshotError, SnapshotPriceBasis, SyncOutcome, Timestamp, ValuationSnapshot,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,6 +12,7 @@ pub enum ValuationSnapshotError {
     Repository(SystemPortError),
     MissingPortfolio,
     UnavailablePortfolio,
+    PriceBasisDefinitionPending,
     Snapshot(SnapshotError),
 }
 
@@ -79,6 +80,15 @@ where
             .map_err(ValuationSnapshotError::Repository)?;
         let snapshot = ValuationSnapshot::observe(calendar, &portfolio.evaluate(fx), at, fx)
             .map_err(ValuationSnapshotError::Snapshot)?;
+        validate_price_basis(snapshot.price_basis(Currency::Krw))?;
+        validate_price_basis(snapshot.price_basis(Currency::Usd))?;
+        for holding in portfolio.holdings() {
+            validate_observation_at(holding.observed_at(), at)?;
+            let price_date = calendar
+                .price_date(holding.currency(), holding.observed_at())
+                .map_err(ValuationSnapshotError::Snapshot)?;
+            validate_price_date(price_date, snapshot.price_date(holding.currency()))?;
+        }
         let recorded = self
             .repository
             .append(account, &snapshot)
@@ -105,10 +115,32 @@ fn validate_observation_at(
     Ok(at)
 }
 
+fn validate_price_basis(basis: SnapshotPriceBasis) -> Result<(), ValuationSnapshotError> {
+    match basis {
+        SnapshotPriceBasis::CurrentSession => Ok(()),
+        SnapshotPriceBasis::AwaitingSession | SnapshotPriceBasis::HolidayCarry => {
+            Err(ValuationSnapshotError::PriceBasisDefinitionPending)
+        }
+    }
+}
+fn validate_price_date(
+    observed: CalendarDate,
+    expected: CalendarDate,
+) -> Result<(), ValuationSnapshotError> {
+    if observed != expected {
+        return Err(ValuationSnapshotError::PriceBasisDefinitionPending);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ValuationSnapshotError, validate_observation_at};
-    use domain::{Nanosecond, OffsetSeconds, SnapshotError, Timestamp, UnixSeconds};
+    use super::{
+        ValuationSnapshotError, validate_observation_at, validate_price_basis, validate_price_date,
+    };
+    use domain::{
+        Nanosecond, OffsetSeconds, SnapshotError, SnapshotPriceBasis, Timestamp, UnixSeconds,
+    };
     fn at(seconds: i64) -> Timestamp {
         Timestamp::from_parts(
             UnixSeconds::new(seconds),
@@ -124,6 +156,36 @@ mod tests {
         assert_eq!(
             validate_observation_at(at(23), at(17)),
             Err(ValuationSnapshotError::Snapshot(SnapshotError::WrongPeriod))
+        );
+    }
+    #[test]
+    fn only_current_session_prices_are_supported_for_observations() {
+        assert_eq!(
+            validate_price_basis(SnapshotPriceBasis::CurrentSession),
+            Ok(())
+        );
+        for basis in [
+            SnapshotPriceBasis::AwaitingSession,
+            SnapshotPriceBasis::HolidayCarry,
+        ] {
+            assert_eq!(
+                validate_price_basis(basis),
+                Err(ValuationSnapshotError::PriceBasisDefinitionPending)
+            );
+        }
+    }
+    #[test]
+    fn price_date_must_match_in_both_directions() {
+        let old = at(11).offset_calendar_date();
+        let new = at(86417).offset_calendar_date();
+        assert_eq!(validate_price_date(old, old), Ok(()));
+        assert_eq!(
+            validate_price_date(old, new),
+            Err(ValuationSnapshotError::PriceBasisDefinitionPending)
+        );
+        assert_eq!(
+            validate_price_date(new, old),
+            Err(ValuationSnapshotError::PriceBasisDefinitionPending)
         );
     }
 }
