@@ -38,6 +38,13 @@ mod tests {
         }
         repository
     }
+    fn refusal(response: RiskChangeConfirmation) -> RiskSettingsChangeOutcome {
+        match response {
+            RiskChangeConfirmation::Confirmed => panic!("거부 응답만 사용"),
+            RiskChangeConfirmation::Denied => RiskSettingsChangeOutcome::Denied,
+            RiskChangeConfirmation::Unavailable => RiskSettingsChangeOutcome::Unavailable,
+        }
+    }
     fn safe() -> RiskSettings {
         RiskSettings::new(
             OrderPermission::Disabled,
@@ -67,10 +74,7 @@ mod tests {
             let presence = ScriptedPresence::new([], [outcome]);
             let events = application::EventBusBuilder::default().build();
             let change = ChangeRiskSettings::new(&repository, &presence, &events);
-            assert_eq!(
-                run(change.execute(risky())),
-                Ok(RiskSettingsChangeOutcome::NotConfirmed(outcome))
-            );
+            assert_eq!(run(change.execute(risky())), Ok(refusal(outcome)));
             assert_eq!(run(repository.risk_settings()).expect("조회"), Some(safe()));
             assert_eq!(presence.order_calls(), vec![]);
             assert_eq!(
@@ -225,7 +229,7 @@ mod tests {
                     Ok(if applied {
                         RiskSettingsChangeOutcome::Changed(application::DeliveryReport::default())
                     } else {
-                        RiskSettingsChangeOutcome::NotConfirmed(response)
+                        refusal(response)
                     })
                 );
                 assert_eq!(
@@ -248,9 +252,7 @@ mod tests {
             let change = ChangeRiskSettings::new(&repository, &presence, &events);
             assert_eq!(
                 run(change.execute(risky())),
-                Ok(RiskSettingsChangeOutcome::NotConfirmed(
-                    RiskChangeConfirmation::Denied
-                ))
+                Ok(RiskSettingsChangeOutcome::Denied)
             );
             assert_eq!(run(repository.risk_settings()).expect("조회"), None);
             assert_eq!(presence.risk_change_calls().len(), denied + 1);
@@ -381,5 +383,38 @@ mod tests {
             assert_eq!(presence.calls(), vec![]);
             assert_eq!(repository.script_store_risk_settings().calls(), vec![]);
         }
+    }
+    #[test]
+    fn hours_horizon_rejection_precedes_unrelated_native_confirmation() {
+        let repository = repository();
+        let mut saved = domain::InvestorProfile::default().saved_state();
+        saved.horizon = domain::HorizonSelection::Hours;
+        saved.hours_permission = HoursPermissionState::Enabled;
+        let profile = domain::InvestorProfile::restore_from_saved_state(saved)
+            .expect("저장 경계의 몇 시간 프로필");
+        repository
+            .script_store_profile()
+            .push(testkit_ports::memory::MemoryReply::Memory);
+        run(repository.store_profile(&profile)).expect("기존 프로필");
+        let original = run(repository.risk_settings()).expect("기존 위험 설정");
+        let presence = ScriptedPresence::new([], [RiskChangeConfirmation::Confirmed]);
+        let events = application::EventBusBuilder::default().build();
+        let requested = RiskSettings::new(
+            OrderPermission::Enabled,
+            SavedMarketOrderSetting::Disabled,
+            HoursPermissionState::Disabled,
+            profile.weight_caps(),
+            profile.risk_appetite(),
+        );
+        let actual =
+            run(ChangeRiskSettings::new(&repository, &presence, &events).execute(requested));
+        assert_eq!(
+            actual,
+            Ok(RiskSettingsChangeOutcome::ProfileRejected(
+                domain::InvestorProfileError::HoursNotAllowed
+            ))
+        );
+        assert_eq!(run(repository.risk_settings()).expect("거부 후"), original);
+        assert_eq!(presence.calls(), vec![]);
     }
 }

@@ -3,15 +3,17 @@ use crate::{
     user_presence::UserPresence,
 };
 use domain::{
-    HoursPermissionState, InvestorProfile, OrderPermission, RiskChange, RiskSettings,
-    SavedMarketOrderSetting, WeightCapChange,
+    HoursPermission, HoursPermissionState, InvestorProfile, InvestorProfileError, OrderPermission,
+    RiskChange, RiskSettings, SavedMarketOrderSetting, WeightCapChange,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RiskSettingsChangeOutcome {
     Changed(DeliveryReport),
     Unchanged,
-    NotConfirmed(RiskChangeConfirmation),
+    Denied,
+    Unavailable,
+    ProfileRejected(InvestorProfileError),
 }
 
 #[derive(Debug)]
@@ -40,10 +42,12 @@ impl<'a, Repository: SettingsRepository, Presence: UserPresence>
         &self,
         requested: RiskSettings,
     ) -> Result<RiskSettingsChangeOutcome, SystemPortError> {
-        let previous = if let Some(settings) = self.repository.risk_settings().await? {
+        let stored = self.repository.risk_settings().await?;
+        let profile = self.repository.profile().await?;
+        let previous = if let Some(settings) = stored {
             settings
         } else {
-            self.repository.profile().await?.as_ref().map_or_else(
+            profile.as_ref().map_or_else(
                 || initial_settings(&InvestorProfile::default()),
                 initial_settings,
             )
@@ -51,12 +55,18 @@ impl<'a, Repository: SettingsRepository, Presence: UserPresence>
         let Some(changes) = plan(previous, requested) else {
             return Ok(RiskSettingsChangeOutcome::Unchanged);
         };
+        if let Some(error) = profile
+            .as_ref()
+            .and_then(|saved_profile| profile_rejection(saved_profile, requested))
+        {
+            return Ok(RiskSettingsChangeOutcome::ProfileRejected(error));
+        }
         for change in changes {
             match self.presence.confirm_risk_change(change).await {
                 RiskChangeConfirmation::Confirmed => (),
-                outcome
-                @ (RiskChangeConfirmation::Denied | RiskChangeConfirmation::Unavailable) => {
-                    return Ok(RiskSettingsChangeOutcome::NotConfirmed(outcome));
+                RiskChangeConfirmation::Denied => return Ok(RiskSettingsChangeOutcome::Denied),
+                RiskChangeConfirmation::Unavailable => {
+                    return Ok(RiskSettingsChangeOutcome::Unavailable);
                 }
             }
         }
@@ -64,6 +74,17 @@ impl<'a, Repository: SettingsRepository, Presence: UserPresence>
         Ok(RiskSettingsChangeOutcome::Changed(
             self.events.publish(domain::DomainEvent::SettingsChanged),
         ))
+    }
+}
+fn profile_rejection(
+    profile: &InvestorProfile,
+    requested: RiskSettings,
+) -> Option<InvestorProfileError> {
+    match requested.hours() {
+        HoursPermissionState::Enabled => None,
+        HoursPermissionState::Disabled => profile
+            .with_hours_permission(HoursPermission::default())
+            .err(),
     }
 }
 fn initial_settings(profile: &InvestorProfile) -> RiskSettings {
@@ -113,7 +134,7 @@ fn confirmations(previous: RiskSettings, requested: RiskSettings) -> Vec<RiskCha
 
 #[cfg(test)]
 mod tests {
-    use super::{initial_settings, plan};
+    use super::{initial_settings, plan, profile_rejection};
     use domain::{
         HoursPermissionState, InvestorProfile, NumericInput, OrderPermission, ProfileWeight,
         RiskAppetite, RiskChange, RiskSettings, SavedMarketOrderSetting, WeightCaps,
@@ -270,5 +291,26 @@ mod tests {
                 assert_eq!(plan(settings(old), settings(new)), expected);
             }
         }
+    }
+    #[test]
+    fn hours_rejection_uses_existing_domain_rule_and_preserves_valid_hours_permission() {
+        let mut saved = InvestorProfile::default().saved_state();
+        saved.horizon = domain::HorizonSelection::Hours;
+        saved.hours_permission = HoursPermissionState::Enabled;
+        let profile =
+            InvestorProfile::restore_from_saved_state(saved).expect("저장된 테스트 프로필");
+        assert_eq!(
+            profile_rejection(&profile, safe()),
+            Some(domain::InvestorProfileError::HoursNotAllowed)
+        );
+        let allowed = RiskSettings::new(
+            safe().orders(),
+            safe().market_orders(),
+            HoursPermissionState::Enabled,
+            safe().weight_caps(),
+            safe().risk_appetite(),
+        );
+        assert_eq!(profile_rejection(&profile, allowed), None);
+        assert_eq!(profile_rejection(&InvestorProfile::default(), safe()), None);
     }
 }
