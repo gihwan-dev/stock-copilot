@@ -10,7 +10,7 @@
 
 상장폐지·KRX 거래정지·미지 유형은 현재 공개 생성 경로가 거부한다. 정리매매는 매도 방향 식별이 허용되는 경우 보유 조회가 가능하다. 기존 주문 봉인은 유지한다. 부분 성공 보존이나 거래 불가 종목의 성공 반환은 별도 domain 설계가 필요하다. BrokerCapabilities는 현재 구현하지 않은 선택 기능을 모두 Unsupported로 선언한다. 후속 읽기 메서드는 HTTP를 보내지 않고 명시적 미지원 오류를 반환한다.
 
-금액과 수량은 domain NumericInput과 Money/Price/Quantity/Ratio 생성자에서만 읽는다. 부동소수 변환과 어댑터 계산은 없다. 개별 행의 currency 및 요약의 krw/usd 키를 통화 근거로 사용한다. 요약 usd null은 부재로 보존한다. 필수 필드 누락·통화 부재·미지 국가/통화·정밀도 손실·중복 종목은 실패한다. 생성 타입 역직렬화·재직렬화로 얻은 알려진 필드만 숫자 검증한다. 원문에 새 필드가 있어도 생성 모델이 쓰지 않는 필드는 무시한다. 보존하지 않는 알려진 비용·세후 수치도 정확한 십진수인지 검증한다. 기존 ReportedHolding/ReportedPortfolio가 표현하는 세전 amount와 rate만 반환하며 비용·세후 값의 새 domain 필드는 만들지 않는다.
+금액과 수량은 domain NumericInput과 Money/Price/Quantity/Ratio 생성자에서만 읽는다. 부동소수 변환과 어댑터 계산은 없다. 개별 행의 currency 및 요약의 krw/usd 키를 통화 근거로 사용한다. 요약 usd의 null과 키 누락은 모두 부재로 보존한다. Price 스키마의 required는 krw뿐이다. 필수 필드 누락·통화 부재·미지 국가/통화·정밀도 손실·중복 종목은 실패한다. 생성 타입 역직렬화·재직렬화로 얻은 알려진 필드만 숫자 검증한다. 원문에 새 필드가 있어도 생성 모델이 쓰지 않는 필드는 무시한다. 보존하지 않는 알려진 비용·세후 수치도 정확한 십진수인지 검증한다. 기존 ReportedHolding/ReportedPortfolio가 표현하는 세전 amount와 rate만 반환하며 비용·세후 값의 새 domain 필드는 만들지 않는다.
 
 ## 응답 형식 근거
 
@@ -21,7 +21,7 @@
 | GET /api/v1/accounts | BrokerRead::accounts | t05-accounts.json, t05-accounts-empty.json | paths의 해당 get.responses.200.content.application/json.examples.brokerageAccount 및 emptyAccounts, components.schemas.Account |
 | GET /api/v1/holdings | BrokerRead::holdings | t05-holdings.json, t05-holdings-empty.json | paths의 해당 get.responses.200.content.application/json.examples.withHoldings 및 emptyHoldings, components.schemas.HoldingsOverview·HoldingsItem |
 
-녹화는 tests/recordings에 origin=synthetic인 T-20 형식으로 추가했다. 계좌번호 00000000731은 합성값이다. 기존 accounts.json은 그대로 두었다. 모든 녹화는 기존 T-20 현재 스키마 검사를 통과해야 한다. 401·429는 account_recordings의 t05-accounts-401.json, t05-accounts-429.json, t05-holdings-401.json, t05-holdings-429.json을 사용한다. components.responses.Unauthorized의 tokenRevoked 예제 및 RateLimitExceeded 예제의 합성 사본이며 requestId만 합성 문자열로 바꾼다. 새 시험에서 8개 녹화를 모두 T-20 검증기에 대조한다. 가짜 서버 시퀀스는 토큰 재발급·제한기 경로와 최소 Retry-After 대기를 함께 검증한다.
+녹화는 tests/recordings에 origin=synthetic인 T-20 형식으로 추가했다. 계좌번호 00000000731은 합성값이다. 기존 accounts.json은 그대로 두었다. 모든 녹화는 기존 T-20 현재 스키마 검사를 통과해야 한다. 401·429는 account_recordings의 t05-accounts-401.json, t05-accounts-429.json, t05-holdings-401.json, t05-holdings-429.json을 사용한다. components.responses.Unauthorized의 tokenRevoked 예제 및 RateLimitExceeded 예제의 합성 사본이며 requestId만 합성 문자열로 바꾼다. 계좌·기본 보유·오류 녹화8개는 새 시험에서 직접 T-20 검증기에 대조한다. 국내 보유와 선택 USD 누락 녹화2개는 기존 자동 열거와 새 USD 회귀에서도 검사한다. 가짜 서버 시퀀스는 토큰 재발급·제한기 경로와 최소 Retry-After 대기를 함께 검증한다.
 
 ## 실측 대기
 
@@ -33,7 +33,7 @@
 
 - T-09: 실제 MasterInstrumentFacts 공급과 갱신을 조립에 연결한다. T-05를 선행으로 둔 순서는 어댑터 코드 의존과 실제 조립 의존을 구분해 메인이 조정한다. 합성 주입 시험은 제품의 실제 마스터 공급 완료를 뜻하지 않는다.
 - D-33/A-06: 거래 불가 보유까지 성공 결과에 보존해야 한다면 보유 식별과 주문 적격성을 분리하는 선행 설계를 한다. 현재는 전체 실패이며 포트 변경 없이 부분 성공을 가장하지 않는다.
-- T-06/T-07: 이 구현체의 해당 미구현 메서드를 기존 경로로 확장한다.
+- T-06/T-07/T-11: 이 구현체의 해당 미구현 메서드를 기존 경로로 확장한다.
 - T-13: 실제 계좌번호 표시 형식을 사용자 검증으로 확인한다.
 
 ## 절차와 검사 기록
@@ -56,6 +56,22 @@ I1: 스키마가 허용하는 추가 응답 필드를 임의로 숫자 처리하
 M2: 로컬 권한 거부는 Forbidden, 잘못된 자격 증명은 InvalidCredentials, 엔드포인트·클라이언트 설정 오류는 MalformedRequest, 저장 자료 무결성·형식 오류는 InvalidResponse(Validation)로 옮긴다. 저장소의 일시 불가에는 원래 RetryDelay를 유지한다. Broker PortError에는 SystemDiagnostic이 없어 세 무결성 원인을 개별 보존하지 못하며 A-05 후속 계약에 인계한다. 실제 화면 문구 검증은 하지 않았다.
 
 새 회귀3개는 e54f7e8 소스에서 컴파일 후 모두 실패했고 수정 후 모두 통과했다. 초기 구현의 테스트 우선 절차 미준수와 이 수정 회차의 red/green 증거를 구분한다. 수정 후 어댑터 전체135개와 Clippy가 통과했으며 RetryDelay 보존 시험을 추가했다.
+
+## 3회차 비판 이후 마지막 수정
+
+대상947cb731e8fbb084b2d3145dec6db7179b86e823의 중요 R3-1과 사소 R3-2는 새 Codex가 독립 실행으로 확정했다. 선택 USD 누락은 여섯 요약 위치 중 실제 amounts 변환을 하는 네 위치에서 실패한다는 것으로 범위를 정정했다. 부모는 두 회귀를 먼저 추가해 컴파일 후2개 모두 실패함을 확인하고 수정했다.
+
+USD 키 부재는 null과 같은 None이다. 국내 보유의 두 합성 녹화는 OpenAPI의 filteredBySymbol 예제에서 왔으며, usd-omitted 녹화는 선택 키6개만 제거했다. 필수 KRW 누락, 잘못된 USD 문자열·숫자·불린·객체·지수 표기·표현 불가 정밀도는 계속 거부한다.
+
+최종 오류의 Retry-After는 로컬 스펙과 T-03이 정의한 비어 있지 않은 ASCII 십진 정수 초만 보존한다. u64 파싱 및 domain TimeSpan 생성에 성공한 값은 Known으로 넘긴다. 0과 선행0도 원래 초 값을 유지하며 내부 백오프를 서버 값에 더하지 않는다. 누락·다른 표기·u64/TimeSpan 범위 초과는 Unknown이다. 제한기의 원문 기한·백오프·과대 값 처리에는 손대지 않는다.
+
+계좌 번호 하이픈과 현재가0 거부는 ADR0061·0038의 기존 계약에 따라 유지한다. 실제 허용 형식과 현재가0의 정상 응답 여부는 T-13 사용자 실측 사항이다. 3회차 실행으로 재현된 중요 문제를 수정하고4회차 독립 리뷰 없이 회귀·변이·최종 병합 검사로 마친다는 원지시문 예외를 적용한다. 이는 수정 후 독립 재리뷰를 통과했다는 뜻이 아니다.
+
+마지막 수정의 좁은 검사18개와 Clippy가 통과했다. 전체 검사와 마지막 SHA는 정상 커밋/병합 훅의 실제 결과로 판단한다.
+
+## 기존 속성 테스트 커버리지의 일회 누락
+
+마지막 수정의 첫 정상 커밋 훅은 전체1676개와 커버리지 대상1059개 테스트가 모두 통과했지만, 변경하지 않은 crates/domain/src/tick_size.rs:273에서 coverage:uncovered-line으로 종료1이었다. 이 줄은 cfg(test)의 integer_reference_proves_tick_bounds_and_direction_for_4096_cases 참조 계산에서 coefficient % unit == 0인 경우에만 실행된다. 이 작업은 해당 파일을 바꾸지 않았다. 기존 테스트·난수 설정·반복 수·커버리지 기준을 바꾸지 않고 정상 커밋 훅을 재실행한다. 이 테스트의 결정적 경계 표본 보강은 D-35/H-20 인계다. 최초 실패 로그는 target/T-05/review3-commit.log에 보존한다. 두 번째 정상 훅은 기존 xtask의 hook_trace_distinguishes_full_from_fast 및 h44_review_real_auto_merge_still_rejects_work_test_changes에서 실패했다(1471개 실행,1469통과/2실패,205미실행). 소스 변경 없는 좁은 재실행은2/2 통과했으며 원인은 미확정이다. target/T-05/review3-commit-retry.log와 harness-regression-repro.log를 보존하고 같은 기준의 정상 훅을 다시 실행한다.
 
 ## 손 변형
 

@@ -23,9 +23,8 @@ fn ratio(value: &Value) -> Conversion<Ratio> {
 fn amounts(value: &Value) -> Conversion<CurrencyAmounts> {
     let krw = money(field(value, "/krw")?, Currency::Krw)?;
     let usd = match value.get("usd") {
-        Some(Value::Null) => None,
+        Some(Value::Null) | None => None,
         Some(usd_value) => Some(money(usd_value, Currency::Usd)?),
-        None => return Err(failure()),
     };
     CurrencyAmounts::new(krw, usd).map_err(|_error| failure())
 }

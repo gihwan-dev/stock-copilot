@@ -572,6 +572,124 @@ mod tests {
         check_summary(&result);
         server.finish().expect("finish");
     }
+    #[test]
+    fn optional_usd_omission_succeeds_for_every_summary_amount() {
+        for name in ["holdings-empty", "holdings-kr"] {
+            for pointer in [
+                "/result/totalPurchaseAmount",
+                "/result/marketValue/amount",
+                "/result/marketValue/amountAfterCost",
+                "/result/profitLoss/amount",
+                "/result/profitLoss/amountAfterCost",
+                "/result/dailyProfitLoss/amount",
+            ] {
+                assert_optional_usd(name, pointer);
+            }
+        }
+        assert_optional_usd("holdings-kr-usd-omitted", "/result/totalPurchaseAmount");
+    }
+    fn assert_optional_usd(name: &str, pointer: &str) {
+        let mut recorded = recording(name);
+        recorded["body"]
+            .pointer_mut(pointer)
+            .expect("amount")
+            .as_object_mut()
+            .expect("object")
+            .remove("usd");
+        crate::support_tests::validation::validate_recording(
+            &crate::support_tests::spec(),
+            &recorded,
+        )
+        .expect("optional USD contract");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &recorded["body"])])
+                .expect("server");
+        let result = run(adapter(&server).holdings(&AccountId::new(413))).expect("optional USD");
+        assert_eq!(
+            result.holdings().len(),
+            recorded["body"]["result"]["items"]
+                .as_array()
+                .expect("items")
+                .len()
+        );
+        for amounts in [
+            result.reported().purchase(),
+            result.reported().valuation(),
+            result.reported().profit(),
+            result
+                .reported()
+                .daily_profit_loss()
+                .expect("daily")
+                .amounts(),
+        ] {
+            assert_eq!(amounts.amount(Currency::Usd), None);
+        }
+        server.finish().expect("finish");
+    }
+    #[test]
+    fn exhausted_rate_limit_preserves_the_server_delay() {
+        let expected = application::RetryDelay::Known(
+            domain::TimeSpan::try_new(domain::SpanSeconds::new(2), domain::Nanosecond::new(0))
+                .expect("delay"),
+        );
+        for name in ["accounts", "holdings"] {
+            let limited = response(
+                "429 Too Many Requests",
+                &recording(&format!("{name}-429"))["body"],
+            );
+            let server = ScriptedHttpServer::start(vec![
+                issued(),
+                limited.clone(),
+                limited.clone(),
+                limited.clone(),
+                limited,
+            ])
+            .expect("server");
+            let reader = adapter(&server);
+            let error = if name == "accounts" {
+                run(reader.accounts()).expect_err("429")
+            } else {
+                run(reader.holdings(&AccountId::new(413))).expect_err("429")
+            };
+            assert_eq!(
+                error.kind(),
+                PortErrorKind::Unavailable {
+                    cause: application::UnavailableCause::RateLimited,
+                    retry: expected
+                }
+            );
+            let requests = String::from_utf8(server.finish().expect("finish")).expect("requests");
+            assert_eq!(requests.matches("GET /api/v1/").count(), 4);
+            assert_eq!(requests.matches("POST /oauth2/token ").count(), 1);
+        }
+    }
+    #[test]
+    fn optional_usd_keeps_invalid_values_and_missing_krw_closed() {
+        for invalid in [
+            json!("bad"),
+            json!(2_i64),
+            json!(true),
+            json!({}),
+            json!("1e3"),
+            json!("0.00000000000000000000000000001"),
+        ] {
+            let mut body = recording("holdings-kr")["body"].clone();
+            body["result"]["totalPurchaseAmount"]["usd"] = invalid;
+            let server = ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)])
+                .expect("server");
+            run(adapter(&server).holdings(&AccountId::new(413))).expect_err("invalid USD");
+            server.finish().expect("finish");
+        }
+        let mut body = recording("holdings-kr-usd-omitted")["body"].clone();
+        body["result"]["totalPurchaseAmount"]
+            .as_object_mut()
+            .expect("amount")
+            .remove("krw");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        run(adapter(&server).holdings(&AccountId::new(413))).expect_err("required KRW");
+        server.finish().expect("finish");
+    }
     fn check_rows(result: &application::HoldingsObservation) {
         for (row, expected) in result.holdings().iter().zip([
             json!([

@@ -42,7 +42,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
             .map_err(|error| token_error(error, endpoint))?;
         if !(200..300).contains(&response.status()) {
             return Err(response
-                .read_error(endpoint, RetryDelay::Unknown)
+                .read_error(endpoint, retry_delay(response.headers().retry_after()))
                 .port_error());
         }
         let body: serde_json::Value =
@@ -78,6 +78,19 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub fn capabilities() -> application::BrokerCapabilities {
         application::BrokerCapabilities::new(std::collections::BTreeSet::new())
     }
+}
+fn retry_delay(header: Option<&str>) -> RetryDelay {
+    header
+        .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|value| value.parse::<u64>().ok())
+        .and_then(|seconds| {
+            domain::TimeSpan::try_new(
+                domain::SpanSeconds::new(seconds),
+                domain::Nanosecond::new(0),
+            )
+            .ok()
+        })
+        .map_or(RetryDelay::Unknown, RetryDelay::Known)
 }
 pub(crate) fn invalid(endpoint: ReadEndpoint, mismatch: ResponseMismatch) -> PortError {
     PortError::new(
@@ -162,6 +175,37 @@ mod tests {
         SystemFailure, SystemPort, SystemPortError,
     };
 
+    #[test]
+    fn server_retry_delay_preserves_only_representable_decimal_seconds() {
+        for (header, seconds) in [
+            ("0", 0_u64),
+            ("2", 2),
+            ("0007", 7),
+            ("9223372036854775807", 9_223_372_036_854_775_807),
+        ] {
+            let expected = application::RetryDelay::Known(
+                domain::TimeSpan::try_new(
+                    domain::SpanSeconds::new(seconds),
+                    domain::Nanosecond::new(0),
+                )
+                .expect("span"),
+            );
+            assert_eq!(super::retry_delay(Some(header)), expected);
+        }
+        for header in [
+            None,
+            Some(""),
+            Some(" 2"),
+            Some("+2"),
+            Some("-2"),
+            Some("2.0"),
+            Some("9223372036854775808"),
+            Some("18446744073709551616"),
+            Some("Thu, 01 Jan 2037 00:00:00 GMT"),
+        ] {
+            assert_eq!(super::retry_delay(header), application::RetryDelay::Unknown);
+        }
+    }
     #[test]
     fn unavailable_store_preserves_its_retry_delay() {
         let delay = application::RetryDelay::Known(
