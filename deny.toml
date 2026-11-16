@@ -22,6 +22,7 @@ version = 2
 confidence-threshold = 0.93
 allow = ["Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib"]
 exceptions = [
+  { crate = "sqlcipher-src", allow = ["blessing", "WTFPL"] },
   { crate = "cssparser", allow = ["MPL-2.0"] },
   { crate = "cssparser-macros", allow = ["MPL-2.0"] },
   { crate = "dtoa-short", allow = ["MPL-2.0"] },
@@ -41,6 +42,14 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 allow-workspace = true
 allow = [
+  { crate = "rsqlite-vfs", reason = "S-01: rusqlite 0.42.0의 wasm 대상 전이 의존성" },
+  { crate = "sqlite-wasm-rs", reason = "S-01: rusqlite 0.42.0의 wasm 대상 전이 의존성" },
+  { crate = "rusqlite", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "libsqlite3-sys", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "sqlcipher-src", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "vcpkg", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "fallible-iterator", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
+  { crate = "fallible-streaming-iterator", reason = "S-01: 승인된 rusqlite 번들 SQLCipher 의존성" },
   { crate = "atomic-waker", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "futures-channel", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "futures-core", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
@@ -53,7 +62,7 @@ allow = [
   { crate = "hyper-util", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "ipnet", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "mio", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
-  { crate = "pkg-config", reason = "T-18: aws-lc-sys의 macOS 활성 빌드 의존성; aws-lc-rs → rustls → reqwest 전이" },
+  { crate = "pkg-config", reason = "S-01 libsqlite3-sys 및 T-18 aws-lc-sys의 macOS 활성 빌드 의존성; aws-lc-rs → rustls → reqwest 전이" },
   { crate = "reqwest", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "slab", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
   { crate = "socket2", reason = "T-18: 기존 잠금 파일의 reqwest 및 tokio 전이 패키지 활성화" },
@@ -364,6 +373,7 @@ skip-tree = []
 
 [bans.build]
 allow-build-scripts = [
+  { crate = "libsqlite3-sys" },
   { crate = "aws-lc-rs" },
   { crate = "aws-lc-sys" },
   { crate = "httparse" },
@@ -414,6 +424,7 @@ include-dependencies = true
 include-workspace = true
 include-archives = true
 bypass = [
+  { crate = "vcpkg", allow = [{ path = "setup_vcp.sh", checksum = "ec7aea336259bd8c9ba05eedd6ec8d2931b631b4f3a457928a750c963762f701" }, { path = "tests/run.sh", checksum = "180f06cc36ce579f22a2282dbe69fe7538f440a8fceb9d65373be1adf83616b3" }, { path = "tests/vcpkgrs_target.sh", checksum = "4f3e1e7d5f2362d03c6d26c0c18c0a04fce4add7f9257f6ee62329e3724c6582" }] },
   { crate = "proptest", allow = [{ path = "test-persistence-location/run-tests.sh", checksum = "03f05cf0409baabf39b0aca33d659e6385306eaccf036fe47e0155a97dd64afb" }] },
   { crate = "tracing", allow = [{ path = "test-macros/bin/macro-results.sh", checksum = "86cc594cd5988829226e5558f97463c709820ee33b85355aadf06e61d6e242ec" }] },
   { crate = "aws-lc-rs", allow = [{ path = "scripts/run-rustls-integration.sh", checksum = "1643b3198b1751b14818a9d6511e61f52cdd57e88cb50f34a0563e0030c7f7be" }, { path = "scripts/run-s2n-quic-integration.sh", checksum = "b411d31ba064c98988cbd6d089e56ec4af018f8e273134e2526c54f07caf06d7" }, { path = "scripts/run-valgrind.sh", checksum = "085223f35859f6b09d4f628e0758ad10f4f6e871deeacf6512ed8fcbcbb99ee9" }, { path = "scripts/run-windows-debug-crt-static-test.sh", checksum = "eeb6162b0af08158a0994048c58825b4dc459672a291ddee8f29530824d6019f" }, { path = "util/process-criterion-csv.rs", checksum = "32d9dd5f5e58231a9411320c86f5d312b027ac33f198d6c66648aeb7f3f29e88" }] },

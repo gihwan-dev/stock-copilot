@@ -4,4 +4,5 @@ examine_globs = [
     "crates/domain/src/**/*.rs",
     "crates/order-execution/src/**/*.rs",
     "crates/application/src/**/*.rs",
+    "crates/adapters/store-sqlite/src/**/*.rs",
 ]

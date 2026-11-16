@@ -54,6 +54,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" arch-check
     "{{just_executable()}}" source-check
     "{{just_executable()}}" sql-check
+    node harness/sqlcipher/check.mjs
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     node harness/generated-files/check.mjs
@@ -206,6 +207,7 @@ linux-check: check-node
     "{{just_executable()}}" arch-check
     "{{just_executable()}}" source-check
     "{{just_executable()}}" sql-check
+    node harness/sqlcipher/check.mjs
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     "{{just_executable()}}" raw-types
@@ -242,6 +244,7 @@ check-fast-static:
     "{{just_executable()}}" arch-check
     "{{just_executable()}}" source-check
     "{{just_executable()}}" sql-check
+    node harness/sqlcipher/check.mjs
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     "{{just_executable()}}" raw-types

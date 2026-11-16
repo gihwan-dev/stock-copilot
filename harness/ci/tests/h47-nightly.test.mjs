@@ -83,7 +83,7 @@ test("H47 timeout reserve and policy accept only the mutation step budget", () =
     Array.from({ length: 128 }, (_, i) => `${i}/128`),
   );
   for (const [name, timeout] of [
-    ["mutants without network", 181],
+    ["mutants with sandboxed tests", 181],
     ["checkout", 160],
   ]) {
     const changed = workflow();
@@ -214,6 +214,8 @@ test("H47 cargo-mutants partitions cover the exact full set without overlap", ()
             "crates/order-execution/src/**/*.rs",
             "--file",
             "crates/application/src/**/*.rs",
+            "--file",
+            "crates/adapters/store-sqlite/src/**/*.rs",
           ];
     if (shard !== undefined) args.push("--shard", shard);
     const result = spawnSync("cargo", args, {
