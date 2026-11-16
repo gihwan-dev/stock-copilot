@@ -20,7 +20,7 @@ pub struct RecordedView<Value> {
     freshness: ViewFreshness,
     recorded_at: Timestamp,
     outcome: SyncOutcome<Value>,
-    exchange_rate: Result<Option<FxRate>, SystemPortError>,
+    exchange_rate_lookup: Result<Option<FxRate>, SystemPortError>,
 }
 impl<Value> RecordedView<Value> {
     #[must_use]
@@ -31,8 +31,8 @@ impl<Value> RecordedView<Value> {
     pub const fn outcome(&self) -> &SyncOutcome<Value> {
         &self.outcome
     }
-    pub const fn exchange_rate(&self) -> &Result<Option<FxRate>, SystemPortError> {
-        &self.exchange_rate
+    pub const fn exchange_rate_lookup(&self) -> &Result<Option<FxRate>, SystemPortError> {
+        &self.exchange_rate_lookup
     }
     #[must_use]
     pub const fn freshness(&self) -> ViewFreshness {
@@ -59,7 +59,7 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
         let Some(record) = self.repository.latest(account).await? else {
             return Ok(StoredView::Missing);
         };
-        let exchange_rate = match record.outcome() {
+        let exchange_rate_lookup = match record.outcome() {
             SyncOutcome::Complete(_) | SyncOutcome::Partial(_) => {
                 self.market
                     .fx_rate(
@@ -71,7 +71,7 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
             }
             SyncOutcome::Failed | SyncOutcome::AccessBlocked => Ok(None),
         };
-        let rate = usable_rate(&exchange_rate, record.recorded_at());
+        let rate = usable_rate(&exchange_rate_lookup, record.recorded_at());
         let outcome = match record.outcome() {
             SyncOutcome::Complete(value) => SyncOutcome::Complete(value.evaluate(rate)),
             SyncOutcome::Partial(value) => SyncOutcome::Partial(value.evaluate(rate)),
@@ -82,7 +82,7 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
             freshness: ViewFreshness::DefinitionPending,
             recorded_at: record.recorded_at(),
             outcome,
-            exchange_rate,
+            exchange_rate_lookup,
         }))
     }
 }
@@ -104,8 +104,9 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
         &self,
         account: &AccountId,
     ) -> Result<StoredView<Allocation>, SystemPortError> {
-        let StoredView::Recorded(view) = self.portfolio.execute(account).await? else {
-            return Ok(StoredView::Missing);
+        let view = match self.portfolio.execute(account).await? {
+            StoredView::Missing => return Ok(StoredView::Missing),
+            StoredView::Recorded(value) => value,
         };
         let assignments = SectorAssignments::default();
         let outcome = match view.outcome {
@@ -122,7 +123,7 @@ impl<'a, Repository: PortfolioRepository, Market: MarketDataRepository>
             freshness: view.freshness,
             recorded_at: view.recorded_at,
             outcome,
-            exchange_rate: view.exchange_rate,
+            exchange_rate_lookup: view.exchange_rate_lookup,
         }))
     }
 }

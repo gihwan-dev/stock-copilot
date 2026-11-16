@@ -222,7 +222,7 @@ mod conversion_tests {
         else {
             panic!("기록")
         };
-        assert_eq!(view.exchange_rate(), &Ok(Some(fx)));
+        assert_eq!(view.exchange_rate_lookup(), &Ok(Some(fx)));
         assert_eq!(view.freshness(), ViewFreshness::DefinitionPending);
         let SyncOutcome::Partial(value) = view.outcome() else {
             panic!("부분")
@@ -246,7 +246,7 @@ mod conversion_tests {
             panic!("기록")
         };
         assert_eq!(allocation_view.recorded_at(), at(123));
-        assert_eq!(allocation_view.exchange_rate(), &Ok(Some(fx)));
+        assert_eq!(allocation_view.exchange_rate_lookup(), &Ok(Some(fx)));
         let SyncOutcome::Partial(allocation) = allocation_view.outcome() else {
             panic!("부분")
         };
@@ -288,7 +288,7 @@ mod conversion_tests {
             else {
                 panic!("기록")
             };
-            assert_eq!(view.exchange_rate(), &Ok(Some(fx)));
+            assert_eq!(view.exchange_rate_lookup(), &Ok(Some(fx)));
             let SyncOutcome::Complete(value) = view.outcome() else {
                 panic!("상태")
             };
@@ -328,7 +328,7 @@ mod conversion_tests {
         else {
             panic!("기록")
         };
-        assert_eq!(view.exchange_rate(), &Err(error));
+        assert_eq!(view.exchange_rate_lookup(), &Err(error));
         let SyncOutcome::Partial(value) = view.outcome() else {
             panic!("부분")
         };
@@ -360,7 +360,7 @@ mod conversion_tests {
                 panic!("기록")
             };
             assert_eq!(view.recorded_at(), at(91));
-            assert_eq!(view.exchange_rate(), &Ok(None));
+            assert_eq!(view.exchange_rate_lookup(), &Ok(None));
             match (outcome, view.outcome()) {
                 (SyncOutcome::Failed, SyncOutcome::Failed)
                 | (SyncOutcome::AccessBlocked, SyncOutcome::AccessBlocked) => {}
@@ -481,6 +481,154 @@ mod conversion_tests {
             assets.subtotal().clone().into_parts(),
             (
                 money("880", Currency::Krw),
+                vec![fx],
+                ValuationAccuracy::Approximate
+            )
+        );
+    }
+    #[test]
+    fn latest_failure_preserves_failure_without_reusing_a_success() {
+        use application::PortfolioRepository;
+        let store = MemoryPortfolioRepository::default();
+        let market = MemoryMarketDataRepository::default();
+        let account = AccountId::new(67);
+        for record in [
+            SyncRecord::new(at(100), SyncOutcome::Complete(portfolio())),
+            SyncRecord::new(at(200), SyncOutcome::Failed),
+        ] {
+            store.script_record().push(MemoryReply::Memory);
+            assert_eq!(
+                run(store.record(&account, &record)),
+                Ok(application::WriteCompleted)
+            );
+        }
+        store.script_latest().push(MemoryReply::Memory);
+        let StoredView::Recorded(view) =
+            run(GetPortfolioView::new(&store, &market).execute(&account)).expect("조회")
+        else {
+            panic!("기록")
+        };
+        assert_eq!(view.recorded_at(), at(200));
+        assert_eq!(view.outcome(), &SyncOutcome::Failed);
+        assert_eq!(market.calls(), vec![]);
+    }
+    #[test]
+    fn allocation_without_stored_assignments_is_unclassified_with_cash_separate() {
+        let store = MemoryPortfolioRepository::default();
+        let market = MemoryMarketDataRepository::default();
+        let portfolio = Portfolio::new(
+            vec![holding()],
+            portfolio().buying_power(Currency::Krw),
+            portfolio().buying_power(Currency::Usd),
+        )
+        .expect("보유");
+        store
+            .script_latest()
+            .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                at(123),
+                SyncOutcome::Complete(portfolio),
+            )))));
+        market
+            .script_fx_rate()
+            .push(MemoryReply::Return(Ok(Some(rate(
+                FxPair::UsdKrw,
+                FxRateKind::Mid,
+                100,
+                200,
+            )))));
+        let StoredView::Recorded(view) =
+            run(GetAllocationView::new(&store, &market).execute(&AccountId::new(71)))
+                .expect("조회")
+        else {
+            panic!("기록")
+        };
+        assert_eq!(view.freshness(), ViewFreshness::DefinitionPending);
+        let SyncOutcome::Complete(allocation) = view.outcome() else {
+            panic!("완료")
+        };
+        let holdings = allocation
+            .holdings()
+            .sectors()
+            .as_ref()
+            .expect("보유 구성비")
+            .entries();
+        assert_eq!(holdings.len(), 1);
+        assert_eq!(holdings[0].key(), &domain::AllocationSector::Unclassified);
+        assert_eq!(holdings[0].display().units().as_u32(), 10000);
+        let assets = allocation
+            .assets()
+            .sectors()
+            .as_ref()
+            .expect("총자산 비중")
+            .entries();
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].key(), &domain::AllocationSector::Cash);
+        assert_eq!(assets[1].key(), &domain::AllocationSector::Unclassified);
+        assert_eq!(assets[0].display().units().as_u32(), 4484);
+        assert_eq!(assets[1].display().units().as_u32(), 5516);
+    }
+    fn reported_summary() -> domain::ReportedPortfolio {
+        domain::ReportedPortfolio::new(
+            domain::CurrencyAmounts::new(
+                money("31", Currency::Krw),
+                Some(money("7", Currency::Usd)),
+            )
+            .expect("평가"),
+            domain::CurrencyAmounts::new(
+                money("23", Currency::Krw),
+                Some(money("5", Currency::Usd)),
+            )
+            .expect("원가"),
+            domain::CurrencyAmounts::new(
+                money("8", Currency::Krw),
+                Some(money("2", Currency::Usd)),
+            )
+            .expect("손익"),
+            at(97),
+        )
+    }
+    #[test]
+    fn complete_reported_summary_preserves_authoritative_values_and_used_rate() {
+        let store = MemoryPortfolioRepository::default();
+        let market = MemoryMarketDataRepository::default();
+        let reported = reported_summary();
+        let portfolio = Portfolio::new(
+            vec![holding()],
+            portfolio().buying_power(Currency::Krw),
+            portfolio().buying_power(Currency::Usd),
+        )
+        .expect("보유")
+        .with_reported(reported);
+        let fx = rate(FxPair::UsdKrw, FxRateKind::Mid, 100, 200);
+        store
+            .script_latest()
+            .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                at(123),
+                SyncOutcome::Complete(portfolio),
+            )))));
+        market
+            .script_fx_rate()
+            .push(MemoryReply::Return(Ok(Some(fx))));
+        let StoredView::Recorded(view) =
+            run(GetPortfolioView::new(&store, &market).execute(&AccountId::new(73))).expect("조회")
+        else {
+            panic!("기록")
+        };
+        let SyncOutcome::Complete(value) = view.outcome() else {
+            panic!("완료")
+        };
+        assert_eq!(value.reported(), Some(reported));
+        let Total::Complete(native) = value.currency_total(Currency::Usd) else {
+            panic!("정본 평가")
+        };
+        assert_eq!(native.value(), &money("7", Currency::Usd));
+        let Total::Complete(assets) = value.assets() else {
+            panic!("완전")
+        };
+        assert_eq!(
+            assets.value().clone().into_parts(),
+            (
+                money("564", Currency::Krw),
                 vec![fx],
                 ValuationAccuracy::Approximate
             )
