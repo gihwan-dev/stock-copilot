@@ -1,0 +1,79 @@
+[[case]]
+name = "direct"
+source = 'fn make() { let _clock = platform_macos::SystemClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "qself"
+source = 'fn make() { let _clock = <platform_macos::SystemClock>::new(); }'
+forbidden = true
+
+[[case]]
+name = "macro-construction"
+source = 'fn make() { let _clocks = vec![platform_macos::SystemClock::new()]; }'
+forbidden = true
+
+[[case]]
+name = "macro-function-value"
+source = 'fn make() { let _openers = vec![store_sqlite::Database::open]; }'
+forbidden = true
+
+[[case]]
+name = "extern-crate-alias"
+source = 'extern crate platform_macos as platform; fn make() { let _clock = platform::SystemClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "module-reexport"
+source = 'pub mod a { pub use platform_macos as pm; } fn make() { let _clock = crate::a::pm::SystemClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "local-module-alias"
+source = 'use platform_macos as pm; fn make() { let _clock = pm::SystemClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "type-alias"
+source = 'type NativeClock = platform_macos::SystemClock; fn make() { let _clock = NativeClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "renamed-value-type"
+source = 'use store_sqlite::Database as DatabasePath; fn make() { let _open = DatabasePath::open; }'
+forbidden = true
+
+[[case]]
+name = "associated-type-constructor"
+source = 'fn make() { let _clock = <ProductPorts as PortTypes>::Clock::new(); }'
+forbidden = true
+
+[[case]]
+name = "type-reference"
+source = 'struct Holder { clock: platform_macos::SystemClock }'
+forbidden = false
+
+[[case]]
+name = "path-value"
+source = 'use store_sqlite::DatabasePath; fn make(path: std::path::PathBuf) { let _path = DatabasePath::new(path); }'
+forbidden = false
+
+[[case]]
+name = "macro-path-value"
+source = 'fn make(path: std::path::PathBuf) { let _paths = vec![store_sqlite::DatabasePath::new(path)]; }'
+forbidden = false
+
+[[case]]
+name = "cargo-dependency-alias"
+source = 'fn make() { let _clock = renamed_platform::SystemClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "associated-type-alias"
+source = 'type NativeClock = <ProductPorts as PortTypes>::Clock; fn make() { let _clock = NativeClock::new(); }'
+forbidden = true
+
+[[case]]
+name = "module-local-alias-shadowing"
+source = 'pub mod a { use platform_macos::SystemClock as C; pub fn make() -> Result<C, domain::TimeError> { C::new() } } pub mod b { use domain::Timestamp as C; pub fn pass(value: C) -> C { value } }'
+forbidden = true

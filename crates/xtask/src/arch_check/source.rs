@@ -11,7 +11,7 @@ mod schema_surface;
 use proc_macro2::{TokenStream, TokenTree};
 use syn::visit::Visit;
 
-use super::metadata::Workspace;
+use super::metadata::{MemberPackage, Workspace};
 use super::rules::SourceRules;
 use super::tokens::{ConstMarkers, Markers, Words, collect_consts};
 use super::{CheckFailure, CrateName, Finding, Rule};
@@ -72,11 +72,12 @@ fn host_allowed(rules: &SourceRules, crate_name: &CrateName, relative: &str) -> 
 
 fn scan_rust(
     rules: &SourceRules,
-    crate_name: &CrateName,
+    package: &MemberPackage,
     relative: &str,
     text: &str,
     findings: &mut BTreeSet<Finding>,
 ) -> Option<SourceFile> {
+    let crate_name = &package.name;
     let (Ok(file), Ok(stream)) = (syn::parse_file(text), TokenStream::from_str(text)) else {
         findings.insert(Finding::new(Rule::SourceParse, String::from(relative)));
         return None;
@@ -86,7 +87,7 @@ fn scan_rust(
             .into_iter()
             .map(|rule| Finding::new(rule, String::from(relative))),
     );
-    if composition::forbidden(relative, &file) {
+    if composition::forbidden(relative, &file, &package.source_aliases) {
         findings.insert(Finding::new(
             Rule::AdapterConstruction,
             String::from(relative),
@@ -119,7 +120,7 @@ fn scan_rust(
 fn scan_file(
     rules: &SourceRules,
     root: &Path,
-    crate_name: &CrateName,
+    package: &MemberPackage,
     path: &Path,
     findings: &mut BTreeSet<Finding>,
 ) -> Result<Option<SourceFile>, CheckFailure> {
@@ -127,7 +128,7 @@ fn scan_file(
     let bytes = fs::read(path).map_err(|error| io_failure(path, error))?;
     let lowered = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
     if lowered.contains(&rules.host_needle.to_ascii_lowercase())
-        && host_allowed(rules, crate_name, &relative).is_none()
+        && host_allowed(rules, &package.name, &relative).is_none()
     {
         findings.insert(Finding::new(Rule::TossHost, relative.clone()));
     }
@@ -135,7 +136,7 @@ fn scan_file(
         return Ok(None);
     }
     if let Ok(text) = String::from_utf8(bytes) {
-        return Ok(scan_rust(rules, crate_name, &relative, &text, findings));
+        return Ok(scan_rust(rules, package, &relative, &text, findings));
     }
     findings.insert(Finding::new(Rule::SourceParse, relative));
     Ok(None)
@@ -229,9 +230,7 @@ pub(crate) fn check_sources(
     skipped.insert(workspace.target_directory.clone());
     for package in &workspace.packages {
         for path in package_files(&package.directory, &skipped)? {
-            if let Some(file) =
-                scan_file(rules, &workspace.root, &package.name, &path, &mut findings)?
-            {
+            if let Some(file) = scan_file(rules, &workspace.root, package, &path, &mut findings)? {
                 by_crate.entry(&package.name).or_default().push(file);
             }
         }

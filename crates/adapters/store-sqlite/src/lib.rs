@@ -27,6 +27,11 @@ impl DatabasePath {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct DatabaseClosed {
+    _private: (),
+}
+
 pub struct Database {
     writer: Writer,
     reader: Arc<Mutex<Connection>>,
@@ -48,8 +53,9 @@ impl Database {
         })
     }
 
-    pub fn shutdown(mut self) -> Result<(), SystemPortError> {
-        self.writer.shutdown()
+    pub fn shutdown(mut self) -> Result<DatabaseClosed, SystemPortError> {
+        self.writer.shutdown()?;
+        Ok(DatabaseClosed { _private: () })
     }
 
     pub async fn check(&self) -> Result<application::WriteCompleted, SystemPortError> {

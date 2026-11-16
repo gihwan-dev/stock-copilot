@@ -15,3 +15,5 @@ fn build_app_builds_empty_app_on_mock_runtime() {
     )
     .expect("mock runtime builds empty app");
 }
+
+mod exit;

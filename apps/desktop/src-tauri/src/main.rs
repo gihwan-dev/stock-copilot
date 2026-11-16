@@ -44,13 +44,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         presence: Arc::new(platform_macos::UnavailablePresence),
         events: application::EventBusBuilder::default().build(),
         saved_accounts: Vec::new(),
-        database: Arc::new(DatabaseFactory(Box::new(|path, key| {
-            src_tauri::database::prepare_directory(&path)?;
-            store_sqlite::Database::open(&path, &key)
-        }))),
+        database: Arc::new(database_factory()),
     };
-    run_app(build_app(tauri::Builder::default(), ports, context)?);
+    run_app(
+        build_app(tauri::Builder::default(), ports, context)?,
+        |handle, code| handle.exit(code.as_i32()),
+    );
     Ok(())
+}
+
+fn database_factory() -> DatabaseFactory {
+    DatabaseFactory(Box::new(|path, key| {
+        src_tauri::database::prepare_directory(&path)?;
+        store_sqlite::Database::open(&path, &key)
+    }))
 }
 
 #[cfg(test)]
@@ -74,37 +81,33 @@ mod tests {
 
     #[test]
     fn configured_database_is_opened_and_explicitly_closed_after_refresh_cleanup() {
-        use src_tauri::database::{DatabaseFactory, DatabaseStatus, open_database};
+        use src_tauri::database::{DatabaseStatus, open_database};
         use src_tauri::lifecycle::Lifecycle;
         use std::sync::Arc;
         use testkit_ports::{memory::MemoryReply, system_fakes::MemorySecretStore};
         let directory = std::path::PathBuf::from("../../../target/U-01")
             .join(format!("database-lifecycle-{}", std::process::id()));
         std::fs::create_dir_all(&directory).expect("테스트 폴더");
-        let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
+        let path = store_sqlite::DatabasePath::new(directory.join("nested").join("store.db"));
         let secrets = MemorySecretStore::default();
         secrets.script_load().push(MemoryReply::Return(Ok(Some(
             application::SecretValue::new(vec![83; 32]),
         ))));
-        let factory = Arc::new(DatabaseFactory(Box::new(|database_path, database_key| {
-            store_sqlite::Database::open(&database_path, &database_key)
-        })));
+        let factory = Arc::new(super::database_factory());
         tauri::async_runtime::block_on(async {
             let state = open_database(&secrets, factory, || Ok(path)).await;
             assert_eq!(state.status(), DatabaseStatus::Ready);
             let lifecycle =
                 Lifecycle::new(tauri::async_runtime::spawn(std::future::pending()), state);
             lifecycle.shutdown().await;
-            assert_eq!(
-                lifecycle
-                    .outcome()
-                    .lock()
-                    .await
-                    .as_ref()
-                    .expect("종료 결과")
-                    .database,
-                Ok(())
-            );
+            let guard = lifecycle.outcome().lock().await;
+            match &guard.as_ref().expect("종료 결과").database {
+                Ok(src_tauri::lifecycle::DatabaseClosure::Closed(_receipt)) => {}
+                Ok(src_tauri::lifecycle::DatabaseClosure::NotOpened) => {
+                    panic!("열린 DB의 명시적 종료 증거 필요")
+                }
+                Err(error) => panic!("종료 실패: {error:?}"),
+            }
         });
         std::fs::remove_dir_all(directory).expect("테스트 정리");
     }

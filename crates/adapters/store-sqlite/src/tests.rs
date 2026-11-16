@@ -561,3 +561,23 @@ fn explicit_shutdown_drains_accepted_writes_on_a_blocking_worker() {
         assert_eq!(second.await.expect("second reply"), Ok(29));
     });
 }
+
+#[test]
+fn explicit_shutdown_reports_a_failed_writer_instead_of_silent_drop() {
+    let fixture = Fixture::new();
+    let database = Database::open(&DatabasePath::new(fixture.path()), &key()).expect("database");
+    runtime()
+        .block_on(
+            database.write::<(), _>(|_transaction| {
+                std::panic::resume_unwind(Box::new("shutdown failure"))
+            }),
+        )
+        .expect_err("writer failed");
+    assert_eq!(
+        database.shutdown(),
+        Err(application::SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::RepositoryIntegrity
+        ))
+    );
+}

@@ -15,7 +15,7 @@ ai-claude-code = { path = "../../../crates/adapters/ai-claude-code" }
 ai-codex = { path = "../../../crates/adapters/ai-codex" }
 store-sqlite = { path = "../../../crates/adapters/store-sqlite" }
 secrets-keychain = { path = "../../../crates/adapters/secrets-keychain" }
-platform-macos = { path = "../../../crates/adapters/platform-macos" }
+renamed-platform = { package = "platform-macos", path = "../../../crates/adapters/platform-macos" }
 mcp-server = { path = "../../../crates/mcp-server" }
 scheduler = { path = "../../../crates/scheduler" }
 tauri = { version = "0.1.0" }

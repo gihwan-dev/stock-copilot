@@ -1,1 +1,1 @@
-use platform_macos::SystemClock as Clock; fn construct() { let _clock = Clock::new(); }
+use renamed_platform::SystemClock as Clock; fn construct() { let _clock = Clock::new(); }

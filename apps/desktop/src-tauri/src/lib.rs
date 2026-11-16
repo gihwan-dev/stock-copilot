@@ -1,5 +1,6 @@
 pub mod bindings;
 pub mod database;
+pub mod exit;
 pub mod ipc;
 pub mod lifecycle;
 pub mod ports;
@@ -43,11 +44,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                 },
             ));
             let refresh = tauri::async_runtime::block_on(startup::start(&ports, |data| {
-                app.manage(data);
-                if let Some(window) = app.get_webview_window("main") {
-                    window.show()?;
-                }
-                Ok(())
+                publish_main(app.handle(), data)
             }))?;
             app.manage(database.status());
             app.manage(Lifecycle::new(refresh, database));
@@ -57,33 +54,42 @@ pub fn build_app<R: Runtime, P: PortTypes>(
         .build(context)
 }
 
-pub fn run_app<R: Runtime>(app: App<R>) {
-    app.run(|handle, event| {
-        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-            request_exit(handle, &api, code);
-        }
-    });
+fn publish_main<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    data: startup::MainScreenData,
+) -> Result<(), tauri::Error> {
+    if !app.manage(data) {
+        return Err(tauri::Error::AssetNotFound(
+            "duplicate-main-screen-data".into(),
+        ));
+    }
+    show_prepared_main(app)
 }
 
-fn request_exit<R: Runtime>(
-    handle: &tauri::AppHandle<R>,
-    api: &tauri::ExitRequestApi,
-    code: Option<i32>,
-) {
-    let lifecycle = handle.state::<Lifecycle>();
-    match lifecycle.outcome().try_lock() {
-        Ok(outcome) if outcome.is_some() => return,
-        Ok(_outcome) => {}
-        Err(_error) => {
-            api.prevent_exit();
-            return;
-        }
+fn show_prepared_main<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), tauri::Error> {
+    if app.try_state::<startup::MainScreenData>().is_none() {
+        return Err(tauri::Error::AssetNotFound("main-screen-data".into()));
     }
-    api.prevent_exit();
-    let exiting = handle.clone();
-    tauri::async_runtime::spawn(async move {
-        exiting.state::<Lifecycle>().shutdown().await;
-        exiting.exit(code.unwrap_or(0_i32));
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| tauri::Error::AssetNotFound("main-window".into()))?;
+    window.show()
+}
+
+pub fn run_app<R: Runtime, Finish>(app: App<R>, finish: Finish)
+where
+    Finish: Fn(&tauri::AppHandle<R>, exit::ExitCode) + Send + Sync + 'static,
+{
+    let finalizer = Arc::new(finish);
+    app.run(move |handle, event| {
+        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            exit::request(
+                handle,
+                &api,
+                exit::ExitCode::from_request(code),
+                Arc::clone(&finalizer),
+            );
+        }
     });
 }
 

@@ -123,3 +123,33 @@ run_app의 ExitRequested 처리에서 종료를 미루고 Lifecycle::shutdown을
 | 22   | 음수 입력 분수를 마이크로초로 | 통과   | system_clock::tests::conversion_preserves_fractional_instants_on_both_sides_of_epoch                                                                                                                                                                   | 검출        |
 | 23   | OS 변환 나노초 반전           | 통과   | system_clock::tests::conversion_follows_wall_clock_backwards_without_a_monotonicity_guarantee, system_clock::tests::conversion_preserves_fractional_instants_on_both_sides_of_epoch                                                                    | 검출        |
 | 24   | 음수 정수 나노초 변경         | 통과   | system_clock::tests::conversion_preserves_fractional_instants_on_both_sides_of_epoch                                                                                                                                                                   | 검출        |
+
+## 1차 리뷰 평가 후 결정
+
+- 어댑터 생성 검사는 qself, 매크로, extern crate와 모듈 재수출, Cargo 의존성 별칭까지 확인한다. 경계 밖에서는 어댑터 모듈 별칭·재수출과 어댑터/한정 연관 타입의 자유 타입 별칭도 금지한다. 일반 타입 참조와 DatabasePath 값 구성은 허용한다. 별칭은 cargo metadata의 실제 의존성 이름으로 해석한다. 고정 자료는 harness/arch-check/composition-cases.toml에 있다.
+- run_app은 제품의 Tauri run 루프를 그대로 사용한다. 실제 종료 효과만 main.rs에서 전달한다. 제품은 AppHandle::exit를, mock 테스트는 기록과 종료 재진입을 수행하는 함수를 전달한다. 종료 코드는 ExitCode로 보존한다. Running → Stopping → Stopped 전이는 중복 요청을 한 번의 정리로 묶으며 메인 이벤트 루프는 try_lock 실패 시 기다리지 않는다.
+- 주 화면 상태가 없거나 중복 등록되면 창 표시를 거부한다. 실제 build_app과 표시 함수가 같은 불변식을 사용한다. visible=true로 시작한 mock 설정도 조립 단계에서 숨겨야 한다.
+- Database::shutdown은 Writer의 Stop·join 성공 후에만 만들 수 있는 DatabaseClosed 증거를 반환한다. 이는 명시적 writer 종료와 DB 소유권 소비의 증거다. 취소된 읽기 작업의 별도 소유권까지 모두 사라졌다는 주장은 하지 않는다. 열리지 않은 DB는 NotOpened, 실제 명시적 종료는 Closed 증거로 구별한다. Drop으로 자원을 해제한 뒤 Ok(())를 반환하는 대체 구현은 성공 종료 증거가 될 수 없다.
+- 갱신 작업의 panic은 Cancelled로 바꾸지 않고 Failed의 원래 런타임 오류로 보존한다.
+- 제품 DB 팩터리를 main.rs의 함수 하나로 두고 제품·실제 DB 통합 테스트가 같은 함수를 사용한다. 개별 저장소 포트는 여전히 자리 표시다.
+- U-02: 자리 표시의 CheckCredentials 분류를 곧바로 사용자 문구로 내보내지 않는다. 설정 부재와 실제 요청 실패를 자체 점검·설정 사실로 구별한다. 현재는 이 오류의 화면 소비 경로가 없다.
+- U-20: 실제 자식 작업과 저장소 유스케이스를 연결할 때 refresh 정리 완료와 DB 종료의 상대 순서를 직접 관측하는 통합 테스트를 추가한다. 현재 코드는 취소·await 후 명시적 DB 종료 순서다.
+
+테스트용 WebviewWindowBuilder 허용은 src/tests/exit.rs 한 파일에 한정한다. 실제 mock 런타임에서 마지막 창 종료 후 재진입 이벤트를 만들기 위한 경계다. 제품 capability와 WebView 권한은 늘리지 않는다.
+
+## 1차 수정 손 변형
+
+현재 수정 소스를 mktemp 복사본으로 옮겨 한 번에 하나씩 변형했다. 원본·복원 대조군 lib 29개가 각각 통과했고, 아래 8개는 전부 독립 컴파일 후 해당 테스트에서 검출됐다. 최초 시계 변형과 합치면 32개 시도 중 유효 31개 검출, 컴파일 불가 1개, 생존 0개다.
+
+| 번호 | 바꾼 것                                  | 컴파일 | 잡은 테스트                                                                              | 결과 |
+| ---- | ---------------------------------------- | ------ | ---------------------------------------------------------------------------------------- | ---- |
+| 1    | 제품 종료 콜백 연결 제거                 | 통과   | tests::exit::run_app_dispatches_the_real_mock_exit_event_and_waits_for_cleanup           | 검출 |
+| 2    | 종료 미루기 호출 제거                    | 통과   | tests::exit::the_product_exit_handler_defers_cleans_once_and_allows_reentry              | 검출 |
+| 3    | 종료 코드 0으로 치환                     | 통과   | tests::exit::the_product_exit_handler_defers_cleans_once_and_allows_reentry              | 검출 |
+| 4    | 정리 호출 제거                           | 통과   | tests::exit::the_product_exit_handler_defers_cleans_once_and_allows_reentry              | 검출 |
+| 5    | 초기 창 숨김 제거                        | 통과   | tests::startup::build_app_forces_initially_visible_windows_to_remain_hidden_during_setup | 검출 |
+| 6    | 주 화면 상태 등록을 표시 뒤로 이동       | 통과   | tests::startup::build_app_runs_the_same_startup_with_the_mock_runtime_and_port_fakes     | 검출 |
+| 7    | DB 명시적 종료를 Drop과 NotOpened로 치환 | 통과   | tests::configured_database_is_opened_and_explicitly_closed_after_refresh_cleanup         | 검출 |
+| 8    | 제품 팩터리의 폴더 준비 제거             | 통과   | tests::configured_database_is_opened_and_explicitly_closed_after_refresh_cleanup         | 검출 |
+
+같은 파일의 서로 다른 모듈에서 같은 별칭을 쓰는 경우에는 뒤쪽 선언으로 앞쪽 경로를 지우지 않는다. 모든 가능한 별칭 경로를 보존하고 경로마다 순환을 제한해, 어느 해석에서든 실제 어댑터 구성이 가능하면 실패한다. 이는 모듈 범위를 완전히 해석하는 컴파일러 대신 보수적으로 경계를 강제하는 선택이다. module-local-alias-shadowing 반례는 수정 전 실패·수정 후 통과했다.

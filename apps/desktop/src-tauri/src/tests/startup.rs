@@ -186,3 +186,26 @@ fn assert_mock_startup(handle: &tauri::AppHandle<tauri::test::MockRuntime>) {
         .close()
         .expect("창 닫기");
 }
+
+#[test]
+fn build_app_forces_initially_visible_windows_to_remain_hidden_during_setup() {
+    let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+    context
+        .config_mut()
+        .app
+        .windows
+        .push(tauri::utils::config::WindowConfig::default());
+    assert!(context.config().app.windows.first().expect("설정").visible);
+    let app = crate::build_app(tauri::test::mock_builder(), ports(), context).expect("조립");
+    assert!(!app.config().app.windows.first().expect("설정").visible);
+}
+
+#[test]
+fn window_presentation_requires_prepared_main_screen_data() {
+    let app = tauri::test::mock_app();
+    let error = crate::show_prepared_main(app.handle()).expect_err("자료 없이 표시 금지");
+    assert_eq!(
+        error.to_string(),
+        tauri::Error::AssetNotFound("main-screen-data".into()).to_string()
+    );
+}
