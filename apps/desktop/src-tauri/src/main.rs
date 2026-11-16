@@ -34,7 +34,16 @@ mod tests {
             format!("{endpoint:?}"),
             format!("TossEndpoint {{ origin: {expected_origin:?}, mode: Production }}")
         );
-        let client = broker_toss::TossHttpClient::new(&endpoint).expect("product configuration");
+        let client = broker_toss::TossHttpClient::new(
+            &endpoint,
+            std::sync::Arc::new(testkit_ports::SteppedClock::new(
+                broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                    .expect("clock")
+                    .into_domain(),
+            )),
+            std::sync::Arc::new(broker_toss::TokioRequestWait),
+        )
+        .expect("product configuration");
         assert_eq!(format!("{client:?}"), "TossHttpClient(<redacted>)");
     }
 }

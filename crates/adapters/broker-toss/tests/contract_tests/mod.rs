@@ -17,8 +17,13 @@ fn recordings_replay_over_local_client() {
     for recording in recordings() {
         validate_recording(&spec(), &recording).expect("valid recording");
         let server = serve_recordings(&recording);
-        let client = TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-            .expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let route = route(&recording);
         let response = tokio::runtime::Builder::new_current_thread()
             .enable_all()

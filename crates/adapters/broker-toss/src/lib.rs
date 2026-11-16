@@ -16,5 +16,7 @@ pub use http::{RawResponse, ResponseHeaders, TossHttpClient, TossHttpError};
 pub use request::{QueryKey, ReadRequest, ReadRoute, RouteId};
 pub use token::issue_token;
 
+mod rate_limiter;
+pub use rate_limiter::{RequestWait, TokioRequestWait};
 mod token_manager;
 pub use token_manager::{BrokerConnection, TokenError, TokenLease, TokenManager, TokenRenewal};
