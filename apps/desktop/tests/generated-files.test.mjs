@@ -27,12 +27,12 @@ const expectedList = [
   [
     "apps/desktop/src/shared/ipc/bindings.ts",
     "prettier",
-    ["@tauri-apps/api/core"],
+    ["@tauri-apps/api/core", "@tauri-apps/api/event"],
   ],
   [
     "apps/desktop/src/shared/ipc/testing/mockBindings.ts",
     "prettier",
-    ["@tauri-apps/api/core", "@tauri-apps/api/mocks"],
+    ["@tauri-apps/api/core", "@tauri-apps/api/event", "@tauri-apps/api/mocks"],
   ],
   ["apps/desktop/src/shared/ipc/testing/responses.ts", "prettier", []],
 ];
@@ -148,7 +148,7 @@ test("generated files may import only their listed modules and nothing dynamical
     'import { mockIPC } from "@tauri-apps/api/mocks";\nexport const load = () => import("./other");\nexport { x } from "./other";\nexport const mock = mockIPC;\n',
   );
   assert.deepEqual(found.sort(), [
-    "no-restricted-syntax :: 생성물: 가져올 수 있는 모듈은 @tauri-apps/api/core뿐이다.",
+    "no-restricted-syntax :: 생성물: 가져올 수 있는 모듈은 @tauri-apps/api/core, @tauri-apps/api/event뿐이다.",
     "no-restricted-syntax :: 생성물: 다른 모듈을 다시 내보내지 않는다.",
     "no-restricted-syntax :: 생성물: 동적 import()를 쓰지 않는다.",
     "no-restricted-syntax :: 생성물: 최상위에는 가져오기와 선언만 둔다.",

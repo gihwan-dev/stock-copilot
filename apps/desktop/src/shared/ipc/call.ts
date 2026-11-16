@@ -16,7 +16,7 @@ const frameworkFailure: IpcFailure = { kind: "framework" };
 
 export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> =>
   commands
-    .appVersion()
+    .appVersion({ query: "current" })
     .then((outcome): Result<AppVersion, IpcFailure> => {
       switch (outcome.status) {
         case "ok": {

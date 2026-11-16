@@ -1,5 +1,5 @@
 {
-  "reason": "gen-bindings(apps/desktop/src-tauri/src/bin/gen-bindings.rs)가 만드는 IPC 생성물. 손으로 고치지 않고, just check가 다시 생성해 차이가 나면 실패한다 (harness.md 2장·5장, ADR 0016)",
+  "reason": "gen-bindings(apps/desktop/src-tauri/src/bin/gen-bindings.rs)\uac00 \ub9cc\ub4dc\ub294 IPC \uc0dd\uc131\ubb3c. \uc190\uc73c\ub85c \uace0\uce58\uc9c0 \uc54a\uace0, just check\uac00 \ub2e4\uc2dc \uc0dd\uc131\ud574 \ucc28\uc774\uac00 \ub098\uba74 \uc2e4\ud328\ud55c\ub2e4 (harness.md 2\uc7a5\u00b75\uc7a5, ADR 0016)",
   "files": [
     {
       "path": "apps/desktop/src-tauri/ipc/commands.txt",
@@ -12,12 +12,16 @@
     {
       "path": "apps/desktop/src/shared/ipc/bindings.ts",
       "format": "prettier",
-      "imports": ["@tauri-apps/api/core"]
+      "imports": ["@tauri-apps/api/core", "@tauri-apps/api/event"]
     },
     {
       "path": "apps/desktop/src/shared/ipc/testing/mockBindings.ts",
       "format": "prettier",
-      "imports": ["@tauri-apps/api/core", "@tauri-apps/api/mocks"]
+      "imports": [
+        "@tauri-apps/api/core",
+        "@tauri-apps/api/event",
+        "@tauri-apps/api/mocks"
+      ]
     },
     {
       "path": "apps/desktop/src/shared/ipc/testing/responses.ts",
