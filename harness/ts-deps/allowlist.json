@@ -159,6 +159,14 @@
         "@testing-library/user-event": {
           "target": "@testing-library/user-event",
           "reason": "Testing Library 키보드·포커스 상호작용 (harness 4.3 Testing Library, 사용자 리뷰 결정 4)"
+        },
+        "storybook": {
+          "target": "storybook",
+          "reason": "DS-07 Storybook 10.6.7 (architecture 5.2)"
+        },
+        "@storybook/react-vite": {
+          "target": "@storybook/react-vite",
+          "reason": "DS-07 Storybook 10.6.7 (architecture 5.2)"
         }
       }
     }

@@ -33,7 +33,7 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "a07d334d560a5415aecf3558a39ed8a05507484fd644e0b0f6de43aecf6a14ce",
   ".claude/hooks/subagent-start.mjs": "837a26d6ab79331429ca714ba9fa663bd4310e46aa5cfa5e8e6a85662a2a87f7",
-  ".codex/config.toml": "823f0dbdeed11f978add4ab94790884810ed0a7c4a27c0c04613a852d83c6d46",
+  ".codex/config.toml": "77a50aa8b717177bde4a5ebf17e74e7ea5ea3792fef90e7e47ad988453a843b8",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "crates/testkit-ports/src/lib.rs": "9722bbb925bcbcfac26b493ab1fb0cfb8caa5c1b31dcc5395752befa54ca4d41",
   "crates/testkit-ports/src/script.rs": "d0d8ac1f007d6b7ed2564cf78f6d2e9ed510e8f6dc908855546d35265b32aa08",
@@ -66,6 +66,6 @@
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "1f57fef22ec8edd9a7f66295af0e3f91a2726d69716a1c5126a8af02db88f3ed",
   "harness/codex-regression/run.mjs": "b43d193ecfb5684c82d808f30884d09bf6805faa5d2774172efb22a83e5a977b",
-  "harness/sandbox/lock-fragment.json": "ff33260e82cf90846dcecd58e7f5124cfb2f19053389aa8cfc752515652c0a55",
+  "harness/sandbox/lock-fragment.json": "5277c9b68202939951e96c23efeca29b07161d05a3b61336c007a4644a9a22ee",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }

@@ -34,6 +34,10 @@
       "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
     },
     {
+      "issue": "files src/shared/ds/Catalog.stories.tsx src/shared/ds/Catalog.stories.tsx",
+      "reason": "DS-07 가상 자료 이야기. 제품 화면이 실제 소비하기 전 정확한 파일만 유예"
+    },
+    {
       "issue": "files src/shared/ds/Checkbox.stories.tsx src/shared/ds/Checkbox.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
