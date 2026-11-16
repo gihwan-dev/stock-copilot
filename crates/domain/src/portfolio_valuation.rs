@@ -1717,4 +1717,16 @@ mod tests {
             Comparison::Unavailable
         );
     }
+    #[test]
+    fn deterministic_zero_cost_and_defined_rates_cover_independent_reference() {
+        for case in [
+            (0, 101, 303, 123_457, false),
+            (0, 101, 303, 123_457, true),
+            (500, 100, 150, 123_457, false),
+            (500, 300, 301, 123_457, true),
+            (500, 300, 100, 123_457, false),
+        ] {
+            assert_review_generated_case(case);
+        }
+    }
 }
