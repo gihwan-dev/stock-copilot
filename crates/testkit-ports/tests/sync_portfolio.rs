@@ -740,4 +740,91 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn non_brokerage_selected_accounts_are_recorded_without_reading_their_assets() {
+        for kind in [
+            "PENSION_SAVINGS",
+            "OVERSEAS_DERIVATIVES",
+            "RESHORING_INVESTMENT",
+            "UNKNOWN",
+        ] {
+            let mut rows = accounts().rows().to_vec();
+            rows.retain(|row| row.account() != &AccountId::new(41));
+            rows.push(
+                BrokerAccountRow::from_broker_account_result(
+                    AccountId::new(41),
+                    BrokerAccountTypeCode::new(kind),
+                    BrokerAccountNumberInput::new("0000009876".to_owned()),
+                    at(),
+                )
+                .expect("다른 유형 계좌"),
+            );
+            let broker = ScriptedBrokerRead::default();
+            broker
+                .script_accounts()
+                .push(Ok(BrokerAccountRows::try_new(rows).expect("계좌 목록")));
+            broker.script_holdings().push(Ok(holdings()));
+            broker.script_buying_power().push(Ok(power(Currency::Krw)));
+            broker.script_buying_power().push(Ok(power(Currency::Usd)));
+            let report = observed_case(&broker, &AccountId::new(41));
+            assert_eq!(report.record.outcome(), &SyncOutcome::AccessBlocked);
+            assert_eq!(report.failures, vec![]);
+            assert_eq!(
+                broker.calls(),
+                vec![testkit_ports::scripted::BrokerReadCall::Accounts()]
+            );
+        }
+    }
+    #[test]
+    fn invalid_portfolio_assembly_is_recorded_as_failed_without_port_errors() {
+        let duplicate = HoldingsObservation::from_broker_result(
+            vec![holding(), holding()],
+            *holdings().reported(),
+        );
+        for (observation, krw, usd) in [
+            (duplicate, power(Currency::Krw), power(Currency::Usd)),
+            (holdings(), power(Currency::Usd), power(Currency::Usd)),
+        ] {
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(Ok(accounts()));
+            broker.script_holdings().push(Ok(observation));
+            broker.script_buying_power().push(Ok(krw));
+            broker.script_buying_power().push(Ok(usd));
+            let report = observed_case(&broker, &AccountId::new(41));
+            assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
+            assert_eq!(report.failures, vec![]);
+        }
+    }
+    #[test]
+    fn all_remaining_account_error_categories_are_failed_and_preserve_the_cause() {
+        for (kind, status) in [
+            (
+                PortErrorKind::NotFound(application::MissingData::Stock),
+                HttpStatus::NotFound,
+            ),
+            (
+                PortErrorKind::InvalidResponse(application::ResponseMismatch::Schema),
+                HttpStatus::Success,
+            ),
+            (
+                PortErrorKind::Unsupported(application::BrokerCapability::Sectors),
+                HttpStatus::NotReceived,
+            ),
+            (
+                PortErrorKind::InvalidRequest(application::RequestRejection::MalformedRequest),
+                HttpStatus::BadRequest,
+            ),
+        ] {
+            let original = PortError::new(ReadEndpoint::Accounts, status, kind);
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(Err(original));
+            let report = observed_case(&broker, &AccountId::new(41));
+            assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
+            assert_eq!(report.failures, vec![original]);
+            assert_eq!(
+                broker.calls(),
+                vec![testkit_ports::scripted::BrokerReadCall::Accounts()]
+            );
+        }
+    }
 }
