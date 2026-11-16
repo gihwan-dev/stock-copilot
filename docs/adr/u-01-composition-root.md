@@ -181,7 +181,7 @@ mktemp 복사본에서 아래 두 변형을 각각 컴파일하고 실행했다.
 
 ## 3차 수정 손 변형
 
-사본 전용 target을 사용해 변형을 각각 새로 컴파일했다. 자체 유효 변형은 누계 36개가 모두 검출됐다. 컴파일 불가 시도는 최초 시계 1개와 아래 별칭 상속 제거의 불필요한 mut 1개로 총 2개이며 검출 수에서 제외한다. 공유 target 캐시 때문에 새 변형의 컴파일을 확인할 수 없었던 중간 실행 두 건도 무효로 제외했고, 전용 target의 원본·복원 대조군과 컴파일 로그로 교체했다. 별도로 독립 비판자가 확인한 실제 shutdown 재작성 생존 1개는 위 잔여 항목으로 유지한다.
+사본 전용 target을 사용해 변형을 각각 새로 컴파일했다. 자체 유효 변형은 누계 37개가 모두 검출됐다. 컴파일 불가 시도는 최초 시계 1개와 아래 별칭 상속 제거의 불필요한 mut 1개로 총 2개이며 검출 수에서 제외한다. 공유 target 캐시 때문에 새 변형의 컴파일을 확인할 수 없었던 중간 실행 두 건도 무효로 제외했고, 전용 target의 원본·복원 대조군과 컴파일 로그로 교체했다. 별도로 독립 비판자가 확인한 실제 shutdown 재작성 생존 1개는 위 잔여 항목으로 유지한다.
 
 | 번호 | 바꾼 것 | 컴파일 | 잡은 테스트 | 결과 |
 | ---- | ------- | ------ | ----------- | ---- |
@@ -189,5 +189,8 @@ mktemp 복사본에서 아래 두 변형을 각각 컴파일하고 실행했다.
 | 1b | 파일 간 별칭 상속 제거와 불필요한 mut 정리 | 통과 | arch_check_cases_tests::every_case_reports_exactly_its_findings | 검출 |
 | 2 | impl 연관 타입 별칭 수집 제거 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
 | 3 | 모듈 접두부 뒤 별칭 후보 검사 제거 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
+| 4 | 별칭 순환 검사로 반복 모듈 접두부를 먼저 차단 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
+
+같은 모듈 이름이 경로에 반복돼도 별칭 순환으로 오인하지 않는다. 경로 접두부를 줄이는 탐색과 별칭을 확장하는 순환 제한을 구분한다. 반복 모듈 고정 자료는 수정 전 실패·수정 후 통과했고, 순서를 되돌리는 유효 변형도 검출됐다. 이 보완은 master 병합 시 포함하며 최종 병합 훅으로 검증한다.
 
 최종 수정 소스로 just mutants-diff를 다시 실행했지만, 사전 승인된 기존 테스트 변경 2건의 test-diff 사전 관문에서 거부됐다. 실제 자동 변이 실행은 없으며 자동 변이 통과로 보고하지 않는다.

@@ -117,3 +117,8 @@ forbidden = false
 name = "private-module-qualified-alias"
 source = 'pub mod parent { use platform_macos::SystemClock as Native; pub mod child { pub fn make() -> Result<crate::parent::Native, domain::TimeError> { crate::parent::Native::new() } } }'
 forbidden = true
+
+[[case]]
+name = "repeated-module-qualified-alias"
+source = 'pub mod parent { pub mod parent { use platform_macos::SystemClock as Native; pub mod child { pub fn make() -> Result<crate::parent::parent::Native, domain::TimeError> { crate::parent::parent::Native::new() } } } }'
+forbidden = true

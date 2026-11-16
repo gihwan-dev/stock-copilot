@@ -39,11 +39,14 @@ impl Bindings {
             if adapter_root && !path_value {
                 return true;
             }
-            if adapter_root || !visited.insert(first.clone()) {
+            if adapter_root {
                 continue;
             }
             if resolved.len() > 1 {
                 pending.push((resolved.iter().skip(1).cloned().collect(), visited.clone()));
+            }
+            if !visited.insert(first.clone()) {
+                continue;
             }
             let Some(alternatives) = self.imported.get(first) else {
                 continue;
