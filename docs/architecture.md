@@ -803,7 +803,7 @@ WKWebView에서의 한글 입력과 문자열 형식화 결과·U+2212·고정�
 
 | 항목 | 결정 | 근거 |
 |---|---|---|
-| 드라이버 | `rusqlite` `=0.41.1`, 기능 `bundled-sqlcipher`, `backup`, `hooks`. `store-sqlite`에만 | R-06 |
+| 드라이버 | `rusqlite` `=0.42.0`, 기능 `bundled-sqlcipher`, `backup`, `hooks`, `codec`. `store-sqlite`에만 | R-06 |
 | 연결 | 전용 DB 스레드 하나가 쓰기 연결을 쥐고 채널로 요청을 받는다 | R-06 |
 | 암호화 | SQLCipher(macOS CommonCrypto). WAL과 저널 포함, `TEMP_STORE=2` | R-06 |
 | 키 | 키체인의 32바이트 난수 원시 키(KDF 없음). 조립 루트가 `SecretStore`에서 꺼내 `store-sqlite`에 넘긴다. 두 어댑터는 서로 의존하지 않는다 | R-06 |
@@ -885,7 +885,7 @@ WKWebView에서의 한글 입력과 문자열 형식화 결과·U+2212·고정�
 | 의존 검사 | `xtask arch-check`(`cargo metadata`) 단독 | R-09 |
 | 본인 확인 | 네이티브 요약 창(`rfd`) + `LAContext.evaluatePolicy` 직접 호출, `platform-macos` | I-02, R-16 |
 | 키체인 | 데이터 보호 키체인, `security-framework` 3.7.0 | R-16 |
-| SQLite 드라이버와 암호화 | `rusqlite` `=0.41.1` + SQLCipher(CommonCrypto), 32바이트 원시 키 | R-06 |
+| SQLite 드라이버와 암호화 | `rusqlite` `=0.42.0` + SQLCipher(CommonCrypto), 32바이트 원시 키 | R-06 |
 | 감사 로그 | 변조 탐지 로그(트리거, authorizer, 해시 체인, HMAC, 키체인 머리값, 토스 대조) | I-10, R-06, R-16 |
 | 스케줄러 시계 | 벽시계 짧은 주기 비교, `Clock` 포트 | R-05 |
 | 토스 타입 | `typify` 0.8.0으로 스키마만 생성(`broker-toss-schema`), HTTP는 손으로 | R-09 |
