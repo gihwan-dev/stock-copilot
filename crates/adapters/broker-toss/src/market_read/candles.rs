@@ -76,23 +76,25 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
         }
         let mut previous = None;
         for row in decoded.candles {
-            let candle = decode(reader, &row, instrument, period, adjustment)?;
-            let at = candle.time().timestamp();
+            let parsed = parse(reader, &row, instrument, period)?;
+            let at = parsed.time.timestamp();
             if at > boundary || previous.is_some_and(|newer| newer <= at) {
                 return Err(invalid(ENDPOINT));
             }
             previous = Some(at);
+            if at < window.start() || at >= window.end() {
+                continue;
+            }
+            let candle = assemble(reader, parsed, instrument, adjustment)?;
             if result.get(&at).is_some_and(|old| !same(old, &candle)) {
                 return Err(invalid(ENDPOINT));
             }
-            if at >= window.start() && at < window.end() {
-                result.entry(at).or_insert(candle);
-            }
+            result.entry(at).or_insert(candle);
         }
         if previous.is_some_and(|at| at <= window.start()) || decoded.next_before.is_none() {
             let candles = result.into_values().collect::<Vec<_>>();
             validate_gaps(reader, instrument, period, &candles)?;
-            validate_adjusted_limits(reader, instrument, period, adjustment, &candles)?;
+            validate_adjusted_moves(reader, instrument, period, adjustment, &candles)?;
             return Ok(candles);
         }
         let next = decoded.next_before.ok_or_else(|| invalid(ENDPOINT))?;
@@ -111,13 +113,18 @@ fn same(left: &Candle, right: &Candle) -> bool {
         && left.adjustment() == right.adjustment()
         && left.status() == right.status()
 }
-fn decode<S: SecretStore, T: Clock, R: TokenRenewal>(
+#[derive(Clone, Copy)]
+struct ParsedCandle {
+    time: CandleTime,
+    values: Ohlcv,
+    collected_at: Timestamp,
+}
+fn parse<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     row: &broker_toss_schema::types::Candle,
     instrument: &QuoteInstrument,
     period: CandlePeriod,
-    adjustment: PriceAdjustment,
-) -> Result<Candle, PortError> {
+) -> Result<ParsedCandle, PortError> {
     let at = timestamp(&row.timestamp, ENDPOINT)?;
     let observed = reader.market_now();
     let unit = currency(&row.currency.to_string(), ENDPOINT)?;
@@ -134,17 +141,30 @@ fn decode<S: SecretStore, T: Clock, R: TokenRenewal>(
             .map_err(|_error| invalid(ENDPOINT))?,
     )
     .map_err(|_error| invalid(ENDPOINT))?;
-    let status = match period {
+    let time = CandleTime::try_new(at, period).map_err(|_error| invalid(ENDPOINT))?;
+    Ok(ParsedCandle {
+        time,
+        values,
+        collected_at: observed,
+    })
+}
+fn assemble<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    parsed: ParsedCandle,
+    instrument: &QuoteInstrument,
+    adjustment: PriceAdjustment,
+) -> Result<Candle, PortError> {
+    let status = match parsed.time.period() {
         CandlePeriod::Minute => CandleStatus::Finalized,
         CandlePeriod::Daily => {
-            let session = session_for(reader, instrument, at.offset_calendar_date())?;
+            let session = session_for(reader, instrument, parsed.time.date())?;
             let end = session
                 .sessions()
                 .iter()
                 .map(|segment| segment.session().interval().end())
                 .max()
                 .ok_or_else(|| invalid(ENDPOINT))?;
-            if observed >= end {
+            if parsed.collected_at >= end {
                 CandleStatus::Finalized
             } else {
                 CandleStatus::InProgress
@@ -153,10 +173,10 @@ fn decode<S: SecretStore, T: Clock, R: TokenRenewal>(
     };
     Candle::try_new(
         instrument.instrument_id().clone(),
-        CandleTime::try_new(at, period).map_err(|_error| invalid(ENDPOINT))?,
+        parsed.time,
         adjustment,
-        values,
-        CandleObservation::new(observed, status),
+        parsed.values,
+        CandleObservation::new(parsed.collected_at, status),
     )
     .map_err(|_error| invalid(ENDPOINT))
 }
@@ -236,7 +256,7 @@ fn unsupported(capability: application::BrokerCapability) -> PortError {
         application::PortErrorKind::Unsupported(capability),
     )
 }
-fn validate_adjusted_limits<S: SecretStore, T: Clock, R: TokenRenewal>(
+fn validate_adjusted_moves<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     instrument: &QuoteInstrument,
     period: CandlePeriod,
@@ -247,39 +267,45 @@ fn validate_adjusted_limits<S: SecretStore, T: Clock, R: TokenRenewal>(
         CandlePeriod::Minute => return Ok(()),
         CandlePeriod::Daily => {}
     }
-    let basis = match adjustment {
+    match adjustment {
         PriceAdjustment::Raw => return Ok(()),
-        PriceAdjustment::Adjusted(value) => value,
-    };
-    for candle in candles {
-        let (_supplied_basis, limits) = reader
-            .market_adjusted_limits()
-            .filter(|(supplied, _)| supplied == &basis)
-            .ok_or_else(|| unsupported(application::BrokerCapability::AdjustedHistory))?;
-        let mut matching = limits.iter().filter(|entry| {
-            entry.instrument() == instrument
-                && entry.timestamp().offset_calendar_date() == candle.time().date()
-        });
-        let bound = matching
-            .next()
-            .ok_or_else(|| unsupported(application::BrokerCapability::AdjustedHistory))?;
-        if matching.next().is_some() {
-            return Err(invalid(ENDPOINT));
-        }
-        check_limit(bound, instrument, candle.values().low())?;
-        check_limit(bound, instrument, candle.values().high())?;
+        PriceAdjustment::Adjusted(_) => {}
+    }
+    let master = reader
+        .market_master()
+        .instruments()
+        .iter()
+        .find(|entry| {
+            entry
+                .quote_instrument()
+                .is_ok_and(|quoted| &quoted == instrument)
+        })
+        .ok_or_else(|| unsupported(application::BrokerCapability::AdjustedHistory))?;
+    for [previous, current] in candles.array_windows::<2>() {
+        check_move(
+            master,
+            current.time().date(),
+            previous.values().close(),
+            current.values().low(),
+        )?;
+        check_move(
+            master,
+            current.time().date(),
+            previous.values().close(),
+            current.values().high(),
+        )?;
     }
     Ok(())
 }
-fn check_limit(
-    limits: &domain::PriceLimits,
-    instrument: &QuoteInstrument,
-    value: domain::Price,
+fn check_move(
+    master: &domain::MasterInstrument,
+    date: domain::CalendarDate,
+    previous: domain::Price,
+    current: domain::Price,
 ) -> Result<(), PortError> {
-    match limits
-        .check(instrument, value)
-        .map_err(|_error| invalid(ENDPOINT))?
-    {
+    let result = domain::PriceLimits::check_adjusted_move(master, date, previous, current)
+        .map_err(|_error| unsupported(application::BrokerCapability::AdjustedHistory))?;
+    match result {
         domain::PriceLimitCheck::Within | domain::PriceLimitCheck::Unlimited => Ok(()),
         domain::PriceLimitCheck::BelowLower | domain::PriceLimitCheck::AboveUpper => {
             Err(invalid(ENDPOINT))
