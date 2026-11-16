@@ -62,7 +62,7 @@ architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으�
 
 DB 소유권은 조립 루트에 두고 저장소가 공유 차용한다. 외부 공개 API의 명시적 종료 회귀, 원시 TEXT와 offset 보존 단언, 나노초 역순 삽입·자료 KST 자정 경계, 다른 계좌의 손상 격리 회귀를 추가했다. 조회 SQL은 계좌 조건으로 먼저 거른다. ADR의 승인 목록 누락1행을 보충했다. 저장소가 주문용 종목 권한 타입을 복원하거나 PortfolioRepository를 새로 정의하지 않는 범위는 사용자 지시대로 유지한다. 서명 옵션과 ADR 초안 이름도 사용자 지정 그대로다.
 
-1차 수정 후 검사는 crate81/81·clippy 통과, 전체1669/1669(속성4096·동시실행4), 커버리지1059/1059·위반 없음이다. 정상 훅의 기존 Git 훅 회귀2건 실패와 재실행 경위는 리뷰 기록에 구분했다. test-diff는 기존 승인16건이며 신규 승인 대상은 추가되지 않았다. 수정 소스의 손 변형도 유효22개 전부 재검출, 전후 대조군은11개 통과했다. 조립 루트는 공유 차용한 저장소들의 사용이 끝난 뒤 원래 Database::close를 호출한다.
+1차 수정 후 검사는 crate81/81·clippy 통과, 전체1669/1669(속성4096·동시실행4), 커버리지1059/1059·위반 없음이다. 정상 훅의 기존 Git 훅 회귀2건 실패와 재실행 경위는 리뷰 기록에 구분했다. test-diff는 기존 승인16건이며 신규 승인 대상은 추가되지 않았다. 수정 소스의 손 변형은 유효21개 검출(당시22개 집계는 아래 정정 참조), 전후 대조군은11개 통과했다. 조립 루트는 공유 차용한 저장소들의 사용이 끝난 뒤 원래 Database::close를 호출한다.
 
 
 ## 앱 상태 조립과 축소 실패 계약
@@ -89,7 +89,7 @@ Database를 소유한 앱 상태의 메서드에서 호출마다 HoldingsStore�
 
 ## 손 변형
 
-임시 사본에서 전후 대조군 각각 신규 7개 통과. 컴파일 가능한 22개 전부 검출, 컴파일불가 1개는 제외했다. 자동 mutants-diff는 사전 승인된 기존 테스트 변경16건을 test-diff가 거부해 변이를 실행하지 못했다. 자동 변이 통과로 표시하지 않는다.
+초기 두 실행의 실제 유효 변형은21개 검출이었다. 당시22개 집계는 줄바꿈으로 적용되지 않은12번까지 센 오류여서 정정한다. 초기 전후 대조군은7개, 수정 후 전후 대조군은11개 통과했다. 최종 검산에서12번을 개행에 맞게 실제 적용·컴파일해 아래 테스트들이 실패함을 확인했고 현재 제품 코드의 실행된 유효 변형은총22개다. 컴파일불가1개는 제외한다. 최종 SHA에서도 수정된 실행기로 전체를 다시 확인한다. 자동 mutants-diff는 사전 승인된 기존 테스트 변경16건을 test-diff가 거부해 변이를 실행하지 못했다. 자동 변이 통과로 표시하지 않는다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
 |---|---|---|---|
@@ -104,6 +104,7 @@ Database를 소유한 앱 상태의 메서드에서 호출마다 HoldingsStore�
 | 9 | at: timestamp(row, 2)? -> at: timestamp(row, 1)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 10 | row.get::<_, String>(2)? -> row.get::<_, String>(3)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::corruption_is_rejected_by_domain_and_decimal_constraint, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 11 | row.get::<_, String>(3)? -> row.get::<_, String>(2)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 12 | .get::<_, Option<String>>(4)? -> .get::<_, Option<String>>(5)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent, holdings_tests::same_second_keeps_largest_nanos_and_kst_midnight_splits_source_days, holdings_tests::shared_database_remains_owned_by_caller_for_explicit_close, holdings_tests::stored_text_scale_and_offsets_survive_round_trip_and_semantic_retry, holdings_tests::unrelated_corrupt_header_does_not_block_account_history | 검출 |
 | 13 | row.get::<_, Option<String>>(5)? -> row.get::<_, Option<String>>(6)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 14 | row.get::<_, Option<String>>(6)? -> row.get::<_, Option<String>>(5)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 15 | row.get::<_, Option<String>>(7)? -> row.get::<_, Option<String>>(8)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
