@@ -78,7 +78,10 @@ mod tests {
         fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
             std::future::ready(Ok(()))
         }
-        fn reconcile_orders(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+        fn reconcile_orders(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
             std::future::ready(Ok(()))
         }
     }
@@ -111,12 +114,12 @@ mod tests {
             Store,
             clock,
             Renewal,
-            EventBus::default(),
+            Arc::new(EventBus::default()),
         )
     }
 
-    async fn issue_shared(
-        manager: Arc<TokenManager<Store, FakeClock, Renewal>>,
+    async fn issue_shared<R: TokenRenewal>(
+        manager: Arc<TokenManager<Store, FakeClock, R>>,
     ) -> Result<broker_toss::TokenLease, TokenError> {
         manager.token().await
     }
@@ -229,7 +232,7 @@ mod tests {
             Store,
             clock.clone(),
             Renewal,
-            builder.build(),
+            Arc::new(builder.build()),
         );
         runtime().block_on(async {
             manager.token().await.expect("initial");
@@ -326,8 +329,12 @@ mod tests {
                 Ok(())
             })
         }
-        fn reconcile_orders(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+        fn reconcile_orders(
+            &self,
+            token: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
             std::future::ready({
+                assert_eq!(token.as_exposed_secret(), b"sequence-37");
                 self.0.write().expect("lock").push("orders");
                 Ok(())
             })
@@ -343,7 +350,7 @@ mod tests {
             Store,
             FakeClock(Arc::new(AtomicI64::new(1000))),
             OrderedRenewal(Arc::clone(&order)),
-            EventBus::default(),
+            Arc::new(EventBus::default()),
         );
         runtime().block_on(manager.token()).expect("token");
         assert_eq!(
@@ -405,7 +412,10 @@ mod tests {
         fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
             std::future::ready(self.step(Stage::Subscribe))
         }
-        fn reconcile_orders(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+        fn reconcile_orders(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
             std::future::ready(self.step(Stage::Orders))
         }
     }
@@ -436,7 +446,7 @@ mod tests {
                 Store,
                 FakeClock(Arc::new(AtomicI64::new(1000))),
                 FailingRenewal(stage, Arc::clone(&calls)),
-                EventBus::default(),
+                Arc::new(EventBus::default()),
             );
             runtime().block_on(async {
                 assert_eq!(
@@ -448,5 +458,494 @@ mod tests {
             assert_eq!(*calls.read().expect("lock"), expected);
             server.finish().expect("captured");
         }
+    }
+    #[derive(Clone, Copy)]
+    enum AdvanceTarget {
+        RefreshAt,
+        BeforeExpiry,
+        ExpiresAt,
+        AfterExpiry,
+    }
+    struct AdvancingRenewal(FakeClock, AdvanceTarget);
+    impl TokenRenewal for AdvancingRenewal {
+        fn close(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+        fn reconnect(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+        fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+        fn reconcile_orders(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
+            let time = match self.1 {
+                AdvanceTarget::RefreshAt => 1060,
+                AdvanceTarget::BeforeExpiry => 1119,
+                AdvanceTarget::ExpiresAt => 1120,
+                AdvanceTarget::AfterExpiry => 1121,
+            };
+            self.0.0.store(time, Ordering::SeqCst);
+            std::future::ready(Ok(()))
+        }
+    }
+    #[test]
+    fn queued_requests_share_success_even_when_refresh_becomes_due_during_issuance() {
+        let server = ScriptedHttpServer::start(vec![issued("delayed-937")]).expect("server");
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        let manager = Arc::new(TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            clock.clone(),
+            AdvancingRenewal(clock, AdvanceTarget::RefreshAt),
+            Arc::new(EventBus::default()),
+        ));
+        runtime().block_on(async {
+            let mut tasks = Vec::new();
+            for _ in 0_u32..8 {
+                tasks.push(tokio::spawn(issue_shared(Arc::clone(&manager))));
+            }
+            for task in tasks {
+                assert_eq!(
+                    task.await
+                        .expect("join")
+                        .expect("shared issuance")
+                        .secret()
+                        .as_exposed_secret(),
+                    b"delayed-937"
+                );
+            }
+        });
+        assert_eq!(
+            String::from_utf8(server.finish().expect("capture"))
+                .expect("utf8")
+                .matches("/oauth2/token HTTP/1.1")
+                .count(),
+            1
+        );
+    }
+    struct HangingRenewal(
+        Arc<std::sync::atomic::AtomicUsize>,
+        Arc<tokio::sync::Notify>,
+    );
+    impl TokenRenewal for HangingRenewal {
+        fn close(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            std::future::ready(Ok(()))
+        }
+        async fn reconnect(&self, _: &SecretValue) -> Result<(), TokenError> {
+            if self.0.load(Ordering::SeqCst) == 2 {
+                self.1.notify_one();
+                std::future::pending().await
+            } else {
+                Ok(())
+            }
+        }
+        fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+        fn reconcile_orders(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+    }
+    #[test]
+    fn cancelled_renewal_disconnects_once_shares_failure_and_can_recover() {
+        let server = ScriptedHttpServer::start(vec![
+            issued("initial-913"),
+            issued("cancelled-417"),
+            issued("recovered-831"),
+        ])
+        .expect("server");
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        let closed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let notice = Arc::new(tokio::sync::Notify::new());
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut builder = application::EventBusBuilder::default();
+        builder.subscribe(
+            std::collections::BTreeSet::from([domain::DomainEventKind::BrokerConnectionChanged]),
+            Counter(Arc::clone(&count)),
+        );
+        let manager = Arc::new(TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            clock.clone(),
+            HangingRenewal(Arc::clone(&closed), Arc::clone(&notice)),
+            Arc::new(builder.build()),
+        ));
+        runtime().block_on(async {
+            manager.token().await.expect("initial");
+            clock.0.store(1070, Ordering::SeqCst);
+            let leader = tokio::spawn(issue_shared(Arc::clone(&manager)));
+            tokio::time::timeout(std::time::Duration::from_secs(5), notice.notified())
+                .await
+                .expect("reconnect reached");
+            let waiter = tokio::spawn(issue_shared(Arc::clone(&manager)));
+            tokio::task::yield_now().await;
+            leader.abort();
+            assert!(leader.await.expect_err("cancelled").is_cancelled());
+            assert_eq!(
+                waiter
+                    .await
+                    .expect("waiter")
+                    .expect_err("shared cancellation"),
+                TokenError::Renewal
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+            assert_eq!(count.load(Ordering::SeqCst), 2);
+            assert_eq!(closed.load(Ordering::SeqCst), 2);
+            assert_eq!(
+                manager
+                    .token()
+                    .await
+                    .expect("recovery")
+                    .secret()
+                    .as_exposed_secret(),
+                b"recovered-831"
+            );
+            assert_eq!(count.load(Ordering::SeqCst), 3);
+        });
+        server.finish().expect("capture");
+    }
+    #[test]
+    fn equivalent_json_escapes_preserve_token_and_bearer_type() {
+        for body in [
+            r#"{"access_token":"\u0066ake-token-942","token_type":"Bearer","expires_in":120}"#,
+            r#"{"access_token":"fake-token-942","token_type":"\u0042earer","expires_in":120}"#,
+        ] {
+            let decoded: broker_toss_schema::types::OAuth2TokenResponse =
+                serde_json::from_str(body).expect("schema accepts equivalent JSON");
+            assert_eq!(decoded.access_token, "fake-token-942");
+            let server = ScriptedHttpServer::start(vec![response("200 OK", body)]).expect("server");
+            let manager = manager(&server, FakeClock(Arc::new(AtomicI64::new(1000))));
+            assert_eq!(
+                runtime()
+                    .block_on(manager.token())
+                    .expect("decoded")
+                    .secret()
+                    .as_exposed_secret(),
+                b"fake-token-942"
+            );
+            server.finish().expect("capture");
+        }
+    }
+    async fn wait_until_held(gate: testkit::ResponseGate) -> testkit::ResponseGate {
+        loop {
+            match gate.observe() {
+                testkit::GateObservation::Held => break gate,
+                testkit::GateObservation::Waiting => tokio::task::yield_now().await,
+                testkit::GateObservation::Closed => {
+                    panic!("gate closed before observing the held response")
+                }
+            }
+        }
+    }
+    async fn read_accounts<R: TokenRenewal>(
+        manager: Arc<TokenManager<Store, FakeClock, R>>,
+    ) -> Result<broker_toss::RawResponse, TokenError> {
+        manager
+            .get(&broker_toss::ReadRequest::new(
+                broker_toss::ReadRoute::Accounts,
+            ))
+            .await
+    }
+    #[test]
+    fn obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token() {
+        let revoked = response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#);
+        let (server, gate) = ScriptedHttpServer::start_holding(
+            vec![
+                issued("one-913"),
+                revoked.clone(),
+                issued("two-417"),
+                revoked,
+                issued("three-831"),
+            ],
+            testkit::HoldPosition::new(3),
+        )
+        .expect("server");
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        let manager = Arc::new(manager(&server, clock.clone()));
+        runtime().block_on(async {
+            let lookup = tokio::spawn(read_accounts(Arc::clone(&manager)));
+            let observed_gate =
+                tokio::time::timeout(std::time::Duration::from_secs(5), wait_until_held(gate))
+                    .await
+                    .expect("retry held");
+            clock.0.store(1060, Ordering::SeqCst);
+            assert_eq!(
+                manager
+                    .token()
+                    .await
+                    .expect("planned renewal")
+                    .secret()
+                    .as_exposed_secret(),
+                b"three-831"
+            );
+            observed_gate.release().expect("release old response");
+            assert_eq!(
+                lookup
+                    .await
+                    .expect("join")
+                    .expect_err("request remains closed"),
+                TokenError::Superseded
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Connected);
+            assert_eq!(
+                manager
+                    .token()
+                    .await
+                    .expect("latest remains usable")
+                    .secret()
+                    .as_exposed_secret(),
+                b"three-831"
+            );
+        });
+        assert_eq!(
+            String::from_utf8(server.finish().expect("capture"))
+                .expect("utf8")
+                .matches("/oauth2/token HTTP/1.1")
+                .count(),
+            3
+        );
+    }
+    #[test]
+    fn connection_coordinator_can_recover_duplicate_key_without_restarting_manager() {
+        let revoked = response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#);
+        let server = ScriptedHttpServer::start(vec![
+            issued("old-913"),
+            revoked.clone(),
+            issued("retry-417"),
+            revoked,
+            issued("recovered-831"),
+        ])
+        .expect("server");
+        let manager = manager(&server, FakeClock(Arc::new(AtomicI64::new(1000))));
+        runtime().block_on(async {
+            assert_eq!(
+                manager
+                    .get(&broker_toss::ReadRequest::new(
+                        broker_toss::ReadRoute::Accounts
+                    ))
+                    .await
+                    .expect_err("duplicate"),
+                TokenError::RevokedRepeated
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::DuplicateKey);
+            assert_eq!(
+                manager.token().await.expect_err("normal calls stay closed"),
+                TokenError::RevokedRepeated
+            );
+            assert_eq!(
+                manager
+                    .retry_connection()
+                    .await
+                    .expect("coordinator retry")
+                    .secret()
+                    .as_exposed_secret(),
+                b"recovered-831"
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Connected);
+            assert_eq!(
+                manager
+                    .retry_connection()
+                    .await
+                    .expect("already connected")
+                    .secret()
+                    .as_exposed_secret(),
+                b"recovered-831"
+            );
+        });
+        assert_eq!(
+            String::from_utf8(server.finish().expect("capture"))
+                .expect("utf8")
+                .matches("/oauth2/token HTTP/1.1")
+                .count(),
+            3
+        );
+    }
+    fn advancing_manager(
+        server: &ScriptedHttpServer,
+        target: AdvanceTarget,
+    ) -> Arc<TokenManager<Store, FakeClock, AdvancingRenewal>> {
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        Arc::new(TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            clock.clone(),
+            AdvancingRenewal(clock, target),
+            Arc::new(EventBus::default()),
+        ))
+    }
+    #[test]
+    fn one_second_before_expiry_can_still_be_shared_by_the_waiting_generation() {
+        let server = ScriptedHttpServer::start(vec![issued("last-second-937")]).expect("server");
+        let manager = advancing_manager(&server, AdvanceTarget::BeforeExpiry);
+        runtime().block_on(async {
+            let mut tasks = Vec::new();
+            for _ in 0_u32..8 {
+                tasks.push(tokio::spawn(issue_shared(Arc::clone(&manager))));
+            }
+            for task in tasks {
+                assert_eq!(
+                    task.await
+                        .expect("join")
+                        .expect("still valid")
+                        .secret()
+                        .as_exposed_secret(),
+                    b"last-second-937"
+                );
+            }
+        });
+        assert_eq!(
+            String::from_utf8(server.finish().expect("capture"))
+                .expect("utf8")
+                .matches("/oauth2/token HTTP/1.1")
+                .count(),
+            1
+        );
+    }
+    async fn shared_expiry_failure(manager: Arc<TokenManager<Store, FakeClock, AdvancingRenewal>>) {
+        let mut tasks = Vec::new();
+        for _ in 0_u32..8 {
+            tasks.push(tokio::spawn(issue_shared(Arc::clone(&manager))));
+        }
+        for task in tasks {
+            assert_eq!(
+                task.await.expect("join").expect_err("expired response"),
+                TokenError::InvalidResponse
+            );
+        }
+        assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+    }
+    #[test]
+    fn expiry_instant_and_after_expiry_share_failure_and_never_return_expired_token() {
+        for target in [AdvanceTarget::ExpiresAt, AdvanceTarget::AfterExpiry] {
+            let server = ScriptedHttpServer::start(vec![issued("expired-937")]).expect("server");
+            runtime().block_on(shared_expiry_failure(advancing_manager(&server, target)));
+            assert_eq!(
+                String::from_utf8(server.finish().expect("capture"))
+                    .expect("utf8")
+                    .matches("/oauth2/token HTTP/1.1")
+                    .count(),
+                1
+            );
+        }
+    }
+    struct EventKinds(Arc<std::sync::RwLock<Vec<domain::DomainEventKind>>>);
+    fn record_kind(
+        kinds: &std::sync::RwLock<Vec<domain::DomainEventKind>>,
+        kind: domain::DomainEventKind,
+    ) {
+        kinds.write().expect("lock").push(kind);
+    }
+    impl application::EventSubscriber for EventKinds {
+        fn on_event(
+            &self,
+            event: &domain::DomainEvent,
+        ) -> Result<(), application::SubscriberFailure> {
+            record_kind(&self.0, event.kind());
+            Ok(())
+        }
+    }
+    #[test]
+    fn connection_changes_use_the_same_bus_as_other_application_publishers() {
+        let server = ScriptedHttpServer::start(vec![issued("shared-bus-937")]).expect("server");
+        let kinds = Arc::new(std::sync::RwLock::new(Vec::new()));
+        let mut builder = application::EventBusBuilder::default();
+        builder.subscribe(
+            std::collections::BTreeSet::from([
+                domain::DomainEventKind::BrokerConnectionChanged,
+                domain::DomainEventKind::SettingsChanged,
+            ]),
+            EventKinds(Arc::clone(&kinds)),
+        );
+        let bus = Arc::new(builder.build());
+        let manager = TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            FakeClock(Arc::new(AtomicI64::new(1000))),
+            Renewal,
+            Arc::clone(&bus),
+        );
+        runtime().block_on(manager.token()).expect("token");
+        let report = bus.publish(domain::DomainEvent::SettingsChanged);
+        assert_eq!(report.failures, Vec::new());
+        assert_eq!(
+            *kinds.read().expect("lock"),
+            [
+                domain::DomainEventKind::BrokerConnectionChanged,
+                domain::DomainEventKind::SettingsChanged
+            ]
+        );
+        server.finish().expect("capture");
+    }
+    #[test]
+    fn invalid_token_also_reissues_once_as_required_by_t04_handoff() {
+        let invalid = response("401 Unauthorized", r#"{"error":{"code":"invalid-token"}}"#);
+        let server = ScriptedHttpServer::start(vec![
+            issued("one-913"),
+            invalid,
+            issued("two-417"),
+            response("200 OK", "{}"),
+        ])
+        .expect("server");
+        let manager = manager(&server, FakeClock(Arc::new(AtomicI64::new(1000))));
+        let result = runtime()
+            .block_on(manager.get(&broker_toss::ReadRequest::new(
+                broker_toss::ReadRoute::Accounts,
+            )))
+            .expect("recovered");
+        assert_eq!(result.status(), 200);
+        assert_eq!(
+            String::from_utf8(server.finish().expect("capture"))
+                .expect("utf8")
+                .matches("/oauth2/token HTTP/1.1")
+                .count(),
+            2
+        );
+    }
+    #[test]
+    fn repeated_invalid_token_closes_request_without_reporting_duplicate_key() {
+        let invalid = response("401 Unauthorized", r#"{"error":{"code":"invalid-token"}}"#);
+        let server = ScriptedHttpServer::start(vec![
+            issued("one-913"),
+            invalid.clone(),
+            issued("two-417"),
+            invalid,
+        ])
+        .expect("server");
+        let manager = manager(&server, FakeClock(Arc::new(AtomicI64::new(1000))));
+        runtime().block_on(async {
+            assert_eq!(
+                manager
+                    .get(&broker_toss::ReadRequest::new(
+                        broker_toss::ReadRoute::Accounts
+                    ))
+                    .await
+                    .expect_err("closed"),
+                TokenError::Rejected(application::PortErrorKind::InvalidRequest(
+                    application::RequestRejection::InvalidToken
+                ))
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+        });
+        assert_eq!(
+            String::from_utf8(server.finish().expect("capture"))
+                .expect("utf8")
+                .matches("/oauth2/token HTTP/1.1")
+                .count(),
+            2
+        );
     }
 }

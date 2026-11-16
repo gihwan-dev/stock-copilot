@@ -68,4 +68,4 @@ pub fn test_executable() -> std::io::Result<std::path::PathBuf> {
 }
 
 mod scripted_http_server;
-pub use scripted_http_server::ScriptedHttpServer;
+pub use scripted_http_server::{GateObservation, HoldPosition, ResponseGate, ScriptedHttpServer};

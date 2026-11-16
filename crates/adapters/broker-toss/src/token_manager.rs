@@ -22,6 +22,7 @@ pub enum TokenError {
     InvalidResponse,
     Renewal,
     RevokedRepeated,
+    Superseded,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BrokerConnection {
@@ -35,7 +36,10 @@ pub trait TokenRenewal: Send + Sync {
     fn reconnect(&self, token: &SecretValue)
     -> impl Future<Output = Result<(), TokenError>> + Send;
     fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send;
-    fn reconcile_orders(&self) -> impl Future<Output = Result<(), TokenError>> + Send;
+    fn reconcile_orders(
+        &self,
+        token: &SecretValue,
+    ) -> impl Future<Output = Result<(), TokenError>> + Send;
 }
 #[derive(Debug)]
 struct Token {
@@ -64,15 +68,83 @@ pub struct TokenManager<Store, Time, Renewal> {
     store: Store,
     clock: Time,
     renewal: Renewal,
-    bus: EventBus,
+    bus: Arc<EventBus>,
     generation: Generation,
     state: Mutex<State>,
 }
 #[derive(serde::Deserialize)]
-struct TokenResponse<'a> {
-    access_token: &'a str,
-    token_type: &'a str,
+enum TokenType {
+    Bearer,
+}
+#[derive(serde::Deserialize)]
+struct TokenResponse {
+    #[serde(deserialize_with = "deserialize_secret")]
+    access_token: SecretValue,
+    token_type: TokenType,
     expires_in: u64,
+}
+struct SecretVisitor;
+impl serde::de::Visitor<'_> for SecretVisitor {
+    type Value = SecretValue;
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("token string")
+    }
+    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        Ok(SecretValue::new(v.as_bytes().to_vec()))
+    }
+    fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
+        Ok(SecretValue::new(v.into_bytes()))
+    }
+}
+fn deserialize_secret<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<SecretValue, D::Error> {
+    deserializer.deserialize_string(SecretVisitor)
+}
+#[derive(PartialEq, Eq)]
+enum ConnectionAttempt {
+    Normal,
+    Recovery,
+}
+#[derive(PartialEq, Eq)]
+enum AttemptCompletion {
+    Pending,
+    Completed,
+}
+struct Attempt<'a> {
+    state: &'a mut State,
+    bus: &'a EventBus,
+    generation: &'a Generation,
+    completion: AttemptCompletion,
+}
+fn change_connection(state: &mut State, bus: &EventBus, connection: BrokerConnection) {
+    if state.connection != connection {
+        state.connection = connection;
+        state.delivery = Some(bus.publish(DomainEvent::BrokerConnectionChanged));
+    }
+}
+impl Attempt<'_> {
+    fn complete(&mut self, result: &Result<TokenLease, TokenError>) {
+        self.completion = AttemptCompletion::Completed;
+        self.state.last_error = result.as_ref().err().copied();
+        self.generation.0.fetch_add(1, Ordering::SeqCst);
+        match result {
+            Ok(token) => {
+                self.state.token = Some(token.clone());
+                change_connection(self.state, self.bus, BrokerConnection::Connected);
+            }
+            Err(_error) => change_connection(self.state, self.bus, BrokerConnection::Disconnected),
+        }
+    }
+}
+impl Drop for Attempt<'_> {
+    fn drop(&mut self) {
+        if self.completion == AttemptCompletion::Pending {
+            self.state.last_error = Some(TokenError::Renewal);
+            self.generation.0.fetch_add(1, Ordering::SeqCst);
+            change_connection(self.state, self.bus, BrokerConnection::Disconnected);
+        }
+    }
 }
 fn parse_token(response: &RawResponse, started: Timestamp) -> Result<TokenLease, TokenError> {
     if response.status() != 200 {
@@ -83,15 +155,16 @@ fn parse_token(response: &RawResponse, started: Timestamp) -> Result<TokenLease,
                 .kind(),
         ));
     }
-    let parsed: TokenResponse<'_> = serde_json::from_slice(response.body().as_exposed_secret())
+    let parsed: TokenResponse = serde_json::from_slice(response.body().as_exposed_secret())
         .map_err(|_error| TokenError::InvalidResponse)?;
-    if parsed.token_type != "Bearer"
-        || parsed.access_token.is_empty()
+    let TokenType::Bearer = parsed.token_type;
+    if parsed.access_token.as_exposed_secret().is_empty()
         || parsed.expires_in < 2
         || !parsed
             .access_token
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/=".contains(&byte))
+            .as_exposed_secret()
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/=".contains(byte))
     {
         return Err(TokenError::InvalidResponse);
     }
@@ -109,7 +182,7 @@ fn parse_token(response: &RawResponse, started: Timestamp) -> Result<TokenLease,
         .checked_sub(margin)
         .map_err(|_error| TokenError::InvalidResponse)?;
     Ok(TokenLease(Arc::new(Token {
-        secret: SecretValue::new(parsed.access_token.as_bytes().to_vec()),
+        secret: parsed.access_token,
         refresh_at,
         expires_at,
     })))
@@ -120,7 +193,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
         store: Store,
         clock: Time,
         renewal: Renewal,
-        bus: EventBus,
+        bus: Arc<EventBus>,
     ) -> Self {
         Self {
             client,
@@ -138,11 +211,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
         }
     }
     fn transition(&self, state: &mut State, connection: BrokerConnection) {
-        if state.connection != connection {
-            state.connection = connection;
-            let report = self.bus.publish(DomainEvent::BrokerConnectionChanged);
-            state.delivery = Some(report);
-        }
+        change_connection(state, &self.bus, connection);
     }
     pub async fn connection(&self) -> BrokerConnection {
         self.state.lock().await.connection
@@ -174,22 +243,31 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
         self.renewal.close().await?;
         self.renewal.reconnect(token.secret()).await?;
         self.renewal.resubscribe().await?;
-        self.renewal.reconcile_orders().await?;
+        self.renewal.reconcile_orders(token.secret()).await?;
         if self.clock.now() >= token.0.expires_at {
             return Err(TokenError::InvalidResponse);
         }
         Ok(token)
     }
-    async fn acquire(&self, rejected: Option<&TokenLease>) -> Result<TokenLease, TokenError> {
+    async fn acquire(
+        &self,
+        rejected: Option<&TokenLease>,
+        mode: ConnectionAttempt,
+    ) -> Result<TokenLease, TokenError> {
         let observed = self.generation.0.load(Ordering::SeqCst);
         let mut state = self.state.lock().await;
-        if state.connection == BrokerConnection::DuplicateKey {
+        if state.connection == BrokerConnection::DuplicateKey && mode == ConnectionAttempt::Normal {
             return Err(TokenError::RevokedRepeated);
         }
-        if observed != self.generation.0.load(Ordering::SeqCst)
-            && let Some(error) = state.last_error
-        {
-            return Err(error);
+        if observed != self.generation.0.load(Ordering::SeqCst) {
+            if let Some(error) = state.last_error {
+                return Err(error);
+            }
+            if let Some(token) = &state.token
+                && self.clock.now() < token.0.expires_at
+            {
+                return Ok(token.clone());
+            }
         }
         if let Some(token) = &state.token
             && self.clock.now() < token.0.refresh_at
@@ -198,20 +276,39 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
             return Ok(token.clone());
         }
         state.token = None;
+        let mut attempt = Attempt {
+            state: &mut state,
+            bus: &self.bus,
+            generation: &self.generation,
+            completion: AttemptCompletion::Pending,
+        };
         let result = self.issue().await;
-        state.last_error = result.as_ref().err().copied();
-        self.generation.0.fetch_add(1, Ordering::SeqCst);
-        match &result {
-            Ok(token) => {
-                state.token = Some(token.clone());
-                self.transition(&mut state, BrokerConnection::Connected);
-            }
-            Err(_error) => self.transition(&mut state, BrokerConnection::Disconnected),
-        }
+        attempt.complete(&result);
         result
     }
+    fn authentication_error(
+        &self,
+        state: &mut State,
+        failure: AuthenticationFailure,
+    ) -> TokenError {
+        match failure {
+            AuthenticationFailure::Revoked => {
+                self.transition(state, BrokerConnection::DuplicateKey);
+                TokenError::RevokedRepeated
+            }
+            AuthenticationFailure::InvalidToken => {
+                self.transition(state, BrokerConnection::Disconnected);
+                TokenError::Rejected(PortErrorKind::InvalidRequest(
+                    application::RequestRejection::InvalidToken,
+                ))
+            }
+        }
+    }
     pub async fn token(&self) -> Result<TokenLease, TokenError> {
-        self.acquire(None).await
+        self.acquire(None, ConnectionAttempt::Normal).await
+    }
+    pub async fn retry_connection(&self) -> Result<TokenLease, TokenError> {
+        self.acquire(None, ConnectionAttempt::Recovery).await
     }
     pub async fn get(&self, request: &ReadRequest) -> Result<RawResponse, TokenError> {
         let token = self.token().await?;
@@ -220,31 +317,52 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
             .get(request, token.secret())
             .await
             .map_err(TokenError::Http)?;
-        if !revoked(&response) {
+        if authentication_failure(&response).is_none() {
             return Ok(response);
         }
-        let refreshed = self.acquire(Some(&token)).await?;
+        let refreshed = self
+            .acquire(Some(&token), ConnectionAttempt::Normal)
+            .await?;
         let retried = self
             .client
             .get(request, refreshed.secret())
             .await
             .map_err(TokenError::Http)?;
-        if revoked(&retried) {
+        if let Some(failure) = authentication_failure(&retried) {
             let mut state = self.state.lock().await;
-            state.token = None;
-            self.transition(&mut state, BrokerConnection::DuplicateKey);
-            return Err(TokenError::RevokedRepeated);
+            if state
+                .token
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.0, &refreshed.0))
+            {
+                state.token = None;
+                return Err(self.authentication_error(&mut state, failure));
+            }
+            return Err(TokenError::Superseded);
         }
         Ok(retried)
     }
 }
-fn revoked(response: &RawResponse) -> bool {
-    response.status() == 401
-        && response
-            .read_error(ReadEndpoint::Accounts, RetryDelay::Unknown)
-            .port_error()
-            .kind()
-            == PortErrorKind::AccessDenied(application::AccessDenial::TokenRevokedRepeated)
+#[derive(Clone, Copy)]
+enum AuthenticationFailure {
+    Revoked,
+    InvalidToken,
+}
+fn authentication_failure(response: &RawResponse) -> Option<AuthenticationFailure> {
+    if response.status() != 401 {
+        return None;
+    }
+    let kind = response
+        .read_error(ReadEndpoint::Accounts, RetryDelay::Unknown)
+        .port_error()
+        .kind();
+    if kind == PortErrorKind::AccessDenied(application::AccessDenial::TokenRevokedRepeated) {
+        Some(AuthenticationFailure::Revoked)
+    } else if kind == PortErrorKind::InvalidRequest(application::RequestRejection::InvalidToken) {
+        Some(AuthenticationFailure::InvalidToken)
+    } else {
+        None
+    }
 }
 
 impl<Store, Time, Renewal> std::fmt::Debug for TokenManager<Store, Time, Renewal> {
