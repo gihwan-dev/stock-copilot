@@ -42,7 +42,6 @@ names = [
     "add_child",
     "add_capability",
     "CapabilityBuilder",
-    "WebviewWindowBuilder",
     "WebviewBuilder",
     "WindowBuilder",
 ]
@@ -67,3 +66,8 @@ names = [
 ]
 allowed-files = []
 reason = "코어 → UI 이벤트. U-05가 사용자 승인으로 허용 파일을 더한다"
+
+[[api]]
+names = ["WebviewWindowBuilder"]
+allowed-files = ["src/tests/exit.rs"]
+reason = "U-01 mock 런타임 종료 재진입 테스트의 네이티브 창. 제품 WebView 권한과 무관"

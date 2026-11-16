@@ -557,3 +557,59 @@ pub(crate) fn timestamp() -> domain::Timestamp {
     )
     .expect("timestamp")
 }
+
+#[test]
+fn explicit_shutdown_drains_accepted_writes_on_a_blocking_worker() {
+    let fixture = Fixture::new();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("database");
+    let (release, gate) = std::sync::mpsc::channel();
+    let (entered, entry) = tokio::sync::oneshot::channel();
+    let first = database
+        .writer
+        .submit(move |_transaction| {
+            entered.send(()).expect("entered");
+            gate.recv().expect("release");
+            Ok(17_i64)
+        })
+        .expect("accepted first");
+    let second = database
+        .writer
+        .submit(|_transaction| Ok(29_i64))
+        .expect("accepted second");
+    runtime().block_on(async move {
+        entry.await.expect("writer entered");
+        let shutdown = tokio::spawn(async move { database.close().await });
+        assert_eq!(
+            tokio::spawn(async { 43_i64 })
+                .await
+                .expect("responsive runtime"),
+            43
+        );
+        release.send(()).expect("release writer");
+        shutdown.await.expect("shutdown worker").expect("shutdown");
+        assert_eq!(first.await.expect("first reply"), Ok(17));
+        assert_eq!(second.await.expect("second reply"), Ok(29));
+    });
+}
+
+#[test]
+fn explicit_shutdown_reports_a_failed_writer_instead_of_silent_drop() {
+    let fixture = Fixture::new();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("database");
+    runtime()
+        .block_on(
+            database.write::<(), _>(|_transaction| {
+                std::panic::resume_unwind(Box::new("shutdown failure"))
+            }),
+        )
+        .expect_err("writer failed");
+    assert_eq!(
+        runtime().block_on(database.close()),
+        Err(application::SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::RepositoryIntegrity
+        ))
+    );
+}
