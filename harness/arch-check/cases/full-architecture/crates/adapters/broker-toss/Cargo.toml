@@ -14,4 +14,5 @@ reqwest = { version = "0.1.0" }
 broker-toss-schema = { path = "../broker-toss-schema" }
 
 [dev-dependencies]
+testkit-ports = { path = "../../testkit-ports" }
 testkit = { path = "../../testkit" }

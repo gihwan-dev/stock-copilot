@@ -19,6 +19,18 @@ pub struct Proposal<State> {
     range: ProposalPriceRange,
     state: State,
 }
+impl Clone for Proposal<Draft> {
+    fn clone(&self) -> Self {
+        Self {
+            intent: self.intent.clone(),
+            id: self.id.clone(),
+            created_at: self.created_at,
+            expires_at: self.expires_at,
+            range: self.range.clone(),
+            state: Draft,
+        }
+    }
+}
 impl<State> fmt::Debug for Proposal<State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Proposal")
@@ -113,6 +125,10 @@ impl<State> Proposal<State> {
     #[must_use]
     pub fn expires_at(&self) -> Timestamp {
         self.expires_at
+    }
+    #[must_use]
+    pub fn price_range(&self) -> &ProposalPriceRange {
+        &self.range
     }
     fn expiry(&self, now: Timestamp) -> CheckResult {
         if now < self.created_at || now >= self.expires_at {
@@ -1100,6 +1116,32 @@ mod tests {
                     .expect("범위")
                     .check(reference),
                 CheckResult::Passed
+            );
+        }
+    }
+    #[test]
+    fn a04_draft_copy_preserves_all_facts_without_copying_validation_authority() {
+        let original = draft();
+        let copied = original.clone();
+        assert_eq!(copied.id(), original.id(), "제안 키 보존");
+        assert_eq!(copied.intent(), original.intent(), "주문 사실 보존");
+        assert_eq!(copied.created_at(), original.created_at(), "생성 시각 보존");
+        assert_eq!(copied.expires_at(), original.expires_at(), "만료 시각 보존");
+        assert_eq!(copied.range, original.range, "비공개 가격 범위 보존");
+        assert_eq!(
+            original.price_range(),
+            &original.range,
+            "저장용 읽기 접근자는 전체 범위 보존"
+        );
+        for current in [
+            observation("97", 0),
+            observation("103", 4),
+            observation("109", 1000),
+        ] {
+            assert_eq!(
+                copied.report(current.observed_at(), &current),
+                original.report(current.observed_at(), &current),
+                "저장 후에도 같은 사실로 재검증"
             );
         }
     }

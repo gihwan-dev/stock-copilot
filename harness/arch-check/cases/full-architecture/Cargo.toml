@@ -20,6 +20,7 @@ members = [
     "crates/order-execution",
     "crates/scheduler",
     "crates/testkit",
+    "crates/testkit-ports",
     "crates/toss-smoke",
     "crates/trade-fakes",
     "crates/xtask",

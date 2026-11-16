@@ -99,6 +99,7 @@ pub(crate) struct SourceRules {
     pub(crate) reexport_crates: BTreeSet<CrateName>,
     pub(crate) presence_trait: String,
     pub(crate) presence_impl_crates: BTreeSet<CrateName>,
+    pub(crate) presence_impl_files: BTreeSet<String>,
     pub(crate) presence_crate: String,
     pub(crate) write_means: Vec<String>,
     pub(crate) order_words: Vec<String>,
@@ -421,6 +422,16 @@ fn schema_surface_names(table: &Table) -> Result<BTreeSet<CrateName>, CheckFailu
     names(schema, "crates")
 }
 
+fn presence_rules(table: &Table) -> Result<&Table, CheckFailure> {
+    let presence = sub_table(table, "user-presence")?;
+    only_keys(
+        presence,
+        "source.user-presence",
+        &["trait-name", "impl-crates", "impl-files", "defining-crate"],
+    )?;
+    Ok(presence)
+}
+
 fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(
         table,
@@ -438,12 +449,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     )?;
     let reexport = sub_table(table, "reexport")?;
     only_keys(reexport, "source.reexport", &["crates"])?;
-    let presence = sub_table(table, "user-presence")?;
-    only_keys(
-        presence,
-        "source.user-presence",
-        &["trait-name", "impl-crates", "defining-crate"],
-    )?;
+    let presence = presence_rules(table)?;
     let order = sub_table(table, "toss-order")?;
     only_keys(
         order,
@@ -469,6 +475,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         reexport_crates: names(reexport, "crates")?,
         presence_trait: text(presence, "trait-name")?,
         presence_impl_crates: names(presence, "impl-crates")?,
+        presence_impl_files: texts(presence, "impl-files")?.into_iter().collect(),
         presence_crate: text(presence, "defining-crate")?,
         write_means: texts(order, "write-means")?,
         order_words: texts(order, "order-words")?,

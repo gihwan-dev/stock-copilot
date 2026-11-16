@@ -9,4 +9,5 @@ application = { path = "../application" }
 domain = { path = "../domain" }
 
 [dev-dependencies]
+testkit-ports = { path = "../testkit-ports" }
 testkit = { path = "../testkit" }

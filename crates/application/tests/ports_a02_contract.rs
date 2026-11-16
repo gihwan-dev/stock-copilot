@@ -44,7 +44,7 @@ mod tests {
             &port_source("src/user_presence.rs"),
             "UserPresence",
             &[
-                "fn confirm_order(&self, summary: OrderSummary) -> impl Future<Output = OrderConfirmation> + Send",
+                "fn confirm_order(&self, summary: &OrderSummary) -> impl Future<Output = OrderConfirmation> + Send",
                 "fn confirm_risk_change(&self, change: RiskChange) -> impl Future<Output = RiskChangeConfirmation> + Send",
             ],
         );

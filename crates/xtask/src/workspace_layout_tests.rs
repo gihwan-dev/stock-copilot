@@ -5,7 +5,7 @@ use cargo_metadata::{Metadata, MetadataCommand};
 
 use crate::harness_workspace_tests::repository_root;
 
-const ARCHITECTURE_CRATES: [(&str, &str); 22] = [
+const ARCHITECTURE_CRATES: [(&str, &str); 23] = [
     ("domain", "crates/domain"),
     ("application", "crates/application"),
     ("order-execution", "crates/order-execution"),
@@ -23,6 +23,7 @@ const ARCHITECTURE_CRATES: [(&str, &str); 22] = [
     ("mcp-bridge", "crates/mcp-bridge"),
     ("scheduler", "crates/scheduler"),
     ("testkit", "crates/testkit"),
+    ("testkit-ports", "crates/testkit-ports"),
     ("trade-fakes", "crates/trade-fakes"),
     ("toss-smoke", "crates/toss-smoke"),
     ("xtask", "crates/xtask"),
