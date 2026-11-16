@@ -26,6 +26,16 @@ T-10은 InvestorFlow와 D-44 수급 응답의 국내 기준일을 같은 KST 계
 
 mktemp -d로 만든 작업 사본 내부 복사본에서 하나씩 실제 실행했다. 무변이·복구 대조군 모두 통과. 아래 22개는 모두 컴파일 후 새 KST 회귀 테스트가 검출했으며 생존·컴파일 불가 0이다. 테스트는 서버와 수집 시각의 서로 다른 초·나노초·오프셋을 각각 비교한다.
 
+
+
+## 독립 리뷰 후 결정
+
+보호 파일의 필요한 등록·생성물·해시는 원 지시문의 구체적 승인으로 진행한다. 서명 옵션을 사용하지 않는 구현자 규칙을 유지한다. 번호 없는 초안도 명시된 형식이다. 첫 리뷰와 새 Codex 비판에서 동작 결함은 남지 않았으며, 확정된 회귀 공백은 테스트로 보강한다. 새 coverage_remeasurement_discards_obsolete_source_mappings는 내부 fixture의 소스 함수·줄 위치와 crate 버전을 바꾼 두 측정에서 이전 바이너리 매핑이 사라짐을 단언한다. 실제 workspace→profraw-only 손 변형이 컴파일 후 before_change 잔존 단언에서 실패하고 복구 대조군이 통과했다.
+
+커버리지 통과 조건은 시드 5·4096회이며 모든 일반 속성 테스트의 모든 분기를 예제로 없앴다고 주장하지 않는다. KST 날짜 검증 두 곳은 같은 계약을 유지한다. T-10은 후속 어댑터 작업에서 둘의 의미가 갈라지지 않는지 확인한다. 현재 공통화는 완료 필수 사항이 아니므로 제품 구조는 더 늘리지 않는다.
+
+## 최종 손 변형 표
+
 | 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
 |---|---|---|---|
 | 1 | KST offset 0 | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
@@ -50,4 +60,4 @@ mktemp -d로 만든 작업 사본 내부 복사본에서 하나씩 실제 실행
 | 20 | indicator server replaced by collection | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
 | 21 | indicator collection replaced by server | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
 | 22 | indicator server offset rewritten | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
-
+| 23 | 계측 정리를 workspace에서 profraw-only로 축소 | coverage_remeasurement_discards_obsolete_source_mappings | 컴파일 성공·before_change 잔존 단언으로 검출, 복구 통과 |
