@@ -77,6 +77,7 @@ pub(super) struct Hits {
 pub(super) struct AstRules<'context> {
     rules: &'context SourceRules,
     crate_name: &'context CrateName,
+    relative: &'context str,
     presence_paths: BTreeSet<String>,
     socket_modules: Vec<Vec<String>>,
     impl_context: ImplContext,
@@ -106,6 +107,7 @@ impl<'context> AstRules<'context> {
     pub(super) fn new(
         rules: &'context SourceRules,
         crate_name: &'context CrateName,
+        relative: &'context str,
         file: &syn::File,
     ) -> Self {
         let defining = rules.presence_crate.replace('-', "_");
@@ -119,6 +121,7 @@ impl<'context> AstRules<'context> {
         Self {
             rules,
             crate_name,
+            relative,
             presence_paths,
             socket_modules: rules
                 .socket_modules
@@ -132,10 +135,9 @@ impl<'context> AstRules<'context> {
     }
 
     fn presence_impl_allowed(&self) -> Option<()> {
-        self.rules
-            .presence_impl_crates
-            .contains(self.crate_name)
-            .then_some(())
+        (self.rules.presence_impl_crates.contains(self.crate_name)
+            || self.rules.presence_impl_files.contains(self.relative))
+        .then_some(())
     }
 
     fn exported_item(&mut self) {

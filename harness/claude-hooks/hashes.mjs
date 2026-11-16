@@ -7,6 +7,9 @@ import { git } from "../../.claude/hooks/lib/project.mjs";
 export const HASHES_FILE = "harness/claude-hooks/hashes.json";
 
 const NAMED = [
+  "crates/testkit-ports/src/scripted_presence.rs",
+  "crates/testkit-ports/src/script.rs",
+  "crates/testkit-ports/src/lib.rs",
   "harness/claude-hooks/rules.json",
   "harness/agent-writable.txt",
   "harness/claude-hooks/lock.txt",

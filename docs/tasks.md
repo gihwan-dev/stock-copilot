@@ -187,29 +187,29 @@ H-20 뒤에 `shared/ds/index.ts`, 토큰 생성물, 허용 목록, 기준 화면
 | D-41 | 투자자별 랭킹, 섹터 목록·상세·랭킹, 섹터 관련 ETF 목록의 타입 | D-37이 다루지 않은 조회 응답을 단위와 집계 시각을 보존한 봉인된 사실로 (ADR 0068) D-37의 타입을 재사용 (ADR 0085) | D-37 |
 | D-44 | 프로그램·공매도·신용·대차 수급의 타입 | D-37·D-41과 같은 방식으로 단위와 집계 시각을 보존한 봉인된 사실로 정의. 토스 API가 주지 않는 종류는 만들지 않고 근거를 ADR에 적음. A-21이 정의 대기로 남긴 `MarketInfo` 메서드를 이 타입으로 정의하는 일까지 포함 (ADR 0087) | D-41, A-21 |
 
-## A. 유스케이스 (`crates/application`, `crates/testkit`)
+## A. 유스케이스 (`crates/application`, `crates/testkit`, `crates/testkit-ports`)
 
 | ID | 작업 | 완료 기준 | 선행 |
 |---|---|---|---|
 | A-01 | 포트 정의: `BrokerRead`, `MarketInfo`, `BrokerCapabilities` | architecture 3.3과 일치. `BrokerTrade`는 여기 없음(`order-execution`이 정의) | D-05, D-10, D-11 |
 | A-02 | 포트 정의: 저장소, `AuditLog`, `SecretStore`, `Clock`, `Notifier`, `UserPresence` | architecture 3.3과 일치. `UserPresence`의 요청은 주문 요약과 위험 설정 변경 두 종류. 비밀 값 타입의 `Debug`는 고정 문자열만 내고 `Display`·`Serialize`·`Clone`은 없음 (SEC-11). 본인 확인은 주문용과 위험 설정 변경용 메서드가 따로 있고 결과 타입도 다름. 중복 기록은 오류가 아니라 `AlreadyRecorded`. `Clock`은 동기 (ADR 0080) | D-18 |
 | A-03 | 포트 정의: `NewsFeed`(메타데이터 포함), `Fundamentals`, `MacroSeries`, `AiProvider`(`RunSpec`에 실행 종류) | architecture 3.3과 일치. 뉴스 포트는 공시 키를 보존하고 커서를 받아 다음 커서를 돌려줌. AI 실행의 첫 사건은 격리 점검 결과 (ADR 0071) | D-15 |
-| A-04 | `testkit` 1: 포트 가짜, `SteppedClock`, `ScriptedPresence` (사용자 승인: 본인 확인 가짜는 보호 파일) | `testkit`의 의존 그래프에 `order-execution`이 없음(arch-check). `ScriptedPresence`가 대본대로 `Confirmed`·`Denied`·`Unavailable`을 돌려주고 호출 횟수를 기록 (I-14, architecture 3.2) | A-01 ~ A-03 |
+| A-04 | `testkit-ports`: 포트 가짜, `SteppedClock`, `ScriptedPresence` (사용자 승인: 본인 확인 가짜는 보호 파일) | `testkit`은 잎이며 `testkit-ports`의 의존 그래프에 `order-execution`이 없음. application/domain의 testkit-ports 개발 의존 금지(arch-check). `ScriptedPresence`가 대본대로 `Confirmed`·`Denied`·`Unavailable`을 돌려주고 호출 횟수를 기록 (I-14, architecture 3.2)  메인 결정: 정상 요약을 통한 confirm_order·user_presence_order의 세 응답과 요청 기록 열 필드·횟수·순서 실행 검증은 A-04 차단에서 제외하고 O-01·O-04·O-17 및 A-14 연동 유스케이스 테스트의 완료 조건으로 인계.| A-01 ~ A-03 |
 | A-11 | `testkit` 2: 가짜 AI CLI 실행 파일 | 녹화한 stream-json 재생 모드와 대본 MCP 클라이언트 모드. 실행 파일 경로 주입으로만 바뀌고 `PATH`를 바꾸지 않음 (harness 6.1) | A-03 |
 | A-05 | 오류 분류 (사용자 조치, 대기, 버그, 데이터 없음) | 모든 포트 오류가 사용자 조치·대기·버그 또는 R-01 Q7의 데이터 없음으로 분류. 데이터 없음은 상태 띠에 올리지 않고 해당 조회의 빈 결과로 처리. 오류 값에 비밀과 요청·응답 본문이 없음 (architecture 3.8, ADR 0063) | A-01 |
 | A-20 | 읽기 포트 2: 정의 대기 메서드 | ADR 0055의 정의 대기 행(매도가능수량, 주문 조회, 유의사항, 종목 마스터, 호가, 가격 제한, 수수료율, 지수, 캘린더)이 모두 메서드로 정의됨. `quotes`·`candles`·`accounts`의 임시 입력·출력이 확정 타입으로 바뀜. 계약 표 전체를 다시 리뷰. 주문 조회·매도가능수량·유의사항 사실의 계좌·종목 결합 의무를 계약 표에 적음 (ADR 0064) 범위는 병합된 domain 타입으로 정의할 수 있는 행(읽기 메서드 16개 추가, 계약 24개). 타입이 아직 없는 행은 A-21과 domain 선행 작업으로 넘김 (ADR 0082) | A-01, D-33 ~ D-36 |
 | A-21 | 읽기 포트 3: D-41 타입의 조회 메서드 | 투자자별 랭킹, 섹터 목록·상세·랭킹, 섹터 관련 ETF 목록이 `MarketInfo`의 메서드로 정의됨. 타입이 없는 수급(프로그램·공매도·신용·대차)은 domain 타입이 생긴 뒤 정의하고 그때까지 정의 대기로 남김. 계약 표 갱신 (ADR 0082) | A-20, D-41 |
-| A-06 | `SyncPortfolio` | 성공, 일부 실패, 접근 차단 경로 테스트. 성공·일부 실패·실패·접근 차단 어느 결과든 저장한 뒤 `PortfolioSyncRecorded`를 한 번 냄 (ADR 0065) | A-04 |
-| A-07 | `SyncTransactions` | 결제일 기준 최근 14일 창을 매번 다시 받아 같은 행의 개수까지 맞춤. 사라진 행은 지우지 않고 표시. 하루 1회 전체 기간 검사 (I-06). 결과를 저장한 뒤 `TransactionsSyncRecorded`를 한 번 냄 (ADR 0065) | A-04, D-08 |
-| A-08 | `GetPortfolioView`, `GetAllocationView` | 표시용 값이 전부 코어 계산. 환산에 쓴 환율 종류와 시각 포함 (ACC-3). 현금 자리는 통화별 매수가능금액, 총자산은 근사 표시 (ACC-6, I-05) | A-06 |
-| A-09 | `GetMarketOverview` | 오래된 데이터 표시 (ACC-4). 미국 지수·금리는 토스 ETF 근사인지 미 재무부·FRED 값인지 표시 (I-18) | A-04 |
+| A-06 | `SyncPortfolio` | 성공, 일부 실패, 접근 차단 경로 테스트. 성공·일부 실패·실패·접근 차단 어느 결과든 저장한 뒤 `PortfolioSyncRecorded`를 한 번 냄 (ADR 0065)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-04 |
+| A-07 | `SyncTransactions` | 결제일 기준 최근 14일 창을 매번 다시 받아 같은 행의 개수까지 맞춤. 사라진 행은 지우지 않고 표시. 하루 1회 전체 기간 검사 (I-06). 결과를 저장한 뒤 `TransactionsSyncRecorded`를 한 번 냄 (ADR 0065)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-04, D-08 |
+| A-08 | `GetPortfolioView`, `GetAllocationView` | 표시용 값이 전부 코어 계산. 환산에 쓴 환율 종류와 시각 포함 (ACC-3). 현금 자리는 통화별 매수가능금액, 총자산은 근사 표시 (ACC-6, I-05)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-06 |
+| A-09 | `GetMarketOverview` | 오래된 데이터 표시 (ACC-4). 미국 지수·금리는 토스 ETF 근사인지 미 재무부·FRED 값인지 표시 (I-18)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-04 |
 | A-10 | 이벤트 버스 | 구독자 추가가 기존 코드 수정 없이 됨. 페이로드는 ID와 종류만 (architecture 3.5). 토스 연결의 한 사건에는 회복을 포함해 `BrokerConnectionChanged` 하나만 내고 자체 점검 이벤트와 겹쳐 내지 않음. 구독 등록표는 이벤트 종류의 순서 비교를 씀 (ADR 0065) | D-18 |
-| A-12 | `SubmitEstimate` | 코드가 만들지 않은 `task_id`와 다른 실행에 배정된 과제는 거부. 한 실행이 받는 추정 수는 그 실행에 배정된 과제 수 이하이고, 같은 과제의 두 번째 제출은 거부(테스트). 출처 없는 추정에 "출처 없음". 제출된 추정은 거래 여부와 상관없이 전부 기록(누락 0, ACC-9). AI-6의 메타데이터 기록. 추정 제출은 종목 키로 `EstimateSubmitted`를 냄 (ADR 0065) | A-04, D-21 |
-| A-13 | `EvaluateSignals` | 보정 → 임계값 비교 → `SignalRaised`·`SignalCleared`. 같은 종목의 새 추정이 오면 신호를 다시 계산하고 이전 추정은 판정 대상으로 남음 (design 6.1, 6.2). 신호 이벤트는 종목 키로 내고 구독자가 현재 신호를 다시 읽음 (ADR 0065) | A-12, D-24 |
-| A-14 | `DraftProposal` | 장이 열려 있으면 `Proposal<Draft>`를 만듦. 닫혀 있으면 신호만 남김. 장이 열린 뒤 추정 기준가에서 변동성 기준 범위 안이면 만들고, 아니면 신호를 버리고 재추정 예약. 만료된 제안의 신호는 남고, 다시 만들면 최신가를 씀 (design 6.4, 6.5) | A-13, D-14, D-26 |
-| A-15 | `ResolveEstimates` | 기간이 끝났거나 목표·손절에 닿은 추정을 전부 판정(거래하지 않은 것 포함). `EstimateResolved`. 보정표 갱신. 판정이 끝난 기록을 다시 바꾸지 않음 (ACC-9). 판정 이벤트는 종목 키로 내고 구독자가 기록을 다시 읽음 (ADR 0065) | A-12, D-23, D-27 |
-| A-16 | `TakeValuationSnapshot`과 빠진 날 재계산 | 일별 평가 기록. 앱이 꺼져 있던 날을 다음 시작 때 일봉과 거래내역으로 채움 (I-09). 평가 스냅샷 이벤트는 계좌 키로 냄 (ADR 0065) | A-06, D-31 |
-| A-17 | 위험 설정 변경 유스케이스 | 주문 켜기, 시장가 허용, 몇 시간 단위 기간 허용, 비중 상한 완화, 위험 성향을 더 공격적으로 바꾸기는 `UserPresence`의 위험 설정 확인이 `Confirmed`일 때만 바뀜. 그 밖의 결과에서는 설정이 그대로. 주문용 본인 확인을 요청하지 않음 (SEC-12, P-9) | A-02, A-04 |
+| A-12 | `SubmitEstimate` | 코드가 만들지 않은 `task_id`와 다른 실행에 배정된 과제는 거부. 한 실행이 받는 추정 수는 그 실행에 배정된 과제 수 이하이고, 같은 과제의 두 번째 제출은 거부(테스트). 출처 없는 추정에 "출처 없음". 제출된 추정은 거래 여부와 상관없이 전부 기록(누락 0, ACC-9). AI-6의 메타데이터 기록. 추정 제출은 종목 키로 `EstimateSubmitted`를 냄 (ADR 0065)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-04, D-21 |
+| A-13 | `EvaluateSignals` | 보정 → 임계값 비교 → `SignalRaised`·`SignalCleared`. 같은 종목의 새 추정이 오면 신호를 다시 계산하고 이전 추정은 판정 대상으로 남음 (design 6.1, 6.2). 신호 이벤트는 종목 키로 내고 구독자가 현재 신호를 다시 읽음 (ADR 0065)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-12, D-24 |
+| A-14 | `DraftProposal` | 장이 열려 있으면 `Proposal<Draft>`를 만듦. 닫혀 있으면 신호만 남김. 장이 열린 뒤 추정 기준가에서 변동성 기준 범위 안이면 만들고, 아니면 신호를 버리고 재추정 예약. 만료된 제안의 신호는 남고, 다시 만들면 최신가를 씀 (design 6.4, 6.5)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지).  A-04 인계: O-01·O-04·O-17과 정상 초안→요약 경로를 연결하는 유스케이스 테스트에서 주문 확인의 세 응답·열 필드 요청 기록·호출 횟수·순서와 공개 user_presence_order 계약을 실행.| A-13, D-14, D-26 |
+| A-15 | `ResolveEstimates` | 기간이 끝났거나 목표·손절에 닿은 추정을 전부 판정(거래하지 않은 것 포함). `EstimateResolved`. 보정표 갱신. 판정이 끝난 기록을 다시 바꾸지 않음 (ACC-9). 판정 이벤트는 종목 키로 내고 구독자가 기록을 다시 읽음 (ADR 0065)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-12, D-23, D-27 |
+| A-16 | `TakeValuationSnapshot`과 빠진 날 재계산 | 일별 평가 기록. 앱이 꺼져 있던 날을 다음 시작 때 일봉과 거래내역으로 채움 (I-09). 평가 스냅샷 이벤트는 계좌 키로 냄 (ADR 0065)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-06, D-31 |
+| A-17 | 위험 설정 변경 유스케이스 | 주문 켜기, 시장가 허용, 몇 시간 단위 기간 허용, 비중 상한 완화, 위험 성향을 더 공격적으로 바꾸기는 `UserPresence`의 위험 설정 확인이 `Confirmed`일 때만 바뀜. 그 밖의 결과에서는 설정이 그대로. 주문용 본인 확인을 요청하지 않음 (SEC-12, P-9)  가짜를 쓰는 테스트는 `testkit-ports/tests/` 또는 별도 테스트 crate에 둠(application/domain 개발 의존 금지). | A-02, A-04 |
 | A-19 | 자체 점검 판정 | design 2.6의 8개 점검을 순서대로 판정해 사용자가 할 일이 있는 문제 하나만 돌려줌. 모두 정상이면 없음. 할 일이 없는 상태(6, 7번)와 뉴스 소스 실패는 상태 띠 대상이 아니고 고급 > 상태 기록으로만 감 (P-7, UX-5, REL-5) 1번 토스 키 점검의 문제는 키 오류·권한 부족·계좌 없음 셋이고 모두 띠 대상. 입력은 칸마다 닫힌 타입. 4~8번이 달라졌을 때만 `SelfCheckChanged` 발행 대상 (ADR 0077) | A-05 |
 
 ## T. 토스 어댑터 (`adapters/broker-toss*`)
@@ -422,9 +422,9 @@ O 묶음은 E와 함께 개발할 수 있다. 주문 기능 스위치는 처음�
 |---|---|---|---|
 | O-01 | 주문 게이트 검증 (사실 수집과 `domain::validate`) | 종목(종목 마스터 조회 결과로만 주문 종목 타입을 만든다, ADR 0032), 장 시간(금액 주문과 소수 수량 매도는 정규장 시작부터 종료 1시간 전까지), 통화별 매수가능금액·매도가능수량, 같은 종목 반대 방향 미체결(국내만), 매수 유의사항, 원칙. 항목마다 통과·실패 테스트. 줄 커버리지 100% (design 6.4, harness 6.1) | D-12, D-14, D-26, T-11 |
 | O-03 | `order-execution` 타입: `BrokerTrade`, `UserApproval`, `ApprovedOrder` | `UserApproval`이 `Proposal<Validated>`를 소유. crate 밖에서 두 타입을 만들거나 복제·`Default`·비공개 메서드 호출하는 코드가 컴파일되지 않음(trybuild). 직렬화·`&mut` 접근자 없음 (architecture 4.3) | A-02, D-14 |
-| O-17 | `approve_and_submit` | `UserPresence::confirm`이 `Confirmed`일 때만 `ApprovedOrder`가 생김. 토큰은 `self` 소비로만 넘어감. Secure Enclave 서명 자리 (architecture 4.3) | O-03, A-04 |
+| O-17 | `approve_and_submit` | `UserPresence::confirm`이 `Confirmed`일 때만 `ApprovedOrder`가 생김. 토큰은 `self` 소비로만 넘어감. Secure Enclave 서명 자리 (architecture 4.3)  A-04 인계: 정상 요약으로 ScriptedPresence::confirm_order와 공개 user_presence_order 계약을 실행해 Confirmed·Denied·Unavailable의 FIFO, 요청 종류·열 필드·호출 횟수·순서를 검증.| O-03, A-04 |
 | O-22 | 주문 횟수 상한 (ORD-6) | 전체 시간당 주문 건수 상한 값 ADR(토스 어뷰징 예보다 충분히 낮게). 넘으면 승인 요청 거부와 이유 한 문장 | A-02, S-10 |
-| O-04 | `approval-command` 1: architecture 4.4의 1~5 | 확인 창 하나와 거절 후 재요청 제한, 요청 횟수 기록. 스위치와 횟수 상한. `proposal_id`로 읽고 만료 확인. 만료됐으면 최신가로 다시 만들고 추정 기준가에서 변동성 기준 범위 밖이면 거부. 최신 시세·잔고로 다시 `validate`. `OrderSummary` 계산. 예약 점검이 만료를 기록할 때 `ProposalExpired`를 한 번 냄 (ADR 0065) | O-01, O-17, O-22, D-32, S-07, A-14 |
+| O-04 | `approval-command` 1: architecture 4.4의 1~5 | 확인 창 하나와 거절 후 재요청 제한, 요청 횟수 기록. 스위치와 횟수 상한. `proposal_id`로 읽고 만료 확인. 만료됐으면 최신가로 다시 만들고 추정 기준가에서 변동성 기준 범위 밖이면 거부. 최신 시세·잔고로 다시 `validate`. `OrderSummary` 계산. 예약 점검이 만료를 기록할 때 `ProposalExpired`를 한 번 냄 (ADR 0065)  A-04 인계: 정상 검증으로 만든 PendingOrderConfirmation의 요약 참조를 사용해 주문 기록 열 필드의 대응을 실행 검증하며 요약 단독 생성·Clone·토큰 분해 공개는 금지.| O-01, O-17, O-22, D-32, S-07, A-14 |
 | O-18 | `approval-command` 2: architecture 4.4의 6~10 | 본인 확인 뒤 값이 허용 범위를 넘으면 전송 0건(다시 계산하지 않음). 한 트랜잭션으로 소비 기록과 전송 전 기록, 실패하면 전송 0건. 결정적 `clientOrderId`. 응답 기록과 `OrderSubmitted` (ORD-2, ORD-3) | O-04, S-08 |
 | O-19 | 결과를 모르는 주문 처리 | 10분 안에는 같은 키·같은 내용으로만 재요청. 10분 뒤와 `maintenance` 뒤에는 재전송 0건이고 조회·이벤트로 대조. 하나로 정해지지 않으면 "확인 불가"와 같은 종목 새 주문 차단 (ORD-2, I-07). 이 앱 주문의 거절과 미확정 결과의 확정은 로컬 주문 키로 알림(`OrderRejected`, `OrderOutcomeResolved`) (ADR 0065) | O-18, T-15 |
 | O-05 | 감사 로그 연결 | 추정, 신호, 검증 결과, 승인 요청, 본인 확인 결과, 넘기기, 전송 전 기록, 응답, 위험 설정 변경이 각각 1건씩 남음 (ORD-3) | A-17, E-10, O-18, S-16 |

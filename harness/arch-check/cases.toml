@@ -343,7 +343,7 @@ findings = [
 name = "user-presence-renamed-import"
 findings = [
     { rule = "user-presence-alias", subject = "crates/adapters/sources/src/lib.rs" },
-    { rule = "user-presence-alias", subject = "crates/testkit/src/lib.rs" },
+    { rule = "user-presence-alias", subject = "crates/testkit-ports/src/lib.rs" },
 ]
 
 [[case]]
@@ -699,6 +699,50 @@ findings = [{ rule = "external-location", subject = "mcp-server => secrecy" }]
 [[case]]
 name = "secrecy-in-application"
 findings = []
+
+[[case]]
+name = "domain-dev-depends-on-testkit-ports"
+findings = [
+    { rule = "dev-edge", subject = "domain -> testkit-ports" },
+    { rule = "transitive-dependency", subject = "domain => testkit-ports" },
+]
+
+[[case]]
+name = "application-dev-depends-on-testkit-ports"
+findings = [
+    { rule = "dev-edge", subject = "application -> testkit-ports" },
+    { rule = "transitive-dependency", subject = "application => testkit-ports" },
+]
+
+[[case]]
+name = "leaf-testkit-depends-on-application"
+findings = [
+    { rule = "allowed-edge", subject = "testkit -> application" },
+]
+
+[[case]]
+name = "testkit-ports-depends-on-order-execution"
+findings = [
+    { rule = "allowed-edge", subject = "testkit-ports -> order-execution" },
+    { rule = "direct-dependent", subject = "testkit-ports -> order-execution" },
+    { rule = "transitive-dependency", subject = "testkit-ports => order-execution" },
+]
+
+[[case]]
+name = "product-bin-has-testkit-ports"
+findings = [
+    { rule = "allowed-edge", subject = "src-tauri -> testkit-ports" },
+    { rule = "direct-dependent", subject = "src-tauri -> testkit-ports" },
+    { rule = "product-bin-graph", subject = "src-tauri => testkit-ports" },
+]
+
+[[case]]
+name = "leaf-testkit-dev-depends-on-testkit-ports"
+findings = [{ rule = "dev-edge", subject = "testkit -> testkit-ports" }]
+
+[[case]]
+name = "user-presence-impl-outside-protected-file"
+findings = [{ rule = "user-presence-impl", subject = "crates/testkit-ports/src/lib.rs" }]
 
 [[case]]
 name = "toss-endpoint-extra-factories-fail"

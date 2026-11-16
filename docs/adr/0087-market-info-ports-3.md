@@ -10,11 +10,11 @@ A-01·A-20의 Send + Sync, RPITIT Send Future, Result<T, PortError> 및 제네�
 
 DataAvailability는 선택 키가 있는 외부 정보 포트의 NotConfigured·NoData 표현이다. 토스 MarketInfo는 A-01·A-20대로 봉인된 성공 값과 PortError를 유지한다. 빈 성공 목록과 NotFound(Sector)를 구별하며 실패를 빈 목록/0으로 바꾸지 않는다. 중복 DataAvailability 래퍼는 추가하지 않는다.
 
-BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추가한다. 미지원 호출은 해당 Unsupported(capability)이며 어댑터가 HTTP 전에 확인한다. trait 선언이나 로컬 가짜 테스트가 실제 공급자의 준수를 보증하지 않는다.
+BrokerCapabilities에는 A-21의 다섯 기능과 D-44의 네 기능을 각 메서드와 일대일로 둔다. 미지원 호출은 해당 Unsupported(capability)이며 어댑터가 HTTP 전에 확인한다. trait 선언이나 로컬 가짜 테스트가 실제 공급자의 준수를 보증하지 않는다.
 
 ## 계약 표
 
-모든 출력은 Result<출력, PortError>의 성공 값이다. 공통 오류 E는 ADR 0063대로 AccessDenied→UserAction, Unavailable→Wait(원 RetryDelay), InvalidRequest/InvalidResponse/Unsupported→Bug, NotFound→NoData다. 아래는 A-20의 24개와 이번 다섯 개를 합친 전체 표다.
+모든 출력은 Result<출력, PortError>의 성공 값이다. 공통 오류 E는 ADR 0063대로 AccessDenied→UserAction, Unavailable→Wait(원 RetryDelay), InvalidRequest/InvalidResponse/Unsupported→Bug, NotFound→NoData다. 아래는 A-20의 24개, A-21의 다섯 개와 D-44의 네 개를 합친 전체 표다.
 
 | 포트 | 메서드 | 입력 | 출력 | 결합 의무·신선도·완전성 | 오류 분류 | 받는 어댑터 작업 |
 |---|---|---|---|---|---|---|
@@ -47,10 +47,14 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 | MarketInfo | sector | sector: &SectorId, market: KnownMarket | SectorDetail | 요청 ID·시장, 여섯 기간·nullable 등락률·요약·서버 시각 Unknown·수집 시각 | E | T-09 |
 | MarketInfo | sector_rankings | query: &SectorRankingQuery | SectorRanking | 요청 종류·시장·기간, 대분류/중분류·TopN·순위 빈자리·nullable 금액/등락률·수집 시각 | E | T-10 |
 | MarketInfo | sector_etfs | sector: &SectorId, market: KnownMarket | SectorEtfs | 요청 ID·시장, 관련 ETF 서버 순서, 하위 섹터 미포함·서버 시각 Unknown·수집 시각 | E | T-09 |
+| MarketInfo | program_trades | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<ProgramTrade> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. 서버 시각 Unknown, KRX만 | E | T-10 |
+| MarketInfo | short_selling | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<ShortSelling> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. updatedAt 보존 | E | T-10 |
+| MarketInfo | credit_trades | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<CreditTrade> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. updatedAt 보존 | E | T-10 |
+| MarketInfo | securities_lending | instrument: &QuoteInstrument, from: CalendarDate, through: CalendarDate | Vec<SecuritiesLending> | 국내 종목·포함 날짜 창·일간 단위·기준일·수집 시각 결합. updatedAt 보존 | E | T-10 |
 
 ## 어댑터 의무
 
-기존 24개 메서드는 ADR 0082의 결합·페이지·오류 의무를 유지한다. 새 다섯 메서드는 다음을 추가한다.
+기존 24개 메서드는 ADR 0082의 결합·페이지·오류 의무를 유지한다. A-21 다섯 메서드는 다음 의무를 유지하고, D-44 네 메서드는 아래 수급 공통 의무를 추가한다.
 
 - T-10: investor_trading_rankings는 국내 투자자 랭킹의 count만 받는다. 임의 시장·기간 인자를 발명하지 않는다. 세 투자자 그룹과 각 매수/매도 목록, 그룹별 독립 rankedAt을 같은 응답에서 보존한다. count보다 짧은 목록·빈 목록·순위 공백을 완전한 전체 시장으로 부르지 않는다. 금액은 KRW이며 0으로 누락을 보충하지 않는다.
 - T-09: sectors는 전체 계층 목록이다. 누락/검증 실패 행을 버리고 완전한 목록으로 만들지 않는다. 사용자에게 보이는 섹터는 ADR 0085의 Major이며 필터링·소속 결정은 D-40 소비자가 한다. sector는 응답 ID와 요청 ID·시장을 결합하고 여섯 기간 및 nullable 값을 보존한다. 없는 섹터는 NotFound(Sector), 식별 불일치는 InvalidResponse(Validation)다.
@@ -59,16 +63,17 @@ BrokerCapabilities에 각 새 메서드와 일대일인 기능 다섯 개를 추
 - T-09: sector·sector_etfs 및 기존 sector_composition의 SectorId는 domain에서 출력 가능한 ASCII 최대 64바이트를 허용하므로 HTTP 경계의 더 좁은 제약을 대신하지 않는다. 요청 전에 `^[A-Za-z0-9_-]{1,40}$`를 검증하고, 불일치하면 해당 ReadEndpoint의 InvalidRequest(MalformedRequest)로 거부하여 HTTP를 보내지 않는다. `../accounts`, 쿼리/fragment 문자, 41~64바이트 입력도 거부한다. 검증된 ID만 URL 경로 세그먼트 API로 넣고 원문 문자열로 경로·쿼리를 조립하지 않는다. 이 작업은 기존 domain 식별자의 의미나 공개 생성자를 바꾸지 않는다.
 - T-10: sector_rankings의 각 ID를 유효한 SectorCatalog의 id/depth와 대조한다. 목록에 없는 ID 또는 Minor 응답은 SectorRankings의 InvalidResponse(Validation)로 전체 실패하며 행을 버리거나 Major로 추정하지 않는다. 대조용 목록 조회가 실패하면 원 status/kind·RetryDelay를 보존하여 SectorRankings에 귀속한 바깥 Err를 반환하고 검증되지 않은 성공 랭킹을 내지 않는다. Major/Middle의 원 랭킹은 그대로 반환하며 새 depth 래퍼를 만들지 않는다. A-09/G-07/M-04는 기존 ID 접근자와 SectorCatalog를 결합해 Major만 사용자 섹터로 표시한다. 소비자의 목록 조회가 실패하면 섹터 표시를 보류하며 Middle을 Major로 표시하거나 순위를 재부여하지 않는다.
 - T-10/A-09/G-07/M-04: 스키마 설명은 자료 없는 섹터의 changeRate를 서버가 0으로 줄 수 있다고 한다. 받은 0은 그대로 보존하되 실제 보합이나 자료 존재의 증거로 단정하지 않는다. null과 서버 0을 서로 바꾸거나, 추가 근거 없이 0을 NoData로 복원하지 않는다.
+- T-10: program_trades, short_selling, credit_trades, securities_lending은 국내 종목의 포함 날짜 창을 받는다. from≤through, 요청 마스터·응답 심볼 결합, count/until/nextUntil 페이지 포괄과 날짜순 반환을 검증한다. 실패 페이지·중복 날짜·잘못된 행을 버리고 완전 성공으로 만들지 않는다. 프로그램은 KRX 주식 수만, 서버 시각 Unknown이다. 나머지는 updatedAt을 보존하며 원화 금액과 주식 수를 교환하지 않는다. 공매도 비율 null과 보고된 0, 개인 신용대주와 기관 대차를 구별한다. 국내 기준일 검증은 KST 날짜로 하되 원래 시각·오프셋은 보존한다.
 - 모든 새 응답의 수집 시각은 Clock에서 받는다. 서버 시각 없는 섹터 API는 Unknown을 유지한다. 허용 신선도와 오래됨 표시는 A-09/G-07/M-04 소비자가 결정한다. 실패한 페이지/행을 누락시키거나 완전 성공으로 가장하지 않는다.
 
-## 정의 대기
+## 정의 대기 해소 (D-44)
 
 | 행 | 필요한 봉인 타입 | 받는 작업 |
 |---|---|---|
-| 프로그램 수급 | 단위·집계 기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
-| 공매도 수급 | 수량·금액·기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
-| 신용 수급 | 잔고·증감·기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
-| 대차 수급 | 수량·잔고·기간·관측 시각 | domain 선행 작업 ID 메인 등록 → 후속 포트 → T-10 |
+| 프로그램 수급 | ProgramTrade로 정의 완료, program_trades 계약 참조 | D-44 → T-10 |
+| 공매도 수급 | ShortSelling로 정의 완료, short_selling 계약 참조 | D-44 → T-10 |
+| 신용 수급 | CreditTrade로 정의 완료, credit_trades 계약 참조 | D-44 → T-10 |
+| 대차 수급 | SecuritiesLending로 정의 완료, securities_lending 계약 참조 | D-44 → T-10 |
 
 ## 인계
 

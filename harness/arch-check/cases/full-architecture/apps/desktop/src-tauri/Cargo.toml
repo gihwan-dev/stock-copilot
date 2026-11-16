@@ -26,5 +26,6 @@ approval-command = { path = "../../../crates/approval-command" }
 broker-toss-trade = { path = "../../../crates/adapters/broker-toss-trade" }
 
 [dev-dependencies]
+testkit-ports = { path = "../../../crates/testkit-ports" }
 testkit = { path = "../../../crates/testkit" }
 trade-fakes = { path = "../../../crates/trade-fakes" }

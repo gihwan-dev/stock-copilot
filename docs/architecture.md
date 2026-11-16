@@ -187,7 +187,8 @@ stock-copilot/
 │  ├ mcp-server/            인바운드 어댑터. 분석 실행이 호출
 │  ├ mcp-bridge/            CLI가 띄우는 stdio↔Unix 소켓 브리지 실행 파일
 │  ├ scheduler/             예약 작업 레지스트리와 벽시계 트리거
-│  ├ testkit/               application 포트의 가짜(가짜 본인 확인 ScriptedPresence 포함), SteppedClock, 가짜 AI CLI 실행 파일
+│  ├ testkit/               작업 공간 crate에 의존하지 않는 속성 테스트 도우미
+│  ├ testkit-ports/         application 포트 가짜, ScriptedPresence, SteppedClock, 포트 계약 테스트
 │  ├ trade-fakes/           RecordingBroker (BrokerTrade 가짜). 테스트와 e2e-app 전용
 │  ├ toss-smoke/            실제 키를 표준 입력으로 받아 읽기 호출만 해 보는 확인 명령. 키를 저장하지 않는다
 │  └ xtask/                 하네스 명령 (arch-check, capability-check, gen-tokens 등)
@@ -229,10 +230,11 @@ stock-copilot/
 | `mcp-server` | `application`, `domain` |
 | `mcp-bridge` | 없음 |
 | `scheduler` | `application`, `domain` |
-| `testkit` | `application`, `domain` |
+| `testkit` | 없음(속성 테스트 도우미 잎) |
+| `testkit-ports` | `application`, `domain` |
 | `trade-fakes` | `order-execution`, `application`, `domain` |
 | `src-tauri` | `domain`, `application`, `approval-command`, `broker-toss`, `broker-toss-trade`, `sources`, `ai-*`, `store-sqlite`, `secrets-keychain`, `platform-macos`, `mcp-server`, `scheduler` |
-| `e2e-app` | `src-tauri`(lib), `testkit`, `trade-fakes` |
+| `e2e-app` | `src-tauri`(lib), `testkit`, `testkit-ports`, `trade-fakes` |
 | `toss-smoke` | `broker-toss`, `application`, `domain` |
 | `xtask` | 없음 |
 
@@ -240,27 +242,32 @@ stock-copilot/
 
 | crate | 개발 의존으로 허용 |
 |---|---|
-| `src-tauri` | `testkit`, `trade-fakes`, `tauri`의 `test` 기능 |
-| `order-execution` | `testkit`(시계, 저장소, 가짜 본인 확인 `ScriptedPresence`) |
-| 그 밖의 crate | `testkit` |
+| `src-tauri` | `testkit`, `testkit-ports`, `trade-fakes`, `tauri`의 `test` 기능 |
+| `order-execution` | `testkit`(속성 횟수), `testkit-ports`(시계·저장소·본인 확인 가짜) |
+| `testkit` | 작업 공간 개발 의존 없음 |
+| `application`, `domain` | `testkit`만. `testkit-ports` 개발 의존 금지 |
+| 그 밖의 crate | `testkit`, `testkit-ports` |
 
-**가짜의 위치 (I-14)**
+A-04 메인 결정: 개발 의존까지 포함한 그래프의 순환을 없애기 위해 `testkit`은 잎으로 남기고 포트 가짜를 `testkit-ports`에 둔다. 가짜를 쓰는 A-06 이후 유스케이스 테스트는 `crates/testkit-ports/tests/` 또는 별도 테스트 crate에 둔다. application/domain 안의 테스트에서 새 포트 가짜 crate에 개발 의존하지 않는다. 실제 구현 코드는 application에 둔다.
 
-- `UserPresence`는 `application`의 포트다. 그래서 가짜 본인 확인 `ScriptedPresence`는 `testkit`에 둔다. `testkit`은 `order-execution`에 의존하지 않으므로 `ApprovedOrder`를 만들 수 없다. `order-execution`의 단위 테스트와 `src-tauri`의 경로 고정 테스트가 같은 가짜를 쓴다.
+**가짜의 위치 (I-14, A-04 정정)**
+
+- `UserPresence`는 `application`의 포트다. 그래서 가짜 본인 확인 `ScriptedPresence`는 `testkit-ports`에 둔다. `testkit-ports`는 `order-execution`에 의존하지 않으므로 `ApprovedOrder`를 만들 수 없다. `order-execution`의 단위 테스트와 `src-tauri`의 경로 고정 테스트가 같은 가짜를 쓴다.
 - 보낸 주문을 기록하는 `RecordingBroker`는 `trade-fakes`에 있고 `ApprovedOrder`를 받기만 한다.
-- `testkit`과 `trade-fakes`는 `cfg`나 `[features]` 없이 보통 crate로 만든다. harness.md 3.2의 `cfg` 금지와 충돌하지 않는다.
-- 제품 실행 파일에 가짜가 들어가지 않는 근거: 개발 의존은 bin 대상에서 쓸 수 없고, `arch-check`가 제품 bin(`src-tauri` main)의 일반 의존 그래프에 `testkit`·`trade-fakes`가 있으면 실패시킨다.
-- 승인 없이 주문이 나가지 않는 근거: `ApprovedOrder`는 `approve_and_submit` 안에서 `UserPresence::confirm`이 `Confirmed`를 돌려준 뒤에만 생긴다(4.3). `UserPresence` 구현(`impl UserPresence`)은 `platform-macos`와 `testkit`에만 둘 수 있고 `xtask`가 검사한다. 이 검사를 피하지 못하도록 `UserPresence`를 다른 이름으로 가져오는 것(`use … as`)과 다시 내보내는 것(`pub use`)을 금지하고 `xtask`가 검사한다. `main.rs`는 `platform-macos`의 구현만 넘긴다(RV-6).
+- `testkit`, `testkit-ports`와 `trade-fakes`는 `cfg`나 `[features]` 없이 보통 crate로 만든다. harness.md 3.2의 `cfg` 금지와 충돌하지 않는다.
+- 제품 실행 파일에 가짜가 들어가지 않는 근거: 개발 의존은 bin 대상에서 쓸 수 없고, `arch-check`가 제품 bin(`src-tauri` main)의 일반 의존 그래프에 `testkit`·`testkit-ports`·`trade-fakes`가 있으면 실패시킨다.
+- 승인 없이 주문이 나가지 않는 근거: `ApprovedOrder`는 `approve_and_submit` 안에서 `UserPresence::confirm`이 `Confirmed`를 돌려준 뒤에만 생긴다(4.3). `UserPresence` 구현(`impl UserPresence`)은 `platform-macos`와 보호된 `crates/testkit-ports/src/scripted_presence.rs`에만 둘 수 있고 `xtask`가 검사한다. 이 검사를 피하지 못하도록 `UserPresence`를 다른 이름으로 가져오는 것(`use … as`)과 다시 내보내는 것(`pub use`)을 금지하고 `xtask`가 검사한다. `main.rs`는 `platform-macos`의 구현만 넘긴다(RV-6).
 
 **의존할 수 없는 것 (직접·전이 모두)**
 
 | 대상 | 직접 의존할 수 있는 것 | 전이 그래프에도 나타나면 안 되는 crate |
 |---|---|---|
-| `order-execution` | `approval-command`, `broker-toss-trade`, `trade-fakes` | `domain`, `application`, `mcp-server`, `mcp-bridge`, `scheduler`, `ai-*`, `sources`, `store-sqlite`, `secrets-keychain`, `platform-macos`, `broker-toss`, `broker-toss-schema`, `testkit`, `toss-smoke`, `xtask` |
+| `order-execution` | `approval-command`, `broker-toss-trade`, `trade-fakes` | `domain`, `application`, `mcp-server`, `mcp-bridge`, `scheduler`, `ai-*`, `sources`, `store-sqlite`, `secrets-keychain`, `platform-macos`, `broker-toss`, `broker-toss-schema`, `testkit`, `testkit-ports`, `toss-smoke`, `xtask` |
 | `approval-command` | `src-tauri` | `src-tauri`, `e2e-app`를 뺀 전부 |
 | `broker-toss-trade` | `src-tauri` | `src-tauri`, `e2e-app`를 뺀 전부 |
 | `trade-fakes` | `e2e-app`(일반), `src-tauri`(개발 의존만) | 제품 bin(`src-tauri` main)의 일반 의존 그래프 |
 | `testkit` | `e2e-app`(일반), 모든 crate(개발 의존만) | 제품 bin(`src-tauri` main)의 일반 의존 그래프 |
+| `testkit-ports` | `e2e-app`(일반), application·domain 외 crate(개발 의존만) | `application`, `domain`의 직접·전이 의존 및 제품 bin 일반 의존 그래프 |
 | `broker-toss-schema` | `broker-toss`, `broker-toss-trade` | 다른 crate는 생성 타입을 보지 못한다 |
 | 어댑터끼리 | 위 표의 `broker-toss-trade → broker-toss`, `broker-toss* → broker-toss-schema`만 | - |
 | `mcp-bridge`, `xtask` | 아무도 의존하지 않는다 | - |
@@ -309,7 +316,7 @@ stock-copilot/
 | `SecretStore` | `load`, `store`, `remove` | `secrets-keychain` | application의 `SecretValue`로 감싼다. 생성자는 소유한 `Vec<u8>`를 받고 내부에서 `secrecy`로 감싼다. `Debug`는 값·길이에 무관한 고정 문자열만 출력하며 `Display`·`Serialize`·`Clone`은 없다 |
 | `Clock` | `now() → Timestamp`, 동기·실패 없음 | 시스템 | 현재 벽시계 시각. 테스트는 `SteppedClock` |
 | `Notifier` | macOS 알림 | `src-tauri/platform`(`tauri-plugin-notification` 2.8.1, Rust에서만 호출) | - |
-| `UserPresence` | `confirm_order(OrderSummary) → OrderConfirmation`, `confirm_risk_change(RiskChange) → RiskChangeConfirmation` | `platform-macos` | 두 결과는 서로 다른 타입이며 각각 `Confirmed / Denied / Unavailable`. 오류 채널은 없다. 주문은 요약 창과 본인 확인, 위험 변경은 확인 창만 사용한다(SEC-12, P-9). A-04는 종류별 호출을 기록한다. 4.5 |
+| `UserPresence` | `confirm_order(&OrderSummary) → OrderConfirmation`, `confirm_risk_change(RiskChange) → RiskChangeConfirmation` | `platform-macos` | 두 결과는 서로 다른 타입이며 각각 `Confirmed / Denied / Unavailable`. 오류 채널은 없다. 주문은 요약 창과 본인 확인, 위험 변경은 확인 창만 사용한다(SEC-12, P-9). A-04는 종류별 호출을 기록한다. 4.5 |
 
 - 스트림 이벤트 `AiEvent`: 첫 사건 `IsolationChecked(Passed | Rejected(IsolationFailure))`(거절 뒤에는 사건 없음), `ActualModel`, `TextDelta`, `ToolCall{server, tool, args, result, status}`, `WebSearch{query, action}`, `TokenUsage`, `Quota`, `RateLimited{resets_at}`, `ModelRerouted`, `McpUnavailable`, 그리고 모르는 type을 담는 명시 변형 `Unknown`(R-02, R-03). 녹화한 스트림을 테스트 고정 자료로 쓴다.
 - 뉴스 소스와 예약 작업은 레지스트리에 등록한다. 새 소스나 작업은 구현 하나와 등록 한 줄로 추가된다. 경로 고정 테스트는 이 레지스트리에서 대상 목록을 가져온다(4.6).
@@ -586,7 +593,7 @@ WebView에는 AI가 쓴 글이 그려지므로 신뢰하지 않는다. WebView �
 
 | 검사 | 내용 | 언제 | 근거 |
 |---|---|---|---|
-| `xtask arch-check` | 3.2의 허용 간선, 전이 금지, 재수출 금지, 외부 crate 위치, 쓰기 메서드와 주문 경로 조합의 위치, `impl UserPresence` 위치와 `UserPresence`의 별칭 가져오기·재수출 금지, 제품 bin에 `testkit`·`trade-fakes`·자동화 플러그인 없음 | 매번 | R-09, R-15 |
+| `xtask arch-check` | 3.2의 허용 간선, 전이 금지, 재수출 금지, 외부 crate 위치, 쓰기 메서드와 주문 경로 조합의 위치, `impl UserPresence` 위치와 `UserPresence`의 별칭 가져오기·재수출 금지, 제품 bin에 `testkit`·`testkit-ports`·`trade-fakes`·자동화 플러그인 없음 | 매번 | R-09, R-15 |
 | `xtask capability-check` | 생성된 명령 목록과 capability 명령 허용 항목 일치, 금지 권한 없음 | 매번 | R-05 |
 | trybuild compile-fail | 리터럴 위조, 복제, `Default`, 비공개 메서드, `Proposal<Validated>` 위조가 컴파일되지 않음. `tests/`에 둔다 | 매번 | R-09 Q4 |
 | 커버리지 | `order-execution`과 주문 게이트 줄 커버리지 100%. 남는 분기는 보호된 예외 목록 | 매번 | I-13 |
@@ -595,7 +602,7 @@ WebView에는 AI가 쓴 글이 그려지므로 신뢰하지 않는다. WebView �
 | L7 E2E 연기 | `e2e-app`을 실제로 띄워 승인 버튼만 누르면 0건 | 밤 macOS | R-15 |
 | L9 사람 확인 | 실제 Touch ID와 토스 소액 실주문 | 출시 전과 변경 시 (O-15) | R-15 |
 
-L4에서 단언할 것. 이 표가 주문 경로 고정 테스트 단언의 유일한 목록이다. [harness.md](harness.md) 6.5는 이 표를 가리킨다. 명령 목록은 생성된 바인딩에서, 도구와 작업 목록은 레지스트리에서 가져온다. 손으로 쓴 목록을 쓰지 않는다. 가짜는 `testkit`의 `ScriptedPresence`와 `trade-fakes`의 `RecordingBroker`다(3.2).
+L4에서 단언할 것. 이 표가 주문 경로 고정 테스트 단언의 유일한 목록이다. [harness.md](harness.md) 6.5는 이 표를 가리킨다. 명령 목록은 생성된 바인딩에서, 도구와 작업 목록은 레지스트리에서 가져온다. 손으로 쓴 목록을 쓰지 않는다. 가짜는 `testkit-ports`의 `ScriptedPresence`와 `trade-fakes`의 `RecordingBroker`다(3.2).
 
 | # | 상황 | 기대 |
 |---|---|---|
