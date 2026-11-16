@@ -337,3 +337,7 @@ mod portfolio_views;
 pub use portfolio_views::{
     GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
 };
+mod valuation_snapshot;
+pub use valuation_snapshot::{
+    TakeValuationSnapshot, ValuationSnapshotError, ValuationSnapshotReport,
+};
