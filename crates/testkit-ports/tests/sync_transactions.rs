@@ -228,7 +228,9 @@ mod tests {
                 .rev()
                 .find(|(key, _record)| key == account)
                 .map(|(_key, value)| value.recorded_at());
-            if &self.current_state(&stored) != previous
+            if record.state().account_id() != account
+                || previous.account_id() != account
+                || &self.current_state(&stored) != previous
                 || latest_at != previous_recorded_at
                 || latest_at.is_some_and(|at| record.recorded_at() < at)
             {
@@ -878,5 +880,66 @@ mod tests {
             stored.events,
             vec![DomainEvent::TransactionsSyncRecorded(AccountId::new(91)); 3]
         );
+    }
+    fn foreign_record() -> TransactionSyncRecord {
+        TransactionSyncRecord::from_observation(
+            &SettledRowSet::new(AccountId::new(92)),
+            window(),
+            at(70),
+            Err(network_error()),
+        )
+    }
+    #[test]
+    fn rejects_foreign_account_in_latest_detail_before_reading_clock_or_broker() {
+        let trace = Arc::new(RwLock::new(Trace::default()));
+        trace
+            .write()
+            .expect("잠금")
+            .records
+            .push((AccountId::new(91), foreign_record()));
+        let repository = Repository {
+            state: initial(),
+            failure: None,
+            trace: Arc::clone(&trace),
+            gate: Arc::new(RwLock::new(Gate::Open)),
+        };
+        let broker = ScriptedBrokerRead::default();
+        let clock = SteppedClock::new(at(75));
+        let events = sync_events(&trace);
+        let sync = SyncTransactions {
+            broker: &broker,
+            repository: &repository,
+            clock: &clock,
+            events: &events,
+        };
+        assert_eq!(
+            run(sync.sync_window(&AccountId::new(91), window())),
+            Err(TransactionSyncError::StoredAccountMismatch)
+        );
+        assert_eq!(clock.calls(), []);
+        assert_eq!(broker.calls(), []);
+        let stored = trace.read().expect("잠금");
+        assert_eq!(stored.records.len(), 1);
+        assert_eq!(stored.events, []);
+    }
+    #[test]
+    fn repository_rejects_a_record_created_for_a_different_account() {
+        let trace = Arc::new(RwLock::new(Trace::default()));
+        let repository = Repository {
+            state: initial(),
+            failure: None,
+            trace: Arc::clone(&trace),
+            gate: Arc::new(RwLock::new(Gate::Open)),
+        };
+        assert_eq!(
+            run(repository.record_sync(&AccountId::new(91), &initial(), None, &foreign_record())),
+            Err(SystemPortError::new(
+                SystemPort::Repository,
+                SystemFailure::InvalidData
+            ))
+        );
+        let stored = trace.read().expect("잠금");
+        assert_eq!(stored.records, []);
+        assert_eq!(stored.summaries, []);
     }
 }
