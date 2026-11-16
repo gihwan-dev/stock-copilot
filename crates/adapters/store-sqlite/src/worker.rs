@@ -34,6 +34,16 @@ impl Writer {
         })
     }
 
+    pub(crate) fn shutdown(&mut self) -> Result<(), SystemPortError> {
+        self.requests
+            .send(Request::Stop)
+            .map_err(|_error| failure::integrity())?;
+        if let Some(thread) = self.thread.take() {
+            thread.join().map_err(|_error| failure::integrity())?;
+        }
+        Ok(())
+    }
+
     pub(crate) async fn execute<T, F>(&self, operation: F) -> Result<T, SystemPortError>
     where
         T: Send + 'static,

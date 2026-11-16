@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 mod ast;
+mod composition;
 mod endpoint;
 mod schema_surface;
 
@@ -85,6 +86,12 @@ fn scan_rust(
             .into_iter()
             .map(|rule| Finding::new(rule, String::from(relative))),
     );
+    if composition::forbidden(relative, &file) {
+        findings.insert(Finding::new(
+            Rule::AdapterConstruction,
+            String::from(relative),
+        ));
+    }
     let mut ast = AstRules::new(rules, crate_name, relative, &file);
     ast.visit_file(&file);
     findings.extend(

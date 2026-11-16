@@ -48,6 +48,10 @@ impl Database {
         })
     }
 
+    pub fn shutdown(mut self) -> Result<(), SystemPortError> {
+        self.writer.shutdown()
+    }
+
     pub async fn check(&self) -> Result<application::WriteCompleted, SystemPortError> {
         self.read(|connection| connection.query_row(sql::SCHEMA, [], |row| row.get::<_, i64>(0)))
             .await?;

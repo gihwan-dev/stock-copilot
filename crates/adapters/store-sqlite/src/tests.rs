@@ -527,3 +527,37 @@ fn cancelling_a_response_does_not_cancel_an_accepted_write() {
         1
     );
 }
+
+#[test]
+fn explicit_shutdown_drains_accepted_writes_on_a_blocking_worker() {
+    let fixture = Fixture::new();
+    let database = Database::open(&DatabasePath::new(fixture.path()), &key()).expect("database");
+    let (release, gate) = std::sync::mpsc::channel();
+    let (entered, entry) = tokio::sync::oneshot::channel();
+    let first = database
+        .writer
+        .submit(move |_transaction| {
+            entered.send(()).expect("entered");
+            gate.recv().expect("release");
+            Ok(17_i64)
+        })
+        .expect("accepted first");
+    let second = database
+        .writer
+        .submit(|_transaction| Ok(29_i64))
+        .expect("accepted second");
+    runtime().block_on(async move {
+        entry.await.expect("writer entered");
+        let shutdown = tokio::task::spawn_blocking(move || database.shutdown());
+        assert_eq!(
+            tokio::spawn(async { 43_i64 })
+                .await
+                .expect("responsive runtime"),
+            43
+        );
+        release.send(()).expect("release writer");
+        shutdown.await.expect("shutdown worker").expect("shutdown");
+        assert_eq!(first.await.expect("first reply"), Ok(17));
+        assert_eq!(second.await.expect("second reply"), Ok(29));
+    });
+}
