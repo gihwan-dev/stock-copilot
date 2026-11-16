@@ -1,0 +1,46 @@
+{
+  "graphs": [
+    {
+      "input": "rusqlite v0.42.0\nlibsqlite3-sys v0.40.0\nsqlcipher-src v420.0.0\n",
+      "expected": []
+    },
+    {
+      "input": "rusqlite v0.42.0\nlibsqlite3-sys v0.40.0\nsqlcipher-src v420.0.0\nopenssl v0.10.1\n",
+      "expected": ["OpenSSL"]
+    },
+    {
+      "input": "rusqlite v0.42.0\nlibsqlite3-sys v0.40.0\nsqlcipher-src v420.0.0\nopenssl-sys v0.9.1\n",
+      "expected": ["OpenSSL"]
+    },
+    {
+      "input": "rusqlite v0.42.0\nlibsqlite3-sys v0.40.0\nsqlcipher-src v420.0.0\nopenssl-src v300.1.0\n",
+      "expected": ["OpenSSL"]
+    },
+    {
+      "input": "missing\nlibsqlite3-sys v0.40.0\nsqlcipher-src v420.0.0\n",
+      "expected": ["rusqlite v0.42.0"]
+    },
+    {
+      "input": "rusqlite v0.42.0\nmissing\nsqlcipher-src v420.0.0\n",
+      "expected": ["libsqlite3-sys v0.40.0"]
+    },
+    {
+      "input": "rusqlite v0.42.0\nlibsqlite3-sys v0.40.0\nmissing\n",
+      "expected": ["sqlcipher-src v420.0.0"]
+    }
+  ],
+  "links": [
+    {
+      "input": "/usr/lib/libSystem.B.dylib",
+      "expected": []
+    },
+    {
+      "input": "/opt/lib/libcrypto.3.dylib",
+      "expected": ["OpenSSL"]
+    },
+    {
+      "input": "/opt/lib/libssl.3.dylib",
+      "expected": ["OpenSSL"]
+    }
+  ]
+}

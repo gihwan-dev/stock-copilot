@@ -489,6 +489,16 @@
         "file": "crates/xtask/src/gen_schema_tests.rs",
         "name": "every_component_has_a_committed_generated_type"
       }
+    },
+    {
+      "recipe": "check",
+      "command": "node harness/sqlcipher/check.mjs",
+      "kind": "check",
+      "cases": "harness/sqlcipher/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/sqlcipher.test.mjs",
+        "name": "SQLCipher rejects missing pins and OpenSSL graph or linkage"
+      }
     }
   ]
 }
