@@ -111,6 +111,7 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/Button.stories.tsx src/shared/ds/Button.stories.tsx",
   "files src/shared/ds/Button.tsx src/shared/ds/Button.tsx",
   "files src/shared/ds/Card.tsx src/shared/ds/Card.tsx",
+  "files src/shared/ds/Catalog.stories.tsx src/shared/ds/Catalog.stories.tsx",
   "files src/shared/ds/Checkbox.stories.tsx src/shared/ds/Checkbox.stories.tsx",
   "files src/shared/ds/Checkbox.tsx src/shared/ds/Checkbox.tsx",
   "files src/shared/ds/Dialog.tsx src/shared/ds/Dialog.tsx",

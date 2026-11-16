@@ -33,7 +33,7 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "a07d334d560a5415aecf3558a39ed8a05507484fd644e0b0f6de43aecf6a14ce",
   ".claude/hooks/subagent-start.mjs": "837a26d6ab79331429ca714ba9fa663bd4310e46aa5cfa5e8e6a85662a2a87f7",
-  ".codex/config.toml": "a4fc41657ad792a3298a652cba93be228129edb506d35d24986f716a5f33d0ad",
+  ".codex/config.toml": "4ad9387823f3eaef2b1aaa2e7d61381ffe2549c690ac54ab3171b9a3ba4c9655",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "crates/testkit-ports/src/lib.rs": "9722bbb925bcbcfac26b493ab1fb0cfb8caa5c1b31dcc5395752befa54ca4d41",
   "crates/testkit-ports/src/script.rs": "d0d8ac1f007d6b7ed2564cf78f6d2e9ed510e8f6dc908855546d35265b32aa08",
@@ -66,6 +66,6 @@
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "1f57fef22ec8edd9a7f66295af0e3f91a2726d69716a1c5126a8af02db88f3ed",
   "harness/codex-regression/run.mjs": "b43d193ecfb5684c82d808f30884d09bf6805faa5d2774172efb22a83e5a977b",
-  "harness/sandbox/lock-fragment.json": "80a6d603c0222ac5879bb763f3bf1d3db7c7f2e77e3161bf22f4ee83ee547110",
+  "harness/sandbox/lock-fragment.json": "dad230814feae21e8933fa8740fc7a2450daa3650b97f5cb2e1c85af15c7e381",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }
