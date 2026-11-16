@@ -326,3 +326,9 @@ pub use sync_transactions::{
 
 mod sync_portfolio;
 pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
+
+mod market_overview;
+pub use market_overview::{
+    GetMarketOverview, MarketOverview, OverviewData, OverviewEntry, OverviewError,
+    OverviewFreshness, OverviewObservation, OverviewRequest,
+};
