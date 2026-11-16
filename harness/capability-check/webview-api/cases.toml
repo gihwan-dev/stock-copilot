@@ -153,3 +153,23 @@ pub fn open(app: &AppHandle) {
     tauri::WebviewWindowBuilder::new(app, "second", tauri::WebviewUrl::default());
 }
 '''
+
+[[case]]
+name = "invoke-key-outside-contract-test"
+expect = ["src/lib.rs: capability:webview-api:invoke_key"]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+pub fn hidden() { let invoke_key = "probe"; }
+'''
+
+[[case]]
+name = "mock-invoke-request-key"
+expect = []
+
+[[case.file]]
+path = "src/tests/ipc_contract.rs"
+source = '''
+fn request() { let invoke_key = tauri::test::INVOKE_KEY; }
+'''
