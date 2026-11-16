@@ -15,3 +15,6 @@ pub use endpoint::TossEndpoint;
 pub use http::{RawResponse, ResponseHeaders, TossHttpClient, TossHttpError};
 pub use request::{QueryKey, ReadRequest, ReadRoute, RouteId};
 pub use token::issue_token;
+
+mod token_manager;
+pub use token_manager::{BrokerConnection, TokenError, TokenLease, TokenManager, TokenRenewal};
