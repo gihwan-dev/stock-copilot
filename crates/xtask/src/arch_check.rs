@@ -19,6 +19,7 @@ pub(crate) const RULES_PATH: &str = "harness/arch-check/rules.toml";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Rule {
+    AdapterConstruction,
     UnknownCrate,
     PathPackage,
     AllowedEdge,
@@ -47,6 +48,7 @@ pub(crate) enum Rule {
 impl Rule {
     pub(crate) const fn name(self) -> &'static str {
         match self {
+            Self::AdapterConstruction => "adapter-construction",
             Self::UnknownCrate => "unknown-crate",
             Self::PathPackage => "path-package",
             Self::AllowedEdge => "allowed-edge",

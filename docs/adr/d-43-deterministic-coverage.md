@@ -30,7 +30,7 @@ mktemp -d로 만든 작업 사본 내부 복사본에서 하나씩 실제 실행
 
 ## 독립 리뷰 후 결정
 
-보호 파일의 필요한 등록·생성물·해시는 원 지시문의 구체적 승인으로 진행한다. 서명 옵션을 사용하지 않는 구현자 규칙을 유지한다. 번호 없는 초안도 명시된 형식이다. 첫 리뷰와 새 Codex 비판에서 동작 결함은 남지 않았으며, 확정된 회귀 공백은 테스트로 보강한다. 새 coverage_remeasurement_discards_obsolete_source_mappings는 내부 fixture의 소스 함수·줄 위치와 crate 버전을 바꾼 두 측정에서 이전 바이너리 매핑이 사라짐을 단언한다. 실제 workspace→profraw-only 손 변형이 컴파일 후 before_change 잔존 단언에서 실패하고 복구 대조군이 통과했다.
+보호 파일의 필요한 등록·생성물·해시는 원 지시문의 구체적 승인으로 진행한다. 서명 옵션을 사용하지 않는 구현자 규칙을 유지한다. 번호 없는 초안도 명시된 형식이다. 첫 리뷰와 새 Codex 비판에서 동작 결함은 남지 않았으며, 확정된 회귀 공백은 테스트로 보강한다. 새 coverage_remeasurement_discards_obsolete_source_mappings는 내부 fixture의 소스 함수·줄 위치와 crate 버전을 바꾼 두 측정에서 이전 바이너리 매핑이 사라짐을 단언한다. 실제 workspace→profraw-only 손 변형이 컴파일 후 before_change 잔존 단언에서 실패하고 복구 대조군이 통과했다. 이 fixture에서는 패키지 버전을 변경해 이전 계측 바이너리가 함께 남는 조건을 만든다. 버전 변경을 제거하면 소스 이름·줄 위치 변경만으로는 profraw-only 회귀를 검출하지 못한다. 이는 이 fixture와 도구 조건에서 확인한 사실이며 바이너리 해시의 모든 입력에 대한 일반 명제는 아니다.
 
 커버리지 통과 조건은 시드 5·4096회이며 모든 일반 속성 테스트의 모든 분기를 예제로 없앴다고 주장하지 않는다. KST 날짜 검증 두 곳은 같은 계약을 유지한다. T-10은 후속 어댑터 작업에서 둘의 의미가 갈라지지 않는지 확인한다. 현재 공통화는 완료 필수 사항이 아니므로 제품 구조는 더 늘리지 않는다.
 
@@ -61,3 +61,5 @@ mktemp -d로 만든 작업 사본 내부 복사본에서 하나씩 실제 실행
 | 21 | indicator collection replaced by server | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
 | 22 | indicator server offset rewritten | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
 | 23 | 계측 정리를 workspace에서 profraw-only로 축소 | coverage_remeasurement_discards_obsolete_source_mappings | 컴파일 성공·before_change 잔존 단언으로 검출, 복구 통과 |
+
+최종 통합에서는 master 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a를 수신한다. 충돌한 config/hash 생성물은 해당 master를 기준으로 기존 스크립트로 재생성하며, 사용자 관리 문서의 upstream 변경을 보존한다. 최종 HEAD 전체 검사는 `just base=HEAD check`와 그 실제 로그로 별도 확인한다.
