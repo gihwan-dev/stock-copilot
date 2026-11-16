@@ -439,3 +439,16 @@ fn region_and_unmeasured_rules_have_examples() {
         );
     }
 }
+
+#[test]
+fn coverage_remeasurement_does_not_accumulate_previous_profile_counts() {
+    let root = repository_root();
+    let directory = fresh_directory(&root, "coverage-repeat");
+    copy_tree(&root.join(WORKSPACE_EXAMPLE), &directory);
+    generate_lockfile(&directory.join("Cargo.toml"));
+    let policy = root_policy(&root);
+    let first = super::measure(&directory, &policy.packages).expect("first measurement");
+    let second = super::measure(&directory, &policy.packages).expect("second measurement");
+    assert_eq!(second.0, first.0);
+    assert_eq!(second.1, first.1);
+}
