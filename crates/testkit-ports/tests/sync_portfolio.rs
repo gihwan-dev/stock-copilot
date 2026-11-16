@@ -444,6 +444,13 @@ mod tests {
                 broker.calls(),
                 vec![testkit_ports::scripted::BrokerReadCall::Accounts()]
             );
+            let expected_failures = response
+                .as_ref()
+                .err()
+                .copied()
+                .into_iter()
+                .collect::<Vec<_>>();
+            assert_eq!(report.failures, expected_failures);
             match response {
                 Err(failure) if failure == error() => {
                     assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
@@ -579,5 +586,95 @@ mod tests {
             assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
             assert_eq!(report.failures, vec![original]);
         }
+    }
+    fn denial(endpoint: ReadEndpoint) -> PortError {
+        PortError::new(
+            endpoint,
+            HttpStatus::Forbidden,
+            PortErrorKind::AccessDenied(application::AccessDenial::Forbidden),
+        )
+    }
+    #[test]
+    fn access_denial_at_every_read_position_wins_and_preserves_all_errors() {
+        for (holding_error, krw_error, usd_error) in [
+            (denial(ReadEndpoint::Holdings), error(), error()),
+            (error(), denial(ReadEndpoint::BuyingPower), error()),
+            (error(), error(), denial(ReadEndpoint::BuyingPower)),
+        ] {
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(Ok(accounts()));
+            broker.script_holdings().push(Err(holding_error));
+            broker.script_buying_power().push(Err(krw_error));
+            broker.script_buying_power().push(Err(usd_error));
+            let report = observed_case(&broker, &AccountId::new(41));
+            assert_eq!(report.record.outcome(), &SyncOutcome::AccessBlocked);
+            assert_eq!(report.failures, vec![holding_error, krw_error, usd_error]);
+        }
+    }
+    #[test]
+    fn ordinary_holdings_failure_is_preserved_without_changing_it_to_success() {
+        let original = PortError::new(
+            ReadEndpoint::Holdings,
+            HttpStatus::ServerError,
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::ServerError,
+                retry: RetryDelay::Unknown,
+            },
+        );
+        let broker = ScriptedBrokerRead::default();
+        broker.script_accounts().push(Ok(accounts()));
+        broker.script_holdings().push(Err(original));
+        broker.script_buying_power().push(Ok(power(Currency::Krw)));
+        broker.script_buying_power().push(Ok(power(Currency::Usd)));
+        let report = observed_case(&broker, &AccountId::new(41));
+        assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
+        assert_eq!(report.failures, vec![original]);
+    }
+    struct ObservationClock(std::sync::RwLock<std::collections::VecDeque<Timestamp>>);
+    impl application::Clock for ObservationClock {
+        fn now(&self) -> Timestamp {
+            self.0
+                .write()
+                .expect("시각 잠금")
+                .pop_front()
+                .expect("관측 시각")
+        }
+    }
+    #[test]
+    fn record_uses_completion_clock_and_cash_failure_keeps_its_observation_time() {
+        let completed_at = Timestamp::from_parts(
+            UnixSeconds::new(124),
+            Nanosecond::new(31),
+            OffsetSeconds::new(0),
+        )
+        .expect("완료 시각");
+        let clock = ObservationClock(std::sync::RwLock::new([at(), completed_at].into()));
+        let broker = broker_for(1);
+        let (calls, received) = mpsc::channel();
+        let store = Store {
+            calls: calls.clone(),
+            result: Ok(WriteCompleted),
+        };
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            [DomainEventKind::PortfolioSyncRecorded].into(),
+            Subscriber(calls),
+        );
+        let bus = builder.build();
+        let report =
+            run(SyncPortfolio::new(&broker, &store, &clock, &bus).execute(&AccountId::new(41)))
+                .expect("기록");
+        assert_eq!(report.record.recorded_at(), completed_at);
+        let SyncOutcome::Partial(portfolio) = report.record.outcome() else {
+            panic!("부분 결과")
+        };
+        assert_eq!(portfolio.buying_power(Currency::Krw).observed_at(), at());
+        assert_eq!(
+            received.try_iter().collect::<Vec<_>>(),
+            vec![
+                Call::Store(AccountId::new(41), Box::new(report.record)),
+                Call::Event(DomainEvent::PortfolioSyncRecorded(AccountId::new(41)))
+            ]
+        );
     }
 }

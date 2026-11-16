@@ -111,18 +111,21 @@ impl<'a, Broker: BrokerRead, Repository: PortfolioRepository, Time: Clock>
             Err(_) => SyncOutcome::Failed,
             Ok(assembled) => {
                 let portfolio = assembled.with_reported(*observation.reported());
-                if failures.is_empty()
-                    && portfolio.buying_power(Currency::Krw).money().is_ok()
-                    && portfolio.buying_power(Currency::Usd).money().is_ok()
-                {
-                    SyncOutcome::Complete(portfolio)
-                } else {
-                    SyncOutcome::Partial(portfolio)
-                }
+                portfolio_outcome(portfolio)
             }
         }
     }
 }
+fn portfolio_outcome(portfolio: Portfolio) -> SyncOutcome<Portfolio> {
+    match (
+        portfolio.buying_power(Currency::Krw).money(),
+        portfolio.buying_power(Currency::Usd).money(),
+    ) {
+        (Ok(_), Ok(_)) => SyncOutcome::Complete(portfolio),
+        (Err(_), Ok(_) | Err(_)) | (Ok(_), Err(_)) => SyncOutcome::Partial(portfolio),
+    }
+}
+
 fn failed_outcome(error: PortError) -> SyncOutcome<Portfolio> {
     match error.kind() {
         PortErrorKind::AccessDenied(_) => SyncOutcome::AccessBlocked,
@@ -200,5 +203,84 @@ fn cash_unavailable(cause: crate::UnavailableCause) -> domain::CashUnavailableCa
         crate::UnavailableCause::ServerError => domain::CashUnavailableCause::ServerError,
         crate::UnavailableCause::Network => domain::CashUnavailableCause::Network,
         crate::UnavailableCause::ExpiredToken => domain::CashUnavailableCause::ExpiredToken,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cash, cash_failure, portfolio_outcome};
+    use crate::{HttpStatus, PortError, PortErrorKind, ReadEndpoint, RetryDelay, UnavailableCause};
+    use domain::{
+        BuyingPower, CashObservation, CashObservationFailure, CashRetryDelay, CashUnavailableCause,
+        Currency, Money, Nanosecond, NumericInput, OffsetSeconds, Portfolio, SyncOutcome,
+        Timestamp, UnixSeconds,
+    };
+
+    fn at() -> Timestamp {
+        Timestamp::from_parts(
+            UnixSeconds::new(137),
+            Nanosecond::new(29),
+            OffsetSeconds::new(0),
+        )
+        .expect("시각")
+    }
+    fn power(value: &str, currency: Currency) -> BuyingPower {
+        BuyingPower::new(
+            Money::parse(&NumericInput::try_new(value).expect("입력"), currency).expect("금액"),
+            at(),
+        )
+    }
+    #[test]
+    fn cash_conversion_preserves_success_and_failed_currency_time_and_delay() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let value = power("31", currency);
+            assert_eq!(
+                cash(Ok(value), currency, at()),
+                Some(CashObservation::Observed(value))
+            );
+            let original = PortError::new(
+                ReadEndpoint::BuyingPower,
+                HttpStatus::RateLimited,
+                PortErrorKind::Unavailable {
+                    cause: UnavailableCause::RateLimited,
+                    retry: RetryDelay::Known(domain::TimeSpan::NANOSECOND),
+                },
+            );
+            let expected = CashObservationFailure::Unavailable {
+                cause: CashUnavailableCause::RateLimited,
+                retry: CashRetryDelay::Known(domain::TimeSpan::NANOSECOND),
+            };
+            assert_eq!(cash_failure(original.kind()), Some(expected));
+            assert_eq!(
+                cash(Err(original), currency, at()),
+                Some(CashObservation::Failed {
+                    currency,
+                    reason: expected,
+                    observed_at: at()
+                })
+            );
+        }
+    }
+    #[test]
+    fn only_two_valid_currencies_form_a_complete_outcome() {
+        let complete = Portfolio::new(
+            vec![],
+            power("43", Currency::Krw),
+            power("17", Currency::Usd),
+        )
+        .expect("정상");
+        assert_eq!(
+            portfolio_outcome(complete.clone()),
+            SyncOutcome::Complete(complete)
+        );
+        for (krw, usd) in [("-5", "17"), ("43", "-7"), ("-5", "-7")] {
+            let partial =
+                Portfolio::new(vec![], power(krw, Currency::Krw), power(usd, Currency::Usd))
+                    .expect("오류 보존");
+            assert_eq!(
+                portfolio_outcome(partial.clone()),
+                SyncOutcome::Partial(partial)
+            );
+        }
     }
 }
