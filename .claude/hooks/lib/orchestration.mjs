@@ -1,5 +1,5 @@
-import { baseVerdict } from "./agent-guard.mjs";
-import { parseBrief } from "./brief.mjs";
+import { baseVerdict, reportProblems } from "./agent-guard.mjs";
+import { parseBrief, reviewTargetCommit } from "./brief.mjs";
 import { ROLE, roleOf } from "./roles.mjs";
 const denied = (message) => [{ rule: "orchestration", gated: false, message }];
 const keys = (value, allowed) =>
@@ -21,7 +21,7 @@ const briefCheck = (text, rules, facts) => {
   );
   return result.problem === undefined ? [] : denied(result.problem);
 };
-const reviewBriefCheck = (text, facts) => {
+const reviewBriefCheck = (text, rules, facts) => {
   const brief = parseBrief(text);
   const base =
     brief.problem === undefined ? facts.resolveCommit(brief.commit) : undefined;
@@ -30,8 +30,15 @@ const reviewBriefCheck = (text, facts) => {
       ? undefined
       : facts.worktreeForBranch?.(brief.branch);
   const head = target === undefined ? undefined : facts.headOf?.(target);
-  return base && head && facts.isAncestor?.(base, head)
-    ? []
+  const requested = reviewTargetCommit(text);
+  const targetCommit =
+    requested === undefined ? undefined : facts.resolveCommit(requested);
+  return base &&
+    head &&
+    base !== targetCommit &&
+    targetCommit === head &&
+    facts.isAncestor?.(base, targetCommit)
+    ? reportProblems(text, rules, facts.reportDigests ?? new Set())
     : denied("리뷰 기준은 등록된 대상 작업 사본 이력의 커밋이어야 한다");
 };
 export const orchestrationFindings = (input, rules, facts) => {
@@ -89,7 +96,7 @@ export const orchestrationFindings = (input, rules, facts) => {
     )
       return denied("허용하지 않은 T3 위임 인자다");
     return args.role === "review"
-      ? reviewBriefCheck(args.task, facts)
+      ? reviewBriefCheck(args.task, rules, facts)
       : briefCheck(args.task, rules, facts);
   }
   if (tool === "t3_thread_launch") {
@@ -173,6 +180,8 @@ export const orchestrationFindings = (input, rules, facts) => {
   if (worktree === undefined)
     return denied("이 메인이 시작한 같은 저장소의 스레드가 아니다");
   if (tool === "t3_thread_send") {
+    if (!["implementation", "research"].includes(owned.role))
+      return denied("리뷰·비판은 재개하지 않고 새로 위임한다");
     if (
       typeof args.message !== "string" ||
       (args.mode !== undefined && args.mode !== "auto")

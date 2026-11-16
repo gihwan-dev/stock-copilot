@@ -360,6 +360,94 @@ test("the post-agent context reports the record and treats a missing one as unch
   );
 });
 
+test("top-level Claude linked sessions are read-only reviewers regardless of input claims", async () => {
+  const { claudeSessionInput } =
+    await import("../../../.claude/hooks/lib/session-role.mjs");
+  const { editFindings } =
+    await import("../../../.claude/hooks/lib/edit-guard.mjs");
+  const { orchestrationFindings } =
+    await import("../../../.claude/hooks/lib/orchestration.mjs");
+  const fixture = createFixture();
+  try {
+    const raw = {
+      cwd: fixture.root,
+      agent_type: "implementer",
+      tool_input: { file_path: join(fixture.root, "docs/notes.md") },
+    };
+    const actor = claudeSessionInput(raw, fixture.worktree);
+    assert.equal(actor.agent_type, "adversarial-reviewer");
+    assert.equal(editFindings(actor, {}).at(0).rule, "role-without-edits");
+    assert.equal(
+      orchestrationFindings(
+        { ...actor, tool_name: "mcp__t3_code__delegate_task" },
+        {},
+        {},
+      ).length,
+      1,
+    );
+    assert.deepEqual(claudeSessionInput({}, fixture.root), {});
+    assert.equal(claudeSessionInput({}, fixture.outside).agent_type, "unknown");
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
+test("real Claude guard entries deny linked reviewer writes and nested delegation", () => {
+  const fixture = createFixture();
+  try {
+    cpSync(
+      join(repoRoot, ".claude/hooks"),
+      join(fixture.worktree, ".claude/hooks"),
+      { recursive: true },
+    );
+    for (const file of ["rules.json", "agent-rules.json"])
+      cpSync(
+        join(repoRoot, "harness/claude-hooks", file),
+        join(fixture.worktree, "harness/claude-hooks", file),
+      );
+    const invoke = (script, tool_input, tool_name) => {
+      const result = spawnSync(
+        process.execPath,
+        [join(fixture.worktree, ".claude/hooks", script)],
+        {
+          input: JSON.stringify({ cwd: fixture.root, tool_input, tool_name }),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            STOCK_COPILOT_HARNESS_STATE: join(fixture.base, "state"),
+          },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      return JSON.parse(result.stdout).hookSpecificOutput;
+    };
+    assert.match(
+      invoke(
+        "guard-edit.mjs",
+        { file_path: join(fixture.root, "docs/notes.md") },
+        "Write",
+      ).permissionDecisionReason,
+      /role-without-edits/u,
+    );
+    assert.equal(
+      invoke("guard-bash.mjs", { command: "git push origin HEAD" }, "Bash")
+        .permissionDecision,
+      "deny",
+    );
+    assert.match(
+      invoke("guard-orchestration.mjs", {}, "mcp__t3_code__delegate_task")
+        .permissionDecisionReason,
+      /서브에이전트는 위임하지 않는다/u,
+    );
+    assert.equal(
+      readFileSync(join(fixture.root, "docs/notes.md"), "utf8"),
+      "fixture\n",
+    );
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
 test("reviewer hook entries pin the brief target across parallel checkouts", () => {
   const fixture = createFixture();
   try {

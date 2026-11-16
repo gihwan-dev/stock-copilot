@@ -565,7 +565,7 @@
     {
       "id": "S7",
       "source": "R-10 #9",
-      "title": "리뷰어가 격리 작업 사본에서 시작",
+      "title": "역사 native 격리 실험 (현행 T3 운영 증거 아님)",
       "expected": "pwd가 .claude/worktrees 아래",
       "signal": "success",
       "evidence": "/\\.claude/worktrees/agent-",
