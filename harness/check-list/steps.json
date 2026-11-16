@@ -52,6 +52,16 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/ds-catalog/check.mjs",
+      "kind": "check",
+      "cases": "apps/desktop/tests/ds07-catalog.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/ds07-catalog.test.mjs",
+        "name": "DS07 complete public catalog accepts both themes"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "node harness/ds-style/check.mjs",
       "kind": "check",
       "cases": "apps/desktop/tests/ds-style.test.mjs",
@@ -488,6 +498,16 @@
       "test": {
         "file": "crates/xtask/src/gen_schema_tests.rs",
         "name": "every_component_has_a_committed_generated_type"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "node harness/sqlcipher/check.mjs",
+      "kind": "check",
+      "cases": "harness/sqlcipher/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/sqlcipher.test.mjs",
+        "name": "SQLCipher rejects missing pins and OpenSSL graph or linkage"
       }
     }
   ]

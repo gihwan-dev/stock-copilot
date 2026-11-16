@@ -54,6 +54,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" arch-check
     "{{just_executable()}}" source-check
     "{{just_executable()}}" sql-check
+    node harness/sqlcipher/check.mjs
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     node harness/generated-files/check.mjs
@@ -83,6 +84,7 @@ check-pnpm: check-node
 check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
+    node harness/ds-catalog/check.mjs
     node harness/ds-style/check.mjs
     node harness/ds-tokens/check.mjs
     cargo run --locked --quiet --package xtask -- gen-tokens --check
@@ -205,6 +207,7 @@ linux-check: check-node
     "{{just_executable()}}" arch-check
     "{{just_executable()}}" source-check
     "{{just_executable()}}" sql-check
+    node harness/sqlcipher/check.mjs
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     "{{just_executable()}}" raw-types
@@ -241,6 +244,7 @@ check-fast-static:
     "{{just_executable()}}" arch-check
     "{{just_executable()}}" source-check
     "{{just_executable()}}" sql-check
+    node harness/sqlcipher/check.mjs
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     "{{just_executable()}}" raw-types

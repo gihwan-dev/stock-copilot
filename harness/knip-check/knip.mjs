@@ -89,7 +89,12 @@ export const productionCasesRoot = join(here, "production-cases");
 
 export const productionConfig = (config) => ({
   ...config,
-  entry: config.entry.filter((pattern) => pattern.endsWith("!")),
+  entry: [
+    ...new Set([
+      "src/shared/ds/theme.css!",
+      ...config.entry.filter((pattern) => pattern.endsWith("!")),
+    ]),
+  ],
 });
 
 export const readProductionAllowlist = () =>

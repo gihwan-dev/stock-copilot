@@ -34,7 +34,7 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "3e0938a7a570e6962b964a0f85fe97df5733f49585a852296851355f23dc82b9",
   ".claude/hooks/subagent-start.mjs": "1a7e0742a7bdafcd8c576fe5e00fab4514a7a175b99d93c8f9706e3c6378eeea",
-  ".codex/config.toml": "b9774790f0d78b535651b6a507ab040f85af660acacb05423e536606759f8828",
+  ".codex/config.toml": "0d1a709fdbc146f7e8c7dc238175007cedcfd89c3e67e37672572f8b029cc576",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "crates/testkit-ports/src/lib.rs": "9722bbb925bcbcfac26b493ab1fb0cfb8caa5c1b31dcc5395752befa54ca4d41",
   "crates/testkit-ports/src/script.rs": "d0d8ac1f007d6b7ed2564cf78f6d2e9ed510e8f6dc908855546d35265b32aa08",
@@ -67,6 +67,6 @@
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "2c0d47dea6d1eccac7f8bfb9b6df9c4e0e5839c3c797cc7b5987df52e41be0a8",
   "harness/codex-regression/run.mjs": "b43d193ecfb5684c82d808f30884d09bf6805faa5d2774172efb22a83e5a977b",
-  "harness/sandbox/lock-fragment.json": "80a6d603c0222ac5879bb763f3bf1d3db7c7f2e77e3161bf22f4ee83ee547110",
+  "harness/sandbox/lock-fragment.json": "dad230814feae21e8933fa8740fc7a2450daa3650b97f5cb2e1c85af15c7e381",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }

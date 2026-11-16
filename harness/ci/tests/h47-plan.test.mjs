@@ -317,11 +317,11 @@ test("H47 enlarged budgets and adaptive matrices stay confined to the named dail
   const policy = readPolicy(process.cwd());
   assert.equal(policy.maxTimeout, 180);
   for (const [job, step, limit] of [
-    ["mutants-daily", "mutants without network", 331],
+    ["mutants-daily", "mutants with sandboxed tests", 331],
     ["mutants-daily", "checkout", 330],
     ["daily-plan", "daily plan", 16],
     ["daily-plan", "checkout", 15],
-    ["mutants", "mutants without network", 330],
+    ["mutants", "mutants with sandboxed tests", 330],
   ]) {
     const w = JSON.parse(readFileSync(".github/workflows/nightly.yml", "utf8"));
     w.jobs[job].steps.find((entry) => entry.name === step)["timeout-minutes"] =

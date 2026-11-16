@@ -168,12 +168,15 @@ findings = [
     { rule = "external-location", subject = "scheduler => reqwest" },
     { rule = "external-location", subject = "scheduler => rfd" },
     { rule = "external-location", subject = "scheduler => rmcp" },
+    { rule = "external-location", subject = "scheduler => rsqlite-vfs" },
     { rule = "external-location", subject = "scheduler => rusqlite" },
     { rule = "external-location", subject = "scheduler => rustls" },
     { rule = "external-location", subject = "scheduler => security-framework" },
     { rule = "external-location", subject = "scheduler => socket2" },
     { rule = "external-location", subject = "scheduler => specta" },
     { rule = "external-location", subject = "scheduler => specta-typescript" },
+    { rule = "external-location", subject = "scheduler => sqlcipher-src" },
+    { rule = "external-location", subject = "scheduler => sqlite-wasm-rs" },
     { rule = "external-location", subject = "scheduler => surf" },
     { rule = "external-location", subject = "scheduler => syn" },
     { rule = "external-location", subject = "scheduler => tauri" },
@@ -745,6 +748,10 @@ name = "user-presence-impl-outside-protected-file"
 findings = [{ rule = "user-presence-impl", subject = "crates/testkit-ports/src/lib.rs" }]
 
 [[case]]
+name = "store-sqlite-socket-bypass"
+findings = [{ rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/lib.rs" }]
+
+[[case]]
 name = "toss-endpoint-extra-factories-fail"
 findings = [{ rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint.rs" }]
 
@@ -758,4 +765,12 @@ findings = [
     { rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint.rs" },
     { rule = "toss-production", subject = "crates/adapters/broker-toss/src/endpoint/sneak.rs" },
     { rule = "toss-production", subject = "crates/adapters/broker-toss/src/http.rs" },
+]
+
+[[case]]
+name = "store-sqlite-dns-bypasses"
+findings = [
+    { rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/alias.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/trait_import.rs" },
+    { rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/glob_method.rs" },
 ]

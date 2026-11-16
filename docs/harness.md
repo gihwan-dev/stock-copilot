@@ -499,7 +499,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 항목 | 규칙 |
 |---|---|
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
-| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 모든 `src/**/*.rs`. application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 일일 변경분·주간 전체 변이 양쪽에 포함한다 (ADR 0063) |
+| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`, `adapters/store-sqlite`의 모든 `src/**/*.rs`. store-sqlite의 암호화 연결·쓰기 직렬화도 포함한다(S-01). application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 일일 변경분·주간 전체 변이 양쪽에 포함한다 (ADR 0063) |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
 | 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 바뀐 대상 src 파일의 diff 영역과 겹치는 변이만 고른다. CI 매일: 지난24시간 master 변경분을 선택량에 따라1~8작업으로. 일요일 밤: 전체를 독립된128조각으로. 수동 실행은 daily/full 선택 (H-47) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
