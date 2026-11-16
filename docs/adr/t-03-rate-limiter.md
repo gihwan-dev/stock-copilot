@@ -165,3 +165,49 @@ A-04 통합으로 testkit은 I/O만, 포트 가짜는 testkit-ports로 분리됐
 
 
 상태 보존 회귀의 최종 스코프 표현은 선택16개와clippy를 다시 통과했고 두 삭제 변형도 검출했다. 제품 부분은 독립 검증본과 동일하다. 부모의 최종 평가는 차단0·중요0이며 실제GET 동시FIFO 통합 시험은 비차단 인계로 남긴다.
+
+
+## T-02·T-20 최종 통합
+
+메인의 추가 승인으로T-20 db986ca,DS-07 92a5eae,T-02 4a587ef3df592cf56a207739a7a59ad620e0056d를수신했다. TokenManager는 이미보관한TossHttpClient의get을사용하므로같은제한기를통과한다.토큰재발급도클라이언트를교체하지않아GET예산이이어진다.토큰POST자동재시도는없다.AUTH그룹의별도전송제한은이번승인범위밖인계로남긴다.
+
+T-02인증상태시험은기존수동FakeClock을보존하고클라이언트대기에별도의전진하는가짜Clock/RequestWait를주입한다.새통합회귀는인증Clock과HTTPClock/대기를같은가짜시간으로공유해토큰재발급전후두GET간격과429대기,POST단발을검증한다.응답을보류한옛요청과새요청의인증경쟁시험은새요청을Quotes그룹으로준비한다.같은그룹FIFO를깨지않고기존인증상태·요청수단언을모두보존한다.
+
+T-20 serve_recordings와현재200·404녹화는단발도우미를그대로사용하고클라이언트생성에가짜시간만주입한다.testkit의ScriptedHttpServer(scripted_http_server.rs)와serve_sequence(http_server.rs)는둘다유지한다.기능중복정리는메인후속작업에인계하며이번에합치지않는다.별도4회차리뷰는메인지시에따라진행하지않고통합범위와회귀결과를기록한다.
+
+
+## 최신 master 대비 승인된 test-diff 23건
+
+기준은T-02병합4a587ef3df592cf56a207739a7a59ad620e0056d다.최초9건에T-20시험1건,T-02시험9건·준비도우미4건이추가돼총23건(시험19·도우미4)이다.도우미는old endpoint-only 생성자에서가짜Clock/RequestWait를받는client준비로바뀌었다.별도인증경쟁시험은새요청을Quotes그룹으로준비하고기존오류·상태·호출수단언을보존했다.생성자·준비변경은메인의(b)(d)승인범위다.
+
+| 종류 | 항목 |
+|---|---|
+| 기존 시험 | `broker-toss::contracts contract_tests::recordings_replay_over_local_client` |
+| 기존 시험 | `broker-toss::http tests::broken_transport_never_returns_the_request_or_response_body` |
+| 기존 시험 | `broker-toss::http tests::local_transport_preserves_status_headers_and_bytes_without_debug_secrets` |
+| 기존 시험 | `broker-toss::http tests::query_and_account_values_are_encoded_and_sent_in_distinct_places` |
+| 기존 시험 | `broker-toss::http tests::redirects_are_returned_without_following_the_location_or_leaking_it` |
+| 기존 시험 | `broker-toss::http tests::token_issuance_uses_only_the_fixed_form_endpoint_and_preserves_raw_body` |
+| 기존 시험 | `broker-toss::http tests::zero_port_and_invalid_secret_are_closed_errors` |
+| 기존 시험 | `broker-toss::http_limits tests::body_limit_includes_exactly_eight_mib_and_rejects_the_next_byte` |
+| 준비 도우미 | `broker-toss::token_management tests::fn advancing_manager` |
+| 준비 도우미 | `broker-toss::token_management tests::fn manager` |
+| 준비 도우미 | `broker-toss::token_management tests::fn observe_issuance_at` |
+| 준비 도우미 | `broker-toss::token_management tests::fn planned_reuse_run` |
+| 기존 시험 | `broker-toss::token_management tests::cancelled_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds` |
+| 기존 시험 | `broker-toss::token_management tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover` |
+| 기존 시험 | `broker-toss::token_management tests::connection_changes_use_the_same_bus_as_other_application_publishers` |
+| 기존 시험 | `broker-toss::token_management tests::expiry_failures_and_recovery_publish_only_changed_state` |
+| 기존 시험 | `broker-toss::token_management tests::failed_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds` |
+| 기존 시험 | `broker-toss::token_management tests::failed_renewal_stage_stops_the_sequence_and_keeps_connection_closed` |
+| 기존 시험 | `broker-toss::token_management tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation` |
+| 기존 시험 | `broker-toss::token_management tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded` |
+| 기존 시험 | `broker-toss::token_management tests::queued_requests_share_success_even_when_refresh_becomes_due_during_issuance` |
+| 기존 시험 | `src-tauri::bin/src-tauri tests::composition_root_constructs_the_fixed_product_endpoint_without_sending_requests` |
+| 기존 시험 | `xtask::bin/xtask arch_check::source::endpoint::tests::client_construction_is_private_and_requires_the_canonical_constructor` |
+
+
+최종 통합 전체 검사는1619/1619, 커버리지1059/1059 및 coverage-check 위반 없음이다. 전체 명령은 승인 test-diff23건(시험19·준비도우미4)으로 종료1이며 그 밖의 검사와 후속 끄기 보고·훅 설치는 통과했다. 새 검사 끄기와 새 외부 패키지는0건이다. 기존38개 변형은 제품 코드 바이트 동일성을 확인한 이전 증거로만 유지한다. 추가4회차 리뷰는 메인 지시에 따라 하지 않았다.
+
+
+병합 완료 후 `just test-diff 4a587ef3df592cf56a207739a7a59ad620e0056d`의 항목23개가 병합 비교 문맥의 목록과 정확히 일치했다. 일반 `disable-report-since`도 새 끄기0건으로 통과했다. 최신 기준의 자동 변이는 승인된 동일23건의 선행 test-diff에서 종료1이므로 실행·통과로 세지 않는다. 이 재확인 뒤에는 문서만 갱신했으며 코드·시험은 전체1619개 검사 때와 같다. 메인 master와승인된9ba977a는실제병합부모로보존했다. master이동·push·PR은없다.

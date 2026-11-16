@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/exchange-rate",
+  "method": "get",
+  "status": "404",
+  "schema": "#/paths/~1api~1v1~1exchange-rate/get/responses/404/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-request-927",
+      "code": "exchange-rate-not-found",
+      "message": "합성 오류 응답"
+    }
+  }
+}
