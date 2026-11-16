@@ -100,17 +100,14 @@ if (kind === ROLE.reviewer) {
     agentType: input.agent_type,
     sessionId: input.session_id,
     startedAt: new Date().toISOString(),
-    status: "started",
+    status: target === undefined ? "unchecked" : "started",
     blocks: 0,
     worktree: target,
-    snapshot:
+    reason:
       target === undefined
-        ? [
-            {
-              path: HOOKS_PROJECT_ROOT,
-              failed: "브리프의 리뷰 대상 작업 사본을 확인하지 못했다",
-            },
-          ]
-        : snapshotOf(worktrees, target, snapshotFacts),
+        ? "브리프의 리뷰 대상 작업 브랜치를 확인하지 못했다 (기준 커밋과 브랜치 필수, 등록된 대상 하나 필요)"
+        : undefined,
+    snapshot:
+      target === undefined ? [] : snapshotOf(worktrees, target, snapshotFacts),
   });
 }

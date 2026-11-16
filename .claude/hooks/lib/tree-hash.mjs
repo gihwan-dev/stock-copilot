@@ -115,7 +115,17 @@ export const contentSnapshot = (root) => {
     ...rootIgnore(root),
   ]);
   if (!head.ok || !reference.ok || !index.ok || !files.ok) {
-    return { failed: `git이 실패했다: ${index.stderr}${files.stderr}`.trim() };
+    const failures = [
+      ["HEAD", head],
+      ["HEAD 참조", reference],
+      ["인덱스", index],
+      ["파일 목록", files],
+    ]
+      .filter(([, result]) => !result.ok)
+      .map(
+        ([label, result]) => `${label}: ${result.stderr.trim() || "조회 실패"}`,
+      );
+    return { failed: `git이 실패했다: ${failures.join("; ")}` };
   }
   return {
     head: head.stdout.trim(),

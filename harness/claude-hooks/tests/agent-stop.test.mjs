@@ -429,6 +429,61 @@ test("reviewer hook entries pin the brief target across parallel checkouts", () 
   }
 });
 
+test("reviewer snapshots exclude worktrees that only share the target prefix", () => {
+  const facts = {
+    contentSnapshot: () => ({
+      head: "h",
+      reference: "refs/heads/a",
+      index: "i",
+      files: {},
+    }),
+  };
+  assert.deepEqual(
+    snapshotOf(["/wt-2", "/wt/nested", "/wt"], "/wt", facts).map(
+      (entry) => entry.path,
+    ),
+    ["/wt"],
+  );
+});
+
+test("reviewer target resolution failures stay unchecked and preserve their cause", () => {
+  let record = {
+    reason: "브리프의 리뷰 대상 작업 브랜치를 확인하지 못했다",
+    snapshot: [],
+    blocks: 0,
+  };
+  const input = { agent_id: "r", agent_type: "adversarial-reviewer" };
+  for (const attempt of Array.from(
+    { length: rules.maxBlocks + 1 },
+    (_, index) => index,
+  )) {
+    const result = decideReviewerStop(input, record, [], rules, "time");
+    record = result.record;
+    assert.equal(record.status, "unchecked");
+    const message = result.output.reason ?? result.output.systemMessage;
+    assert.match(message, /리뷰 대상 작업 브랜치를 확인하지 못했다/u);
+    assert.doesNotMatch(message, /사라졌다|바꾼 채|되돌린/u);
+    assert.equal(
+      result.output.decision,
+      attempt < rules.maxBlocks ? "block" : undefined,
+    );
+  }
+});
+
+test("reviewer snapshot Git failures include the failing HEAD reference cause", () => {
+  const root = mkdtempSync(join(tmpdir(), "reviewer-empty-head-"));
+  try {
+    execFileSync("git", ["-C", root, "init", "--quiet"], {
+      env: gitEnvironment(),
+    });
+    const snapshot = contentSnapshot(root);
+    assert.match(snapshot.failed, /HEAD 참조/u);
+    assert.match(snapshot.failed, /HEAD/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("reviewer target comes from the brief branch instead of the hook project", () => {
   const facts = {
     branchOf: (path) =>
