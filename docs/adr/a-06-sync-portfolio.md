@@ -12,7 +12,7 @@ PortfolioRepository와 SyncRecord/SyncOutcome이 이미 있으므로 새 저장 
 
 ## 정의 대기
 
-CashObservationFailure는 PortErrorKind보다 좁다. NotFound(Order) 및 확장 BrokerCapability의 정확한 domain 현금 오류 표현은 정의 대기다. 이 오류로 새 domain 타입을 만들거나 다른 원인을 발명하지 않는다. 현재는 Failed로 저장하고 반환 PortfolioSyncReport.failures에 원 PortError를 보존한다. 기존 SyncRecord에는 실패 세부 원인 저장 필드가 없다. 영속 상세 오류 조회는 별도 계약 확정 대상이다.
+CashObservationFailure는 PortErrorKind보다 좁다. NotFound(Order) 및 확장 BrokerCapability의 정확한 domain 현금 오류 표현은 정의 대기다. 이 오류로 새 domain 타입을 만들거나 다른 원인을 발명하지 않는다. 현재는 Failed로 저장하고 반환 PortfolioSyncReport.failures에 원 PortError를 보존한다. 기존 SyncRecord에는 실패 세부 원인 저장 필드가 없다. 영속 상세 오류 조회는 별도 계약 확정 대상이다. 조립 검증 실패의 PortfolioError 역시 현재 PortError 목록에는 넣지 않으며, 이 상세 진단 보존은 A-19의 후속 계약으로 남긴다.
 
 ## 인계
 
@@ -28,13 +28,17 @@ CashObservationFailure는 PortErrorKind보다 좁다. NotFound(Order) 및 확장
 
 ## 리뷰 반영과 검사
 
-새 Opus 두 회차와 각각의 새 Codex 비판을 거쳐, 접근 차단 우선순위·보유/계좌 오류 보존·완료 시각·요청 인자·구독자 실패의 회귀 증인을 추가했다. 가짜 없는 application 내부 순수 테스트와 새 ADR 보호 등록 생성물은 원 사용자 지시의 허용 범위이며 가짜 테스트의 위치·의존 규칙은 유지한다. 세부 판정은 docs/reviews/A-06.md에 기록한다.
+새 Opus 세 회차와 각각의 새 Codex 비판을 거쳐, 접근 차단 우선순위·보유/계좌 오류 보존·완료 시각·요청 인자·구독자 실패의 회귀 증인을 추가했다. 가짜 없는 application 내부 순수 테스트와 새 ADR 보호 등록 생성물은 원 사용자 지시의 허용 범위이며 가짜 테스트의 위치·의존 규칙은 유지한다. 세부 판정은 docs/reviews/A-06.md에 기록한다.
 
 최초 자동 변경분 변이는 application만 테스트해 testkit-ports 통합 테스트가 빠졌고 4개가 미검출이었다. 하네스를 바꾸지 않고 순수 현금 변환·결과 판정을 application 테스트로도 검증하도록 보완했다. 수정1의 표준 재실행은 18개 선택 중 컴파일 성공 2개 검출·컴파일 불가 16개·미검출 0개·시간 초과 0개였다. 컴파일 불가를 검출로 세지 않는다. 수정1 정상 훅의 전체 1601개와 커버리지 1061개·검사도 통과했다. 이후 추가한 요청 인자·구독자 실패 테스트를 포함한 좁은 테스트는 통합15개·순수2개가 통과했다. 최신 통합 검사 결과는 리뷰 기록과 최종 보고에 남긴다.
 
+## 최종 회귀 보강
+
+3차 리뷰와 비판에서 비종합매매 계좌, 조립 검증 실패, 계좌 목록 오류 네 종류의 검증 공백을 실행으로 확인했다. 현재 제품 코드는 올바르므로 제품 동작을 바꾸지 않고 테스트 세 개를 추가했다. 종합매매가 아닌 선택 계좌는 다른 정상 계좌가 목록에 있어도 AccessBlocked로 저장하고 Accounts 외 자산 조회를 하지 않는다. 중복 보유와 현금 통화 불일치는 Failed로 기록한다. 계좌 목록 NotFound·InvalidResponse·Unsupported·InvalidRequest는 각각 대표 원인 하나에서 Failed 및 원 오류 보존을 검사한다. 통합18개와 순수2개가 통과했다. 원 지시의 최대3회차 규칙에 따라 4차 독립 리뷰는 없으며 수정 범위와 회귀·변이 결과는 리뷰 기록에 남긴다.
+
 ## 손 변형 실제 실행
 
-최종 제품 소스와 통합 테스트를 새 mktemp 복사본에 넣어 기준 통과 후 서로 다른 변형을 하나씩 실제 컴파일·실행했다. 29개 전부 컴파일 성공 후 검출됐고 생존·시간 초과는 0개이며 원복 대조군도 통과했다. 소스 해시는 target/A-06/hand-source.sha256, 로그와 집계는 target/A-06/hand-*.log 및 hand-results.json이다. 임시 복사본은 제거했다. 이전 시도의 컴파일 불가 변형은 이 집계에 넣지 않았다.
+최종 제품 소스와 통합 테스트를 새 mktemp 복사본에 넣어 기준 통과 후 서로 다른 변형을 하나씩 실제 컴파일·실행했다. 36개 전부 컴파일 성공 후 검출됐고 생존·시간 초과는0개이며 원복 대조군도 통과했다. 마지막7개는 3차 비판의 M1~M6과 기존 AccessDenied 보호 대조 변형이다. 소스 해시는 target/A-06/hand-source.sha256, 로그와 집계는 target/A-06/hand-*.log 및 hand-results.json이다. 임시 복사본은 제거했다. 이전 시도의 컴파일 불가 변형은 이 집계에 넣지 않았다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 |
 |---|---|---|
@@ -55,15 +59,22 @@ CashObservationFailure는 PortErrorKind보다 좁다. NotFound(Order) 및 확장
 | 15 | CashUnavailableCause ServerError | tests::cash_error_reasons_group_2 |
 | 16 | CashUnavailableCause Network | tests::cash_error_reasons_group_3, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event |
 | 17 | CashUnavailableCause ExpiredToken | tests::cash_error_reasons_group_3 |
-| 18 | 부분 실패를 완전 성공으로 | tests::cash_error_reasons_group_3, tests::invalid_cash_cannot_be_reported_as_complete, tests::cash_error_reasons_group_2, tests::cash_error_reasons_group_0, tests::cash_error_reasons_group_1, tests::record_uses_completion_clock_and_cash_failure_keeps_its_observation_time, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero |
-| 19 | 보고값 누락 | tests::cash_error_reasons_group_3, tests::cash_error_reasons_group_1, tests::cash_error_reasons_group_0, tests::cash_error_reasons_group_2, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event |
-| 20 | 보유 누락 | tests::cash_error_reasons_group_2, tests::cash_error_reasons_group_1, tests::one_account_failure_does_not_prevent_another_account_success, tests::cash_error_reasons_group_3, tests::cash_error_reasons_group_0, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event |
-| 21 | 이벤트 두 번 발행 | tests::account_lookup_errors_and_unselected_accounts_save_without_reading_holdings, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event, tests::subscriber_failure_is_reported_exactly_without_republishing_or_rewriting, tests::unmapped_domain_cash_failure_is_failed_and_retains_original_error, tests::ordinary_holdings_failure_is_preserved_without_changing_it_to_success, tests::access_denial_at_every_read_position_wins_and_preserves_all_errors, tests::cash_error_reasons_group_0, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::one_account_failure_does_not_prevent_another_account_success, tests::cash_error_reasons_group_3, tests::cash_error_reasons_group_1, tests::invalid_cash_cannot_be_reported_as_complete, tests::requests_preserve_selected_account_and_both_currency_arguments, tests::record_uses_completion_clock_and_cash_failure_keeps_its_observation_time, tests::cash_error_reasons_group_2 |
+| 18 | 부분 실패를 완전 성공으로 | tests::invalid_cash_cannot_be_reported_as_complete, tests::cash_error_reasons_group_2, tests::record_uses_completion_clock_and_cash_failure_keeps_its_observation_time, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event, tests::cash_error_reasons_group_0, tests::cash_error_reasons_group_3, tests::cash_error_reasons_group_1 |
+| 19 | 보고값 누락 | tests::cash_error_reasons_group_0, tests::cash_error_reasons_group_2, tests::cash_error_reasons_group_1, tests::cash_error_reasons_group_3, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event |
+| 20 | 보유 누락 | tests::cash_error_reasons_group_2, tests::cash_error_reasons_group_1, tests::one_account_failure_does_not_prevent_another_account_success, tests::invalid_portfolio_assembly_is_recorded_as_failed_without_port_errors, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::cash_error_reasons_group_3, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event, tests::cash_error_reasons_group_0 |
+| 21 | 이벤트 두 번 발행 | tests::invalid_cash_cannot_be_reported_as_complete, tests::invalid_portfolio_assembly_is_recorded_as_failed_without_port_errors, tests::subscriber_failure_is_reported_exactly_without_republishing_or_rewriting, tests::ordinary_holdings_failure_is_preserved_without_changing_it_to_success, tests::non_brokerage_selected_accounts_are_recorded_without_reading_their_assets, tests::cash_error_reasons_group_3, tests::all_remaining_account_error_categories_are_failed_and_preserve_the_cause, tests::account_lookup_errors_and_unselected_accounts_save_without_reading_holdings, tests::access_denial_at_every_read_position_wins_and_preserves_all_errors, tests::cash_error_reasons_group_1, tests::cash_error_reasons_group_2, tests::cash_error_reasons_group_0, tests::record_uses_completion_clock_and_cash_failure_keeps_its_observation_time, tests::known_retry_delay_is_not_replaced_with_unknown_or_zero, tests::requests_preserve_selected_account_and_both_currency_arguments, tests::one_account_failure_does_not_prevent_another_account_success, tests::success_partial_failure_blocked_and_storage_failure_record_before_one_event, tests::unmapped_domain_cash_failure_is_failed_and_retains_original_error |
 | 22 | 접근 차단을 첫 오류에서만 검사 | tests::access_denial_at_every_read_position_wins_and_preserves_all_errors |
 | 23 | 보유 오류 기록 누락 | tests::access_denial_at_every_read_position_wins_and_preserves_all_errors, tests::ordinary_holdings_failure_is_preserved_without_changing_it_to_success |
-| 24 | 계좌 목록 오류 기록 누락 | tests::account_lookup_errors_and_unselected_accounts_save_without_reading_holdings |
+| 24 | 계좌 목록 오류 기록 누락 | tests::account_lookup_errors_and_unselected_accounts_save_without_reading_holdings, tests::all_remaining_account_error_categories_are_failed_and_preserve_the_cause |
 | 25 | 기록 시각을 실행 시작 시각으로 | tests::record_uses_completion_clock_and_cash_failure_keeps_its_observation_time |
 | 26 | 보유 요청을 다른 계좌로 | tests::requests_preserve_selected_account_and_both_currency_arguments |
 | 27 | 원화와 달러 요청 통화를 교환 | tests::requests_preserve_selected_account_and_both_currency_arguments |
 | 28 | 구독자 실패 보고를 지움 | tests::subscriber_failure_is_reported_exactly_without_republishing_or_rewriting |
 | 29 | 구독자 실패 시 이벤트 재발행 | tests::subscriber_failure_is_reported_exactly_without_republishing_or_rewriting |
+| 30 | 비종합매매 계좌를 동기화 허용 | tests::non_brokerage_selected_accounts_are_recorded_without_reading_their_assets |
+| 31 | 조립 검증 실패를 접근 차단으로 | tests::invalid_portfolio_assembly_is_recorded_as_failed_without_port_errors |
+| 32 | 계좌 목록 NotFound를 접근 차단으로 | tests::all_remaining_account_error_categories_are_failed_and_preserve_the_cause |
+| 33 | 계좌 목록 InvalidResponse를 접근 차단으로 | tests::all_remaining_account_error_categories_are_failed_and_preserve_the_cause |
+| 34 | 계좌 목록 Unsupported를 접근 차단으로 | tests::all_remaining_account_error_categories_are_failed_and_preserve_the_cause |
+| 35 | 계좌 목록 InvalidRequest를 접근 차단으로 | tests::all_remaining_account_error_categories_are_failed_and_preserve_the_cause |
+| 36 | 계좌 접근 차단을 일반 실패로 | tests::account_lookup_errors_and_unselected_accounts_save_without_reading_holdings |
