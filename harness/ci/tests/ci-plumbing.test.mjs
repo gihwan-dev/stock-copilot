@@ -64,7 +64,13 @@ test("the Linux exclusion list holds exactly the reviewed macOS-only crates and 
   const exclusions = readExclusions(repoRoot);
   assert.deepEqual(
     exclusions.crates.map((entry) => entry.name),
-    ["src-tauri", "e2e-app", "platform-macos", "secrets-keychain"],
+    [
+      "src-tauri",
+      "e2e-app",
+      "platform-macos",
+      "secrets-keychain",
+      "store-sqlite",
+    ],
   );
   assert.deepEqual(
     exclusions.tests.map((entry) => `${entry.package}::${entry.module}`),
@@ -83,6 +89,8 @@ test("the Linux exclusion list holds exactly the reviewed macOS-only crates and 
     "platform-macos",
     "--exclude",
     "secrets-keychain",
+    "--exclude",
+    "store-sqlite",
   ]);
   assert.equal(
     nextestFilter(exclusions),
@@ -399,7 +407,7 @@ test("the workflows run Linux on every push, macOS on master pushes and nightly,
   assert.ok(runs(nightly.jobs.macos).includes("just base=HEAD check"));
   assert.ok(
     runs(nightly.jobs.mutants).includes(
-      "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+      "just mutants-shard ${{ matrix.shard }}",
     ),
   );
   assert.ok(runs(nightly.jobs.linux).includes("just advisory-db-fetch"));

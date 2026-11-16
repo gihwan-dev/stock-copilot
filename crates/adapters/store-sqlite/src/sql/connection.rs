@@ -1,0 +1,16 @@
+pub(crate) const PROVIDER: &str = "PRAGMA cipher_provider";
+pub(crate) const TEMP_STORE: &str = "PRAGMA temp_store";
+pub(crate) const SET_TEMP_STORE: &str = "PRAGMA temp_store = 2";
+pub(crate) const JOURNAL: &str = "PRAGMA journal_mode";
+pub(crate) const SET_JOURNAL: &str = "PRAGMA journal_mode = WAL";
+pub(crate) const FOREIGN_KEYS: &str = "PRAGMA foreign_keys";
+pub(crate) const SET_FOREIGN_KEYS: &str = "PRAGMA foreign_keys = ON";
+pub(crate) const SCHEMA: &str = "SELECT count(*) FROM sqlite_schema";
+pub(crate) const QUERY_ONLY: &str = "PRAGMA query_only";
+pub(crate) const SET_QUERY_ONLY: &str = "PRAGMA query_only = ON";
+pub(crate) const CIPHER_MEMORY: &str = "PRAGMA cipher_memory_security";
+pub(crate) const SET_CIPHER_MEMORY: &str = "PRAGMA cipher_memory_security = ON";
+pub(crate) const CIPHER_HMAC: &str = "PRAGMA cipher_use_hmac";
+pub(crate) const PAGE_SIZE: &str = "PRAGMA cipher_page_size";
+pub(crate) const SYNCHRONOUS: &str = "PRAGMA synchronous";
+pub(crate) const SET_SYNCHRONOUS: &str = "PRAGMA synchronous = FULL";

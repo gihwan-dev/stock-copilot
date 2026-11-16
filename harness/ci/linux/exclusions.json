@@ -15,6 +15,10 @@
     {
       "name": "secrets-keychain",
       "reason": "macOS 데이터 보호 키체인 어댑터"
+    },
+    {
+      "name": "store-sqlite",
+      "reason": "S-01: macOS CommonCrypto 공급자를 강제하는 SQLCipher 저장소. Linux에서는 완료 기준의 공급자를 제공하지 않는다"
     }
   ],
   "tests": [

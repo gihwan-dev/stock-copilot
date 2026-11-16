@@ -25,7 +25,10 @@ pub(crate) fn plan(
     let mut crates = BTreeSet::new();
     let mut frontend = Frontend::Unchanged;
     for path in paths {
-        if path == "crates/testkit/src/lib.rs" || path.starts_with("docs/") {
+        if path == "crates/testkit/src/lib.rs"
+            || path.starts_with("crates/testkit-ports/src/")
+            || path.starts_with("docs/")
+        {
             return Plan::Full;
         }
         if Path::new(path).file_name().is_some_and(|file| {
@@ -510,5 +513,27 @@ mod review_tests {
         }
         assert!(kinds.contains("Development"));
         assert!(kinds.contains("Build"));
+    }
+    #[test]
+    fn port_fake_sources_keep_the_full_shared_support_check() {
+        let members = super::Members::from([(
+            String::from("crates/testkit-ports"),
+            String::from("testkit-ports"),
+        )]);
+        for path in [
+            "crates/testkit-ports/src/lib.rs",
+            "crates/testkit-ports/src/scripted_presence.rs",
+            "crates/testkit-ports/src/memory.rs",
+        ] {
+            assert_eq!(
+                super::plan(
+                    &[String::from(path)].into(),
+                    &members,
+                    &super::Dependencies::new()
+                ),
+                super::Plan::Full,
+                "{path}"
+            );
+        }
     }
 }

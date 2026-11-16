@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 src-tauri = { path = "../src-tauri" }
+testkit-ports = { path = "../../../crates/testkit-ports" }
 testkit = { path = "../../../crates/testkit" }
 trade-fakes = { path = "../../../crates/trade-fakes" }
 tauri = { version = "0.1.0" }

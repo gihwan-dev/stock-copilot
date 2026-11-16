@@ -215,7 +215,7 @@ xtask가 실패시키는 것 (`proc-macro2` 토큰 트리를 재귀로 돌아서
 | `trybuild` | 1.0.122 | 주문 토큰 위조가 컴파일되지 않는지 |
 | `typify` | 0.8.0 | 토스 스펙의 `components.schemas` → Rust 타입 (5장) |
 | `insta` | 1.49.0 | 스냅샷 (명령별 대표 응답, 시나리오 결과) |
-| `xtask arch-check` | - | `cargo metadata`의 일반·빌드·개발 의존을 허용 간선 표와 비교 ([architecture.md](architecture.md) 3.2, 4.6). 표에 없는 crate가 나타나면 실패. 제품 바이너리 그래프에 E2E 자동화 플러그인, `testkit`, `trade-fakes`가 있으면 실패. 재수출 금지, `impl UserPresence` 위치, `UserPresence`의 별칭 가져오기(`use … as`)와 다시 내보내기 금지 |
+| `xtask arch-check` | - | `cargo metadata`의 일반·빌드·개발 의존을 허용 간선 표와 비교 ([architecture.md](architecture.md) 3.2, 4.6). 표에 없는 crate가 나타나면 실패. 제품 바이너리 그래프에 E2E 자동화 플러그인, `testkit`, `testkit-ports`, `trade-fakes`가 있으면 실패. 재수출 금지, `impl UserPresence` 위치, `UserPresence`의 별칭 가져오기(`use … as`)와 다시 내보내기 금지 |
 | `xtask` 소스·매니페스트·설정 검사 | - | 3.2 |
 | `xtask test-diff` | - | 기존 테스트 삭제·변경 검출 (7.7) |
 | `xtask lint-file` | - | 편집 직후 한 파일 검사 |
@@ -460,7 +460,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | `store-sqlite` | SQL 상수 전부를 마이그레이션된 DB에 `prepare`하는 테스트, 스키마 스냅샷 테스트 (R-06) |
 | `mcp-server` | 프로세스 안 duplex 계약 테스트, 두 프로토콜 세대의 JSON 줄 스냅샷, `tools/list` 골든 파일 (R-04) |
 | `ai-claude-code` | 실행 파일 경로를 주입받아 가짜 CLI로 녹화 stream-json을 재생. 출력 재생과 대본 MCP 클라이언트 두 모드 (R-15 2.4). `PATH`를 바꾸는 방식은 쓰지 않는다 |
-| 코어 시나리오 | 하루치 시나리오를 고정 시계와 `testkit` 가짜로 돌리고 이벤트 순서와 DB 상태를 스냅샷으로 고정 |
+| 코어 시나리오 | 하루치 시나리오를 고정 시계와 `testkit-ports` 가짜로 돌리고 이벤트 순서와 DB 상태를 스냅샷으로 고정 |
 | UI | 화면마다 로딩·빈 상태·오류·정상 상태 테스트 (Vitest + Testing Library + `mockCommands`) |
 | 하네스 자체 | 6.8 |
 
@@ -499,7 +499,7 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 항목 | 규칙 |
 |---|---|
 | 도구 | `cargo-mutants` 27.1.0, `--test-tool nextest`, `--cap-lints=true` 필수 (없으면 엄격 린트 때문에 정상 변이체가 unviable로 분류된다) |
-| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`의 모든 `src/**/*.rs`. application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 일일 변경분·주간 전체 변이 양쪽에 포함한다 (ADR 0063) |
+| 대상 | `domain`(신호·주문 계산 모듈 포함), `order-execution`, `application`, `adapters/store-sqlite`의 모든 `src/**/*.rs`. store-sqlite의 암호화 연결·쓰기 직렬화도 포함한다(S-01). application의 실제 포트·조회 결과·오류 타입·오류 분류와 앞으로 추가할 유스케이스를 일일 변경분·주간 전체 변이 양쪽에 포함한다 (ADR 0063) |
 | 제외 | 진단 출력을 비교하는 `trybuild` 테스트는 nextest 필터로 뺀다 (`--cap-lints`가 기대 출력을 바꾼다) |
 | 언제 | 푸시 훅(`just check-full`): 기준 브랜치 대비 변경분(`--in-diff`). 바뀐 대상 src 파일의 diff 영역과 겹치는 변이만 고른다. CI 매일: 지난24시간 master 변경분을 선택량에 따라1~8작업으로. 일요일 밤: 전체를 독립된128조각으로. 수동 실행은 daily/full 선택 (H-47) |
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
@@ -520,7 +520,7 @@ WebDriver가 아니라 Rust에서 `tauri::test` 목 런타임으로 만든다. T
 | 조립 | 제품과 **같은** `build_app<R: Runtime>(builder, Ports, ctx)`를 부른다. `main.rs`는 실제 어댑터 생성과 `build_app` 호출만 담는다 |
 | 호출 | `get_ipc_response`로 WebView가 보내는 것과 같은 IPC 요청을 넣는다. macOS에서 출처는 `tauri://localhost`다 (`http://tauri.localhost`는 macOS에서 로컬로 판정되지 않는다) |
 | 목록 | 명령 목록은 tauri-specta 생성물에서, MCP 도구와 스케줄러 작업은 레지스트리에서 가져온다. 손으로 쓴 목록은 새 명령을 빠뜨린다 |
-| 가짜 | 가짜 본인 확인은 `application`의 `UserPresence` 포트 가짜(`testkit`의 `ScriptedPresence`), 가짜 증권사는 `trade-fakes`의 `RecordingBroker`다 (open-issues I-14, [architecture.md](architecture.md) 3.2). 둘 다 `cfg`나 `[features]` 없는 보통 crate라 3.2의 `cfg` 금지와 충돌하지 않고, `src-tauri`의 개발 의존으로만 들어오므로 제품 실행 파일에는 없다. 가짜 증권사는 진짜 `ApprovedOrder`를 받기만 한다 |
+| 가짜 | 가짜 본인 확인은 `application`의 `UserPresence` 포트 가짜(`testkit-ports`의 `ScriptedPresence`), 가짜 증권사는 `trade-fakes`의 `RecordingBroker`다 (open-issues I-14, [architecture.md](architecture.md) 3.2). 둘 다 `cfg`나 `[features]` 없는 보통 crate라 3.2의 `cfg` 금지와 충돌하지 않고, `src-tauri`의 개발 의존으로만 들어오므로 제품 실행 파일에는 없다. 가짜 증권사는 진짜 `ApprovedOrder`를 받기만 한다 |
 | 보호 | 경로 고정 테스트 파일과 주문·본인 확인 가짜는 보호 파일이다 (7.1) |
 
 단언 목록은 [architecture.md](architecture.md) 4.6의 표 (a)~(n) 하나뿐이다. 이 문서에 따로 적지 않는다.
@@ -610,7 +610,7 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 위 경로 안에 있어도 보호하는 것:
 
-- 경로 고정 테스트 파일, 주문·본인 확인 가짜(`crates/trade-fakes/`, `testkit`의 `ScriptedPresence`) (6.5)
+- 경로 고정 테스트 파일, 주문·본인 확인 가짜(`crates/trade-fakes/`, `testkit-ports`의 `ScriptedPresence`와 공통 `script.rs`·`lib.rs`) (6.5)
 - `crates/xtask/`, `crates/adapters/broker-toss-schema/`(생성 경로)
 - UX-6 금지어 목록과 예외 목록 (6.9)
 - `shared/ds/index.ts`, `shared/ds/tokens.css`, `shared/ds/tokens.ts`, 시각 회귀 기준 이미지 (4.4)
@@ -876,7 +876,7 @@ H-46 리뷰 결정: master는 메인만 움직인다. 전진은 --no-ff 병합 �
 
 밤 전체 변이는 완주 기록이 없다. 2026-11-13은 실패, 11-14는 네 조각이120분 부근에서 취소됐고 취소 전 한 조각에서 미검출18건이 확인됐다. 따라서 현재는 보완 장치로 작동한다고 볼 수 없다. 완주와 결과·취소 처리 보완은 H-47로 넘긴다. 변이 실행은 기본256회를 쓰며 상속된 전체 검사4096 환경을 제거한다.4096 강제는 전체 테스트 검사에만 적용한다.
 
-fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. docs/design.md의 소비 단계를 좁힐 근거는 이번 조사에서 확정하지 않았다. docs/harness.md 및 다른 문서도 테스트·정책에서 참조할 수 있다. 문서별 소비 단계가 빠지는 일을 막기 위해 docs/** 전체를 전체 검사로 승격한다. testkit 도우미 소스 변경도 전체로 승격한다.
+fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. docs/design.md의 소비 단계를 좁힐 근거는 이번 조사에서 확정하지 않았다. docs/harness.md 및 다른 문서도 테스트·정책에서 참조할 수 있다. 문서별 소비 단계가 빠지는 일을 막기 위해 docs/** 전체를 전체 검사로 승격한다. testkit 도우미와 testkit-ports 포트 가짜 소스 변경도 전체로 승격한다.
 
 
 | 문서 | 확인한 소비자 | fast 단계 |
