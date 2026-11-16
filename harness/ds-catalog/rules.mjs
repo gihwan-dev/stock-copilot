@@ -26,6 +26,7 @@ export const catalogProblems = (components, samples, entries) => {
       problems.push(`${story.component}: 이야기 테마 누락`);
   }
   for (const entry of entries) {
+    if (!entry.tags?.includes("dev")) problems.push("목록에서 숨긴 이야기");
     if (!components.includes(entry.component))
       problems.push("비공개 목록 항목");
     if (typeof entry.render !== "function") problems.push("목록 렌더 없음");

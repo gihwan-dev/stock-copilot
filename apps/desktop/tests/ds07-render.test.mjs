@@ -3,7 +3,7 @@ import test from "node:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { componentsDom } from "./ds-components-dom.mjs";
-import { desktopRoot } from "./paths.mjs";
+import { desktopRoot, repoRoot } from "./paths.mjs";
 const files = readdirSync(join(desktopRoot, ".storybook/catalog")).filter(
   (file) => file.endsWith(".stories.mjs"),
 );
@@ -13,20 +13,55 @@ const imports = files
       `import * as page${index} from ${JSON.stringify(join(desktopRoot, ".storybook/catalog", file))};`,
   )
   .join("\n");
+const cardIndex = files.indexOf("Card.stories.mjs");
+const assertTheme = (document, theme) =>
+  assert.equal(document.documentElement.dataset.theme, theme);
 const pages = files
   .map(
     (file, index) =>
-      `...Object.entries(page${index}).filter(([name])=>name!=="default").map(([,page])=>({component:${JSON.stringify(file.replace(".stories.mjs", ""))},page}))`,
+      `...Object.values(composeStories(page${index},preview)).map(page=>({component:${JSON.stringify(file.replace(".stories.mjs", ""))},page}))`,
   )
   .join(",");
+const summary = (scope, document) => ({
+  text: document.body.textContent,
+  nodes: Array.from(scope.querySelectorAll("*"), (element) => [
+    element.tagName,
+    ...[
+      "class",
+      "role",
+      "type",
+      "aria-label",
+      "aria-expanded",
+      "aria-checked",
+      "aria-disabled",
+      "disabled",
+      "data-chart-theme",
+      "d",
+    ].map((name) => element.getAttribute(name)),
+  ]),
+  values: Array.from(
+    scope.querySelectorAll("input,textarea,select"),
+    (element) => element.value,
+  ),
+  dialogs: Array.from(
+    document.querySelectorAll('[role="dialog"]'),
+    (element) => element.textContent,
+  ),
+});
 test("DS07 every actual CSF render uses its component, example and real theme", async () => {
   const bundle =
     await componentsDom(`import {render,cleanup} from "@testing-library/react";
+import {composeStories} from "@storybook/react-vite";
 import * as components from DS_ENTRY;
+import * as sources from STORY_ENTRY;
+import {catalogSamples} from ${JSON.stringify(join(repoRoot, "harness/ds-catalog/samples.mjs"))};
 import preview from ${JSON.stringify(join(desktopRoot, ".storybook/preview.mjs"))};
 ${imports}
-window.cleanup=cleanup;window.names=Object.keys(components);window.pages=[${pages}];
-window.show=page=>render(preview.decorators[0](()=>page.render(),{parameters:page.parameters}));
+window.cleanup=cleanup;window.names=Object.keys(components);window.pages=[${pages}];window.samples=catalogSamples(sources);
+window.show=page=>render(page());
+window.expected=(story,theme)=>{document.documentElement.dataset.theme=theme;return render(story.render(theme));};
+const broken=composeStories({...page${cardIndex},default:{...page${cardIndex}.default,decorators:[Story=>{document.documentElement.dataset.theme="light";return Story();}]}},preview);
+window.showBroken=()=>render(broken.Dark0());
 window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});`);
   try {
     const w = bundle.open();
@@ -35,12 +70,18 @@ window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});
       Array.from(w.names).sort(),
     );
     for (const { component, page } of w.pages) {
+      const source = Array.from(w.samples).find(
+        (story) =>
+          story.component === component &&
+          story.sample === page.parameters.sample,
+      );
+      assert.ok(source);
+      const expected = w.expected(source, page.parameters.theme);
+      const expectedSummary = summary(expected.container, w.document);
+      w.cleanup();
       const shown = w.show(page);
       const root = shown.container.firstElementChild;
-      assert.equal(
-        w.document.documentElement.dataset.theme,
-        page.parameters.theme,
-      );
+      assertTheme(w.document, page.parameters.theme);
       assert.equal(root.dataset.catalogComponent, component);
       assert.equal(root.dataset.catalogTheme, page.parameters.theme);
       assert.equal(
@@ -48,15 +89,17 @@ window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});
         page.parameters.sample.toString(),
       );
       assert.equal(root.children.length, 1);
+      assert.deepEqual(
+        summary(root.firstElementChild, w.document),
+        expectedSummary,
+        `${component}/${page.parameters.sample}/${page.parameters.theme}`,
+      );
       assert.ok(w.document.querySelectorAll('[role="dialog"]').length <= 1);
       for (const chart of shown.container.querySelectorAll(
         "[data-chart-theme]",
       ))
         assert.equal(chart.dataset.chartTheme, page.parameters.theme);
-      if (
-        component === "Table" &&
-        shown.container.textContent.includes("가상 보유 종목")
-      ) {
+      if (component === "Table" && source.state === "long") {
         assert.ok(shown.container.textContent.includes("987,654,321,098"));
         assert.ok(
           shown.container.textContent.includes(
@@ -64,8 +107,35 @@ window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});
           ),
         );
       }
+      if (source.state === "representative") {
+        assert.equal(
+          shown.container.querySelectorAll("[data-chart-theme]").length,
+          1,
+        );
+        const trend = component === "LineChart" || component === "AreaChart";
+        const names = trend
+          ? ["11월 11일", "11월 12일", "11월 13일"]
+          : [
+              "예시반도체장기성장산업기술연구개발통합솔루션보통주",
+              "예시생활건강",
+              "예시미래에너지",
+            ];
+        const values = trend
+          ? ["24,500,000,000", "24,600,000,000", "24,700,000,000"]
+          : ["24,500,000,000", "18,600,000,000", "32,700,000,000"];
+        for (const value of [...names, ...values])
+          assert.ok(
+            w.document.body.textContent.includes(value),
+            `${component}: ${value}`,
+          );
+      }
+      if (source.state === "long" && component === "Text")
+        assert.ok(shown.container.textContent.length >= 80);
       w.cleanup();
     }
+    w.showBroken();
+    assert.throws(() => assertTheme(w.document, "dark"));
+    w.cleanup();
     assert.throws(() => w.invalidTheme(undefined));
     assert.throws(() => w.invalidTheme("purple"));
   } finally {

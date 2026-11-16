@@ -1,0 +1,129 @@
+import { format } from "prettier";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { desktop } from "./load.mjs";
+export const groups = {
+  레이아웃: ["Card"],
+  기본: [
+    "Text",
+    "Heading",
+    "Button",
+    "IconButton",
+    "TextField",
+    "Select",
+    "Checkbox",
+    "Switch",
+    "SegmentedControl",
+    "Disclosure",
+    "Icon",
+  ],
+  피드백: ["Table", "Badge", "StatusBar", "Dialog", "EmptyState", "Skeleton"],
+  숫자: [
+    "Money",
+    "Percent",
+    "Quantity",
+    "Probability",
+    "PriceChange",
+    "DirectionBadge",
+  ],
+  차트: ["LineChart", "AreaChart", "DonutChart", "Treemap"],
+  콘텐츠: ["Markdown", "ChatInput"],
+};
+const states = {
+  normal: "기본",
+  disabled: "비활성",
+  selected: "선택",
+  error: "오류",
+  hint: "도움말",
+  secret: "가림",
+  empty: "빈 상태",
+  open: "열림",
+  closed: "닫힘",
+  decorative: "장식용",
+  meaningful: "의미 있음",
+  present: "내용 있음",
+  absent: "내용 없음",
+  single: "한 점",
+  load: "부하",
+  invalid: "잘못된 자료",
+  denied: "링크 제한",
+  sending: "전송 중",
+  stress: "부하",
+  long: "긴 내용",
+  representative: "가상 자료",
+};
+export const generatedCatalogFiles = async (samples) => {
+  const files = {};
+  for (const [group, components] of Object.entries(groups))
+    for (const component of components) {
+      const stories = samples.filter((story) => story.component === component);
+      let source = `import { renderCatalog } from "../catalog.mjs";\nexport default { title: ${JSON.stringify(`${group}/${component}`)} };\n`;
+      for (const story of stories)
+        for (const theme of ["light", "dark"]) {
+          const element = story.render(theme);
+          const details = [
+            "name",
+            "variant",
+            "size",
+            "level",
+            "tone",
+            "notation",
+            "direction",
+          ]
+            .map((key) => element?.props?.[key])
+            .filter(
+              (value) => typeof value === "string" || typeof value === "number",
+            );
+          const name = [
+            states[story.state] ?? "기본",
+            ...details,
+            (story.sample + 1).toString().padStart(3, "0"),
+            theme === "light" ? "라이트" : "다크",
+          ].join(" · ");
+          source += `export const ${theme === "light" ? "Light" : "Dark"}${story.sample} = { name: ${JSON.stringify(name)}, parameters: { theme: "${theme}", sample: ${story.sample} }, render: () => renderCatalog("${component}", "${theme}", ${story.sample}) };\n`;
+        }
+      files[`catalog/${component}.stories.mjs`] = await format(source, {
+        filepath: `${component}.mjs`,
+      });
+    }
+  files["main.mjs"] = await format(
+    'export default {\n  framework: "@storybook/react-vite",\n  stories: ["./catalog/*.stories.mjs"],\n  core: { disableTelemetry: true },\n};\n',
+    { filepath: "main.mjs" },
+  );
+  files["preview.mjs"] = await format(
+    'import "../src/shared/ds/theme.css";\nexport default {\n parameters: {controls: {disable: true}, options: {storySort: {method: "alphabetical", order: ORDER}}},\n decorators: [(Story, context) => {const theme=context.parameters.theme;\n if(theme!=="light" && theme!=="dark") throw new Error("이야기의 테마는 light 또는 dark여야 해요");\n document.documentElement.dataset.theme=theme;return Story();}],\n};\n'.replace(
+      "ORDER",
+      JSON.stringify(
+        Object.entries(groups).flatMap(([group, components]) => [
+          group,
+          components,
+        ]),
+      ),
+    ),
+    { filepath: "preview.mjs" },
+  );
+  return files;
+};
+export const generationProblems = async (samples) => {
+  const expected = await generatedCatalogFiles(samples);
+  const problems = Object.entries(expected)
+    .filter(
+      ([file, source]) =>
+        readFileSync(join(desktop, ".storybook", file), "utf8") !== source,
+    )
+    .map(([file]) => `목록 생성물 불일치: ${file}`);
+  const files = readdirSync(join(desktop, ".storybook/catalog")).filter(
+    (file) => file.endsWith(".stories.mjs"),
+  );
+  for (const file of files)
+    if (expected[`catalog/${file}`] === undefined)
+      problems.push(`등록되지 않은 목록 파일: ${file}`);
+  for (const file of readdirSync(join(desktop, ".storybook")))
+    if (
+      (/^(?:main|preview|manager)\.(?:[cm]?js|jsx|tsx?|mts|cts)$/.test(file) &&
+        !["main.mjs", "preview.mjs"].includes(file)) ||
+      /^(?:preview|manager)-(?:head|body)\.html$/.test(file)
+    )
+      problems.push(`지원하지 않는 목록 설정: ${file}`);
+  return problems;
+};

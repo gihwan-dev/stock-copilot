@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { catalogProblems } from "../../../harness/ds-catalog/rules.mjs";
 const render = () => null;
+const pageRender = () => null;
 const sample = {
   sample: 0,
   component: "Card",
@@ -10,6 +11,7 @@ const sample = {
 };
 const entries = ["light", "dark"].map((theme) => ({
   sample: 0,
+  tags: ["dev", "test", "manifest"],
   title: "Card",
   observedComponent: "Card",
   observedTheme: theme,
@@ -17,7 +19,7 @@ const entries = ["light", "dark"].map((theme) => ({
   observedRender: render,
   component: "Card",
   theme,
-  render,
+  render: pageRender,
 }));
 test("DS07 complete public catalog accepts both themes", () => {
   assert.deepEqual(catalogProblems(["Card"], [sample], entries), []);
@@ -103,3 +105,22 @@ for (const field of [
       [],
     );
   });
+
+test("DS07 rejects a story hidden from the actual sidebar", () =>
+  assert.notDeepEqual(
+    catalogProblems(
+      ["Card"],
+      [sample],
+      [{ ...entries[0], tags: ["test"] }, entries[1]],
+    ),
+    [],
+  ));
+test("DS07 dev visibility alone is enough without optional test tags", () =>
+  assert.deepEqual(
+    catalogProblems(
+      ["Card"],
+      [sample],
+      entries.map((entry) => ({ ...entry, tags: ["dev"] })),
+    ),
+    [],
+  ));

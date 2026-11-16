@@ -8,6 +8,8 @@ import {
 import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { desktop, loadCatalog } from "./load.mjs";
+import { stylesheetProblems } from "./styles.mjs";
+import { generationProblems } from "./generation.mjs";
 import { catalogProblems } from "./rules.mjs";
 const folder = mkdtempSync(join(desktop, "node_modules/.ds07-index-"));
 try {
@@ -41,6 +43,7 @@ try {
       return {
         component: basename(item.importPath, ".stories.mjs"),
         theme: page?.parameters?.theme,
+        tags: item.tags,
         sample: page?.parameters?.sample,
         title: item.title.split("/").at(-1),
         render: page?.render,
@@ -51,11 +54,11 @@ try {
           rendered?.props?.children?.props?.children?.props?.render,
       };
     });
-  const problems = catalogProblems(
-    Object.keys(loaded.components),
-    loaded.samples,
-    entries,
-  );
+  const problems = [
+    ...stylesheetProblems(join(folder, "storybook")),
+    ...(await generationProblems(loaded.samples)),
+    ...catalogProblems(Object.keys(loaded.components), loaded.samples, entries),
+  ];
   mkdirSync(join(desktop, "../../target/DS-07"), { recursive: true });
   writeFileSync(
     join(desktop, "../../target/DS-07/index-verdict.json"),

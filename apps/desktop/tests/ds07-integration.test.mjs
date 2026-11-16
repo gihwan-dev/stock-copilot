@@ -6,12 +6,17 @@ import {
   mkdtempSync,
   readFileSync,
   writeFileSync,
+  existsSync,
+  unlinkSync,
   symlinkSync,
   rmSync,
 } from "node:fs";
 import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { repoRoot } from "./paths.mjs";
+const childEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => key !== "NODE_TEST_CONTEXT"),
+);
 const cases = JSON.parse(
   readFileSync(join(repoRoot, "harness/ds-catalog/cases.json"), "utf8"),
 );
@@ -47,6 +52,7 @@ test("DS07 actual Storybook index and CSF mutations fail the registered checker"
     const run = () =>
       spawnSync(process.execPath, ["harness/ds-catalog/check.mjs"], {
         cwd: scratch,
+        env: childEnvironment,
         encoding: "utf8",
         maxBuffer: 16 * 1024 * 1024,
       });
@@ -54,27 +60,49 @@ test("DS07 actual Storybook index and CSF mutations fail the registered checker"
     assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
     for (const item of cases) {
       const path = join(scratch, item.file),
-        original = readFileSync(path, "utf8");
+        original = existsSync(path) ? readFileSync(path, "utf8") : undefined;
       if (item.from !== undefined)
         assert.ok(original.includes(item.from), item.name);
       writeFileSync(
         path,
-        item.append === undefined
-          ? original.replace(item.from, item.to)
-          : original + item.append,
+        item.create ??
+          (item.append === undefined
+            ? original.replace(item.from, item.to)
+            : original + item.append),
       );
       assert.equal(
-        spawnSync(process.execPath, ["--check", path]).status,
+        (item.compile === "typescript"
+          ? spawnSync(
+              join(scratch, "apps/desktop/node_modules/.bin/tsc"),
+              ["-p", join(scratch, "apps/desktop/tsconfig.json")],
+              { cwd: scratch, env: childEnvironment, encoding: "utf8" },
+            )
+          : spawnSync(process.execPath, ["--check", path])
+        ).status,
         0,
         item.name,
       );
-      const result = run();
+      const result =
+        item.command === undefined
+          ? run()
+          : spawnSync(process.execPath, item.command, {
+              cwd: scratch,
+              env: childEnvironment,
+              encoding: "utf8",
+              maxBuffer: 16 * 1024 * 1024,
+            });
       assert.notEqual(
         result.status,
         0,
         `${item.name}\n${result.stdout}\n${result.stderr}`,
       );
-      writeFileSync(path, original);
+      if (item.expected !== undefined)
+        assert.ok(
+          (result.stdout + result.stderr).includes(item.expected),
+          item.name,
+        );
+      if (original === undefined) unlinkSync(path);
+      else writeFileSync(path, original);
     }
   } finally {
     rmSync(scratch, { recursive: true, force: true });

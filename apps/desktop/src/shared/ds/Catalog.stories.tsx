@@ -22,7 +22,12 @@ const description = text("catalog.description", "ko");
 const point = (
   id: "example-a" | "example-b" | "example-c",
   label: UiText,
-  value: "24500000000" | "18600000000" | "32700000000",
+  value:
+    | "24500000000"
+    | "24600000000"
+    | "24700000000"
+    | "18600000000"
+    | "32700000000",
 ): readonly ChartPoint[] => {
   const parsedId = parseEntityId(id);
   const parsedValue = parseChartDecimal(value);
@@ -32,8 +37,8 @@ const point = (
 };
 const trend = [
   ...point("example-a", text("catalog.firstDate", "ko"), "24500000000"),
-  ...point("example-b", text("catalog.secondDate", "ko"), "18600000000"),
-  ...point("example-c", text("catalog.thirdDate", "ko"), "32700000000"),
+  ...point("example-b", text("catalog.secondDate", "ko"), "24600000000"),
+  ...point("example-c", text("catalog.thirdDate", "ko"), "24700000000"),
 ];
 const parts = [
   ...point("example-a", text("catalog.company", "ko"), "24500000000"),
