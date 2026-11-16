@@ -423,7 +423,27 @@ test("reviewer hook entries pin the brief target across parallel checkouts", () 
     writeFileSync(join(fixture.worktree, "docs/notes.md"), "target change\n");
     assert.equal(run("reviewer-stop.mjs").decision, "block");
     run("subagent-start.mjs", "missing");
-    assert.equal(run("reviewer-stop.mjs", "missing").decision, "block");
+    assert.match(
+      run("reviewer-stop.mjs", "missing").systemMessage,
+      /확인하지 못했다/u,
+    );
+    writeRecord(state, "pending", "s-queued", {
+      sessionId: "s",
+      agentType: "adversarial-reviewer",
+      toolUseId: "queued",
+      at: "1",
+      prompt: `- 기준 커밋: ${BASE}, 브랜치 \`side\``,
+    });
+    run("subagent-start.mjs", "queued");
+    assert.equal(
+      readRecord(state, "reviewer", "queued").worktree,
+      fixture.worktree,
+    );
+    writeFileSync(
+      join(fixture.worktree, "docs/notes.md"),
+      "queued target changed\n",
+    );
+    assert.equal(run("reviewer-stop.mjs", "queued").decision, "block");
   } finally {
     rmSync(fixture.base, { recursive: true, force: true });
   }
@@ -459,14 +479,12 @@ test("reviewer target resolution failures stay unchecked and preserve their caus
   )) {
     const result = decideReviewerStop(input, record, [], rules, "time");
     record = result.record;
+    assert.equal(record.blocks, 0, String(attempt));
     assert.equal(record.status, "unchecked");
     const message = result.output.reason ?? result.output.systemMessage;
     assert.match(message, /리뷰 대상 작업 브랜치를 확인하지 못했다/u);
     assert.doesNotMatch(message, /사라졌다|바꾼 채|되돌린/u);
-    assert.equal(
-      result.output.decision,
-      attempt < rules.maxBlocks ? "block" : undefined,
-    );
+    assert.equal(result.output.decision, undefined);
   }
 });
 
@@ -506,6 +524,12 @@ test("reviewer target comes from the brief branch instead of the hook project", 
   assert.equal(
     reviewerTarget(`- 기준 커밋: ${BASE}, 브랜치 \`h48\``, ["/one", "/two"], {
       branchOf: () => "h48",
+    }),
+    undefined,
+  );
+  assert.equal(
+    reviewerTarget(`- 기준 커밋: ${BASE}, 브랜치 \`h48\``, ["/suffix"], {
+      branchOf: () => "t3/h48",
     }),
     undefined,
   );

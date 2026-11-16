@@ -301,9 +301,14 @@ const judgeAgentContext = (experiment, observed) => {
   return decided(found, found ? expected : `${expected}가 디버그 기록에 없다`);
 };
 
-const recordFits = (record, expected) =>
+const recordFits = (record, expected, values = {}) =>
   Object.entries(expected).every(([key, value]) =>
-    key === "minBlocks" ? (record.blocks ?? 0) >= value : record[key] === value,
+    key === "minBlocks"
+      ? (record.blocks ?? 0) >= value
+      : key === "changedPath"
+        ? Array.isArray(record.differences) &&
+          record.differences.includes(fill(value, values))
+        : record[key] === value,
   );
 
 const recordOf = (observed, kind, agent) =>
@@ -360,7 +365,9 @@ const judgeAgentRecord = (experiment, observed) => {
     );
   }
   return decided(
-    recordFits(record.data, experiment.record),
+    recordFits(record.data, experiment.record, observed.values) &&
+      (experiment.probe.recordKind !== "reviewer" ||
+        ["clean", "contaminated"].includes(record.data.status)),
     `상태=${record.data.status ?? "없음"}, 차단=${record.data.blocks ?? 0}`,
   );
 };
@@ -429,7 +436,7 @@ export const resultTable = (rows, version) => {
 
 const RECORD_FIELDS = {
   implementer: ["blocks", "status"],
-  reviewer: ["minBlocks"],
+  reviewer: ["minBlocks", "changedPath"],
 };
 
 const TOOL_PROBE = ["agent", "input", "kind", "session", "step", "tool"];

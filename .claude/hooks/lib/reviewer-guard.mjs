@@ -95,16 +95,13 @@ export const decideReviewerStop = (input, record, snapshot, rules, now) => {
     };
   }
   if (record.reason !== undefined) {
-    const blocks = (record.blocks ?? 0) + 1;
-    const message = `${input.agent_type} ${input.agent_id}: 원본 무결성을 확인하지 못했다. ${record.reason}. 작업 브랜치를 포함한 브리프로 리뷰를 다시 시작한다. 메인은 확인 전 다음 단계로 가지 않는다`;
+    const message = `${input.agent_type} ${input.agent_id}: 원본 무결성을 확인하지 못했다. ${record.reason}. 메인이 시작 입력과 대상을 확인하기 전 다음 단계로 가지 않는다`;
     return {
-      record: { ...record, blocks, status: "unchecked", updatedAt: now },
-      output:
-        blocks > rules.maxBlocks
-          ? { systemMessage: message }
-          : { decision: "block", reason: message },
+      record: { ...record, status: "unchecked", updatedAt: now },
+      output: { systemMessage: message },
     };
   }
+
   const differences = snapshotDifferences(record.snapshot, snapshot);
   if (differences.length === 0) {
     return {
