@@ -339,3 +339,8 @@ mod portfolio_views;
 pub use portfolio_views::{
     GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
 };
+
+mod transaction_schedule;
+pub use transaction_schedule::{
+    FullInspectionRepository, TransactionSchedule, TransactionScheduleError,
+};
