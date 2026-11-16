@@ -575,3 +575,8 @@ mod short_selling;
 pub use short_selling::ShortSelling;
 mod securities_lending;
 pub use securities_lending::SecuritiesLending;
+
+mod transaction_sync;
+pub use transaction_sync::{DailyFullInspection, TransactionSyncTimeError, daily_full_inspection};
+
+pub use settled_row_set::recent_transaction_window;
