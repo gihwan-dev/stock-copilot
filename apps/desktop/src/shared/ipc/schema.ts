@@ -6,7 +6,7 @@ export type AppVersionText = string & Brand<"AppVersionText">;
 
 export type AppVersion = { readonly version: AppVersionText };
 
-export type CommandErrorKind = "user-fixable" | "retryable" | "bug";
+export type CommandErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
 export type CommandError = { readonly kind: CommandErrorKind };
 
@@ -21,6 +21,6 @@ export const appVersionSchema = z
   .readonly();
 
 export const commandErrorSchema = z
-  .object({ kind: z.enum(["user-fixable", "retryable", "bug"]) })
+  .object({ kind: z.enum(["user-fixable", "retryable", "bug", "no-data"]) })
   .strict()
   .readonly();

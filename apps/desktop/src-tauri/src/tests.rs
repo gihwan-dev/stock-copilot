@@ -2,6 +2,7 @@ use tauri::test::{mock_builder, mock_context, noop_assets};
 
 use crate::build_app;
 mod database;
+mod ipc_contract;
 mod lifecycle;
 mod startup;
 mod support;
