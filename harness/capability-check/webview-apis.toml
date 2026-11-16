@@ -14,7 +14,6 @@ reason = "명령은 registry.rs의 collect_commands! 하나로만 모은다"
 names = [
     "generate_handler",
     "invoke_system",
-    "invoke_key",
     "channel_interceptor",
     "append_invoke_initialization_script",
     "register_uri_scheme_protocol",
@@ -64,10 +63,15 @@ names = [
     "Emitter",
     "Listener",
 ]
-allowed-files = []
-reason = "코어 → UI 이벤트. U-05가 사용자 승인으로 허용 파일을 더한다"
+allowed-files = ["src/tests/ipc_contract.rs"]
+reason = "U-02 제품 조립의 모의 이벤트 발행 회귀만 허용한다. 제품 발행·구독 파일은 U-05가 등록한다"
 
 [[api]]
 names = ["WebviewWindowBuilder"]
 allowed-files = ["src/tests/exit.rs"]
 reason = "U-01 mock 런타임 종료 재진입 테스트의 네이티브 창. 제품 WebView 권한과 무관"
+
+[[api]]
+names = ["invoke_key"]
+allowed-files = ["src/tests/ipc_contract.rs"]
+reason = "U-02 실제 명령 역직렬화 회귀의 InvokeRequest에 Tauri 모의 런타임의 고정 키를 넣는다. 제품 IPC 통로를 추가하지 않는다"

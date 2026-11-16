@@ -127,6 +127,14 @@ impl CalendarDate {
     pub const fn day(self) -> DayNumber {
         DayNumber(self.0.day())
     }
+    pub(crate) fn transaction_window_start(self) -> Result<Self, TimeError> {
+        let first = self.0.saturating_sub(SignedDuration::days(13));
+        if first.year() < 1 {
+            Err(TimeError::OutOfRange)
+        } else {
+            Ok(Self(first))
+        }
+    }
     pub fn days_until(self, other: Self) -> Result<CalendarDays, TimeError> {
         i64::from(other.0.to_julian_day())
             .checked_sub(i64::from(self.0.to_julian_day()))

@@ -1,5 +1,5 @@
 use tauri::Runtime;
-use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
+use tauri_specta::{Builder, ErrorHandlingMode, collect_commands, collect_events};
 
 use super::app_version;
 
@@ -12,5 +12,6 @@ pub fn specta_builder<R: Runtime>() -> Builder<R> {
     let commands = collect_commands![app_version::app_version::<tauri::Wry>];
     Builder::<R>::new()
         .commands(commands)
+        .events(collect_events![super::event::UiEvent])
         .error_handling(ErrorHandlingMode::Result)
 }

@@ -328,3 +328,14 @@ mod sync_portfolio;
 pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
 mod change_risk_settings;
 pub use change_risk_settings::{ChangeRiskSettings, RiskSettingsChangeOutcome};
+
+mod market_overview;
+pub use market_overview::{
+    GetMarketOverview, MarketOverview, OverviewData, OverviewEntry, OverviewError,
+    OverviewFreshness, OverviewObservation, OverviewRequest,
+};
+
+mod portfolio_views;
+pub use portfolio_views::{
+    GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
+};

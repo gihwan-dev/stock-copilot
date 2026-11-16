@@ -12,12 +12,18 @@
     {
       "path": "apps/desktop/src/shared/ipc/bindings.ts",
       "format": "prettier",
-      "imports": ["@tauri-apps/api/core"]
+      "imports": ["@tauri-apps/api/core", "@tauri-apps/api/event"],
+      "typeImports": ["@tauri-apps/api/webview", "@tauri-apps/api/window"]
     },
     {
       "path": "apps/desktop/src/shared/ipc/testing/mockBindings.ts",
       "format": "prettier",
-      "imports": ["@tauri-apps/api/core", "@tauri-apps/api/mocks"]
+      "imports": [
+        "@tauri-apps/api/core",
+        "@tauri-apps/api/event",
+        "@tauri-apps/api/mocks"
+      ],
+      "typeImports": ["@tauri-apps/api/webview", "@tauri-apps/api/window"]
     },
     {
       "path": "apps/desktop/src/shared/ipc/testing/responses.ts",

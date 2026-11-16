@@ -385,6 +385,16 @@ fn cancellation_notices(
         })
         .collect()
 }
+pub fn recent_transaction_window(
+    now: Timestamp,
+) -> Result<SettlementWindow, crate::TransactionSyncTimeError> {
+    let to = crate::transaction_sync::kst_date(now)?;
+    let from = to
+        .transaction_window_start()
+        .map_err(|_error| crate::TransactionSyncTimeError::OutOfRange)?;
+    Ok(SettlementWindow { from, to })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
