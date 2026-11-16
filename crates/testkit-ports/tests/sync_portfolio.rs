@@ -677,4 +677,67 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn requests_preserve_selected_account_and_both_currency_arguments() {
+        for account in [AccountId::new(41), AccountId::new(67)] {
+            let broker = broker_for(0);
+            observed_case(&broker, &account);
+            assert_eq!(
+                broker.calls(),
+                vec![
+                    testkit_ports::scripted::BrokerReadCall::Accounts(),
+                    testkit_ports::scripted::BrokerReadCall::Holdings(account.clone()),
+                    testkit_ports::scripted::BrokerReadCall::BuyingPower(
+                        account.clone(),
+                        Currency::Krw
+                    ),
+                    testkit_ports::scripted::BrokerReadCall::BuyingPower(account, Currency::Usd),
+                ]
+            );
+        }
+    }
+    struct UnavailableSubscriber(Sender<Call>);
+    impl EventSubscriber for UnavailableSubscriber {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            self.0
+                .send(Call::Event(event.clone()))
+                .map_err(|_send_error| SubscriberFailure::Unavailable)?;
+            Err(SubscriberFailure::Unavailable)
+        }
+    }
+    #[test]
+    fn subscriber_failure_is_reported_exactly_without_republishing_or_rewriting() {
+        let broker = broker_for(0);
+        let (calls, received) = mpsc::channel();
+        let store = Store {
+            calls: calls.clone(),
+            result: Ok(WriteCompleted),
+        };
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(std::collections::BTreeSet::new(), Subscriber(calls.clone()));
+        let subscription = builder.subscribe(
+            [DomainEventKind::PortfolioSyncRecorded].into(),
+            UnavailableSubscriber(calls),
+        );
+        let bus = builder.build();
+        let report = run(
+            SyncPortfolio::new(&broker, &store, &SteppedClock::new(at()), &bus)
+                .execute(&AccountId::new(41)),
+        )
+        .expect("저장 완료");
+        assert_eq!(
+            report.delivery.failures,
+            vec![application::DeliveryFailure {
+                subscription,
+                cause: SubscriberFailure::Unavailable
+            }]
+        );
+        assert_eq!(
+            received.try_iter().collect::<Vec<_>>(),
+            vec![
+                Call::Store(AccountId::new(41), Box::new(report.record)),
+                Call::Event(DomainEvent::PortfolioSyncRecorded(AccountId::new(41)))
+            ]
+        );
+    }
 }
