@@ -212,7 +212,7 @@ mod tests {
     fn cursor_error() -> Vec<u8> {
         response(
             "400 Bad Request",
-            &json!({"error":{"code":"invalid-request","message":"합성 오류"}}),
+            &json!({"error":{"code":"invalid-request","message":"합성 오류","data":{"field":"cursor"}}}),
         )
     }
     #[test]
@@ -768,5 +768,194 @@ mod tests {
                 panic!("repeated cursor was partial")
             }
         }
+    }
+
+    #[test]
+    fn out_of_window_filter_violation_cannot_certify_complete() {
+        let filter = TransactionFilter::only(vec![domain::TransactionKind::Buy]).expect("filter");
+        let mut valid = row();
+        valid["transactionType"] = json!("BUY");
+        let mut outside = row();
+        outside["settlementDate"] = json!("2020-01-01");
+        let (result, _) = read_filtered(
+            vec![ok(page(json!([valid, outside]), Value::Null))],
+            &filter,
+        );
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::PageInterrupted
+        );
+        assert_eq!(received.received[0].as_slice().len(), 1);
+        assert_eq!(
+            received.received[0].as_slice()[0].data().kind,
+            domain::TransactionKind::Buy
+        );
+    }
+    #[test]
+    fn repeated_cursor_precedes_other_envelope_shape_failures() {
+        for (field, value) in [
+            ("hasNext", json!("true")),
+            ("hasNext", Value::Null),
+            ("transactions", Value::Null),
+            ("missing", Value::Null),
+        ] {
+            for cursor in ["a", "b"] {
+                let malformed = malformed_cursor_page(field, value.clone(), cursor);
+                let (result, _) =
+                    read_responses(vec![ok(page(json!([row()]), json!("a"))), ok(malformed)]);
+                assert_cursor_outcome(result, cursor);
+            }
+        }
+    }
+    #[test]
+    fn unspecified_invalid_request_does_not_authorize_restart() {
+        for data in [
+            None,
+            Some(json!({})),
+            Some(json!({"rule":"Max"})),
+            Some(Value::Null),
+        ] {
+            let mut error = json!({"error":{"code":"invalid-request","message":"합성"}});
+            if let Some(details) = data {
+                error["error"]["data"] = details;
+            }
+            let (result, requests) = read_responses(vec![
+                ok(page(json!([row()]), json!("a"))),
+                response("400 Bad Request", &error),
+            ]);
+            let received = partial(result);
+            assert_eq!(
+                received.reason,
+                application::IncompleteReason::PageInterrupted
+            );
+            assert_eq!(received.received[0].as_slice().len(), 1);
+            assert_eq!(requests.matches("GET /api/v1/transactions?").count(), 2);
+        }
+    }
+    #[test]
+    fn unknown_currency_keeps_raw_when_scope_fields_cannot_be_parsed() {
+        for (field, value) in [
+            ("settlementDate", json!("bad")),
+            ("settlementDate", Value::Null),
+            ("settled", Value::Null),
+        ] {
+            let mut unknown = row();
+            unknown["currency"] = json!("EUR");
+            unknown[field] = value.clone();
+            let original = unknown.to_string();
+            let (result, _) = read_responses(vec![ok(page(json!([unknown]), Value::Null))]);
+            let received = partial(result);
+            assert_eq!(
+                received.reason,
+                application::IncompleteReason::QuarantinedRows
+            );
+            let application::QuarantinedTransaction::UnknownCurrency(chunks) =
+                &received.quarantined[0];
+            assert_eq!(
+                chunks
+                    .iter()
+                    .map(domain::UntrustedText::as_untrusted_str)
+                    .collect::<String>(),
+                original
+            );
+            let mut known = row();
+            known[field] = value;
+            read_responses(vec![ok(page(json!([known]), Value::Null))])
+                .0
+                .expect_err("known currency keeps scope validation");
+        }
+    }
+    #[test]
+    fn interruption_preserves_quarantine_without_valid_rows() {
+        let mut unknown = row();
+        unknown["currency"] = json!("EUR");
+        let (result, _) = read_responses(vec![
+            ok(page(json!([unknown]), json!("a"))),
+            response(
+                "500 Internal Server Error",
+                &json!({"error":{"code":"internal-error","message":"합성"}}),
+            ),
+        ]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::PageInterrupted
+        );
+        assert_eq!(received.quarantined.len(), 1);
+        assert_eq!(received.received.len(), 0);
+    }
+    #[test]
+    fn row_limit_reason_wins_when_a_later_row_is_invalid() {
+        let mut rows = vec![row(); 4097];
+        let mut bad = row();
+        bad["amount"] = json!("bad");
+        rows.push(bad);
+        let (result, _) = read_responses(vec![ok(page(json!(rows), Value::Null))]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::RowLimitExceeded
+        );
+        assert_eq!(
+            received
+                .received
+                .iter()
+                .map(|batch| batch.as_slice().len())
+                .collect::<Vec<_>>(),
+            vec![4096, 1]
+        );
+    }
+    #[test]
+    fn quarantine_limit_stops_before_another_get() {
+        let mut unknown = row();
+        unknown["currency"] = json!("EUR");
+        let (result, requests) =
+            read_responses(vec![ok(page(json!(vec![unknown; 4097]), json!("another")))]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::RowLimitExceeded
+        );
+        assert_eq!(received.quarantined.len(), 4097);
+        assert_eq!(requests.matches("GET /api/v1/transactions?").count(), 1);
+    }
+    fn assert_cursor_outcome(
+        result: Result<application::TransactionRead, application::PortError>,
+        cursor: &str,
+    ) {
+        if cursor == "a" {
+            match result {
+                Err(error) => assert_eq!(
+                    error.kind(),
+                    application::PortErrorKind::InvalidResponse(
+                        application::ResponseMismatch::Validation
+                    )
+                ),
+                Ok(application::TransactionRead::Complete(_)) => panic!("complete"),
+                Ok(application::TransactionRead::Incomplete(_)) => {
+                    panic!("partial repeated cursor")
+                }
+            }
+        } else {
+            let received = partial(result);
+            assert_eq!(
+                received.reason,
+                application::IncompleteReason::PageInterrupted
+            );
+            assert_eq!(received.received[0].as_slice().len(), 1);
+        }
+    }
+    fn malformed_cursor_page(field: &str, value: Value, cursor: &str) -> Value {
+        let mut body = page(json!([]), json!(cursor));
+        if field == "missing" {
+            body["result"]
+                .as_object_mut()
+                .expect("object")
+                .remove("hasNext");
+        } else {
+            body["result"][field] = value;
+        }
+        body
     }
 }

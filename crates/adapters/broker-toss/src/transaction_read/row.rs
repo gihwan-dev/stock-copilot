@@ -124,3 +124,16 @@ pub(crate) fn in_scope(value: &Value, window: domain::SettlementWindow) -> Conve
         None => Err(invalid()),
     }
 }
+
+pub(crate) fn validate_filter(value: &Value, filter: &domain::TransactionFilter) -> Conversion<()> {
+    if let Some(kinds) = filter.selected_kinds() {
+        let kind = TransactionKind::new(
+            TransactionCode::try_new(text(field(value, "transactionType")?)?)
+                .map_err(|_error| invalid())?,
+        );
+        if !kinds.contains(&kind) {
+            return Err(invalid());
+        }
+    }
+    Ok(())
+}

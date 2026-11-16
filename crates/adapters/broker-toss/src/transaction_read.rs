@@ -26,6 +26,15 @@ struct Page {
     has_next: bool,
     next_cursor: Value,
 }
+#[derive(serde::Deserialize)]
+struct CursorEnvelope {
+    result: CursorPage,
+}
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CursorPage {
+    next_cursor: Option<String>,
+}
 #[derive(Default)]
 struct Pages {
     cursor: Option<String>,
@@ -74,18 +83,20 @@ impl Pages {
         window: SettlementWindow,
         filter: &TransactionFilter,
     ) -> Result<(), PageFault> {
+        if serde_json::from_slice::<CursorEnvelope>(body).is_ok_and(|envelope| {
+            envelope
+                .result
+                .next_cursor
+                .as_ref()
+                .is_some_and(|next| self.seen.contains(next))
+        }) {
+            return Err(PageFault::RepeatedCursor);
+        }
         let envelope: Envelope = serde_json::from_slice(body).map_err(|_error| invalid())?;
         if envelope.error.is_some_and(|error| !error.is_null()) {
             return Err(invalid().into());
         }
         let page = envelope.result;
-        if page
-            .next_cursor
-            .as_str()
-            .is_some_and(|next| self.seen.contains(next))
-        {
-            return Err(PageFault::RepeatedCursor);
-        }
         for source in page.transactions {
             self.append_row(source, window, filter)?;
         }
@@ -109,7 +120,9 @@ impl Pages {
         filter: &TransactionFilter,
     ) -> Conversion<()> {
         let value: Value = serde_json::from_str(source.get()).map_err(|_error| invalid())?;
-        if !row::in_scope(&value, window)? {
+        row::validate_filter(&value, filter)?;
+        let scope = row::in_scope(&value, window);
+        if scope.as_ref().is_ok_and(|included| !included) {
             return Ok(());
         }
         let currency = field(&value, "currency")?.as_str().ok_or_else(invalid)?;
@@ -120,15 +133,10 @@ impl Pages {
                 )?));
             return Ok(());
         }
+        scope?;
         let _decoded: broker_toss_schema::types::Transaction =
             serde_json::from_value(value.clone()).map_err(|_error| invalid())?;
         let transaction = row::convert(&value)?;
-        if filter
-            .selected_kinds()
-            .is_some_and(|kinds| !kinds.contains(&transaction.data().kind))
-        {
-            return Err(invalid());
-        }
         self.rows.push(row::ParsedTransaction {
             transaction,
             source,
@@ -270,12 +278,13 @@ fn read_failure(response: &crate::RawResponse) -> PortError {
 fn cursor_error(response: &crate::RawResponse, pages: &Pages) -> bool {
     response.status() == 400
         && pages.cursor.is_some()
-        && serde_json::from_slice::<Value>(response.body().as_exposed_secret()).is_ok_and(|body| {
-            body.pointer("/error/code").and_then(Value::as_str) == Some("invalid-request")
-                && body
-                    .pointer("/error/data/field")
-                    .is_none_or(|field| field.as_str() == Some("cursor"))
-        })
+        && response
+            .read_error(
+                ReadEndpoint::Transactions,
+                crate::account_read::retry_delay(response.headers().retry_after()),
+            )
+            .cursor_hint()
+            == crate::CursorHint::Invalid
 }
 pub(crate) fn field<'a>(value: &'a Value, key: &str) -> Conversion<&'a Value> {
     value.get(key).ok_or_else(invalid)
