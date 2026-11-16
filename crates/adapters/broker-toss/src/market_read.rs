@@ -62,6 +62,8 @@ pub(crate) async fn quotes<S: SecretStore, T: Clock, R: TokenRenewal>(
     let symbols = instruments
         .iter()
         .map(|item| item.symbol().as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
         .collect::<Vec<_>>()
         .join(",");
     let value = reader

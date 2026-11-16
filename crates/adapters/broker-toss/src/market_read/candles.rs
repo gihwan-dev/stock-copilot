@@ -92,6 +92,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
         if previous.is_some_and(|at| at <= window.start()) || decoded.next_before.is_none() {
             let candles = result.into_values().collect::<Vec<_>>();
             validate_gaps(reader, instrument, period, &candles)?;
+            validate_adjusted_limits(reader, instrument, period, adjustment, &candles)?;
             return Ok(candles);
         }
         let next = decoded.next_before.ok_or_else(|| invalid(ENDPOINT))?;
@@ -194,7 +195,9 @@ fn session_for<'a, S: SecretStore, T: Clock, R: TokenRenewal>(
     let mut matching = reader.market_sessions().iter().filter(|entry| {
         entry.market() == domain::Market::from(*instrument.market()) && entry.date() == date
     });
-    let session = matching.next().ok_or_else(|| invalid(ENDPOINT))?;
+    let session = matching
+        .next()
+        .ok_or_else(|| unsupported(application::BrokerCapability::DailyCandles))?;
     if matching.next().is_some() {
         return Err(invalid(ENDPOINT));
     }
@@ -206,10 +209,13 @@ fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     left: Timestamp,
     right: Timestamp,
 ) -> Result<(), PortError> {
+    if left.offset_calendar_date() >= right.offset_calendar_date() {
+        return Err(invalid(ENDPOINT));
+    }
     let mut next = left
         .checked_add(TimeSpan::DAY)
         .map_err(|_error| invalid(ENDPOINT))?;
-    while next < right {
+    while next.offset_calendar_date() < right.offset_calendar_date() {
         if !session_for(reader, instrument, next.offset_calendar_date())?
             .sessions()
             .is_empty()
@@ -221,4 +227,62 @@ fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
             .map_err(|_error| invalid(ENDPOINT))?;
     }
     Ok(())
+}
+
+fn unsupported(capability: application::BrokerCapability) -> PortError {
+    PortError::new(
+        ENDPOINT,
+        application::HttpStatus::Success,
+        application::PortErrorKind::Unsupported(capability),
+    )
+}
+fn validate_adjusted_limits<S: SecretStore, T: Clock, R: TokenRenewal>(
+    reader: &TossAccountRead<S, T, R>,
+    instrument: &QuoteInstrument,
+    period: CandlePeriod,
+    adjustment: PriceAdjustment,
+    candles: &[Candle],
+) -> Result<(), PortError> {
+    match period {
+        CandlePeriod::Minute => return Ok(()),
+        CandlePeriod::Daily => {}
+    }
+    let basis = match adjustment {
+        PriceAdjustment::Raw => return Ok(()),
+        PriceAdjustment::Adjusted(value) => value,
+    };
+    for candle in candles {
+        let (_supplied_basis, limits) = reader
+            .market_adjusted_limits()
+            .filter(|(supplied, _)| supplied == &basis)
+            .ok_or_else(|| unsupported(application::BrokerCapability::AdjustedHistory))?;
+        let mut matching = limits.iter().filter(|entry| {
+            entry.instrument() == instrument
+                && entry.timestamp().offset_calendar_date() == candle.time().date()
+        });
+        let bound = matching
+            .next()
+            .ok_or_else(|| unsupported(application::BrokerCapability::AdjustedHistory))?;
+        if matching.next().is_some() {
+            return Err(invalid(ENDPOINT));
+        }
+        check_limit(bound, instrument, candle.values().low())?;
+        check_limit(bound, instrument, candle.values().high())?;
+    }
+    Ok(())
+}
+fn check_limit(
+    limits: &domain::PriceLimits,
+    instrument: &QuoteInstrument,
+    value: domain::Price,
+) -> Result<(), PortError> {
+    match limits
+        .check(instrument, value)
+        .map_err(|_error| invalid(ENDPOINT))?
+    {
+        domain::PriceLimitCheck::Within | domain::PriceLimitCheck::Unlimited => Ok(()),
+        domain::PriceLimitCheck::BelowLower | domain::PriceLimitCheck::AboveUpper => {
+            Err(invalid(ENDPOINT))
+        }
+    }
 }

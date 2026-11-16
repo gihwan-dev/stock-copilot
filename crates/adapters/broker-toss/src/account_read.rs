@@ -13,6 +13,7 @@ pub struct TossAccountRead<Store, Time, Renewal> {
     clock: Time,
     master: MasterInstrumentFacts,
     candle_sessions: Vec<domain::MarketSession>,
+    adjusted_candle_limits: Option<(domain::AdjustmentBasis, Vec<domain::PriceLimits>)>,
 }
 impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Renewal> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,6 +31,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
             clock,
             master,
             candle_sessions: Vec::new(),
+            adjusted_candle_limits: None,
         }
     }
     async fn read(
@@ -80,6 +82,20 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub fn with_candle_sessions(mut self, sessions: Vec<domain::MarketSession>) -> Self {
         self.candle_sessions = sessions;
         self
+    }
+    #[must_use]
+    pub fn with_adjusted_candle_limits(
+        mut self,
+        basis: domain::AdjustmentBasis,
+        limits: Vec<domain::PriceLimits>,
+    ) -> Self {
+        self.adjusted_candle_limits = Some((basis, limits));
+        self
+    }
+    pub(crate) fn market_adjusted_limits(
+        &self,
+    ) -> Option<&(domain::AdjustmentBasis, Vec<domain::PriceLimits>)> {
+        self.adjusted_candle_limits.as_ref()
     }
     pub(crate) async fn market_read(
         &self,

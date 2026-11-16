@@ -148,6 +148,12 @@ mod tests {
             Time(Arc::<crate::support::FakeTime>::clone(&clock)),
             master(clock.now()),
         )
+        .with_adjusted_candle_limits(
+            AdjustmentBasis::new(window().end()),
+            ["2026-03-24T00:00:00+09:00", "2026-03-25T00:00:00+09:00"]
+                .map(|stamp| limits_for(&instrument(), at(stamp), Some(("50000", "100000"))))
+                .to_vec(),
+        )
     }
     fn run<T>(future: impl Future<Output = T>) -> T {
         tokio::runtime::Builder::new_current_thread()
@@ -195,6 +201,28 @@ mod tests {
                 .expect("calendar")
             })
             .to_vec()
+    }
+    fn limits_for(
+        instrument: &domain::QuoteInstrument,
+        stamp: Timestamp,
+        range: Option<(&str, &str)>,
+    ) -> domain::PriceLimits {
+        let parsed = |text| {
+            Price::parse(
+                &NumericInput::try_new(text).expect("input"),
+                instrument.currency(),
+            )
+            .expect("price")
+        };
+        domain::PriceLimits::try_new(domain::PriceLimitsInput {
+            instrument: instrument.clone(),
+            currency: instrument.currency(),
+            lower: range.map(|(lower, _)| parsed(lower)),
+            upper: range.map(|(_, upper)| parsed(upper)),
+            timestamp: stamp,
+            collected_at: crate::support::time().now(),
+        })
+        .expect("limits")
     }
     fn fixture(name: &str) -> Value {
         serde_json::from_str(
@@ -282,7 +310,7 @@ mod tests {
         let requests = server.finish().expect("requests");
         assert!(
             String::from_utf8_lossy(&requests)
-                .contains("GET /api/v1/prices?symbols=005930%2C005930 HTTP/1.1")
+                .contains("GET /api/v1/prices?symbols=005930 HTTP/1.1")
         );
     }
     #[test]
@@ -835,8 +863,7 @@ mod tests {
             let _captured = server.finish().expect("requests");
         }
     }
-    #[test]
-    fn two_hundred_one_daily_bars_use_two_pages_with_the_same_adjustment_basis() {
+    fn daily_history() -> (Vec<Value>, Vec<MarketSession>, Timestamp) {
         let mut stamp = at("2026-03-25T00:00:00+09:00");
         let mut rows = Vec::new();
         let mut calendar = Vec::new();
@@ -872,11 +899,28 @@ mod tests {
             );
             stamp = stamp.checked_add(domain::TimeSpan::DAY).expect("next day");
         }
+        (rows, calendar, stamp)
+    }
+    #[test]
+    fn two_hundred_one_daily_bars_use_two_pages_with_the_same_adjustment_basis() {
+        let (rows, calendar, stamp) = daily_history();
         let first = json!({"result":{"candles":rows.iter().skip(1).rev().cloned().collect::<Vec<_>>(),"nextBefore":rows[1]["timestamp"]}});
         let second = json!({"result":{"candles":[rows[1],rows[0]],"nextBefore":null}});
         let server = serve(&[first, second]);
-        let reader = adapter(&server).with_candle_sessions(calendar);
         let adjustment = PriceAdjustment::Adjusted(AdjustmentBasis::new(stamp));
+        let bounds = rows
+            .iter()
+            .map(|row| {
+                limits_for(
+                    &instrument(),
+                    at(row["timestamp"].as_str().expect("time")),
+                    Some(("50000", "100000")),
+                )
+            })
+            .collect();
+        let reader = adapter(&server)
+            .with_candle_sessions(calendar)
+            .with_adjusted_candle_limits(AdjustmentBasis::new(stamp), bounds);
         let range = TimeInterval::try_new(at("2026-03-25T00:00:00+09:00"), stamp).expect("range");
         let bars = run(reader.candles(&instrument(), range, CandlePeriod::Daily, adjustment))
             .expect("daily pages");
@@ -887,5 +931,428 @@ mod tests {
         }
         let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
         assert_eq!(requests.matches("adjusted=true").count(), 2);
+    }
+    #[test]
+    fn review1_adjusted_half_price_is_rejected() {
+        let mut body = fixture("daily")["body"].clone();
+        body["result"]["nextBefore"] = Value::Null;
+        for (index, value) in [(0, "36000"), (1, "72000")] {
+            for field in ["openPrice", "highPrice", "lowPrice", "closePrice"] {
+                body["result"]["candles"][index][field] = json!(value);
+            }
+        }
+        let server = serve(&[body]);
+        let result = run(adapter(&server).with_candle_sessions(sessions()).candles(
+            &instrument(),
+            window(),
+            CandlePeriod::Daily,
+            PriceAdjustment::Adjusted(AdjustmentBasis::new(window().end())),
+        ));
+        invalid_response(result);
+        let _captured = server.finish().expect("requests");
+    }
+    #[test]
+    fn review1_dst_fall_keeps_calendar_dates() {
+        for offset in ["-04:00", "-05:00"] {
+            let mut body = fixture("daily")["body"].clone();
+            body["result"]["nextBefore"] = Value::Null;
+            body["result"]["candles"][0]["timestamp"] =
+                json!(format!("2026-11-02T00:00:00{offset}"));
+            body["result"]["candles"][1]["timestamp"] = json!("2026-10-30T00:00:00-04:00");
+            for row in body["result"]["candles"].as_array_mut().expect("rows") {
+                row["currency"] = json!("USD");
+            }
+            let calendar = us_sessions([
+                ("2026-10-30", "-04:00"),
+                ("2026-10-31", offset),
+                ("2026-11-01", offset),
+                ("2026-11-02", offset),
+            ]);
+            let server = serve(&[body]);
+            let inst = master(at("2026-10-30T00:00:00-04:00")).instruments()[1]
+                .quote_instrument()
+                .expect("us");
+            let range = TimeInterval::try_new(
+                at("2026-10-30T00:00:00-04:00"),
+                at("2026-11-03T00:00:00-05:00"),
+            )
+            .expect("window");
+            let result = run(adapter(&server).with_candle_sessions(calendar).candles(
+                &inst,
+                range,
+                CandlePeriod::Daily,
+                PriceAdjustment::Raw,
+            ));
+            assert_eq!(result.expect("local calendar dates").len(), 2);
+            let _captured = server.finish().expect("requests");
+        }
+    }
+    #[derive(Clone)]
+    struct FixedTime(Timestamp);
+    impl Clock for FixedTime {
+        fn now(&self) -> Timestamp {
+            self.0
+        }
+    }
+    fn adapter_at(
+        server: &ScriptedHttpServer,
+        now: Timestamp,
+    ) -> TossAccountRead<Store, FixedTime, Renewal> {
+        let clock = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("local"),
+            Arc::<crate::support::FakeTime>::clone(&clock),
+            clock,
+        )
+        .expect("client");
+        TossAccountRead::new(
+            TokenManager::new(
+                client,
+                Store,
+                FixedTime(now),
+                Renewal,
+                Arc::new(EventBus::default()),
+            ),
+            FixedTime(now),
+            master(now),
+        )
+    }
+    #[test]
+    fn review1_daily_status_boundary() {
+        for (now, status) in [
+            ("2026-03-25T15:29:59+09:00", CandleStatus::InProgress),
+            ("2026-03-25T15:30:00+09:00", CandleStatus::Finalized),
+        ] {
+            let server = serve(&[fixture("daily")["body"].clone()]);
+            let result = run(adapter_at(&server, at(now))
+                .with_candle_sessions(sessions())
+                .candles(
+                    &instrument(),
+                    window(),
+                    CandlePeriod::Daily,
+                    PriceAdjustment::Raw,
+                ))
+            .expect("daily");
+            assert_eq!(result[1].status(), status);
+            let _captured = server.finish().expect("requests");
+        }
+    }
+    #[test]
+    fn review1_zero_current_price_is_closed_until_policy_is_confirmed() {
+        for value in ["0", "-0.00", "-1"] {
+            let mut body = fixture("quote")["body"].clone();
+            body["result"][0]["lastPrice"] = json!(value);
+            let server = serve(&[body]);
+            let reader = adapter(&server);
+            let rows = run(reader.quotes(&[instrument()])).expect("batch");
+            assert_eq!(
+                rows[0].result.as_ref().expect_err("invalid price").kind(),
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation
+                )
+            );
+            let _captured = server.finish().expect("requests");
+        }
+    }
+    #[test]
+    fn review1_local_context_failures_use_unsupported_diagnostics() {
+        for adjustment in [
+            PriceAdjustment::Raw,
+            PriceAdjustment::Adjusted(AdjustmentBasis::new(window().end())),
+        ] {
+            let server = serve(&[fixture("daily")["body"].clone()]);
+            let reader = adapter_at(&server, crate::support::time().now());
+            let reader_with_context = if adjustment == PriceAdjustment::Raw {
+                reader
+            } else {
+                reader.with_candle_sessions(sessions())
+            };
+            let error = run(reader_with_context.candles(
+                &instrument(),
+                window(),
+                CandlePeriod::Daily,
+                adjustment,
+            ))
+            .expect_err("missing local context");
+            let capability = match adjustment {
+                PriceAdjustment::Raw => application::BrokerCapability::DailyCandles,
+                PriceAdjustment::Adjusted(_) => application::BrokerCapability::AdjustedHistory,
+            };
+            assert_eq!(
+                error.kind(),
+                application::PortErrorKind::Unsupported(capability)
+            );
+            let _captured = server.finish().expect("requests");
+        }
+        let capabilities = TossAccountRead::<Store, Time, Renewal>::capabilities();
+        for capability in [
+            application::BrokerCapability::DailyCandles,
+            application::BrokerCapability::MinuteCandles,
+            application::BrokerCapability::AdjustedHistory,
+            application::BrokerCapability::RawHistory,
+        ] {
+            assert_eq!(
+                capabilities.support_for(capability),
+                application::CapabilitySupport::Supported
+            );
+        }
+    }
+    #[test]
+    fn review1_adjusted_limits_reject_outside_and_accept_exact_bounds() {
+        for (value, expected) in [
+            ("50400", 2_usize),
+            ("93600", 2),
+            ("50399", 0),
+            ("93601", 0),
+            ("36000", 0),
+        ] {
+            let mut body = fixture("daily")["body"].clone();
+            for field in ["openPrice", "highPrice", "lowPrice", "closePrice"] {
+                body["result"]["candles"][0][field] = json!(value);
+            }
+            let server = serve(&[body]);
+            let reader = adapter(&server)
+                .with_candle_sessions(sessions())
+                .with_adjusted_candle_limits(
+                    AdjustmentBasis::new(window().end()),
+                    [window().start(), at("2026-03-25T00:00:00+09:00")]
+                        .map(|stamp| limits_for(&instrument(), stamp, Some(("50400", "93600"))))
+                        .to_vec(),
+                );
+            let result = run(reader.candles(
+                &instrument(),
+                window(),
+                CandlePeriod::Daily,
+                PriceAdjustment::Adjusted(AdjustmentBasis::new(window().end())),
+            ));
+            if expected == 0 {
+                invalid_response(result);
+            } else {
+                assert_eq!(result.expect("allowed").len(), expected);
+            }
+            let _captured = server.finish().expect("requests");
+        }
+    }
+    #[test]
+    fn review1_adjusted_limits_require_same_basis_day_identity_and_unique_fact() {
+        let basis = AdjustmentBasis::new(window().end());
+        let correct = limits_for(
+            &instrument(),
+            at("2026-03-25T00:00:00+09:00"),
+            Some(("50000", "100000")),
+        );
+        for (supplied, limits, expected) in [
+            (
+                AdjustmentBasis::new(window().start()),
+                vec![correct.clone()],
+                application::PortErrorKind::Unsupported(
+                    application::BrokerCapability::AdjustedHistory,
+                ),
+            ),
+            (
+                basis,
+                vec![limits_for(
+                    &instrument(),
+                    window().start(),
+                    Some(("50000", "100000")),
+                )],
+                application::PortErrorKind::Unsupported(
+                    application::BrokerCapability::AdjustedHistory,
+                ),
+            ),
+            (
+                basis,
+                vec![
+                    limits_for(&instrument(), window().start(), Some(("50000", "100000"))),
+                    correct.clone(),
+                    correct,
+                ],
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation,
+                ),
+            ),
+        ] {
+            let server = serve(&[fixture("daily")["body"].clone()]);
+            let reader = adapter(&server)
+                .with_candle_sessions(sessions())
+                .with_adjusted_candle_limits(supplied, limits);
+            let error = run(reader.candles(
+                &instrument(),
+                window(),
+                CandlePeriod::Daily,
+                PriceAdjustment::Adjusted(basis),
+            ))
+            .expect_err("wrong fact");
+            assert_eq!(error.kind(), expected);
+            let _captured = server.finish().expect("requests");
+        }
+    }
+    fn us_sessions(dates: [(&str, &str); 4]) -> Vec<MarketSession> {
+        dates
+            .into_iter()
+            .enumerate()
+            .map(|(index, (date, offset))| {
+                let open = at(&format!("{date}T09:30:00{offset}"));
+                let close = at(&format!("{date}T16:00:00{offset}"));
+                let regular = (index == 0 || index == 3).then(|| {
+                    SessionData::try_new(TimeInterval::try_new(open, close).expect("range"), None)
+                        .expect("data")
+                });
+                MarketSession::try_new(
+                    open.offset_calendar_date(),
+                    SessionInformation::Us {
+                        day_market: None,
+                        pre_market: None,
+                        regular_market: regular,
+                        after_market: None,
+                    },
+                )
+                .expect("session")
+            })
+            .collect()
+    }
+    fn us_daily_body(left: &str, right: &str) -> Value {
+        let mut body = fixture("daily")["body"].clone();
+        body["result"]["nextBefore"] = Value::Null;
+        body["result"]["candles"][0]["timestamp"] = json!(right);
+        body["result"]["candles"][1]["timestamp"] = json!(left);
+        for row in body["result"]["candles"].as_array_mut().expect("rows") {
+            row["currency"] = json!("USD");
+        }
+        body
+    }
+    #[test]
+    fn review1_dst_spring_keeps_calendar_dates() {
+        let body = us_daily_body("2026-03-06T00:00:00-05:00", "2026-03-09T00:00:00-04:00");
+        let calendar = us_sessions([
+            ("2026-03-06", "-05:00"),
+            ("2026-03-07", "-05:00"),
+            ("2026-03-08", "-04:00"),
+            ("2026-03-09", "-04:00"),
+        ]);
+        let server = serve(&[body]);
+        let reader = adapter(&server).with_candle_sessions(calendar);
+        let requested = master(window().start()).instruments()[1]
+            .quote_instrument()
+            .expect("us");
+        let range = TimeInterval::try_new(
+            at("2026-03-06T00:00:00-05:00"),
+            at("2026-03-10T00:00:00-04:00"),
+        )
+        .expect("window");
+        let rows =
+            run(reader.candles(&requested, range, CandlePeriod::Daily, PriceAdjustment::Raw))
+                .expect("us candles");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            *rows[0].time().timestamp().offset_seconds().as_i32(),
+            -18_000_i32
+        );
+        assert_eq!(
+            *rows[1].time().timestamp().offset_seconds().as_i32(),
+            -14_400_i32
+        );
+        let _captured = server.finish().expect("requests");
+    }
+    #[test]
+    fn review1_us_adjusted_candles_preserve_unlimited_price_limits() {
+        let body = us_daily_body("2026-10-30T00:00:00-04:00", "2026-11-02T00:00:00-05:00");
+        let calendar = us_sessions([
+            ("2026-10-30", "-04:00"),
+            ("2026-10-31", "-04:00"),
+            ("2026-11-01", "-05:00"),
+            ("2026-11-02", "-05:00"),
+        ]);
+        let requested = master(window().start()).instruments()[1]
+            .quote_instrument()
+            .expect("us");
+        let range = TimeInterval::try_new(
+            at("2026-10-30T00:00:00-04:00"),
+            at("2026-11-03T00:00:00-05:00"),
+        )
+        .expect("window");
+        let basis = AdjustmentBasis::new(range.end());
+        let limits = [range.start(), at("2026-11-02T00:00:00-05:00")]
+            .map(|stamp| limits_for(&requested, stamp, None))
+            .to_vec();
+        let server = serve(&[body]);
+        let reader = adapter(&server)
+            .with_candle_sessions(calendar)
+            .with_adjusted_candle_limits(basis, limits);
+        let rows = run(reader.candles(
+            &requested,
+            range,
+            CandlePeriod::Daily,
+            PriceAdjustment::Adjusted(basis),
+        ))
+        .expect("us candles");
+        assert_eq!(rows.len(), 2);
+        for row in rows {
+            assert_eq!(row.values().currency(), Currency::Usd);
+            assert_eq!(row.instrument(), requested.instrument_id());
+            assert_eq!(row.adjustment(), PriceAdjustment::Adjusted(basis));
+        }
+        let _captured = server.finish().expect("requests");
+    }
+    #[test]
+    fn review1_adjusted_limits_follow_each_distinct_trading_day() {
+        let mut body = fixture("daily")["body"].clone();
+        for (index, value) in [(1, "100"), (0, "120")] {
+            for field in ["openPrice", "highPrice", "lowPrice", "closePrice"] {
+                body["result"]["candles"][index][field] = json!(value);
+            }
+        }
+        let bounds = vec![
+            limits_for(&instrument(), window().start(), Some(("90", "110"))),
+            limits_for(
+                &instrument(),
+                at("2026-03-25T00:00:00+09:00"),
+                Some(("115", "125")),
+            ),
+        ];
+        let server = serve(&[body]);
+        let reader = adapter(&server)
+            .with_candle_sessions(sessions())
+            .with_adjusted_candle_limits(AdjustmentBasis::new(window().end()), bounds);
+        let rows = run(reader.candles(
+            &instrument(),
+            window(),
+            CandlePeriod::Daily,
+            PriceAdjustment::Adjusted(AdjustmentBasis::new(window().end())),
+        ))
+        .expect("each day's supplied limits");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].values().close(),
+            Price::parse(&NumericInput::try_new("100").expect("input"), Currency::Krw)
+                .expect("price")
+        );
+        assert_eq!(
+            rows[1].values().close(),
+            Price::parse(&NumericInput::try_new("120").expect("input"), Currency::Krw)
+                .expect("price")
+        );
+        let _captured = server.finish().expect("requests");
+    }
+    #[test]
+    fn review1_adjusted_limits_check_low_and_high_independently() {
+        for (field, value) in [("lowPrice", "50399"), ("highPrice", "93601")] {
+            let mut body = fixture("daily")["body"].clone();
+            body["result"]["candles"][0][field] = json!(value);
+            let bounds = [window().start(), at("2026-03-25T00:00:00+09:00")]
+                .map(|stamp| limits_for(&instrument(), stamp, Some(("50400", "93600"))))
+                .to_vec();
+            let server = serve(&[body]);
+            let reader = adapter(&server)
+                .with_candle_sessions(sessions())
+                .with_adjusted_candle_limits(AdjustmentBasis::new(window().end()), bounds);
+            invalid_response(run(reader.candles(
+                &instrument(),
+                window(),
+                CandlePeriod::Daily,
+                PriceAdjustment::Adjusted(AdjustmentBasis::new(window().end())),
+            )));
+            let _captured = server.finish().expect("requests");
+        }
     }
 }
