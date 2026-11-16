@@ -16,7 +16,7 @@ broker-toss-schema = { path = "../broker-toss-schema" }
 serde_json.workspace = true
 
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls"] }
-tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time", "sync"] }
 
 [dev-dependencies]
 testkit = { path = "../../testkit" }

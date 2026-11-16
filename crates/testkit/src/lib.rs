@@ -66,3 +66,4 @@ pub use http_server::{
 pub fn test_executable() -> std::io::Result<std::path::PathBuf> {
     std::env::current_exe()
 }
+pub use http_server::{ServeSequence, serve_sequence, serve_sequence_with_pending_first};

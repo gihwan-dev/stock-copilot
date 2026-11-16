@@ -347,7 +347,7 @@ fn closed_client_method(item: &syn::ImplItem) -> bool {
     let mut actual = method.sig.clone();
     actual.inputs = actual.inputs.into_iter().collect();
     [
-        "fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> {}",
+        "fn new(endpoint: &TossEndpoint, clock: Arc<dyn Clock>, wait: Arc<dyn crate::RequestWait>) -> Result<Self, TossHttpError> {}",
         "async fn get(&self, request: &ReadRequest, token: &SecretValue) -> Result<RawResponse, TossHttpError> {}",
         "async fn send_token(&self, body: SecretValue) -> Result<RawResponse, TossHttpError> {}",
     ].iter().any(|text| syn::parse_str::<syn::ImplItemFn>(text).is_ok_and(|expected| expected.sig.to_token_stream().to_string() == actual.to_token_stream().to_string()))
@@ -645,7 +645,17 @@ mod tests {
             .is_empty()
         );
         assert!(findings(http, "#[cfg(test)] mod tests { #[test] fn f() {} }").is_empty());
-        assert!(findings(http, "impl TossHttpClient { pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> { Ok(Self { client: client(), origin: url() }) } }").is_empty());
-        assert!(findings(http, "impl self::TossHttpClient { pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> { Ok(Self { client: client(), origin: url() }) } }").is_empty());
+        assert!(findings(http, "impl TossHttpClient { pub fn new(endpoint: &TossEndpoint, clock: Arc<dyn Clock>, wait: Arc<dyn crate::RequestWait>) -> Result<Self, TossHttpError> { Ok(Self { client: client(), origin: url() }) } }").is_empty());
+        assert!(findings(http, "impl self::TossHttpClient { pub fn new(endpoint: &TossEndpoint, clock: Arc<dyn Clock>, wait: Arc<dyn crate::RequestWait>) -> Result<Self, TossHttpError> { Ok(Self { client: client(), origin: url() }) } }").is_empty());
+    }
+    #[test]
+    fn old_client_constructor_cannot_omit_clock_and_wait() {
+        assert_eq!(
+            findings(
+                "crates/adapters/broker-toss/src/http.rs",
+                "impl TossHttpClient { pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> { Ok(Self { client: client(), origin: url() }) } }"
+            ),
+            BTreeSet::from([Rule::TossProduction])
+        );
     }
 }
