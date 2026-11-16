@@ -144,6 +144,7 @@ T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않�
 | A-03 | 완료 | 7674beb | [A-03](reviews/A-03.md) | A-04·A-11: 가짜. A-11·AI-02·AI-11: 사건 순서 계약. AI-05·AI-06: 사용률·재개 시각. C-01·C-09: 대화 재개. N-03·N-05·N-07: 공시 키. A-12·S-09: 실행과 과제 연결. A-19: 소스 오류 기록 |
 | A-04 | 완료 | 0c115ae | [A-04](reviews/A-04.md) | O-01·O-04·O-17, A-14: 실제 주문 요약으로 ScriptedPresence::confirm_order와 기록 열 필드 대응 검증. A-06 이후: 가짜를 쓰는 유스케이스 테스트는 testkit-ports/tests 또는 별도 테스트 crate에(application·domain은 testkit-ports에 개발 의존 금지) |
 | A-05 | 완료 | b8bf825 | [A-05](reviews/A-05.md) | A-02·A-03: 각자의 닫힌 오류 타입에 `ClassifiedError` 구현. A-06: `PortError`를 `CashObservationFailure`로 변환, 포트 밖 재시도의 상한. A-08·A-19: 데이터 없음의 화면 처리(상태 띠 제외). 하네스: 포트 오류 타입의 trait 구현 검사(arch-check), 변이 대상 등록(H-45) |
+| A-06 | 완료 | e8d3a7c | [A-06](reviews/A-06.md) | D-36·A-05·A-19: NotFound(Order)·Unsupported 현금 오류의 domain 대응과 상세 진단 계약. T-05·T-11: 실제 응답의 계좌 결합 검증 |
 | A-10 | 완료 | 97c1ffd | [A-10](reviews/A-10.md) | J-01·N-12·U-02: 구독자는 `Send + Sync`, 짧게 끝내고 안에서 발행하지 않음. T-02: 상태가 같으면 발행 생략, 연결 전이당 한 번. A-19: 같은 사건에 자체 점검 이벤트를 겹쳐 내지 않음 |
 | A-19 | 완료 | 877cf63 | [A-19](reviews/A-19.md) | T-02·AI-13·AI-05: 관측 반영과 저장·이벤트 발행. T-16·O-01: 8번 사유 해제. U-21·U-05: 두 이벤트에 재조회. U-27: 띠에 안 오르는 기록 표시. N-01: 소스 상태 이벤트 |
 | A-20 | 완료 | 2b1a74e | [A-20](reviews/A-20.md) | A-21: D-41 타입의 조회 메서드. T-05 이후 T 묶음: 어댑터 구현과 요청·응답 계약 검증. T-15: 종료 주문 조회의 완전성. A-06·A-08·A-09·A-14: 소비 |
