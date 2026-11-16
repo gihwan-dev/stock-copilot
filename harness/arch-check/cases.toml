@@ -774,3 +774,15 @@ findings = [
     { rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/trait_import.rs" },
     { rule = "http-socket-means", subject = "crates/adapters/store-sqlite/src/glob_method.rs" },
 ]
+
+[[case]]
+name = "adapter-construction-outside-main"
+findings = [{ rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/lib.rs" }, { rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/child.rs" }]
+
+[[case]]
+name = "adapter-construction-imported"
+findings = [{ rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/lib.rs" }]
+
+[[case]]
+name = "adapter-constructor-function-pointer"
+findings = [{ rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/lib.rs" }]

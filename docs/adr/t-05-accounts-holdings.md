@@ -71,34 +71,53 @@ USD 키 부재는 null과 같은 None이다. 국내 보유의 두 합성 녹화�
 
 ## 기존 속성 테스트 커버리지의 일회 누락
 
-마지막 수정의 첫 정상 커밋 훅은 전체1676개와 커버리지 대상1059개 테스트가 모두 통과했지만, 변경하지 않은 crates/domain/src/tick_size.rs:273에서 coverage:uncovered-line으로 종료1이었다. 이 줄은 cfg(test)의 integer_reference_proves_tick_bounds_and_direction_for_4096_cases 참조 계산에서 coefficient % unit == 0인 경우에만 실행된다. 이 작업은 해당 파일을 바꾸지 않았다. 기존 테스트·난수 설정·반복 수·커버리지 기준을 바꾸지 않고 정상 커밋 훅을 재실행한다. 이 테스트의 결정적 경계 표본 보강은 D-35/H-20 인계다. 최초 실패 로그는 target/T-05/review3-commit.log에 보존한다. 두 번째 정상 훅은 기존 xtask의 hook_trace_distinguishes_full_from_fast 및 h44_review_real_auto_merge_still_rejects_work_test_changes에서 실패했다(1471개 실행,1469통과/2실패,205미실행). 소스 변경 없는 좁은 재실행은2/2 통과했으며 원인은 미확정이다. target/T-05/review3-commit-retry.log와 harness-regression-repro.log를 보존하고 같은 기준의 정상 훅을 다시 실행한다.
+마지막 수정의 첫 정상 커밋 훅은 전체1676개와 커버리지 대상1059개 테스트가 모두 통과했지만, 변경하지 않은 crates/domain/src/tick_size.rs:273에서 coverage:uncovered-line으로 종료1이었다. 이 줄은 cfg(test)의 integer_reference_proves_tick_bounds_and_direction_for_4096_cases 참조 계산에서 coefficient % unit == 0인 경우에만 실행된다. 이 작업은 해당 파일을 바꾸지 않았다. 기존 테스트·난수 설정·반복 수·커버리지 기준을 바꾸지 않고 정상 커밋 훅을 재실행한다. 이 테스트의 결정적 경계 표본 보강은 D-35/H-11 인계다. 최초 실패 로그는 target/T-05/review3-commit.log에 보존한다. 두 번째 정상 훅은 기존 xtask의 hook_trace_distinguishes_full_from_fast 및 h44_review_real_auto_merge_still_rejects_work_test_changes에서 실패했다(1471개 실행,1469통과/2실패,205미실행). 소스 변경 없는 좁은 재실행은2/2 통과했으며 원인은 미확정이다. target/T-05/review3-commit-retry.log와 harness-regression-repro.log를 보존하고 같은 기준의 정상 훅을 다시 실행한다.
+
+## 마지막 검증 범위
+
+3회차 후 수정 범위는947cb731e8fbb084b2d3145dec6db7179b86e823 → 3f498f98c539116793be9875f0e769820fddf2c7다. 이 수정에4회차 독립 리뷰는 하지 않았다. 부모의 회귀·변이와 정상 커밋 훅을 증거로 직접 평가했다. 수정 커밋의 전체 검사는1676개, 커버리지 대상1059개가 통과했고 coverage-check/test-diff 위반은 없다.
+
+최신 master afc9a3f9841832585bcc48fe122e4f36cd27b367를 별도 --no-ff 병합으로 수신한다. 병합 뒤 전체 검사 결과와 최종 SHA는 마지막 정상 훅 로그 target/T-05/merge.log 및 최종 보고에 연결한다. master 참조는 이동하지 않는다. 병합으로 받은 다른 작업의 변경과 T-05 변경을 구분한다.
 
 ## 손 변형
 
-mktemp -d로 만든 별도 복사본에서 하나씩 실제 컴파일하고 accounts_holdings 통합 시험으로 확인했다. 최초 매수 게이트 변형은 생존했고 정리매매 보유 회귀를 추가한 뒤 검출됐다. 최초 컴파일 불가 두 변형은 집계에서 제외하고 컴파일 가능한 변형으로 교체해 재실행했다. 최종 23개가 컴파일 후 검출됐고 생존 0개다. 원본 및 최종 복구 검사도 통과했다.
+최종 제품 소스를 mktemp -d 복사본에 복사해 한 번에 하나씩 실제 컴파일·실행했다. 아래34개가 모두 컴파일 후 실패로 검출됐다. 생존0, 최종 컴파일 불가0이다. 첫 구현의 생존1개에는 정리매매 회귀를 추가했고 초기 컴파일 불가 변형은 검출로 세지 않은 뒤 컴파일 가능한 변형으로 교체해 재실행했다. 마지막 복사본과 부모의 account_read.rs·holding_read.rs·account_ports.rs 바이트 일치를 확인했고 복구 후 별도 명시적 unit3개와 integration15개도 통과했다. 처음23개·중간30개 증거와 마지막34개를 합산해 더 큰 검출 수로 보고하지 않는다.
+
+자동 mutants-diff는 초기 중간 test-diff 실패를 최종 패치에서 제거한 뒤 종료0이었다. 현재 자동 examine_globs에 이 어댑터가 없어 선택 변이0개이며 검출 성공으로 세지 않는다. 마지막 master 기준 재실행 결과는 target/T-05/final-automatic.log와 최종 보고에 남긴다.
 
 | 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
 |---|---|---|---|
-| 1 | field quantity -> lastPrice | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::malformed_fields_fail_the_whole_response |
-| 2 | field lastPrice -> quantity | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::malformed_fields_fail_the_whole_response |
-| 3 | field averagePurchasePrice -> lastPrice | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 4 | field marketValue/amount -> profitLoss/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 5 | field profitLoss/amount -> marketValue/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 6 | field profitLoss/rate -> dailyProfitLoss/rate | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 7 | field dailyProfitLoss/amount -> profitLoss/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 8 | field dailyProfitLoss/rate -> profitLoss/rate | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 9 | field totalPurchaseAmount -> marketValue/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
-| 10 | KRW summary interpreted as USD | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::empty_recordings_remain_empty_successes, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
-| 11 | USD summary interpreted as KRW | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
+| 1 | field quantity -> lastPrice | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account, tests::malformed_fields_fail_the_whole_response |
+| 2 | field lastPrice -> quantity | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account, tests::malformed_fields_fail_the_whole_response |
+| 3 | field averagePurchasePrice -> lastPrice | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account |
+| 4 | field marketValue/amount -> profitLoss/amount | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account |
+| 5 | field profitLoss/amount -> marketValue/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::additional_response_fields_do_not_change_known_holdings |
+| 6 | field profitLoss/rate -> dailyProfitLoss/rate | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account |
+| 7 | field dailyProfitLoss/amount -> profitLoss/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::additional_response_fields_do_not_change_known_holdings |
+| 8 | field dailyProfitLoss/rate -> profitLoss/rate | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account |
+| 9 | field totalPurchaseAmount -> marketValue/amount | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::additional_response_fields_do_not_change_known_holdings |
+| 10 | KRW summary interpreted as USD | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::holdings_preserve_each_distinct_field_and_request_account, tests::empty_recordings_remain_empty_successes, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 11 | USD summary interpreted as KRW | 컴파일 후 검출(exit 101) | tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::holdings_preserve_each_distinct_field_and_request_account, tests::additional_response_fields_do_not_change_known_holdings, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
 | 12 | sell gate replaced by buy | 컴파일 후 검출(exit 101) | tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate |
-| 13 | duplicate guard reversed | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
-| 14 | symbol comparison reversed | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
-| 15 | currency comparison reversed | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
-| 16 | market comparison reversed | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
-| 17 | account key zero | 컴파일 후 검출(exit 101) | tests::accounts_preserve_key_kind_mask_order_and_time |
-| 18 | account type constant for nonempty code | 컴파일 후 검출(exit 101) | tests::accounts_preserve_key_kind_mask_order_and_time |
+| 13 | duplicate guard reversed | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account, tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 14 | symbol comparison reversed | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::additional_response_fields_do_not_change_known_holdings, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 15 | currency comparison reversed | 컴파일 후 검출(exit 101) | tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::additional_response_fields_do_not_change_known_holdings, tests::holdings_preserve_each_distinct_field_and_request_account, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 16 | market comparison reversed | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::additional_response_fields_do_not_change_known_holdings, tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 17 | account key zero | 컴파일 후 검출(exit 101) | tests::accounts_preserve_key_kind_mask_order_and_time, tests::unknown_account_kind_is_preserved_without_hiding_brokerage |
+| 18 | account type constant for nonempty code | 컴파일 후 검출(exit 101) | tests::accounts_preserve_key_kind_mask_order_and_time, tests::unknown_account_kind_is_preserved_without_hiding_brokerage |
 | 19 | request account incremented | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
 | 20 | holdings route replaced | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account |
 | 21 | accounts route replaced | 컴파일 후 검출(exit 101) | tests::accounts_preserve_key_kind_mask_order_and_time |
-| 22 | success boundary excludes 200 | 컴파일 후 검출(exit 101) | tests::holdings_preserve_each_distinct_field_and_request_account, tests::empty_recordings_remain_empty_successes, tests::accounts_preserve_key_kind_mask_order_and_time, tests::revoked_token_and_rate_limit_keep_the_existing_paths |
-| 23 | envelope guard reversed | 컴파일 후 검출(exit 101) | tests::unresolved_and_suspended_master_fail_without_dropping_rows, tests::holdings_preserve_each_distinct_field_and_request_account, tests::empty_recordings_remain_empty_successes, tests::accounts_preserve_key_kind_mask_order_and_time, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::missing_required_fields_and_duplicates_never_become_empty_success |
+| 22 | success boundary excludes 200 | 컴파일 후 검출(exit 101) | tests::empty_recordings_remain_empty_successes, tests::holdings_preserve_each_distinct_field_and_request_account, tests::accounts_preserve_key_kind_mask_order_and_time, tests::additional_response_fields_do_not_change_known_holdings, tests::unknown_account_kind_is_preserved_without_hiding_brokerage, tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 23 | envelope guard reversed | 컴파일 후 검출(exit 101) | tests::unresolved_and_suspended_master_fail_without_dropping_rows, tests::accounts_preserve_key_kind_mask_order_and_time, tests::unknown_account_kind_is_preserved_without_hiding_brokerage, tests::holdings_preserve_each_distinct_field_and_request_account, tests::empty_recordings_remain_empty_successes, tests::additional_response_fields_do_not_change_known_holdings, tests::liquidation_holdings_use_the_sell_identity_and_preserve_the_summary_rate, tests::revoked_token_and_rate_limit_keep_the_existing_paths, tests::missing_required_fields_and_duplicates_never_become_empty_success, tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 24 | reject unknown account kind | 컴파일 후 검출(exit 101) | tests::unknown_account_kind_is_preserved_without_hiding_brokerage |
+| 25 | validate unknown raw response fields | 컴파일 후 검출(exit 101) | tests::additional_response_fields_do_not_change_known_holdings |
+| 26 | permission denied becomes network wait | 컴파일 후 검출(exit 101) | account_read::tests::local_token_failures_do_not_become_network_waits |
+| 27 | invalid credentials become network wait | 컴파일 후 검출(exit 101) | account_read::tests::local_token_failures_do_not_become_network_waits |
+| 28 | configuration error becomes network wait | 컴파일 후 검출(exit 101) | account_read::tests::local_token_failures_do_not_become_network_waits |
+| 29 | invalid stored data becomes network wait | 컴파일 후 검출(exit 101) | account_read::tests::local_token_failures_do_not_become_network_waits |
+| 30 | stored retry delay discarded | 컴파일 후 검출(exit 101) | account_read::tests::unavailable_store_preserves_its_retry_delay |
+| 31 | optional USD omission rejected | 컴파일 후 검출(exit 101) | tests::optional_usd_omission_succeeds_for_every_summary_amount |
+| 32 | valid server delay discarded | 컴파일 후 검출(exit 101) | account_read::tests::server_retry_delay_preserves_only_representable_decimal_seconds |
+| 33 | signed server delay accepted | 컴파일 후 검출(exit 101) | account_read::tests::server_retry_delay_preserves_only_representable_decimal_seconds |
+| 34 | final HTTP response delay discarded | 컴파일 후 검출(exit 101) | tests::exhausted_rate_limit_preserves_the_server_delay |

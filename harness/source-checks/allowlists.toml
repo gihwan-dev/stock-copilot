@@ -4,7 +4,8 @@ reason = "typify가 토스 OpenAPI의 components.schemas에서 만든 생성 cra
 
 [[clock-environment]]
 path = "apps/desktop/src-tauri/src/main.rs"
-reason = "조립 지점. 실제 어댑터를 만들 때 시계와 환경 값을 읽는다 (harness.md 3.1)"
+names = ["clock-env:var", "clock-env:var_os", "clock-env:vars", "clock-env:vars_os", "test-awareness:thread::current"]
+reason = "조립 지점의 환경 읽기. 벽시계 직접 읽기는 SystemClock 한 곳으로 제한 (U-01)"
 
 [[clock-environment]]
 path = "crates/xtask/src/main.rs"
@@ -106,3 +107,8 @@ reason = "H-46 속성 테스트 도우미. 전용 상수 키만 읽고 전체 �
 path = "crates/adapters/store-sqlite/src/tests.rs"
 names = ["test-awareness:thread::current", "clock-env:temp_dir"]
 reason = "S-01: 새 동시 쓰기 회귀에서 실행 스레드 동일성과 호출 스레드 분리를 검증한다. 제품 코드에는 허용하지 않는다"
+
+[[clock-environment]]
+path = "crates/adapters/platform-macos/src/system_clock.rs"
+names = ["clock-env:now"]
+reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"

@@ -179,7 +179,7 @@ test("protected changes only warn while the lock is off and fail once it is on",
       "crates/domain/src/lib.rs",
       "justfile",
       "docs/adr/0001-product-decisions.md",
-      "docs/adr/0099-new.md",
+      "docs/adr/9999-new.md",
     ],
   };
   const off = stop("완료", startedRecord(), changes);

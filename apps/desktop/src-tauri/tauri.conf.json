@@ -10,6 +10,7 @@
     "windows": [
       {
         "label": "main",
+        "visible": false,
         "title": "Stock Copilot"
       }
     ],
