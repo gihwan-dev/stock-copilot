@@ -3,7 +3,7 @@ import test from "node:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { componentsDom } from "./ds-components-dom.mjs";
-import { desktopRoot, repoRoot } from "./paths.mjs";
+import { desktopRoot } from "./paths.mjs";
 const files = readdirSync(join(desktopRoot, ".storybook/catalog")).filter(
   (file) => file.endsWith(".stories.mjs"),
 );
@@ -48,40 +48,45 @@ const summary = (scope, document) => ({
     (element) => element.textContent,
   ),
 });
+const tick = (window) =>
+  new Promise((resolve) => window.setTimeout(resolve, 0));
 test("DS07 every actual CSF render uses its component, example and real theme", async () => {
-  const bundle =
+  const originalBundle =
     await componentsDom(`import {render,cleanup} from "@testing-library/react";
+import * as sources from STORY_ENTRY;
+window.cleanup=cleanup;
+window.findSource=(component,sample)=>Object.keys(sources).sort().flatMap(key=>sources[key]).filter(story=>story.component===component && (!("theme" in story)||story.theme==="light"))[sample];
+window.expected=(story,theme)=>{document.documentElement.dataset.theme=theme;return render(story.render(theme));};`);
+  let bundle;
+  try {
+    bundle =
+      await componentsDom(`import {render,cleanup} from "@testing-library/react";
 import {composeStories} from "@storybook/react-vite";
 import * as components from DS_ENTRY;
-import * as sources from STORY_ENTRY;
-import {catalogSamples} from ${JSON.stringify(join(repoRoot, "harness/ds-catalog/samples.mjs"))};
 import preview from ${JSON.stringify(join(desktopRoot, ".storybook/preview.mjs"))};
 ${imports}
-window.cleanup=cleanup;window.names=Object.keys(components);window.pages=[${pages}];window.samples=catalogSamples(sources);
-window.show=page=>render(page());
-window.expected=(story,theme)=>{document.documentElement.dataset.theme=theme;return render(story.render(theme));};
+window.cleanup=cleanup;window.names=Object.keys(components);window.pages=[${pages}];window.show=page=>render(page());
 const broken=composeStories({...page${cardIndex},default:{...page${cardIndex}.default,decorators:[Story=>{document.documentElement.dataset.theme="light";return Story();}]}},preview);
 window.showBroken=()=>render(broken.Dark0());
 window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});`);
-  try {
-    const w = bundle.open();
+    const original = originalBundle.open(),
+      w = bundle.open();
     assert.deepEqual(
       [...new Set(Array.from(w.pages, (entry) => entry.component))].sort(),
       Array.from(w.names).sort(),
     );
     for (const { component, page } of w.pages) {
-      const source = Array.from(w.samples).find(
-        (story) =>
-          story.component === component &&
-          story.sample === page.parameters.sample,
-      );
+      const source = original.findSource(component, page.parameters.sample);
       assert.ok(source);
-      const expected = w.expected(source, page.parameters.theme);
-      const expectedSummary = summary(expected.container, w.document);
-      w.cleanup();
+      const expected = original.expected(source, page.parameters.theme);
+      await tick(original);
+      const expectedSummary = summary(expected.container, original.document);
+      original.cleanup();
       const shown = w.show(page);
+      await tick(w);
       const root = shown.container.firstElementChild;
       assertTheme(w.document, page.parameters.theme);
+      assert.ok(w.document.documentElement.classList.contains("bg-surface"));
       assert.equal(root.dataset.catalogComponent, component);
       assert.equal(root.dataset.catalogTheme, page.parameters.theme);
       assert.equal(
@@ -134,11 +139,13 @@ window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});
       w.cleanup();
     }
     w.showBroken();
+    await tick(w);
     assert.throws(() => assertTheme(w.document, "dark"));
     w.cleanup();
     assert.throws(() => w.invalidTheme(undefined));
     assert.throws(() => w.invalidTheme("purple"));
   } finally {
-    bundle.close();
+    bundle?.close();
+    originalBundle.close();
   }
 });

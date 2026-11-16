@@ -44,6 +44,12 @@ try {
         component: basename(item.importPath, ".stories.mjs"),
         theme: page?.parameters?.theme,
         tags: item.tags,
+        classes: [
+          rendered?.props?.className,
+          rendered?.props?.children?.props?.className,
+        ]
+          .filter((value) => typeof value === "string")
+          .flatMap((value) => value.split(/\s+/)),
         sample: page?.parameters?.sample,
         title: item.title.split("/").at(-1),
         render: page?.render,
@@ -55,7 +61,9 @@ try {
       };
     });
   const problems = [
-    ...stylesheetProblems(join(folder, "storybook")),
+    ...stylesheetProblems(join(folder, "storybook"), [
+      ...new Set(entries.flatMap((entry) => entry.classes)),
+    ]),
     ...(await generationProblems(loaded.samples)),
     ...catalogProblems(Object.keys(loaded.components), loaded.samples, entries),
   ];

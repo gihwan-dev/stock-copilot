@@ -54,6 +54,10 @@ const states = {
 };
 export const generatedCatalogFiles = async (samples) => {
   const files = {};
+  files["catalog.mjs"] = await format(
+    'import { createElement } from "react";\nimport {\n  baseComponentStories,\n  feedbackComponentStories,\n  statusComponentStories,\n  chartComponentStories,\n  numberComponentStories,\n  contentComponentStories,\n  catalogAdditionalStories,\n} from "../src/shared/ds/stories.ts";\nimport { catalogSamples } from "../../../harness/ds-catalog/samples.mjs";\nconst samples = catalogSamples({\n  baseComponentStories,\n  feedbackComponentStories,\n  statusComponentStories,\n  chartComponentStories,\n  numberComponentStories,\n  contentComponentStories,\n  catalogAdditionalStories,\n});\nconst Example = ({ render, theme }) => render(theme);\nexport const renderCatalog = (component, theme, sample) => {\n  const story = samples.find(\n    (story) => story.component === component && story.sample === sample,\n  );\n  if (story === undefined || (theme !== "light" && theme !== "dark"))\n    throw new Error("목록의 컴포넌트·예제·테마가 올바르지 않아요");\n  return createElement(\n    "div",\n    {\n      className: "bg-surface text-ink p-space-4",\n      "data-catalog-component": component,\n      "data-catalog-theme": theme,\n      "data-catalog-sample": sample,\n    },\n    createElement(\n      "section",\n      {\n        key: `${component}-${sample}-${theme}`,\n        className: "bg-surface p-space-4",\n      },\n      createElement(Example, { render: story.render, theme }),\n    ),\n  );\n};\n',
+    { filepath: "catalog.mjs" },
+  );
   for (const [group, components] of Object.entries(groups))
     for (const component of components) {
       const stories = samples.filter((story) => story.component === component);
@@ -91,7 +95,7 @@ export const generatedCatalogFiles = async (samples) => {
     { filepath: "main.mjs" },
   );
   files["preview.mjs"] = await format(
-    'import "../src/shared/ds/theme.css";\nexport default {\n parameters: {controls: {disable: true}, options: {storySort: {method: "alphabetical", order: ORDER}}},\n decorators: [(Story, context) => {const theme=context.parameters.theme;\n if(theme!=="light" && theme!=="dark") throw new Error("이야기의 테마는 light 또는 dark여야 해요");\n document.documentElement.dataset.theme=theme;return Story();}],\n};\n'.replace(
+    'import "../src/shared/ds/theme.css";\nexport default {\n parameters: {controls: {disable: true}, options: {storySort: {method: "alphabetical", order: ORDER}}},\n decorators: [(Story, context) => {const theme=context.parameters.theme;\n if(theme!=="light" && theme!=="dark") throw new Error("이야기의 테마는 light 또는 dark여야 해요");\n document.documentElement.dataset.theme=theme;document.documentElement.classList.add("bg-surface","text-ink");return Story();}],\n};\n'.replace(
       "ORDER",
       JSON.stringify(
         Object.entries(groups).flatMap(([group, components]) => [

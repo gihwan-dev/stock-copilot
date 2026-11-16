@@ -65,10 +65,11 @@ test("DS07 actual Storybook index and CSF mutations fail the registered checker"
         assert.ok(original.includes(item.from), item.name);
       writeFileSync(
         path,
-        item.create ??
-          (item.append === undefined
-            ? original.replace(item.from, item.to)
-            : original + item.append),
+        (item.prepend ?? "") +
+          (item.create ??
+            (item.append === undefined
+              ? original.replace(item.from, item.to)
+              : original + item.append)),
       );
       assert.equal(
         (item.compile === "typescript"

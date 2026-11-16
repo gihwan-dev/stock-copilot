@@ -52,7 +52,8 @@
     "file": "apps/desktop/.storybook/catalog.mjs",
     "from": "const Example = ({ render, theme }) => render(theme);",
     "to": "const Example = () => null;",
-    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"]
+    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"],
+    "expected": "AssertionError"
   },
   {
     "name": "가상 자료 점 누락",
@@ -60,6 +61,40 @@
     "from": "parseEntityId(id)",
     "to": "parseEntityId(id === \"example-a\" ? \"\" : id)",
     "compile": "typescript",
-    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"]
+    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"],
+    "expected": "AssertionError"
+  },
+  {
+    "name": "생성되지 않은 배경과 여백 클래스",
+    "file": "apps/desktop/.storybook/catalog.mjs",
+    "from": "bg-surface text-ink p-space-4",
+    "to": "bg-bg text-ink p-space-8",
+    "expected": "목록 클래스 CSS"
+  },
+  {
+    "name": "비동기 테마 덮어쓰기",
+    "file": "apps/desktop/.storybook/catalog.mjs",
+    "from": "const Example = ({ render, theme }) => render(theme);",
+    "to": "const Example = ({ render, theme }) => { setTimeout(() => { document.documentElement.dataset.theme = \"light\"; }); return render(theme); };",
+    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"],
+    "expected": "AssertionError"
+  },
+  {
+    "name": "정규화가 Card 본문을 누락",
+    "file": "harness/ds-catalog/samples.mjs",
+    "from": "return { ...story, sample };",
+    "to": "return { ...story, sample, render: story.component === \"Card\" ? blank : story.render };",
+    "prepend": "const blank = () => null;\n",
+    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"],
+    "expected": "Card/0/"
+  },
+  {
+    "name": "원본 이야기 변조 정규화",
+    "file": "harness/ds-catalog/samples.mjs",
+    "from": "return { ...story, sample };",
+    "to": "if (story.component === \"Card\") story.render = blank; return { ...story, sample };",
+    "prepend": "const blank = () => null;\n",
+    "command": ["--test", "apps/desktop/tests/ds07-render.test.mjs"],
+    "expected": "Card/0/"
   }
 ]

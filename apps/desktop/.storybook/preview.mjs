@@ -47,6 +47,7 @@ export default {
       if (theme !== "light" && theme !== "dark")
         throw new Error("이야기의 테마는 light 또는 dark여야 해요");
       document.documentElement.dataset.theme = theme;
+      document.documentElement.classList.add("bg-surface", "text-ink");
       return Story();
     },
   ],

@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { desktop } from "./load.mjs";
 const { parse } = createRequire(join(desktop, "package.json"))("postcss");
-export const stylesheetProblems = (directory) => {
+export const stylesheetProblems = (directory, classes) => {
   const html = readFileSync(join(directory, "iframe.html"), "utf8");
   const backgrounds = new Map();
+  const selectors = [];
   for (const match of html.matchAll(
     /<link\b[^>]*href=["']([^"']+\.css(?:\?[^"']*)?)["'][^>]*>/g,
   )) {
@@ -18,6 +19,7 @@ export const stylesheetProblems = (directory) => {
       continue;
     const css = parse(readFileSync(join(directory, path), "utf8"));
     css.walkRules((rule) => {
+      selectors.push(rule.selector);
       if (!rule.selector.includes(":root")) return;
       const theme = /:root\[data-theme=["']?dark/.test(rule.selector)
         ? "dark"
@@ -30,9 +32,23 @@ export const stylesheetProblems = (directory) => {
       );
     });
   }
-  return backgrounds.has("light") &&
+  const problems = classes
+    .filter(
+      (name) =>
+        !selectors.some((selector) =>
+          new RegExp(
+            "\\." +
+              name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+              "(?![a-zA-Z0-9_-])",
+          ).test(selector),
+        ),
+    )
+    .map((name) => `목록 클래스 CSS가 없어요: ${name}`);
+  if (!(
+    backgrounds.has("light") &&
     backgrounds.has("dark") &&
     backgrounds.get("light") !== backgrounds.get("dark")
-    ? []
-    : ["목록 테마 CSS가 iframe에 연결되지 않았어요"];
+  ))
+    problems.push("목록 테마 CSS가 iframe에 연결되지 않았어요");
+  return problems;
 };

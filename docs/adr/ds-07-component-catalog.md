@@ -10,9 +10,9 @@ Storybook과 React Vite 연결은 architecture 5.2의 10.6.7로 정확히 고정
 
 각 예제를 라이트·다크의 개별 CSF 이야기로 노출한다. 모든 상태를 한 페이지에 동시에 그리면 열린 Dialog끼리 겹치므로 이 대안은 버린다. 기존 차트의 테마 축은 목록에서 한 번만 선택하고, 선택한 CSF 테마를 차트 속성으로 전달한다. 기존 이야기의 무인자 render는 그대로 유지한다. 예제 순서는 원본 묶음 이름의 정렬과 묶음 안 순서로 고정하며, CSF는 `node harness/ds-catalog/generate.mjs` 후 Prettier로 생성한다.
 
-`node harness/ds-catalog/check.mjs`가 실제 Storybook 빌드의 index.json을 읽는다. index에 실린 모든 export의 실제 render를 실행하여 공개 컴포넌트·예제·테마·원본 render 함수 연결을 비교한다. 원본 예제마다 index에 라이트·다크가 하나씩 있어야 한다. includeStories/excludeStories로 빠진 이야기, 추가 이야기의 잘못된 metadata, 잘못 연결된 render는 실패한다. 실제 importPath도 지정한 목록 모듈과 정확히 연결한다. decorator는 잘못된 테마를 기본값으로 숨기지 않고 거부한다. index의 dev 태그를 요구하여 실제 사이드바에서 숨긴 이야기를 거부한다. 회귀 테스트는 composeStories로 전체 project·component·story decorator를 합성한 뒤 최종 테마를 확인한다. 별도로 원본 DS 이야기와 실제 CSF 결과의 글자·요소·역할·값을 대조하여 본문을 비운 어댑터도 잡는다.
+`node harness/ds-catalog/check.mjs`가 실제 Storybook 빌드의 index.json을 읽는다. index에 실린 모든 export의 실제 render를 실행하여 공개 컴포넌트·예제·테마·원본 render 함수 연결을 비교한다. 원본 예제마다 index에 라이트·다크가 하나씩 있어야 한다. includeStories/excludeStories로 빠진 이야기, 추가 이야기의 잘못된 metadata, 잘못 연결된 render는 실패한다. 실제 importPath도 지정한 목록 모듈과 정확히 연결한다. decorator는 잘못된 테마를 기본값으로 숨기지 않고 거부한다. index의 dev 태그를 요구하여 실제 사이드바에서 숨긴 이야기를 거부한다. 회귀 테스트는 composeStories로 전체 project·component·story decorator를 합성한 뒤 최종 테마를 확인한다. 별도로 원본 DS 이야기와 실제 CSF 결과의 글자·요소·역할·값을 대조하여 본문을 비운 어댑터도 잡는다. 원본의 기대값은 정규화를 거치지 않으며 별도 번들·별도 DOM에서 실행한다. 이야기마다 한 틱 뒤 다시 확인하여 타이머와 마이크로태스크의 테마 변경을 놓치지 않는다.
 
-main·preview·개별 CSF는 생성기의 소유 파일로 고정한다. 생성물 일치를 등록 검사 안에서 확인하고 `generate.mjs --check`로도 확인한다. 이 목록은 현재 필요한 설정만 지원하므로 별도 manager와 head/body 삽입 설정은 거부한다. 여섯 묶음·순서·테마 이름은 생성 입력에 있다. 새 Storybook 기능이 필요하면 해당 작업에서 생성 입력과 계약을 함께 갱신한다. iframe에 실제 연결된 CSS에서 라이트·다크 배경 토큰이 모두 있고 서로 다른지도 확인한다. 이것은 CSS 포함 여부의 증거이며 픽셀 실측은 아니다.
+main·preview·렌더 어댑터·개별 CSF는 생성기의 소유 파일로 고정한다. 생성물 일치를 등록 검사 안에서 확인하고 `generate.mjs --check`로도 확인한다. 이 목록은 현재 필요한 설정만 지원하므로 별도 manager와 head/body 삽입 설정은 거부한다. 여섯 묶음·순서·테마 이름은 생성 입력에 있다. 새 Storybook 기능이 필요하면 해당 작업에서 생성 입력과 계약을 함께 갱신한다. Tailwind가 src만 스캔하므로 렌더 어댑터는 이미 생성되는 bg-surface·text-ink·p-space-4를 쓰고 HTML에도 배경 클래스를 적용한다. CSS에서 실제 wrapper 클래스의 존재까지 검사한다. iframe에 실제 연결된 CSS에서 라이트·다크 배경 토큰이 모두 있고 서로 다른지도 확인한다. 이것은 CSS 포함 여부의 증거이며 픽셀 실측은 아니다.
 
 검사는 just check-ts와 보호된 check-list에 등록한다. 이 검사는 목록과 테마 연결을 증명하며 DS-15의 픽셀 기준 화면과 DS-20의 넘침 실측을 대체하지 않는다.
 
@@ -44,155 +44,155 @@ normal Knip은 Storybook의 실제 진입점에서 theme.css·stories.ts를 소�
 
 ## 검증과 인계
 
-실제 index·CSF·전체 decorator·대표 자료 회귀를 추가했고, Knip·타입·린트·생성물 동일성을 확인했다. 자료 파싱 실패는 TS에서 예외를 던지지 않고 테스트에서 세 날짜·종목·금액을 독립적으로 검증한다. 컴파일되는 점 누락 변형과 예제 본문을 비우는 변형이 실제 렌더 회귀에서 실패한다. 하위 Node 테스트를 실행할 때 부모의 NODE_TEST_CONTEXT를 전달하지 않아 실제로 테스트가 실행되게 한다. 독립 검사의 첫 전체 실행 중 기존 Rust 하네스 테스트 자식이 신호 9로 종료됐다. 해당 테스트의 단독 재실행과 이후 정상 커밋 훅 전체 검사는 통과했다. 원인은 확정하지 않았다.
+실제 index·CSF·전체 decorator·대표 자료 회귀를 추가했고, Knip·타입·린트·생성물 동일성을 확인했다. 자료 파싱 실패는 TS에서 예외를 던지지 않고 테스트에서 세 날짜·종목·금액을 독립적으로 검증한다. 컴파일되는 점 누락 변형과 예제 본문을 비우는 변형이 실제 렌더 회귀에서 실패한다. 하위 Node 테스트를 실행할 때 부모의 NODE_TEST_CONTEXT를 전달하지 않아 실제로 테스트가 실행되게 한다. 정규화가 원본 render까지 바꾸는 변형을 공유된 기대값이 놓치는 red와, 별도 원본 번들로 검출하는 green을 직접 확인했다. 독립 검사의 첫 전체 실행 중 기존 Rust 하네스 테스트 자식이 신호 9로 종료됐다. 해당 테스트의 단독 재실행과 이후 정상 커밋 훅 전체 검사는 통과했다. 원인은 확정하지 않았다.
 
 DS-15: 고정 브라우저의 양 테마 시각 회귀. DS-20: 전용 부하 자료·넘침 실측. DS-12: 상태 테스트·기준 화면까지 통합한 공개 목록 잠금. 실제 WKWebView와 VoiceOver는 NOT_RUN이다.
 
 ## 의존성
 
-직접 개발 의존성: storybook 10.6.7, @storybook/react-vite 10.6.7. 추가 feature 설정 없음. 아래는 기존 lockfile 대비 새 패키지(선택 플랫폼 패키지 포함)다.
+직접 개발 의존성은 storybook 10.6.7과 @storybook/react-vite 10.6.7이며 모두 MIT다. 새 런타임 의존성이나 추가 기능 설정은 없다. 다음은 기준 lockfile 대비 새 패키지 135개(선택 플랫폼 패키지 포함)의 버전별 공개 registry 메타데이터다. 정확한 버전의 registry license 필드를 기록한다.
 
-| 패키지 | 버전 | 라이선스 |
-|---|---|---|
-| @adobe/css-tools | 4.5.0 | MIT |
-| @emnapi/core | 1.11.0 | 미설치 선택 패키지 |
-| @emnapi/core | 1.9.2 | 미설치 선택 패키지 |
-| @emnapi/runtime | 1.11.0 | 미설치 선택 패키지 |
-| @emnapi/runtime | 1.9.2 | 미설치 선택 패키지 |
-| @emnapi/wasi-threads | 1.2.1 | 미설치 선택 패키지 |
-| @esbuild/aix-ppc64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/android-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/android-arm | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/android-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/darwin-arm64 | 0.28.2 | MIT |
-| @esbuild/darwin-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/freebsd-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/freebsd-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-arm | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-ia32 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-loong64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-mips64el | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-ppc64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-riscv64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-s390x | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/linux-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/netbsd-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/netbsd-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/openbsd-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/openbsd-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/openharmony-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/sunos-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/win32-arm64 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/win32-ia32 | 0.28.2 | 미설치 선택 패키지 |
-| @esbuild/win32-x64 | 0.28.2 | 미설치 선택 패키지 |
-| @joshwooding/vite-plugin-react-docgen-typescript | 0.7.0 | MIT |
-| @oxc-parser/binding-android-arm-eabi | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-android-arm64 | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-darwin-arm64 | 0.127.0 | MIT |
-| @oxc-parser/binding-darwin-x64 | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-freebsd-x64 | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-arm-gnueabihf | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-arm-musleabihf | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-arm64-gnu | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-arm64-musl | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-ppc64-gnu | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-riscv64-gnu | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-riscv64-musl | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-s390x-gnu | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-x64-gnu | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-linux-x64-musl | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-openharmony-arm64 | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-wasm32-wasi | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-win32-arm64-msvc | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-win32-ia32-msvc | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-parser/binding-win32-x64-msvc | 0.127.0 | 미설치 선택 패키지 |
-| @oxc-project/types | 0.127.0 | MIT |
-| @oxc-resolver/binding-android-arm-eabi | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-android-arm64 | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-darwin-arm64 | 11.21.2 | MIT |
-| @oxc-resolver/binding-darwin-x64 | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-freebsd-x64 | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-arm-gnueabihf | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-arm-musleabihf | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-arm64-gnu | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-arm64-musl | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-ppc64-gnu | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-riscv64-gnu | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-riscv64-musl | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-s390x-gnu | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-x64-gnu | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-linux-x64-musl | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-openharmony-arm64 | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-wasm32-wasi | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-win32-arm64-msvc | 11.21.2 | 미설치 선택 패키지 |
-| @oxc-resolver/binding-win32-x64-msvc | 11.21.2 | 미설치 선택 패키지 |
-| @rollup/pluginutils | 5.5.1 | MIT |
-| @storybook/builder-vite | 10.6.7 | MIT |
-| @storybook/global | 5.0.0 | MIT |
-| @storybook/icons | 2.2.0 | MIT |
-| @storybook/react-dom-shim | 10.6.7 | MIT |
-| @storybook/react-vite | 10.6.7 | MIT |
-| @storybook/react | 10.6.7 | MIT |
-| @testing-library/jest-dom | 6.9.1 | MIT |
-| @types/babel__core | 7.20.5 | MIT |
-| @types/babel__generator | 7.27.0 | MIT |
-| @types/babel__template | 7.4.4 | MIT |
-| @types/babel__traverse | 7.28.0 | MIT |
-| @types/doctrine | 0.0.9 | MIT |
-| @types/resolve | 1.20.6 | MIT |
-| @vitest/expect | 3.2.4 | MIT |
-| @vitest/pretty-format | 3.2.4 | MIT |
-| @vitest/spy | 3.2.4 | MIT |
-| @vitest/utils | 3.2.4 | MIT |
-| @webcontainer/env | 1.1.1 | MIT |
-| ast-types | 0.16.3 | MIT |
-| bundle-name | 4.1.1 | MIT |
-| chai | 5.3.3 | MIT |
-| check-error | 2.1.3 | MIT |
-| css.escape | 1.5.1 | MIT |
-| deep-eql | 5.0.2 | MIT |
-| default-browser-id | 5.0.1 | MIT |
-| default-browser | 5.5.1 | MIT |
-| define-lazy-prop | 3.0.0 | MIT |
-| doctrine | 3.0.0 | Apache-2.0 |
-| dom-accessibility-api | 0.6.3 | MIT |
-| empathic | 2.1.0 | MIT |
-| esbuild | 0.28.2 | MIT |
-| esprima | 4.0.1 | BSD-2-Clause |
-| estree-walker | 2.0.2 | MIT |
-| glob | 13.0.7 | BlueOak-1.0.0 |
-| indent-string | 4.0.0 | MIT |
-| is-docker | 3.0.0 | MIT |
-| is-inside-container | 1.0.0 | MIT |
-| is-wsl | 3.1.1 | MIT |
-| jsonc-parser | 3.3.1 | MIT |
-| loupe | 3.2.1 | MIT |
-| min-indent | 1.0.1 | MIT |
-| minipass | 7.1.3 | BlueOak-1.0.0 |
-| open | 10.2.0 | MIT |
-| oxc-parser | 0.127.0 | MIT |
-| oxc-resolver | 11.21.2 | MIT |
-| path-scurry | 2.0.2 | BlueOak-1.0.0 |
-| pathval | 2.0.1 | MIT |
-| react-docgen-typescript | 2.4.0 | MIT |
-| react-docgen | 8.0.4 | MIT |
-| recast | 0.23.21 | MIT |
-| redent | 3.0.0 | MIT |
-| run-applescript | 7.1.0 | MIT |
-| storybook | 10.6.7 | MIT |
-| strip-indent | 3.0.0 | MIT |
-| strip-indent | 4.1.1 | MIT |
-| tiny-invariant | 1.3.3 | MIT |
-| tinyrainbow | 2.0.0 | MIT |
-| tinyspy | 4.0.6 | MIT |
-| ts-dedent | 2.3.0 | MIT |
-| ws | 8.23.0 | MIT |
-| wsl-utils | 0.1.0 | MIT |
+| 패키지 | 버전 | 명시된 라이선스 | 근거 |
+|---|---|---|---|
+| @adobe/css-tools | 4.5.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40adobe%2Fcss-tools/4.5.0) |
+| @emnapi/core | 1.11.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40emnapi%2Fcore/1.11.0) |
+| @emnapi/core | 1.9.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40emnapi%2Fcore/1.9.2) |
+| @emnapi/runtime | 1.11.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40emnapi%2Fruntime/1.11.0) |
+| @emnapi/runtime | 1.9.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40emnapi%2Fruntime/1.9.2) |
+| @emnapi/wasi-threads | 1.2.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40emnapi%2Fwasi-threads/1.2.1) |
+| @esbuild/aix-ppc64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Faix-ppc64/0.28.2) |
+| @esbuild/android-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fandroid-arm64/0.28.2) |
+| @esbuild/android-arm | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fandroid-arm/0.28.2) |
+| @esbuild/android-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fandroid-x64/0.28.2) |
+| @esbuild/darwin-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fdarwin-arm64/0.28.2) |
+| @esbuild/darwin-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fdarwin-x64/0.28.2) |
+| @esbuild/freebsd-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Ffreebsd-arm64/0.28.2) |
+| @esbuild/freebsd-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Ffreebsd-x64/0.28.2) |
+| @esbuild/linux-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-arm64/0.28.2) |
+| @esbuild/linux-arm | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-arm/0.28.2) |
+| @esbuild/linux-ia32 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-ia32/0.28.2) |
+| @esbuild/linux-loong64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-loong64/0.28.2) |
+| @esbuild/linux-mips64el | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-mips64el/0.28.2) |
+| @esbuild/linux-ppc64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-ppc64/0.28.2) |
+| @esbuild/linux-riscv64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-riscv64/0.28.2) |
+| @esbuild/linux-s390x | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-s390x/0.28.2) |
+| @esbuild/linux-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Flinux-x64/0.28.2) |
+| @esbuild/netbsd-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fnetbsd-arm64/0.28.2) |
+| @esbuild/netbsd-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fnetbsd-x64/0.28.2) |
+| @esbuild/openbsd-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fopenbsd-arm64/0.28.2) |
+| @esbuild/openbsd-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fopenbsd-x64/0.28.2) |
+| @esbuild/openharmony-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fopenharmony-arm64/0.28.2) |
+| @esbuild/sunos-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fsunos-x64/0.28.2) |
+| @esbuild/win32-arm64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fwin32-arm64/0.28.2) |
+| @esbuild/win32-ia32 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fwin32-ia32/0.28.2) |
+| @esbuild/win32-x64 | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40esbuild%2Fwin32-x64/0.28.2) |
+| @joshwooding/vite-plugin-react-docgen-typescript | 0.7.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40joshwooding%2Fvite-plugin-react-docgen-typescript/0.7.0) |
+| @oxc-parser/binding-android-arm-eabi | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-android-arm-eabi/0.127.0) |
+| @oxc-parser/binding-android-arm64 | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-android-arm64/0.127.0) |
+| @oxc-parser/binding-darwin-arm64 | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-darwin-arm64/0.127.0) |
+| @oxc-parser/binding-darwin-x64 | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-darwin-x64/0.127.0) |
+| @oxc-parser/binding-freebsd-x64 | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-freebsd-x64/0.127.0) |
+| @oxc-parser/binding-linux-arm-gnueabihf | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-arm-gnueabihf/0.127.0) |
+| @oxc-parser/binding-linux-arm-musleabihf | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-arm-musleabihf/0.127.0) |
+| @oxc-parser/binding-linux-arm64-gnu | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-arm64-gnu/0.127.0) |
+| @oxc-parser/binding-linux-arm64-musl | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-arm64-musl/0.127.0) |
+| @oxc-parser/binding-linux-ppc64-gnu | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-ppc64-gnu/0.127.0) |
+| @oxc-parser/binding-linux-riscv64-gnu | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-riscv64-gnu/0.127.0) |
+| @oxc-parser/binding-linux-riscv64-musl | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-riscv64-musl/0.127.0) |
+| @oxc-parser/binding-linux-s390x-gnu | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-s390x-gnu/0.127.0) |
+| @oxc-parser/binding-linux-x64-gnu | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-x64-gnu/0.127.0) |
+| @oxc-parser/binding-linux-x64-musl | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-linux-x64-musl/0.127.0) |
+| @oxc-parser/binding-openharmony-arm64 | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-openharmony-arm64/0.127.0) |
+| @oxc-parser/binding-wasm32-wasi | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-wasm32-wasi/0.127.0) |
+| @oxc-parser/binding-win32-arm64-msvc | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-win32-arm64-msvc/0.127.0) |
+| @oxc-parser/binding-win32-ia32-msvc | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-win32-ia32-msvc/0.127.0) |
+| @oxc-parser/binding-win32-x64-msvc | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-parser%2Fbinding-win32-x64-msvc/0.127.0) |
+| @oxc-project/types | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-project%2Ftypes/0.127.0) |
+| @oxc-resolver/binding-android-arm-eabi | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-android-arm-eabi/11.21.2) |
+| @oxc-resolver/binding-android-arm64 | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-android-arm64/11.21.2) |
+| @oxc-resolver/binding-darwin-arm64 | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-darwin-arm64/11.21.2) |
+| @oxc-resolver/binding-darwin-x64 | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-darwin-x64/11.21.2) |
+| @oxc-resolver/binding-freebsd-x64 | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-freebsd-x64/11.21.2) |
+| @oxc-resolver/binding-linux-arm-gnueabihf | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-arm-gnueabihf/11.21.2) |
+| @oxc-resolver/binding-linux-arm-musleabihf | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-arm-musleabihf/11.21.2) |
+| @oxc-resolver/binding-linux-arm64-gnu | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-arm64-gnu/11.21.2) |
+| @oxc-resolver/binding-linux-arm64-musl | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-arm64-musl/11.21.2) |
+| @oxc-resolver/binding-linux-ppc64-gnu | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-ppc64-gnu/11.21.2) |
+| @oxc-resolver/binding-linux-riscv64-gnu | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-riscv64-gnu/11.21.2) |
+| @oxc-resolver/binding-linux-riscv64-musl | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-riscv64-musl/11.21.2) |
+| @oxc-resolver/binding-linux-s390x-gnu | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-s390x-gnu/11.21.2) |
+| @oxc-resolver/binding-linux-x64-gnu | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-x64-gnu/11.21.2) |
+| @oxc-resolver/binding-linux-x64-musl | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-linux-x64-musl/11.21.2) |
+| @oxc-resolver/binding-openharmony-arm64 | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-openharmony-arm64/11.21.2) |
+| @oxc-resolver/binding-wasm32-wasi | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-wasm32-wasi/11.21.2) |
+| @oxc-resolver/binding-win32-arm64-msvc | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-win32-arm64-msvc/11.21.2) |
+| @oxc-resolver/binding-win32-x64-msvc | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40oxc-resolver%2Fbinding-win32-x64-msvc/11.21.2) |
+| @rollup/pluginutils | 5.5.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40rollup%2Fpluginutils/5.5.1) |
+| @storybook/builder-vite | 10.6.7 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40storybook%2Fbuilder-vite/10.6.7) |
+| @storybook/global | 5.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40storybook%2Fglobal/5.0.0) |
+| @storybook/icons | 2.2.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40storybook%2Ficons/2.2.0) |
+| @storybook/react-dom-shim | 10.6.7 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40storybook%2Freact-dom-shim/10.6.7) |
+| @storybook/react-vite | 10.6.7 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40storybook%2Freact-vite/10.6.7) |
+| @storybook/react | 10.6.7 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40storybook%2Freact/10.6.7) |
+| @testing-library/jest-dom | 6.9.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40testing-library%2Fjest-dom/6.9.1) |
+| @types/babel__core | 7.20.5 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40types%2Fbabel__core/7.20.5) |
+| @types/babel__generator | 7.27.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40types%2Fbabel__generator/7.27.0) |
+| @types/babel__template | 7.4.4 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40types%2Fbabel__template/7.4.4) |
+| @types/babel__traverse | 7.28.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40types%2Fbabel__traverse/7.28.0) |
+| @types/doctrine | 0.0.9 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40types%2Fdoctrine/0.0.9) |
+| @types/resolve | 1.20.6 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40types%2Fresolve/1.20.6) |
+| @vitest/expect | 3.2.4 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40vitest%2Fexpect/3.2.4) |
+| @vitest/pretty-format | 3.2.4 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40vitest%2Fpretty-format/3.2.4) |
+| @vitest/spy | 3.2.4 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40vitest%2Fspy/3.2.4) |
+| @vitest/utils | 3.2.4 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40vitest%2Futils/3.2.4) |
+| @webcontainer/env | 1.1.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/%40webcontainer%2Fenv/1.1.1) |
+| ast-types | 0.16.3 | MIT | [공개 메타데이터](https://registry.npmjs.org/ast-types/0.16.3) |
+| bundle-name | 4.1.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/bundle-name/4.1.1) |
+| chai | 5.3.3 | MIT | [공개 메타데이터](https://registry.npmjs.org/chai/5.3.3) |
+| check-error | 2.1.3 | MIT | [공개 메타데이터](https://registry.npmjs.org/check-error/2.1.3) |
+| css.escape | 1.5.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/css.escape/1.5.1) |
+| deep-eql | 5.0.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/deep-eql/5.0.2) |
+| default-browser-id | 5.0.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/default-browser-id/5.0.1) |
+| default-browser | 5.5.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/default-browser/5.5.1) |
+| define-lazy-prop | 3.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/define-lazy-prop/3.0.0) |
+| doctrine | 3.0.0 | Apache-2.0 | [공개 메타데이터](https://registry.npmjs.org/doctrine/3.0.0) |
+| dom-accessibility-api | 0.6.3 | MIT | [공개 메타데이터](https://registry.npmjs.org/dom-accessibility-api/0.6.3) |
+| empathic | 2.1.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/empathic/2.1.0) |
+| esbuild | 0.28.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/esbuild/0.28.2) |
+| esprima | 4.0.1 | BSD-2-Clause | [공개 메타데이터](https://registry.npmjs.org/esprima/4.0.1) |
+| estree-walker | 2.0.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/estree-walker/2.0.2) |
+| glob | 13.0.7 | BlueOak-1.0.0 | [공개 메타데이터](https://registry.npmjs.org/glob/13.0.7) |
+| indent-string | 4.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/indent-string/4.0.0) |
+| is-docker | 3.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/is-docker/3.0.0) |
+| is-inside-container | 1.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/is-inside-container/1.0.0) |
+| is-wsl | 3.1.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/is-wsl/3.1.1) |
+| jsonc-parser | 3.3.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/jsonc-parser/3.3.1) |
+| loupe | 3.2.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/loupe/3.2.1) |
+| min-indent | 1.0.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/min-indent/1.0.1) |
+| minipass | 7.1.3 | BlueOak-1.0.0 | [공개 메타데이터](https://registry.npmjs.org/minipass/7.1.3) |
+| open | 10.2.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/open/10.2.0) |
+| oxc-parser | 0.127.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/oxc-parser/0.127.0) |
+| oxc-resolver | 11.21.2 | MIT | [공개 메타데이터](https://registry.npmjs.org/oxc-resolver/11.21.2) |
+| path-scurry | 2.0.2 | BlueOak-1.0.0 | [공개 메타데이터](https://registry.npmjs.org/path-scurry/2.0.2) |
+| pathval | 2.0.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/pathval/2.0.1) |
+| react-docgen-typescript | 2.4.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/react-docgen-typescript/2.4.0) |
+| react-docgen | 8.0.4 | MIT | [공개 메타데이터](https://registry.npmjs.org/react-docgen/8.0.4) |
+| recast | 0.23.21 | MIT | [공개 메타데이터](https://registry.npmjs.org/recast/0.23.21) |
+| redent | 3.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/redent/3.0.0) |
+| run-applescript | 7.1.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/run-applescript/7.1.0) |
+| storybook | 10.6.7 | MIT | [공개 메타데이터](https://registry.npmjs.org/storybook/10.6.7) |
+| strip-indent | 3.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/strip-indent/3.0.0) |
+| strip-indent | 4.1.1 | MIT | [공개 메타데이터](https://registry.npmjs.org/strip-indent/4.1.1) |
+| tiny-invariant | 1.3.3 | MIT | [공개 메타데이터](https://registry.npmjs.org/tiny-invariant/1.3.3) |
+| tinyrainbow | 2.0.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/tinyrainbow/2.0.0) |
+| tinyspy | 4.0.6 | MIT | [공개 메타데이터](https://registry.npmjs.org/tinyspy/4.0.6) |
+| ts-dedent | 2.3.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/ts-dedent/2.3.0) |
+| ws | 8.23.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/ws/8.23.0) |
+| wsl-utils | 0.1.0 | MIT | [공개 메타데이터](https://registry.npmjs.org/wsl-utils/0.1.0) |
 
 ## 손 변형
 
-현재 검사 복사본마다 node --check 후 새 단위 회귀를 실제 실행했다. 30/30 컴파일·검출, 생존 0. 별도 통합 회귀의 열 가지 변형은 각각 JavaScript 구문 검사 또는 TypeScript 컴파일 후 등록 checker·실제 합성 렌더 검사에서 거부된다. Node 하위 테스트가 실행되지 않은 초기 경고 실행은 성공 실적으로 세지 않았다.
+현재 검사 복사본마다 node --check 후 새 단위 회귀를 실제 실행했다. 30/30 컴파일·검출, 생존 0. 별도 통합 회귀의 열네 가지 변형은 각각 JavaScript 구문 검사 또는 TypeScript 컴파일 후 등록 checker·실제 합성 렌더 검사에서 거부된다. Node 하위 테스트가 실행되지 않은 초기 경고 실행은 성공 실적으로 세지 않았다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 |
 |---|---|---|

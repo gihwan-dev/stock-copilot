@@ -28,7 +28,7 @@ export const renderCatalog = (component, theme, sample) => {
   return createElement(
     "div",
     {
-      className: "bg-bg text-ink p-space-8",
+      className: "bg-surface text-ink p-space-4",
       "data-catalog-component": component,
       "data-catalog-theme": theme,
       "data-catalog-sample": sample,
