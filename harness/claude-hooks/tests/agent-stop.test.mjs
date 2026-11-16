@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -31,6 +32,7 @@ import { gitEnvironment, LOCK } from "../../../.claude/hooks/lib/project.mjs";
 import {
   decideReviewerStop,
   snapshotOf,
+  reviewerTarget,
 } from "../../../.claude/hooks/lib/reviewer-guard.mjs";
 import {
   STATUS,
@@ -358,12 +360,275 @@ test("the post-agent context reports the record and treats a missing one as unch
   );
 });
 
-test("reviewer stops are blocked while any worktree's content differs from the start", () => {
+test("top-level Claude linked sessions are read-only reviewers regardless of input claims", async () => {
+  const { claudeSessionInput } =
+    await import("../../../.claude/hooks/lib/session-role.mjs");
+  const { editFindings } =
+    await import("../../../.claude/hooks/lib/edit-guard.mjs");
+  const { orchestrationFindings } =
+    await import("../../../.claude/hooks/lib/orchestration.mjs");
+  const fixture = createFixture();
+  try {
+    const raw = {
+      cwd: fixture.root,
+      agent_type: "implementer",
+      tool_input: { file_path: join(fixture.root, "docs/notes.md") },
+    };
+    const actor = claudeSessionInput(raw, fixture.worktree);
+    assert.equal(actor.agent_type, "adversarial-reviewer");
+    assert.equal(editFindings(actor, {}).at(0).rule, "role-without-edits");
+    assert.equal(
+      orchestrationFindings(
+        { ...actor, tool_name: "mcp__t3_code__delegate_task" },
+        {},
+        {},
+      ).length,
+      1,
+    );
+    assert.deepEqual(claudeSessionInput({}, fixture.root), {});
+    assert.equal(claudeSessionInput({}, fixture.outside).agent_type, "unknown");
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
+test("real Claude guard entries deny linked reviewer writes and nested delegation", () => {
+  const fixture = createFixture();
+  try {
+    cpSync(
+      join(repoRoot, ".claude/hooks"),
+      join(fixture.worktree, ".claude/hooks"),
+      { recursive: true },
+    );
+    for (const file of ["rules.json", "agent-rules.json"])
+      cpSync(
+        join(repoRoot, "harness/claude-hooks", file),
+        join(fixture.worktree, "harness/claude-hooks", file),
+      );
+    const invoke = (script, tool_input, tool_name) => {
+      const result = spawnSync(
+        process.execPath,
+        [join(fixture.worktree, ".claude/hooks", script)],
+        {
+          input: JSON.stringify({ cwd: fixture.root, tool_input, tool_name }),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            STOCK_COPILOT_HARNESS_STATE: join(fixture.base, "state"),
+          },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      return JSON.parse(result.stdout).hookSpecificOutput;
+    };
+    assert.match(
+      invoke(
+        "guard-edit.mjs",
+        { file_path: join(fixture.root, "docs/notes.md") },
+        "Write",
+      ).permissionDecisionReason,
+      /role-without-edits/u,
+    );
+    assert.equal(
+      invoke("guard-bash.mjs", { command: "git push origin HEAD" }, "Bash")
+        .permissionDecision,
+      "deny",
+    );
+    assert.match(
+      invoke("guard-orchestration.mjs", {}, "mcp__t3_code__delegate_task")
+        .permissionDecisionReason,
+      /서브에이전트는 위임하지 않는다/u,
+    );
+    assert.equal(
+      readFileSync(join(fixture.root, "docs/notes.md"), "utf8"),
+      "fixture\n",
+    );
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
+test("reviewer hook entries pin the brief target across parallel checkouts", () => {
+  const fixture = createFixture();
+  try {
+    cpSync(
+      join(repoRoot, ".claude/hooks"),
+      join(fixture.root, ".claude/hooks"),
+      { recursive: true },
+    );
+    cpSync(
+      join(repoRoot, "harness/claude-hooks/agent-rules.json"),
+      join(fixture.root, "harness/claude-hooks/agent-rules.json"),
+    );
+    const state = join(fixture.base, "state");
+    const transcript = join(fixture.base, "session.jsonl");
+    const subagent = join(fixture.base, "s", "subagents", "agent-r.jsonl");
+    mkdirSync(join(subagent, ".."), { recursive: true });
+    writeFileSync(
+      subagent,
+      JSON.stringify({
+        type: "user",
+        message: { content: `- 기준 커밋: ${BASE}, 브랜치 \`side\`` },
+      }) + "\n",
+    );
+    const run = (script, id = "r") => {
+      const result = spawnSync(
+        process.execPath,
+        [join(fixture.root, ".claude/hooks", script)],
+        {
+          input: JSON.stringify({
+            session_id: "s",
+            agent_id: id,
+            agent_type: "adversarial-reviewer",
+            transcript_path: transcript,
+          }),
+          encoding: "utf8",
+          env: { ...process.env, STOCK_COPILOT_HARNESS_STATE: state },
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim() === ""
+        ? undefined
+        : JSON.parse(result.stdout);
+    };
+    run("subagent-start.mjs");
+    assert.equal(readRecord(state, "reviewer", "r").worktree, fixture.worktree);
+    writeFileSync(join(fixture.root, "docs/notes.md"), "parallel change\n");
+    execFileSync(
+      "git",
+      [
+        "-C",
+        fixture.root,
+        "worktree",
+        "add",
+        "--quiet",
+        "--detach",
+        join(fixture.base, "review-copy"),
+      ],
+      { env: gitEnvironment() },
+    );
+    assert.equal(run("reviewer-stop.mjs"), undefined);
+    writeFileSync(join(fixture.worktree, "docs/notes.md"), "target change\n");
+    assert.equal(run("reviewer-stop.mjs").decision, "block");
+    run("subagent-start.mjs", "missing");
+    assert.match(
+      run("reviewer-stop.mjs", "missing").systemMessage,
+      /확인하지 못했다/u,
+    );
+    writeRecord(state, "pending", "s-queued", {
+      sessionId: "s",
+      agentType: "adversarial-reviewer",
+      toolUseId: "queued",
+      at: "1",
+      prompt: `- 기준 커밋: ${BASE}, 브랜치 \`side\``,
+    });
+    run("subagent-start.mjs", "queued");
+    assert.equal(
+      readRecord(state, "reviewer", "queued").worktree,
+      fixture.worktree,
+    );
+    writeFileSync(
+      join(fixture.worktree, "docs/notes.md"),
+      "queued target changed\n",
+    );
+    assert.equal(run("reviewer-stop.mjs", "queued").decision, "block");
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
+test("reviewer snapshots exclude worktrees that only share the target prefix", () => {
+  const facts = {
+    contentSnapshot: () => ({
+      head: "h",
+      reference: "refs/heads/a",
+      index: "i",
+      files: {},
+    }),
+  };
+  assert.deepEqual(
+    snapshotOf(["/wt-2", "/wt/nested", "/wt"], "/wt", facts).map(
+      (entry) => entry.path,
+    ),
+    ["/wt"],
+  );
+});
+
+test("reviewer target resolution failures stay unchecked and preserve their cause", () => {
+  let record = {
+    reason: "브리프의 리뷰 대상 작업 브랜치를 확인하지 못했다",
+    snapshot: [],
+    blocks: 0,
+  };
+  const input = { agent_id: "r", agent_type: "adversarial-reviewer" };
+  for (const attempt of Array.from(
+    { length: rules.maxBlocks + 1 },
+    (_, index) => index,
+  )) {
+    const result = decideReviewerStop(input, record, [], rules, "time");
+    record = result.record;
+    assert.equal(record.blocks, 0, String(attempt));
+    assert.equal(record.status, "unchecked");
+    const message = result.output.reason ?? result.output.systemMessage;
+    assert.match(message, /리뷰 대상 작업 브랜치를 확인하지 못했다/u);
+    assert.doesNotMatch(message, /사라졌다|바꾼 채|되돌린/u);
+    assert.equal(result.output.decision, undefined);
+  }
+});
+
+test("reviewer snapshot Git failures include the failing HEAD reference cause", () => {
+  const root = mkdtempSync(join(tmpdir(), "reviewer-empty-head-"));
+  try {
+    execFileSync("git", ["-C", root, "init", "--quiet"], {
+      env: gitEnvironment(),
+    });
+    const snapshot = contentSnapshot(root);
+    assert.match(snapshot.failed, /HEAD 참조/u);
+    assert.match(snapshot.failed, /HEAD/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("reviewer target comes from the brief branch instead of the hook project", () => {
+  const facts = {
+    branchOf: (path) =>
+      ({ "/main": "master", "/target": "h48", "/other": "parallel" })[path],
+  };
+  const worktrees = ["/main", "/other", "/target"];
+  assert.equal(
+    reviewerTarget(`- 기준 커밋: ${BASE}, 브랜치 \`h48\``, worktrees, facts),
+    "/target",
+  );
+  assert.equal(
+    reviewerTarget(`- 기준 커밋: ${BASE}, 브랜치 \`absent\``, worktrees, facts),
+    undefined,
+  );
+  assert.equal(
+    reviewerTarget(`- 기준 커밋: ${BASE}`, worktrees, facts),
+    undefined,
+  );
+  assert.equal(reviewerTarget("unreadable", worktrees, facts), undefined);
+  assert.equal(
+    reviewerTarget(`- 기준 커밋: ${BASE}, 브랜치 \`h48\``, ["/one", "/two"], {
+      branchOf: () => "h48",
+    }),
+    undefined,
+  );
+  assert.equal(
+    reviewerTarget(`- 기준 커밋: ${BASE}, 브랜치 \`h48\``, ["/suffix"], {
+      branchOf: () => "t3/h48",
+    }),
+    undefined,
+  );
+});
+
+test("reviewer stops protect the fixed target while parallel worktrees change", () => {
   const fixture = createFixture();
   const worktrees = [fixture.root, fixture.worktree];
   const facts = { contentSnapshot };
   writeFileSync(join(fixture.root, "docs/notes.md"), "dirty before\n");
-  const before = snapshotOf(worktrees, fixture.root, facts);
+  const before = snapshotOf(worktrees, fixture.worktree, facts);
   const record = {
     kind: "reviewer",
     agentId: "r1",
@@ -371,7 +636,7 @@ test("reviewer stops are blocked while any worktree's content differs from the s
     blocks: 0,
   };
   const input = { agent_id: "r1", agent_type: "adversarial-reviewer" };
-  const now = (list = worktrees) => snapshotOf(list, fixture.root, facts);
+  const now = (list = worktrees) => snapshotOf(list, fixture.worktree, facts);
   const decide = (snapshot, given = record) =>
     decideReviewerStop(input, given, snapshot, rules, "t");
   mkdirSync(join(fixture.root, ".claude/worktrees/agent-r1"), {
@@ -380,11 +645,11 @@ test("reviewer stops are blocked while any worktree's content differs from the s
   writeFileSync(join(fixture.root, ".claude/worktrees/agent-r1/x"), "x\n");
   assert.equal(decide(now()).output, undefined);
   assert.equal(decide(now()).record.status, "clean");
-  writeFileSync(join(fixture.root, "docs/notes.md"), "dirty and more\n");
+  writeFileSync(join(fixture.worktree, "docs/notes.md"), "dirty and more\n");
   const further = decide(now());
   assert.equal(further.output.decision, "block");
   assert.match(further.output.reason, /내용이 바뀐 파일 docs\/notes\.md/u);
-  writeFileSync(join(fixture.root, "docs/notes.md"), "dirty before\n");
+  writeFileSync(join(fixture.worktree, "docs/notes.md"), "fixture\n");
   writeFileSync(join(fixture.worktree, "docs/escape.md"), "x\n");
   const added = decide(now());
   assert.match(added.output.reason, /새 파일 docs\/escape\.md/u);
@@ -392,7 +657,7 @@ test("reviewer stops are blocked while any worktree's content differs from the s
   rmSync(join(fixture.worktree, "docs/escape.md"));
   execFileSync(
     "git",
-    ["-C", fixture.root, "mv", "docs/harness.md", "docs/moved.md"],
+    ["-C", fixture.worktree, "mv", "docs/harness.md", "docs/moved.md"],
     {
       env: gitEnvironment(),
     },
@@ -403,17 +668,17 @@ test("reviewer stops are blocked while any worktree's content differs from the s
   assert.match(renamed.output.reason, /인덱스가 바뀌었다/u);
   execFileSync(
     "git",
-    ["-C", fixture.root, "mv", "docs/moved.md", "docs/harness.md"],
+    ["-C", fixture.worktree, "mv", "docs/moved.md", "docs/harness.md"],
     {
       env: gitEnvironment(),
     },
   );
   assert.equal(decide(now()).output, undefined);
   const created = decide(now([...worktrees, fixture.outside]));
-  assert.match(created.output.reason, /새 작업 사본|상태를 읽지 못했다/u);
+  assert.equal(created.output, undefined);
   const broken = decide([...now(), { path: "/x", failed: "git이 실패했다" }]);
   assert.equal(broken.output.decision, "block");
-  const given = decide(now([fixture.root]), {
+  const given = decide([], {
     ...record,
     blocks: rules.maxBlocks,
   });
@@ -422,6 +687,87 @@ test("reviewer stops are blocked while any worktree's content differs from the s
   assert.equal(given.record.status, "contaminated");
   const unknown = decideReviewerStop(input, undefined, [], rules, "t");
   assert.match(unknown.output.systemMessage, /스냅숏이 없어/u);
+});
+
+test("reviewer snapshots block target HEAD and reference moves but ignore other refs", () => {
+  const fixture = createFixture();
+  const git = (root, ...args) =>
+    execFileSync("git", ["-C", root, ...args], { env: gitEnvironment() });
+  const take = () =>
+    snapshotOf([fixture.root, fixture.worktree], fixture.worktree, {
+      contentSnapshot,
+    });
+  const before = take();
+  const decide = () =>
+    decideReviewerStop(
+      { agent_id: "r", agent_type: "adversarial-reviewer" },
+      { snapshot: before },
+      take(),
+      rules,
+      "t",
+    );
+  git(fixture.root, "branch", "parallel");
+  assert.equal(decide().output, undefined);
+  git(fixture.worktree, "branch", "same-tree");
+  git(fixture.worktree, "symbolic-ref", "HEAD", "refs/heads/same-tree");
+  assert.match(decide().output.reason, /참조/u);
+  git(fixture.worktree, "symbolic-ref", "HEAD", "refs/heads/side");
+  assert.equal(decide().output, undefined);
+  git(
+    fixture.worktree,
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@e.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "--allow-empty",
+    "-m",
+    "move",
+  );
+  assert.match(decide().output.reason, /HEAD/u);
+  rmSync(fixture.base, { recursive: true, force: true });
+});
+
+test("reviewer snapshot comparisons fail closed at each target boundary", () => {
+  const before = [
+    {
+      path: "/target",
+      head: "head-a",
+      reference: "refs/heads/a",
+      index: "index-a",
+      files: { a: "hash-a", b: "hash-b" },
+    },
+  ];
+  const decide = (after, blocks = 0) =>
+    decideReviewerStop(
+      { agent_id: "r", agent_type: "adversarial-reviewer" },
+      { snapshot: before, blocks },
+      after,
+      rules,
+      "time",
+    );
+  assert.equal(decide(before).record.status, "clean");
+  for (const [field, value] of [
+    ["head", "head-b"],
+    ["reference", "refs/heads/b"],
+    ["index", "index-b"],
+    ["files", { a: "changed", b: "hash-b" }],
+  ]) {
+    assert.equal(
+      decide([{ ...before[0], [field]: value }]).output.decision,
+      "block",
+      field,
+    );
+  }
+  assert.equal(
+    decide([{ path: "/target", failed: "unreadable" }]).output.decision,
+    "block",
+  );
+  assert.equal(decide([]).output.decision, "block");
+  assert.equal(decide([], rules.maxBlocks - 1).output.decision, "block");
+  assert.equal(decide([], rules.maxBlocks).record.status, "contaminated");
 });
 
 test("the stop hook refuses a worktree whose files differ from its commit", () => {

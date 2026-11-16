@@ -293,16 +293,50 @@ test("a missing self test, example location or unknown kind fails the list", () 
   );
 });
 
-const testFiles = (directory) =>
+const testFiles = (directory, root = directory) =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      return ["node_modules", "target", ".git"].includes(entry.name)
+      return ["node_modules", "target", ".git"].includes(entry.name) ||
+        relative(root, path) === ".claude/worktrees"
         ? []
-        : testFiles(path);
+        : testFiles(path, root);
     }
-    return entry.name.endsWith(".test.mjs") ? [relative(repoRoot, path)] : [];
+    return entry.name.endsWith(".test.mjs") ? [relative(root, path)] : [];
   });
+
+test("test discovery excludes only root agent worktrees and keeps uncovered tests", () => {
+  const root = scratch("discovery-");
+  try {
+    for (const file of [
+      ".claude/worktrees/agent/a.test.mjs",
+      ".claude/hooks/a.test.mjs",
+      "other/a.test.mjs",
+      "nested/.claude/worktrees/a.test.mjs",
+      ".claude/worktrees-other/a.test.mjs",
+    ]) {
+      mkdirSync(join(root, file, ".."), { recursive: true });
+      writeFileSync(join(root, file), "");
+    }
+    const files = testFiles(root, root).sort();
+    assert.deepEqual(files, [
+      ".claude/hooks/a.test.mjs",
+      ".claude/worktrees-other/a.test.mjs",
+      "nested/.claude/worktrees/a.test.mjs",
+      "other/a.test.mjs",
+    ]);
+    assert.deepEqual(
+      files.filter((file) => !globMatches(".claude/hooks/*.test.mjs", file)),
+      [
+        ".claude/worktrees-other/a.test.mjs",
+        "nested/.claude/worktrees/a.test.mjs",
+        "other/a.test.mjs",
+      ],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("the node test runners of just check reach every test file", () => {
   const globs = runnerGlobs(justfile);
