@@ -4,8 +4,8 @@ mod tests {
         DeliveryReport, EventBusBuilder, EventSubscriber, HttpStatus, IncompleteReason,
         IncompleteTransactions, PortError, PortErrorKind, ReadEndpoint, RetryDelay,
         SubscriberFailure, SyncTransactions, SystemFailure, SystemPort, SystemPortError,
-        TransactionRead, TransactionSyncError, TransactionSyncRecord, TransactionSyncRepository,
-        UnavailableCause, WriteCompleted,
+        TransactionRead, TransactionRepository, TransactionSyncError, TransactionSyncRecord,
+        TransactionSyncRejection, TransactionSyncRepository, UnavailableCause, WriteCompleted,
     };
     use domain::{
         AccountId, CalendarDate, CalendarYear, Cancellation, CompleteTransactionResponse,
@@ -121,37 +121,115 @@ mod tests {
     #[derive(Debug, Default)]
     struct Trace {
         records: Vec<(AccountId, TransactionSyncRecord)>,
+        summaries: Vec<(AccountId, domain::SyncRecord<SettledRowSet>)>,
         events: Vec<DomainEvent>,
+    }
+    #[derive(Debug, Clone, Copy)]
+    enum Gate {
+        Open,
+        Held,
     }
     #[derive(Debug)]
     struct Repository {
         state: SettledRowSet,
         failure: Option<SystemPortError>,
         trace: Arc<RwLock<Trace>>,
+        gate: Arc<RwLock<Gate>>,
+    }
+    impl Repository {
+        fn current_state(&self, stored: &Trace) -> SettledRowSet {
+            stored
+                .summaries
+                .iter()
+                .rev()
+                .find_map(|(_account, record)| match record.outcome() {
+                    domain::SyncOutcome::Complete(state) | domain::SyncOutcome::Partial(state) => {
+                        Some(state.clone())
+                    }
+                    domain::SyncOutcome::Failed | domain::SyncOutcome::AccessBlocked => None,
+                })
+                .unwrap_or_else(|| self.state.clone())
+        }
+    }
+    impl TransactionRepository for Repository {
+        fn record(
+            &self,
+            account: &AccountId,
+            record: &domain::SyncRecord<SettledRowSet>,
+        ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+            self.trace
+                .write()
+                .expect("잠금")
+                .summaries
+                .push((account.clone(), record.clone()));
+            std::future::ready(Ok(WriteCompleted))
+        }
+        fn latest(
+            &self,
+            account: &AccountId,
+        ) -> impl Future<
+            Output = Result<Option<domain::SyncRecord<SettledRowSet>>, SystemPortError>,
+        > + Send {
+            let stored = self.trace.read().expect("잠금");
+            let found = stored
+                .summaries
+                .iter()
+                .rev()
+                .find(|(key, _record)| key == account)
+                .map(|(_key, record)| record.clone());
+            std::future::ready(Ok(found))
+        }
     }
     impl TransactionSyncRepository for Repository {
         fn state(
             &self,
             _account: &AccountId,
         ) -> impl Future<Output = Result<SettledRowSet, SystemPortError>> + Send {
-            std::future::ready(Ok(self.state.clone()))
+            std::future::ready(Ok(self.current_state(&self.trace.read().expect("잠금"))))
         }
-        fn record(
+        fn latest_sync(
+            &self,
+            account: &AccountId,
+        ) -> impl Future<Output = Result<Option<TransactionSyncRecord>, SystemPortError>> + Send
+        {
+            let stored = self.trace.read().expect("잠금");
+            let found = stored
+                .records
+                .iter()
+                .rev()
+                .find(|(key, _record)| key == account)
+                .map(|(_key, record)| record.clone());
+            std::future::ready(Ok(found))
+        }
+        async fn record_sync(
             &self,
             account: &AccountId,
             previous: &SettledRowSet,
             record: &TransactionSyncRecord,
-        ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
-            assert_eq!(previous, &self.state);
+        ) -> Result<WriteCompleted, SystemPortError> {
+            std::future::poll_fn(|_context| {
+                let gate = *self.gate.read().expect("gate");
+                match gate {
+                    Gate::Open => Poll::Ready(()),
+                    Gate::Held => Poll::Pending,
+                }
+            })
+            .await;
             if let Some(error) = self.failure {
-                return std::future::ready(Err(error));
+                return Err(error);
             }
-            self.trace
-                .write()
-                .expect("잠금")
-                .records
-                .push((account.clone(), record.clone()));
-            std::future::ready(Ok(WriteCompleted))
+            let mut stored = self.trace.write().map_err(|_error| {
+                SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData)
+            })?;
+            if &self.current_state(&stored) != previous {
+                return Err(SystemPortError::new(
+                    SystemPort::Repository,
+                    SystemFailure::InvalidData,
+                ));
+            }
+            stored.summaries.push((account.clone(), record.summary()));
+            stored.records.push((account.clone(), record.clone()));
+            Ok(WriteCompleted)
         }
     }
     #[derive(Debug)]
@@ -169,11 +247,20 @@ mod tests {
             Ok(())
         }
     }
-    fn execute(
+    fn sync_events(trace: &Arc<RwLock<Trace>>) -> application::EventBus {
+        let mut builder = EventBusBuilder::default();
+        let _subscription = builder.subscribe(
+            [DomainEventKind::TransactionsSyncRecorded].into(),
+            Subscriber(Arc::clone(trace)),
+        );
+        builder.build()
+    }
+    fn execute_scope(
         state: SettledRowSet,
         observation: Result<TransactionRead, PortError>,
         failure: Option<SystemPortError>,
         now: Timestamp,
+        scope: SettlementWindow,
     ) -> (
         Result<DeliveryReport, TransactionSyncError>,
         Arc<RwLock<Trace>>,
@@ -183,29 +270,37 @@ mod tests {
             state,
             failure,
             trace: Arc::clone(&trace),
+            gate: Arc::new(RwLock::new(Gate::Open)),
         };
         let broker = ScriptedBrokerRead::default();
         broker.script_transactions().push(observation);
         let clock = SteppedClock::new(now);
-        let mut builder = EventBusBuilder::default();
-        let _subscription = builder.subscribe(
-            [DomainEventKind::TransactionsSyncRecorded].into(),
-            Subscriber(Arc::clone(&trace)),
-        );
-        let events = builder.build();
+        let events = sync_events(&trace);
         let sync = SyncTransactions {
             broker: &broker,
             repository: &repository,
             clock: &clock,
             events: &events,
         };
-        let result = run(sync.sync_window(&AccountId::new(91), window()));
+        let result = run(sync.sync_window(&AccountId::new(91), scope));
         if result.is_ok() {
+            let latest = run(repository.latest_sync(&AccountId::new(91)))
+                .expect("상세 재조회")
+                .expect("기록");
+            assert_eq!(latest.window, scope);
+            assert_eq!(
+                run(repository.latest(&AccountId::new(91))).expect("기존 재조회"),
+                Some(latest.summary())
+            );
+            assert_eq!(
+                latest,
+                trace.read().expect("잠금").records.last().expect("저장").1
+            );
             assert_eq!(
                 broker.calls(),
                 vec![BrokerReadCall::Transactions(
                     AccountId::new(91),
-                    window(),
+                    scope,
                     TransactionFilter::all()
                 )]
             );
@@ -217,6 +312,17 @@ mod tests {
         }
         (result, trace)
     }
+    fn execute(
+        state: SettledRowSet,
+        observation: Result<TransactionRead, PortError>,
+        failure: Option<SystemPortError>,
+        now: Timestamp,
+    ) -> (
+        Result<DeliveryReport, TransactionSyncError>,
+        Arc<RwLock<Trace>>,
+    ) {
+        execute_scope(state, observation, failure, now, window())
+    }
     #[test]
     fn duplicate_disappearance_preserves_both_boundaries_and_outside_rows() {
         let (result, trace) = execute(initial(), Ok(response(vec![row(3)])), None, at(20));
@@ -225,6 +331,12 @@ mod tests {
         let (account, record) = stored.records.first().expect("저장");
         assert_eq!(account, &AccountId::new(91));
         assert_eq!(record.recorded_at, at(20));
+        assert_eq!(record.window, window());
+        assert_eq!(record.summary().recorded_at(), at(20));
+        assert_eq!(
+            record.summary().outcome(),
+            &domain::SyncOutcome::Complete(record.state.clone())
+        );
         assert_eq!(record.observation, Ok(response(vec![row(3)])));
         assert_eq!(record.state.history_rows().len(), 5);
         let active = record
@@ -242,7 +354,13 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(gone, vec![(row(3), Some(at(20))), (row(16), Some(at(20)))]);
         assert_eq!(
-            record.reconciliation.as_ref().expect("대조").state(),
+            record
+                .reconciliation
+                .as_ref()
+                .expect("대조 성공")
+                .as_ref()
+                .expect("대조")
+                .state(),
             &record.state
         );
     }
@@ -262,18 +380,28 @@ mod tests {
         let record = &stored.records.first().expect("저장").1;
         assert_eq!(record.state, initial());
         assert_eq!(record.observation, Ok(incomplete));
-        assert_eq!(record.reconciliation, None);
+        assert_eq!(
+            record.summary().outcome(),
+            &domain::SyncOutcome::Partial(initial())
+        );
+        assert_eq!(record.reconciliation, Ok(None));
     }
     #[test]
     fn broker_failure_and_access_denial_are_recorded_without_erasing_state() {
         let causes = [
-            PortErrorKind::Unavailable {
-                cause: UnavailableCause::Network,
-                retry: RetryDelay::Unknown,
-            },
-            PortErrorKind::AccessDenied(application::AccessDenial::Forbidden),
+            (
+                PortErrorKind::Unavailable {
+                    cause: UnavailableCause::Network,
+                    retry: RetryDelay::Unknown,
+                },
+                domain::SyncOutcome::Failed,
+            ),
+            (
+                PortErrorKind::AccessDenied(application::AccessDenial::Forbidden),
+                domain::SyncOutcome::AccessBlocked,
+            ),
         ];
-        for cause in causes {
+        for (cause, expected) in causes {
             let error = PortError::new(ReadEndpoint::Transactions, HttpStatus::NotReceived, cause);
             let (result, trace) = execute(initial(), Err(error), None, at(22));
             assert_eq!(result, Ok(DeliveryReport::default()));
@@ -281,7 +409,8 @@ mod tests {
             let record = &stored.records.first().expect("저장").1;
             assert_eq!(record.state, initial());
             assert_eq!(record.observation, Err(error));
-            assert_eq!(record.reconciliation, None);
+            assert_eq!(record.summary().outcome(), &expected);
+            assert_eq!(record.reconciliation, Ok(None));
         }
     }
     #[test]
@@ -294,7 +423,7 @@ mod tests {
         assert_eq!(stored.events, []);
     }
     #[test]
-    fn rejects_wrong_response_account_window_or_filter_without_save_or_event() {
+    fn records_wrong_response_account_window_or_filter_without_changing_state() {
         let observations = [
             complete(
                 AccountId::new(92),
@@ -317,10 +446,15 @@ mod tests {
         ];
         for observation in observations {
             let (result, trace) = execute(initial(), Ok(observation), None, at(24));
-            assert_eq!(result, Err(TransactionSyncError::ResponseScopeMismatch));
+            assert_eq!(result, Ok(DeliveryReport::default()));
             let stored = trace.write().expect("잠금");
-            assert_eq!(stored.records, []);
-            assert_eq!(stored.events, []);
+            let record = &stored.records.first().expect("실패 기록").1;
+            assert_eq!(record.state, initial());
+            assert_eq!(
+                record.reconciliation,
+                Err(TransactionSyncRejection::ResponseScopeMismatch)
+            );
+            assert_eq!(record.summary().outcome(), &domain::SyncOutcome::Failed);
         }
     }
     #[test]
@@ -368,10 +502,15 @@ mod tests {
                 None,
                 at(26),
             );
-            assert_eq!(result, Err(TransactionSyncError::ResponseScopeMismatch));
+            assert_eq!(result, Ok(DeliveryReport::default()));
             let stored = trace.write().expect("잠금");
-            assert_eq!(stored.records, []);
-            assert_eq!(stored.events, []);
+            let record = &stored.records.first().expect("실패 기록").1;
+            assert_eq!(record.state, initial());
+            assert_eq!(
+                record.reconciliation,
+                Err(TransactionSyncRejection::ResponseScopeMismatch)
+            );
+            assert_eq!(record.summary().outcome(), &domain::SyncOutcome::Failed);
         }
     }
     #[test]
@@ -395,8 +534,206 @@ mod tests {
         );
         assert_eq!(record.state.last_synchronized_at(), Some(at(10)));
         assert_eq!(
-            record.reconciliation.as_ref().expect("대조").state(),
+            record
+                .reconciliation
+                .as_ref()
+                .expect("대조 성공")
+                .as_ref()
+                .expect("대조")
+                .state(),
             &record.state
+        );
+    }
+    fn interrupted() -> TransactionRead {
+        TransactionRead::Incomplete(IncompleteTransactions {
+            account: AccountId::new(91),
+            window: window(),
+            filter: TransactionFilter::all(),
+            received: vec![],
+            quarantined: vec![],
+            reason: IncompleteReason::PageInterrupted,
+        })
+    }
+    fn network_error() -> PortError {
+        PortError::new(
+            ReadEndpoint::Transactions,
+            HttpStatus::NotReceived,
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::Network,
+                retry: RetryDelay::Unknown,
+            },
+        )
+    }
+    #[test]
+    fn clock_reversal_rejects_incomplete_and_failed_reads() {
+        for observation in [Ok(interrupted()), Err(network_error())] {
+            let (result, trace) = execute(initial(), observation, None, at(9));
+            assert_eq!(
+                result,
+                Err(TransactionSyncError::Reconciliation(
+                    ReconciliationError::InvalidHistory
+                ))
+            );
+            let stored = trace.read().expect("잠금");
+            assert_eq!(stored.records, []);
+            assert_eq!(stored.events, []);
+        }
+    }
+    #[test]
+    fn disappearance_warning_survives_storage_and_lookup() {
+        let TransactionRead::Complete(received) = response(vec![row(3); 5]) else {
+            panic!("완전 응답")
+        };
+        let state = SettledRowSet::new(AccountId::new(91))
+            .reconcile(&received, at(10))
+            .expect("시작")
+            .state()
+            .clone();
+        let (result, trace) = execute(state, Ok(response(vec![])), None, at(30));
+        assert_eq!(result, Ok(DeliveryReport::default()));
+        let stored = trace.read().expect("잠금");
+        let reconciliation = stored
+            .records
+            .first()
+            .expect("기록")
+            .1
+            .reconciliation
+            .as_ref()
+            .expect("처리")
+            .as_ref()
+            .expect("대조");
+        let domain::DisappearanceWarning::MassDisappearance {
+            missing,
+            scoped_active,
+        } = reconciliation.disappearance_warning()
+        else {
+            panic!("경고")
+        };
+        assert_eq!(*missing.as_usize(), 5);
+        assert_eq!(*scoped_active.as_usize(), 5);
+    }
+    #[test]
+    fn cancellation_notice_survives_storage_and_lookup() {
+        let mut changed = row(2).data().clone();
+        changed.settlement_date = date(8);
+        changed.cancellation = Cancellation::Cancelled;
+        let cancellation = Transaction::try_new(changed).expect("취소");
+        let (result, trace) = execute(
+            initial(),
+            Ok(response(vec![cancellation.clone()])),
+            None,
+            at(31),
+        );
+        assert_eq!(result, Ok(DeliveryReport::default()));
+        let stored_notice = trace.read().expect("잠금");
+        let notices = stored_notice
+            .records
+            .first()
+            .expect("기록")
+            .1
+            .reconciliation
+            .as_ref()
+            .expect("처리")
+            .as_ref()
+            .expect("대조")
+            .notices();
+        let [
+            domain::ReconciliationNotice::UnconfirmedCancellation {
+                cancellation: actual,
+                possible_originals,
+            },
+        ] = notices
+        else {
+            panic!("취소 알림")
+        };
+        assert_eq!(actual, &cancellation);
+        assert_eq!(*possible_originals.as_usize(), 2);
+    }
+    #[test]
+    fn failed_observation_retains_the_requested_window() {
+        let wider = SettlementWindow::try_new(date(1), date(30)).expect("전체 fixture 창");
+        let (_, first_trace) =
+            execute_scope(initial(), Err(network_error()), None, at(32), window());
+        let (_, second_trace) = execute_scope(initial(), Err(network_error()), None, at(32), wider);
+        let first = first_trace
+            .read()
+            .expect("잠금")
+            .records
+            .first()
+            .expect("기록")
+            .1
+            .clone();
+        let second = second_trace
+            .read()
+            .expect("잠금")
+            .records
+            .first()
+            .expect("기록")
+            .1
+            .clone();
+        assert_eq!(first.window, window());
+        assert_eq!(second.window, wider);
+        assert_ne!(first, second);
+        assert_eq!(first.summary().outcome(), &domain::SyncOutcome::Failed);
+    }
+    #[test]
+    fn concurrent_success_is_preserved_when_an_older_failure_finishes_late() {
+        let trace = Arc::new(RwLock::new(Trace::default()));
+        let gate = Arc::new(RwLock::new(Gate::Held));
+        let repository = Repository {
+            state: initial(),
+            failure: None,
+            trace: Arc::clone(&trace),
+            gate: Arc::clone(&gate),
+        };
+        let failing = ScriptedBrokerRead::default();
+        failing.script_transactions().push(Err(network_error()));
+        let succeeding = ScriptedBrokerRead::default();
+        succeeding
+            .script_transactions()
+            .push(Ok(response(vec![row(3)])));
+        let first_clock = SteppedClock::new(at(40));
+        let second_clock = SteppedClock::new(at(41));
+        let events = sync_events(&trace);
+        let first = SyncTransactions {
+            broker: &failing,
+            repository: &repository,
+            clock: &first_clock,
+            events: &events,
+        };
+        let second = SyncTransactions {
+            broker: &succeeding,
+            repository: &repository,
+            clock: &second_clock,
+            events: &events,
+        };
+        let account = AccountId::new(91);
+        let mut pending = std::pin::pin!(first.sync_window(&account, window()));
+        let mut context = Context::from_waker(Waker::noop());
+        assert_eq!(pending.as_mut().poll(&mut context), Poll::Pending);
+        *gate.write().expect("gate") = Gate::Open;
+        assert_eq!(
+            run(second.sync_window(&account, window())),
+            Ok(DeliveryReport::default())
+        );
+        assert_eq!(
+            pending.as_mut().poll(&mut context),
+            Poll::Ready(Err(TransactionSyncError::Repository(SystemPortError::new(
+                SystemPort::Repository,
+                SystemFailure::InvalidData
+            ))))
+        );
+        let latest = run(repository.latest_sync(&account))
+            .expect("조회")
+            .expect("기록");
+        assert_eq!(latest.recorded_at, at(41));
+        assert_eq!(run(repository.state(&account)), Ok(latest.state.clone()));
+        assert_eq!(run(repository.latest(&account)), Ok(Some(latest.summary())));
+        let stored = trace.read().expect("잠금");
+        assert_eq!(stored.records.len(), 1);
+        assert_eq!(
+            stored.events,
+            vec![DomainEvent::TransactionsSyncRecorded(account.clone())]
         );
     }
 }

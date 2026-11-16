@@ -320,5 +320,6 @@ pub use self_check::{
 };
 mod sync_transactions;
 pub use sync_transactions::{
-    SyncTransactions, TransactionSyncError, TransactionSyncRecord, TransactionSyncRepository,
+    SyncTransactions, TransactionSyncError, TransactionSyncRecord, TransactionSyncRejection,
+    TransactionSyncRepository,
 };
