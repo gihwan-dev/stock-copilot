@@ -1,6 +1,10 @@
-use src_tauri::build_app;
+use src_tauri::{build_app, run_app};
+use src_tauri::{
+    database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
+};
+use std::sync::Arc;
 
-fn main() -> Result<(), tauri::Error> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[expect(
         clippy::disallowed_macros,
         reason = "tauri::generate_context! expands to include_bytes! and env!"
@@ -14,9 +18,47 @@ fn main() -> Result<(), tauri::Error> {
         reason = "tauri::generate_context! expands to std::collections::HashMap"
     )]
     let context = tauri::generate_context!();
-    let app = build_app(tauri::Builder::default(), context)?;
-    app.run(|_, _| {});
+    let clock = platform_macos::SystemClock::new()
+        .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let shared_clock = Arc::new(clock);
+    let ports = Ports::<ProductPorts> {
+        broker_read: Arc::new(Unavailable),
+        market_info: Arc::new(Unavailable),
+        macro_series: Arc::new(Unavailable),
+        fundamentals: Arc::new(Unavailable),
+        ai_provider: Arc::new(Unavailable),
+        portfolios: Arc::new(Unavailable),
+        transactions: Arc::new(Unavailable),
+        market_data: Arc::new(Unavailable),
+        news: Arc::new(Unavailable),
+        theses: Arc::new(Unavailable),
+        estimates: Arc::new(Unavailable),
+        signals: Arc::new(Unavailable),
+        proposals: Arc::new(Unavailable),
+        valuations: Arc::new(Unavailable),
+        settings: Arc::new(Unavailable),
+        audit: Arc::new(Unavailable),
+        secrets: Arc::new(Unavailable),
+        notifier: Arc::new(Unavailable),
+        news_feeds: Vec::new(),
+        clock: Arc::clone(&shared_clock),
+        presence: Arc::new(platform_macos::UnavailablePresence),
+        events: application::EventBusBuilder::default().build(),
+        saved_accounts: Vec::new(),
+        database: Arc::new(database_factory(shared_clock)),
+    };
+    run_app(
+        build_app(tauri::Builder::default(), ports, context)?,
+        |handle, code| handle.exit(code.as_i32()),
+    );
     Ok(())
+}
+
+fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {
+    DatabaseFactory(Box::new(move |path, key| {
+        src_tauri::database::prepare_directory(&path)?;
+        store_sqlite::Database::open(&path, &key, clock.as_ref())
+    }))
 }
 
 #[cfg(test)]
@@ -45,5 +87,43 @@ mod tests {
         )
         .expect("product configuration");
         assert_eq!(format!("{client:?}"), "TossHttpClient(<redacted>)");
+    }
+
+    #[test]
+    fn configured_database_is_opened_and_explicitly_closed_after_refresh_cleanup() {
+        use src_tauri::database::{DatabaseStatus, open_database};
+        use src_tauri::lifecycle::Lifecycle;
+        use std::sync::Arc;
+        use testkit_ports::{memory::MemoryReply, system_fakes::MemorySecretStore};
+        let directory = std::path::PathBuf::from("../../../target/U-01")
+            .join(format!("database-lifecycle-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("테스트 폴더");
+        let path = store_sqlite::DatabasePath::new(directory.join("nested").join("store.db"));
+        let secrets = MemorySecretStore::default();
+        secrets.script_load().push(MemoryReply::Return(Ok(Some(
+            application::SecretValue::new(vec![83; 32]),
+        ))));
+        let clock = Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ));
+        let factory = Arc::new(super::database_factory(clock));
+        tauri::async_runtime::block_on(async {
+            let state = open_database(&secrets, factory, || Ok(path)).await;
+            assert_eq!(state.status(), DatabaseStatus::Ready);
+            let lifecycle =
+                Lifecycle::new(tauri::async_runtime::spawn(std::future::pending()), state);
+            lifecycle.shutdown().await;
+            let guard = lifecycle.outcome().lock().await;
+            match &guard.as_ref().expect("종료 결과").database {
+                Ok(src_tauri::lifecycle::DatabaseClosure::Closed(_receipt)) => {}
+                Ok(src_tauri::lifecycle::DatabaseClosure::NotOpened) => {
+                    panic!("열린 DB의 명시적 종료 증거 필요")
+                }
+                Err(error) => panic!("종료 실패: {error:?}"),
+            }
+        });
+        std::fs::remove_dir_all(directory).expect("테스트 정리");
     }
 }
