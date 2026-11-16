@@ -1,5 +1,17 @@
 #[cfg(test)]
 mod tests {
+    struct FixedClock;
+    impl application::Clock for FixedClock {
+        fn now(&self) -> domain::Timestamp {
+            domain::Timestamp::from_parts(
+                domain::UnixSeconds::new(1_723_456_789),
+                domain::Nanosecond::new(0),
+                domain::OffsetSeconds::new(0),
+            )
+            .expect("fixed timestamp")
+        }
+    }
+
     #[test]
     fn secret_debug_contract() {
         use application::{SecretValue, SystemFailure, SystemPort, SystemPortError};
@@ -8,13 +20,15 @@ mod tests {
         let path = std::path::PathBuf::from("target/S-01/secret-debug-cargo.db");
         let key = SecretValue::new((1..=32).collect());
         {
-            let database = Database::open(&DatabasePath::new(path.clone()), &key).expect("open");
+            let database =
+                Database::open(&DatabasePath::new(path.clone()), &key, &FixedClock).expect("open");
             assert_eq!(format!("{database:?}"), "Database(<redacted>)");
             assert_eq!(format!("{database:#?}"), "Database(<redacted>)");
         }
         let error = Database::open(
             &DatabasePath::new(path.clone()),
             &SecretValue::new(vec![99; 32]),
+            &FixedClock,
         )
         .expect_err("wrong key");
         assert_eq!(

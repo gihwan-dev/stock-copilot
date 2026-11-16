@@ -45,6 +45,8 @@ if (process.platform === "darwin") {
     "--extern",
     `application=${library("application")}`,
     "--extern",
+    `domain=${library("domain")}`,
+    "--extern",
     `store_sqlite=${library("store_sqlite")}`,
     "-L",
     "dependency=target/debug/deps",
