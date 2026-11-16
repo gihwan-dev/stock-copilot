@@ -332,3 +332,8 @@ pub use market_overview::{
     GetMarketOverview, MarketOverview, OverviewData, OverviewEntry, OverviewError,
     OverviewFreshness, OverviewObservation, OverviewRequest,
 };
+
+mod portfolio_views;
+pub use portfolio_views::{
+    GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
+};
