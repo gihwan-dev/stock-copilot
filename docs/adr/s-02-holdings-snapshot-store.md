@@ -6,9 +6,9 @@
 
 기준은 730e4069f9327da8e7884c845069130d542066f7이다. 다음 번호 0002_holdings_snapshots.sql 하나를 추가한다. 두 STRICT 테이블에 계좌·시각 헤더와 순서가 있는 보유 관측을 나눠 저장한다. 금액과 수량은 TEXT 정규 십진수 CHECK, 금액은 KRW/USD 통화와 함께 보존한다. 모든 읽기는 domain 숫자·심볼·시각·보고 값 생성자로 재검증한다. SQL 및 오류에는 계좌 본문이나 비밀을 담지 않는다.
 
-HoldingsStore는 Database를 소유하는 구체 어댑터다. PortfolioRepository는 이미 application에 있으므로 새 trait를 만들지 않는다. SnapshotHolding은 보유 관측 필드다. DB만으로 마스터 조회 권한을 나타내는 ResolvedOrderInstrument를 만들지 않는다. 이 관측을 현재 마스터와 결합해 Portfolio로 복원하는 일은 A-06 연결 작업에 넘긴다. 현금과 계좌 전체 평가 기록은 이 보유 저장소의 범위 밖이다. 외부 의존 추가는 없다.
+HoldingsStore는 조립 루트의 Database를 빌리는 구체 어댑터다. 여러 저장소가 같은 Database를 빌려 전용 쓰기 스레드 하나를 공유한다. 저장소 사용이 끝나면 조립 루트가 Database::close(self)를 호출해 종료 결과를 받는다. PortfolioRepository는 이미 application에 있으므로 새 trait를 만들지 않는다. SnapshotHolding은 보유 관측 필드다. DB만으로 마스터 조회 권한을 나타내는 ResolvedOrderInstrument를 만들지 않는다. 이 관측을 현재 마스터와 결합해 Portfolio로 복원하는 일은 A-06 연결 작업에 넘긴다. 현금과 계좌 전체 평가 기록은 이 보유 저장소의 범위 밖이다. 외부 의존 추가는 없다.
 
-계좌·UTC 초·나노초가 동일하면 같은 스냅샷이다. 동일 본문 재시도는 성공하고 다른 본문은 RepositoryIntegrity로 닫는다. 삽입과 모든 자식 행은 한 트랜잭션이다. 빈 보유도 헤더를 남긴다. 잘못된 통화 조합과 중복 종목은 실패한다.
+계좌·UTC 초·나노초가 동일하면 같은 스냅샷이다. domain의 동등성에 따라 동일한 순간과 수치인 본문 재시도는 성공하고 다른 본문은 RepositoryIntegrity로 닫는다. 재시도는 최초 저장된 오프셋과 십진수 scale 표현을 바꾸지 않는다. 최초 관측의 표현은 별도 왕복·실제 TEXT 단언으로 보존한다. 삽입과 모든 자식 행은 한 트랜잭션이다. 빈 보유도 헤더를 남긴다. 잘못된 통화 조합과 중복 종목은 실패한다.
 
 | 현재 KST 날짜와 자료 KST 날짜의 차 | 보존 |
 |---|---|
@@ -38,6 +38,7 @@ architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으�
 
 | 파일 | 테스트 | 전 → 후 |
 |---|---|---|
+| src/migration_tests.rs | corrupt_ledger_and_future_database_fail_open | 두 원장 행에서 UNIQUE 충돌 없는 BAD_NAME·GAP·FUTURE 준비 값; 실패 단언 유지 |
 | src/migration_tests.rs | fresh_open_records_clock_and_reopen_preserves_ledger | 원장 개수 1 → 2 |
 | src/review_tests.rs | embedded_sequence_gap_rolls_back_pending_schema | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
 | src/review_tests.rs | snapshot_contains_index_view_trigger_and_tables | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
@@ -84,3 +85,9 @@ architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으�
 | 21 | item.quantity.as_decimal().to_string() -> item.acquisition_price.money().amount().as_decimal().to_string() | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 22 | report_value.profit().amount() -> report_value.valuation().amount() | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
 | 23 | daily_value.rate().as_decimal() -> Ratio::parse(&NumericInput::try_new("0").expect("input")).expect("rate").as_decimal() |  | 컴파일불가 |
+
+## 1차 리뷰 수정
+
+DB 소유권은 조립 루트에 두고 저장소가 공유 차용한다. 외부 공개 API의 명시적 종료 회귀, 원시 TEXT와 offset 보존 단언, 나노초 역순 삽입·자료 KST 자정 경계, 다른 계좌의 손상 격리 회귀를 추가했다. 조회 SQL은 계좌 조건으로 먼저 거른다. ADR의 승인 목록 누락1행을 보충했다. 저장소가 주문용 종목 권한 타입을 복원하거나 PortfolioRepository를 새로 정의하지 않는 범위는 사용자 지시대로 유지한다. 서명 옵션과 ADR 초안 이름도 사용자 지정 그대로다.
+
+1차 수정 후 검사는 crate81/81·clippy 통과, 전체1669/1669(속성4096·동시실행4), 커버리지1059/1059·위반 없음이다. 정상 훅의 기존 Git 훅 회귀2건 실패와 재실행 경위는 리뷰 기록에 구분했다. test-diff는 기존 승인16건이며 신규 승인 대상은 추가되지 않았다. 수정 소스의 손 변형도 유효22개 전부 재검출, 전후 대조군은11개 통과했다. 조립 루트는 공유 차용한 저장소들의 사용이 끝난 뒤 원래 Database::close를 호출한다.

@@ -178,12 +178,12 @@ fn save_item(
     Ok(())
 }
 #[derive(Debug)]
-pub struct HoldingsStore {
-    pub(crate) database: Database,
+pub struct HoldingsStore<'database> {
+    pub(crate) database: &'database Database,
 }
-impl HoldingsStore {
+impl<'database> HoldingsStore<'database> {
     #[must_use]
-    pub const fn new(database: Database) -> Self {
+    pub const fn new(database: &'database Database) -> Self {
         Self { database }
     }
     pub async fn record_holdings(
@@ -231,12 +231,11 @@ impl HoldingsStore {
         self.database
             .read(move |connection| {
                 let headers = connection
-                    .prepare(sql::HEADERS)?
-                    .query_map([], header)?
+                    .prepare(sql::ACCOUNT_HEADERS)?
+                    .query_map([account.as_i64()], header)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 headers
                     .iter()
-                    .filter(|entry| entry.account == account)
                     .map(|entry| load(connection, entry))
                     .collect()
             })

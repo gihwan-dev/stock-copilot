@@ -6,3 +6,6 @@ pub(crate) const GAP: &str = "UPDATE migration_ledger SET number = 3 WHERE numbe
 pub(crate) const FUTURE: &str = "PRAGMA user_version = 3";
 
 pub(crate) const BAD_NAME: &str = "UPDATE migration_ledger SET name = 'wrong.sql' WHERE number = 1";
+pub(crate) const STORED_TEXT: &str = "SELECT quantity, acquisition_price, current_price, valuation, profit, return_rate, daily_profit, daily_rate FROM snapshot_holdings";
+pub(crate) const OTHER_CORRUPT: &str =
+    "INSERT INTO holdings_snapshots(account, seconds, nanos, offset) VALUES (2, 1728572400, 0, 1)";

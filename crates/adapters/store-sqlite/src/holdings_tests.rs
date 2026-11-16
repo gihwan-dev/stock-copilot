@@ -72,7 +72,7 @@ fn round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent() {
     let expected = snapshot(0, 123, 11);
     {
         let database = Database::open(&path, &key(), &clock()).expect("열기");
-        let db = HoldingsStore::new(database);
+        let db = HoldingsStore::new(&database);
         rt.block_on(db.record_holdings(expected.clone()))
             .expect("저장");
         rt.block_on(db.record_holdings(expected.clone()))
@@ -92,7 +92,7 @@ fn round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent() {
         );
     };
     let database = Database::open(&path, &key(), &clock()).expect("다시 열기");
-    let db = HoldingsStore::new(database);
+    let db = HoldingsStore::new(&database);
     assert_eq!(
         rt.block_on(db.holdings_history(AccountId::new(11)))
             .expect("조회"),
@@ -105,7 +105,7 @@ fn empty_and_optional_observations_round_trip() {
     let rt = runtime();
     let database =
         Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
-    let db = HoldingsStore::new(database);
+    let db = HoldingsStore::new(&database);
     let mut first = snapshot(0, 0, 1);
     for holding in &mut first.holdings {
         holding.current_price = None;
@@ -132,7 +132,7 @@ fn compaction_uses_kst_dates_29_30_31_and_last_per_account() {
     let rt = runtime();
     let database =
         Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
-    let db = HoldingsStore::new(database);
+    let db = HoldingsStore::new(&database);
     for account in [1, 2] {
         for day in [0, 1, 2] {
             for second in [1, 3600] {
@@ -179,7 +179,7 @@ fn corruption_is_rejected_by_domain_and_decimal_constraint() {
     let rt = runtime();
     let database =
         Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
-    let db = HoldingsStore::new(database);
+    let db = HoldingsStore::new(&database);
     rt.block_on(db.record_holdings(snapshot(0, 0, 1)))
         .expect("저장");
     rt.block_on(
@@ -205,7 +205,7 @@ fn failed_compaction_rolls_back_prior_deletes_and_children() {
     let rt = runtime();
     let database =
         Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
-    let db = HoldingsStore::new(database);
+    let db = HoldingsStore::new(&database);
     let originals = vec![snapshot(0, 1, 1), snapshot(0, 2, 1), snapshot(0, 3, 1)];
     for value in &originals {
         rt.block_on(db.record_holdings(value.clone()))
@@ -230,7 +230,7 @@ fn failed_snapshot_insert_rolls_back_header_and_previous_items() {
     let rt = runtime();
     let database =
         Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
-    let db = HoldingsStore::new(database);
+    let db = HoldingsStore::new(&database);
     let mut duplicate = snapshot(0, 0, 1);
     duplicate.holdings.push(duplicate.holdings[0].clone());
     rt.block_on(db.record_holdings(duplicate))
@@ -246,6 +246,7 @@ fn sql_constants_prepare_on_migrated_database() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("메모리");
     crate::migration::run(&mut connection, at(0, 0)).expect("마이그레이션");
     for sql in [
+        crate::sql::holdings::ACCOUNT_HEADERS,
         crate::sql::tests::FUTURE,
         crate::sql::holdings::INSERT,
         crate::sql::holdings::HEADERS,
@@ -256,4 +257,172 @@ fn sql_constants_prepare_on_migrated_database() {
     ] {
         connection.prepare(sql).expect("준비");
     }
+}
+
+#[test]
+fn shared_database_remains_owned_by_caller_for_explicit_close() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    let first = HoldingsStore::new(&database);
+    let second = HoldingsStore::new(&database);
+    let expected = snapshot(0, 0, 1);
+    rt.block_on(first.record_holdings(expected.clone()))
+        .expect("저장");
+    assert_eq!(
+        rt.block_on(second.holdings_history(AccountId::new(1)))
+            .expect("공유"),
+        vec![expected]
+    );
+    rt.block_on(database.close()).expect("명시적 종료");
+}
+
+#[test]
+fn stored_text_scale_and_offsets_survive_round_trip_and_semantic_retry() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    let store = HoldingsStore::new(&database);
+    let mut expected = snapshot(0, 123, 1);
+    expected.holdings.truncate(1);
+    expected.holdings[0].quantity = Quantity::parse(&number("1.500")).expect("수량");
+    expected.holdings[0].acquisition_price =
+        AcquisitionPrice::try_new(money("23.4567890", Currency::Krw)).expect("취득가");
+    rt.block_on(store.record_holdings(expected.clone()))
+        .expect("저장");
+    let mut retry = expected.clone();
+    retry.observed_at = Timestamp::from_parts(
+        retry.observed_at.utc_seconds(),
+        retry.observed_at.nanosecond(),
+        OffsetSeconds::new(0),
+    )
+    .expect("동일 순간");
+    retry.holdings[0].quantity = Quantity::parse(&number("1.5")).expect("동일 수량");
+    rt.block_on(store.record_holdings(retry))
+        .expect("의미상 동일 재시도");
+    let loaded = rt
+        .block_on(store.holdings_history(AccountId::new(1)))
+        .expect("읽기");
+    assert_eq!(
+        loaded[0].observed_at.offset_seconds(),
+        OffsetSeconds::new(-18000)
+    );
+    assert_eq!(
+        loaded[0].holdings[0].observed_at.offset_seconds(),
+        OffsetSeconds::new(-18000)
+    );
+    assert_eq!(
+        loaded[0].holdings[0].quantity.as_decimal().to_string(),
+        "1.500"
+    );
+    assert_eq!(
+        loaded[0].holdings[0]
+            .acquisition_price
+            .money()
+            .amount()
+            .as_decimal()
+            .to_string(),
+        "23.4567890"
+    );
+    assert_stored_text(&database);
+}
+
+#[test]
+fn same_second_keeps_largest_nanos_and_kst_midnight_splits_source_days() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    let store = HoldingsStore::new(&database);
+    let mut early = snapshot(0, 86399, 1);
+    early.observed_at = Timestamp::from_parts(
+        early.observed_at.utc_seconds(),
+        Nanosecond::new(17),
+        OffsetSeconds::new(-18000),
+    )
+    .expect("이른 나노초");
+    let mut late = early.clone();
+    late.observed_at = Timestamp::from_parts(
+        late.observed_at.utc_seconds(),
+        Nanosecond::new(18),
+        OffsetSeconds::new(0),
+    )
+    .expect("늦은 나노초");
+    let next_day = snapshot(1, 0, 1);
+    for value in [&late, &next_day, &early] {
+        rt.block_on(store.record_holdings(value.clone()))
+            .expect("역순 저장");
+    }
+    rt.block_on(store.compact_holdings(&Fixed(at(32, 0))))
+        .expect("축소");
+    let loaded = rt
+        .block_on(store.holdings_history(AccountId::new(1)))
+        .expect("조회");
+    assert_eq!(loaded, vec![late, next_day]);
+    assert_eq!(loaded[0].observed_at.nanosecond(), Nanosecond::new(18));
+}
+
+#[test]
+fn unrelated_corrupt_header_does_not_block_account_history() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    let store = HoldingsStore::new(&database);
+    let expected = snapshot(0, 0, 1);
+    rt.block_on(store.record_holdings(expected.clone()))
+        .expect("정상 계좌");
+    rt.block_on(
+        database.write(|transaction| {
+            transaction.execute(crate::sql::holdings_tests::OTHER_CORRUPT, [])
+        }),
+    )
+    .expect("다른 계좌 손상");
+    assert_eq!(
+        rt.block_on(store.holdings_history(AccountId::new(1)))
+            .expect("정상 계좌 조회"),
+        vec![expected]
+    );
+    assert_eq!(
+        rt.block_on(store.holdings_history(AccountId::new(2)))
+            .expect_err("손상 계좌 거부")
+            .failure(),
+        application::SystemFailure::RepositoryIntegrity
+    );
+}
+
+fn assert_stored_text(database: &Database) {
+    runtime()
+        .block_on(database.read(|connection| {
+            let texts =
+                connection.query_row(crate::sql::holdings_tests::STORED_TEXT, [], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                        row.get::<_, String>(7)?,
+                    ))
+                })?;
+            assert_eq!(
+                texts,
+                (
+                    "1.500".to_owned(),
+                    "23.4567890".to_owned(),
+                    "34.567891".to_owned(),
+                    "45.678912".to_owned(),
+                    "-56.789123".to_owned(),
+                    "-0.678912".to_owned(),
+                    "-78.912345".to_owned(),
+                    "-0.891234".to_owned()
+                )
+            );
+            Ok(())
+        }))
+        .expect("실제 TEXT");
 }

@@ -6,3 +6,5 @@ pub(crate) const FIND: &str = "SELECT id, account, seconds, nanos, offset FROM h
 pub(crate) const ITEMS: &str = "SELECT symbol, currency, quantity, acquisition_price, current_price, valuation, profit, return_rate, daily_profit, daily_rate, seconds, nanos, offset FROM snapshot_holdings WHERE snapshot = ?1 ORDER BY position";
 pub(crate) const INSERT_ITEM: &str = "INSERT INTO snapshot_holdings(snapshot, position, symbol, currency, quantity, acquisition_price, current_price, valuation, profit, return_rate, daily_profit, daily_rate, seconds, nanos, offset) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)";
 pub(crate) const DELETE: &str = "DELETE FROM holdings_snapshots WHERE id = ?1";
+
+pub(crate) const ACCOUNT_HEADERS: &str = "SELECT id, account, seconds, nanos, offset FROM holdings_snapshots WHERE account = ?1 ORDER BY seconds, nanos";
