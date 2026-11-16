@@ -838,4 +838,45 @@ mod tests {
         assert_eq!(record.observation(), &Ok(response(vec![row(8)])));
         assert_eq!(record.summary().outcome(), &domain::SyncOutcome::Failed);
     }
+    #[test]
+    fn consecutive_observations_at_the_same_clock_instant_are_accepted() {
+        let trace = Arc::new(RwLock::new(Trace::default()));
+        let repository = Repository {
+            state: initial(),
+            failure: None,
+            trace: Arc::clone(&trace),
+            gate: Arc::new(RwLock::new(Gate::Open)),
+        };
+        let broker = ScriptedBrokerRead::default();
+        broker.script_transactions().push(Err(network_error()));
+        broker
+            .script_transactions()
+            .push(Ok(response(vec![row(3)])));
+        broker.script_transactions().push(Ok(interrupted()));
+        let events = sync_events(&trace);
+        let clock = SteppedClock::new(at(60));
+        let sync = SyncTransactions {
+            broker: &broker,
+            repository: &repository,
+            clock: &clock,
+            events: &events,
+        };
+        for _ in 0_usize..3_usize {
+            assert_eq!(
+                run(sync.sync_window(&AccountId::new(91), window())),
+                Ok(DeliveryReport::default())
+            );
+        }
+        let latest = run(repository.latest_sync(&AccountId::new(91)))
+            .expect("조회")
+            .expect("기록");
+        assert_eq!(latest.recorded_at(), at(60));
+        assert_eq!(latest.state().last_synchronized_at(), Some(at(60)));
+        let stored = trace.read().expect("잠금");
+        assert_eq!(stored.records.len(), 3);
+        assert_eq!(
+            stored.events,
+            vec![DomainEvent::TransactionsSyncRecorded(AccountId::new(91)); 3]
+        );
+    }
 }
