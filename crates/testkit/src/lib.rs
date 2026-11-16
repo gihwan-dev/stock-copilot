@@ -66,3 +66,6 @@ pub use http_server::{
 pub fn test_executable() -> std::io::Result<std::path::PathBuf> {
     std::env::current_exe()
 }
+pub use http_server::{ServeSequence, serve_sequence};
+mod fixed_clock;
+pub use fixed_clock::{FixedClock, fixed_clock};

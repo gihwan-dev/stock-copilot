@@ -115,3 +115,35 @@ impl ConnectionProbe {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct ServeSequence {
+    port: u16,
+    task: JoinHandle<io::Result<Vec<Vec<u8>>>>,
+}
+pub fn serve_sequence(responses: Vec<Vec<u8>>) -> io::Result<ServeSequence> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let task = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for response in responses {
+            let (mut stream, _) = listener.accept()?;
+            stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+            requests.push(read_request(&mut stream)?);
+            stream.write_all(&response)?;
+        }
+        Ok(requests)
+    });
+    Ok(ServeSequence { port, task })
+}
+impl ServeSequence {
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+    pub fn finish(self) -> io::Result<Vec<Vec<u8>>> {
+        self.task
+            .join()
+            .map_err(|_error| io::Error::from(io::ErrorKind::Other))?
+    }
+}

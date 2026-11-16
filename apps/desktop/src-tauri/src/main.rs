@@ -34,7 +34,12 @@ mod tests {
             format!("{endpoint:?}"),
             format!("TossEndpoint {{ origin: {expected_origin:?}, mode: Production }}")
         );
-        let client = broker_toss::TossHttpClient::new(&endpoint).expect("product configuration");
+        let client = broker_toss::TossHttpClient::new(
+            &endpoint,
+            std::sync::Arc::new(testkit::fixed_clock().expect("clock")),
+            std::sync::Arc::new(broker_toss::TokioRequestWait),
+        )
+        .expect("product configuration");
         assert_eq!(format!("{client:?}"), "TossHttpClient(<redacted>)");
     }
 }
