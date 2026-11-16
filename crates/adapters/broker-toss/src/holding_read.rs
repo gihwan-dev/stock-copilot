@@ -111,10 +111,11 @@ pub(crate) fn holdings(
     master: &MasterInstrumentFacts,
     observed: Timestamp,
 ) -> Conversion<HoldingsObservation> {
-    let _decoded: broker_toss_schema::types::HoldingsOverview =
+    let decoded: broker_toss_schema::types::HoldingsOverview =
         serde_json::from_value(value.clone())
             .map_err(|_error| invalid(ReadEndpoint::Holdings, ResponseMismatch::Schema))?;
-    validate_numbers(value)?;
+    let modeled = serde_json::to_value(decoded).map_err(|_error| failure())?;
+    validate_numbers(&modeled)?;
     let rows = field(value, "/items")?.as_array().ok_or_else(failure)?;
     let mut seen = std::collections::BTreeSet::new();
     let holdings = rows

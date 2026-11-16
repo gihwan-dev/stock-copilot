@@ -86,11 +86,12 @@ mod tests {
         }
     }
     fn recording(name: &str) -> Value {
-        let directory = if name == "accounts-empty" {
-            "account_recordings"
-        } else {
-            "recordings"
-        };
+        let directory =
+            if name == "accounts-empty" || name.ends_with("-401") || name.ends_with("-429") {
+                "account_recordings"
+            } else {
+                "recordings"
+            };
         serde_json::from_str(
             &std::fs::read_to_string(format!("tests/{directory}/t05-{name}.json"))
                 .expect("recording"),
@@ -168,7 +169,16 @@ mod tests {
     }
     #[test]
     fn all_account_recordings_match_the_current_spec() {
-        for name in ["accounts", "accounts-empty", "holdings", "holdings-empty"] {
+        for name in [
+            "accounts",
+            "accounts-empty",
+            "holdings",
+            "holdings-empty",
+            "accounts-401",
+            "accounts-429",
+            "holdings-401",
+            "holdings-429",
+        ] {
             crate::support_tests::validation::validate_recording(
                 &crate::support_tests::spec(),
                 &recording(name),
@@ -280,7 +290,6 @@ mod tests {
     #[test]
     fn malformed_fields_fail_the_whole_response() {
         for (name, pointer, replacement) in [
-            ("accounts", "/result/0/accountType", json!("FUTURE")),
             ("accounts", "/result/0/accountSeq", Value::Null),
             ("accounts", "/result/0/accountNo", json!("bad")),
             ("holdings", "/result/items/0/currency", json!("EUR")),
@@ -332,22 +341,36 @@ mod tests {
                 issued(),
                 response(
                     "401 Unauthorized",
-                    &json!({"error":{"code":"token-revoked"}}),
+                    &recording(&format!("{name}-401"))["body"],
                 ),
                 issued(),
                 response(
                     "429 Too Many Requests",
-                    &json!({"error":{"code":"too-many-requests"}}),
+                    &recording(&format!("{name}-429"))["body"],
                 ),
                 response("200 OK", &recording(name)["body"]),
             ])
             .expect("server");
             let reader = adapter(&server);
-            if name == "accounts" {
-                run(reader.accounts()).expect("accounts");
+            let observed = if name == "accounts" {
+                run(reader.accounts()).expect("accounts").rows()[0].observed_at()
             } else {
-                run(reader.holdings(&AccountId::new(413))).expect("holdings");
-            }
+                run(reader.holdings(&AccountId::new(413)))
+                    .expect("holdings")
+                    .reported()
+                    .observed_at()
+            };
+            let earliest = crate::support::time()
+                .now()
+                .checked_add(
+                    domain::TimeSpan::try_new(
+                        domain::SpanSeconds::new(2),
+                        domain::Nanosecond::new(0),
+                    )
+                    .expect("delay"),
+                )
+                .expect("time");
+            assert!(observed >= earliest);
             let requests = String::from_utf8(server.finish().expect("finish")).expect("requests");
             assert_eq!(requests.matches("POST /oauth2/token ").count(), 2);
             assert_eq!(requests.matches("GET /api/v1/").count(), 3);
@@ -509,6 +532,45 @@ mod tests {
         } else {
             run(reader.holdings(&AccountId::new(413))).expect_err("invalid");
         }
+    }
+    #[test]
+    fn unknown_account_kind_is_preserved_without_hiding_brokerage() {
+        let mut body = recording("accounts")["body"].clone();
+        body["result"]
+            .as_array_mut()
+            .expect("rows")
+            .push(json!({"accountSeq":-19_i64,"accountNo":"00000000421","accountType":"NEW_KIND"}));
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let rows = run(adapter(&server).accounts()).expect("unknown retained");
+        assert_eq!(rows.rows().len(), 2);
+        assert_eq!(rows.rows()[1].account(), &AccountId::new(-19));
+        assert_eq!(rows.rows()[1].kind().as_code().as_str(), "NEW_KIND");
+        assert_eq!(
+            domain::select_brokerage_account(&rows),
+            domain::BrokerAccountSelection::Selected(&rows.rows()[0])
+        );
+        assert_eq!(
+            domain::select_brokerage_account_by_id(&rows, &AccountId::new(-19)),
+            domain::BrokerAccountKeySelection::NotBrokerage
+        );
+        server.finish().expect("finish");
+    }
+    #[test]
+    fn additional_response_fields_do_not_change_known_holdings() {
+        let mut body = recording("holdings")["body"].clone();
+        body["result"]["newSummary"] = json!({"message":"추가 정보", "available":true});
+        body["result"]["items"][0]["exchange"] = json!("NASDAQ");
+        body["result"]["items"][0]["isEtf"] = json!(true);
+        body["result"]["items"][0]["cost"]["newField"] = json!("미사용");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let result = run(adapter(&server).holdings(&AccountId::new(413)))
+            .expect("additional fields ignored");
+        assert_eq!(result.holdings().len(), 2);
+        check_rows(&result);
+        check_summary(&result);
+        server.finish().expect("finish");
     }
     fn check_rows(result: &application::HoldingsObservation) {
         for (row, expected) in result.holdings().iter().zip([

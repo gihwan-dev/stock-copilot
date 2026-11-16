@@ -4,13 +4,13 @@
 
 ## 결정
 
-기존 TokenManager.get만 호출하는 TossAccountRead를 둔다. 동일한 TossHttpClient의 T-03 제한기를 사용하며 별도 HTTP 전송 경로는 만들지 않는다. 계좌는 BrokerAccountRow::from_broker_account_result와 BrokerAccountRows::try_new를 통해 서버 순서, 유형, 관측 시각, 마스킹된 표시를 결합한다. 중복 계좌와 미지 유형은 전체 오류다. 실제 자료와 실제 API를 사용하지 않는다.
+기존 TokenManager.get만 호출하는 TossAccountRead를 둔다. 동일한 TossHttpClient의 T-03 제한기를 사용하며 별도 HTTP 전송 경로는 만들지 않는다. 계좌는 BrokerAccountRow::from_broker_account_result와 BrokerAccountRows::try_new를 통해 서버 순서, 유형, 관측 시각, 마스킹된 표시를 결합한다. 중복 계좌는 전체 오류다. 미지 유형은 ADR 0061대로 원문을 Unknown으로 보존하며 자동·명시 선택 단계에서만 거부한다. 실제 자료와 실제 API를 사용하지 않는다.
 
 보유 변환에는 기존 MasterInstrumentFacts를 생성자에서 주입한다. 보유 응답의 국가·심볼·통화가 같은 마스터를 찾고 매도 방향의 게이트로 ResolvedOrderInstrument를 얻는다. 보유 응답에 없는 상장시장·상장상태·종목유형·정지상태·안정적 내부 ID는 발명하지 않는다. 누락·불일치·게이트 거부가 하나라도 있으면 조회 전체를 InvalidResponse(Validation)로 닫는다. 일부 행을 버리거나 0원·빈 보유로 바꾸지 않는다. 이 방식은 기존 포트 변경을 요구하지 않는다.
 
 상장폐지·KRX 거래정지·미지 유형은 현재 공개 생성 경로가 거부한다. 정리매매는 매도 방향 식별이 허용되는 경우 보유 조회가 가능하다. 기존 주문 봉인은 유지한다. 부분 성공 보존이나 거래 불가 종목의 성공 반환은 별도 domain 설계가 필요하다. BrokerCapabilities는 현재 구현하지 않은 선택 기능을 모두 Unsupported로 선언한다. 후속 읽기 메서드는 HTTP를 보내지 않고 명시적 미지원 오류를 반환한다.
 
-금액과 수량은 domain NumericInput과 Money/Price/Quantity/Ratio 생성자에서만 읽는다. 부동소수 변환과 어댑터 계산은 없다. 개별 행의 currency 및 요약의 krw/usd 키를 통화 근거로 사용한다. 요약 usd null은 부재로 보존한다. 필수 필드 누락·통화 부재·미지 국가/통화·정밀도 손실·중복 종목은 실패한다. 생성 타입 역직렬화 뒤 보존하지 않는 비용·세후 수치도 정확한 십진수인지 검증한다. 기존 ReportedHolding/ReportedPortfolio가 표현하는 세전 amount와 rate만 반환하며 비용·세후 값의 새 domain 필드는 만들지 않는다.
+금액과 수량은 domain NumericInput과 Money/Price/Quantity/Ratio 생성자에서만 읽는다. 부동소수 변환과 어댑터 계산은 없다. 개별 행의 currency 및 요약의 krw/usd 키를 통화 근거로 사용한다. 요약 usd null은 부재로 보존한다. 필수 필드 누락·통화 부재·미지 국가/통화·정밀도 손실·중복 종목은 실패한다. 생성 타입 역직렬화·재직렬화로 얻은 알려진 필드만 숫자 검증한다. 원문에 새 필드가 있어도 생성 모델이 쓰지 않는 필드는 무시한다. 보존하지 않는 알려진 비용·세후 수치도 정확한 십진수인지 검증한다. 기존 ReportedHolding/ReportedPortfolio가 표현하는 세전 amount와 rate만 반환하며 비용·세후 값의 새 domain 필드는 만들지 않는다.
 
 ## 응답 형식 근거
 
@@ -21,7 +21,7 @@
 | GET /api/v1/accounts | BrokerRead::accounts | t05-accounts.json, t05-accounts-empty.json | paths의 해당 get.responses.200.content.application/json.examples.brokerageAccount 및 emptyAccounts, components.schemas.Account |
 | GET /api/v1/holdings | BrokerRead::holdings | t05-holdings.json, t05-holdings-empty.json | paths의 해당 get.responses.200.content.application/json.examples.withHoldings 및 emptyHoldings, components.schemas.HoldingsOverview·HoldingsItem |
 
-녹화는 tests/recordings에 origin=synthetic인 T-20 형식으로 추가했다. 계좌번호 00000000731은 합성값이다. 기존 accounts.json은 그대로 두었다. 모든 녹화는 기존 T-20 현재 스키마 검사를 통과해야 한다. 401·429는 녹화 본문에 오류 응답을 끼운 가짜 서버 시퀀스로 토큰 재발급·제한기 경로를 검증한다.
+녹화는 tests/recordings에 origin=synthetic인 T-20 형식으로 추가했다. 계좌번호 00000000731은 합성값이다. 기존 accounts.json은 그대로 두었다. 모든 녹화는 기존 T-20 현재 스키마 검사를 통과해야 한다. 401·429는 account_recordings의 t05-accounts-401.json, t05-accounts-429.json, t05-holdings-401.json, t05-holdings-429.json을 사용한다. components.responses.Unauthorized의 tokenRevoked 예제 및 RateLimitExceeded 예제의 합성 사본이며 requestId만 합성 문자열로 바꾼다. 새 시험에서 8개 녹화를 모두 T-20 검증기에 대조한다. 가짜 서버 시퀀스는 토큰 재발급·제한기 경로와 최소 Retry-After 대기를 함께 검증한다.
 
 ## 실측 대기
 
@@ -46,6 +46,16 @@
 
 보호 파일 harness/arch-check/rules.toml의 http-write-means 허용 목록에 tests/accounts_holdings.rs 하나만 등록한다. 기존 T-20 메타데이터 검증·재생 도우미를 호출하는 시험 경계이며 제품 전송을 추가하지 않는다. 해당 파일 등록 승인은 브리프의 새 시험 파일 한정 허용에 따른다. Codex 설정, sandbox 잠금 조각, Claude 훅 해시는 공식 생성기로만 재생성한다.
 
+
+## 구현 리뷰 수정
+
+B1: 기존 domain에 미지 계좌 유형 보존 계약이 이미 있으므로 닫힌 실패 대상을 잘못 적용한 선행 거부를 제거했다. BROKERAGE와 NEW_KIND를 함께 반환하고 자동 선택은 BROKERAGE를 고르며 미지 계좌 명시 선택은 거부한다.
+
+I1: 스키마가 허용하는 추가 응답 필드를 임의로 숫자 처리하지 않는다. 생성 모델에 남는 알려진 필드만 검증하며 원문의 알려진 필드에서 도메인 값을 만든다. 추가 문자열·불린·중첩 객체가 결과를 바꾸지 않는 회귀와 기존 commission 형식 오류 거부를 함께 유지한다.
+
+M2: 로컬 권한 거부는 Forbidden, 잘못된 자격 증명은 InvalidCredentials, 엔드포인트·클라이언트 설정 오류는 MalformedRequest, 저장 자료 무결성·형식 오류는 InvalidResponse(Validation)로 옮긴다. 저장소의 일시 불가에는 원래 RetryDelay를 유지한다. Broker PortError에는 SystemDiagnostic이 없어 세 무결성 원인을 개별 보존하지 못하며 A-05 후속 계약에 인계한다. 실제 화면 문구 검증은 하지 않았다.
+
+새 회귀3개는 e54f7e8 소스에서 컴파일 후 모두 실패했고 수정 후 모두 통과했다. 초기 구현의 테스트 우선 절차 미준수와 이 수정 회차의 red/green 증거를 구분한다. 수정 후 어댑터 전체135개와 Clippy가 통과했으며 RetryDelay 보존 시험을 추가했다.
 
 ## 손 변형
 

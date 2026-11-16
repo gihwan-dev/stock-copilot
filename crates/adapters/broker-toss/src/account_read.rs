@@ -94,7 +94,7 @@ fn token_error(error: crate::TokenError, endpoint: ReadEndpoint) -> PortError {
         TokenError::RevokedRepeated => {
             PortErrorKind::AccessDenied(AccessDenial::TokenRevokedRepeated)
         }
-        TokenError::MissingCredentials => {
+        TokenError::MissingCredentials | TokenError::Http(TossHttpError::InvalidCredential) => {
             PortErrorKind::AccessDenied(AccessDenial::InvalidCredentials)
         }
         TokenError::InvalidResponse | TokenError::Http(TossHttpError::ResponseTooLarge) => {
@@ -104,13 +104,11 @@ fn token_error(error: crate::TokenError, endpoint: ReadEndpoint) -> PortError {
             cause: UnavailableCause::RateLimited,
             retry: RetryDelay::Unknown,
         },
-        TokenError::Store(_)
-        | TokenError::Http(
-            TossHttpError::InvalidEndpoint
-            | TossHttpError::InvalidCredential
-            | TossHttpError::Configuration
-            | TossHttpError::Transport,
-        )
+        TokenError::Store(store_failure) => store_error(store_failure),
+        TokenError::Http(TossHttpError::InvalidEndpoint | TossHttpError::Configuration) => {
+            PortErrorKind::InvalidRequest(application::RequestRejection::MalformedRequest)
+        }
+        TokenError::Http(TossHttpError::Transport)
         | TokenError::Renewal
         | TokenError::Superseded => PortErrorKind::Unavailable {
             cause: UnavailableCause::Network,
@@ -118,6 +116,22 @@ fn token_error(error: crate::TokenError, endpoint: ReadEndpoint) -> PortError {
         },
     };
     PortError::new(endpoint, HttpStatus::NotReceived, kind)
+}
+fn store_error(error: application::SystemPortError) -> PortErrorKind {
+    match error.failure() {
+        application::SystemFailure::PermissionDenied => {
+            PortErrorKind::AccessDenied(application::AccessDenial::Forbidden)
+        }
+        application::SystemFailure::Unavailable(retry) => PortErrorKind::Unavailable {
+            cause: application::UnavailableCause::Network,
+            retry,
+        },
+        application::SystemFailure::InvalidData
+        | application::SystemFailure::RepositoryIntegrity
+        | application::SystemFailure::SecretIntegrity => {
+            PortErrorKind::InvalidResponse(ResponseMismatch::Validation)
+        }
+    }
 }
 fn accounts(value: serde_json::Value, observed: Timestamp) -> Result<BrokerAccountRows, PortError> {
     let failure = || invalid(ReadEndpoint::Accounts, ResponseMismatch::Validation);
@@ -127,13 +141,6 @@ fn accounts(value: serde_json::Value, observed: Timestamp) -> Result<BrokerAccou
         .into_iter()
         .map(|row| {
             let code = row.kind.to_string();
-            match row.kind {
-                broker_toss_schema::types::AccountAccountType::Unknown(_) => return Err(failure()),
-                broker_toss_schema::types::AccountAccountType::Brokerage
-                | broker_toss_schema::types::AccountAccountType::OverseasDerivatives
-                | broker_toss_schema::types::AccountAccountType::PensionSavings
-                | broker_toss_schema::types::AccountAccountType::ReshoringInvestment => {}
-            }
             BrokerAccountRow::from_broker_account_result(
                 AccountId::new(row.seq),
                 BrokerAccountTypeCode::new(&code),
@@ -144,4 +151,83 @@ fn accounts(value: serde_json::Value, observed: Timestamp) -> Result<BrokerAccou
         })
         .collect::<Result<Vec<_>, _>>()?;
     BrokerAccountRows::try_new(rows).map_err(|_error| failure())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::token_error;
+    use crate::{TokenError, TossHttpError};
+    use application::{
+        AccessDenial, HttpStatus, PortErrorKind, ReadEndpoint, RequestRejection, ResponseMismatch,
+        SystemFailure, SystemPort, SystemPortError,
+    };
+
+    #[test]
+    fn unavailable_store_preserves_its_retry_delay() {
+        let delay = application::RetryDelay::Known(
+            domain::TimeSpan::try_new(domain::SpanSeconds::new(17), domain::Nanosecond::new(0))
+                .expect("delay"),
+        );
+        let error = TokenError::Store(SystemPortError::new(
+            SystemPort::SecretStore,
+            SystemFailure::Unavailable(delay),
+        ));
+        assert_eq!(
+            token_error(error, ReadEndpoint::Accounts).kind(),
+            PortErrorKind::Unavailable {
+                cause: application::UnavailableCause::Network,
+                retry: delay
+            }
+        );
+    }
+    #[test]
+    fn local_token_failures_do_not_become_network_waits() {
+        for (failure, expected) in [
+            (
+                TokenError::Store(SystemPortError::new(
+                    SystemPort::SecretStore,
+                    SystemFailure::PermissionDenied,
+                )),
+                PortErrorKind::AccessDenied(AccessDenial::Forbidden),
+            ),
+            (
+                TokenError::Store(SystemPortError::new(
+                    SystemPort::SecretStore,
+                    SystemFailure::SecretIntegrity,
+                )),
+                PortErrorKind::InvalidResponse(ResponseMismatch::Validation),
+            ),
+            (
+                TokenError::Store(SystemPortError::new(
+                    SystemPort::SecretStore,
+                    SystemFailure::RepositoryIntegrity,
+                )),
+                PortErrorKind::InvalidResponse(ResponseMismatch::Validation),
+            ),
+            (
+                TokenError::Store(SystemPortError::new(
+                    SystemPort::SecretStore,
+                    SystemFailure::InvalidData,
+                )),
+                PortErrorKind::InvalidResponse(ResponseMismatch::Validation),
+            ),
+            (
+                TokenError::Http(TossHttpError::InvalidCredential),
+                PortErrorKind::AccessDenied(AccessDenial::InvalidCredentials),
+            ),
+            (
+                TokenError::Http(TossHttpError::Configuration),
+                PortErrorKind::InvalidRequest(RequestRejection::MalformedRequest),
+            ),
+            (
+                TokenError::Http(TossHttpError::InvalidEndpoint),
+                PortErrorKind::InvalidRequest(RequestRejection::MalformedRequest),
+            ),
+        ] {
+            let result = token_error(failure, ReadEndpoint::Holdings);
+            assert_eq!(result.kind(), expected);
+            assert_eq!(result.endpoint(), ReadEndpoint::Holdings);
+            assert_eq!(result.status(), HttpStatus::NotReceived);
+        }
+    }
 }
