@@ -164,7 +164,7 @@ LLM이 말하는 확률은 실제 빈도와 잘 맞지 않는다(R-12). 그래�
 | I-11 | 셸 명령으로 보호 파일을 고치는 것을 훅으로 못 막는다 | 샌드박스의 쓰기 금지 목록과 CI의 서명 검사를 함께 쓴다 | 확정 |
 | I-12 | 격리해서 띄운 리뷰어도 원본에 쓸 수 있다 | 시작과 종료 때 원본 상태를 비교하는 훅 | 확정 |
 | I-13 | 커버리지 100% 기준과 방어용 분기의 충돌 | 타입으로 분기 자체를 없앤다. 남는 것은 보호된 예외 목록에 적는다 | 확정 |
-| I-14 | `testkit`이 `order-execution`에 의존하면 주문 차단 구조와 충돌한다 | `testkit`은 `order-execution`에 의존하지 않는다. 가짜 본인 확인은 `application`의 `UserPresence` 포트 가짜로 `testkit`에 두고, 가짜 증권사는 `trade-fakes`에 둔다. `order-execution` 안의 테스트 전용 모듈은 `src-tauri` 경로 고정 테스트가 쓸 수 없어서(`cfg(test)`는 그 crate 안에서만 보인다) 이 방식으로 바꿨다 (architecture 3.2) | 확정 |
+| I-14 | `testkit`이 `order-execution`에 의존하면 주문 차단 구조와 충돌한다 | `testkit`은 `order-execution`에 의존하지 않는다. 가짜 본인 확인은 `application`의 `UserPresence` 포트 가짜로 `testkit-ports`에 두고, 가짜 증권사는 `trade-fakes`에 둔다. `order-execution` 안의 테스트 전용 모듈은 `src-tauri` 경로 고정 테스트가 쓸 수 없어서(`cfg(test)`는 그 crate 안에서만 보인다) 이 방식으로 바꿨다 (architecture 3.2) | 확정 |
 | I-15 | TS 금액 타입을 문자열 브랜드로 만들면 산술이 그대로 통과한다 | 내부를 볼 수 없는 객체 타입으로 만든다 | 확정 |
 | I-16 | TypeScript 7을 린트 도구가 아직 지원하지 않는다 | 타입 검사는 7, 린트는 6으로 함께 설치한다 | 확정 |
 | I-17 | 이 PC의 Rust가 1.88인데 Tauri 2.12는 1.90 이상이 필요하다 | 저장소에 도구 버전을 고정한다 | 확정 |

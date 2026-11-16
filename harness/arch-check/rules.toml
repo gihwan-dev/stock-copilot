@@ -15,7 +15,8 @@ platform-macos = ["application", "domain"]
 mcp-server = ["application", "domain"]
 mcp-bridge = []
 scheduler = ["application", "domain"]
-testkit = ["application", "domain"]
+testkit = []
+testkit-ports = ["application", "domain"]
 trade-fakes = ["order-execution", "application", "domain"]
 src-tauri = [
     "domain",
@@ -32,16 +33,19 @@ src-tauri = [
     "mcp-server",
     "scheduler",
 ]
-e2e-app = ["src-tauri", "testkit", "trade-fakes"]
+e2e-app = ["src-tauri", "testkit", "testkit-ports", "trade-fakes"]
 toss-smoke = ["broker-toss", "application", "domain"]
 xtask = []
 
 [dev-edges]
-other-crates = ["testkit"]
+other-crates = ["testkit", "testkit-ports"]
 
 [dev-edges.crates]
-src-tauri = ["testkit", "trade-fakes"]
-order-execution = ["testkit"]
+testkit = []
+domain = ["testkit"]
+application = ["testkit"]
+src-tauri = ["testkit", "testkit-ports", "trade-fakes"]
+order-execution = ["testkit", "testkit-ports"]
 xtask = []
 
 [[restricted]]
@@ -66,6 +70,7 @@ transitive-forbidden = [
     "broker-toss",
     "broker-toss-schema",
     "testkit",
+    "testkit-ports",
     "toss-smoke",
     "xtask",
 ]
@@ -93,6 +98,12 @@ dependents = [{ crate = "e2e-app", kinds = ["normal"] }]
 any-dependent-kinds = ["dev"]
 
 [[restricted]]
+target = "testkit-ports"
+dependents = [{ crate = "e2e-app", kinds = ["normal"] }]
+any-dependent-kinds = ["dev"]
+transitive-forbidden = ["application", "domain"]
+
+[[restricted]]
 target = "broker-toss-schema"
 dependents = [
     { crate = "broker-toss", kinds = ["normal", "build"] },
@@ -111,6 +122,7 @@ dependents = []
 package = "src-tauri"
 forbidden = [
     "testkit",
+    "testkit-ports",
     "trade-fakes",
     "tauri-plugin-wdio-webdriver",
     "tauri-plugin-playwright",
@@ -278,7 +290,8 @@ crates = ["approval-command", "broker-toss-trade", "trade-fakes"]
 [source.user-presence]
 trait-name = "UserPresence"
 defining-crate = "application"
-impl-crates = ["platform-macos", "testkit"]
+impl-crates = ["platform-macos"]
+impl-files = ["crates/testkit-ports/src/scripted_presence.rs"]
 
 [source.toss-order]
 write-means = [

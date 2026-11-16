@@ -18,7 +18,7 @@ pub enum RiskChangeConfirmation {
 pub trait UserPresence: Send + Sync {
     fn confirm_order(
         &self,
-        summary: OrderSummary,
+        summary: &OrderSummary,
     ) -> impl Future<Output = OrderConfirmation> + Send;
     fn confirm_risk_change(
         &self,

@@ -2,5 +2,5 @@
 resolver = "3"
 members = [
     "crates/adapters/platform-macos",
-    "crates/testkit",
+    "crates/testkit-ports",
 ]

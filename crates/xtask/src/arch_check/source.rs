@@ -85,7 +85,7 @@ fn scan_rust(
             .into_iter()
             .map(|rule| Finding::new(rule, String::from(relative))),
     );
-    let mut ast = AstRules::new(rules, crate_name, &file);
+    let mut ast = AstRules::new(rules, crate_name, relative, &file);
     ast.visit_file(&file);
     findings.extend(
         ast.found
