@@ -349,7 +349,10 @@ impl InvestorFlow {
     }
 }
 fn validate_flow_date(date: CalendarDate, updated: Timestamp) -> Result<(), MarketDataError> {
-    if date > updated.offset_calendar_date() {
+    let market_date = updated
+        .date_at_offset(crate::OffsetSeconds::new(32_400))
+        .or(Err(MarketDataError::InvalidFlow))?;
+    if date > market_date {
         return Err(MarketDataError::InvalidFlow);
     }
     Ok(())
@@ -885,5 +888,111 @@ mod tests {
         assert_eq!(institution.buy().to_string(), "7");
         assert_eq!(institution.sell().to_string(), "0");
         assert_eq!(institution.net().to_string(), "7");
+    }
+    fn assert_flow_observation(
+        fact: &InvestorFlow,
+        date: crate::CalendarDate,
+        updated: Timestamp,
+        collected: Timestamp,
+    ) {
+        assert_eq!(fact.date(), date);
+        let observation = fact.observation();
+        let server = observation.server_at().expect("서버");
+        assert_eq!(server.utc_seconds(), updated.utc_seconds());
+        assert_eq!(server.nanosecond(), updated.nanosecond());
+        assert_eq!(server.offset_seconds(), updated.offset_seconds());
+        assert_eq!(
+            observation.collected_at().utc_seconds(),
+            collected.utc_seconds()
+        );
+        assert_eq!(
+            observation.collected_at().nanosecond(),
+            collected.nanosecond()
+        );
+        assert_eq!(
+            observation.collected_at().offset_seconds(),
+            collected.offset_seconds()
+        );
+    }
+    fn assert_flow_result(
+        result: Result<InvestorFlow, crate::MarketDataError>,
+        expected: Result<(), crate::MarketDataError>,
+        date: crate::CalendarDate,
+        updated: Timestamp,
+        collected: Timestamp,
+    ) {
+        assert_eq!(
+            result.as_ref().map(|_fact| ()).map_err(|error| *error),
+            expected
+        );
+        if let Ok(fact) = result {
+            assert_flow_observation(&fact, date, updated, collected);
+        }
+    }
+    fn assert_flow_date_case(
+        seconds: i64,
+        nanos: u32,
+        expected: Result<(), crate::MarketDataError>,
+    ) {
+        let date = at(86_400).offset_calendar_date();
+        for offset in [-18_000_i32, 0_i32, 32_400_i32, 36_000_i32] {
+            let updated = Timestamp::from_parts(
+                UnixSeconds::new(seconds),
+                Nanosecond::new(nanos),
+                OffsetSeconds::new(offset),
+            )
+            .expect("표기");
+            let collected = Timestamp::from_parts(
+                UnixSeconds::new(86_401),
+                Nanosecond::new(987_654_321),
+                OffsetSeconds::new(-3_600),
+            )
+            .expect("수집");
+            let stock = InvestorFlow::from_stock_response(
+                stock_symbol(),
+                StockFlowRecordInput {
+                    date,
+                    updated,
+                    rows: vec![stock_row("individual", "17", "5", "12")],
+                    collected,
+                },
+            );
+            let market = InvestorFlow::from_indicator_response(
+                code("KOSPI"),
+                &code("1d"),
+                MarketFlowRecordInput {
+                    date,
+                    updated,
+                    rows: market_rows(),
+                    collected,
+                },
+            );
+            assert_flow_result(stock, expected, date, updated, collected);
+            assert_flow_result(market, expected, date, updated, collected);
+        }
+    }
+    #[test]
+    fn deterministic_flow_dates_use_kst_and_preserve_original_observations() {
+        for (seconds, nanos, expected) in [
+            (
+                53_999,
+                999_999_999,
+                Err(crate::MarketDataError::InvalidFlow),
+            ),
+            (54_000, 0, Ok(())),
+            (55_800, 123_456_789, Ok(())),
+        ] {
+            assert_flow_date_case(seconds, nanos, expected);
+        }
+        for seconds in [53_999, 54_000] {
+            assert_eq!(
+                super::validate_flow_date(at(0).offset_calendar_date(), at(seconds)),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            super::validate_flow_date(at(86_400).offset_calendar_date(), at(253_402_300_799)),
+            Err(crate::MarketDataError::InvalidFlow)
+        );
     }
 }

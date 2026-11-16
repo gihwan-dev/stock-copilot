@@ -1,0 +1,68 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/holdings",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1holdings/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "totalPurchaseAmount": {
+        "krw": "6500000"
+      },
+      "marketValue": {
+        "amount": {
+          "krw": "7200000"
+        },
+        "amountAfterCost": {
+          "krw": "7050000"
+        }
+      },
+      "profitLoss": {
+        "amount": {
+          "krw": "700000"
+        },
+        "amountAfterCost": {
+          "krw": "550000"
+        },
+        "rate": "0.1077",
+        "rateAfterCost": "0.0846"
+      },
+      "dailyProfitLoss": {
+        "amount": {
+          "krw": "100000"
+        },
+        "rate": "0.0141"
+      },
+      "items": [
+        {
+          "symbol": "005930",
+          "name": "삼성전자",
+          "marketCountry": "KR",
+          "currency": "KRW",
+          "quantity": "100",
+          "lastPrice": "72000",
+          "averagePurchasePrice": "65000",
+          "marketValue": {
+            "purchaseAmount": "6500000",
+            "amount": "7200000",
+            "amountAfterCost": "7050000"
+          },
+          "profitLoss": {
+            "amount": "700000",
+            "amountAfterCost": "550000",
+            "rate": "0.1077",
+            "rateAfterCost": "0.0846"
+          },
+          "dailyProfitLoss": {
+            "amount": "100000",
+            "rate": "0.0141"
+          },
+          "cost": {
+            "commission": "14400",
+            "tax": "135600"
+          }
+        }
+      ]
+    }
+  }
+}

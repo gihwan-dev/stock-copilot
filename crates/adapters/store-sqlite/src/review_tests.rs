@@ -40,7 +40,12 @@ fn quantity_and_ratio_checks_do_not_require_currency() {
 #[test]
 fn snapshot_contains_index_view_trigger_and_tables() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-    crate::migration::run(&mut connection, crate::tests::timestamp()).expect("migrate");
+    crate::migration::apply(
+        &mut connection,
+        crate::tests::timestamp(),
+        &crate::migration::MIGRATIONS[..1],
+    )
+    .expect("migrate");
     for statement in [
         fixtures::SNAPSHOT_TABLE,
         fixtures::SNAPSHOT_INDEX,
@@ -97,7 +102,8 @@ fn resetting_both_ledger_and_version_is_not_a_fresh_database() {
 fn embedded_sequence_gap_rolls_back_pending_schema() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
     let at = crate::tests::timestamp();
-    crate::migration::run(&mut connection, at).expect("initial");
+    crate::migration::apply(&mut connection, at, &crate::migration::MIGRATIONS[..1])
+        .expect("initial");
     crate::migration::apply(
         &mut connection,
         at,
@@ -124,7 +130,12 @@ fn digit_to_uppercase_boundary_is_a_numeric_name_segment() {
 #[test]
 fn table_rename_quotes_do_not_change_column_identity() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-    crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+    crate::migration::apply(
+        &mut connection,
+        crate::tests::timestamp(),
+        &crate::migration::MIGRATIONS[..1],
+    )
+    .expect("initial");
     connection
         .execute_batch(fixtures::SNAPSHOT_TABLE)
         .expect("table");
@@ -138,7 +149,8 @@ fn table_rename_quotes_do_not_change_column_identity() {
 fn third_migration_failure_rolls_back_second_migration_too() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
     let at = crate::tests::timestamp();
-    crate::migration::run(&mut connection, at).expect("initial");
+    crate::migration::apply(&mut connection, at, &crate::migration::MIGRATIONS[..1])
+        .expect("initial");
     crate::migration::apply(
         &mut connection,
         at,
@@ -215,7 +227,12 @@ fn unsupported_schema_forms_fail_after_sqlite_accepts_them() {
         fixtures::LINE_COMMENT,
     ] {
         let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-        crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+        crate::migration::apply(
+            &mut connection,
+            crate::tests::timestamp(),
+            &crate::migration::MIGRATIONS[..1],
+        )
+        .expect("initial");
         connection
             .execute_batch(statement)
             .expect("SQLite accepts fixture");

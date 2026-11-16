@@ -185,61 +185,7 @@ mod tests {
         TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u64..1_000_000, 1_u64..10_000, 0_u32..=8, 0_u32..=8),
-                |(coefficient, unit, price_scale, tick_scale)| {
-                    let common = price_scale.max(tick_scale);
-                    let numerator = coefficient * 10_u64.pow(common - price_scale);
-                    let denominator = unit * 10_u64.pow(common - tick_scale);
-                    let residue = numerator % denominator;
-                    let lower = numerator - residue;
-                    let upper = if residue == 0 {
-                        numerator
-                    } else {
-                        lower + denominator
-                    };
-                    let candidate = Price::try_new(Money::new(
-                        Amount::new(rust_decimal::Decimal::from_i128_with_scale(
-                            i128::from(coefficient),
-                            price_scale,
-                        )),
-                        Currency::Usd,
-                    ))
-                    .expect("가격");
-                    let tick = TickSize::from_response(
-                        Price::try_new(Money::new(
-                            Amount::new(rust_decimal::Decimal::from_i128_with_scale(
-                                i128::from(unit),
-                                tick_scale,
-                            )),
-                            Currency::Usd,
-                        ))
-                        .expect("단위"),
-                    );
-                    proptest::prop_assert_eq!(
-                        align_fixed(candidate, tick),
-                        Ok(if residue == 0 {
-                            TickAlignment::OnTick
-                        } else {
-                            TickAlignment::OffTick
-                        })
-                    );
-                    for (direction, expected) in
-                        [(TickRounding::Down, lower), (TickRounding::Up, upper)]
-                    {
-                        let result = round_fixed(candidate, tick, direction).expect("정확 격자");
-                        proptest::prop_assert_eq!(
-                            result.amount().as_decimal(),
-                            rust_decimal::Decimal::from_i128_with_scale(
-                                i128::from(expected),
-                                common
-                            )
-                        );
-                        proptest::prop_assert!(lower <= numerator && numerator <= upper);
-                        proptest::prop_assert!(
-                            numerator - lower < denominator && upper - numerator < denominator
-                        );
-                    }
-                    Ok(())
-                },
+                assert_different_scale_reference,
             )
             .expect("다른 스케일 정수 기준");
     }
@@ -248,52 +194,113 @@ mod tests {
         TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
                 &(1_u64..1_000_000, 1_u64..10_000, 0_u32..=8),
-                |(coefficient, unit, scale)| {
-                    let candidate = Price::try_new(Money::new(
-                        Amount::new(rust_decimal::Decimal::from_i128_with_scale(
-                            i128::from(coefficient),
-                            scale,
-                        )),
-                        Currency::Usd,
-                    ))
-                    .expect("가격");
-                    let tick = TickSize::from_response(
-                        Price::try_new(Money::new(
-                            Amount::new(rust_decimal::Decimal::from_i128_with_scale(
-                                i128::from(unit),
-                                scale,
-                            )),
-                            Currency::Usd,
-                        ))
-                        .expect("단위"),
-                    );
-                    let remainder = coefficient % unit;
-                    let down = coefficient - remainder;
-                    let up = if remainder == 0 {
-                        coefficient
-                    } else {
-                        down + unit
-                    };
-                    for (direction, expected) in
-                        [(TickRounding::Down, down), (TickRounding::Up, up)]
-                    {
-                        let result = round_fixed(candidate, tick, direction).expect("격자 가격");
-                        proptest::prop_assert_eq!(
-                            result.amount().as_decimal(),
-                            rust_decimal::Decimal::from_i128_with_scale(
-                                i128::from(expected),
-                                scale
-                            )
-                        );
-                        proptest::prop_assert_eq!(expected % unit, 0);
-                        proptest::prop_assert!(down <= coefficient && coefficient <= up);
-                        proptest::prop_assert!(
-                            coefficient - down < unit && up - coefficient < unit
-                        );
-                    }
-                    Ok(())
-                },
+                assert_same_scale_reference,
             )
             .expect("독립 정수 격자");
+    }
+    fn reference_price(coefficient: u64, scale: u32) -> Price {
+        Price::try_new(Money::new(
+            Amount::new(rust_decimal::Decimal::from_i128_with_scale(
+                i128::from(coefficient),
+                scale,
+            )),
+            Currency::Usd,
+        ))
+        .expect("가격")
+    }
+    fn reference_scaled(coefficient: u64, common: u32, scale: u32) -> u64 {
+        let places = common.checked_sub(scale).expect("공통 스케일");
+        coefficient
+            .checked_mul(10_u64.checked_pow(places).expect("스케일 배수"))
+            .expect("정수 배수")
+    }
+    fn reference_bounds(numerator: u64, denominator: u64) -> (u64, u64, u64) {
+        let residue = numerator.checked_rem(denominator).expect("양의 단위");
+        let lower = numerator.checked_sub(residue).expect("하한");
+        let upper = if residue == 0 {
+            numerator
+        } else {
+            lower.checked_add(denominator).expect("상한")
+        };
+        (residue, lower, upper)
+    }
+    fn reference_rounded(candidate: Price, tick: TickSize, direction: TickRounding) -> Money {
+        round_fixed(candidate, tick, direction).expect("정확 격자")
+    }
+    fn assert_different_scale_reference(
+        (coefficient, unit, price_scale, tick_scale): (u64, u64, u32, u32),
+    ) -> proptest::test_runner::TestCaseResult {
+        let common = price_scale.max(tick_scale);
+        let numerator = reference_scaled(coefficient, common, price_scale);
+        let denominator = reference_scaled(unit, common, tick_scale);
+        let (residue, lower, upper) = reference_bounds(numerator, denominator);
+        let candidate = reference_price(coefficient, price_scale);
+        let tick = TickSize::from_response(reference_price(unit, tick_scale));
+        proptest::prop_assert_eq!(
+            align_fixed(candidate, tick),
+            Ok(if residue == 0 {
+                TickAlignment::OnTick
+            } else {
+                TickAlignment::OffTick
+            })
+        );
+        for (direction, expected) in [(TickRounding::Down, lower), (TickRounding::Up, upper)] {
+            let result = reference_rounded(candidate, tick, direction);
+            proptest::prop_assert_eq!(
+                result.amount().as_decimal(),
+                rust_decimal::Decimal::from_i128_with_scale(i128::from(expected), common)
+            );
+            proptest::prop_assert!(lower <= numerator && numerator <= upper);
+            proptest::prop_assert!(
+                numerator.abs_diff(lower) < denominator && upper.abs_diff(numerator) < denominator
+            );
+        }
+        Ok(())
+    }
+    fn assert_same_scale_reference(
+        (coefficient, unit, scale): (u64, u64, u32),
+    ) -> proptest::test_runner::TestCaseResult {
+        let candidate = reference_price(coefficient, scale);
+        let tick = TickSize::from_response(reference_price(unit, scale));
+        let (_, down, up) = reference_bounds(coefficient, unit);
+        for (direction, expected) in [(TickRounding::Down, down), (TickRounding::Up, up)] {
+            let result = reference_rounded(candidate, tick, direction);
+            proptest::prop_assert_eq!(
+                result.amount().as_decimal(),
+                rust_decimal::Decimal::from_i128_with_scale(i128::from(expected), scale)
+            );
+            proptest::prop_assert_eq!(expected.checked_rem(unit), Some(0));
+            proptest::prop_assert!(down <= coefficient && coefficient <= up);
+            proptest::prop_assert!(
+                coefficient.abs_diff(down) < unit && up.abs_diff(coefficient) < unit
+            );
+        }
+        Ok(())
+    }
+    #[test]
+    fn deterministic_tick_references_cover_aligned_and_unaligned_prices() {
+        for case in [(100, 25, 2), (123, 5, 2)] {
+            assert_same_scale_reference(case).expect("같은 스케일");
+        }
+        for case in [(100, 25, 2, 2), (100, 10, 1, 2), (123, 5, 2, 1)] {
+            assert_different_scale_reference(case).expect("다른 스케일");
+        }
+        let tick = TickSize::from_response(price("0.25", Currency::Usd));
+        assert_eq!(
+            align_fixed(price("1.00", Currency::Usd), tick),
+            Ok(TickAlignment::OnTick)
+        );
+        assert_eq!(
+            round_fixed(price("1.00", Currency::Usd), tick, TickRounding::Up),
+            Ok(price("1.00", Currency::Usd).as_money())
+        );
+        assert_eq!(
+            round_fixed(price("1.23", Currency::Usd), tick, TickRounding::Down),
+            Ok(price("1.00", Currency::Usd).as_money())
+        );
+        assert_eq!(
+            round_fixed(price("1.23", Currency::Usd), tick, TickRounding::Up),
+            Ok(price("1.25", Currency::Usd).as_money())
+        );
     }
 }

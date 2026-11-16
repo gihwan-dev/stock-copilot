@@ -16,7 +16,12 @@ fn quoted_body_tokens_cannot_hide_numeric_columns() {
         fixtures::PLAIN_BRACKET_REF,
     ] {
         let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-        crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+        crate::migration::apply(
+            &mut connection,
+            crate::tests::timestamp(),
+            &crate::migration::MIGRATIONS[..1],
+        )
+        .expect("initial");
         connection
             .execute_batch(source)
             .expect("SQLite accepts quoted fixture");
@@ -35,7 +40,12 @@ fn hidden_numeric_column_fails_apply_and_preserves_ledger() {
         fixtures::DOUBLE_DEFAULT,
     ] {
         let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-        crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+        crate::migration::apply(
+            &mut connection,
+            crate::tests::timestamp(),
+            &crate::migration::MIGRATIONS[..1],
+        )
+        .expect("initial");
         crate::migration::apply(
             &mut connection,
             crate::tests::timestamp(),
@@ -64,7 +74,12 @@ fn hidden_numeric_column_fails_apply_and_preserves_ledger() {
 #[test]
 fn single_quoted_text_markers_do_not_change_column_boundaries() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-    crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+    crate::migration::apply(
+        &mut connection,
+        crate::tests::timestamp(),
+        &crate::migration::MIGRATIONS[..1],
+    )
+    .expect("initial");
     connection
         .execute_batch(fixtures::TEXT_MARKERS)
         .expect("literal markers");
@@ -79,7 +94,12 @@ fn single_quoted_text_markers_do_not_change_column_boundaries() {
 #[test]
 fn alter_after_quoted_reference_is_closed() {
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-    crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+    crate::migration::apply(
+        &mut connection,
+        crate::tests::timestamp(),
+        &crate::migration::MIGRATIONS[..1],
+    )
+    .expect("initial");
     connection
         .execute_batch(fixtures::QUOTED_TABLE_BASE)
         .expect("reference");
@@ -117,7 +137,8 @@ fn successful_sql_cannot_commit_a_damaged_ledger() {
     ] {
         let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
         let at = crate::tests::timestamp();
-        crate::migration::run(&mut connection, at).expect("initial");
+        crate::migration::apply(&mut connection, at, &crate::migration::MIGRATIONS[..1])
+            .expect("initial");
         let outcome = crate::migration::apply(
             &mut connection,
             at,
@@ -215,7 +236,8 @@ fn valid_data_migration_preserves_distinct_application_times() {
         domain::OffsetSeconds::new(0),
     )
     .expect("later timestamp");
-    crate::migration::run(&mut connection, initial).expect("initial");
+    crate::migration::apply(&mut connection, initial, &crate::migration::MIGRATIONS[..1])
+        .expect("initial");
     let migrations = [
         ("0001_migration_ledger.sql", sql::CREATE_LEDGER),
         ("0002_data.sql", fixtures::VALID_DML),
@@ -242,7 +264,12 @@ fn valid_data_migration_preserves_distinct_application_times() {
 fn supported_negative_and_division_defaults_are_not_comments() {
     for source in [fixtures::NEGATIVE_DEFAULT, fixtures::DIVISION_DEFAULT] {
         let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-        crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+        crate::migration::apply(
+            &mut connection,
+            crate::tests::timestamp(),
+            &crate::migration::MIGRATIONS[..1],
+        )
+        .expect("initial");
         connection.execute_batch(source).expect("valid default");
         crate::migration::validate_schema(&connection).expect("supported numeric syntax");
     }
@@ -256,7 +283,12 @@ fn damaged_initial_ledger_cannot_be_repaired_by_pending_sql() {
         crate::sql::tests::GAP,
     ] {
         let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
-        crate::migration::run(&mut connection, crate::tests::timestamp()).expect("initial");
+        crate::migration::apply(
+            &mut connection,
+            crate::tests::timestamp(),
+            &crate::migration::MIGRATIONS[..1],
+        )
+        .expect("initial");
         connection.execute_batch(damage).expect("damage");
         crate::migration::apply(
             &mut connection,

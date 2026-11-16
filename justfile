@@ -169,6 +169,8 @@ commit-check:
 push-check:
     base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
 
+[env("PROPTEST_RNG_SEED", "5")]
+[env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 coverage-check:
     cargo run --locked --quiet --package xtask -- coverage-check
 

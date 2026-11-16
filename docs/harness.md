@@ -889,3 +889,5 @@ H-48: 루트에서 재귀 탐색하는 검사는 정확히 `.claude/worktrees`�
 H-48 회귀 판정: S8은 clean/contaminated 상태와 차단 횟수 및 정확한 대상 변경 차이를 함께 요구한다. unchecked 차단만으로 통과하지 않는다. 과거 녹화는 대상 차이 증거가 없어 현행 S8에서 실패하며 새 실측으로 꾸미지 않는다. native 실험은 T3 전용 운영의 성공 증거가 아니며, 현행 실제 모델 회귀는 별도 NOT_RUN이다.
 
 H-48 최종 역할 경계: Claude 별도 Git 작업 사본은 훅 모듈의 위치와 common directory로 리뷰어에 고정한다. 도구 입력의 cwd·agent_type으로 메인이 되지 않는다. 주 작업 사본의 Claude만 메인이다. T3 review는 대상40자리SHA·대상HEAD일치·엄격조상과 보고표식/줄지문을 검사한다. review와 역할 없는 기존 스레드의 재개는 거부한다. native guard-agent pending은 현재 생산 Agent 경로에 연결되지 않은 호환 회귀이며 T3 자동 훅 보장이 아니다.
+
+D-43: 커버리지는 측정 전에 기존 워크스페이스 계측 산출물과 profraw를 정리해 이전 실행의 결과가 섞이지 않게 한다. 단독 coverage-check도 전체 검사와 같은 기존 STOCK_COPILOT_PROPTEST_CASES=4096 설정을 사용한다. testkit의 횟수 해석 규칙은 유지한다. 커버리지의 난수 의존 실패를 막기 위해 `just coverage-check`에만 `PROPTEST_RNG_SEED=5`을 설정한다. 전체 검사·훅·CI는 이 레시피를 통해 같은 시드를 사용한다. 일반 테스트는 기존 무작위 시드를 유지하며 testkit의 256/4096 횟수 규칙과 최소 횟수 단언은 변경하지 않는다. 관찰된 portfolio_valuation과 tick_size의 희귀 분기는 고정 예제로 보완한다.
