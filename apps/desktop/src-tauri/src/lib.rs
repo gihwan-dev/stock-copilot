@@ -24,6 +24,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
     builder
         .invoke_handler(ipc::registry::specta_builder::<R>().invoke_handler())
         .setup(move |app| {
+            ipc::registry::specta_builder::<R>().mount_events(app);
             let database = tauri::async_runtime::block_on(database::open_database(
                 ports.secrets.as_ref(),
                 Arc::clone(&ports.database),

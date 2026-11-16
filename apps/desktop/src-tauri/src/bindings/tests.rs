@@ -154,7 +154,9 @@ fn generated_typescript_names_the_command_mocks_and_recorded_responses() {
     let mocks = read(&root, Path::new(MOCK_BINDINGS_FILE));
     let responses = read(&root, Path::new(RESPONSES_FILE));
     assert!(
-        bindings.contains("appVersion: () => typedError<AppVersion, IpcError>"),
+        bindings.contains(
+            "appVersion: (request: AppVersionRequest) => typedError<AppVersion, IpcError>"
+        ),
         "{bindings}"
     );
     assert!(!bindings.contains("mockCommands"), "{bindings}");

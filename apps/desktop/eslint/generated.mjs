@@ -39,7 +39,14 @@ export const GENERATED_GLOBALS = [
   "alert",
 ];
 
-const generatedSyntax = (imports) => [
+const generatedSyntax = (imports, typeImports) => [
+  {
+    selector:
+      typeImports.length === 0
+        ? "TSImportType"
+        : `TSImportType:not(${typeImports.map((source) => `[source.value="${source}"]`).join(", ")})`,
+    message: "생성물: 허용 목록 밖의 타입 모듈을 가져오지 않는다.",
+  },
   {
     selector: "ImportExpression",
     message: "생성물: 동적 import()를 쓰지 않는다.",
@@ -75,9 +82,9 @@ const generatedSyntax = (imports) => [
   },
 ];
 
-export const generatedRules = (imports) => ({
+export const generatedRules = (imports, typeImports = []) => ({
   "no-restricted-globals": ["error", ...GENERATED_GLOBALS],
-  "no-restricted-syntax": ["error", ...generatedSyntax(imports)],
+  "no-restricted-syntax": ["error", ...generatedSyntax(imports, typeImports)],
   "no-eval": "error",
   "no-implied-eval": "error",
   "no-new-func": "error",
@@ -107,10 +114,11 @@ export const generatedTypeScript = (list = readList()) =>
     .map((entry) => ({
       path: entry.path.slice(desktopPrefix.length),
       imports: entry.imports,
+      typeImports: entry.typeImports ?? [],
     }));
 
 export const generatedConfigs = (configs, desktopRoot, list = readList()) =>
-  generatedTypeScript(list).map(({ path, imports }) => ({
+  generatedTypeScript(list).map(({ path, imports, typeImports }) => ({
     name: `generated:${path}`,
     basePath: desktopRoot,
     files: [path],
@@ -120,5 +128,8 @@ export const generatedConfigs = (configs, desktopRoot, list = readList()) =>
       reportUnusedDisableDirectives: "error",
       reportUnusedInlineConfigs: "error",
     },
-    rules: { ...everyConfiguredRule(configs), ...generatedRules(imports) },
+    rules: {
+      ...everyConfiguredRule(configs),
+      ...generatedRules(imports, typeImports),
+    },
   }));
