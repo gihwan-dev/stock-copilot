@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/holdings",
+  "method": "get",
+  "status": "429",
+  "schema": "#/components/responses/RateLimitExceeded/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-holdings-429",
+      "code": "rate-limit-exceeded",
+      "message": "요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."
+    }
+  }
+}
