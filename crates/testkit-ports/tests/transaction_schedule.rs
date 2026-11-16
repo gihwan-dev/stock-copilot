@@ -426,4 +426,99 @@ mod tests {
             Ok(DailyFullInspection::CompletedToday)
         );
     }
+    #[test]
+    fn recent_rejects_state_one_second_after_clock_sample() {
+        let repo = Repository::default();
+        let broker = ScriptedBrokerRead::default();
+        let clock = SteppedClock::new(at(1_794_841_201));
+        let events = EventBus::default();
+        let account = AccountId::new(103);
+        let window = SettlementWindow::try_new(date(4), date(17)).expect("fixture 창");
+        let response = domain::CompleteTransactionResponse::after_last_page_without_quarantine(
+            account.clone(),
+            window,
+            domain::TransactionFilter::all(),
+            domain::TransactionBatch::try_new(vec![]).expect("빈 행"),
+            domain::CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
+        )
+        .expect("완전 응답");
+        let state = SettledRowSet::new(account.clone())
+            .reconcile(&response, at(1_794_841_202))
+            .expect("미래 대조 상태")
+            .state()
+            .clone();
+        assert_eq!(state.last_synchronized_at(), Some(at(1_794_841_202)));
+        repo.state.push(Ok(state));
+        repo.latest.push(Ok(None));
+        assert_eq!(
+            run(schedule(&broker, &repo, &clock, &events).sync_recent(&account)),
+            Err(TransactionScheduleError::Sync(
+                TransactionSyncError::Reconciliation(domain::ReconciliationError::InvalidHistory)
+            ))
+        );
+        assert_eq!(broker.calls(), []);
+        assert_eq!(repo.records.calls(), []);
+        assert_eq!(repo.completed.calls(), []);
+        assert_eq!(clock.calls(), vec![at(1_794_841_201)]);
+    }
+    #[test]
+    fn recent_complete_and_incomplete_preserve_observation_and_completion_boundary() {
+        let account = AccountId::new(104);
+        let window = SettlementWindow::try_new(date(4), date(17)).expect("fixture 창");
+        let complete = application::TransactionRead::Complete(
+            domain::CompleteTransactionResponse::after_last_page_without_quarantine(
+                account.clone(),
+                window,
+                domain::TransactionFilter::all(),
+                domain::TransactionBatch::try_new(vec![]).expect("빈 행"),
+                domain::CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
+            )
+            .expect("완전 응답"),
+        );
+        let incomplete =
+            application::TransactionRead::Incomplete(application::IncompleteTransactions {
+                account: account.clone(),
+                window,
+                filter: domain::TransactionFilter::all(),
+                received: vec![],
+                quarantined: vec![],
+                reason: application::IncompleteReason::PageInterrupted,
+            });
+        for observation in [complete, incomplete] {
+            let repo = Repository::default();
+            let broker = ScriptedBrokerRead::default();
+            let clock = SteppedClock::new(at(1_794_841_201));
+            let events = EventBus::default();
+            repo.state.push(Ok(SettledRowSet::new(account.clone())));
+            repo.latest.push(Ok(None));
+            repo.records.push(Ok(WriteCompleted));
+            broker.script_transactions().push(Ok(observation.clone()));
+            assert_eq!(
+                run(schedule(&broker, &repo, &clock, &events).sync_recent(&account)),
+                Ok(DeliveryReport::default())
+            );
+            let records = repo.records.calls();
+            assert_eq!(records.len(), 1);
+            let record = &records.first().expect("한 기록").3;
+            assert_eq!(record.observation(), &Ok(observation.clone()));
+            assert_eq!(record.window(), window);
+            assert_eq!(record.recorded_at(), at(1_794_841_201));
+            let expected = match observation {
+                application::TransactionRead::Complete(response) => domain::SyncOutcome::Complete(
+                    SettledRowSet::new(account.clone())
+                        .reconcile(&response, at(1_794_841_201))
+                        .expect("정상 대조")
+                        .state()
+                        .clone(),
+                ),
+                application::TransactionRead::Incomplete(_) => {
+                    domain::SyncOutcome::Partial(SettledRowSet::new(account.clone()))
+                }
+            };
+            assert_eq!(record.summary().outcome(), &expected);
+            assert_eq!(repo.completed.calls(), []);
+            assert_eq!(repo.last.calls(), []);
+            assert_eq!(clock.calls(), vec![at(1_794_841_201)]);
+        }
+    }
 }
