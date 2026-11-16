@@ -106,3 +106,6 @@ mod migration_tests;
 
 #[cfg(test)]
 mod review_tests;
+
+#[cfg(test)]
+mod third_tests;

@@ -10,3 +10,6 @@ pub(crate) mod tests;
 
 #[cfg(test)]
 pub(crate) mod review_tests;
+
+#[cfg(test)]
+pub(crate) mod third_tests;

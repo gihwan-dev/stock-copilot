@@ -46,7 +46,6 @@ enum CurrencyColumn {
 }
 
 const SCALAR_SEGMENTS: &[&str] = &[
-    "exposure",
     "pct",
     "percent",
     "probability",
@@ -54,17 +53,13 @@ const SCALAR_SEGMENTS: &[&str] = &[
     "quantity",
     "rate",
     "ratio",
-    "return",
     "shares",
     "threshold",
     "weight",
 ];
 
 pub(crate) fn validate(ddl: &str) -> rusqlite::Result<()> {
-    if ddl.contains("--") || ddl.contains("/*") {
-        return Err(rusqlite::Error::InvalidQuery);
-    }
-    let clauses = columns(table_body(ddl)?);
+    let clauses = columns(table_body(ddl)?)?;
     let currency = currency_column(&clauses);
     for body in &clauses {
         let name = body.split_whitespace().next().unwrap_or("");
@@ -107,35 +102,66 @@ fn table_body(ddl: &str) -> rusqlite::Result<&str> {
         .ok_or(rusqlite::Error::InvalidQuery)
 }
 
-fn columns(body: &str) -> Vec<String> {
+#[derive(Clone, Copy)]
+enum TextContext {
+    Syntax,
+    Literal,
+}
+
+fn columns(body: &str) -> rusqlite::Result<Vec<String>> {
     let mut clauses = Vec::new();
     let mut depth = 0_u32;
-    let mut quoted = false;
+    let mut context = TextContext::Syntax;
     let mut current = String::new();
-    for symbol in body.chars() {
-        if symbol == '\'' {
-            quoted = !quoted;
-        }
-        if !quoted {
-            match symbol {
-                '(' => {
-                    depth = depth.saturating_add(1);
-                }
-                ')' => {
-                    depth = depth.saturating_sub(1);
-                }
+    let mut remaining = body.chars().peekable();
+    while let Some(symbol) = remaining.next() {
+        match context {
+            TextContext::Literal => {
+                current.push(symbol);
+                literal_symbol(symbol, &mut remaining, &mut context, &mut current);
+                continue;
+            }
+            TextContext::Syntax => match symbol {
+                '\'' => context = TextContext::Literal,
+                '"' | '`' | '[' => return Err(rusqlite::Error::InvalidQuery),
+                '-' if remaining.peek() == Some(&'-') => return Err(rusqlite::Error::InvalidQuery),
+                '/' if remaining.peek() == Some(&'*') => return Err(rusqlite::Error::InvalidQuery),
+                '(' => depth = depth.saturating_add(1),
+                ')' => depth = depth.checked_sub(1).ok_or(rusqlite::Error::InvalidQuery)?,
                 ',' if depth == 0 => {
                     clauses.push(current.clone());
                     current.clear();
                     continue;
                 }
                 _ => {}
-            }
+            },
         }
         current.push(symbol);
     }
-    clauses.push(current);
-    clauses
+    if depth != 0 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    match context {
+        TextContext::Literal => Err(rusqlite::Error::InvalidQuery),
+        TextContext::Syntax => {
+            clauses.push(current);
+            Ok(clauses)
+        }
+    }
+}
+
+fn literal_symbol(
+    symbol: char,
+    remaining: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    context: &mut TextContext,
+    current: &mut String,
+) {
+    if symbol == '\'' {
+        match remaining.next_if_eq(&'\'') {
+            Some(quote) => current.push(quote),
+            None => *context = TextContext::Syntax,
+        }
+    }
 }
 
 fn segments(name: &str) -> Vec<String> {

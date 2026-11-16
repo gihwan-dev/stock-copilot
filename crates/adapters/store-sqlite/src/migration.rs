@@ -70,16 +70,7 @@ fn apply_guarded(
     if before == 0 {
         transaction.execute_batch(sql::CREATE_LEDGER)?;
     }
-    let rows = transaction
-        .prepare(sql::LEDGER)?
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let rows = ledger_rows(&transaction)?;
     if rows.len() != version || (before != 0 && rows.is_empty()) {
         return Err(rusqlite::Error::InvalidQuery);
     }
@@ -116,6 +107,7 @@ fn apply_guarded(
         i64::try_from(migrations.len()).map_err(|_error| rusqlite::Error::InvalidQuery)?,
     )?;
     validate_schema(&transaction)?;
+    verify_applied(&transaction, at, &rows, migrations)?;
     transaction.commit()
 }
 
@@ -140,23 +132,70 @@ pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn verify_rows(
-    rows: &[(i64, String, String)],
-    migrations: &[(&str, &str)],
-) -> rusqlite::Result<()> {
-    for (index, (number, name, hash)) in rows.iter().enumerate() {
+#[derive(PartialEq, Eq)]
+struct LedgerEntry {
+    number: i64,
+    name: String,
+    sha256: String,
+    applied_at: i64,
+}
+
+fn ledger_rows(connection: &Connection) -> rusqlite::Result<Vec<LedgerEntry>> {
+    connection
+        .prepare(sql::LEDGER)?
+        .query_map([], |row| {
+            Ok(LedgerEntry {
+                number: row.get(0)?,
+                name: row.get(1)?,
+                sha256: row.get(2)?,
+                applied_at: row.get(3)?,
+            })
+        })?
+        .collect()
+}
+
+fn verify_rows(rows: &[LedgerEntry], migrations: &[(&str, &str)]) -> rusqlite::Result<()> {
+    for (index, row) in rows.iter().enumerate() {
         let Some((expected_name, source)) = migrations.get(index) else {
             return Err(rusqlite::Error::InvalidQuery);
         };
-        if usize::try_from(*number).ok()
+        if usize::try_from(row.number).ok()
             != Some(index.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?)
-            || name != expected_name
-            || *hash != digest(source)
+            || row.name.as_str() != *expected_name
+            || row.sha256 != digest(source)
         {
             return Err(rusqlite::Error::InvalidQuery);
         }
     }
     Ok(())
+}
+
+fn verify_applied(
+    connection: &Connection,
+    at: Timestamp,
+    before: &[LedgerEntry],
+    migrations: &[(&str, &str)],
+) -> rusqlite::Result<()> {
+    let expected = migrations
+        .iter()
+        .enumerate()
+        .map(|(index, (name, source))| {
+            Ok(LedgerEntry {
+                number: i64::try_from(index.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?)
+                    .map_err(|_error| rusqlite::Error::InvalidQuery)?,
+                name: String::from(*name),
+                sha256: digest(source),
+                applied_at: before
+                    .get(index)
+                    .map_or_else(|| *at.utc_seconds().as_i64(), |row| row.applied_at),
+            })
+        })
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if ledger_rows(connection)? == expected {
+        Ok(())
+    } else {
+        Err(rusqlite::Error::InvalidQuery)
+    }
 }
 
 fn authorize(
