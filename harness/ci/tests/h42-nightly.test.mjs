@@ -37,9 +37,7 @@ test("H-42 mutation shards run independently and notify with their own title", (
   assert.equal(jobs["notify-mutants"].steps[2].env.TITLE, "밤 변이 검사 실패");
   assert.ok(
     jobs.mutants.steps.some(
-      (step) =>
-        step.run ===
-        "node harness/ci/linux/offline.mjs just mutants-shard ${{ matrix.shard }}",
+      (step) => step.run === "just mutants-shard ${{ matrix.shard }}",
     ),
   );
   assert.ok(!jobs.linux.steps.some((step) => /mutants/u.test(step.run ?? "")));

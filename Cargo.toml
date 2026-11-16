@@ -18,6 +18,7 @@ members = [
     "crates/mcp-bridge",
     "crates/scheduler",
     "crates/testkit",
+    "crates/testkit-ports",
     "crates/trade-fakes",
     "crates/toss-smoke",
     "crates/xtask",

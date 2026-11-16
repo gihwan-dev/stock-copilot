@@ -436,6 +436,40 @@ mod tests {
         }
     }
     impl MarketInfo for FakeBroker {
+        fn program_trades(
+            &self,
+            _instrument: &QuoteInstrument,
+            _from: CalendarDate,
+            _through: CalendarDate,
+        ) -> impl Future<Output = Result<Vec<domain::ProgramTrade>, PortError>> + Send {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::ProgramTrades))
+        }
+        fn short_selling(
+            &self,
+            _instrument: &QuoteInstrument,
+            _from: CalendarDate,
+            _through: CalendarDate,
+        ) -> impl Future<Output = Result<Vec<domain::ShortSelling>, PortError>> + Send {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::ShortSelling))
+        }
+        fn credit_trades(
+            &self,
+            _instrument: &QuoteInstrument,
+            _from: CalendarDate,
+            _through: CalendarDate,
+        ) -> impl Future<Output = Result<Vec<domain::CreditTrade>, PortError>> + Send {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::CreditTrades))
+        }
+        fn securities_lending(
+            &self,
+            _instrument: &QuoteInstrument,
+            _from: CalendarDate,
+            _through: CalendarDate,
+        ) -> impl Future<Output = Result<Vec<domain::SecuritiesLending>, PortError>> + Send
+        {
+            std::future::ready(outcome(self.0, vec![], ReadEndpoint::SecuritiesLending))
+        }
+
         fn investor_trading_rankings(
             &self,
             limit: RankingLimit,
@@ -1504,5 +1538,46 @@ mod tests {
                 assert_eq!(etfs.market(), market);
             }
         }
+    }
+    #[test]
+    fn d44_supply_ports_preserve_empty_success_and_endpoint_errors() {
+        let instrument = a20_master(KnownMarket::Kr)
+            .quote_instrument()
+            .expect("국내 종목");
+        let date = instant().offset_calendar_date();
+        let good = FakeBroker(Scenario::Complete);
+        let bad = FakeBroker(Scenario::Failed);
+        assert_eq!(
+            ready(good.program_trades(&instrument, date, date)).expect("빈 자료"),
+            vec![]
+        );
+        assert_eq!(
+            ready(bad.program_trades(&instrument, date, date)),
+            Err(failure(ReadEndpoint::ProgramTrades))
+        );
+        assert_eq!(
+            ready(good.short_selling(&instrument, date, date)).expect("빈 자료"),
+            vec![]
+        );
+        assert_eq!(
+            ready(bad.short_selling(&instrument, date, date)),
+            Err(failure(ReadEndpoint::ShortSelling))
+        );
+        assert_eq!(
+            ready(good.credit_trades(&instrument, date, date)).expect("빈 자료"),
+            vec![]
+        );
+        assert_eq!(
+            ready(bad.credit_trades(&instrument, date, date)),
+            Err(failure(ReadEndpoint::CreditTrades))
+        );
+        assert_eq!(
+            ready(good.securities_lending(&instrument, date, date)).expect("빈 자료"),
+            vec![]
+        );
+        assert_eq!(
+            ready(bad.securities_lending(&instrument, date, date)),
+            Err(failure(ReadEndpoint::SecuritiesLending))
+        );
     }
 }
