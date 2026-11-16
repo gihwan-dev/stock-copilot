@@ -533,6 +533,7 @@ mod tests {
     struct HangingRenewal(
         Arc<std::sync::atomic::AtomicUsize>,
         Arc<tokio::sync::Notify>,
+        usize,
     );
     impl TokenRenewal for HangingRenewal {
         fn close(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
@@ -540,7 +541,7 @@ mod tests {
             std::future::ready(Ok(()))
         }
         async fn reconnect(&self, _: &SecretValue) -> Result<(), TokenError> {
-            if self.0.load(Ordering::SeqCst) == 2 {
+            if self.0.load(Ordering::SeqCst) == self.2 {
                 self.1.notify_one();
                 std::future::pending().await
             } else {
@@ -579,7 +580,7 @@ mod tests {
                 .expect("client"),
             Store,
             clock.clone(),
-            HangingRenewal(Arc::clone(&closed), Arc::clone(&notice)),
+            HangingRenewal(Arc::clone(&closed), Arc::clone(&notice), 2),
             Arc::new(builder.build()),
         ));
         runtime().block_on(async {
@@ -1181,9 +1182,13 @@ mod tests {
                 application::RequestRejection::InvalidToken,
             ));
             assert_eq!(
-                read_accounts(Arc::clone(&manager))
-                    .await
-                    .expect_err("new request fails"),
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    read_accounts(Arc::clone(&manager)),
+                )
+                .await
+                .expect("newer lookup remains bounded")
+                .expect_err("new request fails"),
                 error
             );
             assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
@@ -1193,6 +1198,155 @@ mod tests {
                 error
             );
             assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+        });
+        let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
+        assert_eq!(captured.matches("/oauth2/token HTTP/1.1").count(), 4);
+    }
+    async fn assert_duplicate_stop<R: TokenRenewal>(
+        manager: &TokenManager<Store, FakeClock, R>,
+        count: &std::sync::atomic::AtomicUsize,
+    ) {
+        assert_eq!(manager.connection().await, BrokerConnection::DuplicateKey);
+        assert_eq!(
+            manager
+                .token()
+                .await
+                .expect_err("ordinary issuance stays blocked"),
+            TokenError::RevokedRepeated
+        );
+        assert_eq!(
+            manager
+                .get(&broker_toss::ReadRequest::new(
+                    broker_toss::ReadRoute::Accounts
+                ))
+                .await
+                .expect_err("ordinary read stays blocked"),
+            TokenError::RevokedRepeated
+        );
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+    }
+    #[test]
+    fn failed_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds() {
+        let revoked = response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#);
+        let server = ScriptedHttpServer::start(vec![
+            issued("old-319"),
+            revoked.clone(),
+            issued("retry-751"),
+            revoked,
+            response("503 Busy", "{}"),
+            issued("recovered-863"),
+        ])
+        .expect("server");
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut builder = application::EventBusBuilder::default();
+        builder.subscribe(
+            std::collections::BTreeSet::from([domain::DomainEventKind::BrokerConnectionChanged]),
+            Counter(Arc::clone(&count)),
+        );
+        let manager = TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            FakeClock(Arc::new(AtomicI64::new(1000))),
+            Renewal,
+            Arc::new(builder.build()),
+        );
+        runtime().block_on(async {
+            assert_eq!(
+                manager
+                    .get(&broker_toss::ReadRequest::new(
+                        broker_toss::ReadRoute::Accounts
+                    ))
+                    .await
+                    .expect_err("duplicate key"),
+                TokenError::RevokedRepeated
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::DuplicateKey);
+            assert_eq!(count.load(Ordering::SeqCst), 2);
+            manager
+                .retry_connection()
+                .await
+                .expect_err("failed recovery");
+            assert_duplicate_stop(&manager, &count).await;
+            assert_eq!(
+                manager
+                    .retry_connection()
+                    .await
+                    .expect("explicit recovery succeeds")
+                    .secret()
+                    .as_exposed_secret(),
+                b"recovered-863"
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Connected);
+            assert_eq!(count.load(Ordering::SeqCst), 3);
+        });
+        let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
+        assert_eq!(captured.matches("/oauth2/token HTTP/1.1").count(), 4);
+    }
+    async fn recover_shared<R: TokenRenewal>(
+        manager: Arc<TokenManager<Store, FakeClock, R>>,
+    ) -> Result<broker_toss::TokenLease, TokenError> {
+        manager.retry_connection().await
+    }
+    #[test]
+    fn cancelled_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds() {
+        let revoked = response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#);
+        let server = ScriptedHttpServer::start(vec![
+            issued("old-319"),
+            revoked.clone(),
+            issued("retry-751"),
+            revoked,
+            issued("cancelled-863"),
+            issued("recovered-947"),
+        ])
+        .expect("server");
+        let closed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let notice = Arc::new(tokio::sync::Notify::new());
+        let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut builder = application::EventBusBuilder::default();
+        builder.subscribe(
+            std::collections::BTreeSet::from([domain::DomainEventKind::BrokerConnectionChanged]),
+            Counter(Arc::clone(&count)),
+        );
+        let manager = Arc::new(TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            FakeClock(Arc::new(AtomicI64::new(1000))),
+            HangingRenewal(Arc::clone(&closed), Arc::clone(&notice), 3),
+            Arc::new(builder.build()),
+        ));
+        runtime().block_on(async {
+            assert_eq!(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    read_accounts(Arc::clone(&manager)),
+                )
+                .await
+                .expect("duplicate key lookup remains bounded")
+                .expect_err("duplicate key"),
+                TokenError::RevokedRepeated
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::DuplicateKey);
+            let recovery = tokio::spawn(recover_shared(Arc::clone(&manager)));
+            tokio::time::timeout(std::time::Duration::from_secs(5), notice.notified())
+                .await
+                .expect("recovery callback reached");
+            recovery.abort();
+            assert!(recovery.await.expect_err("cancelled").is_cancelled());
+            assert_duplicate_stop(&manager, &count).await;
+            assert_eq!(
+                manager
+                    .retry_connection()
+                    .await
+                    .expect("explicit recovery succeeds")
+                    .secret()
+                    .as_exposed_secret(),
+                b"recovered-947"
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Connected);
+            assert_eq!(count.load(Ordering::SeqCst), 3);
+            assert_eq!(closed.load(Ordering::SeqCst), 4);
         });
         let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
         assert_eq!(captured.matches("/oauth2/token HTTP/1.1").count(), 4);

@@ -10,7 +10,7 @@ Clock이 제공하는 발급 요청 시작 시각에 expires_in을 더한다. �
 
 관리자 한 개를 앱 조립에서 Arc로 공유한다. A-10 전역 EventBus도 Arc로 주입해 다른 유스케이스와 동일 버스를 공유한다. tokio sync 기능을 추가하고 한 비동기 잠금으로 발급·후속 복구를 직렬화한다. 동시 대기자는 진행 중인 발급 결과를 재사용한다. 성공한 발급을 기다린 세대는 갱신 시점에 들어섰어도 실제 만료 전까지 그 결과를 공유한다. 실패 회차도 세대 번호를 비교해 이미 대기하던 요청에는 같은 실패를 전달한다. 이후 새 요청은 다시 시도할 수 있다. 잠금은 일반 GET 응답을 기다리는 동안 잡지 않는다. 토큰 발급 REST와 네 갱신 단계는 잠금 안에서 직렬화되므로 상태/발행 보고 조회도 그 완료를 기다린다. 이전 lease로 거절된 요청은 이미 새 토큰이 있으면 추가 발급하지 않는다.
 
-발급 시도가 시작되면 이전 토큰을 관리자로부터 제거한다. 발급이 성공했지만 응답이 소실됐을 수 있으므로 실패 시에도 이전 토큰을 다시 쓰지 않는다. 연결 상태는 Disconnected·Connected·DuplicateKey다. 발급 → close → reconnect(새 토큰) → resubscribe → reconcile_orders 순서가 끝나고 아직 만료되지 않아야 Connected다. 어느 단계든 실패하면 Disconnected다. 같은 상태는 이벤트를 다시 내지 않는다. 발행 보고서 최신 한 개를 보존해 호출자가 실패 구독자를 확인할 수 있게 한다.
+발급 시도가 시작되면 이전 토큰을 관리자로부터 제거한다. 발급이 성공했지만 응답이 소실됐을 수 있으므로 실패 시에도 이전 토큰을 다시 쓰지 않는다. 연결 상태는 Disconnected·Connected·DuplicateKey다. 발급 → close → reconnect(새 토큰) → resubscribe → reconcile_orders 순서가 끝나고 아직 만료되지 않아야 Connected다. 일반 발급·갱신은 어느 단계든 실패하면 Disconnected다. DuplicateKey에서 명시적으로 시도한 복구는 실패·취소해도 기존 정지를 유지하며, 성공한 복구만 Connected로 전이한다. 같은 상태는 이벤트를 다시 내지 않는다. 발행 보고서 최신 한 개를 보존해 호출자가 실패 구독자를 확인할 수 있게 한다.
 
 401 token-revoked에는 그 요청이 직접 수행하는 재발급이 최대1회다. 계획 갱신이나 다른 요청의 발급 결과를 재사용한 것은 자체 재발급에 포함하지 않는다. 재사용한 토큰이 다시 revoked여도 아직 자체 발급하지 않은 요청은 발급1회를 수행할 수 있다. 자체 재발급 뒤 다시 인증 실패하면 요청을 닫는다. ADR 0074의 T-02 인계에 따라 invalid-token도 동일한 1회 재발급을 수행한다. 새 토큰으로도 invalid-token이면 닫힌 Rejected(InvalidToken)와 Disconnected로 끝내며 중복 키로 오분류하지 않는다. 자체 재발급 뒤 현재 토큰이 다시 revoked면 DuplicateKey와 RevokedRepeated로 닫고 이후 자동 발급도 중단한다. 연결 조정자는 다른 프로그램 종료 후의 재점검에 retry_connection을 호출해 같은 관리자를 회복할 수 있다. 일반 token/get 호출이 이 정지를 자동 해제하지 않는다. 재조립이나 앱 재시작을 사용자에게 요구하지 않는다. 자동 재발급 무한 반복을 막기 위한 보수적 선택이다.
 
@@ -27,7 +27,7 @@ TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문
 
 - T-17: TokenRenewal을 구현해 close/reconnect/resubscribe/reconcile_orders를 연결한다. 마지막 단계는 인자로 빌려 받은 새 토큰으로 직접 GET을 실행하고 같은 관리자에 재진입하지 않는다. 네 단계 실패는 호출자에게 반환하며 실제 주문은 전송하지 않는다.
 - T-03: TokenManager::get은 token/revoked 흐름만 제공한다. 그룹 속도 제한은 TossHttpClient 호출 전의 어댑터 연결부에서 결합한다. AUTH 발급과 최초 GET, 공유 토큰 재조회 및 자체 재발급 뒤 재조회 각각이 전송되기 전에 제한기를 거쳐야 한다. 공통 HTTP 구조는 변경하지 않았다.
-- T-05·T-16: 조립한 단일 TokenManager를 공유한다. TokenLease는 비밀을 노출해야 하는 경계에서만 사용한다.
+- T-05·T-16: 조립한 단일 TokenManager를 공유한다. TokenLease는 비밀을 노출해야 하는 경계에서만 사용한다. get이 이미 복구한 뒤 반환한 닫힌 인증 오류에 같은 논리 요청의 일반 재시도를 다시 겹치지 않는다. Superseded도 요청을 닫는 결과이며 추가 발급 허가가 아니다. invalid-token의 새 요청 간 반복은 이번 계약 밖이며 실제 화면/WS 조립에서 확인한다.
 - J-01·T-05·U-07: Clock 기준 token 호출을 예약해 유휴 중에도 만료 전 갱신한다. 반복 revoked 뒤에는 기존 연결 점검 흐름에서 retry_connection을 사용해 앱 재시작 없이 회복한다. access_denied/허용 IP 오류 뒤 일반 호출을 자동 재시도하지 않고, 안내가 떠 있는 동안에만 1분에 1회 이하로 발급을 재점검한다(REL-1). 이 호출 예약/화면 상태 조건은 연결 조정자의 책임이며 T-03의 일반 그룹 속도 제한과 구분한다. TokenManager는 벽시계/자체 타이머를 만들지 않는다.
 
 ## 검증
@@ -130,3 +130,115 @@ TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문
 메인은 계획 갱신 토큰 재사용을 요청 자체 재발급으로 세지 않는다고 확정했다. acquire는 Shared/Issued를 반환하고, get은 요청 자체의 Issued 성공 뒤에만 예산을 소진한다. 공유한 토큰이 다시 거절되면 예산이 남아 발급할 수 있다. 다른 발급 세대가 계속 생기는 동안에는 그 결과를 공유하지만 같은 거부 토큰을 재사용하지 않으며, 요청 자체 발급을 반복하지 않는다. 최초 획득은 인증 실패 복구 예산과 별개다.
 
 자체 발급 뒤 인증 실패에서 실제 다른 토큰이 있으면 Superseded로 요청만 닫는다. 현재 토큰이면 폐기와 닫힌 실패를 기록하고 상태를 전이한다. 다른 실패가 이미 캐시를 비웠으면 그 실패를 그대로 공유하며 새 토큰 교체로 오분류하지 않는다. expired-token401은 ADR0074의 이번 인계 범위 밖으로 기록만 하고 제품 정책을 추가하지 않는다.
+
+## 리뷰 3 수정
+
+명시적 retry_connection의 실패/취소가 중복 키 정지를 해제하는 반례를 비판과 자체 회귀로 확인했다. Attempt의 실패 전이는 기존 DuplicateKey를 보존하고, 다른 연결 상태만 Disconnected로 바꾼다. 성공한 명시 복구만 Connected로 회복하며 일반 token/get은 그 전까지 추가 HTTP 요청 없이 RevokedRepeated로 닫힌다. 실패·취소는 같은 상태이므로 이벤트를 추가하지 않고 회복 성공에1회 발행한다. 기존 오류 기록·완료 세대 공유와 요청 자체 발급 예산은 유지한다.
+
+| 재사용한 의존성 | 버전·기능 | 새 전이 패키지 | 라이선스 |
+|---|---|---|---|
+| tokio | =1.54.1,기존rt/time에sync추가 | 0 | MIT |
+| serde | =1.0.229,기존workspace derive를일반의존성에도사용 | 0 | MIT 또는 Apache-2.0 |
+
+## 2차 수정 손 변형 이력
+
+2차 수정d6b7100 당시 핵심 소스와 복사본 원복 소스의 SHA-256은 `b304332b6dcb88b78e45dfff7cab506ad31d1d5c007e58cec1e73fba4d93c531`로 같다. 대조군과 원복 대조군은 각각24개 수용 시험을 통과했다. 아래43개는 모두 실제 컴파일 후 시험 실패로 검출했고 생존·컴파일 불가·시간 초과0이다. 이전22/35개는 각 회차의 기록이며 합산하지 않는다. 원시 결과는 target/T-02/manual-r2-results.json과 manual-r2-logs에 보존했다. 변형 복사본에서만 cap-lints를 사용했으며 제품 검사 규칙은 끄지 않았다. 이후 시험의 게이트 변수명과 만료 관측 함수 추출, 서버 함수의 참조 전달은 Clippy 정합화이며 단언과 핵심 소스는 같다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 1 | Bearer 분류 변조 | tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation, tests::queued_requests_share_success_even_when_refresh_becomes_due_during_issuance | 검출 |
+| 2 | 빈 토큰 검사 반전 | tests::equivalent_json_escapes_preserve_token_and_bearer_type, tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation | 검출 |
+| 3 | 최소 수명 완화 | tests::malformed_tokens_are_closed_errors_and_never_become_credentials | 검출 |
+| 4 | 수명 오류 | tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation, tests::queued_requests_share_success_even_when_refresh_becomes_due_during_issuance | 검출 |
+| 5 | 갱신 여유 59 | tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token, tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token | 검출 |
+| 6 | 갱신 여유 61 | tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token | 검출 |
+| 7 | 갱신시각 덧셈 | tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token, tests::expiry_failures_and_recovery_publish_only_changed_state | 검출 |
+| 8 | 캐시 경계 반전 | tests::expiry_failures_and_recovery_publish_only_changed_state, tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token | 검출 |
+| 9 | 갱신 정각 제외 | tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token, tests::rejected_old_token_reuses_planned_token_without_another_issue | 검출 |
+| 10 | 성공 상태 오지정 | tests::expired_issuance_response_never_starts_renewal_callbacks, tests::expiry_failures_and_recovery_publish_only_changed_state | 검출 |
+| 11 | 실패 상태 오지정 | tests::expiry_instant_and_after_expiry_share_failure_and_never_return_expired_token, tests::failed_renewal_stage_stops_the_sequence_and_keeps_connection_closed | 검출 |
+| 12 | 동일 상태 알림 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expiry_failures_and_recovery_publish_only_changed_state | 검출 |
+| 13 | 이벤트 종류 오지정 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expiry_failures_and_recovery_publish_only_changed_state | 검출 |
+| 14 | 닫기 누락 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 15 | 재연결 누락 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 16 | 구독 누락 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 17 | 주문 재조회 누락 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 18 | revoked 상태 코드 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager | 검출 |
+| 19 | 토큰 필드 교환 | tests::equivalent_json_escapes_preserve_token_and_bearer_type, tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation | 검출 |
+| 20 | 키 필드 교환 | tests::simultaneous_requests_share_one_issue_and_secret_debug_is_redacted | 검출 |
+| 21 | 정상 조회 결과를 오류로 변조 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::rejected_old_token_reuses_planned_token_without_another_issue | 검출 |
+| 22 | 중복 키 차단 누락 | tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager, tests::revoked_reissues_once_then_stops_all_requests | 검출 |
+| 23 | 대기자 성공 유효 경계 변조 | tests::queued_requests_share_success_even_when_refresh_becomes_due_during_issuance, tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation | 검출 |
+| 24 | 취소 정리 조건 반전 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expiry_failures_and_recovery_publish_only_changed_state | 검출 |
+| 25 | 정상 완료 표식 누락 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 26 | 오래된 응답 비교 반전 | tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager, tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token | 검출 |
+| 27 | 디코딩 토큰 폐기 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::equivalent_json_escapes_preserve_token_and_bearer_type | 검출 |
+| 28 | 주문 재조회 토큰 교환 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 29 | 명시 복구 차단 조건 반전 | tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager, tests::revoked_reissues_once_then_stops_all_requests | 검출 |
+| 30 | 오래된 오류를 중복 키로 오분류 | tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token | 검출 |
+| 31 | invalid-token을 중복 키로 오분류 | tests::repeated_invalid_token_discards_the_rejected_cached_token, tests::repeated_invalid_token_closes_request_without_reporting_duplicate_key | 검출 |
+| 32 | invalid-token 인식 반전 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::repeated_invalid_token_closes_request_without_reporting_duplicate_key | 검출 |
+| 33 | 반복 invalid-token 상태 오류 | tests::repeated_invalid_token_discards_the_rejected_cached_token, tests::repeated_invalid_token_closes_request_without_reporting_duplicate_key | 검출 |
+| 34 | 취소 공유 오류 누락 | tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |
+| 35 | 취소 완료 세대 누락 | tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |
+| 36 | 이미 갱신된 토큰 재사용 제거 | tests::rejected_old_token_reuses_planned_token_without_another_issue, tests::revoked_after_shared_token_and_own_reissue_closes_without_second_own_issue | 검출 |
+| 37 | WS 닫기 전 만료 검사 제거 | tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 38 | invalid-token 캐시 폐기 누락 | tests::repeated_invalid_token_discards_the_rejected_cached_token, tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded | 검출 |
+| 39 | 자체 발급 예산 소진 누락 | tests::repeated_invalid_token_discards_the_rejected_cached_token, tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token | 검출 |
+| 40 | 발급을 공유로 오분류 | tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager, tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token | 검출 |
+| 41 | 공유를 자체 발급으로 오분류 | tests::revoked_after_shared_token_and_own_reissue_closes_without_second_own_issue, tests::revoked_shared_planned_token_preserves_one_own_reissue | 검출 |
+| 42 | 빈 캐시를 교체로 오분류 | tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded | 검출 |
+| 43 | 닫힌 인증 실패 공유 누락 | tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded | 검출 |
+
+## 최종 손 변형 결과
+
+3차 수정 핵심 소스와 복사본 원복 소스의 SHA-256은 `ff994bf1b483d302bedd0d25b5a22e5f144b3a0c63a761f03e70f4304e2a2f56`로 같다. 토큰 시험과 새 가짜 서버 도우미도 원복 복사본과 각각 해시가 같다. 대조군과 원복 대조군은 각각26개를 통과했다. 아래46개는 모두 실제 컴파일 후 시험 실패로 검출했고 생존·컴파일 불가·시간 초과0이다. 앞선22/35/43개 및 시간 초과한 중간 실행은 합산하지 않는다. 원시 결과는 target/T-02/manual-r3-results.json과 manual-r3-logs에, 파일별 해시는 manual-r3-hashes.json에 보존했다. 복사본 변형의 컴파일에만 cap-lints를 사용했고 제품 검사 규칙은 끄지 않았다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 1 | Bearer 분류 변조 | tests::equivalent_json_escapes_preserve_token_and_bearer_type, tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager | 검출 |
+| 2 | 빈 토큰 검사 반전 | tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation, tests::connection_changes_use_the_same_bus_as_other_application_publishers | 검출 |
+| 3 | 최소 수명 완화 | tests::malformed_tokens_are_closed_errors_and_never_become_credentials | 검출 |
+| 4 | 수명 오류 | tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 5 | 갱신 여유 59 | tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token, tests::rejected_old_token_reuses_planned_token_without_another_issue | 검출 |
+| 6 | 갱신 여유 61 | tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token | 검출 |
+| 7 | 갱신시각 덧셈 | tests::expiry_failures_and_recovery_publish_only_changed_state, tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token | 검출 |
+| 8 | 캐시 경계 반전 | tests::expiry_failures_and_recovery_publish_only_changed_state, tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token | 검출 |
+| 9 | 갱신 정각 제외 | tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token, tests::refresh_boundary_is_before_expiry_and_failure_never_reuses_invalidated_token | 검출 |
+| 10 | 성공 상태 오지정 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 11 | 실패 상태 오지정 | tests::expiry_instant_and_after_expiry_share_failure_and_never_return_expired_token, tests::failed_renewal_stage_stops_the_sequence_and_keeps_connection_closed | 검출 |
+| 12 | 동일 상태 알림 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 13 | 이벤트 종류 오지정 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expiry_failures_and_recovery_publish_only_changed_state | 검출 |
+| 14 | 닫기 누락 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 15 | 재연결 누락 | tests::expired_issuance_response_never_starts_renewal_callbacks, tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation | 검출 |
+| 16 | 구독 누락 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 17 | 주문 재조회 누락 | tests::expired_issuance_response_never_starts_renewal_callbacks, tests::expiry_instant_and_after_expiry_share_failure_and_never_return_expired_token | 검출 |
+| 18 | revoked 상태 코드 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::cancelled_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds | 검출 |
+| 19 | 토큰 필드 교환 | tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation, tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation | 검출 |
+| 20 | 키 필드 교환 | tests::simultaneous_requests_share_one_issue_and_secret_debug_is_redacted | 검출 |
+| 21 | 정상 조회 결과를 오류로 변조 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::rejected_old_token_reuses_planned_token_without_another_issue | 검출 |
+| 22 | 중복 키 차단 누락 | tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager, tests::failed_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds | 검출 |
+| 23 | 대기자 성공 유효 경계 변조 | tests::one_second_before_expiry_can_still_be_shared_by_the_waiting_generation, tests::queued_requests_share_success_even_when_refresh_becomes_due_during_issuance | 검출 |
+| 24 | 취소 정리 조건 반전 | tests::connection_changes_use_the_same_bus_as_other_application_publishers, tests::expiry_instant_and_after_expiry_share_failure_and_never_return_expired_token | 검출 |
+| 25 | 정상 완료 표식 누락 | tests::expiry_instant_and_after_expiry_share_failure_and_never_return_expired_token, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 26 | 오래된 응답 비교 반전 | tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token, tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager | 검출 |
+| 27 | 디코딩 토큰 폐기 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::equivalent_json_escapes_preserve_token_and_bearer_type | 검출 |
+| 28 | 주문 재조회 토큰 교환 | tests::issuance_precedes_close_reconnect_subscriptions_and_order_reconciliation, tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 29 | 명시 복구 차단 조건 반전 | tests::failed_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds, tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager | 검출 |
+| 30 | 오래된 오류를 중복 키로 오분류 | tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token | 검출 |
+| 31 | invalid-token을 중복 키로 오분류 | tests::repeated_invalid_token_closes_request_without_reporting_duplicate_key, tests::repeated_invalid_token_discards_the_rejected_cached_token | 검출 |
+| 32 | invalid-token 인식 반전 | tests::invalid_token_also_reissues_once_as_required_by_t04_handoff, tests::repeated_invalid_token_discards_the_rejected_cached_token | 검출 |
+| 33 | 반복 invalid-token 상태 오류 | tests::repeated_invalid_token_discards_the_rejected_cached_token, tests::repeated_invalid_token_closes_request_without_reporting_duplicate_key | 검출 |
+| 34 | 취소 공유 오류 누락 | tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |
+| 35 | 취소 완료 세대 누락 | tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |
+| 36 | 이미 갱신된 토큰 재사용 제거 | tests::rejected_old_token_reuses_planned_token_without_another_issue, tests::revoked_after_shared_token_and_own_reissue_closes_without_second_own_issue | 검출 |
+| 37 | WS 닫기 전 만료 검사 제거 | tests::expired_issuance_response_never_starts_renewal_callbacks | 검출 |
+| 38 | invalid-token 캐시 폐기 누락 | tests::repeated_invalid_token_discards_the_rejected_cached_token, tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded | 검출 |
+| 39 | 자체 발급 예산 소진 누락 | tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token, tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager | 검출 |
+| 40 | 발급을 공유로 오분류 | tests::obsolete_revoked_retry_does_not_disconnect_a_newer_successful_token, tests::connection_coordinator_can_recover_duplicate_key_without_restarting_manager | 검출 |
+| 41 | 공유를 자체 발급으로 오분류 | tests::revoked_after_shared_token_and_own_reissue_closes_without_second_own_issue, tests::revoked_shared_planned_token_preserves_one_own_reissue | 검출 |
+| 42 | 빈 캐시를 교체로 오분류 | tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded | 검출 |
+| 43 | 닫힌 인증 실패 공유 누락 | tests::late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded | 검출 |
+| 44 | 명시 복구 실패 정지 보존 제거 | tests::failed_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds | 검출 |
+| 45 | 명시 복구 취소 정지 보존 제거 | tests::cancelled_explicit_recovery_keeps_duplicate_key_stop_until_recovery_succeeds | 검출 |
+| 46 | 중복 키 정지 보존 조건 반전 | tests::expiry_failures_and_recovery_publish_only_changed_state, tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |

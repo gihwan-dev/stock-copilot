@@ -140,6 +140,11 @@ fn change_connection(state: &mut State, bus: &EventBus, connection: BrokerConnec
     }
 }
 impl Attempt<'_> {
+    fn fail_connection(&mut self) {
+        if self.state.connection != BrokerConnection::DuplicateKey {
+            change_connection(self.state, self.bus, BrokerConnection::Disconnected);
+        }
+    }
     fn complete(&mut self, result: &Result<TokenLease, TokenError>) {
         self.completion = AttemptCompletion::Completed;
         self.state.last_error = result.as_ref().err().copied();
@@ -149,7 +154,7 @@ impl Attempt<'_> {
                 self.state.token = Some(token.clone());
                 change_connection(self.state, self.bus, BrokerConnection::Connected);
             }
-            Err(_error) => change_connection(self.state, self.bus, BrokerConnection::Disconnected),
+            Err(_error) => self.fail_connection(),
         }
     }
 }
@@ -158,7 +163,7 @@ impl Drop for Attempt<'_> {
         if self.completion == AttemptCompletion::Pending {
             self.state.last_error = Some(TokenError::Renewal);
             self.generation.0.fetch_add(1, Ordering::SeqCst);
-            change_connection(self.state, self.bus, BrokerConnection::Disconnected);
+            self.fail_connection();
         }
     }
 }
