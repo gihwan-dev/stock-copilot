@@ -6,7 +6,7 @@
 
 SEC-12, P-9, ADR 0039·0080·0091·0100을 따른다. ChangeRiskSettings는 전체 요청을 기존 RiskSettings와 비교한다. 주문 켜기, 시장가 허용, 몇 시간 허용, 비중 완화, 성향 증가 순서로 필요한 확인만 요청하며 모두 Confirmed여야 저장소를 한 번 호출한다. Denied 또는 Unavailable이면 저장하지 않는다. 취소·시간 초과·시스템 오류는 포트의 Unavailable이다. 주문 확인은 호출하지 않는다.
 
-덜 위험한 변경과 주의 기준만 변경하는 경우 확인 없이 저장한다. 같은 값은 저장하지 않는다. 비중 완화는 WeightCaps::change_from, 성향 비교는 domain의 닫힌 순서를 사용한다. 금액·비율 계산은 없다. 부재는 기존 투자 성향과 주문·시장가 꺼짐으로 읽으며 조회 부재 자체를 저장하지 않는다. 몇 시간 선택 중 허용 끄기의 정합 검사는 저장소가 같은 프로필 사실과 함께 원자적으로 검증한다(ADR 0039·0080).
+덜 위험한 변경과 주의 기준만 변경하는 경우 확인 없이 저장한다. 같은 값은 저장하지 않는다. 비중 완화는 WeightCaps::change_from, 성향 비교는 domain의 닫힌 순서를 사용한다. 금액·비율 계산은 없다. 부재는 기존 투자 성향과 주문·시장가 꺼짐으로 읽으며 조회 부재 자체를 저장하지 않는다. 몇 시간 선택 중 허용 끄기는 유스케이스가 기존 domain 규칙으로 네이티브 확인 전에 검사하고, 정합하지 않으면 ProfileRejected(HoursNotAllowed)를 반환한다. 저장소는 저장 시 같은 프로필 사실과 함께 정합성을 원자적으로 재검증한다(ADR 0039·0080).
 
 모든 설정 쓰기의 직렬화는 조립 책임이다. 저장 성공 뒤 SettingsChanged를 발행하고 구독 실패는 Changed의 DeliveryReport로 반환한다. 저장소는 다섯 필드와 프로필을 같은 사실로 저장해야 한다. 새로운 포트·domain API·의존성·가짜 메서드·검사 끄기·기존 테스트 변경은 없다.
 
@@ -62,7 +62,7 @@ SEC-12, P-9, ADR 0039·0080·0091·0100을 따른다. ChangeRiskSettings는 전�
 
 | 정의 대기 항목 | 받는 작업 | 현재 동작과 범위 |
 |---|---|---|
-| AdvancedHoursConfirmation 발급 API, 요청 연계와 재사용 계약 | A-17·U-24, O-14·E-09 | ADR 0039가 넘긴 봉인 증거 발급 API는 현재 없다. 이번 범위에서 새 domain API나 포트를 만들지 않는다. 현재는 ADR 0080에 따라 AllowHours 확인이 Confirmed인 뒤 RiskSettings 상태를 저장한다. 실제 확인 우회 결함으로 보지는 않으며 봉인 증거 연동은 정의 대기다 |
+| AdvancedHoursConfirmation 발급 API, 요청 연계와 재사용 계약 | 주책임 U-24, 연계 O-14·E-09, 저장 경계 S-10 | ADR 0039가 넘긴 봉인 증거 발급 API는 현재 없다. 이번 범위에서 새 domain API나 포트를 만들지 않는다. 현재는 ADR 0080에 따라 AllowHours 확인이 Confirmed인 뒤 RiskSettings 상태를 저장한다. 실제 확인 우회 결함으로 보지는 않으며 봉인 증거 연동은 정의 대기다 |
 | 위험 설정 없이 프로필만 있는 초기화·마이그레이션 상태의 허용 여부와 비교 기준 | S-10 | 정상 메모리 저장은 프로필과 위험 설정을 함께 저장한다. 기존 프로필을 존중하는 현재 부재 해석은 유지하며, 실제 어댑터가 이 조합을 허용하는지는 아직 확정하지 않는다 |
 
 리뷰의 ADR 파일명 지적은 기각한다. 사용자 지시와 implementer 규칙이 번호 없는 이 초안 경로를 명시했고 번호 부여는 메인의 병합 책임이다. 기존 테스트·domain 구현·포트·가짜는 수정하지 않았다.
@@ -100,3 +100,7 @@ SEC-12, P-9, ADR 0039·0080·0091·0100을 따른다. ChangeRiskSettings는 전�
 | 23 | 허용 끄기를 기존 허용 유지로 검증 | tests::hours_horizon_rejection_precedes_unrelated_native_confirmation | 컴파일 성공·검출 |
 | 24 | 거부를 확인 불가로 반환 | tests::later_denial_does_not_save_earlier_confirmed_fields, tests::each_field_preserves_exact_values_and_checks_only_risk_increases, tests::every_non_confirmation_preserves_all_settings_and_never_requests_order_presence | 컴파일 성공·검출 |
 | 25 | 확인 불가를 거부로 반환 | tests::every_non_confirmation_preserves_all_settings_and_never_requests_order_presence, tests::each_field_preserves_exact_values_and_checks_only_risk_increases | 컴파일 성공·검출 |
+
+## 최종 인계 책임
+
+봉인 증거 발급 API·확인 요청 연계·일회성 및 재사용 방지 계약의 주책임은 U-24다. O-14·E-09가 승인 경로와 연결하고 S-10이 저장 경계를 맡는다. 메인은 U-24의 완료 조건 또는 열린 항목에 이 계약을 등록해야 한다. 이번 작업에서는 지시대로 tasks.md와 progress.md를 수정하지 않는다. 2회차 비판은 새 차단·중요 코드 결함이 없음을 확인했고, 남은 두 문서 보완을 반영했다.
