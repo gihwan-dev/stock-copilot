@@ -634,4 +634,64 @@ mod conversion_tests {
             )
         );
     }
+    #[test]
+    fn complete_fx_failure_preserves_native_data_in_both_views() {
+        let store = MemoryPortfolioRepository::default();
+        let market = MemoryMarketDataRepository::default();
+        let error = SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData);
+        for () in [(), ()] {
+            store
+                .script_latest()
+                .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                    at(123),
+                    SyncOutcome::Complete(portfolio()),
+                )))));
+            market
+                .script_fx_rate()
+                .push(MemoryReply::Return(Err(error)));
+        }
+        let StoredView::Recorded(view) =
+            run(GetPortfolioView::new(&store, &market).execute(&AccountId::new(79))).expect("조회")
+        else {
+            panic!("기록")
+        };
+        assert_eq!(view.exchange_rate_lookup(), &Err(error));
+        let SyncOutcome::Complete(value) = view.outcome() else {
+            panic!("완료 기록")
+        };
+        assert_eq!(
+            value.buying_power(Currency::Krw).money(),
+            Ok(money("137", Currency::Krw))
+        );
+        assert_eq!(
+            value.buying_power(Currency::Usd).money(),
+            Ok(money("29", Currency::Usd))
+        );
+        assert_eq!(
+            value.assets().completeness(),
+            domain::TotalCompleteness::Incomplete
+        );
+        let StoredView::Recorded(allocation_view) =
+            run(GetAllocationView::new(&store, &market).execute(&AccountId::new(79)))
+                .expect("조회")
+        else {
+            panic!("기록")
+        };
+        assert_eq!(allocation_view.exchange_rate_lookup(), &Err(error));
+        let SyncOutcome::Complete(allocation) = allocation_view.outcome() else {
+            panic!("완료 기록")
+        };
+        assert_eq!(
+            allocation.valuation().buying_power(Currency::Krw).money(),
+            Ok(money("137", Currency::Krw))
+        );
+        assert_eq!(
+            allocation.valuation().buying_power(Currency::Usd).money(),
+            Ok(money("29", Currency::Usd))
+        );
+        assert_eq!(
+            allocation.valuation().assets().completeness(),
+            domain::TotalCompleteness::Incomplete
+        );
+    }
 }
