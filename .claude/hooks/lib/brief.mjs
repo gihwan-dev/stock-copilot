@@ -53,3 +53,13 @@ export const digestOf = (text) =>
   createHash("sha256")
     .update(typeof text === "string" ? text : "")
     .digest("hex");
+
+export const reviewTargetCommit = (prompt) => {
+  const matches = [
+    ...String(prompt).matchAll(
+      /^[ \t]*(?:[-*][ \t]*)?대상(?: 커밋| SHA)[ \t]*:[ \t]*`?([0-9a-f]{40})`?[ \t]*$/gmu,
+    ),
+  ];
+  const values = [...new Set(matches.map((match) => match[1]))];
+  return values.length === 1 ? values[0] : undefined;
+};

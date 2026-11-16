@@ -13,6 +13,7 @@ pub(crate) struct MemberPackage {
     pub(crate) name: CrateName,
     pub(crate) directory: PathBuf,
     pub(crate) schema_names: BTreeSet<String>,
+    pub(crate) source_aliases: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -121,6 +122,18 @@ fn member_packages(metadata: &Metadata) -> Vec<MemberPackage> {
                 .manifest_path
                 .parent()
                 .map(|directory| MemberPackage {
+                    source_aliases: package
+                        .dependencies
+                        .iter()
+                        .filter_map(|dependency| {
+                            dependency.rename.as_ref().map(|alias| {
+                                (
+                                    alias.replace('-', "_"),
+                                    vec![dependency.name.replace('-', "_")],
+                                )
+                            })
+                        })
+                        .collect(),
                     name: CrateName::new(&package.name),
                     directory: directory.as_std_path().to_path_buf(),
                     schema_names: package

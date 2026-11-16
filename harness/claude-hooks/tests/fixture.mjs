@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  cpSync,
   linkSync,
   mkdirSync,
   rmSync,
@@ -143,14 +144,38 @@ export const roleInput = (role) => {
   return { agent_type: role, agent_id: "a1" };
 };
 
+let mainHookRoot;
+const mainHookProject = () => {
+  if (mainHookRoot === undefined) {
+    const base = mkdtempSync(join(tmpdir(), "main-hook-context-"));
+    mainHookRoot = join(base, "repo");
+    execFileSync(
+      "git",
+      ["clone", "--quiet", "--shared", repoRoot, mainHookRoot],
+      { env: gitEnvironment() },
+    );
+    mainHookRoot = realpathSync(mainHookRoot);
+    cpSync(join(repoRoot, ".claude"), join(mainHookRoot, ".claude"), {
+      recursive: true,
+    });
+  }
+  return mainHookRoot;
+};
+
 export const runHook = (script, input) => {
+  const root = ["guard-edit.mjs", "guard-bash.mjs"].includes(script)
+    ? mainHookProject()
+    : repoRoot;
   const finished = spawnSync(
     process.execPath,
-    [join(repoRoot, ".claude/hooks", script)],
+    [join(root, ".claude/hooks", script)],
     {
-      input: typeof input === "string" ? input : JSON.stringify(input),
+      input: (typeof input === "string"
+        ? input
+        : JSON.stringify(input)
+      ).replaceAll(repoRoot, root),
       encoding: "utf8",
-      env: { ...process.env, CLAUDE_PROJECT_DIR: repoRoot },
+      env: { ...process.env, CLAUDE_PROJECT_DIR: root },
       timeout: 300000,
     },
   );

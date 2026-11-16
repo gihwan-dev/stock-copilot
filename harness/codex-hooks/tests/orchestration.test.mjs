@@ -15,6 +15,9 @@ const facts = {
   resolveCommit: (value) => value,
   passedTargets: new Map(),
   reportDigests: new Set(),
+  worktreeForBranch: (branch) => (branch === "h-41" ? "/target" : undefined),
+  headOf: () => "b".repeat(40),
+  isAncestor: () => true,
 };
 const call = {
   tool_name: "mcp__t3_code__delegate_task",
@@ -25,7 +28,7 @@ const call = {
   },
 };
 
-test("only fresh Codex worktree delegation and Claude adversarial review are allowed", () => {
+test("only T3 worktree delegation is allowed and native reviews are denied", () => {
   assert.deepEqual(orchestrationFindings(call, rules, facts), []);
   for (const key of ["driverKind", "model"]) {
     const input = structuredClone(call);
@@ -40,7 +43,7 @@ test("only fresh Codex worktree delegation and Claude adversarial review are all
     { tool_name: "SendMessage" },
   ])
     assert.equal(orchestrationFindings(input, rules, facts).length, 1);
-  assert.deepEqual(
+  assert.equal(
     orchestrationFindings(
       {
         tool_name: "Agent",
@@ -52,7 +55,99 @@ test("only fresh Codex worktree delegation and Claude adversarial review are all
       },
       rules,
       facts,
-    ),
-    [],
+    ).length,
+    1,
   );
+});
+
+test("T3 Opus review requires the exact model role provider and worktree", () => {
+  const input = structuredClone(call);
+  input.tool_input.role = "review";
+  input.tool_input.task += `\n- 대상 SHA: ${"b".repeat(40)}`;
+  input.tool_input.target = {
+    driverKind: "claudeAgent",
+    model: "claude-opus-5-5",
+    providerInstanceId: "claudeAgent",
+  };
+  assert.deepEqual(orchestrationFindings(input, rules, facts), []);
+  for (const target of [
+    { model: "claude-sonnet-5-5" },
+    { providerInstanceId: "other" },
+    { options: { effort: "max" } },
+  ]) {
+    assert.equal(
+      orchestrationFindings(
+        {
+          ...input,
+          tool_input: {
+            ...input.tool_input,
+            target: { ...input.tool_input.target, ...target },
+          },
+        },
+        rules,
+        facts,
+      ).length,
+      1,
+    );
+  }
+  for (const change of [
+    { role: "implementation" },
+    { isolation: "shared" },
+    { runtimeMode: "full-access" },
+  ]) {
+    assert.equal(
+      orchestrationFindings(
+        { ...input, tool_input: { ...input.tool_input, ...change } },
+        rules,
+        facts,
+      ).length,
+      1,
+    );
+  }
+});
+
+test("pinned review bases survive parallel master movement but must belong to the target", () => {
+  const input = structuredClone(call);
+  input.tool_input.role = "review";
+  input.tool_input.task += `\n- 대상 SHA: ${"b".repeat(40)}`;
+  const moved = { ...facts, baseTip: "c".repeat(40) };
+  assert.deepEqual(orchestrationFindings(input, rules, moved), []);
+  assert.equal(
+    orchestrationFindings(input, rules, { ...moved, isAncestor: () => false })
+      .length,
+    1,
+  );
+  assert.equal(
+    orchestrationFindings(input, rules, {
+      ...moved,
+      worktreeForBranch: () => undefined,
+    }).length,
+    1,
+  );
+  assert.equal(
+    orchestrationFindings(input, rules, { ...moved, headOf: () => undefined })
+      .length,
+    1,
+  );
+});
+
+test("review delegation rejects implementation reports missing targets and wrong target heads", () => {
+  const input = structuredClone(call);
+  input.tool_input.role = "review";
+  input.tool_input.task += `\n- 대상 SHA: ${"b".repeat(40)}`;
+  assert.deepEqual(orchestrationFindings(input, rules, facts), []);
+  for (const task of [
+    call.tool_input.task,
+    input.tool_input.task.replace("b".repeat(40), "d".repeat(40)),
+    input.tool_input.task + "\n완료\n완료 기준별 충족 근거",
+    input.tool_input.task + "\n하네스 기록: 검증",
+  ])
+    assert.equal(
+      orchestrationFindings(
+        { ...input, tool_input: { ...input.tool_input, task } },
+        rules,
+        facts,
+      ).length,
+      1,
+    );
 });

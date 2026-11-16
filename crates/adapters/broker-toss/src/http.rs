@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use application::{HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
+use application::{Clock, HttpStatus, ReadEndpoint, RetryDelay, SecretValue};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest::{Client, Url};
@@ -21,6 +21,7 @@ pub enum TossHttpError {
     Configuration,
     Transport,
     ResponseTooLarge,
+    RateLimited,
 }
 
 #[derive(Debug)]
@@ -46,6 +47,7 @@ impl Resolve for LoopbackResolver {
 pub struct TossHttpClient {
     client: Client,
     origin: Url,
+    limiter: crate::rate_limiter::RateLimiter,
 }
 
 impl fmt::Debug for TossHttpClient {
@@ -205,7 +207,11 @@ fn validate_loopback(origin: &Url) -> Result<(), TossHttpError> {
 }
 
 impl TossHttpClient {
-    pub fn new(endpoint: &TossEndpoint) -> Result<Self, TossHttpError> {
+    pub fn new(
+        endpoint: &TossEndpoint,
+        clock: Arc<dyn Clock>,
+        wait: Arc<dyn crate::RequestWait>,
+    ) -> Result<Self, TossHttpError> {
         let origin =
             Url::parse(endpoint.origin()).map_err(|_error| TossHttpError::InvalidEndpoint)?;
         match endpoint.mode() {
@@ -215,7 +221,11 @@ impl TossHttpClient {
         let client = configured_client(endpoint.mode())
             .build()
             .map_err(|_error| TossHttpError::Configuration)?;
-        Ok(Self { client, origin })
+        Ok(Self {
+            client,
+            origin,
+            limiter: crate::rate_limiter::RateLimiter::new(clock, wait),
+        })
     }
 
     pub(crate) async fn send_token(&self, body: SecretValue) -> Result<RawResponse, TossHttpError> {
@@ -238,25 +248,43 @@ impl TossHttpClient {
         request: &ReadRequest,
         token: &SecretValue,
     ) -> Result<RawResponse, TossHttpError> {
-        let url = request.url(&self.origin);
-        let authorization_bytes =
-            SecretValue::new([b"Bearer ", token.as_exposed_secret()].concat());
-        let authorization = sensitive_header(&authorization_bytes)?;
-        let builder = self.client.get(url).header(AUTHORIZATION, authorization);
-        let authenticated = match request.account() {
-            Some(account) => {
-                let value = sensitive_header(account)?;
-                builder.header("X-Tossinvest-Account", value)
-            }
-            None => builder,
-        };
-        receive(
-            authenticated
+        let mut budget = self.limiter.lock(request.group()).await;
+        let mut attempt = 0_u32;
+        loop {
+            self.limiter.admit(&mut budget).await?;
+            let url = request.url(&self.origin);
+            let authorization_bytes =
+                SecretValue::new([b"Bearer ", token.as_exposed_secret()].concat());
+            let authorization = sensitive_header(&authorization_bytes)?;
+            let builder = self.client.get(url).header(AUTHORIZATION, authorization);
+            let authenticated = match request.account() {
+                Some(account) => {
+                    let value = sensitive_header(account)?;
+                    builder.header("X-Tossinvest-Account", value)
+                }
+                None => builder,
+            };
+            let transport = authenticated
                 .send()
                 .await
-                .map_err(|_error| TossHttpError::Transport)?,
-        )
-        .await
+                .map_err(|_error| TossHttpError::Transport)?;
+            budget.observe(header(transport.headers(), "X-RateLimit-Limit").as_deref());
+            if transport.status().as_u16() == 429 {
+                self.limiter.defer(
+                    &mut budget,
+                    header(transport.headers(), "Retry-After").as_deref(),
+                    attempt,
+                );
+            }
+            let response = receive(transport).await?;
+            if response.status() != 429
+                || attempt == 3
+                || budget.cooldown() == crate::rate_limiter::Cooldown::Unavailable
+            {
+                return Ok(response);
+            }
+            attempt = attempt.saturating_add(1);
+        }
     }
 }
 

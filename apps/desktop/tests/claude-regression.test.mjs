@@ -70,14 +70,28 @@ const removalVariants = (value, path = []) => {
   return [];
 };
 
+const expectedSetup = {
+  ...recording.setup,
+  scripts: {
+    ...recording.setup.scripts,
+    "reviewer-write.sh":
+      "printf 'x\\n' > '{worktree}/docs/regression-reviewer.md'\n",
+    "reviewer-undo.sh": "rm -f '{worktree}/docs/regression-reviewer.md'\n",
+  },
+};
+const expectedRecordedRows = recording.rows.map((row) =>
+  row.id === "S8" ? { ...row, verdict: VERDICT.fail } : row,
+);
+
 const specHolds = (candidate) =>
   specProblems(candidate).length === 0 &&
-  JSON.stringify(candidate.setup) === JSON.stringify(recording.setup) &&
+  JSON.stringify(candidate.setup) === JSON.stringify(expectedSetup) &&
   JSON.stringify(candidate.experiments.map((item) => item.id)) ===
     JSON.stringify(recording.rows.map((row) => row.id)) &&
   JSON.stringify(snapshotTargets(candidate.experiments, recorded.values)) ===
     JSON.stringify(Object.keys(recorded.snapshots.before)) &&
-  rowKey(judgeAll(candidate.experiments, recorded)) === rowKey(recording.rows);
+  rowKey(judgeAll(candidate.experiments, recorded)) ===
+    rowKey(expectedRecordedRows);
 
 const withSession = (id, change) => ({
   ...recorded,
@@ -150,7 +164,7 @@ test("the experiments cover R-10 #1 to #12 and every step the sessions ask for",
   );
 });
 
-test("the recorded run judges every experiment as recorded", () => {
+test("the historical run retains its verdicts except S8 without target evidence", () => {
   assert.ok(specHolds(spec));
   assert.ok(recording.version.length > 0);
 });
@@ -356,5 +370,40 @@ test("just claude-regression runs the script and is not part of just check", () 
     checkSteps(dumpJustfile(join(repoRoot, "justfile"))).every(
       (step) => !(step.command ?? "").includes("claude-regression"),
     ),
+  );
+});
+
+test("S8 rejects unchecked blocks and requires the target mutation evidence", () => {
+  const change = (data) => ({
+    ...recorded,
+    records: recorded.records.map((record) =>
+      record.kind === "reviewer" ? { ...record, data } : record,
+    ),
+  });
+  const target = `${recorded.values.worktree}: 새 파일 docs/regression-reviewer.md`;
+  for (const data of [
+    { status: "unchecked", blocks: 3 },
+    { status: "unchecked", blocks: 3, differences: [target] },
+    { status: "clean", blocks: 3 },
+    {
+      status: "contaminated",
+      blocks: 3,
+      differences: ["other: 새 파일 docs/regression-reviewer.md"],
+    },
+  ])
+    assert.equal(judge(experiment("S8"), change(data)).verdict, VERDICT.fail);
+  assert.equal(
+    judge(
+      experiment("S8"),
+      change({ status: "clean", blocks: 1, differences: [target] }),
+    ).verdict,
+    VERDICT.pass,
+  );
+  assert.equal(
+    judge(
+      experiment("S8"),
+      change({ status: "contaminated", blocks: 1, differences: [target] }),
+    ).verdict,
+    VERDICT.pass,
   );
 });

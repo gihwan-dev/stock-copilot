@@ -17,12 +17,15 @@ const prompt = input.tool_input?.prompt;
 
 if (
   verdict.findings.length === 0 &&
-  input.tool_input?.subagent_type === "implementer" &&
+  ["implementer", "adversarial-reviewer", "review-critic"].includes(
+    input.tool_input?.subagent_type,
+  ) &&
   isSafeId(input.session_id) &&
   isSafeId(input.tool_use_id) &&
   typeof prompt === "string"
 ) {
   writeRecord(state, KIND.pending, `${input.session_id}-${input.tool_use_id}`, {
+    agentType: input.tool_input.subagent_type,
     sessionId: input.session_id,
     toolUseId: input.tool_use_id,
     digest: digestOf(prompt),

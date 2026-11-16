@@ -7,7 +7,8 @@ fn assert_sidecar_directory_is_integrity(filename: &str) {
     let fixture = Fixture::new();
     let path = DatabasePath::new(fixture.path());
     let encrypted_length = {
-        let database = Database::open(&path, &key()).expect("encrypted database");
+        let database =
+            Database::open(&path, &key(), &crate::tests::clock()).expect("encrypted database");
         super::runtime()
             .block_on(
                 database
@@ -25,7 +26,7 @@ fn assert_sidecar_directory_is_integrity(filename: &str) {
     }
     std::fs::create_dir_all(&sidecar).expect("directory collision");
     assert_eq!(
-        Database::open(&path, &key())
+        Database::open(&path, &key(), &crate::tests::clock())
             .expect_err("directory is not a sidecar file")
             .failure(),
         SystemFailure::RepositoryIntegrity
@@ -46,7 +47,8 @@ fn shm_sidecar_directory_is_a_storage_layout_failure() {
 fn regular_sidecar_files_preserve_a_live_encrypted_database() {
     let fixture = Fixture::new();
     let path = DatabasePath::new(fixture.path());
-    let database = Database::open(&path, &key()).expect("encrypted database");
+    let database =
+        Database::open(&path, &key(), &crate::tests::clock()).expect("encrypted database");
     let rt = super::runtime();
     rt.block_on(database.write(|transaction| {
         transaction.execute_batch(crate::sql::tests::CREATE_TEST)?;
@@ -57,7 +59,8 @@ fn regular_sidecar_files_preserve_a_live_encrypted_database() {
     for filename in ["store.db-wal", "store.db-shm"] {
         assert!(fixture.0.join(filename).is_file());
     }
-    let reopened = Database::open(&path, &key()).expect("regular sidecars are allowed");
+    let reopened = Database::open(&path, &key(), &crate::tests::clock())
+        .expect("regular sidecars are allowed");
     assert_eq!(
         rt.block_on(reopened.read(|connection| {
             connection.query_row(crate::sql::tests::VALUE_TEST, [], |row| {
@@ -78,14 +81,15 @@ fn readonly_parent_rejects_new_and_existing_database_with_permission_action() {
     for state in ["new", "existing"] {
         std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o500))
             .expect("deny creation");
-        let result = Database::open(&path, &key());
+        let result = Database::open(&path, &key(), &crate::tests::clock());
         std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700))
             .expect("restore before assertion");
         assert_eq!(
             result.expect_err(state).failure(),
             SystemFailure::PermissionDenied
         );
-        let _database = Database::open(&path, &key()).expect("create writable database");
+        let _database = Database::open(&path, &key(), &crate::tests::clock())
+            .expect("create writable database");
     }
 }
 
@@ -94,11 +98,12 @@ fn readonly_database_file_is_rejected_before_a_successful_health_result() {
     let fixture = Fixture::new();
     let path = DatabasePath::new(fixture.path());
     {
-        let _database = Database::open(&path, &key()).expect("create database");
+        let _database =
+            Database::open(&path, &key(), &crate::tests::clock()).expect("create database");
     }
     std::fs::set_permissions(path.as_path(), std::fs::Permissions::from_mode(0o400))
         .expect("read only");
-    let result = Database::open(&path, &key());
+    let result = Database::open(&path, &key(), &crate::tests::clock());
     std::fs::set_permissions(path.as_path(), std::fs::Permissions::from_mode(0o600))
         .expect("restore before assertion");
     assert_eq!(
@@ -111,17 +116,25 @@ fn readonly_database_file_is_rejected_before_a_successful_health_result() {
 fn a_directory_or_non_directory_parent_is_a_storage_layout_failure() {
     let fixture = Fixture::new();
     assert_eq!(
-        Database::open(&DatabasePath::new(fixture.0.clone()), &key())
-            .expect_err("directory is not a database file")
-            .failure(),
+        Database::open(
+            &DatabasePath::new(fixture.0.clone()),
+            &key(),
+            &crate::tests::clock()
+        )
+        .expect_err("directory is not a database file")
+        .failure(),
         SystemFailure::RepositoryIntegrity
     );
     let component = fixture.0.join("file-parent");
     std::fs::write(&component, b"not a directory").expect("file");
     assert_eq!(
-        Database::open(&DatabasePath::new(component.join("store.db")), &key())
-            .expect_err("parent is not a directory")
-            .failure(),
+        Database::open(
+            &DatabasePath::new(component.join("store.db")),
+            &key(),
+            &crate::tests::clock()
+        )
+        .expect_err("parent is not a directory")
+        .failure(),
         SystemFailure::RepositoryIntegrity
     );
 }
@@ -133,6 +146,7 @@ fn invalid_key_length_creates_no_database_file() {
         Database::open(
             &DatabasePath::new(fixture.path()),
             &application::SecretValue::new(vec![9; 31]),
+            &crate::tests::clock()
         )
         .expect_err("invalid key")
         .failure(),
@@ -146,7 +160,7 @@ fn file_preparation_is_owner_only_and_preserves_existing_encrypted_data() {
     let fixture = Fixture::new();
     let path = DatabasePath::new(fixture.path());
     let created_mode = {
-        let database = Database::open(&path, &key()).expect("new database");
+        let database = Database::open(&path, &key(), &crate::tests::clock()).expect("new database");
         super::runtime()
             .block_on(database.write(|transaction| {
                 transaction.execute_batch(crate::sql::tests::CREATE_TEST)?;
@@ -164,7 +178,8 @@ fn file_preparation_is_owner_only_and_preserves_existing_encrypted_data() {
             & 0o777_u32
     };
     assert_eq!(created_mode, 0o600_u32);
-    let database = Database::open(&path, &key()).expect("existing database");
+    let database =
+        Database::open(&path, &key(), &crate::tests::clock()).expect("existing database");
     assert_eq!(
         super::runtime()
             .block_on(database.read(|connection| {

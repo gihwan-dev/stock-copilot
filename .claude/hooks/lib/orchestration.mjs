@@ -1,5 +1,5 @@
-import { agentFindings, baseVerdict } from "./agent-guard.mjs";
-import { parseBrief } from "./brief.mjs";
+import { baseVerdict, reportProblems } from "./agent-guard.mjs";
+import { parseBrief, reviewTargetCommit } from "./brief.mjs";
 import { ROLE, roleOf } from "./roles.mjs";
 const denied = (message) => [{ rule: "orchestration", gated: false, message }];
 const keys = (value, allowed) =>
@@ -21,15 +21,33 @@ const briefCheck = (text, rules, facts) => {
   );
   return result.problem === undefined ? [] : denied(result.problem);
 };
+const reviewBriefCheck = (text, rules, facts) => {
+  const brief = parseBrief(text);
+  const base =
+    brief.problem === undefined ? facts.resolveCommit(brief.commit) : undefined;
+  const target =
+    brief.branch === undefined
+      ? undefined
+      : facts.worktreeForBranch?.(brief.branch);
+  const head = target === undefined ? undefined : facts.headOf?.(target);
+  const requested = reviewTargetCommit(text);
+  const targetCommit =
+    requested === undefined ? undefined : facts.resolveCommit(requested);
+  return base &&
+    head &&
+    base !== targetCommit &&
+    targetCommit === head &&
+    facts.isAncestor?.(base, targetCommit)
+    ? reportProblems(text, rules, facts.reportDigests ?? new Set())
+    : denied("리뷰 기준은 등록된 대상 작업 사본 이력의 커밋이어야 한다");
+};
 export const orchestrationFindings = (input, rules, facts) => {
   if (roleOf(input) !== ROLE.main)
     return denied("서브에이전트는 위임하지 않는다");
   if (input.tool_name === "SendMessage")
     return denied("Claude 리뷰어를 재개하지 않는다");
   if (input.tool_name === "Agent")
-    return input.tool_input?.subagent_type === "adversarial-reviewer"
-      ? agentFindings(input, rules, facts)
-      : denied("Claude는 매번 새 적대적 리뷰만 한다");
+    return denied("리뷰도 T3의 별도 작업 사본으로만 위임한다");
   const tool = input.tool_name.replace(/^mcp__t3[-_]code__/u, "");
   const args = input.tool_input ?? {};
   if (
@@ -52,9 +70,23 @@ export const orchestrationFindings = (input, rules, facts) => {
         "clientRequestId",
         "timeoutMs",
       ]) ||
-      !keys(args.target, ["driverKind", "model", "options"]) ||
-      args.target.driverKind !== "codex" ||
-      args.target.model !== "gpt-6.1-sol" ||
+      !keys(args.target, [
+        "driverKind",
+        "model",
+        "options",
+        "providerInstanceId",
+      ]) ||
+      !(
+        (args.target.driverKind === "codex" &&
+          args.target.model === "gpt-6.1-sol" &&
+          (args.target.providerInstanceId === undefined ||
+            args.target.providerInstanceId === "codex")) ||
+        (args.target.driverKind === "claudeAgent" &&
+          args.target.model === "claude-opus-5-5" &&
+          args.role === "review" &&
+          (args.target.providerInstanceId === undefined ||
+            args.target.providerInstanceId === "claudeAgent"))
+      ) ||
       !options(args.target.options) ||
       args.isolation !== "worktree" ||
       (args.role !== undefined &&
@@ -63,7 +95,9 @@ export const orchestrationFindings = (input, rules, facts) => {
       typeof args.task !== "string"
     )
       return denied("허용하지 않은 T3 위임 인자다");
-    return briefCheck(args.task, rules, facts);
+    return args.role === "review"
+      ? reviewBriefCheck(args.task, rules, facts)
+      : briefCheck(args.task, rules, facts);
   }
   if (tool === "t3_thread_launch") {
     if (
@@ -146,6 +180,8 @@ export const orchestrationFindings = (input, rules, facts) => {
   if (worktree === undefined)
     return denied("이 메인이 시작한 같은 저장소의 스레드가 아니다");
   if (tool === "t3_thread_send") {
+    if (!["implementation", "research"].includes(owned.role))
+      return denied("리뷰·비판은 재개하지 않고 새로 위임한다");
     if (
       typeof args.message !== "string" ||
       (args.mode !== undefined && args.mode !== "auto")
