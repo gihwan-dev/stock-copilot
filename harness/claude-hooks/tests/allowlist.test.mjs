@@ -102,9 +102,16 @@ test("open-issues and every git-tracked ADR are protected, a new ADR number is n
       path,
     ),
   );
+  const nextNumber =
+    Math.max(
+      ...project.adrs.map((path) =>
+        Number(/^(\d+)/u.exec(path.slice("docs/adr/".length))?.[1] ?? "0"),
+      ),
+    ) + 1;
+  const futureAdr = `docs/adr/${String(nextNumber).padStart(4, "0")}-future.md`;
   assert.deepEqual(
     writeFindings(
-      join(repoRoot, "docs/adr/0099-future.md"),
+      join(repoRoot, futureAdr),
       ROLE.implementer,
       project,
       MODE.edit,

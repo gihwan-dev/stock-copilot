@@ -34,6 +34,14 @@ mktemp -d로 만든 작업 사본 내부 복사본에서 하나씩 실제 실행
 
 커버리지 통과 조건은 시드 5·4096회이며 모든 일반 속성 테스트의 모든 분기를 예제로 없앴다고 주장하지 않는다. KST 날짜 검증 두 곳은 같은 계약을 유지한다. T-10은 후속 어댑터 작업에서 둘의 의미가 갈라지지 않는지 확인한다. 현재 공통화는 완료 필수 사항이 아니므로 제품 구조는 더 늘리지 않는다.
 
+최종 통합에서는 master 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a를 수신한다. 충돌한 config/hash 생성물은 해당 master를 기준으로 기존 스크립트로 재생성하며, 사용자 관리 문서의 upstream 변경을 보존한다. 최종 HEAD 전체 검사는 `just base=HEAD check`와 그 실제 로그로 별도 확인한다.
+
+## 최종 HEAD 검사에서 확인한 기존 fixture 충돌
+
+master 520c8df의 ADR 0099가 커밋된 뒤 최종 HEAD 021e4c8d43687c685d9955dee50efce30607ea01에서 전체 검사를 실행하자, 기존 allowlist 테스트가 미래의 미사용 번호로 고정한 0099-future.md가 이미 사용 중인 번호가 되어 실패했다. 병합 전 훅의 HEAD에는 새 ADR 0099가 없어 이 충돌이 드러나지 않았다. 이 실패는 통과로 취급하지 않았다.
+
+원 지시문의 준비 부분 변경 승인(d)에 따라 해당 테스트의 미사용 번호 fixture만 현재 Git 추적 ADR의 가장 큰 번호 다음 값으로 만든다. 기존 보호 경로·중복 번호 단언과 성공 기대값은 그대로 유지한다. 하네스의 허용 규칙을 바꾸지 않는다. 좁은 회귀는 수정 전 실패했고, 수정 후 allowlist 테스트 5개와 ESLint가 통과했다. 기존 테스트 변경 목록에 이 준비 부분 한 건을 별도로 기록한다. 최종 전체 검사는 수정 커밋 HEAD에서 다시 실행한다.
+
 ## 최종 손 변형 표
 
 | 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
@@ -61,5 +69,3 @@ mktemp -d로 만든 작업 사본 내부 복사본에서 하나씩 실제 실행
 | 21 | indicator collection replaced by server | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
 | 22 | indicator server offset rewritten | `deterministic_flow_dates_use_kst_and_preserve_original_observations` | 검출 |
 | 23 | 계측 정리를 workspace에서 profraw-only로 축소 | coverage_remeasurement_discards_obsolete_source_mappings | 컴파일 성공·before_change 잔존 단언으로 검출, 복구 통과 |
-
-최종 통합에서는 master 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a를 수신한다. 충돌한 config/hash 생성물은 해당 master를 기준으로 기존 스크립트로 재생성하며, 사용자 관리 문서의 upstream 변경을 보존한다. 최종 HEAD 전체 검사는 `just base=HEAD check`와 그 실제 로그로 별도 확인한다.
