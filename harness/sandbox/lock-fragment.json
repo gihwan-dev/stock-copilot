@@ -39,6 +39,7 @@
         "./clippy.toml",
         "./crates/adapters/broker-toss-schema",
         "./crates/adapters/store-sqlite/migrations.lock",
+        "./crates/adapters/store-sqlite/schema.snapshot.sql",
         "./crates/testkit-ports/src/lib.rs",
         "./crates/testkit-ports/src/script.rs",
         "./crates/testkit-ports/src/scripted_presence.rs",

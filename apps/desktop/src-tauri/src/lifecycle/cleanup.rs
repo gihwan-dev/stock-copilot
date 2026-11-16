@@ -21,15 +21,7 @@ pub(super) async fn close_database(
     state: DatabaseState,
 ) -> Result<DatabaseClosure, SystemPortError> {
     match state {
-        DatabaseState::Ready(database) => {
-            match tauri::async_runtime::spawn_blocking(move || database.shutdown()).await {
-                Ok(result) => result.map(DatabaseClosure::Closed),
-                Err(_error) => Err(SystemPortError::new(
-                    application::SystemPort::Repository,
-                    application::SystemFailure::RepositoryIntegrity,
-                )),
-            }
-        }
+        DatabaseState::Ready(database) => database.close().await.map(DatabaseClosure::Closed),
         DatabaseState::Failed(error) => Err(error),
         DatabaseState::NotConfigured => Ok(DatabaseClosure::NotOpened),
     }

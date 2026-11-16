@@ -5,7 +5,8 @@ import {
 } from "./lib/agent-facts.mjs";
 import { readInput, writeOutput } from "./lib/io.mjs";
 import { HOOKS_PROJECT_ROOT, worktreesOf } from "./lib/project.mjs";
-import { snapshotOf } from "./lib/reviewer-guard.mjs";
+import { branchOf } from "./lib/git-facts.mjs";
+import { reviewerTarget, snapshotOf } from "./lib/reviewer-guard.mjs";
 import {
   KIND,
   claimRecord,
@@ -49,7 +50,9 @@ const context = (text) => ({
 
 const claimFor = (transcribed) => {
   const mine = listRecords(state, KIND.pending).filter(
-    (entry) => entry.sessionId === input.session_id,
+    (entry) =>
+      entry.sessionId === input.session_id &&
+      (entry.agentType === undefined || entry.agentType === input.agent_type),
   );
   const chosen = choosePending(
     mine,
@@ -87,18 +90,26 @@ if (kind === ROLE.implementer) {
 }
 
 if (kind === ROLE.reviewer) {
+  const worktrees = worktreesOf(HOOKS_PROJECT_ROOT);
+  const transcribed = promptWithRetry(subagentTranscript(input), 5);
+  const claimed = claimFor(transcribed);
+  const target = reviewerTarget(transcribed ?? claimed, worktrees, {
+    branchOf,
+  });
   writeRecord(state, KIND.reviewer, input.agent_id, {
     kind: KIND.reviewer,
     agentId: input.agent_id,
     agentType: input.agent_type,
     sessionId: input.session_id,
     startedAt: new Date().toISOString(),
-    status: "started",
+    status: target === undefined ? "unchecked" : "started",
     blocks: 0,
-    snapshot: snapshotOf(
-      worktreesOf(HOOKS_PROJECT_ROOT),
-      HOOKS_PROJECT_ROOT,
-      snapshotFacts,
-    ),
+    worktree: target,
+    reason:
+      target === undefined
+        ? "시작 입력 또는 등록된 리뷰 대상을 확인하지 못했다 (전사본·대기 기록과 기준 커밋·브랜치를 확인한다)"
+        : undefined,
+    snapshot:
+      target === undefined ? [] : snapshotOf(worktrees, target, snapshotFacts),
   });
 }

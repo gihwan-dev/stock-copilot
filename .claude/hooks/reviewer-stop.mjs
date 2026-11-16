@@ -6,14 +6,17 @@ import { KIND, readRecord, stateDirectory, writeRecord } from "./lib/state.mjs";
 
 const input = readInput();
 const state = stateDirectory();
+const record = readRecord(state, KIND.reviewer, input.agent_id);
 const result = decideReviewerStop(
   input,
-  readRecord(state, KIND.reviewer, input.agent_id),
-  snapshotOf(
-    worktreesOf(HOOKS_PROJECT_ROOT),
-    HOOKS_PROJECT_ROOT,
-    snapshotFacts,
-  ),
+  record,
+  record?.worktree === undefined
+    ? []
+    : snapshotOf(
+        worktreesOf(HOOKS_PROJECT_ROOT),
+        record.worktree,
+        snapshotFacts,
+      ),
   readAgentRules(),
   new Date().toISOString(),
 );

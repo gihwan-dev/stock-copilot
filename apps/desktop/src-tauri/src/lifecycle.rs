@@ -21,7 +21,7 @@ pub struct ShutdownOutcome {
 #[derive(Debug, PartialEq, Eq)]
 pub enum DatabaseClosure {
     NotOpened,
-    Closed(store_sqlite::DatabaseClosed),
+    Closed(application::WriteCompleted),
 }
 
 #[derive(Debug)]

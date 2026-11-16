@@ -169,6 +169,9 @@ impl std::fmt::Debug for ReadRequest {
     }
 }
 impl ReadRequest {
+    pub(crate) fn group(&self) -> crate::rate_limiter::Group {
+        crate::rate_limiter::Group::route(&self.route)
+    }
     #[must_use]
     pub const fn new(route: ReadRoute) -> Self {
         Self {

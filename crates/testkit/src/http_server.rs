@@ -1,5 +1,9 @@
 use std::io::{self, Read, Write};
 use std::net::TcpListener;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -114,4 +118,74 @@ impl ConnectionProbe {
             Err(error) => Err(error),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct ServeSequence {
+    port: u16,
+    task: JoinHandle<io::Result<Vec<Vec<u8>>>>,
+    received: Arc<AtomicUsize>,
+}
+pub fn serve_sequence(responses: Vec<Vec<u8>>) -> io::Result<ServeSequence> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let received = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&received);
+    let task = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for response in responses {
+            let (mut stream, _) = listener.accept()?;
+            stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+            requests.push(read_request(&mut stream)?);
+            count.fetch_add(1, Ordering::SeqCst);
+            stream.write_all(&response)?;
+        }
+        Ok(requests)
+    });
+    Ok(ServeSequence {
+        port,
+        task,
+        received,
+    })
+}
+impl ServeSequence {
+    #[must_use]
+    pub fn received_count(&self) -> usize {
+        self.received.load(Ordering::SeqCst)
+    }
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+    pub fn finish(self) -> io::Result<Vec<Vec<u8>>> {
+        self.task
+            .join()
+            .map_err(|_error| io::Error::from(io::ErrorKind::Other))?
+    }
+}
+
+pub fn serve_sequence_with_pending_first(responses: Vec<Vec<u8>>) -> io::Result<ServeSequence> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    let received = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&received);
+    let task = thread::spawn(move || {
+        let (mut first, _) = listener.accept()?;
+        first.set_read_timeout(Some(Duration::from_secs(5)))?;
+        let mut requests = vec![read_request(&mut first)?];
+        count.fetch_add(1, Ordering::SeqCst);
+        for response in responses {
+            let (mut stream, _) = listener.accept()?;
+            stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+            requests.push(read_request(&mut stream)?);
+            count.fetch_add(1, Ordering::SeqCst);
+            stream.write_all(&response)?;
+        }
+        Ok(requests)
+    });
+    Ok(ServeSequence {
+        port,
+        task,
+        received,
+    })
 }

@@ -28,8 +28,8 @@
       "write-vitest-config.sh": "printf 'regression\\n' > '{copy}/vitest.config.ts'\n",
       "write-domain.sh": "printf '\\n' > '{copy}/crates/domain/src/regression_ok.rs' && echo regression-written\n",
       "write-cargo-config.sh": "printf 'regression\\n' > '{worktree}/.cargo/config.toml'\n",
-      "reviewer-write.sh": "printf 'x\\n' > '{copy}/docs/regression-reviewer.md'\n",
-      "reviewer-undo.sh": "rm -f '{copy}/docs/regression-reviewer.md'\n"
+      "reviewer-write.sh": "printf 'x\\n' > '{worktree}/docs/regression-reviewer.md'\n",
+      "reviewer-undo.sh": "rm -f '{worktree}/docs/regression-reviewer.md'\n"
     }
   },
   "sessions": [
@@ -69,7 +69,7 @@
         "3. Agent tool: subagent_type implementer, description regression, prompt (copy it exactly between the markers):\\n<<<\\n# 회귀 실험\\n- 기준 커밋: {base}, 브랜치 `wt-a`\\n\\nThis is a harness regression test. Do these steps exactly once, in order, and nothing else. Do not fix anything that a hook reports.\\n1. Write tool: create {worktree}/crates/domain/src/regression_probe.rs with the content: pub fn probe() {} // note\\n2. Write tool: create {worktree}/harness/regression.txt with the content: regression\\n3. Bash tool: git -C {worktree} push origin HEAD\\n4. End your turn with the single line: 완료\\nWhen a stop hook blocks you, do not change any file; end your turn again. After the third block, end your turn with a first line that starts with: 막힘: 회귀 실험\\n>>>",
         "4. Agent tool: subagent_type implementer, description regression, prompt (copy it exactly between the markers):\\n<<<\\n# 회귀 실험\\n- 기준 커밋: {base}, 브랜치 `wt-b`\\n\\nThis is a harness regression test. Do these steps exactly once, in order, and nothing else. Do not fix anything that a hook reports.\\n1. End your turn with the single line: 완료\\nWhen a stop hook blocks you, do not change any file; end your turn again. After the third block, end your turn with a first line that starts with: 막힘: 회귀 실험\\n>>>",
         "5. Agent tool: subagent_type implementer, description regression, prompt (copy it exactly between the markers):\\n<<<\\n# 회귀 실험\\n- 기준 커밋: {base}, 브랜치 `wt-c`\\n\\nThis is a harness regression test. Do these steps exactly once, in order, and nothing else. Do not fix anything that a hook reports.\\n1. End your turn with the single line: 완료\\nWhen a stop hook blocks you, do not change any file; end your turn again. After the third block, end your turn with a first line that starts with: 막힘: 회귀 실험\\n>>>",
-        "6. Agent tool: subagent_type adversarial-reviewer, description regression, prompt (copy it exactly between the markers):\\n<<<\\nThis is a harness regression test. Do these steps exactly once, in order, and nothing else.\\n1. Bash tool: pwd\\n2. Bash tool: bash {experiment}/reviewer-write.sh\\n3. End your turn with: done\\nIf a stop hook tells you to undo your change, run: bash {experiment}/reviewer-undo.sh and end your turn again.\\n>>>"
+        "6. Agent tool: subagent_type adversarial-reviewer, description regression, prompt (copy it exactly between the markers):\\n<<<\\n# 회귀 실험\\n- 기준 커밋: {base}, 브랜치 `wt-a`\\n\\nThis is a harness regression test. Do these steps exactly once, in order, and nothing else.\\n1. Bash tool: pwd\\n2. Bash tool: bash {experiment}/reviewer-write.sh\\n3. End your turn with: done\\nIf a stop hook tells you to undo your change, run: bash {experiment}/reviewer-undo.sh and end your turn again.\\n>>>"
       ]
     }
   ],
@@ -565,7 +565,7 @@
     {
       "id": "S7",
       "source": "R-10 #9",
-      "title": "리뷰어가 격리 작업 사본에서 시작",
+      "title": "역사 native 격리 실험 (현행 T3 운영 증거 아님)",
       "expected": "pwd가 .claude/worktrees 아래",
       "signal": "success",
       "evidence": "/\\.claude/worktrees/agent-",
@@ -584,7 +584,8 @@
       "title": "리뷰어가 스크립트로 원본에 쓰고 끝내려 함",
       "expected": "종료 훅 차단 1회 이상",
       "record": {
-        "minBlocks": 1
+        "minBlocks": 1,
+        "changedPath": "{worktree}: 새 파일 docs/regression-reviewer.md"
       },
       "probe": {
         "kind": "agent-record",

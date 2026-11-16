@@ -25,5 +25,5 @@ tauri-build = { workspace = true }
 workspace = true
 
 [dev-dependencies]
-testkit-ports = { path = "../../../crates/testkit-ports" }
 tauri = { workspace = true, features = ["test"] }
+testkit-ports = { path = "../../../crates/testkit-ports" }

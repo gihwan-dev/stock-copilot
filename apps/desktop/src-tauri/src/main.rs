@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = tauri::generate_context!();
     let clock = platform_macos::SystemClock::new()
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let shared_clock = Arc::new(clock);
     let ports = Ports::<ProductPorts> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
@@ -40,11 +41,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         secrets: Arc::new(Unavailable),
         notifier: Arc::new(Unavailable),
         news_feeds: Vec::new(),
-        clock: Arc::new(clock),
+        clock: Arc::clone(&shared_clock),
         presence: Arc::new(platform_macos::UnavailablePresence),
         events: application::EventBusBuilder::default().build(),
         saved_accounts: Vec::new(),
-        database: Arc::new(database_factory()),
+        database: Arc::new(database_factory(shared_clock)),
     };
     run_app(
         build_app(tauri::Builder::default(), ports, context)?,
@@ -53,10 +54,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn database_factory() -> DatabaseFactory {
-    DatabaseFactory(Box::new(|path, key| {
+fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {
+    DatabaseFactory(Box::new(move |path, key| {
         src_tauri::database::prepare_directory(&path)?;
-        store_sqlite::Database::open(&path, &key)
+        store_sqlite::Database::open(&path, &key, clock.as_ref())
     }))
 }
 
@@ -75,7 +76,16 @@ mod tests {
             format!("{endpoint:?}"),
             format!("TossEndpoint {{ origin: {expected_origin:?}, mode: Production }}")
         );
-        let client = broker_toss::TossHttpClient::new(&endpoint).expect("product configuration");
+        let client = broker_toss::TossHttpClient::new(
+            &endpoint,
+            std::sync::Arc::new(testkit_ports::SteppedClock::new(
+                broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                    .expect("clock")
+                    .into_domain(),
+            )),
+            std::sync::Arc::new(broker_toss::TokioRequestWait),
+        )
+        .expect("product configuration");
         assert_eq!(format!("{client:?}"), "TossHttpClient(<redacted>)");
     }
 
@@ -93,7 +103,12 @@ mod tests {
         secrets.script_load().push(MemoryReply::Return(Ok(Some(
             application::SecretValue::new(vec![83; 32]),
         ))));
-        let factory = Arc::new(super::database_factory());
+        let clock = Arc::new(testkit_ports::SteppedClock::new(
+            broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")
+                .expect("clock")
+                .into_domain(),
+        ));
+        let factory = Arc::new(super::database_factory(clock));
         tauri::async_runtime::block_on(async {
             let state = open_database(&secrets, factory, || Ok(path)).await;
             assert_eq!(state.status(), DatabaseStatus::Ready);

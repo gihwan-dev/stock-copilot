@@ -17,31 +17,57 @@ pub(crate) struct Writer {
 }
 
 impl Writer {
-    pub(crate) fn open(path: &DatabasePath, key: &SecretValue) -> Result<Self, SystemPortError> {
+    pub(crate) fn open_migrated(
+        path: &DatabasePath,
+        key: &SecretValue,
+        at: domain::Timestamp,
+    ) -> Result<Self, SystemPortError> {
+        Self::start(path, key, move |connection| {
+            crate::migration::run(connection, at)
+        })
+    }
+
+    fn start(
+        path: &DatabasePath,
+        key: &SecretValue,
+        initialize: impl FnOnce(&mut Connection) -> Result<(), SystemPortError> + Send + 'static,
+    ) -> Result<Self, SystemPortError> {
         let mut connection = connection::open(path, key, connection::Access::Write)?;
+        let (ready, initialized) = mpsc::sync_channel(1);
         let (requests, receiver) = mpsc::channel();
         let thread = std::thread::Builder::new()
             .name(String::from("encrypted-store-writer"))
             .spawn(move || {
+                let result = initialize(&mut connection);
+                let failed = result.is_err();
+                if ready.send(result).is_err() || failed {
+                    return;
+                }
                 while let Ok(Request::Run(job)) = receiver.recv() {
                     job(&mut connection);
                 }
             })
             .map_err(|error| failure::io(&error))?;
-        Ok(Self {
+        let writer = Self {
             requests,
             thread: Some(thread),
-        })
+        };
+        initialized
+            .recv()
+            .map_err(|_error| failure::integrity())??;
+        Ok(writer)
     }
 
-    pub(crate) fn shutdown(&mut self) -> Result<(), SystemPortError> {
-        self.requests
+    pub(crate) fn close(mut self) -> Result<application::WriteCompleted, SystemPortError> {
+        let sent = self
+            .requests
             .send(Request::Stop)
-            .map_err(|_error| failure::integrity())?;
+            .map_err(|_error| failure::integrity());
         if let Some(thread) = self.thread.take() {
             thread.join().map_err(|_error| failure::integrity())?;
         }
-        Ok(())
+        sent?;
+        Ok(application::WriteCompleted)
     }
 
     pub(crate) async fn execute<T, F>(&self, operation: F) -> Result<T, SystemPortError>
@@ -107,9 +133,10 @@ mod tests {
         let fixture = crate::tests::Fixture::new();
         let endpoint;
         {
-            let writer = Writer::open(
+            let writer = Writer::open_migrated(
                 &DatabasePath::new(fixture.path()),
                 &SecretValue::new(vec![23; 32]),
+                crate::tests::timestamp(),
             )
             .expect("writer");
             endpoint = writer.requests.clone();

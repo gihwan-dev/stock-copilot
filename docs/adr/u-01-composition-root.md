@@ -39,7 +39,7 @@ BrokerTrade는 order-execution 전용 포트이며 src-tauri가 직접 보지 �
 | `presence`       | `Arc<P::UserPresence>`          | 닫힌 자리 표시: Unavailable                                     | O-07, U-24                   |
 | `events`         | `EventBus`                      | 실제: 프로세스 내부 구현                                        | U-02, J-01이 구독자 등록     |
 | `saved_accounts` | `Vec<AccountId>`                | 조립 입력: 저장된 계좌 인덱스, 제품은 현재 비어 있음            | S-02가 저장 계좌 인덱스 제공 |
-| `database`       | `Arc<DatabaseFactory>`          | 실제 S-01의 열기 함수를 main.rs에서 주입                        | S-15 마이그레이션 통합       |
+| `database`       | `Arc<DatabaseFactory>`          | 실제 S-15 열기 함수에 제품 SystemClock을 주입                   | S-15 마이그레이션 통합 완료  |
 
 BrokerRead와 MarketInfo는 요청 엔드포인트를 보존한 AccessDenied(InvalidCredentials), HttpStatus::NotReceived를 반환한다. 시도하지 않은 HTTP 상태를 만들지 않는다. 저장소·감사·알림·비밀 쓰기는 SystemFailure::Unavailable(RetryDelay::Unknown)이며 SecretStore::load만 Ok(None)으로 설정 부재를 보존한다. 선택 자료(MacroSeries, Fundamentals, NewsFeed)는 NotConfigured다. AI 실행과 스트림은 InformationError::Unavailable(NotProvided)다. UserPresence는 주문과 위험 변경 모두 Unavailable이며 확인 성공을 만들지 않는다.
 
@@ -80,7 +80,7 @@ run_app의 ExitRequested 처리에서 종료를 미루고 Lifecycle::shutdown을
 | --------------------------------- | ---------------------------------------------------------------------------- |
 | S-02                              | 저장된 계좌 인덱스를 saved_accounts에 제공하고 PortfolioRepository 교체      |
 | S-03~S-08, S-11, S-12, S-16, S-18 | Ports 표의 저장소·키체인·감사 자리 표시 교체                                 |
-| S-15                              | DB 열기 팩터리에 마이그레이션과 스키마 검증 통합                             |
+| S-15                              | 마이그레이션 열기와 앱 종료 소유권 통합 완료. 사이드카 경합·동시 열기 재시도는 남음 |
 | T-02, T-05~T-15                   | 읽기 포트와 갱신 작업을 실제 동기화 유스케이스로 교체                        |
 | U-02                              | 준비된 MainScreenData와 DatabaseStatus의 타입 IPC 조회 및 이벤트 구독자 등록 |
 | U-04, G-09                        | 실제 화면 표시와 2초 측정                                                    |
@@ -194,3 +194,12 @@ mktemp 복사본에서 아래 두 변형을 각각 컴파일하고 실행했다.
 같은 모듈 이름이 경로에 반복돼도 별칭 순환으로 오인하지 않는다. 경로 접두부를 줄이는 탐색과 별칭을 확장하는 순환 제한을 구분한다. 반복 모듈 고정 자료는 수정 전 실패·수정 후 통과했고, 순서를 되돌리는 유효 변형도 검출됐다. 이 보완은 master 병합 시 포함하며 최종 병합 훅으로 검증한다.
 
 최종 수정 소스로 just mutants-diff를 다시 실행했지만, 사전 승인된 기존 테스트 변경 2건의 test-diff 사전 관문에서 거부됐다. 실제 자동 변이 실행은 없으며 자동 변이 통과로 보고하지 않는다.
+
+## S-15 병합 뒤 통합 결정
+
+메인 후속 지시로 730e4069f9327da8e7884c845069130d542066f7의 master를 --no-ff로 받았다. 이 절이 앞선 U-01 독립 구현의 DB 종료 결정보다 우선한다. 추가 독립 리뷰는 하지 않으며 메인이 통합 범위를 평가한다.
+
+- Database::open에는 Ports.clock과 같은 Arc의 SystemClock을 넘긴다. 테스트는 같은 팩터리에 SteppedClock을 주입한다. T-03의 TossHttpClient 시계·대기 인자와 src-tauri 개발 의존을 보존했다.
+- DB의 명시적 종료는 S-15의 async close(self) 하나다. U-01의 Database::shutdown, Writer::shutdown, DatabaseClosed는 제거했다. close 내부에서 블로킹 작업으로 소유권을 옮기므로 lifecycle은 refresh 취소·await 뒤 close를 직접 await한다.
+- DatabaseClosure::Closed의 결과는 S-15의 WriteCompleted다. 예전 비공개 DatabaseClosed 증거라는 설명은 폐기한다. DB 종료 실패는 그대로 보존한다.
+- S-15 인계 중 앱의 마지막 Database 소유자가 명시적 종료를 호출하는 책임은 이 통합으로 닫았다. 저장 자료/폴더 준비와 종료 실패·FIFO 배출·비동기 응답성 테스트를 유지한다. 실제 macOS UI 종료 실측, 사이드카 경합, 동시 열기·재시도 책임은 닫지 않는다.
