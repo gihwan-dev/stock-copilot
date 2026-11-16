@@ -91,7 +91,7 @@ mod tests {
     }
     fn holdings() -> HoldingsObservation {
         HoldingsObservation::from_broker_result(
-            vec![],
+            vec![holding()],
             ReportedPortfolio::new(
                 CurrencyAmounts::new(money("31", Currency::Krw), Some(money("7", Currency::Usd)))
                     .expect("평가"),
@@ -129,6 +129,7 @@ mod tests {
         match (path, outcome) {
             (0 | 4, SyncOutcome::Complete(portfolio)) => {
                 assert_eq!(portfolio.reported(), Some(*holdings().reported()));
+                assert_eq!(portfolio.holdings(), holdings().holdings());
                 assert_eq!(portfolio.buying_power(Currency::Krw), power(Currency::Krw));
                 assert_eq!(portfolio.buying_power(Currency::Usd), power(Currency::Usd));
             }
@@ -224,6 +225,268 @@ mod tests {
                     )))
                 );
             }
+        }
+    }
+    fn observed_case(
+        broker: &ScriptedBrokerRead,
+        account: &AccountId,
+    ) -> application::PortfolioSyncReport {
+        let (calls, received) = mpsc::channel();
+        let store = Store {
+            calls: calls.clone(),
+            result: Ok(WriteCompleted),
+        };
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            [DomainEventKind::PortfolioSyncRecorded].into(),
+            Subscriber(calls),
+        );
+        let bus = builder.build();
+        let report = run(
+            SyncPortfolio::new(broker, &store, &SteppedClock::new(at()), &bus).execute(account),
+        )
+        .expect("기록 성공");
+        assert_eq!(
+            received.try_iter().collect::<Vec<_>>(),
+            vec![
+                Call::Store(account.clone(), Box::new(report.record.clone())),
+                Call::Event(DomainEvent::PortfolioSyncRecorded(account.clone()))
+            ]
+        );
+        report
+    }
+    fn cash_reply(
+        requested: Currency,
+        failed: Currency,
+        error: PortError,
+    ) -> Result<BuyingPower, PortError> {
+        if requested == failed {
+            Err(error)
+        } else {
+            Ok(power(requested))
+        }
+    }
+    fn failure_case(kind: PortErrorKind, expected: domain::CashObservationFailure) {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(Ok(accounts()));
+            broker.script_holdings().push(Ok(holdings()));
+            let original = PortError::new(
+                ReadEndpoint::BuyingPower,
+                HttpStatus::OtherClientError,
+                kind,
+            );
+            for requested in [Currency::Krw, Currency::Usd] {
+                let response = cash_reply(requested, currency, original);
+                broker.script_buying_power().push(response);
+            }
+            let report = observed_case(&broker, &AccountId::new(41));
+            assert_eq!(report.failures, vec![original]);
+            let SyncOutcome::Partial(portfolio) = report.record.outcome() else {
+                panic!("부분 실패")
+            };
+            assert_eq!(portfolio.reported(), Some(*holdings().reported()));
+            assert_eq!(portfolio.holdings(), holdings().holdings());
+            assert_eq!(
+                portfolio.buying_power(currency).money(),
+                Err(domain::PortfolioError::CashLookupFailed(expected))
+            );
+            assert_eq!(portfolio.buying_power(currency).currency(), currency);
+            assert_eq!(portfolio.buying_power(currency).observed_at(), at());
+            assert_eq!(portfolio.holdings(), holdings().holdings());
+        }
+    }
+    #[test]
+    fn cash_error_reasons_group_0() {
+        failure_case(
+            PortErrorKind::NotFound(application::MissingData::Stock),
+            domain::CashObservationFailure::NotFound(domain::CashMissingData::Stock),
+        );
+        failure_case(
+            PortErrorKind::NotFound(application::MissingData::ExchangeRate),
+            domain::CashObservationFailure::NotFound(domain::CashMissingData::ExchangeRate),
+        );
+        failure_case(
+            PortErrorKind::NotFound(application::MissingData::Sector),
+            domain::CashObservationFailure::NotFound(domain::CashMissingData::Sector),
+        );
+        failure_case(
+            PortErrorKind::InvalidResponse(application::ResponseMismatch::Schema),
+            domain::CashObservationFailure::InvalidResponse(domain::CashResponseMismatch::Schema),
+        );
+        failure_case(
+            PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation),
+            domain::CashObservationFailure::InvalidResponse(
+                domain::CashResponseMismatch::Validation,
+            ),
+        );
+    }
+    #[test]
+    fn cash_error_reasons_group_1() {
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::MalformedRequest),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::MalformedRequest,
+            ),
+        );
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::MissingAccountHeader),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::MissingAccountHeader,
+            ),
+        );
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::InvalidToken),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::InvalidToken,
+            ),
+        );
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::EdgeBlocked),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::EdgeBlocked,
+            ),
+        );
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::UnsupportedQuery),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::UnsupportedQuery,
+            ),
+        );
+    }
+    #[test]
+    fn cash_error_reasons_group_2() {
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::UnsupportedContentType),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::UnsupportedContentType,
+            ),
+        );
+        failure_case(
+            PortErrorKind::InvalidRequest(application::RequestRejection::BatchLimitExceeded),
+            domain::CashObservationFailure::InvalidRequest(
+                domain::CashRequestRejection::BatchLimitExceeded,
+            ),
+        );
+        failure_case(
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::RateLimited,
+                retry: RetryDelay::Unknown,
+            },
+            domain::CashObservationFailure::Unavailable {
+                cause: domain::CashUnavailableCause::RateLimited,
+                retry: domain::CashRetryDelay::Unknown,
+            },
+        );
+        failure_case(
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::Maintenance,
+                retry: RetryDelay::Unknown,
+            },
+            domain::CashObservationFailure::Unavailable {
+                cause: domain::CashUnavailableCause::Maintenance,
+                retry: domain::CashRetryDelay::Unknown,
+            },
+        );
+        failure_case(
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::ServerError,
+                retry: RetryDelay::Unknown,
+            },
+            domain::CashObservationFailure::Unavailable {
+                cause: domain::CashUnavailableCause::ServerError,
+                retry: domain::CashRetryDelay::Unknown,
+            },
+        );
+    }
+    #[test]
+    fn cash_error_reasons_group_3() {
+        failure_case(
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::Network,
+                retry: RetryDelay::Unknown,
+            },
+            domain::CashObservationFailure::Unavailable {
+                cause: domain::CashUnavailableCause::Network,
+                retry: domain::CashRetryDelay::Unknown,
+            },
+        );
+        failure_case(
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::ExpiredToken,
+                retry: RetryDelay::Unknown,
+            },
+            domain::CashObservationFailure::Unavailable {
+                cause: domain::CashUnavailableCause::ExpiredToken,
+                retry: domain::CashRetryDelay::Unknown,
+            },
+        );
+    }
+    #[test]
+    fn account_lookup_errors_and_unselected_accounts_save_without_reading_holdings() {
+        for response in [
+            Err(error()),
+            Err(PortError::new(
+                ReadEndpoint::Accounts,
+                HttpStatus::Forbidden,
+                PortErrorKind::AccessDenied(application::AccessDenial::Forbidden),
+            )),
+            Ok(BrokerAccountRows::try_new(vec![]).expect("빈 목록")),
+            Ok(accounts()),
+        ] {
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(response.clone());
+            let report = observed_case(&broker, &AccountId::new(99));
+            assert_eq!(
+                broker.calls(),
+                vec![testkit_ports::scripted::BrokerReadCall::Accounts()]
+            );
+            match response {
+                Err(failure) if failure == error() => {
+                    assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
+                }
+                Err(_) | Ok(_) => assert_eq!(report.record.outcome(), &SyncOutcome::AccessBlocked),
+            }
+        }
+    }
+
+    fn holding() -> domain::Holding {
+        let master = domain::MasterInstrument::try_new(domain::MasterInstrumentRow {
+            listing_market: domain::MasterCode::try_new("NASDAQ").expect("시장"),
+            instrument_id: domain::InstrumentId::try_new("fixture-holding").expect("ID"),
+            symbol: domain::Symbol::try_new("AAPL").expect("심볼"),
+            name: domain::DisplayInstrumentName::try_new("고정 보유").expect("이름"),
+            security_type: domain::MasterSecurityType::from_code(
+                domain::MasterCode::try_new("STOCK").expect("종류"),
+            ),
+            currency: Currency::Usd,
+            listing_status: domain::ListingStatus::Active,
+            common_share: domain::CommonShare::Common,
+            korean_detail: None,
+            observed_at: at(),
+        })
+        .expect("마스터");
+        domain::Holding::new(
+            master.order_instrument().expect("종목"),
+            domain::Quantity::parse(&NumericInput::try_new("3").expect("수량 입력")).expect("수량"),
+            domain::AcquisitionPrice::try_new(money("11", Currency::Usd)).expect("원가"),
+            domain::HoldingObservation::new(None, None, at()),
+        )
+        .expect("보유")
+    }
+    #[test]
+    fn known_retry_delay_is_not_replaced_with_unknown_or_zero() {
+        for delay in [domain::TimeSpan::NANOSECOND, domain::TimeSpan::DAY] {
+            failure_case(
+                PortErrorKind::Unavailable {
+                    cause: UnavailableCause::RateLimited,
+                    retry: RetryDelay::Known(delay),
+                },
+                domain::CashObservationFailure::Unavailable {
+                    cause: domain::CashUnavailableCause::RateLimited,
+                    retry: domain::CashRetryDelay::Known(delay),
+                },
+            );
         }
     }
 }

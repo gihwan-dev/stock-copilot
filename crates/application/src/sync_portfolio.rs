@@ -149,22 +149,6 @@ fn cash(
 }
 fn cash_failure(kind: PortErrorKind) -> Option<CashObservationFailure> {
     match kind {
-        PortErrorKind::AccessDenied(value) => {
-            Some(CashObservationFailure::AccessDenied(match value {
-                crate::AccessDenial::InvalidCredentials => {
-                    domain::CashAccessDenial::InvalidCredentials
-                }
-                crate::AccessDenial::IpNotAllowed => domain::CashAccessDenial::IpNotAllowed,
-                crate::AccessDenial::TokenRevokedRepeated => {
-                    domain::CashAccessDenial::TokenRevokedRepeated
-                }
-                crate::AccessDenial::AccountNotFound => domain::CashAccessDenial::AccountNotFound,
-                crate::AccessDenial::Forbidden => domain::CashAccessDenial::Forbidden,
-                crate::AccessDenial::LoginUserNotFound => {
-                    domain::CashAccessDenial::LoginUserNotFound
-                }
-            }))
-        }
         PortErrorKind::NotFound(value) => Some(CashObservationFailure::NotFound(match value {
             crate::MissingData::Stock => domain::CashMissingData::Stock,
             crate::MissingData::ExchangeRate => domain::CashMissingData::ExchangeRate,
@@ -198,7 +182,7 @@ fn cash_failure(kind: PortErrorKind) -> Option<CashObservationFailure> {
                 }
             }))
         }
-        PortErrorKind::Unsupported(_) => None,
+        PortErrorKind::AccessDenied(_) | PortErrorKind::Unsupported(_) => None,
         PortErrorKind::Unavailable { cause, retry } => Some(CashObservationFailure::Unavailable {
             cause: cash_unavailable(cause),
             retry: match retry {
