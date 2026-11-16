@@ -12,7 +12,7 @@ Clock이 제공하는 발급 요청 시작 시각에 expires_in을 더한다. �
 
 발급 시도가 시작되면 이전 토큰을 관리자로부터 제거한다. 발급이 성공했지만 응답이 소실됐을 수 있으므로 실패 시에도 이전 토큰을 다시 쓰지 않는다. 연결 상태는 Disconnected·Connected·DuplicateKey다. 발급 → close → reconnect(새 토큰) → resubscribe → reconcile_orders 순서가 끝나고 아직 만료되지 않아야 Connected다. 어느 단계든 실패하면 Disconnected다. 같은 상태는 이벤트를 다시 내지 않는다. 발행 보고서 최신 한 개를 보존해 호출자가 실패 구독자를 확인할 수 있게 한다.
 
-401 token-revoked에는 요청당 재발급/재조회 각각 최대 1회다. ADR 0074의 T-02 인계에 따라 invalid-token도 동일한 1회 재발급을 수행한다. 새 토큰으로도 invalid-token이면 닫힌 Rejected(InvalidToken)와 Disconnected로 끝내며 중복 키로 오분류하지 않는다. 두 번째 revoked는 DuplicateKey와 RevokedRepeated로 닫고 이후 자동 발급도 중단한다. 연결 조정자는 다른 프로그램 종료 후의 재점검에 retry_connection을 호출해 같은 관리자를 회복할 수 있다. 일반 token/get 호출이 이 정지를 자동 해제하지 않는다. 재조립이나 앱 재시작을 사용자에게 요구하지 않는다. 자동 재발급 무한 반복을 막기 위한 보수적 선택이다.
+401 token-revoked에는 그 요청이 직접 수행하는 재발급이 최대1회다. 계획 갱신이나 다른 요청의 발급 결과를 재사용한 것은 자체 재발급에 포함하지 않는다. 재사용한 토큰이 다시 revoked여도 아직 자체 발급하지 않은 요청은 발급1회를 수행할 수 있다. 자체 재발급 뒤 다시 인증 실패하면 요청을 닫는다. ADR 0074의 T-02 인계에 따라 invalid-token도 동일한 1회 재발급을 수행한다. 새 토큰으로도 invalid-token이면 닫힌 Rejected(InvalidToken)와 Disconnected로 끝내며 중복 키로 오분류하지 않는다. 자체 재발급 뒤 현재 토큰이 다시 revoked면 DuplicateKey와 RevokedRepeated로 닫고 이후 자동 발급도 중단한다. 연결 조정자는 다른 프로그램 종료 후의 재점검에 retry_connection을 호출해 같은 관리자를 회복할 수 있다. 일반 token/get 호출이 이 정지를 자동 해제하지 않는다. 재조립이나 앱 재시작을 사용자에게 요구하지 않는다. 자동 재발급 무한 반복을 막기 위한 보수적 선택이다.
 
 TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문 전송 권한을 주지 않으며 마지막 단계는 읽기 주문 재조회다. reconcile_orders는 새 SecretValue 참조를 직접 받아 같은 관리자의 잠금을 재진입하거나 토큰을 따로 복사/저장할 필요가 없다. 실제 웹소켓은 T-17이 구현한다. 새 HTTP 수단이나 주문 경로를 추가하지 않는다. 사용자 설정·화면 상태는 추가하지 않는다.
 
@@ -26,7 +26,7 @@ TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문
 ## 인계
 
 - T-17: TokenRenewal을 구현해 close/reconnect/resubscribe/reconcile_orders를 연결한다. 마지막 단계는 인자로 빌려 받은 새 토큰으로 직접 GET을 실행하고 같은 관리자에 재진입하지 않는다. 네 단계 실패는 호출자에게 반환하며 실제 주문은 전송하지 않는다.
-- T-03: TokenManager::get은 token/revoked 흐름만 제공한다. 그룹 속도 제한은 TossHttpClient 호출 전의 어댑터 연결부에서 결합한다. 공통 HTTP 구조는 변경하지 않았다.
+- T-03: TokenManager::get은 token/revoked 흐름만 제공한다. 그룹 속도 제한은 TossHttpClient 호출 전의 어댑터 연결부에서 결합한다. AUTH 발급과 최초 GET, 공유 토큰 재조회 및 자체 재발급 뒤 재조회 각각이 전송되기 전에 제한기를 거쳐야 한다. 공통 HTTP 구조는 변경하지 않았다.
 - T-05·T-16: 조립한 단일 TokenManager를 공유한다. TokenLease는 비밀을 노출해야 하는 경계에서만 사용한다.
 - J-01·T-05·U-07: Clock 기준 token 호출을 예약해 유휴 중에도 만료 전 갱신한다. 반복 revoked 뒤에는 기존 연결 점검 흐름에서 retry_connection을 사용해 앱 재시작 없이 회복한다. access_denied/허용 IP 오류 뒤 일반 호출을 자동 재시도하지 않고, 안내가 떠 있는 동안에만 1분에 1회 이하로 발급을 재점검한다(REL-1). 이 호출 예약/화면 상태 조건은 연결 조정자의 책임이며 T-03의 일반 그룹 속도 제한과 구분한다. TokenManager는 벽시계/자체 타이머를 만들지 않는다.
 
@@ -73,7 +73,7 @@ TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문
 
 취소로 발급 future가 버려져도 시도 범위의 Drop 정리가 Renewal 오류와 완료 세대를 남기고 Disconnected 전이를 한 번 발행한다. 기존 대기자는 그 취소 실패를 공유하며 이후 새 호출은 회복할 수 있다. 갱신 단계 성공 결과를 반영하기 전에 완료 표식을 세워 구독자 패닉 중에 취소 정리를 재발행하지 않는다. 패닉을 회복하거나 삼키는 경로는 추가하지 않는다.
 
-두 번째 revoked 응답도 현재 lease와 비교한다. 이미 계획 갱신으로 교체된 lease의 오래된 응답은 Superseded로 요청만 닫고 최신 토큰·연결 상태를 건드리지 않는다. 세 번째 재조회는 하지 않는다. 현재 lease가 다시 revoked인 경우에만 DuplicateKey로 닫는다.
+두 번째 revoked 응답도 현재 lease와 비교한다. 이미 계획 갱신으로 교체된 lease의 오래된 응답은 Superseded로 요청만 닫고 최신 토큰·연결 상태를 건드리지 않는다. 이전 회차에서는 세 번째 재조회를 금지했으나 2차 메인 결정으로 대체한다. 공유 토큰 재사용을 자체 재발급으로 세지 않으며, 자체 발급 뒤 현재 lease가 다시 revoked인 경우에만 DuplicateKey로 닫는다.
 
 3번 지적의 앱 재시작 필수 주장은 기각됐다. 남은 조립 불확실성은 같은 인스턴스의 명시적 retry_connection 계약과 T-05/J-01/T-17/U-07 인계로 보완한다. 새 UI 절차나 설정을 만들지 않는다. 2번의 요청 간 누적 제한은 구체 브리프와 달라 기각한다. 4번의 5xx 비발급 보장도 자료가 없어 기각하며 기존 보수적 폐기 규칙을 유지한다.
 
@@ -85,7 +85,7 @@ TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문
 
 ## 리뷰 수정 뒤 손 변형 결과
 
-최종 핵심 소스와 복사본 원복 소스의 SHA-256이 같다: `5c242883812a9d48b4b3752f59298e24c0e28fbafb116e91e1f0af2bfa3138e5`. 별도 mktemp 복사본의 대조군/원복 대조군은 각각 18개 수용 테스트를 통과했다. 아래 35개는 모두 실제 컴파일 후 테스트 실패로 검출했고 생존·컴파일 불가·시간 초과는 0이다. 최초 22개 표는 최초 구현 회차 기록이며 아래 최종 수정 증거와 합산하지 않는다. 변형 복사본의 컴파일에만 cargo-mutants와 같은 cap-lints 모드를 사용했다. 제품 검사와 보호 규칙은 끄지 않았다.
+1차 수정65a6d575의 핵심 소스와 당시 복사본 원복 소스의 SHA-256이 같다: `5c242883812a9d48b4b3752f59298e24c0e28fbafb116e91e1f0af2bfa3138e5`. 별도 mktemp 복사본의 대조군/원복 대조군은 각각 18개 수용 테스트를 통과했다. 아래 35개는 모두 실제 컴파일 후 테스트 실패로 검출했고 생존·컴파일 불가·시간 초과는 0이다. 최초 22개 표는 최초 구현 회차 기록이며 아래1차 수정 증거와 합산하지 않는다. 변형 복사본의 컴파일에만 cargo-mutants와 같은 cap-lints 모드를 사용했다. 제품 검사와 보호 규칙은 끄지 않았다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
 |---|---|---|---|
@@ -124,3 +124,9 @@ TokenRenewal은 웹소켓 네 단계의 실행 계약이다. 구현체에 주문
 | 33 | 반복 invalid-token 상태 오류 | tests::repeated_invalid_token_closes_request_without_reporting_duplicate_key | 검출 |
 | 34 | 취소 공유 오류 누락 | tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |
 | 35 | 취소 완료 세대 누락 | tests::cancelled_renewal_disconnects_once_shares_failure_and_can_recover | 검출 |
+
+## 리뷰 2 수정
+
+메인은 계획 갱신 토큰 재사용을 요청 자체 재발급으로 세지 않는다고 확정했다. acquire는 Shared/Issued를 반환하고, get은 요청 자체의 Issued 성공 뒤에만 예산을 소진한다. 공유한 토큰이 다시 거절되면 예산이 남아 발급할 수 있다. 다른 발급 세대가 계속 생기는 동안에는 그 결과를 공유하지만 같은 거부 토큰을 재사용하지 않으며, 요청 자체 발급을 반복하지 않는다. 최초 획득은 인증 실패 복구 예산과 별개다.
+
+자체 발급 뒤 인증 실패에서 실제 다른 토큰이 있으면 Superseded로 요청만 닫는다. 현재 토큰이면 폐기와 닫힌 실패를 기록하고 상태를 전이한다. 다른 실패가 이미 캐시를 비웠으면 그 실패를 그대로 공유하며 새 토큰 교체로 오분류하지 않는다. expired-token401은 ADR0074의 이번 인계 범위 밖으로 기록만 하고 제품 정책을 추가하지 않는다.

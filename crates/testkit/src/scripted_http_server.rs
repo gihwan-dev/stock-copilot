@@ -38,34 +38,48 @@ fn read_request(stream: &mut std::net::TcpStream) -> io::Result<Vec<u8>> {
     }
 }
 
+fn release_response(
+    mut stream: std::net::TcpStream,
+    response: &[u8],
+    released: &std::sync::mpsc::Receiver<()>,
+) -> io::Result<()> {
+    released
+        .recv()
+        .map_err(|_error| io::Error::from(io::ErrorKind::BrokenPipe))?;
+    stream.write_all(response)
+}
+
 fn serve_holding(
     listener: &TcpListener,
     responses: Vec<Vec<u8>>,
     hold: HoldPosition,
     seen: &std::sync::mpsc::Sender<()>,
-    released: &std::sync::mpsc::Receiver<()>,
+    released: std::sync::mpsc::Receiver<()>,
 ) -> io::Result<Vec<u8>> {
-    let mut requests = Vec::new();
-    let mut deferred = None;
-    for (position, response) in responses.into_iter().enumerate() {
-        let (mut stream, _) = listener.accept()?;
-        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-        requests.extend(read_request(&mut stream)?);
-        if position == hold.0 {
-            deferred = Some((stream, response));
-            seen.send(())
-                .map_err(|_error| io::Error::from(io::ErrorKind::BrokenPipe))?;
-        } else {
-            stream.write_all(&response)?;
+    thread::scope(|scope| {
+        let mut requests = Vec::new();
+        let mut deferred = None;
+        let mut release = Some(released);
+        for (position, response) in responses.into_iter().enumerate() {
+            let (mut stream, _) = listener.accept()?;
+            stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+            requests.extend(read_request(&mut stream)?);
+            if position == hold.0 {
+                seen.send(())
+                    .map_err(|_error| io::Error::from(io::ErrorKind::BrokenPipe))?;
+                let gate_release = release.take().ok_or(io::ErrorKind::InvalidInput)?;
+                deferred =
+                    Some(scope.spawn(move || release_response(stream, &response, &gate_release)));
+            } else {
+                stream.write_all(&response)?;
+            }
         }
-    }
-    released
-        .recv()
-        .map_err(|_error| io::Error::from(io::ErrorKind::BrokenPipe))?;
-    if let Some((mut stream, response)) = deferred {
-        stream.write_all(&response)?;
-    }
-    Ok(requests)
+        if let Some(task) = deferred {
+            task.join()
+                .map_err(|_error| io::Error::from(io::ErrorKind::Other))??;
+        }
+        Ok(requests)
+    })
 }
 
 impl ScriptedHttpServer {
@@ -81,7 +95,7 @@ impl ScriptedHttpServer {
         let (seen, observed) = std::sync::mpsc::channel();
         let (release, released) = std::sync::mpsc::channel();
         let task =
-            thread::spawn(move || serve_holding(&listener, responses, hold, &seen, &released));
+            thread::spawn(move || serve_holding(&listener, responses, hold, &seen, released));
         Ok((Self { port, task }, ResponseGate { observed, release }))
     }
     pub fn start(responses: Vec<Vec<u8>>) -> io::Result<Self> {

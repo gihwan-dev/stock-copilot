@@ -948,4 +948,253 @@ mod tests {
             2
         );
     }
+    struct CountingRenewal(Arc<std::sync::atomic::AtomicUsize>);
+    impl TokenRenewal for CountingRenewal {
+        fn close(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            std::future::ready(Ok(()))
+        }
+        fn reconnect(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+        fn resubscribe(&self) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+        fn reconcile_orders(
+            &self,
+            _: &SecretValue,
+        ) -> impl Future<Output = Result<(), TokenError>> + Send {
+            std::future::ready(Ok(()))
+        }
+    }
+    async fn planned_reuse_run(
+        outcome: Vec<Vec<u8>>,
+        expected: Result<(), TokenError>,
+        expected_connection: BrokerConnection,
+        expected_issues: usize,
+    ) {
+        let revoked = response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#);
+        let mut replies = vec![issued("old-319"), revoked, issued("planned-751")];
+        replies.extend(outcome);
+        let (server, gate) =
+            ScriptedHttpServer::start_holding(replies, testkit::HoldPosition::new(1))
+                .expect("server");
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        let issues = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let manager = Arc::new(TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            clock.clone(),
+            CountingRenewal(Arc::clone(&issues)),
+            Arc::new(EventBus::default()),
+        ));
+        let lookup = tokio::spawn(read_accounts(Arc::clone(&manager)));
+        let observed_gate =
+            tokio::time::timeout(std::time::Duration::from_secs(5), wait_until_held(gate))
+                .await
+                .expect("first lookup held");
+        clock.0.store(1060, Ordering::SeqCst);
+        assert_eq!(
+            manager
+                .token()
+                .await
+                .expect("planned renewal")
+                .secret()
+                .as_exposed_secret(),
+            b"planned-751"
+        );
+        observed_gate.release().expect("release old lookup");
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), lookup)
+            .await
+            .expect("bounded recovery")
+            .expect("join");
+        match expected {
+            Ok(()) => assert_eq!(result.expect("recovered").status(), 200),
+            Err(error) => assert_eq!(result.expect_err("closed"), error),
+        }
+        assert_eq!(manager.connection().await, expected_connection);
+        assert_eq!(issues.load(Ordering::SeqCst), expected_issues);
+        let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
+        assert_eq!(
+            captured.matches("/oauth2/token HTTP/1.1").count(),
+            expected_issues
+        );
+        assert_eq!(captured.matches("Bearer old-319").count(), 1);
+        assert_eq!(captured.matches("Bearer planned-751").count(), 1);
+    }
+    #[test]
+    fn rejected_old_token_reuses_planned_token_without_another_issue() {
+        runtime().block_on(planned_reuse_run(
+            vec![response("200 OK", "{}")],
+            Ok(()),
+            BrokerConnection::Connected,
+            2,
+        ));
+    }
+    #[test]
+    fn revoked_shared_planned_token_preserves_one_own_reissue() {
+        runtime().block_on(planned_reuse_run(
+            vec![
+                response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#),
+                issued("own-863"),
+                response("200 OK", "{}"),
+            ],
+            Ok(()),
+            BrokerConnection::Connected,
+            3,
+        ));
+    }
+    #[test]
+    fn revoked_after_shared_token_and_own_reissue_closes_without_second_own_issue() {
+        runtime().block_on(planned_reuse_run(
+            vec![
+                response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#),
+                issued("own-863"),
+                response("401 Unauthorized", r#"{"error":{"code":"token-revoked"}}"#),
+            ],
+            Err(TokenError::RevokedRepeated),
+            BrokerConnection::DuplicateKey,
+            3,
+        ));
+    }
+    async fn observe_issuance_at(received_at: i64, expected: Result<(), TokenError>) {
+        let (server, gate) = ScriptedHttpServer::start_holding(
+            vec![issued("sequence-37")],
+            testkit::HoldPosition::new(0),
+        )
+        .expect("server");
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        let order = Arc::new(std::sync::RwLock::new(Vec::new()));
+        let manager = Arc::new(TokenManager::new(
+            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
+                .expect("client"),
+            Store,
+            clock.clone(),
+            OrderedRenewal(Arc::clone(&order)),
+            Arc::new(EventBus::default()),
+        ));
+        let issuing = tokio::spawn(issue_shared(Arc::clone(&manager)));
+        let observed_gate =
+            tokio::time::timeout(std::time::Duration::from_secs(5), wait_until_held(gate))
+                .await
+                .expect("issuance response held");
+        clock.0.store(received_at, Ordering::SeqCst);
+        observed_gate.release().expect("release response");
+        let result = issuing.await.expect("join");
+        match expected {
+            Ok(()) => {
+                result.expect("still valid");
+                assert_eq!(
+                    *order.read().expect("order"),
+                    ["close", "reconnect", "resubscribe", "orders"]
+                );
+                assert_eq!(manager.connection().await, BrokerConnection::Connected);
+            }
+            Err(error) => {
+                assert_eq!(result.expect_err("already expired"), error);
+                assert!(order.read().expect("order").is_empty());
+                assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+            }
+        }
+        server.finish().expect("capture");
+    }
+    #[test]
+    fn expired_issuance_response_never_starts_renewal_callbacks() {
+        for (received_at, expected) in [
+            (1119, Ok(())),
+            (1120, Err(TokenError::InvalidResponse)),
+            (1121, Err(TokenError::InvalidResponse)),
+        ] {
+            runtime().block_on(observe_issuance_at(received_at, expected));
+        }
+    }
+    #[test]
+    fn repeated_invalid_token_discards_the_rejected_cached_token() {
+        let invalid = response("401 Unauthorized", r#"{"error":{"code":"invalid-token"}}"#);
+        let server = ScriptedHttpServer::start(vec![
+            issued("invalid-one-319"),
+            invalid.clone(),
+            issued("invalid-two-751"),
+            invalid,
+            issued("recovered-863"),
+        ])
+        .expect("server");
+        let manager = manager(&server, FakeClock(Arc::new(AtomicI64::new(1000))));
+        runtime().block_on(async {
+            assert_eq!(
+                manager
+                    .get(&broker_toss::ReadRequest::new(
+                        broker_toss::ReadRoute::Accounts
+                    ))
+                    .await
+                    .expect_err("closed"),
+                TokenError::Rejected(application::PortErrorKind::InvalidRequest(
+                    application::RequestRejection::InvalidToken
+                ))
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+            assert_eq!(
+                manager
+                    .token()
+                    .await
+                    .expect("fresh token")
+                    .secret()
+                    .as_exposed_secret(),
+                b"recovered-863"
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Connected);
+        });
+        let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
+        assert_eq!(captured.matches("/oauth2/token HTTP/1.1").count(), 3);
+    }
+    #[test]
+    fn late_invalid_retry_after_another_failure_reports_failure_instead_of_superseded() {
+        let invalid = response("401 Unauthorized", r#"{"error":{"code":"invalid-token"}}"#);
+        let (server, gate) = ScriptedHttpServer::start_holding(
+            vec![
+                issued("one-319"),
+                invalid.clone(),
+                issued("two-751"),
+                invalid.clone(),
+                issued("three-863"),
+                invalid.clone(),
+                issued("four-947"),
+                invalid,
+            ],
+            testkit::HoldPosition::new(3),
+        )
+        .expect("server");
+        let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
+        let manager = Arc::new(manager(&server, clock.clone()));
+        runtime().block_on(async {
+            let earlier = tokio::spawn(read_accounts(Arc::clone(&manager)));
+            let observed_gate =
+                tokio::time::timeout(std::time::Duration::from_secs(5), wait_until_held(gate))
+                    .await
+                    .expect("old retry held");
+            clock.0.store(1060, Ordering::SeqCst);
+            let error = TokenError::Rejected(application::PortErrorKind::InvalidRequest(
+                application::RequestRejection::InvalidToken,
+            ));
+            assert_eq!(
+                read_accounts(Arc::clone(&manager))
+                    .await
+                    .expect_err("new request fails"),
+                error
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+            observed_gate.release().expect("release older failure");
+            assert_eq!(
+                earlier.await.expect("join").expect_err("same closed state"),
+                error
+            );
+            assert_eq!(manager.connection().await, BrokerConnection::Disconnected);
+        });
+        let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
+        assert_eq!(captured.matches("/oauth2/token HTTP/1.1").count(), 4);
+    }
 }

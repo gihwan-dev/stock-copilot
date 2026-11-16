@@ -106,6 +106,22 @@ enum ConnectionAttempt {
     Normal,
     Recovery,
 }
+enum Acquisition {
+    Shared(TokenLease),
+    Issued(TokenLease),
+}
+impl Acquisition {
+    fn token(self) -> TokenLease {
+        match self {
+            Self::Shared(token) | Self::Issued(token) => token,
+        }
+    }
+}
+#[derive(PartialEq, Eq)]
+enum ReissueBudget {
+    Available,
+    Spent,
+}
 #[derive(PartialEq, Eq)]
 enum AttemptCompletion {
     Pending,
@@ -253,7 +269,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
         &self,
         rejected: Option<&TokenLease>,
         mode: ConnectionAttempt,
-    ) -> Result<TokenLease, TokenError> {
+    ) -> Result<Acquisition, TokenError> {
         let observed = self.generation.0.load(Ordering::SeqCst);
         let mut state = self.state.lock().await;
         if state.connection == BrokerConnection::DuplicateKey && mode == ConnectionAttempt::Normal {
@@ -266,14 +282,14 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
             if let Some(token) = &state.token
                 && self.clock.now() < token.0.expires_at
             {
-                return Ok(token.clone());
+                return Ok(Acquisition::Shared(token.clone()));
             }
         }
         if let Some(token) = &state.token
             && self.clock.now() < token.0.refresh_at
             && rejected.is_none_or(|old| !Arc::ptr_eq(&old.0, &token.0))
         {
-            return Ok(token.clone());
+            return Ok(Acquisition::Shared(token.clone()));
         }
         state.token = None;
         let mut attempt = Attempt {
@@ -284,7 +300,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
         };
         let result = self.issue().await;
         attempt.complete(&result);
-        result
+        result.map(Acquisition::Issued)
     }
     fn authentication_error(
         &self,
@@ -305,42 +321,58 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TokenManager<Store,
         }
     }
     pub async fn token(&self) -> Result<TokenLease, TokenError> {
-        self.acquire(None, ConnectionAttempt::Normal).await
+        self.acquire(None, ConnectionAttempt::Normal)
+            .await
+            .map(Acquisition::token)
     }
     pub async fn retry_connection(&self) -> Result<TokenLease, TokenError> {
-        self.acquire(None, ConnectionAttempt::Recovery).await
+        self.acquire(None, ConnectionAttempt::Recovery)
+            .await
+            .map(Acquisition::token)
+    }
+    async fn close_rejected(
+        &self,
+        rejected: &TokenLease,
+        failure: AuthenticationFailure,
+    ) -> TokenError {
+        let mut state = self.state.lock().await;
+        match &state.token {
+            Some(current) if !Arc::ptr_eq(&current.0, &rejected.0) => TokenError::Superseded,
+            Some(_) => {
+                state.token = None;
+                let error = self.authentication_error(&mut state, failure);
+                state.last_error = Some(error);
+                error
+            }
+            None => state.last_error.unwrap_or(TokenError::Renewal),
+        }
     }
     pub async fn get(&self, request: &ReadRequest) -> Result<RawResponse, TokenError> {
-        let token = self.token().await?;
-        let response = self
-            .client
-            .get(request, token.secret())
-            .await
-            .map_err(TokenError::Http)?;
-        if authentication_failure(&response).is_none() {
-            return Ok(response);
-        }
-        let refreshed = self
-            .acquire(Some(&token), ConnectionAttempt::Normal)
-            .await?;
-        let retried = self
-            .client
-            .get(request, refreshed.secret())
-            .await
-            .map_err(TokenError::Http)?;
-        if let Some(failure) = authentication_failure(&retried) {
-            let mut state = self.state.lock().await;
-            if state
-                .token
-                .as_ref()
-                .is_some_and(|current| Arc::ptr_eq(&current.0, &refreshed.0))
-            {
-                state.token = None;
-                return Err(self.authentication_error(&mut state, failure));
+        let mut token = self.token().await?;
+        let mut budget = ReissueBudget::Available;
+        loop {
+            let response = self
+                .client
+                .get(request, token.secret())
+                .await
+                .map_err(TokenError::Http)?;
+            let Some(failure) = authentication_failure(&response) else {
+                return Ok(response);
+            };
+            if budget == ReissueBudget::Spent {
+                return Err(self.close_rejected(&token, failure).await);
             }
-            return Err(TokenError::Superseded);
+            match self
+                .acquire(Some(&token), ConnectionAttempt::Normal)
+                .await?
+            {
+                Acquisition::Shared(shared) => token = shared,
+                Acquisition::Issued(issued) => {
+                    token = issued;
+                    budget = ReissueBudget::Spent;
+                }
+            }
         }
-        Ok(retried)
     }
 }
 #[derive(Clone, Copy)]
