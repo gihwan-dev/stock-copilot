@@ -1,3 +1,4 @@
+mod support;
 #[cfg(test)]
 mod tests {
     use application::{
@@ -104,13 +105,21 @@ mod tests {
             .build()
             .expect("runtime")
     }
+    fn client(server: &ScriptedHttpServer) -> TossHttpClient {
+        let time = crate::support::time();
+        TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("endpoint"),
+            Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client")
+    }
     fn manager(
         server: &ScriptedHttpServer,
         clock: FakeClock,
     ) -> TokenManager<Store, FakeClock, Renewal> {
         TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(server),
             Store,
             clock,
             Renewal,
@@ -227,8 +236,7 @@ mod tests {
             Counter(Arc::clone(&count)),
         );
         let manager = TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             clock.clone(),
             Renewal,
@@ -345,8 +353,7 @@ mod tests {
         let server = ScriptedHttpServer::start(vec![issued("sequence-37")]).expect("server");
         let order = Arc::new(std::sync::RwLock::new(Vec::new()));
         let manager = TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             FakeClock(Arc::new(AtomicI64::new(1000))),
             OrderedRenewal(Arc::clone(&order)),
@@ -441,8 +448,7 @@ mod tests {
             let server = ScriptedHttpServer::start(vec![issued("never-used-937")]).expect("server");
             let calls = Arc::new(std::sync::RwLock::new(Vec::new()));
             let manager = TokenManager::new(
-                TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                    .expect("client"),
+                client(&server),
                 Store,
                 FakeClock(Arc::new(AtomicI64::new(1000))),
                 FailingRenewal(stage, Arc::clone(&calls)),
@@ -499,8 +505,7 @@ mod tests {
         let server = ScriptedHttpServer::start(vec![issued("delayed-937")]).expect("server");
         let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
         let manager = Arc::new(TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             clock.clone(),
             AdvancingRenewal(clock, AdvanceTarget::RefreshAt),
@@ -576,8 +581,7 @@ mod tests {
             Counter(Arc::clone(&count)),
         );
         let manager = Arc::new(TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             clock.clone(),
             HangingRenewal(Arc::clone(&closed), Arc::clone(&notice), 2),
@@ -779,8 +783,7 @@ mod tests {
     ) -> Arc<TokenManager<Store, FakeClock, AdvancingRenewal>> {
         let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
         Arc::new(TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(server),
             Store,
             clock.clone(),
             AdvancingRenewal(clock, target),
@@ -872,8 +875,7 @@ mod tests {
         );
         let bus = Arc::new(builder.build());
         let manager = TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             FakeClock(Arc::new(AtomicI64::new(1000))),
             Renewal,
@@ -986,8 +988,7 @@ mod tests {
         let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
         let issues = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let manager = Arc::new(TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             clock.clone(),
             CountingRenewal(Arc::clone(&issues)),
@@ -1071,8 +1072,7 @@ mod tests {
         let clock = FakeClock(Arc::new(AtomicI64::new(1000)));
         let order = Arc::new(std::sync::RwLock::new(Vec::new()));
         let manager = Arc::new(TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             clock.clone(),
             OrderedRenewal(Arc::clone(&order)),
@@ -1184,7 +1184,9 @@ mod tests {
             assert_eq!(
                 tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    read_accounts(Arc::clone(&manager)),
+                    manager.get(&broker_toss::ReadRequest::new(
+                        broker_toss::ReadRoute::Quotes
+                    )),
                 )
                 .await
                 .expect("newer lookup remains bounded")
@@ -1244,8 +1246,7 @@ mod tests {
             Counter(Arc::clone(&count)),
         );
         let manager = TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             FakeClock(Arc::new(AtomicI64::new(1000))),
             Renewal,
@@ -1309,8 +1310,7 @@ mod tests {
             Counter(Arc::clone(&count)),
         );
         let manager = Arc::new(TokenManager::new(
-            TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-                .expect("client"),
+            client(&server),
             Store,
             FakeClock(Arc::new(AtomicI64::new(1000))),
             HangingRenewal(Arc::clone(&closed), Arc::clone(&notice), 3),
@@ -1350,5 +1350,95 @@ mod tests {
         });
         let captured = String::from_utf8(server.finish().expect("capture")).expect("utf8");
         assert_eq!(captured.matches("/oauth2/token HTTP/1.1").count(), 4);
+    }
+    struct SharedTime(Arc<crate::support::FakeTime>);
+    impl Clock for SharedTime {
+        fn now(&self) -> Timestamp {
+            self.0.now()
+        }
+    }
+    fn integrated_manager(
+        server: &ScriptedHttpServer,
+        time: Arc<crate::support::FakeTime>,
+    ) -> TokenManager<Store, SharedTime, Renewal> {
+        TokenManager::new(
+            TossHttpClient::new(
+                &TossEndpoint::local(server.port()).expect("endpoint"),
+                Arc::<crate::support::FakeTime>::clone(&time),
+                Arc::<crate::support::FakeTime>::clone(&time),
+            )
+            .expect("client"),
+            Store,
+            SharedTime(time),
+            Renewal,
+            Arc::new(EventBus::default()),
+        )
+    }
+    #[test]
+    fn managed_get_keeps_rate_budget_across_token_reissue() {
+        let server = ScriptedHttpServer::start(vec![
+            issued("old-731"),
+            response("401 Unauthorized", r#"{"error":{"code":"invalid-token"}}"#),
+            issued("new-419"),
+            response("200 OK", "{}"),
+            response("200 OK", "{}"),
+        ])
+        .expect("server");
+        let time = crate::support::time();
+        let manager = integrated_manager(&server, Arc::clone(&time));
+        let request = broker_toss::ReadRequest::new(broker_toss::ReadRoute::Accounts);
+        runtime().block_on(async {
+            assert_eq!(
+                manager.get(&request).await.expect("recovered").status(),
+                200
+            );
+            assert_eq!(
+                manager.get(&request).await.expect("shared budget").status(),
+                200
+            );
+        });
+        assert_eq!(*time.now().utc_seconds().as_i64(), 1_800_000_003);
+        assert_eq!(*time.now().nanosecond().as_u32(), 333_333_334);
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
+        assert_eq!(requests.matches("POST /oauth2/token HTTP/1.1").count(), 2);
+        assert_eq!(requests.matches("GET /api/v1/accounts HTTP/1.1").count(), 3);
+        assert_eq!(requests.matches("Bearer old-731").count(), 1);
+        assert_eq!(requests.matches("Bearer new-419").count(), 2);
+    }
+    #[test]
+    fn managed_get_honors_retry_after_without_reissuing_token() {
+        let server = ScriptedHttpServer::start(vec![
+            issued("quota-913"),
+            b"HTTP/1.1 429 Limited\r\nContent-Length: 0\r\nRetry-After: 7\r\nConnection: close\r\n\r\n".to_vec(),
+            response("200 OK", "{}"),
+        ])
+        .expect("server");
+        let time = crate::support::time();
+        let manager = integrated_manager(&server, Arc::clone(&time));
+        let result = runtime()
+            .block_on(manager.get(&broker_toss::ReadRequest::new(
+                broker_toss::ReadRoute::Accounts,
+            )))
+            .expect("retry");
+        assert_eq!(result.status(), 200);
+        assert_eq!(*time.now().utc_seconds().as_i64(), 1_800_000_008);
+        assert_eq!(*time.now().nanosecond().as_u32(), 0);
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
+        assert_eq!(requests.matches("POST /oauth2/token HTTP/1.1").count(), 1);
+        assert_eq!(requests.matches("GET /api/v1/accounts HTTP/1.1").count(), 2);
+    }
+    #[test]
+    fn managed_token_post_is_not_retried_on_429() {
+        let server =
+            ScriptedHttpServer::start(vec![response("429 Limited", "{}")]).expect("server");
+        let time = crate::support::time();
+        let manager = integrated_manager(&server, Arc::clone(&time));
+        runtime()
+            .block_on(manager.token())
+            .expect_err("one failed issuance");
+        assert_eq!(*time.now().utc_seconds().as_i64(), 1_800_000_000);
+        assert_eq!(*time.now().nanosecond().as_u32(), 0);
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
+        assert_eq!(requests.matches("POST /oauth2/token HTTP/1.1").count(), 1);
     }
 }
