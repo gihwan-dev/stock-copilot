@@ -34,10 +34,11 @@ architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으�
 - S-03: 이 작업은 0002를 썼으므로 최신 master에서 다음 번호를 확인한다.
 - U-01: 마지막 Database 소유권의 비동기 close 수명 주기 연결.
 
-## 승인된 test-diff 16건
+## 승인된 기존 테스트 변경 17건 (test-diff 검출16건과 Node 준비1건)
 
 | 파일 | 테스트 | 전 → 후 |
 |---|---|---|
+| harness/claude-hooks/tests/allowlist.test.mjs | open-issues and every git-tracked ADR are protected, a new ADR number is not | 준비 경로 0099-future.md → 9999-future.md; 모든 단언 유지 |
 | src/migration_tests.rs | corrupt_ledger_and_future_database_fail_open | 두 원장 행에서 UNIQUE 충돌 없는 BAD_NAME·GAP·FUTURE 준비 값; 실패 단언 유지 |
 | src/migration_tests.rs | fresh_open_records_clock_and_reopen_preserves_ledger | 원장 개수 1 → 2 |
 | src/review_tests.rs | embedded_sequence_gap_rolls_back_pending_schema | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
@@ -103,3 +104,8 @@ Database를 소유한 앱 상태의 메서드에서 호출마다 HoldingsStore�
 
 
 최신 master520c8df를 수신한 트리의 정상 훅은 전체1695/1695·커버리지1059/1059와 다른 검사를 통과하고 승인test-diff16건만 실패했다. 최종 커밋 예외와 이후 SHA 기준 전체 check를 분리한다. 병합 중 S-02 제품 코드 변경은 없고 기존 master의 새 테스트·규칙은 보존했다. 실패·중단·재실행 경위는 리뷰 기록에 남겼다.
+
+
+최종 커밋 기준 전체 검사에서 기존 ADR 보호 테스트가 미사용 번호로 가정한0099를 master의 새 ADR0099가 소비한 충돌을 재현했다. 준비 인자의 새 번호만 현재 미사용9999로 바꾸고 단언은 그대로 유지한다. 사용자 사전 승인(d)에 해당하며 최종 사전 승인 변경은 초기16건과 이 Node 준비1건이다. 실제 test-diff 출력은16건이며 이 Node fixture 변경은 출력에 포함되지 않아 직접 diff로 대조했다. 이 fixture 외 제품 코드와 기존 단언의 변경은 없다.
+
+- H-20 인계: 최종 test-diff 출력은 Rust16건이며 이번 Node mjs fixture 한 인자 변경은 검출되지 않았다. 하네스 범위 확대는 이 저장소 작업에서 하지 않고 별도 검토한다.

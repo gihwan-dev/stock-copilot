@@ -104,7 +104,7 @@ test("open-issues and every git-tracked ADR are protected, a new ADR number is n
   );
   assert.deepEqual(
     writeFindings(
-      join(repoRoot, "docs/adr/0099-future.md"),
+      join(repoRoot, "docs/adr/9999-future.md"),
       ROLE.implementer,
       project,
       MODE.edit,
