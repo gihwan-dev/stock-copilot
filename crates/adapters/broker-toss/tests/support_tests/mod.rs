@@ -1,3 +1,4 @@
+pub(crate) mod typed;
 pub(crate) mod validation;
 use serde_json::Value;
 use std::{fs, path::Path};

@@ -192,3 +192,24 @@ fn one_of_requires_exactly_one_matching_branch() {
     assert!(validate(&spec, &schema, &Value::Null, 0).is_err());
     assert!(validate(&spec, &json!({"oneOf":[{},{}]}), &Value::Null, 0).is_err());
 }
+
+#[test]
+fn concrete_generated_types_validate_success_payloads_independently() {
+    use crate::support_tests::typed::validate_payload;
+    for recording in recordings() {
+        let path = recording["path"].as_str().expect("path");
+        let status = recording["status"].as_str().expect("status");
+        validate_payload(path, status, &recording["body"]).expect("generated model");
+        if status != "200" {
+            continue;
+        }
+        let pointer = match path {
+            "/api/v1/accounts" => "/result/0/accountSeq",
+            "/api/v1/exchange-rate" => "/result/rate",
+            _ => continue,
+        };
+        let mut body = recording["body"].clone();
+        *body.pointer_mut(pointer).expect("field") = serde_json::json!({"invalid":"type"});
+        assert!(validate_payload(path, status, &body).is_err());
+    }
+}

@@ -10,7 +10,7 @@
 
 테스트 도우미는 `tests/support_tests/`에 둔다. source-check의 시험 모듈 이름 규칙을 지키기 위한 이름이다. 후속 통합 테스트는 `#[cfg(test)] mod support_tests;`로 가져온다. `spec`, `recordings`, `route`, `serve_recordings`를 재사용한다. 현재 닫힌 GET 경로 전부를 대응하며 경로 인자는 synthetic-731로 고정한다. 쿼리·계좌 헤더는 후속 API 테스트가 ReadRequest에서 직접 구성한다.
 
-T-01 생성 ApiResponse/ErrorResponse를 역직렬화한다. 성공 envelope의 result는 구체 타입이 없고, 생성 enum은 unknown을 보존하므로 이것만으로 엄격한 녹화 검사가 불가능하다. 현재 원문 스키마를 추가 대조한다. 필요한 부분만 직접 검사하며 새 외부 패키지는 추가하지 않는다. 지원하지 않는 키워드는 성공으로 넘기지 않고 오류로 돌려준다.
+T-01 생성 ApiResponse/ErrorResponse를 역직렬화하고, 이번 두 성공 응답의 result를 각각 Vec<Account>와 ExchangeRateResponse로 추가 역직렬화한다. 구체 생성 타입만 직접 호출하는 독립 테스트가 필드 타입 오류를 거부하는지도 확인한다. 성공 envelope의 result는 구체 타입이 없고, 생성 enum은 unknown을 보존하므로 이것만으로 엄격한 녹화 검사가 불가능하다. 현재 원문 스키마를 추가 대조한다. 필요한 부분만 직접 검사하며 새 외부 패키지는 추가하지 않는다. 지원하지 않는 키워드는 성공으로 넘기지 않고 오류로 돌려준다.
 
 | 항목 | 검사 |
 |---|---|
@@ -20,6 +20,9 @@ T-01 생성 ApiResponse/ErrorResponse를 역직렬화한다. 성공 envelope의 
 | 로컬 $ref, allOf, oneOf, nullable, 다중 type, 추가 속성 규칙, maxLength | 검사. 참조 순환은 깊이 제한으로 실패 |
 | pattern, anyOf, 수치 범위 등 미지원 키워드 | 해당 스키마를 사용하는 녹화는 실패. 조용히 무시하지 않음 |
 | format(decimal, date-time, int64) | 현재 형식 의미는 검사하지 않음. JSON 타입만 검사 |
+| 추가 속성을 금지하지 않은 스키마의 미지 필드 | 원문대로 허용. 필드 오타를 모두 잡는 검사는 아님 |
+| result와 error의 동시 존재 | 원문의 설명 문장에는 금지돼 있으나 검증 키워드에 없어 현재 검사하지 않음 |
+| accountSeq의 413.0 같은 정수 값 | JSON Schema보다 생성 Rust i64와 serde_json 정수 표현 판정이 엄격하여 거부 |
 | 실제 토스 서비스의 동작·금융 계산 의미·인증·페이지 연결 | 이 작업에서 증명하지 않음 |
 
 ## 사용 예
@@ -86,3 +89,5 @@ let client = TossHttpClient::new(&endpoint)?;
 - 기존 테스트 변경 및 승인 test-diff 예외: 0건. 기존 impl, 서버 함수, 의존성 변경 없음.
 
 `check-fast`의 전체 승격 첫 실행은 새 validate 함수의 60줄 초과로 clippy에서 실패했다. 길이 검증을 별도 함수로 분리했고 좁은 clippy와 계약5개는 통과했다. 정상 커밋 훅에서 전체를 다시 검사한다.
+
+리뷰 수정: 성공 본문의 구체 생성 타입 재사용을 보강했다. 생성된 환율 타입도 decimal/date-time의 의미는 검사하지 않으며, enum은 unknown을 보존한다. 따라서 원문 enum 대조와 별도의 형식 의미 인계를 유지한다. 쿼리 파라미터 및 봉투 상호 배제의 서술상 계약은 T-05 이후 각 엔드포인트 테스트에 인계한다.

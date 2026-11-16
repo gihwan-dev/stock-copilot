@@ -35,14 +35,7 @@ pub(crate) fn validate_recording(spec: &Value, recording: &Value) -> Result<(), 
     }
     let body = recording.get("body").ok_or("body")?;
     validate(spec, schema, body, 0)?;
-    if status == "200" {
-        serde_json::from_value::<broker_toss_schema::types::ApiResponse>(body.clone())
-            .map_err(|error| error.to_string())?;
-    } else {
-        serde_json::from_value::<broker_toss_schema::types::ErrorResponse>(body.clone())
-            .map_err(|error| error.to_string())?;
-    }
-    Ok(())
+    super::typed::validate_payload(path, status, body)
 }
 
 pub(crate) fn validate(
