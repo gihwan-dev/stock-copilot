@@ -86,7 +86,7 @@ mod tests {
         let power = |text, currency| {
             BuyingPower::new(
                 Money::parse(&NumericInput::try_new(text).expect("입력"), currency).expect("금액"),
-                at(3, 2),
+                at(3, 1),
             )
         };
         Portfolio::new(
@@ -122,7 +122,7 @@ mod tests {
     ) {
         assert_eq!(
             report.snapshot,
-            ValuationSnapshot::observe(dates, &portfolio().evaluate(None), at(3, 2), None)
+            ValuationSnapshot::observe(dates, &portfolio().evaluate(None), at(3, 1), None)
                 .expect("도메인 위임")
         );
         assert_eq!(
@@ -134,8 +134,8 @@ mod tests {
             }
         );
         assert_eq!(report.snapshot.source(), SnapshotSource::Observed);
-        assert_eq!(report.snapshot.recorded_at(), at(3, 2));
-        assert_eq!(report.snapshot.valuation_at(), at(3, 2));
+        assert_eq!(report.snapshot.recorded_at(), at(3, 1));
+        assert_eq!(report.snapshot.valuation_at(), at(3, 1));
         assert_eq!(report.delivery.failures.len(), 1);
         assert_eq!(
             report.delivery.failures[0].cause,
@@ -151,7 +151,7 @@ mod tests {
     fn assert_market(market: &MemoryMarketDataRepository) {
         assert_eq!(
             market.script_fx_rate().calls(),
-            vec![(FxPair::UsdKrw, FxRateKind::Mid, FxRateQuery::At(at(3, 2))); 2]
+            vec![(FxPair::UsdKrw, FxRateKind::Mid, FxRateQuery::At(at(3, 1))); 2]
         );
     }
     #[test]
@@ -304,5 +304,140 @@ mod tests {
             assert_eq!(events.try_iter().count(), 0);
             assert_eq!(stored.try_iter().count(), 0);
         }
+    }
+    fn money(text: &str, currency: Currency) -> Money {
+        Money::parse(&NumericInput::try_new(text).expect("입력"), currency).expect("금액")
+    }
+    fn held(observed: Timestamp) -> Portfolio {
+        let master = domain::MasterInstrument::try_new(domain::MasterInstrumentRow {
+            listing_market: domain::MasterCode::try_new("NASDAQ").expect("시장"),
+            instrument_id: domain::InstrumentId::try_new("snapshot-fixture").expect("ID"),
+            symbol: domain::Symbol::try_new("AAPL").expect("심볼"),
+            name: domain::DisplayInstrumentName::try_new("고정 보유").expect("이름"),
+            security_type: domain::MasterSecurityType::from_code(
+                domain::MasterCode::try_new("STOCK").expect("종류"),
+            ),
+            currency: Currency::Usd,
+            listing_status: domain::ListingStatus::Active,
+            common_share: domain::CommonShare::Common,
+            korean_detail: None,
+            observed_at: observed,
+        })
+        .expect("마스터");
+        let holding = domain::Holding::new(
+            master.order_instrument().expect("종목"),
+            domain::Quantity::parse(&NumericInput::try_new("3").expect("입력")).expect("수량"),
+            domain::AcquisitionPrice::try_new(money("11", Currency::Usd)).expect("원가"),
+            domain::HoldingObservation::new(
+                Some(domain::Price::try_new(money("17", Currency::Usd)).expect("가격")),
+                None,
+                observed,
+            ),
+        )
+        .expect("보유");
+        Portfolio::new(
+            vec![holding],
+            BuyingPower::new(money("137", Currency::Krw), observed),
+            BuyingPower::new(money("29", Currency::Usd), observed),
+        )
+        .expect("포트")
+    }
+    fn assert_saved(
+        repo: &MemoryValuationRepository,
+        result: &Result<application::ValuationSnapshotReport, ValuationSnapshotError>,
+    ) {
+        assert_eq!(repo.calls().len(), usize::from(result.is_ok()));
+    }
+    fn take_saved(
+        saved: Timestamp,
+        now: Timestamp,
+        fx: Option<domain::FxRate>,
+    ) -> Result<application::ValuationSnapshotReport, ValuationSnapshotError> {
+        let store = MemoryPortfolioRepository::default();
+        store
+            .script_latest()
+            .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                saved,
+                SyncOutcome::Complete(held(saved)),
+            )))));
+        let market = MemoryMarketDataRepository::default();
+        market.script_fx_rate().push(MemoryReply::Return(Ok(fx)));
+        let repo = MemoryValuationRepository::default();
+        repo.script_append().push(MemoryReply::Memory);
+        let clock = SteppedClock::new(now);
+        let result = run(TakeValuationSnapshot::new(
+            &store,
+            &market,
+            &repo,
+            &clock,
+            &application::EventBus::default(),
+        )
+        .execute(&AccountId::new(83), &calendar(3)));
+        assert_saved(&repo, &result);
+        result
+    }
+    #[test]
+    fn stale_and_future_records_cannot_be_relabelled_as_current_observations() {
+        for saved in [at(1, 0), at(3, 3)] {
+            assert_eq!(
+                take_saved(saved, at(3, 2), None),
+                Err(ValuationSnapshotError::Snapshot(SnapshotError::WrongPeriod))
+            );
+        }
+    }
+    #[test]
+    fn preclose_record_keeps_its_time_and_awaiting_price_basis() {
+        let snapshot = take_saved(at(3, 0), at(3, 2), None).expect("기록").snapshot;
+        assert_eq!(snapshot.valuation_at(), at(3, 0));
+        assert_eq!(snapshot.recorded_at(), at(3, 0));
+        assert_eq!(
+            snapshot.price_basis(Currency::Usd),
+            domain::SnapshotPriceBasis::AwaitingSession
+        );
+        assert_eq!(
+            snapshot.price_date(Currency::Usd),
+            at(2, 0).offset_calendar_date()
+        );
+        assert_eq!(
+            snapshot.stock_value(Currency::Usd),
+            Ok(money("51", Currency::Usd))
+        );
+    }
+    #[test]
+    fn foreign_stock_uses_the_observation_mid_rate_and_keeps_conversion_evidence() {
+        let fx = domain::FxRate::parse(
+            &NumericInput::try_new("1300").expect("입력"),
+            FxPair::UsdKrw,
+            FxRateKind::Mid,
+            TimeInterval::try_new(at(3, 0), at(3, 3)).expect("구간"),
+            domain::FxSource::TossOpenApi,
+        )
+        .expect("환율");
+        let snapshot = take_saved(at(3, 1), at(3, 4), Some(fx))
+            .expect("기록")
+            .snapshot;
+        assert_eq!(snapshot.fx(), Some(fx));
+        assert_eq!(
+            snapshot.stock_value(Currency::Usd),
+            Ok(money("51", Currency::Usd))
+        );
+        assert_eq!(
+            snapshot
+                .stock_krw_value()
+                .expect("환산")
+                .clone()
+                .into_parts(),
+            (
+                money("66300", Currency::Krw),
+                vec![fx],
+                domain::ValuationAccuracy::Approximate
+            )
+        );
+    }
+    #[test]
+    fn observation_at_clock_boundary_is_allowed() {
+        let report = take_saved(at(3, 1), at(3, 1), None).expect("경계 기록");
+        assert_eq!(report.snapshot.valuation_at(), at(3, 1));
+        assert_eq!(report.recorded, RecordOutcome::Recorded);
     }
 }
