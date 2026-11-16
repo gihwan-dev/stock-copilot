@@ -1,1 +1,4 @@
-migration = []
+[[migration]]
+number = 1
+file = "0001_migration_ledger.sql"
+sha256 = "f059233e48dd3cd2f492b96f916d760c19a109861b52707d6901f2bc0c6b2501"
