@@ -105,6 +105,7 @@ export const treeProblems = (root) => {
 
 export const contentSnapshot = (root) => {
   const head = runGit(root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+  const reference = runGit(root, ["rev-parse", "--symbolic-full-name", "HEAD"]);
   const index = runGit(root, ["ls-files", "-s", "-z"]);
   const files = runGit(root, [
     "ls-files",
@@ -113,11 +114,12 @@ export const contentSnapshot = (root) => {
     "-z",
     ...rootIgnore(root),
   ]);
-  if (!index.ok || !files.ok) {
+  if (!head.ok || !reference.ok || !index.ok || !files.ok) {
     return { failed: `git이 실패했다: ${index.stderr}${files.stderr}`.trim() };
   }
   return {
     head: head.stdout.trim(),
+    reference: reference.stdout.trim(),
     index: createHash("sha256").update(index.stdout).digest("hex"),
     files: Object.fromEntries(
       [...new Set(nul(files.stdout))].sort().map((path) => {

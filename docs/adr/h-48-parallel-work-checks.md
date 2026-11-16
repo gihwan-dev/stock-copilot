@@ -1,0 +1,76 @@
+# H-48 병렬 작업에서 깨지는 검사 수정
+
+- 상태: 초안
+
+## 결정
+
+루트 `.claude/worktrees`만 테스트 파일 탐색에서 제외한다. 전체 gitignore를 따르지 않는다. 다른 위치의 미도달 테스트와 접두사만 같은 폴더는 계속 검사한다.
+
+리뷰 대상 원본은 브리프의 작업 브랜치로 찾은 등록된 작업 사본 하나다. 등록된 다른 작업 사본이나 메인 저장소의 병렬 변경은 리뷰 오염이 아니다. 대상의 파일 내용·인덱스·HEAD와 HEAD의 심볼릭 참조 이름은 비교한다. 참조가 다른 이름으로 같은 커밋을 가리켜도 차단한다. 공유 Git의 다른 브랜치 참조는 병렬 작업이므로 비교하지 않는다. Git 조회 실패는 차단한다.
+
+문서에 없던 세부는 대상 작업 브랜치의 체크아웃만 감시하고 대상을 확정할 수 없으면 차단하는 것으로 정했다. 모든 공유 ref를 비교하면 병렬 작업을 다시 막기 때문이다. 리뷰어 사본은 메인 저장소 밖 T3 격리를 사용한다.
+
+작업 절의 H-48 행 추가 승인을 일반적인 tasks 수정 금지보다 우선 적용했다. progress는 수정하지 않는다. 외부 의존성 추가와 검사 끄기 주석은 없다.
+
+## 탐색기 조사
+
+| 검사 | 결과 |
+|---|---|
+| Node check-list testFiles | 루트부터 재귀 탐색. 정확한 제외 추가 |
+| Node config-files | 이미 `.claude/worktrees` 제외 |
+| xtask source-check | 이미 루트 `.claude` 제외 |
+| xtask workspace_sources / arch-check | workspace package 디렉터리부터 탐색 |
+| xtask mutants_check / coverage_check | crate/src 또는 보호 정책 경로부터 탐색 |
+| xtask migration / sql / capability / gen_schema | 지정된 store, crate, Tauri, schema 폴더부터 탐색 |
+| Node source-tree / ds-style / eslint / vitest / workflow-policy | src, fixture 또는 .github 지정 폴더부터 탐색 |
+
+## 검증
+
+회귀: 루트 에이전트 사본 제외, 정상 경로의 미도달 파일 유지, 다른 사본 변경·생성 무시, 대상 파일·인덱스·HEAD·동일 SHA의 참조 이름 이동 차단.
+
+`just mutants-diff 775bc89f0d2876458ca51927db94766b13ad9950`은 위반 없음으로 끝났다. 제품 Rust 소스 변경이 없어 application/domain/order-execution을 주간 전체 대상으로 출력했다. 이를 Rust 변이 실행 통과로 간주하지 않으며 JS 변경은 위 손 변형으로 검증했다.
+
+세션 프로젝트 신뢰와 훅 신뢰 및 적용 여부는 이 환경에서 확인하지 못했다. 시작 pnpm frozen ignore-scripts 및 lefthook 설치는 성공했다. Git 훅의 검사 결과를 별도로 기록한다.
+
+## 인계
+
+H-48: 메인은 보호 파일과 승인된 기존 테스트 변경을 서명 정책에 따라 통합한다. 원격 쓰기와 master 이동은 하지 않는다.
+
+## 손 변형
+
+최종 코드에서 mktemp 임시 복사본으로 각 변형을 실제 실행했다. 초기 생존한 차단 한계 경계는 경계 테스트 추가 뒤 다시 실행했다. Node 구문 오류는 없었다. 32개 모두 검출했다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 1 | 중복 대상 허용 | reviewer 회귀 5개 | 검출 |
+| 2 | 대상 인덱스 뒤바꿈 | reviewer 회귀 5개 | 검출 |
+| 3 | 브리프 대신 첫 작업 사본 선택 | reviewer 회귀 5개 | 검출 |
+| 4 | 대상 브랜치 조건 반전 | reviewer 회귀 5개 | 검출 |
+| 5 | 유효 브리프 조건 반전 | reviewer 회귀 5개 | 검출 |
+| 6 | 다른 사본도 감시 | reviewer 회귀 5개 | 검출 |
+| 7 | 대상 누락 | reviewer 회귀 5개 | 검출 |
+| 8 | HEAD 저장 누락 | reviewer 회귀 5개 | 검출 |
+| 9 | 참조 저장 누락 | reviewer 회귀 5개 | 검출 |
+| 10 | 인덱스 저장 누락 | reviewer 회귀 5개 | 검출 |
+| 11 | HEAD 비교 제거 | reviewer 회귀 5개 | 검출 |
+| 12 | 참조 비교 제거 | reviewer 회귀 5개 | 검출 |
+| 13 | 인덱스 비교 제거 | reviewer 회귀 5개 | 검출 |
+| 14 | 파일 비교 제거 | reviewer 회귀 5개 | 검출 |
+| 15 | 파일 차이 누락 | reviewer 회귀 5개 | 검출 |
+| 16 | 사본 삭제 누락 | reviewer 회귀 5개 | 검출 |
+| 17 | 불변 대상도 새 사본 취급 | reviewer 회귀 5개 | 검출 |
+| 18 | 종료 조건 반전 | reviewer 회귀 5개 | 검출 |
+| 19 | 차단 한계 경계 | reviewer 회귀 5개 | 검출 |
+| 20 | 정상 상태 오염 | reviewer 회귀 5개 | 검출 |
+| 21 | 새 파일 구분 | reviewer 회귀 5개 | 검출 |
+| 22 | 삭제 파일 구분 | reviewer 회귀 5개 | 검출 |
+| 23 | 참조 이름 대신 SHA | reviewer 회귀 5개 | 검출 |
+| 24 | SHA 대신 이름 | reviewer 회귀 5개 | 검출 |
+| 25 | 파일 해시 고정 | reviewer 회귀 5개 | 검출 |
+| 26 | HEAD 분기 강제 | reviewer 회귀 5개 | 검출 |
+| 27 | 에이전트 제외 제거 | test discovery 회귀 | 검출 |
+| 28 | 접두사 범위 확대 | test discovery 회귀 | 검출 |
+| 29 | 중첩 위치 제외 확대 | test discovery 회귀 | 검출 |
+| 30 | 재귀 루트 유실 | test discovery 회귀 | 검출 |
+| 31 | 훅 폴더까지 제외 | test discovery 회귀 | 검출 |
+| 32 | 도달 파일 누락 | test discovery 회귀 | 검출 |

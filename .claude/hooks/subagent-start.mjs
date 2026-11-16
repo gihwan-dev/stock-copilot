@@ -5,7 +5,8 @@ import {
 } from "./lib/agent-facts.mjs";
 import { readInput, writeOutput } from "./lib/io.mjs";
 import { HOOKS_PROJECT_ROOT, worktreesOf } from "./lib/project.mjs";
-import { snapshotOf } from "./lib/reviewer-guard.mjs";
+import { branchOf } from "./lib/git-facts.mjs";
+import { reviewerTarget, snapshotOf } from "./lib/reviewer-guard.mjs";
 import {
   KIND,
   claimRecord,
@@ -87,6 +88,12 @@ if (kind === ROLE.implementer) {
 }
 
 if (kind === ROLE.reviewer) {
+  const worktrees = worktreesOf(HOOKS_PROJECT_ROOT);
+  const target = reviewerTarget(
+    promptWithRetry(subagentTranscript(input), 5),
+    worktrees,
+    { branchOf },
+  );
   writeRecord(state, KIND.reviewer, input.agent_id, {
     kind: KIND.reviewer,
     agentId: input.agent_id,
@@ -95,10 +102,15 @@ if (kind === ROLE.reviewer) {
     startedAt: new Date().toISOString(),
     status: "started",
     blocks: 0,
-    snapshot: snapshotOf(
-      worktreesOf(HOOKS_PROJECT_ROOT),
-      HOOKS_PROJECT_ROOT,
-      snapshotFacts,
-    ),
+    worktree: target,
+    snapshot:
+      target === undefined
+        ? [
+            {
+              path: HOOKS_PROJECT_ROOT,
+              failed: "브리프의 리뷰 대상 작업 사본을 확인하지 못했다",
+            },
+          ]
+        : snapshotOf(worktrees, target, snapshotFacts),
   });
 }

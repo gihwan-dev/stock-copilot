@@ -737,7 +737,7 @@ Claude 적대적 리뷰어는 `isolation: worktree`(정의 파일)로 임시 작
 
 | 보완 | 내용 |
 |---|---|
-| 원본 상태 비교 훅 | `SubagentStart`가 원본의 HEAD와 상태를 저장하고, `SubagentStop`이 다시 비교해 다르면 되돌리게 하고 종료를 막는다 (실측으로 동작함) |
+| 원본 상태 비교 훅 | `SubagentStart`가 리뷰 대상인 브리프의 작업 브랜치로 찾은 작업 사본 하나의 파일 내용·인덱스·HEAD·HEAD 참조를 저장하고, `SubagentStop`이 같은 루트를 다시 비교해 다르면 되돌리게 하고 종료를 막는다 (실측으로 동작함) |
 | 메인의 재확인 | 리뷰어가 되돌리지 않고 내장 상한 8에 걸리면 오염이 남는다. 이때 사용자에게 경고가 보인다. 메인은 리뷰 단계가 끝날 때마다 `git status`와 HEAD를 확인하고, 다르면 다음 단계로 가지 않는다 |
 | `.gitignore` | `.claude/worktrees/`를 넣어 상태 비교에 잡음이 없게 한다 |
 | 좁은 거부 규칙 | `.claude/` 거부 규칙은 하위 경로로 좁게 쓴다 (7.1) |
@@ -885,3 +885,5 @@ fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. d
 | docs/toss-openapi-1.2.28.json | xtask gen_schema_tests | 전체 검사(xtask 테스트 포함) |
 | docs/harness.md | Codex 설정·Claude 훅 정책/회귀 | 전체 검사 |
 | docs/design.md 및 나머지 docs/** | 소비 범위를 확정하지 못함 | 전체 승격 |
+
+H-48: 루트에서 재귀 탐색하는 검사는 정확히 `.claude/worktrees`를 건너뛴다. gitignore 전체를 따르지 않는다. Node 테스트 도달 검사에 적용한다. xtask의 다른 탐색기는 crate·정책 경로에서 시작하므로 루트의 에이전트 사본에 도달하지 않는다. source-check는 기존 `.claude` 제외를 유지하고 config-files는 이미 해당 경로를 제외한다. 리뷰의 원본은 대상 작업 사본이며 다른 작업 사본·공유 저장소의 다른 브랜치 참조·새 작업 사본 등록은 비교 범위 밖이다. 대상 HEAD가 같은 커밋을 가리켜도 HEAD 참조 이름 변경은 차단한다. 리뷰어 사본은 메인 저장소 밖 T3 격리만 사용한다.

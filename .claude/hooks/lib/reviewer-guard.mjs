@@ -1,13 +1,18 @@
-import { join } from "node:path";
+import { parseBrief } from "./brief.mjs";
 
-const ISOLATION = ".claude/worktrees";
+export const reviewerTarget = (prompt, worktrees, facts) => {
+  const brief = parseBrief(prompt);
+  if (brief.problem !== undefined || brief.branch === undefined) {
+    return undefined;
+  }
+  const matches = worktrees.filter(
+    (path) => facts.branchOf(path) === brief.branch,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+};
 
 export const watchedWorktrees = (worktrees, projectRoot) =>
-  worktrees.filter(
-    (path) => !path.startsWith(`${join(projectRoot, ISOLATION)}/`),
-  );
-
-const relevant = (path) => !path.startsWith(`${ISOLATION}/`);
+  worktrees.filter((path) => path === projectRoot);
 
 export const snapshotOf = (worktrees, projectRoot, facts) =>
   watchedWorktrees(worktrees, projectRoot)
@@ -18,10 +23,9 @@ export const snapshotOf = (worktrees, projectRoot, facts) =>
         ? {
             path,
             head: taken.head,
+            reference: taken.reference,
             index: taken.index,
-            files: Object.fromEntries(
-              Object.entries(taken.files).filter(([file]) => relevant(file)),
-            ),
+            files: taken.files,
           }
         : { path, failed: taken.failed };
     });
@@ -62,6 +66,9 @@ export const snapshotDifferences = (before, after) => {
         ...(old.head === entry.head
           ? []
           : [`${entry.path}: HEAD ${old.head} -> ${entry.head}`]),
+        ...(old.reference === entry.reference
+          ? []
+          : [`${entry.path}: 참조 ${old.reference} -> ${entry.reference}`]),
         ...(old.index === entry.index
           ? []
           : [`${entry.path}: 인덱스가 바뀌었다`]),
