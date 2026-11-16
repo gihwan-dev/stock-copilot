@@ -21,15 +21,11 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
     }
     fn transactions(
         &self,
-        _account: &AccountId,
-        _window: SettlementWindow,
-        _filter: &TransactionFilter,
+        account: &AccountId,
+        window: SettlementWindow,
+        filter: &TransactionFilter,
     ) -> impl Future<Output = Result<TransactionRead, PortError>> + Send {
-        std::future::ready(Err(PortError::new(
-            ReadEndpoint::Transactions,
-            HttpStatus::NotReceived,
-            PortErrorKind::InvalidRequest(application::RequestRejection::UnsupportedQuery),
-        )))
+        self.fetch_transactions(account, window, filter)
     }
     fn quotes(
         &self,
