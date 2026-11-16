@@ -1,0 +1,8 @@
+{
+  "rejected": [
+    "snapshots/button-chromium-darwin.png",
+    "other/x-darwin.PNG",
+    "x-darwin.jpeg"
+  ],
+  "allowed": ["snapshots/button-chromium-linux.png"]
+}

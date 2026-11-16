@@ -307,6 +307,7 @@
         ["pnpm install --frozen-lockfile --ignore-scripts"],
         ["node harness/ts-deps/check.mjs"],
         ["node harness/ds-catalog/check.mjs"],
+        ["node harness/visual/check.mjs"],
         ["node harness/ds-style/check.mjs"],
         ["node harness/ds-tokens/check.mjs"],
         ["cargo run --locked --quiet --package xtask -- gen-tokens --check"],
@@ -1196,6 +1197,45 @@
       "private": false,
       "quiet": false,
       "namepath": "tokens-contrast",
+      "shebang": false
+    },
+    "visual-check": {
+      "attributes": [],
+      "body": [["node harness/visual/launch.mjs compare"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "visual-check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "visual-check",
+      "shebang": false
+    },
+    "visual-measure": {
+      "attributes": [],
+      "body": [["node harness/visual/launch.mjs measure"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "visual-measure",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "visual-measure",
+      "shebang": false
+    },
+    "visual-update": {
+      "attributes": [],
+      "body": [["node harness/visual/launch.mjs update"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "visual-update",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "visual-update",
       "shebang": false
     }
   },

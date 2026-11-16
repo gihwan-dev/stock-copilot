@@ -52,5 +52,6 @@
     "src/shared/ipc/testing/responses.ts": ["exports", "types"],
     "src/shared/ds/tokens.ts": ["files", "exports", "types"],
     "src/shared/ds/theme.css": ["unlisted"]
-  }
+  },
+  "playwright": false
 }
