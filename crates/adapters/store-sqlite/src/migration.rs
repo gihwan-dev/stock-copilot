@@ -21,13 +21,10 @@ pub(crate) fn digest(source: &str) -> String {
         .collect()
 }
 
+pub(crate) const MIGRATIONS: &[(&str, &str)] = &[("0001_migration_ledger.sql", sql::CREATE_LEDGER)];
+
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {
-    apply(
-        connection,
-        at,
-        &[("0001_migration_ledger.sql", sql::CREATE_LEDGER)],
-    )
-    .map_err(|error| failure::sqlite(&error))
+    apply(connection, at, MIGRATIONS).map_err(|error| failure::sqlite(&error))
 }
 
 pub(crate) fn apply(
@@ -130,11 +127,15 @@ pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
     if tables.iter().any(|strict| *strict != 1) {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    for row in connection
-        .prepare(sql::SCHEMA)?
-        .query_map([], |row| row.get::<_, String>(1))?
-    {
-        crate::schema::validate(&row?)?;
+    for row in connection.prepare(sql::SCHEMA)?.query_map([], |row| {
+        Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+    })? {
+        let (ddl, kind) = row?;
+        match kind.as_str() {
+            "table" => crate::schema::validate(&ddl)?,
+            "index" | "view" | "trigger" => {}
+            _ => return Err(rusqlite::Error::InvalidQuery),
+        }
     }
     Ok(())
 }

@@ -20,7 +20,7 @@ pub(crate) const BROKEN: &str =
     "CREATE TABLE partial (id INTEGER) STRICT; INSERT INTO absent VALUES (1)";
 pub(crate) const PARTIAL: &str = "SELECT count(*) FROM sqlite_schema WHERE name = 'partial'";
 
-pub(crate) const GOOD_MONEY: &str = "CREATE TABLE money_fixture (currency TEXT NOT NULL, amount TEXT NOT NULL CHECK (amount NOT GLOB '*[^0-9.-]*' AND amount GLOB '*[0-9]*' AND amount NOT GLOB '?*-*' AND amount NOT GLOB '*.*.*' AND amount NOT GLOB '.*' AND amount NOT GLOB '-.*' AND amount NOT GLOB '*.')) STRICT";
+pub(crate) const GOOD_MONEY: &str = "CREATE TABLE money_fixture (currency TEXT NOT NULL, amount TEXT NOT NULL CHECK (instr(amount,char(0))=0 AND amount NOT GLOB '*[^0-9.-]*' AND amount GLOB '*[0-9]*' AND amount NOT GLOB '?*-*' AND amount NOT GLOB '*.*.*' AND amount NOT GLOB '.*' AND amount NOT GLOB '-.*' AND amount NOT GLOB '*.')) STRICT";
 pub(crate) const INSERT_MONEY: &str =
     "INSERT INTO money_fixture(currency, amount) VALUES ('KRW', ?1)";
 

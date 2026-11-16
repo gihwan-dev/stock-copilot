@@ -10,6 +10,6 @@ pub(crate) const LEDGER: &str =
 pub(crate) const INSERT_LEDGER: &str =
     "INSERT INTO migration_ledger(number, name, sha256, applied_at) VALUES (?1, ?2, ?3, ?4)";
 pub(crate) const TABLES: &str = "SELECT name, strict FROM pragma_table_list WHERE schema = 'main' AND type IN ('table', 'virtual', 'shadow') AND name NOT GLOB 'sqlite_*'";
-pub(crate) const SCHEMA: &str = "SELECT name, sql FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB 'sqlite_*' ORDER BY name";
+pub(crate) const SCHEMA: &str = "SELECT name, sql, type FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' ORDER BY type, name";
 
 pub(crate) const VERSION: &str = "PRAGMA user_version";
