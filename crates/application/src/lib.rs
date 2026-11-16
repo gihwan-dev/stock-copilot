@@ -323,3 +323,6 @@ pub use sync_transactions::{
     SyncTransactions, TransactionSyncError, TransactionSyncRecord, TransactionSyncRejection,
     TransactionSyncRepository,
 };
+
+mod sync_portfolio;
+pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
