@@ -146,6 +146,13 @@ test("DS15 browser startup failure closes its server and exits", async () => {
       "harness/visual/policy.mjs",
       `export const settings=${JSON.stringify(settings)}; export const environmentProblems=()=>[]; export const compareCaptures=()=>[];`,
     );
+    for (const module of ["capture", "server"])
+      put(
+        `harness/visual/${module}.mjs`,
+        readFileSync(
+          new URL(`../../../harness/visual/${module}.mjs`, import.meta.url),
+        ),
+      );
     put("apps/desktop/package.json", "{}");
     put(
       "apps/desktop/node_modules/@playwright/test/package.json",

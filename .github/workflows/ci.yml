@@ -63,6 +63,10 @@
           "run": "just advisory-db-fetch"
         },
         {
+          "name": "container visual regression",
+          "run": "node harness/ci/visual.mjs"
+        },
+        {
           "name": "linux check",
           "run": "just linux-check"
         },

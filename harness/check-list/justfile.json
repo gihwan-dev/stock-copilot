@@ -237,6 +237,7 @@
     "check-full": {
       "attributes": [],
       "body": [
+        ["\"", [["call", "just_executable"]], "\" visual-check"],
         [
           "\"",
           [["call", "just_executable"]],

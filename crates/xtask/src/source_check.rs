@@ -359,7 +359,7 @@ fn entry_findings(
 
 fn darwin_baseline(name: &str) -> bool {
     let lowercase = name.to_ascii_lowercase();
-    lowercase.contains("-darwin.")
+    (lowercase.contains("-darwin.") || lowercase.contains("-darwin-"))
         && ["png", "jpg", "jpeg", "webp"]
             .iter()
             .any(|extension| lowercase.ends_with(&format!(".{extension}")))

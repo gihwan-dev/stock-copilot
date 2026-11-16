@@ -69,6 +69,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" hooks-installed
 
 check-full: advisory-db-fetch check
+    "{{just_executable()}}" visual-check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
 
 require-base:

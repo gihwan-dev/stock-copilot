@@ -14,6 +14,8 @@ fn ds15_darwin_baseline_is_rejected_without_reading_binary_data() {
         "a-darwin.jpeg",
         "a-darwin.jpg",
         "a-darwin.webp",
+        "Button-light-chromium-darwin-arm64.png",
+        "Money-dark-webkit-darwin-x64.PNG",
     ] {
         let entry = Entry {
             relative: path.into(),

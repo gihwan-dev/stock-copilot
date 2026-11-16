@@ -15,7 +15,7 @@ export const settings = Object.freeze({
 });
 export const baselineProblems = (paths) =>
   paths
-    .filter((path) => /-darwin\.(png|jpe?g|webp)$/i.test(path))
+    .filter((path) => /-darwin(?:[-.][^/]*)?\.(png|jpe?g|webp)$/i.test(path))
     .map((path) => `호스트 기준 화면 금지: ${path}`);
 export const environmentProblems = (environment) =>
   Object.entries({

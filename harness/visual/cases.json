@@ -2,7 +2,14 @@
   "rejected": [
     "snapshots/button-chromium-darwin.png",
     "other/x-darwin.PNG",
-    "x-darwin.jpeg"
+    "x-darwin.jpeg",
+    "Button-light-chromium-darwin-arm64.png",
+    "nested/Money-dark-webkit-darwin-x64.PNG",
+    "nested/a-darwin.debug.png"
   ],
-  "allowed": ["snapshots/button-chromium-linux.png"]
+  "allowed": [
+    "snapshots/button-chromium-linux.png",
+    "nested/-darwin-dir/a-linux.png",
+    "a-darwinian.png"
+  ]
 }
