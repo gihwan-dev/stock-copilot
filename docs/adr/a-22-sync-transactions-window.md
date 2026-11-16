@@ -18,17 +18,55 @@ full_inspection_status는 완료 시각을 읽고 daily_full_inspection으로 �
 | 오늘 전체 검사 필요 여부 | 충족 | full_inspection_status, 완료일/미완료 재시도 |
 | 완료 시각 기록 및 역행 거부 | 충족 | 별도 저장 포트, domain 일일 판정 후 CAS 저장 |
 | 전체 기간 실행 하루 한 번 | 정의 대기 | 전체 시작일·분할·완결 증명 domain 계약 없음 |
-| 전체 수신 실패 후 실제 재실행 | 정의 대기 | 실행 계약 없음. 판정·저장 실패 후 필요 상태 유지까지 검사 |
+| 전체 수신 실패 후 실제 재실행 | 정의 대기 | 실행 계약 없음. 오류 전파와 다음 조회가 미완료일 때 Required 판정까지 검사. 실제 저장 상태 보존은 S-03 검증 대상 |
 
 ## 인계
 
 | 받는 작업 | 내용 |
 |---|---|
 | D-45 후속(메인 지정) | 전체 시작일, 응답 상한 분할, 모든 구간 성공의 계약 |
-| S-03 | 계좌별 완료 시각 CAS 원자 저장·실패 보존, 미래 자료 복구는 별도 결정 |
+| S-03 | 계좌별 완료 시각 CAS 원자 저장·실패 보존, 미래 자료 복구는 별도 결정. 복구·정정이 없으면 시계가 저장 시각에 도달할 때까지 전체 판정은 오류로 남음. 최근 14일 동기화는 독립적으로 실행 가능 |
 | A-23 | 실행 직렬화·일일 검사 호출 연결. 필요 판정만으로 동시 실행 배제를 주장하지 않음 |
 | A-22 후속 | 전체 계약 확정 뒤 모든 구간 완전 수신·저장 성공에만 완료 기록 연결 |
 
 ## 검사
 
-새 외부 의존성·기존 테스트 변경·기존 가짜 수정 없음. 프로젝트 신뢰와 세션 훅 신뢰는 확인 불가이며 브리프 승인으로 진행한다. Git 훅 설치 성공. 환경 예외 사용: 아니오(검증 진행 중).
+새 외부 의존성·기존 테스트 변경·기존 가짜 수정 없음. 프로젝트 신뢰와 세션 훅 신뢰는 확인 불가이며 브리프 승인으로 진행한다. Git 훅 설치 성공. 환경 예외 사용: 예. 정상 훅 재실행은 Xcode 라이선스 R4 한 건만 실패했고 나머지 check-ts와 check 본문은 순차 직접 실행하여 통과했다. 해당 커밋에만 브리프의 LEFTHOOK=0 승인을 적용하고 커밋 메시지에 기록했다. 전체 nextest 1813개, 계측 테스트 1070개와 coverage-check·test-diff·hooks-installed가 통과했다. 전체 just check가 무조건 종료 0이었다고 주장하지 않는다.
+
+
+## 리뷰 반영
+
+저장소 실패 후 다음 응답을 직접 넣는 대본 테스트는 실제 저장 상태 보존을 증명하지 않는다. 테스트 이름과 위 작업 기준의 근거를 그 범위로 정정했다. 실제 CAS 충돌·원자성·실패 보존은 S-03이 어댑터에서 검증한다. 구독자 실패를 정확히 반환하는 회귀와 미래 완료 시각에 도달하면 CompletedToday로 회복하는 회귀를 추가한다. 마지막 완료 시각의 KST 날짜를 기준으로 삼는 것은 ADR 0105의 확정 계약이며 시작 날짜로 바꾸지 않는다. 자정을 넘는 실제 전체 수신에서 어느 결제일까지 완결해야 하는지는 전체 구간 계약의 인계다.
+
+## 변이 범위의 한계
+
+저장소 명령 just mutants-diff는 4개 선택 중 미검출 1개·컴파일 불가 3개로 종료 1이었다. sync_recent을 빈 성공으로 바꾸는 변형은 application 테스트만 실행하여 testkit-ports 통합 테스트가 제외됐다. 원 명령의 실패를 통과로 바꾸어 보고하지 않는다. 동일 변형을 통합 테스트까지 포함하여 보완 실행하며 실제 결과를 별도로 기록한다. 하네스 선택 문제는 A-07에서도 알려진 H-47 인계다. 가짜를 application에 옮기거나 검사 규칙을 바꾸지 않는다.
+
+## 손 변형
+
+구현 소스와 통합 테스트를 target 아래 mktemp 복사본에 넣어 각각 컴파일 후 실행했다. 최초 20개 모두 컴파일 성공·검출이고 복구 대조군 6개도 통과했다. 다음 표는 실제 실행 로그의 집계이며 컴파일 불가를 검출로 세지 않는다. 리뷰 후 추가 회귀에 대한 보고서 유실 변형은 별도로 기록한다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 1 | 최근 창에 표현 범위 밖 시각 전달 | 컴파일 성공·검출 | recent_range_and_sync_errors_are_preserved, recent_window_midnight_uses_one_clock_sample_and_never_marks_full_completion |
+| 2 | 최근 창에 하루 뒤 고정 시각 전달 | 컴파일 성공·검출 | recent_window_midnight_uses_one_clock_sample_and_never_marks_full_completion, recent_range_and_sync_errors_are_preserved |
+| 3 | A07 기록 시각을 고정 시각으로 대체 | 컴파일 성공·검출 | recent_window_midnight_uses_one_clock_sample_and_never_marks_full_completion |
+| 4 | 일일 판정의 이전 완료 무시 | 컴파일 성공·검출 | completion_uses_current_clock_and_preserves_previous_for_atomic_write, daily_status_midnight_retry_and_accounts, future_completion_and_out_of_range_fail_before_writing |
+| 5 | 일일 판정 현재 시각을 범위 밖으로 | 컴파일 성공·검출 | daily_status_midnight_retry_and_accounts, future_completion_and_out_of_range_fail_before_writing, completion_uses_current_clock_and_preserves_previous_for_atomic_write, repository_errors_propagate_and_failed_completion_remains_due |
+| 6 | 일일 판정 시각을 과거 고정값으로 | 컴파일 성공·검출 | future_completion_and_out_of_range_fail_before_writing, daily_status_midnight_retry_and_accounts, completion_uses_current_clock_and_preserves_previous_for_atomic_write |
+| 7 | 완료 저장 이전 값 제거 | 컴파일 성공·검출 | completion_uses_current_clock_and_preserves_previous_for_atomic_write |
+| 8 | 완료 저장 현재 값을 과거로 | 컴파일 성공·검출 | completion_uses_current_clock_and_preserves_previous_for_atomic_write |
+| 9 | 완료 역행 검사 이전 값 제거 | 컴파일 성공·검출 | future_completion_and_out_of_range_fail_before_writing |
+| 10 | 완료 역행 검사를 자기 시각으로 | 컴파일 성공·검출 | future_completion_and_out_of_range_fail_before_writing |
+| 11 | 완료 검사 시각 범위 밖 | 컴파일 성공·검출 | completion_uses_current_clock_and_preserves_previous_for_atomic_write, future_completion_and_out_of_range_fail_before_writing, repository_errors_propagate_and_failed_completion_remains_due |
+| 12 | 완료 저장 이전 값을 현재로 | 컴파일 성공·검출 | completion_uses_current_clock_and_preserves_previous_for_atomic_write |
+| 13 | 완료 저장 계좌 변경 | 컴파일 성공·검출 | completion_uses_current_clock_and_preserves_previous_for_atomic_write |
+| 14 | 완료 조회 계좌 변경 | 컴파일 성공·검출 | daily_status_midnight_retry_and_accounts |
+| 15 | 최근 창 요청 계좌 변경 | 컴파일 성공·검출 | recent_window_midnight_uses_one_clock_sample_and_never_marks_full_completion |
+| 16 | 최근 창 오류를 역행으로 | 컴파일 성공·검출 | recent_range_and_sync_errors_are_preserved |
+| 17 | 일일 상태 출력 반전 | 컴파일 성공·검출 | repository_errors_propagate_and_failed_completion_remains_due, completion_uses_current_clock_and_preserves_previous_for_atomic_write, daily_status_midnight_retry_and_accounts |
+| 18 | 최근 창 실패 무시 | 컴파일 성공·검출 | recent_range_and_sync_errors_are_preserved |
+| 19 | 완료 판정 오류 무시 | 컴파일 성공·검출 | future_completion_and_out_of_range_fail_before_writing |
+| 20 | 완료 저장 결과 성공 합성 | 컴파일 성공·검출 | repository_errors_propagate_and_failed_completion_remains_due |
+
+최초 손 변형 표의 실패 전파 테스트 이름은 실행 당시 이름이다. 리뷰 후 repository_errors_propagate_and_missing_completion_is_required로 이름을 정정했고 단언은 유지했다.

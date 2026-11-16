@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(clock.calls(), vec![at(1_794_841_201); 4]);
     }
     #[test]
-    fn repository_errors_propagate_and_failed_completion_remains_due() {
+    fn repository_errors_propagate_and_missing_completion_is_required() {
         let repo = Repository::default();
         let broker = ScriptedBrokerRead::default();
         let clock = SteppedClock::new(at(1_794_841_201));
@@ -344,5 +344,86 @@ mod tests {
             ))
         );
         assert_eq!(broker.calls(), []);
+    }
+    #[test]
+    fn delivery_failure_survives_recent_wrapper() {
+        struct Failing;
+        impl application::EventSubscriber for Failing {
+            fn on_event(
+                &self,
+                _event: &domain::DomainEvent,
+            ) -> Result<(), application::SubscriberFailure> {
+                Err(application::SubscriberFailure::Unavailable)
+            }
+        }
+        let repo = Repository::default();
+        let broker = ScriptedBrokerRead::default();
+        let clock = SteppedClock::new(at(1_794_841_201));
+        let mut builder = application::EventBusBuilder::default();
+        let subscription = builder.subscribe(
+            [domain::DomainEventKind::TransactionsSyncRecorded].into(),
+            Failing,
+        );
+        let events = builder.build();
+        let account = AccountId::new(101);
+        repo.state.push(Ok(SettledRowSet::new(account.clone())));
+        repo.latest.push(Ok(None));
+        repo.records.push(Ok(WriteCompleted));
+        broker.script_transactions().push(Err(PortError::new(
+            ReadEndpoint::Transactions,
+            HttpStatus::NotReceived,
+            PortErrorKind::Unavailable {
+                cause: UnavailableCause::Network,
+                retry: RetryDelay::Unknown,
+            },
+        )));
+        assert_eq!(
+            run(schedule(&broker, &repo, &clock, &events).sync_recent(&account)),
+            Ok(DeliveryReport {
+                failures: vec![application::DeliveryFailure {
+                    subscription,
+                    cause: application::SubscriberFailure::Unavailable
+                }]
+            })
+        );
+    }
+    #[test]
+    fn completion_clock_and_future_status_recovery_are_preserved() {
+        let repo = Repository::default();
+        let broker = ScriptedBrokerRead::default();
+        let clock = SteppedClock::new(at(1_794_841_199));
+        let events = EventBus::default();
+        let sync = schedule(&broker, &repo, &clock, &events);
+        let account = AccountId::new(102);
+        clock.advance_to(at(1_794_841_200)).expect("자정");
+        repo.last.push(Ok(None));
+        repo.completed.push(Ok(WriteCompleted));
+        assert_eq!(
+            run(sync.record_full_inspection_completed(&account)),
+            Ok(WriteCompleted)
+        );
+        assert_eq!(broker.calls(), []);
+        assert_eq!(
+            repo.completed.calls(),
+            vec![(account.clone(), None, at(1_794_841_200))]
+        );
+        repo.last.push(Ok(Some(at(1_794_841_200))));
+        assert_eq!(
+            run(sync.full_inspection_status(&account)),
+            Ok(DailyFullInspection::CompletedToday)
+        );
+        repo.last.push(Ok(Some(at(1_794_927_600))));
+        assert_eq!(
+            run(sync.full_inspection_status(&account)),
+            Err(TransactionScheduleError::Time(
+                TransactionSyncTimeError::ClockReversed
+            ))
+        );
+        clock.advance_to(at(1_794_927_600)).expect("미래 시각 도달");
+        repo.last.push(Ok(Some(at(1_794_927_600))));
+        assert_eq!(
+            run(sync.full_inspection_status(&account)),
+            Ok(DailyFullInspection::CompletedToday)
+        );
     }
 }
