@@ -2,61 +2,63 @@
 
 - 상태: 초안
 
+## 기준과 범위
+
+최초 작업 기준은 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a, 독립 검토 기준은 master 수신 후 afc9a3f9841832585bcc48fe122e4f36cd27b367이다. 검토 대상은 최초 구현 484a4f26b604e37905ddb1485171402efadf5535와 1회차 수정 f1ab0358f8a305ed608d9b1ec5395d39aa069876이다. 마지막 수신 대상으로 4df1fac4a5b67bb2e77a948e41d470dc56cd97da을 고정했다. 작업은 IPC 틀이며 실제 화면용 명령을 늘리지 않는다.
+
 ## 결정
 
-최초 작업 기준 SHA는 520c8dfc0e5b2fdd9bcc69a1c32b48b0eff9c49a다. 기존 app_version 하나에 닫힌 current 조회 입력을 연결하고 기존 조립 루트에 UiEvent 하나를 등록한다. 입력은 serde deny_unknown_fields로 추가 필드를 거부한다. specta skip_attr = "serde"는 이 DTO의 serde 메타데이터만 생략한다. 필드명 변경이나 태그가 없는 DTO에서 TS 모양은 동일하며 serde의 런타임 거부는 유지한다. 수동으로 필드 목록을 복제하는 Type 구현보다 단순하고 끌 수 없는 disallowed_macros를 끄지 않는다. serde rename/tag/flatten을 추가하면 이 결정을 다시 검증해야 한다.
+기존 app_version 명령 하나에 닫힌 current 조회 DTO를 연결한다. Tauri 비동기 명령으로 인자를 Future가 소유하게 하여 기존 needless_pass_by_value·unnecessary_wraps expect 두 개를 제거했다. 별도 작업 큐나 태스크는 추가하지 않는다.
 
-ErrorHandlingMode::Result를 유지한다. application ErrorClass의 네 분류를 user-fixable, retryable, bug, no-data로 옮긴다. 진단·대기 시간·원문·경로·계좌 키는 내보내지 않는다. no-data는 조회 빈 상태이며 상태 띠에 올리지 않는 처리는 U-04에 인계한다.
+입력은 serde deny_unknown_fields로 추가 필드를 거부한다. specta skip_attr = "serde"는 해당 DTO의 serde 메타데이터만 생략한다. 필드 이름·태그를 바꾸지 않는 현재 DTO에서 Rust가 받는 모양과 TS 모양이 같다. 별도 AppVersionQuery의 current 이름은 그 타입의 Type 정의가 반영한다. 수동 Type 구현으로 필드 목록을 복제하는 것보다 단순하며 끌 수 없는 린트를 약화하지 않는다. 향후 rename/default/skip/tag/flatten을 도입할 때에는 생성 비교뿐 아니라 정상 입력과 실제 IPC 경로의 동등성을 검증해야 한다.
 
-UiEvent는 외부 태그 열거형이다. 무페이로드는 종류 문자열, 나머지는 종류를 키로 갖는 객체다. 계좌 이벤트는 키를 버린다. 다른 ID는 문자열로 보존하며 공시는 소스와 접수 번호를 구분한다. 시장·소스·통화쌍은 닫힌 DTO 열거형으로 옮긴다. domain에 직렬화 의존성을 추가하지 않는다.
+ErrorHandlingMode::Result를 유지한다. ErrorClass의 UserAction, Wait, Bug, NoData를 각각 user-fixable, retryable, bug, no-data로 옮긴다. 오류에는 kind만 있고 진단·대기 시간·원문·경로·계좌 키는 없다. TS 경계는 오류를 strict 스키마로 검증하고 프레임워크 문자열·알 수 없는 객체를 payload 없는 framework 분류로 줄인다.
 
-기존 큰 정수 거부 테스트의 i64/u64/i128/u128/isize/usize와 기본 Typescript exporter를 유지한다. 금액·수량 명령은 추가하지 않는다. 향후 해당 DTO는 문자열 십진수만 사용해야 한다.
+UiEvent는 외부 태그 열거형이다. 무페이로드는 종류 문자열, 나머지는 종류를 키로 갖는 객체다. 여섯 계좌 이벤트의 키를 버리고 다른 ID는 문자열로 보존한다. 공시는 소스와 접수 번호를 분리하며 시장·소스·통화쌍은 닫힌 DTO 열거형으로 옮긴다. 변환은 DomainEvent를 소진하므로 새 변형을 추가하면 검토를 요구한다. domain에는 직렬화 의존성을 추가하지 않는다.
 
-H-13 생성기·재생성 바이트 비교를 유지하고 이벤트로 인해 달라진 고정 헤더·런타임 스냅샷과 해당 생성 파일의 허용 import만 갱신한다. 새 의존성·린트 끄기는 없다.
+UiEvent와 딸린 DTO는 단방향 전송을 위해 Serialize·Type만 갖고 Deserialize는 갖지 않는다. 이벤트 등록과 발행에 역직렬화는 필요 없다. 제품 조립 setup의 첫 줄에서 등록한다. 테스트는 build_app을 Ready까지 실행한 뒤 발행된 정확한 wire payload를 관측하고 자원을 정리한다. 등록 호출을 제거한 손 변형이 컴파일된 뒤 EventRegistry 누락으로 검출됐다.
 
-## 검증
+기존 i64/u64/i128/u128/isize/usize export 거부와 기본 Typescript exporter를 유지한다. 현재 금액·수량 DTO는 없고 향후 경계에는 문자열 십진수만 사용한다. 해당 계산은 domain이 소유한다.
 
-프로젝트 신뢰와 세션 훅 신뢰는 확인 불가다. 저장소 hooks=true는 세션 적용 증거가 아니다. pnpm frozen 설치와 lefthook install은 성공했다. 검증 상세는 리뷰 기록에 남긴다.
+H-13 생성기와 재생성 바이트 비교를 유지한다. 이벤트 때문에 달라진 고정 헤더·런타임 스냅샷은 실제 생성물로 갱신한다. runtime import는 기존 core와 이벤트용 event를 두 생성 파일에서만 허용하고 mocks는 테스트 사본에만 둔다. TSImportType의 참조는 별도 typeImports에서 webview·window를 두 생성 파일에만 한정한다. responses는 타입 참조도 허용하지 않는다. runtime import 범위를 이 타입 목록 때문에 넓히지 않는다. 정확한 경로·값·개수와 허용·거부 대조군을 검사한다.
 
-## 인계
-
-| 작업        | 내용                                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| U-04        | no-data 빈 상태 처리, IPC 시간 제한과 쿼리 계층                                                                     |
-| U-05 / A-10 | 이벤트 발행·구독과 선택 계좌 재조회 연결. 이번 작업은 타입 등록과 mount만 수행                                      |
-| O-08        | 승인 입력에는 proposal_id만 허용. serde 메타데이터를 생략할 경우 태그·이름 변경을 쓰지 않고 직렬화 모양 회귀를 추가 |
+Tauri의 바깥 invoke 인자 객체와 request DTO는 구분한다. 실제 제품 invoke handler를 호출하는 영구 테스트가 생성 바인딩의 정상 인자 {request:{query:"current"}} 성공과 request 내부 추가 필드의 serde 거부를 검증한다. 바깥 추가 키 무시는 독립 비판의 실제 실행으로 확인했으며 현재 입력 DTO 조건 위반으로 보지 않는다. 더 강한 O-08 승인 입력 조건은 별도로 검증한다.
 
 ## 승인된 기존 테스트 변경
 
-| 파일                                   | 테스트                                                                       | 전 → 후                                                                      |
-| -------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| src-tauri/src/bindings/tests.rs        | generated_typescript_names_the_command_mocks_and_recorded_responses          | 인자 없음 → AppVersionRequest 인자 서명                                      |
-| src-tauri/src/ipc/tests.rs             | app_version_response_is_recorded_for_the_typescript_fake                     | app handle만 전달 → current 조회 DTO도 전달. 응답 단언 유지                  |
-| src-tauri/src/ipc/tests.rs             | every_ipc_error_is_recorded_with_its_tag                                     | 세 분류 → NoData를 포함한 네 분류                                            |
-| desktop/tests/generated-files.test.mjs | the generated file list holds exactly the IPC outputs of gen-bindings        | 두 생성 파일의 고정 import 목록에 event 한 항목 추가                         |
-| desktop/tests/generated-files.test.mjs | generated files may import only their listed modules and nothing dynamically | 고정 허용 목록에 event가 추가된 정확한 오류 문구로 갱신. 다른 위반 단언 유지 |
+| 파일                                   | 테스트                                                                       | 전 → 후                                                            |
+| -------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| src-tauri/src/bindings/tests.rs        | generated_typescript_names_the_command_mocks_and_recorded_responses          | 인자 없음 → AppVersionRequest 서명                                 |
+| src-tauri/src/ipc/tests.rs             | app_version_response_is_recorded_for_the_typescript_fake                     | handle만 전달 → current DTO와 비동기 block_on 호출. 응답 단언 유지 |
+| src-tauri/src/ipc/tests.rs             | every_ipc_error_is_recorded_with_its_tag                                     | 세 분류 → NoData 포함 네 분류                                      |
+| desktop/tests/generated-files.test.mjs | the generated file list holds exactly the IPC outputs of gen-bindings        | event import 및 타입 참조 metadata의 정확한 목록·개수 반영         |
+| desktop/tests/generated-files.test.mjs | generated files may import only their listed modules and nothing dynamically | event가 추가된 정확한 오류 문구. 다른 위반 단언 유지               |
 
-사전 승인된 기존 테스트 변경은 5개다. Rust use 구문 변경에 따른 support-removed/shadowing 진단도 동일한 서명 변경의 기계적 결과다. 변경분 자동 변이는 test-diff에서 중단되어 실행하지 못했다. 손 변형 20개의 실제 실행으로 보완했으며 자동 변이 통과로 보고하지 않는다.
+기존 테스트 변경은 고유 테스트 5개다. 최초 구현의 Rust use 구문 변경은 같은 서명 변경의 support-removed/shadowing 진단 두 개를 냈다. 새 패키지와 새 검사 끄기는 없다.
 
-입력 DTO 추가 뒤 기존 AppHandle 명령의 needless_pass_by_value 예외가 모든 인자를 Tauri 주입 타입으로 제한하는 검사와 충돌했다. 명령을 async fn으로 바꾸어 인자를 명령 Future가 소유하도록 했다. 기존 needless_pass_by_value·unnecessary_wraps expect 두 개는 제거했고, 새 끄기 없이 Clippy가 통과했다. 별도 태스크·큐·상태는 추가하지 않았다. 기존 응답 테스트는 변경된 비동기 서명에 맞추어 block_on으로 호출하며 응답 단언을 유지한다.
+## 보호 파일 변경
 
-## 커밋 전 막힘 (해소)
+| 파일                                                 | 이유                                                                                                      |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| .codex/config.toml, harness/claude-hooks/hashes.json | 새 ADR 보호 등록과 생성 해시. 최신 master 수신 충돌은 생성기로 해결                                       |
+| harness/generated-files/files.json, fixed.json       | 이벤트 생성물의 runtime import·타입 참조·고정 헤더·런타임 등록                                            |
+| apps/desktop/eslint/generated.mjs                    | 허용 목록 밖 TSImportType을 거부하는 검사 추가                                                            |
+| harness/capability-check/webview-apis.toml           | 새 mock 제품 조립 테스트 한 파일에서만 이벤트 발행·관측과 InvokeRequest 키 필드 허용. 제품 권한 추가 없음 |
+| apps/desktop/tests/generated-files.test.mjs          | 생성 metadata의 정확한 기대값 갱신과 새 허용·거부 회귀                                                    |
 
-두 번째 정상 커밋 훅은 프런트 테스트 529개를 통과한 뒤 기존 Claude 훅 회귀 테스트에서 82 passed, 1 failed로 중단됐다. harness/claude-hooks/tests/allowlist.test.mjs:105는 docs/adr/0099-future.md에 대해 빈 위반 목록을 기대하지만 기준 커밋에는 이미 docs/adr/0099-composition-root.md가 있다. 실제 결과는 adr-number 위반이다. 기준의 테스트 본문과 ADR 존재를 확인했으며 단독 테스트로 재현했다.
+harness/capability-check/webview-api/cases.toml에는 invoke_key의 제품 파일 거부와 지정한 mock 테스트 파일 허용 대조군 두 개만 추가했다. 기존 사례의 단언과 기대값은 바꾸지 않았다.
 
-이 fixture는 U-02 설계 변경으로 생긴 것이 아니다. 기존 테스트를 이번 작업 범위 밖에서 수정하지 않고 보존한다. 다른 검사 실패가 남아 있으므로 test-diff에 한정된 LEFTHOOK=0 예외도 사용하지 않았다. 구현은 미커밋 상태로 인계한다. 전체 검사 통과, 구현 커밋 이후의 독립 리뷰·비판은 미실행이다. 이 하네스 fixture 수정과 정상 검사 재실행이 재개 조건이다.
+## 검증과 인계
 
-## 재개
+독립 Opus와 Codex 검토를 두 회차 거쳤다. 1회차 연결 테스트와 타입 참조 검사 공백을 보완했고 2회차에 현재 차단·중요 결함은 확인되지 않았다. 2회차의 사소한 실제 invoke 테스트 공백은 영구 회귀로 보완했다. 프로젝트 신뢰와 실제 세션 훅 신뢰는 확인 불가이며 Git 검사 결과와 동일시하지 않는다. 환경 예외와 최종 검사 결과는 docs/reviews/U-02.md에 구분해 기록한다.
 
-메인이 afc9a3f9841832585bcc48fe122e4f36cd27b367에서 기존 세 하네스 테스트의 미사용 번호 예시를 9999로 수정했다. 해당 테스트를 직접 수정하지 않고 master를 정상 훅으로 병합했다. 수신 병합 커밋은 674d0a8f277d83afe81db3859b4c440268b5a0e9다. 병합 중 전용 stash에 보존한 구현 20개 파일은 --index로 복원했고 원래 스테이징 패치와 바이트 단위로 동일함을 확인했다. 전용 stash는 확인 뒤 제거했다. 기존 막힘은 해소되었고 정상 구현 커밋 검사와 독립 리뷰를 재개한다.
-
-## 1회차 검토 반영
-
-생성 파일의 타입 참조를 별도 typeImports 목록으로 명시한다. 기존 runtime import 목록을 넓히지 않고 TSImportType에 같은 허용 경계를 적용한다. webview와 window의 타입 참조는 고정된 두 생성 파일에서만 허용하며 responses 및 이웃 파일에는 적용하지 않는다. 기존 고정 항목 수 단언은 새 metadata 한 개를 정확히 반영하고 별도 테스트가 경로·값·개수를 고정한다.
-
-UiEvent와 딸린 DTO는 Serialize·Type만 갖는다. Deserialize는 단방향 전송에 필요 없어 제거했다. mock 제품 조립을 Ready까지 실행한 다음 이벤트를 발행해 실제 payload를 관측하고, 수명 주기를 정리한 뒤 창을 닫는 회귀를 추가한다. 테스트 파일 한 곳에만 이벤트 관측 API를 등록하며 제품 권한은 추가하지 않는다.
-
-입력 DTO의 정상 query 모양과 알 수 없는 내부 필드는 기존 역직렬화 테스트가 고정한다. Tauri의 바깥 invoke 인자 객체는 입력 DTO와 구분한다. O-08은 승인 명령에서 바깥·안쪽 추가 키를 실제 IPC 경로로 검증해야 한다. 향후 금액·수량 DTO는 십진수 문자열 경계 검증을 해당 작업에서 추가한다.
+| 작업           | 인계                                                                                                                  |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- |
+| U-04           | no-data 빈 상태 처리, IPC 시간 제한과 쿼리 계층                                                                       |
+| U-03/U-05      | 생성 TS emit/emitTo는 제품 ACL상 허용되지 않는다. mock 성공을 제품 발행·구독 승인 증거로 쓰지 않고 단방향 구독을 검증 |
+| U-05/A-10      | 이벤트 발행·구독과 선택 계좌 재조회 연결. 반드시 등록 이후 발행하도록 수명 주기 소유권 유지                           |
+| O-08           | proposal_id만 받는 승인 입력의 바깥·안쪽 추가 키를 실제 IPC로 검증. serde 속성 확장 시 Rust·TS 모양 동등성 확인       |
+| U-04/U-09/U-13 | 금액·수량 DTO를 도입할 때 십진수 문자열 경계와 표시 스키마 검증                                                       |
 
 ## 손 변형
 

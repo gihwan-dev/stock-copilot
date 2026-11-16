@@ -21,7 +21,10 @@ pub(crate) fn digest(source: &str) -> String {
         .collect()
 }
 
-pub(crate) const MIGRATIONS: &[(&str, &str)] = &[("0001_migration_ledger.sql", sql::CREATE_LEDGER)];
+pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
+    ("0001_migration_ledger.sql", sql::CREATE_LEDGER),
+    ("0002_holdings_snapshots.sql", crate::sql::holdings::CREATE),
+];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {
     apply(connection, at, MIGRATIONS).map_err(|error| failure::sqlite(&error))

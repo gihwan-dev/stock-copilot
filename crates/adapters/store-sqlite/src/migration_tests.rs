@@ -27,7 +27,7 @@ fn fresh_open_records_clock_and_reopen_preserves_ledger() {
                 assert_eq!(
                     connection.query_row(crate::sql::tests::LEDGER_COUNT, [], |row| row
                         .get::<_, i64>(0))?,
-                    1
+                    2
                 );
                 Ok(())
             }))
@@ -39,10 +39,10 @@ fn fresh_open_records_clock_and_reopen_preserves_ledger() {
 fn corrupt_ledger_and_future_database_fail_open() {
     for statement in [
         crate::sql::tests::BAD_HASH,
-        crate::sql::tests::BAD_NAME,
+        crate::sql::holdings_tests::BAD_NAME,
         crate::sql::tests::MISSING,
-        crate::sql::tests::GAP,
-        crate::sql::tests::FUTURE,
+        crate::sql::holdings_tests::GAP,
+        crate::sql::holdings_tests::FUTURE,
         crate::sql::tests::DROP_LEDGER,
         crate::sql::tests::NONSTRICT,
         crate::sql::tests::PREFIX_NONSTRICT,

@@ -92,3 +92,81 @@ fn product_assembly_mounts_the_event_and_emits_only_its_wire_payload() {
     });
     assert_eq!(code, 0_i32, "제품 조립 종료");
 }
+
+fn version_request(body: serde_json::Value) -> tauri::webview::InvokeRequest {
+    tauri::webview::InvokeRequest {
+        cmd: "app_version".into(),
+        callback: tauri::ipc::CallbackFn(41),
+        error: tauri::ipc::CallbackFn(59),
+        url: "tauri://localhost".parse().expect("로컬 출처"),
+        body: tauri::ipc::InvokeBody::Json(body),
+        headers: tauri::http::HeaderMap::new(),
+        invoke_key: tauri::test::INVOKE_KEY.into(),
+    }
+}
+
+fn assert_command_input(handle: &tauri::AppHandle<MockRuntime>) {
+    let window = handle.get_webview_window("main").expect("주 창");
+    let response = tauri::test::get_ipc_response(
+        &window,
+        version_request(serde_json::json!({"request":{"query":"current"}})),
+    )
+    .expect("생성 바인딩 인자 성공");
+    assert_eq!(
+        response
+            .deserialize::<serde_json::Value>()
+            .expect("명령 응답 JSON"),
+        serde_json::json!({"version":"0.1.0"}),
+        "실제 IPC가 생성 바인딩의 인자 모양을 받는다"
+    );
+    let rejected = tauri::test::get_ipc_response(
+        &window,
+        version_request(serde_json::json!({"request":{"query":"current","extra":"probe"}})),
+    )
+    .expect_err("DTO 내부 추가 필드 거부");
+    assert!(
+        rejected
+            .as_str()
+            .expect("역직렬화 오류")
+            .contains("unknown field `extra`"),
+        "권한 실패가 아니라 DTO의 추가 필드 거부다"
+    );
+}
+
+#[test]
+fn product_command_accepts_binding_arguments_and_rejects_unknown_dto_fields() {
+    let code = assembled_app().run_return(|handle, event| match event {
+        tauri::RunEvent::Ready => {
+            assert_command_input(handle);
+            tauri::async_runtime::block_on(
+                handle.state::<crate::lifecycle::Lifecycle>().shutdown(),
+            );
+            handle
+                .get_webview_window("main")
+                .expect("주 창")
+                .close()
+                .expect("창 닫기");
+        }
+        tauri::RunEvent::ExitRequested { .. } => {
+            assert!(
+                handle
+                    .state::<crate::lifecycle::Lifecycle>()
+                    .outcome()
+                    .try_lock()
+                    .expect("종료 기록")
+                    .is_some(),
+                "명령 검증 뒤 정리한 앱을 종료한다"
+            );
+        }
+        tauri::RunEvent::Exit
+        | tauri::RunEvent::WindowEvent { .. }
+        | tauri::RunEvent::WebviewEvent { .. }
+        | tauri::RunEvent::Resumed
+        | tauri::RunEvent::MainEventsCleared
+        | tauri::RunEvent::Opened { .. }
+        | tauri::RunEvent::MenuEvent(_)
+        | tauri::RunEvent::Reopen { .. }
+        | _ => {}
+    });
+    assert_eq!(code, 0_i32, "제품 명령 검증 종료");
+}

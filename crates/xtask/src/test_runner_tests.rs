@@ -157,3 +157,27 @@ fn mutation_recipes_do_not_force_full_property_counts() {
         assert!(!recipe(name).iter().any(|line| line.contains("4096")));
     }
 }
+
+#[test]
+fn coverage_alone_pins_the_property_seed() {
+    let coverage = recipe("coverage-check");
+    assert_eq!(
+        coverage.first().map(String::as_str),
+        Some("[env(\"PROPTEST_RNG_SEED\", \"5\")]")
+    );
+    assert!(
+        coverage
+            .iter()
+            .any(|line| line == "[env(\"STOCK_COPILOT_PROPTEST_CASES\", \"4096\")]")
+    );
+    for name in recipe_names() {
+        if name != "coverage-check" {
+            assert!(
+                !recipe(&name)
+                    .iter()
+                    .any(|line| line.contains("PROPTEST_RNG_SEED")),
+                "{name}"
+            );
+        }
+    }
+}
