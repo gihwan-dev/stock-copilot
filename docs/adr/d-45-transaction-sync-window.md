@@ -22,12 +22,14 @@
 | daily_full_inspection(Option<Timestamp>, Timestamp) | Result<DailyFullInspection, TransactionSyncTimeError> |
 | TransactionSyncTimeError | OutOfRange / ClockReversed |
 
+최근 창 생성에서 발생하는 오류는 OutOfRange뿐이다. ClockReversed는 일일 검사 판정에서만 발생한다. 두 시간 정책은 기존 domain 관례대로 오류 열거형을 공유한다.
+
 ## 인계
 
 | 받는 작업 | 필요한 일 |
 |---|---|
-| A-22 | Clock 값을 전달하고 계좌별 마지막 성공 전체 검사 시각을 저장. 실패·부분 수신은 완료 시각 갱신 금지. 전체 시작일·상한 초과 구간 분할과 완결 저장·재시도 계약 연결 |
-| S-03 | 전체 검사 완료 시각을 계좌별로 원자적으로 보존 |
+| A-22 | Clock 값을 전달하고 정기 동기화에 recent_transaction_window 결과를 사용한다. 계좌별 마지막 성공 전체 검사 시각을 저장하며 실패·부분 수신은 완료 시각을 갱신하지 않는다. 전체 시작일·응답 상한 초과 분할은 별도 domain 계약이 먼저 필요하다. 담당 작업은 메인이 지정하며 application에서 정책을 재정의하지 않는다. 완결 저장·재시도는 그 계약 이후 연결한다. |
+| S-03 | 전체 검사 완료 시각을 계좌별로 원자적으로 보존. 미래 완료 기록의 복구·정정은 A-22와 별도 계약으로 정하고 오류를 완료 판정으로 바꾸지 않는다. |
 
 ## 검증
 

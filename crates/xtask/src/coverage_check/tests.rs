@@ -439,3 +439,51 @@ fn region_and_unmeasured_rules_have_examples() {
         );
     }
 }
+
+#[test]
+fn coverage_remeasurement_does_not_accumulate_previous_profile_counts() {
+    let root = repository_root();
+    let directory = fresh_directory(&root, "coverage-repeat");
+    copy_tree(&root.join(WORKSPACE_EXAMPLE), &directory);
+    generate_lockfile(&directory.join("Cargo.toml"));
+    let policy = root_policy(&root);
+    let first = super::measure(&directory, &policy.packages).expect("first measurement");
+    let second = super::measure(&directory, &policy.packages).expect("second measurement");
+    assert_eq!(second.0, first.0);
+    assert_eq!(second.1, first.1);
+}
+
+#[test]
+fn coverage_remeasurement_discards_obsolete_source_mappings() {
+    let root = repository_root();
+    let directory = fresh_directory(&root, "coverage-source-change");
+    copy_tree(&root.join(WORKSPACE_EXAMPLE), &directory);
+    let source = directory.join("crates/domain/src/lib.rs");
+    let original = "pub fn before_change() -> u32 { 7 }\n#[cfg(test)]\nmod tests { #[test] fn measures_current_source() { assert_eq!(super::before_change(), 7); } }\n";
+    fs::write(&source, original).expect("first source");
+    generate_lockfile(&directory.join("Cargo.toml"));
+    let packages = vec![String::from("domain")];
+    let first = super::measure(&directory, &packages).expect("first source measurement");
+    assert!(first.0.contains("before_change"));
+    let manifest = directory.join("crates/domain/Cargo.toml");
+    let manifest_text = fs::read_to_string(&manifest).expect("manifest");
+    fs::write(&manifest, manifest_text.replace("0.1.0", "0.2.0")).expect("new crate identity");
+    fs::write(
+        &source,
+        format!(
+            "\n\n\n\n\n\n{}",
+            original.replace("before_change", "after_change")
+        ),
+    )
+    .expect("changed source locations");
+    generate_lockfile(&directory.join("Cargo.toml"));
+    let second = super::measure(&directory, &packages).expect("changed source measurement");
+    assert!(second.0.contains("after_change"));
+    assert!(!second.0.contains("before_change"));
+    let counts = parse_lcov(&second.0, &directory);
+    let current = counts
+        .get("crates/domain/src/lib.rs")
+        .expect("current source");
+    assert!(current.keys().all(|line| *line > 6));
+    assert!(current.values().all(|count| *count > 0));
+}

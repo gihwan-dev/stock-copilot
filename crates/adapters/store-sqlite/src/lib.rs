@@ -112,3 +112,8 @@ mod third_tests;
 
 #[cfg(test)]
 mod final_tests;
+
+mod holdings;
+pub use holdings::{HoldingsSnapshot, HoldingsStore, SnapshotHolding};
+#[cfg(test)]
+mod holdings_tests;

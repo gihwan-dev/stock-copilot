@@ -327,6 +327,7 @@ fn fresh_report(workspace: &Path, name: &str) -> Result<String, String> {
 pub(crate) fn measure(workspace: &Path, packages: &[String]) -> Result<(String, String), String> {
     let lines = fresh_report(workspace, REPORT_FILE)?;
     let regions = fresh_report(workspace, REGION_FILE)?;
+    run_llvm_cov(workspace, &["clean", "--workspace", "--locked"], &[])?;
     run_llvm_cov(workspace, &["nextest", "--locked", "--no-report"], packages)?;
     run_llvm_cov(
         workspace,
