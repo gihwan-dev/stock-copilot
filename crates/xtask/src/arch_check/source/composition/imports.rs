@@ -42,6 +42,9 @@ impl Bindings {
             if adapter_root || !visited.insert(first.clone()) {
                 continue;
             }
+            if resolved.len() > 1 {
+                pending.push((resolved.iter().skip(1).cloned().collect(), visited.clone()));
+            }
             let Some(alternatives) = self.imported.get(first) else {
                 continue;
             };
@@ -52,6 +55,15 @@ impl Bindings {
             }
         }
         false
+    }
+    pub(super) fn inherit(&mut self, other: &Self) {
+        for (name, paths) in &other.imported {
+            let entry = self.imported.entry(name.clone()).or_default();
+            entry.extend(paths.iter().cloned());
+            entry.sort();
+            entry.dedup();
+        }
+        self.prohibited = self.restricted.iter().any(|path| self.adapter(path));
     }
     fn collect(&mut self, tree: &UseTree, prefix: &[String], visibility: &Visibility) {
         match tree {
@@ -91,11 +103,26 @@ impl Bindings {
 }
 fn normalized(path: &[String]) -> Vec<String> {
     path.iter()
-        .skip_while(|part| ["crate", "self", "super"].contains(&part.as_str()))
+        .skip_while(|part| ["crate", "self", "super", "Self"].contains(&part.as_str()))
         .cloned()
         .collect()
 }
 impl<'ast> Visit<'ast> for Bindings {
+    fn visit_impl_item_type(&mut self, i: &'ast syn::ImplItemType) {
+        if let syn::Type::Path(value) = &i.ty {
+            let path = value
+                .path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.unraw().to_string())
+                .collect();
+            self.imported
+                .entry(i.ident.unraw().to_string())
+                .or_default()
+                .push(path);
+        }
+        visit::visit_impl_item_type(self, i);
+    }
     fn visit_item_use(&mut self, i: &'ast ItemUse) {
         self.collect(&i.tree, &[], &i.vis);
         visit::visit_item_use(self, i);

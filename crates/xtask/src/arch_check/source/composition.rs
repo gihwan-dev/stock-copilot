@@ -93,12 +93,10 @@ impl<'ast> Visit<'ast> for Construction {
             if let syn::Type::Path(qualified) = qself.ty.as_ref() {
                 self.path(&qualified.path);
             }
-            if qself.as_token.is_some()
-                && i.path.segments.last().is_some_and(|last| {
-                    ["new", "try_new", "open", "default", "production"]
-                        .contains(&last.ident.unraw().to_string().as_str())
-                })
-            {
+            if i.path.segments.last().is_some_and(|last| {
+                ["new", "try_new", "open", "default", "production"]
+                    .contains(&last.ident.unraw().to_string().as_str())
+            }) {
                 self.found = true;
             }
         }
@@ -131,19 +129,33 @@ impl<'ast> Visit<'ast> for Construction {
     }
 }
 
-pub(super) fn forbidden(
-    relative: &str,
-    file: &File,
-    aliases: &std::collections::BTreeMap<String, Vec<String>>,
-) -> bool {
+fn with_bindings(relative: &str, file: &File, bindings: Bindings) -> bool {
     if !relative.starts_with("apps/desktop/src-tauri/src/") || relative == ROOT {
         return false;
     }
-    let bindings = Bindings::of(file, aliases);
     let mut visitor = Construction {
         found: bindings.prohibited,
         bindings,
     };
     visitor.visit_file(file);
     visitor.found
+}
+
+pub(super) fn check(
+    files: &[(String, File)],
+    aliases: &std::collections::BTreeMap<String, Vec<String>>,
+) -> Vec<String> {
+    let mut shared = Bindings::default();
+    for (_, file) in files {
+        shared.inherit(&Bindings::of(file, aliases));
+    }
+    files
+        .iter()
+        .filter(|(relative, file)| {
+            let mut local = Bindings::of(file, aliases);
+            local.inherit(&shared);
+            with_bindings(relative, file, local)
+        })
+        .map(|(relative, _file)| relative.clone())
+        .collect()
 }

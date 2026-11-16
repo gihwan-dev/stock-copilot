@@ -97,3 +97,23 @@ forbidden = true
 name = "impl-local-type"
 source = 'struct Local; trait Make { fn make() -> Self; } impl Make for Local { fn make() -> Self { Self } }'
 forbidden = false
+
+[[case]]
+name = "impl-associated-qself-constructor"
+source = 'trait Make { type Item; fn make() -> Result<Self::Item, domain::TimeError>; } struct Local; impl Make for Local { type Item = platform_macos::SystemClock; fn make() -> Result<Self::Item, domain::TimeError> { <Self::Item>::new() } }'
+forbidden = true
+
+[[case]]
+name = "impl-associated-path-constructor"
+source = 'trait Make { type Item; fn make() -> Result<Self::Item, domain::TimeError>; } struct Local; impl Make for Local { type Item = platform_macos::SystemClock; fn make() -> Result<Self::Item, domain::TimeError> { Self::Item::new() } }'
+forbidden = true
+
+[[case]]
+name = "product-port-associated-types"
+source = 'struct Product; trait Family { type Clock; } impl Family for Product { type Clock = platform_macos::SystemClock; }'
+forbidden = false
+
+[[case]]
+name = "private-module-qualified-alias"
+source = 'pub mod parent { use platform_macos::SystemClock as Native; pub mod child { pub fn make() -> Result<crate::parent::Native, domain::TimeError> { crate::parent::Native::new() } } }'
+forbidden = true

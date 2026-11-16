@@ -777,7 +777,7 @@ findings = [
 
 [[case]]
 name = "adapter-construction-outside-main"
-findings = [{ rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/lib.rs" }]
+findings = [{ rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/lib.rs" }, { rule = "adapter-construction", subject = "apps/desktop/src-tauri/src/child.rs" }]
 
 [[case]]
 name = "adapter-construction-imported"

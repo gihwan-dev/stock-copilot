@@ -1,4 +1,12 @@
-use super::forbidden;
+use super::{imports::Bindings, with_bindings};
+
+fn forbidden(
+    relative: &str,
+    file: &syn::File,
+    aliases: &std::collections::BTreeMap<String, Vec<String>>,
+) -> bool {
+    with_bindings(relative, file, Bindings::of(file, aliases))
+}
 
 #[test]
 fn every_composition_fixture_enforces_the_constructor_boundary() {

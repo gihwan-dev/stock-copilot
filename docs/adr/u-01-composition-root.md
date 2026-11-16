@@ -86,6 +86,7 @@ run_app의 ExitRequested 처리에서 종료를 미루고 Lifecycle::shutdown을
 | U-04, G-09                        | 실제 화면 표시와 2초 측정                                                    |
 | U-14, O-07, U-24                  | 알림과 본인 확인 자리 표시 교체                                              |
 | U-18, U-20, U-31                  | 트레이 상주, 실제 자식 프로세스 그룹 정리, 실제 장기 작업 응답성             |
+| U-20 | 실제 shutdown 호출부를 재작성해 DB를 미리 닫는 경우까지 관측하는 자원 정리 통합 테스트 확대. 현재 종료 순서는 맞으며 helper 내부 순서 반전은 검출 |
 
 ## 검증
 
@@ -169,3 +170,24 @@ mktemp 복사본에서 아래 두 변형을 각각 컴파일하고 실행했다.
 | ---- | ------- | ------ | ----------- | ---- |
 | 1 | impl 대상 타입 검사 제거 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
 | 2 | DB 종료를 refresh 취소·await 앞으로 이동 | 통과 | lifecycle::cleanup::tests::database_closing_begins_only_after_refresh_future_has_been_dropped | 검출 |
+
+## 3차 리뷰 평가 후 결정
+
+- 파일별 분석에만 의존하지 않고 같은 crate의 Rust 파일에서 가져온 별칭과 연관 타입 별칭을 함께 수집한다. 파일마다 실제 구성 표현식을 이 가능한 경로 집합으로 해석한다. 비공개 부모 별칭을 자식이 사용하는 우회를 막으면서, 생성하지 않는 타입 참조와 제품 포트의 연관 타입 지정은 허용한다. 모듈 스코프를 완전히 추론하지 않고 가능한 경로의 합집합으로 보수적으로 실패시키는 기존 선택을 crate 전체로 확장한다.
+- ImplItemType을 별칭 수집에 포함하고 Self 경로를 정규화한다. qself의 new·try_new·open·default·production 호출은 as 구문 유무와 관계없이 금지한다. 이는 연관 타입을 통한 알려진 생성자 우회를 막는 구문 제한이다. 일반 경로 호출은 유지한다.
+- super 별칭뿐 아니라 crate::부모모듈::별칭도 검사한다. 알 수 없는 모듈 접두부 뒤의 별칭 후보까지 확인한다. 이 누락은 자체 mktemp 사본에서 고정 자료 실패로 재현한 뒤 수정했으며, 별칭 후보 검사 제거 변형도 새 컴파일 뒤 검출됐다.
+- 3차 비판에서 실행으로 확정된 두 차단 지적은 위 변경과 회귀·손 변형으로 수정한다. 지시대로 4차 리뷰는 하지 않으며 a400884 이후 수정 범위를 최종 기록에 명시한다.
+- 현재 제품은 공통 finish를 통해 refresh 취소·await 후 DB 종료를 수행한다. helper를 버린 재작성은 제품 dead-code 검사에 걸리지만, helper 호출을 유지하면서 DB를 먼저 닫는 별도 재작성은 32개 테스트를 통과했다. 이는 사소한 실제 호출부 테스트 공백으로 남기고 U-20에 인계한다. 이 독립 생존 변형을 자체 선택 손 변형의 생존 0개 집계에 섞거나 미검출이 전혀 없다고 보고하지 않는다.
+
+## 3차 수정 손 변형
+
+사본 전용 target을 사용해 변형을 각각 새로 컴파일했다. 자체 유효 변형은 누계 36개가 모두 검출됐다. 컴파일 불가 시도는 최초 시계 1개와 아래 별칭 상속 제거의 불필요한 mut 1개로 총 2개이며 검출 수에서 제외한다. 공유 target 캐시 때문에 새 변형의 컴파일을 확인할 수 없었던 중간 실행 두 건도 무효로 제외했고, 전용 target의 원본·복원 대조군과 컴파일 로그로 교체했다. 별도로 독립 비판자가 확인한 실제 shutdown 재작성 생존 1개는 위 잔여 항목으로 유지한다.
+
+| 번호 | 바꾼 것 | 컴파일 | 잡은 테스트 | 결과 |
+| ---- | ------- | ------ | ----------- | ---- |
+| 1a | 파일 간 별칭 상속만 제거 | 실패 | unused_mut 린트 | 컴파일 불가, 제외 |
+| 1b | 파일 간 별칭 상속 제거와 불필요한 mut 정리 | 통과 | arch_check_cases_tests::every_case_reports_exactly_its_findings | 검출 |
+| 2 | impl 연관 타입 별칭 수집 제거 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
+| 3 | 모듈 접두부 뒤 별칭 후보 검사 제거 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
+
+최종 수정 소스로 just mutants-diff를 다시 실행했지만, 사전 승인된 기존 테스트 변경 2건의 test-diff 사전 관문에서 거부됐다. 실제 자동 변이 실행은 없으며 자동 변이 통과로 보고하지 않는다.

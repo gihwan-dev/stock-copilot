@@ -87,12 +87,6 @@ fn scan_rust(
             .into_iter()
             .map(|rule| Finding::new(rule, String::from(relative))),
     );
-    if composition::forbidden(relative, &file, &package.source_aliases) {
-        findings.insert(Finding::new(
-            Rule::AdapterConstruction,
-            String::from(relative),
-        ));
-    }
     let mut ast = AstRules::new(rules, crate_name, relative, &file);
     ast.visit_file(&file);
     findings.extend(
@@ -240,11 +234,10 @@ pub(crate) fn check_sources(
             order_writes(files, &mut findings);
         }
     }
-    for package in workspace
-        .packages
-        .iter()
-        .filter(|package| rules.schema_surface_crates.contains(&package.name))
-    {
+    for package in workspace.packages.iter().filter(|package| {
+        rules.schema_surface_crates.contains(&package.name)
+            || package.name == CrateName::new("src-tauri")
+    }) {
         let mut parsed = Vec::new();
         for path in package_files(&package.directory, &skipped)?
             .into_iter()
@@ -259,6 +252,11 @@ pub(crate) fn check_sources(
             schema_surface::check(&parsed, &package.schema_names)
                 .into_iter()
                 .map(|path| Finding::new(Rule::SchemaSurface, path)),
+        );
+        findings.extend(
+            composition::check(&parsed, &package.source_aliases)
+                .into_iter()
+                .map(|path| Finding::new(Rule::AdapterConstruction, path)),
         );
     }
     http_write_means(rules, &by_crate, &mut findings);
