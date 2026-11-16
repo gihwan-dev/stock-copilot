@@ -1,0 +1,86 @@
+# S-02 보유 스냅샷 저장소
+
+- 상태: 초안
+
+## 결정
+
+기준은 730e4069f9327da8e7884c845069130d542066f7이다. 다음 번호 0002_holdings_snapshots.sql 하나를 추가한다. 두 STRICT 테이블에 계좌·시각 헤더와 순서가 있는 보유 관측을 나눠 저장한다. 금액과 수량은 TEXT 정규 십진수 CHECK, 금액은 KRW/USD 통화와 함께 보존한다. 모든 읽기는 domain 숫자·심볼·시각·보고 값 생성자로 재검증한다. SQL 및 오류에는 계좌 본문이나 비밀을 담지 않는다.
+
+HoldingsStore는 Database를 소유하는 구체 어댑터다. PortfolioRepository는 이미 application에 있으므로 새 trait를 만들지 않는다. SnapshotHolding은 보유 관측 필드다. DB만으로 마스터 조회 권한을 나타내는 ResolvedOrderInstrument를 만들지 않는다. 이 관측을 현재 마스터와 결합해 Portfolio로 복원하는 일은 A-06 연결 작업에 넘긴다. 현금과 계좌 전체 평가 기록은 이 보유 저장소의 범위 밖이다. 외부 의존 추가는 없다.
+
+계좌·UTC 초·나노초가 동일하면 같은 스냅샷이다. 동일 본문 재시도는 성공하고 다른 본문은 RepositoryIntegrity로 닫는다. 삽입과 모든 자식 행은 한 트랜잭션이다. 빈 보유도 헤더를 남긴다. 잘못된 통화 조합과 중복 종목은 실패한다.
+
+| 현재 KST 날짜와 자료 KST 날짜의 차 | 보존 |
+|---|---|
+| 음수부터 29일 | 전부 |
+| 30일 이상 | 계좌·KST 날짜별 UTC 시각이 마지막인 하나 |
+| 동일 초의 다른 나노초 | 나노초가 큰 것이 마지막 |
+| 축소 중 실패 | 헤더와 자식 행 모두 롤백 |
+
+architecture는 일별 대표 시각을 지정하지 않아 마지막 관측으로 정한다. 시각은 Clock에서 한 번 얻고, KST 달력 날짜 차이를 domain에서 계산한다. SQL에서 금액 계산은 하지 않는다. 삭제는 전용 쓰기 스레드의 한 트랜잭션에서 수행하며 FK CASCADE로 자식도 지운다. J-13이 반복 호출한다. 미래 날짜는 건드리지 않는다.
+
+## 검사와 절차
+
+프로젝트 신뢰·훅 정의 신뢰·현재 세션 적용은 확인 불가다. 시작 pnpm frozen 설치와 lefthook 설치는 성공했다. 테스트 작성 전에 구현 파일을 먼저 작성한 절차상 누락이 있어 회귀 우선 실행을 주장하지 않는다. 최초 신규 테스트 실행은 6 통과·KST fixture 기준 시각 오류 1 실패였고 독립 UTC 변환으로 fixture를 정정했다.
+
+기존 마이그레이션 실행기 테스트는 제품 목록이 늘어도 원래 한 파일에서 시작하는 실험이 되도록 준비 부분을 MIGRATIONS[..1] 적용으로 고정한다. 단언은 유지한다. 실제 제품 열기의 원장 개수 1→2, sqlite_schema 개수 2→7은 정확한 새 값으로 갱신한다. 기존 부정 fixture는 두 행의 UNIQUE 충돌을 피하면서 같은 손상 조건을 만들도록 바꾼다. 사전 승인 (c), (d)에 해당한다. test-diff 목록은 최종 검사 후 기록한다.
+
+보호 파일은 migrations.lock(0002 해시), schema.snapshot.sql(두 테이블 추가)과 스크립트 생성물만 갱신한다. 규칙 완화와 검사 끄기는 추가하지 않는다.
+
+## 인계
+
+- A-06: 기존 PortfolioRepository와 보유 관측 저장 API 연결. 마스터 확인을 거쳐 종목 타입 복원, 현금·계좌 전체 평가·SyncRecord 저장은 별도 조립.
+- J-13: compact_holdings 예약 호출과 incremental_vacuum.
+- S-03: 이 작업은 0002를 썼으므로 최신 master에서 다음 번호를 확인한다.
+- U-01: 마지막 Database 소유권의 비동기 close 수명 주기 연결.
+
+## 승인된 test-diff 16건
+
+| 파일 | 테스트 | 전 → 후 |
+|---|---|---|
+| src/migration_tests.rs | fresh_open_records_clock_and_reopen_preserves_ledger | 원장 개수 1 → 2 |
+| src/review_tests.rs | embedded_sequence_gap_rolls_back_pending_schema | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/review_tests.rs | snapshot_contains_index_view_trigger_and_tables | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/review_tests.rs | table_rename_quotes_do_not_change_column_identity | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/review_tests.rs | third_migration_failure_rolls_back_second_migration_too | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/review_tests.rs | unsupported_schema_forms_fail_after_sqlite_accepts_them | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/tests.rs | raw_key_is_independently_readable_and_debug_is_closed | sqlite_schema 정확한 개수 2 → 7 |
+| src/third_tests.rs | alter_after_quoted_reference_is_closed | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | damaged_initial_ledger_cannot_be_repaired_by_pending_sql | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | hidden_numeric_column_fails_apply_and_preserves_ledger | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | quoted_body_tokens_cannot_hide_numeric_columns | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | single_quoted_text_markers_do_not_change_column_boundaries | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | successful_sql_cannot_commit_a_damaged_ledger | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | supported_negative_and_division_defaults_are_not_comments | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+| src/third_tests.rs | valid_data_migration_preserves_distinct_application_times | 제품 목록 전체 적용 → 원장 0001만 적용하는 원래 실험 준비; 단언 동일 |
+
+전체 검사로 승격된 check-fast: 프런트·정책·구조·SQL·마이그레이션·1665 테스트·커버리지 통과. test-diff만 위16건으로 실패. 이 커밋에만 사용자 지시의 LEFTHOOK=0 예외를 쓰며 규칙을 변경하지 않는다. 자동 변이는 test-diff 단계에서 중단되었다.
+
+## 손 변형
+
+임시 사본에서 전후 대조군 각각 신규 7개 통과. 컴파일 가능한 22개 전부 검출, 컴파일불가 1개는 제외했다. 자동 mutants-diff는 사전 승인된 기존 테스트 변경16건을 test-diff가 거부해 변이를 실행하지 못했다. 자동 변이 통과로 표시하지 않는다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 1 | < 30 -> < 29 | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account | 검출 |
+| 2 | < 30 -> <= 30 | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account | 검출 |
+| 3 | OffsetSeconds::new(32_400) -> OffsetSeconds::new(0) | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account | 검출 |
+| 4 | latest.insert((entry.account.clone(), date), entry.id) -> latest.insert((AccountId::new(0), date), entry.id) | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account | 검출 |
+| 5 | if stored != incoming -> if stored == incoming | holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 6 | if let Some(id) = previous -> if let Some(id) = previous.filter(&#124;_&#124; false) | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children | 검출 |
+| 7 | row.get(0)? -> row.get(1)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 8 | AccountId::new(row.get(1)?) -> AccountId::new(row.get(0)?) | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 9 | at: timestamp(row, 2)? -> at: timestamp(row, 1)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 10 | row.get::<_, String>(2)? -> row.get::<_, String>(3)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::corruption_is_rejected_by_domain_and_decimal_constraint, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 11 | row.get::<_, String>(3)? -> row.get::<_, String>(2)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 13 | row.get::<_, Option<String>>(5)? -> row.get::<_, Option<String>>(6)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 14 | row.get::<_, Option<String>>(6)? -> row.get::<_, Option<String>>(5)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 15 | row.get::<_, Option<String>>(7)? -> row.get::<_, Option<String>>(8)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 16 | row.get::<_, Option<String>>(8)? -> row.get::<_, Option<String>>(9)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 17 | row.get::<_, Option<String>>(9)? -> row.get::<_, Option<String>>(8)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 18 | timestamp(row, 10)? -> timestamp(row, 9)? | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 19 | Currency::Krw => "KRW" -> Currency::Krw => "USD" | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::corruption_is_rejected_by_domain_and_decimal_constraint, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 20 | Currency::Usd => "USD" -> Currency::Usd => "KRW" | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::corruption_is_rejected_by_domain_and_decimal_constraint, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 21 | item.quantity.as_decimal().to_string() -> item.acquisition_price.money().amount().as_decimal().to_string() | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::empty_and_optional_observations_round_trip, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 22 | report_value.profit().amount() -> report_value.valuation().amount() | holdings_tests::compaction_uses_kst_dates_29_30_31_and_last_per_account, holdings_tests::failed_compaction_rolls_back_prior_deletes_and_children, holdings_tests::round_trip_reopen_preserves_every_field_and_duplicate_is_idempotent | 검출 |
+| 23 | daily_value.rate().as_decimal() -> Ratio::parse(&NumericInput::try_new("0").expect("input")).expect("rate").as_decimal() |  | 컴파일불가 |

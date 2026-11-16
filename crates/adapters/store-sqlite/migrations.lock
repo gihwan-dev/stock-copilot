@@ -2,3 +2,8 @@
 number = 1
 file = "0001_migration_ledger.sql"
 sha256 = "f059233e48dd3cd2f492b96f916d760c19a109861b52707d6901f2bc0c6b2501"
+
+[[migration]]
+number = 2
+file = "0002_holdings_snapshots.sql"
+sha256 = "85eb69d7b1e4dc46ff5522233ebd9c35b33423d1cad8e5ca37bd7c3c686b9d80"
