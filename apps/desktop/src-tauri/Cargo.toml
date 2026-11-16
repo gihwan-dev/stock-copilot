@@ -22,3 +22,4 @@ workspace = true
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
+testkit-ports = { path = "../../../crates/testkit-ports" }

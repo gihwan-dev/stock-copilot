@@ -1,3 +1,4 @@
+mod support;
 #[cfg(test)]
 mod tests {
     use application::SecretValue;
@@ -6,10 +7,15 @@ mod tests {
 
     #[test]
     fn local_transport_preserves_status_headers_and_bytes_without_debug_secrets() {
-        let server = LocalHttpServer::start(b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 4\r\nRetry-After: 17\r\nX-RateLimit-Limit: 23\r\nX-RateLimit-Remaining: 11\r\nX-RateLimit-Reset: 19\r\nConnection: close\r\n\r\nraw!".to_vec()).expect("server");
+        let server = testkit::serve_sequence((0_u32..4_u32).map(|_| b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 4\r\nRetry-After: 17\r\nX-RateLimit-Limit: 23\r\nX-RateLimit-Remaining: 11\r\nX-RateLimit-Reset: 19\r\nConnection: close\r\n\r\nraw!".to_vec()).collect()).expect("server");
         let port = server.port();
-        let client =
-            TossHttpClient::new(&TossEndpoint::local(port).expect("endpoint")).expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(port).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let request = ReadRequest::new(ReadRoute::Accounts);
         let token = SecretValue::new(b"fake-token-731".to_vec());
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -27,7 +33,12 @@ mod tests {
         assert_eq!(response.headers().reset(), Some("19"));
         assert!(!format!("{client:?}{request:?}{response:?}{token:?}").contains("fake-token-731"));
         assert!(!format!("{response:?}").contains("raw!"));
-        let bytes = server.finish().expect("server");
+        let bytes = server
+            .finish()
+            .expect("server")
+            .into_iter()
+            .next()
+            .expect("received bytes");
         let received = String::from_utf8_lossy(&bytes);
         assert!(received.starts_with("GET /api/v1/accounts HTTP/1.1"));
         assert!(received.contains("Bearer fake-token-731"));
@@ -39,8 +50,13 @@ mod tests {
             TossEndpoint::local(0).err(),
             Some(TossHttpError::InvalidEndpoint)
         );
-        let client =
-            TossHttpClient::new(&TossEndpoint::local(49151).expect("endpoint")).expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(49151).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -65,8 +81,13 @@ mod tests {
     #[test]
     fn redirects_are_returned_without_following_the_location_or_leaking_it() {
         let server = LocalHttpServer::start(b"HTTP/1.1 302 Found\r\nLocation: http://192.0.2.1/secret-location\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()).expect("server");
-        let client = TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-            .expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let response = runtime()
             .block_on(client.get(
                 &ReadRequest::new(ReadRoute::Accounts),
@@ -84,8 +105,13 @@ mod tests {
             b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\ntoken".to_vec(),
         )
         .expect("server");
-        let client = TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-            .expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let response = runtime()
             .block_on(broker_toss::issue_token(
                 &client,
@@ -116,8 +142,13 @@ mod tests {
             b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n".to_vec(),
         )
         .expect("server");
-        let client = TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-            .expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let request = ReadRequest::new(ReadRoute::Transactions)
             .with_query(broker_toss::QueryKey::Cursor, "next?&=#/ value".to_owned())
             .with_account(SecretValue::new(b"account-413".to_vec()));
@@ -148,8 +179,13 @@ mod tests {
                 .to_vec(),
         )
         .expect("server");
-        let client = TossHttpClient::new(&TossEndpoint::local(server.port()).expect("endpoint"))
-            .expect("client");
+        let time = crate::support::time();
+        let client = TossHttpClient::new(
+            &TossEndpoint::local(server.port()).expect("endpoint"),
+            std::sync::Arc::<crate::support::FakeTime>::clone(&time),
+            time,
+        )
+        .expect("client");
         let error = runtime()
             .block_on(client.get(
                 &ReadRequest::new(ReadRoute::Accounts),

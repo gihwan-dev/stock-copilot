@@ -3502,6 +3502,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-specta",
+ "testkit-ports",
 ]
 
 [[package]]
