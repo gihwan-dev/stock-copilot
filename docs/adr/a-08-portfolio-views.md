@@ -1,0 +1,66 @@
+# A-08 포트폴리오와 비중 조회
+
+- 상태: 초안
+
+## 결정
+
+저장된 최신 SyncRecord를 계좌별로 읽고 Complete·Partial·Failed·AccessBlocked와 자료 없음(Missing)을 구분한다. 저장소 오류는 원 오류로 반환한다. domain의 Portfolio::evaluate와 Allocation::new만 호출한다. 통화별 현금은 BuyingPower이고 총자산은 domain의 Total<AssetEstimate>라서 불완전 여부와 근사를 유지한다. 보유·요약·현금의 원래 수집 시각을 보존한다.
+
+저장 시각에 유효한 USD/KRW Mid를 저장소에서 조회한다. 조회 결과 자체와 실제 사용한 환율은 구분한다. 쌍·종류·유효 구간이 맞지 않는 환율은 계산에 쓰지 않으며 원 조회 결과는 exchange_rate에 남긴다. 실제 사용한 종류·시각·출처는 domain 환산 값의 분해 결과에 남는다. 환율 저장소 오류가 나도 통화별 자료를 숨기지 않는다. 재시도·실제 API 호출·쓰기·이벤트 발행은 없다.
+
+현재 저장 포트에는 섹터 대응 조회 메서드가 없으므로 임의 포트나 분류 사실을 만들지 않는다. 빈 SectorAssignments를 domain에 넘겨 보유 종목은 미분류로 계산한다. 기존 domain의 미분류 정책을 그대로 사용한다.
+
+## 정의 대기와 인계
+
+| 기준                                 | 상태      | 받는 작업과 남은 계약                                                                                                                        |
+| ------------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 표시용 평가·비중은 코어 계산         | 충족      | U-02/U-09/U-10: domain 결과를 표시 DTO로 변환                                                                                                |
+| 환율 종류·시각                       | 충족      | U-09/U-10: 실제 환산 값의 환율 목록 표시                                                                                                     |
+| 통화별 매수가능금액·총자산 근사      | 충족      | U-09/U-10: BuyingPower와 AssetEstimate 의미 유지                                                                                             |
+| 자료 없음·동기화 실패·부분 결과 보존 | 충족      | A-19: 상태 띠 판단과 상세 진단                                                                                                               |
+| 오래된 자료 판정                     | 정의 대기 | D-05/A-08: 보유·현금·요약의 신선도와 시각 정합 정책을 domain 함수로 제공. 현재 ViewFreshness::DefinitionPending이며 신선하다고 주장하지 않음 |
+| 저장된 섹터 대응 적용                | 정의 대기 | S-10: 저장 계약과 읽기 포트 확정 후 A-08 연결. 현재 domain의 미분류                                                                          |
+
+장중 시세의 5분 기준(ACC-4)은 있지만 저장 포트폴리오 전체의 신선도 판정 함수는 없다. 지시문에 따라 새 domain 함수와 포트를 정의하지 않는다. 이 때문에 오래됨을 자동 판정하는 기준은 빠져 있다. 사용자 확인 절차나 설정은 추가하지 않는다.
+
+## 검증
+
+시작 의존성 설치와 Git 훅 설치 성공. 프로젝트 설정 hooks=true는 확인했으나 프로젝트 신뢰와 훅 정의 신뢰 및 이번 세션 런타임 적용은 확인 불가다. 기존 테스트·의존성·가짜·검사 끄기 변경 없음. 기존 테스트 변경 승인 건수 0.
+
+## 자동 변이 보강
+
+첫 표준 변경분 변이는21개 중 미검출3개·시간 초과2개·컴파일 불가16개였다. application만 실행하는 자동 변이에서도 검증하도록 환율 선택을 private 순수 함수로 분리하고 가짜 없는 단위 테스트를 추가했다. 통합 테스트는 testkit-ports에 유지한다. 최종 재실행은23개 선택 중 컴파일 성공6개 검출·컴파일 불가17개·미검출0개·시간 초과0개로 통과했다. 컴파일 불가를 검출로 세지 않는다.
+
+## 손 변형 실제 실행
+
+mktemp 복사본에서 원본 기준 통과 후 각 변형을 독립 실행했다. 최종 제품 소스의 컴파일 성공21개 전부 검출, 생존0개. 최초 실행의 생존1개는 완료 상태 환산 테스트로 보완했고 재실행에서 검출했다. 컴파일 불가 변형은 집계에서 제외했다.
+
+| 번호 | 바꾼 것                        | 잡은 테스트                                                                                                                                                                                                                                                                                                                        |
+| ---- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | portfolio complete to partial  | conversion_tests::wrong_kind_pair_and_interval_never_convert_but_preserve_lookup_evidence, conversion_tests::complete_conversion_is_not_dropped, tests::allocation_retains_unavailable_conversion, tests::absent_failed_blocked_and_partial_are_distinct                                                                           |
+| 2    | portfolio partial to complete  | conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata, tests::absent_failed_blocked_and_partial_are_distinct, conversion_tests::holdings_and_incomplete_cash_remain_visible_without_zero_substitution, conversion_tests::storage_errors_propagate_and_fx_errors_preserve_native_values          |
+| 3    | portfolio failed to blocked    | conversion_tests::allocation_missing_failed_and_blocked_do_not_read_fx, tests::absent_failed_blocked_and_partial_are_distinct                                                                                                                                                                                                      |
+| 4    | portfolio blocked to failed    | tests::absent_failed_blocked_and_partial_are_distinct, conversion_tests::allocation_missing_failed_and_blocked_do_not_read_fx                                                                                                                                                                                                      |
+| 5    | allocation complete to partial | tests::allocation_retains_unavailable_conversion                                                                                                                                                                                                                                                                                   |
+| 6    | allocation partial to complete | conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata                                                                                                                                                                                                                                           |
+| 7    | fx query pair                  | conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata, tests::absent_failed_blocked_and_partial_are_distinct                                                                                                                                                                                    |
+| 8    | fx query kind                  | tests::absent_failed_blocked_and_partial_are_distinct, conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata                                                                                                                                                                                    |
+| 9    | fx query latest                | tests::absent_failed_blocked_and_partial_are_distinct, conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata                                                                                                                                                                                    |
+| 10   | reject valid pair              | conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata, conversion_tests::holdings_and_incomplete_cash_remain_visible_without_zero_substitution, conversion_tests::complete_conversion_is_not_dropped                                                                                            |
+| 11   | reject valid kind              | conversion_tests::complete_conversion_is_not_dropped, conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata, conversion_tests::holdings_and_incomplete_cash_remain_visible_without_zero_substitution                                                                                            |
+| 12   | reject valid interval          | conversion_tests::complete_conversion_is_not_dropped, conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata, conversion_tests::wrong_kind_pair_and_interval_never_convert_but_preserve_lookup_evidence, conversion_tests::holdings_and_incomplete_cash_remain_visible_without_zero_substitution |
+| 13   | accept any interval            | conversion_tests::wrong_kind_pair_and_interval_never_convert_but_preserve_lookup_evidence                                                                                                                                                                                                                                          |
+| 14   | drop complete rate             | conversion_tests::complete_conversion_is_not_dropped                                                                                                                                                                                                                                                                               |
+| 15   | drop partial rate              | conversion_tests::holdings_and_incomplete_cash_remain_visible_without_zero_substitution, conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata                                                                                                                                                  |
+| 16   | drop evidence                  | conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata, conversion_tests::storage_errors_propagate_and_fx_errors_preserve_native_values, conversion_tests::wrong_kind_pair_and_interval_never_convert_but_preserve_lookup_evidence                                                               |
+| 17   | drop allocation evidence       | conversion_tests::mid_conversion_and_allocation_preserve_independent_values_and_metadata                                                                                                                                                                                                                                           |
+| 18   | missing to failed              | tests::absent_failed_blocked_and_partial_are_distinct, conversion_tests::allocation_missing_failed_and_blocked_do_not_read_fx                                                                                                                                                                                                      |
+| 19   | allocation failed to blocked   | conversion_tests::allocation_missing_failed_and_blocked_do_not_read_fx                                                                                                                                                                                                                                                             |
+| 20   | allocation blocked to failed   | conversion_tests::allocation_missing_failed_and_blocked_do_not_read_fx                                                                                                                                                                                                                                                             |
+| 21   | allocation missing to error    | conversion_tests::allocation_missing_failed_and_blocked_do_not_read_fx                                                                                                                                                                                                                                                             |
+
+## 구현 커밋 검증
+
+전체 속성4,096회에서 workspace1,732개와 커버리지 계측1,062개가 모두 통과했고 커버리지·test-diff·hooks-installed도 위반 없음이다. 기존 테스트 변경 승인0건, 새 검사 끄기0건, 새 의존성과 새 포트0개다. 최초 수동 실행의 기본256회 커버리지 누락5건은 전체 횟수 재실행으로 해소했다.
+
+정상 훅 첫 실행은 새 ADR 보호 등록 생성물과 환경 오류가 함께 나와 예외를 쓰지 않았다. 생성 스크립트로 등록한 뒤 재실행은 session-r1의 R4 한 건만 Xcode 라이선스 미동의로 실패했다. 사용자의 환경 안내2에 따라 나머지 전체 검사 본문과 check-ts의 나머지 세 검사를 직접 통과한 뒤 해당 커밋에만 환경 예외를 사용한다. 테스트·훅·검사 규칙은 수정하지 않는다.

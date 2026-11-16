@@ -326,3 +326,8 @@ pub use sync_transactions::{
 
 mod sync_portfolio;
 pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
+
+mod portfolio_views;
+pub use portfolio_views::{
+    GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,
+};
