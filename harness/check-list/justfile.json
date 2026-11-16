@@ -560,7 +560,14 @@
       "shebang": false
     },
     "coverage-check": {
-      "attributes": [],
+      "attributes": [
+        {
+          "env": ["PROPTEST_RNG_SEED", "5"]
+        },
+        {
+          "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
+        }
+      ],
       "body": [
         ["cargo run --locked --quiet --package xtask -- coverage-check"]
       ],

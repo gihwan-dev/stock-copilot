@@ -1,0 +1,45 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/holdings",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1holdings/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "totalPurchaseAmount": {
+        "krw": "0",
+        "usd": null
+      },
+      "marketValue": {
+        "amount": {
+          "krw": "0",
+          "usd": null
+        },
+        "amountAfterCost": {
+          "krw": "0",
+          "usd": null
+        }
+      },
+      "profitLoss": {
+        "amount": {
+          "krw": "0",
+          "usd": null
+        },
+        "amountAfterCost": {
+          "krw": "0",
+          "usd": null
+        },
+        "rate": "0",
+        "rateAfterCost": "0"
+      },
+      "dailyProfitLoss": {
+        "amount": {
+          "krw": "0",
+          "usd": null
+        },
+        "rate": "0"
+      },
+      "items": []
+    }
+  }
+}
