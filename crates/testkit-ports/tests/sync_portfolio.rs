@@ -104,16 +104,19 @@ mod tests {
         )
     }
     fn accounts() -> BrokerAccountRows {
-        BrokerAccountRows::try_new(vec![
-            BrokerAccountRow::from_broker_account_result(
-                AccountId::new(41),
-                BrokerAccountTypeCode::new("BROKERAGE"),
-                BrokerAccountNumberInput::new("0000001234".to_owned()),
-                at(),
-            )
-            .expect("행"),
-        ])
-        .expect("목록")
+        let rows = [41_i64, 67]
+            .into_iter()
+            .map(|id| {
+                BrokerAccountRow::from_broker_account_result(
+                    AccountId::new(id),
+                    BrokerAccountTypeCode::new("BROKERAGE"),
+                    BrokerAccountNumberInput::new("0000001234".to_owned()),
+                    at(),
+                )
+                .expect("행")
+            })
+            .collect();
+        BrokerAccountRows::try_new(rows).expect("목록")
     }
     fn error() -> PortError {
         PortError::new(
@@ -487,6 +490,94 @@ mod tests {
                     retry: domain::CashRetryDelay::Known(delay),
                 },
             );
+        }
+    }
+    #[test]
+    fn one_account_failure_does_not_prevent_another_account_success() {
+        let broker = ScriptedBrokerRead::default();
+        for _ in 0_u8..2 {
+            broker.script_accounts().push(Ok(accounts()));
+            for currency in [Currency::Krw, Currency::Usd] {
+                broker.script_buying_power().push(Ok(power(currency)));
+            }
+        }
+        broker.script_holdings().push(Err(error()));
+        broker.script_holdings().push(Ok(holdings()));
+        let (calls, received) = mpsc::channel();
+        let store = Store {
+            calls: calls.clone(),
+            result: Ok(WriteCompleted),
+        };
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            [DomainEventKind::PortfolioSyncRecorded].into(),
+            Subscriber(calls),
+        );
+        let bus = builder.build();
+        let clock = SteppedClock::new(at());
+        let use_case = SyncPortfolio::new(&broker, &store, &clock, &bus);
+        let failed = run(use_case.execute(&AccountId::new(41))).expect("실패 기록");
+        let complete = run(use_case.execute(&AccountId::new(67))).expect("다른 계좌 성공 기록");
+        assert_eq!(failed.record.outcome(), &SyncOutcome::Failed);
+        let SyncOutcome::Complete(portfolio) = complete.record.outcome() else {
+            panic!("다른 계좌 정상")
+        };
+        assert_eq!(portfolio.holdings(), holdings().holdings());
+        assert_eq!(portfolio.buying_power(Currency::Krw), power(Currency::Krw));
+        assert_eq!(portfolio.buying_power(Currency::Usd), power(Currency::Usd));
+        assert_eq!(
+            received.try_iter().collect::<Vec<_>>(),
+            vec![
+                Call::Store(AccountId::new(41), Box::new(failed.record)),
+                Call::Event(DomainEvent::PortfolioSyncRecorded(AccountId::new(41))),
+                Call::Store(AccountId::new(67), Box::new(complete.record)),
+                Call::Event(DomainEvent::PortfolioSyncRecorded(AccountId::new(67)))
+            ]
+        );
+    }
+    #[test]
+    fn invalid_cash_cannot_be_reported_as_complete() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(Ok(accounts()));
+            broker.script_holdings().push(Ok(holdings()));
+            for requested in [Currency::Krw, Currency::Usd] {
+                let cash = invalid_power(requested, currency);
+                broker.script_buying_power().push(Ok(cash));
+            }
+            let report = observed_case(&broker, &AccountId::new(41));
+            let SyncOutcome::Partial(portfolio) = report.record.outcome() else {
+                panic!("오류가 있는 현금은 부분 결과")
+            };
+            assert_eq!(
+                portfolio.buying_power(currency).money(),
+                Err(domain::PortfolioError::NegativeBuyingPower)
+            );
+            assert_eq!(report.failures, vec![]);
+        }
+    }
+    fn invalid_power(requested: Currency, invalid: Currency) -> BuyingPower {
+        if requested == invalid {
+            BuyingPower::new(money("-3", requested), at())
+        } else {
+            power(requested)
+        }
+    }
+    #[test]
+    fn unmapped_domain_cash_failure_is_failed_and_retains_original_error() {
+        for kind in [
+            PortErrorKind::NotFound(application::MissingData::Order),
+            PortErrorKind::Unsupported(application::BrokerCapability::Sectors),
+        ] {
+            let broker = ScriptedBrokerRead::default();
+            broker.script_accounts().push(Ok(accounts()));
+            broker.script_holdings().push(Ok(holdings()));
+            let original = PortError::new(ReadEndpoint::BuyingPower, HttpStatus::NotFound, kind);
+            broker.script_buying_power().push(Err(original));
+            broker.script_buying_power().push(Ok(power(Currency::Usd)));
+            let report = observed_case(&broker, &AccountId::new(41));
+            assert_eq!(report.record.outcome(), &SyncOutcome::Failed);
+            assert_eq!(report.failures, vec![original]);
         }
     }
 }
