@@ -318,3 +318,6 @@ pub use self_check::{
     TossKeyProblem, evaluate_self_check, isolation_check_observation, self_check_change,
     toss_check_observation,
 };
+
+mod sync_portfolio;
+pub use sync_portfolio::{PortfolioSyncReport, SyncPortfolio};
