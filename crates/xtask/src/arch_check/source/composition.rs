@@ -108,6 +108,15 @@ impl<'ast> Visit<'ast> for Construction {
         self.path(&i.path);
         visit::visit_expr_struct(self, i);
     }
+    fn visit_item_impl(&mut self, i: &'ast syn::ItemImpl) {
+        if let syn::Type::Path(target) = i.self_ty.as_ref() {
+            self.path(&target.path);
+            if target.qself.is_some() {
+                self.found = true;
+            }
+        }
+        visit::visit_item_impl(self, i);
+    }
     fn visit_item_type(&mut self, i: &'ast syn::ItemType) {
         if let syn::Type::Path(value) = i.ty.as_ref() {
             self.path(&value.path);

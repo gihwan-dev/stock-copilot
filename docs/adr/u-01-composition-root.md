@@ -133,7 +133,7 @@ run_app의 ExitRequested 처리에서 종료를 미루고 Lifecycle::shutdown을
 - 갱신 작업의 panic은 Cancelled로 바꾸지 않고 Failed의 원래 런타임 오류로 보존한다.
 - 제품 DB 팩터리를 main.rs의 함수 하나로 두고 제품·실제 DB 통합 테스트가 같은 함수를 사용한다. 개별 저장소 포트는 여전히 자리 표시다.
 - U-02: 자리 표시의 CheckCredentials 분류를 곧바로 사용자 문구로 내보내지 않는다. 설정 부재와 실제 요청 실패를 자체 점검·설정 사실로 구별한다. 현재는 이 오류의 화면 소비 경로가 없다.
-- U-20: 실제 자식 작업과 저장소 유스케이스를 연결할 때 refresh 정리 완료와 DB 종료의 상대 순서를 직접 관측하는 통합 테스트를 추가한다. 현재 코드는 취소·await 후 명시적 DB 종료 순서다.
+- U-20: 실제 자식 작업과 저장소 유스케이스를 연결할 때 프로세스 그룹과 별도 읽기 작업의 정리도 확장한다. 현재 취소·await 후 DB 종료 순서는 공통 종료 함수에서 보장하고 관측한다.
 
 테스트용 WebviewWindowBuilder 허용은 src/tests/exit.rs 한 파일에 한정한다. 실제 mock 런타임에서 마지막 창 종료 후 재진입 이벤트를 만들기 위한 경계다. 제품 capability와 WebView 권한은 늘리지 않는다.
 
@@ -153,3 +153,19 @@ run_app의 ExitRequested 처리에서 종료를 미루고 Lifecycle::shutdown을
 | 8    | 제품 팩터리의 폴더 준비 제거             | 통과   | tests::configured_database_is_opened_and_explicitly_closed_after_refresh_cleanup         | 검출 |
 
 같은 파일의 서로 다른 모듈에서 같은 별칭을 쓰는 경우에는 뒤쪽 선언으로 앞쪽 경로를 지우지 않는다. 모든 가능한 별칭 경로를 보존하고 경로마다 순환을 제한해, 어느 해석에서든 실제 어댑터 구성이 가능하면 실패한다. 이는 모듈 범위를 완전히 해석하는 컴파일러 대신 보수적으로 경계를 강제하는 선택이다. module-local-alias-shadowing 반례는 수정 전 실패·수정 후 통과했다.
+
+## 2차 리뷰 평가 후 결정
+
+- 실제 어댑터에 대한 로컬 trait 구현도 main.rs 밖에서 금지한다. impl 대상 타입을 검사해 Self::new와 unit Self 값의 우회를 막는다. 일반 로컬 타입 구현은 허용하고, 어댑터 타입을 단순 필드·반환 타입으로 참조하는 기존 허용은 유지한다. 검사에서 모든 Rust 타입을 추론하는 대신 어댑터의 동작 확장을 조립 루트 밖에 두지 않는 보수적 선택이다.
+- 종료 순서는 lifecycle의 공통 finish 함수가 소유한다. 실제 DB 종료 함수만 인자로 전달하고, 제품은 기존 spawn_blocking 종료를 사용한다. 테스트는 실행 중인 refresh future의 Drop 기록이 생긴 후 DB 종료 함수에 진입하는지 직접 검사한다. 이 테스트는 실제 DB 종료 영수증을 확인하는 제품 팩터리 테스트와 함께 순서·자원 해제를 각각 고정한다.
+- 일반 qself의 특정 생성자 이름도 거부하는 제한은 유지한다. 비판에서 동작은 확인됐으나 일반 qself를 허용해야 하는 계약이 없어 결함 판정을 기각했다. 일반 경로 호출로 같은 동작을 표현할 수 있다.
+- 비 rs 파일을 path 속성으로 불러오는 우회 주장은 기존 source-check의 속성 금지로 기각됐다. 새 종료 테스트 파일에만 WebviewWindowBuilder를 허용한 등록과 브랜치 신규 fixture 변경은 사전 승인 범위다.
+
+## 2차 수정 손 변형
+
+mktemp 복사본에서 아래 두 변형을 각각 컴파일하고 실행했다. 무변형·복원 대조군도 각각 통과했다. 두 변형 모두 검출됐으며, 전체 합계는 34개 시도·유효 33개 검출·컴파일 불가 1개·생존 0개다.
+
+| 번호 | 바꾼 것 | 컴파일 | 잡은 테스트 | 결과 |
+| ---- | ------- | ------ | ----------- | ---- |
+| 1 | impl 대상 타입 검사 제거 | 통과 | arch_check::source::composition::tests::every_composition_fixture_enforces_the_constructor_boundary | 검출 |
+| 2 | DB 종료를 refresh 취소·await 앞으로 이동 | 통과 | lifecycle::cleanup::tests::database_closing_begins_only_after_refresh_future_has_been_dropped | 검출 |

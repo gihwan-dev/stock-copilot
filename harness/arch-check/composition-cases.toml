@@ -77,3 +77,23 @@ forbidden = true
 name = "module-local-alias-shadowing"
 source = 'pub mod a { use platform_macos::SystemClock as C; pub fn make() -> Result<C, domain::TimeError> { C::new() } } pub mod b { use domain::Timestamp as C; pub fn pass(value: C) -> C { value } }'
 forbidden = true
+
+[[case]]
+name = "impl-self-constructor"
+source = 'trait Make: Sized { fn make() -> Result<Self, domain::TimeError>; } impl Make for platform_macos::SystemClock { fn make() -> Result<Self, domain::TimeError> { Self::new() } }'
+forbidden = true
+
+[[case]]
+name = "impl-self-unit-value"
+source = 'trait Make { fn make() -> Self; } impl Make for platform_macos::UnavailablePresence { fn make() -> Self { Self } }'
+forbidden = true
+
+[[case]]
+name = "impl-self-imported-type"
+source = 'use platform_macos::SystemClock as Native; trait Make: Sized { fn make() -> Result<Self, domain::TimeError>; } impl Make for Native { fn make() -> Result<Self, domain::TimeError> { Self::new() } }'
+forbidden = true
+
+[[case]]
+name = "impl-local-type"
+source = 'struct Local; trait Make { fn make() -> Self; } impl Make for Local { fn make() -> Self { Self } }'
+forbidden = false

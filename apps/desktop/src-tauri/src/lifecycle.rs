@@ -3,6 +3,8 @@ use application::{PortError, SystemPortError};
 use domain::BrokerAccountRows;
 use tauri::async_runtime::{JoinHandle, Mutex};
 
+mod cleanup;
+
 #[derive(Debug)]
 pub enum RefreshOutcome {
     Completed(Result<BrokerAccountRows, PortError>),
@@ -71,28 +73,7 @@ impl Lifecycle {
         let mut outcome = self.outcome.lock().await;
         let pending = self.work.lock().await.take();
         if let Some(work) = pending {
-            work.refresh.abort();
-            let refresh = match work.refresh.await {
-                Ok(result) => RefreshOutcome::Completed(result),
-                Err(tauri::Error::JoinError(error)) if error.is_cancelled() => {
-                    RefreshOutcome::Cancelled
-                }
-                Err(error) => RefreshOutcome::Failed(error),
-            };
-            let database = match work.database {
-                DatabaseState::Ready(database) => {
-                    match tauri::async_runtime::spawn_blocking(move || database.shutdown()).await {
-                        Ok(result) => result.map(DatabaseClosure::Closed),
-                        Err(_error) => Err(SystemPortError::new(
-                            application::SystemPort::Repository,
-                            application::SystemFailure::RepositoryIntegrity,
-                        )),
-                    }
-                }
-                DatabaseState::Failed(error) => Err(error),
-                DatabaseState::NotConfigured => Ok(DatabaseClosure::NotOpened),
-            };
-            *outcome = Some(ShutdownOutcome { refresh, database });
+            *outcome = Some(cleanup::finish(work, cleanup::close_database).await);
         }
         *self.phase.lock().await = ExitPhase::Stopped;
     }
