@@ -100,3 +100,27 @@ fn market_currency(value: &Value) -> Conversion<(Market, Currency)> {
         _ => Err(invalid()),
     }
 }
+
+pub(crate) struct ParsedTransaction {
+    pub(crate) transaction: Transaction,
+    pub(crate) source: Box<serde_json::value::RawValue>,
+}
+pub(crate) fn project(
+    rows: Vec<ParsedTransaction>,
+) -> (Vec<Transaction>, Vec<Box<serde_json::value::RawValue>>) {
+    rows.into_iter()
+        .map(|parsed| (parsed.transaction, parsed.source))
+        .unzip()
+}
+pub(crate) fn in_scope(value: &Value, window: domain::SettlementWindow) -> Conversion<bool> {
+    match field(value, "settled")?.as_bool() {
+        Some(false) => Ok(true),
+        Some(true) => {
+            let date = crate::TossDate::try_from(text(field(value, "settlementDate")?)?)
+                .map_err(|_error| invalid())?
+                .into_domain();
+            Ok(date >= window.from() && date <= window.to())
+        }
+        None => Err(invalid()),
+    }
+}

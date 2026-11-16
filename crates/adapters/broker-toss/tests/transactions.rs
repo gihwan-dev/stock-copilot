@@ -271,11 +271,18 @@ mod tests {
             outcome_9.expect_err(field);
         }
         for body in [
-            json!({"outcome_9":{"transactions":[],"hasNext":true,"nextCursor":null}}),
-            json!({"outcome_9":{"transactions":[],"hasNext":false,"nextCursor":"cursor"}}),
-            json!({"outcome_9":{"transactions":[],"hasNext":true,"nextCursor":""}}),
+            json!({"result":{"transactions":[],"hasNext":true,"nextCursor":null}}),
+            json!({"result":{"transactions":[],"hasNext":false,"nextCursor":"cursor"}}),
+            json!({"result":{"transactions":[],"hasNext":true,"nextCursor":""}}),
         ] {
-            read_responses(vec![ok(body)]).0.expect_err("paging");
+            let rejected = read_responses(vec![ok(body)]).0.expect_err("paging");
+            assert_eq!(rejected.status(), application::HttpStatus::Success);
+            assert_eq!(
+                rejected.kind(),
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation
+                )
+            );
         }
     }
     #[test]
@@ -316,8 +323,26 @@ mod tests {
             "429 Too Many Requests",
             &json!({"error":{"code":"rate-limit-exceeded","message":"합성"}}),
         );
-        let (outcome_13, _) = read_responses(vec![limited]);
-        outcome_13.expect_err("closed failure");
+        let (outcome_13, _) = read_responses(vec![limited; 4]);
+        let rate_error = outcome_13.expect_err("rate limited");
+        assert_eq!(
+            rate_error.endpoint(),
+            application::ReadEndpoint::Transactions
+        );
+        assert_eq!(rate_error.status(), application::HttpStatus::RateLimited);
+        assert_eq!(
+            rate_error.kind(),
+            application::PortErrorKind::Unavailable {
+                cause: application::UnavailableCause::RateLimited,
+                retry: application::RetryDelay::Known(
+                    domain::TimeSpan::try_new(
+                        domain::SpanSeconds::new(2),
+                        domain::Nanosecond::new(0)
+                    )
+                    .expect("span")
+                )
+            }
+        );
     }
 
     #[test]
@@ -393,5 +418,160 @@ mod tests {
         })
         .expect("transaction");
         assert_eq!(completed.rows().as_slice(), [expected]);
+    }
+
+    fn partial(
+        result: Result<application::TransactionRead, application::PortError>,
+    ) -> application::IncompleteTransactions {
+        match result.expect("partial result") {
+            application::TransactionRead::Incomplete(received) => received,
+            application::TransactionRead::Complete(_) => panic!("complete"),
+        }
+    }
+    #[test]
+    fn middle_server_failure_preserves_received_rows() {
+        let (result, _) = read_responses(vec![
+            ok(page(json!([row()]), json!("next"))),
+            response(
+                "500 Internal Server Error",
+                &json!({"error":{"code":"internal-error","message":"合成"}}),
+            ),
+        ]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::PageInterrupted
+        );
+        assert_eq!(received.received.len(), 1);
+        assert_eq!(received.received[0].as_slice().len(), 1);
+        assert_eq!(received.account, AccountId::new(731));
+        assert_eq!(received.window, window());
+        assert_eq!(received.filter, TransactionFilter::all());
+    }
+    #[test]
+    fn row_limit_preserves_the_overflowing_page_in_bounded_batches() {
+        let (result, _) = read_responses(vec![ok(page(json!(vec![row(); 4100]), Value::Null))]);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::RowLimitExceeded
+        );
+        assert_eq!(
+            received
+                .received
+                .iter()
+                .map(|batch| batch.as_slice().len())
+                .sum::<usize>(),
+            4100
+        );
+        assert!(
+            received
+                .received
+                .iter()
+                .all(|batch| batch.as_slice().len() <= 4096)
+        );
+    }
+    #[test]
+    fn outside_settled_rows_are_excluded_before_conversion_and_quarantine() {
+        let mut eur = row();
+        eur["currency"] = json!("EUR");
+        eur["settlementDate"] = json!("2020-01-01");
+        let mut bad_market = eur.clone();
+        bad_market["currency"] = json!("KRW");
+        bad_market["marketCountry"] = json!("JP");
+        let mut bad_amount = eur.clone();
+        bad_amount["currency"] = json!("KRW");
+        bad_amount["amount"] = json!("-9");
+        let completed = complete(vec![page(
+            json!([eur, bad_market, bad_amount, row()]),
+            Value::Null,
+        )]);
+        assert_eq!(completed.rows().as_slice().len(), 1);
+    }
+    #[test]
+    fn both_window_boundaries_are_included() {
+        let mut rows = Vec::new();
+        for value in ["2026-08-31", "2026-09-01", "2026-09-30", "2026-10-01"] {
+            let mut entry = row();
+            entry["settlementDate"] = json!(value);
+            rows.push(entry);
+        }
+        let completed = complete(vec![page(json!(rows), Value::Null)]);
+        assert_eq!(
+            completed
+                .rows()
+                .as_slice()
+                .iter()
+                .map(|entry| entry.data().settlement_date)
+                .collect::<Vec<_>>(),
+            vec![date("2026-09-01"), date("2026-09-30")]
+        );
+    }
+    #[test]
+    fn partial_filter_uses_comma_separated_codes_on_every_page() {
+        let server = ScriptedHttpServer::start(vec![
+            issued(),
+            ok(page(json!([]), json!("opaque"))),
+            ok(page(json!([]), Value::Null)),
+        ])
+        .expect("server");
+        let filter = TransactionFilter::only(vec![
+            domain::TransactionKind::Buy,
+            domain::TransactionKind::Sell,
+        ])
+        .expect("filter");
+        let result = run(adapter(&server).transactions(&AccountId::new(731), window(), &filter))
+            .expect("read");
+        let application::TransactionRead::Complete(completed) = result else {
+            panic!("partial")
+        };
+        assert_eq!(completed.filter(), &filter);
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
+        assert_eq!(requests.matches("transactionTypes=BUY%2CSELL").count(), 2);
+    }
+    #[test]
+    fn long_unknown_currency_preserves_utf8_chunks() {
+        let mut entry = row();
+        entry["currency"] = json!("EUR");
+        entry["extra"] = json!("가".repeat(23000));
+        let original = entry.to_string();
+        let (result, _) = read_responses(vec![ok(page(json!([entry]), Value::Null))]);
+        let received = partial(result);
+        let application::QuarantinedTransaction::UnknownCurrency(chunks) = &received.quarantined[0];
+        assert!(chunks.len() > 1);
+        assert!(
+            chunks
+                .iter()
+                .all(|chunk| chunk.as_untrusted_str().len() <= 65536)
+        );
+        assert_eq!(
+            chunks
+                .iter()
+                .map(domain::UntrustedText::as_untrusted_str)
+                .collect::<String>(),
+            original
+        );
+    }
+
+    #[test]
+    fn page_limit_keeps_previously_received_rows() {
+        let responses = (0_u16..8192)
+            .map(|index| {
+                let rows = if index == 0 {
+                    json!([row()])
+                } else {
+                    json!([])
+                };
+                ok(page(rows, json!(format!("cursor_{index}"))))
+            })
+            .collect();
+        let (result, requests) = read_responses(responses);
+        let received = partial(result);
+        assert_eq!(
+            received.reason,
+            application::IncompleteReason::PageInterrupted
+        );
+        assert_eq!(received.received[0].as_slice().len(), 1);
+        assert_eq!(requests.matches("GET /api/v1/transactions?").count(), 8192);
     }
 }
