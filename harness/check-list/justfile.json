@@ -238,6 +238,7 @@
       "attributes": [],
       "body": [
         ["\"", [["call", "just_executable"]], "\" visual-check"],
+        ["node harness/ds-overflow/examples.mjs"],
         [
           "\"",
           [["call", "just_executable"]],
@@ -320,6 +321,7 @@
         ["node harness/config-files/check.mjs"],
         ["node harness/claude-hooks/hashes.mjs"],
         ["pnpm -C apps/desktop exec tsc -p ."],
+        ["node harness/ds-overflow/typecheck.mjs"],
         ["pnpm -C apps/desktop exec eslint --max-warnings 0 src"],
         ["node harness/eslint-violations/check.mjs"],
         [
@@ -488,13 +490,13 @@
       "attributes": [],
       "body": [
         [
-          "base=\"$(\"",
+          "if [ -f \"$(git rev-parse --git-path stock-copilot-merge-gate.json)\" ]; then node harness/ci/merge-gate.mjs --hook; else base=\"$(\"",
           [["call", "just_executable"]],
           "\" commit-base)\"; STOCK_COPILOT_BASE_USE=commit \"",
           [["call", "just_executable"]],
           "\" base=\"$base\" \"$(\"",
           [["call", "just_executable"]],
-          "\" commit-recipe)\""
+          "\" commit-recipe)\"; fi"
         ]
       ],
       "dependencies": [],
@@ -898,6 +900,54 @@
       "namepath": "linux-test",
       "shebang": false
     },
+    "merge-gate": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ -n \"$2\" ]; then node harness/ci/merge-gate.mjs \"$1\" \"$2\"; else node harness/ci/merge-gate.mjs \"$1\"; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "merge-gate",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "branch",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": "",
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "receipt",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "merge-gate",
+      "shebang": false
+    },
     "migration-check": {
       "attributes": [],
       "body": [
@@ -1068,6 +1118,35 @@
       "private": false,
       "quiet": false,
       "namepath": "raw-types",
+      "shebang": false
+    },
+    "remote-check": {
+      "attributes": [],
+      "body": [["node harness/ci/remote-check.mjs \"$1\""]],
+      "dependencies": [],
+      "doc": null,
+      "name": "remote-check",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "sha",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "remote-check",
       "shebang": false
     },
     "require-base": {

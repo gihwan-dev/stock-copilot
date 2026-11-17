@@ -176,6 +176,12 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/ChatInput.tsx src/shared/ds/ChatInput.tsx",
   "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
   "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
+  "files src/shared/ds/testing/Stress.stories.tsx src/shared/ds/testing/Stress.stories.tsx",
+  "files src/shared/ds/testing/StressContent.stories.tsx src/shared/ds/testing/StressContent.stories.tsx",
+  "files src/shared/ds/testing/messages.ts src/shared/ds/testing/messages.ts",
+  "files src/shared/ds/testing/overflow.ts src/shared/ds/testing/overflow.ts",
+  "files src/shared/ds/testing/overflow-geometry.ts src/shared/ds/testing/overflow-geometry.ts",
+  "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {

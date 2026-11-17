@@ -1,0 +1,104 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/rankings/investor-trading",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1rankings~1investor-trading/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "foreigner": {
+        "rankedAt": "2026-10-20T15:41:19+09:00",
+        "netBuyRankings": [
+          {
+            "rank": 1,
+            "symbol": "005930",
+            "currency": "KRW",
+            "netBuyAmount": "386487682000"
+          },
+          {
+            "rank": 2,
+            "symbol": "402340",
+            "currency": "KRW",
+            "netBuyAmount": "43100000000"
+          }
+        ],
+        "netSellRankings": [
+          {
+            "rank": 1,
+            "symbol": "000660",
+            "currency": "KRW",
+            "netSellAmount": "391201805000"
+          },
+          {
+            "rank": 2,
+            "symbol": "009150",
+            "currency": "KRW",
+            "netSellAmount": "139536061500"
+          }
+        ]
+      },
+      "institution": {
+        "rankedAt": "2026-10-20T15:37:30+09:00",
+        "netBuyRankings": [
+          {
+            "rank": 1,
+            "symbol": "353200",
+            "currency": "KRW",
+            "netBuyAmount": "29200000000"
+          },
+          {
+            "rank": 2,
+            "symbol": "068270",
+            "currency": "KRW",
+            "netBuyAmount": "28500000000"
+          }
+        ],
+        "netSellRankings": [
+          {
+            "rank": 1,
+            "symbol": "000660",
+            "currency": "KRW",
+            "netSellAmount": "93376868000"
+          },
+          {
+            "rank": 2,
+            "symbol": "005930",
+            "currency": "KRW",
+            "netSellAmount": "87898296000"
+          }
+        ]
+      },
+      "individual": {
+        "rankedAt": "2026-10-20T15:39:18+09:00",
+        "netBuyRankings": [
+          {
+            "rank": 1,
+            "symbol": "005930",
+            "currency": "KRW",
+            "netBuyAmount": "189300000000"
+          },
+          {
+            "rank": 2,
+            "symbol": "233740",
+            "currency": "KRW",
+            "netBuyAmount": "79000000000"
+          }
+        ],
+        "netSellRankings": [
+          {
+            "rank": 1,
+            "symbol": "005380",
+            "currency": "KRW",
+            "netSellAmount": "41200000000"
+          },
+          {
+            "rank": 2,
+            "symbol": "034020",
+            "currency": "KRW",
+            "netSellAmount": "31500000000"
+          }
+        ]
+      }
+    }
+  }
+}

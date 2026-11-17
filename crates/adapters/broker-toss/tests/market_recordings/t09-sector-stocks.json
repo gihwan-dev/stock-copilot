@@ -1,0 +1,29 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/sectors/{sectorId}/stocks",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1sectors~1{sectorId}~1stocks/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "stocks": [
+        {
+          "symbol": "005930",
+          "name": "삼성전자",
+          "volume": "18432100",
+          "tradingAmount": "1041436650000",
+          "marketCapitalization": "388035900000000",
+          "currency": "KRW"
+        },
+        {
+          "symbol": "000660",
+          "name": "SK하이닉스",
+          "volume": "4821300",
+          "tradingAmount": "927910250000",
+          "marketCapitalization": "140150000000000",
+          "currency": "KRW"
+        }
+      ]
+    }
+  }
+}

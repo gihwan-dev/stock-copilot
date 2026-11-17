@@ -6,7 +6,7 @@ type Props = ChartProps & {
   readonly onHighlight: (point: ChartPoint | undefined) => void;
   readonly layout: "trend" | "donut" | "treemap";
 };
-export const ChartTable = (props: Props): ReactElement => (
+const ChartTableContent = (props: Props): ReactElement => (
   <table className={classes[props.layout]}>
     <caption>{props.label}</caption>
     <tbody>
@@ -31,6 +31,23 @@ export const ChartTable = (props: Props): ReactElement => (
     </tbody>
   </table>
 );
+export const ChartTable = (props: Props): ReactElement => {
+  const content = (
+    <ChartTableContent
+      data={props.data}
+      label={props.label}
+      empty={props.empty}
+      theme={props.theme}
+      onHighlight={props.onHighlight}
+      layout={props.layout}
+    />
+  );
+  return props.layout === "trend" ? (
+    <div className="sr-only">{content}</div>
+  ) : (
+    content
+  );
+};
 const classes = {
   trend: "sr-only",
   donut: "w-full text-body-sm tabular-nums",

@@ -1,0 +1,69 @@
+# ADR 0131: T-09 섹터 조회와 종목 마스터 제한기
+
+- 상태: 확정 (2026-11-18)
+
+## 결정
+
+섹터 카탈로그, 상세, 구성 종목, ETF는 기존 TokenManager와 SECTOR 그룹을 통해 조회하고 domain 생성자로 검증한다. 응답이 과도하게 크거나 필수 필드·계층·시장·식별자가 맞지 않으면 전체 실패한다. 서버 시각이 없는 응답에는 수집 시각만 남긴다. 구성 종목의 거래대금과 시가총액은 미국 종목이어도 명세상 KRW다.
+
+종목 전체 조회는 미완료다. ListedStock과 StockInfo에는 안정적인 내부 InstrumentId가 없고 ADR 0022는 심볼·ISIN으로 내부 ID를 만들지 못하게 하며 발급·유일성 정책이 미정이다. 이미 주입된 마스터의 같은 심볼만으로는 재사용·코드 변경 뒤 같은 종목인지 증명할 수 없다. 또한 status 생략 시 서버의 기본값이 ACTIVE이므로 필터 없는 요청이 모든 상장 상태를 포함한다고 단정하지 않는다. 임의 ID나 완전한 목록을 만들지 않는다. BrokerRead::instruments는 기존 닫힌 미지원 상태를 유지한다.
+
+## 실측 대기
+
+섹터별 실제 데이터의 필드와 크기, 저장 후 갱신 시점은 합성 녹화로 확인할 수 없다. 종목 식별의 발급과 거래소별 status 범위는 실측만이 아니라 domain·저장소 정책 결정이 필요하다.
+
+## 인계
+
+- D-03/S-04/T-09: 심볼 재사용과 코드 변경에서도 동일 종목을 식별할 발급·영속 매핑과 완전 목록 계약을 정의한 뒤 해당 포트를 연결한다. 토스가 제공하지 않는 내부 ID를 추측하지 않는다.
+- T-09: STOCK_ALL 경로를 실제 종목 조회에 연결하고 가짜 시계로 요청 간격을 검증한다. 기존 제한기 그룹의 존재만으로 해당 경로가 작동한다고 주장하지 않는다.
+
+## 합성 계약과 검사
+
+| 엔드포인트 | 포트 메서드 | 녹화 |
+|---|---|---|
+| GET /api/v1/sectors | MarketInfo::sectors | t09-sectors.json |
+| GET /api/v1/sectors/{sectorId} | MarketInfo::sector | t09-sector.json |
+| GET /api/v1/sectors/{sectorId}/stocks | MarketInfo::sector_composition | t09-sector-stocks.json |
+| GET /api/v1/sectors/{sectorId}/etfs | MarketInfo::sector_etfs | t09-sector-etfs.json |
+| GET /api/v1/stocks/all | 미연결 BrokerRead::instruments, 제한기 직접 시험 | t09-stocks-all.json |
+
+섹터 ID는 HTTP 경계의 1~40자리 영숫자·밑줄·하이픈만 허용한다. 서버 목록과 상세의 ID 및 부모 ID도 같은 규칙으로 검사하고 유효하지 않으면 응답 오류로 닫는다. 섹터 행은 8192건까지 허용한다. ETF는 주입된 마스터에서 요청 시장과 심볼이 일치하고 ETF 유형이 확인돼야 한다. 종목 목록 전체를 생성할 근거가 없는 상태라 이 마스터의 실제 공급은 완료되지 않았다. 형식 오류 및 각 섹터 경로의 401 재발급·429 재시도는 합성 응답으로 확인한다.
+
+1차 리뷰 수정: 섹터 구성의 각 종목도 반환 전에 주입된 마스터와 시장·심볼을 대조한다. 구성과 ETF 모두 응답 자체를 먼저 domain으로 검증하고, 해당 마스터 연결을 찾을 수 없거나 ETF 유형을 증명할 수 없으면 서버 응답 오류 대신 현재 미구현인 마스터 조회를 가리키는 `Unsupported(Instruments)`로 반환한다. 포트의 endpoint와 받은 HTTP 성공 상태는 보존한다. 기존 오류 분류에서 이것은 여전히 `Bug(UnsupportedCapability(Instruments))`이며 사용자에게 더 세밀한 준비 상태로 전달되지는 않는다. D-03/S-04: 마스터 발급·영속 연결과 함께 누락·갱신 중인 마스터를 표현할 오류 계약을 정하고 이 임시 분류를 다시 평가한다. 이 처리는 마스터의 완전성이나 최신성을 보증하지 않는다. 포트 trait와 기존 오류 열거형은 바꾸지 않는다.
+
+제한기 시험은 두 번째 요청을 서버가 받은 순간의 가짜 시계를 읽는다. 대조군은 성공했고 별도 mktemp 복사본에서 STOCK_ALL 그룹 한도를 1에서 2로 바꾸거나 제한기 대기를 실제 송신 뒤로 옮긴 두 변형 모두 컴파일 후 stock_all_limiter_delays_second_request_at_least_one_second에서 실패했다. 실 API 속도 측정이나 BrokerRead::instruments의 연결 검증은 아니다.
+
+## 보호 파일과 세션
+
+harness/arch-check/rules.toml에는 합성 녹화를 재생하는 tests/sector_market.rs만 추가한다. ADR 등록에 따른 설정·해시는 저장소 생성기로 만든다. 프로젝트 설정 hooks=true와 Git 훅 설치는 확인했지만 현재 세션 프로젝트 신뢰·훅 신뢰 및 적용은 확인 불가다. 브리프를 읽는 명령과 병렬로 금지된 홈 MEMORY.md 검색이 최초 1회 실행됐다. 결과는 구현 근거로 쓰지 않았고 이후 홈 파일은 읽지 않았다.
+
+최초 정상 커밋 훅 진행 중 응답 ID 검증 누락을 발견해 해당 커밋 프로세스만 중단했다. 섹터 목록의 경로 불가능 ID가 성공하는 red를 확인한 뒤 검사와 회귀를 더했다. 두 번째 훅 진행 중 제한기 시험이 응답 뒤 시각만 확인하는 한계를 발견해 해당 프로세스를 중단하고 서버 수신 시각 검사로 보강했다. 두 중단된 훅은 통과로 세지 않고 정상 훅을 다시 실행한다.
+
+구현된 섹터 기능의 지원 여부는 공통 `TossAccountRead::capabilities`에 반영한다. 내부 종목 마스터가 정의되지 않은 `Instruments`는 Unsupported를 유지한다.
+
+## 손 변형 실제 실행
+
+`mktemp -d` 복사본에서 다음 변형을 각각 컴파일하고 표시된 테스트로 실행했다. 11개 모두 해당 테스트 실패로 검출됐다. 별도의 제한기 변형 둘도 실행했으나 기존 코드 변형이므로 이 11개에 포함하지 않았다. 로그는 작업 사본의 `target/T-09/mutant-*.log`다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|
+| 1 | 8192개 경계 거부 | `sector_catalog_bounds_rows_at_8192` |
+| 2 | 8193개 경계 허용 | `sector_catalog_bounds_rows_at_8192` |
+| 3 | 중분류를 대분류로 변경 | `sector_catalog_preserves_hierarchy_and_recordings_match_schema` |
+| 4 | 소분류를 중분류로 변경 | `sector_catalog_preserves_hierarchy_and_recordings_match_schema` |
+| 5 | 미국 조회를 국내 시장으로 변경 | `sector_detail_preserves_us_market_in_request_and_result` |
+| 6 | 상세 ID 일치 판정 반전 | `sector_detail_preserves_identity_market_and_six_rates` |
+| 7 | 시가총액에 거래대금 대입 | `sector_stocks_preserve_symbols_and_market` |
+| 8 | 거래대금에 시가총액 대입 | `sector_stocks_preserve_symbols_and_market` |
+| 9 | ETF 종목 유형 일치 판정 반전 | `sector_etfs_preserve_symbols_and_sector` |
+| 10 | 카탈로그 ID 경계 검증 제거 | `sector_responses_reject_unusable_catalog_and_parent_ids` |
+| 11 | 대분류를 중분류로 변경 | `sector_catalog_preserves_hierarchy_and_recordings_match_schema` |
+
+1차 리뷰 수정의 다음 네 변형도 별도 복사본에서 각각 컴파일하고 실행해 검출했다. 로그는 `target/T-08/review1-mutant-*.log`다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|
+| 12 | 구성 종목 심볼 일치 판정 반전 | `sector_composition_requires_each_symbol_in_the_requested_master` |
+| 13 | 구성 종목 마스터의 시장 대조 제거 | `sector_master_matching_rejects_same_symbol_from_another_market` |
+| 14 | ETF 마스터의 시장 대조 제거 | `sector_master_matching_rejects_same_symbol_from_another_market` |
+| 15 | 마스터 미구현 원인을 서버 응답 오류로 변경 | `sector_etf_master_miss_identifies_unsupported_master` |

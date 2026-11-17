@@ -50,3 +50,23 @@ export const Dark4 = {
   parameters: { theme: "dark", sample: 4 },
   render: () => renderCatalog("EmptyState", "dark", 4),
 };
+export const Light5 = {
+  name: "부하 · 006 · 라이트",
+  parameters: { theme: "light", sample: 5 },
+  render: () => renderCatalog("EmptyState", "light", 5),
+};
+export const Dark5 = {
+  name: "부하 · 006 · 다크",
+  parameters: { theme: "dark", sample: 5 },
+  render: () => renderCatalog("EmptyState", "dark", 5),
+};
+export const Light6 = {
+  name: "부하 · 007 · 라이트",
+  parameters: { theme: "light", sample: 6 },
+  render: () => renderCatalog("EmptyState", "light", 6),
+};
+export const Dark6 = {
+  name: "부하 · 007 · 다크",
+  parameters: { theme: "dark", sample: 6 },
+  render: () => renderCatalog("EmptyState", "dark", 6),
+};

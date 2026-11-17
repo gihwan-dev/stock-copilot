@@ -8,6 +8,7 @@ import {
   contentComponentStories,
   catalogAdditionalStories,
 } from "../src/shared/ds/stories.ts";
+import { stressComponentStories } from "../src/shared/ds/testing/Stress.stories.tsx";
 import { catalogSamples } from "../../../harness/ds-catalog/samples.mjs";
 const samples = catalogSamples({
   baseComponentStories,
@@ -17,6 +18,7 @@ const samples = catalogSamples({
   numberComponentStories,
   contentComponentStories,
   catalogAdditionalStories,
+  stressComponentStories,
 });
 const Example = ({ render, theme }) => render(theme);
 export const renderCatalog = (component, theme, sample) => {

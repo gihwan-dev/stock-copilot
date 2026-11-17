@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @import "./tokens.css";
 @source "../../";
+@source not "./testing/overflow-geometry.ts";
 
 @layer base {
   html {
