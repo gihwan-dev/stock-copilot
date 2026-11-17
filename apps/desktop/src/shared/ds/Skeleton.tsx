@@ -1,4 +1,4 @@
-import { ChartPlaceholder } from "./ChartFrame";
+import { ChartPlaceholder, ChartLoadingLines } from "./chart-loading";
 import type { ReactElement } from "react";
 import type { SizeToken } from "./tokens";
 type Props =
@@ -13,18 +13,5 @@ type Props =
 export const Skeleton = (props: Props): ReactElement => {
   if (props.variant === "block")
     return <ChartPlaceholder height={props.height ?? "chart-height-sm"} />;
-  const lines =
-    props.lines === 6
-      ? (["a", "b", "c", "d", "e", "f"] as const)
-      : (["a", "b", "c"] as const);
-  return (
-    <div aria-hidden="true" className="flex flex-col gap-space-2">
-      {lines.map((key): ReactElement => (
-        <div
-          key={key}
-          className="pt-space-1 pb-space-2 rounded-sm bg-surface-sunken"
-        />
-      ))}
-    </div>
-  );
+  return <ChartLoadingLines lines={props.lines ?? 3} />;
 };

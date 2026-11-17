@@ -677,5 +677,33 @@
     "file": "src/shared/ds/Dialog.tsx",
     "code": "import {ScrollArea} from \"./ScrollArea\";",
     "rule": null
+  },
+  {
+    "name": "review-equivalent-0",
+    "row": 23,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"text-nowrap\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "review-equivalent-1",
+    "row": 23,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"whitespace-pre\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "review-equivalent-2",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"-space-x-space-2\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "review-equivalent-3",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"-space-y-space-2\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
   }
 ]

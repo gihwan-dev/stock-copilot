@@ -40,7 +40,7 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
     });
     const probe = join(folder, "src/shared/ds/Probe.tsx");
     const header = 'import type {ReactElement} from "react";';
-    for (const [name, code, wanted] of [
+    for (const [name, code, wanted, compile] of [
       [
         "template",
         "export const Probe=():ReactElement=><div className={`overflow-hidden`}/>;",
@@ -87,12 +87,42 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
         "ds/static-classes",
       ],
       [
+        "native dialog alias",
+        'const Element="dialog" as const;export const Probe=():ReactElement=><Element open/>;',
+        "ds/no-presentation-props",
+        true,
+      ],
+      [
+        "native pre alias",
+        'const Element="pre" as const;export const Probe=():ReactElement=><Element className="text-body"/>;',
+        "ds/no-presentation-props",
+        true,
+      ],
+      [
+        "native textarea alias",
+        'const Element="textarea" as const;export const Probe=():ReactElement=><Element cols={200}/>;',
+        "ds/no-presentation-props",
+        true,
+      ],
+      [
         "named control",
         'export const Probe=():ReactElement=><div className="text-body"/>;',
         null,
       ],
     ]) {
       writeFileSync(probe, header + code);
+      if (compile) {
+        const compiled = spawnSync(
+          join(desktopRoot, "node_modules/.bin/tsc"),
+          ["-p", project],
+          { encoding: "utf8" },
+        );
+        assert.equal(
+          compiled.status,
+          0,
+          name + compiled.stdout + compiled.stderr,
+        );
+      }
       const [result] = await engine.lintFiles([probe]);
       if (wanted === null) assert.deepEqual(result.messages, [], name);
       else
@@ -121,6 +151,53 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
       result.messages.some((m) => m.ruleId === "ds/static-classes"),
       JSON.stringify(result.messages),
     );
+    const privateHeader =
+      header +
+      'import {DialogDescription} from "./Dialog";import {ChartPlaceholder,ChartLoadingLines} from "./chart-loading";import {text} from "../lib";';
+    for (const [name, body, valid] of [
+      [
+        "closed helpers",
+        '<><DialogDescription>{text("ds.description","ko")}</DialogDescription><ChartPlaceholder height="chart-height"/><ChartLoadingLines lines={6}/></>',
+        true,
+      ],
+      [
+        "no arbitrary child",
+        "<DialogDescription><div/></DialogDescription>",
+        false,
+      ],
+      [
+        "no description width",
+        '<DialogDescription width="prose-max">{text("ds.description","ko")}</DialogDescription>',
+        false,
+      ],
+      [
+        "no arbitrary chart height",
+        '<ChartPlaceholder height="dialog-width"/>',
+        false,
+      ],
+      [
+        "no arbitrary chart child",
+        '<ChartPlaceholder height="chart-height"><div/></ChartPlaceholder>',
+        false,
+      ],
+      ["closed line count", "<ChartLoadingLines lines={4}/>", false],
+    ]) {
+      writeFileSync(
+        probe,
+        privateHeader + "export const Probe=():ReactElement=>" + body + ";",
+      );
+      const compiled = spawnSync(
+        join(desktopRoot, "node_modules/.bin/tsc"),
+        ["-p", project],
+        { encoding: "utf8" },
+      );
+      assert.equal(
+        compiled.status === 0,
+        valid,
+        name + compiled.stdout + compiled.stderr,
+      );
+      if (!valid) assert.match(compiled.stdout, /TS(?:2322|2745)/u, name);
+    }
     for (const file of ["src/shared/ds/Markdown.tsx", "src/app/Probe.tsx"]) {
       const target = join(folder, file);
       mkdirSync(join(target, ".."), { recursive: true });

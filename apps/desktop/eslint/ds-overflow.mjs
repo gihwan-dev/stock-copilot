@@ -1,3 +1,4 @@
+import { utilityPattern } from "./ds-overflow-utilities.mjs";
 const ds = (names) => names.map((name) => `src/shared/ds/${name}.tsx`);
 export const OVERFLOW_FILES = ds(["ScrollArea", "Text", "Heading"]);
 export const SCROLL_FILES = ds(["ScrollArea"]);
@@ -23,6 +24,7 @@ export const LENGTH_FILES = ds([
   "SegmentedControl",
   "Table",
   "ChartFrame",
+  "chart-loading",
   "Toolbar",
   "StatusBar",
   "AppShell",
@@ -53,29 +55,29 @@ export const OVERFLOW_POLICIES = [
   [
     20,
     POSITION_FILES,
-    "(?:absolute|fixed|sticky|(?:-?(?:inset(?:-[xy])?|top|bottom|left|right|start|end))-.+|dialog-overlay|sr-only)",
+    "(?:absolute|fixed|sticky|(?:-?(?:inset(?:-[xy])?|top|bottom|left|right|start|end))-.+|sr-only)",
   ],
   [
     21,
     LENGTH_FILES,
-    "(?:(?:min-|max-)?(?:h|w|size)-(?!(?:auto|full|min|max|fit|0)$).+|skeleton-line|chat-input|markdown-content)",
+    "(?:(?:min-|max-)?(?:h|w|size)-(?!(?:auto|full|min|max|fit|0)$).+)",
   ],
   [
     22,
     VIEWPORT_FILES,
     "(?:(?:min-|max-)?(?:h|w|size)-screen|.+(?:v[hw]|vmin|vmax).*)",
   ],
-  [23, NOWRAP_FILES, "whitespace-nowrap"],
+  [23, NOWRAP_FILES, "(?:whitespace-(?:nowrap|pre)|text-nowrap)"],
   [
     24,
     OFFSET_FILES,
-    "(?:-m[xytrblse]?-.+|-?(?:translate|scale)(?:-[xyz])?-.+)",
+    "(?:-m[xytrblse]?-.+|-space-[xy]-.+|-?(?:translate|scale)(?:-[xyz])?-.+)",
   ],
 ];
 export const overflowRestrictions = (file) =>
   OVERFLOW_POLICIES.filter(([, files]) => !files.includes(file)).map(
     ([id, , pattern]) => ({
-      pattern: `(^|:)!?(?:${id === 21 && file === PROSE_FILE ? "(?!(?:markdown-content|max-w-prose-max)!?$)" : ""}(?:${pattern}))!?$`,
+      pattern: `(^|:)!?(?:${id === 21 && file === PROSE_FILE ? "(?!(?:markdown-content|max-w-prose-max)!?$)" : ""}(?:${pattern}${utilityPattern(id) ? `|${utilityPattern(id)}` : ""}))!?$`,
       message: `스크롤·넘침 #${id}: 지정 파일에서만 쓴다.`,
     }),
   );
@@ -102,18 +104,7 @@ export const overflowKeywords = (file) => [
         "overflow-y-scroll",
       ]
     : []),
-  ...(POSITION_FILES.includes(file)
-    ? [
-        "absolute",
-        "fixed",
-        "sticky",
-        "inset-0",
-        "top-0",
-        "bottom-0",
-        "left-0",
-        "right-0",
-      ]
-    : []),
+  ...(POSITION_FILES.includes(file) ? ["absolute", "fixed", "sticky"] : []),
   ...(VIEWPORT_FILES.includes(file)
     ? [
         "h-screen",

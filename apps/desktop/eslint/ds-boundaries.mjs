@@ -1,3 +1,7 @@
+import {
+  nativeOverflowElement,
+  nativeOverflowAttribute,
+} from "./ds-overflow-elements.mjs";
 const rule = (message, create) => ({
   meta: { type: "problem", schema: [], messages: { forbidden: message } },
   create,
@@ -217,7 +221,14 @@ export const boundaryRules = {
     },
     create(ctx) {
       return {
+        JSXOpeningElement(node) {
+          if (nativeOverflowElement(ctx, node)) report(ctx, node);
+        },
         JSXAttribute(node) {
+          if (nativeOverflowAttribute(ctx, node, propertyName(node.name))) {
+            report(ctx, node);
+            return;
+          }
           const tag = node.parent.name;
           if (tag.type !== "JSXIdentifier" || !/^[a-z]/u.test(tag.name)) return;
           const key = propertyName(node.name);

@@ -15,7 +15,17 @@
 
 ## 기존 코드 조정
 
-EmptyState의 직접 max-w-dialog-width를 제거한다. Skeleton에 길이 예외를 추가하지 않는다. 차트 자리 표시의 세 높이 렌더링은 기존 ChartFrame.tsx의 내부 ChartPlaceholder로 옮기며 공개 index에는 추가하지 않는다. 텍스트 뼈대의 skeleton-line 높이는 pt-space-1 + pb-space-2로 바꾼다. 원래 text-size-sm과 같은 12px이며 빈 장식 요소의 자식 수·aria-hidden을 보존한다. 컨트롤·머리줄 범주와 메인이 정한 Markdown 외에 임의 길이 허용 파일을 추가하지 않는다.
+EmptyState의 설명 폭을 원래 dialog-width로 보존한다. 폭 토큰의 기존 소유 파일인 Dialog.tsx에서 UiText만 받는 내부 DialogDescription을 제공하고 EmptyState가 조립한다. 반환되는 p 요소·문구·클래스는 변경 전과 같다. 이 컴포넌트는 임의 자식 요소·폭·높이·스타일·HTML 속성을 받지 않으며 공개 index에 추가하지 않는다. 이는 파일에 길이 권한을 더하는 대신, 이미 허용된 DS 파일이 정해진 표현을 선언하고 다른 DS 파일이 조립하는 #21·#25의 경계를 따른다. 모든 내부 내보내기를 index 이름과 같게 제한하지 않는다. 기존 ChartFrame·ButtonVariant와 같은 정상 내부 조립도 그 구조를 사용한다.
+
+Skeleton도 원래 skeleton-line의 text-size-sm 높이를 보존한다. 패딩 합으로 높이를 흉내 낸 1차 구현은 제거했다. 내부 chart-loading.tsx가 세 가지 고정 차트 높이와 3·6줄의 장식 로딩 형태만 제공한다. 임의 자식이나 자유 크기를 받지 않는다. 원래 ChartFrame의 변경은 되돌리고 이 작은 렌더링 모듈로 분리해 파일 길이 규칙을 유지한다. #21에는 이번에 추가한 차트 내부 모듈 하나만 정확히 등록하며 Skeleton 파일 전체를 풀지 않는다.
+
+## 1차 독립 리뷰와 비판 반영
+
+Opus의 EmptyState 폭 삭제 지적은 수용해 위와 같이 기존 폭을 복원했다. 범용 Clip의 통과 가능성은 기존 검사 한계로 기록하되, 정상 DS 조립 전체를 막는 내보내기 일괄 제한은 적용하지 않는다. LENGTH_FILES가 원래 문서상 가진 길이 권한과 Markdown에 추가한 prose-max 단일 예외를 구분한다. 메인 결정은 다른 모든 길이 허용 파일에서 prose-max를 금지하라는 뜻으로 확대하지 않는다.
+
+HTML 기본 동작은 기존 no-presentation-props를 보강한다. native dialog, popover 계열 속성, cols·rows·wrap=off를 거부한다. textarea는 architecture가 명시한 ChatInput 파일에서만 쓰고 soft·hard 줄바꿈만 허용한다. pre는 기존 chat-content 줄바꿈을 명시한 경우를 허용한다. 기존 Markdown·ChatInput과 타입 검사에 통과하는 태그 별칭도 대조·위반 자료로 검증한다. 모든 pre·textarea를 일괄 금지하지 않는다. 실제 브라우저의 최종 크기·넘침은 DS-20이 검증한다.
+
+의미 유틸리티는 designUtilities의 CSS 선언에서 #18~24 분류를 유도한다. 기존 이름을 정책 정규식에 손으로 반복하지 않는다. 합성 유틸리티를 실제 Tailwind로 컴파일한 뒤 속성·정책 연결을 검사해 새로운 이름의 overflow-y:auto·position:absolute·고정 길이·화면 단위·nowrap·음수 여백·translate를 검증한다. text-nowrap·whitespace-pre·음수 space-x/y도 개별 패턴과 독립 증인에 추가한다. 테마에서 생성되지 않는 위치 0 키워드 다섯 개는 제거한다. 기존 unknown 검사와 닫힌 토큰 집합은 유지한다.
 
 ## 검증
 
@@ -23,18 +33,26 @@ EmptyState의 직접 max-w-dialog-width를 제거한다. Skeleton에 길이 예�
 
 harness/eslint-violations/ds19-overflow.json은 #18~25의 위반·통과 대조군이다. DS19 policy 테스트는 실제 설정과 번호별 단독 제한을 각각 실행해 기존 토큰 금지에 가려진 누락도 검출한다. CSS 경계 테스트는 각 속성과 화면 단위를 위반 자료로 검사한다. 별도 타입 인식 앱 테스트는 템플릿·도우미·변수·로컬 및 가져온 의미별 클래스 표·인라인 끄기를 검증하고, 가져온 표 반례는 실제 tsc 통과 뒤 ESLint 거부를 확인한다.
 
-DS04 컴포넌트 회귀 12개와 새 우회 검사 1개가 통과했다. 시각 검사는 현재 등록된 Button·Card·Money·TextField의 라이트·다크 8쌍에서 바이트 일치를 확인했다. 이 기준에 없는 EmptyState·Skeleton 전체의 시각 동등성을 증명하지는 않는다. 제품 조정 뒤 최종 결과와 독립 리뷰는 리뷰 기록에 추가한다.
+DS04 컴포넌트 회귀 12개와 새 우회 검사 1개가 통과했다. 시각 검사는 현재 등록된 Button·Card·Money·TextField의 라이트·다크 8쌍에서 바이트 일치를 확인했다. 이 기준에 없는 EmptyState·Skeleton 전체의 시각 동등성을 증명하지는 않는다. 제품 조정 뒤 최종 결과와 독립 리뷰는 리뷰 기록에 추가한다. 새 DOM·CSS 회귀는 긴 설명의 max-width, 정상·넓은 Dialog 폭, Skeleton 줄 수·원래 높이 클래스를 검사하고 원본 디자인 토큰의 480px·12px과 실제 생성 CSS를 대조한다. 이것은 브라우저 픽셀 비교를 대신한다고 주장하지 않는다.
 
 ## 승인된 기존 테스트 변경과 보호 파일
 
-| 파일                                              | 항목                          | 전 → 후                                                                                                             | 승인 |
-| ------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---- |
-| apps/desktop/tests/eslint-config.test.mjs         | 끌 수 없는 규칙 고정 목록     | 기존 항목 유지 + no-restricted-imports 1개                                                                          | (c)  |
-| apps/desktop/tests/ds-semantic-mutations.test.mjs | 변형 모듈 import 준비         | 기존 경로 해석 유지 + 새 ds-overflow.mjs의 절대 URL 해석                                                            | (d)  |
-| apps/desktop/tests/ds04-style.test.mjs            | DS04 style 통과 자료의 준비   | Probe 한 파일에 모든 클래스를 배치 → Dialog·차트 파일 등 해당 허용 위치로 나누어 검사. 기존 단언과 위반 자료는 유지 | (d)  |
-| harness/ds-style/cases.json                       | review-ref.tsx 고정 진단 목록 | 기존 세 진단 → 기존 세 진단 + no-restricted-classes                                                                 | (c)  |
+| 파일                                              | 테스트·자료                                        | 전 → 후                                                                                               | 승인 |
+| ------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---- |
+| apps/desktop/tests/eslint-config.test.mjs         | 끌 수 없는 규칙 고정 목록                          | 기존 항목 유지 + no-restricted-imports 1개                                                            | (c)  |
+| apps/desktop/tests/knip.test.mjs                  | production 유예 고정 목록                          | 기존 항목 유지 + 새 chart-loading.tsx 1개                                                             | (c)  |
+| apps/desktop/tests/ds-semantic-mutations.test.mjs | 변형 모듈 import 준비                              | 기존 경로 해석 유지 + 새 ds-overflow.mjs URL 해석                                                     | (d)  |
+| apps/desktop/tests/ds04-style.test.mjs            | DS04 style 통과 자료 준비                          | Probe에 모든 클래스를 배치 → Dialog·chart-loading의 정확한 허용 위치. 모든 단언과 기존 위반 자료 유지 | (d)  |
+| harness/ds-style/cases.json                       | review-ref.tsx                                     | 기존 세 진단 유지 + no-restricted-classes                                                             | (c)  |
+| harness/eslint-violations/cases.json              | src/app/comments/undisableable-namespace-import.ts | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                            | (c)  |
+| harness/eslint-violations/cases.json              | src/app/syntax/export-all.ts                       | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                            | (c)  |
+| harness/eslint-violations/cases.json              | src/features/imports/namespace.ts                  | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                            | (c)  |
+| harness/eslint-violations/cases.json              | src/features/money/generic-key.ts                  | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                            | (c)  |
+| harness/eslint-violations/cases.json              | src/features/react/effect-namespace.ts             | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                            | (c)  |
 
-ESLint 설정·규칙 파일은 이번 정적 제한 등록에 필요하다. 고정 자료와 Node 테스트는 규칙별 증인 등록이다. Codex 설정·sandbox fragment·Claude 해시는 기존 생성기로 갱신한다. 기존 금지 삭제와 검사 끄기 추가는 없다.
+기존 기대 목록 추가 8항목(c)과 준비 변경 2항목(d), 총 10항목이다. 새 DS19 테스트·새 사례 등록은 기존 테스트 변경 수에 넣지 않는다. 첫 정상 훅의 test-diff 도구 지적은 0건이며 훅 예외를 사용하지 않았다.
+
+ESLint 설정·규칙 파일은 이번 정적 제한 등록에 필요하다. 새 ds-overflow-elements.mjs와 ds-overflow-utilities.mjs는 기존 규칙의 네이티브 속성 및 의미 유틸리티 분석이고, 새 chart-loading.tsx는 위의 닫힌 차트 로딩 표현 모듈이다. 고정 자료와 Node 테스트는 규칙별 증인 등록이다. Codex 설정·sandbox fragment·Claude 해시는 기존 생성기로 갱신한다. 기존 금지 삭제와 검사 끄기 추가는 없다.
 
 ## 인계
 
@@ -76,3 +94,37 @@ OS 임시 디렉터리에 검사 코드·자료를 복사하고 원본 대조군
 | prose-file       | `file === PROSE_FILE` → `file !== PROSE_FILE`                                        | ds19-policy.test.mjs | 검출 |
 | prose-token      | `markdown-content&#124;max-w-prose-max` → `markdown-content&#124;max-w-dialog-width` | ds19-policy.test.mjs | 검출 |
 | prose-escape-all | `id === 21 && file === PROSE_FILE` → `id === 21`                                     | ds19-policy.test.mjs | 검출 |
+
+## 1차 수정의 손 변형과 검증
+
+수정한 코드의 임시 복사본에서 정책 변형 26개를 다시 실행해 모두 검출했고, 의미별 클래스 표의 넘침 제한 삭제 1개도 다시 검출했다. 아래 추가 22개는 원본 대조군 통과 뒤 실행했다. JS는 node --check, TSX는 실제 tsc 통과를 확인하고, 테스트의 AssertionError로 검출된 경우만 센다. 합계 49개이며 Rust 변이 선택 결과와 구분한다. 추가 22개 중 dialog-normal-width는 같은 파일의 기존 Dialog 표현을 지키는 회귀 강화다.
+
+초기 dialog-normal-width 변형은 EmptyState 전용 검사만으로 실행했을 때 생존했다. 정상·넓은 Dialog의 폭 회귀를 더하고 정확한 설명 폭 변형도 따로 둔 뒤 재실행해 둘 다 검출했다. 준비 중 모듈 누락으로 실행하지 못한 실험과 중복 화면 단위 분기의 동등 변형은 집계하지 않는다.
+
+| 변형                       | 바꾼 것                                                                                             | 잡은 테스트                           | 결과 |
+| -------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------- | ---- |
+| semantic-overflow-link     | 의미별 클래스 표의 파일 정책 검사 삭제                                                              | ds19-bypass.test.mjs의 semantic table | 검출 |
+| native-dialog              | `names.includes("dialog")` → `false`                                                                | ds19-native.test.mjs                  | 검출 |
+| native-pre                 | `names.includes("pre") && !wrappingClass(node)` → `false`                                           | ds19-native.test.mjs                  | 검출 |
+| native-textarea            | `projectPath(ctx, ctx.filename) !== "src/shared/ds/ChatInput.tsx"` → `false`                        | ds19-native.test.mjs                  | 검출 |
+| pre-wrap-control           | `.includes("chat-content")` → `.includes("text-body")`                                              | ds19-native.test.mjs                  | 검출 |
+| native-popover             | `"popover",` → `"not-popover",`                                                                     | ds19-native.test.mjs                  | 검출 |
+| native-cols                | `"cols",` → `"columnCount",`                                                                        | ds19-native.test.mjs                  | 검출 |
+| native-rows                | `"rows",` → `"rowCount",`                                                                           | ds19-native.test.mjs                  | 검출 |
+| native-wrap                | `!["soft", "hard"].includes(node.value?.value)` → `false`                                           | ds19-native.test.mjs                  | 검출 |
+| native-tag-filter          | `nativeTags(ctx, node.parent.name).length === 0` → `nativeTags(ctx, node.parent.name).length !== 0` | ds19-native.test.mjs                  | 검출 |
+| utility-policy-link        | `declarationPolicies(property, value).includes(id)` → `false`                                       | ds19-native.test.mjs                  | 검출 |
+| utility-auto               | `/^overflow(?:-[xy])?$/u` → `/^neverflow(?:-[xy])?$/u`                                              | ds19-native.test.mjs                  | 검출 |
+| utility-position           | `property === "position"` → `false`                                                                 | ds19-native.test.mjs                  | 검출 |
+| utility-white-space        | `property === "white-space"` → `false`                                                              | ds19-native.test.mjs                  | 검출 |
+| utility-margin             | `/^margin(?:-.+)?$/u.test(property)` → `false`                                                      | ds19-native.test.mjs                  | 검출 |
+| utility-transform          | `property === "transform"` → `false`                                                                | ds19-native.test.mjs                  | 검출 |
+| dialog-normal-width        | `max-w-dialog-width` → `max-w-full`                                                                 | ds19-design.test.mjs                  | 검출 |
+| description-width          | `text-body-sm max-w-dialog-width` → `text-body-sm max-w-full`                                       | ds19-design.test.mjs                  | 검출 |
+| line-height-token          | `skeleton-line rounded-sm` → `pt-space-1 pb-space-2 rounded-sm`                                     | ds19-design.test.mjs                  | 검출 |
+| block-height               | `props.height === "chart-height-lg"` → `props.height === "chart-height-sm"`                         | ds19-design.test.mjs                  | 검출 |
+| line-count                 | `props.lines === 6` → `props.lines === 3`                                                           | ds19-design.test.mjs                  | 검출 |
+| intrinsic-alias            | `typeFlags.StringLiteral` → `typeFlags.NumberLiteral`                                               | ds19-bypass.test.mjs                  | 검출 |
+| description-child-contract | `readonly children: UiText` → `readonly children: ReactElement &#124; UiText`                       | ds19-bypass.test.mjs                  | 검출 |
+
+Knip production-allowlist.json에는 새 chart-loading.tsx 한 파일만 기존 DS의 첫 제품 화면 소비 전 규칙과 같은 사유로 등록한다. 정상 커밋 훅이 이 등록 누락을 검출한 뒤 보완했다. 실제 제품 소비가 시작되어 미사용 보고가 사라지면 기존 검사에 따라 이 항목도 제거해야 한다. 다른 파일이나 패키지의 허용 범위를 넓히지 않는다.

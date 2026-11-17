@@ -162,6 +162,7 @@ test("DS19 every documented file exception is exact and does not extend to a sib
         "SegmentedControl",
         "Table",
         "ChartFrame",
+        "chart-loading",
         "Toolbar",
         "StatusBar",
         "AppShell",

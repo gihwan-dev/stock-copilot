@@ -98,3 +98,10 @@ const DialogFooter = (props: {
       )}
     </footer>
   );
+
+type DialogDescriptionProps = { readonly children: UiText };
+export const DialogDescription = (
+  props: DialogDescriptionProps,
+): ReactElement => (
+  <p className="text-body-sm max-w-dialog-width">{props.children}</p>
+);
