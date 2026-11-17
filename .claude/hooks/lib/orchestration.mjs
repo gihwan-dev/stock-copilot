@@ -9,10 +9,35 @@ const keys = (value, allowed) =>
 const safeMode = (args) =>
   args.runtimeMode === undefined ||
   ["inherit", "approval-required"].includes(args.runtimeMode);
-const options = (value) =>
-  value === undefined ||
-  (keys(value, ["effort"]) &&
-    (value.effort === undefined || value.effort === "high"));
+const expectedEffort = (model) => (model === "gpt-6.1-terra" ? "max" : "high");
+const options = (value, model) =>
+  (model !== "gpt-6.1-terra" ||
+    value?.effort === "max" ||
+    value?.reasoningEffort === "max") &&
+  (value === undefined ||
+    (keys(value, ["effort"]) &&
+      (value.effort === undefined || value.effort === expectedEffort(model))) ||
+    (["gpt-6.1-sol", "gpt-6.1-terra"].includes(model) &&
+      keys(value, ["reasoningEffort"]) &&
+      value.reasoningEffort === expectedEffort(model)));
+const codexModel = (model, role) =>
+  model === "gpt-6.1-sol" ||
+  (role === "implementation" && model === "gpt-6.1-terra");
+const codexFindings = (model, role, value) => {
+  if (!codexModel(model, role))
+    return denied(
+      "Codex 허용 모델은 gpt-6.1-sol 또는 gpt-6.1-terra이며 역할은 terra에 implementation을 명시한다. 조사·비판은 sol만 허용한다",
+    );
+  return options(value, model)
+    ? []
+    : denied(
+        "Codex 추론 강도는 sol high, terra max이며 Terra의 max 옵션을 명시한다. effort와 reasoningEffort는 혼합하지 않고 한 키만 쓴다",
+      );
+};
+const launchRole = (message) => {
+  const roles = [...String(message).matchAll(/^[-] 역할: (.+)$/gmu)];
+  return roles.length === 1 ? roles[0][1] : undefined;
+};
 const briefCheck = (text, rules, facts) => {
   const result = baseVerdict(
     parseBrief(text),
@@ -57,6 +82,14 @@ export const orchestrationFindings = (input, rules, facts) => {
   )
     return denied("권한 확대는 허용하지 않는다");
   if (tool === "delegate_task") {
+    if (args.target?.driverKind === "codex") {
+      const problems = codexFindings(
+        args.target.model,
+        args.role,
+        args.target.options,
+      );
+      if (problems.length > 0) return problems;
+    }
     if (
       !keys(args, [
         "task",
@@ -78,7 +111,7 @@ export const orchestrationFindings = (input, rules, facts) => {
       ]) ||
       !(
         (args.target.driverKind === "codex" &&
-          args.target.model === "gpt-6.1-sol" &&
+          codexModel(args.target.model, args.role) &&
           (args.target.providerInstanceId === undefined ||
             args.target.providerInstanceId === "codex")) ||
         (args.target.driverKind === "claudeAgent" &&
@@ -87,7 +120,7 @@ export const orchestrationFindings = (input, rules, facts) => {
           (args.target.providerInstanceId === undefined ||
             args.target.providerInstanceId === "claudeAgent"))
       ) ||
-      !options(args.target.options) ||
+      !options(args.target.options, args.target.model) ||
       args.isolation !== "worktree" ||
       (args.role !== undefined &&
         !["implementation", "research", "review"].includes(args.role)) ||
@@ -100,6 +133,14 @@ export const orchestrationFindings = (input, rules, facts) => {
       : briefCheck(args.task, rules, facts);
   }
   if (tool === "t3_thread_launch") {
+    if (args.modelSelection?.provider === "codex") {
+      const problems = codexFindings(
+        args.modelSelection.model,
+        launchRole(args.message),
+        args.modelSelection.options,
+      );
+      if (problems.length > 0) return problems;
+    }
     if (
       !keys(args, [
         "title",
@@ -112,8 +153,8 @@ export const orchestrationFindings = (input, rules, facts) => {
       ]) ||
       !keys(args.modelSelection, ["provider", "model", "options"]) ||
       args.modelSelection.provider !== "codex" ||
-      args.modelSelection.model !== "gpt-6.1-sol" ||
-      !options(args.modelSelection.options) ||
+      !codexModel(args.modelSelection.model, launchRole(args.message)) ||
+      !options(args.modelSelection.options, args.modelSelection.model) ||
       !keys(args.workspaceStrategy, [
         "type",
         "branch",

@@ -702,10 +702,11 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 역할 | 실행 | 강제 |
 |---|---|---|
 | 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸 가드 |
-| 구현·수정·조사·비판 | T3의 Codex gpt-6.1-sol, 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 모델·작업 사본·브리프를 확인 |
+| 구현·수정 | T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다), 별도 작업 사본. sol high, terra max. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 정확한 두 모델·작업 사본·브리프를 확인. Terra만 implementation 역할 명시를 요구하며 sol 역할 생략은 기존 호환으로 허용 |
+| 조사·비판 | T3 Codex `gpt-6.1-sol` high, 별도 작업 사본 | Claude 위임 가드가 sol만 허용 |
 | 적대적 리뷰 | 새 Claude Opus 5.5 adversarial-reviewer | T3 격리, 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
 
-Codex 내부 서브에이전트 도구는 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude Agent 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. 적대적 리뷰는 정확한 Opus 모델·review 역할·worktree 격리의 T3 위임만 허용한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모델별 위임 판정은 메인 Claude의 orchestrationFindings가 수행한다. sol high는 운영 기본 요청이며 기존 옵션 생략·빈 객체·빈 배열에서는 실제 강도가 T3 상속·기본값에 따른다. Terra에는 max 옵션을 명시하며 생략·빈 옵션은 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude Agent 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. 적대적 리뷰는 정확한 Opus 모델·review 역할·worktree 격리의 T3 위임만 허용한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
 
 #### Claude 적대적 리뷰어 통제
 
