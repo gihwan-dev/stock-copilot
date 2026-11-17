@@ -1,5 +1,5 @@
 use crate::{
-    CalendarDate, CandlePeriod, CandleStatus, Currency, InstrumentId, PriceAdjustment,
+    CalendarDate, Candle, CandlePeriod, CandleStatus, Currency, InstrumentId, PriceAdjustment,
     SettledRowSet, SnapshotCalendar, SnapshotError, SnapshotInstrumentHistory, SnapshotLedgers,
     SnapshotObservation, ValuationPriceEvidence, ValuationSnapshot, valuation_time,
 };
@@ -96,13 +96,9 @@ impl<'action> ValuationRecomputeInput<'action> {
                 value.currency(),
                 self.observation.valuation_at(),
             )?;
-            if position.candle().is_none_or(|candle| {
-                candle.instrument() != instrument
-                    || candle.values().close() != price
-                    || candle.time().period() != CandlePeriod::Daily
-                    || candle.status() != CandleStatus::Finalized
-                    || candle.adjustment() != PriceAdjustment::Raw
-            }) {
+            let candle = position.candle().ok_or(SnapshotError::InvalidCandle)?;
+            validate_candle(candle, instrument, value.currency())?;
+            if candle.values().close() != price {
                 return Err(SnapshotError::InvalidCandle);
             }
         }
@@ -111,9 +107,30 @@ impl<'action> ValuationRecomputeInput<'action> {
             if !value.amount().as_decimal().is_zero() && !seen.contains(position.instrument()) {
                 return Err(SnapshotError::MissingPrice);
             }
+            if !seen.contains(position.instrument())
+                && let Some(candle) = position.candle()
+            {
+                validate_candle(candle, position.instrument(), value.currency())?;
+            }
         }
         snapshot.stock_krw_value()?;
         snapshot.account_krw_value()?;
         Ok(snapshot)
     }
+}
+
+fn validate_candle(
+    candle: &Candle,
+    instrument: &InstrumentId,
+    currency: Currency,
+) -> Result<(), SnapshotError> {
+    if candle.instrument() != instrument
+        || candle.values().close().as_money().currency() != currency
+        || candle.time().period() != CandlePeriod::Daily
+        || candle.status() != CandleStatus::Finalized
+        || candle.adjustment() != PriceAdjustment::Raw
+    {
+        return Err(SnapshotError::InvalidCandle);
+    }
+    Ok(())
 }

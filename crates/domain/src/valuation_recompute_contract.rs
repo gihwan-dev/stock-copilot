@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn valuation_time_is_16_kst_even_when_utc_and_kst_dates_differ() {
+    fn valuation_time_is_16_kst_and_kst_midnight_crosses_utc_date() {
         let day = CalendarDate::from_parts(
             crate::CalendarYear::new(2026),
             crate::MonthNumber::new(1),
@@ -962,6 +962,124 @@ mod tests {
             candle("A", CandlePeriod::Minute, PriceAdjustment::Raw),
         ] {
             assert_eq!(run(invalid).err(), Some(SnapshotError::InvalidCandle));
+        }
+    }
+
+    fn zero_candle(
+        instrument: &str,
+        currency: Currency,
+        period: CandlePeriod,
+        status: CandleStatus,
+        adjustment: PriceAdjustment,
+    ) -> Candle {
+        let value = price("12", currency);
+        Candle::try_new(
+            id(instrument),
+            CandleTime::try_new(at(3, 0), period).expect("시각"),
+            adjustment,
+            Ohlcv::try_new(
+                value,
+                value,
+                value,
+                value,
+                Quantity::parse(&NumericInput::try_new("0").expect("입력")).expect("수량"),
+            )
+            .expect("가격"),
+            CandleObservation::new(at(3, 6), status),
+        )
+        .expect("봉")
+    }
+
+    fn zero_history(item: Option<Candle>) -> SnapshotInstrumentHistory {
+        let identity = LotIdentity::new(
+            id("A"),
+            Symbol::try_new("A").expect("심볼"),
+            Market::Kr,
+            Currency::Krw,
+        );
+        SnapshotInstrumentHistory::new(identity, vec![], item.into_iter().collect()).expect("이력")
+    }
+
+    fn zero_without_evidence(item: Option<Candle>) -> Result<ValuationSnapshot, SnapshotError> {
+        let histories = [zero_history(item)];
+        snapshot(
+            3,
+            TestCash::new(vec![], ("100", "0"), ("100", "0")),
+            &histories,
+            &[],
+            None,
+        )
+    }
+
+    #[test]
+    fn zero_without_evidence_accepts_absence_and_rejects_wrong_identity_or_currency() {
+        let absent = zero_without_evidence(None).expect("봉 없는 0주");
+        assert!(absent.positions()[0].candle().is_none());
+        assert_eq!(
+            absent.account_value(Currency::Krw),
+            Ok(money("100", Currency::Krw))
+        );
+        let valid = zero_without_evidence(Some(zero_candle(
+            "A",
+            Currency::Krw,
+            CandlePeriod::Daily,
+            CandleStatus::Finalized,
+            PriceAdjustment::Raw,
+        )))
+        .expect("정상 봉");
+        assert!(valid.positions()[0].candle().is_some());
+        for invalid in [
+            zero_candle(
+                "B",
+                Currency::Krw,
+                CandlePeriod::Daily,
+                CandleStatus::Finalized,
+                PriceAdjustment::Raw,
+            ),
+            zero_candle(
+                "A",
+                Currency::Usd,
+                CandlePeriod::Daily,
+                CandleStatus::Finalized,
+                PriceAdjustment::Raw,
+            ),
+        ] {
+            assert_eq!(
+                zero_without_evidence(Some(invalid)).err(),
+                Some(SnapshotError::InvalidCandle)
+            );
+        }
+    }
+
+    #[test]
+    fn zero_without_evidence_rejects_unfinished_nondaily_or_adjusted_candles() {
+        for invalid in [
+            zero_candle(
+                "A",
+                Currency::Krw,
+                CandlePeriod::Daily,
+                CandleStatus::InProgress,
+                PriceAdjustment::Raw,
+            ),
+            zero_candle(
+                "A",
+                Currency::Krw,
+                CandlePeriod::Minute,
+                CandleStatus::Finalized,
+                PriceAdjustment::Raw,
+            ),
+            zero_candle(
+                "A",
+                Currency::Krw,
+                CandlePeriod::Daily,
+                CandleStatus::Finalized,
+                PriceAdjustment::Adjusted(crate::AdjustmentBasis::new(at(3, 0))),
+            ),
+        ] {
+            assert_eq!(
+                zero_without_evidence(Some(invalid)).err(),
+                Some(SnapshotError::InvalidCandle)
+            );
         }
     }
 
