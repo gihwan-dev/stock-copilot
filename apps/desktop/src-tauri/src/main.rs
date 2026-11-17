@@ -4,7 +4,7 @@ use src_tauri::{
 };
 use std::sync::Arc;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn product_context() -> tauri::Context<tauri::Wry> {
     #[expect(
         clippy::disallowed_macros,
         reason = "tauri::generate_context! expands to include_bytes! and env!"
@@ -18,6 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         reason = "tauri::generate_context! expands to std::collections::HashMap"
     )]
     let context = tauri::generate_context!();
+    context
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let context = product_context();
     let clock = platform_macos::SystemClock::new()
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
@@ -63,6 +68,109 @@ fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseF
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn product_acl_allows_only_main_window_event_subscription() {
+        let mut context = super::product_context();
+        let authority = context.runtime_authority_mut();
+        let local = tauri::ipc::Origin::Local;
+        let remote = tauri::ipc::Origin::Remote {
+            url: "https://example.com".parse().expect("원격 출처"),
+        };
+        for command in ["plugin:event|listen", "plugin:event|unlisten"] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &local)
+                    .is_some(),
+                "{command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(command, "other", "other", &local)
+                    .is_none(),
+                "{command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &remote)
+                    .is_none(),
+                "{command}"
+            );
+        }
+        for command in ["plugin:event|emit", "plugin:event|emit_to"] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &local)
+                    .is_none(),
+                "{command}"
+            );
+        }
+        let without_permissions = tauri::runtime_authority!(
+            std::collections::BTreeMap::new(),
+            tauri::utils::acl::resolved::Resolved::default()
+        );
+        for command in ["plugin:event|listen", "plugin:event|unlisten"] {
+            assert!(
+                without_permissions
+                    .resolve_access(command, "main", "main", &local)
+                    .is_none(),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn product_event_permissions_are_individually_required() {
+        use std::collections::BTreeMap;
+        use tauri::utils::acl::{capability::Capability, manifest::Manifest, resolved::Resolved};
+
+        let manifests: BTreeMap<String, Manifest> = serde_json::from_str(
+            &std::fs::read_to_string("gen/schemas/acl-manifests.json").expect("생성된 ACL"),
+        )
+        .expect("ACL 매니페스트");
+        let capability: Capability = serde_json::from_str(
+            &std::fs::read_to_string("capabilities/main.json").expect("제품 capability"),
+        )
+        .expect("제품 capability 형식");
+        for (omitted, denied, retained) in [
+            (
+                "core:event:allow-listen",
+                "plugin:event|listen",
+                "plugin:event|unlisten",
+            ),
+            (
+                "core:event:allow-unlisten",
+                "plugin:event|unlisten",
+                "plugin:event|listen",
+            ),
+        ] {
+            let mut edited = capability.clone();
+            edited
+                .permissions
+                .retain(|permission| permission.identifier().get() != omitted);
+            assert_eq!(edited.permissions.len() + 1, capability.permissions.len());
+            let capabilities = BTreeMap::from([(edited.identifier.clone(), edited)]);
+            let resolved = Resolved::resolve(
+                &manifests,
+                capabilities,
+                tauri::utils::platform::Target::MacOS,
+            )
+            .expect("제품 ACL 해석");
+            let authority = tauri::runtime_authority!(BTreeMap::new(), resolved);
+            assert!(
+                authority
+                    .resolve_access(denied, "main", "main", &tauri::ipc::Origin::Local)
+                    .is_none(),
+                "{omitted}: {denied}"
+            );
+            assert!(
+                authority
+                    .resolve_access(retained, "main", "main", &tauri::ipc::Origin::Local)
+                    .is_some(),
+                "{omitted}: {retained}"
+            );
+        }
+    }
+
     #[test]
     fn composition_root_constructs_the_fixed_product_endpoint_without_sending_requests() {
         let endpoint = broker_toss::TossEndpoint::production();

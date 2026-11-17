@@ -158,6 +158,16 @@ impl CalendarDate {
     }
 }
 
+#[must_use]
+pub fn valuation_time(date: CalendarDate) -> Timestamp {
+    let utc = date
+        .0
+        .midnight()
+        .assume_utc()
+        .saturating_add(SignedDuration::hours(7));
+    Timestamp(utc)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CalendarDays(i64);
 impl CalendarDays {

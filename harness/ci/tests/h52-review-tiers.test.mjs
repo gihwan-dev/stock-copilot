@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
-import { recordProblems, reviewProblems } from "../review-records/check.mjs";
+import {
+  recordProblems,
+  reviewProblems,
+  isLegacyRecord,
+} from "../review-records/check.mjs";
 import { repoRoot } from "./signature-repo.mjs";
 
 const git = (ref) => {
@@ -86,8 +90,31 @@ test("마지막 회차 다음의 수정 행만 추가로 허용한다", () => {
   assert.notDeepEqual(problems(3, ["1", "3"]), []);
 });
 
-test("등급이 없는 과거 기록은 변경 없이 통과한다", () => {
-  assert.deepEqual(problems(undefined, ["1", "2", "3", "4"]), []);
+test("기준 커밋에 있던 과거 기록만 원래 내용 그대로 예외를 받는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const path = "docs/reviews/H-49.md";
+  const text = readFileSync(join(repoRoot, path), "utf8");
+  assert.equal(isLegacyRecord(repoRoot, path, text), true);
+  assert.equal(isLegacyRecord(repoRoot, path, `${text}\n`), false);
+  assert.equal(isLegacyRecord(repoRoot, "docs/reviews/X-999.md", text), false);
+});
+
+test("등급이 없는 새 기록은 회차 수와 관계없이 거부한다", () => {
+  for (const rounds of [["1"], ["1", "2", "3", "4"]]) {
+    assert.ok(
+      problems(undefined, rounds).some((item) => item.includes("리뷰 등급")),
+    );
+  }
+  const misleading = record(undefined, ["1"]).replace(
+    "## 커밋",
+    "| 리뷰 등급 | 3 |\n\n## 커밋",
+  );
+  assert.ok(
+    recordProblems(repoRoot, misleading, "H-52").some((item) =>
+      item.includes("리뷰 등급"),
+    ),
+  );
 });
 
 test("아직 완료 progress에 연결되지 않은 새 리뷰 기록도 등급을 검사한다", async () => {
@@ -104,6 +131,41 @@ test("아직 완료 progress에 연결되지 않은 새 리뷰 기록도 등급�
       "| 작업 | 상태 | 대상 커밋 | 리뷰 기록 |\n|---|---|---|---|\n| H-52 | 해결 | - | [기록](reviews/H-52.md) |\n",
     );
     writeFileSync(join(root, "docs/reviews/H-52.md"), record("4", ["1"]));
+    assert.ok(
+      reviewProblems(root).some((problem) => problem.includes("리뷰 등급")),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("progress에 연결되지 않은 새 기록에도 리뷰 등급이 필요하다", async () => {
+  const { mkdirSync, mkdtempSync, rmSync, writeFileSync } =
+    await import("node:fs");
+  const { join } = await import("node:path");
+  const parent = join(repoRoot, "target/h52-tier");
+  mkdirSync(parent, { recursive: true });
+  const root = mkdtempSync(join(parent, "repo-"));
+  try {
+    assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
+    assert.equal(
+      spawnSync("git", [
+        "-C",
+        root,
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        repoRoot,
+        target,
+      ]).status,
+      0,
+    );
+    mkdirSync(join(root, "docs/reviews"), { recursive: true });
+    writeFileSync(
+      join(root, "docs/progress.md"),
+      "| 작업 | 상태 | 대상 커밋 | 리뷰 기록 |\n|---|---|---|---|\n| H-52 | 해결 | - | - |\n",
+    );
+    writeFileSync(join(root, "docs/reviews/H-52.md"), record(undefined, ["1"]));
     assert.ok(
       reviewProblems(root).some((problem) => problem.includes("리뷰 등급")),
     );

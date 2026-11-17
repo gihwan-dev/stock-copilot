@@ -139,21 +139,36 @@ export const inspectMerge = (root, branch, indexFile) => {
   }
 };
 
-const recordedCommits = (root) => {
+export const recordedCommits = (root) => {
   const entries = [];
   const directory = join(root, "docs/reviews");
   for (const file of readdirSync(directory).filter((name) =>
     name.endsWith(".md"),
   )) {
     const text = readFileSync(join(directory, file), "utf8");
-    const section =
-      /^## 커밋[^\n]*\n([\s\S]*?)(?=^## |$(?![\s\S]))/mu.exec(text)?.[1] ?? "";
-    for (const row of section.split("\n")) {
+    let inCommits = false;
+    for (const [index, row] of text.split("\n").entries()) {
+      if (/^## 커밋/u.test(row)) {
+        inCommits = true;
+        continue;
+      }
+      if (/^## /u.test(row)) {
+        inCommits = false;
+        continue;
+      }
+      if (!inCommits) continue;
       const match =
         /^\|\s*\d+(?: \([^)]*\))?\s*\|\s*([a-f0-9]{7,40})\b[^|]*\|\s*([a-f0-9]{7,40})\b/u.exec(
           row,
         );
-      if (match !== null) entries.push(...match.slice(1));
+      if (match !== null) {
+        entries.push(
+          ...match.slice(1).map((ref) => ({
+            ref,
+            location: `docs/reviews/${file}:${index + 1}`,
+          })),
+        );
+      }
     }
   }
   const progress = readFileSync(join(root, "docs/progress.md"), "utf8");
@@ -161,10 +176,27 @@ const recordedCommits = (root) => {
     (row) => row.progress && isDone(row.state),
   )) {
     const match = /^([a-f0-9]{7,40})(?:$|\s)/u.exec(row.target);
-    if (match !== null) entries.push(match[1]);
+    if (match !== null)
+      entries.push({ ref: match[1], location: `docs/progress.md:${row.line}` });
   }
-  return [...new Set(entries.map((ref) => commit(root, ref)))];
+  return [
+    ...new Set(
+      entries.map(({ ref, location }) => {
+        try {
+          return commit(root, ref);
+        } catch {
+          throw new Error(`${location}: 리뷰 커밋 ${ref}를 확인하지 못했다`);
+        }
+      }),
+    ),
+  ];
 };
+
+export const advertisedTags = (listing) =>
+  listing.split("\n").flatMap((line) => {
+    const [sha, ref] = line.split("\t");
+    return COMMIT.test(sha ?? "") && ref?.startsWith("refs/tags/") ? [sha] : [];
+  });
 
 export const missingRemoteObjects = (root, reviewed, head, advertised) => {
   const refs = advertised.flatMap((ref) => {
@@ -187,16 +219,11 @@ const validateRemoteObjects = (root, head) => {
     "-c",
     "credential.helper=",
     "ls-remote",
-    "--heads",
     "--tags",
     `https://github.com/${REPOSITORY}.git`,
   ]);
   if (result.status !== 0) throw new Error("원격 참조를 조회하지 못했다");
-  const advertised = result.stdout
-    .split("\n")
-    .map((line) => line.split("\t")[0])
-    .filter((sha) => COMMIT.test(sha));
-  if (advertised.length === 0) throw new Error("원격 참조가 없다");
+  const advertised = advertisedTags(result.stdout);
   const missing = missingRemoteObjects(
     root,
     recordedCommits(root),
@@ -258,6 +285,15 @@ const main = async () => {
   );
   const [branch, receipt] = process.argv.slice(2);
   if (branch === "--prepare-hook") {
+    const mergeFile = output(root, ["rev-parse", "--git-path", "MERGE_HEAD"]);
+    try {
+      readFileSync(resolve(root, mergeFile), "utf8");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      rmSync(marker);
+      process.stdout.write("merge-gate: 중단된 요청을 정리했다\n");
+      return;
+    }
     if (receipt === undefined || receipt === "")
       throw new Error("커밋 인덱스를 받지 못했다");
     const request = JSON.parse(readFileSync(marker, "utf8"));

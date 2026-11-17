@@ -1,6 +1,13 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { checkRun, evidenceFor, remoteCheckFrom } from "../remote-check.mjs";
+import {
+  checkRun,
+  evidenceFor,
+  remoteCheckFrom,
+  checkLinuxRun,
+  remoteLinuxCheckFrom,
+  failureCode,
+} from "../remote-check.mjs";
 
 const sha = "a".repeat(40);
 const other = "b".repeat(40);
@@ -298,4 +305,177 @@ test("로컬 영수증은 신뢰된 서명과 동일한 내용에만 유효하�
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("러너 미배정·취소·시간 초과는 통과가 아닌 재시도 대상으로 구분한다", async () => {
+  const failedRun = { ...run, conclusion: "failure" };
+  const unassigned = {
+    ...jobs[1],
+    runner_id: 0,
+    runner_name: "",
+    steps: [],
+    conclusion: "cancelled",
+  };
+  assert.equal(checkRun(sha, failedRun, [jobs[0], unassigned]), false);
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], unassigned]),
+    "RETRY_RUNNER_UNASSIGNED",
+  );
+  assert.equal(
+    failureCode(sha, failedRun, [
+      jobs[0],
+      {
+        ...jobs[1],
+        conclusion: "cancelled",
+        runner_id: 11,
+        runner_name: "hosted",
+      },
+    ]),
+    "RETRY_CANCELLED",
+  );
+  assert.equal(
+    failureCode(sha, failedRun, [
+      jobs[0],
+      {
+        ...jobs[1],
+        conclusion: "timed_out",
+        runner_id: 12,
+        runner_name: "hosted",
+      },
+    ]),
+    "RETRY_TIMED_OUT",
+  );
+  assert.equal(
+    failureCode(sha, failedRun, [
+      jobs[0],
+      {
+        ...jobs[1],
+        conclusion: "failure",
+        runner_id: 12,
+        runner_name: "hosted",
+        steps: [
+          { name: "just check", status: "completed", conclusion: "timed_out" },
+        ],
+      },
+    ]),
+    "RETRY_TIMED_OUT",
+  );
+  assert.equal(
+    failureCode(sha, { ...run, status: "queued", conclusion: null }, [
+      jobs[0],
+      { ...unassigned, status: "queued", conclusion: null },
+    ]),
+    "PENDING",
+  );
+  const failingLinux = {
+    ...jobs[0],
+    conclusion: "failure",
+    runner_id: 13,
+    runner_name: "hosted",
+    steps: [
+      { name: "linux check", status: "completed", conclusion: "failure" },
+    ],
+  };
+  assert.equal(
+    failureCode(sha, failedRun, [failingLinux, unassigned]),
+    "CHECK_FAILED",
+  );
+  assert.equal(
+    failureCode(other, failedRun, [jobs[0], unassigned]),
+    "INVALID_EVIDENCE",
+  );
+  const read = async (path) =>
+    path.includes("workflows/ci.yml/")
+      ? { total_count: 1, workflow_runs: [failedRun] }
+      : { total_count: 2, jobs: [jobs[0], unassigned] };
+  await assert.rejects(
+    remoteCheckFrom(sha, read),
+    (error) => error.code === "RETRY_RUNNER_UNASSIGNED",
+  );
+});
+
+test("macOS가 대기·실패해도 Linux 작업만의 성공은 별도로 확인한다", async () => {
+  const failedRun = { ...run, conclusion: "failure" };
+  const macos = {
+    ...jobs[1],
+    runner_id: 0,
+    runner_name: "",
+    steps: [],
+    conclusion: "cancelled",
+  };
+  const entries = [jobs[0], macos];
+  assert.equal(checkRun(sha, failedRun, entries), false);
+  assert.equal(checkLinuxRun(sha, failedRun, entries), true);
+  assert.equal(
+    checkLinuxRun(
+      sha,
+      { ...failedRun, status: "queued", conclusion: null },
+      entries,
+    ),
+    true,
+  );
+  assert.equal(checkLinuxRun(other, failedRun, entries), false);
+  assert.equal(
+    checkLinuxRun(sha, { ...failedRun, status: "unknown" }, entries),
+    false,
+  );
+  assert.equal(
+    checkLinuxRun(sha, { ...failedRun, event: "pull_request" }, entries),
+    false,
+  );
+  assert.equal(
+    checkLinuxRun(
+      sha,
+      { ...failedRun, repository: { full_name: "fork/project" } },
+      entries,
+    ),
+    false,
+  );
+  assert.equal(checkLinuxRun(sha, failedRun, [jobs[0], jobs[0], macos]), false);
+  assert.equal(
+    checkLinuxRun(sha, failedRun, [
+      { ...jobs[0], status: "in_progress" },
+      macos,
+    ]),
+    false,
+  );
+  assert.equal(checkLinuxRun(sha, failedRun, null), false);
+  assert.equal(
+    checkLinuxRun(sha, failedRun, [
+      { ...jobs[0], conclusion: "failure" },
+      macos,
+    ]),
+    false,
+  );
+  assert.equal(
+    checkLinuxRun(sha, failedRun, [
+      { ...jobs[0], steps: jobs[0].steps.slice(1) },
+      macos,
+    ]),
+    false,
+  );
+  assert.equal(
+    checkLinuxRun(sha, failedRun, [{ ...jobs[0], run_attempt: 1 }, macos]),
+    false,
+  );
+  const read = async (path) =>
+    path.includes("workflows/ci.yml/")
+      ? { total_count: 1, workflow_runs: [failedRun] }
+      : { total_count: 2, jobs: entries };
+  const linuxEvidence = await remoteLinuxCheckFrom(sha, read);
+  assert.deepEqual(linuxEvidence, {
+    scope: "linux",
+    head: sha,
+    runId: 31,
+    attempt: 2,
+  });
+  assert.equal(
+    evidenceFor(sha, {
+      remote: linuxEvidence,
+      receipt: undefined,
+      signed: false,
+    }),
+    false,
+  );
+  await assert.rejects(remoteCheckFrom(sha, read));
 });

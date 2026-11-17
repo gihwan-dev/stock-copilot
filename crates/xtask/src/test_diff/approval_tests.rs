@@ -777,3 +777,73 @@ fn approval_never_allows_removing_an_assertion_helper_from_preparation() {
             .expect("support assertion helper approval");
     assert_eq!(remaining.len(), 1);
 }
+
+#[test]
+fn master_merge_may_use_the_latest_separate_main_approval() {
+    let (root, _) = repository("h52-review-master-merge-approved");
+    commit_record(
+        &root,
+        &record(AFTER_ONE, &["test-diff:modified:sample tests::first"]),
+    );
+    git(
+        &root,
+        &["fetch", "--quiet", ".", "master:refs/remotes/origin/master"],
+    );
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    commit_change(&root, AFTER_ONE);
+    git(&root, &["checkout", "--quiet", "master"]);
+    git(
+        &root,
+        &["merge", "--quiet", "--no-ff", "--no-commit", "feature"],
+    );
+    let before = files(BEFORE);
+    let current = files(AFTER_ONE);
+    let (findings, _) = compare_files(&before, &current);
+    let remaining = approval::apply(
+        &root,
+        &before,
+        &current,
+        findings,
+        crate::git_base::BaseUse::Commit,
+    )
+    .expect("master merge approval");
+    assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+#[test]
+fn master_merge_cannot_validate_a_same_commit_self_approval() {
+    let (root, _) = repository("h52-review-master-merge-self-approval");
+    write(
+        &root,
+        RECORD,
+        &record(AFTER_ONE, &["test-diff:modified:sample tests::first"]),
+    );
+    write(&root, SOURCE, AFTER_ONE);
+    git(&root, &["add", RECORD, SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "self approval"]);
+    git(
+        &root,
+        &["fetch", "--quiet", ".", "master:refs/remotes/origin/master"],
+    );
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    write(&root, "later.txt", "unrelated\n");
+    git(&root, &["add", "later.txt"]);
+    git(&root, &["commit", "--quiet", "-m", "feature"]);
+    git(&root, &["checkout", "--quiet", "master"]);
+    git(
+        &root,
+        &["merge", "--quiet", "--no-ff", "--no-commit", "feature"],
+    );
+    let before = files(BEFORE);
+    let current = files(AFTER_ONE);
+    let (findings, _) = compare_files(&before, &current);
+    let remaining = approval::apply(
+        &root,
+        &before,
+        &current,
+        findings,
+        crate::git_base::BaseUse::Commit,
+    )
+    .expect("master merge self approval");
+    assert_eq!(remaining.len(), 1);
+}

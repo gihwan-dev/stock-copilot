@@ -67,6 +67,25 @@ fn commit(root: &Path, reference: &str) -> Option<String> {
     git_base::is_commit_id(&resolved).then_some(resolved)
 }
 
+fn pending_master_merge(root: &Path, head: &str, authority: &str) -> bool {
+    if head != authority
+        || git(root, &["symbolic-ref", "--quiet", "HEAD"]).as_deref() != Some("refs/heads/master")
+    {
+        return false;
+    }
+    let Some(path) = git(root, &["rev-parse", "--git-path", "MERGE_HEAD"]) else {
+        return false;
+    };
+    let Ok(contents) = std::fs::read_to_string(root.join(path)) else {
+        return false;
+    };
+    let heads: Vec<&str> = contents.lines().collect();
+    let [incoming] = heads.as_slice() else {
+        return false;
+    };
+    git_base::is_commit_id(incoming) && commit(root, incoming).as_deref() == Some(*incoming)
+}
+
 fn trusted_authority(root: &Path, head: &str) -> Option<String> {
     let master = commit(root, MASTER)?;
     let branch = git(root, &["symbolic-ref", "--quiet", "HEAD"]);
@@ -74,6 +93,7 @@ fn trusted_authority(root: &Path, head: &str) -> Option<String> {
         && branch
             .as_deref()
             .is_none_or(|name| name == "refs/heads/master")
+        && !pending_master_merge(root, head, &master)
     {
         commit(root, &format!("{master}^1"))
     } else {
@@ -112,6 +132,7 @@ fn trusted_history(
     ) else {
         return false;
     };
+    let pending_merge = pending_master_merge(root, head, authority);
     history.lines().all(|revision| {
         if !git_base::is_commit_id(revision) {
             return false;
@@ -125,7 +146,7 @@ fn trusted_history(
             Some(true) => true,
             Some(false) => {
                 parents.len() <= 1
-                    && revision != head
+                    && (revision != head || pending_merge)
                     && groups
                         .keys()
                         .all(|group| same_entry(root, revision, parent, &group.path) == Some(true))

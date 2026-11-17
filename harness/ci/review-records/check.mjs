@@ -7,6 +7,8 @@ export const PROGRESS_FILE = "docs/progress.md";
 
 export const REVIEWS_DIRECTORY = "docs/reviews";
 
+export const LEGACY_REVIEW_BASE = "d235aaf8d3f3a6387e0a20aede316cc5b7d0edbf";
+
 export const TABLE_HEADER = ["작업", "상태", "대상 커밋", "리뷰 기록"];
 
 export const DONE_STATES = ["완료", "일부 완료"];
@@ -234,12 +236,17 @@ export const waiverProblems = (lines) => {
   ];
 };
 
-export const tierProblems = (text) => {
+const tierRows = (text) => {
   const lines = text.split("\n");
   const measure = sectionLines(lines, /^## 측정/u);
   const measurements =
     measure === undefined ? undefined : tableRows(measure, ["항목", "값"]);
-  const tiers = (measurements ?? []).filter((row) => row[0] === "리뷰 등급");
+  return (measurements ?? []).filter((row) => row[0] === "리뷰 등급");
+};
+
+export const tierProblems = (text) => {
+  const lines = text.split("\n");
+  const tiers = tierRows(text);
   if (tiers.length === 0) {
     return [];
   }
@@ -283,7 +290,48 @@ export const tierProblems = (text) => {
   return issues;
 };
 
-export const recordProblems = (root, text, tasks) => {
+const hasTier = (text) => tierRows(text).length > 0;
+
+export const isLegacyRecord = (root, path, text) => {
+  if (dirname(path) !== REVIEWS_DIRECTORY || !path.endsWith(".md")) {
+    return false;
+  }
+  const redirected = new Set([
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_SHALLOW_FILE",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_PARAMETERS",
+  ]);
+  const env = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !redirected.has(name)),
+    ),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_GRAFT_FILE: "/dev/null",
+  };
+  const result = spawnSync(
+    "git",
+    [
+      "--no-replace-objects",
+      "-C",
+      root,
+      "show",
+      `${LEGACY_REVIEW_BASE}:${path}`,
+    ],
+    { encoding: "utf8", env },
+  );
+  return result.status === 0 && result.stdout === text;
+};
+
+export const recordProblems = (root, text, tasks, legacy = false) => {
   const lines = text.split("\n");
   const title = lines.find((line) => line.startsWith("# ")) ?? "";
   const missingIds = (tasks.match(TASK_ID) ?? []).filter(
@@ -306,13 +354,16 @@ export const recordProblems = (root, text, tasks) => {
     }
     return tableProblems(root, section, rows);
   });
-  return [
+  const structural = [
     ...(missingIds.length === 0
       ? []
       : [`제목에 작업 ID가 없다: ${missingIds.join(", ")}`]),
     ...sections,
-    ...tierProblems(text),
   ];
+  if (structural.length !== 0) return structural;
+  if (!hasTier(text) && !legacy)
+    return ["새 리뷰 기록에는 리뷰 등급이 필요하다"];
+  return tierProblems(text);
 };
 
 const progressRowProblems = (root, row) => {
@@ -346,11 +397,11 @@ const progressRowProblems = (root, row) => {
   if (!existsSync(join(root, target))) {
     return [`${where}: 리뷰 기록이 없다: ${target}`];
   }
-  return recordProblems(
-    root,
-    readFileSync(join(root, target), "utf8"),
-    row.tasks,
-  ).map((problem) => `${where}: ${target}: ${problem}`);
+  const text = readFileSync(join(root, target), "utf8");
+  const legacy = !hasTier(text) && isLegacyRecord(root, target, text);
+  return recordProblems(root, text, row.tasks, legacy).map(
+    (problem) => `${where}: ${target}: ${problem}`,
+  );
 };
 
 export const reviewProblems = (root) => {
@@ -376,11 +427,13 @@ export const reviewProblems = (root) => {
         .filter((name) => !referenced.has(join(REVIEWS_DIRECTORY, name)))
         .flatMap((name) => {
           const text = readFileSync(join(directory, name), "utf8");
-          return /^\|\s*리뷰 등급\s*\|/mu.test(text)
-            ? recordProblems(root, text, "").map(
-                (problem) => `${REVIEWS_DIRECTORY}/${name}: ${problem}`,
-              )
-            : [];
+          const path = join(REVIEWS_DIRECTORY, name);
+          const legacy = !hasTier(text) && isLegacyRecord(root, path, text);
+          return legacy
+            ? []
+            : recordProblems(root, text, "").map(
+                (problem) => `${path}: ${problem}`,
+              );
         })
     : [];
   return [

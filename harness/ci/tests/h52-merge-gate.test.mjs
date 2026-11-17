@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  existsSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -74,6 +75,72 @@ test("현재 master를 포함한 브랜치와 문서·생성 등록만 다른 �
     const result = inspect(made);
     assert.equal(result.problem, undefined);
     assert.equal(result.head, made.head);
+  } finally {
+    made.close();
+  }
+});
+
+test("옆가지 리뷰 커밋은 일시 브랜치가 아닌 원격 태그가 필요하다", async () => {
+  const { advertisedTags, missingRemoteObjects } =
+    await import("../merge-gate.mjs");
+  const made = fixture();
+  try {
+    made.git("merge", "--abort");
+    made.git("checkout", "--quiet", "-b", "side");
+    made.put("side.txt", "side\n");
+    made.git("commit", "--quiet", "-m", "side");
+    const side = made.git("rev-parse", "HEAD");
+    const branchOnly = advertisedTags(`${side}\trefs/heads/temporary\n`);
+    assert.deepEqual(
+      missingRemoteObjects(made.directory, [side], made.head, branchOnly),
+      [side],
+    );
+    const tagged = advertisedTags(`${side}\trefs/tags/review-evidence/side\n`);
+    assert.deepEqual(
+      missingRemoteObjects(made.directory, [side], made.head, tagged),
+      [],
+    );
+  } finally {
+    made.close();
+  }
+});
+
+test("병합 중단 뒤 남은 요청은 다음 커밋 가드에서 지운다", () => {
+  const made = fixture();
+  try {
+    const state = inspect(made);
+    const marker = join(made.directory, ".git/stock-copilot-merge-gate.json");
+    writeFileSync(marker, JSON.stringify({ branch: "feature", ...state }));
+    made.git("merge", "--abort");
+    const program = join(repoRoot, "harness/ci/merge-gate.mjs");
+    const result = spawnSync(
+      "node",
+      [program, "--prepare-hook", ".git/index"],
+      { cwd: made.directory, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(existsSync(marker), false);
+  } finally {
+    made.close();
+  }
+});
+
+test("없는 리뷰 커밋은 기록 파일과 행 및 SHA를 알려 준다", async () => {
+  const { recordedCommits } = await import("../merge-gate.mjs");
+  const made = fixture();
+  try {
+    made.put(
+      "docs/reviews/H-52.md",
+      "# H-52\n\n## 커밋\n\n| 회차 | 기준 SHA | 대상 SHA |\n|---|---|---|\n| 1 | deadbeef | deadbeef |\n",
+    );
+    made.put(
+      "docs/progress.md",
+      "| 작업 | 상태 | 대상 커밋 | 리뷰 기록 |\n|---|---|---|---|\n",
+    );
+    assert.throws(
+      () => recordedCommits(made.directory),
+      /docs\/reviews\/H-52\.md:7.*deadbeef/u,
+    );
   } finally {
     made.close();
   }
@@ -253,6 +320,10 @@ test("실제 xtask 커밋 가드가 준비된 병합의 커밋 인덱스를 검�
     writeFileSync(marker, JSON.stringify({ ...stored, tree: "a".repeat(40) }));
     const rejected = guard();
     assert.notEqual(rejected.status, 0);
+    made.git("merge", "--abort");
+    const cleared = guard();
+    assert.equal(cleared.status, 0, cleared.stderr);
+    assert.equal(existsSync(marker), false);
   } finally {
     made.close();
   }

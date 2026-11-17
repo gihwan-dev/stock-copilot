@@ -219,6 +219,9 @@ pub struct ValuationSnapshot {
     assumptions: BTreeSet<LotAssumption>,
 }
 impl ValuationSnapshot {
+    pub fn recompute(input: crate::ValuationRecomputeInput<'_>) -> Result<Self, SnapshotError> {
+        input.calculate()
+    }
     pub fn observe(
         calendar: &SnapshotCalendar,
         portfolio: &PortfolioValuation,

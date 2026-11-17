@@ -1,0 +1,89 @@
+[[case]]
+name = "no-setup-hook"
+file = "src/lib.rs"
+before = 'security::create_windows(app)?;'
+after = ''
+
+[[case]]
+name = "events-not-mounted-before-window"
+file = "src/lib.rs"
+before = 'ipc::registry::specta_builder::<R>().mount_events(app);'
+after = ''
+
+[[case]]
+name = "automatic-creation"
+file = "src/lib.rs"
+before = 'window.create = false;'
+after = 'window.create = true;'
+
+[[case]]
+name = "setup-not-connected-to-build"
+file = "src/lib.rs"
+before = '}).build(context)'
+after = '}); builder.build(context)'
+
+[[case]]
+name = "extra-window-before-build"
+file = "src/lib.rs"
+before = '    builder.setup'
+after = '    let extra = WebviewWindowBuilder::new(app, "other", url); builder.setup'
+
+[[case]]
+name = "extra-window-factory"
+file = "src/security.rs"
+before = 'fn new_window_response<R: Runtime>() -> NewWindowResponse<R> {'
+after = 'fn bypass() { WebviewWindowBuilder::new(app, "other", url); } fn new_window_response<R: Runtime>() -> NewWindowResponse<R> {'
+
+[[case]]
+name = "no-navigation-hook"
+file = "src/security.rs"
+before = '.on_navigation(allows_navigation)'
+after = ''
+
+[[case]]
+name = "no-new-window-hook"
+file = "src/security.rs"
+before = '.on_new_window(|_, _| new_window_response())'
+after = ''
+
+[[case]]
+name = "external-host-accepted"
+file = "src/security.rs"
+before = 'url.host_str() == Some("localhost")'
+after = 'url.host_str().is_some()'
+
+[[case]]
+name = "new-window-allowed"
+file = "src/security.rs"
+before = 'NewWindowResponse::Deny'
+after = 'NewWindowResponse::Allow'
+
+[[case]]
+name = "alternate-security-module-path"
+file = "src/lib.rs"
+before = 'mod security;'
+after = '#[path = "other.rs"] mod security;'
+
+[[case]]
+name = "inline-security-module"
+file = "src/lib.rs"
+before = 'mod security;'
+after = 'mod security {}'
+
+[[case]]
+name = "missing-security-module"
+file = "src/lib.rs"
+before = 'mod security;'
+after = ''
+
+[[case]]
+name = "conditional-security-module"
+file = "src/lib.rs"
+before = 'mod security;'
+after = '#[cfg(target_os = "macos")] mod security;'
+
+[[case]]
+name = "duplicate-security-module"
+file = "src/lib.rs"
+before = 'mod security;'
+after = 'mod security; mod security;'

@@ -21,50 +21,147 @@ const REQUIRED_STEPS = {
   signatures: ["signatures from the base checkout"],
 };
 
+const invalidRun = (sha, run, workflow) =>
+  !COMMIT.test(sha) ||
+  run?.head_sha !== sha ||
+  run.event !== "push" ||
+  run.path !== `.github/workflows/${workflow.file}` ||
+  run.repository?.full_name !== REPOSITORY ||
+  run.head_repository?.full_name !== REPOSITORY ||
+  typeof run.head_branch !== "string" ||
+  run.head_branch === "" ||
+  !Number.isSafeInteger(run.id) ||
+  !Number.isSafeInteger(run.run_attempt);
+
+const requiredJobs = (run, workflow) =>
+  workflow.file === "ci.yml"
+    ? [
+        ...workflow.jobs,
+        run.head_branch === "master" ? "macos" : "macos-branch",
+      ]
+    : workflow.jobs;
+
+const completeJob = (sha, run, jobs, name) => {
+  const matches = jobs.filter((job) => job.name === name);
+  return (
+    matches.length === 1 &&
+    matches[0].status === "completed" &&
+    matches[0].conclusion === "success" &&
+    matches[0].head_sha === sha &&
+    matches[0].run_attempt === run.run_attempt &&
+    Array.isArray(matches[0].steps) &&
+    REQUIRED_STEPS[name].every((step) => {
+      const found = matches[0].steps.filter((entry) => entry.name === step);
+      return (
+        found.length === 1 &&
+        found[0].status === "completed" &&
+        found[0].conclusion === "success"
+      );
+    })
+  );
+};
+
 export const checkRun = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
   if (
-    !COMMIT.test(sha) ||
-    run?.head_sha !== sha ||
-    run.event !== "push" ||
-    run.path !== `.github/workflows/${workflow.file}` ||
-    run.repository?.full_name !== REPOSITORY ||
-    run.head_repository?.full_name !== REPOSITORY ||
-    typeof run.head_branch !== "string" ||
-    run.head_branch === "" ||
+    invalidRun(sha, run, workflow) ||
     run.status !== "completed" ||
     run.conclusion !== "success" ||
-    !Number.isSafeInteger(run.id) ||
-    !Number.isSafeInteger(run.run_attempt) ||
     !Array.isArray(jobs)
-  ) {
+  )
     return false;
+  return requiredJobs(run, workflow).every((name) =>
+    completeJob(sha, run, jobs, name),
+  );
+};
+
+export const checkLinuxRun = (sha, run, jobs) => {
+  if (
+    invalidRun(sha, run, WORKFLOWS[0]) ||
+    ![
+      "queued",
+      "requested",
+      "waiting",
+      "pending",
+      "in_progress",
+      "completed",
+    ].includes(run.status) ||
+    !Array.isArray(jobs)
+  )
+    return false;
+  return completeJob(sha, run, jobs, "linux");
+};
+
+export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
+  if (invalidRun(sha, run, workflow) || !Array.isArray(jobs))
+    return "INVALID_EVIDENCE";
+  if (
+    ["queued", "requested", "waiting", "pending", "in_progress"].includes(
+      run.status,
+    )
+  )
+    return "PENDING";
+  if (run.status !== "completed") return "INVALID_EVIDENCE";
+  const required = requiredJobs(run, workflow);
+  const entries = required.map((name) =>
+    jobs.filter((job) => job.name === name),
+  );
+  if (
+    entries.some(
+      (items) =>
+        items.length !== 1 ||
+        items[0].head_sha !== sha ||
+        items[0].run_attempt !== run.run_attempt,
+    )
+  ) {
+    return run.conclusion === "cancelled"
+      ? "RETRY_CANCELLED"
+      : "INVALID_EVIDENCE";
   }
-  const required =
-    workflow.file === "ci.yml"
-      ? [
-          ...workflow.jobs,
-          run.head_branch === "master" ? "macos" : "macos-branch",
-        ]
-      : workflow.jobs;
-  return required.every((name) => {
-    const matches = jobs.filter((job) => job.name === name);
-    return (
-      matches.length === 1 &&
-      matches[0].status === "completed" &&
-      matches[0].conclusion === "success" &&
-      matches[0].head_sha === sha &&
-      matches[0].run_attempt === run.run_attempt &&
-      Array.isArray(matches[0].steps) &&
-      REQUIRED_STEPS[name].every((step) => {
-        const found = matches[0].steps.filter((entry) => entry.name === step);
-        return (
-          found.length === 1 &&
-          found[0].status === "completed" &&
-          found[0].conclusion === "success"
-        );
-      })
-    );
-  });
+  const failed = entries
+    .map((items) => items[0])
+    .filter((job) => job.conclusion !== "success");
+  if (failed.some((job) => job.status !== "completed"))
+    return "INVALID_EVIDENCE";
+  const unassigned = (job) =>
+    (job.runner_id === 0 || job.runner_id === null) &&
+    (job.runner_name === "" || job.runner_name === null) &&
+    Array.isArray(job.steps) &&
+    job.steps.length === 0;
+  const timedOutStep = (job) =>
+    Array.isArray(job.steps) &&
+    job.steps.some((step) => step.conclusion === "timed_out");
+  const failedStep = (job) =>
+    Array.isArray(job.steps) &&
+    job.steps.some((step) => step.conclusion === "failure");
+  if (
+    failed.some(
+      (job) =>
+        job.conclusion === "failure" &&
+        !unassigned(job) &&
+        (!timedOutStep(job) || failedStep(job)),
+    )
+  )
+    return "CHECK_FAILED";
+  if (
+    failed.some(
+      (job) =>
+        unassigned(job) &&
+        ["failure", "cancelled", "timed_out"].includes(job.conclusion),
+    )
+  )
+    return "RETRY_RUNNER_UNASSIGNED";
+  if (
+    failed.some((job) => job.conclusion === "timed_out" || timedOutStep(job)) ||
+    run.conclusion === "timed_out"
+  )
+    return "RETRY_TIMED_OUT";
+  if (
+    failed.some((job) => job.conclusion === "cancelled") ||
+    run.conclusion === "cancelled"
+  )
+    return "RETRY_CANCELLED";
+  if (run.conclusion === "failure") return "CHECK_FAILED";
+  return "INVALID_EVIDENCE";
 };
 
 export const evidenceFor = (sha, { receipt, remote, signed }) => {
@@ -124,52 +221,85 @@ const request = (path) => {
   });
 };
 
+const workflowResult = async (sha, read, workflow) => {
+  const data = await read(
+    `actions/workflows/${workflow.file}/runs?head_sha=${sha}&event=push&per_page=100`,
+  );
+  if (
+    !Array.isArray(data.workflow_runs) ||
+    data.total_count !== data.workflow_runs.length ||
+    data.workflow_runs.length === 0
+  ) {
+    throw new Error(
+      `${workflow.file}: 해당 SHA의 실행이 없거나 응답이 불완전하다`,
+    );
+  }
+  const candidates = data.workflow_runs.filter(
+    (run) => run.head_sha === sha && run.event === "push",
+  );
+  candidates.sort((a, b) => b.id - a.id);
+  const run = candidates[0];
+  if (
+    run === undefined ||
+    !Number.isSafeInteger(run.id) ||
+    !Number.isSafeInteger(run.run_attempt)
+  ) {
+    throw new Error(`${workflow.file}: 실행 ID 또는 회차가 없다`);
+  }
+  const result = await read(
+    `actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
+  );
+  if (!Array.isArray(result.jobs) || result.total_count !== result.jobs.length)
+    throw new Error(`${workflow.file}: 작업 응답이 불완전하다`);
+  return { run, jobs: result.jobs };
+};
+
+const FAILURE_MESSAGES = {
+  RETRY_RUNNER_UNASSIGNED: "러너 미배정 상태로 종료되어 재시도 대상이다",
+  RETRY_CANCELLED: "작업이 취소되어 재시도 대상이다",
+  RETRY_TIMED_OUT:
+    "작업이 시간 초과되어 재시도 대상이다; 원인은 확인되지 않았다",
+  PENDING: "작업이 아직 진행 중이다",
+  CHECK_FAILED: "검사 또는 준비 단계가 실패했다; 실행 로그를 확인한다",
+  INVALID_EVIDENCE: "실행 출처나 필수 작업 증거가 올바르지 않다",
+};
+
+const rejectRun = (sha, run, jobs, workflow) => {
+  const code = failureCode(sha, run, jobs, workflow);
+  const error = new Error(
+    `${workflow.file}: ${code}: ${FAILURE_MESSAGES[code]}`,
+  );
+  error.code = code;
+  throw error;
+};
+
 export const remoteCheckFrom = async (sha, read, report = () => {}) => {
   if (!COMMIT.test(sha)) throw new Error("40자리 소문자 커밋 SHA가 필요하다");
   for (const workflow of WORKFLOWS) {
-    const data = await read(
-      `actions/workflows/${workflow.file}/runs?head_sha=${sha}&event=push&per_page=100`,
-    );
-    if (
-      !Array.isArray(data.workflow_runs) ||
-      data.total_count !== data.workflow_runs.length ||
-      data.workflow_runs.length === 0
-    ) {
-      throw new Error(
-        `${workflow.file}: 해당 SHA의 실행이 없거나 응답이 불완전하다`,
-      );
-    }
-    const candidates = data.workflow_runs.filter(
-      (run) => run.head_sha === sha && run.event === "push",
-    );
-    candidates.sort((a, b) => b.id - a.id);
-    const run = candidates[0];
-    if (
-      run === undefined ||
-      !Number.isSafeInteger(run.id) ||
-      !Number.isSafeInteger(run.run_attempt)
-    ) {
-      throw new Error(`${workflow.file}: 실행 ID 또는 회차가 없다`);
-    }
-    const result = await read(
-      `actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
-    );
-    if (
-      !Array.isArray(result.jobs) ||
-      result.total_count !== result.jobs.length ||
-      !checkRun(sha, run, result.jobs, workflow)
-    ) {
-      throw new Error(
-        `${workflow.file}: 해당 SHA의 필수 작업이 모두 성공하지 않았다`,
-      );
-    }
+    const { run, jobs } = await workflowResult(sha, read, workflow);
+    if (!checkRun(sha, run, jobs, workflow))
+      rejectRun(sha, run, jobs, workflow);
     report(`${workflow.file}: 성공, 실행 ${run.id}, 회차 ${run.run_attempt}\n`);
   }
   return true;
 };
 
+export const remoteLinuxCheckFrom = async (sha, read, report = () => {}) => {
+  if (!COMMIT.test(sha)) throw new Error("40자리 소문자 커밋 SHA가 필요하다");
+  const workflow = WORKFLOWS[0];
+  const { run, jobs } = await workflowResult(sha, read, workflow);
+  if (!checkLinuxRun(sha, run, jobs)) rejectRun(sha, run, jobs, workflow);
+  report(
+    `ci.yml: Linux 범위 성공, 실행 ${run.id}, 회차 ${run.run_attempt} (전체 검사가 아니다)\n`,
+  );
+  return { scope: "linux", head: sha, runId: run.id, attempt: run.run_attempt };
+};
+
 export const remoteCheck = (sha) =>
   remoteCheckFrom(sha, request, (line) => process.stdout.write(line));
+
+export const remoteLinuxCheck = (sha) =>
+  remoteLinuxCheckFrom(sha, request, (line) => process.stdout.write(line));
 
 export const verifyReceipt = (receiptPath, signers, principal, scratch) => {
   if (signers.trim() === "" || !/^[A-Za-z0-9-]+$/u.test(principal))
@@ -211,8 +341,16 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   try {
-    await remoteCheck(process.argv[2] ?? "");
-    process.stdout.write("remote-check: 통과\n");
+    const mode = process.argv[3];
+    if (process.argv.length > 4 || (mode !== undefined && mode !== "--linux"))
+      throw new Error("사용법: remote-check <sha> [--linux]");
+    if (mode === "--linux") {
+      await remoteLinuxCheck(process.argv[2] ?? "");
+      process.stdout.write("remote-check: Linux 범위 통과 (병합 판정 아님)\n");
+    } else {
+      await remoteCheck(process.argv[2] ?? "");
+      process.stdout.write("remote-check: 통과\n");
+    }
   } catch (error) {
     process.stderr.write(
       `remote-check: ${error instanceof Error ? error.message : "조회 실패"}\n`,
