@@ -1,5 +1,9 @@
+mod approval;
 mod crates;
 mod modules;
+
+#[cfg(test)]
+mod approval_tests;
 
 #[cfg(test)]
 mod tests;
@@ -377,10 +381,11 @@ pub(crate) fn check_for(
 ) -> Result<BTreeSet<Finding<Rule>>, String> {
     let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
     let before = base_files(root, &commit)?;
-    let mut findings = compare_sources(&texts(&before), &texts(&current_files(root)?));
+    let current = current_files(root)?;
+    let mut findings = compare_sources(&texts(&before), &texts(&current));
     let expected: BTreeSet<String> = scan(&before).tests.keys().cloned().collect();
     findings.extend(compare_lists(&expected, &list_tests(root, &[], None)?));
-    Ok(findings)
+    approval::apply(root, &before, &current, findings, base_use)
 }
 
 pub(crate) fn check_fast(
@@ -391,7 +396,8 @@ pub(crate) fn check_fast(
 ) -> Result<BTreeSet<Finding<Rule>>, String> {
     let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
     let before = base_files(root, &commit)?;
-    let mut findings = compare_sources(&texts(&before), &texts(&current_files(root)?));
+    let current = current_files(root)?;
+    let mut findings = compare_sources(&texts(&before), &texts(&current));
     if !packages.is_empty() {
         let expected = scan(&before)
             .tests
@@ -405,7 +411,7 @@ pub(crate) fn check_fast(
             .collect();
         findings.extend(compare_lists(&expected, &list_tests(root, packages, None)?));
     }
-    Ok(findings)
+    approval::apply(root, &before, &current, findings, base_use)
 }
 
 pub(crate) fn selected_command(

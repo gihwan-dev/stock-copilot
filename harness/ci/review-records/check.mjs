@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -234,6 +234,55 @@ export const waiverProblems = (lines) => {
   ];
 };
 
+export const tierProblems = (text) => {
+  const lines = text.split("\n");
+  const measure = sectionLines(lines, /^## 측정/u);
+  const measurements =
+    measure === undefined ? undefined : tableRows(measure, ["항목", "값"]);
+  const tiers = (measurements ?? []).filter((row) => row[0] === "리뷰 등급");
+  if (tiers.length === 0) {
+    return [];
+  }
+  if (tiers.length !== 1 || !/^[123]$/u.test(tiers[0][1] ?? "")) {
+    return ["리뷰 등급은 1·2·3 중 하나로 한 번만 적는다"];
+  }
+  const body = sectionLines(lines, /^## 커밋/u);
+  const rows =
+    body === undefined
+      ? undefined
+      : tableRows(body, ["회차", "기준 SHA", "대상 SHA"]);
+  if (rows === undefined) {
+    return ["리뷰 등급을 검사할 커밋 표가 없다"];
+  }
+  let reviews = 0;
+  let corrected = false;
+  const issues = [];
+  rows.forEach((row, index) => {
+    const value = row[0] ?? "";
+    const match = /^(\d+)(?: \((.+)\))?$/u.exec(value);
+    if (match === null || Number(match[1]) !== index + 1) {
+      issues.push("리뷰 등급이 있는 커밋 표는 회차를 1부터 순서대로 적는다");
+      return;
+    }
+    const correction = /(?:^|\s)수정$/u.test(match[2] ?? "");
+    if (correction) {
+      if (reviews === 0) {
+        issues.push("수정 행은 리뷰 회차 뒤에 둔다");
+      }
+      corrected = true;
+    } else {
+      if (corrected) {
+        issues.push("수정 행 다음에 리뷰 회차를 둘 수 없다");
+      }
+      reviews += 1;
+    }
+  });
+  if (reviews > Number(tiers[0][1])) {
+    issues.push(`리뷰 회차 ${reviews}가 등급 ${tiers[0][1]}의 상한을 넘는다`);
+  }
+  return issues;
+};
+
 export const recordProblems = (root, text, tasks) => {
   const lines = text.split("\n");
   const title = lines.find((line) => line.startsWith("# ")) ?? "";
@@ -262,6 +311,7 @@ export const recordProblems = (root, text, tasks) => {
       ? []
       : [`제목에 작업 ID가 없다: ${missingIds.join(", ")}`]),
     ...sections,
+    ...tierProblems(text),
   ];
 };
 
@@ -312,7 +362,31 @@ export const reviewProblems = (root) => {
   if (!rows.some((row) => row.progress)) {
     return [`${PROGRESS_FILE}에 진행 표가 없다`];
   }
-  return rows.flatMap((row) => progressRowProblems(root, row));
+  const referenced = new Set(
+    rows
+      .filter((row) => row.progress && isDone(row.state))
+      .map((row) => LINK.exec(row.record)?.[1])
+      .filter((path) => path !== undefined)
+      .map((path) => normalize(join(dirname(PROGRESS_FILE), path))),
+  );
+  const directory = join(root, REVIEWS_DIRECTORY);
+  const unreferenced = existsSync(directory)
+    ? readdirSync(directory)
+        .filter((name) => name.endsWith(".md"))
+        .filter((name) => !referenced.has(join(REVIEWS_DIRECTORY, name)))
+        .flatMap((name) => {
+          const text = readFileSync(join(directory, name), "utf8");
+          return /^\|\s*리뷰 등급\s*\|/mu.test(text)
+            ? recordProblems(root, text, "").map(
+                (problem) => `${REVIEWS_DIRECTORY}/${name}: ${problem}`,
+              )
+            : [];
+        })
+    : [];
+  return [
+    ...rows.flatMap((row) => progressRowProblems(root, row)),
+    ...unreferenced,
+  ];
 };
 
 const repoRoot = resolve(
