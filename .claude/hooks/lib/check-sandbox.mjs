@@ -142,8 +142,8 @@ export const runInSandbox = (places, worktree, command) => {
 };
 
 export const FRESH_STEPS = [
-  ["cargo", "clean", "--locked", "--offline", "--workspace"],
-  ["cargo", "llvm-cov", "clean", "--locked", "--offline", "--workspace"],
+  ["cargo", "clean", "--locked", "--offline"],
+  ["cargo", "llvm-cov", "clean", "--locked", "--offline"],
   [
     "pnpm",
     "install",

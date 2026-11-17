@@ -46,6 +46,7 @@ export RUSTC_WORKSPACE_WRAPPER := ""
 
 base := ""
 
+[env("NEXTEST_TEST_THREADS", "4")]
 [env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 check: check-node require-base check-ts
     cargo fmt --all --check
@@ -82,6 +83,7 @@ check-node:
 check-pnpm: check-node
     node harness/toolchain/pnpm.mjs
 
+[env("NEXTEST_TEST_THREADS", "4")]
 check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
@@ -153,11 +155,14 @@ hooks-installed:
 commit-guard index="":
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-guard "$1"
 
+seed-target:
+    if [ -x /usr/bin/python3 ]; then /usr/bin/python3 -I harness/build-seed/seed.py; fi
+
 fresh-build: fresh-cargo fresh-node
 
 fresh-cargo:
-    cargo clean --locked --workspace
-    cargo llvm-cov clean --locked --workspace
+    cargo clean --locked
+    cargo llvm-cov clean --locked
 
 fresh-node:
     pnpm install --frozen-lockfile --force --ignore-scripts
@@ -172,6 +177,7 @@ push-check:
     base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
 
 [env("PROPTEST_RNG_SEED", "5")]
+[env("NEXTEST_TEST_THREADS", "4")]
 [env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
 coverage-check:
     cargo run --locked --quiet --package xtask -- coverage-check
@@ -238,6 +244,7 @@ tokens-contrast:
 mutants-shard shard:
     cargo run --locked --quiet --package xtask -- mutants --shard "$1"
 
+[env("NEXTEST_TEST_THREADS", "4")]
 check-fast: check-node require-base
     cargo run --locked --quiet --package xtask -- check-fast {{quote(base)}} "{{just_executable()}}"
 

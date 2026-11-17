@@ -893,3 +893,13 @@ H-48 회귀 판정: S8은 clean/contaminated 상태와 차단 횟수 및 정확�
 H-48 최종 역할 경계: Claude 별도 Git 작업 사본은 훅 모듈의 위치와 common directory로 리뷰어에 고정한다. 도구 입력의 cwd·agent_type으로 메인이 되지 않는다. 주 작업 사본의 Claude만 메인이다. T3 review는 대상40자리SHA·대상HEAD일치·엄격조상과 보고표식/줄지문을 검사한다. review와 역할 없는 기존 스레드의 재개는 거부한다. native guard-agent pending은 현재 생산 Agent 경로에 연결되지 않은 호환 회귀이며 T3 자동 훅 보장이 아니다.
 
 D-43: 커버리지는 측정 전에 기존 워크스페이스 계측 산출물과 profraw를 정리해 이전 실행의 결과가 섞이지 않게 한다. 단독 coverage-check도 전체 검사와 같은 기존 STOCK_COPILOT_PROPTEST_CASES=4096 설정을 사용한다. testkit의 횟수 해석 규칙은 유지한다. 커버리지의 난수 의존 실패를 막기 위해 `just coverage-check`에만 `PROPTEST_RNG_SEED=5`을 설정한다. 전체 검사·훅·CI는 이 레시피를 통해 같은 시드를 사용한다. 일반 테스트는 기존 무작위 시드를 유지하며 testkit의 256/4096 횟수 규칙과 최소 횟수 단언은 변경하지 않는다. 관찰된 portfolio_valuation과 tick_size의 희귀 분기는 고정 예제로 보완한다.
+
+### H-51 빌드 씨앗과 전체 정리
+
+`just seed-target`은 명시적으로 지정한 메인 체크아웃의 `target/`을 새 작업 사본에 복제하는 선택적 가속이다. 일반 복사로 대체하지 않는 macOS `clonefile`을 파일마다 사용하고, 심볼릭 링크와 일반 파일이 아닌 항목은 복제하지 않는다. 대상이 비어 있지 않거나 원본 경로가 메인 체크아웃의 `target/`이 아니면 건드리지 않는다. 씨앗이 없거나 복제·workspace 정리에 실패하면 임시 복제본을 버리고 건너뛴다. 원본에는 쓰지 않는다.
+
+복제 후에도 Cargo가 다른 작업 사본의 workspace 산출물을 신선하다고 판정할 수 있으므로, 게시 전에 현재 workspace 산출물을 정리한다. 남은 외부 의존성 산출물은 메인 체크아웃과 같은 신뢰를 가진다. 메인의 산출물이 변조되면 씨앗을 쓴 검사도 영향을 받을 수 있다.
+
+`check`, `check-ts`, `check-fast`, `coverage-check`는 호출자의 `NEXTEST_TEST_THREADS`를 지운 뒤 검사에 4를 고정한다. 사용자 환경값으로 검사 병렬도를 바꾸지 않으면서 병렬 작업의 부하를 제한한다.
+
+`fresh-cargo`와 에이전트 종료 훅의 fresh 단계는 `cargo clean --locked`로 외부 의존성까지 삭제한다. `fresh-build`, 커밋·푸시·종료 훅, CI와 밤 실행은 `seed-target`을 호출하지 않는다. 작업 사본의 `target/` 아래 기록과 검사 산출물도 전체 정리로 지워진다.

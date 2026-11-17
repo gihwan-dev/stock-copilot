@@ -101,7 +101,7 @@ fn check_refuses_to_run_without_an_explicit_base() {
     }
     let check = recipe("check");
     assert_eq!(
-        check.get(1).map(String::as_str),
+        check.get(2).map(String::as_str),
         Some("check: check-node require-base check-ts"),
         "{check:?}"
     );
@@ -122,7 +122,7 @@ fn check_full_does_not_repeat_nightly_mutation_testing() {
 fn full_check_forces_property_cases_and_fast_keeps_static_guards() {
     let full = recipe("check");
     assert_eq!(
-        full.first().map(String::as_str),
+        full.get(1).map(String::as_str),
         Some("[env(\"STOCK_COPILOT_PROPTEST_CASES\", \"4096\")]")
     );
     let fast = recipe("check-fast-static");
@@ -162,7 +162,7 @@ fn mutation_recipes_do_not_force_full_property_counts() {
 fn coverage_alone_pins_the_property_seed() {
     let coverage = recipe("coverage-check");
     assert_eq!(
-        coverage.first().map(String::as_str),
+        coverage.get(1).map(String::as_str),
         Some("[env(\"PROPTEST_RNG_SEED\", \"5\")]")
     );
     assert!(

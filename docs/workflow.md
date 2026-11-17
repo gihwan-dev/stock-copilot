@@ -213,3 +213,15 @@
 - 구현 담당은 docs/progress.md를 편집하지 않는다. 진행 상태는 보고서에 쓰고 메인이 한 줄 메모나 완료 행을 반영한다.
 
 T3 도구는 전체 matcher에서 기본 거부한다. 허용된 launch·send·read·wait와 project_list·orchestrator_capabilities·background_wait만 쓴다. configure·queue 편집으로 모델이나 브리프를 바꾸지 않는다. 하네스 프로필 삭제와 잠금 전 prelock 절차는 ADR 0021 B를 따른다.
+
+## H-51 작업 사본의 빌드 씨앗
+
+새 작업 사본에 `target/`이 없거나 비어 있을 때, 첫 빌드 전에 메인 체크아웃의 `target/` 경로를 `STOCK_COPILOT_SEED_TARGET`으로 넘겨 `just seed-target`을 한 번 실행할 수 있다. 예를 들어 등록된 작업 사본에서 다음과 같이 실행한다.
+
+```sh
+STOCK_COPILOT_SEED_TARGET="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/target" just seed-target
+```
+
+씨앗이 없거나 메인 체크아웃의 `target/`이 아니면 건너뛴다. 원본과 대상이 같은 곳이어도 건너뛴다. 복제할 수 없는 파일시스템이면 일반 복사 없이 건너뛰고, 복제한 심볼릭 링크는 사용하지 않는다. 성공하면 현재 작업 사본의 workspace 산출물은 비워서 다시 컴파일하고 외부 의존성 산출물만 재사용한다. 메인 체크아웃의 `target/`이 변조됐다면 복제 결과도 영향을 받는다. 메인 검사와 같은 신뢰를 전제로 하므로 확인되지 않은 다른 작업 사본을 씨앗으로 쓰지 않는다.
+
+`fresh-cargo`와 `fresh-build`는 씨앗을 가져오지 않고 의존성을 포함한 현재 작업 사본의 빌드 산출물을 모두 지운다. 커밋 훅과 종료 훅의 fresh 단계도 이 정리를 사용한다. 중요한 로컬 자료는 `target/` 밖에 둔다. CI와 밤 실행은 씨앗 레시피를 실행하지 않는다.

@@ -92,6 +92,9 @@
     "check": {
       "attributes": [
         {
+          "env": ["NEXTEST_TEST_THREADS", "4"]
+        },
+        {
           "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
         }
       ],
@@ -153,7 +156,11 @@
       "shebang": false
     },
     "check-fast": {
-      "attributes": [],
+      "attributes": [
+        {
+          "env": ["NEXTEST_TEST_THREADS", "4"]
+        }
+      ],
       "body": [
         [
           "cargo run --locked --quiet --package xtask -- check-fast ",
@@ -303,7 +310,11 @@
       "shebang": false
     },
     "check-ts": {
-      "attributes": [],
+      "attributes": [
+        {
+          "env": ["NEXTEST_TEST_THREADS", "4"]
+        }
+      ],
       "body": [
         ["pnpm install --frozen-lockfile --ignore-scripts"],
         ["node harness/ts-deps/check.mjs"],
@@ -564,6 +575,9 @@
     "coverage-check": {
       "attributes": [
         {
+          "env": ["NEXTEST_TEST_THREADS", "4"]
+        },
+        {
           "env": ["PROPTEST_RNG_SEED", "5"]
         },
         {
@@ -708,10 +722,7 @@
     },
     "fresh-cargo": {
       "attributes": [],
-      "body": [
-        ["cargo clean --locked --workspace"],
-        ["cargo llvm-cov clean --locked --workspace"]
-      ],
+      "body": [["cargo clean --locked"], ["cargo llvm-cov clean --locked"]],
       "dependencies": [],
       "doc": null,
       "name": "fresh-cargo",
@@ -1093,6 +1104,23 @@
       "private": false,
       "quiet": false,
       "namepath": "require-base",
+      "shebang": false
+    },
+    "seed-target": {
+      "attributes": [],
+      "body": [
+        [
+          "if [ -x /usr/bin/python3 ]; then /usr/bin/python3 -I harness/build-seed/seed.py; fi"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "seed-target",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "seed-target",
       "shebang": false
     },
     "source-check": {
