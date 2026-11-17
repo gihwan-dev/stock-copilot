@@ -16,13 +16,13 @@ quotes는 입력 1~200개를 한 배치로 받고, 송신 심볼은 중복 제�
 
 수정주가 일봉의 하루 변화 검사는 domain PriceLimits.check_adjusted_move에서 수행한다. 호출자가 제공한 기존 MasterInstrumentFacts에서 QuoteInstrument 전체가 일치하는 마스터를 찾고, 시간 오름차순의 인접 봉마다 전일 수정 종가를 기준으로 현재 수정 저가·고가를 검사한다. 가격 계산과 비교는 domain에만 있다. Decimal 곱셈으로 상하한을 반올림하거나 수익률을 나누지 않고 기존 확장 정밀도 정수 곱 비교를 재사용하므로 최소 단위·최대 금액에서도 경계를 정확히 구별한다. 허용 경계는 포함한다. 첫 봉은 다음 봉의 기준이며 첫 봉 이전의 수익률은 검증했다고 주장하지 않는다. 빈 결과·단일 봉에는 인접 하루 변화가 없다.
 
-국내 정책은 2015-06-15 이후 KOSPI/KOSDAQ의 알려진 STOCK·Active·일반 매매 종목에 한정한다. 이전 날짜, 다른 국내 시장, 미지 종목 유형, 상장 예정/폐지, 정리매매 또는 국내 상세 정보 부재에는 기본 비율을 추정하지 않고 Unsupported(AdjustedHistory)로 닫는다. 확인한 일반 주식 정책의 전일 수정 종가 대비 0.7~1.3 바깥 저가·고가는 Validation 오류다. 미국은 기존 domain PriceLimits가 표현하는 Unlimited 정책을 유지한다. 통화가 다르면 먼저 실패한다.
+현재 초안의 국내 정책은 2015-06-15 이후 KOSPI/KOSDAQ의 알려진 STOCK·Active·일반 매매 종목에 한정한다. 국내 ETF, ETN, REIT, DEPOSITARY_RECEIPT, FOREIGN_ETF, INFRASTRUCTURE_FUND, FOREIGN_STOCK, STOCK_WARRANTS에는 이 정책을 적용하지 않는다. 이전 날짜, 다른 국내 시장, 미지 종목 유형, 상장 예정/폐지, 정리매매 또는 국내 상세 정보 부재에는 기본 비율을 추정하지 않고 Unsupported(AdjustedHistory)로 닫는다. 확인한 일반 주식 정책의 전일 수정 종가 대비 0.7~1.3 바깥 저가·고가는 Validation 오류다. 미국은 기존 domain PriceLimits가 표현하는 Unlimited 정책을 유지한다. 통화가 다르면 먼저 실패한다.
 
-이 검사는 수정 자료의 하루 변화 이상을 차단하는 적격성 규칙이며 실제 거래소 주문용 상하한을 계산하는 API가 아니다. 거래소 상하한의 호가 단위 절사나 신규 상장·재상장·기준가 예외를 추정하지 않는다. 예외일에 큰 변동이 정상이라도 보수적으로 계산 입력에서 제외될 수 있다. 이를 허용하려면 확인한 역사 사건과 domain 정책부터 별도 결정한다. 조정 계수·배당·분할 반영의 진위까지 인증하지 않는다. 분봉에는 ADR 0035의 하루 수익률 의무를 확장하지 않는다. 분봉 이상 방어 정책은 D-27/T-13 인계에 명시한다.
+이 검사는 수정 자료의 하루 변화 이상을 차단하는 적격성 규칙이며 실제 거래소 주문용 상하한을 계산하는 API가 아니다. 거래소 상하한의 호가 단위 절사나 신규 상장·재상장·기준가 예외를 추정하지 않는다. 예외일에 큰 변동이 정상이라도 그 인접 쌍을 포함하는 수정 일봉 요청 전체가 InvalidResponse(Validation)으로 실패하며, 기존 분류에서는 Bug(Response(Validation))다. 봉 일부를 제거하여 부분 성공으로 만들지 않는다. 단일 봉에는 인접 비교가 없어 같은 가격도 반환될 수 있다. 이를 허용하려면 확인한 역사 사건과 domain 정책부터 별도 결정한다. 조정 계수·배당·분할 반영의 진위까지 인증하지 않는다. 분봉에는 ADR 0035의 하루 수익률 의무를 확장하지 않는다. 분봉 이상 방어 정책은 D-27/T-13 인계에 명시한다.
 
 정책 근거는 [KRX 유가증권 가격제한폭 및 변경 이력](https://regulation.krx.co.kr/contents/RGL/03/03010100/RGL03010100T5.jsp), [KRX KOSDAQ 가격제한폭](https://regulation.krx.co.kr/contents/RGL/03/03020201/RGL03020201.jsp), [KRX 기준가와 예외](https://global.krx.co.kr/contents/GLB/06/0602/0602010201/GLB0602010201T6.jsp)다. 일반 주식 비율과 시행일·기준가 예외를 대조했으며 전체 과거 규정이나 실제 서버 자료를 검증했다는 뜻은 아니다.
 
-2차 리뷰에서 공급 공백이 확인된 with_adjusted_candle_limits와 별도 역사 PriceLimits 저장·공급 계약은 제거했다. 당일 /price-limits 값을 과거에 복사하거나 같은 수정 기준이라고 이름만 붙이지 않는다. 기존 마스터와 장 운영 정보가 주입된 합성 수정 일봉은 별도 상하한 주입 없이 성공한다. 실제 역사 장 운영 정보의 앱 조립 연결은 아직 없으므로 기본 생성자가 임의 일봉을 성공시킨다고 주장하지 않는다. capabilities는 구현된 네 기능을 표시하며 해당 호출의 사실 공급 완료를 보증하지 않는다. 로컬 근거 부재는 응답 형식 오류와 구별한다.
+2차 리뷰에서 공급 공백이 확인된 with_adjusted_candle_limits와 별도 역사 PriceLimits 저장·공급 계약은 제거했다. 당일 /price-limits 값을 과거에 복사하거나 같은 수정 기준이라고 이름만 붙이지 않는다. 기존 마스터와 장 운영 정보가 주입된 합성 수정 일봉은 별도 상하한 주입 없이 성공한다. 실제 역사 장 운영 정보의 앱 조립 연결은 아직 없으므로 기본 생성자가 임의 일봉을 성공시킨다고 주장하지 않는다. capabilities는 구현된 네 기능을 표시하며 해당 호출의 사실 공급 완료를 보증하지 않는다. 다만 알려진 국내 비주식 유형의 두 봉 이상 조회도 AdjustedHistory 지원 선언 뒤 Unsupported로 실패하고 Bug로 분류된다는 계약 불일치는 남는다. 현재 포트의 기능 단위 지원 판정으로 이 유형 조건을 사전에 표현하지 못한다. 이를 해결했다거나 모든 종목의 수정 일봉을 지원한다고 주장하지 않는다. 로컬 근거 부재는 응답 형식 오류와 구별한다.
 
 요청 창 밖의 행도 시각 형식·미래·주기 정렬·OHLCV·통화·페이지 순서와 중복을 먼저 검사한다. 반환하지 않을 행의 Finalized/InProgress를 만들지 않으므로 그 날짜의 세션은 요구하지 않는다. 반환 일봉의 상태와 반환 봉 사이의 공백에 필요한 장 운영 정보만 요구한다.
 
@@ -220,3 +220,69 @@ quotes는 입력 1~200개를 한 배치로 받고, 송신 심볼은 중복 제�
 | 41 | 전일 종가 통화 판정 반전 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::us_market_is_unlimited_after_currency_validation, price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::unsupported_market_type_and_status_never_receive_a_default_band, price_limits::history::tests::currency_mismatch_is_rejected_before_market_policy |
 | 42 | 확장 정밀도 곱 대소 비교 반전 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date |
 | 43 | 확장 정밀도 현재가 소수 자릿수 교체 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries |
+
+## 3차 리뷰와 정책·범위 인계
+
+3차 Opus는 차단0·중요0·보통3·사소3을 보고했다. 새 반례는 하네스 제한으로 실행하지 못했다. 새 Codex 비판자는 합성 공개 포트 검증7개, 독립 Decimal 산술75쌍, 타입 위조 거부와 손 변형2개를 직접 실행했다. 실행으로 확정된 차단·중요는 없고, 보통2개와 사소3개가 남는다고 판정했다. 전체 검사와 자동 변이는 비판자가 실행한 것으로 합산하지 않는다.
+
+정상 토스 수정 자료의 예외일 오거부는 실측하지 않았다. 합성 100→69/131 두 봉의 요청 전체 Validation 실패와 70/130 경계 포함, 한 봉의 인접 검사 없음은 확인됐다. 현재 마스터의 시장·유형·상장 상태·정리매매 상태로 과거 봉의 검사 정책을 선택한다. 마스터 관측 시각이 그 과거 날짜의 시장·상태와 같음을 인증하지 않으며, 이전상장 이력이나 역사 규칙의 유효 기간을 입력받지 않는다. 현재 폐지/정리매매 마스터는 과거의 두 봉 이상 요청도 미지원으로 닫힐 수 있고, 현재 KOSDAQ인 종목의 과거 다른 시장 구간을 정확한 역사 제한폭으로 검사한다는 보증은 없다.
+
+RV-2에 맞게 새 상태 정책 분기는 유형·상장 상태·정리매매의 모든 닫힌 변형을 match로 소진하도록 정리했다. 오류 매핑도 MissingLimits만 Unsupported로 옮기고 나머지 PriceLimitsError는 Validation으로 명시했다. 현재 공개 경로의 CurrencyMismatch 오분류는 비판에서 기각됐으며 이 정리를 새 실행 결함 수정으로 세지 않는다.
+
+- 메인/D-11/D-14 후속: 새 domain 변경 세 파일(exact_arithmetic.rs의 비교 함수, price_limits.rs의 공개 메서드, price_limits/history.rs)의 범위를 채택하거나 D 작업으로 분리한다. 원 지시와 추가 승인은 domain 제품 소스의 명시적 범위 확대 승인이 아니므로 이 초안은 승인 완료를 주장하지 않는다. ADR0035의 당시 D-11 회차 책임 분리를 영구 파일 수정 금지로 해석하지는 않는다.
+- 메인/A-01/A-05/D-21/T-13: 국내 알려진 비주식 유형과 이전 규칙 구간을 포함한 지원 범위 및 조회별 적격성 실패의 닫힌 표현을 결정한다. 기능 지원을 확인한 호출의 Unsupported가 Bug가 되는 계약 문제는 현재 코드에서 해결되지 않았다. 임의 비율로 지원을 넓히거나 기존 오류 분류를 다른 뜻으로 재사용하지 않는다.
+- T-09/T-13/D-21: 현재 마스터와 역사 시장·상장·정리매매 상태의 차이, 배당·분할·변경상장·재상장의 수정 자료 표현을 확인한다. 이상 봉을 조용히 제거해 다일 변화를 일간 수익률로 만들지 않는다.
+
+## 3차 후속 정리본의 손 변형
+
+3차 비판 뒤 소진 검사·오류 매핑을 정리한 소스의 mktemp -d 복사본에서 아래45개를 실제 컴파일·시험했다. 모두 컴파일 후 검출됐고 생존·컴파일 불가·시간 초과는0이다. 기준/복구 대조는 각각 계약35개 통과, 제품 소스7개는 복구 뒤 원본과 바이트가 일치했다. 앞 회차28·34·43개 및 비판자의2개와 합산하지 않는다. 집계·개별 로그는 target/T-07/final-mutation-results.json, final-mutation-01.log~final-mutation-45.log, final-mutations.log다.
+
+| 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
+|---|---|---|---|
+| 1 | 현재가 통화 대조 반전 | 컴파일 후 검출 (exit 101) | tests::quote_preserves_instrument_currency_price_and_both_times |
+| 2 | 현재가 대신 심볼 파싱 | 컴파일 후 검출 (exit 101) | tests::quote_preserves_instrument_currency_price_and_both_times |
+| 3 | 현재가 경로 변경 | 컴파일 후 검출 (exit 101) | tests::quote_preserves_instrument_currency_price_and_both_times |
+| 4 | 현재가 배치 쿼리 키 변경 | 컴파일 후 검출 (exit 101) | tests::quote_preserves_instrument_currency_price_and_both_times |
+| 5 | 현재가 배치 상한 201 허용 | 컴파일 후 검출 (exit 101) | tests::local_batch_rejection_remains_typed |
+| 6 | 현재가 정확히 200 거부 | 컴파일 후 검출 (exit 101) | tests::batch_limit_exactly_two_hundred_is_supported |
+| 7 | 중복 응답 판정 반전 | 컴파일 후 검출 (exit 101) | tests::quote_preserves_instrument_currency_price_and_both_times |
+| 8 | 캔들 요청 크기 199 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 9 | 일봉 주기 분봉으로 변경 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 10 | 원주가 요청 수정주가로 변경 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 11 | 수정주가 요청 원주가로 변경 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 12 | 캔들 종목 쿼리 키 변경 | 컴파일 후 검출 (exit 101) | tests::candles_exclude_the_right_endpoint_and_keep_the_left |
+| 13 | 정확히 200개 응답 거부 | 컴파일 후 검출 (exit 101) | tests::two_hundred_one_candles_page_backwards_and_merge_only_equal_overlap |
+| 14 | 페이지 상한 시각 판정 반전 | 컴파일 후 검출 (exit 101) | tests::candles_exclude_the_right_endpoint_and_keep_the_left |
+| 15 | 페이지 내 내림차순 판정 반전 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 16 | 요청 시작 시각 제외 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 17 | 요청 끝 시각 포함 | 컴파일 후 검출 (exit 101) | tests::candles_exclude_the_right_endpoint_and_keep_the_left |
+| 18 | 페이지 겹침 값 대조 반전 | 컴파일 후 검출 (exit 101) | tests::two_hundred_one_candles_page_backwards_and_merge_only_equal_overlap |
+| 19 | 커서와 마지막 봉 비교 반전 | 컴파일 후 검출 (exit 101) | tests::invalid_cursors_preserve_validation_error_without_a_second_request |
+| 20 | 캔들 통화 대조 반전 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 21 | 시가를 종가로 교체 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 22 | 고가를 시가로 교체 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 23 | 저가를 시가로 교체 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 24 | 종가를 시가로 교체 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 25 | 거래량을 종가로 교체 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 26 | 미래 시각 판정 반전 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 27 | 일봉 확정 시각 판정 반전 | 컴파일 후 검출 (exit 101) | tests::daily_candles_preserve_each_field_order_and_explicit_adjustment |
+| 28 | 휴장 공백 판정 반전 | 컴파일 후 검출 (exit 101) | tests::daily_gap_requires_explicit_nontrading_dates |
+| 29 | DST 날짜 비교를 절대 시각 비교로 되돌림 | 컴파일 후 검출 (exit 101) | tests::review1_dst_fall_keeps_calendar_dates |
+| 30 | 수정 일봉 상대 변화 검증 우회 | 컴파일 후 검출 (exit 101) | tests::review1_adjusted_half_price_is_rejected |
+| 31 | 기준 전일 종가를 시가로 교체 | 컴파일 후 검출 (exit 101) | tests::review2_relative_move_boundaries_include_exact_endpoints |
+| 32 | 저가 대신 고가를 두 번 검증 | 컴파일 후 검출 (exit 101) | tests::review2_relative_guard_checks_low_and_high |
+| 33 | 고가 대신 저가를 두 번 검증 | 컴파일 후 검출 (exit 101) | tests::review2_relative_guard_checks_low_and_high |
+| 34 | 창 밖 봉까지 장 운영 정보 요구 | 컴파일 후 검출 (exit 101) | tests::review2_outside_daily_rows_do_not_require_extra_sessions |
+| 35 | 하한 배수 0.7을 0.6으로 변경 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact |
+| 36 | 상한 배수 1.3을 1.4로 변경 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact |
+| 37 | 하한과 같은 가격 거부 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries |
+| 38 | 상한과 같은 가격 거부 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries |
+| 39 | 확인한 시장 대신 다른 시장 허용 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries |
+| 40 | 규칙 적용 날짜 판정 반전 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date |
+| 41 | 전일 종가 통화 판정 반전 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::us_market_is_unlimited_after_currency_validation, price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date, price_limits::history::tests::unsupported_market_type_and_status_never_receive_a_default_band, price_limits::history::tests::currency_mismatch_is_rejected_before_market_policy |
+| 42 | 확장 정밀도 곱 대소 비교 반전 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries |
+| 43 | 확장 정밀도 현재가 소수 자릿수 교체 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries |
+| 44 | 지원 유형을 Stock에서 Etf로 교체 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::unsupported_market_type_and_status_never_receive_a_default_band |
+| 45 | 정상 상장 대신 예정 상태에 정책 적용 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date, price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::unsupported_market_type_and_status_never_receive_a_default_band |
+
+공식 변경분 변이의 최종 병합 소스 실행 결과는 target/T-07/official-mutants.log와 최종 보고에 별도로 남긴다. 손 변형을 공식 자동 변이의 완주 결과로 세지 않는다.

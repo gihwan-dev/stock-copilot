@@ -304,7 +304,16 @@ fn check_move(
     current: domain::Price,
 ) -> Result<(), PortError> {
     let result = domain::PriceLimits::check_adjusted_move(master, date, previous, current)
-        .map_err(|_error| unsupported(application::BrokerCapability::AdjustedHistory))?;
+        .map_err(|error| match error {
+            domain::PriceLimitsError::MissingLimits => {
+                unsupported(application::BrokerCapability::AdjustedHistory)
+            }
+            domain::PriceLimitsError::CurrencyMismatch
+            | domain::PriceLimitsError::DifferentInstrument
+            | domain::PriceLimitsError::UnexpectedLimits
+            | domain::PriceLimitsError::ReversedLimits
+            | domain::PriceLimitsError::FutureTimestamp => invalid(ENDPOINT),
+        })?;
     match result {
         domain::PriceLimitCheck::Within | domain::PriceLimitCheck::Unlimited => Ok(()),
         domain::PriceLimitCheck::BelowLower | domain::PriceLimitCheck::AboveUpper => {

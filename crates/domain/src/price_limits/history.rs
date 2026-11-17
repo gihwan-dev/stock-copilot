@@ -30,15 +30,7 @@ pub(super) fn check_adjusted_move(
     {
         return Err(PriceLimitsError::MissingLimits);
     }
-    if !["KOSPI", "KOSDAQ"].contains(&row.listing_market.as_str())
-        || row.security_type.known() != Some(ExcludedSecurityType::Stock)
-        || row.listing_status != ListingStatus::Active
-        || row
-            .korean_detail
-            .is_none_or(|detail| detail.liquidation != LiquidationTrading::Regular)
-    {
-        return Err(PriceLimitsError::MissingLimits);
-    }
+    validate_instrument(instrument)?;
     let lower = crate::exact_arithmetic::compare_positive_price_product(
         previous,
         Ratio::new(Decimal::new(7_i64, 1_u32)),
@@ -55,6 +47,39 @@ pub(super) fn check_adjusted_move(
         Ok(PriceLimitCheck::AboveUpper)
     } else {
         Ok(PriceLimitCheck::Within)
+    }
+}
+
+fn validate_instrument(instrument: &MasterInstrument) -> Result<(), PriceLimitsError> {
+    let row = instrument.row();
+    if !["KOSPI", "KOSDAQ"].contains(&row.listing_market.as_str()) {
+        return Err(PriceLimitsError::MissingLimits);
+    }
+    match row.security_type.known() {
+        Some(ExcludedSecurityType::Stock) => {}
+        Some(
+            ExcludedSecurityType::ForeignStock
+            | ExcludedSecurityType::DepositaryReceipt
+            | ExcludedSecurityType::InfrastructureFund
+            | ExcludedSecurityType::Reit
+            | ExcludedSecurityType::Etf
+            | ExcludedSecurityType::ForeignEtf
+            | ExcludedSecurityType::Etn
+            | ExcludedSecurityType::StockWarrants,
+        )
+        | None => {
+            return Err(PriceLimitsError::MissingLimits);
+        }
+    }
+    match row.listing_status {
+        ListingStatus::Active => {}
+        ListingStatus::Scheduled | ListingStatus::Delisted => {
+            return Err(PriceLimitsError::MissingLimits);
+        }
+    }
+    match row.korean_detail.map(|detail| detail.liquidation) {
+        Some(LiquidationTrading::Regular) => Ok(()),
+        Some(LiquidationTrading::Liquidation) | None => Err(PriceLimitsError::MissingLimits),
     }
 }
 
