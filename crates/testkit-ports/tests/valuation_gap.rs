@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use application::{
-        PlanValuationGap, SystemFailure, SystemPort, SystemPortError, ValuationCalendarSource,
+        AccessDenial, BrokerCapability, HttpStatus, PlanValuationGap, PortError, PortErrorKind,
+        ReadEndpoint, ResponseMismatch, RetryDelay, UnavailableCause, ValuationCalendarSource,
         ValuationGapError,
     };
     use domain::{
@@ -102,7 +103,7 @@ mod tests {
         )
         .expect("평가일")
     }
-    type CalendarReply = Result<Vec<ValuationCalendarDay>, SystemPortError>;
+    type CalendarReply = Result<Vec<ValuationCalendarDay>, PortError>;
     #[derive(Default)]
     struct CalendarSource(Script<(CalendarDate, Timestamp), CalendarReply>);
     impl ValuationCalendarSource for CalendarSource {
@@ -150,14 +151,29 @@ mod tests {
     }
     #[test]
     fn source_failures_are_not_relabelled_as_holidays() {
-        for failure in [
-            SystemFailure::InvalidData,
-            SystemFailure::RepositoryIntegrity,
-            SystemFailure::PermissionDenied,
-            SystemFailure::SecretIntegrity,
+        for (status, kind) in [
+            (
+                HttpStatus::Success,
+                PortErrorKind::InvalidResponse(ResponseMismatch::Validation),
+            ),
+            (
+                HttpStatus::NotReceived,
+                PortErrorKind::Unavailable {
+                    cause: UnavailableCause::Network,
+                    retry: RetryDelay::Unknown,
+                },
+            ),
+            (
+                HttpStatus::Forbidden,
+                PortErrorKind::AccessDenied(AccessDenial::IpNotAllowed),
+            ),
+            (
+                HttpStatus::BadRequest,
+                PortErrorKind::Unsupported(BrokerCapability::Calendar),
+            ),
         ] {
             let source = CalendarSource::default();
-            let error = SystemPortError::new(SystemPort::Repository, failure);
+            let error = PortError::new(ReadEndpoint::Calendar, status, kind);
             source.0.push(Err(error));
             let clock = SteppedClock::new(at(100_000));
             assert_eq!(

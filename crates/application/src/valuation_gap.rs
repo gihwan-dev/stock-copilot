@@ -1,4 +1,4 @@
-use crate::{Clock, RecordOutcome, SystemPortError};
+use crate::{Clock, PortError, RecordOutcome, SystemPortError};
 use domain::{
     AccountId, CalendarDate, SnapshotError, Timestamp, ValuationCalendarDay, ValuationDayResult,
     ValuationGapPlan,
@@ -10,12 +10,12 @@ pub trait ValuationCalendarSource: Send + Sync {
         &self,
         last: CalendarDate,
         now: Timestamp,
-    ) -> impl Future<Output = Result<Vec<ValuationCalendarDay>, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<Vec<ValuationCalendarDay>, PortError>> + Send;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValuationGapError {
-    Calendar(SystemPortError),
+    Calendar(PortError),
     Plan(SnapshotError),
 }
 

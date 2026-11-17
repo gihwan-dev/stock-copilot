@@ -4,7 +4,7 @@
 
 ## 결정
 
-A-16의 기존 관측·저장 동작과 테스트를 유지한다. 새 PlanValuationGap은 Clock을 한 번 읽고 ValuationCalendarSource.days(last, now)로 받은 자료를 ValuationGapPlan::new에 전달한다. 날짜·금액 계산은 하지 않는다. 달력 포트는 (last, KST 오늘]의 모든 날짜에 한국/미국 달력 또는 날짜별 unavailable 사유를 순서대로 공급한다. 날짜 매핑과 출처는 J-11 책임이며, 전역 공급 실패는 원래 SystemPortError로 반환한다. 확인된 양국 휴장과 획득 실패의 구별은 기존 domain에 맡긴다.
+A-16의 기존 관측·저장 동작과 테스트를 유지한다. 새 PlanValuationGap은 Clock을 한 번 읽고 ValuationCalendarSource.days(last, now)로 받은 자료를 ValuationGapPlan::new에 전달한다. 날짜·금액 계산은 하지 않는다. 달력 포트는 (last, KST 오늘]의 모든 날짜에 한국/미국 달력 또는 날짜별 unavailable 사유를 순서대로 공급한다. 날짜 매핑과 출처는 J-11 책임이며, 전역 공급 실패는 원래 PortError로 반환한다. 확인된 양국 휴장과 획득 실패의 구별은 기존 domain에 맡긴다.
 
 계획은 저장 허가가 아니다. 이번 연결은 시작 시 후보 계획까지이며 자동 재계산·저장은 정의 대기다. 계획을 성공 기록이나 중복 방지 표식으로 저장하지 않으며 이벤트를 발행하지 않는다. 기존 TakeValuationSnapshot을 과거 Clock으로 호출하지 않는다. 과거 시각을 만들어 현재 관측에 붙이지 않는다.
 
@@ -13,12 +13,12 @@ A-16의 기존 관측·저장 동작과 테스트를 유지한다. 새 PlanValua
 | 작업 기준 | 상태 | 근거 또는 빠진 계약 |
 |---|---|---|
 | 시작 시 누락일 계획 연결 | 충족 | PlanValuationGap과 달력 포트, 여러 후보·휴장·실패·KST 자정 통합 테스트 |
-| 달력 실패와 확인 휴장 구별 | 충족 | 전역 오류는 Calendar 원값, 날짜별 오류는 domain 계획에 보존 |
+| 달력 실패와 확인 휴장 구별 | 충족 | 전역 오류는 Calendar(PortError) 원값, 날짜별 오류는 domain 계획에 보존 |
 | 날짜·금액 계산은 domain, 현재 시각은 Clock | 충족 | 기존 ValuationGapPlan::new 호출, 시각 한 번 샘플링 |
 | 일봉과 거래내역으로 모두 채움 / 일봉 없는 날만 실패 | 정의 대기 | SnapshotInstrumentHistory의 종목/행사 이력, 대조된 SnapshotLedgers 공급 포트가 없음. 기존 MarketDataRepository.candles와 TransactionRepository.latest만으로 이를 대체하지 않음 |
 | 과거 날짜 16:00 KST 평가 | 정의 대기 | CalendarDate에서 해당 날짜 16:00 KST Timestamp를 만드는 domain 공개 함수가 없음. application 산술이나 새 domain 함수 추가는 브리프가 금지 |
 | 가격 근거와 실제 재계산 입력 동일성 / 통화·날짜 거부 | 정의 대기 | ValuationPriceEvidence::closing_price는 존재하지만 위 이력/시각 공급이 없어 실행 연결하지 않음. D-48 테스트 통과를 A-24 구현으로 세지 않음 |
-| 없음과 0 구분 | 충족 | 계획 단계에서는 평가액을 합성하지 않으며 0을 완전성 증거로 사용하지 않음. 재계산 입력 연결은 정의 대기 |
+| 없음과 0 구분 | 정의 대기 | 계획 단계에는 금액 입력이 없어 해당 없음. 재계산 입력에서 없음/명시적 0/완전성을 구별하는 연결은 정의 대기 |
 | 날짜별 성공·실패 영속 저장 | 정의 대기 | 최소 ValuationDayRepository::record 경계만 정의. S-18 구현과 성공일 재조회/재시도 정책은 정의 대기 |
 | 중복 실행 시 이미 채운 날 재생성 금지 | 정의 대기 | ValuationRepository.history는 TimeInterval만 받음. 날짜별 성공 조회/누락 계획 재연결과 실패 재시도 계약이 없음. 계획은 매번 반환하되 스냅샷 생성은 하지 않음 |
 
@@ -26,9 +26,15 @@ A-16의 기존 관측·저장 동작과 테스트를 유지한다. 새 PlanValua
 
 ## 새 포트
 
-ValuationCalendarSource::days(last: CalendarDate, now: Timestamp) -> Future<Result<Vec<ValuationCalendarDay>, SystemPortError>>. 달력 경계 추가의 명시적 승인을 사용했다. 실제 공급 구현 없이 tests/valuation_gap.rs의 Script 기반 가짜로 검증한다. 계좌에 무관한 달력 공급이며 last는 호출자가 확인한 마지막 평가일이다. 최초 기록이 없는 계좌의 기준일 선택도 별도 정책이며 임의로 정하지 않는다.
+ValuationCalendarSource::days(last: CalendarDate, now: Timestamp) -> Future<Result<Vec<ValuationCalendarDay>, PortError>>. 달력 경계 추가의 명시적 승인을 사용했다. 실제 공급 구현 없이 tests/valuation_gap.rs의 Script 기반 가짜로 검증한다. 계좌에 무관한 달력 공급이며 last는 호출자가 확인한 마지막 평가일이다. 최초 기록이 없는 계좌의 기준일 선택도 별도 정책이며 임의로 정하지 않는다.
 
 ValuationDayRepository::record(account, &ValuationDayResult)는 날짜별 성공·실패 결과를 저장할 최소 포트다. 기존 RecordOutcome으로 같은 결과의 중복을 표현한다. 저장 구현·호출은 하지 않으며 실패 뒤 성공 갱신, 동일 날짜 다른 성공값, 동시 실행 정책은 S-18이 정한다. 마지막 성공일 조회 메서드는 발명하지 않는다.
+
+달력 공급의 전역 실패는 기존 읽기 포트 오류 PortError로 전달한다. ReadEndpoint::Calendar·HTTP 상태·정규화 원인·재시도 정보를 보존하며 저장 데이터 손상으로 변환하지 않는다. 공급자는 외부 조회 실패를 Repository 오류로 위장하지 않는다. 저장된 달력을 읽는 별도 공급 구현이 필요하면 그 저장 오류와 조회 오류의 합성 계약부터 확정한다. 현재 공급 구현은 없다.
+
+S-18의 날짜 결과 저장은 기존 ValuationRepository와 별도의 성공 정본을 만들라는 뜻이 아니다. 성공 스냅샷은 같은 계좌의 기존 history 조회에 나타나야 한다. 같은 어댑터·동일 저장 사실을 사용하며 성공 저장과 날짜 결과 기록의 원자성·중복·실패 뒤 성공 정책을 S-18에서 정한다. A-24 후속은 확정된 계약의 저장 성공 뒤에만 기존 계좌 이벤트를 발행한다. 현재는 어느 저장 포트도 호출하지 않는다.
+
+unavailable(..., ClosedDay)는 ADR0118대로 계획에 남는 획득 실패다. 확인된 양국 휴장은 계획에서 제외된다. ClosedDay 사유 하나만 읽어 확인 휴장 화면 문구로 바꾸지 않는다. 상세 획득 원인 보존·화면 문구 연결은 S-18/J-11 인계이며 현재 저장·표시 경로는 없다.
 
 ## 인계
 
@@ -36,8 +42,8 @@ ValuationDayRepository::record(account, &ValuationDayResult)는 날짜별 성공
 |---|---|
 | D-31/D-48 | 평가일에서 16:00 KST를 만드는 공개 domain 함수 |
 | A-24 후속 / J-11 | 과거 종목·기업행사·대조 현금 원장 공급의 포트 계약, 달력 실제 매핑·시작 조립 |
-| S-18 | 계좌/평가일별 성공·실패 기록, 성공일 조회·재시도·동시 중복 정책 |
-| A-24 후속 | 위 계약 후 일봉·거래내역 재계산, 가격 증거 동일성, 날짜별 결과 저장과 기존 A-16 이벤트 연결 |
+| S-18 | 계좌/평가일별 성공·실패 기록, 성공일 조회·재시도·동시 중복 정책, 기존 history의 성공 정본과 날짜 결과의 원자성 |
+| A-24 후속 | 실패일을 포함하는 재시도 하한과 이미 성공한 날짜의 조회/재사용을 결합할 것. 위 계약 후 일봉·거래내역 재계산, 가격 증거 동일성, 날짜별 결과 저장과 기존 A-16 이벤트 연결 |
 
 ## 검증 경계
 
