@@ -1169,4 +1169,25 @@ mod tests {
         );
         server.finish().expect("requests");
     }
+    #[test]
+    fn indicator_candles_reject_missing_next_before_instead_of_assuming_last_page() {
+        let mut body = recording("indicator-daily")["body"].clone();
+        body["result"]
+            .as_object_mut()
+            .expect("result")
+            .remove("nextBefore");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let error = run(adapter(&server).indicator_candles(
+            IndicatorCode::Kospi,
+            daily_window(),
+            domain::CandlePeriod::Daily,
+        ))
+        .expect_err("missing cursor");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
 }

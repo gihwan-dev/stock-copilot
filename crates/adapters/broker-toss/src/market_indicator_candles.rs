@@ -90,6 +90,9 @@ pub(crate) async fn fetch<S: SecretStore, T: Clock, R: TokenRenewal>(
         let value = reader
             .market_read(candle_query(symbol, period, &before)?, ENDPOINT)
             .await?;
+        if value.get("nextBefore").is_none() {
+            return Err(invalid());
+        }
         let decoded: broker_toss_schema::types::MarketIndicatorCandlePageResponse =
             serde_json::from_value(value).map_err(|_error| invalid())?;
         if decoded.candles.len() > PAGE_SIZE {

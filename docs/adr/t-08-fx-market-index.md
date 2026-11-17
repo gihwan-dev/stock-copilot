@@ -56,9 +56,15 @@ T-07의 일봉 어댑터 `crates/adapters/broker-toss/src/market_read/candles.rs
 
 공통 `TossAccountRead::capabilities`는 이 묶음에서 실제 구현한 지표·달력·섹터·랭킹·수급 기능을 Supported로 명시한다. 미구현 종목 마스터, 호가·가격 제한 및 주문 관련 기능은 계속 Unsupported다. 지원 가능성 표시는 응답의 신선도·마스터 주입·휴장 근거가 이미 갖춰졌다는 보증이 아니다.
 
+토스 문서는 국내 `integrated` 구간이 장전·장후 시간외종가를 제외한다고 명시한다. 따라서 그 구간은 이 응답에 없어 정규장이나 다른 연장 구간으로 만들지 않는다. D-50 정의 대기: 다른 원본에서 시간외종가 구간을 받게 되면 별도 종류와 일별 종가 기준을 어떻게 결합할지 정한다. T-13은 실제 응답에 이 문서와 다른 세션 필드가 있는지 실측한다.
+
+T-07 인계: 기존 종목 봉 `market_read/candles.rs`는 응답의 `nextBefore` 키 누락과 명시적 null을 모두 마지막 쪽으로 취급한다. 합성 범위를 3월 23~26일로 넓히고 24~25일 두 행을 남긴 채 키를 제거하면 조회가 성공하는 반례를 별도 복사본에서 재현했다(`target/T-10/t07-missing-cursor-probe.log`). 기존 T-07 소스와 테스트는 수정하지 않았다. T-08 지표 봉은 키 누락을 닫힌 실패로 둔다.
+
+지표 봉의 `nextBefore`는 명시적 null만 마지막 쪽으로 처리하고 키 자체가 없으면 완전성을 알 수 없어 응답 오류로 닫는다. OpenAPI 스키마는 해당 키를 필수로 지정하지 않으므로 실제 마지막 쪽에서 키를 생략하는지 T-13 실측이 필요하며, 생략이 정상이라면 현재 보수적 구현은 그 응답을 거부한다.
+
 ## 손 변형 실제 실행
 
-`mktemp -d` 복사본에서 다음 변형을 각각 컴파일하고 표시된 테스트로 실행했다. 23개 모두 해당 테스트 실패로 검출됐다. 로그는 작업 사본의 `target/T-08/mutant-*.log`다.
+`mktemp -d` 복사본에서 다음 변형을 각각 컴파일하고 표시된 테스트로 실행했다. 24개 모두 해당 테스트 실패로 검출됐다. 로그는 작업 사본의 `target/T-08/mutant-*.log`와 `target/T-08/indicator-mutant-*.log`다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 |
 |---|---|---|
@@ -85,3 +91,4 @@ T-07의 일봉 어댑터 `crates/adapters/broker-toss/src/market_read/candles.rs
 | 21 | 휴장 증거 판정 반전 | `indicator_daily_gaps_require_closed_calendar_evidence` |
 | 22 | 구현된 지표 현재가 지원 표시 제거 | `capabilities_match_implemented_market_endpoints` |
 | 23 | 미구현 종목 마스터를 지원으로 표시 | `capabilities_match_implemented_market_endpoints` |
+| 24 | 다음 페이지 커서 키 누락 검사 제거 | `indicator_candles_reject_missing_next_before_instead_of_assuming_last_page` |
