@@ -14,7 +14,7 @@
 
 ## 검증
 
-실행 결과와 시간은 검증 후 추가한다.
+이하 절에 실제 실행 결과와 시간을 기록한다.
 
 ## 인계
 
@@ -59,35 +59,48 @@ check-fast는 docs·xtask 변경 때문에 전체 검사로 승격됐다. JavaSc
 
 test-diff의 최종 실패는 승인된 준비 변경2건뿐이다. 사용자 지시문의 (d)에 따라 이 구현 커밋에만 LEFTHOOK=0을 적용한다. 검사 규칙·단언을 약화하지 않는다. 최종 문서 커밋과 최신 master 통합 후에는 정상 훅의 전체 검사를 다시 확인한다.
 
-## 손 변형
+## 1차 리뷰 평가와 수정
 
-mktemp로 만든 작업 사본 내부 임시 복사본에서 선택 모듈과 원본 회귀를 rustc --test로 실제 컴파일·실행했다. workspace 연결 동작은 별도의 cargo-mutants 통합 회귀로 검증한다. 컴파일 불가 항목은 검출 수에서 제외한다. 최종 25개 중 컴파일 성공 24개·검출 24개, 생존 0개다.
+새 Opus의 중요 두 건을 새 Codex가 비판했다. 혼합·주간 합집합의 비용 증가는 최소 예제로 확인했지만128분할 CI의160분 위반은 실측되지 않았다. domain 변이를 외부 테스트가 잡는 것은 실제 실패 단언에 의한 정상 검출이며 명시한 단독/혼합 계약에 부합한다. 시간은 같은 domain변이5개에 단독3.705초·혼합5.342초·주간4.317초였다. 제품 전체나 CI 예산으로 환산하지 않는다. H-47이 실제 조각별 최대 시간과 빌드·테스트 비용을 확인한다.
+
+실행으로 확정된 연결부 회귀 공백은 application이 설정된 상태에서 domain파일만 선택하는 회귀로 보강한다. domain단독은5개 생존, 혼합은 외부 테스트에 의해 검출되어야 한다. 외부 테스트 변경의 주간 안내도 같은 COMPANION 선언의 명시 소스/패키지/경로 관계로 보강한다. 소스 변이 선택은 확대하지 않는다. broker-toss의 import는 소유 선언의 증거가 아니며 SecretValue 손 변형은 application자체 테스트3개로 검출되어 범위를 추가하지 않는다. 번호 없는 초안 형식은 사용자 지시를 유지하고 자리표시자만 정리한다.
+
+수동 commit-guard에 기준SHA를 인덱스 경로로 잘못 전달한 호출은 무효 진단이었다. 즉시 올바른 무인자 just commit-guard로 재검사하여 위반 없음을 확인했다. 이 호출 실수와 승인된 test-diff 예외를 구별한다.
+
+1차 수정의 정상 커밋 훅은 Rust1996/1996·커버리지1114/1114와 기준 검사까지 통과하고, master분기점 대비 최초 승인 준비2건의 test-diff에서만 종료1이었다. 준비 부분을 추가 변경하지 않았다. 정상 훅 성공으로 기록하지 않으며 같은 승인2건 범위의 커밋 한정 예외를 적용한다. 후속 끄기 보고·훅 설치 확인을 유지한다. 전체 target_globs 연결 손 변형은 컴파일 성공 후 새 domain회귀가 실패(생존0 대 기대5)하여 검출했다.
+
+## 최종 선택·안내 모듈 손 변형
+
+mktemp 임시 복사본에서 원본 테스트와 선택·안내 모듈을 rustc --test로 실제 컴파일하고 실행했다.29개 중 컴파일 성공28개·검출28개, 컴파일 불가1개 집계 제외. 실행기 연결부 손 변형은 별도 임시 전체 복사본에서 cargo nextest로 검증한다.
 
 | 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
 |---|---|---|---|
-| 1 | `"crates/domain" => "crates/wrong"` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 2 | `"crates/application" => "crates/wrong"` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 3 | `"crates/order-execution" => "crates/wrong"` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 4 | `"crates/adapters/store-sqlite" => "crates/wrong"` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 5 | `"domain", None => "wrong", None` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 6 | `"application", Some => "wrong", Some` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 7 | `"order-execution", None => "wrong", None` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 8 | `"store-sqlite", None => "wrong", None` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 9 | `Some("testkit-ports") => None` | 컴파일 불가 | 집계 제외 |
-| 10 | `"testkit-ports" => "wrong"` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 11 | `glob.starts_with => glob.ends_with` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 12 | `glob.starts_with => glob.contains` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 13 | `{directory}/src/ => {directory}/` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 14 | `{directory}/src/ => {directory}/tests/` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 15 | `for glob in globs { => for glob in globs.iter().skip(1) {` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 16 | `for glob in globs { => for glob in globs.iter().take(1) {` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 17 | `packages.insert(String::from(*package)); => packages.remove(*package);` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 18 | `packages.insert(String::from(*name)); => packages.remove(*name);` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 19 | `Ok(packages) =>     Ok(BTreeSet::new())` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 20 | `Ok(packages) =>     packages.insert(String::from("testkit-ports")); Ok(packages)` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 21 | `packages.contains("testkit-ports") => !packages.contains("testkit-ports")` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 22 | `command.arg("--test-package").arg(package); => command.arg("--package").arg(package);` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 23 | `command.arg("--test-package").arg(package); => command.arg("--test-package").arg("application");` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 24 | `Ok(packages) =>     Err(String::from("failure"))` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-| 25 | `glob.starts_with(&format!("{directory}/src/")) => !glob.starts_with(&format!("{directory}/src/"))` | 검출 | test_packages::tests (선택 집합 또는 CLI 인자) |
-
+| 1 | `"crates/domain" => "crates/wrong"` | 검출 | test_packages::tests |
+| 2 | `"crates/application" => "crates/wrong"` | 검출 | test_packages::tests |
+| 3 | `"crates/order-execution" => "crates/wrong"` | 검출 | test_packages::tests |
+| 4 | `"crates/adapters/store-sqlite" => "crates/wrong"` | 검출 | test_packages::tests |
+| 5 | `"domain", None => "wrong", None` | 검출 | test_packages::tests |
+| 6 | `"application", Some => "wrong", Some` | 검출 | test_packages::tests |
+| 7 | `"order-execution", None => "wrong", None` | 검출 | test_packages::tests |
+| 8 | `"store-sqlite", None => "wrong", None` | 검출 | test_packages::tests |
+| 9 | `Some(COMPANION.1) => None` | 컴파일 불가 | 집계 제외 |
+| 10 | `"testkit-ports" => "wrong"` | 검출 | test_packages::tests |
+| 11 | `glob.starts_with => glob.ends_with` | 검출 | test_packages::tests |
+| 12 | `glob.starts_with => glob.contains` | 검출 | test_packages::tests |
+| 13 | `{directory}/src/ => {directory}/` | 검출 | test_packages::tests |
+| 14 | `{directory}/src/ => {directory}/tests/` | 검출 | test_packages::tests |
+| 15 | `for glob in globs { => for glob in globs.iter().skip(1) {` | 검출 | test_packages::tests |
+| 16 | `for glob in globs { => for glob in globs.iter().take(1) {` | 검출 | test_packages::tests |
+| 17 | `packages.insert(String::from(*package)); => packages.remove(*package);` | 검출 | test_packages::tests |
+| 18 | `packages.insert(String::from(*name)); => packages.remove(*name);` | 검출 | test_packages::tests |
+| 19 | `Ok(packages) =>     Ok(BTreeSet::new())` | 검출 | test_packages::tests |
+| 20 | `Ok(packages) =>     packages.insert(String::from("testkit-ports"));     Ok(packages)` | 검출 | test_packages::tests |
+| 21 | `packages.contains("testkit-ports") => !packages.contains("testkit-ports")` | 검출 | test_packages::tests |
+| 22 | `command.arg("--test-package").arg(package); => command.arg("--package").arg(package);` | 검출 | test_packages::tests |
+| 23 | `command.arg("--test-package").arg(package); => command.arg("--test-package").arg("application");` | 검출 | test_packages::tests |
+| 24 | `Ok(packages) =>     Err(String::from("failure"))` | 검출 | test_packages::tests |
+| 25 | `glob.starts_with(&format!("{directory}/src/")) => !glob.starts_with(&format!("{directory}/src/"))` | 검출 | test_packages::tests |
+| 26 | `&& changed => || changed` | 검출 | test_packages::tests |
+| 27 | `path.starts_with => path.ends_with` | 검출 | test_packages::tests |
+| 28 | `format!("{}/", COMPANION.2) => format!("{}", COMPANION.2)` | 검출 | test_packages::tests |
+| 29 | `COMPANION.0)]) => COMPANION.1)])` | 검출 | test_packages::tests |

@@ -1,9 +1,15 @@
 use std::collections::BTreeSet;
 
+const COMPANION: (&str, &str, &str) = (
+    "crates/application",
+    "testkit-ports",
+    "crates/testkit-ports",
+);
+
 pub(super) fn selected(globs: &[String]) -> Result<BTreeSet<String>, String> {
     let declarations = [
         ("crates/domain", "domain", None),
-        ("crates/application", "application", Some("testkit-ports")),
+        (COMPANION.0, "application", Some(COMPANION.1)),
         ("crates/order-execution", "order-execution", None),
         ("crates/adapters/store-sqlite", "store-sqlite", None),
     ];
@@ -35,8 +41,64 @@ pub(super) fn configure(
     Ok(())
 }
 
+pub(super) fn companion_sources(globs: &[String], changed: &BTreeSet<String>) -> BTreeSet<String> {
+    if globs
+        .iter()
+        .any(|glob| glob.starts_with(&format!("{}/src/", COMPANION.0)))
+        && changed
+            .iter()
+            .any(|path| path.starts_with(&format!("{}/", COMPANION.2)))
+    {
+        BTreeSet::from([String::from(COMPANION.0)])
+    } else {
+        BTreeSet::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn companion_notice_requires_the_source_scope_and_exact_companion_directory() {
+        let globs = [String::from("crates/application/src/**/*.rs")];
+        let changed = std::collections::BTreeSet::from([String::from(
+            "crates/testkit-ports/tests/submission.rs",
+        )]);
+        assert_eq!(
+            super::companion_sources(&globs, &changed),
+            std::collections::BTreeSet::from([String::from("crates/application")])
+        );
+        assert_eq!(
+            super::companion_sources(&[], &changed),
+            std::collections::BTreeSet::new()
+        );
+        assert_eq!(
+            super::companion_sources(&globs, &std::collections::BTreeSet::new()),
+            std::collections::BTreeSet::new()
+        );
+        for path in [
+            "crates/testkit-ports-other/tests/test.rs",
+            "other/crates/testkit-ports/tests/test.rs",
+            "crates/domain/tests/test.rs",
+        ] {
+            assert_eq!(
+                super::companion_sources(
+                    &globs,
+                    &std::collections::BTreeSet::from([String::from(path)])
+                ),
+                std::collections::BTreeSet::new()
+            );
+        }
+        for glob in [
+            "crates/domain/src/**/*.rs",
+            "crates/application/src-other/**/*.rs",
+            "other/crates/application/src/**/*.rs",
+        ] {
+            assert_eq!(
+                super::companion_sources(&[String::from(glob)], &changed),
+                std::collections::BTreeSet::new()
+            );
+        }
+    }
     #[test]
     fn domain_keeps_default_arguments_and_application_adds_both_packages() {
         let mut domain = std::process::Command::new("cargo");

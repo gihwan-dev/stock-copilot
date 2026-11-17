@@ -231,6 +231,7 @@ pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BT
                 .iter()
                 .any(|path| path.starts_with(&prefix) || workspace_support(path))
         })
+        .chain(test_packages::companion_sources(globs, changed))
         .collect()
 }
 

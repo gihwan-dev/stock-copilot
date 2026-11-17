@@ -697,3 +697,71 @@ fn broken_companion_tests_fail_baseline_instead_of_counting_as_caught() {
     assert_eq!(results["caught"], 0_i32);
     assert_eq!(results["missed"], 0_i32);
 }
+
+#[test]
+fn domain_file_scope_ignores_application_in_the_configured_targets() {
+    let root = cross_crate_fixture("h49-domain-scope");
+    fs::create_dir_all(root.join("crates/domain/src")).expect("domain directory");
+    fs::write(
+        root.join("crates/domain/Cargo.toml"),
+        "[package]\nname=\"domain\"\nversion=\"0.1.0\"\nedition=\"2024\"\n",
+    )
+    .expect("domain manifest");
+    fs::write(root.join("crates/domain/src/lib.rs"), "pub fn accepts(value: i32) -> bool { value > 7 }\n#[test] fn baseline() { assert_eq!(3 + 4, 7); }\n").expect("weak domain");
+    fs::write(root.join("Cargo.toml"), "[workspace]\nresolver=\"3\"\nmembers=[\"crates/domain\",\"crates/application\",\"crates/testkit-ports\"]\n").expect("workspace");
+    fs::write(root.join("crates/testkit-ports/Cargo.toml"), "[package]\nname=\"testkit-ports\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[dependencies]\napplication={path=\"../application\"}\ndomain={path=\"../domain\"}\n").expect("test manifest");
+    fs::write(root.join("crates/testkit-ports/tests/accepts.rs"), "#[test] fn boundaries() { assert!(!domain::accepts(7)); assert!(domain::accepts(8)); assert!(!application::accepts(7)); assert!(application::accepts(8)); }\n").expect("external boundaries");
+    fs::write(
+        root.join(".cargo/mutants.toml"),
+        "examine_globs=[\"crates/domain/src/**/*.rs\",\"crates/application/src/**/*.rs\"]\n",
+    )
+    .expect("mixed configuration");
+    generate_lockfile(&root.join("Cargo.toml"));
+    let domain = Scope::Files(BTreeSet::from([String::from("crates/domain/src/lib.rs")]));
+    let outcomes = run(&root, &domain, IgnoreFiles::Disregarded).expect("domain-only scope");
+    assert_eq!(
+        super::parse_outcomes(&outcomes.missed)
+            .expect("missed")
+            .len(),
+        5
+    );
+    assert_eq!(outcomes.timeouts, "");
+    let mixed = run(&root, &Scope::Everything, IgnoreFiles::Disregarded).expect("mixed scope");
+    assert_eq!(mixed, Outcomes::default());
+}
+
+#[test]
+fn companion_changes_mark_only_the_declared_source_for_weekly_tests() {
+    let globs = [
+        "crates/domain/src/**/*.rs",
+        "crates/application/src/**/*.rs",
+    ]
+    .map(String::from);
+    for path in [
+        "crates/testkit-ports/tests/submit_estimate.rs",
+        "crates/testkit-ports/Cargo.toml",
+    ] {
+        assert_eq!(
+            super::touched_crates(&globs, &BTreeSet::from([String::from(path)])),
+            BTreeSet::from([String::from("crates/application")])
+        );
+    }
+    for path in [
+        "crates/testkit-ports-other/tests/submit_estimate.rs",
+        "crates/broker-toss/tests/test.rs",
+    ] {
+        assert_eq!(
+            super::touched_crates(&globs, &BTreeSet::from([String::from(path)])),
+            BTreeSet::new()
+        );
+    }
+    assert_eq!(
+        super::touched_crates(
+            &[String::from("crates/domain/src/**/*.rs")],
+            &BTreeSet::from([String::from(
+                "crates/testkit-ports/tests/submit_estimate.rs"
+            )])
+        ),
+        BTreeSet::new()
+    );
+}
