@@ -360,3 +360,7 @@ pub use transaction_observation::{
     CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,
     RawTransactionRow,
 };
+mod run_full_inspection;
+pub use run_full_inspection::{
+    FullInspectionReport, FullInspectionRun, FullInspectionRunError, RunFullInspection,
+};
