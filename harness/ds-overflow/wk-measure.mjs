@@ -8,20 +8,25 @@ const require = createRequire(join(root, "apps/desktop/package.json"));
 const ts = require("typescript");
 const output = join(root, "target/DS-20");
 mkdirSync(output, { recursive: true });
-const source = readFileSync(
-  join(root, "apps/desktop/src/shared/ds/testing/overflow.ts"),
-  "utf8",
-);
-const javascript = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
+const compile = (file) =>
+  ts.transpileModule(
+    readFileSync(
+      join(root, `apps/desktop/src/shared/ds/testing/${file}`),
+      "utf8",
+    ),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+      },
+    },
+  ).outputText;
+const geometry = compile("overflow-geometry.ts");
+const javascript = compile("overflow.ts");
 const script = join(output, "overflow-wk.js");
 writeFileSync(
   script,
-  `var exports = {};\n${javascript}\nwindow.dsOverflow = exports;\n`,
+  `var geometryExports = {};\n(function(exports){${geometry}\n})(geometryExports);\nvar exports = {};\nfunction require(name){if(name !== "./overflow-geometry") throw new Error("unexpected module");return geometryExports;}\n${javascript}\nwindow.dsOverflow = exports;\n`,
 );
 const result = spawnSync(
   "swift",

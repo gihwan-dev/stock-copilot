@@ -5,6 +5,7 @@ import { screenRules } from "./ds-screen.mjs";
 import { noDomValues, noDomExports } from "./ds-dom.mjs";
 import { boundaryRules, intlOptions } from "./ds-boundaries.mjs";
 import { styleLiteral, assembledStyle } from "./ds-style-values.mjs";
+import { overflowMarkers } from "./ds-overflow-markers.mjs";
 const rule = (message, create) => ({
   meta: { type: "problem", schema: [], messages: { forbidden: message } },
   create,
@@ -41,6 +42,7 @@ export const dsPlugin = {
     ...screenRules,
     "no-message-format": noMessageFormat,
     "no-dom-values": noDomValues,
+    "no-overflow-markers": overflowMarkers,
     "no-dom-exports": noDomExports,
     "static-classes": rule(
       "className은 문자열 리터럴 또는 정적인 cn 인자만 받는다.",

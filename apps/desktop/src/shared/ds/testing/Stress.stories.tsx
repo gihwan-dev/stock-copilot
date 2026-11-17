@@ -76,6 +76,10 @@ const onSend = (): void => undefined;
 const stories: readonly Omit<Story, "state" | "themes">[] = [
   { component: "Text", render: (): ReactElement => <Text>{label}</Text> },
   {
+    component: "Text",
+    render: (): ReactElement => <Text>{stressFixtures.english}</Text>,
+  },
+  {
     component: "Heading",
     render: (): ReactElement => <Heading>{label}</Heading>,
   },
@@ -193,7 +197,15 @@ const stories: readonly Omit<Story, "state" | "themes">[] = [
       </EmptyState>
     ),
   },
-  { component: "Skeleton", render: (): ReactElement => <Skeleton lines={6} /> },
+  {
+    component: "Skeleton",
+    render: (): ReactElement => (
+      <>
+        <Skeleton lines={6} />
+        <Text>{label}</Text>
+      </>
+    ),
+  },
   { component: "Badge", render: (): ReactElement => <Badge>{label}</Badge> },
   {
     component: "StatusBar",

@@ -30,6 +30,11 @@ try {
     readFileSync(join(folder, "storybook/index.json"), "utf8"),
   );
   const loaded = await loadCatalog();
+  const stress = stressProblems(
+    Object.keys(loaded.components),
+    loaded.protectedStressStories,
+  );
+  if (stress.length !== 0) throw new Error(stress.join("\n"));
   const entries = Object.values(index.entries)
     .filter((entry) => entry.type === "story")
     .map((item) => {
@@ -66,7 +71,7 @@ try {
     ]),
     ...(await generationProblems(loaded.samples)),
     ...catalogProblems(Object.keys(loaded.components), loaded.samples, entries),
-    ...stressProblems(Object.keys(loaded.components), loaded.samples),
+    ...stress,
   ];
   mkdirSync(join(desktop, "../../target/DS-07"), { recursive: true });
   writeFileSync(

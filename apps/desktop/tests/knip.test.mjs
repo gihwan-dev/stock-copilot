@@ -180,6 +180,7 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/testing/StressContent.stories.tsx src/shared/ds/testing/StressContent.stories.tsx",
   "files src/shared/ds/testing/messages.ts src/shared/ds/testing/messages.ts",
   "files src/shared/ds/testing/overflow.ts src/shared/ds/testing/overflow.ts",
+  "files src/shared/ds/testing/overflow-geometry.ts src/shared/ds/testing/overflow-geometry.ts",
   "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
 ];
 

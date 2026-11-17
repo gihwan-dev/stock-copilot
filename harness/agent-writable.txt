@@ -27,6 +27,7 @@ pnpm-lock.yaml
 !apps/desktop/src/shared/ds/tokens.css
 !apps/desktop/src/shared/ds/tokens.ts
 !apps/desktop/src/shared/ds/testing/overflow.ts
+!apps/desktop/src/shared/ds/testing/overflow-geometry.ts
 !apps/desktop/src/shared/ds/testing/stress.ts
 !apps/desktop/src/shared/ds/testing/messages.ts
 !apps/desktop/src/shared/ds/testing/Stress.stories.tsx

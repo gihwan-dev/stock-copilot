@@ -7,6 +7,7 @@ export const stressFixtures = {
   paragraph: stressMessage("paragraph", "ko"),
   money: "9876543210123",
   quantity: "987654321.12345678",
+  probability: "99",
   digits: "12345678901234567890123456789012345678901234567890",
   empty: stressMessage("empty", "ko"),
   holdings: Array.from(Array.from({ length: 200 }).keys(), (index) => {

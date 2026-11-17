@@ -1,5 +1,9 @@
-import { inspectOverflow } from "../../apps/desktop/src/shared/ds/testing/overflow";
+import { inspectOverflow } from "../src/shared/ds/testing/overflow";
+import { stressFixtures } from "../src/shared/ds/testing/stress";
 import { commands } from "vitest/browser";
+
+declare const __DS20_FIRST__: number;
+declare const __DS20_SIZE__: number;
 
 beforeAll(async () => {
   await commands.prepareCatalog();
@@ -21,9 +25,12 @@ const waitForCatalog = async (frame: HTMLIFrameElement): Promise<Document> => {
       if (fonts.some((items) => items.length === 0))
         throw new Error("묶은 글꼴 로딩 실패");
       if (
-        frame.contentWindow?.Date.now() !==
-          Date.parse("2026-01-02T03:04:05.000Z") ||
-        frame.contentWindow?.Math.random() !== 0.3141592653589793
+        (
+          frame.contentWindow as (Window & typeof globalThis) | null
+        )?.Date.now() !== Date.parse("2026-01-02T03:04:05.000Z") ||
+        (
+          frame.contentWindow as (Window & typeof globalThis) | null
+        )?.Math.random() !== 0.3141592653589793
       )
         throw new Error("이야기의 시계·난수가 고정되지 않았다");
       const style = doc.createElement("style");
@@ -65,10 +72,12 @@ it("measures an actual Storybook component in the fixed browser", async () => {
   document.body.append(frame);
   const doc = await waitForCatalog(frame);
   expect(doc.querySelector("button")).not.toBeNull();
-  expect(frame.contentWindow?.Date.now()).toBe(
-    Date.parse("2026-01-02T03:04:05.000Z"),
-  );
-  expect(frame.contentWindow?.Math.random()).toBe(0.3141592653589793);
+  expect(
+    (frame.contentWindow as (Window & typeof globalThis) | null)?.Date.now(),
+  ).toBe(Date.parse("2026-01-02T03:04:05.000Z"));
+  expect(
+    (frame.contentWindow as (Window & typeof globalThis) | null)?.Math.random(),
+  ).toBe(0.3141592653589793);
   expect(inspectOverflow(doc)).toEqual([]);
   frame.remove();
 }, 20000);
@@ -137,7 +146,7 @@ it("measures every catalog story in the narrow slot and at enlarged text", async
       if (content === null) throw new Error(`이야기 본문 누락: ${story.id}`);
       for (const width of ["normal", "narrow"] as const) {
         content.style.boxSizing = width === "narrow" ? "content-box" : "";
-        content.style.width = width === "narrow" ? "142px" : "";
+        content.style.width = width === "narrow" ? "126px" : "";
         for (const scale of ["100%", "125%"] as const) {
           doc.documentElement.style.fontSize = scale;
           const findings = inspectOverflow(doc);
@@ -170,3 +179,44 @@ it("measures every catalog story in the narrow slot and at enlarged text", async
   expect(errors).toEqual([]);
   expect(results).toEqual([]);
 }, 600000);
+
+it("wraps long English text in the narrow stress slot", async () => {
+  const response = await fetch("/index.json");
+  const index = await response.json();
+  const entries = Object.values(index.entries) as {
+    id: string;
+    importPath: string;
+    exportName: string;
+    name: string;
+  }[];
+  const stories = entries.filter(
+    (entry) =>
+      entry.importPath.endsWith("/Text.stories.mjs") &&
+      entry.exportName.startsWith("Light") &&
+      entry.name.includes("부하"),
+  );
+  const results: { width: number; scroll: number }[] = [];
+  for (const story of stories) {
+    const frame = document.createElement("iframe");
+    frame.width = "960";
+    frame.height = "640";
+    frame.src = `/iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`;
+    document.body.append(frame);
+    try {
+      const doc = await waitForCatalog(frame);
+      const slot = doc.querySelector<HTMLElement>(
+        "[data-catalog-component] > section",
+      );
+      if (slot === null) throw new Error("이야기 본문 누락");
+      slot.style.boxSizing = "content-box";
+      slot.style.width = "126px";
+      const text = slot.querySelector("p");
+      if (text?.textContent?.includes(stressFixtures.english))
+        results.push({ width: text.clientWidth, scroll: text.scrollWidth });
+    } finally {
+      frame.remove();
+    }
+  }
+  expect(results).toHaveLength(1);
+  expect(results[0]?.scroll).toBeLessThanOrEqual(results[0]?.width ?? 0);
+}, 60000);

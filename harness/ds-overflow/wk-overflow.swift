@@ -20,8 +20,8 @@ final class Runner: NSObject, WKNavigationDelegate {
         (() => {
           const cases = [
             ['document-scroll', '<div style="width:800px;height:10px"></div>'],
-            ['missing-tooltip', '<div data-truncate style="width:60px;overflow:hidden;white-space:nowrap">longlonglonglonglonglong</div>'],
-            ['valid-tooltip', '<div data-truncate title="longlonglonglong" style="width:40px;overflow:hidden;white-space:nowrap">longlonglonglong</div>'],
+            ['missing-tooltip', '<div data-truncate style="width:60px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">longlonglonglonglonglong</div>'],
+            ['valid-tooltip', '<div data-truncate title="longlonglonglong" style="width:40px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">longlonglonglong</div>'],
             ['fixed-height', '<div style="width:120px;height:20px">긴 글 긴 글 긴 글 긴 글 긴 글 긴 글 긴 글 긴 글</div>'],
             ['flex', '<div style="display:flex;width:120px"><div style="white-space:nowrap">verylongunbreakableenglishwordverylongunbreakableenglishword</div></div>'],
             ['clipped-popup', '<div style="position:absolute;left:50px;top:50px;overflow:hidden;width:100px;height:80px"><div role="dialog" style="position:absolute;left:-20px;top:10px;width:40px;height:30px">팝업</div></div>'],
@@ -34,7 +34,7 @@ final class Runner: NSObject, WKNavigationDelegate {
             frame.width = '640'; frame.height = '480'; document.body.append(frame);
             const doc = frame.contentDocument;
             doc.open(); doc.write('<html><head><style>html,body{margin:0;width:100%;height:100%}*{box-sizing:border-box}body{font:16px sans-serif}</style></head><body>' + body + '</body></html>'); doc.close();
-            if (name === 'document-scroll') { doc.documentElement.setAttribute('data-scroll-viewport', ''); doc.body.setAttribute('data-scroll-viewport', ''); }
+            if (name === 'document-scroll') { doc.documentElement.setAttribute('data-scroll-viewport', ''); doc.documentElement.style.overflow = 'auto'; doc.documentElement.append(doc.body.firstElementChild); doc.body.setAttribute('data-scroll-viewport', ''); doc.body.style.overflowX = 'auto'; doc.body.style.overflowY = 'hidden'; }
             const findings = dsOverflow.inspectOverflow(doc);
             frame.remove(); return {name, findings};
           }));

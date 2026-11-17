@@ -142,6 +142,16 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/ds-overflow/typecheck.mjs",
+      "kind": "check",
+      "cases": "apps/desktop/tests/ds20-automation.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/ds20-automation.test.mjs",
+        "name": "browser typecheck rejects an invalid browser-test type"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "pnpm -C apps/desktop exec eslint --max-warnings 0 src",
       "kind": "integrity",
       "cases": "harness/eslint-violations/cases.json",

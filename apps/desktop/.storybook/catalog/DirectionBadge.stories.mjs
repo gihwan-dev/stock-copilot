@@ -31,12 +31,12 @@ export const Dark2 = {
   render: () => renderCatalog("DirectionBadge", "dark", 2),
 };
 export const Light3 = {
-  name: "부하 · down · 004 · 라이트",
+  name: "부하 · 004 · 라이트",
   parameters: { theme: "light", sample: 3 },
   render: () => renderCatalog("DirectionBadge", "light", 3),
 };
 export const Dark3 = {
-  name: "부하 · down · 004 · 다크",
+  name: "부하 · 004 · 다크",
   parameters: { theme: "dark", sample: 3 },
   render: () => renderCatalog("DirectionBadge", "dark", 3),
 };

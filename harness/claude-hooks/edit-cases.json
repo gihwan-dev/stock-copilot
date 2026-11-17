@@ -460,6 +460,19 @@
     "lock": "on"
   },
   {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/overflow-geometry.ts",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/overflow-geometry.ts",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
     "path": "{root}/apps/desktop/src/shared/ds/testing/overflow.ts",
     "decision": "warn",
     "rules": ["protected-path"],

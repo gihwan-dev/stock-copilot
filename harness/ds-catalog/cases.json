@@ -1,5 +1,13 @@
 [
   {
+    "name": "보호된 채팅 부하 이야기 제거",
+    "file": "apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
+    "from": "  ...chatStress,",
+    "to": "  ...chatStress.filter(() => false),",
+    "compile": "typescript",
+    "expected": "ChatInput: 부하 이야기 없음"
+  },
+  {
     "name": "실제 CSF 연결 바꾸기",
     "file": "apps/desktop/.storybook/catalog/Card.stories.mjs",
     "from": "renderCatalog(\"Card\", \"dark\", 0)",

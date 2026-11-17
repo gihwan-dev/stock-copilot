@@ -41,7 +41,7 @@ export default {
   test: {
     include: [
       resolve(root, "apps/desktop/tests/ds20-overflow.browser.ts"),
-      resolve(root, "harness/ds-overflow/catalog.browser.ts"),
+      resolve(root, "apps/desktop/tests/ds20-catalog.browser.ts"),
     ],
     globals: true,
     fileParallelism: false,

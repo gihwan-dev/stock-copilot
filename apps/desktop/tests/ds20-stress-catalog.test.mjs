@@ -57,3 +57,81 @@ test("stress stories exercise long digits and an empty value", async () => {
   );
   assert.ok(empty.some((story) => story.render().props.title === ""));
 });
+
+test("trend chart stress stories render charts with distinct points", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const catalog = await loadCatalog();
+  for (const component of ["LineChart", "AreaChart"]) {
+    const story = catalog.samples
+      .filter((item) => item.component === component && item.state === "stress")
+      .at(-1);
+    assert.ok(story, component);
+    const element = story.render("light");
+    assert.ok(element.props.data.length >= 2, component);
+    assert.equal(
+      new Set(element.props.data.map((point) => point.id)).size,
+      element.props.data.length,
+      component,
+    );
+    assert.match(renderToStaticMarkup(element), /<svg\b/u, component);
+  }
+});
+
+test("Text has a stress story with an unbroken English word", async () => {
+  const catalog = await loadCatalog();
+  const stories = catalog.samples.filter(
+    (item) => item.component === "Text" && item.state === "stress",
+  );
+  assert.ok(
+    stories.some((story) =>
+      String(story.render().props.children).includes(
+        "ExtraordinarilyLongUnbrokenInternationalSemiconductorInvestmentCompanyName",
+      ),
+    ),
+  );
+});
+
+test("Percent stresses long numeric output while Probability stays in range", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const catalog = await loadCatalog();
+  const content = (component) => {
+    const story = catalog.protectedStressStories.find(
+      (item) => item.component === component,
+    );
+    assert.ok(story, component);
+    return renderToStaticMarkup(story.render("light"));
+  };
+  assert.match(content("Percent"), /9,876,543,210,123%/u);
+  assert.match(content("Probability"), /99%/u);
+});
+
+test("components without free-text props include protected context in stress stories", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const catalog = await loadCatalog();
+  for (const component of ["Skeleton", "DirectionBadge"]) {
+    const story = catalog.protectedStressStories.find(
+      (item) => item.component === component,
+    );
+    assert.ok(story, component);
+    const markup = renderToStaticMarkup(story.render("light"));
+    assert.match(markup, /대한미래첨단산업글로벌에너지/u, component);
+  }
+});
+
+test("a legacy stress state cannot replace the protected ChatInput story", async () => {
+  const catalog = await loadCatalog();
+  assert.ok(
+    catalog.samples.some(
+      (story) => story.component === "ChatInput" && story.state === "stress",
+    ),
+  );
+  assert.deepEqual(
+    stressProblems(
+      ["ChatInput"],
+      catalog.protectedStressStories.filter(
+        (story) => story.component !== "ChatInput",
+      ),
+    ),
+    ["ChatInput: 부하 이야기 없음"],
+  );
+});

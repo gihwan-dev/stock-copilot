@@ -2,7 +2,6 @@ import type { ReactElement } from "react";
 import {
   emptyFreeText,
   parseChartDecimal,
-  parseEntityId,
   parseFreeText,
   parseMoney,
   parsePercentDisplay,
@@ -21,6 +20,7 @@ import {
   DirectionBadge,
 } from "../Numbers";
 import { Markdown } from "../Markdown";
+import { Text } from "../Text";
 import { chatInputStressWithDraft } from "../ChatInput";
 import { stressFixtures } from "./stress";
 
@@ -44,12 +44,14 @@ type ContentStory = {
 const label = stressFixtures.company;
 const money = parseMoney(stressFixtures.money, "KRW");
 const quantity = parseQuantity(stressFixtures.quantity);
-const percent = parsePercentDisplay("99");
-const chartId = parseEntityId("stress-chart");
+const percent = parsePercentDisplay(stressFixtures.money);
+const probability = parsePercentDisplay(stressFixtures.probability);
 const chartValue = parseChartDecimal(stressFixtures.money);
 const points =
-  chartId.kind === "ok" && chartValue.kind === "ok"
-    ? [{ id: chartId.value, label, value: chartValue.value }]
+  chartValue.kind === "ok"
+    ? stressFixtures.holdings
+        .slice(0, 2)
+        .map((id) => ({ id, label, value: chartValue.value }))
     : [];
 const markdown = parseFreeText(
   [
@@ -102,7 +104,9 @@ export const contentStressStories: readonly ContentStory[] = [
   {
     component: "Probability",
     render: (): ReactElement | null =>
-      percent.kind === "ok" ? <Probability value={percent.value} /> : null,
+      probability.kind === "ok" ? (
+        <Probability value={probability.value} />
+      ) : null,
   },
   {
     component: "PriceChange",
@@ -113,7 +117,12 @@ export const contentStressStories: readonly ContentStory[] = [
   },
   {
     component: "DirectionBadge",
-    render: (): ReactElement => <DirectionBadge direction="down" />,
+    render: (): ReactElement => (
+      <>
+        <DirectionBadge direction="down" />
+        <Text>{label}</Text>
+      </>
+    ),
   },
   {
     component: "Markdown",

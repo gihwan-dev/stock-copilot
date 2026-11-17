@@ -45,6 +45,7 @@ export const DS_RULES = {
     },
   ],
   "ds/no-dom-values": "error",
+  "ds/no-overflow-markers": "error",
   "ds/no-dom-styling": "error",
   "ds/no-element-factory": "error",
   "ds/no-style-object": "error",
@@ -58,6 +59,7 @@ export const DS_RULES = {
 export const SHARED_RULES = {
   "ds/no-style-literals": "error",
   "ds/no-dom-values": "error",
+  "ds/no-overflow-markers": "error",
   "ds/no-dom-styling": "error",
   "ds/no-shared-jsx": "error",
   "ds/no-element-factory": "error",
@@ -84,6 +86,7 @@ export const SCREEN_RULES = {
     Object.entries(DS_RULES).filter(([name]) =>
       [
         "ds/no-dom-values",
+        "ds/no-overflow-markers",
         "ds/no-dom-styling",
         "ds/no-element-factory",
         "ds/no-style-object",

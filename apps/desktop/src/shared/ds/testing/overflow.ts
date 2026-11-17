@@ -1,3 +1,5 @@
+import { clipped, isTruncated, isViewport } from "./overflow-geometry";
+
 type OverflowKind =
   | "document-scroll"
   | "unauthorized-overflow"
@@ -5,7 +7,8 @@ type OverflowKind =
   | "missing-tooltip"
   | "nested-scroll"
   | "outside-window"
-  | "overlapping-controls";
+  | "overlapping-controls"
+  | "layout-unavailable";
 
 export type OverflowFinding = {
   readonly kind: OverflowKind;
@@ -30,9 +33,6 @@ const hasOverflow = (element: Readonly<Element>): boolean =>
 const isVisible = (element: Readonly<Element>): boolean =>
   element.getClientRects().length !== 0;
 
-const isViewport = (element: Readonly<Element>): boolean =>
-  element.hasAttribute("data-scroll-viewport");
-
 const trimmedText = (text: string | null): string =>
   (text ?? "").replace(/\s+/gu, " ").trim();
 
@@ -55,28 +55,6 @@ const hasFullTooltip = (
           trimmedText(tooltip.textContent) === text
         );
       }))
-  );
-};
-
-const nearestClip = (element: Readonly<Element>): Element | null => {
-  const parent = element.parentElement;
-  if (parent === null) return null;
-  const style = getComputedStyle(parent);
-  return style.overflowX !== "visible" || style.overflowY !== "visible"
-    ? parent
-    : nearestClip(parent);
-};
-
-const clipped = (element: Readonly<Element>): boolean => {
-  const parent = nearestClip(element);
-  if (parent === null || isViewport(parent)) return false;
-  const outer = parent.getBoundingClientRect();
-  const inner = element.getBoundingClientRect();
-  return (
-    inner.left < outer.left ||
-    inner.top < outer.top ||
-    inner.right > outer.right ||
-    inner.bottom > outer.bottom
   );
 };
 
@@ -132,7 +110,8 @@ const overlaps = (
   );
 };
 
-const controls = "button,input,select,textarea,a[href],[role='button']";
+const controls =
+  "button,input,select,textarea,a[href],[role='button'],[role='switch']";
 const overlays =
   "[role='dialog'],[role='alertdialog'],[role='menu'],[role='listbox'],[role='tooltip'],[popover],[data-overflow-overlay]";
 
@@ -147,9 +126,7 @@ const overlapsSibling = (element: Readonly<Element>): boolean =>
   );
 
 const unauthorized = (element: Readonly<Element>): boolean =>
-  hasOverflow(element) &&
-  !isViewport(element) &&
-  !element.hasAttribute("data-truncate");
+  hasOverflow(element) && !isViewport(element) && !isTruncated(element);
 
 const missingTooltip = (
   element: Readonly<Element>,
@@ -183,6 +160,11 @@ const findingsFor = (
 export const inspectOverflow = (
   doc: Readonly<Document>,
 ): readonly OverflowFinding[] => {
+  if (
+    doc.documentElement.clientWidth === 0 ||
+    doc.documentElement.clientHeight === 0
+  )
+    return [finding("layout-unavailable", doc.documentElement)];
   const elements = [
     doc.documentElement,
     ...doc.querySelectorAll("body, body *"),

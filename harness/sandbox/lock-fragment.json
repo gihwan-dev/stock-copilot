@@ -28,6 +28,7 @@
         "./apps/desktop/src/shared/ds/testing/Stress.stories.tsx",
         "./apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
         "./apps/desktop/src/shared/ds/testing/messages.ts",
+        "./apps/desktop/src/shared/ds/testing/overflow-geometry.ts",
         "./apps/desktop/src/shared/ds/testing/overflow.ts",
         "./apps/desktop/src/shared/ds/testing/stress.ts",
         "./apps/desktop/src/shared/ds/theme.css",
