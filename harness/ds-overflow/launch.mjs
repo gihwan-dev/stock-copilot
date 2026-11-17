@@ -66,14 +66,18 @@ await withBrowser((context) => {
     );
     const expectedStatus = value.results.length === 0 ? "passed" : "failed";
     if (
-      report.numTotalTests !== 4 ||
+      report.numTotalTests !== 8 ||
       report.numPendingTests !== 0 ||
       report.numTodoTests !== 0 ||
-      assertions.length !== 4 ||
+      assertions.length !== 8 ||
       assertions[0].status !== "passed" ||
       assertions[1].status !== "passed" ||
-      assertions[2].status !== expectedStatus ||
-      assertions[3].status !== "passed"
+      assertions[2].status !== "passed" ||
+      assertions[3].status !== "passed" ||
+      assertions[4].status !== expectedStatus ||
+      assertions[5].status !== "passed" ||
+      assertions[6].status !== "passed" ||
+      assertions[7].status !== "passed"
     )
       throw new Error(`이야기 테스트 실행 결과 불완전: ${first}`);
     if (result.status !== (value.results.length === 0 ? 0 : 1))

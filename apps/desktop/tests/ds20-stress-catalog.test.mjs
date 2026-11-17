@@ -1,7 +1,13 @@
 import { strict as assert } from "node:assert";
+import { join } from "node:path";
 import { test } from "node:test";
-import { stressProblems } from "../../../harness/ds-catalog/rules.mjs";
+import {
+  stressProblems,
+  stressRenderProblems,
+} from "../../../harness/ds-catalog/rules.mjs";
 import { loadCatalog } from "../../../harness/ds-catalog/load.mjs";
+import { componentsDom } from "./ds-components-dom.mjs";
+import { desktopRoot } from "./paths.mjs";
 
 test("each public component must have its own stress story", () => {
   const components = ["Text", "Button", "Money"];
@@ -33,6 +39,25 @@ test("the actual catalog provides stress stories for all public components", asy
   );
 });
 
+test("stress stories fail when their render is empty in either theme", async () => {
+  const { createElement } = await import("react");
+  const samples = [
+    { component: "Money", render: () => null },
+    {
+      component: "Percent",
+      render: (theme) => (theme === "dark" ? null : createElement("span")),
+    },
+    { component: "Quantity", render: () => createElement("span") },
+  ];
+  assert.deepEqual(stressRenderProblems(samples), [
+    "Money: light 부하 이야기 렌더 없음",
+    "Money: dark 부하 이야기 렌더 없음",
+    "Percent: dark 부하 이야기 렌더 없음",
+  ]);
+  const catalog = await loadCatalog();
+  assert.deepEqual(stressRenderProblems(catalog.protectedStressStories), []);
+});
+
 test("the additional ChatInput stress story starts with protected stress content", async () => {
   const catalog = await loadCatalog();
   const chatStories = catalog.samples.filter(
@@ -41,6 +66,27 @@ test("the additional ChatInput stress story starts with protected stress content
   const draft = chatStories.at(-1)?.render().props.initialDraft;
   assert.equal(typeof draft, "string");
   assert.ok(draft.includes("대한미래첨단산업글로벌에너지"));
+});
+
+test("ChatInput actually renders the complete protected draft", async () => {
+  const bundle = await componentsDom(`
+import {render,cleanup} from "@testing-library/react";
+import {stressComponentStories} from ${JSON.stringify(join(desktopRoot, "src/shared/ds/testing/Stress.stories.tsx"))};
+import {stressFixtures} from ${JSON.stringify(join(desktopRoot, "src/shared/ds/testing/stress.ts"))};
+window.cleanup=cleanup;
+window.expectedDraft=[stressFixtures.company,...stressFixtures.paragraphs].join("\\n");
+window.renderChat=()=>render(stressComponentStories.find(story=>story.component==="ChatInput").render("light"));
+`);
+  try {
+    const window = bundle.open();
+    window.renderChat();
+    assert.equal(
+      window.document.querySelector("textarea")?.value,
+      window.expectedDraft,
+    );
+  } finally {
+    bundle.close();
+  }
 });
 
 test("stress stories exercise long digits and an empty value", async () => {

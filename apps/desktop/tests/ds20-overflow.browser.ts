@@ -194,11 +194,191 @@ describe("overflow measurements", () => {
 });
 
 describe("review regressions", () => {
+  it("measures the fixtures in standards mode", async () => {
+    const doc = await makeDocument("<div>내용</div>");
+    expect(doc.compatMode).toBe("CSS1Compat");
+  });
+
+  it("detects clipping on the non-scrollable axis of a viewport", async () => {
+    const doc = await makeDocument(
+      '<div data-scroll-viewport style="overflow-x:hidden;overflow-y:auto;width:100px;height:100px"><div id="wide-child" style="width:300px;height:20px"></div><div style="height:200px"></div></div>',
+    );
+    const parent = doc.querySelector("[data-scroll-viewport]");
+    expect(parent).not.toBeNull();
+    if (parent === null) throw new Error("viewport missing");
+    expect(doc.defaultView?.getComputedStyle(parent).overflowX).toBe("hidden");
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+  });
+
+  it("detects vertical clipping in a horizontally scrollable viewport", async () => {
+    const doc = await makeDocument(
+      '<div data-scroll-viewport style="overflow-x:auto;overflow-y:hidden;width:100px;height:100px"><div id="tall-child" style="width:200px;height:300px"></div></div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#tall-child",
+    });
+  });
+
+  it("rejects a child that extends before the scroll origin", async () => {
+    const doc = await makeDocument(
+      '<div data-scroll-viewport style="position:relative;overflow:auto;width:100px;height:100px"><div id="negative-child" style="position:absolute;left:-30px;top:10px;width:40px;height:20px"></div></div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#negative-child",
+    });
+  });
+
+  it("rejects a child above the vertical scroll origin", async () => {
+    const doc = await makeDocument(
+      '<div data-scroll-viewport style="position:relative;overflow:auto;width:100px;height:100px"><div id="negative-top" style="position:absolute;left:10px;top:-30px;width:40px;height:40px"></div></div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#negative-top",
+    });
+  });
+
+  it("accepts horizontal content that can be reached by scrolling", async () => {
+    const doc = await makeDocument(
+      '<div id="viewport" data-scroll-viewport style="overflow:auto;width:100px;height:100px"><div id="wide-child" style="width:300px;height:20px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#viewport");
+    const child = doc.querySelector<HTMLElement>("#wide-child");
+    if (parent === null || child === null) throw new Error("viewport missing");
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+    parent.scrollLeft = 200;
+    expect(parent.scrollLeft).toBeGreaterThan(0);
+    expect(child.getBoundingClientRect().right).toBeLessThanOrEqual(
+      parent.getBoundingClientRect().right,
+    );
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+  });
+
+  it("accepts reachable right-to-left scroll content", async () => {
+    const doc = await makeDocument(
+      '<div id="viewport" dir="rtl" data-scroll-viewport style="overflow:auto;width:100px;height:100px"><div id="wide-child" style="width:300px;height:20px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#viewport");
+    const child = doc.querySelector<HTMLElement>("#wide-child");
+    if (parent === null || child === null) throw new Error("viewport missing");
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+    parent.scrollLeft = -200;
+    expect(parent.scrollLeft).toBeLessThan(0);
+    expect(child.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      parent.getBoundingClientRect().left,
+    );
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+  });
+
+  it("accepts reachable content in a reversed horizontal flex viewport", async () => {
+    const doc = await makeDocument(
+      '<div id="viewport" data-scroll-viewport style="display:flex;flex-direction:row-reverse;overflow:auto;width:100px;height:100px"><div id="wide-child" style="flex:none;width:300px;height:20px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#viewport");
+    if (parent === null) throw new Error("viewport missing");
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+    parent.scrollLeft = -200;
+    expect(parent.scrollLeft).toBeLessThan(0);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+  });
+
+  it("accepts reachable content in a reversed vertical flex viewport", async () => {
+    const doc = await makeDocument(
+      '<div id="viewport" data-scroll-viewport style="display:flex;flex-direction:column-reverse;overflow:auto;width:100px;height:100px"><div id="tall-child" style="flex:none;width:20px;height:300px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#viewport");
+    if (parent === null) throw new Error("viewport missing");
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#tall-child",
+    });
+    parent.scrollTop = -200;
+    expect(parent.scrollTop).toBeLessThan(0);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#tall-child",
+    });
+  });
+
+  it("accepts reachable reversed flex content in right-to-left layout", async () => {
+    const doc = await makeDocument(
+      '<div id="viewport" dir="rtl" data-scroll-viewport style="display:flex;flex-direction:row-reverse;overflow:auto;width:100px;height:100px"><div id="wide-child" style="flex:none;width:300px;height:20px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#viewport");
+    if (parent === null) throw new Error("viewport missing");
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+    parent.scrollLeft = 200;
+    expect(parent.scrollLeft).toBeGreaterThan(0);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "clipped",
+      element: "div#wide-child",
+    });
+  });
+
+  it("detects nested native textarea scrolling except ChatInput", async () => {
+    const doc = await makeDocument(
+      '<div data-scroll-viewport style="overflow:auto;width:180px;height:100px"><textarea id="ordinary" style="overflow:auto;width:150px;height:30px"></textarea><textarea id="chat" class="chat-input" style="overflow:auto;width:150px;height:30px"></textarea><div style="height:100px"></div></div>',
+    );
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({
+      kind: "nested-scroll",
+      element: "textarea#ordinary",
+    });
+    expect(findings).not.toContainEqual({
+      kind: "nested-scroll",
+      element: "textarea#chat",
+    });
+  });
+
   it("reports a document without a layout viewport", () => {
     const doc = document.implementation.createHTMLDocument("inert");
     expect(inspectOverflow(doc)).toContainEqual({
       kind: "layout-unavailable",
       element: "html",
+    });
+  });
+
+  it("reports a hidden document root as unavailable layout", async () => {
+    const doc = await makeDocument("<div>내용</div>");
+    doc.documentElement.style.display = "none";
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+  });
+
+  it("reports a hidden document body as unavailable layout", async () => {
+    const doc = await makeDocument("<div>내용</div>");
+    doc.body.style.display = "none";
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "layout-unavailable",
+      element: "body",
     });
   });
 
@@ -233,6 +413,35 @@ describe("review regressions", () => {
       kind: "clipped",
       element: "button#fixed-child",
     });
+  });
+
+  it("matches clipping behavior for a size container", async () => {
+    const doc = await makeDocument(
+      '<div id="container" style="position:relative;margin-left:100px;margin-top:100px;container-type:inline-size;overflow:hidden;width:60px;height:60px"><div id="fixed-child" style="position:fixed;left:50px;top:10px;width:40px;height:30px"></div></div>',
+    );
+    const container = doc.querySelector<HTMLElement>("#container");
+    const child = doc.querySelector<HTMLElement>("#fixed-child");
+    if (container === null || child === null)
+      throw new Error("container missing");
+    const origin = container.getBoundingClientRect();
+    const bounds = child.getBoundingClientRect();
+    const findings = inspectOverflow(doc);
+    if (bounds.left === 50) {
+      expect(doc.elementFromPoint(55, 15)?.id).toBe("fixed-child");
+      expect(findings).not.toContainEqual({
+        kind: "clipped",
+        element: "div#fixed-child",
+      });
+    } else {
+      expect(bounds.left).toBe(origin.left + 50);
+      expect(
+        doc.elementFromPoint(origin.left + 70, origin.top + 15)?.id,
+      ).not.toBe("fixed-child");
+      expect(findings).toContainEqual({
+        kind: "clipped",
+        element: "div#fixed-child",
+      });
+    }
   });
 
   it("detects clipping at the padding edge inside a border", async () => {

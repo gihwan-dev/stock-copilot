@@ -1,3 +1,10 @@
+import { createRequire } from "node:module";
+
+const require = createRequire(
+  new URL("../../apps/desktop/package.json", import.meta.url),
+);
+const { isValidElement } = require("react");
+
 export const stressProblems = (components, samples) =>
   components
     .filter(
@@ -7,6 +14,17 @@ export const stressProblems = (components, samples) =>
         ),
     )
     .map((component) => `${component}: 부하 이야기 없음`);
+
+export const stressRenderProblems = (samples) =>
+  samples.flatMap((story) =>
+    ["light", "dark"]
+      .filter(
+        (theme) =>
+          typeof story.render !== "function" ||
+          !isValidElement(story.render(theme)),
+      )
+      .map((theme) => `${story.component}: ${theme} 부하 이야기 렌더 없음`),
+  );
 
 export const catalogProblems = (components, samples, entries) => {
   const problems = [];

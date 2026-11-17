@@ -23,6 +23,19 @@ test("overflow markers are limited to their owning design-system files", async (
       'const x = {["data-" + "scroll-viewport"]: ""};',
       "src/shared/ds/Heading.tsx",
     ],
+    [
+      'const key = "data-truncate"; const x = {[key]: ""};',
+      "src/shared/ds/Card.tsx",
+    ],
+    [
+      'const prefix = "data-"; const key = prefix + "truncate"; const x = {[key]: ""};',
+      "src/shared/ds/Card.tsx",
+    ],
+    ['const x = {[`data-${"truncate"}`]: ""};', "src/shared/ds/Card.tsx"],
+    [
+      'const x = {[["data", "truncate"].join("-")]: ""};',
+      "src/shared/ds/Card.tsx",
+    ],
   ])
     assert.ok(
       (await lint(source, file)).includes("ds/no-overflow-markers"),
@@ -46,6 +59,22 @@ test("overflow markers are limited to their owning design-system files", async (
       await lint(
         'const x = <h1 data-truncate="" />;',
         "src/shared/ds/Heading.tsx",
+      )
+    ).includes("ds/no-overflow-markers"),
+  );
+  assert.ok(
+    !(
+      await lint(
+        'const key = "title"; const x = {[key]: ""};',
+        "src/shared/ds/Card.tsx",
+      )
+    ).includes("ds/no-overflow-markers"),
+  );
+  assert.ok(
+    !(
+      await lint(
+        'const key = "data-truncate"; function f() { const key = "title"; return {[key]: ""}; }',
+        "src/shared/ds/Card.tsx",
       )
     ).includes("ds/no-overflow-markers"),
   );

@@ -50,11 +50,21 @@ const expected = {
   "nested-scroll": ["nested-scroll"],
   "outside-window": ["outside-window"],
   overlap: ["overlapping-controls"],
+  "fixed-locked": [],
+  "fixed-transformed": ["clipped"],
+  "padding-edge": ["clipped"],
+};
+const geometryExpected = {
+  "fixed-locked": true,
+  "fixed-transformed": true,
+  "padding-edge": true,
 };
 if (
   actual.length !== Object.keys(expected).length ||
   actual.some(
     (row) =>
+      row.mode !== "CSS1Compat" ||
+      row.geometry !== (geometryExpected[row.name] ?? null) ||
       JSON.stringify([
         ...new Set(row.findings.map((finding) => finding.kind)),
       ]) !== JSON.stringify(expected[row.name]),

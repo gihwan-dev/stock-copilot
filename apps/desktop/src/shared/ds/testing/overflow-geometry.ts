@@ -79,9 +79,79 @@ const nearestClipFrom = (
     : nearestClipFrom(parent, settled);
 };
 
+const isScrollable = (value: string): boolean =>
+  ["auto", "scroll", "overlay"].includes(value);
+
+type Interval = { readonly start: number; readonly end: number };
+type Axis = {
+  readonly offset: number;
+  readonly extent: number;
+  readonly canScroll: boolean;
+  readonly reverse: boolean;
+};
+
+const outsideReach = (
+  inner: Readonly<Interval>,
+  clip: Readonly<Interval>,
+  axis: Readonly<Axis>,
+): boolean => {
+  if (!axis.canScroll) return inner.start < clip.start || inner.end > clip.end;
+  const minimum = axis.reverse ? -axis.extent : 0;
+  const maximum = axis.reverse ? 0 : axis.extent;
+  return (
+    inner.start < clip.start - (axis.offset - minimum) ||
+    inner.end > clip.end + (maximum - axis.offset)
+  );
+};
+
+type ClipBounds = {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+};
+
+const reversedFlex = (
+  style: Readonly<CSSStyleDeclaration>,
+  direction: string,
+): boolean =>
+  ["flex", "inline-flex"].includes(style.display) &&
+  style.flexDirection === direction;
+
+const viewportClipped = (
+  parent: Readonly<Element>,
+  inner: Readonly<DOMRect>,
+  bounds: Readonly<ClipBounds>,
+): boolean => {
+  const style = getComputedStyle(parent);
+  return (
+    outsideReach(
+      { start: inner.left, end: inner.right },
+      { start: bounds.left, end: bounds.right },
+      {
+        offset: parent.scrollLeft,
+        extent: parent.scrollWidth - parent.clientWidth,
+        canScroll: isScrollable(style.overflowX),
+        reverse:
+          (style.direction === "rtl") !== reversedFlex(style, "row-reverse"),
+      },
+    ) ||
+    outsideReach(
+      { start: inner.top, end: inner.bottom },
+      { start: bounds.top, end: bounds.bottom },
+      {
+        offset: parent.scrollTop,
+        extent: parent.scrollHeight - parent.clientHeight,
+        canScroll: isScrollable(style.overflowY),
+        reverse: reversedFlex(style, "column-reverse"),
+      },
+    )
+  );
+};
+
 export const clipped = (element: Readonly<Element>): boolean => {
   const parent = nearestClipFrom(element, "none");
-  if (parent === null || isViewport(parent)) return false;
+  if (parent === null) return false;
   const bounds = parent.getBoundingClientRect();
   const root = element.ownerDocument.documentElement;
   const left = parent === root ? 0 : bounds.left + parent.clientLeft;
@@ -89,6 +159,8 @@ export const clipped = (element: Readonly<Element>): boolean => {
   const right = left + parent.clientWidth;
   const bottom = top + parent.clientHeight;
   const inner = element.getBoundingClientRect();
+  if (isViewport(parent))
+    return viewportClipped(parent, inner, { left, right, top, bottom });
   return (
     inner.left < left ||
     inner.top < top ||

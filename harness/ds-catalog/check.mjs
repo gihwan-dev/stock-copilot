@@ -10,7 +10,11 @@ import { spawnSync } from "node:child_process";
 import { desktop, loadCatalog } from "./load.mjs";
 import { stylesheetProblems } from "./styles.mjs";
 import { generationProblems } from "./generation.mjs";
-import { catalogProblems, stressProblems } from "./rules.mjs";
+import {
+  catalogProblems,
+  stressProblems,
+  stressRenderProblems,
+} from "./rules.mjs";
 const folder = mkdtempSync(join(desktop, "node_modules/.ds07-index-"));
 try {
   const run = spawnSync(
@@ -34,6 +38,7 @@ try {
     Object.keys(loaded.components),
     loaded.protectedStressStories,
   );
+  stress.push(...stressRenderProblems(loaded.protectedStressStories));
   if (stress.length !== 0) throw new Error(stress.join("\n"));
   const entries = Object.values(index.entries)
     .filter((entry) => entry.type === "story")

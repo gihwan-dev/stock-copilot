@@ -61,7 +61,8 @@ const hasFullTooltip = (
 const verticalViewport = (element: Readonly<Element>): boolean => {
   const overflow = getComputedStyle(element).overflowY;
   return (
-    isViewport(element) && ["auto", "scroll", "overlay"].includes(overflow)
+    (isViewport(element) || element.matches("textarea")) &&
+    ["auto", "scroll", "overlay"].includes(overflow)
   );
 };
 
@@ -165,11 +166,18 @@ export const inspectOverflow = (
     doc.documentElement.clientHeight === 0
   )
     return [finding("layout-unavailable", doc.documentElement)];
+  if (getComputedStyle(doc.documentElement).display === "none")
+    return [finding("layout-unavailable", doc.documentElement)];
+  const body = doc.querySelector("body");
+  if (body === null)
+    return [finding("layout-unavailable", doc.documentElement)];
+  if (getComputedStyle(body).display === "none")
+    return [finding("layout-unavailable", body)];
   const elements = [
     doc.documentElement,
     ...doc.querySelectorAll("body, body *"),
   ];
-  const documentFindings = [doc.documentElement, doc.body]
+  const documentFindings = [doc.documentElement, body]
     .filter(hasOverflow)
     .map((element) => finding("document-scroll", element));
   return [
