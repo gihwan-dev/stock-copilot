@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { FRESH_STEPS } from "../../../.claude/hooks/lib/check-sandbox.mjs";
 import { dumpJustfile, renderLine } from "../../check-list/list.mjs";
 import { knownGaps } from "../../known-gaps/list.mjs";
 import { installActionSpec, readTools } from "../tools.mjs";
@@ -120,7 +121,10 @@ test("the known dependency-artifact gap is listed and full cleanup is manual", (
     gaps.some(
       (gap) =>
         gap.location.startsWith("docs/adr/h-51-shared-compile-cache.md:") &&
-        gap.text.includes("외부 의존성 산출물"),
+        gap.text.includes("외부 의존성 산출물") &&
+        gap.text.startsWith(
+          "`fresh-cargo`와 종료 훅의 `cargo clean --workspace` 뒤에도 외부 의존성 산출물이 남는다.",
+        ),
     ),
   );
   const recipes = dumpJustfile(join(repoRoot, "justfile")).recipes;
@@ -140,6 +144,18 @@ test("the known dependency-artifact gap is listed and full cleanup is manual", (
     readFileSync(join(repoRoot, ".claude/hooks/lib/check-sandbox.mjs"), "utf8"),
     /fresh-all/u,
   );
+  assert.deepEqual(FRESH_STEPS, [
+    ["cargo", "clean", "--locked", "--offline", "--workspace"],
+    ["cargo", "llvm-cov", "clean", "--locked", "--offline", "--workspace"],
+    [
+      "pnpm",
+      "install",
+      "--frozen-lockfile",
+      "--force",
+      "--offline",
+      "--ignore-scripts",
+    ],
+  ]);
 });
 
 test("workspace cleanup preserves external dependency artifacts and manual full cleanup removes them", () => {

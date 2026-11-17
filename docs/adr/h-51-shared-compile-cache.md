@@ -40,7 +40,7 @@
 | 3    | 씨앗 없음 | 05:25:45             | 90.40 → 44.79        |  110.09초 |           없음 |        907,936 KiB |                 없음 / 2,166,489,088 |
 | 4    | 씨앗 있음 | 05:28:22             | 72.42 → 53.77        |  140.85초 |        26.09초 |      9,168,004 KiB |         324,407,296 / -4,203,610,112 |
 
-씨앗 검사 중앙값은 192.72초로 무씨앗 156.67초보다 23.0% 느렸다. 복제·정리까지 각각 더하면 씨앗 실행은 272.59초와 166.94초다. 각 쌍의 시작 load는 41.06 대 39.84, 90.40 대 72.42였지만 실행 중 부하가 크게 바뀌었다. 이 수치만으로 원인이나 다른 작업의 성능을 단정하지 않는다.
+이번 씨앗 검사 중앙값은 192.72초로 무씨앗 156.67초보다 23.0% 느렸다. 복제·정리까지 반올림 전에 각각 더하면 씨앗 실행은 272.59초와 166.94초다. 각 쌍의 시작 load는 41.06 대 39.84, 90.40 대 72.42였지만 실행 중 부하가 크게 바뀌었다. 이 수치만으로 원인이나 다른 작업의 성능을 단정하지 않는다.
 
 가용량 차이는 `statvfs`의 볼륨 가용 바이트를 복제·검사 전후로 뺀 값으로, `df`와 같이 같은 볼륨의 다른 작업을 포함한다. 음수는 그동안 전체 가용량이 늘었다는 뜻이다. 공통 스냅숏 생성 비용은 씨앗 복제 차이에 포함하지 않았다. `du`는 APFS 공유 블록을 중복 계산할 수 있으므로 사본의 실제 물리 증가량으로 읽을 수 없다. 이번 수치로 각 사본의 물리 디스크 증가분을 분리하지 못한다.
 
@@ -54,7 +54,7 @@ H-51: 메인은 병합 뒤 필요할 때 각 작업 사본에서 수동 `just fr
 
 ## 손 변형
 
-`mktemp` 사본에서 새 워크플로·정리 회귀 테스트의 대조군을 실행한 뒤, 정식 JSON 문법과 justfile 구문을 확인한 각 변형을 실제 테스트로 실행했다. 변형 22개가 모두 검출됐고 사본은 삭제했다. 로그는 작업 사본의 `target/H-51/policy-mutations/`에 보존한다.
+`mktemp` 사본에서 새 워크플로·정리 회귀 테스트의 대조군을 실행한 뒤, 정식 JSON 문법과 justfile 구문을 확인한 각 변형을 실제 테스트로 실행했다. 변형 24개가 모두 검출됐고 사본은 삭제했다. 워크플로 변형 20개는 기존 정책의 기대값 정확 일치와 허용 목록을 포함한 첫 단언에서 검출됐으며, 이후 정규식만의 독립 검출력을 증명하지 않는다. 로그는 작업 사본의 `target/H-51/policy-mutations/`에 보존한다.
 
 | 번호 | 바꾼 것                                                | 잡은 테스트                                                             |
 | ---- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
@@ -80,3 +80,5 @@ H-51: 메인은 병합 뒤 필요할 때 각 작업 사본에서 수동 `just fr
 | 20   | .github/workflows/nightly.yml macos: rust-cache-action | remote checks run on hosted runners without restoring a compiled target |
 | 21   | workspace-only                                         | the known dependency-artifact gap is listed and full cleanup is manual  |
 | 22   | missing-clean                                          | the known dependency-artifact gap is listed and full cleanup is manual  |
+| 23   | stop-hook workspace removal                            | the known dependency-artifact gap is listed and full cleanup is manual  |
+| 24   | known-gap reversed                                     | the known dependency-artifact gap is listed and full cleanup is manual  |
