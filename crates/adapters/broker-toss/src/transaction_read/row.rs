@@ -105,12 +105,15 @@ pub(crate) struct ParsedTransaction {
     pub(crate) transaction: Transaction,
     pub(crate) source: Box<serde_json::value::RawValue>,
 }
-pub(crate) fn project(
-    rows: Vec<ParsedTransaction>,
-) -> (Vec<Transaction>, Vec<Box<serde_json::value::RawValue>>) {
+pub(crate) fn project(rows: Vec<ParsedTransaction>) -> Vec<application::ObservedTransaction> {
     rows.into_iter()
-        .map(|parsed| (parsed.transaction, parsed.source))
-        .unzip()
+        .map(|parsed| {
+            application::ObservedTransaction::new(
+                parsed.transaction,
+                application::RawTransactionRow::new(parsed.source.get().to_owned()),
+            )
+        })
+        .collect()
 }
 pub(crate) fn in_scope(value: &Value, window: domain::SettlementWindow) -> Conversion<bool> {
     match field(value, "settled")?.as_bool() {
