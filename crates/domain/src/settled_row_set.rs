@@ -6,8 +6,9 @@ use crate::{
     Settlement, Timestamp, Transaction,
 };
 pub use full_inspection::{
-    FullInspectionError, FullInspectionPlan, FullInspectionProgress, FullInspectionStatus,
-    InspectionRangeDays, InspectionRangeResult, split_full_inspection,
+    FullInspectionCompletion, FullInspectionCompletionError, FullInspectionError,
+    FullInspectionPlan, FullInspectionProgress, FullInspectionStatus, InspectionRangeDays,
+    InspectionRangeResult, InspectionReportError, split_full_inspection,
 };
 use std::collections::BTreeMap;
 
