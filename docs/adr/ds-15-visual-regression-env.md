@@ -6,7 +6,7 @@
 
 harness 6.6에는 비교 엔진이 미정이다. R-15의 재현 실험을 이어 Chromium을 선택한다. WKWebView 적합성과 WebKit 재현성을 증명하는 선택은 아니다. 비교는 허용 오차 없는 PNG 바이트 동등성이다. 파일 누락과 빈 파일도 실패한다. 화면 비교 자체는 제품 패키지에 들어가지 않는다. 아래 기본 글꼴 수정은 앱과 Storybook에 함께 적용한다.
 
-이미지는 mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe, linux/arm64다. 실제 실행은 태그에서 inspect한 이미지 ID로 고정하며 digest와 ID를 target/DS-15/image.json에 남긴다. 익명 임시 Docker 설정으로 pull하고 종료 시 설정을 지운다. Docker 자격 증명 파일을 읽지 않는다. DOCKER_HOST가 없으면 표준 Docker·Colima·Docker Desktop 소켓의 존재만 확인해 연결한다. 익명 설정이 기존 Docker context 선택도 가리는 경우를 실제로 재현했고 기본 명령이 별도 환경 설정 없이 동작하도록 했다. 컨테이너는 네트워크 없음, 루트 파일 시스템 읽기 전용이며 저장소도 읽기 전용이다. 결과와 기준 화면 디렉터리만 쓰기를 허용한다. Storybook은 호스트에서 정적 빌드하고 컨테이너 안의 루프백 HTTP 서버만 사용한다.
+이미지는 mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe, linux/arm64다. 실제 실행은 고정 참조에서 inspect한 이미지 ID로 고정하며 실행별 결과는 target/DS-15/image.json에 남긴다. 이번 실측의 실제 ID와 RepoDigest는 아래 검증 절에도 보존한다. measurement.json의 settings.image에도 고정 태그·digest가 남는다. 익명 임시 Docker 설정으로 pull하고 종료 시 설정을 지운다. Docker 자격 증명 파일을 읽지 않는다. DOCKER_HOST가 없으면 표준 Docker·Colima·Docker Desktop 소켓의 존재만 확인해 연결한다. 익명 설정이 기존 Docker context 선택도 가리는 경우를 실제로 재현했고 기본 명령이 별도 환경 설정 없이 동작하도록 했다. 컨테이너는 네트워크 없음, 루트 파일 시스템 읽기 전용이며 저장소도 읽기 전용이다. 결과와 기준 화면 디렉터리만 쓰기를 허용한다. Storybook은 호스트에서 정적 빌드하고 컨테이너 안의 루프백 HTTP 서버만 사용한다.
 
 just visual-measure는 독립 브라우저 context 두 개에서 각각 찍어 바이트를 비교한다. just visual-update는 같은 검증 뒤 PNG와 measurement.json을 함께 생성한다. 현재 8개 파일 목록·환경·행 수·두 해시·바이트 수를 검사하고, 삭제된 이야기의 기존 linux-arm64 기준 파일을 정리한다. 알 수 없는 파일과 호스트 기준 파일은 지우지 않고 실패한다. compare와 등록 검사도 저장된 원자료와 전체 파일 목록의 일치를 요구한다. just visual-check는 두 촬영 결과와 기존 기준까지 비교한다. 기준 화면의 사용자 서명 커밋 요구는 기존 서명 정책을 따른다. 이 작업의 최초 기준 생성은 작업 지시문의 생성물 승인 범위다. 호스트에서 run.mjs를 직접 실행하면 운영체제·아키텍처·컨테이너·이미지 검증에 실패한다.
 
@@ -17,6 +17,18 @@ macOS 기준 파일은 Node 등록 검사와 xtask source-check에서 거부한�
 ## 검증
 
 시작 frozen 설치와 lefthook 설치 성공. 프로젝트 신뢰와 세션 훅 신뢰·현재 세션 적용 여부는 확인할 수 없다. 지시문의 예외에 따라 계속하고 Git 훅을 사용한다. 설치된 Colima를 사용자 권한으로 시작했다. 시스템 설정 변경·데몬 설치는 하지 않았다.
+
+이번 통합 실측에서 inspect한 식별 정보다. 임시 target 자료를 지워도 이 값은 ADR에 남는다.
+
+```json
+{
+  "tag": "mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
+  "id": "sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
+  "digests": [
+    "mcr.microsoft.com/playwright@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe"
+  ]
+}
+```
 
 동일 이미지의 Chromium에서 독립 context 두 개로 찍은 8쌍 모두 바이트가 일치했다. 다음은 실제 SHA-256과 바이트 수이며 원자료는 harness/visual/baselines/measurement.json에 있다.
 
@@ -80,35 +92,35 @@ DS-12: 전체 공개 목록의 기준 화면 잠금. pauseAt가 타이머와 rAF
 
 | 변형 | 바꾼 것 | 잡은 테스트 | 결과 |
 |---|---|---|---|
-| random-hook | `Math.random = () => random;` → `Math.random = () => 0.7;` | ds15-capture normal capture | 검출 |
-| caret-option | `caret: settings.caret,` → `` | ds15-capture normal capture | 검출 |
-| animation-option | `animations: settings.animations,` → `` | ds15-capture normal capture | 검출 |
-| motion-context | `reducedMotion: "reduce",` → `` | ds15-capture normal capture | 검출 |
-| scale | `deviceScaleFactor: settings.scale` → `deviceScaleFactor: 2` | ds15-capture normal capture | 검출 |
-| locale | `locale: settings.locale` → `locale: "en-US"` | ds15-capture normal capture | 검출 |
-| timezone | `timezoneId: settings.timezone` → `timezoneId: "UTC"` | ds15-capture normal capture | 검출 |
-| color | `colorScheme: theme` → `colorScheme: "light"` | ds15-capture normal capture | 검출 |
-| serviceworkers | `serviceWorkers: "block"` → `serviceWorkers: "allow"` | ds15-capture normal capture | 검출 |
-| route-origin | `new URL(route.request().url()).origin === origin` → `new URL(route.request().url()).origin !== origin` | ds15-capture normal capture | 검출 |
-| clock-install | `await page.clock.install({ time: new Date(0) });` → `` | ds15-capture normal capture | 검출 |
-| clock-pause | `await page.clock.pauseAt(new Date(settings.time));` → `` | ds15-capture normal capture | 검출 |
-| time-check | `inputs.time !== Date.parse(settings.time)` → `inputs.time === Date.parse(settings.time)` | ds15-capture normal capture | 검출 |
-| random-check | `inputs.random !== settings.random` → `inputs.random === settings.random` | ds15-capture normal capture | 검출 |
-| font-condition | `used.some((font) => font.glyphCount > 0 && !font.isCustomFont)` → `false` | ds15-capture normal capture | 검출 |
-| font-glyph | `font.glyphCount > 0` → `font.glyphCount >= 0` | ds15-capture normal capture | 검출 |
-| font-origin | `!font.isCustomFont` → `font.isCustomFont` | ds15-capture normal capture | 검출 |
-| mono-required | `!fonts.includes("IBM Plex Mono")` → `false` | ds15-capture normal capture | 검출 |
-| page-errors | `errors.length !== 0` → `false` | ds15-capture normal capture | 검출 |
-| selector-theme | `data-catalog-theme="${theme}"` → `data-catalog-theme="light"` | ds15-capture normal capture | 검출 |
-| selector-component | `data-catalog-component="${component}"` → `data-catalog-component="Button"` | ds15-capture normal capture | 검출 |
-| cdp-detach | `await session.detach();` → `` | ds15-capture normal capture | 검출 |
-| cdp-nodes | `for (const nodeId of nodeIds)` → `for (const nodeId of nodeIds.slice(0, 1))` | ds15-capture normal capture | 검출 |
-| context-close | `await context.close();` → `` | ds15-capture normal capture | 검출 |
-| style-animation | `animation: none` → `animation: initial` | ds15-capture normal capture | 검출 |
-| style-transition | `transition: none` → `transition: initial` | ds15-capture normal capture | 검출 |
-| style-caret | `caret-color: transparent` → `caret-color: auto` | ds15-capture normal capture | 검출 |
-| clock-origin | `await page.clock.install({ time: new Date(0) });` → `await page.clock.install({ time: new Date(settings.time) });` | ds15-capture elapsed clock | 검출 |
-| return-bytes | `return bytes;` → `return undefined;` | ds15-capture normal capture | 검출 |
+| random-hook | `Math.random = () => random;` → `Math.random = () => 0.7;` | ds15-capture.test.mjs | 검출 |
+| caret-option | `caret: settings.caret,` → `` | ds15-capture.test.mjs | 검출 |
+| animation-option | `animations: settings.animations,` → `` | ds15-capture.test.mjs | 검출 |
+| motion-context | `reducedMotion: "reduce",` → `` | ds15-capture.test.mjs | 검출 |
+| scale | `deviceScaleFactor: settings.scale` → `deviceScaleFactor: 2` | ds15-capture.test.mjs | 검출 |
+| locale | `locale: settings.locale` → `locale: "en-US"` | ds15-capture.test.mjs | 검출 |
+| timezone | `timezoneId: settings.timezone` → `timezoneId: "UTC"` | ds15-capture.test.mjs | 검출 |
+| color | `colorScheme: theme` → `colorScheme: "light"` | ds15-capture.test.mjs | 검출 |
+| serviceworkers | `serviceWorkers: "block"` → `serviceWorkers: "allow"` | ds15-capture.test.mjs | 검출 |
+| route-origin | `new URL(route.request().url()).origin === origin` → `new URL(route.request().url()).origin !== origin` | ds15-capture.test.mjs | 검출 |
+| clock-install | `await page.clock.install({ time: new Date(0) });` → `` | ds15-capture.test.mjs | 검출 |
+| clock-pause | `await page.clock.pauseAt(new Date(settings.time));` → `` | ds15-capture.test.mjs | 검출 |
+| time-check | `inputs.time !== Date.parse(settings.time)` → `inputs.time === Date.parse(settings.time)` | ds15-capture.test.mjs | 검출 |
+| random-check | `inputs.random !== settings.random` → `inputs.random === settings.random` | ds15-capture.test.mjs | 검출 |
+| font-condition | `used.some((font) => font.glyphCount > 0 && !font.isCustomFont)` → `false` | ds15-capture.test.mjs | 검출 |
+| font-glyph | `font.glyphCount > 0` → `font.glyphCount >= 0` | ds15-capture.test.mjs | 검출 |
+| font-origin | `!font.isCustomFont` → `font.isCustomFont` | ds15-capture.test.mjs | 검출 |
+| mono-required | `!fonts.includes("IBM Plex Mono")` → `false` | ds15-capture.test.mjs | 검출 |
+| page-errors | `errors.length !== 0` → `false` | ds15-capture.test.mjs | 검출 |
+| selector-theme | `data-catalog-theme="${theme}"` → `data-catalog-theme="light"` | ds15-capture.test.mjs | 검출 |
+| selector-component | `data-catalog-component="${component}"` → `data-catalog-component="Button"` | ds15-capture.test.mjs | 검출 |
+| cdp-detach | `await session.detach();` → `` | ds15-capture.test.mjs | 검출 |
+| cdp-nodes | `for (const nodeId of nodeIds)` → `for (const nodeId of nodeIds.slice(0, 1))` | ds15-capture.test.mjs | 검출 |
+| context-close | `await context.close();` → `` | ds15-capture.test.mjs | 검출 |
+| style-animation | `animation: none` → `animation: initial` | ds15-capture.test.mjs | 검출 |
+| style-transition | `transition: none` → `transition: initial` | ds15-capture.test.mjs | 검출 |
+| style-caret | `caret-color: transparent` → `caret-color: auto` | ds15-capture.test.mjs | 검출 |
+| clock-origin | `await page.clock.install({ time: new Date(0) });` → `await page.clock.install({ time: new Date(settings.time) });` | DS15 normal capture applies inputs and checks actual fonts before its screenshot | 검출 |
+| return-bytes | `return bytes;` → `return undefined;` | ds15-capture.test.mjs | 검출 |
 
 ## 승인된 기존 기대 목록 갱신
 
@@ -120,9 +132,9 @@ Sans 누락·글꼴 load 호출 삭제·촬영 직전 난수 검증 삭제는 �
 
 | 변형 | 바꾼 것 | 잡은 테스트 | 결과 |
 |---|---|---|---|
-| sans-required | Sans 필수 포함 조건 삭제 | ds15 capture missingSans | 검출 |
-| font-loads | 두 fonts.load 호출 삭제 | ds15 normal capture load 호출 | 검출 |
-| random-validation | 촬영 직전 난수 일치 조건 삭제 | ds15 rejects wrong random with correct clock | 검출 |
+| sans-required | Sans 필수 포함 조건 삭제 | DS15 normal capture rejects a missing bundled family or page error | 검출 |
+| font-loads | 두 fonts.load 호출 삭제 | DS15 normal capture applies inputs and checks actual fonts before its screenshot | 검출 |
+| random-validation | 촬영 직전 난수 일치 조건 삭제 | DS15 normal capture rejects a random source that did not freeze | 검출 |
 | selector-equivalent | CDP 선택자를 바깥 요소 하나로 축소 | 기존 회귀 통과. 독립 Chromium 실험에서 부모도 자식 시스템 글꼴 검출 | 동등, 검출 집계 제외 |
 
 기준 자료 무결성 회귀는 8개 이미지에 서로 다른 바이트·해시·크기를 사용한다. 누락·중복 행, 환경 변경, 첫째·둘째 해시 변경, 크기 변경, 이미지 뒤바꿈, 오래된 PNG, 손상 JSON, 알 수 없는 파일을 검증한다. 실제 update로 원자료를 재생성한 뒤 compare가 8쌍 일치를 다시 확인했다. 이미지 바이트는 이전 기준과 동일하다. GitHub arm64 러너와 로컬 Colima 사이 바이트 동일성은 실제 CI 실행 전이므로 NOT_RUN이다.
@@ -145,3 +157,22 @@ Sans 누락·글꼴 load 호출 삭제·촬영 직전 난수 검증 삭제는 �
 | image-write | `writeFileSync(join(folder, name), bytes);` → `;` | ds15-records.test.mjs | 검출 |
 
 통합 재검증에서 발견한 시계 초기화 경합은 촬영기의 오류를 재시도하거나 무시하지 않고 초기 시각을 epoch로 분리해 고쳤다. 원래 코드에서 1ms 경과 회귀가 실패하는 red를 확인했다. 목표 시각과 고정 조건은 바꾸지 않는다.
+
+## 3차 비판 뒤 회귀 보완
+
+3차 비판은 first-parent diff에서 병합 수정이 보이지 않는다는 주장과 커밋 메시지 중복 주장을 실제 Git 실행으로 기각했다. 이력을 다시 쓰지 않는다. 수정 경계는 78a53cdd → d8edb0cb이며, git log --first-parent -p 또는 git diff d8edb0cb^ d8edb0cb로 확인할 수 있다. 이후 수정은 DS-15 신규 테스트 세 파일과 ADR·리뷰 기록에 한정된다. 촬영·등록·기록 코드와 기준 PNG는 바꾸지 않는다.
+
+foreign은 unmanaged의 부분집합이 아니다. Button-darwin-chromium-linux-arm64.png는 소유 파일 접미사로 끝나므로 unmanaged는 허용하지만 foreign은 거부한다. 기존 표의 foreign 행은 두 거부 조건 전체를 false로 바꾼 실제 변형이다. 단독 foreign 삭제는 별도 변형으로 아래에 더하며 동등 변형으로 제외하지 않는다.
+
+임시 복사본의 원본 대조군 22/22 통과 뒤 아래 여섯 변형이 모두 생존하는 red를 재현했다. 테스트를 보완한 뒤 같은 여섯 변형은 모두 해당 테스트 본문에서 검출됐다. 각 변형은 Node 문법 검사를 통과했고 모듈 로딩 실패를 집계하지 않았다. 기존 64개도 현재 테스트로 다시 실행해 모두 검출했다. 총 70개이며, 앞서 설명한 동등 변형 두 개는 별도 제외다.
+
+| 변형 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| checker-record | check.mjs의 storedProblems 연결 삭제 | DS15 actual registered checker rejects fixed darwin files in another repository | 생존 → 검출 |
+| extra-row | measurements 행 수 검사 삭제 | DS15 measurement requires exact scope and both hashes for distinct files | 생존 → 검출 |
+| extra-key | 최상위 키 집합 검사 삭제 | DS15 measurement requires exact scope and both hashes for distinct files | 생존 → 검출 |
+| empty-png | bytes.length === 0 검사 삭제 | DS15 measurement requires exact scope and both hashes for distinct files | 생존 → 검출 |
+| foreign-only | foreign.length 조건만 삭제하고 unmanaged 검사 보존 | DS15 comparison rejects stale extras and update refuses foreign or unmanaged files | 생존 → 검출 |
+| pause-after-navigation | pauseAt을 goto 뒤로 이동 | DS15 normal capture applies inputs and checks actual fonts before its screenshot | 생존 → 검출 |
+
+마운트 회귀는 촬영 직전 값만 보지 않고 goto 시점에 관측한 Date.now를 별도로 저장해 목표 시각 1767323045000과 비교한다. 빈 PNG 반례는 빈 바이트에 맞는 두 해시와 크기 0을 함께 넣어 다른 조건으로 잘못 검출하지 않는다. 등록 CLI 반례도 정상 자료 0 → 손상 JSON 1 → 정상 자료 0을 실제 CLI로 확인한다. 기존 단언은 모두 유지하고 반례를 추가했다.

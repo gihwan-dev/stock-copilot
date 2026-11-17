@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
@@ -43,6 +44,29 @@ test("DS15 measurement requires exact scope and both hashes for distinct files",
       },
       images,
     ).length > 0,
+  );
+  assert.ok(
+    recordProblems(
+      { ...record, measurements: [...measurements, { component: "Ghost" }] },
+      images,
+    ).length > 0,
+  );
+  assert.ok(
+    recordProblems({ ...record, unexpected: "extra" }, images).length > 0,
+  );
+  const emptyRecord = structuredClone(record);
+  const emptyHash = createHash("sha256").update(Buffer.alloc(0)).digest("hex");
+  emptyRecord.measurements[0] = {
+    ...emptyRecord.measurements[0],
+    bytes: 0,
+    first: emptyHash,
+    second: emptyHash,
+  };
+  assert.ok(
+    recordProblems(emptyRecord, {
+      ...images,
+      [Object.keys(images)[0]]: Buffer.alloc(0),
+    }).length > 0,
   );
   for (const field of ["bytes", "first", "second"]) {
     const invalid = structuredClone(record);
@@ -103,6 +127,7 @@ test("DS15 comparison rejects stale extras and update refuses foreign or unmanag
     const original = readFileSync(join(folder, "measurement.json"));
     for (const name of [
       "Button-light-chromium-darwin-arm64.png",
+      "Button-darwin-chromium-linux-arm64.png",
       "unknown.txt",
     ]) {
       writeFileSync(join(folder, name), "extra");

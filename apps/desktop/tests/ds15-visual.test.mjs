@@ -122,6 +122,19 @@ test("DS15 actual registered checker rejects fixed darwin files in another repos
       images,
     );
     assert.equal(check().status, 0);
+    writeFileSync(
+      join(folder, "harness/visual/baselines/measurement.json"),
+      "invalid JSON",
+    );
+    const corrupt = check();
+    assert.equal(corrupt.status, 1);
+    assert.ok(corrupt.stderr.includes("실측 자료 누락 또는 형식 오류"));
+    await writeBaselineSet(
+      join(folder, "harness/visual/baselines"),
+      measurements,
+      images,
+    );
+    assert.equal(check().status, 0);
     for (const path of cases.rejected) {
       mkdirSync(dirname(join(folder, path)), { recursive: true });
       writeFileSync(join(folder, path), Buffer.from([137, 80, 78, 71]));

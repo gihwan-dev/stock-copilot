@@ -69,6 +69,7 @@ const fixture = ({
       install: async (value) => {
         calls.push(["install", value.time.toISOString()]);
         installedTime = value.time.getTime() + 1;
+        realm.Date = { now: () => installedTime };
       },
       pauseAt: async (time) => {
         calls.push(["pauseAt", time.toISOString()]);
@@ -80,6 +81,7 @@ const fixture = ({
       },
     },
     goto: async (...args) => {
+      calls.push(["mountTime", realm.Date.now()]);
       calls.push(["goto", ...args]);
     },
     locator: (selector) => ({
@@ -154,6 +156,10 @@ test("DS15 normal capture applies inputs and checks actual fonts before its scre
     ],
   );
   assert.equal(runInContext("Math.random()", realm), 0.3141592653589793);
+  assert.deepEqual(
+    calls.find(([name]) => name === "mountTime"),
+    ["mountTime", 1767323045000],
+  );
   assert.deepEqual(
     calls.filter(([name]) => ["install", "pauseAt"].includes(name)),
     [
