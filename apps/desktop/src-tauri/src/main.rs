@@ -4,7 +4,7 @@ use src_tauri::{
 };
 use std::sync::Arc;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn product_context() -> tauri::Context<tauri::Wry> {
     #[expect(
         clippy::disallowed_macros,
         reason = "tauri::generate_context! expands to include_bytes! and env!"
@@ -18,6 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         reason = "tauri::generate_context! expands to std::collections::HashMap"
     )]
     let context = tauri::generate_context!();
+    context
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let context = product_context();
     let clock = platform_macos::SystemClock::new()
         .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
     let shared_clock = Arc::new(clock);
@@ -63,6 +68,56 @@ fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseF
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn product_acl_allows_only_main_window_event_subscription() {
+        let mut context = super::product_context();
+        let authority = context.runtime_authority_mut();
+        let local = tauri::ipc::Origin::Local;
+        let remote = tauri::ipc::Origin::Remote {
+            url: "https://example.com".parse().expect("원격 출처"),
+        };
+        for command in ["plugin:event|listen", "plugin:event|unlisten"] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &local)
+                    .is_some(),
+                "{command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(command, "other", "other", &local)
+                    .is_none(),
+                "{command}"
+            );
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &remote)
+                    .is_none(),
+                "{command}"
+            );
+        }
+        for command in ["plugin:event|emit", "plugin:event|emit_to"] {
+            assert!(
+                authority
+                    .resolve_access(command, "main", "main", &local)
+                    .is_none(),
+                "{command}"
+            );
+        }
+        let without_permissions = tauri::runtime_authority!(
+            std::collections::BTreeMap::new(),
+            tauri::utils::acl::resolved::Resolved::default()
+        );
+        for command in ["plugin:event|listen", "plugin:event|unlisten"] {
+            assert!(
+                without_permissions
+                    .resolve_access(command, "main", "main", &local)
+                    .is_none(),
+                "{command}"
+            );
+        }
+    }
+
     #[test]
     fn composition_root_constructs_the_fixed_product_endpoint_without_sending_requests() {
         let endpoint = broker_toss::TossEndpoint::production();

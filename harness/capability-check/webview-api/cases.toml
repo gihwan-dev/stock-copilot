@@ -155,6 +155,33 @@ pub fn open(app: &AppHandle) {
 '''
 
 [[case]]
+name = "navigation-handler-outside-security"
+expect = [
+    "src/lib.rs: capability:webview-api:on_navigation",
+    "src/lib.rs: capability:webview-api:on_new_window",
+]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+fn open(builder: Builder) {
+    builder.on_navigation(allow).on_new_window(open);
+}
+'''
+
+[[case]]
+name = "navigation-handler-in-security"
+expect = []
+
+[[case.file]]
+path = "src/security.rs"
+source = '''
+fn protected(builder: Builder) {
+    builder.on_navigation(allow).on_new_window(deny);
+}
+'''
+
+[[case]]
 name = "invoke-key-outside-contract-test"
 expect = ["src/lib.rs: capability:webview-api:invoke_key"]
 

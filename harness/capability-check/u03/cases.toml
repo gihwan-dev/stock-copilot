@@ -1,0 +1,111 @@
+[[case]]
+name = "missing-csp"
+file = "tauri.conf.json"
+before = '"csp": "default-src'
+after = '"other": "default-src'
+expected = "capability:u03-csp"
+
+[[case]]
+name = "external-connect"
+file = "tauri.conf.json"
+before = "connect-src ipc:"
+after = "connect-src ipc: https://example.com"
+expected = "capability:u03-csp"
+
+[[case]]
+name = "missing-img-src"
+file = "tauri.conf.json"
+before = "img-src 'self' data:; "
+after = ""
+expected = "capability:u03-csp"
+
+[[case]]
+name = "external-worker"
+file = "tauri.conf.json"
+before = "worker-src 'none'"
+after = "worker-src https://example.com"
+expected = "capability:u03-csp"
+
+[[case]]
+name = "weaker-dev-csp"
+file = "tauri.conf.json"
+before = '"freezePrototype": true'
+after = '"freezePrototype": true, "devCsp": "default-src *"'
+expected = "capability:u03-csp"
+
+[[case]]
+name = "csp-modification-disabled"
+file = "tauri.conf.json"
+before = '"freezePrototype": true'
+after = '"freezePrototype": true, "dangerousDisableAssetCspModification": true'
+expected = "capability:u03-csp"
+
+[[case]]
+name = "prototype-unfrozen"
+file = "tauri.conf.json"
+before = '"freezePrototype": true'
+after = '"freezePrototype": false'
+expected = "capability:u03-freeze-prototype"
+
+[[case]]
+name = "listen-missing"
+file = "capabilities/main.json"
+before = "    \"core:event:allow-listen\",\n"
+after = ""
+expected = "capability:u03-event-permissions"
+
+[[case]]
+name = "unlisten-missing"
+file = "capabilities/main.json"
+before = "    \"core:event:allow-listen\",\n    \"core:event:allow-unlisten\""
+after = '    "core:event:allow-listen"'
+expected = "capability:u03-event-permissions"
+
+[[case]]
+name = "event-emit-added"
+file = "capabilities/main.json"
+before = '"core:event:allow-unlisten"'
+after = '"core:event:allow-unlisten", "core:event:allow-emit"'
+expected = "capability:u03-event-permissions"
+
+[[case]]
+name = "remote-dev-url"
+file = "tauri.conf.json"
+before = '"frontendDist": "../dist"'
+after = '"frontendDist": "../dist", "devUrl": "https://example.com"'
+expected = "capability:u03-frontend"
+
+[[case]]
+name = "remote-frontend"
+file = "tauri.conf.json"
+before = '"frontendDist": "../dist"'
+after = '"frontendDist": "https://example.com"'
+expected = "capability:u03-frontend"
+
+[[case]]
+name = "automatic-window"
+file = "tauri.conf.json"
+before = '"create": false'
+after = '"create": true'
+expected = "capability:u03-window"
+
+[[case]]
+name = "multiple-windows"
+file = "tauri.conf.json"
+before = '"windows": [{ "label": "main", "create": false }]'
+after = '"windows": [{ "label": "main", "create": false }, { "label": "other", "create": false }]'
+expected = "capability:u03-window"
+
+[[case]]
+name = "missing-window"
+file = "tauri.conf.json"
+before = '"windows": [{ "label": "main", "create": false }]'
+after = '"windows": []'
+expected = "capability:u03-window"
+
+[[case]]
+name = "remote-window"
+file = "tauri.conf.json"
+before = '"label": "main", "create": false'
+after = '"label": "main", "create": false, "url": "https://example.com"'
+expected = "capability:u03-window"
