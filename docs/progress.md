@@ -85,7 +85,7 @@ Claude Code 샌드박스는 아직 꺼져 있다. 복사본 실측에서 작업 
 
 T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않는다.
 
-구현·수정·조사·비판은 T3 Codex `gpt-6.1-sol`, 적대적 리뷰는 Claude Opus 5.5다. 메인은 오케스트레이션과 문서를 맡는다. pnpm은 독립 설치본을 PATH 앞에 두며 `just check-pnpm`이 실제 버전을 확인한다.
+구현·수정 회차는 T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다)가 한다. 기본 추론 강도는 sol은 high, terra는 max다. 조사·비판은 `gpt-6.1-sol`(high), 적대적 리뷰는 Claude Opus 5.5다. 메인은 오케스트레이션과 문서를 맡는다. pnpm은 독립 설치본을 PATH 앞에 두며 `just check-pnpm`이 실제 버전을 확인한다.
 
 ## 도메인
 
