@@ -21,12 +21,14 @@ I-09, R-11, ADR 0028·0052·0112·0118·0127. R-11과 ADR 0112는 16:00 KST에 �
 | 받는 작업 | 내용 |
 |---|---|
 | T-08 | 실제 장 운영 응답에서 정규장·프리·애프터·미국 데이마켓을 해당 필드로 구분하고, 거래소별 운영 시간·휴장·반일장과 일봉 OHLC의 실제 의미를 실측한다. `crates/adapters/broker-toss/src/market_read/candles.rs`의 `assemble`은 현재 최종 세션 종료의 최댓값을 일봉 확정 시각으로 사용한다. 합성 달력에서 16:00과 19:59:59는 `InProgress`, 20:00은 `Finalized`다. 이 범위 밖 어댑터를 후속 작업에서 정규장 계약과 맞추고 종료 직전·정각·연장 거래 중·최종 종료를 검증한다. 누락과 확인된 휴장을 구분한다. |
-| A-16 | 관측 보유·보고값에 정규장 종가의 종목별 가격·날짜·출처 증거를 연결한다. 현행 연장 거래 달력의 비0 관측 거부를 근거 없이 제거하지 않는다. 정규장만 있는 기존 관측 경로도 원본 값의 진실성을 스스로 인증하지 않는다. |
+| A-16 | 관측 보유·보고값에 정규장 종가의 종목별 가격·날짜·출처 증거를 연결한다. 현행 연장 거래 달력의 비0 관측 거부를 근거 없이 제거하지 않는다. 정규장만 있는 기존 관측 경로도 원본 값의 진실성을 스스로 인증하지 않는다. 현재 가드는 당일 세션만 보므로 전일에 연장 거래가 있었고 당일에 없으면 domain 관측에서 전일 값의 출처를 확인하지 않는다. 해당 시장이 사용된 관측의 `AwaitingSession`·`HolidayCarry`는 현재 application이 저장하지 않으며, 이 비대칭도 증거 연결 시 정리한다. |
 | A-26 | 실제 일봉의 정규장 종가와 증거의 출처·가격·날짜를 확인해 D-49 입력에 공급한다. `InProgress`를 `Finalized`로 바꾸거나 장중·연장 거래 체결가를 종가 주장으로 바꾸지 않는다. 필요한 자료가 없으면 날짜별 실패와 재시도를 보존하고 달력 최신성을 확인한다. |
+
+현행 연결의 제약은 ADR 0112의 국내 전용 계좌 16:00 저장 계약과 함께 해소해야 한다. 합성 달력에 한국 정규장 09:00~15:30과 애프터마켓 15:30~20:00이 있으면 비0 관측은 16:00에 거부된다. 같은 시각에 위 어댑터가 수집한 당일 일봉은 `InProgress`이므로 양수 보유의 완전한 D-49 입력으로 사용할 수 없다. 빈 계좌 등 정확한 0은 별도 계약을 따르고, 나중에 수집한 봉이나 확정 일봉과 일치하는 종가 증거를 갖춘 domain 입력은 결과가 다를 수 있다. 실제 API 일봉의 구성과 실제 관측값의 출처는 확인하지 않았다.
 
 ## 검증
 
-구현 전 `regular_close` 테스트에서 당일 가격 선택, 반일장 종료, 연장 거래 추가 불변 속성이 실패했다. D-31 직접 재계산과 D-49 입력을 함께 검증하는 테스트도 전일 선택으로 실패했다. 구현 후 관련 테스트는 통과했다. 프로젝트 신뢰와 세션 훅 정의의 신뢰·현재 세션 적용은 각각 확인하지 못했다. Git lefthook 설치 성공은 세션 훅 적용 증거가 아니다. 지시문을 읽기 전 메모리 색인을 조회한 사실이 있으며 이후에는 홈 메모리를 읽지 않았다.
+구현 전 `regular_close` 테스트에서 당일 가격 선택, 반일장 종료, 연장 거래 추가 불변 속성이 실패했다. D-31 직접 재계산과 D-49 입력을 함께 검증하는 테스트도 전일 선택으로 실패했다. 구현 후 관련 테스트는 통과했다.
 
 ## 손 변형
 
@@ -101,3 +103,12 @@ I-09, R-11, ADR 0028·0052·0112·0118·0127. R-11과 ADR 0112는 16:00 KST에 �
 | 27 | 연장 거래가 없으면 연장 거래 있다고 판정 | valuation_snapshot::tests::accessors_preserve_provenance_and_individual_toss_daily_reports |
 | 28 | 원화 관측에 달러 세션 사용 | valuation_snapshot::tests::extended_observed_nonzero_price_requires_close_evidence_even_after_last_session |
 | 29 | 달러 관측에 원화 세션 사용 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+
+컴파일되지 않은 보고액 변형 4개는 변수를 유지하는 식으로 다시 작성했다. 원본 대조군의 평가 테스트 98개가 통과했고, 새 식 4개는 모두 컴파일됐다. 개별 보유 보고액을 항상 비0으로 만드는 변형은 처음 생존해 0주·개별 보고액 0 사례를 추가했다. 새 테스트는 이 변형에서 실패하고 원본에서 통과했다. 기존의 컴파일 불가 4개는 여전히 원래 집계에서 제외한다.
+
+| 대체 변형 | 결과 |
+|---|---|
+| 개별 보유 보고액을 항상 0으로 | `extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not`에서 검출 |
+| 개별 보유 보고액을 항상 비0으로 | 처음 생존, `extended_observed_zero_holding_with_zero_report_remains_available` 추가 후 검출 |
+| 포트폴리오 보고액을 항상 0으로 | `extended_observed_reported_value_and_each_currency_require_evidence` 등에서 검출 |
+| 포트폴리오 보고액을 항상 비0으로 | `extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not`에서 검출 |

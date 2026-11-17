@@ -2777,4 +2777,31 @@ pub(crate) mod tests {
             Some(SnapshotError::MissingPrice)
         );
     }
+
+    #[test]
+    fn extended_observed_zero_holding_with_zero_report_remains_available() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let template = holding(Currency::Krw, None, Some("17"));
+        let ratio = Ratio::parse(&NumericInput::try_new("0").expect("입력")).expect("율");
+        let report = crate::ReportedHolding::new(
+            money("0", Currency::Krw),
+            money("0", Currency::Krw),
+            ratio,
+        )
+        .expect("제공값");
+        let zero = crate::Holding::new(
+            template.instrument().clone(),
+            Quantity::parse(&NumericInput::try_new("0").expect("입력")).expect("수량"),
+            template.acquisition_price(),
+            crate::HoldingObservation::new(template.current_price(), Some(report), at(3, 7)),
+        )
+        .expect("0주");
+        let portfolio = observation_portfolio(vec![zero]);
+        let snapshot = ValuationSnapshot::observe(&cal, &portfolio.evaluate(None), at(3, 7), None)
+            .expect("0주와 보고된 0");
+        assert_eq!(
+            snapshot.stock_value(Currency::Krw),
+            Ok(money("0", Currency::Krw))
+        );
+    }
 }
