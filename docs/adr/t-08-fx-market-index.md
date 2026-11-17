@@ -28,7 +28,7 @@ StoreFxRate는 기존 MarketDataRepository에 단일 환율을 저장한 뒤 해
 
 ## 절차
 
-프로젝트 설정의 hooks=true와 Git 훅 설치는 확인했으나 현재 세션의 프로젝트 신뢰·훅 신뢰·실제 적용은 확인할 수 없다. 실제 API와 실제 자격 증명은 사용하지 않았다.
+프로젝트 설정의 hooks=true와 Git 훅 설치는 확인했으나 현재 세션의 프로젝트 신뢰·훅 신뢰·실제 적용은 확인할 수 없다. 실제 API와 실제 자격 증명은 사용하지 않았다. portable-r1 단독 실행 첫 시도에는 지정된 pnpm PATH를 빠뜨려 Corepack 경로 부재로 실패했다. 지정된 PATH로 다시 실행한 10개 시험은 통과했다.
 
 ## 보호 파일
 
@@ -42,9 +42,23 @@ D-50: 일별 종가와 평가 가격 증거에서 사용할 장 종료를 정규
 
 T-07의 일봉 어댑터 `crates/adapters/broker-toss/src/market_read/candles.rs`의 `assemble`도 현재 모든 세션의 가장 늦은 종료를 일봉 확정에 사용한다. D-50: domain의 정규장 종료 판정뿐 아니라 이 소비 경로도 같은 기준으로 맞추고 16:00 KST 회귀를 확인한다. T-08 범위에서 기존 일봉 구현은 변경하지 않았다.
 
+미국 지수 대용 ETF의 양성 검증은 `us_index_proxy_etf_reuses_existing_quote_endpoint` 안의 SPY·USD 인라인 합성 응답을 쓴다. 위 표의 기존 `t07-quote.json`은 같은 `/prices` 경로의 국내 종목 합성 녹화이며 ETF 녹화라고 주장하지 않는다. 401·429의 전송 계약은 T-07 기존 현재가 테스트를 재사용한다.
+
+## 지표 봉과 지원 기능 보강
+
+확정 ADR 0055·0082가 T-08에 배정한 `MarketInfo::indicator_candles`의 기존 미지원 상태를 보완한다. 기존 `ReadRoute::IndicatorCandles`, 토큰 관리자와 제한기를 사용해 `/api/v1/market-indicators/{symbol}/candles`를 읽고 OHLCV를 `MarketIndicatorCandle` 생성자에 넣는다. 지수 분봉과 지표 일봉만 허용하며 미지 심볼과 국채 분봉은 전송 전에 거부한다. 최대 200행·64쪽이고 포함 `nextBefore` 페이지의 같은 봉은 값과 원래 오프셋이 모두 같을 때만 한 번 보존한다. 서로 다른 값·오프셋, 역순, 지나치게 큰 페이지와 진행하지 않는 커서는 실패한다. 분봉 시간 간격과 국내 일봉 사이의 휴장 증거를 확인하며 근거가 없는 중간 날짜는 성공으로 꾸미지 않는다.
+
+일봉의 확정 상태는 domain 생성자의 `Unknown`을 그대로 반환한다. 해당 날짜의 실제 `MarketCalendar`를 가진 소비자만 `finalize_index_day`에 넘겨 정규장 종료를 확인한다. 합성 16:00 KST 사례에서 정규장 15:30 종료와 20:00 애프터마켓을 분리한 달력으로 확정되는 것을 시험했다. 이 검증은 앞서 인계한 T-07 종목 일봉의 최대 종료 시각 문제를 고쳤다는 뜻이 아니다. 과거 날짜의 전체 달력 공급과 실제 봉 시각은 T-13/D-50에서 확인한다.
+
+| 엔드포인트 | 포트 메서드 | 합성 녹화 |
+|---|---|---|
+| GET /api/v1/market-indicators/{symbol}/candles | MarketInfo::indicator_candles | tests/market_recordings/t08-indicator-daily.json, t08-indicator-minute.json |
+
+공통 `TossAccountRead::capabilities`는 이 묶음에서 실제 구현한 지표·달력·섹터·랭킹·수급 기능을 Supported로 명시한다. 미구현 종목 마스터, 호가·가격 제한 및 주문 관련 기능은 계속 Unsupported다. 지원 가능성 표시는 응답의 신선도·마스터 주입·휴장 근거가 이미 갖춰졌다는 보증이 아니다.
+
 ## 손 변형 실제 실행
 
-`mktemp -d` 복사본에서 다음 변형을 각각 컴파일하고 표시된 테스트로 실행했다. 11개 모두 해당 테스트 실패로 검출됐다. 로그는 작업 사본의 `target/T-08/mutant-*.log`다.
+`mktemp -d` 복사본에서 다음 변형을 각각 컴파일하고 표시된 테스트로 실행했다. 23개 모두 해당 테스트 실패로 검출됐다. 로그는 작업 사본의 `target/T-08/mutant-*.log`다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 |
 |---|---|---|
@@ -59,3 +73,15 @@ T-07의 일봉 어댑터 `crates/adapters/broker-toss/src/market_read/candles.rs
 | 9 | 미확인 세션 필드 검사 제거 | `calendar_rejects_unknown_session_kinds` |
 | 10 | KOSPI 요청을 KOSDAQ로 변경 | `indicator_quotes_keep_requested_codes_and_distinct_points` |
 | 11 | 지수 응답 건수 일치 판정 반전 | `indicator_quotes_keep_requested_codes_and_distinct_points` |
+| 12 | 지표 시가를 종가로 변경 | `indicator_daily_candles_preserve_points_time_and_unknown_finality` |
+| 13 | 지표 고가를 저가로 변경 | `indicator_daily_candles_preserve_points_time_and_unknown_finality` |
+| 14 | 200봉 경계 거부 | `indicator_candle_page_accepts_200_rows` |
+| 15 | 64쪽 상한을 63쪽으로 축소 | `indicator_candles_accept_complete_64_page_window` |
+| 16 | 중복 봉의 원본 오프셋 비교 반전 | `indicator_candles_use_inclusive_cursor_and_deduplicate_equal_overlap` |
+| 17 | 중복 봉 값 일치 판정 반전 | `indicator_candles_use_inclusive_cursor_and_deduplicate_equal_overlap` |
+| 18 | 조회 시작 경계 비교 반전 | `indicator_daily_candles_preserve_points_time_and_unknown_finality` |
+| 19 | 일봉 요청을 분봉으로 변경 | `indicator_daily_candles_preserve_points_time_and_unknown_finality` |
+| 20 | 분봉 간격 검증 반전 | `indicator_minute_candles_preserve_finality_boundary` |
+| 21 | 휴장 증거 판정 반전 | `indicator_daily_gaps_require_closed_calendar_evidence` |
+| 22 | 구현된 지표 현재가 지원 표시 제거 | `capabilities_match_implemented_market_endpoints` |
+| 23 | 미구현 종목 마스터를 지원으로 표시 | `capabilities_match_implemented_market_endpoints` |

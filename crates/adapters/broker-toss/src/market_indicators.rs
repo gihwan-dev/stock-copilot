@@ -66,7 +66,7 @@ pub(crate) async fn quotes<S: SecretStore, T: Clock, R: TokenRenewal>(
 fn invalid() -> PortError {
     crate::market_read::invalid(ENDPOINT)
 }
-fn code(value: IndicatorCode) -> Result<&'static str, PortError> {
+pub(crate) fn code(value: IndicatorCode) -> Result<&'static str, PortError> {
     match value {
         IndicatorCode::Kospi => Ok("KOSPI"),
         IndicatorCode::Kosdaq => Ok("KOSDAQ"),

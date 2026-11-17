@@ -32,6 +32,7 @@ mod market_read;
 mod market_calendar;
 mod market_flow;
 mod market_fx;
+mod market_indicator_candles;
 mod market_indicators;
 mod market_info;
 mod market_investor_rankings;

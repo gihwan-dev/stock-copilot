@@ -1,7 +1,6 @@
 use crate::{TokenRenewal, TossAccountRead};
 use application::{
-    Clock, MarketInfo, PortError, RankingQuery, ReadEndpoint, RequestRejection, SecretStore,
-    SectorRankingQuery,
+    Clock, MarketInfo, PortError, RankingQuery, ReadEndpoint, SecretStore, SectorRankingQuery,
 };
 use domain::{
     CalendarDate, CandlePeriod, CreditTrade, FlowInterval, FxPair, FxRate, FxRateKind,
@@ -11,12 +10,6 @@ use domain::{
     SectorRanking, SecuritiesLending, ShortSelling, StockRanking, TimeInterval, Timestamp,
 };
 
-fn unsupported<T>(endpoint: ReadEndpoint) -> Result<T, PortError> {
-    Err(crate::market_read::rejected(
-        endpoint,
-        RequestRejection::UnsupportedQuery,
-    ))
-}
 impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S, T, R> {
     async fn fx_rate(
         &self,
@@ -104,11 +97,11 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
     }
     fn indicator_candles(
         &self,
-        _: IndicatorCode,
-        _: TimeInterval,
-        _: CandlePeriod,
+        code: IndicatorCode,
+        window: TimeInterval,
+        period: CandlePeriod,
     ) -> impl Future<Output = Result<Vec<MarketIndicatorCandle>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::IndicatorCandles))
+        crate::market_indicator_candles::fetch(self, code, window, period)
     }
     fn rankings(
         &self,
