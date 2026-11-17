@@ -1,3 +1,4 @@
+mod history;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PriceLimitsInput {
     pub instrument: QuoteInstrument,
@@ -39,6 +40,15 @@ pub struct PriceLimits {
     clock_alignment: ClockAlignment,
 }
 impl PriceLimits {
+    pub fn check_adjusted_move(
+        instrument: &crate::MasterInstrument,
+        date: crate::CalendarDate,
+        previous: Price,
+        current: Price,
+    ) -> Result<PriceLimitCheck, PriceLimitsError> {
+        history::check_adjusted_move(instrument, date, previous, current)
+    }
+
     pub fn try_new(input: PriceLimitsInput) -> Result<Self, PriceLimitsError> {
         let PriceLimitsInput {
             instrument,

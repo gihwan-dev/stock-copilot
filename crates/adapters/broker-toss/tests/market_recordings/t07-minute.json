@@ -1,0 +1,32 @@
+{
+  "origin": "synthetic",
+  "method": "get",
+  "path": "/api/v1/candles",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1candles/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "candles": [
+        {
+          "timestamp": "2026-03-25T09:32:00+09:00",
+          "openPrice": "72000",
+          "highPrice": "72100",
+          "lowPrice": "71950",
+          "closePrice": "72050",
+          "volume": "15200",
+          "currency": "KRW"
+        },
+        {
+          "timestamp": "2026-03-25T09:31:00+09:00",
+          "openPrice": "71950",
+          "highPrice": "72050",
+          "lowPrice": "71900",
+          "closePrice": "72000",
+          "volume": "18400",
+          "currency": "KRW"
+        }
+      ],
+      "nextBefore": "2026-03-25T09:31:00+09:00"
+    }
+  }
+}
