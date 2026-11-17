@@ -10,6 +10,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
