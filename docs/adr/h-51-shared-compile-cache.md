@@ -13,7 +13,7 @@
 
 - 네 번의 검사 중앙값은 씨앗 없음 156.67초, 씨앗 있음 192.72초다. 씨앗 쪽이 23.0% 느려 개선 기준을 충족하지 못했다. 씨앗 레시피·스크립트·테스트는 제거하고 이 조사 기록을 남긴다. 이 측정은 속도 저하의 원인을 입증하지 않는다.
 - `fresh-cargo`와 종료 훅은 ADR 0015대로 `--workspace` 정리를 유지한다. 외부 의존성까지 매번 정리하면 커밋·병합·푸시·종료에서 재컴파일 비용이 발생한다. 수동 `just fresh-all`은 외부 의존성까지 지우며 자동 훅에 넣지 않는다. 전체 정리 뒤 `just base=HEAD check`로 가속 없는 로컬 빌드를 확인할 수 있다.
-- 기존 `NEXTEST_TEST_THREADS` 환경값 제거 방어는 유지한다. 이 작업에서 시험한 네 레시피의 영구 4스레드 고정과 관련 기존 테스트 기대값은 되돌렸다.
+- 기존 `NEXTEST_TEST_THREADS` 환경값 제거 방어는 유지한다. 이 작업에서 시험한 네 레시피의 영구 4스레드 고정과 관련 기존 테스트 기대값은 되돌렸다. 최신 master의 H-52는 nextest 기본 프로필에 4를 고정했으며 병합 시 유지한다.
 
 ## 버린 대안
 
@@ -54,31 +54,37 @@ H-51: 메인은 병합 뒤 필요할 때 각 작업 사본에서 수동 `just fr
 
 ## 손 변형
 
-`mktemp` 사본에서 새 워크플로·정리 회귀 테스트의 대조군을 실행한 뒤, 정식 JSON 문법과 justfile 구문을 확인한 각 변형을 실제 테스트로 실행했다. 변형 24개가 모두 검출됐고 사본은 삭제했다. 워크플로 변형 20개는 기존 정책의 기대값 정확 일치와 허용 목록을 포함한 첫 단언에서 검출됐으며, 이후 정규식만의 독립 검출력을 증명하지 않는다. 로그는 작업 사본의 `target/H-51/policy-mutations/`에 보존한다.
+`mktemp` 사본에서 새 워크플로·정리 회귀 테스트의 대조군을 실행한 뒤, 정식 JSON 문법과 justfile 구문을 확인한 각 변형을 실제 테스트로 실행했다. 변형 28개가 모두 검출됐고 사본은 삭제했다. 워크플로 변형 20개는 기존 정책의 기대값 정확 일치와 허용 목록을 포함한 첫 단언에서 검출됐으며, 이후 정규식만의 독립 검출력을 증명하지 않는다. 로그는 작업 사본의 `target/H-51/policy-mutations/`에 보존한다.
 
-| 번호 | 바꾼 것                                                | 잡은 테스트                                                             |
-| ---- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| 1    | .github/workflows/ci.yml linux: self-hosted            | remote checks run on hosted runners without restoring a compiled target |
-| 2    | .github/workflows/ci.yml linux: cache-action           | remote checks run on hosted runners without restoring a compiled target |
-| 3    | .github/workflows/ci.yml linux: seed-command           | remote checks run on hosted runners without restoring a compiled target |
-| 4    | .github/workflows/ci.yml linux: wrapper-env            | remote checks run on hosted runners without restoring a compiled target |
-| 5    | .github/workflows/ci.yml linux: rust-cache-action      | remote checks run on hosted runners without restoring a compiled target |
-| 6    | .github/workflows/ci.yml macos: self-hosted            | remote checks run on hosted runners without restoring a compiled target |
-| 7    | .github/workflows/ci.yml macos: cache-action           | remote checks run on hosted runners without restoring a compiled target |
-| 8    | .github/workflows/ci.yml macos: seed-command           | remote checks run on hosted runners without restoring a compiled target |
-| 9    | .github/workflows/ci.yml macos: wrapper-env            | remote checks run on hosted runners without restoring a compiled target |
-| 10   | .github/workflows/ci.yml macos: rust-cache-action      | remote checks run on hosted runners without restoring a compiled target |
-| 11   | .github/workflows/nightly.yml linux: self-hosted       | remote checks run on hosted runners without restoring a compiled target |
-| 12   | .github/workflows/nightly.yml linux: cache-action      | remote checks run on hosted runners without restoring a compiled target |
-| 13   | .github/workflows/nightly.yml linux: seed-command      | remote checks run on hosted runners without restoring a compiled target |
-| 14   | .github/workflows/nightly.yml linux: wrapper-env       | remote checks run on hosted runners without restoring a compiled target |
-| 15   | .github/workflows/nightly.yml linux: rust-cache-action | remote checks run on hosted runners without restoring a compiled target |
-| 16   | .github/workflows/nightly.yml macos: self-hosted       | remote checks run on hosted runners without restoring a compiled target |
-| 17   | .github/workflows/nightly.yml macos: cache-action      | remote checks run on hosted runners without restoring a compiled target |
-| 18   | .github/workflows/nightly.yml macos: seed-command      | remote checks run on hosted runners without restoring a compiled target |
-| 19   | .github/workflows/nightly.yml macos: wrapper-env       | remote checks run on hosted runners without restoring a compiled target |
-| 20   | .github/workflows/nightly.yml macos: rust-cache-action | remote checks run on hosted runners without restoring a compiled target |
-| 21   | workspace-only                                         | the known dependency-artifact gap is listed and full cleanup is manual  |
-| 22   | missing-clean                                          | the known dependency-artifact gap is listed and full cleanup is manual  |
-| 23   | stop-hook workspace removal                            | the known dependency-artifact gap is listed and full cleanup is manual  |
-| 24   | known-gap reversed                                     | the known dependency-artifact gap is listed and full cleanup is manual  |
+변형 23은 종료 훅의 상수 목록 변경을, 24는 공백 설명의 첫 문장 반전을 검출한다. 27·28은 존재하지 않는 작업 경로에서 sandbox 시작 전 기본 첫 단계 선택만 확인한다. 이 테스트가 실제 Claude·Codex 종료 훅의 성공 실행이나 모든 단계를 입증하지는 않는다. 문구 일부를 검사하는 테스트도 문서 전체의 의미적 무모순을 증명하지 않는다.
+
+| 번호 | 바꾼 것                                                | 잡은 테스트                                                                |
+| ---- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
+| 1    | .github/workflows/ci.yml linux: self-hosted            | remote checks run on hosted runners without restoring a compiled target    |
+| 2    | .github/workflows/ci.yml linux: cache-action           | remote checks run on hosted runners without restoring a compiled target    |
+| 3    | .github/workflows/ci.yml linux: seed-command           | remote checks run on hosted runners without restoring a compiled target    |
+| 4    | .github/workflows/ci.yml linux: wrapper-env            | remote checks run on hosted runners without restoring a compiled target    |
+| 5    | .github/workflows/ci.yml linux: rust-cache-action      | remote checks run on hosted runners without restoring a compiled target    |
+| 6    | .github/workflows/ci.yml macos: self-hosted            | remote checks run on hosted runners without restoring a compiled target    |
+| 7    | .github/workflows/ci.yml macos: cache-action           | remote checks run on hosted runners without restoring a compiled target    |
+| 8    | .github/workflows/ci.yml macos: seed-command           | remote checks run on hosted runners without restoring a compiled target    |
+| 9    | .github/workflows/ci.yml macos: wrapper-env            | remote checks run on hosted runners without restoring a compiled target    |
+| 10   | .github/workflows/ci.yml macos: rust-cache-action      | remote checks run on hosted runners without restoring a compiled target    |
+| 11   | .github/workflows/nightly.yml linux: self-hosted       | remote checks run on hosted runners without restoring a compiled target    |
+| 12   | .github/workflows/nightly.yml linux: cache-action      | remote checks run on hosted runners without restoring a compiled target    |
+| 13   | .github/workflows/nightly.yml linux: seed-command      | remote checks run on hosted runners without restoring a compiled target    |
+| 14   | .github/workflows/nightly.yml linux: wrapper-env       | remote checks run on hosted runners without restoring a compiled target    |
+| 15   | .github/workflows/nightly.yml linux: rust-cache-action | remote checks run on hosted runners without restoring a compiled target    |
+| 16   | .github/workflows/nightly.yml macos: self-hosted       | remote checks run on hosted runners without restoring a compiled target    |
+| 17   | .github/workflows/nightly.yml macos: cache-action      | remote checks run on hosted runners without restoring a compiled target    |
+| 18   | .github/workflows/nightly.yml macos: seed-command      | remote checks run on hosted runners without restoring a compiled target    |
+| 19   | .github/workflows/nightly.yml macos: wrapper-env       | remote checks run on hosted runners without restoring a compiled target    |
+| 20   | .github/workflows/nightly.yml macos: rust-cache-action | remote checks run on hosted runners without restoring a compiled target    |
+| 21   | workspace-only                                         | the known dependency-artifact gap is listed and full cleanup is manual     |
+| 22   | missing-clean                                          | the known dependency-artifact gap is listed and full cleanup is manual     |
+| 23   | `FRESH_STEPS`의 첫 정리 명령에서 `--workspace` 제거    | the known dependency-artifact gap is listed and full cleanup is manual     |
+| 24   | 공백 첫 문장을 산출물이 지워진다는 뜻으로 반전         | the known dependency-artifact gap is listed and full cleanup is manual     |
+| 25   | 공백 항목의 `fresh-all` 안내 제거                      | the known dependency-artifact gap is listed and full cleanup is manual     |
+| 26   | 공백 항목의 무결성 한계를 증명한다는 뜻으로 반전       | the known dependency-artifact gap is listed and full cleanup is manual     |
+| 27   | 종료 검사 기본 단계 목록을 빈 배열로 변경              | the default stop check selects workspace cleanup before starting a sandbox |
+| 28   | 종료 검사 기본 단계 중 첫 단계를 제거                  | the default stop check selects workspace cleanup before starting a sandbox |
