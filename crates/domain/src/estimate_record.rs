@@ -11,6 +11,7 @@ pub enum EstimateSourceStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EstimateRecordError {
     TaskMismatch,
+    HorizonMismatch,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EstimatePrompt {
@@ -35,16 +36,18 @@ impl PromptHash {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EstimateMetadataError {
     InvalidHash,
+    InvalidBundleId,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EvidenceBundleId(crate::CalibrationEstimateId);
+pub struct EvidenceBundleId(String);
 impl EvidenceBundleId {
-    #[must_use]
-    pub const fn new(value: crate::CalibrationEstimateId) -> Self {
-        Self(value)
+    pub fn try_new(value: &str) -> Result<Self, EstimateMetadataError> {
+        let parsed = crate::CalibrationEstimateId::try_new(value)
+            .map_err(|_error| EstimateMetadataError::InvalidBundleId)?;
+        Ok(Self(parsed.as_str().to_owned()))
     }
     #[must_use]
-    pub const fn as_estimate_id(&self) -> &crate::CalibrationEstimateId {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -77,6 +80,13 @@ impl<Run: Clone, Effort> EstimateSubmissionRecord<Run, Effort> {
     ) -> Result<Self, EstimateRecordError> {
         if submission.task_key().task() != issued.task().task() {
             return Err(EstimateRecordError::TaskMismatch);
+        }
+        if issued.task().task().horizon()
+            != crate::TradingDayHorizon::from_estimate_policy(
+                submission.calibration_key().horizon().selection(),
+            )
+        {
+            return Err(EstimateRecordError::HorizonMismatch);
         }
         Ok(Self {
             task_id: issued.id().clone(),

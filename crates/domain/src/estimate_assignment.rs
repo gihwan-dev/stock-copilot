@@ -288,10 +288,17 @@ mod tests {
                 version: ModelIdentityPart::try_new("revision-11").expect("버전"),
                 hash: PromptHash::try_new(&"ab".repeat(32)).expect("해시"),
             },
-            evidence_bundle: EvidenceBundleId::new(id("bundle-13")),
+            evidence_bundle: EvidenceBundleId::try_new("bundle-13").expect("묶음"),
         }
     }
     fn submission(task: &CostEligibleTask, evidence: Option<Evidence>) -> SignalSubmission {
+        submission_for(task, evidence, HorizonSelection::FewDays)
+    }
+    fn submission_for(
+        task: &CostEligibleTask,
+        evidence: Option<Evidence>,
+        horizon: HorizonSelection,
+    ) -> SignalSubmission {
         let model = CalibrationModel::new(
             ModelIdentityPart::try_new("provider-17").expect("제공자"),
             ModelIdentityPart::try_new("actual-19").expect("실제 모델"),
@@ -299,7 +306,7 @@ mod tests {
         );
         SignalSubmission::create(
             SignalTaskKey::from_task(task),
-            CalibrationKey::new(model, Horizon::new(HorizonSelection::FewDays)),
+            CalibrationKey::new(model, Horizon::new(horizon)),
             AiProbability::parse(&AiProbabilityInput::try_new("67").expect("입력")).expect("확률"),
             evidence,
             task.task().created_at(),
@@ -342,10 +349,7 @@ mod tests {
         assert_eq!(record.metadata().prompt.id.as_str(), "prompt-7");
         assert_eq!(record.metadata().prompt.version.as_str(), "revision-11");
         assert_eq!(record.metadata().prompt.hash.as_str(), "ab".repeat(32));
-        assert_eq!(
-            record.metadata().evidence_bundle.as_estimate_id(),
-            &id("bundle-13")
-        );
+        assert_eq!(record.metadata().evidence_bundle.as_str(), "bundle-13");
         assert_eq!(record.source_status(), EstimateSourceStatus::Missing);
         let other = eligible(HorizonSelection::WeeksToMonths);
         assert_eq!(
@@ -414,5 +418,73 @@ mod tests {
             PromptHash::try_new(&"AB".repeat(32)),
             PromptHash::try_new(&"ab".repeat(32))
         );
+    }
+
+    #[test]
+    fn record_rejects_calibration_period_that_differs_from_issued_task() {
+        for horizon in [
+            HorizonSelection::FewDays,
+            HorizonSelection::WeeksToMonths,
+            HorizonSelection::HalfYearOrMore,
+        ] {
+            let assignments = EstimateAssignments::default()
+                .issue(id("period"), run("alpha"), eligible(horizon))
+                .expect("발급");
+            let issued = assignments.lookup(&id("period")).expect("과제");
+            for key in [
+                HorizonSelection::Hours,
+                HorizonSelection::FewDays,
+                HorizonSelection::WeeksToMonths,
+                HorizonSelection::HalfYearOrMore,
+            ] {
+                check_record_period(issued, horizon, key);
+            }
+        }
+    }
+    fn check_record_period(
+        issued: &crate::IssuedEstimateTask<InstrumentId>,
+        task: HorizonSelection,
+        key: HorizonSelection,
+    ) {
+        let record = EstimateSubmissionRecord::create(
+            issued,
+            submission_for(issued.task(), None, key),
+            narrative(),
+            metadata(),
+        );
+        if task == key {
+            assert_eq!(
+                record
+                    .expect("일치")
+                    .submission()
+                    .calibration_key()
+                    .horizon()
+                    .selection(),
+                task
+            );
+        } else {
+            assert_eq!(record, Err(EstimateRecordError::HorizonMismatch));
+        }
+    }
+    #[test]
+    fn evidence_bundle_preserves_its_own_boundary_without_task_id_access() {
+        for valid in ["b".to_owned(), "B".repeat(64), "bundle-13".to_owned()] {
+            assert_eq!(
+                EvidenceBundleId::try_new(&valid).expect("묶음").as_str(),
+                valid
+            );
+        }
+        for invalid in [
+            String::new(),
+            "B".repeat(65),
+            "bundle id".to_owned(),
+            "가".to_owned(),
+            "bundle\n".to_owned(),
+        ] {
+            assert_eq!(
+                EvidenceBundleId::try_new(&invalid),
+                Err(EstimateMetadataError::InvalidBundleId)
+            );
+        }
     }
 }
