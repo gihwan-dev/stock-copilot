@@ -2,8 +2,27 @@ use crate::{
     BuySignal, MarketCalendar, NoBuyQuantity, ResolvedOrderInstrument, TimeInterval, Timestamp,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BuySignalOccurrenceId(String);
+impl BuySignalOccurrenceId {
+    pub fn try_new(value: &str) -> Result<Self, NoBuyQuantity> {
+        if value.is_empty()
+            || value.len() > 64
+            || !value.bytes().all(|byte| byte.is_ascii_graphic())
+        {
+            return Err(NoBuyQuantity::Indeterminate);
+        }
+        Ok(Self(value.to_owned()))
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 #[derive(Clone, PartialEq, Eq)]
 pub struct BuySignalRecord {
+    id: BuySignalOccurrenceId,
+    instrument_id: crate::InstrumentId,
     instrument: ResolvedOrderInstrument,
     interval: TimeInterval,
     raised_at: Timestamp,
@@ -15,6 +34,7 @@ impl std::fmt::Debug for BuySignalRecord {
 }
 impl BuySignalRecord {
     pub fn from_signal(
+        id: BuySignalOccurrenceId,
         signal: &BuySignal,
         raised_at: Timestamp,
         calendars: &[MarketCalendar],
@@ -26,10 +46,20 @@ impl BuySignalRecord {
         crate::estimate_outcome::buy_signal_interval_from(task, raised_at, calendars)
             .or(Err(NoBuyQuantity::Indeterminate))
             .map(|interval| Self {
+                id,
+                instrument_id: task.volatility().instrument().clone(),
                 instrument: task.reference().instrument().clone(),
                 interval,
                 raised_at,
             })
+    }
+    #[must_use]
+    pub const fn id(&self) -> &BuySignalOccurrenceId {
+        &self.id
+    }
+    #[must_use]
+    pub const fn instrument_id(&self) -> &crate::InstrumentId {
+        &self.instrument_id
     }
     #[must_use]
     pub const fn instrument(&self) -> &ResolvedOrderInstrument {
@@ -45,20 +75,54 @@ impl BuySignalRecord {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrentBuySignal {
+    signal: BuySignal,
+    occurrence: BuySignalRecord,
+}
+impl CurrentBuySignal {
+    pub fn try_new(signal: BuySignal, occurrence: BuySignalRecord) -> Result<Self, NoBuyQuantity> {
+        if occurrence.instrument() != signal.facts().task().reference().instrument()
+            || occurrence.instrument_id() != signal.facts().task().volatility().instrument()
+        {
+            return Err(NoBuyQuantity::Indeterminate);
+        }
+        Ok(Self { signal, occurrence })
+    }
+    #[must_use]
+    pub const fn signal(&self) -> &BuySignal {
+        &self.signal
+    }
+    #[must_use]
+    pub const fn occurrence(&self) -> &BuySignalRecord {
+        &self.occurrence
+    }
+    pub fn update(self, signal: BuySignal) -> Result<Self, NoBuyQuantity> {
+        Self::try_new(signal, self.occurrence)
+    }
+}
+
 pub(crate) fn check_buy_history(
-    signal: &BuySignal,
+    current: &CurrentBuySignal,
     now: Timestamp,
     records: &[BuySignalRecord],
 ) -> Result<(), NoBuyQuantity> {
     if records.len() > 65_536 {
         return Err(NoBuyQuantity::Indeterminate);
     }
-    if records.iter().any(|record| record.raised_at > now) {
+    if current.occurrence.raised_at > now || records.iter().any(|record| record.raised_at > now) {
         return Err(NoBuyQuantity::Indeterminate);
     }
-    let instrument = signal.facts().task().reference().instrument();
+    if records
+        .iter()
+        .any(|record| record.id == current.occurrence.id && record != &current.occurrence)
+    {
+        return Err(NoBuyQuantity::Indeterminate);
+    }
+    let instrument = current.signal.facts().task().reference().instrument();
     if records.iter().any(|record| {
-        record.instrument.market() == instrument.market()
+        record.id != current.occurrence.id
+            && record.instrument.market() == instrument.market()
             && record.instrument.symbol() == instrument.symbol()
             && now >= record.interval.start()
             && now < record.interval.end()

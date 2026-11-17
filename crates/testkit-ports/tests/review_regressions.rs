@@ -351,11 +351,41 @@ mod tests {
         )
         .expect("제출")
     }
-    fn signal(held: &str) -> RaisedSignal {
-        let task = eligible();
+    fn submitted_for_signal(task: &CostEligibleTask) -> domain::SubmittedCalibration {
         let key = calibration_key();
         let calibration = Calibration::try_new(key, &[]).expect("보정");
-        let submitted = calibrate_signal_submission(&calibration, submission(&task));
+        let latest = domain::CalibrationLedgerHead::new(
+            calibration_key(),
+            domain::CalibrationPosition::new(0),
+        );
+        let snapshot =
+            domain::CalibrationSnapshot::try_new(calibration, latest.clone()).expect("완전한 표");
+        calibrate_signal_submission(Some(&snapshot), &latest, submission(task)).expect("보정")
+    }
+    fn signal_assessment<'facts>(
+        estimate: &SignalEstimate,
+        at: Timestamp,
+        calendars: &'facts [MarketCalendar],
+    ) -> domain::SignalAssessmentFacts<'facts> {
+        domain::SignalAssessmentFacts::new(
+            SignalTiming::new(at, calendars),
+            Some(
+                domain::PriceObservation::from_quote_parts(
+                    estimate.task().reference().instrument().clone(),
+                    estimate.task().reference().price(),
+                    at,
+                )
+                .expect("대상 시세"),
+            ),
+            Some(domain::CalibrationLedgerHead::new(
+                estimate.submission().calibration_key().clone(),
+                domain::CalibrationPosition::new(0),
+            )),
+        )
+    }
+    fn signal(held: &str) -> RaisedSignal {
+        let task = eligible();
+        let submitted = submitted_for_signal(&task);
         let estimate =
             SignalEstimate::create(&task, &submitted, Margin::default()).expect("신호 입력");
         let at = task.task().created_at();
@@ -400,7 +430,7 @@ mod tests {
             &policy,
             (&assignments, &security),
             &sources,
-            SignalTiming::new(at, &calendars),
+            signal_assessment(&estimate, at, &calendars),
         );
         SignalDecision::assess(&estimate, &context)
             .into_signal()
