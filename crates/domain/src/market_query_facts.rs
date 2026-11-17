@@ -426,6 +426,7 @@ pub struct InvestorRankingGroup {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvestorTradingRankings {
+    market: KnownMarket,
     foreigner: InvestorRankingGroup,
     institution: InvestorRankingGroup,
     individual: InvestorRankingGroup,
@@ -440,6 +441,7 @@ impl InvestorTradingRankings {
         collected: Timestamp,
     ) -> Result<Self, MarketDataError> {
         Ok(Self {
+            market: KnownMarket::Kr,
             foreigner: investor_group(InvestorClass::Foreigner, foreigner, limit, collected)?,
             institution: investor_group(InvestorClass::Institution, institution, limit, collected)?,
             individual: investor_group(InvestorClass::Individual, individual, limit, collected)?,
@@ -447,6 +449,10 @@ impl InvestorTradingRankings {
         })
     }
 
+    #[must_use]
+    pub const fn market(&self) -> KnownMarket {
+        self.market
+    }
     #[must_use]
     pub const fn foreigner(&self) -> &InvestorRankingGroup {
         &self.foreigner

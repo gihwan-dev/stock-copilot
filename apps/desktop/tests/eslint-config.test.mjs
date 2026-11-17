@@ -56,6 +56,7 @@ const undisableable = [
   "better-tailwindcss/no-concatenated-classes",
   "better-tailwindcss/no-restricted-classes",
   "ds/no-dom-values",
+  "ds/no-overflow-markers",
   "ds/no-dom-styling",
   "ds/no-element-factory",
   "ds/no-style-object",

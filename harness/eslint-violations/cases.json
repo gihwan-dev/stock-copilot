@@ -140,6 +140,7 @@
       "boundaries/no-unknown-files"
     ],
     "DS19 화면 스크롤": ["no-restricted-imports"],
+    "DS20 넘침 표식": ["ds/no-overflow-markers"],
     "DS19 프리미티브 경계": ["boundaries/dependencies"]
   },
   "cases": {
@@ -3990,6 +3991,30 @@
     },
     "src/shared/ds/Markdown.tsx": {
       "row": "원시 타입",
+      "expect": []
+    },
+    "src/shared/ds/testing/overflow.ts": {
+      "row": "원시 타입",
+      "expect": []
+    },
+    "src/shared/ds/testing/overflow-geometry.ts": {
+      "row": "원시 타입",
+      "expect": []
+    },
+    "src/shared/ds/testing/stress.ts": {
+      "row": "원시 타입",
+      "expect": []
+    },
+    "src/shared/ds/MarkerViewport.tsx": {
+      "row": "DS20 넘침 표식",
+      "expect": ["ds/no-overflow-markers"]
+    },
+    "src/shared/ds/MarkerTruncate.tsx": {
+      "row": "DS20 넘침 표식",
+      "expect": ["ds/no-overflow-markers"]
+    },
+    "src/shared/ds/Text.tsx": {
+      "row": "DS20 넘침 표식",
       "expect": []
     },
     "src/app/overflow/named.ts": {

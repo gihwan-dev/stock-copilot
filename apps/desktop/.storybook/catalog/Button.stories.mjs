@@ -120,3 +120,13 @@ export const Dark11 = {
   parameters: { theme: "dark", sample: 11 },
   render: () => renderCatalog("Button", "dark", 11),
 };
+export const Light12 = {
+  name: "부하 · 013 · 라이트",
+  parameters: { theme: "light", sample: 12 },
+  render: () => renderCatalog("Button", "light", 12),
+};
+export const Dark12 = {
+  name: "부하 · 013 · 다크",
+  parameters: { theme: "dark", sample: 12 },
+  render: () => renderCatalog("Button", "dark", 12),
+};

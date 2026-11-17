@@ -1,0 +1,21 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/sectors/{sectorId}/etfs",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1sectors~1{sectorId}~1etfs/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "etfs": [
+        {
+          "symbol": "091160",
+          "name": "KODEX 반도체"
+        },
+        {
+          "symbol": "396500",
+          "name": "TIGER Fn반도체TOP10"
+        }
+      ]
+    }
+  }
+}

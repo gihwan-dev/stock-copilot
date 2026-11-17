@@ -10,7 +10,12 @@ import { spawnSync } from "node:child_process";
 import { desktop, loadCatalog } from "./load.mjs";
 import { stylesheetProblems } from "./styles.mjs";
 import { generationProblems } from "./generation.mjs";
-import { catalogProblems } from "./rules.mjs";
+import {
+  catalogProblems,
+  stressProblems,
+  stressRenderProblems,
+  stressFixtureProblems,
+} from "./rules.mjs";
 const folder = mkdtempSync(join(desktop, "node_modules/.ds07-index-"));
 try {
   const run = spawnSync(
@@ -30,6 +35,18 @@ try {
     readFileSync(join(folder, "storybook/index.json"), "utf8"),
   );
   const loaded = await loadCatalog();
+  const stress = stressProblems(
+    Object.keys(loaded.components),
+    loaded.protectedStressStories,
+  );
+  stress.push(...stressRenderProblems(loaded.protectedStressStories));
+  stress.push(
+    ...stressFixtureProblems(
+      loaded.stressFixtures,
+      loaded.protectedStressStories,
+    ),
+  );
+  if (stress.length !== 0) throw new Error(stress.join("\n"));
   const entries = Object.values(index.entries)
     .filter((entry) => entry.type === "story")
     .map((item) => {
@@ -66,6 +83,7 @@ try {
     ]),
     ...(await generationProblems(loaded.samples)),
     ...catalogProblems(Object.keys(loaded.components), loaded.samples, entries),
+    ...stress,
   ];
   mkdirSync(join(desktop, "../../target/DS-07"), { recursive: true });
   writeFileSync(

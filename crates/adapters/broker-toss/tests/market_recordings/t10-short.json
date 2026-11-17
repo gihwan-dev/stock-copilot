@@ -1,0 +1,30 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/stocks/{symbol}/short-selling",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1stocks~1{symbol}~1short-selling/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "nextUntil": "2026-07-14",
+      "records": [
+        {
+          "date": "2026-07-16",
+          "updatedAt": "2026-07-16T17:25:43+09:00",
+          "shortSellingVolume": "512300",
+          "shortSellingAmount": "41250000000",
+          "shortSellingVolumeRate": "0.03215",
+          "shortSellingAmountRate": "0.0318"
+        },
+        {
+          "date": "2026-07-15",
+          "updatedAt": "2026-07-15T17:26:02+09:00",
+          "shortSellingVolume": "423100",
+          "shortSellingAmount": "33980000000",
+          "shortSellingVolumeRate": "0.02871",
+          "shortSellingAmountRate": "0.0281"
+        }
+      ]
+    }
+  }
+}

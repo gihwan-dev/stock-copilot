@@ -4,7 +4,8 @@
       "src/shared/*/index.ts",
       "eslint/**/*.mjs",
       "tests/*.test.mjs",
-      "tests/ds06-geometry-fixture.ts"
+      "tests/ds06-geometry-fixture.ts",
+      "tests/ds20-overflow.browser.ts"
     ],
     "project": ["src/**/*.{ts,tsx}!", "src/**/*.css"],
     "include": [

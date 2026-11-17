@@ -1,5 +1,37 @@
 [
   {
+    "name": "보호된 보유 종목 하나가 파서에서 거부됨",
+    "file": "apps/desktop/src/shared/lib/brand.ts",
+    "from": "const entityIdSchema = z.string().min(1).brand<\"EntityId\">();",
+    "to": "const entityIdSchema = z.string().min(1).refine((value) => value !== \"holding-199\").brand<\"EntityId\">();",
+    "compile": "typescript",
+    "expected": "보유 종목 부하 자료"
+  },
+  {
+    "name": "보호된 Markdown 내용이 파서에서 거부됨",
+    "file": "apps/desktop/src/shared/lib/brand.ts",
+    "from": "const freeTextSchema = z.string().brand<\"FreeText\">();",
+    "to": "const freeTextSchema = z.string().refine((value) => !value.includes(\"https://example.test/source-29\")).brand<\"FreeText\">();",
+    "compile": "typescript",
+    "expected": "Markdown 부하 자료"
+  },
+  {
+    "name": "부하 수치 이야기가 빈 값으로 렌더",
+    "file": "apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
+    "from": "money.kind === \"ok\" ? <Money value={money.value} /> : null",
+    "to": "money.kind === \"ok\" && stressFixtures.empty.length > 0 ? <Money value={money.value} /> : null",
+    "compile": "typescript",
+    "expected": "Money: light 부하 이야기 렌더 없음"
+  },
+  {
+    "name": "보호된 채팅 부하 이야기 제거",
+    "file": "apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
+    "from": "  ...chatStress,",
+    "to": "  ...chatStress.filter(() => false),",
+    "compile": "typescript",
+    "expected": "ChatInput: 부하 이야기 없음"
+  },
+  {
     "name": "실제 CSF 연결 바꾸기",
     "file": "apps/desktop/.storybook/catalog/Card.stories.mjs",
     "from": "renderCatalog(\"Card\", \"dark\", 0)",

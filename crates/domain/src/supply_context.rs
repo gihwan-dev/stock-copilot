@@ -14,6 +14,7 @@ pub enum CreditSide {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupplyContext {
+    market: KnownMarket,
     symbol: Symbol,
     date: CalendarDate,
     observation: MarketObservation,
@@ -28,10 +29,15 @@ impl SupplyContext {
         crate::market_ranking::validate_market_symbol(&symbol, KnownMarket::Kr)?;
         validate_supply_date(date, updated)?;
         Ok(Self {
+            market: KnownMarket::Kr,
             symbol,
             date,
             observation: MarketObservation::from_response(Some(updated), collected)?,
         })
+    }
+    #[must_use]
+    pub const fn market(&self) -> KnownMarket {
+        self.market
     }
     #[must_use]
     pub const fn symbol(&self) -> &Symbol {
@@ -49,6 +55,7 @@ impl SupplyContext {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProgramContext {
+    market: KnownMarket,
     symbol: Symbol,
     date: CalendarDate,
     observation: MarketObservation,
@@ -62,10 +69,15 @@ impl ProgramContext {
         crate::market_ranking::validate_market_symbol(&symbol, KnownMarket::Kr)?;
         validate_supply_date(date, collected)?;
         Ok(Self {
+            market: KnownMarket::Kr,
             symbol,
             date,
             observation: MarketObservation::collected_only(collected),
         })
+    }
+    #[must_use]
+    pub const fn market(&self) -> KnownMarket {
+        self.market
     }
     #[must_use]
     pub const fn symbol(&self) -> &Symbol {
