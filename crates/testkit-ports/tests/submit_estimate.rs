@@ -171,11 +171,17 @@ mod tests {
         ModelIdentityPart::try_new(value).expect("메타데이터")
     }
     fn input(key: &str, probability: &str) -> EstimateSubmissionInput {
-        let task = eligible();
+        input_for_task(key, probability, &eligible())
+    }
+    fn input_for_task(
+        key: &str,
+        probability: &str,
+        task: &CostEligibleTask,
+    ) -> EstimateSubmissionInput {
         EstimateSubmissionInput {
             task_id: task_id(key),
             submission: SignalSubmission::create(
-                SignalTaskKey::from_task(&task),
+                SignalTaskKey::from_task(task),
                 CalibrationKey::new(
                     CalibrationModel::new(
                         identity("claude"),
@@ -214,21 +220,31 @@ mod tests {
         assignments: EstimateAssignments<AiRunId>,
         records: Vec<EstimateSubmissionRecord<AiRunId, ReasoningEffort>>,
     }
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum RepositoryCall {
+        Assignments,
+        Commit,
+    }
     #[derive(Debug)]
     struct Repo {
         state: RwLock<RepoState>,
+        calls: RwLock<Vec<RepositoryCall>>,
         fail: RwLock<Option<SystemPortError>>,
         read_error: RwLock<Option<SystemPortError>>,
         barrier: Option<Barrier>,
     }
     impl Repo {
         fn new() -> Self {
+            Self::with_second_task(eligible())
+        }
+        fn with_second_task(second: CostEligibleTask) -> Self {
             Self {
+                calls: RwLock::new(Vec::new()),
                 state: RwLock::new(RepoState {
                     assignments: EstimateAssignments::default()
                         .issue(task_id("one"), ai_run("alpha"), eligible())
                         .expect("발급")
-                        .issue(task_id("two"), ai_run("alpha"), eligible())
+                        .issue(task_id("two"), ai_run("alpha"), second)
                         .expect("발급")
                         .issue(task_id("three"), ai_run("beta"), eligible())
                         .expect("발급"),
@@ -244,6 +260,10 @@ mod tests {
         fn assignments(
             &self,
         ) -> impl Future<Output = Result<EstimateAssignments<AiRunId>, SystemPortError>> {
+            self.calls
+                .write()
+                .expect("호출 기록")
+                .push(RepositoryCall::Assignments);
             let scripted_error = self.read_error.write().expect("잠금").take();
             if let Some(error) = scripted_error {
                 return std::future::ready(Err(error));
@@ -260,6 +280,10 @@ mod tests {
             next: &EstimateAssignments<AiRunId>,
             records: &[EstimateSubmissionRecord<AiRunId, ReasoningEffort>],
         ) -> impl Future<Output = Result<EstimateCommitOutcome, SystemPortError>> {
+            self.calls
+                .write()
+                .expect("호출 기록")
+                .push(RepositoryCall::Commit);
             let scripted_error = self.fail.write().expect("잠금").take();
             if let Some(error) = scripted_error {
                 return std::future::ready(Err(error));
@@ -310,12 +334,28 @@ mod tests {
         );
         (builder.build(), events)
     }
+    fn other_task() -> CostEligibleTask {
+        let mut row = master().row().clone();
+        row.instrument_id = id("sample-b");
+        row.symbol = Symbol::try_new("000660").expect("다른 코드");
+        eligible_for_master("103", &MasterInstrument::try_new(row).expect("다른 마스터"))
+    }
     #[test]
     fn complete_records_are_saved_before_exactly_one_event_each() {
-        let repo = Arc::new(Repo::new());
+        let second_task = other_task();
+        let repo = Arc::new(Repo::with_second_task(second_task.clone()));
         let (events, seen) = bus(&repo, Ok(()));
         let first = input("one", "17");
-        let second = input("two", "83");
+        let mut second = input_for_task("two", "83", &second_task);
+        second.narrative.rationale = UntrustedText::try_new("다른 근거 셋").expect("근거");
+        second.narrative.counterargument = UntrustedText::try_new("다른 반론 넷").expect("반론");
+        second.metadata.effort = ReasoningEffort::Low;
+        second.metadata.cli_version = identity("3.8.9");
+        second.metadata.prompt.id =
+            domain::ScorecardPromptId::try_new("another-prompt").expect("다른 프롬프트");
+        second.metadata.prompt.version = identity("v7");
+        second.metadata.evidence_bundle =
+            EvidenceBundleId::try_new("bundle-twelve").expect("다른 묶음");
         let expected = vec![first.clone(), second.clone()];
         assert_eq!(
             run(SubmitEstimate::new(repo.as_ref(), &events)
@@ -336,7 +376,10 @@ mod tests {
         }
         assert_eq!(
             *seen.write().expect("잠금"),
-            vec![DomainEvent::EstimateSubmitted(id("sample-a")); 2]
+            vec![
+                DomainEvent::EstimateSubmitted(id("sample-a")),
+                DomainEvent::EstimateSubmitted(id("sample-b"))
+            ]
         );
     }
     #[test]
@@ -454,6 +497,7 @@ mod tests {
             run(SubmitEstimate::new(repo.as_ref(), &events).execute(&ai_run("alpha"), Vec::new())),
             Ok(Vec::new())
         );
+        assert_eq!(*repo.calls.write().expect("호출 기록"), Vec::new());
         assert_eq!(repo.state.write().expect("잠금").records, Vec::new());
         assert_eq!(*seen.write().expect("잠금"), Vec::new());
     }
@@ -502,5 +546,100 @@ mod tests {
         );
         assert_eq!(repo.state.write().expect("잠금").records, Vec::new());
         assert_eq!(*seen.write().expect("잠금"), Vec::new());
+    }
+    #[test]
+    fn task_mismatch_preserves_every_assignment_and_record() {
+        let repo = Arc::new(Repo::new());
+        let (events, seen) = bus(&repo, Ok(()));
+        let before = repo.state.write().expect("잠금").assignments.clone();
+        let invalid = input_for_task("two", "74", &other_task());
+        assert_eq!(
+            run(SubmitEstimate::new(repo.as_ref(), &events)
+                .execute(&ai_run("alpha"), vec![input("one", "32"), invalid])),
+            Err(SubmitEstimateError::Record(
+                domain::EstimateRecordError::TaskMismatch
+            ))
+        );
+        let state = repo.state.write().expect("잠금");
+        assert_eq!(state.assignments, before);
+        assert_eq!(state.records, Vec::new());
+        assert_eq!(*seen.write().expect("잠금"), Vec::new());
+        assert_eq!(
+            *repo.calls.write().expect("호출 기록"),
+            vec![RepositoryCall::Assignments]
+        );
+    }
+
+    fn collide_distinct(
+        repo: &Arc<Repo>,
+        second_run: &AiRunId,
+        second_id: &CalibrationEstimateId,
+    ) -> (AiRunId, CalibrationEstimateId) {
+        let (events, seen) = bus(repo, Ok(()));
+        let service = SubmitEstimate::new(repo.as_ref(), &events);
+        let results = std::thread::scope(|scope| {
+            let first =
+                scope.spawn(|| run(service.execute(&ai_run("alpha"), vec![input("one", "36")])));
+            let second = scope
+                .spawn(|| run(service.execute(second_run, vec![input(second_id.as_str(), "79")])));
+            [
+                first.join().expect("첫 스레드"),
+                second.join().expect("둘째 스레드"),
+            ]
+        });
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| **result == Err(SubmitEstimateError::ConcurrentUpdate))
+                .count(),
+            1
+        );
+        assert_eq!(repo.state.write().expect("잠금").records.len(), 1);
+        assert_eq!(seen.write().expect("잠금").len(), 1);
+        let failed = results.iter().position(Result::is_err).expect("충돌 하나");
+        if failed == 0 {
+            (ai_run("alpha"), task_id("one"))
+        } else {
+            (second_run.clone(), second_id.clone())
+        }
+    }
+    #[test]
+    fn distinct_tasks_conflict_without_consumption_and_retry_from_latest_state() {
+        for (second_run, second_id) in [
+            (ai_run("alpha"), task_id("two")),
+            (ai_run("beta"), task_id("three")),
+        ] {
+            let mut repository = Repo::new();
+            repository.barrier = Some(Barrier::new(2));
+            let mut repo = Arc::new(repository);
+            let (retry_run, retry_id) = collide_distinct(&repo, &second_run, &second_id);
+            assert_eq!(
+                repo.state
+                    .write()
+                    .expect("잠금")
+                    .assignments
+                    .lookup(&retry_id)
+                    .expect("과제")
+                    .consumption(),
+                domain::EstimateConsumption::Available
+            );
+            Arc::get_mut(&mut repo).expect("경쟁 종료").barrier = None;
+            let (events, seen) = bus(&repo, Ok(()));
+            run(SubmitEstimate::new(repo.as_ref(), &events)
+                .execute(&retry_run, vec![input(retry_id.as_str(), "79")]))
+            .expect("최신 원장 재시도");
+            let stored = repo.state.write().expect("잠금");
+            assert_eq!(stored.records.len(), 2);
+            assert_eq!(
+                stored
+                    .assignments
+                    .lookup(&retry_id)
+                    .expect("과제")
+                    .consumption(),
+                domain::EstimateConsumption::Consumed
+            );
+            assert_eq!(seen.write().expect("잠금").len(), 1);
+        }
     }
 }
