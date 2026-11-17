@@ -19,7 +19,11 @@ const git = (ref) => {
 
 const base = git("HEAD^");
 const target = git("HEAD");
-const record = (tier, rounds) => `# 리뷰 기록 H-52
+const record = (tier, rounds) => {
+  const reviews = rounds.filter(
+    (round) => !/^\d+ \((?:.*\s)?수정\)$/u.test(round),
+  );
+  return `# 리뷰 기록 H-52
 
 ## 커밋
 
@@ -27,19 +31,25 @@ const record = (tier, rounds) => `# 리뷰 기록 H-52
 |---|---|---|
 ${rounds.map((round) => `| ${round} | ${base} | ${target} |`).join("\n")}
 
-## 리뷰
+${reviews
+  .map(
+    (_, index) => `## 리뷰 (회차 ${index + 1})
 
 | 번호 | 등급 | 지적 | 평가 |
 |---|---|---|---|
 | 1 | 없음 | 없음 | 통과 |
+`,
+  )
+  .join("\n")}
 
 ## 측정
 
 | 항목 | 값 |
 |---|---|
-| 리뷰 회차 | ${rounds.length} |
+| 리뷰 회차 | ${reviews.length} |
 ${tier === undefined ? "" : `| 리뷰 등급 | ${tier} |`}
 `;
+};
 
 const problems = (tier, rounds) =>
   recordProblems(repoRoot, record(tier, rounds), "H-52");

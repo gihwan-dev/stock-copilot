@@ -124,7 +124,7 @@ const sectionLines = (lines, heading) => {
   return lines.slice(start + 1, end === -1 ? lines.length : end);
 };
 
-const tableRows = (lines, header) => {
+const tableRowsWithLines = (lines, header, offset = 0) => {
   const index = lines.findIndex((line) => {
     const row = cells(line);
     return row !== undefined && isHeader(row, header);
@@ -137,14 +137,31 @@ const tableRows = (lines, header) => {
     return undefined;
   }
   const rows = [];
-  for (const line of lines.slice(index + 2)) {
+  for (const [position, line] of lines.slice(index + 2).entries()) {
     const row = cells(line);
     if (row === undefined) {
       break;
     }
-    rows.push(row);
+    rows.push({ row, line: offset + index + position + 3 });
   }
   return rows;
+};
+
+const tableRows = (lines, header) =>
+  tableRowsWithLines(lines, header)?.map(({ row }) => row);
+
+export const reviewCommitRows = (text) => {
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => SECTIONS[0].heading.test(line));
+  if (start === -1) return [];
+  const end = lines.findIndex(
+    (line, index) => index > start && /^## /u.test(line),
+  );
+  return tableRowsWithLines(
+    lines.slice(start + 1, end === -1 ? lines.length : end),
+    SECTIONS[0].table,
+    start + 1,
+  );
 };
 
 const commitOf = (root, cell) => {
@@ -287,6 +304,32 @@ export const tierProblems = (text) => {
   if (reviews > Number(tiers[0][1])) {
     issues.push(`리뷰 회차 ${reviews}가 등급 ${tiers[0][1]}의 상한을 넘는다`);
   }
+  const measure = sectionLines(lines, /^## 측정/u);
+  const measurements =
+    measure === undefined ? [] : (tableRows(measure, ["항목", "값"]) ?? []);
+  const counts = measurements.filter((row) => row[0] === "리뷰 회차");
+  if (
+    counts.length !== 1 ||
+    !/^[1-3]$/u.test(counts[0][1] ?? "") ||
+    Number(counts[0][1]) !== reviews
+  ) {
+    issues.push("측정 표의 리뷰 회차는 커밋 표의 실제 리뷰 회차와 같아야 한다");
+  }
+  const headings = lines.filter((line) => /^## 리뷰(?! 생략)/u.test(line));
+  const waived = waiverProblems(sectionLines(lines, /^## 리뷰 생략/u));
+  if (waived === undefined) {
+    const rounds = headings.map((heading) =>
+      /^## 리뷰(?:와 비판)? \(회차 (\d+)\)$/u.exec(heading),
+    );
+    if (
+      rounds.length !== reviews ||
+      rounds.some(
+        (round, index) => round === null || Number(round[1]) !== index + 1,
+      )
+    ) {
+      issues.push("리뷰 절은 각 회차를 '## 리뷰 (회차 N)'으로 순서대로 적는다");
+    }
+  }
   return issues;
 };
 
@@ -354,11 +397,27 @@ export const recordProblems = (root, text, tasks, legacy = false) => {
     }
     return tableProblems(root, section, rows);
   });
+  const reviewHeadings = lines.flatMap((line, index) =>
+    SECTIONS[1].heading.test(line) ? [index] : [],
+  );
+  const laterReviews = hasTier(text)
+    ? reviewHeadings.slice(1).flatMap((start) => {
+        const end = lines.findIndex(
+          (line, index) => index > start && /^## /u.test(line),
+        );
+        const rows = tableRows(
+          lines.slice(start + 1, end === -1 ? lines.length : end),
+          SECTIONS[1].table,
+        );
+        return tableProblems(root, SECTIONS[1], rows);
+      })
+    : [];
   const structural = [
     ...(missingIds.length === 0
       ? []
       : [`제목에 작업 ID가 없다: ${missingIds.join(", ")}`]),
     ...sections,
+    ...laterReviews,
   ];
   if (structural.length !== 0) return structural;
   if (!hasTier(text) && !legacy)

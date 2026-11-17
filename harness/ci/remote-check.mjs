@@ -3,6 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { get } from "node:https";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  isWritable,
+  parseAllowlist,
+} from "../../.claude/hooks/lib/allowlist.mjs";
 
 export const REPOSITORY = "gihwan-dev/stock-copilot";
 export const COMMIT = /^[0-9a-f]{40}$/u;
@@ -10,6 +14,98 @@ export const WORKFLOWS = [
   { file: "ci.yml", jobs: ["linux"] },
   { file: "signatures.yml", jobs: ["signatures"] },
 ];
+
+const REDIRECTING = new Set([
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_SHALLOW_FILE",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_DIFF_OPTS",
+  "GIT_ATTR_SOURCE",
+  "GIT_EXTERNAL_DIFF",
+  "GIT_GRAFT_FILE",
+]);
+
+const trustedGit = (root, args) =>
+  spawnSync(
+    "git",
+    ["--no-replace-objects", "-C", root, "-c", "core.fsmonitor=false", ...args],
+    {
+      encoding: "utf8",
+      env: {
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(([key]) => !REDIRECTING.has(key)),
+        ),
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_GRAFT_FILE: "/dev/null",
+      },
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+
+const definitionFile = (path) =>
+  /(?:^|\/)(?:Cargo\.toml|Cargo\.lock|build\.rs|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|justfile|lefthook\.ya?ml|\.node-version|rust-toolchain(?:\.toml)?)$/u.test(
+    path,
+  );
+
+export const assertTrustedExecution = (root, base, head) => {
+  if (!COMMIT.test(base) || !COMMIT.test(head))
+    throw new Error("검사 정의 기준과 대상은 40자리 SHA여야 한다");
+  const baseline = trustedGit(root, [
+    "show",
+    `${base}:harness/agent-writable.txt`,
+  ]);
+  const allowlist =
+    baseline.status === 0 ? parseAllowlist(baseline.stdout) : {};
+  const changes = trustedGit(root, [
+    "diff",
+    "--name-only",
+    "-z",
+    "--no-renames",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--ignore-submodules=none",
+    base,
+    head,
+    "--",
+  ]);
+  if (
+    allowlist.problem !== undefined ||
+    !Array.isArray(allowlist.includes) ||
+    changes.status !== 0
+  )
+    throw new Error("검사 정의의 기준 또는 대상 트리를 확인하지 못했다");
+  const untrusted = changes.stdout
+    .split("\0")
+    .filter(
+      (path) =>
+        path !== "" && (!isWritable(allowlist, path) || definitionFile(path)),
+    );
+  if (untrusted.length !== 0)
+    throw new Error(
+      `검사 정의 또는 보호 경로가 기준 master와 다르다: ${untrusted.join(", ")}`,
+    );
+};
+
+const masterAt = (root) => {
+  const result = trustedGit(root, [
+    "rev-parse",
+    "--verify",
+    "refs/heads/master^{commit}",
+  ]);
+  const master = result.stdout.trim();
+  if (result.status !== 0 || !COMMIT.test(master))
+    throw new Error("검사 정의의 master 기준을 확인하지 못했다");
+  return master;
+};
 const REQUIRED_STEPS = {
   linux: [
     "container visual regression",
@@ -127,6 +223,10 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
     (job.runner_name === "" || job.runner_name === null) &&
     Array.isArray(job.steps) &&
     job.steps.length === 0;
+  const uncertainAssignment = (job) =>
+    (job.runner_id === 0 || job.runner_id === null) &&
+    (job.runner_name === "" || job.runner_name === null) &&
+    job.steps === null;
   const timedOutStep = (job) =>
     Array.isArray(job.steps) &&
     job.steps.some((step) => step.conclusion === "timed_out");
@@ -138,10 +238,17 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
       (job) =>
         job.conclusion === "failure" &&
         !unassigned(job) &&
+        !uncertainAssignment(job) &&
         (!timedOutStep(job) || failedStep(job)),
     )
   )
     return "CHECK_FAILED";
+  if (
+    failed.some(
+      (job) => job.conclusion === "failure" && uncertainAssignment(job),
+    )
+  )
+    return "INVALID_EVIDENCE";
   if (
     failed.some(
       (job) =>
@@ -234,9 +341,19 @@ const workflowResult = async (sha, read, workflow) => {
       `${workflow.file}: 해당 SHA의 실행이 없거나 응답이 불완전하다`,
     );
   }
-  const candidates = data.workflow_runs.filter(
-    (run) => run.head_sha === sha && run.event === "push",
-  );
+  const candidates = data.workflow_runs;
+  if (
+    candidates.some(
+      (run) =>
+        run?.head_sha !== sha ||
+        run.event !== "push" ||
+        !Number.isSafeInteger(run.id) ||
+        run.id <= 0 ||
+        !Number.isSafeInteger(run.run_attempt) ||
+        run.run_attempt <= 0,
+    )
+  )
+    throw new Error(`${workflow.file}: 실행 ID 또는 회차가 없다`);
   candidates.sort((a, b) => b.id - a.id);
   const run = candidates[0];
   if (
@@ -295,11 +412,25 @@ export const remoteLinuxCheckFrom = async (sha, read, report = () => {}) => {
   return { scope: "linux", head: sha, runId: run.id, attempt: run.run_attempt };
 };
 
-export const remoteCheck = (sha) =>
-  remoteCheckFrom(sha, request, (line) => process.stdout.write(line));
+export const remoteCheck = (
+  sha,
+  root = process.cwd(),
+  base = masterAt(root),
+) => {
+  assertTrustedExecution(root, base, sha);
+  return remoteCheckFrom(sha, request, (line) => process.stdout.write(line));
+};
 
-export const remoteLinuxCheck = (sha) =>
-  remoteLinuxCheckFrom(sha, request, (line) => process.stdout.write(line));
+export const remoteLinuxCheck = (
+  sha,
+  root = process.cwd(),
+  base = masterAt(root),
+) => {
+  assertTrustedExecution(root, base, sha);
+  return remoteLinuxCheckFrom(sha, request, (line) =>
+    process.stdout.write(line),
+  );
+};
 
 export const verifyReceipt = (receiptPath, signers, principal, scratch) => {
   if (signers.trim() === "" || !/^[A-Za-z0-9-]+$/u.test(principal))

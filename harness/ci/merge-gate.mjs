@@ -15,7 +15,13 @@ import {
   REPOSITORY,
   verifyReceipt,
 } from "./remote-check.mjs";
-import { isDone, progressRows } from "./review-records/check.mjs";
+import {
+  COMMIT_CELL,
+  isDone,
+  progressRows,
+  reviewCommitRows,
+  ROUND_CELL,
+} from "./review-records/check.mjs";
 
 const REDIRECTING = new Set([
   "GIT_DIR",
@@ -146,29 +152,27 @@ export const recordedCommits = (root) => {
     name.endsWith(".md"),
   )) {
     const text = readFileSync(join(directory, file), "utf8");
-    let inCommits = false;
-    for (const [index, row] of text.split("\n").entries()) {
-      if (/^## 커밋/u.test(row)) {
-        inCommits = true;
-        continue;
-      }
-      if (/^## /u.test(row)) {
-        inCommits = false;
-        continue;
-      }
-      if (!inCommits) continue;
-      const match =
-        /^\|\s*\d+(?: \([^)]*\))?\s*\|\s*([a-f0-9]{7,40})\b[^|]*\|\s*([a-f0-9]{7,40})\b/u.exec(
-          row,
+    const rows = reviewCommitRows(text);
+    if (rows === undefined)
+      throw new Error(`docs/reviews/${file}: 커밋 표를 읽지 못했다`);
+    for (const { row, line } of rows) {
+      const refs = [
+        COMMIT_CELL.exec(row[1] ?? ""),
+        COMMIT_CELL.exec(row[2] ?? ""),
+      ];
+      if (
+        !ROUND_CELL.test(row[0] ?? "") ||
+        refs.some((match) => match === null)
+      )
+        throw new Error(
+          `docs/reviews/${file}:${line}: 커밋 표의 회차 또는 SHA가 올바르지 않다`,
         );
-      if (match !== null) {
-        entries.push(
-          ...match.slice(1).map((ref) => ({
-            ref,
-            location: `docs/reviews/${file}:${index + 1}`,
-          })),
-        );
-      }
+      entries.push(
+        ...refs.map((match) => ({
+          ref: match[1],
+          location: `docs/reviews/${file}:${line}`,
+        })),
+      );
     }
   }
   const progress = readFileSync(join(root, "docs/progress.md"), "utf8");
@@ -238,7 +242,7 @@ const validate = async (root, branch, receiptPath, indexFile) => {
   const state = inspectMerge(root, branch, indexFile);
   if (state.problem !== undefined) throw new Error(state.problem);
   if (receiptPath === undefined) {
-    await remoteCheck(state.head);
+    await remoteCheck(state.head, root, state.master);
   } else {
     if (!/^target\/[A-Za-z0-9_-]+\/final-check\.json$/u.test(receiptPath))
       throw new Error("영수증 경로가 올바르지 않다");

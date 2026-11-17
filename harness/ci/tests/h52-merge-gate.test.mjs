@@ -45,6 +45,7 @@ const fixture = ({ withGate = false } = {}) => {
       "harness/ci/merge-gate.mjs",
       "harness/ci/remote-check.mjs",
       "harness/ci/review-records/check.mjs",
+      ".claude/hooks/lib/allowlist.mjs",
     ]) {
       put(path, readFileSync(join(repoRoot, path), "utf8"));
     }
