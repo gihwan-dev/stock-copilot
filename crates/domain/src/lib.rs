@@ -597,3 +597,10 @@ pub use settled_row_set::{
     FullInspectionPlan, FullInspectionProgress, FullInspectionStatus, InspectionRangeDays,
     InspectionRangeResult, InspectionReportError, split_full_inspection,
 };
+
+mod valuation_gap;
+mod valuation_price_evidence;
+pub use valuation_gap::{ValuationCalendarDay, ValuationDayResult, ValuationGapPlan};
+pub use valuation_price_evidence::{
+    ValuationAmountPresence, ValuationPriceEvidence, valuation_amount_presence,
+};
