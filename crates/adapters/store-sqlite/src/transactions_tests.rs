@@ -192,6 +192,30 @@ fn generic_transaction_latest_accepts_out_of_order_summaries() {
 }
 
 #[test]
+fn legacy_equal_timestamp_uses_last_saved_summary() {
+    use domain::{SyncOutcome, SyncRecord};
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("DB");
+    runtime().block_on(async {
+        let account = AccountId::new(45);
+        let store = TransactionStore::new(&db);
+        let first = SyncRecord::new(at(23), SyncOutcome::Failed);
+        let last = SyncRecord::new(at(23), SyncOutcome::AccessBlocked);
+        store.record(&account, &first).await.expect("첫 요약");
+        store.record(&account, &last).await.expect("동률 요약");
+        assert_eq!(
+            store.latest(&account).await.expect("마지막 저장"),
+            Some(last)
+        );
+        assert_eq!(
+            store.state(&account).await.expect("정상 상태"),
+            SettledRowSet::new(account.clone())
+        );
+        assert_eq!(store.latest_sync(&account).await.expect("상세 부재"), None);
+    });
+}
+
+#[test]
 fn historical_legacy_summaries_preserve_inputs_without_replacing_latest_state() {
     use domain::{SyncOutcome, SyncRecord};
     let fixture = Fixture::new();

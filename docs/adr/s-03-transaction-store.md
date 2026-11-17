@@ -27,7 +27,7 @@ ADR 0091 범용 포트의 오래된 record 성공 계약은 record_sync의 CAS�
 | 받는 작업 | 내용 |
 |---|---|
 | T-06 후속, S-03 후속 | 객체 내부 중복 JSON 키의 수용·격리·거부와 재정규화 해석 경로를 결정한다. 직접 스키마 파싱과 Value 경유의 차이를 포함한다. 이번 저장소는 전달받은 원문을 그대로 보존하며 원문에서 정규화하는 새 파서나 정책을 추가하지 않는다. |
-| A-25, A-22 후속 | 전체 계획의 계좌·창과 모든 구간 저장 성공을 확인하고 completion_at의 성공값에 있는 completed_at을 기존 record_completed에 전달한다. 저장 전 Clock을 다시 읽어 교체하지 않는다. 현재 record_full_inspection_completed 헬퍼의 재표본 경로를 완료값 연결에 사용하지 않는다. |
+| U-08, A-22 후속 | A-25(ADR 0120)가 전체 계획과 완료값을 연결한다. 실제 SQLite 조립·계좌별 직렬화와 CAS 충돌을 검증한다. 완료값의 completed_at을 기존 record_completed에 그대로 전달하고 재표본 헬퍼로 교체하지 않는다. |
 | S-03 후속, 성능 검증 담당 | 긴 이력의 스냅샷 복제 비용을 측정하고 필요하면 정규화 행 공유와 체크포인트 구조를 별도 설계한다. 기존 원본·순서·중복·사라짐·CAS 계약을 유지한다. |
 
 ## 검증
@@ -97,3 +97,51 @@ glob import를 명시적 import로 정리한 최종 제품 소스와 보강한 �
 최신 정상 상태/요약/상세 시각을 한 번 읽은 결과에서 함께 취득한다. 최신 항목이 상세 기록이면 다시 같은 상세를 읽지 않는다. 일반적인 상세 기록 뒤의 record_sync는 저장 후 검증을 포함해 전체 적재 2회이며, 최신 항목이 legacy 요약일 때만 기존 상세를 한 번 더 읽는다. 정규화 행과 원문을 LEFT JOIN으로 함께 읽어 행별 원문 존재 확인과 조회를 제거한다. 새 0003에 account/id 색인을 추가해 계좌별 최신 조회를 지원한다. 이전/이후 상태의 전체 스냅샷을 저장하는 2H 삽입은 남는다.
 
 비판자의 보강 전 단일 debug 측정은 H=2000, R=0에서 적재5회·복원20000행·행별 원본 확인20000회·삽입4000행·1851ms였다. 계측과 빌드 조건이 있는 표본이므로 제품 성능 수치로 사용하지 않는다. 개설일 미상 계획 739937일을 모든 구간별 저장에 연결하면 저장 비용이 커지는 조건부 계산은 사실이지만 현재 실행 연결은 A-25이며 UI 정지 또는 대기 CPU/메모리 위반을 재현한 것은 아니다. 전체 스냅샷의 공간 비용과 실제 연결 후 성능은 S-03 후속·A-25가 측정한다. 이번 보강이 전체 스냅샷 비용을 없앴다고 주장하지 않는다.
+
+## 3차 판정과 통합 경계
+
+3차 비판은 외부 추가 트리거로 형식상 유효한 다른 최신 요약이 삽입되면 Id 검증과 Latest 검증의 결과가 달라짐을 확인했다. 정상 스키마와 공개 포트의 제품 결함으로는 기각한다. 도메인 생성자 검증이 외부에서 만들어 넣은 모든 유효한 대체 자료까지 탐지한다는 보장은 하지 않는다. history 사전 시각 검사 삭제는 후단 읽기 검증이 대신 막아 생존했으며 단독 검출로 세지 않는다. 앞 회차 Partial 쓰기 단독 복원 생존도 같은 이유로 분리해 기록한다.
+
+legacy 동률 분기 >를 >=로 바꾼 변형이 기존 회귀를 통과한 사소한 공백은 같은 시각23의 Failed→AccessBlocked 회귀로 보강한다. 대상5afa0f8b 이후 저장 제품 코드는 바꾸지 않는다. 최대3회차를 완료하고 4차 리뷰를 추가하지 않는다. master d2d12e38bfa556418c53fc7c1bb8b99100b083a0의 A-25·A-12·D-48을 통합하며 포트 서명과 실제 저장 경계는 유지한다. A-25 실행기 추가와 SQLite 조립·실제 API 실행 검증을 구분한다.
+
+구현자 보강 후 H=2000/R=0의 단일 계측 표본은 적재2회·복원8000행·삽입4000행·원문 추가0행·3288ms였다. 이전 비판자의1851ms와 실행 조건·부하가 달라 지연 개선을 주장하지 않는다. 반복 적재와 행별 원문 점 조회는 줄었고 상태 복제 비용은 남는다. 공개 TransactionStore 생성 컴파일은 통과하고 외부 Database::write와 store.database 접근은 각각 E0624·E0616으로 거부되는 자체 경계 실험도 실행했다. 이것을 리뷰어의 NOT_RUN인 타입 우회 실험으로 바꿔 보고하지 않는다.
+
+## 통합 소스의 최종 손 변형 27개
+
+master d2d12e38 통합 및 동률 회귀를 포함한 새 mktemp 사본에서 27개 전부 실제 컴파일·실행했다. 전후 원본 대조군은 통과했고 선정한27개는 모두 검출됐다. 제품 코드·마이그레이션·저장소 테스트의 원본 사본과 현재 파일은 바이트 일치한다. 이는 별도 비판자가 확인한 중복 사전검사 삭제 생존2건을 검출로 세거나 숨기는 주장이 아니다. 그 생존은 반환값·커밋 상태의 중복 방어로 별도 기록한다. 자동 mutants-diff는 앞서 승인 test-diff2건으로 전처리 중단된 NOT_RUN 상태 그대로다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 | 결과 |
+|---|---|---|---|
+| 1 | 거래 종류 열과 시장 열 혼동 | state_only_cas_rejects_legacy_complete_interleaving | 컴파일·검출 |
+| 2 | 시장 열과 거래 종류 열 혼동 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 3 | 종목 대신 자산 종류 복원 | normalized_fields_pending_unknown_codes_and_legacy_summary_roundtrip | 컴파일·검출 |
+| 4 | 자산 종류 대신 ISIN 복원 | normalized_fields_pending_unknown_codes_and_legacy_summary_roundtrip | 컴파일·검출 |
+| 5 | ISIN 대신 종목 복원 | normalized_fields_pending_unknown_codes_and_legacy_summary_roundtrip | 컴파일·검출 |
+| 6 | 수량 대신 단가 복원 | normalized_fields_pending_unknown_codes_and_legacy_summary_roundtrip | 컴파일·검출 |
+| 7 | 단가 대신 총액 복원 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 8 | 총액 대신 수수료 복원 | legacy_summary_timestamp_before_preserved_state_fails_closed | 컴파일·검출 |
+| 9 | 수수료 대신 세금 복원 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 10 | 세금 대신 수수료 복원 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 11 | 순금액 대신 총액 복원 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 12 | 환율 대신 수량 복원 | normalized_fields_pending_unknown_codes_and_legacy_summary_roundtrip | 컴파일·검출 |
+| 13 | 결제일 대신 결제 상태 복원 | historical_legacy_summaries_preserve_inputs_without_replacing_latest_state | 컴파일·검출 |
+| 14 | 거래 시각 대신 취소 상태 복원 | state_only_cas_rejects_legacy_complete_interleaving | 컴파일·검출 |
+| 15 | 정상 거래를 취소로 복원 | failed_record_timestamp_before_preserved_state_fails_closed | 컴파일·검출 |
+| 16 | 결제 거래를 미결제로 복원 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 17 | 원문을 빈 문자열로 저장 | historical_legacy_summaries_preserve_inputs_without_replacing_latest_state | 컴파일·검출 |
+| 18 | 정상 상태 CAS 비교 반전 | failed_record_timestamp_before_preserved_state_fails_closed | 컴파일·검출 |
+| 19 | 완료 시각 역행 거부 반전 | completion_advances_and_transaction_sync_keeps_completion_unchanged | 컴파일·검출 |
+| 20 | 새 완료값 대신 이전 완료값 저장 | completion_advances_and_transaction_sync_keeps_completion_unchanged | 컴파일·검출 |
+| 21 | 읽기 시각 검증 OR를 AND로 변경 | legacy_summary_timestamp_before_preserved_state_fails_closed | 컴파일·검출 |
+| 22 | 읽기 직전 상태 시각 검증 방향 반전 | state_only_cas_rejects_legacy_complete_interleaving | 컴파일·검출 |
+| 23 | 읽기 정상 동시각까지 거부 | partial_pages_quarantine_and_port_errors_roundtrip_without_erasing_state | 컴파일·검출 |
+| 24 | 정상 상태 CAS 조건만 삭제 | state_only_cas_rejects_legacy_complete_interleaving | 컴파일·검출 |
+| 25 | Partial 읽기 정상 상태 보존 검사 삭제 | changed_state_partial_summary_fails_closed_on_read | 컴파일·검출 |
+| 26 | 동시각 legacy 요약을 과거 이력으로 분류 | legacy_equal_timestamp_uses_last_saved_summary | 컴파일·검출 |
+| 27 | 최신 조회에서 과거 이력 제외 삭제 | generic_transaction_latest_accepts_out_of_order_summaries | 컴파일·검출 |
+
+실행 로그는 target/S-03/manual-merged-final.log이며 사본 결과와 source.tar 경로는 manual-path.txt에 보존했다. 타입 경계·비용 계측의 이전 대상과 이번 최종 소스 증거는 구분한다.
+
+## A-24 추가 통합
+
+d2d12e38 통합 트리의 정상 훅은 전체2019개·계측1115개와 coverage를 통과했다. 검사 도중 master가 A-24를 포함한 c22117c94038c27d252fdf220d88919605afde54로 전진해, 마지막 test-diff가 이전 MERGE_HEAD를 유효한 비교 기준으로 인정하지 않고 중단됐다. 이를 승인 test-diff2건이나 환경 예외로 넘기지 않았다. S-03 회귀·문서를 보존하고 미완료 병합을 정리한 뒤 새 master를 --no-ff로 다시 받는다. 저장소 제품 코드·마이그레이션·테스트37개는 손 변형 실행 사본과 바이트 일치하며, 추가된 application 평가 진입점과 함께 최종 통합 전체 검사를 다시 수행한다. 실제 결과는 최종 커밋 메시지와 보고에 기록한다.
