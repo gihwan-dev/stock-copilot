@@ -6,12 +6,12 @@ mod tests {
     use crate::{
         AssetClass, CalendarDate, Candle, CandleObservation, CandlePeriod, CandleStatus,
         CandleTime, CorporateAction, CorporateActionId, CorporateActionKind, Currency,
-        InstrumentId, LotIdentity, Market, MarketCalendar, MarketSession, NumericInput, Ohlcv,
-        Price, PriceAdjustment, Quantity, SessionData, SessionInformation, SettlementWindow,
-        ShareCount, ShareRatio, SnapshotCalendar, SnapshotError, SnapshotInstrumentHistory,
-        SnapshotObservation, Symbol, TimeInterval, Timestamp, Transaction, TransactionKind,
-        ValuationHistoryEvidence, ValuationPriceEvidence, ValuationRecomputeInput,
-        ValuationSnapshot, valuation_time,
+        DatedSnapshotLedgers, InstrumentId, LotIdentity, Market, MarketCalendar, MarketSession,
+        NumericInput, Ohlcv, Price, PriceAdjustment, Quantity, SessionData, SessionInformation,
+        SettlementWindow, ShareCount, ShareRatio, SnapshotCalendar, SnapshotError,
+        SnapshotInstrumentHistory, SnapshotObservation, Symbol, TimeInterval, Timestamp,
+        Transaction, TransactionKind, ValuationHistoryEvidence, ValuationPriceEvidence,
+        ValuationRecomputeInput, ValuationSnapshot, valuation_time,
     };
     use proptest::prelude::ProptestConfig;
     use proptest::{prop_assert_eq, proptest};
@@ -133,7 +133,7 @@ mod tests {
             &cal,
             &fixture_data.rows,
             ValuationHistoryEvidence::new(histories, evidence),
-            ledgers(&fixture_data),
+            DatedSnapshotLedgers::new(date(day), ledgers(&fixture_data)),
             observation(day, rate),
         )?;
         ValuationSnapshot::recompute(input)
@@ -274,6 +274,75 @@ mod tests {
     }
 
     #[test]
+    fn a_later_reconciled_period_rewinds_cash_to_the_valuation_day() {
+        let fixture_data = fixture_window(
+            vec![
+                trade("A", Currency::Usd, 1, "10", "100"),
+                tx(TransactionKind::Withdrawal, Currency::Usd, 4, 1, "100"),
+            ],
+            ("0", "1000"),
+            ("0", "800"),
+            SettlementWindow::try_new(date(1), date(4)).expect("기간"),
+        );
+        let cal = calendar(3);
+        let histories = [history("A", Currency::Usd, 3, "10", vec![])];
+        let evidence = [close("A", Currency::Usd, 3, "10")];
+        let input = ValuationRecomputeInput::new(
+            &cal,
+            &fixture_data.rows,
+            ValuationHistoryEvidence::new(&histories, &evidence),
+            DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
+            observation(3, Some("1375")),
+        )
+        .expect("과거일 현금");
+        let result = ValuationSnapshot::recompute(input).expect("재계산");
+        assert_eq!(
+            result.stock_value(Currency::Usd),
+            Ok(money("100", Currency::Usd))
+        );
+        assert_eq!(
+            result.account_value(Currency::Usd),
+            Ok(money("1000", Currency::Usd))
+        );
+        assert_eq!(result.valuation_at(), valuation_time(date(3)));
+    }
+
+    #[test]
+    fn daily_recomputations_share_the_period_needed_for_performance() {
+        use crate::{Performance, PerformanceCurrency};
+        let fixture_data = fixture_window(
+            vec![],
+            ("1000", "0"),
+            ("1000", "0"),
+            SettlementWindow::try_new(date(2), date(3)).expect("기간"),
+        );
+        let make = |day| {
+            let cal = calendar(day);
+            ValuationRecomputeInput::new(
+                &cal,
+                &fixture_data.rows,
+                ValuationHistoryEvidence::new(&[], &[]),
+                DatedSnapshotLedgers::new(date(day), ledgers(&fixture_data)),
+                observation(day, None),
+            )
+            .and_then(ValuationSnapshot::recompute)
+            .expect("평가")
+        };
+        let old = make(2);
+        let current = make(3);
+        let performance = Performance::calculate(
+            &[old, current],
+            (&fixture_data.kp, &fixture_data.up),
+            &[],
+            PerformanceCurrency::Native(Currency::Krw),
+        )
+        .expect("성과");
+        assert_eq!(performance.start(), date(2));
+        assert_eq!(performance.end(), date(3));
+        assert_eq!(performance.twr().to_string(), "0.000000");
+    }
+
+    #[test]
     fn mismatched_ledger_date_is_rejected_when_created() {
         let fixture_data = fixture_window(
             vec![],
@@ -287,11 +356,33 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&[], &[]),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(4), ledgers(&fixture_data)),
                 observation(3, None)
             ))
             .err(),
             Some(SnapshotError::WrongPeriod)
+        );
+    }
+
+    #[test]
+    fn ledger_period_must_cover_the_requested_cash_date() {
+        let fixture_data = fixture_window(
+            vec![],
+            ("100", "0"),
+            ("100", "0"),
+            SettlementWindow::try_new(date(1), date(2)).expect("기간"),
+        );
+        let cal = calendar(3);
+        assert_eq!(
+            ValuationRecomputeInput::new(
+                &cal,
+                &fixture_data.rows,
+                ValuationHistoryEvidence::new(&[], &[]),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
+                observation(3, None),
+            )
+            .err(),
+            Some(SnapshotError::OutsideConfirmedPeriod)
         );
     }
 
@@ -402,7 +493,7 @@ mod tests {
             &cal,
             &fixture_data.rows,
             ValuationHistoryEvidence::new(&histories, &evidence),
-            ledgers(&fixture_data),
+            DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
             observation(3, None),
         )
         .expect("입력");
@@ -528,7 +619,7 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&histories, &prices),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(4), ledgers(&fixture_data)),
                 observation(4, None),
             )
             .and_then(ValuationSnapshot::recompute)
@@ -574,7 +665,7 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&histories, &[]),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
                 observation(3, None),
             )
             .and_then(ValuationSnapshot::recompute)
@@ -650,7 +741,7 @@ mod tests {
             &cal,
             &fixture_data.rows,
             ValuationHistoryEvidence::new(&histories, &evidence),
-            ledgers(&fixture_data),
+            DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
             observation(3, None),
         )
         .expect("직전 종가");
@@ -669,7 +760,7 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&histories, &bad),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
                 observation(3, None)
             ))
             .err(),
@@ -678,7 +769,7 @@ mod tests {
     }
 
     #[test]
-    fn each_ledger_date_and_observation_time_is_checked_at_construction() {
+    fn each_ledger_period_and_observation_time_is_checked_at_construction() {
         use crate::valuation_snapshot::tests::confirmed;
         let short = fixture_window(
             vec![],
@@ -707,11 +798,11 @@ mod tests {
                     &cal,
                     &short.rows,
                     ValuationHistoryEvidence::new(&[], &[]),
-                    ledgers,
+                    DatedSnapshotLedgers::new(date(3), ledgers),
                     observation(3, None)
                 ))
                 .err(),
-                Some(SnapshotError::WrongPeriod)
+                Some(SnapshotError::OutsideConfirmedPeriod)
             );
         }
         let wrong_time = SnapshotObservation::new(at(3, 6), at(20, 0), None);
@@ -722,7 +813,7 @@ mod tests {
                     &cal,
                     &short.rows,
                     ValuationHistoryEvidence::new(&[], &[]),
-                    ledgers(&short),
+                    DatedSnapshotLedgers::new(date(3), ledgers(&short)),
                     observation
                 ))
                 .err(),
@@ -748,7 +839,7 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&histories, &[]),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
                 observation(3, Some("1375"))
             ))
             .err(),
@@ -759,7 +850,7 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&histories, &unknown),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
                 observation(3, Some("1375"))
             ))
             .err(),
@@ -770,7 +861,7 @@ mod tests {
                 &cal,
                 &fixture_data.rows,
                 ValuationHistoryEvidence::new(&histories, &evidence),
-                ledgers(&fixture_data),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
                 observation(3, None)
             ))
             .err(),
@@ -845,7 +936,7 @@ mod tests {
             &cal,
             &fixture_data.rows,
             ValuationHistoryEvidence::new(&histories, &evidence),
-            ledgers(&fixture_data),
+            DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
             observation(3, Some("1375")),
         )
         .expect("입력");
@@ -945,7 +1036,7 @@ mod tests {
             &cal,
             &fixture_data.rows,
             ValuationHistoryEvidence::new(&histories, &evidence),
-            ledgers(&fixture_data),
+            DatedSnapshotLedgers::new(date(3), ledgers(&fixture_data)),
             observation(3, None),
         );
         assert_eq!(input.err(), Some(SnapshotError::MissingFx));
@@ -964,7 +1055,7 @@ mod tests {
             &cal,
             &good.rows,
             ValuationHistoryEvidence::new(&[], &[]),
-            pair,
+            DatedSnapshotLedgers::new(date(3), pair),
             observation(3, None),
         );
         assert_eq!(

@@ -1,6 +1,6 @@
 use crate::{
-    CandlePeriod, CandleStatus, Currency, InstrumentId, PriceAdjustment, SettledRowSet,
-    SnapshotCalendar, SnapshotError, SnapshotInstrumentHistory, SnapshotLedgers,
+    CalendarDate, CandlePeriod, CandleStatus, Currency, InstrumentId, PriceAdjustment,
+    SettledRowSet, SnapshotCalendar, SnapshotError, SnapshotInstrumentHistory, SnapshotLedgers,
     SnapshotObservation, ValuationPriceEvidence, ValuationSnapshot, valuation_time,
 };
 use std::collections::BTreeSet;
@@ -25,6 +25,19 @@ impl<'action> ValuationHistoryEvidence<'action> {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct DatedSnapshotLedgers<'action> {
+    date: CalendarDate,
+    ledgers: SnapshotLedgers<'action>,
+}
+
+impl<'action> DatedSnapshotLedgers<'action> {
+    #[must_use]
+    pub const fn new(date: CalendarDate, ledgers: SnapshotLedgers<'action>) -> Self {
+        Self { date, ledgers }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct ValuationRecomputeInput<'action> {
     calendar: &'action SnapshotCalendar,
     rows: &'action SettledRowSet,
@@ -38,22 +51,21 @@ impl<'action> ValuationRecomputeInput<'action> {
         calendar: &'action SnapshotCalendar,
         rows: &'action SettledRowSet,
         history: ValuationHistoryEvidence<'action>,
-        ledgers: SnapshotLedgers<'action>,
+        ledgers: DatedSnapshotLedgers<'action>,
         observation: SnapshotObservation,
     ) -> Result<Self, SnapshotError> {
         let date = calendar.dates().date(Currency::Krw);
         let at = valuation_time(date);
-        if observation.valuation_at() != at {
+        if observation.valuation_at() != at || ledgers.date != date {
             return Err(SnapshotError::WrongPeriod);
         }
-        ledgers.require_day(date)?;
         let checked_observation =
             SnapshotObservation::new(at, observation.recorded_at(), observation.fx());
         let input = Self {
             calendar,
             rows,
             history,
-            ledgers,
+            ledgers: ledgers.ledgers,
             observation: checked_observation,
         };
         input.calculate()?;

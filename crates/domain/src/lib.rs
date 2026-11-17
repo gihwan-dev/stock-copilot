@@ -609,4 +609,6 @@ pub use valuation_price_evidence::{
 mod valuation_recompute_contract;
 
 mod valuation_recompute;
-pub use valuation_recompute::{ValuationHistoryEvidence, ValuationRecomputeInput};
+pub use valuation_recompute::{
+    DatedSnapshotLedgers, ValuationHistoryEvidence, ValuationRecomputeInput,
+};
