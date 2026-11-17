@@ -1246,6 +1246,50 @@ mod tests {
         server.finish().expect("requests");
     }
     #[test]
+    fn indicator_minute_gap_distinguishes_extended_and_regular_sessions() {
+        let extended_only =
+            indicator_gap_body("2026-03-25T15:29:00+09:00", "2026-03-26T09:00:00+09:00");
+        let also_regular =
+            indicator_gap_body("2026-03-25T15:29:00+09:00", "2026-03-26T09:02:00+09:00");
+        let server = ScriptedHttpServer::start(vec![
+            issued(),
+            response("200 OK", &recording("kr")["body"]),
+            response("200 OK", &extended_only),
+            response("200 OK", &also_regular),
+        ])
+        .expect("server");
+        let reader = adapter(&server);
+        let calendar = run(reader.calendar(KnownMarket::Kr)).expect("calendar");
+        let calendar_reader = reader.with_candle_sessions(vec![
+            calendar.previous_business_day().clone(),
+            calendar.today().clone(),
+            calendar.next_business_day().clone(),
+        ]);
+        let extended_error = run(calendar_reader.indicator_candles(
+            IndicatorCode::Kospi,
+            indicator_window("2026-03-25T15:29:00+09:00", "2026-03-26T09:01:00+09:00"),
+            domain::CandlePeriod::Minute,
+        ))
+        .expect_err("extended-session indicator data is not yet verified");
+        assert_eq!(
+            extended_error.kind(),
+            application::PortErrorKind::Unsupported(
+                application::BrokerCapability::IndicatorCandles
+            )
+        );
+        let regular_error = run(calendar_reader.indicator_candles(
+            IndicatorCode::Kospi,
+            indicator_window("2026-03-25T15:29:00+09:00", "2026-03-26T09:03:00+09:00"),
+            domain::CandlePeriod::Minute,
+        ))
+        .expect_err("regular-session minutes are missing");
+        assert_eq!(
+            regular_error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
     fn indicator_minute_gap_rejects_missing_session_evidence_and_trading_overlap() {
         let body = indicator_gap_body("2026-06-12T15:29:00+09:00", "2026-06-15T09:00:00+09:00");
         let window = indicator_window("2026-06-12T15:29:00+09:00", "2026-06-15T09:01:00+09:00");
@@ -1282,7 +1326,9 @@ mod tests {
         .expect_err("extended session overlaps");
         assert_eq!(
             open_error.kind(),
-            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+            application::PortErrorKind::Unsupported(
+                application::BrokerCapability::IndicatorCandles
+            )
         );
         open.finish().expect("requests");
     }
@@ -1409,7 +1455,9 @@ mod tests {
         .expect_err("later day's pre-market overlaps");
         assert_eq!(
             error.kind(),
-            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+            application::PortErrorKind::Unsupported(
+                application::BrokerCapability::IndicatorCandles
+            )
         );
         server.finish().expect("requests");
     }

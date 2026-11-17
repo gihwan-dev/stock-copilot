@@ -2,8 +2,8 @@ use crate::{QueryKey, ReadRequest, ReadRoute, RouteId, TokenRenewal, TossAccount
 use application::{Clock, PortError, ReadEndpoint, RequestRejection, SecretStore};
 use domain::{
     CandlePeriod, IndicatorCandleRow, IndicatorCode, IndicatorUnit, Market, MarketIndicatorCandle,
-    MasterCode, Nanosecond, NumericInput, OffsetSeconds, SpanSeconds, TimeInterval, TimeSpan,
-    Timestamp,
+    MarketState, MasterCode, Nanosecond, NumericInput, OffsetSeconds, SpanSeconds, TimeInterval,
+    TimeSpan, Timestamp,
 };
 use std::collections::BTreeMap;
 
@@ -185,6 +185,7 @@ fn validate_minute_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
     let mut cursor = earlier
         .checked_sub(TimeSpan::DAY)
         .map_err(|_error| missing_calendar())?;
+    let mut extended = None;
     for _day in 0..GAP_LIMIT {
         let date = cursor.date_at_offset(offset).map_err(|_error| invalid())?;
         let mut matching = reader
@@ -195,14 +196,24 @@ fn validate_minute_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
         if matching.next().is_some() {
             return Err(invalid());
         }
-        if session.sessions().iter().any(|segment| {
+        for segment in session.sessions() {
             let interval = segment.session().interval();
-            interval.start() < later && interval.end() > first_missing
-        }) {
-            return Err(invalid());
+            if interval.start() >= later || interval.end() <= first_missing {
+                continue;
+            }
+            match segment.state() {
+                MarketState::RegularMarket => return Err(invalid()),
+                MarketState::DayMarket | MarketState::PreMarket | MarketState::AfterMarket => {
+                    extended = Some(segment.state());
+                }
+                MarketState::Unknown | MarketState::Closed => return Err(missing_calendar()),
+            }
         }
         if date == later_date {
-            return Ok(());
+            return match extended {
+                Some(_state) => Err(missing_calendar()),
+                None => Ok(()),
+            };
         }
         cursor = cursor
             .checked_add(TimeSpan::DAY)
@@ -233,15 +244,7 @@ fn validate_daily_gap<S: SecretStore, T: Clock, R: TokenRenewal>(
             .market_sessions()
             .iter()
             .filter(|session| session.market() == Market::Kr && session.date() == date);
-        let session = matching.next().ok_or_else(|| {
-            PortError::new(
-                ENDPOINT,
-                application::HttpStatus::Success,
-                application::PortErrorKind::Unsupported(
-                    application::BrokerCapability::IndicatorCandles,
-                ),
-            )
-        })?;
+        let session = matching.next().ok_or_else(missing_calendar)?;
         if matching.next().is_some() || !session.sessions().is_empty() {
             return Err(invalid());
         }
