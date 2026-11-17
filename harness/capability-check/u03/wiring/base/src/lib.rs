@@ -1,3 +1,5 @@
+mod security;
+
 fn build_app(builder: Builder, mut context: Context) {
     for window in &mut context.config_mut().app.windows {
         window.visible = false;

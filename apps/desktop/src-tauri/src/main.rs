@@ -119,6 +119,59 @@ mod tests {
     }
 
     #[test]
+    fn product_event_permissions_are_individually_required() {
+        use std::collections::BTreeMap;
+        use tauri::utils::acl::{capability::Capability, manifest::Manifest, resolved::Resolved};
+
+        let manifests: BTreeMap<String, Manifest> = serde_json::from_str(
+            &std::fs::read_to_string("gen/schemas/acl-manifests.json").expect("생성된 ACL"),
+        )
+        .expect("ACL 매니페스트");
+        let capability: Capability = serde_json::from_str(
+            &std::fs::read_to_string("capabilities/main.json").expect("제품 capability"),
+        )
+        .expect("제품 capability 형식");
+        for (omitted, denied, retained) in [
+            (
+                "core:event:allow-listen",
+                "plugin:event|listen",
+                "plugin:event|unlisten",
+            ),
+            (
+                "core:event:allow-unlisten",
+                "plugin:event|unlisten",
+                "plugin:event|listen",
+            ),
+        ] {
+            let mut edited = capability.clone();
+            edited
+                .permissions
+                .retain(|permission| permission.identifier().get() != omitted);
+            assert_eq!(edited.permissions.len() + 1, capability.permissions.len());
+            let capabilities = BTreeMap::from([(edited.identifier.clone(), edited)]);
+            let resolved = Resolved::resolve(
+                &manifests,
+                capabilities,
+                tauri::utils::platform::Target::MacOS,
+            )
+            .expect("제품 ACL 해석");
+            let authority = tauri::runtime_authority!(BTreeMap::new(), resolved);
+            assert!(
+                authority
+                    .resolve_access(denied, "main", "main", &tauri::ipc::Origin::Local)
+                    .is_none(),
+                "{omitted}: {denied}"
+            );
+            assert!(
+                authority
+                    .resolve_access(retained, "main", "main", &tauri::ipc::Origin::Local)
+                    .is_some(),
+                "{omitted}: {retained}"
+            );
+        }
+    }
+
+    #[test]
     fn composition_root_constructs_the_fixed_product_endpoint_without_sending_requests() {
         let endpoint = broker_toss::TossEndpoint::production();
         assert!(format!("{endpoint:?}").contains("Production"));

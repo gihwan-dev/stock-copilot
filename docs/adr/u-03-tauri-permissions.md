@@ -15,12 +15,12 @@ U-02는 UI 이벤트와 명령을 등록했지만 WebView 이벤트 구독 권�
 |---|---|
 | 명령 ACL | 기존 생성 명령 목록과 `AppManifest::commands`, `commands` 권한 묶음을 유지한다. `capability-check`가 등록 명령·목록·묶음과 빌드 스크립트를 대조한다. |
 | capability | 설정에 `main` 하나를 명시한다. `commands`, `core:event:allow-listen`, `core:event:allow-unlisten`만 부여한다. 구독 해제를 지원하며 발행·다른 플러그인 권한은 주지 않는다. |
-| 이벤트 ACL 증거 | 제품 설정에서 생성한 Tauri `RuntimeAuthority`로 주 창의 구독·해제 허용, 다른 창과 원격 출처 거부, 발행 거부를 확인한다. 빈 권한 ACL에서는 구독과 해제 모두 거부된다. 별도 실제 WKWebView 실행을 뜻하지는 않는다. |
+| 이벤트 ACL 증거 | 제품 설정에서 생성한 Tauri `RuntimeAuthority`로 주 창의 구독·해제 허용, 다른 창과 원격 출처 거부, 발행 거부를 확인한다. 제품 capability에서 구독·해제 권한을 각각 하나만 제거하고 생성된 매니페스트로 다시 해석하면 제거한 명령만 거부되며 나머지 구독 명령은 허용된다. 빈 권한 ACL에서는 둘 다 거부된다. 별도 실제 WKWebView 실행을 뜻하지는 않는다. |
 | CSP | `default-src`, `script-src`, `font-src`는 앱 자체 출처, `style-src`는 앱 출처와 인라인 스타일, `img-src`는 앱 출처와 data, `connect-src`는 Tauri의 `ipc:`만 허용한다. `worker-src`, `object-src`, `frame-src`, `base-uri`, `form-action`은 none이다. 외부 네트워크 주소는 없다. |
-| 프로토타입 | `freezePrototype`을 켠다. 별도 개발 CSP와 CSP 수정 비활성화를 허용하지 않는다. |
+| 프로토타입 | `freezePrototype`을 켠다. Node에서 같은 `Object.prototype` 동결 뒤 zod 파싱과 React Markdown·Base UI 버튼의 서버 렌더를 확인했다. 실제 WKWebView 검증은 O-13으로 넘긴다. 별도 개발 CSP와 CSP 수정 비활성화를 허용하지 않는다. |
 | 탐색 | macOS 앱 자체 주소 `tauri://localhost`만 허용하며 포트·사용자 정보와 다른 호스트·스킴은 거부한다. 새 창은 대상에 관계없이 거부한다. 개발용 원격 URL과 원격 프런트 배포 경로는 허용하지 않는다. |
 | 창 조립 | Tauri 자동 생성을 끄고 U-02 이벤트를 등록한 뒤 설정의 창을 보안 콜백과 함께 생성한다. 초기 창은 기존처럼 숨긴 상태에서 자료 준비 뒤 표시한다. |
-| 검사 | `capability-check`는 CSP·프로토타입·프런트 위치·단일 수동 창·정확한 이벤트 권한을 검사한다. 구문 검사는 제품 조립의 이벤트 등록과 보호된 창 생성 연결, 탐색·새 창 정책을 고정한다. 독립된 정상·위반 자료로 각각을 검증한다. |
+| 검사 | `capability-check`는 CSP·프로토타입·프런트 위치·단일 수동 창·정확한 이벤트 권한을 검사한다. 창과 WebView의 직접 생성·연관 빌더 이름을 금지하며, 구문 검사는 보안 모듈 경로, 제품 조립의 이벤트 등록과 보호된 창 생성 연결, 탐색·새 창 정책을 고정한다. 독립된 정상·위반 자료로 각각을 검증한다. |
 
 보안 검사에서 창 생성 코드의 구체적인 구문을 함께 고정하므로 창 조립을 바꿀 때는 검사의 기대 구문과 회귀 사례를 함께 검토해야 한다. 이는 외부 주소를 허용하기 위한 설정이 아니다. 새 외부 패키지는 추가하지 않았다.
 
@@ -31,6 +31,8 @@ U-02는 UI 이벤트와 명령을 등록했지만 WebView 이벤트 구독 권�
 | `apps/desktop/src-tauri/tauri.conf.json`, `capabilities/main.json` | 명시적 CSP·프로토타입·수동 창·최소 이벤트 권한 |
 | `harness/capability-check/allowed-permissions.toml`, `webview-apis.toml` | 지정한 구독 권한과 보안 창 생성 파일만 한정해 등록 |
 | `crates/xtask/**`, `harness/capability-check/**` | 완료 기준을 강제하는 검사와 위반 자료 추가 |
+| `.codex/config.toml` | ADR 초안 경로를 에이전트 설정의 보호 목록에 등록 |
+| `harness/claude-hooks/hashes.json` | 보호 파일 등록 변경에 따른 해시 재생성 |
 | `apps/desktop/src-tauri/src/main.rs`, `src/lib.rs` | 실제 ACL 검증에 기존 생성 context 재사용, 조립 시 이벤트 등록과 보호된 창 생성 연결 |
 
 기존 테스트의 단언을 삭제하거나 완화하지 않았다.
@@ -39,8 +41,8 @@ U-02는 UI 이벤트와 명령을 등록했지만 WebView 이벤트 구독 권�
 
 | 작업 | 인계 |
 |---|---|
-| U-05 | UI의 실제 이벤트 구독과 제품 발행 시 수명 주기 및 구독 해제를 연결하고 검증한다. |
-| O-13 | 실제 창과 제품 capability를 포함한 실행 경로 검증 및 S-13의 목 런타임 적용 가능성을 확인한다. |
+| U-05 | UI의 실제 이벤트 구독과 제품 발행 시 수명 주기 및 구독 해제를 연결하고 검증한다. 생성된 바인딩의 `emit`·`emitTo`는 노출되지만 현재 WebView ACL에서는 거부된다. |
+| O-13 | 실제 WKWebView의 탐색·새 창 콜백과 `freezePrototype`의 프런트 호환성, 제품 capability 실행 경로 및 S-13 목 런타임 적용 가능성을 확인한다. |
 | H-50 | 사용자가 결정한 구현 모델 허용 범위를 저장소의 모델 지침에 반영한다. |
 
 ## 손 변형
@@ -76,3 +78,15 @@ U-02는 UI 이벤트와 명령을 등록했지만 WebView 이벤트 구독 권�
 | 25 | 모든 보안 함수 검사 축소 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
 | 26 | 조립 본문 추가문 허용 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
 | 27 | 보안 파일 추가 항목 허용 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
+| 28 | 보안 모듈 선언 내용 검증 생략 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
+| 29 | 보안 모듈 중복 허용 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
+| 30 | 보안 모듈 이름 비교 반전 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
+| 31 | 보안 모듈 파일 경로 변경 | `u03_navigation_wiring_fixtures_detect_each_regression` | 검출 |
+
+아래는 컴파일 대상 코드 변형과 별도로 실행한 설정 목록 제거 실험이다. 각 항목을 하나씩 지우면 위반 자료 검사가 실패했다.
+
+| 설정에서 뺀 항목 | 검출 테스트 | 결과 |
+|---|---|---|
+| `WebviewWindow` | `webview_api_cases_report_exactly_their_findings` | 검출 |
+| `Webview` | `webview_api_cases_report_exactly_their_findings` | 검출 |
+| `Window` | `webview_api_cases_report_exactly_their_findings` | 검출 |

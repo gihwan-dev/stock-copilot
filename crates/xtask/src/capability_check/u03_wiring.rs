@@ -67,6 +67,25 @@ fn protected_build(statement: &Stmt) -> bool {
 }
 
 fn assembly_is_protected(source: &syn::File) -> bool {
+    let expected_module: syn::ItemMod = parse_quote!(
+        mod security;
+    );
+    let mut security_modules = source.items.iter().filter_map(|item| {
+        if let Item::Mod(module) = item
+            && module.ident == "security"
+        {
+            Some(module)
+        } else {
+            None
+        }
+    });
+    if !security_modules
+        .next()
+        .is_some_and(|module| same_tokens(module, &expected_module))
+        || security_modules.next().is_some()
+    {
+        return false;
+    }
     let Some(build) = function(source, "build_app") else {
         return false;
     };

@@ -41,6 +41,9 @@ names = [
     "CapabilityBuilder",
     "WebviewBuilder",
     "WindowBuilder",
+    "WebviewWindow",
+    "Webview",
+    "Window",
 ]
 allowed-files = []
 reason = "명령 밖의 IPC 통로, 플러그인, 사용자 정의 프로토콜, 스크립트 주입, 창·webview 생성, 런타임 capability 추가. 지금 쓰는 곳이 없다"
