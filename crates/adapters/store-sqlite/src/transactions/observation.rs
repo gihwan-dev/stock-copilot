@@ -214,7 +214,7 @@ fn batch(
             }
             Ok(ObservedTransaction::new(
                 row.transaction,
-                RawTransactionRow::new(rows::source(connection, row.id)?),
+                RawTransactionRow::new(row.source.ok_or_else(|| invalid(()))?),
             ))
         })
         .collect::<rusqlite::Result<_>>()?;

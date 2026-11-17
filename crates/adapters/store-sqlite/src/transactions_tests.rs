@@ -602,7 +602,6 @@ fn all_transaction_runtime_statements_prepare() {
         crate::sql::transactions::INSERT_ROW,
         crate::sql::transactions::ROWS,
         crate::sql::transactions::INSERT_SOURCE,
-        crate::sql::transactions::SOURCE,
         crate::sql::transactions::ROW_COUNT,
         crate::sql::transactions::SOURCE_COUNT,
         crate::sql::transactions::COMPLETION,
@@ -850,5 +849,147 @@ fn legacy_summary_timestamp_before_preserved_state_fails_closed() {
             .latest(&account)
             .await
             .expect_err("정상 상태보다 오래된 요약 시각");
+    });
+}
+
+fn empty_state(account: &AccountId, at: Timestamp) -> SettledRowSet {
+    SettledRowSet::try_restore(
+        account.clone(),
+        vec![],
+        domain::TransactionBatch::try_new(vec![]).expect("빈 배치"),
+        Some(at),
+    )
+    .expect("빈 정상 상태")
+}
+#[test]
+fn state_only_cas_rejects_legacy_complete_interleaving() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    runtime().block_on(async {
+        let store = TransactionStore::new(&db);
+        let account = AccountId::new(161);
+        let first = TransactionSyncRecord::from_observation(
+            &SettledRowSet::new(account.clone()),
+            window(),
+            at(10),
+            Ok(complete(&account, &["{}"])),
+        );
+        store
+            .record_sync(&account, &SettledRowSet::new(account.clone()), None, &first)
+            .await
+            .expect("X 저장");
+        let replacement = domain::SyncRecord::new(
+            at(20),
+            domain::SyncOutcome::Complete(empty_state(&account, at(20))),
+        );
+        store
+            .record(&account, &replacement)
+            .await
+            .expect("Y로 교체");
+        assert_eq!(
+            store.latest_sync(&account).await.expect("상세 시각 유지"),
+            Some(first.clone())
+        );
+        let outdated = TransactionSyncRecord::from_observation(
+            first.state(),
+            window(),
+            at(30),
+            Ok(complete(&account, &[])),
+        );
+        store
+            .record_sync(&account, first.state(), Some(at(10)), &outdated)
+            .await
+            .expect_err("정상 상태만 달라도 CAS 거부");
+        assert_eq!(
+            store.state(&account).await.expect("Y 보존"),
+            empty_state(&account, at(20))
+        );
+        assert_eq!(
+            store.latest(&account).await.expect("요약 보존"),
+            Some(replacement)
+        );
+    });
+}
+#[test]
+fn legacy_partial_rejects_changed_state_and_preserves_normal_state() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    runtime().block_on(async {
+        let store = TransactionStore::new(&db);
+        let account = AccountId::new(171);
+        let first = TransactionSyncRecord::from_observation(
+            &SettledRowSet::new(account.clone()),
+            window(),
+            at(10),
+            Ok(complete(&account, &["{}"])),
+        );
+        store
+            .record_sync(&account, &SettledRowSet::new(account.clone()), None, &first)
+            .await
+            .expect("정상 저장");
+        let changed = domain::SyncRecord::new(
+            at(20),
+            domain::SyncOutcome::Partial(empty_state(&account, at(20))),
+        );
+        store
+            .record(&account, &changed)
+            .await
+            .expect_err("불완전 요약이 정상 상태를 바꿀 수 없음");
+        assert_eq!(
+            store.state(&account).await.expect("정상 보존"),
+            *first.state()
+        );
+        assert_eq!(
+            store.latest(&account).await.expect("요약 보존"),
+            Some(first.summary())
+        );
+        let unchanged =
+            domain::SyncRecord::new(at(21), domain::SyncOutcome::Partial(first.state().clone()));
+        store
+            .record(&account, &unchanged)
+            .await
+            .expect("같은 정상 상태의 불완전 요약");
+        assert_eq!(
+            store.latest(&account).await.expect("불완전 결과 보존"),
+            Some(unchanged)
+        );
+        assert_eq!(
+            store.latest_sync(&account).await.expect("상세 보존"),
+            Some(first)
+        );
+    });
+}
+#[test]
+fn changed_state_partial_summary_fails_closed_on_read() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    runtime().block_on(async {
+        let store = TransactionStore::new(&db);
+        let account = AccountId::new(181);
+        let first = TransactionSyncRecord::from_observation(
+            &SettledRowSet::new(account.clone()),
+            window(),
+            at(10),
+            Ok(complete(&account, &["{}"])),
+        );
+        store
+            .record_sync(&account, &SettledRowSet::new(account.clone()), None, &first)
+            .await
+            .expect("정상 저장");
+        let changed = domain::SyncRecord::new(
+            at(20),
+            domain::SyncOutcome::Complete(empty_state(&account, at(20))),
+        );
+        store
+            .record(&account, &changed)
+            .await
+            .expect("완전 요약은 교체 허용");
+        db.write(|tx| tx.execute_batch(crate::sql::transactions_tests::PARTIAL_WITH_CHANGED_STATE))
+            .await
+            .expect("부분 태그 손상");
+        store
+            .state(&account)
+            .await
+            .expect_err("부분 요약의 이전 상태 불일치");
     });
 }

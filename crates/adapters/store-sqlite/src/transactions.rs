@@ -110,7 +110,9 @@ fn load(
         }
         "summary" => {
             match summary.outcome() {
-                SyncOutcome::Failed | SyncOutcome::AccessBlocked if previous != state => {
+                SyncOutcome::Partial(_) | SyncOutcome::Failed | SyncOutcome::AccessBlocked
+                    if previous != state =>
+                {
                     return Err(invalid(()));
                 }
                 SyncOutcome::Complete(_)
@@ -181,7 +183,11 @@ fn latest_detail(
     connection: &Connection,
     account: &AccountId,
 ) -> rusqlite::Result<Option<TransactionSyncRecord>> {
-    load(connection, account, Selection::Latest)?;
+    if let Some(detail) =
+        load(connection, account, Selection::Latest)?.and_then(|entry| entry.detail)
+    {
+        return Ok(Some(detail));
+    }
     Ok(load(connection, account, Selection::Detail)?.and_then(|entry| entry.detail))
 }
 #[derive(Clone, Copy)]
@@ -233,6 +239,58 @@ fn save(tx: &Transaction<'_>, input: EntryInput<'_>) -> rusqlite::Result<WriteCo
     }
     Ok(WriteCompleted)
 }
+fn record_summary(
+    tx: &Transaction<'_>,
+    account: &AccountId,
+    record: &SyncRecord<SettledRowSet>,
+) -> rusqlite::Result<WriteCompleted> {
+    let latest = load(tx, account, Selection::Latest)?;
+    let latest_at = latest.as_ref().map(|entry| entry.summary.recorded_at());
+    let previous = latest.map_or_else(|| SettledRowSet::new(account.clone()), |entry| entry.state);
+    if latest_at.is_some_and(|at| at > record.recorded_at())
+        || previous
+            .last_synchronized_at()
+            .is_some_and(|at| at > record.recorded_at())
+    {
+        return Err(invalid(()));
+    }
+    let state = match record.outcome() {
+        SyncOutcome::Complete(value) => value,
+        SyncOutcome::Partial(value) if value != &previous => return Err(invalid(())),
+        SyncOutcome::Partial(_) | SyncOutcome::Failed | SyncOutcome::AccessBlocked => &previous,
+    };
+    validate_record_time(&previous, state, record.recorded_at())?;
+    save(
+        tx,
+        EntryInput {
+            account,
+            previous: &previous,
+            state,
+            summary: record,
+            detail: None,
+        },
+    )
+}
+struct SyncBaseline {
+    state: SettledRowSet,
+    observed_at: Option<Timestamp>,
+    summary_at: Option<Timestamp>,
+}
+fn sync_baseline(connection: &Connection, account: &AccountId) -> rusqlite::Result<SyncBaseline> {
+    let latest = load(connection, account, Selection::Latest)?;
+    let summary_at = latest.as_ref().map(|entry| entry.summary.recorded_at());
+    let observed_at = match latest.as_ref().and_then(|entry| entry.detail.as_ref()) {
+        Some(detail) => Some(detail.recorded_at()),
+        None => load(connection, account, Selection::Detail)?
+            .and_then(|entry| entry.detail)
+            .map(|record| record.recorded_at()),
+    };
+    Ok(SyncBaseline {
+        state: latest.map_or_else(|| SettledRowSet::new(account.clone()), |entry| entry.state),
+        observed_at,
+        summary_at,
+    })
+}
 impl TransactionRepository for TransactionStore<'_> {
     async fn record(
         &self,
@@ -242,37 +300,7 @@ impl TransactionRepository for TransactionStore<'_> {
         let owned_account = account.clone();
         let owned_record = record.clone();
         self.database
-            .write(move |tx| {
-                let previous = current(tx, &owned_account)?;
-                if load(tx, &owned_account, Selection::Latest)?
-                    .is_some_and(|entry| entry.summary.recorded_at() > owned_record.recorded_at())
-                    || previous
-                        .last_synchronized_at()
-                        .is_some_and(|at| at > owned_record.recorded_at())
-                {
-                    return Err(invalid(()));
-                }
-                let state = match owned_record.outcome() {
-                    SyncOutcome::Complete(value) | SyncOutcome::Partial(value) => value,
-                    SyncOutcome::Failed | SyncOutcome::AccessBlocked => &previous,
-                };
-                if state
-                    .last_synchronized_at()
-                    .is_some_and(|at| at > owned_record.recorded_at())
-                {
-                    return Err(invalid(()));
-                }
-                save(
-                    tx,
-                    EntryInput {
-                        account: &owned_account,
-                        previous: &previous,
-                        state,
-                        summary: &owned_record,
-                        detail: None,
-                    },
-                )
-            })
+            .write(move |tx| record_summary(tx, &owned_account, &owned_record))
             .await
     }
     async fn latest(
@@ -315,16 +343,17 @@ impl TransactionSyncRepository for TransactionStore<'_> {
         let owned_record = record.clone();
         self.database
             .write(move |tx| {
-                if current(tx, &owned_account)? != owned_previous
-                    || latest_detail(tx, &owned_account)?.map(|record_row| record_row.recorded_at())
-                        != previous_recorded_at
+                let baseline = sync_baseline(tx, &owned_account)?;
+                if baseline.state != owned_previous
+                    || baseline.observed_at != previous_recorded_at
                     || previous_recorded_at.is_some_and(|at| at > owned_record.recorded_at())
-                    || owned_previous
+                    || baseline
+                        .state
                         .last_synchronized_at()
                         .is_some_and(|at| at > owned_record.recorded_at())
-                    || load(tx, &owned_account, Selection::Latest)?.is_some_and(|entry| {
-                        entry.summary.recorded_at() > owned_record.recorded_at()
-                    })
+                    || baseline
+                        .summary_at
+                        .is_some_and(|at| at > owned_record.recorded_at())
                 {
                     return Err(invalid(()));
                 }

@@ -71,7 +71,9 @@ pub(super) fn get(
     let history = rows::load(connection, entry, scope, 0, history_count)?
         .into_iter()
         .map(|row| {
-            rows::forbid_source(connection, row.id)?;
+            if row.source.is_some() {
+                return Err(invalid(()));
+            }
             StoredTransaction::try_restore(
                 row.transaction,
                 row.first_seen.ok_or_else(|| invalid(()))?,
@@ -83,7 +85,9 @@ pub(super) fn get(
     let pending = rows::load(connection, entry, scope, 1, pending_count)?
         .into_iter()
         .map(|row| {
-            rows::forbid_source(connection, row.id)?;
+            if row.source.is_some() {
+                return Err(invalid(()));
+            }
             if row.first_seen.is_some() || row.disappeared_at.is_some() {
                 return Err(invalid(()));
             }

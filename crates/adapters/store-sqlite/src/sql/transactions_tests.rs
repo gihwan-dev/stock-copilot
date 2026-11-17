@@ -13,3 +13,4 @@ pub(crate) const BAD_COMPLETION: &str =
 
 pub(crate) const REVERSE_FAILED_TIME: &str = "UPDATE transaction_entries SET payload = substr(payload, 1, 3) || '1:9' || substr(payload, 8) WHERE id = 2";
 pub(crate) const REVERSE_FIRST_TIME: &str = "UPDATE transaction_entries SET payload = substr(payload, 1, 3) || '1:9' || substr(payload, 8) WHERE id = 1";
+pub(crate) const PARTIAL_WITH_CHANGED_STATE: &str = "UPDATE transaction_entries SET payload = replace(payload, '8:complete', '7:partial') WHERE mode = 'summary'";

@@ -5,9 +5,9 @@ use domain::{
     NumericInput, Quantity, Ratio, Settlement, Symbol, Timestamp, Transaction as DomainTransaction,
     TransactionCode, TransactionData, TransactionKind, TransactionPrice,
 };
-use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
+use rusqlite::{Connection, Row, Transaction, params};
 pub(super) struct SavedRow {
-    pub id: i64,
+    pub source: Option<String>,
     pub transaction: DomainTransaction,
     pub first_seen: Option<Timestamp>,
     pub disappeared_at: Option<Timestamp>,
@@ -23,7 +23,7 @@ fn decode(row: &Row<'_>) -> rusqlite::Result<(usize, SavedRow)> {
     Ok((
         usize::try_from(row.get::<_, i64>(1)?).map_err(invalid)?,
         SavedRow {
-            id: row.get(0)?,
+            source: row.get(21)?,
             transaction,
             first_seen: row
                 .get::<_, Option<String>>(2)?
@@ -199,19 +199,4 @@ pub(super) fn load(
         return Err(invalid(()));
     }
     Ok(rows.into_iter().map(|(_, row)| row).collect())
-}
-pub(super) fn source(connection: &Connection, id: i64) -> rusqlite::Result<String> {
-    connection.query_row(sql::SOURCE, [id], |record_row| record_row.get(0))
-}
-pub(super) fn forbid_source(connection: &Connection, id: i64) -> rusqlite::Result<()> {
-    if connection
-        .query_row(sql::SOURCE, [id], |record_row| {
-            record_row.get::<_, String>(0)
-        })
-        .optional()?
-        .is_some()
-    {
-        return Err(invalid(()));
-    }
-    Ok(())
 }

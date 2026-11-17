@@ -1,3 +1,4 @@
+CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
 CREATE TABLE holdings_snapshots (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL,

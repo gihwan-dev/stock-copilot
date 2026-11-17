@@ -39,3 +39,4 @@ CREATE TABLE transaction_full_inspections (
     account INTEGER PRIMARY KEY,
     completed_at TEXT NOT NULL
 ) STRICT;
+CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
