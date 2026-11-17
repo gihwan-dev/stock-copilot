@@ -74,14 +74,14 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
         std::future::ready(unsupported(ReadEndpoint::InvestorTradingRankings))
     }
     fn sectors(&self) -> impl Future<Output = Result<SectorCatalog, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::Sectors))
+        crate::market_sector::sectors(self)
     }
     fn sector(
         &self,
-        _: &SectorId,
-        _: KnownMarket,
+        sector: &SectorId,
+        market: KnownMarket,
     ) -> impl Future<Output = Result<SectorDetail, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::Sector))
+        crate::market_sector::detail(self, sector, market)
     }
     fn sector_rankings(
         &self,
@@ -91,10 +91,10 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
     }
     fn sector_etfs(
         &self,
-        _: &SectorId,
-        _: KnownMarket,
+        sector: &SectorId,
+        market: KnownMarket,
     ) -> impl Future<Output = Result<SectorEtfs, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::SectorEtfs))
+        crate::market_sector::etfs(self, sector, market)
     }
     async fn indicator_quotes(
         &self,
@@ -135,10 +135,10 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
     }
     fn sector_composition(
         &self,
-        _: &SectorId,
-        _: KnownMarket,
+        sector: &SectorId,
+        market: KnownMarket,
     ) -> impl Future<Output = Result<SectorComposition, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::SectorComposition))
+        crate::market_sector::composition(self, sector, market)
     }
     async fn calendar(&self, market: KnownMarket) -> Result<MarketCalendar, PortError> {
         crate::market_calendar::fetch(self, market).await

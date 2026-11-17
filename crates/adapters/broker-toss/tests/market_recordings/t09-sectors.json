@@ -1,0 +1,37 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/sectors",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1sectors/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "sectors": [
+        {
+          "sectorId": "10",
+          "name": "IT 하드웨어",
+          "depth": 0,
+          "parentSectorId": null
+        },
+        {
+          "sectorId": "42",
+          "name": "스마트폰 부품",
+          "depth": 1,
+          "parentSectorId": "10"
+        },
+        {
+          "sectorId": "100",
+          "name": "반도체",
+          "depth": 1,
+          "parentSectorId": "10"
+        },
+        {
+          "sectorId": "103",
+          "name": "스마트폰 카메라",
+          "depth": 2,
+          "parentSectorId": "42"
+        }
+      ]
+    }
+  }
+}

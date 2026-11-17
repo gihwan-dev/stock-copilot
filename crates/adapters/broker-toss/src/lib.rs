@@ -33,3 +33,4 @@ mod market_calendar;
 mod market_fx;
 mod market_indicators;
 mod market_info;
+mod market_sector;
