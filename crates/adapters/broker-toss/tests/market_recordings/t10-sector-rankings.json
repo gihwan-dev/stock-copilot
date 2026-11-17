@@ -1,0 +1,40 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/sectors/rankings",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1sectors~1rankings/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "rankings": [
+        {
+          "rank": 1,
+          "sectorId": "100",
+          "name": "반도체",
+          "changeRate": "0.0179",
+          "tradingAmount": "2411000000000",
+          "marketCapitalization": "612000000000000",
+          "currency": "KRW"
+        },
+        {
+          "rank": 2,
+          "sectorId": "42",
+          "name": "스마트폰 부품",
+          "changeRate": "0.0123",
+          "tradingAmount": null,
+          "marketCapitalization": "9800000000000",
+          "currency": "KRW"
+        },
+        {
+          "rank": 3,
+          "sectorId": "10",
+          "name": "IT 하드웨어",
+          "changeRate": "0.0098",
+          "tradingAmount": "3105000000000",
+          "marketCapitalization": "998000000000000",
+          "currency": "KRW"
+        }
+      ]
+    }
+  }
+}

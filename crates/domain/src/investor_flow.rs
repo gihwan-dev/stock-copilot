@@ -219,6 +219,7 @@ struct FlowGroups {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvestorFlow {
+    market: KnownMarket,
     subject: FlowSubject,
     date: CalendarDate,
     interval: FlowInterval,
@@ -246,6 +247,7 @@ impl InvestorFlow {
             })
             .collect();
         Ok(Self {
+            market: KnownMarket::Kr,
             subject: FlowSubject::Stock(symbol),
             date: input.date,
             interval: FlowInterval::Day,
@@ -297,6 +299,7 @@ impl InvestorFlow {
             FlowBalance::Mismatched
         };
         Ok(Self {
+            market: KnownMarket::Kr,
             subject: FlowSubject::Indicator(code),
             date: input.date,
             interval,
@@ -306,6 +309,10 @@ impl InvestorFlow {
             finality: FlowFinality::Unknown,
             balance,
         })
+    }
+    #[must_use]
+    pub const fn market(&self) -> KnownMarket {
+        self.market
     }
     #[must_use]
     pub const fn subject(&self) -> &FlowSubject {

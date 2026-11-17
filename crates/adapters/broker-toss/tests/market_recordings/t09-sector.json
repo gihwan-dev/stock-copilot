@@ -1,0 +1,44 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/sectors/{sectorId}",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1sectors~1{sectorId}/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "sectorId": "100",
+      "name": "반도체",
+      "depth": 1,
+      "parentSectorId": "10",
+      "summary": "반도체 설계·제조 전문 회사들",
+      "performance": {
+        "changeRates": [
+          {
+            "duration": "1d",
+            "changeRate": "0.0179"
+          },
+          {
+            "duration": "1w",
+            "changeRate": "0.0412"
+          },
+          {
+            "duration": "1mo",
+            "changeRate": "-0.0231"
+          },
+          {
+            "duration": "3mo",
+            "changeRate": "0.1188"
+          },
+          {
+            "duration": "6mo",
+            "changeRate": null
+          },
+          {
+            "duration": "1y",
+            "changeRate": "0.3542"
+          }
+        ]
+      }
+    }
+  }
+}

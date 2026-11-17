@@ -369,3 +369,6 @@ mod run_full_inspection;
 pub use run_full_inspection::{
     FullInspectionReport, FullInspectionRun, FullInspectionRunError, RunFullInspection,
 };
+
+mod store_fx_rate;
+pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
