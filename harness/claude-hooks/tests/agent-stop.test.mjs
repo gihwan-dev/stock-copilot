@@ -898,8 +898,8 @@ sandboxTest(
   "the hook check runs the offline fresh steps first and then just base=<SHA> check",
   () => {
     assert.deepEqual(FRESH_STEPS, [
-      ["cargo", "clean", "--locked", "--offline"],
-      ["cargo", "llvm-cov", "clean", "--locked", "--offline"],
+      ["cargo", "clean", "--locked", "--offline", "--workspace"],
+      ["cargo", "llvm-cov", "clean", "--locked", "--offline", "--workspace"],
       [
         "pnpm",
         "install",

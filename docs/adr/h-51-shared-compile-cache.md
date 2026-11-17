@@ -1,100 +1,82 @@
-# H-51: 작업 사본의 빌드 씨앗
+# H-51: 작업 사본의 컴파일 결과 공유 조사
 
 - 상태: 초안
 - 날짜: 2026-11-18
 - 관련 작업: H-51
-- 구현 담당: Codex `gpt-6.1-terra` (max). 2026-11-17 사용자가 이 작업의 구현 모델로 정했다. 조사와 비판은 별도의 Codex `gpt-6.1-sol`, 적대적 리뷰는 새 Claude Opus 5.5라는 결정도 유지한다.
+- 구현 담당: Codex `gpt-6.1-terra` max. 2026-11-17 사용자가 구현 모델을 정했고, 조사·비판은 별도 Codex `gpt-6.1-sol`, 적대적 리뷰는 새 Claude Opus 5.5로 유지했다.
 
 ## 맥락
 
-여러 작업 사본의 첫 빌드가 같은 의존성을 각각 컴파일해 시간과 디스크를 쓴다. 사용자 결정에 따라 메인 체크아웃의 `target/`을 각 작업 사본으로 APFS 복제한다. 메인 병합 검사가 쓰는 산출물을 신뢰하고, 각 복제본은 독립된 쓰기 경로를 가진다. 메인 체크아웃의 산출물이 조작되면 씨앗을 쓴 검사 결과도 바뀔 수 있다. 이는 메인 산출물에 대한 신뢰를 전제로 하며, 그 위험이 없어졌다는 뜻은 아니다.
+여러 작업 사본이 외부 의존성을 다시 컴파일해 시간과 디스크를 사용한다. 공유 캐시의 신뢰 경계와 메인 `target/`에서 APFS `clonefile`로 사적인 씨앗을 만드는 후보를 조사했다. 2026-11-18 사용자는 씨앗 없음과 있음을 번갈아 두 번 이상 실측해 씨앗 검사의 중앙값이 10% 이상 빠를 때만 채택하기로 했다.
 
 ## 결정
 
-- 새 작업 사본의 `target/`이 없거나 비어 있을 때 `STOCK_COPILOT_SEED_TARGET`으로 메인 체크아웃의 `target/`을 지정하고 `just seed-target`을 실행한다. Git 공통 디렉터리로 확인한 메인 체크아웃의 정확한 경로만 받는다. 원본은 읽기만 하고, 다른 작업 사본과 산출물 쓰기를 공유하지 않는다.
-- macOS 시스템 `clonefile`을 파일마다 호출한다. 실패할 때 일반 복사로 돌아가지 않고 임시 결과를 지운다. 시스템 `cp -c`는 복제 실패 시 일반 복사를 할 수 있다고 `man cp`가 명시하므로 쓰지 않는다. 이 환경에서 Node의 `COPYFILE_FICLONE_FORCE`는 `ENOSYS`였고, 저장소가 쓰는 시스템 Python의 표준 라이브러리로 `clonefile`을 직접 호출한다. 새 패키지나 설치 도구는 없다.
-- 디렉터리는 새로 만들고 일반 파일을 복제한다. 원본의 심볼릭 링크나 특수 파일은 따라가거나 복제하지 않는다. 복제 중 실패하거나 원본이 없고 대상이 비어 있지 않으면 건너뛴다. 불완전한 결과는 게시하지 않는다.
-- 복제한 workspace 산출물은 게시 전에 `cargo clean --locked --offline --workspace --target-dir <임시 복제본>`으로 제거한다. 실제로 다른 경로의 workspace 산출물이 새 코드에도 `Fresh`로 판정돼 이전 실행 결과가 나온 예제를 재현했기 때문이다. 외부 의존성 산출물은 남겨 Cargo가 자신의 fingerprint와 도구·입력에 따라 재사용하거나 다시 빌드한다. 정리 실패 시 전체 씨앗 적용을 건너뛴다.
-- 정리 명령은 사용자 Cargo 설치의 `cargo`와 `rustc`를 고정 경로로 호출하고 컴파일러 래퍼를 비운다. 격리 fixture의 `CARGO_HOME/config.toml`에 가짜 `rustc`를 지정하면 원래 정리 명령이 이를 실행하는 것을 재현해, 해당 설정과 환경 변수로 대체되지 않는지 테스트한다. 홈 설정을 읽거나 수정하지 않았다.
-- 작업 중 부하 제한을 실제 검사 자식 프로세스에도 적용한다. 기존 `justfile`은 외부 `NEXTEST_TEST_THREADS`를 지워 4가 전달되지 않았으므로, `check`, `check-ts`, `check-fast`, `coverage-check` 레시피가 신뢰된 고정값 4를 각각 설정한다. 호출자의 값은 계속 지운다. 이 고정값은 CI에도 적용된다.
-- `fresh-cargo`는 `cargo clean --locked`와 `cargo llvm-cov clean --locked`를 실행한다. 종료 훅도 같은 범위를 오프라인으로 지운다. 이것은 이전에 `--workspace`가 남긴 외부 의존성 산출물까지 정리한다. `fresh-build`, 커밋·종료 훅, CI와 밤 실행은 씨앗을 호출하지 않는다.
+- 네 번의 검사 중앙값은 씨앗 없음 156.67초, 씨앗 있음 192.72초다. 씨앗 쪽이 23.0% 느려 개선 기준을 충족하지 못했다. 씨앗 레시피·스크립트·테스트는 제거하고 이 조사 기록을 남긴다. 이 측정은 속도 저하의 원인을 입증하지 않는다.
+- `fresh-cargo`와 종료 훅은 ADR 0015대로 `--workspace` 정리를 유지한다. 외부 의존성까지 매번 정리하면 커밋·병합·푸시·종료에서 재컴파일 비용이 발생한다. 수동 `just fresh-all`은 외부 의존성까지 지우며 자동 훅에 넣지 않는다. 전체 정리 뒤 `just base=HEAD check`로 가속 없는 로컬 빌드를 확인할 수 있다.
+- 기존 `NEXTEST_TEST_THREADS` 환경값 제거 방어는 유지한다. 이 작업에서 시험한 네 레시피의 영구 4스레드 고정과 관련 기존 테스트 기대값은 되돌렸다.
 
 ## 버린 대안
 
-여러 작업 사본이 쓰는 `sccache`는 사용자의 2026-11-18 결정으로 버렸다. 여러 주체가 쓰는 공유 캐시를 검사 결과에 쓰면 새 신뢰 경계가 생기며, 이를 서명·검증하는 비용이 이득보다 크다. `CARGO_TARGET_DIR` 하나를 공유하는 방식도 빌드 잠금과 산출물 혼합 때문에 쓰지 않는다. 기존 `target/`이 있는 작업 사본에 덮어쓰거나, 복제 실패를 일반 파일 복사로 대체하는 방식도 쓰지 않는다.
+여러 작업 사본이 쓰는 `sccache`는 사용자의 결정으로 버렸다. 여러 주체가 쓰는 공유 캐시를 검사 결과에 쓰면 새 신뢰 경계가 생기며, 이를 서명·검증하는 비용이 이득보다 크다. `CARGO_TARGET_DIR` 하나를 공유하는 방식도 빌드 잠금과 산출물 혼합 때문에 쓰지 않는다.
 
 격리 fixture에서 `sccache 0.19.0`의 의존 함수는 실제로 `0`을 반환했고 테스트는 `1`을 기대했다. 무캐시 테스트는 종료 101과 `left: 0`, `right: 1`로 실패했다. `1`을 반환하는 별도 빌드의 유효한 캐시 아카이브를 원래 의존성 캐시 항목에 덮어쓴 뒤 원래 소스로 테스트하자 새 target에서 종료 0과 테스트 1건 통과가 나왔다. 서버 통계는 Rust 캐시 적중 2, 미스 0이었다. 그 target에서 `cargo clean --workspace --locked --offline` 뒤 래퍼 없이 다시 실행해도 통과했다. workspace만 다시 컴파일되고 외부 의존성 산출물은 남았다. 제품 코드와 실제 `check-fast`에 sccache를 적용한 실험은 아니다.
 
+메인 체크아웃의 `target/`을 사적인 APFS 씨앗으로 복제하는 후보는 새 공유 쓰기 경계를 만들지 않지만 위 실측에서 채택 기준을 만족하지 못했다. 메인 씨앗을 조작하면 씨앗을 쓴 검사 결과가 달라질 수 있으며 이는 메인 체크아웃의 산출물을 신뢰하는 것과 같은 위협이다. 후보는 일반 복사로 넘어가지 않는 시스템 `clonefile`을 사용했다. 릴리스 workspace 산출물과 빌드 스크립트의 메인 절대 경로가 잘못 재사용되는 반례를 확인해 후보의 복제 범위를 제한했으나, 최종 트리에는 씨앗 구현이 없다.
+
+## 알려진 빈틈
+
+- `fresh-cargo`와 종료 훅의 `cargo clean --workspace` 뒤에도 외부 의존성 산출물이 남는다. 위 sccache 오염 fixture에서 정리 후 래퍼 없이 다시 실행해도 잘못된 의존성 결과가 유지됐다. 커밋마다 전체 정리하면 외부 의존성을 반복 컴파일해야 하므로 비용이 크다. 별도 `just fresh-all`로 로컬 전체 정리를 실행할 수 있고, GitHub 호스팅의 새 러너에서 컴파일 산출물을 복원하지 않는 원격 CI와 조건이 충족된 밤 전체 검사는 로컬 오염 산출물을 재사용하지 않는다. 이것이 외부 의존성 전체의 무결성을 증명하지는 않는다.
+
+워크플로 정책은 네 검사 작업의 호스팅 러너와 단계, 복원 명령·액션 부재를 고정한다. 워크플로가 호출하는 스크립트의 향후 내용 변경이나 레지스트리의 변조까지 이 검사만으로 증명하지 않는다.
+
 ## 검증과 측정
 
-두 측정 사본은 서로 다른 새 Git 작업 사본이며 같은 `732b58d1bab83bef0aa9a7affa51277316fbd651`에서 시작했다. 소스 변경이 없는 첫 `just base=<해당 SHA> check-fast`로 정적 검사와 `xtask` 부트스트랩을 측정했다. 작업 사본의 제품 crate 변경을 검사하는 시간은 이 표에 포함되지 않는다. 씨앗은 실측 전 메인 체크아웃 `target/`을 별도 측정용 메인 사본에 복제한 스냅숏이다. 측정 당시의 씨앗 스크립트는 이후 추가된 복제 결과 파일 종류 재확인과 Cargo·컴파일러 절대 경로 고정 전 버전이며, 최종 버전의 시간을 다시 측정한 값은 아니다. 둘 다 종료 0이었다.
+실험은 2026-11-18에 각각 새 Git 작업 사본에서 씨앗 없음 → 있음 → 없음 → 있음 순서로 실행했다. 같은 커밋 `730ea4f8bb34824941ef80009922f7a6605d8b97`과 씨앗 스크립트 SHA-256 `907d644b222eb545bae3ad7270d4f3b911bcde75403d917fee0ac35d51d378ba`를 사용했다. 실제 메인 `target/`의 clonefile 스냅숏 하나를 두 씨앗 실험의 공통 원본으로 사용했다. 복제는 일반 복사로 대체하지 않았고 측정 사본과 스냅숏은 즉시 삭제했다. `CARGO_BUILD_JOBS=4`이며 측정한 커밋의 검사 레시피는 nextest를 4로 고정했다. 두 조건의 검사와 씨앗 적용은 모두 종료 0이었다.
 
-| 항목                           |           씨앗 없음 |                              씨앗 있음 |
-| ------------------------------ | ------------------: | -------------------------------------: |
-| 시작 시각 (KST)                |            00:44:19 | 00:46:48 복제 시작, 00:47:53 검사 시작 |
-| 시작 시 1분 load               |               83.22 |               복제 137.61, 검사 103.91 |
-| `check-fast`                   |            141.05초 |                               213.79초 |
-| 씨앗 복제와 workspace 정리     |                없음 |                                64.79초 |
-| 검사 직후 `target/`의 `du -sk` |         909,860 KiB |                         12,590,140 KiB |
-| 복제 전후 `df` 가용량 감소     |           해당 없음 |                    1,602,981,888바이트 |
-| 검사 전후 `df` 가용량 감소     | 3,832,426,496바이트 |                    5,393,584,128바이트 |
+| 순서 | 조건      | 검사 시작 시각 (KST) | 1분 load 시작 → 종료 | 검사 시간 | 씨앗 복제·정리 | 검사 직후 `du -sk` | 볼륨 가용 감소: 복제 / 검사 (바이트) |
+| ---- | --------- | -------------------- | -------------------- | --------: | -------------: | -----------------: | -----------------------------------: |
+| 1    | 씨앗 없음 | 05:16:27             | 41.06 → 45.22        |  203.25초 |           없음 |        907,240 KiB |                없음 / -5,269,790,720 |
+| 2    | 씨앗 있음 | 05:20:31             | 39.84 → 101.48       |  244.59초 |        28.01초 |      9,165,728 KiB |            168,095,744 / 338,161,664 |
+| 3    | 씨앗 없음 | 05:25:45             | 90.40 → 44.79        |  110.09초 |           없음 |        907,936 KiB |                 없음 / 2,166,489,088 |
+| 4    | 씨앗 있음 | 05:28:22             | 72.42 → 53.77        |  140.85초 |        26.09초 |      9,168,004 KiB |         324,407,296 / -4,203,610,112 |
 
-씨앗을 쓴 검사 자체는 이번 한 번의 측정에서 51.6% 느렸고, 복제까지 포함하면 97.5% 느렸다. 두 실행의 load와 다른 스레드의 디스크 사용이 달랐다. `df` 차이는 같은 볼륨의 동시 작업과 삭제를 포함하므로 해당 작업만의 물리 사용량으로 단정할 수 없다. `du`는 APFS 공유 블록을 사본별로 계산할 수 있어 물리 증가량이 아니다. 이 한 번의 결과로 일반적인 속도 이득을 주장하지 않는다.
+씨앗 검사 중앙값은 192.72초로 무씨앗 156.67초보다 23.0% 느렸다. 복제·정리까지 각각 더하면 씨앗 실행은 272.59초와 166.94초다. 각 쌍의 시작 load는 41.06 대 39.84, 90.40 대 72.42였지만 실행 중 부하가 크게 바뀌었다. 이 수치만으로 원인이나 다른 작업의 성능을 단정하지 않는다.
 
-측정 뒤 `xtask`만 정리하고 같은 씨앗 사본에서 상세 Cargo 빌드를 다시 실행하자 의존성 45개는 `Fresh`, workspace의 `xtask`는 `Compiling`으로 나왔다. 측정 직후의 `.rlib` 비교에서는 workspace 패키지 이름에서 추정한 분류로 이름·크기·mtime이 씨앗과 같은 외부 의존성 파일 1,362개와 workspace 파일 0개가 남아 있었다. 이 파일 개수 전체가 실제 그 검사에서 소비됐다는 뜻은 아니다.
+가용량 차이는 `statvfs`의 볼륨 가용 바이트를 복제·검사 전후로 뺀 값으로, `df`와 같이 같은 볼륨의 다른 작업을 포함한다. 음수는 그동안 전체 가용량이 늘었다는 뜻이다. 공통 스냅숏 생성 비용은 씨앗 복제 차이에 포함하지 않았다. `du`는 APFS 공유 블록을 중복 계산할 수 있으므로 사본의 실제 물리 증가량으로 읽을 수 없다. 이번 수치로 각 사본의 물리 디스크 증가분을 분리하지 못한다.
 
-작은 fixture에서 씨앗 유무의 검사 결과, 비어 있지 않은 대상과 원본 보존, 복제 실패 시 일반 복사 금지, 다른 잠금 파일의 의존성 재빌드, 기존 `fresh-cargo`가 외부 의존성 산출물을 남기는 회귀와 수정 뒤 제거를 확인했다. Rust `1.95.0`으로 만든 씨앗을 Rust `1.99.1`에서 쓴 별도 실험에서는 외부 의존성을 다시 컴파일했고, 씨앗 유무의 테스트가 각각 종료 0이었다. 이는 두 버전과 작은 fixture에 대한 실측이다.
+측정은 소스 변경이 없는 첫 `check-fast`라 정적 검사와 `xtask` 부트스트랩이 중심이며 제품 crate 변경 검사 시간을 대표하지 않는다. 앞선 단일 측정도 씨앗 없음 98.21초, 있음 233.25초와 복제 21.03초였으나 다른 스크립트 버전, 다른 부하 및 Cargo 잠금 대기가 있어 독립적인 성능 보증이 아니다.
 
-프로젝트 신뢰와 훅 정의 신뢰는 각각 확인하지 못했다. 세션 훅 확인용 Git 명령은 거부되지 않고 실행됐다. 최종 전체 검사와 리뷰 결과는 리뷰 기록을 따른다.
+작은 fixture에서 workspace 정리 뒤 외부 의존성 산출물이 남고 `fresh-all` 뒤 사라지는 것을 확인했다. 워크플로 정책 테스트는 CI·밤 검사에 컴파일 캐시 복원 액션, 씨앗 명령 또는 자체 호스팅 러너를 넣는 예제를 거부한다. 프로젝트 신뢰와 세션 훅 정의 신뢰는 각각 확인하지 못했다. 리뷰와 검사 결과는 리뷰 기록을 따른다.
 
 ## 인계
 
-H-51: 메인은 병합 뒤 새 작업 사본의 첫 빌드 전에만 선택적으로 씨앗 레시피를 쓰도록 각 스레드에 알린다. 기존 `target/`은 덮어쓰지 않으며, `fresh-build`는 그 복제본을 포함해 모두 지운다.
+H-51: 메인은 병합 뒤 필요할 때 각 작업 사본에서 수동 `just fresh-all` 다음 `just base=HEAD check`로 전체 정리 빌드를 실행하도록 안내한다. `fresh-all`은 `target/`의 기록도 지우므로 필요한 기록은 먼저 밖에 보존한다.
 
 ## 손 변형
 
-`mktemp -d` 복사본에 고정 `rust-toolchain.toml`을 포함했다. 변경하지 않은 대조군 17개가 통과한 뒤 Python 구문 검사를 통과한 변형을 각각 실제 테스트로 실행했다. 그때 `justfile`은 스레드를 셸에 고정한 이전 버전이었으며 씨앗 Python 코드는 현재와 같다. 네 레시피 속성 변형은 변경 뒤 별도 복사본의 정상 대조군 통과 뒤 실행했다. 각 행은 테스트가 잡은 변형이다. 고정 툴체인이 빠진 첫 실행은 결과에서 제외했다.
+`mktemp` 사본에서 새 워크플로·정리 회귀 테스트의 대조군을 실행한 뒤, 정식 JSON 문법과 justfile 구문을 확인한 각 변형을 실제 테스트로 실행했다. 변형 22개가 모두 검출됐고 사본은 삭제했다. 로그는 작업 사본의 `target/H-51/policy-mutations/`에 보존한다.
 
-| 번호 | 바꾼 것                            | 잡은 테스트                              |
-| ---- | ---------------------------------- | ---------------------------------------- |
-| 1    | clone nofollow 플래그 변경         | `a cloned symlink is rejected`           |
-| 2    | clone 성공 판정 반전               | `a clone is private`                     |
-| 3    | 복제 결과 심볼릭 링크 검사 제거    | `a cloned symlink is rejected`           |
-| 4    | 원본 심볼릭 링크에서 실패          | `a clone is private`                     |
-| 5    | 디렉터리 판정 변경                 | `a clone is private`                     |
-| 6    | 대상 디렉터리 생성 제거            | `a clone is private`                     |
-| 7    | 하위 디렉터리 재귀 제거            | `a clone is private`                     |
-| 8    | 일반 파일 판정 변경                | `a clone is private`                     |
-| 9    | 일반 파일 복제 제거                | `a clone is private`                     |
-| 10   | 대상 파일을 빈 디렉터리로 판정     | `a target file or a target inside`       |
-| 11   | 빈 디렉터리 판정 반전              | `a clone is private`                     |
-| 12   | 운영체제 판정 반전                 | `a clone is private`                     |
-| 13   | 없는 원본 검사 제거                | `a symlink seed root and a missing seed` |
-| 14   | 원본과 대상 중첩 판정 반전         | `a target file or a target inside`       |
-| 15   | 초기 빈 대상 판정 반전             | `a clone is private`                     |
-| 16   | 트리 복제 제거                     | `a clone is private`                     |
-| 17   | 게시 전 workspace 정리 제거        | `seeded and unseeded workspaces`         |
-| 18   | 빈 대상 제거 조건 반전             | `seeded and unseeded workspaces`         |
-| 19   | 복제본 대신 원본을 이동            | `a clone is private`                     |
-| 20   | 복제 성공을 실패로 반환            | `a clone is private`                     |
-| 21   | 복제 실패에서 예외 전파            | `failed cloning leaves`                  |
-| 22   | 실패한 임시 복제본 정리 제거       | `failed cloning leaves`                  |
-| 23   | 고정 Cargo 대신 PATH의 Cargo 사용  | `a fake cargo at the front`              |
-| 24   | Cargo locked 인자 변경             | `workspace cleanup is locked`            |
-| 25   | Cargo offline 인자 변경            | `workspace cleanup is locked`            |
-| 26   | Cargo workspace 인자 변경          | `workspace cleanup is locked`            |
-| 27   | Cargo target-dir 인자 변경         | `workspace cleanup is locked`            |
-| 28   | Cargo 작업 디렉터리 변경           | `workspace cleanup is locked`            |
-| 29   | Cargo 성공 강제 제거               | `workspace cleanup is locked`            |
-| 30   | 공통 Git 디렉터리 판정 반전        | `a clone is private`                     |
-| 31   | 메인 씨앗 경로 변경                | `a clone is private`                     |
-| 32   | 신뢰한 원본 경로 판정 반전         | `a clone is private`                     |
-| 33   | 사본의 대상 경로 변경              | `a clone is private`                     |
-| 34   | 씨앗 루트 심볼릭 링크 거부 제거    | `a symlink seed root and a missing seed` |
-| 35   | 정리 컴파일러 고정 제거            | `a cargo-home config cannot`             |
-| 36   | 정리 컴파일러 래퍼 비우기 제거     | `a cargo-home config cannot`             |
-| 37   | workspace 래퍼 비우기 제거         | `a cargo-home config cannot`             |
-| 38   | `check` 스레드 상한 4 → 5          | `recipes fix nextest threads`            |
-| 39   | `check-ts` 스레드 상한 4 → 5       | `recipes fix nextest threads`            |
-| 40   | `coverage-check` 스레드 상한 4 → 5 | `recipes fix nextest threads`            |
-| 41   | `check-fast` 스레드 상한 4 → 5     | `recipes fix nextest threads`            |
+| 번호 | 바꾼 것                                                | 잡은 테스트                                                             |
+| ---- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| 1    | .github/workflows/ci.yml linux: self-hosted            | remote checks run on hosted runners without restoring a compiled target |
+| 2    | .github/workflows/ci.yml linux: cache-action           | remote checks run on hosted runners without restoring a compiled target |
+| 3    | .github/workflows/ci.yml linux: seed-command           | remote checks run on hosted runners without restoring a compiled target |
+| 4    | .github/workflows/ci.yml linux: wrapper-env            | remote checks run on hosted runners without restoring a compiled target |
+| 5    | .github/workflows/ci.yml linux: rust-cache-action      | remote checks run on hosted runners without restoring a compiled target |
+| 6    | .github/workflows/ci.yml macos: self-hosted            | remote checks run on hosted runners without restoring a compiled target |
+| 7    | .github/workflows/ci.yml macos: cache-action           | remote checks run on hosted runners without restoring a compiled target |
+| 8    | .github/workflows/ci.yml macos: seed-command           | remote checks run on hosted runners without restoring a compiled target |
+| 9    | .github/workflows/ci.yml macos: wrapper-env            | remote checks run on hosted runners without restoring a compiled target |
+| 10   | .github/workflows/ci.yml macos: rust-cache-action      | remote checks run on hosted runners without restoring a compiled target |
+| 11   | .github/workflows/nightly.yml linux: self-hosted       | remote checks run on hosted runners without restoring a compiled target |
+| 12   | .github/workflows/nightly.yml linux: cache-action      | remote checks run on hosted runners without restoring a compiled target |
+| 13   | .github/workflows/nightly.yml linux: seed-command      | remote checks run on hosted runners without restoring a compiled target |
+| 14   | .github/workflows/nightly.yml linux: wrapper-env       | remote checks run on hosted runners without restoring a compiled target |
+| 15   | .github/workflows/nightly.yml linux: rust-cache-action | remote checks run on hosted runners without restoring a compiled target |
+| 16   | .github/workflows/nightly.yml macos: self-hosted       | remote checks run on hosted runners without restoring a compiled target |
+| 17   | .github/workflows/nightly.yml macos: cache-action      | remote checks run on hosted runners without restoring a compiled target |
+| 18   | .github/workflows/nightly.yml macos: seed-command      | remote checks run on hosted runners without restoring a compiled target |
+| 19   | .github/workflows/nightly.yml macos: wrapper-env       | remote checks run on hosted runners without restoring a compiled target |
+| 20   | .github/workflows/nightly.yml macos: rust-cache-action | remote checks run on hosted runners without restoring a compiled target |
+| 21   | workspace-only                                         | the known dependency-artifact gap is listed and full cleanup is manual  |
+| 22   | missing-clean                                          | the known dependency-artifact gap is listed and full cleanup is manual  |

@@ -914,8 +914,8 @@ fn check_ends_with_the_new_disables_and_the_hook_installation() {
         recipe("fresh-cargo"),
         [
             "fresh-cargo:",
-            "cargo clean --locked",
-            "cargo llvm-cov clean --locked"
+            "cargo clean --locked --workspace",
+            "cargo llvm-cov clean --locked --workspace"
         ],
         "fresh-cargo recipe"
     );
