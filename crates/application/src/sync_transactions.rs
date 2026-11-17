@@ -193,7 +193,7 @@ fn reconcile_observation(
     }
     if let Ok(TransactionRead::Complete(response)) = observation {
         state
-            .reconcile(response, at)
+            .reconcile(response.normalized(), at)
             .map(Some)
             .map_err(TransactionSyncRejection::Reconciliation)
     } else {
