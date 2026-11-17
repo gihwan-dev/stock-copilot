@@ -1,0 +1,12 @@
+pub(crate) const FAIL_SOURCE: &str = "CREATE TRIGGER fail_transaction_source BEFORE INSERT ON transaction_sources BEGIN SELECT RAISE(ABORT, 'injected'); END";
+pub(crate) const FAIL_COMPLETION: &str = "CREATE TRIGGER fail_transaction_completion AFTER UPDATE ON transaction_full_inspections BEGIN SELECT RAISE(ABORT, 'injected'); END";
+pub(crate) const BAD_CURRENCY: &str = "UPDATE transaction_rows SET currency = 'EUR'";
+pub(crate) const BAD_QUANTITY: &str = "UPDATE transaction_rows SET quantity = '-9'";
+pub(crate) const BAD_TIME: &str = "UPDATE transaction_rows SET transaction_time = 'broken'";
+pub(crate) const BAD_POSITION: &str = "UPDATE transaction_rows SET position = 10";
+pub(crate) const REMOVE_SOURCE: &str = "DELETE FROM transaction_sources";
+pub(crate) const REMOVE_ROW: &str = "DELETE FROM transaction_rows WHERE scope = 'after'";
+pub(crate) const BAD_HEADER: &str = "UPDATE transaction_entries SET payload = '1:x'";
+pub(crate) const BAD_MODE: &str = "UPDATE transaction_entries SET mode = 'summary'";
+pub(crate) const BAD_COMPLETION: &str =
+    "UPDATE transaction_full_inspections SET completed_at = 'broken'";
