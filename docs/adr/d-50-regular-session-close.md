@@ -14,12 +14,15 @@ I-09, R-11, ADR 0028·0052·0112·0118·0127. R-11과 ADR 0112는 16:00 KST에 �
 
 `MarketDay::price` 하나가 통화별 가격일과 가격 기준을 함께 결정한다. D-31 스냅샷과 D-48 가격 증거는 `SnapshotCalendar::price`를 통해 이를 공유하고 D-49 재계산은 두 경로를 모두 이용한다. `Intraday` 증거는 연장 거래 중에도 종가로 받지 않는다. `SessionClose`와 일봉의 내용은 제공자의 주장이고 이 타입만으로 실제 출처나 종가의 진실성을 인증하지 않는다.
 
+관측 포트폴리오는 종가 증거를 포함하지 않는다. 그 통화의 당일 달력에 프리·데이·애프터 등 연장 거래가 있으면 비0 보유 또는 비0 보고 평가액을 `ValuationSnapshot::observe`에서 `MissingPrice`로 거부한다. 연장 거래가 끝난 뒤에도 현재가가 정규장 종가였음을 추정할 수 없어 동일하게 거부한다. 빈 계좌, 정확한 0, 미사용 통화는 유지한다. 이 판단은 정규장 종가의 완료 판정이나 일봉 재계산의 가격일을 변경하지 않는다. 기존 정규장만 있는 달력의 관측 계약은 유지하지만 그 경우에도 제공 가격의 출처를 인증하는 것은 아니다. 관측 값과 확정 일별 종가의 증거 연결은 A-16으로 인계한다.
+
 ## 인계
 
 | 받는 작업 | 내용 |
 |---|---|
-| T-08 | 실제 장 운영 응답에서 정규장·프리·애프터·미국 데이마켓을 해당 필드로 구분해 매핑하고, 거래소별 운영 시간·휴장·반일장과 정규장 종가를 제공하는 일봉의 의미를 실측한다. 누락과 확인된 휴장을 구분한다. |
-| A-26 | 실제 일봉의 정규장 종가와 증거의 출처·가격·날짜를 확인해 D-49 입력에 공급한다. 장중·연장 거래 체결가를 종가 주장으로 바꾸지 않는다. 달력 최신성과 날짜별 실패를 보존한다. |
+| T-08 | 실제 장 운영 응답에서 정규장·프리·애프터·미국 데이마켓을 해당 필드로 구분하고, 거래소별 운영 시간·휴장·반일장과 일봉 OHLC의 실제 의미를 실측한다. `crates/adapters/broker-toss/src/market_read/candles.rs`의 `assemble`은 현재 최종 세션 종료의 최댓값을 일봉 확정 시각으로 사용한다. 합성 달력에서 16:00과 19:59:59는 `InProgress`, 20:00은 `Finalized`다. 이 범위 밖 어댑터를 후속 작업에서 정규장 계약과 맞추고 종료 직전·정각·연장 거래 중·최종 종료를 검증한다. 누락과 확인된 휴장을 구분한다. |
+| A-16 | 관측 보유·보고값에 정규장 종가의 종목별 가격·날짜·출처 증거를 연결한다. 현행 연장 거래 달력의 비0 관측 거부를 근거 없이 제거하지 않는다. 정규장만 있는 기존 관측 경로도 원본 값의 진실성을 스스로 인증하지 않는다. |
+| A-26 | 실제 일봉의 정규장 종가와 증거의 출처·가격·날짜를 확인해 D-49 입력에 공급한다. `InProgress`를 `Finalized`로 바꾸거나 장중·연장 거래 체결가를 종가 주장으로 바꾸지 않는다. 필요한 자료가 없으면 날짜별 실패와 재시도를 보존하고 달력 최신성을 확인한다. |
 
 ## 검증
 
@@ -64,3 +67,37 @@ I-09, R-11, ADR 0028·0052·0112·0118·0127. R-11과 ADR 0112는 16:00 KST에 �
 | 31 | 휴장 조건에서 미국 상태 반전 | valuation_gap::tests::unavailable_calendar_dates_keep_reasons_without_skipping_other_days |
 | 32 | 원화 달력을 미국 달력으로 | valuation_gap::tests::returned_snapshot_must_use_planned_market_dates_and_price_bases |
 | 33 | 달러 달력을 한국 달력으로 | valuation_gap::tests::returned_snapshot_must_use_planned_market_dates_and_price_bases |
+
+관측 가드는 별도 복사본에서 29개 변형을 실행했다. 최초 실행에서 컴파일된 25개 중 24개를 검출했고 원화 보고만 있는 사례를 빠뜨려 1개가 생존했다. 해당 테스트를 추가해 그 변형을 다시 실행한 결과 실패했다. 나머지 4개는 미사용 변수 등으로 컴파일되지 않아 검출에서 제외한다. 최초 정상·원복 대조군은 통과했다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 또는 결과 |
+|---|---|---|
+| 1 | 연장 거래 가드 조건 반전 | valuation_snapshot::tests::accessors_preserve_provenance_and_individual_toss_daily_reports |
+| 2 | 연장 거래 대신 정규장만 가드 | valuation_snapshot::tests::accessors_preserve_provenance_and_individual_toss_daily_reports |
+| 3 | 보유 종목 통화 조건 반전 | valuation_snapshot::tests::extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not |
+| 4 | 보유 수량 0 판정 반전 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 5 | 보유 수량을 항상 0으로 처리 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 6 | 보유 수량을 항상 비0으로 처리 | valuation_snapshot::tests::extended_observed_exact_zero_and_cash_only_remain_available |
+| 7 | 개별 보유 보고액 부호 판정 반전 | valuation_snapshot::tests::extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not |
+| 8 | 개별 보유 보고액을 항상 0으로 | 컴파일 불가, 집계 제외 |
+| 9 | 개별 보유 보고액을 항상 비0으로 | 컴파일 불가, 집계 제외 |
+| 10 | 포트폴리오 보고액 부호 판정 반전 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 11 | 포트폴리오 보고액을 항상 0으로 | 컴파일 불가, 집계 제외 |
+| 12 | 포트폴리오 보고액을 항상 비0으로 | 컴파일 불가, 집계 제외 |
+| 13 | 보유 수량과 보고액을 둘 다 요구 | valuation_snapshot::tests::extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not |
+| 14 | 보유와 요약 보고 모두 비0이어야 거부 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 15 | 통화 불일치라도 비0 보유를 거부 | valuation_snapshot::tests::extended_observed_exact_zero_and_cash_only_remain_available |
+| 16 | 종가 근거 누락 대신 잘못된 봉 오류 | valuation_snapshot::tests::extended_observed_nonzero_price_requires_close_evidence_even_after_last_session |
+| 17 | 원화만 두 번 검사 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 18 | 달러만 두 번 검사 | valuation_snapshot::tests::extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not |
+| 19 | 보고 통화를 원화로 고정 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 20 | 보고 통화를 달러로 고정 | 처음 생존, extended_observed_krw_summary_without_holdings_requires_evidence 추가 후 재검출 |
+| 21 | 개별 보고가 없을 때도 보고를 가정 | valuation_snapshot::tests::extended_observed_exact_zero_and_cash_only_remain_available |
+| 22 | 요약 보고가 없을 때도 보고를 가정 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |
+| 23 | 정규장을 연장 거래로 판정 | valuation_snapshot::tests::accessors_preserve_provenance_and_individual_toss_daily_reports |
+| 24 | 애프터마켓만 연장 거래로 판정 | valuation_snapshot_calendar::regular_close_tests::observation_market_sessions_detect_pre_day_and_after_trading |
+| 25 | 프리마켓만 연장 거래로 판정 | valuation_snapshot::tests::extended_observed_nonzero_price_requires_close_evidence_even_after_last_session |
+| 26 | 데이마켓만 연장 거래로 판정 | valuation_snapshot::tests::extended_observed_nonzero_price_requires_close_evidence_even_after_last_session |
+| 27 | 연장 거래가 없으면 연장 거래 있다고 판정 | valuation_snapshot::tests::accessors_preserve_provenance_and_individual_toss_daily_reports |
+| 28 | 원화 관측에 달러 세션 사용 | valuation_snapshot::tests::extended_observed_nonzero_price_requires_close_evidence_even_after_last_session |
+| 29 | 달러 관측에 원화 세션 사용 | valuation_snapshot::tests::extended_observed_reported_value_and_each_currency_require_evidence |

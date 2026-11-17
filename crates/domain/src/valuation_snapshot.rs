@@ -167,6 +167,33 @@ fn lot_error(error: LotError) -> SnapshotError {
     SnapshotError::Lot(error)
 }
 
+fn validate_observed_extended_prices(
+    calendar: &SnapshotCalendar,
+    portfolio: &PortfolioValuation,
+) -> Result<(), SnapshotError> {
+    for currency in [Currency::Krw, Currency::Usd] {
+        if calendar.observation_sessions(currency)
+            == crate::valuation_snapshot_calendar::ObservationSessionScope::HasExtended
+            && (portfolio.holdings().iter().any(|item| {
+                let holding = item.holding();
+                holding.currency() == currency
+                    && (!holding.quantity().as_decimal().is_zero()
+                        || holding.reported().is_some_and(|reported| {
+                            !reported.valuation().amount().as_decimal().is_zero()
+                        }))
+            }) || portfolio.reported().is_some_and(|reported| {
+                reported
+                    .valuation()
+                    .amount(currency)
+                    .is_some_and(|amount| !amount.amount().as_decimal().is_zero())
+            }))
+        {
+            return Err(SnapshotError::MissingPrice);
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SnapshotContext {
     dates: SnapshotDates,
@@ -229,6 +256,7 @@ impl ValuationSnapshot {
         fx: Option<FxRate>,
     ) -> Result<Self, SnapshotError> {
         let context = SnapshotContext::new(calendar, SnapshotObservation::new(at, at, fx))?;
+        validate_observed_extended_prices(calendar, portfolio)?;
         let stock = |currency| match portfolio.currency_total(currency) {
             Total::Complete(entry) => Ok(*entry.value()),
             Total::Incomplete(_) => Err(SnapshotError::IncompleteValuation),
@@ -2577,5 +2605,176 @@ pub(crate) mod tests {
     }
     pub(crate) fn set_exchange(snapshot: &mut ValuationSnapshot, row: Transaction) {
         snapshot.inputs.cash.exchanges = vec![row];
+    }
+    fn extended_observation_calendar(currency: Currency) -> SnapshotCalendar {
+        let end = at(3, 6)
+            .checked_add(
+                TimeSpan::try_new(SpanSeconds::new(1_800), Nanosecond::new(0)).expect("30분"),
+            )
+            .expect("정규장 종료");
+        let regular =
+            SessionData::try_new(TimeInterval::try_new(at(3, 0), end).expect("정규장"), None)
+                .expect("정규장");
+        let after = SessionData::try_new(
+            TimeInterval::try_new(end, at(3, 11)).expect("연장 거래"),
+            None,
+        )
+        .expect("연장 거래");
+        let today = |market: Market| {
+            let information = match market {
+                Market::Kr => SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: Some(regular),
+                    after_market: (currency == Currency::Krw).then_some(after),
+                },
+                Market::Us | Market::Unknown(_) => SessionInformation::Us {
+                    day_market: None,
+                    pre_market: None,
+                    regular_market: Some(regular),
+                    after_market: (currency == Currency::Usd).then_some(after),
+                },
+            };
+            MarketSession::try_new(date(3), information).expect("당일")
+        };
+        let make = |market: Market| {
+            MarketCalendar::try_new(
+                trading(2, &market),
+                today(market.clone()),
+                trading(4, &market),
+            )
+            .expect("시장")
+        };
+        SnapshotCalendar::new(&make(Market::Kr), &make(Market::Us)).expect("評価")
+    }
+
+    fn observation_portfolio(holdings: Vec<crate::Holding>) -> Portfolio {
+        Portfolio::new(
+            holdings,
+            BuyingPower::new(money("0", Currency::Krw), at(3, 7)),
+            BuyingPower::new(money("0", Currency::Usd), at(3, 7)),
+        )
+        .expect("포트폴리오")
+    }
+
+    #[test]
+    fn extended_observed_nonzero_price_requires_close_evidence_even_after_last_session() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let value = observation_portfolio(vec![holding(Currency::Krw, None, Some("17"))]);
+        for hour in [7, 10, 11, 12] {
+            assert_eq!(
+                ValuationSnapshot::observe(&cal, &value.evaluate(None), at(3, hour), None).err(),
+                Some(SnapshotError::MissingPrice),
+            );
+        }
+        let plain = calendar(3);
+        assert_eq!(
+            ValuationSnapshot::observe(&plain, &value.evaluate(None), at(3, 7), None)
+                .expect("정규장만 있는 기존 관측")
+                .stock_value(Currency::Krw),
+            Ok(money("17", Currency::Krw)),
+        );
+    }
+
+    #[test]
+    fn extended_observed_reported_value_and_each_currency_require_evidence() {
+        let cal = extended_observation_calendar(Currency::Usd);
+        let value = observation_portfolio(vec![holding(Currency::Usd, None, Some("23"))]);
+        assert_eq!(
+            ValuationSnapshot::observe(&cal, &value.evaluate(None), at(3, 7), None).err(),
+            Some(SnapshotError::MissingPrice)
+        );
+        let amounts = |kr: &str, us: Option<&str>| {
+            CurrencyAmounts::new(
+                money(kr, Currency::Krw),
+                us.map(|text| money(text, Currency::Usd)),
+            )
+            .expect("통화")
+        };
+        let summary = crate::ReportedPortfolio::new(
+            amounts("0", Some("31")),
+            amounts("0", Some("0")),
+            amounts("0", Some("0")),
+            at(3, 7),
+        );
+        let reported = observation_portfolio(vec![]).with_reported(summary);
+        assert_eq!(
+            ValuationSnapshot::observe(&cal, &reported.evaluate(None), at(3, 7), None).err(),
+            Some(SnapshotError::MissingPrice)
+        );
+        let unrelated = observation_portfolio(vec![holding(Currency::Krw, None, Some("17"))]);
+        assert_eq!(
+            ValuationSnapshot::observe(&cal, &unrelated.evaluate(None), at(3, 7), None)
+                .expect("미사용 미국 시장")
+                .stock_value(Currency::Krw),
+            Ok(money("17", Currency::Krw))
+        );
+    }
+
+    #[test]
+    fn extended_observed_exact_zero_and_cash_only_remain_available() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let original = holding(Currency::Krw, None, Some("17"));
+        let zero = crate::Holding::new(
+            original.instrument().clone(),
+            Quantity::parse(&NumericInput::try_new("0").expect("입력")).expect("수량"),
+            original.acquisition_price(),
+            crate::HoldingObservation::new(original.current_price(), None, at(3, 7)),
+        )
+        .expect("0주");
+        for items in [vec![], vec![zero]] {
+            let portfolio = observation_portfolio(items);
+            let snapshot =
+                ValuationSnapshot::observe(&cal, &portfolio.evaluate(None), at(3, 7), None)
+                    .expect("명시적 0");
+            assert_eq!(
+                snapshot.stock_value(Currency::Krw),
+                Ok(money("0", Currency::Krw))
+            );
+        }
+    }
+    #[test]
+    fn extended_observed_reported_zero_is_allowed_but_nonzero_holding_report_is_not() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let zero = CurrencyAmounts::new(money("0", Currency::Krw), None).expect("통화");
+        let empty = observation_portfolio(vec![]).with_reported(crate::ReportedPortfolio::new(
+            zero,
+            zero,
+            zero,
+            at(3, 7),
+        ));
+        let result = ValuationSnapshot::observe(&cal, &empty.evaluate(None), at(3, 7), None)
+            .expect("보고된 0");
+        assert_eq!(
+            result.stock_value(Currency::Krw),
+            Ok(money("0", Currency::Krw))
+        );
+        let template = holding(Currency::Krw, Some("7"), None);
+        let inconsistent = crate::Holding::new(
+            template.instrument().clone(),
+            Quantity::parse(&NumericInput::try_new("0").expect("입력")).expect("수량"),
+            template.acquisition_price(),
+            crate::HoldingObservation::new(None, template.reported(), at(3, 7)),
+        )
+        .expect("보유");
+        let value = observation_portfolio(vec![inconsistent]);
+        assert_eq!(
+            ValuationSnapshot::observe(&cal, &value.evaluate(None), at(3, 7), None).err(),
+            Some(SnapshotError::MissingPrice)
+        );
+    }
+    #[test]
+    fn extended_observed_krw_summary_without_holdings_requires_evidence() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let value =
+            CurrencyAmounts::new(money("47", Currency::Krw), Some(money("0", Currency::Usd)))
+                .expect("평가");
+        let zero = CurrencyAmounts::new(money("0", Currency::Krw), Some(money("0", Currency::Usd)))
+            .expect("기준");
+        let summary = crate::ReportedPortfolio::new(value, zero, zero, at(3, 7));
+        let portfolio = observation_portfolio(vec![]).with_reported(summary);
+        assert_eq!(
+            ValuationSnapshot::observe(&cal, &portfolio.evaluate(None), at(3, 7), None).err(),
+            Some(SnapshotError::MissingPrice)
+        );
     }
 }

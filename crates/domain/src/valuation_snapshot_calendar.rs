@@ -107,11 +107,17 @@ impl RegularClose {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ObservationSessionScope {
+    NoExtended,
+    HasExtended,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MarketDay {
     date: CalendarDate,
     previous: CalendarDate,
     close: RegularClose,
     previous_close: RegularClose,
+    observation_sessions: ObservationSessionScope,
 }
 impl MarketDay {
     fn from_calendar(calendar: &MarketCalendar) -> Self {
@@ -120,6 +126,15 @@ impl MarketDay {
             previous: calendar.previous_business_day().date(),
             close: RegularClose::from_session(calendar.today()),
             previous_close: RegularClose::from_session(calendar.previous_business_day()),
+            observation_sessions: match calendar
+                .today()
+                .sessions()
+                .iter()
+                .find(|segment| segment.state() != MarketState::RegularMarket)
+            {
+                Some(_) => ObservationSessionScope::HasExtended,
+                None => ObservationSessionScope::NoExtended,
+            },
         }
     }
     fn price(self, at: Timestamp) -> Result<(CalendarDate, SnapshotPriceBasis), SnapshotError> {
@@ -181,6 +196,12 @@ impl SnapshotCalendar {
             Currency::Usd => self.us,
         }
         .price(at)
+    }
+    pub(crate) const fn observation_sessions(self, currency: Currency) -> ObservationSessionScope {
+        match currency {
+            Currency::Krw => self.kr.observation_sessions,
+            Currency::Usd => self.us.observation_sessions,
+        }
     }
     pub(crate) fn settlement_date(self, at: Timestamp) -> Result<CalendarDate, SnapshotError> {
         let date = kst_date(at)?;
@@ -485,6 +506,49 @@ mod regular_close_tests {
             for evidence in [today, prior_evidence] {
                 prop_assert_eq!(evidence.closing_price(extended, Currency::Krw, moment), evidence.closing_price(plain, Currency::Krw, moment));
             }
+        }
+    }
+    #[test]
+    fn observation_market_sessions_detect_pre_day_and_after_trading() {
+        let previous = kr(2, Some(kr_regular(2)), None, None);
+        let regular = kr(3, Some(kr_regular(3)), None, None);
+        let regular_calendar = calendar(regular, previous.clone());
+        assert_eq!(
+            regular_calendar.observation_sessions(Currency::Krw),
+            super::ObservationSessionScope::NoExtended
+        );
+        let pre = kr(3, Some(kr_regular(3)), Some(interval(3, -7_200, 0)), None);
+        let after = kr(
+            3,
+            Some(kr_regular(3)),
+            None,
+            Some(interval(3, 23_400, 39_600)),
+        );
+        for row in [pre, after] {
+            assert_eq!(
+                calendar(row, previous.clone()).observation_sessions(Currency::Krw),
+                super::ObservationSessionScope::HasExtended
+            );
+        }
+        let us_day = us_extra(3, Some(interval(3, 36_000, 43_200)), None, None);
+        let us_regular = us_extra(3, None, None, None);
+        let kr_calendar = MarketCalendar::try_new(
+            previous,
+            kr(3, Some(kr_regular(3)), None, None),
+            kr(4, Some(kr_regular(4)), None, None),
+        )
+        .expect("한국");
+        for (row, expected) in [
+            (us_day, super::ObservationSessionScope::HasExtended),
+            (us_regular, super::ObservationSessionScope::NoExtended),
+        ] {
+            let us_calendar = MarketCalendar::try_new(us(2), row, us(4)).expect("미국");
+            assert_eq!(
+                SnapshotCalendar::new(&kr_calendar, &us_calendar)
+                    .expect("평가")
+                    .observation_sessions(Currency::Usd),
+                expected
+            );
         }
     }
 }
