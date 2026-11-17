@@ -1,4 +1,3 @@
-import { DialogDescription } from "./Dialog";
 import type { Action } from "./control-types";
 import { Button } from "./Button";
 import type { ReactElement } from "react";
@@ -18,7 +17,7 @@ export const EmptyState = (props: Props): ReactElement => (
     </span>
     <p className="text-body font-semibold text-ink">{props.title}</p>
     {props.children === undefined ? null : (
-      <DialogDescription>{props.children}</DialogDescription>
+      <p className="text-body-sm max-w-dialog-width">{props.children}</p>
     )}
     {props.action === undefined ? null : (
       <div className="mt-space-2">

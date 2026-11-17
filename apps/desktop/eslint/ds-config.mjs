@@ -3,6 +3,7 @@ import {
   overflowRestrictions,
   overflowKeywords,
   PROSE_FILE,
+  LENGTH_EXCEPTIONS,
 } from "./ds-overflow.mjs";
 import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
@@ -187,6 +188,8 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
         ...new Set([
           ...OVERFLOW_POLICIES.flatMap(([, files]) => files),
           PROSE_FILE,
+          ...LENGTH_EXCEPTIONS.map(([file]) => file),
+          ...(lists.CHART_TABLE_FILES ?? []),
         ]),
       ].map((file) => ({
         files: [file],

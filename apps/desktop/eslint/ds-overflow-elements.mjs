@@ -35,7 +35,8 @@ export const nativeOverflowElement = (ctx, node) => {
   );
 };
 export const nativeOverflowAttribute = (ctx, node, key) => {
-  if (nativeTags(ctx, node.parent.name).length === 0) return false;
+  const names = nativeTags(ctx, node.parent.name);
+  if (names.length === 0) return false;
   return (
     [
       "popover",
@@ -44,6 +45,7 @@ export const nativeOverflowAttribute = (ctx, node, key) => {
       "cols",
       "rows",
     ].includes(key) ||
+    (key === "multiple" && names.includes("select")) ||
     (key === "wrap" && !["soft", "hard"].includes(node.value?.value))
   );
 };

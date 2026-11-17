@@ -292,10 +292,6 @@
     {
       "issue": "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
       "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
-    },
-    {
-      "issue": "files src/shared/ds/chart-loading.tsx src/shared/ds/chart-loading.tsx",
-      "reason": "DS-19의 닫힌 차트 로딩 표현 모듈. 기존 Skeleton의 첫 제품 화면 소비 전 정확한 새 파일 하나만 유예"
     }
   ]
 }

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cpSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ESLint, mkdtempSync } from "./ds-runtime-environment.mjs";
@@ -87,6 +93,12 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
         "ds/static-classes",
       ],
       [
+        "native multiple alias",
+        'const Element="select" as const;export const Probe=():ReactElement=><Element multiple/>;',
+        "ds/no-presentation-props",
+        true,
+      ],
+      [
         "native dialog alias",
         'const Element="dialog" as const;export const Probe=():ReactElement=><Element open/>;',
         "ds/no-presentation-props",
@@ -151,36 +163,84 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
       result.messages.some((m) => m.ruleId === "ds/static-classes"),
       JSON.stringify(result.messages),
     );
+    const chartTableFile = join(folder, "src/shared/ds/ChartTable.tsx");
+    const originalChartTable = readFileSync(chartTableFile, "utf8");
+    try {
+      writeFileSync(
+        chartTableFile,
+        originalChartTable +
+          '\nconst permissionProbeClasses={a:"fixed",b:"text-body"} as const;type PermissionProbeProps={readonly variant:"a"|"b"};export const PermissionProbe=(props:PermissionProbeProps):ReactElement=><div className={permissionProbeClasses[props.variant]}/>;',
+      );
+      const compiled = spawnSync(
+        join(desktopRoot, "node_modules/.bin/tsc"),
+        ["-p", project],
+        { encoding: "utf8" },
+      );
+      assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+      const [rejected] = await engine.lintFiles([chartTableFile]);
+      assert.ok(
+        rejected.messages.some(
+          (message) => message.ruleId === "ds/static-classes",
+        ),
+        JSON.stringify(rejected.messages),
+      );
+    } finally {
+      writeFileSync(chartTableFile, originalChartTable);
+    }
     const privateHeader =
       header +
-      'import {DialogDescription} from "./Dialog";import {ChartPlaceholder,ChartLoadingLines} from "./chart-loading";import {text} from "../lib";';
+      'import {EmptyState,Skeleton} from "./index";import {text} from "../lib";';
+    for (const name of ["EmptyState", "Skeleton"]) {
+      const target = join(folder, `src/shared/ds/${name}.tsx`);
+      const original = readFileSync(target, "utf8");
+      try {
+        writeFileSync(
+          target,
+          original +
+            '\nconst ownClasses={a:"h-control-height",b:"text-body"} as const;type OwnProps={readonly variant:"a"|"b"};export const DS19Map=(props:OwnProps):ReactElement=><div className={ownClasses[props.variant]}/>;',
+        );
+        const compiled = spawnSync(
+          join(desktopRoot, "node_modules/.bin/tsc"),
+          ["-p", project],
+          { encoding: "utf8" },
+        );
+        assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+        const [result] = await engine.lintFiles([target]);
+        assert.ok(
+          result.messages.some((m) => m.ruleId === "ds/static-classes"),
+          name + JSON.stringify(result.messages),
+        );
+      } finally {
+        writeFileSync(target, original);
+      }
+    }
     for (const [name, body, valid] of [
       [
-        "closed helpers",
-        '<><DialogDescription>{text("ds.description","ko")}</DialogDescription><ChartPlaceholder height="chart-height"/><ChartLoadingLines lines={6}/></>',
+        "own component dimensions",
+        '<><EmptyState title={text("app.title","ko")}>{text("ds.description","ko")}</EmptyState><Skeleton variant="block" height="chart-height"/><Skeleton lines={6}/></>',
         true,
       ],
       [
         "no arbitrary child",
-        "<DialogDescription><div/></DialogDescription>",
+        '<EmptyState title={text("app.title","ko")}><div/></EmptyState>',
         false,
       ],
       [
         "no description width",
-        '<DialogDescription width="prose-max">{text("ds.description","ko")}</DialogDescription>',
+        '<EmptyState title={text("app.title","ko")} width="prose-max"/>',
         false,
       ],
       [
-        "no arbitrary chart height",
-        '<ChartPlaceholder height="dialog-width"/>',
+        "no arbitrary skeleton height",
+        '<Skeleton variant="block" height="dialog-width"/>',
         false,
       ],
       [
-        "no arbitrary chart child",
-        '<ChartPlaceholder height="chart-height"><div/></ChartPlaceholder>',
+        "no arbitrary skeleton child",
+        '<Skeleton variant="block"><div/></Skeleton>',
         false,
       ],
-      ["closed line count", "<ChartLoadingLines lines={4}/>", false],
+      ["closed line count", "<Skeleton lines={4}/>", false],
     ]) {
       writeFileSync(
         probe,
@@ -196,7 +256,7 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
         valid,
         name + compiled.stdout + compiled.stderr,
       );
-      if (!valid) assert.match(compiled.stdout, /TS(?:2322|2745)/u, name);
+      if (!valid) assert.match(compiled.stdout, /TS(?:2322|2745|2747)/u, name);
     }
     for (const file of ["src/shared/ds/Markdown.tsx", "src/app/Probe.tsx"]) {
       const target = join(folder, file);

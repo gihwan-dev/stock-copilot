@@ -1,3 +1,4 @@
+import { CHART_TABLE_FILES } from "./ds-allowlists.mjs";
 import { utilityPattern } from "./ds-overflow-utilities.mjs";
 const ds = (names) => names.map((name) => `src/shared/ds/${name}.tsx`);
 export const OVERFLOW_FILES = ds(["ScrollArea", "Text", "Heading"]);
@@ -10,7 +11,6 @@ export const POSITION_FILES = ds([
   "Toast",
   "AppShell",
   "Table",
-  "ChartTable",
 ]);
 export const LENGTH_FILES = ds([
   "Button",
@@ -24,7 +24,6 @@ export const LENGTH_FILES = ds([
   "SegmentedControl",
   "Table",
   "ChartFrame",
-  "chart-loading",
   "Toolbar",
   "StatusBar",
   "AppShell",
@@ -45,6 +44,21 @@ export const NOWRAP_FILES = ds([
 ]);
 export const OFFSET_FILES = [];
 export const PROSE_FILE = "src/shared/ds/Markdown.tsx";
+export const LENGTH_EXCEPTIONS = [
+  [PROSE_FILE, ["markdown-content", "max-w-prose-max"]],
+  ["src/shared/ds/EmptyState.tsx", ["max-w-dialog-width"]],
+  [
+    "src/shared/ds/Skeleton.tsx",
+    [
+      "skeleton-line",
+      "h-chart-height-sm",
+      "h-chart-height",
+      "h-chart-height-lg",
+    ],
+  ],
+];
+const lengthException = (file) =>
+  LENGTH_EXCEPTIONS.find(([path]) => path === file)?.[1] ?? [];
 export const OVERFLOW_POLICIES = [
   [
     18,
@@ -65,7 +79,7 @@ export const OVERFLOW_POLICIES = [
   [
     22,
     VIEWPORT_FILES,
-    "(?:(?:min-|max-)?(?:h|w|size)-screen|.+(?:v[hw]|vmin|vmax).*)",
+    "(?:(?:min-|max-)?(?:h|w|size)-(?:screen|[sdl]?v(?:[hwib]|min|max))|.*(?:\\d|\\.)[sdl]?v(?:[hwib]|min|max).*)",
   ],
   [23, NOWRAP_FILES, "(?:whitespace-(?:nowrap|pre)|text-nowrap)"],
   [
@@ -77,7 +91,7 @@ export const OVERFLOW_POLICIES = [
 export const overflowRestrictions = (file) =>
   OVERFLOW_POLICIES.filter(([, files]) => !files.includes(file)).map(
     ([id, , pattern]) => ({
-      pattern: `(^|:)!?(?:${id === 21 && file === PROSE_FILE ? "(?!(?:markdown-content|max-w-prose-max)!?$)" : ""}(?:${pattern}${utilityPattern(id) ? `|${utilityPattern(id)}` : ""}))!?$`,
+      pattern: `(^|:)!?(?:${id === 21 && lengthException(file).length > 0 ? `(?!(?:${lengthException(file).join("|")})!?$)` : id === 20 && CHART_TABLE_FILES.includes(file) ? "(?!(?:sr-only)!?$)" : ""}(?:${pattern}${utilityPattern(id) ? `|${utilityPattern(id)}` : ""}))!?$`,
       message: `스크롤·넘침 #${id}: 지정 파일에서만 쓴다.`,
     }),
   );

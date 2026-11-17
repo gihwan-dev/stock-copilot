@@ -137,16 +137,7 @@ test("DS19 every documented file exception is exact and does not extend to a sib
     ["overflow-auto", ["ScrollArea"]],
     [
       "fixed",
-      [
-        "Dialog",
-        "Popover",
-        "Menu",
-        "Tooltip",
-        "Toast",
-        "AppShell",
-        "Table",
-        "ChartTable",
-      ],
+      ["Dialog", "Popover", "Menu", "Tooltip", "Toast", "AppShell", "Table"],
     ],
     [
       "h-control-height",
@@ -162,7 +153,6 @@ test("DS19 every documented file exception is exact and does not extend to a sib
         "SegmentedControl",
         "Table",
         "ChartFrame",
-        "chart-loading",
         "Toolbar",
         "StatusBar",
         "AppShell",
@@ -197,4 +187,144 @@ test("DS19 every documented file exception is exact and does not extend to a sib
   }
   const { OFFSET_FILES } = await import("../eslint/ds-overflow.mjs");
   assert.deepEqual(OFFSET_FILES, []);
+});
+
+test("DS19 ChartTable keeps only its pre-existing sr-only positioning exception", async () => {
+  const actual = new ESLint({
+    cwd: desktopRoot,
+    overrideConfigFile: true,
+    overrideConfig: dsConfigs(),
+  });
+  const [control] = await actual.lintText(
+    'const probe=<table className="sr-only"/>;',
+    { filePath: "src/shared/ds/ChartTable.tsx" },
+  );
+  assert.deepEqual(control.messages, []);
+  for (const value of ["absolute", "fixed", "sticky", "hover:fixed"]) {
+    const [result] = await actual.lintText(
+      `const probe=<div className="${value}"/>;`,
+      { filePath: "src/shared/ds/ChartTable.tsx" },
+    );
+    assert.ok(
+      result.messages.some((message) => message.ruleId === restricted),
+      value,
+    );
+  }
+});
+
+test("DS19 policy files equal the documented set without adding a new helper", async () => {
+  const { OVERFLOW_POLICIES } = await import("../eslint/ds-overflow.mjs");
+  const ds = (names) => names.map((name) => `src/shared/ds/${name}.tsx`);
+  const expected = [
+    [18, ds(["ScrollArea", "Text", "Heading"])],
+    [19, ds(["ScrollArea"])],
+    [
+      20,
+      ds([
+        "Dialog",
+        "Popover",
+        "Menu",
+        "Tooltip",
+        "Toast",
+        "AppShell",
+        "Table",
+      ]),
+    ],
+    [
+      21,
+      ds([
+        "Button",
+        "button-variants",
+        "IconButton",
+        "TextField",
+        "Select",
+        "Combobox",
+        "Switch",
+        "Checkbox",
+        "SegmentedControl",
+        "Table",
+        "ChartFrame",
+        "Toolbar",
+        "StatusBar",
+        "AppShell",
+        "Dialog",
+        "ChatInput",
+        "Icon",
+        "Disclosure",
+        "Card",
+      ]),
+    ],
+    [22, ds(["AppShell"])],
+    [
+      23,
+      ds([
+        "Numbers",
+        "Table",
+        "Badge",
+        "Button",
+        "button-variants",
+        "IconButton",
+      ]),
+    ],
+    [24, []],
+  ];
+  assert.deepEqual(
+    OVERFLOW_POLICIES.map(([id, files]) => [id, files]),
+    expected,
+  );
+});
+
+test("DS19 position policy set rejects an added helper independently of length decisions", async () => {
+  const { POSITION_FILES } = await import("../eslint/ds-overflow.mjs");
+  assert.deepEqual(
+    POSITION_FILES,
+    ["Dialog", "Popover", "Menu", "Tooltip", "Toast", "AppShell", "Table"].map(
+      (name) => `src/shared/ds/${name}.tsx`,
+    ),
+  );
+});
+
+test("DS19 component dimension exceptions equal the approved exact file token pairs", async () => {
+  const { LENGTH_EXCEPTIONS } = await import("../eslint/ds-overflow.mjs");
+  assert.deepEqual(LENGTH_EXCEPTIONS, [
+    ["src/shared/ds/Markdown.tsx", ["markdown-content", "max-w-prose-max"]],
+    ["src/shared/ds/EmptyState.tsx", ["max-w-dialog-width"]],
+    [
+      "src/shared/ds/Skeleton.tsx",
+      [
+        "skeleton-line",
+        "h-chart-height-sm",
+        "h-chart-height",
+        "h-chart-height-lg",
+      ],
+    ],
+  ]);
+  for (const [file, values] of LENGTH_EXCEPTIONS) {
+    for (const value of [...values, ...values.map((v) => `hover:${v}`)]) {
+      const [result] = await engine.lintText(
+        `const probe=<div className="${value}"/>;`,
+        { filePath: file },
+      );
+      assert.deepEqual(result.messages, [], `${file}: ${value}`);
+    }
+    for (const value of [
+      "h-control-height",
+      "w-dialog-width",
+      "max-w-dialog-width-wide",
+      "h-[37px]",
+      "max-w-[41rem]",
+      ...(file.includes("Skeleton")
+        ? ["max-w-dialog-width"]
+        : ["skeleton-line", "h-chart-height"]),
+    ]) {
+      const [result] = await engine.lintText(
+        `const probe=<div className="${value}"/>;`,
+        { filePath: file },
+      );
+      assert.ok(
+        result.messages.some((m) => m.ruleId === restricted),
+        `${file}: ${value}`,
+      );
+    }
+  }
 });

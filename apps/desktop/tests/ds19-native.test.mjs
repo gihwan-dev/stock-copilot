@@ -79,6 +79,21 @@ test("DS19 generated semantic utilities carry every risky declaration into file 
     ["white-space", "nowrap", [23]],
     ["margin-left", "-1rem", [24]],
     ["transform", "translateX(100%)", [24]],
+    ["inline-size", "20rem", [21]],
+    ["max-inline-size", "20rem", [21]],
+    ["block-size", "20rem", [21]],
+    ["max-block-size", "20rem", [21]],
+    ["text-wrap-mode", "nowrap", [23]],
+    ["width", "100vi", [21, 22]],
+    ["width", "100dvi", [21, 22]],
+    ["height", "100vb", [21, 22]],
+    ["height", "100dvb", [21, 22]],
+    ["transform", "matrix(1,0,0,1,8,9)", [24]],
+    ["transform", "matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,8,9,0,1)", [24]],
+    ["text-indent", "-1rem", [24]],
+    ["clip-path", "circle(50%)", [18]],
+    ["contain", "paint", [18]],
+    ["contain", "layout", []],
     ["overflow-wrap", "anywhere", []],
     ["white-space", "pre-wrap", []],
     ["width", "100%", []],
@@ -112,4 +127,20 @@ test("DS19 generated semantic utilities carry every risky declaration into file 
   } finally {
     utilityDeclarations.splice(original);
   }
+});
+
+test("DS19 native multi-select is rejected while single select remains allowed", async () => {
+  for (const code of ["<select multiple/>", "<select multiple={true}/>"]) {
+    const [result] = await engine.lintText(`const probe=${code};`, {
+      filePath: "src/shared/ds/Select.tsx",
+    });
+    assert.ok(
+      result.messages.some((message) => message.ruleId === rule),
+      code,
+    );
+  }
+  const [single] = await engine.lintText("const probe=<select/>;", {
+    filePath: "src/shared/ds/Select.tsx",
+  });
+  assert.deepEqual(single.messages, []);
 });

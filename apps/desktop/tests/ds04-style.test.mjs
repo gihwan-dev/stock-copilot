@@ -11,10 +11,10 @@ test("DS04 only the artifact backed overlay, skeleton and chart sizes pass style
   });
   const destinations = {
     "dialog-overlay": "Dialog",
-    "skeleton-line": "chart-loading",
-    "h-chart-height-sm": "chart-loading",
-    "h-chart-height": "chart-loading",
-    "h-chart-height-lg": "chart-loading",
+    "skeleton-line": "Skeleton",
+    "h-chart-height-sm": "Skeleton",
+    "h-chart-height": "Skeleton",
+    "h-chart-height-lg": "Skeleton",
   };
   const lint = async (classes) =>
     (

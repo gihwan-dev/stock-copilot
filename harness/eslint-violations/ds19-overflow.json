@@ -705,5 +705,145 @@
     "file": "src/shared/ds/Probe.tsx",
     "code": "const probe=<div className=\"-space-y-space-2\"/>;",
     "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-w-vi",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"w-vi\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-h-vb",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"h-vb\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-w-dvi",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"w-dvi\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-h-dvb",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"h-dvb\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-w-[100vi]",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"w-[100vi]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-no-absolute",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<div className=\"absolute\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-no-fixed",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<div className=\"fixed\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-no-sticky",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<div className=\"sticky\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-sr-only",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<table className=\"sr-only\"/>;",
+    "rule": null
+  },
+  {
+    "name": "EmptyState-own-width",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"max-w-dialog-width\"/>;",
+    "rule": null
+  },
+  {
+    "name": "EmptyState-no-height",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"h-control-height\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "EmptyState-no-other-max",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"max-w-prose-max\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "EmptyState-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"max-w-[47rem]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Skeleton-own-line",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"skeleton-line\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-own-sm",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-chart-height-sm\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-own-md",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-chart-height\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-own-lg",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-chart-height-lg\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-no-control",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-control-height\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Skeleton-no-width",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"max-w-dialog-width\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Skeleton-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-[31px]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
   }
 ]

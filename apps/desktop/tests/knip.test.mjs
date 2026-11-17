@@ -176,7 +176,6 @@ const expectedProductionAllowlist = [
   "files src/shared/ds/ChatInput.tsx src/shared/ds/ChatInput.tsx",
   "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
   "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
-  "files src/shared/ds/chart-loading.tsx src/shared/ds/chart-loading.tsx",
 ];
 
 test("the production allowlist holds exactly the documented skeleton entries, each with a reason", () => {
