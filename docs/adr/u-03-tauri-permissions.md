@@ -3,7 +3,7 @@
 - 상태: 초안
 - 작업: U-03
 - 구현: Codex `gpt-6.1-terra` (max)
-- 구현 모델 결정: 2026-11-17 사용자 결정으로 이 작업은 Terra가 직접 구현한다. 구현 모델 문서 갱신은 H-50에서 진행한다. 적대적 리뷰는 Claude Opus 5.5, 독립 비판은 Codex `gpt-6.1-sol`이다.
+- 구현 모델 결정: 2026-11-17 사용자 결정으로 이 작업은 Terra가 직접 구현한다. 구현 모델 문서 갱신은 H-50이 최신 master에 반영했다. 적대적 리뷰는 Claude Opus 5.5, 독립 비판은 Codex `gpt-6.1-sol`이다.
 
 ## 맥락
 
@@ -24,6 +24,33 @@ U-02는 UI 이벤트와 명령을 등록했지만 WebView 이벤트 구독 권�
 
 보안 검사에서 창 생성 코드의 구체적인 구문을 함께 고정하므로 창 조립을 바꿀 때는 검사의 기대 구문과 회귀 사례를 함께 검토해야 한다. 이는 외부 주소를 허용하기 위한 설정이 아니다. 새 외부 패키지는 추가하지 않았다.
 
+CSP와 `freezePrototype`의 자동 검사는 설정 파일의 값을 확인한다. `main.rs`에서 생성된 실행 중 context의 보안 값을 나중에 바꾸거나 보호된 조립을 건너뛰는 경우까지 검사하지는 않는다. 현재 `product_context`는 생성된 context를 그대로 반환하며, 이 경계의 변경은 `docs/harness.md` 9장 RV-6 리뷰에서 확인한다.
+
+## 동결 호환성 재현
+
+저장소 루트에서 고정된 Node 버전과 설치된 의존성을 사용해 아래 명령을 실행했다. 이 실험은 Node 서버 렌더 범위이며 실제 WKWebView 실행을 대신하지 않는다.
+
+```sh
+cd apps/desktop
+node --input-type=module <<'NODE'
+import assert from 'node:assert/strict';
+Object.freeze(Object.prototype);
+const { z } = await import('zod');
+const React = await import('react');
+const { renderToStaticMarkup } = await import('react-dom/server');
+const { default: Markdown } = await import('react-markdown');
+const { Button } = await import('@base-ui/react/button');
+assert.deepEqual(z.object({ value: z.string() }).parse({ value: 'ok' }), { value: 'ok' });
+const markdown = renderToStaticMarkup(React.createElement(Markdown, null, '**ok**'));
+assert.equal(markdown, '<p><strong>ok</strong></p>');
+const button = renderToStaticMarkup(React.createElement(Button, null, 'ok'));
+assert.match(button, /<button[^>]*>ok<\/button>/);
+console.log('freezePrototype Node smoke: zod parse, React Markdown and Base UI button server render passed');
+NODE
+```
+
+Node `v24.22.0`에서 종료 코드 0과 `freezePrototype Node smoke: zod parse, React Markdown and Base UI button server render passed`를 확인했다.
+
 ## 보호 파일과 기존 테스트
 
 | 파일 | 이유 |
@@ -43,7 +70,7 @@ U-02는 UI 이벤트와 명령을 등록했지만 WebView 이벤트 구독 권�
 |---|---|
 | U-05 | UI의 실제 이벤트 구독과 제품 발행 시 수명 주기 및 구독 해제를 연결하고 검증한다. 생성된 바인딩의 `emit`·`emitTo`는 노출되지만 현재 WebView ACL에서는 거부된다. |
 | O-13 | 실제 WKWebView의 탐색·새 창 콜백과 `freezePrototype`의 프런트 호환성, 제품 capability 실행 경로 및 S-13 목 런타임 적용 가능성을 확인한다. |
-| H-50 | 사용자가 결정한 구현 모델 허용 범위를 저장소의 모델 지침에 반영한다. |
+| H-50 | 사용자가 결정한 구현 모델 허용 범위를 모델 지침에 반영했다. |
 
 ## 손 변형
 
