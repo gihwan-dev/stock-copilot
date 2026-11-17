@@ -348,3 +348,9 @@ mod transaction_schedule;
 pub use transaction_schedule::{
     FullInspectionRepository, TransactionSchedule, TransactionScheduleError,
 };
+
+mod submit_estimate;
+pub use submit_estimate::{
+    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository, SubmitEstimate,
+    SubmitEstimateError,
+};
