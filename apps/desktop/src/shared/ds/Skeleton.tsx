@@ -1,3 +1,4 @@
+import { ChartPlaceholder } from "./ChartFrame";
 import type { ReactElement } from "react";
 import type { SizeToken } from "./tokens";
 type Props =
@@ -9,37 +10,20 @@ type Props =
         "chart-height-sm" | "chart-height" | "chart-height-lg"
       >;
     };
-const variantClasses = {
-  text: "flex flex-col gap-space-2",
-  block: "rounded-md bg-surface-sunken h-chart-height-sm",
-} as const;
-const tallVariantClasses = {
-  text: "flex flex-col gap-space-2",
-  block: "rounded-md bg-surface-sunken h-chart-height",
-} as const;
-const tallerVariantClasses = {
-  text: "flex flex-col gap-space-2",
-  block: "rounded-md bg-surface-sunken h-chart-height-lg",
-} as const;
 export const Skeleton = (props: Props): ReactElement => {
-  const variant = props.variant ?? "text";
-  if (props.variant === "block") {
-    if (props.height === "chart-height")
-      return <div aria-hidden="true" className={tallVariantClasses[variant]} />;
-    if (props.height === "chart-height-lg")
-      return (
-        <div aria-hidden="true" className={tallerVariantClasses[variant]} />
-      );
-    return <div aria-hidden="true" className={variantClasses[variant]} />;
-  }
+  if (props.variant === "block")
+    return <ChartPlaceholder height={props.height ?? "chart-height-sm"} />;
   const lines =
     props.lines === 6
       ? (["a", "b", "c", "d", "e", "f"] as const)
       : (["a", "b", "c"] as const);
   return (
-    <div aria-hidden="true" className={variantClasses[variant]}>
+    <div aria-hidden="true" className="flex flex-col gap-space-2">
       {lines.map((key): ReactElement => (
-        <div key={key} className="skeleton-line rounded-sm bg-surface-sunken" />
+        <div
+          key={key}
+          className="pt-space-1 pb-space-2 rounded-sm bg-surface-sunken"
+        />
       ))}
     </div>
   );

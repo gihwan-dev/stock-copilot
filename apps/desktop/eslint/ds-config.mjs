@@ -1,3 +1,9 @@
+import {
+  OVERFLOW_POLICIES,
+  overflowRestrictions,
+  overflowKeywords,
+  PROSE_FILE,
+} from "./ds-overflow.mjs";
 import * as defaultLists from "./ds-allowlists.mjs";
 import { join } from "node:path";
 import rawTailwind from "eslint-plugin-better-tailwindcss";
@@ -33,6 +39,7 @@ export const DS_RULES = {
           pattern: "(^|:)sr-only$",
           message: "숨은 표는 차트 대체 표 파일에서만 쓴다.",
         },
+        ...overflowRestrictions(""),
       ],
     },
   ],
@@ -55,6 +62,22 @@ export const SHARED_RULES = {
   "ds/no-element-factory": "error",
 };
 export const SCREEN_RULES = {
+  "no-restricted-imports": [
+    "error",
+    {
+      patterns: [
+        {
+          regex: ".*",
+          importNames: ["ScrollArea"],
+          message: "스크롤 영역은 DS 내부에서만 조립한다.",
+        },
+        {
+          regex: "(^|/)ScrollArea(?:\\.[cm]?[jt]sx?)?$",
+          message: "ScrollArea 내부 경로를 화면에서 가져오지 않는다.",
+        },
+      ],
+    },
+  ],
   ...Object.fromEntries(
     Object.entries(DS_RULES).filter(([name]) =>
       [
@@ -146,7 +169,7 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
       {
         restrict: DS_RULES[
           "better-tailwindcss/no-restricted-classes"
-        ][1].restrict.slice(0, 3),
+        ][1].restrict.filter((r) => r.pattern !== "(^|:)sr-only$"),
       },
     ],
   }),
@@ -158,4 +181,48 @@ export const dsConfigs = (rules = DS_RULES, lists = defaultLists) => [
     "ds/no-presentation-props": ["error", { geometry: "chart" }],
   }),
   ...listed(lists.DOM_STYLE_FILES, { "ds/no-dom-styling": "off" }),
+  ...(rules["better-tailwindcss/no-restricted-classes"] ===
+  DS_RULES["better-tailwindcss/no-restricted-classes"]
+    ? [
+        ...new Set([
+          ...OVERFLOW_POLICIES.flatMap(([, files]) => files),
+          PROSE_FILE,
+        ]),
+      ].map((file) => ({
+        files: [file],
+        rules: {
+          "better-tailwindcss/no-restricted-classes": [
+            "error",
+            {
+              restrict: [
+                ...DS_RULES[
+                  "better-tailwindcss/no-restricted-classes"
+                ][1].restrict
+                  .filter(
+                    (r) =>
+                      !r.message.startsWith("스크롤·넘침") &&
+                      !(
+                        lists.PRICE_COLOR_FILES.includes(file) &&
+                        r.message.startsWith("가격색")
+                      ) &&
+                      !(
+                        (lists.CHART_TABLE_FILES ?? []).includes(file) &&
+                        r.pattern === "(^|:)sr-only$"
+                      ),
+                  )
+                  .map((r, i) =>
+                    i === 0 && overflowKeywords(file).length > 0
+                      ? {
+                          ...r,
+                          pattern: `^(?!(?:(?:${[...DS_VARIANTS, "dark"].map(escape).join("|")}):)*(?:${overflowKeywords(file).map(escape).join("|")})$)${r.pattern.slice(1)}`,
+                        }
+                      : r,
+                  ),
+                ...overflowRestrictions(file),
+              ],
+            },
+          ],
+        },
+      }))
+    : []),
 ];

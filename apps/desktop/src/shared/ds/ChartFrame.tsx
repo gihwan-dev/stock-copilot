@@ -1,3 +1,4 @@
+import type { SizeToken } from "./tokens";
 import { useId, useState, type ReactElement } from "react";
 import { text } from "../lib";
 import type { ChartProps, ChartGeometry, ChartMark } from "./chart-types";
@@ -219,3 +220,31 @@ const orderMessages = {
   donut: "ds.chartDonutOrder",
   treemap: "ds.chartTreemapOrder",
 } as const;
+type PlaceholderProps = {
+  readonly height: Extract<
+    SizeToken,
+    "chart-height-sm" | "chart-height" | "chart-height-lg"
+  >;
+};
+export const ChartPlaceholder = (props: PlaceholderProps): ReactElement => {
+  if (props.height === "chart-height")
+    return (
+      <div
+        aria-hidden="true"
+        className="rounded-md bg-surface-sunken h-chart-height"
+      />
+    );
+  if (props.height === "chart-height-lg")
+    return (
+      <div
+        aria-hidden="true"
+        className="rounded-md bg-surface-sunken h-chart-height-lg"
+      />
+    );
+  return (
+    <div
+      aria-hidden="true"
+      className="rounded-md bg-surface-sunken h-chart-height-sm"
+    />
+  );
+};

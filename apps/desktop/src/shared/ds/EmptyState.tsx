@@ -17,7 +17,7 @@ export const EmptyState = (props: Props): ReactElement => (
     </span>
     <p className="text-body font-semibold text-ink">{props.title}</p>
     {props.children === undefined ? null : (
-      <p className="text-body-sm max-w-dialog-width">{props.children}</p>
+      <p className="text-body-sm">{props.children}</p>
     )}
     {props.action === undefined ? null : (
       <div className="mt-space-2">

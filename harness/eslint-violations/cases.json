@@ -138,7 +138,8 @@
       "boundaries/dependencies",
       "boundaries/no-unknown-dependencies",
       "boundaries/no-unknown-files"
-    ]
+    ],
+    "DS19 화면 스크롤": ["no-restricted-imports"]
   },
   "cases": {
     "src/app/boundary/allowed.ts": {
@@ -423,7 +424,8 @@
       "expect": [
         "@eslint-community/eslint-comments/no-restricted-disable",
         "boundaries/dependencies :: app에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
-        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
+        "no-restricted-imports :: 스크롤 영역은 DS 내부에서만 조립한다."
       ]
     },
     "src/app/comments/undisableable-network.ts": {
@@ -1336,7 +1338,8 @@
     "src/app/syntax/export-all.ts": {
       "row": "문법",
       "expect": [
-        "guard/no-export-all :: export * 금지: 내보낼 이름을 나열한다."
+        "guard/no-export-all :: export * 금지: 내보낼 이름을 나열한다.",
+        "no-restricted-imports :: 스크롤 영역은 DS 내부에서만 조립한다."
       ]
     },
     "src/app/syntax/global-event.ts": {
@@ -2432,7 +2435,8 @@
         "boundaries/dependencies :: feature에서 lib의 brand.ts 가져오기 금지: architecture 5장 폴더 의존 표의 방향으로, 다른 요소는 index.ts로만 가져온다.",
         "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
         "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
-        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다."
+        "local/no-raw-types :: 내보내는 값의 타입(함수 매개변수·반환 타입 포함)에 원시 타입이 남아 있다.",
+        "no-restricted-imports :: 스크롤 영역은 DS 내부에서만 조립한다."
       ]
     },
     "src/features/money/allowed.ts": {
@@ -2495,7 +2499,8 @@
         "local/no-computed-member :: 계산된 키는 리터럴이거나 리터럴 유니온 타입이어야 한다. symbol·타입 매개변수·문자열 키로 멤버를 고르지 않는다.",
         "local/no-computed-member :: 계산된 키로 고르는 대상은 프로젝트에서 선언한 객체여야 한다. 네임스페이스·라이브러리 객체는 이름으로 접근한다.",
         "local/no-money-coercion :: 금액 값을 제약 없는 타입 매개변수 자리(structuredClone, 범용 도우미 등)에 넘기지 않는다.",
-        "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다)."
+        "local/no-money-coercion :: 금액의 비공개 키는 shared/lib/money.ts 밖에서 쓰지 않는다(값을 읽는 파일 목록은 비어 있다).",
+        "no-restricted-imports :: 스크롤 영역은 DS 내부에서만 조립한다."
       ]
     },
     "src/features/money/generic.ts": {
@@ -3147,7 +3152,8 @@
         "guard/no-effect-hooks :: useEffect 금지: 효과 훅은 shared/platform의 허용 목록 파일에서만.",
         "guard/no-namespace-import :: import * as 금지: 이름을 나열해 가져온다. 네임스페이스 객체는 계산된 키로 아무 내보내기나 꺼내는 길이다.",
         "guard/no-react-namespace :: react 기본·네임스페이스 가져오기 금지: 이름 있는 가져오기만 쓴다.",
-        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장)."
+        "local/forbidden-file :: features/<이름>/ 바로 아래에는 ui/, model/, index.ts, messages.ts만 둔다 (architecture 5장).",
+        "no-restricted-imports :: 스크롤 영역은 DS 내부에서만 조립한다."
       ]
     },
     "src/features/react/effect-reexport-alias.ts": {
@@ -3983,6 +3989,24 @@
     },
     "src/shared/ds/Markdown.tsx": {
       "row": "원시 타입",
+      "expect": []
+    },
+    "src/app/overflow/named.ts": {
+      "row": "DS19 화면 스크롤",
+      "expect": [
+        "no-restricted-imports :: 스크롤 영역은 DS 내부에서만 조립한다."
+      ]
+    },
+    "src/app/overflow/deep.ts": {
+      "row": "DS19 화면 스크롤",
+      "expect": [
+        "boundaries/dependencies :: src의 요소(app, features/*, shared/*) 밖 파일 ../../shared/ds/ScrollArea 가져오기 금지.",
+        "boundaries/no-unknown-dependencies :: Dependencies to unknown elements and files are not allowed",
+        "no-restricted-imports :: ScrollArea 내부 경로를 화면에서 가져오지 않는다."
+      ]
+    },
+    "src/app/overflow/allowed.ts": {
+      "row": "DS19 화면 스크롤",
       "expect": []
     }
   }

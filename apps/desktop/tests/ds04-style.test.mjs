@@ -9,12 +9,29 @@ test("DS04 only the artifact backed overlay, skeleton and chart sizes pass style
     overrideConfigFile: true,
     overrideConfig: dsConfigs(),
   });
+  const destinations = {
+    "dialog-overlay": "Dialog",
+    "skeleton-line": "ChartFrame",
+    "h-chart-height-sm": "ChartFrame",
+    "h-chart-height": "ChartFrame",
+    "h-chart-height-lg": "ChartFrame",
+  };
   const lint = async (classes) =>
     (
-      await engine.lintText(`const Probe=()=> <div className="${classes}"/>;`, {
-        filePath: "src/shared/ds/Probe.tsx",
-      })
-    )[0].messages;
+      await Promise.all(
+        classes.split(" ").map(
+          async (value) =>
+            (
+              await engine.lintText(
+                `const Probe=()=> <div className="${value}"/>;`,
+                {
+                  filePath: `src/shared/ds/${destinations[value] ?? "Probe"}.tsx`,
+                },
+              )
+            )[0].messages,
+        ),
+      )
+    ).flat();
   assert.deepEqual(
     await lint(
       "dialog-overlay z-modal bg-overlay skeleton-line border-b-hairline h-chart-height-sm h-chart-height h-chart-height-lg",
