@@ -190,7 +190,7 @@ test("DS19 actual type-aware app rejects templates helpers aliases and imported 
     const privateHeader =
       header +
       'import {EmptyState,Skeleton} from "./index";import {text} from "../lib";';
-    for (const name of ["EmptyState", "Skeleton"]) {
+    for (const name of ["EmptyState", "Skeleton", "Card", "Icon"]) {
       const target = join(folder, `src/shared/ds/${name}.tsx`);
       const original = readFileSync(target, "utf8");
       try {

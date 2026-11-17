@@ -158,9 +158,7 @@ test("DS19 every documented file exception is exact and does not extend to a sib
         "AppShell",
         "Dialog",
         "ChatInput",
-        "Icon",
         "Disclosure",
-        "Card",
       ],
     ],
     ["h-screen", ["AppShell"]],
@@ -249,9 +247,7 @@ test("DS19 policy files equal the documented set without adding a new helper", a
         "AppShell",
         "Dialog",
         "ChatInput",
-        "Icon",
         "Disclosure",
-        "Card",
       ]),
     ],
     [22, ds(["AppShell"])],
@@ -289,6 +285,11 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
   assert.deepEqual(LENGTH_EXCEPTIONS, [
     ["src/shared/ds/Markdown.tsx", ["markdown-content", "max-w-prose-max"]],
     ["src/shared/ds/EmptyState.tsx", ["max-w-dialog-width"]],
+    ["src/shared/ds/Card.tsx", ["min-h-toolbar-height"]],
+    [
+      "src/shared/ds/Icon.tsx",
+      ["size-icon-sm", "size-icon-md", "size-icon-lg"],
+    ],
     [
       "src/shared/ds/Skeleton.tsx",
       [

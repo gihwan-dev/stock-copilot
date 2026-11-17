@@ -42,6 +42,9 @@ test("DS19 Base UI owners and the single IconButton Tooltip Positioner exception
     ["Select", "select", "Select"],
     ["Combobox", "combobox", "Combobox"],
     ["Autocomplete", "autocomplete", "Combobox"],
+    ["Drawer", "drawer", null],
+    ["Slider", "slider", null],
+    ["NumberField", "number-field", null],
   ]);
   for (const [name, path, owner] of PRIMITIVE_OWNERS) {
     for (const code of [
@@ -67,7 +70,7 @@ test("DS19 Base UI owners and the single IconButton Tooltip Positioner exception
       `import {${name} as P} from "@base-ui/react/${path}";`,
       { filePath: `src/shared/ds/${owner}.tsx` },
     );
-    if (["Select", "Combobox", "Autocomplete"].includes(name))
+    if (owner === null || ["Select", "Combobox", "Autocomplete"].includes(name))
       assert.ok(
         control.messages.some((m) => m.ruleId === rule),
         path,

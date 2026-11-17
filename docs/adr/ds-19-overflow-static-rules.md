@@ -11,7 +11,7 @@
 
 IconButton.tsx는 기존 Tooltip.Positioner 사용 하나만 예외로 둔다. 정확한 @base-ui/react/tooltip의 Tooltip 이름 가져오기와 JSX의 한 Positioner만 허용하며 별칭·네임스페이스·재내보내기·변수 추출·두 번째 Positioner는 거부한다. 일반 absolute·fixed·sticky 클래스, 다른 Positioner 및 ScrollArea 권한은 부여하지 않는다. 이 예외도 정확한 집합 대조로 고정한다. 나머지 Base UI 스크롤·겹침 계열은 문서의 파일 책임 안에서만 가져올 수 있고 재내보내기는 막는다. 현재 일반 위치 목록에 없는 Select·Combobox 계열을 미리 풀지 않는다.
 
-이번 회차에서 같은 원칙으로 새로 추가한 다른 고유 치수·프리미티브 예외는 없다. 2차 이후의 막힘 판정은 이 메인 결정으로 해소됐다.
+3차 리뷰 뒤 같은 원칙을 적용한 추가 고유 치수 예외는 Card.tsx의 min-h-toolbar-height 하나와 Icon.tsx의 size-icon-sm·size-icon-md·size-icon-lg 세 개다. Card의 머리줄과 아이콘 자신의 기존 크기를 보존하는 정확한 쌍이며 두 파일은 일반 #21 목록에서 제거한다. 다른 폭·높이·임의 값은 거부한다. 다른 단일 프리미티브 사용 예외는 추가하지 않았다. 2차 이후의 막힘 판정은 이 메인 결정으로 해소됐다.
 
 ## 결정
 
@@ -45,6 +45,16 @@ ChartTable은 일반 위치 목록에서 빼고 sr-only에만 좁은 예외를 �
 
 POSITION 집합의 회귀만 독립 실행하는 OS 임시 복사본에서 원본 대조군 통과를 확인하고, FutureHelper.tsx를 허용 목록에 추가하는 문법상 유효한 변형을 실제 실행했다. 새 정확한 집합 단언이 검출했다. 전체 회귀의 chart-loading 실패를 통과로 바꾼 실험이 아니며 기존 49개와 구분한다.
 
+## 3차 리뷰와 비판 뒤 결정
+
+Base UI는 shared/ds에서만 가져올 수 있도록 기존 패키지 위치 경계를 강화한다. shared/lib에서 UI 프리미티브를 내보내고 lib/index를 거쳐 DS로 되가져오는 경로도 원본 외부 의존 지점에서 거부한다. 직접 가져오기뿐 아니라 재내보내기 전체 사슬을 기존 컴포넌트·props를 보존한 앱 전체 컴파일과 린트로 대조한다.
+
+NumberField의 ScrubAreaCursor와 Slider의 Thumb는 설치된 1.9.0 소스에서 fixed·absolute 위치를 만든다. Drawer에도 가상 키보드 측정을 위한 fixed probe가 있다. 현재 승인된 DS 소유자가 없는 세 공개 계열은 임의로 소유자를 배정하지 않고 거부한다. 공개 exports 목록만으로 위험을 자동 결정하지 않는다. 각 공개 진입점의 실제 mjs 구현에 있는 위치·스크롤 선언과 anchor helper를 위험 목록과 대조하는 독립 감사와 별도의 직접 JSX 증인을 추가한다. 이 감사가 임의 라이브러리의 모든 런타임 동작을 증명한다는 뜻은 아니다.
+
+popover·popoverTarget·popoverTargetAction은 태그 종류에 관계없이 표현 경계에서 거부한다. Base UI Button이 네이티브 속성을 전달하는 경로를 별도 타입·린트 증인으로 검증한다. 저장소의 고정 Linux arm64 Playwright 컨테이너에서 실제 Button을 렌더하고 popover를 열어 Chromium 158.0.8127.18의 open=true·position=fixed·overflow=auto·inset=0px을 측정했다. 이는 WKWebView나 실제 내용 스크롤의 실측을 대신하지 않는다.
+
+화면의 광범위한 ScrollArea 이름 제한은 유지한다. namespace/export-all에서도 사실인 설명으로 진단 문구를 바꾸고 기존 기대 진단의 개수와 규칙을 유지한다. 3차의 재현 지적은 수정 뒤 회귀·손 변형으로 검증하며 지시문에 따라 4차 독립 리뷰는 하지 않는다.
+
 ## 검증
 
 시작 frozen 설치와 lefthook 설치는 성공했다. 프로젝트 신뢰·세션 훅 신뢰와 현재 세션 적용은 확인할 수 없다. 지시문의 예외에 따라 진행하며 Git 커밋 훅을 사용한다. 실제 키·계좌·API 및 홈 설정은 다루지 않았다.
@@ -57,24 +67,26 @@ DS04 컴포넌트 회귀 12개와 새 우회 검사 1개가 통과했다. 시각
 
 | 파일                                              | 테스트·자료                                        | 전 → 후                                                                                          | 승인 |
 | ------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---- |
+| apps/desktop/tests/boundaries.test.mjs            | 패키지 위치 고정 목록                              | 기존 항목 유지 + Base UI의 DS 위치 제한 1개                                                      | (c)  |
 | apps/desktop/tests/eslint-config.test.mjs         | 끌 수 없는 규칙 고정 목록                          | 기존 항목 유지 + no-restricted-imports 1개                                                       | (c)  |
 | apps/desktop/tests/ds-semantic-mutations.test.mjs | 변형 모듈 import 준비                              | 기존 경로 해석 유지 + 새 ds-overflow.mjs URL 해석                                                | (d)  |
 | apps/desktop/tests/ds04-style.test.mjs            | DS04 style 통과 자료 준비                          | Probe에 모든 클래스를 배치 → Dialog·Skeleton의 정확한 허용 위치. 모든 단언과 기존 위반 자료 유지 | (d)  |
 | harness/ds-style/cases.json                       | review-ref.tsx                                     | 기존 세 진단 유지 + no-restricted-classes                                                        | (c)  |
-| harness/eslint-violations/cases.json              | src/app/comments/undisableable-namespace-import.ts | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                       | (c)  |
-| harness/eslint-violations/cases.json              | src/app/syntax/export-all.ts                       | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                       | (c)  |
-| harness/eslint-violations/cases.json              | src/features/imports/namespace.ts                  | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                       | (c)  |
-| harness/eslint-violations/cases.json              | src/features/money/generic-key.ts                  | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                       | (c)  |
-| harness/eslint-violations/cases.json              | src/features/react/effect-namespace.ts             | 기존 진단 유지 + ScrollArea 이름 제한 진단                                                       | (c)  |
+| harness/eslint-violations/cases.json              | src/app/comments/undisableable-namespace-import.ts | 기존 진단 유지 + ScrollArea 또는 모듈 전체 가져오기 제한 진단                                    | (c)  |
+| harness/eslint-violations/cases.json              | src/app/syntax/export-all.ts                       | 기존 진단 유지 + ScrollArea 또는 모듈 전체 가져오기 제한 진단                                    | (c)  |
+| harness/eslint-violations/cases.json              | src/features/imports/namespace.ts                  | 기존 진단 유지 + ScrollArea 또는 모듈 전체 가져오기 제한 진단                                    | (c)  |
+| harness/eslint-violations/cases.json              | src/features/money/generic-key.ts                  | 기존 진단 유지 + ScrollArea 또는 모듈 전체 가져오기 제한 진단                                    | (c)  |
+| harness/eslint-violations/cases.json              | src/features/react/effect-namespace.ts             | 기존 진단 유지 + ScrollArea 또는 모듈 전체 가져오기 제한 진단                                    | (c)  |
 
-기존 기대 목록 추가 7항목(c)과 준비 변경 2항목(d), 총 9항목이다. 새 DS19 테스트·새 사례 등록은 기존 테스트 변경 수에 넣지 않는다. 첫 정상 훅의 test-diff 도구 지적은 0건이며 훅 예외를 사용하지 않았다.
+기존 기대 목록 추가 8항목(c)과 준비 변경 2항목(d), 총 10항목이다. 새 DS19 테스트·새 사례 등록은 기존 테스트 변경 수에 넣지 않는다. 첫 정상 훅의 test-diff 도구 지적은 0건이며 훅 예외를 사용하지 않았다.
 
-ESLint 설정·규칙 파일은 이번 정적 제한 등록에 필요하다. 새 ds-overflow-elements.mjs와 ds-overflow-utilities.mjs는 기존 규칙의 네이티브 속성 및 의미 유틸리티 분석이고, ds-overflow-primitives.mjs는 기존 표현 속성 규칙에 연결하는 Base UI 책임 경계 분석이다. chart-loading.tsx의 추가·유예는 최종 변경에서 제거했다. 고정 자료와 Node 테스트는 규칙별 증인 등록이다. Codex 설정·sandbox fragment·Claude 해시는 기존 생성기로 갱신한다. 기존 금지 삭제와 검사 끄기 추가는 없다.
+ESLint 설정·규칙 파일은 이번 정적 제한 등록에 필요하다. boundaries.mjs의 Base UI 패키지 위치 추가는 DS 밖 UI 재내보내기를 막는 검사 강화다. 새 ds-overflow-elements.mjs와 ds-overflow-utilities.mjs는 기존 규칙의 네이티브 속성 및 의미 유틸리티 분석이고, ds-overflow-primitives.mjs는 기존 표현 속성 규칙에 연결하는 Base UI 책임 경계 분석이다. chart-loading.tsx의 추가·유예는 최종 변경에서 제거했다. 고정 자료와 Node 테스트는 규칙별 증인 등록이다. Codex 설정·sandbox fragment·Claude 해시는 기존 생성기로 갱신한다. 기존 금지 삭제와 검사 끄기 추가는 없다.
 
 ## 인계
 
 - DS-11: 레이아웃 컴포넌트(Page 등)가 들어오면 긴 글 폭 책임을 그쪽으로 옮길지 재검토한다. 현재 책임은 Markdown.tsx이며 prose-max 하나만 허용한다.
 - DS-11 또는 이후 Tooltip DS 작업: 공개 Tooltip 컴포넌트가 생기면 IconButton의 위치 책임을 그쪽으로 옮기고 Tooltip.Positioner 단일 사용 예외를 지운다. EmptyState·Skeleton의 고유 치수는 현재 원래 파일의 정확한 토큰 집합으로 유지한다.
+- DS-11 또는 후속 DS 작업: Card·Icon의 고유 크기 네 쌍은 원래 파일에서만 유지하고 레이아웃 책임 변경 시 좁은 집합을 재검토한다. NumberField·Slider·Drawer를 도입할 때 실제 위험 부품의 소유자를 먼저 정하고 범용 권한으로 풀지 않는다.
 - DS-20: 실제 문서·요소 넘침, 잘림·스크롤 중첩·창 밖 요소·조작 요소 겹침을 렌더링으로 검증한다. 정적 검사가 이 실측을 대신하지 않는다.
 - DS-12: 현재 4개 컴포넌트의 시각 기준을 전체 공개 목록으로 확대한다. EmptyState·Skeleton도 포함해야 한다.
 
@@ -185,3 +197,50 @@ chart-loading.tsx의 Knip 유예는 메인 결정에 따라 최종 차이에서 
 | tooltip-value-extraction | ds-overflow-primitives.mjs: node.name === "Tooltip" → false                                                                          | ds19-primitives.test.mjs | 검출 |
 | quoted-root-import       | ds-overflow-primitives.mjs: specifier.imported?.name ?? specifier.imported?.value → specifier.imported?.name                         | ds19-primitives.test.mjs | 검출 |
 | tooltip-count            | ds-overflow-primitives.mjs: ++positioners > 1 → ++positioners > 2                                                                    | ds19-primitives.test.mjs | 검출 |
+
+## 3차 수정 최종 손 변형
+
+3차 수정의 현재 소스를 OS 임시 복사본에 옮긴 뒤 policy·native·primitives·review-three 원본 테스트 네 파일의 통과를 확인했다. 아래 40개 모두 문법 검사에 통과하고 지정 테스트의 AssertionError로 검출됐다. 생존·실행 오류 0이며 이전 대상의 변형 수와 합산하지 않는다.
+
+| 변형                     | 파일·바꾼 것                                                                                                                              | 잡은 테스트                | 결과 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---- |
+| policy-file-filter       | ds-overflow.mjs: !files.includes(file) → files.includes(file)                                                                             | ds19-policy.test.mjs       | 검출 |
+| overflow-prefix          | ds-overflow.mjs: overflow(?:-[xy])?-.+ → neverflow(?:-[xy])?-.+                                                                           | ds19-policy.test.mjs       | 검출 |
+| truncate                 | ds-overflow.mjs: &#124;truncate&#124; → &#124;truncation&#124;                                                                            | ds19-policy.test.mjs       | 검출 |
+| scroll-auto              | ds-overflow.mjs: (?:auto&#124;scroll&#124;overlay) → (?:automatic&#124;scroll&#124;overlay)                                               | ds19-policy.test.mjs       | 검출 |
+| scroll-scroll            | ds-overflow.mjs: (?:auto&#124;scroll&#124;overlay) → (?:auto&#124;scrolling&#124;overlay)                                                 | ds19-policy.test.mjs       | 검출 |
+| absolute                 | ds-overflow.mjs: absolute&#124;fixed → relative&#124;fixed                                                                                | ds19-policy.test.mjs       | 검출 |
+| fixed                    | ds-overflow.mjs: absolute&#124;fixed → absolute&#124;relative                                                                             | ds19-policy.test.mjs       | 검출 |
+| sticky                   | ds-overflow.mjs: &#124;sticky&#124; → &#124;relative&#124;                                                                                | ds19-policy.test.mjs       | 검출 |
+| length-height            | ds-overflow.mjs: (?:h&#124;w&#124;size) → (?:q&#124;w&#124;size)                                                                          | ds19-policy.test.mjs       | 검출 |
+| length-width             | ds-overflow.mjs: (?:h&#124;w&#124;size) → (?:h&#124;q&#124;size)                                                                          | ds19-policy.test.mjs       | 검출 |
+| length-size              | ds-overflow.mjs: (?:h&#124;w&#124;size) → (?:h&#124;w&#124;sizing)                                                                        | ds19-policy.test.mjs       | 검출 |
+| viewport-screen          | ds-overflow.mjs: (?:screen&#124;[sdl]?v → (?:screens&#124;[sdl]?v                                                                         | ds19-policy.test.mjs       | 검출 |
+| nowrap                   | ds-overflow.mjs: (?:nowrap&#124;pre) → (?:neverwrap&#124;pre)                                                                             | ds19-policy.test.mjs       | 검출 |
+| negative-margin          | ds-overflow.mjs: -m[xytrblse]? → -n[xytrblse]?                                                                                            | ds19-policy.test.mjs       | 검출 |
+| translate                | ds-overflow.mjs: (?:translate&#124;scale) → (?:translation&#124;scale)                                                                    | ds19-policy.test.mjs       | 검출 |
+| scale                    | ds-overflow.mjs: (?:translate&#124;scale) → (?:translate&#124;scaling)                                                                    | ds19-policy.test.mjs       | 검출 |
+| chart-table-exception    | ds-overflow.mjs: id === 20 && CHART_TABLE_FILES.includes(file) → false                                                                    | ds19-policy.test.mjs       | 검출 |
+| exact-length-file        | ds-overflow.mjs: path === file → path !== file                                                                                            | ds19-policy.test.mjs       | 검출 |
+| empty-width-token        | ds-overflow.mjs: ["max-w-dialog-width"] → ["max-w-prose-max"]                                                                             | ds19-policy.test.mjs       | 검출 |
+| skeleton-extra-token     | ds-overflow.mjs: "skeleton-line", → "skeleton-line", "h-control-height",                                                                  | ds19-policy.test.mjs       | 검출 |
+| native-select            | ds-overflow-elements.mjs: key === "multiple" → key === "multitude"                                                                        | ds19-native.test.mjs       | 검출 |
+| logical-size             | ds-overflow-utilities.mjs: width&#124;height&#124;inline-size&#124;block-size → width&#124;height&#124;inline-length&#124;block-size      | ds19-native.test.mjs       | 검출 |
+| nowrap-declaration       | ds-overflow-utilities.mjs: "text-wrap-mode" → "text-wrapping-mode"                                                                        | ds19-native.test.mjs       | 검출 |
+| clipping                 | ds-overflow-utilities.mjs: property === "clip-path" → false                                                                               | ds19-native.test.mjs       | 검출 |
+| matrix-transform         | ds-overflow-utilities.mjs: translate&#124;scale&#124;matrix → translate&#124;scale&#124;mtrx                                              | ds19-native.test.mjs       | 검출 |
+| primitive-boundary       | ds-overflow-primitives.mjs: !owned(entry) &#124;&#124; node.type !== "ImportDeclaration" → false                                          | ds19-primitives.test.mjs   | 검출 |
+| primitive-root           | ds-overflow-primitives.mjs: source === "@base-ui/react" → false                                                                           | ds19-primitives.test.mjs   | 검출 |
+| primitive-dynamic        | ds-overflow-primitives.mjs: node.source.value.startsWith("@base-ui/react") → false                                                        | ds19-primitives.test.mjs   | 검출 |
+| tooltip-import-alias     | ds-overflow-primitives.mjs: node.specifiers[0].local.name === "Tooltip" → true                                                            | ds19-primitives.test.mjs   | 검출 |
+| tooltip-value-extraction | ds-overflow-primitives.mjs: node.name === "Tooltip" → false                                                                               | ds19-primitives.test.mjs   | 검출 |
+| quoted-root-import       | ds-overflow-primitives.mjs: specifier.imported?.name ?? specifier.imported?.value → specifier.imported?.name                              | ds19-primitives.test.mjs   | 검출 |
+| tooltip-count            | ds-overflow-primitives.mjs: ++positioners > 1 → ++positioners > 2                                                                         | ds19-primitives.test.mjs   | 검출 |
+| lib-package-boundary     | boundaries.mjs: "@base-ui/react": ["src/shared/ds/**"], →                                                                                 | ds19-review-three.test.mjs | 검출 |
+| lib-package-widening     | boundaries.mjs: "@base-ui/react": ["src/shared/ds/**"] → "@base-ui/react": ["src/shared/{ds,lib}/**"]                                     | ds19-review-three.test.mjs | 검출 |
+| unowned-number-field     | ds-overflow-primitives.mjs: ["NumberField", "number-field", null], →                                                                      | ds19-review-three.test.mjs | 검출 |
+| unowned-slider           | ds-overflow-primitives.mjs: ["Slider", "slider", null], →                                                                                 | ds19-review-three.test.mjs | 검출 |
+| unowned-drawer           | ds-overflow-primitives.mjs: ["Drawer", "drawer", null], →                                                                                 | ds19-review-three.test.mjs | 검출 |
+| popover-wrapper          | ds-overflow-elements.mjs: ["popover", "popoverTarget", "popoverTargetAction"].includes(key) → false                                       | ds19-review-three.test.mjs | 검출 |
+| card-extra-size          | ds-overflow.mjs: ["min-h-toolbar-height"] → ["min-h-toolbar-height", "h-chart-height"]                                                    | ds19-policy.test.mjs       | 검출 |
+| icon-extra-size          | ds-overflow.mjs: ["size-icon-sm", "size-icon-md", "size-icon-lg"] → ["size-icon-sm", "size-icon-md", "size-icon-lg", "max-w-content-max"] | ds19-policy.test.mjs       | 검출 |

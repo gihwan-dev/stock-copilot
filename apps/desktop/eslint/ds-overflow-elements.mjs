@@ -35,16 +35,12 @@ export const nativeOverflowElement = (ctx, node) => {
   );
 };
 export const nativeOverflowAttribute = (ctx, node, key) => {
+  if (["popover", "popoverTarget", "popoverTargetAction"].includes(key))
+    return true;
   const names = nativeTags(ctx, node.parent.name);
   if (names.length === 0) return false;
   return (
-    [
-      "popover",
-      "popoverTarget",
-      "popoverTargetAction",
-      "cols",
-      "rows",
-    ].includes(key) ||
+    ["cols", "rows"].includes(key) ||
     (key === "multiple" && names.includes("select")) ||
     (key === "wrap" && !["soft", "hard"].includes(node.value?.value))
   );

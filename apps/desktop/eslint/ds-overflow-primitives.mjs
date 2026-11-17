@@ -14,6 +14,9 @@ export const PRIMITIVE_OWNERS = [
   ["Select", "select", "Select"],
   ["Combobox", "combobox", "Combobox"],
   ["Autocomplete", "autocomplete", "Combobox"],
+  ["Drawer", "drawer", null],
+  ["Slider", "slider", null],
+  ["NumberField", "number-field", null],
 ];
 export const PRIMITIVE_EXCEPTIONS = [
   [
@@ -36,6 +39,7 @@ export const primitiveOverflowVisitors = (ctx) => {
   const tooltipSource = PRIMITIVE_EXCEPTIONS[0][1];
   const report = (node) => ctx.report({ node, messageId: "forbidden" });
   const owned = (entry) =>
+    entry[2] !== null &&
     file === `src/shared/ds/${entry[2]}.tsx` &&
     (entry[0] === "ScrollArea" ? SCROLL_FILES : POSITION_FILES).includes(file);
   const family = (source) =>

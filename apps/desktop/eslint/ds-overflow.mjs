@@ -29,9 +29,7 @@ export const LENGTH_FILES = ds([
   "AppShell",
   "Dialog",
   "ChatInput",
-  "Icon",
   "Disclosure",
-  "Card",
 ]);
 export const VIEWPORT_FILES = ds(["AppShell"]);
 export const NOWRAP_FILES = ds([
@@ -47,6 +45,8 @@ export const PROSE_FILE = "src/shared/ds/Markdown.tsx";
 export const LENGTH_EXCEPTIONS = [
   [PROSE_FILE, ["markdown-content", "max-w-prose-max"]],
   ["src/shared/ds/EmptyState.tsx", ["max-w-dialog-width"]],
+  ["src/shared/ds/Card.tsx", ["min-h-toolbar-height"]],
+  ["src/shared/ds/Icon.tsx", ["size-icon-sm", "size-icon-md", "size-icon-lg"]],
   [
     "src/shared/ds/Skeleton.tsx",
     [

@@ -845,5 +845,82 @@
     "file": "src/shared/ds/Skeleton.tsx",
     "code": "const probe=<div className=\"h-[31px]\"/>;",
     "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-own-header",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"min-h-toolbar-height\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Card-no-fixed-body",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"h-chart-height\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-no-max-width",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"max-w-content-max\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-no-width",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"w-sidebar-width\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"h-[17px]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Icon-own-small",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-icon-sm\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Icon-own-medium",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-icon-md\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Icon-own-large",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-icon-lg\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Icon-no-chart",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"h-chart-height-lg\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Icon-no-max-width",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"max-w-content-max\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Icon-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-[29px]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
   }
 ]

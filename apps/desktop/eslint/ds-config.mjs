@@ -70,7 +70,8 @@ export const SCREEN_RULES = {
         {
           regex: ".*",
           importNames: ["ScrollArea"],
-          message: "스크롤 영역은 DS 내부에서만 조립한다.",
+          message:
+            "화면에서 ScrollArea 또는 모듈 전체를 가져오거나 다시 내보내지 않는다.",
         },
         {
           regex: "(^|/)ScrollArea(?:\\.[cm]?[jt]sx?)?$",
