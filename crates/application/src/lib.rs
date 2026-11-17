@@ -360,6 +360,11 @@ pub use transaction_observation::{
     CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,
     RawTransactionRow,
 };
+
+mod valuation_gap;
+pub use valuation_gap::{
+    PlanValuationGap, ValuationCalendarSource, ValuationDayRepository, ValuationGapError,
+};
 mod run_full_inspection;
 pub use run_full_inspection::{
     FullInspectionReport, FullInspectionRun, FullInspectionRunError, RunFullInspection,
