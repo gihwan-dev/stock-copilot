@@ -11,6 +11,13 @@ const MAX_ROWS: usize = 8192;
 fn invalid(endpoint: ReadEndpoint) -> PortError {
     crate::market_read::invalid(endpoint)
 }
+fn missing_master_mapping(endpoint: ReadEndpoint) -> PortError {
+    PortError::new(
+        endpoint,
+        application::HttpStatus::Success,
+        application::PortErrorKind::Unsupported(application::BrokerCapability::Instruments),
+    )
+}
 fn required<'a>(
     value: &'a Value,
     key: &str,
@@ -187,8 +194,19 @@ pub(crate) async fn composition<S: SecretStore, T: Clock, R: TokenRenewal>(
             })
         })
         .collect::<Result<Vec<_>, PortError>>()?;
-    SectorComposition::from_stocks_response(sector.clone(), market, rows, reader.market_now())
-        .map_err(|_error| invalid(endpoint))
+    let composition =
+        SectorComposition::from_stocks_response(sector.clone(), market, rows, reader.market_now())
+            .map_err(|_error| invalid(endpoint))?;
+    for symbol in composition.symbols() {
+        if !reader.market_master().instruments().iter().any(|master| {
+            master.quote_instrument().is_ok_and(|instrument| {
+                instrument.market() == &market && instrument.symbol() == symbol
+            })
+        }) {
+            return Err(missing_master_mapping(endpoint));
+        }
+    }
+    Ok(composition)
 }
 pub(crate) async fn etfs<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
@@ -215,17 +233,18 @@ pub(crate) async fn etfs<S: SecretStore, T: Clock, R: TokenRenewal>(
             })
         })
         .collect::<Result<Vec<_>, PortError>>()?;
-    for row in &rows {
+    let etfs = SectorEtfs::from_response(sector.clone(), market, rows, reader.market_now())
+        .map_err(|_error| invalid(endpoint))?;
+    for row in etfs.etfs() {
         if !reader.market_master().instruments().iter().any(|master| {
             master.quote_instrument().is_ok_and(|instrument| {
-                instrument.market() == &market && instrument.symbol() == &row.symbol
+                instrument.market() == &market && instrument.symbol() == row.symbol()
             }) && matches_etf_type(master)
         }) {
-            return Err(invalid(endpoint));
+            return Err(missing_master_mapping(endpoint));
         }
     }
-    SectorEtfs::from_response(sector.clone(), market, rows, reader.market_now())
-        .map_err(|_error| invalid(endpoint))
+    Ok(etfs)
 }
 
 fn matches_etf_type(master: &domain::MasterInstrument) -> bool {

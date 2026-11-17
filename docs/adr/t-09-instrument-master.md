@@ -28,6 +28,8 @@
 
 섹터 ID는 HTTP 경계의 1~40자리 영숫자·밑줄·하이픈만 허용한다. 서버 목록과 상세의 ID 및 부모 ID도 같은 규칙으로 검사하고 유효하지 않으면 응답 오류로 닫는다. 섹터 행은 8192건까지 허용한다. ETF는 주입된 마스터에서 요청 시장과 심볼이 일치하고 ETF 유형이 확인돼야 한다. 종목 목록 전체를 생성할 근거가 없는 상태라 이 마스터의 실제 공급은 완료되지 않았다. 형식 오류 및 각 섹터 경로의 401 재발급·429 재시도는 합성 응답으로 확인한다.
 
+1차 리뷰 수정: 섹터 구성의 각 종목도 반환 전에 주입된 마스터와 시장·심볼을 대조한다. 구성과 ETF 모두 응답 자체를 먼저 domain으로 검증하고, 해당 마스터 연결을 찾을 수 없거나 ETF 유형을 증명할 수 없으면 서버 응답 오류 대신 현재 미구현인 마스터 조회를 가리키는 `Unsupported(Instruments)`로 반환한다. 포트의 endpoint와 받은 HTTP 성공 상태는 보존한다. 기존 오류 분류에서 이것은 여전히 `Bug(UnsupportedCapability(Instruments))`이며 사용자에게 더 세밀한 준비 상태로 전달되지는 않는다. D-03/S-04: 마스터 발급·영속 연결과 함께 누락·갱신 중인 마스터를 표현할 오류 계약을 정하고 이 임시 분류를 다시 평가한다. 이 처리는 마스터의 완전성이나 최신성을 보증하지 않는다. 포트 trait와 기존 오류 열거형은 바꾸지 않는다.
+
 제한기 시험은 두 번째 요청을 서버가 받은 순간의 가짜 시계를 읽는다. 대조군은 성공했고 별도 mktemp 복사본에서 STOCK_ALL 그룹 한도를 1에서 2로 바꾸거나 제한기 대기를 실제 송신 뒤로 옮긴 두 변형 모두 컴파일 후 stock_all_limiter_delays_second_request_at_least_one_second에서 실패했다. 실 API 속도 측정이나 BrokerRead::instruments의 연결 검증은 아니다.
 
 ## 보호 파일과 세션
@@ -55,3 +57,12 @@ harness/arch-check/rules.toml에는 합성 녹화를 재생하는 tests/sector_m
 | 9 | ETF 종목 유형 일치 판정 반전 | `sector_etfs_preserve_symbols_and_sector` |
 | 10 | 카탈로그 ID 경계 검증 제거 | `sector_responses_reject_unusable_catalog_and_parent_ids` |
 | 11 | 대분류를 중분류로 변경 | `sector_catalog_preserves_hierarchy_and_recordings_match_schema` |
+
+1차 리뷰 수정의 다음 네 변형도 별도 복사본에서 각각 컴파일하고 실행해 검출했다. 로그는 `target/T-08/review1-mutant-*.log`다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|
+| 12 | 구성 종목 심볼 일치 판정 반전 | `sector_composition_requires_each_symbol_in_the_requested_master` |
+| 13 | 구성 종목 마스터의 시장 대조 제거 | `sector_master_matching_rejects_same_symbol_from_another_market` |
+| 14 | ETF 마스터의 시장 대조 제거 | `sector_master_matching_rejects_same_symbol_from_another_market` |
+| 15 | 마스터 미구현 원인을 서버 응답 오류로 변경 | `sector_etf_master_miss_identifies_unsupported_master` |

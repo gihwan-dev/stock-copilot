@@ -1190,4 +1190,272 @@ mod tests {
         );
         server.finish().expect("requests");
     }
+    fn indicator_trading_day(date: &str, after: Option<(&str, &str)>) -> domain::MarketSession {
+        let session = |start: &str, end: &str| {
+            domain::SessionData::try_new(indicator_window(start, end), None).expect("session")
+        };
+        let regular_start = format!("{date}T09:00:00+09:00");
+        let regular_end = format!("{date}T15:30:00+09:00");
+        domain::MarketSession::try_new(
+            broker_toss::TossDate::try_from(date)
+                .expect("date")
+                .into_domain(),
+            domain::SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(session(&regular_start, &regular_end)),
+                after_market: after.map(|(start, end)| session(start, end)),
+            },
+        )
+        .expect("trading day")
+    }
+    fn indicator_gap_body(earlier: &str, later: &str) -> Value {
+        let mut body = recording("indicator-minute")["body"].clone();
+        body["result"]["candles"][0]["timestamp"] = json!(later);
+        body["result"]["candles"][1]["timestamp"] = json!(earlier);
+        body
+    }
+    #[test]
+    fn indicator_minute_gap_accepts_only_calendar_proven_closed_interval() {
+        let body = indicator_gap_body("2026-06-12T15:29:00+09:00", "2026-06-15T09:00:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let sessions = vec![
+            holiday("2026-06-11"),
+            indicator_trading_day("2026-06-12", None),
+            holiday("2026-06-13"),
+            holiday("2026-06-14"),
+            indicator_trading_day("2026-06-15", None),
+        ];
+        let rows = run(adapter(&server)
+            .with_candle_sessions(sessions)
+            .indicator_candles(
+                IndicatorCode::Kospi,
+                indicator_window("2026-06-12T15:29:00+09:00", "2026-06-15T09:01:00+09:00"),
+                domain::CandlePeriod::Minute,
+            ))
+        .expect("all missing minutes are outside known sessions");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].observation().server_at(),
+            Some(at("2026-06-12T15:29:00+09:00"))
+        );
+        assert_eq!(
+            rows[1].observation().server_at(),
+            Some(at("2026-06-15T09:00:00+09:00"))
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_rejects_missing_session_evidence_and_trading_overlap() {
+        let body = indicator_gap_body("2026-06-12T15:29:00+09:00", "2026-06-15T09:00:00+09:00");
+        let window = indicator_window("2026-06-12T15:29:00+09:00", "2026-06-15T09:01:00+09:00");
+        let missing =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let missing_error = run(adapter(&missing).indicator_candles(
+            IndicatorCode::Kospi,
+            window,
+            domain::CandlePeriod::Minute,
+        ))
+        .expect_err("missing calendar");
+        assert_eq!(
+            missing_error.kind(),
+            application::PortErrorKind::Unsupported(
+                application::BrokerCapability::IndicatorCandles
+            )
+        );
+        missing.finish().expect("requests");
+        let open =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let sessions = vec![
+            holiday("2026-06-11"),
+            indicator_trading_day(
+                "2026-06-12",
+                Some(("2026-06-12T15:30:00+09:00", "2026-06-12T20:00:00+09:00")),
+            ),
+            holiday("2026-06-13"),
+            holiday("2026-06-14"),
+            indicator_trading_day("2026-06-15", None),
+        ];
+        let open_error = run(adapter(&open)
+            .with_candle_sessions(sessions)
+            .indicator_candles(IndicatorCode::Kospi, window, domain::CandlePeriod::Minute))
+        .expect_err("extended session overlaps");
+        assert_eq!(
+            open_error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        open.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_rejects_missing_minute_during_regular_session() {
+        let body = indicator_gap_body("2026-06-12T10:00:00+09:00", "2026-06-12T10:02:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let sessions = vec![
+            holiday("2026-06-11"),
+            indicator_trading_day("2026-06-12", None),
+        ];
+        let error = run(adapter(&server)
+            .with_candle_sessions(sessions)
+            .indicator_candles(
+                IndicatorCode::Kospi,
+                indicator_window("2026-06-12T10:00:00+09:00", "2026-06-12T10:03:00+09:00"),
+                domain::CandlePeriod::Minute,
+            ))
+        .expect_err("trading minute missing");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_checks_previous_days_cross_midnight_session() {
+        let body = indicator_gap_body("2026-06-12T00:00:00+09:00", "2026-06-12T00:32:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let previous = domain::MarketSession::try_new(
+            broker_toss::TossDate::try_from("2026-06-11")
+                .expect("date")
+                .into_domain(),
+            domain::SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(
+                    domain::SessionData::try_new(
+                        indicator_window("2026-06-11T23:55:00+09:00", "2026-06-12T00:30:00+09:00"),
+                        None,
+                    )
+                    .expect("session"),
+                ),
+                after_market: None,
+            },
+        )
+        .expect("session date");
+        let error = run(adapter(&server)
+            .with_candle_sessions(vec![previous, holiday("2026-06-12")])
+            .indicator_candles(
+                IndicatorCode::Kospi,
+                indicator_window("2026-06-12T00:00:00+09:00", "2026-06-12T00:33:00+09:00"),
+                domain::CandlePeriod::Minute,
+            ))
+        .expect_err("previous day's session overlaps missing minutes");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_rejects_duplicate_calendar_days() {
+        let body = indicator_gap_body("2026-06-12T15:29:00+09:00", "2026-06-12T15:31:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let error = run(adapter(&server)
+            .with_candle_sessions(vec![
+                holiday("2026-06-11"),
+                indicator_trading_day("2026-06-12", None),
+                holiday("2026-06-12"),
+            ])
+            .indicator_candles(
+                IndicatorCode::Kospi,
+                indicator_window("2026-06-12T15:29:00+09:00", "2026-06-12T15:32:00+09:00"),
+                domain::CandlePeriod::Minute,
+            ))
+        .expect_err("conflicting calendar days");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_checks_the_later_days_pre_market() {
+        let body = indicator_gap_body("2026-06-12T15:29:00+09:00", "2026-06-15T09:00:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let session = |start, end| {
+            domain::SessionData::try_new(indicator_window(start, end), None).expect("session")
+        };
+        let monday = domain::MarketSession::try_new(
+            broker_toss::TossDate::try_from("2026-06-15")
+                .expect("date")
+                .into_domain(),
+            domain::SessionInformation::Kr {
+                pre_market: Some(session(
+                    "2026-06-15T08:45:00+09:00",
+                    "2026-06-15T09:00:00+09:00",
+                )),
+                regular_market: Some(session(
+                    "2026-06-15T09:00:00+09:00",
+                    "2026-06-15T15:30:00+09:00",
+                )),
+                after_market: None,
+            },
+        )
+        .expect("monday");
+        let error = run(adapter(&server)
+            .with_candle_sessions(vec![
+                holiday("2026-06-11"),
+                indicator_trading_day("2026-06-12", None),
+                holiday("2026-06-13"),
+                holiday("2026-06-14"),
+                monday,
+            ])
+            .indicator_candles(
+                IndicatorCode::Kospi,
+                indicator_window("2026-06-12T15:29:00+09:00", "2026-06-15T09:01:00+09:00"),
+                domain::CandlePeriod::Minute,
+            ))
+        .expect_err("later day's pre-market overlaps");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_requires_every_intervening_day() {
+        let body = indicator_gap_body("2026-06-12T15:29:00+09:00", "2026-06-15T09:00:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let error = run(adapter(&server)
+            .with_candle_sessions(vec![
+                holiday("2026-06-11"),
+                indicator_trading_day("2026-06-12", None),
+                holiday("2026-06-13"),
+                indicator_trading_day("2026-06-15", None),
+            ])
+            .indicator_candles(
+                IndicatorCode::Kospi,
+                indicator_window("2026-06-12T15:29:00+09:00", "2026-06-15T09:01:00+09:00"),
+                domain::CandlePeriod::Minute,
+            ))
+        .expect_err("missing sunday");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::Unsupported(
+                application::BrokerCapability::IndicatorCandles
+            )
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn indicator_minute_gap_at_last_date_stops_after_checking_coverage() {
+        let body = indicator_gap_body("9999-12-31T15:29:00+09:00", "9999-12-31T15:31:00+09:00");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let reader =
+            adapter_at(&server, at("9999-12-31T16:00:00+09:00")).with_candle_sessions(vec![
+                holiday("9999-12-30"),
+                indicator_trading_day("9999-12-31", None),
+            ]);
+        let rows = run(reader.indicator_candles(
+            IndicatorCode::Kospi,
+            indicator_window("9999-12-31T15:29:00+09:00", "9999-12-31T15:32:00+09:00"),
+            domain::CandlePeriod::Minute,
+        ))
+        .expect("last date has complete closed-interval evidence");
+        assert_eq!(rows.len(), 2);
+        server.finish().expect("requests");
+    }
 }

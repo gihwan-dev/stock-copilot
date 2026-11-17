@@ -99,14 +99,22 @@ mod tests {
             MasterSecurityType, NxtTrading, Symbol, TradingSuspension,
         };
         let observed = crate::support::time().now();
-        let rows = ["091160", "396500"].map(|symbol| {
+        let rows = [
+            ("091160", "ETF"),
+            ("396500", "ETF"),
+            ("005930", "STOCK"),
+            ("000660", "STOCK"),
+            ("ABCDEF", "STOCK"),
+            ("ABCETF", "ETF"),
+        ]
+        .map(|(symbol, kind)| {
             MasterInstrument::try_new(MasterInstrumentRow {
                 listing_market: MasterCode::try_new("KOSPI").expect("market"),
                 symbol: Symbol::try_new(symbol).expect("symbol"),
                 instrument_id: InstrumentId::try_new(&format!("synthetic-{symbol}")).expect("id"),
                 name: DisplayInstrumentName::try_new("합성 ETF").expect("name"),
                 security_type: MasterSecurityType::from_code(
-                    MasterCode::try_new("ETF").expect("type"),
+                    MasterCode::try_new(kind).expect("type"),
                 ),
                 currency: Currency::Krw,
                 listing_status: ListingStatus::Active,
@@ -467,9 +475,105 @@ mod tests {
             run(adapter(&server).sector_etfs(&id(), KnownMarket::Kr)).expect_err("unknown master");
         assert_eq!(
             error.kind(),
-            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+            application::PortErrorKind::Unsupported(application::BrokerCapability::Instruments)
         );
         server.finish().expect("requests");
+    }
+    #[test]
+    fn sector_composition_requires_each_symbol_in_the_requested_master() {
+        let mut input = recording("sector-stocks")["body"].clone();
+        input["result"]["stocks"][0]["symbol"] = json!("123456");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &input)]).expect("server");
+        let error = run(adapter(&server).sector_composition(&id(), KnownMarket::Kr))
+            .expect_err("unknown master");
+        assert_eq!(
+            error.endpoint(),
+            application::ReadEndpoint::SectorComposition
+        );
+        assert_eq!(error.status(), application::HttpStatus::Success);
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::Unsupported(application::BrokerCapability::Instruments)
+        );
+        assert_eq!(
+            application::classify_port_error(error),
+            application::ErrorClass::Bug(application::BugDiagnostic::UnsupportedCapability(
+                application::BrokerCapability::Instruments
+            ))
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn sector_etf_master_miss_identifies_unsupported_master() {
+        let mut input = recording("sector-etfs")["body"].clone();
+        input["result"]["etfs"][0]["symbol"] = json!("005930");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &input)]).expect("server");
+        let error = run(adapter(&server).sector_etfs(&id(), KnownMarket::Kr))
+            .expect_err("stock is not an ETF master mapping");
+        assert_eq!(error.endpoint(), application::ReadEndpoint::SectorEtfs);
+        assert_eq!(
+            application::classify_port_error(error),
+            application::ErrorClass::Bug(application::BugDiagnostic::UnsupportedCapability(
+                application::BrokerCapability::Instruments
+            ))
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn sector_master_matching_rejects_same_symbol_from_another_market() {
+        let mut stocks = recording("sector-stocks")["body"].clone();
+        let mut stock = stocks["result"]["stocks"][0].clone();
+        stock["symbol"] = json!("ABCDEF");
+        stocks["result"]["stocks"] = json!([stock]);
+        let mut etfs = recording("sector-etfs")["body"].clone();
+        let mut etf = etfs["result"]["etfs"][0].clone();
+        etf["symbol"] = json!("ABCETF");
+        etfs["result"]["etfs"] = json!([etf]);
+        for (route, body) in [(0_usize, stocks), (1_usize, etfs)] {
+            let server = ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)])
+                .expect("server");
+            let reader = adapter(&server);
+            let error = if route == 0_usize {
+                run(reader.sector_composition(&id(), KnownMarket::Us)).map(|_| ())
+            } else {
+                run(reader.sector_etfs(&id(), KnownMarket::Us)).map(|_| ())
+            }
+            .expect_err("matching symbol only belongs to the other market");
+            assert_eq!(
+                error.kind(),
+                application::PortErrorKind::Unsupported(application::BrokerCapability::Instruments)
+            );
+            server.finish().expect("requests");
+        }
+    }
+    #[test]
+    fn sector_server_validation_precedes_master_lookup() {
+        let mut stocks = recording("sector-stocks")["body"].clone();
+        stocks["result"]["stocks"][0]["symbol"] = json!("123456");
+        stocks["result"]["stocks"][0]["marketCapitalization"] = json!("bad");
+        let mut etfs = recording("sector-etfs")["body"].clone();
+        etfs["result"]["etfs"][0]["symbol"] = json!("123456");
+        etfs["result"]["etfs"][1]["symbol"] = json!("123456");
+        for (route, body) in [(0_usize, stocks), (1_usize, etfs)] {
+            let server = ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)])
+                .expect("server");
+            let reader = adapter(&server);
+            let error = if route == 0_usize {
+                run(reader.sector_composition(&id(), KnownMarket::Kr)).map(|_| ())
+            } else {
+                run(reader.sector_etfs(&id(), KnownMarket::Kr)).map(|_| ())
+            }
+            .expect_err("malformed response");
+            assert_eq!(
+                error.kind(),
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation
+                )
+            );
+            server.finish().expect("requests");
+        }
     }
     #[test]
     fn generated_sector_models_decode_recordings_and_reject_invalid_shapes() {

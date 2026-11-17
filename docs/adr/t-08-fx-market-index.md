@@ -62,6 +62,8 @@ T-07 인계: 기존 종목 봉 `market_read/candles.rs`는 응답의 `nextBefore
 
 지표 봉의 `nextBefore`는 명시적 null만 마지막 쪽으로 처리하고 키 자체가 없으면 완전성을 알 수 없어 응답 오류로 닫는다. OpenAPI 스키마는 해당 키를 필수로 지정하지 않으므로 실제 마지막 쪽에서 키를 생략하는지 T-13 실측이 필요하며, 생략이 정상이라면 현재 보수적 구현은 그 응답을 거부한다.
 
+1차 리뷰 수정: 지수 분봉이 서로 1분 차이가 아니어도 빠진 구간이 실제로 닫혀 있다는 달력 증거가 있으면 반환한다. 빠진 구간과 겹치는 세션이 하나라도 있으면 전체 실패하고, 날짜별 국내 세션 증거가 없거나 중복되면 각각 미지원 또는 응답 오류다. 날짜를 넘기는 세션을 놓치지 않도록 앞 봉 날짜의 전날부터 뒤 봉 날짜까지 확인한다. 정규장뿐 아니라 제공된 모든 연장 세션을 보수적으로 대조하며 연장 세션이 지수 봉을 제공하지 않는다고 추측하지 않는다. 휴장·거래 공백·이전 날짜의 자정 통과 세션과 중복 달력을 합성 시험했다. 역사 달력 공급과 실제 지수 분봉의 공백 정책은 T-13에서 실측한다.
+
 ## 손 변형 실제 실행
 
 `mktemp -d` 복사본에서 다음 변형을 각각 컴파일하고 표시된 테스트로 실행했다. 24개 모두 해당 테스트 실패로 검출됐다. 로그는 작업 사본의 `target/T-08/mutant-*.log`와 `target/T-08/indicator-mutant-*.log`다.
@@ -92,3 +94,14 @@ T-07 인계: 기존 종목 봉 `market_read/candles.rs`는 응답의 `nextBefore
 | 22 | 구현된 지표 현재가 지원 표시 제거 | `capabilities_match_implemented_market_endpoints` |
 | 23 | 미구현 종목 마스터를 지원으로 표시 | `capabilities_match_implemented_market_endpoints` |
 | 24 | 다음 페이지 커서 키 누락 검사 제거 | `indicator_candles_reject_missing_next_before_instead_of_assuming_last_page` |
+
+1차 리뷰 수정의 다음 여섯 변형도 별도 복사본에서 각각 컴파일하고 실행해 검출했다. 로그는 `target/T-08/review1-mutant-*.log`다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 |
+|---|---|---|
+| 25 | 전날 세션 대조 생략 | `indicator_minute_gap_checks_previous_days_cross_midnight_session` |
+| 26 | 마지막 날짜 세션 대조 전에 성공 반환 | `indicator_minute_gap_checks_the_later_days_pre_market` |
+| 27 | 마지막 날짜 검사 후 하루 더 진행 | `indicator_minute_gap_at_last_date_stops_after_checking_coverage` |
+| 28 | 세션과 빈 구간의 겹침 검사 반전 | `indicator_minute_gap_rejects_missing_session_evidence_and_trading_overlap` |
+| 29 | 날짜별 세션 중복 검사 제거 | `indicator_minute_gap_rejects_duplicate_calendar_days` |
+| 30 | 없는 달력을 서버 응답 오류로 분류 | `indicator_minute_gap_requires_every_intervening_day` |
