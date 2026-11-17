@@ -36,7 +36,7 @@ CREATE TABLE snapshot_holdings (
 CREATE TABLE transaction_entries (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL,
-    mode TEXT NOT NULL CHECK (mode IN ('sync', 'summary')),
+    mode TEXT NOT NULL CHECK (mode IN ('sync', 'summary', 'history')),
     payload TEXT NOT NULL
 ) STRICT;
 CREATE TABLE transaction_full_inspections (

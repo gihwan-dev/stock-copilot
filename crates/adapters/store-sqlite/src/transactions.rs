@@ -54,6 +54,7 @@ fn summary(
 enum Selection {
     Latest,
     Detail,
+    Id(i64),
 }
 type Header = (i64, i64, String, String);
 fn header(
@@ -72,6 +73,9 @@ fn header(
     match selection {
         Selection::Latest => connection.query_row(sql::LATEST, [account.as_i64()], decode),
         Selection::Detail => connection.query_row(sql::LATEST_SYNC, [account.as_i64()], decode),
+        Selection::Id(id) => {
+            connection.query_row(sql::ENTRY, params![account.as_i64(), id], decode)
+        }
     }
     .optional()
 }
@@ -108,7 +112,7 @@ fn load(
             }
             (Some(record), count)
         }
-        "summary" => {
+        "summary" | "history" => {
             match summary.outcome() {
                 SyncOutcome::Partial(_) | SyncOutcome::Failed | SyncOutcome::AccessBlocked
                     if previous != state =>
@@ -191,12 +195,18 @@ fn latest_detail(
     Ok(load(connection, account, Selection::Detail)?.and_then(|entry| entry.detail))
 }
 #[derive(Clone, Copy)]
+enum EntryKind<'a> {
+    Summary,
+    History,
+    Detail(&'a TransactionSyncRecord),
+}
+#[derive(Clone, Copy)]
 struct EntryInput<'a> {
     account: &'a AccountId,
     previous: &'a SettledRowSet,
     state: &'a SettledRowSet,
     summary: &'a SyncRecord<SettledRowSet>,
-    detail: Option<&'a TransactionSyncRecord>,
+    kind: EntryKind<'a>,
 }
 fn save(tx: &Transaction<'_>, input: EntryInput<'_>) -> rusqlite::Result<WriteCompleted> {
     let EntryInput {
@@ -204,8 +214,13 @@ fn save(tx: &Transaction<'_>, input: EntryInput<'_>) -> rusqlite::Result<WriteCo
         previous,
         state,
         summary,
-        detail,
+        kind,
     } = input;
+    let (mode, detail) = match kind {
+        EntryKind::Summary => ("summary", None),
+        EntryKind::History => ("history", None),
+        EntryKind::Detail(record) => ("sync", Some(record)),
+    };
     if previous.account_id() != account || state.account_id() != account {
         return Err(invalid(()));
     }
@@ -221,11 +236,7 @@ fn save(tx: &Transaction<'_>, input: EntryInput<'_>) -> rusqlite::Result<WriteCo
     }
     tx.execute(
         sql::INSERT_ENTRY,
-        params![
-            account.as_i64(),
-            if detail.is_some() { "sync" } else { "summary" },
-            fields.encode()
-        ],
+        params![account.as_i64(), mode, fields.encode()],
     )?;
     let id = tx.last_insert_rowid();
     state::save(tx, id, "before", previous)?;
@@ -233,11 +244,33 @@ fn save(tx: &Transaction<'_>, input: EntryInput<'_>) -> rusqlite::Result<WriteCo
     if let Some(record) = detail {
         observation::save(tx, id, record.observation())?;
     }
-    let loaded = load(tx, account, Selection::Latest)?.ok_or_else(|| invalid(()))?;
+    let loaded = load(tx, account, Selection::Id(id))?.ok_or_else(|| invalid(()))?;
     if loaded.state != *state || loaded.summary != *summary || loaded.detail.as_ref() != detail {
         return Err(invalid(()));
     }
     Ok(WriteCompleted)
+}
+fn record_history(
+    tx: &Transaction<'_>,
+    account: &AccountId,
+    record: &SyncRecord<SettledRowSet>,
+) -> rusqlite::Result<WriteCompleted> {
+    let empty = SettledRowSet::new(account.clone());
+    let state = match record.outcome() {
+        SyncOutcome::Complete(value) | SyncOutcome::Partial(value) => value,
+        SyncOutcome::Failed | SyncOutcome::AccessBlocked => &empty,
+    };
+    validate_record_time(state, state, record.recorded_at())?;
+    save(
+        tx,
+        EntryInput {
+            account,
+            previous: state,
+            state,
+            summary: record,
+            kind: EntryKind::History,
+        },
+    )
 }
 fn record_summary(
     tx: &Transaction<'_>,
@@ -247,12 +280,8 @@ fn record_summary(
     let latest = load(tx, account, Selection::Latest)?;
     let latest_at = latest.as_ref().map(|entry| entry.summary.recorded_at());
     let previous = latest.map_or_else(|| SettledRowSet::new(account.clone()), |entry| entry.state);
-    if latest_at.is_some_and(|at| at > record.recorded_at())
-        || previous
-            .last_synchronized_at()
-            .is_some_and(|at| at > record.recorded_at())
-    {
-        return Err(invalid(()));
+    if latest_at.is_some_and(|at| at > record.recorded_at()) {
+        return record_history(tx, account, record);
     }
     let state = match record.outcome() {
         SyncOutcome::Complete(value) => value,
@@ -267,7 +296,7 @@ fn record_summary(
             previous: &previous,
             state,
             summary: record,
-            detail: None,
+            kind: EntryKind::Summary,
         },
     )
 }
@@ -373,7 +402,7 @@ impl TransactionSyncRepository for TransactionStore<'_> {
                         previous: &owned_previous,
                         state: owned_record.state(),
                         summary: &owned_record.summary(),
-                        detail: Some(&owned_record),
+                        kind: EntryKind::Detail(&owned_record),
                     },
                 )
             })

@@ -14,3 +14,5 @@ pub(crate) const BAD_COMPLETION: &str =
 pub(crate) const REVERSE_FAILED_TIME: &str = "UPDATE transaction_entries SET payload = substr(payload, 1, 3) || '1:9' || substr(payload, 8) WHERE id = 2";
 pub(crate) const REVERSE_FIRST_TIME: &str = "UPDATE transaction_entries SET payload = substr(payload, 1, 3) || '1:9' || substr(payload, 8) WHERE id = 1";
 pub(crate) const PARTIAL_WITH_CHANGED_STATE: &str = "UPDATE transaction_entries SET payload = replace(payload, '8:complete', '7:partial') WHERE mode = 'summary'";
+pub(crate) const HISTORY_COUNTS: &str = "SELECT (SELECT COUNT(*) FROM transaction_entries WHERE mode = 'history'), (SELECT COUNT(*) FROM transaction_rows JOIN transaction_entries ON entry = transaction_entries.id WHERE mode = 'history')";
+pub(crate) const CORRUPT_HISTORY: &str = "CREATE TRIGGER corrupt_history AFTER INSERT ON transaction_entries WHEN NEW.mode = 'history' BEGIN UPDATE transaction_entries SET payload = 'broken' WHERE id = NEW.id; END";

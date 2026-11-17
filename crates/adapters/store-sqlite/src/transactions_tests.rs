@@ -169,6 +169,89 @@ fn port_errors() -> [application::PortError; 2] {
         ),
     ]
 }
+
+#[test]
+fn generic_transaction_latest_accepts_out_of_order_summaries() {
+    use domain::{SyncOutcome, SyncRecord};
+    let fixture = Fixture::new();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("DB");
+    let store = TransactionStore::new(&database);
+    runtime().block_on(async {
+        let account = AccountId::new(41);
+        let other = AccountId::new(42);
+        let older = SyncRecord::new(at(11), SyncOutcome::Failed);
+        let newer = SyncRecord::new(at(23), SyncOutcome::AccessBlocked);
+        testkit_ports::contracts::scenarios::transaction_latest(
+            &store,
+            (&account, &other),
+            (&older, &newer),
+        )
+        .await;
+    });
+}
+
+#[test]
+fn historical_legacy_summaries_preserve_inputs_without_replacing_latest_state() {
+    use domain::{SyncOutcome, SyncRecord};
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("DB");
+    runtime().block_on(async {
+        let account = AccountId::new(43);
+        let empty = SettledRowSet::new(account.clone());
+        let first = TransactionSyncRecord::from_observation(
+            &empty,
+            window(),
+            at(10),
+            Ok(complete(&account, &["original"])),
+        );
+        let latest = TransactionSyncRecord::from_observation(
+            first.state(),
+            window(),
+            at(30),
+            Ok(complete(&account, &[])),
+        );
+        let store = TransactionStore::new(&db);
+        store
+            .record_sync(&account, &empty, None, &first)
+            .await
+            .expect("처음");
+        store
+            .record_sync(&account, first.state(), Some(at(10)), &latest)
+            .await
+            .expect("최신");
+        for (time, outcome) in [
+            (15, SyncOutcome::Complete(first.state().clone())),
+            (16, SyncOutcome::Partial(first.state().clone())),
+            (17, SyncOutcome::Failed),
+            (18, SyncOutcome::AccessBlocked),
+        ] {
+            store
+                .record(&account, &SyncRecord::new(at(time), outcome))
+                .await
+                .expect("과거 보존");
+        }
+        assert_eq!(store.state(&account).await.expect("상태"), *latest.state());
+        assert_eq!(
+            store.latest(&account).await.expect("요약"),
+            Some(latest.summary())
+        );
+        assert_eq!(
+            store.latest_sync(&account).await.expect("상세"),
+            Some(latest.clone())
+        );
+        let counts: (i64, i64) = db
+            .read(|connection| {
+                connection.query_row(crate::sql::transactions_tests::HISTORY_COUNTS, [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+            })
+            .await
+            .expect("과거 기록 보존");
+        assert_eq!(counts, (4, 4));
+        history_rejections(&db, &store, &account, &latest).await;
+    });
+}
 #[test]
 fn transaction_roundtrip_raw_duplicates_disappearance_and_reopen() {
     let fixture = Fixture::new();
@@ -992,4 +1075,49 @@ fn changed_state_partial_summary_fails_closed_on_read() {
             .await
             .expect_err("부분 요약의 이전 상태 불일치");
     });
+}
+
+async fn history_rejections(
+    db: &Database,
+    store: &TransactionStore<'_>,
+    account: &AccountId,
+    latest: &TransactionSyncRecord,
+) {
+    let foreign = domain::SyncRecord::new(
+        at(19),
+        domain::SyncOutcome::Complete(empty_state(&AccountId::new(44), at(12))),
+    );
+    store
+        .record(account, &foreign)
+        .await
+        .expect_err("과거도 계좌 검증");
+    let stale = TransactionSyncRecord::from_observation(
+        latest.state(),
+        window(),
+        at(29),
+        Ok(complete(account, &[])),
+    );
+    store
+        .record_sync(account, latest.state(), Some(at(30)), &stale)
+        .await
+        .expect_err("오래된 상세 거부");
+    db.write(|tx| tx.execute_batch(crate::sql::transactions_tests::CORRUPT_HISTORY))
+        .await
+        .expect("손상 주입");
+    store
+        .record(
+            account,
+            &domain::SyncRecord::new(at(20), domain::SyncOutcome::Failed),
+        )
+        .await
+        .expect_err("과거 저장 재검증");
+    let counts_after: (i64, i64) = db
+        .read(|connection| {
+            connection.query_row(crate::sql::transactions_tests::HISTORY_COUNTS, [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+        })
+        .await
+        .expect("롤백");
+    assert_eq!(counts_after, (4, 4));
 }
