@@ -460,6 +460,71 @@
     "lock": "on"
   },
   {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/overflow.ts",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/overflow.ts",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/stress.ts",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/stress.ts",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/messages.ts",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/messages.ts",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/Stress.stories.tsx",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/Stress.stories.tsx",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
+    "decision": "warn",
+    "rules": ["protected-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
+    "decision": "deny",
+    "rules": ["protected-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
     "path": "{root}/apps/desktop/src/shared/ds/index.ts",
     "decision": "warn",
     "rules": ["protected-path"],

@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { desktop, loadCatalog } from "./load.mjs";
 import { stylesheetProblems } from "./styles.mjs";
 import { generationProblems } from "./generation.mjs";
-import { catalogProblems } from "./rules.mjs";
+import { catalogProblems, stressProblems } from "./rules.mjs";
 const folder = mkdtempSync(join(desktop, "node_modules/.ds07-index-"));
 try {
   const run = spawnSync(
@@ -66,6 +66,7 @@ try {
     ]),
     ...(await generationProblems(loaded.samples)),
     ...catalogProblems(Object.keys(loaded.components), loaded.samples, entries),
+    ...stressProblems(Object.keys(loaded.components), loaded.samples),
   ];
   mkdirSync(join(desktop, "../../target/DS-07"), { recursive: true });
   writeFileSync(

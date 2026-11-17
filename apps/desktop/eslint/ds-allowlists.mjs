@@ -4,6 +4,7 @@ export const DOM_STYLE_FILES = [];
 export const DOM_ACCESS_FILES = [
   "src/shared/platform/index.ts",
   "src/shared/platform/input.ts",
+  "src/shared/ds/testing/overflow.ts",
 ];
 export const ICON_GEOMETRY_FILES = [
   "src/shared/ds/Icon.tsx",

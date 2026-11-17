@@ -760,3 +760,13 @@ export const Dark75 = {
   parameters: { theme: "dark", sample: 75 },
   render: () => renderCatalog("Text", "dark", 75),
 };
+export const Light76 = {
+  name: "부하 · 077 · 라이트",
+  parameters: { theme: "light", sample: 76 },
+  render: () => renderCatalog("Text", "light", 76),
+};
+export const Dark76 = {
+  name: "부하 · 077 · 다크",
+  parameters: { theme: "dark", sample: 76 },
+  render: () => renderCatalog("Text", "dark", 76),
+};

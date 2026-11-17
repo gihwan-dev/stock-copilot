@@ -23,6 +23,8 @@ export const CHART_NUMBER_ALLOWLIST = [
 ];
 
 export const RAW_TYPE_ALLOWLIST = [
+  "src/shared/ds/testing/overflow.ts",
+  "src/shared/ds/testing/stress.ts",
   "src/shared/ds/Markdown.tsx",
   "src/shared/platform/input.ts",
   "src/shared/lib/brand.ts",

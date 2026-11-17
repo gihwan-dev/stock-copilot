@@ -82,14 +82,16 @@ type DraftStory = {
   readonly themes: readonly ["light", "dark"];
   readonly render: () => ReactElement;
 };
-export const chatInputStressStories: readonly DraftStory[] = [
+export const chatInputStressWithDraft = (
+  draft: FreeText,
+): readonly DraftStory[] => [
   {
     component: "ChatInput",
     state: "stress",
     themes: ["light", "dark"],
     render: (): ReactElement => (
       <ChatEditor
-        initialDraft={longDraft.kind === "ok" ? longDraft.value : emptyFreeText}
+        initialDraft={draft}
         onSend={(): void => {
           return;
         }}
@@ -97,3 +99,7 @@ export const chatInputStressStories: readonly DraftStory[] = [
     ),
   },
 ];
+export const chatInputStressStories: readonly DraftStory[] =
+  chatInputStressWithDraft(
+    longDraft.kind === "ok" ? longDraft.value : emptyFreeText,
+  );

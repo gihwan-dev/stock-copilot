@@ -1,3 +1,13 @@
+export const stressProblems = (components, samples) =>
+  components
+    .filter(
+      (component) =>
+        !samples.some(
+          (story) => story.component === component && story.state === "stress",
+        ),
+    )
+    .map((component) => `${component}: 부하 이야기 없음`);
+
 export const catalogProblems = (components, samples, entries) => {
   const problems = [];
   for (const component of components) {

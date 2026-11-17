@@ -292,6 +292,26 @@
     {
       "issue": "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
       "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+    },
+    {
+      "issue": "files src/shared/ds/testing/Stress.stories.tsx src/shared/ds/testing/Stress.stories.tsx",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/StressContent.stories.tsx src/shared/ds/testing/StressContent.stories.tsx",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/messages.ts src/shared/ds/testing/messages.ts",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/overflow.ts src/shared/ds/testing/overflow.ts",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
     }
   ]
 }

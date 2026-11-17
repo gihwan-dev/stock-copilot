@@ -106,6 +106,7 @@ test("DS09 review main cannot calculate DOM values and platform exports cannot r
     assert.deepEqual(DOM_ACCESS_FILES, [
       "src/shared/platform/index.ts",
       "src/shared/platform/input.ts",
+      "src/shared/ds/testing/overflow.ts",
     ]);
     const inputSource = program.getSourceFile(input);
     const inputExports = checker.getExportsOfModule(

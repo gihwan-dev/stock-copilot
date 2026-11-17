@@ -60,3 +60,13 @@ export const Dark5 = {
   parameters: { theme: "dark", sample: 5 },
   render: () => renderCatalog("DonutChart", "dark", 5),
 };
+export const Light6 = {
+  name: "부하 · 007 · 라이트",
+  parameters: { theme: "light", sample: 6 },
+  render: () => renderCatalog("DonutChart", "light", 6),
+};
+export const Dark6 = {
+  name: "부하 · 007 · 다크",
+  parameters: { theme: "dark", sample: 6 },
+  render: () => renderCatalog("DonutChart", "dark", 6),
+};
