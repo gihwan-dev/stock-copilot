@@ -73,7 +73,7 @@ pub fn build_app<R: Runtime>(builder: Builder<R>) -> Builder<R> {
 
 [[case]]
 name = "raw-identifier"
-expect = ["src/ipc/app_version.rs: capability:webview-api:eval"]
+expect = ["src/ipc/app_version.rs: capability:webview-api:Webview", "src/ipc/app_version.rs: capability:webview-api:eval"]
 
 [[case.file]]
 path = "src/ipc/app_version.rs"
@@ -155,6 +155,33 @@ pub fn open(app: &AppHandle) {
 '''
 
 [[case]]
+name = "navigation-handler-outside-security"
+expect = [
+    "src/lib.rs: capability:webview-api:on_navigation",
+    "src/lib.rs: capability:webview-api:on_new_window",
+]
+
+[[case.file]]
+path = "src/lib.rs"
+source = '''
+fn open(builder: Builder) {
+    builder.on_navigation(allow).on_new_window(open);
+}
+'''
+
+[[case]]
+name = "navigation-handler-in-security"
+expect = []
+
+[[case.file]]
+path = "src/security.rs"
+source = '''
+fn protected(builder: Builder) {
+    builder.on_navigation(allow).on_new_window(deny);
+}
+'''
+
+[[case]]
 name = "invoke-key-outside-contract-test"
 expect = ["src/lib.rs: capability:webview-api:invoke_key"]
 
@@ -172,4 +199,62 @@ expect = []
 path = "src/tests/ipc_contract.rs"
 source = '''
 fn request() { let invoke_key = tauri::test::INVOKE_KEY; }
+'''
+
+[[case]]
+name = "associated-webview-window-builder"
+expect = ["src/lifecycle.rs: capability:webview-api:WebviewWindow"]
+
+[[case.file]]
+path = "src/lifecycle.rs"
+source = '''
+fn open<R: tauri::Runtime>(app: &tauri::App<R>, url: tauri::Url) -> tauri::Result<()> {
+    tauri::WebviewWindow::builder(app, "x", tauri::WebviewUrl::External(url)).build()?;
+    Ok(())
+}
+'''
+
+[[case]]
+name = "associated-webview-window-builder-alias"
+expect = [
+    "src/lifecycle.rs: capability:webview-api:WebviewWindow",
+    "src/other.rs: capability:webview-api:WebviewWindow",
+]
+
+[[case.file]]
+path = "src/lifecycle.rs"
+source = '''
+pub use tauri::WebviewWindow as WindowHandle;
+'''
+
+[[case.file]]
+path = "src/other.rs"
+source = '''
+fn open(app: &App, url: Url) {
+    crate::lifecycle::WindowHandle::builder(app, "x", WebviewUrl::External(url));
+}
+'''
+
+[[case]]
+name = "associated-window-builder"
+expect = ["src/lifecycle.rs: capability:webview-api:Window"]
+
+[[case.file]]
+path = "src/lifecycle.rs"
+source = '''
+fn open(app: &App) {
+    tauri::window::Window::builder(app, "x");
+}
+'''
+
+[[case]]
+name = "associated-webview-builder"
+expect = ["src/lifecycle.rs: capability:webview-api:Webview"]
+
+[[case.file]]
+path = "src/lifecycle.rs"
+source = '''
+fn open(url: Url) {
+    tauri::webview::Webview::builder("x", WebviewUrl::External(url));
+}
 '''

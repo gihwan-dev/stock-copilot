@@ -24,8 +24,6 @@ names = [
     "register_plugin",
     "on_webview_event",
     "on_page_load",
-    "on_navigation",
-    "on_new_window",
     "on_web_resource_request",
     "on_download",
     "on_permission_request",
@@ -43,9 +41,17 @@ names = [
     "CapabilityBuilder",
     "WebviewBuilder",
     "WindowBuilder",
+    "WebviewWindow",
+    "Webview",
+    "Window",
 ]
 allowed-files = []
 reason = "명령 밖의 IPC 통로, 플러그인, 사용자 정의 프로토콜, 스크립트 주입, 창·webview 생성, 런타임 capability 추가. 지금 쓰는 곳이 없다"
+
+[[api]]
+names = ["on_navigation", "on_new_window"]
+allowed-files = ["src/security.rs"]
+reason = "주 창을 만들 때 앱 주소 외 탐색과 모든 새 창을 차단한다"
 
 [[api]]
 names = [
@@ -68,8 +74,8 @@ reason = "U-02 제품 조립의 모의 이벤트 발행 회귀만 허용한다. 
 
 [[api]]
 names = ["WebviewWindowBuilder"]
-allowed-files = ["src/tests/exit.rs"]
-reason = "U-01 mock 런타임 종료 재진입 테스트의 네이티브 창. 제품 WebView 권한과 무관"
+allowed-files = ["src/security.rs", "src/tests/exit.rs"]
+reason = "제품 주 창은 탐색 차단과 함께 만들고 U-01 테스트는 mock 네이티브 창을 만든다"
 
 [[api]]
 names = ["invoke_key"]

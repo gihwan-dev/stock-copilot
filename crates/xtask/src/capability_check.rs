@@ -1,12 +1,16 @@
 mod build_script;
 pub(crate) mod json;
 pub(crate) mod registration;
+mod u03;
+mod u03_wiring;
 pub(crate) mod webview_api;
 
 #[cfg(test)]
 mod registration_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod u03_tests;
 #[cfg(test)]
 mod webview_api_tests;
 
@@ -20,6 +24,8 @@ use crate::check_support::{Finding, read_text, report, workspace_root};
 use build_script::build_script_findings;
 use json::{Json, parse};
 use registration::{EXPECTED_BUILD_SCRIPT_FILE, build_body_findings, registration_findings};
+use u03::check_u03_directory;
+use u03_wiring::check_u03_wiring;
 use webview_api::{WebviewApis, sources, webview_api_findings};
 
 pub(crate) const TAURI_DIRECTORY: &str = "apps/desktop/src-tauri";
@@ -79,6 +85,12 @@ pub(crate) enum Rule {
     HandWrittenHandler,
     BuildBody,
     WebviewApi(String),
+    U03Csp,
+    U03FreezePrototype,
+    U03EventPermissions,
+    U03Frontend,
+    U03Window,
+    U03Navigation,
 }
 
 impl fmt::Display for Rule {
@@ -108,6 +120,12 @@ impl fmt::Display for Rule {
             Self::RegistrationCount => "registration-count",
             Self::HandWrittenHandler => "hand-written-handler",
             Self::BuildBody => "build-body",
+            Self::U03Csp => "u03-csp",
+            Self::U03FreezePrototype => "u03-freeze-prototype",
+            Self::U03EventPermissions => "u03-event-permissions",
+            Self::U03Frontend => "u03-frontend",
+            Self::U03Window => "u03-window",
+            Self::U03Navigation => "u03-navigation",
         };
         write!(f, "capability:{name}")
     }
@@ -476,6 +494,8 @@ pub(crate) fn command() -> ExitCode {
                 &AllowedPermissions::load(&root)?,
                 &read_text(&root.join(EXPECTED_BUILD_SCRIPT_FILE))?,
             )?;
+            found.extend(check_u03_directory(&directory));
+            found.extend(check_u03_wiring(&directory));
             found.extend(check_webview_apis(&directory, &WebviewApis::load(&root)?));
             Ok(found)
         }),
