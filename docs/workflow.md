@@ -190,7 +190,9 @@
 | Claude Design 작업과 산출물 전달 | 디자인 결정 |
 | 리서치 결과 채택 | ADR 승인 |
 
-## 부록: 운영 규칙 (ADR 0021이 역할과 Codex에 대해 앞선다)
+## 부록: 운영 규칙
+
+역할과 Codex는 ADR 0021을 따르되, 2026-11-17 사용자 결정인 [H-50](adr/h-50-implementer-models.md)이 구현 모델·추론 강도·옵션 키 제한을 이 문서와 함께 대체한다. 제공자·격리·기준·소유권 규칙은 ADR 0021을 유지한다.
 
 - 메인 Claude 세션은 원본 저장소에서 연다. Codex는 T3가 만든 등록된 작업 사본에서 연다. Codex의 프로젝트 설정과 훅 신뢰는 각각 확인한다.
 - 구현·수정 회차는 T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다)가 한다. 기본 추론 강도는 sol은 high, terra는 max다. 조사·비판은 `gpt-6.1-sol`(high), 적대적 리뷰는 Claude Opus 5.5다. 브리프에는 `- 기준 커밋: <SHA>, 브랜치 \`<이름>\`` 줄이 반드시 있고, 그 브랜치는 `master`가 아닌 등록된 작업 사본이어야 한다.
@@ -204,7 +206,7 @@
 ## H-41 운영 규칙
 
 - Claude SendMessage는 계속 금지한다. Codex 수정 회차는 T3의 소유 스레드 가드로 통제한다.
-- 메인은 이 프로젝트의 T3 문맥에서 t3_thread_launch로 구현을 시작한다. modelSelection은 provider=codex, model은 정확히 gpt-6.1-sol 또는 gpt-6.1-terra다. options는 생략 또는 sol의 reasoningEffort=high, terra의 reasoningEffort=max다. 기존 effort 키도 같은 값만 허용하며 두 키를 섞지 않는다. Terra 시작 브리프에는 정확히 한 개의 `- 역할: implementation` 줄을 넣는다. 역할이 없거나 중복되거나 다른 역할이면 Terra를 거부한다. 조사·비판은 delegate_task의 research·review 역할로 sol에 맡긴다. workspaceStrategy는 type=worktree, branch=브리프 브랜치, 로컬은 baseRef=브리프 SHA·startFromOrigin=false다. 원격은 baseRef=origin/master·startFromOrigin=true이며 브리프 SHA는 그 원격 추적 끝과 같아야 한다.
+- 메인은 이 프로젝트의 T3 문맥에서 t3_thread_launch로 구현을 시작한다. modelSelection은 provider=codex, model은 정확히 gpt-6.1-sol 또는 gpt-6.1-terra다. sol options는 생략 또는 reasoningEffort=high다. Terra options는 reasoningEffort=max를 명시하며 생략·빈 객체·빈 배열은 거부한다. 기존 effort 키도 같은 값만 허용하며 두 키를 섞지 않는다. Terra 시작 브리프에는 정확히 한 개의 `- 역할: implementation` 줄을 넣는다. 역할이 없거나 중복되거나 다른 역할이면 Terra를 거부한다. 조사·비판은 delegate_task의 research·review 역할로 sol에 맡긴다. workspaceStrategy는 type=worktree, branch=브리프 브랜치, 로컬은 baseRef=브리프 SHA·startFromOrigin=false다. 원격은 baseRef=origin/master·startFromOrigin=true이며 브리프 SHA는 그 원격 추적 끝과 같아야 한다.
 - projectId·environmentId·scratch·다른 제공자·권한 확대는 넘기지 않는다. 현재 프로젝트와 환경을 상속한다. runtimeMode는 생략 또는 approval-required다.
 - 실행 결과의 threadId를 메인 세션 소유 기록에 저장한다. 그 기록과 등록된 worktree가 있는 스레드만 t3_thread_read·t3_thread_wait·t3_thread_send로 접근한다. 허용 인자 밖은 거부한다.
 - 수정은 같은 스레드의 t3_thread_send(mode=auto 또는 생략)로 계속할 수 있다. 수정 브리프는 기준 SHA와 기존 브랜치를 포함한다. SHA는 master 끝의 자손이며 해당 작업 사본 HEAD의 조상이어야 한다. 메인이 앞 구현의 전체 검사와 리뷰 판정을 확인한다. Claude의 passedTargets가 없어도 같은 스레드 수정은 가능하다.

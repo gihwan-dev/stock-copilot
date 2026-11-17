@@ -11,15 +11,29 @@ const safeMode = (args) =>
   ["inherit", "approval-required"].includes(args.runtimeMode);
 const expectedEffort = (model) => (model === "gpt-6.1-terra" ? "max" : "high");
 const options = (value, model) =>
-  value === undefined ||
-  (keys(value, ["effort"]) &&
-    (value.effort === undefined || value.effort === expectedEffort(model))) ||
-  (["gpt-6.1-sol", "gpt-6.1-terra"].includes(model) &&
-    keys(value, ["reasoningEffort"]) &&
-    value.reasoningEffort === expectedEffort(model));
+  (model !== "gpt-6.1-terra" ||
+    value?.effort === "max" ||
+    value?.reasoningEffort === "max") &&
+  (value === undefined ||
+    (keys(value, ["effort"]) &&
+      (value.effort === undefined || value.effort === expectedEffort(model))) ||
+    (["gpt-6.1-sol", "gpt-6.1-terra"].includes(model) &&
+      keys(value, ["reasoningEffort"]) &&
+      value.reasoningEffort === expectedEffort(model)));
 const codexModel = (model, role) =>
   model === "gpt-6.1-sol" ||
   (role === "implementation" && model === "gpt-6.1-terra");
+const codexFindings = (model, role, value) => {
+  if (!codexModel(model, role))
+    return denied(
+      "Codex 모델과 역할: sol만 조사·비판에 허용하며 terra는 명시한 implementation 역할만 허용한다",
+    );
+  return options(value, model)
+    ? []
+    : denied(
+        "Codex 추론 강도는 sol high, terra max이며 Terra의 max 옵션을 명시한다",
+      );
+};
 const launchRole = (message) => {
   const roles = [...String(message).matchAll(/^[-] 역할: (.+)$/gmu)];
   return roles.length === 1 ? roles[0][1] : undefined;
@@ -68,6 +82,14 @@ export const orchestrationFindings = (input, rules, facts) => {
   )
     return denied("권한 확대는 허용하지 않는다");
   if (tool === "delegate_task") {
+    if (args.target?.driverKind === "codex") {
+      const problems = codexFindings(
+        args.target.model,
+        args.role,
+        args.target.options,
+      );
+      if (problems.length > 0) return problems;
+    }
     if (
       !keys(args, [
         "task",
@@ -111,6 +133,14 @@ export const orchestrationFindings = (input, rules, facts) => {
       : briefCheck(args.task, rules, facts);
   }
   if (tool === "t3_thread_launch") {
+    if (args.modelSelection?.provider === "codex") {
+      const problems = codexFindings(
+        args.modelSelection.model,
+        launchRole(args.message),
+        args.modelSelection.options,
+      );
+      if (problems.length > 0) return problems;
+    }
     if (
       !keys(args, [
         "title",

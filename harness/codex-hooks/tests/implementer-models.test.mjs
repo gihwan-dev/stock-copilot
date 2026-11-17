@@ -68,13 +68,28 @@ for (const model of [
         (model === "gpt-6.1-sol" &&
           ["implementation", "research", "review", undefined].includes(role)) ||
         (model === "gpt-6.1-terra" && role === "implementation");
-      assert.equal(verdict(delegate(model, role)).length, accepted ? 0 : 1);
+      assert.equal(
+        verdict(
+          delegate(model, role, {
+            effort: model === "gpt-6.1-terra" ? "max" : "high",
+          }),
+        ).length,
+        accepted ? 0 : 1,
+      );
     });
     test(`launch exact model ${model} role ${role}`, () => {
       const accepted =
         model === "gpt-6.1-sol" ||
         (model === "gpt-6.1-terra" && role === "implementation");
-      assert.equal(verdict(launch(model, role), true).length, accepted ? 0 : 1);
+      assert.equal(
+        verdict(
+          launch(model, role, {
+            effort: model === "gpt-6.1-terra" ? "max" : "high",
+          }),
+          true,
+        ).length,
+        accepted ? 0 : 1,
+      );
     });
   }
 }
@@ -99,7 +114,12 @@ for (const model of ["gpt-6.1-sol", "gpt-6.1-terra"]) {
       { runtimeMode: "full-access" },
     ])
       assert.equal(
-        verdict({ ...delegate(model, "implementation"), ...patch }).length,
+        verdict({
+          ...delegate(model, "implementation", {
+            reasoningEffort: model === "gpt-6.1-terra" ? "max" : "high",
+          }),
+          ...patch,
+        }).length,
         1,
       );
     for (const patch of [
@@ -107,7 +127,9 @@ for (const model of ["gpt-6.1-sol", "gpt-6.1-terra"]) {
       { providerInstanceId: "other" },
       { options: { sandbox: "disabled" } },
     ]) {
-      const input = delegate(model, "implementation");
+      const input = delegate(model, "implementation", {
+        reasoningEffort: model === "gpt-6.1-terra" ? "max" : "high",
+      });
       Object.assign(input.target, patch);
       assert.equal(verdict(input).length, 1);
     }
@@ -119,7 +141,9 @@ test("terra launch requires one exact implementation role line", () => {
     "\n- 역할: implementation",
     "\n- 역할: review",
   ]) {
-    const input = launch("gpt-6.1-terra", "implementation");
+    const input = launch("gpt-6.1-terra", "implementation", {
+      reasoningEffort: "max",
+    });
     input.message += suffix;
     assert.equal(verdict(input, true).length, 1);
   }
@@ -153,3 +177,74 @@ for (const model of ["gpt-6.1-sol", "gpt-6.1-terra"]) {
     );
   });
 }
+
+test("terra requires an explicit max option while sol retains omission", () => {
+  for (const options of [
+    undefined,
+    {},
+    [],
+    null,
+    { effort: undefined },
+    { reasoningEffort: undefined },
+  ]) {
+    assert.equal(
+      verdict(delegate("gpt-6.1-terra", "implementation", options)).length,
+      1,
+    );
+    assert.equal(
+      verdict(launch("gpt-6.1-terra", "implementation", options), true).length,
+      1,
+    );
+  }
+  for (const options of [undefined, {}, []]) {
+    assert.deepEqual(
+      verdict(delegate("gpt-6.1-sol", "implementation", options)),
+      [],
+    );
+    assert.deepEqual(
+      verdict(launch("gpt-6.1-sol", "implementation", options), true),
+      [],
+    );
+  }
+});
+
+test("Opus review accepts effort high and rejects Codex reasoningEffort", () => {
+  for (const [options, expected] of [
+    [{ effort: "high" }, 0],
+    [{ reasoningEffort: "high" }, 1],
+    [{ reasoningEffort: "max" }, 1],
+    [{ effort: "max" }, 1],
+  ]) {
+    const input = delegate("claude-opus-5-5", "review", options);
+    input.target.driverKind = "claudeAgent";
+    assert.equal(verdict(input).length, expected);
+  }
+});
+
+test("model role and effort failures explain the rejected contract", () => {
+  for (const role of ["research", "review", undefined]) {
+    assert.match(
+      verdict(delegate("gpt-6.1-terra", role, { reasoningEffort: "max" }))[0]
+        .message,
+      /모델.*역할/u,
+    );
+    assert.match(
+      verdict(
+        launch("gpt-6.1-terra", role, { reasoningEffort: "max" }),
+        true,
+      )[0].message,
+      /모델.*역할/u,
+    );
+  }
+  for (const options of [undefined, {}, [], { reasoningEffort: "high" }]) {
+    assert.match(
+      verdict(delegate("gpt-6.1-terra", "implementation", options))[0].message,
+      /강도.*max/u,
+    );
+    assert.match(
+      verdict(launch("gpt-6.1-terra", "implementation", options), true)[0]
+        .message,
+      /강도.*max/u,
+    );
+  }
+});
