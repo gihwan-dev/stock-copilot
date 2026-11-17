@@ -127,6 +127,16 @@ impl<Broker: BrokerRead, Repository: TransactionSyncRepository, Time: Clock>
         account: &AccountId,
         window: SettlementWindow,
     ) -> Result<DeliveryReport, TransactionSyncError> {
+        self.sync_window_record(account, window)
+            .await
+            .map(|(delivery, _record)| delivery)
+    }
+
+    pub(crate) async fn sync_window_record(
+        &self,
+        account: &AccountId,
+        window: SettlementWindow,
+    ) -> Result<(DeliveryReport, TransactionSyncRecord), TransactionSyncError> {
         let state = self
             .repository
             .state(account)
@@ -164,9 +174,10 @@ impl<Broker: BrokerRead, Repository: TransactionSyncRepository, Time: Clock>
             .record_sync(account, &state, previous_recorded_at, &record)
             .await
             .map_err(TransactionSyncError::Repository)?;
-        Ok(self
+        let delivery = self
             .events
-            .publish(DomainEvent::TransactionsSyncRecorded(account.clone())))
+            .publish(DomainEvent::TransactionsSyncRecorded(account.clone()));
+        Ok((delivery, record))
     }
 }
 
@@ -193,7 +204,7 @@ fn reconcile_observation(
     }
     if let Ok(TransactionRead::Complete(response)) = observation {
         state
-            .reconcile(response, at)
+            .reconcile(response.normalized(), at)
             .map(Some)
             .map_err(TransactionSyncRejection::Reconciliation)
     } else {

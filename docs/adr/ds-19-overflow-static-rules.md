@@ -53,7 +53,7 @@ NumberField의 ScrubAreaCursor와 Slider의 Thumb는 설치된 1.9.0 소스에�
 
 popover·popoverTarget·popoverTargetAction은 태그 종류에 관계없이 표현 경계에서 거부한다. Base UI Button이 네이티브 속성을 전달하는 경로를 별도 타입·린트 증인으로 검증한다. 저장소의 고정 Linux arm64 Playwright 컨테이너에서 실제 Button을 렌더하고 popover를 열어 Chromium 158.0.8127.18의 open=true·position=fixed·overflow=auto·inset=0px을 측정했다. 이는 WKWebView나 실제 내용 스크롤의 실측을 대신하지 않는다.
 
-화면의 광범위한 ScrollArea 이름 제한은 유지한다. namespace/export-all에서도 사실인 설명으로 진단 문구를 바꾸고 기존 기대 진단의 개수와 규칙을 유지한다. 3차의 재현 지적은 수정 뒤 회귀·손 변형으로 검증하며 지시문에 따라 4차 독립 리뷰는 하지 않는다.
+화면의 광범위한 ScrollArea 이름 제한은 유지한다. namespace/export-all에서도 사실인 설명으로 진단 문구를 바꾸고 기존 기대 진단의 개수와 규칙을 유지한다. 3차의 재현 지적은 f581ec35b3f37f40eaa790256ecd55733d09f2d7 → 7ebabd6f7253974088a3ead2e11ae2bd112545c5에서 수정하고 회귀·손 변형으로 검증했다. 지시문에 따라 4차 독립 리뷰는 하지 않는다. 최신 master c22117c94038c27d252fdf220d88919605afde54를 정상 --no-ff 병합으로 받으며 마지막 훅 전체 검사가 통과해야 완료다.
 
 ## 검증
 

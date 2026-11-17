@@ -8,11 +8,11 @@ mod tests {
         TransactionSyncRejection, TransactionSyncRepository, UnavailableCause, WriteCompleted,
     };
     use domain::{
-        AccountId, CalendarDate, CalendarYear, Cancellation, CompleteTransactionResponse,
-        CompletionAttestation, Currency, DayNumber, DomainEvent, DomainEventKind, Market, Money,
-        MonthNumber, Nanosecond, OffsetSeconds, ReconciliationError, SettledRowSet, Settlement,
-        SettlementWindow, Timestamp, Transaction, TransactionBatch, TransactionData,
-        TransactionFilter, TransactionKind, UnixSeconds,
+        AccountId, CalendarDate, CalendarYear, Cancellation, CompletionAttestation, Currency,
+        DayNumber, DomainEvent, DomainEventKind, Market, Money, MonthNumber, Nanosecond,
+        OffsetSeconds, ReconciliationError, SettledRowSet, Settlement, SettlementWindow, Timestamp,
+        Transaction, TransactionBatch, TransactionData, TransactionFilter, TransactionKind,
+        UnixSeconds,
     };
     use std::{
         future::Future,
@@ -82,6 +82,104 @@ mod tests {
         })
         .expect("행")
     }
+    #[test]
+    fn raw_rows_reach_repository_with_duplicates_and_partial_quarantine() {
+        let sources = [
+            "{ \"transactionType\":\"DEPOSIT\", \"extra\":\"\\uAC00\" }",
+            "{\"transactionType\":\"DEPO\\u0053IT\",\"extra\":\"가\"}",
+        ];
+        let rows = application::ObservedTransactionBatch::try_new(
+            sources
+                .iter()
+                .cycle()
+                .take(4)
+                .map(|source| {
+                    application::ObservedTransaction::new(
+                        row(3),
+                        application::RawTransactionRow::new((*source).to_owned()),
+                    )
+                })
+                .collect(),
+        )
+        .expect("행");
+        let complete =
+            application::CompleteTransactionObservation::after_last_page_without_quarantine(
+                AccountId::new(91),
+                window(),
+                TransactionFilter::all(),
+                rows.clone(),
+                CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
+            )
+            .expect("완전");
+        let partial = IncompleteTransactions {
+            account: AccountId::new(91),
+            window: window(),
+            filter: TransactionFilter::all(),
+            received: vec![rows],
+            quarantined: vec![application::QuarantinedTransaction::UnknownCurrency(vec![
+                domain::UntrustedText::try_new("{\"currency\":\"EUR\"}").expect("격리"),
+            ])],
+            reason: IncompleteReason::QuarantinedRows,
+        };
+        for observation in [
+            TransactionRead::Complete(complete),
+            TransactionRead::Incomplete(partial),
+        ] {
+            let (_, trace) = execute(
+                SettledRowSet::new(AccountId::new(91)),
+                Ok(observation),
+                None,
+                at(20),
+            );
+            let saved = trace.read().expect("잠금");
+            assert_raw_record(&saved.records[0].1, &sources);
+            assert_eq!(saved.events.len(), 1);
+        }
+    }
+    fn assert_raw_record(record: &TransactionSyncRecord, sources: &[&str]) {
+        let received = match record.observation().as_ref().expect("관측") {
+            TransactionRead::Complete(value) => value.rows(),
+            TransactionRead::Incomplete(value) => &value.received[0],
+        };
+        assert_eq!(received.observed_rows().len(), 4);
+        for (index, observed) in received.observed_rows().iter().enumerate() {
+            assert_eq!(observed.transaction(), &row(3));
+            assert_eq!(observed.source().as_str(), sources[index % 2]);
+        }
+        assert_ne!(
+            received.observed_rows()[0].source(),
+            received.observed_rows()[1].source()
+        );
+    }
+    #[test]
+    fn observed_batch_bounds_and_order_are_preserved() {
+        assert_eq!(
+            observed_batch(vec![row(3); 4097]),
+            Err(ReconciliationError::TooManyRows)
+        );
+        let boundary = observed_batch(vec![row(3); 4096]).expect("경계");
+        assert_eq!(boundary.observed_rows().len(), 4096);
+        let distinct = observed_batch(vec![row(2), row(3), row(4)]).expect("순서");
+        assert_eq!(distinct.as_slice(), &[row(2), row(3), row(4)]);
+        for (observed, normalized) in distinct.observed_rows().iter().zip(distinct.as_slice()) {
+            assert_eq!(observed.transaction(), normalized);
+        }
+        assert_eq!(observed_batch(vec![]).expect("빈 목록").observed_rows(), []);
+    }
+    fn observed_batch(
+        rows: Vec<Transaction>,
+    ) -> Result<application::ObservedTransactionBatch, ReconciliationError> {
+        application::ObservedTransactionBatch::try_new(
+            rows.into_iter()
+                .map(|row| {
+                    application::ObservedTransaction::new(
+                        row,
+                        application::RawTransactionRow::new("{}".to_owned()),
+                    )
+                })
+                .collect(),
+        )
+    }
     fn complete(
         account: AccountId,
         scope: SettlementWindow,
@@ -89,11 +187,11 @@ mod tests {
         rows: Vec<Transaction>,
     ) -> TransactionRead {
         TransactionRead::Complete(
-            CompleteTransactionResponse::after_last_page_without_quarantine(
+            application::CompleteTransactionObservation::after_last_page_without_quarantine(
                 account,
                 scope,
                 filter,
-                TransactionBatch::try_new(rows).expect("행들"),
+                observed_batch(rows).expect("행들"),
                 CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
             )
             .expect("완전 응답"),
@@ -113,7 +211,7 @@ mod tests {
             panic!("완전 응답")
         };
         SettledRowSet::new(AccountId::new(91))
-            .reconcile(&received, at(10))
+            .reconcile(received.normalized(), at(10))
             .expect("기존 상태")
             .state()
             .clone()
@@ -382,7 +480,7 @@ mod tests {
             account: AccountId::new(91),
             window: window(),
             filter: TransactionFilter::all(),
-            received: vec![TransactionBatch::try_new(vec![row(3)]).expect("받은 페이지")],
+            received: vec![observed_batch(vec![row(3)]).expect("받은 페이지")],
             quarantined: vec![application::QuarantinedTransaction::UnknownCurrency(vec![
                 domain::UntrustedText::try_new("synthetic-unknown-currency-XYZ")
                     .expect("합성 원문"),
@@ -600,7 +698,7 @@ mod tests {
             panic!("완전 응답")
         };
         let state = SettledRowSet::new(AccountId::new(91))
-            .reconcile(&received, at(10))
+            .reconcile(received.normalized(), at(10))
             .expect("시작")
             .state()
             .clone();

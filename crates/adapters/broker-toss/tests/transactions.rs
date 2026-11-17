@@ -136,7 +136,7 @@ mod tests {
         "amount":"731","commission":"13","tax":"17","netAmount":"701","exchangeRate":null,
         "settlementDate":"2026-09-18","settled":true,"transactionTime":null,"isCancellation":false})
     }
-    fn complete(bodies: Vec<Value>) -> domain::CompleteTransactionResponse {
+    fn complete(bodies: Vec<Value>) -> application::CompleteTransactionObservation {
         let mut responses = vec![issued()];
         responses.extend(bodies.into_iter().map(|body| response("200 OK", &body)));
         let server = ScriptedHttpServer::start(responses).expect("server");
@@ -149,6 +149,58 @@ mod tests {
         match outcome_1 {
             application::TransactionRead::Complete(completed) => completed,
             application::TransactionRead::Incomplete(_) => panic!("incomplete"),
+        }
+    }
+    #[test]
+    fn raw_spelling_survives_complete_and_interrupted_observation() {
+        let first = serde_json::to_string(&row()).expect("json");
+        let second = first
+            .replace("DEPOSIT", r"DEPO\u0053IT")
+            .replace("731", "731.000");
+        let third = first.replace("731", "733");
+        for suffix in [
+            r#","hasNext":false,"nextCursor":null"#,
+            r#","hasNext":true,"nextCursor":"next""#,
+        ] {
+            let body = format!(
+                r#"{{"result":{{"transactions":[{first},{second},{third},{first}]{suffix}}}}}"#
+            );
+            let mut replies = vec![
+                issued(),
+                response(
+                    "200 OK",
+                    &serde_json::from_str::<Value>(&body).expect("json"),
+                ),
+            ];
+            replies[1] = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).into_bytes();
+            replies.push(response("500 Internal Server Error", &json!({})));
+            let server = ScriptedHttpServer::start(replies).expect("server");
+            let observation = run(adapter(&server).transactions(
+                &AccountId::new(731),
+                window(),
+                &TransactionFilter::all(),
+            ))
+            .expect("read");
+            let record = application::TransactionSyncRecord::from_observation(
+                &domain::SettledRowSet::new(AccountId::new(731)),
+                window(),
+                crate::support::time().now(),
+                Ok(observation),
+            );
+            let rows = match record.observation().as_ref().expect("observation") {
+                application::TransactionRead::Complete(value) => value.rows(),
+                application::TransactionRead::Incomplete(value) => &value.received[0],
+            };
+            assert_eq!(rows.observed_rows().len(), 4);
+            for (observed, expected) in rows
+                .observed_rows()
+                .iter()
+                .zip([&first, &second, &third, &first])
+            {
+                assert_eq!(observed.source().as_str(), expected);
+            }
+            assert_eq!(rows.as_slice()[0], rows.as_slice()[1]);
+            assert_ne!(rows.as_slice()[1], rows.as_slice()[2]);
         }
     }
     #[test]
@@ -957,5 +1009,113 @@ mod tests {
             body["result"][field] = value;
         }
         body
+    }
+    fn read_raw_transactions(rows: &str) -> application::TransactionRead {
+        let body = format!(
+            r#"{{"result":{{"transactions":[{rows}],"hasNext":false,"nextCursor":null}}}}"#
+        );
+        let wire = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).into_bytes();
+        read_responses(vec![wire]).0.expect("read")
+    }
+    #[test]
+    fn mixed_quarantine_keeps_raw_pairing() {
+        let first = serde_json::to_string(&row()).expect("json");
+        let second = first
+            .replace("DEPOSIT", r"DEPO\u0053IT")
+            .replace("731", "731.000");
+        let third = first.replace("731", "733.000");
+        let unknown = first.replace("KRW", "EUR");
+        let application::TransactionRead::Incomplete(actual) =
+            read_raw_transactions(&format!("{first},{unknown},{second},{third}"))
+        else {
+            panic!("incomplete")
+        };
+        assert_eq!(
+            actual.reason,
+            application::IncompleteReason::QuarantinedRows
+        );
+        assert_eq!(actual.quarantined.len(), 1);
+        let application::QuarantinedTransaction::UnknownCurrency(chunks) = &actual.quarantined[0];
+        assert_eq!(
+            chunks
+                .iter()
+                .map(domain::UntrustedText::as_untrusted_str)
+                .collect::<String>(),
+            unknown
+        );
+        let rows = actual.received[0].observed_rows();
+        assert_eq!(rows.len(), 3);
+        for (entry, source) in rows.iter().zip([&first, &second, &third]) {
+            assert_eq!(entry.source().as_str(), source);
+        }
+        assert_eq!(rows[0].transaction(), rows[1].transaction());
+        assert_eq!(
+            rows[0].transaction().data().amount,
+            Some(expected_krw_amount("731"))
+        );
+        assert_eq!(
+            rows[1].transaction().data().amount,
+            Some(expected_krw_amount("731"))
+        );
+        assert_eq!(
+            rows[2].transaction().data().amount,
+            Some(expected_krw_amount("733"))
+        );
+    }
+    fn expected_krw_amount(value: &str) -> domain::Money {
+        domain::Money::parse(
+            &domain::NumericInput::try_new(value).expect("numeric"),
+            domain::Currency::Krw,
+        )
+        .expect("money")
+    }
+    fn assert_overflow_tail(actual: &application::IncompleteTransactions, source: &str) {
+        assert_eq!(
+            actual.reason,
+            application::IncompleteReason::RowLimitExceeded
+        );
+        assert_eq!(actual.received.len(), 2);
+        assert_eq!(actual.received[0].observed_rows().len(), 4096);
+        assert_eq!(actual.received[1].observed_rows().len(), 1);
+        let last = &actual.received[1].observed_rows()[0];
+        assert_eq!(last.source().as_str(), source);
+        assert_eq!(
+            last.transaction().data().amount,
+            Some(expected_krw_amount("733"))
+        );
+        assert_eq!(
+            actual.received[0].observed_rows()[0]
+                .transaction()
+                .data()
+                .amount,
+            Some(expected_krw_amount("731"))
+        );
+    }
+    #[test]
+    fn overflow_tail_before_invalid_row_keeps_raw_pairing() {
+        let first = serde_json::to_string(&row()).expect("json");
+        let tail = first.replace("731", "733.000");
+        let bad = first.replace("731", "bad");
+        let mut rows = vec![first.as_str(); 4096];
+        rows.extend([tail.as_str(), bad.as_str()]);
+        let application::TransactionRead::Incomplete(actual) =
+            read_raw_transactions(&rows.join(","))
+        else {
+            panic!("incomplete")
+        };
+        assert_overflow_tail(&actual, &tail);
+    }
+    #[test]
+    fn clean_row_limit_keeps_raw_tail_pairing() {
+        let first = serde_json::to_string(&row()).expect("json");
+        let tail = first.replace("731", "733.000");
+        let mut rows = vec![first.as_str(); 4096];
+        rows.push(tail.as_str());
+        let application::TransactionRead::Incomplete(actual) =
+            read_raw_transactions(&rows.join(","))
+        else {
+            panic!("incomplete")
+        };
+        assert_overflow_tail(&actual, &tail);
     }
 }
