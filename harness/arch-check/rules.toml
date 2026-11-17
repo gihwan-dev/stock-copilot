@@ -317,7 +317,7 @@ allowed-crates = ["broker-toss-trade"]
 
 [[source.http-write]]
 crate = "broker-toss"
-allowed-files = ["crates/adapters/broker-toss/src/token.rs", "crates/adapters/broker-toss/src/http.rs", "crates/adapters/broker-toss/tests/contract_tests/mod.rs", "crates/adapters/broker-toss/tests/support_tests/validation.rs", "crates/adapters/broker-toss/tests/accounts_holdings.rs"]
+allowed-files = ["crates/adapters/broker-toss/src/token.rs", "crates/adapters/broker-toss/src/http.rs", "crates/adapters/broker-toss/tests/contract_tests/mod.rs", "crates/adapters/broker-toss/tests/support_tests/validation.rs", "crates/adapters/broker-toss/tests/accounts_holdings.rs", "crates/adapters/broker-toss/tests/fx_market.rs"]
 
 [[source.http-write]]
 crate = "sources"

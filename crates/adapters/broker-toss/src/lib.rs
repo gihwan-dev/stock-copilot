@@ -28,3 +28,8 @@ mod account_ports;
 mod transaction_read;
 
 mod market_read;
+
+mod market_calendar;
+mod market_fx;
+mod market_indicators;
+mod market_info;

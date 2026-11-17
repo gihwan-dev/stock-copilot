@@ -1,0 +1,21 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/market-indicators/prices",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1market-indicators~1prices/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": [
+      {
+        "symbol": "KOSPI",
+        "timestamp": "2026-06-11T15:30:00+09:00",
+        "lastPrice": "2812.45"
+      },
+      {
+        "symbol": "KOSDAQ",
+        "timestamp": "2026-06-11T15:30:00+09:00",
+        "lastPrice": "845.32"
+      }
+    ]
+  }
+}
