@@ -354,3 +354,8 @@ pub use transaction_observation::{
     CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,
     RawTransactionRow,
 };
+
+mod valuation_gap;
+pub use valuation_gap::{
+    PlanValuationGap, ValuationCalendarSource, ValuationDayRepository, ValuationGapError,
+};
