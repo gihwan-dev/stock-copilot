@@ -157,6 +157,37 @@ const completeJob = (sha, run, jobs, name) => {
   );
 };
 
+const missingRequiredSteps = (sha, run, jobs, workflow) => {
+  if (
+    invalidRun(sha, run, workflow) ||
+    run.status !== "completed" ||
+    run.conclusion !== "success" ||
+    !Array.isArray(jobs)
+  )
+    return [];
+  const entries = requiredJobs(run, workflow).map((name) => ({
+    name,
+    jobs: jobs.filter((job) => job.name === name),
+  }));
+  if (
+    entries.some(
+      ({ jobs: matches }) =>
+        matches.length !== 1 ||
+        matches[0].status !== "completed" ||
+        matches[0].conclusion !== "success" ||
+        matches[0].head_sha !== sha ||
+        matches[0].run_attempt !== run.run_attempt ||
+        !Array.isArray(matches[0].steps),
+    )
+  )
+    return [];
+  return entries.flatMap(({ name, jobs: [entry] }) =>
+    REQUIRED_STEPS[name]
+      .filter((step) => !entry.steps.some((item) => item.name === step))
+      .map((step) => `${name}: ${step}`),
+  );
+};
+
 export const checkRun = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
   if (
     invalidRun(sha, run, workflow) ||
@@ -268,6 +299,8 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
   )
     return "RETRY_CANCELLED";
   if (run.conclusion === "failure") return "CHECK_FAILED";
+  if (missingRequiredSteps(sha, run, jobs, workflow).length !== 0)
+    return "MISSING_REQUIRED_STEPS";
   return "INVALID_EVIDENCE";
 };
 
@@ -378,13 +411,15 @@ const FAILURE_MESSAGES = {
     "작업이 시간 초과되어 재시도 대상이다; 원인은 확인되지 않았다",
   PENDING: "작업이 아직 진행 중이다",
   CHECK_FAILED: "검사 또는 준비 단계가 실패했다; 실행 로그를 확인한다",
+  MISSING_REQUIRED_STEPS: "성공 실행에 현재 필수 단계가 없다",
   INVALID_EVIDENCE: "실행 출처나 필수 작업 증거가 올바르지 않다",
 };
 
 const rejectRun = (sha, run, jobs, workflow) => {
   const code = failureCode(sha, run, jobs, workflow);
+  const missing = missingRequiredSteps(sha, run, jobs, workflow);
   const error = new Error(
-    `${workflow.file}: ${code}: ${FAILURE_MESSAGES[code]}`,
+    `${workflow.file}: ${code}: ${FAILURE_MESSAGES[code]}${missing.length === 0 ? "" : ` (${missing.join(", ")})`}`,
   );
   error.code = code;
   throw error;

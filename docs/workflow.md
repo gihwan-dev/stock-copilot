@@ -165,19 +165,19 @@
 
 작업 브랜치 끝이 현재 `master`를 포함하고, 그 끝의 전체 검사 성공 증거가 동일한 40자리 SHA에 묶여 있으며, 준비된 병합 인덱스가 그 끝과 `docs/**`, `.codex/config.toml`, `harness/claude-hooks/hashes.json`, `harness/sandbox/**`, `harness/arch-check/cases.toml`만 다를 때만 병합 커밋의 전체 검사 재실행을 생략한다. 그때도 `check-fast-static`을 실행한다. 소스 차이, 충돌, 미스테이징 파일, 오래된 master나 다른 SHA는 거부한다.
 
-메인은 병합을 준비하기 전에 신뢰된 Git으로 아래 명령을 실행한다. 검사기와 그 실행 경로가 `master`와 다르면 종료 코드가 1이며 원격 결과로 생략하지 않고 일반 전체 검사를 실행한다. `branch`에는 실제 브랜치 이름을 준다.
+메인은 병합을 준비하기 전에 신뢰된 Git으로 아래 명령을 실행한다. 검사기와 그 실행 경로가 `master`와 다르거나 확인에 실패하면 원격 결과와 로컬 영수증 모두를 이용한 생략을 거부하고 일반 전체 검사를 실행한다. `branch`에는 실제 브랜치 이름을 준다.
 
 ```sh
 git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch> -- justfile lefthook.yml .github .claude .codex .cargo .config harness crates/xtask Cargo.toml Cargo.lock pnpm-lock.yaml .node-version rust-toolchain.toml
 ```
 
-통과하면 메인은 `git merge --no-ff --no-commit <branch>`로 병합을 준비하고 문서·생성 등록을 스테이징한 뒤 `just merge-gate <branch>`를 실행한다. 이 명령은 같은 SHA의 GitHub `ci.yml`의 Linux·macOS 작업과 `signatures.yml`의 서명 작업이 해당 push 실행의 최신 회차에서 모두 성공했는지 직접 확인한다. Linux 검사·네트워크 차단 테스트·시각 회귀, macOS 전체 검사·변이, 서명 검증의 필수 단계도 각각 성공해야 한다. 실패·취소·진행 중·누락은 거부한다. `just remote-check <sha>`는 같은 원격 판정만 별도로 실행한다. 공개 조회는 인증 없이 가능하며 토큰이 필요한 경우 `GH_TOKEN` 또는 `GITHUB_TOKEN`을 환경에서만 받는다.
+통과하면 메인은 `git merge --no-ff --no-commit <branch>`로 병합을 준비하고 문서·생성 등록을 스테이징한 뒤 `just merge-gate <branch>`를 실행한다. 이 명령은 같은 SHA의 GitHub `ci.yml`의 Linux·macOS 작업과 `signatures.yml`의 서명 작업이 해당 push 실행의 최신 회차에서 모두 성공했는지 직접 확인한다. Linux 검사·네트워크 차단 테스트·시각 회귀, macOS 전체 검사·변이, 서명 워크플로 진입 단계도 각각 성공해야 한다. 단계 성공만으로 서명 검사가 활성 상태였다는 뜻은 아니다. 실패·취소·진행 중·누락은 거부한다. `just remote-check <sha>`는 같은 원격 판정만 별도로 실행한다. 공개 조회는 인증 없이 가능하며 토큰이 필요한 경우 `GH_TOKEN` 또는 `GITHUB_TOKEN`을 환경에서만 받는다.
 
 원격 성공을 증거로 사용할 때는 대상과 현재 로컬 `master`의 보호 경로도 비교한다. 기준 `master`의 `harness/agent-writable.txt` 밖의 파일이나 Cargo·패키지 명세, 잠금 파일, 빌드 진입점이 다르면 원격 성공과 관계없이 생략을 거부한다. 워크플로와 그 호출 도구를 작업 브랜치에서 바꾸고 같은 이름의 성공 단계를 만드는 경우를 막기 위한 조건이다. 정당한 하네스 변경도 이 경로에서는 일반 전체 검사를 받는다. 비교에는 대상 Git 객체와 메인이 관리하는 로컬 `master`가 필요하다. 메인은 명령과 비교 코드 자체를 `master`의 신뢰된 내용으로 실행해야 한다. 이미 병합 인덱스에 적힌 미검증 도구가 검사기 자체를 바꾸는 경우에는 그 도구의 자기 검사만으로 신뢰를 만들 수 없다.
 
-러너를 배정받지 못했거나 작업이 취소·시간 초과로 끝나면 `remote-check`는 각각 재시도 대상으로 표시하고 실패한다. 실행 중에는 대기로 표시하고, 검사나 준비 단계 실패는 원인을 확인하도록 별도로 표시한다. `node harness/ci/remote-check.mjs <sha> --linux`는 같은 SHA의 Linux 작업과 필수 단계만 확인하며, 성공하더라도 macOS·변이·서명 검사나 병합 통과를 뜻하지 않는다. 병합 게이트는 이 부분 판정을 전체 원격 증거로 받지 않는다.
+러너를 배정받지 못했거나 작업이 취소·시간 초과로 끝나면 `remote-check`는 각각 재시도 대상으로 표시하고 실패한다. 실행 중에는 대기로 표시하고, 검사나 준비 단계 실패는 원인을 확인하도록 별도로 표시한다. 성공으로 끝난 실행에서 현재의 필수 단계가 빠졌다면 누락된 작업과 단계 이름을 표시하고 거부한다. `node harness/ci/remote-check.mjs <sha> --linux`는 같은 SHA의 Linux 작업과 필수 단계만 확인하며, 성공하더라도 macOS·변이·서명 검사나 병합 통과를 뜻하지 않는다. 병합 게이트는 이 부분 판정을 전체 원격 증거로 받지 않는다.
 
-로컬 증거를 쓸 때는 `just merge-gate <branch> target/<작업 ID>/final-check.json`을 실행한다. `head`, `recipe: check`, `exit: 0`이 정확히 맞는 영수증과 옆의 `.sig`가 필요하다. 서명은 `stock-copilot-check` 네임스페이스에서 `master`의 `harness/allowed_signers`와 소유자 이름으로 검증한다. 서명 없는 JSON은 누구나 만들 수 있어 단독 증거로 받지 않는다. 신뢰 서명자가 비어 있으면 로컬 증거는 거부되고 원격 증거가 필요하다.
+로컬 증거를 쓸 때도 위의 신뢰된 Git 사전 비교를 통과한 다음 `just merge-gate <branch> target/<작업 ID>/final-check.json`을 실행한다. `head`, `recipe: check`, `exit: 0`이 정확히 맞는 영수증과 옆의 `.sig`가 필요하다. 서명은 `stock-copilot-check` 네임스페이스에서 `master`의 `harness/allowed_signers`와 소유자 이름으로 검증한다. 서명 없는 JSON은 누구나 만들 수 있어 단독 증거로 받지 않는다. 신뢰 서명자가 비어 있으면 로컬 증거는 거부되고 원격 증거가 필요하다.
 
 두 경로 모두 리뷰 기록과 진행 표가 가리키는 커밋이 작업 브랜치 끝의 조상이거나 GitHub가 실제로 광고하는 태그에서 도달 가능한지 확인한다. 일시 브랜치만으로는 병합 이후 새 체크아웃에서 객체가 유지되지 않는다. 태그 또한 지울 수 있으므로 기록이 참조하는 동안 메인이 보존하고 후속 병합 때 다시 확인한다. 로컬 Git 객체만으로는 원격 CI가 그 커밋을 가져올 수 없다. 원격 조회 실패도 거부한다.
 
@@ -209,6 +209,8 @@ git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch
 
 - 반박 단계가 오탐을 얼마나 줄이는지는 정량 연구가 없다 (R-10 Q4). 위 측정 항목으로 이 저장소에서 직접 잰다.
 - 새 기록의 `## 측정` 표에는 `리뷰 등급`과 실제 `리뷰 회차`를 각각 한 번 적는다. `## 커밋` 표의 실제 리뷰 회차와 측정 회차는 같고 등급을 넘지 않는다. 리뷰·비판은 회차마다 `## 리뷰 (회차 N)` 절을 순서대로 둔다. 마지막 회차 뒤 `N (… 수정)` 행은 별도 리뷰로 세지 않는다. 등급이 없는 과거 기록은 변경하지 않는다. 도입 전 기준 `d235aaf8d3f3a6387e0a20aede316cc5b7d0edbf`에 있던 기록이 같은 경로와 내용일 때만 등급 없는 기록으로 인정한다.
+- 사용자가 독립 리뷰를 생략하기로 결정한 새 기록은 결정과 사유를 `## 리뷰 생략`에 적고 측정 표의 실제 리뷰 회차를 0으로 둔다. 이 경우 커밋 표의 행은 구현 이력이고 리뷰 절을 함께 두지 않는다.
+- 기록 검사는 등급 값과 기록 내부의 회차 정합성을 확인한다. CI에는 메인이 작성한 브리프의 신뢰된 등급이 전달되지 않으므로 브리프에 지정한 등급을 기록에서 낮췄는지나 작업 위험도가 적절한지 기계적으로 증명하지 못한다. 메인은 브리프와 범위를 리뷰 기록에 대조한다.
 - 기록 파일이 없는 작업은 완료로 표시할 수 없다. `just check`와 CI가 `docs/progress.md`에서 상태가 완료·일부 완료인 행마다 기록 파일이 있고 필수 절을 갖췄는지 검사한다. 메인 에이전트는 새 작업의 브리프를 쓰기 전에 `gh run list --branch master --limit 3`과 열린 'CI 실패' 이슈를 확인한다.
 - 같은 종류의 지적이 두 번 나오면 하네스 규칙으로 만들 수 있는지 검토하고 tasks.md에 하네스 작업을 추가한다. 리뷰에서 반복해서 잡는 것은 하네스가 약하다는 뜻이다.
 

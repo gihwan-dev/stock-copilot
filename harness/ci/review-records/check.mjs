@@ -308,6 +308,16 @@ export const tierProblems = (text) => {
   const measurements =
     measure === undefined ? [] : (tableRows(measure, ["항목", "값"]) ?? []);
   const counts = measurements.filter((row) => row[0] === "리뷰 회차");
+  const headings = lines.filter((line) => /^## 리뷰(?! 생략)/u.test(line));
+  const waived = waiverProblems(sectionLines(lines, /^## 리뷰 생략/u));
+  if (waived !== undefined) {
+    issues.push(...waived);
+    if (headings.length !== 0)
+      issues.push("리뷰 생략 기록에는 리뷰 절을 함께 둘 수 없다");
+    if (counts.length !== 1 || counts[0][1] !== "0")
+      issues.push("리뷰 생략 기록의 실제 리뷰 회차는 0이다");
+    return issues;
+  }
   if (
     counts.length !== 1 ||
     !/^[1-3]$/u.test(counts[0][1] ?? "") ||
@@ -315,20 +325,16 @@ export const tierProblems = (text) => {
   ) {
     issues.push("측정 표의 리뷰 회차는 커밋 표의 실제 리뷰 회차와 같아야 한다");
   }
-  const headings = lines.filter((line) => /^## 리뷰(?! 생략)/u.test(line));
-  const waived = waiverProblems(sectionLines(lines, /^## 리뷰 생략/u));
-  if (waived === undefined) {
-    const rounds = headings.map((heading) =>
-      /^## 리뷰(?:와 비판)? \(회차 (\d+)\)$/u.exec(heading),
-    );
-    if (
-      rounds.length !== reviews ||
-      rounds.some(
-        (round, index) => round === null || Number(round[1]) !== index + 1,
-      )
-    ) {
-      issues.push("리뷰 절은 각 회차를 '## 리뷰 (회차 N)'으로 순서대로 적는다");
-    }
+  const rounds = headings.map((heading) =>
+    /^## 리뷰(?:와 비판)? \(회차 (\d+)\)$/u.exec(heading),
+  );
+  if (
+    rounds.length !== reviews ||
+    rounds.some(
+      (round, index) => round === null || Number(round[1]) !== index + 1,
+    )
+  ) {
+    issues.push("리뷰 절은 각 회차를 '## 리뷰 (회차 N)'으로 순서대로 적는다");
   }
   return issues;
 };
