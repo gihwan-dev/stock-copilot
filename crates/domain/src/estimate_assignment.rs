@@ -104,10 +104,14 @@ impl<Run: Clone + Eq> EstimateAssignments<Run> {
             if &entry.run != run {
                 return Err(EstimateAssignmentError::WrongRun);
             }
-            if entry.consumption == EstimateConsumption::Consumed {
-                return Err(EstimateAssignmentError::AlreadyConsumed);
+            match entry.consumption {
+                EstimateConsumption::Available => {
+                    entry.consumption = EstimateConsumption::Consumed;
+                }
+                EstimateConsumption::Consumed => {
+                    return Err(EstimateAssignmentError::AlreadyConsumed);
+                }
             }
-            entry.consumption = EstimateConsumption::Consumed;
         }
         Ok(next)
     }
@@ -404,7 +408,11 @@ mod tests {
             PromptHash::try_new(&"A0".repeat(32))
                 .expect("SHA256")
                 .as_str(),
-            "A0".repeat(32)
+            "a0".repeat(32)
+        );
+        assert_eq!(
+            PromptHash::try_new(&"AB".repeat(32)),
+            PromptHash::try_new(&"ab".repeat(32))
         );
     }
 }

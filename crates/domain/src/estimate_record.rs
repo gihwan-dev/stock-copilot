@@ -25,7 +25,7 @@ impl PromptHash {
         if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(EstimateMetadataError::InvalidHash);
         }
-        Ok(Self(value.to_owned()))
+        Ok(Self(value.to_ascii_lowercase()))
     }
     #[must_use]
     pub fn as_str(&self) -> &str {
