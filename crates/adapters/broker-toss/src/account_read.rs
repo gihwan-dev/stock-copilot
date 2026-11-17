@@ -76,6 +76,14 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         let value = self.read(request, ReadEndpoint::Holdings).await?;
         crate::holding_read::holdings(&value, &self.master, self.clock.now())
     }
+    pub(crate) async fn fetch_transactions(
+        &self,
+        account: &AccountId,
+        window: domain::SettlementWindow,
+        filter: &domain::TransactionFilter,
+    ) -> Result<application::TransactionRead, PortError> {
+        crate::transaction_read::fetch(&self.tokens, account, window, filter).await
+    }
     #[must_use]
     pub fn with_candle_sessions(mut self, sessions: Vec<domain::MarketSession>) -> Self {
         self.candle_sessions = sessions;
@@ -111,7 +119,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
         )
     }
 }
-fn retry_delay(header: Option<&str>) -> RetryDelay {
+pub(crate) fn retry_delay(header: Option<&str>) -> RetryDelay {
     header
         .filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
         .and_then(|value| value.parse::<u64>().ok())
@@ -131,7 +139,7 @@ pub(crate) fn invalid(endpoint: ReadEndpoint, mismatch: ResponseMismatch) -> Por
         PortErrorKind::InvalidResponse(mismatch),
     )
 }
-fn token_error(error: crate::TokenError, endpoint: ReadEndpoint) -> PortError {
+pub(crate) fn token_error(error: crate::TokenError, endpoint: ReadEndpoint) -> PortError {
     use crate::{TokenError, TossHttpError};
     use application::{AccessDenial, UnavailableCause};
     let kind = match error {

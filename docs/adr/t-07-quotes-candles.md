@@ -286,3 +286,7 @@ RV-2에 맞게 새 상태 정책 분기는 유형·상장 상태·정리매매�
 | 45 | 정상 상장 대신 예정 상태에 정책 적용 | 컴파일 후 검출 (exit 101) | price_limits::history::tests::historical_policy_starts_at_the_verified_rule_date, price_limits::history::tests::price_extremes_and_unrepresentable_fractional_bounds_are_exact, price_limits::history::tests::regular_stock_daily_moves_include_both_exact_boundaries, price_limits::history::tests::unsupported_market_type_and_status_never_receive_a_default_band |
 
 공식 변경분 변이의 최종 병합 소스 실행 결과는 target/T-07/official-mutants.log와 최종 보고에 별도로 남긴다. 손 변형을 공식 자동 변이의 완주 결과로 세지 않는다.
+
+## 최종 병합의 모듈 선언 그룹
+
+T-06의 transaction_read와 T-07의 market_read 선언을 모두 보존한다. 기존 선언과 바로 이어 붙이면 rustfmt가 알파벳순으로 재배치해 fmt 검사가 실패한다. 빈 줄로 선언 그룹을 나누는 표준 형식은 rustfmt가 유지한다. 따라서 받은 lib.rs의 기존 내용 뒤에 그룹 구분 빈 줄과 market_read 선언 한 줄만 추가하여 끝 추가 위치와 기존 선언 순서를 유지한다. 주석·속성·검사 끄기는 추가하지 않는다. 최초 형식 실패에는 환경 예외를 쓰지 않고 최종 형식으로 정상 훅부터 다시 실행한다.

@@ -1,0 +1,91 @@
+{
+  "origin": "synthetic",
+  "method": "get",
+  "path": "/api/v1/transactions",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1transactions/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "transactions": [
+        {
+          "transactionType": "DIVIDEND",
+          "marketCountry": "KR",
+          "currency": "KRW",
+          "symbol": "005930",
+          "assetClass": "STOCK",
+          "isinCode": "KR7005930003",
+          "quantity": null,
+          "filledPrice": null,
+          "amount": "3610",
+          "commission": "0",
+          "tax": "556",
+          "netAmount": "3054",
+          "exchangeRate": null,
+          "settlementDate": "2026-09-15",
+          "settled": true,
+          "transactionTime": "2026-09-15T06:30:00+09:00",
+          "isCancellation": false
+        },
+        {
+          "transactionType": "INTEREST",
+          "marketCountry": "KR",
+          "currency": "KRW",
+          "symbol": null,
+          "assetClass": null,
+          "isinCode": null,
+          "quantity": null,
+          "filledPrice": null,
+          "amount": "1230",
+          "commission": "0",
+          "tax": "180",
+          "netAmount": "1050",
+          "exchangeRate": null,
+          "settlementDate": "2026-09-14",
+          "settled": true,
+          "transactionTime": "2026-09-14T06:30:00+09:00",
+          "isCancellation": false
+        },
+        {
+          "transactionType": "DIVIDEND",
+          "marketCountry": "US",
+          "currency": "USD",
+          "symbol": "AAPL",
+          "assetClass": "STOCK",
+          "isinCode": "US0378331005",
+          "quantity": null,
+          "filledPrice": null,
+          "amount": "12.5",
+          "commission": "0",
+          "tax": "0",
+          "netAmount": "12.5",
+          "exchangeRate": "1384.8",
+          "settlementDate": "2026-09-13",
+          "settled": true,
+          "transactionTime": "2026-09-13T06:30:00+09:00",
+          "isCancellation": false
+        },
+        {
+          "transactionType": "INTEREST",
+          "marketCountry": "US",
+          "currency": "USD",
+          "symbol": null,
+          "assetClass": "BOND",
+          "isinCode": "US912810TV08",
+          "quantity": null,
+          "filledPrice": null,
+          "amount": "21.25",
+          "commission": "0",
+          "tax": "0",
+          "netAmount": "21.25",
+          "exchangeRate": "1384.5",
+          "settlementDate": "2026-09-12",
+          "settled": true,
+          "transactionTime": "2026-09-12T06:30:00+09:00",
+          "isCancellation": false
+        }
+      ],
+      "nextCursor": null,
+      "hasNext": false
+    }
+  }
+}
