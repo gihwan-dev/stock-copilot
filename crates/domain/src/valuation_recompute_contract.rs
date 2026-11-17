@@ -910,6 +910,88 @@ mod tests {
     }
 
     #[test]
+    fn zero_position_rejects_wrong_instrument_adjustment_and_period() {
+        let value = price("12", Currency::Krw);
+        let candle = |instrument: &str, period, adjustment| {
+            Candle::try_new(
+                id(instrument),
+                CandleTime::try_new(at(3, 0), period).expect("시각"),
+                adjustment,
+                Ohlcv::try_new(
+                    value,
+                    value,
+                    value,
+                    value,
+                    Quantity::parse(&NumericInput::try_new("0").expect("입력")).expect("수량"),
+                )
+                .expect("가격"),
+                CandleObservation::new(at(3, 6), CandleStatus::Finalized),
+            )
+            .expect("봉")
+        };
+        let run = |item| {
+            let identity = LotIdentity::new(
+                id("A"),
+                Symbol::try_new("A").expect("심볼"),
+                Market::Kr,
+                Currency::Krw,
+            );
+            let histories =
+                [SnapshotInstrumentHistory::new(identity, vec![], vec![item]).expect("이력")];
+            snapshot(
+                3,
+                TestCash::new(vec![], ("100", "0"), ("100", "0")),
+                &histories,
+                &[close("A", Currency::Krw, 3, "12")],
+                None,
+            )
+        };
+        assert_eq!(
+            run(candle("A", CandlePeriod::Daily, PriceAdjustment::Raw))
+                .expect("정상 봉")
+                .account_value(Currency::Krw),
+            Ok(money("100", Currency::Krw))
+        );
+        for invalid in [
+            candle("B", CandlePeriod::Daily, PriceAdjustment::Raw),
+            candle(
+                "A",
+                CandlePeriod::Daily,
+                PriceAdjustment::Adjusted(crate::AdjustmentBasis::new(at(3, 0))),
+            ),
+            candle("A", CandlePeriod::Minute, PriceAdjustment::Raw),
+        ] {
+            assert_eq!(run(invalid).err(), Some(SnapshotError::InvalidCandle));
+        }
+    }
+
+    #[test]
+    fn equivalent_instant_with_previous_local_date_is_canonicalized() {
+        let canonical = valuation_time(date(3));
+        let original = Timestamp::from_parts(
+            crate::UnixSeconds::new(*canonical.utc_seconds().as_i64()),
+            crate::Nanosecond::new(0),
+            crate::OffsetSeconds::new(-28_800),
+        )
+        .expect("오프셋");
+        assert_eq!(original, canonical);
+        assert_eq!(original.offset_calendar_date(), date(2));
+        let data = fixture_window(vec![], ("100", "0"), ("100", "0"), test_window(3));
+        let cal = calendar(3);
+        let input = ValuationRecomputeInput::new(
+            &cal,
+            &data.rows,
+            ValuationHistoryEvidence::new(&[], &[]),
+            DatedSnapshotLedgers::new(date(3), ledgers(&data)),
+            SnapshotObservation::new(original, at(20, 0), None),
+        )
+        .expect("같은 시각");
+        let result = ValuationSnapshot::recompute(input).expect("평가");
+        assert_eq!(*result.valuation_at().offset_seconds().as_i32(), 0_i32);
+        assert_eq!(result.valuation_at().offset_calendar_date(), date(3));
+    }
+
+    #[test]
     fn us_market_date_can_differ_from_kst_valuation_date() {
         let kr = MarketCalendar::try_new(
             market_row(2, &Market::Kr, TestSession::Open),

@@ -19,7 +19,7 @@ I-09, design 4.3, ADR 0052·0112·0118·0121. 구현은 2026-11-17 사용자 결
 |---|---|
 | A-26 | 과거 보유·행사·대조 원장·거래·가격 증거·환율과 현금 적용일을 공급하고, ValuationRecomputeInput::new와 ValuationSnapshot::recompute의 검증 경로로 날짜별 성공·실패를 기록한다. 자료 출처와 실제 이력 완전성을 확인한다. 기존 recalculate 직접 호출은 D-49의 가격 증거 검증 경로가 아니다. |
 | S-18 | 날짜별 결과 및 기존 성공 스냅샷 정본의 저장·조회와 재시도·원자성 정책을 구현한다. |
-| J-11 | 시장별 달력 매핑과 16:00 예약 및 시작 시 복구를 연결한다. |
+| J-11 | 시장별 달력의 날짜 매핑·출처·최신성을 검증하고 16:00 예약 및 시작 시 복구를 연결한다. |
 | H-50 | 구현·수정 모델 허용 규칙을 갱신한다. |
 
 ## 검증
@@ -30,35 +30,39 @@ I-09, design 4.3, ADR 0052·0112·0118·0121. 구현은 2026-11-17 사용자 결
 
 ## 손 변형
 
-임시 복사본에서 28개를 실행해 컴파일된 25개를 모두 검출했고 3개는 컴파일 불가로 제외했다. 생존은 없었다. 원본 대조군과 원복 뒤 대조군을 실행했고, 복사본의 변경 소스는 원본과 일치했다. 아래는 각 실제 실행의 첫 실패 테스트다.
+임시 복사본에서 32개를 실행해 컴파일된 30개를 모두 검출했고 2개는 컴파일 불가로 제외했다. 생존은 없었다. 원본 대조군과 원복 뒤 대조군을 실행했고, 복사본의 변경 소스는 원본과 일치했다. 아래는 각 실제 실행의 첫 실패 테스트다.
 
 | 번호 | 바꾼 것 | 잡은 테스트 또는 생존 |
 |---|---|---|
 | 1 | 기준 시각을 15시 KST로 | each_ledger_period_and_observation_time_is_checked_at_construction |
-| 2 | 기준 시각을 17시 KST로 | failed_recompute_is_a_day_result_with_its_reason |
+| 2 | 기준 시각을 17시 KST로 | each_ledger_period_and_observation_time_is_checked_at_construction |
 | 3 | 평가일을 한국 대신 미국 달력에서 선택 | us_market_date_can_differ_from_kst_valuation_date |
 | 4 | 기준 시각 일치 비교 반전 | evidence_must_match_the_actual_candle_currency_date_and_kind |
-| 5 | 현금 적용일 검사 제거 | 컴파일 불가 (미사용 필드, 검출 건수 제외) |
-| 6 | 현금 적용일 비교 반전 | ledger_period_must_cover_the_requested_cash_date |
-| 7 | 기준 시각과 현금 적용일 검사의 OR를 AND로 | mismatched_ledger_date_is_rejected_when_created |
+| 5 | 현금 적용일 검사를 항상 통과 | mismatched_ledger_date_is_rejected_when_created |
+| 6 | 현금 적용일 비교 반전 | mismatched_ledger_date_is_rejected_when_created |
+| 7 | 기준 시각과 현금 적용일 검사의 OR를 AND로 | each_ledger_period_and_observation_time_is_checked_at_construction |
 | 8 | 생성자 검증 제거 | each_ledger_period_and_observation_time_is_checked_at_construction |
-| 9 | 중복 종목 증거 검사 반전 | constructor_rejects_missing_evidence_unknown_id_and_missing_fx |
-| 10 | 가격 증거 통화를 원화로 고정 | us_market_date_can_differ_from_kst_valuation_date |
-| 11 | 가격 증거 통화를 달러로 고정 | incomplete_market_uses_previous_final_close_not_today_intraday |
+| 9 | 중복 종목 증거 검사 반전 | incomplete_market_uses_previous_final_close_not_today_intraday |
+| 10 | 가격 증거 통화를 원화로 고정 | recalculated_us_stock_and_cash_match_d31_expected_values |
+| 11 | 가격 증거 통화를 달러로 고정 | first_evaluation_after_consecutive_holidays_is_not_skipped |
 | 12 | 증거 판정 시각을 기록 시각으로 | incomplete_market_uses_previous_final_close_not_today_intraday |
-| 13 | 봉의 종목 비교 반전 | a_later_reconciled_period_rewinds_cash_to_the_valuation_day |
-| 14 | 증거와 실제 종가 비교 반전 | us_market_date_can_differ_from_kst_valuation_date |
-| 15 | 일봉 기간 비교 반전 | incomplete_market_uses_previous_final_close_not_today_intraday |
-| 16 | 확정 상태 비교 반전 | recalculated_us_stock_and_cash_match_d31_expected_values |
-| 17 | 원주가 조정 여부 비교 반전 | incomplete_market_uses_previous_final_close_not_today_intraday |
+| 13 | 봉의 종목 비교 반전 | corporate_action_is_applied_only_from_its_date |
+| 14 | 증거와 실제 종가 비교 반전 | evidence_must_match_the_actual_candle_currency_date_and_kind |
+| 15 | 일봉 기간 비교 반전 | recalculated_us_stock_and_cash_match_d31_expected_values |
+| 16 | 확정 상태 비교 반전 | incomplete_market_uses_previous_final_close_not_today_intraday |
+| 17 | 원주가 조정 여부 비교 반전 | recalculated_us_stock_and_cash_match_d31_expected_values |
 | 18 | 봉 부재를 통과시킴 | zero_position_cannot_attach_evidence_without_a_candle |
-| 19 | 0주 판정 반전 | constructor_rejects_missing_evidence_unknown_id_and_missing_fx |
-| 20 | 보유 종목 증거 존재 판정 반전 | recalculated_us_stock_and_cash_match_d31_expected_values |
-| 21 | 누락 검사의 AND를 OR로 | us_market_date_can_differ_from_kst_valuation_date |
+| 19 | 0주 판정 반전 | evidence_must_match_the_actual_candle_currency_date_and_kind |
+| 20 | 보유 종목 증거 존재 판정 반전 | us_market_date_can_differ_from_kst_valuation_date |
+| 21 | 누락 검사의 AND를 OR로 | corporate_action_is_applied_only_from_its_date |
 | 22 | 환산 완전성 검사 제거 | ledger_period_must_cover_the_requested_cash_date |
 | 23 | 대조 원장 입력 제거 | 컴파일 불가 (미사용 필드, 검출 건수 제외) |
 | 24 | 종목 이력 제거 | 컴파일 불가 (미사용 필드, 검출 건수 제외) |
 | 25 | 알 수 없는 증거 종목 오류 바꿈 | constructor_rejects_missing_evidence_unknown_id_and_missing_fx |
 | 26 | 가격 증거 누락 오류 바꿈 | constructor_rejects_missing_evidence_unknown_id_and_missing_fx |
-| 27 | 기준 시각 불일치 오류 바꿈 | mismatched_ledger_date_is_rejected_when_created |
+| 27 | 기준 시각 불일치 오류 바꿈 | each_ledger_period_and_observation_time_is_checked_at_construction |
 | 28 | 주식 환산 완전성 검사 제거 | offsetting_usd_cash_does_not_hide_missing_stock_fx |
+| 29 | 봉 종목 검사를 항상 통과 | zero_position_rejects_wrong_instrument_adjustment_and_period |
+| 30 | 원주가 검사를 항상 통과 | zero_position_rejects_wrong_instrument_adjustment_and_period |
+| 31 | 일봉 검사를 항상 통과 | zero_position_rejects_wrong_instrument_adjustment_and_period |
+| 32 | 기준 시각의 오프셋 정규화 생략 | equivalent_instant_with_previous_local_date_is_canonicalized |
