@@ -66,6 +66,21 @@ pub(crate) fn multiply(left: Amount, right: Amount) -> Result<Amount, MoneyError
         .ok_or(MoneyError::PrecisionLoss)
 }
 
+pub(crate) fn compare_positive_price_product(
+    previous: crate::Price,
+    multiplier: Ratio,
+    current: crate::Price,
+) -> std::cmp::Ordering {
+    let before = previous.as_money().amount();
+    let after = current.as_money().amount();
+    let factor = Amount::new(multiplier.as_decimal());
+    let actual = ProposalMagnitude::coefficient(after).scaled(product_scale(before, factor));
+    let expected = ProposalMagnitude::coefficient(before)
+        .product(ProposalMagnitude::coefficient(factor))
+        .scaled(Scale(after.as_decimal().scale()));
+    actual.cmp(&expected)
+}
+
 pub(crate) fn divide(left: Amount, right: Amount) -> Result<RatioQuotient, MoneyError> {
     if right.as_decimal().is_zero() {
         return Err(MoneyError::DivisionByZero);
