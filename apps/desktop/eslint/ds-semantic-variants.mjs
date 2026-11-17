@@ -1,3 +1,4 @@
+import { overflowRestrictions, overflowKeywords } from "./ds-overflow.mjs";
 import ts from "typescript";
 import { relative, dirname } from "node:path";
 import { DS_CLASSES, DS_VARIANTS } from "./ds-classes.mjs";
@@ -147,7 +148,11 @@ export const semanticVariants = (ctx) => {
         const base = parts.pop();
         return (
           parts.every((part) => variants.has(part)) &&
-          classNames.has(base) &&
+          (classNames.has(base) ||
+            overflowKeywords(relativeSource(source)).includes(base)) &&
+          !overflowRestrictions(relativeSource(source)).some((r) =>
+            new RegExp(r.pattern, "u").test(entry),
+          ) &&
           (!/^(text|bg|border|fill|stroke|outline|ring|decoration)-(up|down|on-up|on-down)(-|$)/u.test(
             base,
           ) ||

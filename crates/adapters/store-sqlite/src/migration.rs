@@ -24,6 +24,7 @@ pub(crate) fn digest(source: &str) -> String {
 pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_migration_ledger.sql", sql::CREATE_LEDGER),
     ("0002_holdings_snapshots.sql", crate::sql::holdings::CREATE),
+    ("0003_transactions.sql", crate::sql::transactions::CREATE),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {

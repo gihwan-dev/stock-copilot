@@ -66,6 +66,7 @@ const undisableable = [
   "ds/no-ui-attributes",
   "ds/public-props",
   "ds/no-shared-jsx",
+  "no-restricted-imports",
   "ds/no-screen-elements",
   "ds/no-screen-props",
   "ds/no-screen-imports",
