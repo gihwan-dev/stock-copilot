@@ -29,6 +29,7 @@ const toolSpec = installActionSpec(readTools(repoRoot));
 const workflows = [
   [".github/workflows/ci.yml", "linux", "ubuntu-24.04-arm"],
   [".github/workflows/ci.yml", "macos", "macos-15"],
+  [".github/workflows/ci.yml", "macos-branch", "macos-15"],
   [".github/workflows/nightly.yml", "linux", "ubuntu-24.04-arm"],
   [".github/workflows/nightly.yml", "macos", "macos-15"],
 ];

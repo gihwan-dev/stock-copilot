@@ -170,10 +170,16 @@ commit-base:
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- commit-base
 
 commit-check:
-    base="$("{{just_executable()}}" commit-base)"; STOCK_COPILOT_BASE_USE=commit "{{just_executable()}}" base="$base" "$("{{just_executable()}}" commit-recipe)"
+    if [ -f "$(git rev-parse --git-path stock-copilot-merge-gate.json)" ]; then node harness/ci/merge-gate.mjs --hook; else base="$("{{just_executable()}}" commit-base)"; STOCK_COPILOT_BASE_USE=commit "{{just_executable()}}" base="$base" "$("{{just_executable()}}" commit-recipe)"; fi
 
 push-check:
     base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
+
+remote-check sha:
+    node harness/ci/remote-check.mjs "$1"
+
+merge-gate branch receipt="":
+    if [ -n "$2" ]; then node harness/ci/merge-gate.mjs "$1" "$2"; else node harness/ci/merge-gate.mjs "$1"; fi
 
 [env("PROPTEST_RNG_SEED", "5")]
 [env("STOCK_COPILOT_PROPTEST_CASES", "4096")]

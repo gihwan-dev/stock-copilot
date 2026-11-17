@@ -103,6 +103,7 @@ pub(crate) fn expected_nextest() -> toml::Table {
         toml::Value::from(SANDBOX_WRAPPER),
     );
     let mut default = toml::Table::new();
+    default.insert(String::from("test-threads"), toml::Value::from(4_i32));
     default.insert(
         String::from("scripts"),
         toml::Value::Array(vec![toml::Value::Table(rule)]),

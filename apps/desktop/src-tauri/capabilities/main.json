@@ -1,5 +1,9 @@
 {
   "identifier": "main",
   "windows": ["main"],
-  "permissions": ["commands"]
+  "permissions": [
+    "commands",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
 }

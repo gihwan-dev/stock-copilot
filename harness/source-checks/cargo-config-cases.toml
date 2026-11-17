@@ -14,6 +14,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
@@ -36,6 +39,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -62,6 +68,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -91,6 +100,7 @@ command = [
 target-runner = "ignore"
 
 [profile.default]
+test-threads = 4
 default-filter = "not test(network)"
 
 [[profile.default.scripts]]
@@ -117,6 +127,7 @@ command = [
 target-runner = "ignore"
 
 [profile.default]
+test-threads = 4
 retries = 2
 
 [[profile.default.scripts]]
@@ -142,6 +153,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "not test(network)"
 platform = "cfg(target_os = \"macos\")"
@@ -165,6 +179,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 run-wrapper = "network-sandbox"
@@ -186,6 +203,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -214,6 +234,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
@@ -236,6 +259,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -260,6 +286,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
@@ -283,6 +312,9 @@ command = [
 ]
 target-runner = "within-wrapper"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
@@ -304,6 +336,9 @@ command = [
     "network-sandbox",
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -327,6 +362,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -353,6 +391,9 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
@@ -375,6 +416,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -401,6 +445,9 @@ command = [
     "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
 ]
 target-runner = "ignore"
+
+[profile.default]
+test-threads = 4
 
 [[profile.default.scripts]]
 filter = "all()"
@@ -632,9 +679,64 @@ command = [
 ]
 target-runner = "ignore"
 
+[profile.default]
+test-threads = 4
+
 [[profile.default.scripts]]
 filter = "all()"
 platform = "cfg(target_os = \"macos\")"
 run-wrapper = "network-sandbox"
 '''
 expect = ["nextest-config:value:scripts.wrapper.network-sandbox.command"]
+
+[[case]]
+name = "nextest-thread-limit-missing"
+file = ".config/nextest.toml"
+text = '''
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/bin/sh",
+    "-c",
+    'p="$1"; shift; if /usr/bin/sandbox-exec -p "$p" /usr/bin/true 2>/dev/null; then exec /usr/bin/sandbox-exec -p "$p" "$@"; fi; if [ "${SANDBOX_RUNTIME:-}" = 1 ]; then exec "$@"; fi; echo "network-sandbox: sandbox-exec를 적용할 수 없고 바깥 샌드박스(SANDBOX_RUNTIME=1)도 없다" >&2; exit 1',
+    "network-sandbox",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[profile.default]
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+'''
+expect = ["nextest-config:missing:profile.default.test-threads"]
+
+
+[[case]]
+name = "nextest-thread-limit-too-high"
+file = ".config/nextest.toml"
+text = '''
+experimental = ["wrapper-scripts"]
+
+[scripts.wrapper.network-sandbox]
+command = [
+    "/bin/sh",
+    "-c",
+    'p="$1"; shift; if /usr/bin/sandbox-exec -p "$p" /usr/bin/true 2>/dev/null; then exec /usr/bin/sandbox-exec -p "$p" "$@"; fi; if [ "${SANDBOX_RUNTIME:-}" = 1 ]; then exec "$@"; fi; echo "network-sandbox: sandbox-exec를 적용할 수 없고 바깥 샌드박스(SANDBOX_RUNTIME=1)도 없다" >&2; exit 1',
+    "network-sandbox",
+    "(version 1)(allow default)(deny network-outbound)(allow network-outbound (remote ip \"localhost:*\"))(allow network-outbound (remote unix-socket))(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))",
+]
+target-runner = "ignore"
+
+[profile.default]
+test-threads = 5
+
+[[profile.default.scripts]]
+filter = "all()"
+platform = "cfg(target_os = \"macos\")"
+run-wrapper = "network-sandbox"
+'''
+expect = ["nextest-config:value:profile.default.test-threads"]
