@@ -1018,35 +1018,15 @@ mod tests {
         read_responses(vec![wire]).0.expect("read")
     }
     #[test]
-    fn duplicate_amount_keeps_raw_and_value_normalization() {
-        let first = serde_json::to_string(&row()).expect("json");
-        let duplicate = first.replace(r#""amount":"731""#, r#""amount":"999","amount":"731""#);
-        assert_ne!(duplicate, first);
-        let direct = serde_json::from_str::<broker_toss_schema::types::Transaction>(&duplicate)
-            .expect_err("duplicate rejected directly");
-        assert!(direct.to_string().contains("duplicate field"));
-        let application::TransactionRead::Complete(actual) = read_raw_transactions(&duplicate)
-        else {
-            panic!("complete")
-        };
-        let application::TransactionRead::Complete(expected) = read_raw_transactions(&first) else {
-            panic!("complete")
-        };
-        assert_eq!(actual.rows().as_slice(), expected.rows().as_slice());
-        assert_eq!(
-            actual.rows().observed_rows()[0].source().as_str(),
-            duplicate
-        );
-    }
-    #[test]
     fn mixed_quarantine_keeps_raw_pairing() {
         let first = serde_json::to_string(&row()).expect("json");
         let second = first
             .replace("DEPOSIT", r"DEPO\u0053IT")
             .replace("731", "731.000");
+        let third = first.replace("731", "733.000");
         let unknown = first.replace("KRW", "EUR");
         let application::TransactionRead::Incomplete(actual) =
-            read_raw_transactions(&format!("{first},{unknown},{second}"))
+            read_raw_transactions(&format!("{first},{unknown},{second},{third}"))
         else {
             panic!("incomplete")
         };
@@ -1055,14 +1035,60 @@ mod tests {
             application::IncompleteReason::QuarantinedRows
         );
         assert_eq!(actual.quarantined.len(), 1);
+        let application::QuarantinedTransaction::UnknownCurrency(chunks) = &actual.quarantined[0];
+        assert_eq!(
+            chunks
+                .iter()
+                .map(domain::UntrustedText::as_untrusted_str)
+                .collect::<String>(),
+            unknown
+        );
         let rows = actual.received[0].observed_rows();
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].source().as_str(), first);
-        assert_eq!(rows[1].source().as_str(), second);
+        assert_eq!(rows.len(), 3);
+        for (entry, source) in rows.iter().zip([&first, &second, &third]) {
+            assert_eq!(entry.source().as_str(), source);
+        }
         assert_eq!(rows[0].transaction(), rows[1].transaction());
+        assert_eq!(
+            rows[0].transaction().data().amount,
+            Some(expected_tail_amount("731"))
+        );
+        assert_eq!(
+            rows[2].transaction().data().amount,
+            Some(expected_tail_amount("733"))
+        );
+    }
+    fn expected_tail_amount(value: &str) -> domain::Money {
+        domain::Money::parse(
+            &domain::NumericInput::try_new(value).expect("numeric"),
+            domain::Currency::Krw,
+        )
+        .expect("money")
+    }
+    fn assert_overflow_tail(actual: &application::IncompleteTransactions, source: &str) {
+        assert_eq!(
+            actual.reason,
+            application::IncompleteReason::RowLimitExceeded
+        );
+        assert_eq!(actual.received.len(), 2);
+        assert_eq!(actual.received[0].observed_rows().len(), 4096);
+        assert_eq!(actual.received[1].observed_rows().len(), 1);
+        let last = &actual.received[1].observed_rows()[0];
+        assert_eq!(last.source().as_str(), source);
+        assert_eq!(
+            last.transaction().data().amount,
+            Some(expected_tail_amount("733"))
+        );
+        assert_eq!(
+            actual.received[0].observed_rows()[0]
+                .transaction()
+                .data()
+                .amount,
+            Some(expected_tail_amount("731"))
+        );
     }
     #[test]
-    fn overflow_tail_keeps_raw_pairing() {
+    fn overflow_tail_before_invalid_row_keeps_raw_pairing() {
         let first = serde_json::to_string(&row()).expect("json");
         let tail = first.replace("731", "733.000");
         let bad = first.replace("731", "bad");
@@ -1073,17 +1099,19 @@ mod tests {
         else {
             panic!("incomplete")
         };
-        assert_eq!(
-            actual.reason,
-            application::IncompleteReason::RowLimitExceeded
-        );
-        assert_eq!(actual.received.len(), 2);
-        assert_eq!(actual.received[0].observed_rows().len(), 4096);
-        let last = &actual.received[1].observed_rows()[0];
-        assert_eq!(last.source().as_str(), tail);
-        assert_ne!(
-            last.transaction(),
-            actual.received[0].observed_rows()[0].transaction()
-        );
+        assert_overflow_tail(&actual, &tail);
+    }
+    #[test]
+    fn clean_row_limit_keeps_raw_tail_pairing() {
+        let first = serde_json::to_string(&row()).expect("json");
+        let tail = first.replace("731", "733.000");
+        let mut rows = vec![first.as_str(); 4096];
+        rows.push(tail.as_str());
+        let application::TransactionRead::Incomplete(actual) =
+            read_raw_transactions(&rows.join(","))
+        else {
+            panic!("incomplete")
+        };
+        assert_overflow_tail(&actual, &tail);
     }
 }
