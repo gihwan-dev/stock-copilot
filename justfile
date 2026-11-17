@@ -70,6 +70,7 @@ check: check-node require-base check-ts
 
 check-full: advisory-db-fetch check
     "{{just_executable()}}" visual-check
+    node harness/ds-overflow/examples.mjs
     "{{just_executable()}}" mutants-diff {{quote(base)}}
 
 require-base:
@@ -96,6 +97,7 @@ check-ts: check-node check-pnpm
     node harness/config-files/check.mjs
     node harness/claude-hooks/hashes.mjs
     pnpm -C apps/desktop exec tsc -p .
+    node harness/ds-overflow/typecheck.mjs
     pnpm -C apps/desktop exec eslint --max-warnings 0 src
     node harness/eslint-violations/check.mjs
     apps/desktop/node_modules/.bin/eslint --max-warnings 0 --config apps/desktop/eslint.scripts.config.mjs apps/desktop/tests apps/desktop/eslint apps/desktop/eslint.config.mjs apps/desktop/eslint.scripts.config.mjs harness

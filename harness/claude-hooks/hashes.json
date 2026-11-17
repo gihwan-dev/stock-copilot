@@ -34,12 +34,12 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "3e0938a7a570e6962b964a0f85fe97df5733f49585a852296851355f23dc82b9",
   ".claude/hooks/subagent-start.mjs": "1a7e0742a7bdafcd8c576fe5e00fab4514a7a175b99d93c8f9706e3c6378eeea",
-  ".codex/config.toml": "cc3cfcb6fb6ef5b1dc9e6d199282f1e699ba870c6c0578df474fcb239747ea56",
+  ".codex/config.toml": "9e1d3eb4731deab5a59173c8f0f82105ad07ca5c2c7f5a8314b154832a92d278",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "crates/testkit-ports/src/lib.rs": "9722bbb925bcbcfac26b493ab1fb0cfb8caa5c1b31dcc5395752befa54ca4d41",
   "crates/testkit-ports/src/script.rs": "d0d8ac1f007d6b7ed2564cf78f6d2e9ed510e8f6dc908855546d35265b32aa08",
   "crates/testkit-ports/src/scripted_presence.rs": "0a72ecf84c037ad257178d57e0f9f3ad4683be1cb7dfeff60ce8964a7cc3d92f",
-  "harness/agent-writable.txt": "0e4d879db2e53972de4898ed7f2acfa273904dc32a91d7060c48dd81a0013cad",
+  "harness/agent-writable.txt": "0d43930b49261b1d854cbe4ce7b25a4dd079b0f085df2056834e1a92cb0b25db",
   "harness/claude-hooks/agent-rules.json": "083f56b11c43377855d5487e9c2deffd061cc9d02b95712fd92110bce083b7fe",
   "harness/claude-hooks/lock.txt": "b470b84cf0cd3189e10615bffea7d5cbd9f61134ba1c2cfd513ddd45b776a5f6",
   "harness/claude-hooks/rules.json": "85f116810c2474844affcf77b378e4005d61b27d563a0f38b6e314c70ba1a761",
@@ -68,6 +68,6 @@
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "2c0d47dea6d1eccac7f8bfb9b6df9c4e0e5839c3c797cc7b5987df52e41be0a8",
   "harness/codex-regression/run.mjs": "b43d193ecfb5684c82d808f30884d09bf6805faa5d2774172efb22a83e5a977b",
-  "harness/sandbox/lock-fragment.json": "5277c9b68202939951e96c23efeca29b07161d05a3b61336c007a4644a9a22ee",
+  "harness/sandbox/lock-fragment.json": "09d29ec7f04bb0a71762c6aeda7587c12a9bfd5f3bf4a60a40124b5fd1bb3764",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }

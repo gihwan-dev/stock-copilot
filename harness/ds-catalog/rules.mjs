@@ -1,3 +1,78 @@
+import { createRequire } from "node:module";
+
+const require = createRequire(
+  new URL("../../apps/desktop/package.json", import.meta.url),
+);
+const { isValidElement } = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+
+export const stressProblems = (components, samples) =>
+  components
+    .filter(
+      (component) =>
+        !samples.some(
+          (story) => story.component === component && story.state === "stress",
+        ),
+    )
+    .map((component) => `${component}: 부하 이야기 없음`);
+
+export const stressRenderProblems = (samples) =>
+  samples.flatMap((story) =>
+    ["light", "dark"]
+      .filter(
+        (theme) =>
+          typeof story.render !== "function" ||
+          !isValidElement(story.render(theme)),
+      )
+      .map((theme) => `${story.component}: ${theme} 부하 이야기 렌더 없음`),
+  );
+
+export const stressFixtureProblems = (fixtures, samples) => {
+  const problems = [];
+  if (
+    !Array.isArray(fixtures.holdings) ||
+    fixtures.holdings.length !== 200 ||
+    new Set(fixtures.holdings).size !== 200
+  )
+    problems.push("보유 종목 부하 자료는 서로 다른 200행이어야 함");
+  if (
+    !Array.isArray(fixtures.paragraphs) ||
+    fixtures.paragraphs.length !== 20 ||
+    fixtures.paragraphs.some((paragraph) => paragraph.length === 0)
+  )
+    problems.push("근거 부하 자료는 비어 있지 않은 20문단이어야 함");
+  if (
+    !Array.isArray(fixtures.sources) ||
+    fixtures.sources.length !== 30 ||
+    new Set(fixtures.sources).size !== 30
+  )
+    problems.push("출처 부하 자료는 서로 다른 30개여야 함");
+  const table = samples.find((story) => story.component === "Table");
+  const tableElement = table?.render?.("light");
+  if (
+    !isValidElement(tableElement) ||
+    (renderToStaticMarkup(tableElement).match(/<tr(?:\s|>)/gu) ?? []).length !==
+      201
+  )
+    problems.push("보유 종목 부하 자료의 표 렌더는 200행이어야 함");
+  const markdown = samples.find((story) => story.component === "Markdown");
+  const markdownElement = markdown?.render?.("light");
+  const paragraphs = Array.isArray(fixtures.paragraphs)
+    ? fixtures.paragraphs
+    : [];
+  const sources = Array.isArray(fixtures.sources) ? fixtures.sources : [];
+  const expectedMarkdown = [
+    ...paragraphs,
+    ...sources.map((source) => `[${fixtures.english}](${source})`),
+  ].join("\n\n");
+  if (
+    !isValidElement(markdownElement) ||
+    markdownElement.props.content !== expectedMarkdown
+  )
+    problems.push("Markdown 부하 자료의 문단과 출처가 누락됨");
+  return problems;
+};
+
 export const catalogProblems = (components, samples, entries) => {
   const problems = [];
   for (const component of components) {

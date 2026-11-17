@@ -132,6 +132,10 @@
           "target": "vitest",
           "reason": "단위·컴포넌트 테스트 실행기 (harness 4.3, architecture 5.2)"
         },
+        "@vitest/browser-playwright": {
+          "target": "@vitest/browser-playwright",
+          "reason": "DS-20 Vitest 브라우저 모드의 고정 Chromium 실측 (harness 4.4, 사용자 승인)"
+        },
         "@tailwindcss/vite": {
           "target": "@tailwindcss/vite",
           "reason": "Tailwind 4.3.5 토큰 테마와 Vite 컴파일 (R-14, DS-13)"

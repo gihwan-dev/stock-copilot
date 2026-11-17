@@ -139,6 +139,8 @@ test("DS02 price inline style and DOM exceptions are exact protected file lists"
       DOM_ACCESS_FILES: [
         "src/shared/platform/index.ts",
         "src/shared/platform/input.ts",
+        "src/shared/ds/testing/overflow.ts",
+        "src/shared/ds/testing/overflow-geometry.ts",
       ],
       ICON_GEOMETRY_FILES: [
         "src/shared/ds/Icon.tsx",

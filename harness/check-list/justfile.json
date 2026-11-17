@@ -238,6 +238,7 @@
       "attributes": [],
       "body": [
         ["\"", [["call", "just_executable"]], "\" visual-check"],
+        ["node harness/ds-overflow/examples.mjs"],
         [
           "\"",
           [["call", "just_executable"]],
@@ -320,6 +321,7 @@
         ["node harness/config-files/check.mjs"],
         ["node harness/claude-hooks/hashes.mjs"],
         ["pnpm -C apps/desktop exec tsc -p ."],
+        ["node harness/ds-overflow/typecheck.mjs"],
         ["pnpm -C apps/desktop exec eslint --max-warnings 0 src"],
         ["node harness/eslint-violations/check.mjs"],
         [

@@ -2700,3 +2700,13 @@ export const Dark269 = {
   parameters: { theme: "dark", sample: 269 },
   render: () => renderCatalog("Icon", "dark", 269),
 };
+export const Light270 = {
+  name: "부하 · wallet · 271 · 라이트",
+  parameters: { theme: "light", sample: 270 },
+  render: () => renderCatalog("Icon", "light", 270),
+};
+export const Dark270 = {
+  name: "부하 · wallet · 271 · 다크",
+  parameters: { theme: "dark", sample: 270 },
+  render: () => renderCatalog("Icon", "dark", 270),
+};
