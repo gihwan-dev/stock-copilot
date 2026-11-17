@@ -1,21 +1,43 @@
 use crate::{
-    CalendarDate, Market, MarketCalendar, SnapshotCalendar, SnapshotError, Timestamp,
-    ValuationSnapshot,
+    CalendarDate, MarketCalendar, SnapshotCalendar, SnapshotError, Timestamp, ValuationSnapshot,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ValuationDayEligibility {
+    Candidate,
+    Closed,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValuationCalendarDay {
     date: CalendarDate,
     calendar: Result<SnapshotCalendar, SnapshotError>,
+    eligibility: ValuationDayEligibility,
 }
 impl ValuationCalendarDay {
     pub fn new(kr: &MarketCalendar, us: &MarketCalendar) -> Result<Self, SnapshotError> {
-        if kr.today().market() != Market::Kr || us.today().market() != Market::Us {
-            return Err(SnapshotError::CalendarMismatch);
-        }
         let date = kr.today().date();
-        let calendar = SnapshotCalendar::new(kr, us);
-        Ok(Self { date, calendar })
+        let (calendar, eligibility) = match SnapshotCalendar::new(kr, us) {
+            Ok(value) => (Ok(value), ValuationDayEligibility::Candidate),
+            Err(SnapshotError::ClosedDay) => (
+                Err(SnapshotError::ClosedDay),
+                ValuationDayEligibility::Closed,
+            ),
+            Err(error) => return Err(error),
+        };
+        Ok(Self {
+            date,
+            calendar,
+            eligibility,
+        })
+    }
+    #[must_use]
+    pub const fn unavailable(date: CalendarDate, reason: SnapshotError) -> Self {
+        Self {
+            date,
+            calendar: Err(reason),
+            eligibility: ValuationDayEligibility::Candidate,
+        }
     }
 }
 
@@ -45,7 +67,7 @@ impl ValuationGapPlan {
                 return Err(SnapshotError::CalendarMismatch);
             }
             previous = row.date;
-            if row.calendar != Err(SnapshotError::ClosedDay) {
+            if row.eligibility == ValuationDayEligibility::Candidate {
                 days.push(*row);
             }
         }
@@ -64,10 +86,10 @@ impl ValuationGapPlan {
         self.days
             .iter()
             .map(|row| {
-                let result = row
-                    .calendar
-                    .and_then(|calendar| fill(row.date, calendar))
-                    .and_then(|snapshot| snapshot_on_date(snapshot, row.date));
+                let result = row.calendar.and_then(|calendar| {
+                    let snapshot = fill(row.date, calendar)?;
+                    snapshot_on_date(snapshot, row.date, calendar)
+                });
                 ValuationDayResult {
                     date: row.date,
                     result,
@@ -95,12 +117,25 @@ impl ValuationDayResult {
 fn snapshot_on_date(
     snapshot: ValuationSnapshot,
     date: CalendarDate,
+    calendar: SnapshotCalendar,
 ) -> Result<ValuationSnapshot, SnapshotError> {
-    if snapshot.settlement_date() == date {
-        Ok(snapshot)
-    } else {
-        Err(SnapshotError::WrongPeriod)
+    if snapshot.settlement_date() != date {
+        return Err(SnapshotError::WrongPeriod);
     }
+    if snapshot.dates() != calendar.dates() {
+        return Err(SnapshotError::CalendarMismatch);
+    }
+    for currency in [crate::Currency::Krw, crate::Currency::Usd] {
+        if calendar.price(currency, snapshot.valuation_at())
+            != Ok((
+                snapshot.price_date(currency),
+                snapshot.price_basis(currency),
+            ))
+        {
+            return Err(SnapshotError::CalendarMismatch);
+        }
+    }
+    Ok(snapshot)
 }
 
 #[cfg(test)]
@@ -119,6 +154,88 @@ mod tests {
             None,
         )
         .expect("세션")
+    }
+
+    #[test]
+    fn unavailable_calendar_dates_keep_reasons_without_skipping_other_days() {
+        let rows = [
+            row(2, Open, Open),
+            ValuationCalendarDay::unavailable(date(3), SnapshotError::MissingPrice),
+            row(4, Closed, Closed),
+            ValuationCalendarDay::unavailable(date(5), SnapshotError::ClosedDay),
+            row(6, Open, Open),
+        ];
+        let plan = ValuationGapPlan::new(date(1), at(6, 2), &rows).expect("계획");
+        assert_eq!(
+            plan.dates().collect::<Vec<_>>(),
+            vec![date(2), date(3), date(5), date(6)]
+        );
+        let mut called = Vec::new();
+        let results = plan.resolve(|day, _calendar| {
+            called.push(day);
+            if day == date(2) {
+                Ok(observed(2, "101", "203"))
+            } else {
+                Ok(observed(6, "307", "409"))
+            }
+        });
+        assert_eq!(called, vec![date(2), date(6)]);
+        let mut items = results.iter();
+        assert_eq!(
+            items.next().expect("2일").result(),
+            Ok(&observed(2, "101", "203"))
+        );
+        assert_eq!(
+            items.next().expect("3일").result(),
+            Err(&SnapshotError::MissingPrice)
+        );
+        assert_eq!(
+            items.next().expect("5일").result(),
+            Err(&SnapshotError::ClosedDay)
+        );
+        assert_eq!(
+            items.next().expect("6일").result(),
+            Ok(&observed(6, "307", "409"))
+        );
+        assert_eq!(items.next(), None);
+    }
+
+    #[test]
+    fn returned_snapshot_must_use_planned_market_dates_and_price_bases() {
+        let plan = ValuationGapPlan::new(date(2), at(3, 2), &[row(3, Open, Open)]).expect("계획");
+        let other = crate::SnapshotCalendar::new(
+            &market_calendar(3, &Market::Kr, Open),
+            &market_calendar(2, &Market::Us, Open),
+        )
+        .expect("다른 미국 날짜");
+        let empty = crate::Portfolio::new(
+            Vec::new(),
+            crate::BuyingPower::new(
+                crate::valuation_snapshot::tests::money("0", crate::Currency::Krw),
+                at(3, 7),
+            ),
+            crate::BuyingPower::new(
+                crate::valuation_snapshot::tests::money("0", crate::Currency::Usd),
+                at(3, 7),
+            ),
+        )
+        .expect("포트폴리오");
+        let mismatched = plan.resolve(|_day, _calendar| {
+            crate::ValuationSnapshot::observe(&other, &empty.evaluate(None), at(3, 7), None)
+        });
+        assert_eq!(
+            mismatched.first().expect("결과").result(),
+            Err(&SnapshotError::CalendarMismatch)
+        );
+        for (kr, us) in [(Closed, Open), (Open, Closed)] {
+            let closed_plan =
+                ValuationGapPlan::new(date(2), at(3, 2), &[row(3, kr, us)]).expect("계획");
+            let result = closed_plan.resolve(|_day, _calendar| Ok(observed(3, "509", "601")));
+            assert_eq!(
+                result.first().expect("결과").result(),
+                Err(&SnapshotError::CalendarMismatch)
+            );
+        }
     }
 
     #[test]
@@ -342,6 +459,26 @@ mod tests {
             items.next().expect("다른 날짜").result(),
             Err(&SnapshotError::WrongPeriod)
         );
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(testkit::property_cases()))]
+        #[test]
+        fn unavailable_and_closed_dates_have_distinct_complete_outcomes(states in prop::collection::vec(0_u8..3, 1..80)) {
+            let rows: Vec<_> = states.iter().enumerate().map(|(index, state)| {
+                let day = i64::try_from(index).expect("인덱스").checked_add(2).expect("날짜");
+                match state {
+                    0 => row(day, Closed, Closed),
+                    1 => ValuationCalendarDay::unavailable(date(day), SnapshotError::ClosedDay),
+                    _ => row(day, Open, Open),
+                }
+            }).collect();
+            let end = i64::try_from(states.len()).expect("길이").checked_add(1).expect("마지막");
+            let plan = ValuationGapPlan::new(date(1), at(end, 2), &rows).expect("계획");
+            let actual = plan.resolve(|_day, _calendar| Err(SnapshotError::MissingFx));
+            let expected: Vec<_> = states.iter().enumerate().filter(|(_index, state)| **state != 0).map(|(index, state)| (date(i64::try_from(index).expect("인덱스").checked_add(2).expect("날짜")), if *state == 1 { SnapshotError::ClosedDay } else { SnapshotError::MissingFx })).collect();
+            prop_assert_eq!(actual.iter().map(|item| (item.date(), *item.result().expect_err("실패 사유"))).collect::<Vec<_>>(), expected);
+        }
     }
 
     proptest! {
