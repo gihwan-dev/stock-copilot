@@ -34,11 +34,11 @@
 
 | 타입 | 공개 생성·전이·조회 |
 |---|---|
-| EstimateAssignments<Run> | default로 빈 상태, issue로 코드의 과제 발급·배정, lookup으로 외부 식별 표현 대조, assigned로 실행 배정 목록, consume으로 순수 다음 상태 |
-| IssuedEstimateTask<Run>, IssuedEstimateTaskId | 직접 생성 없음. id·run·task·consumption을 불변 조회하고 발급 ID의 as_estimate_id로 기존 외부 표현을 읽음 |
+| `EstimateAssignments<Run>` | default로 빈 상태, issue로 코드의 과제 발급·배정, lookup으로 외부 식별 표현 대조, assigned로 실행 배정 목록, consume으로 순수 다음 상태 |
+| `IssuedEstimateTask<Run>`, IssuedEstimateTaskId | 직접 생성 없음. id·run·task·consumption을 불변 조회하고 발급 ID의 as_estimate_id로 기존 외부 표현을 읽음 |
 | EstimateAssignmentError, EstimateConsumption | AlreadyIssued·UnknownTask·WrongRun·AlreadyConsumed·AssignmentExceeded / Available·Consumed |
-| EstimateSubmissionRecord<Run, Effort> | create에서 과제와 기간 일치 검사. task_id·run·submission·narrative·metadata·source_status 조회 |
-| EstimatePrompt, EstimateMetadata<Effort>, EstimateNarrative | 필수 필드를 소유하는 입력 묶음. 프롬프트 ID·버전·해시, 추론 강도·CLI 버전·증거 묶음, 근거·반론 |
+| `EstimateSubmissionRecord<Run, Effort>` | create에서 과제와 기간 일치 검사. task_id·run·submission·narrative·metadata·source_status 조회 |
+| EstimatePrompt, `EstimateMetadata<Effort>`, EstimateNarrative | 필수 필드를 소유하는 입력 묶음. 프롬프트 ID·버전·해시, 추론 강도·CLI 버전·증거 묶음, 근거·반론 |
 | PromptHash, EvidenceBundleId | try_new로 각 경계 검증, as_str로 경계 문자열 조회 |
 | EstimateRecordError, EstimateMetadataError, EstimateSourceStatus | TaskMismatch·HorizonMismatch / InvalidHash·InvalidBundleId / Missing·External |
 
@@ -65,21 +65,23 @@
 
 ## 검증
 
+세 회차의 독립 리뷰와 비판을 마쳤다. 3차 비판에서 실제 생존한 News·Disclosure 분기 변형을 잡도록 단독 출처 사례와 참조 보존 단언을 추가했다. 도구만 있는 경우의 Missing과 Web·News·Disclosure의 External을 각각 검사한다. External의 의미는 참조 종류이며 신호의 원장 적격성을 대신하지 않는다.
+
 프로젝트 신뢰·훅 정의 신뢰·현재 세션 강제 적용은 확인할 수 없었다. 지시문의 계속 진행 예외를 적용했다. frozen install·lefthook install 성공. 실제 계좌·키·API 접근 없음. 새 의존성·기존 테스트 수정 없음. 테스트 우선 작성 순서는 지키지 못했으며 실행 근거를 별도로 기록한다.
 
 ## 손 변형
 
-기간·묶음 경계를 수정한 현재 코드의 독립 임시 복사본에서 28개를 실제 실행했다. 컴파일 성공 26개는 모두 계약 테스트에 검출됐고, 중복 패턴과 사용하지 않는 변수 때문에 컴파일되지 않은 2개는 집계에서 제외한다. 원본 기준 실행은 새 계약 테스트 8개 통과였다. 필드마다 서로 다른 값을 사용하며 기록 기간 비교·오류 종류·묶음 ID 보존·묶음 오류도 변형했다.
+3차 뒤 테스트를 보강한 최종 소스의 독립 임시 복사본에서 30개를 실제 실행했다. 컴파일 성공 28개는 모두 계약 테스트에 검출됐으며 중복 패턴과 사용하지 않는 변수로 컴파일되지 않은 2개는 집계에서 제외한다. 원본 기준 실행은 계약 테스트 8개 통과였다. News와 Disclosure를 각각 false로 바꾼 두 변형도 컴파일되고 새 단언에 검출됐다. 각 로그는 작업 사본 target/D-47/manual-*.log에 있다.
 
 | 번호 | 바꾼 것 | 실행 결과 | 잡은 테스트 |
 |---|---|---|---|
-| 1 | 중복 발급 any→all | 검출, exit 101 | complete_record_preserves_independent_fields_without_trade_input, issuance_and_consumption_are_pure_and_errors_are_distinct, record_rejects_calibration_period_that_differs_from_issued_task, source_absence_includes_tool_only_and_preserves_all_references, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments, consumption_is_atomic_and_repeated_consumption_is_rejected |
-| 2 | 발급 키 비교 반전 | 검출, exit 101 | source_absence_includes_tool_only_and_preserves_all_references, complete_record_preserves_independent_fields_without_trade_input, issuance_and_consumption_are_pure_and_errors_are_distinct, consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
-| 3 | 발급 즉시 소비 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
-| 4 | 조회 키 비교 반전 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, complete_record_preserves_independent_fields_without_trade_input, record_rejects_calibration_period_that_differs_from_issued_task |
+| 1 | 중복 발급 any→all | 검출, exit 101 | issuance_and_consumption_are_pure_and_errors_are_distinct, record_rejects_calibration_period_that_differs_from_issued_task, complete_record_preserves_independent_fields_without_trade_input, consumption_is_atomic_and_repeated_consumption_is_rejected, source_absence_includes_tool_only_and_preserves_all_references, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
+| 2 | 발급 키 비교 반전 | 검출, exit 101 | complete_record_preserves_independent_fields_without_trade_input, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments, issuance_and_consumption_are_pure_and_errors_are_distinct, consumption_is_atomic_and_repeated_consumption_is_rejected, source_absence_includes_tool_only_and_preserves_all_references |
+| 3 | 발급 즉시 소비 | 검출, exit 101 | arbitrary_consumption_sequences_never_repeat_or_exceed_assignments, consumption_is_atomic_and_repeated_consumption_is_rejected |
+| 4 | 조회 키 비교 반전 | 검출, exit 101 | record_rejects_calibration_period_that_differs_from_issued_task, complete_record_preserves_independent_fields_without_trade_input |
 | 5 | 배정 실행 반전 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, issuance_and_consumption_are_pure_and_errors_are_distinct, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
 | 6 | 상한 등호 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected |
-| 7 | 상한 반전 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, issuance_and_consumption_are_pure_and_errors_are_distinct, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
+| 7 | 상한 반전 | 검출, exit 101 | issuance_and_consumption_are_pure_and_errors_are_distinct, consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
 | 8 | 실행 거부 반전 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, issuance_and_consumption_are_pure_and_errors_are_distinct, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
 | 9 | 소비 가능 분기 반전 | 컴파일 불가(집계 제외), exit 101 | - |
 | 10 | 소비 상태 누락 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
@@ -87,17 +89,23 @@
 | 12 | 상한 오류 혼동 | 검출, exit 101 | issuance_and_consumption_are_pure_and_errors_are_distinct |
 | 13 | 실행 오류 혼동 | 검출, exit 101 | issuance_and_consumption_are_pure_and_errors_are_distinct, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
 | 14 | 소비 오류 혼동 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
-| 15 | 발급 상태 전이 누락 | 검출, exit 101 | record_rejects_calibration_period_that_differs_from_issued_task, consumption_is_atomic_and_repeated_consumption_is_rejected, issuance_and_consumption_are_pure_and_errors_are_distinct, complete_record_preserves_independent_fields_without_trade_input, source_absence_includes_tool_only_and_preserves_all_references, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
-| 16 | 소비 접근자 고정 | 검출, exit 101 | consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
+| 15 | 발급 상태 전이 누락 | 검출, exit 101 | complete_record_preserves_independent_fields_without_trade_input, record_rejects_calibration_period_that_differs_from_issued_task, source_absence_includes_tool_only_and_preserves_all_references, issuance_and_consumption_are_pure_and_errors_are_distinct, consumption_is_atomic_and_repeated_consumption_is_rejected, arbitrary_consumption_sequences_never_repeat_or_exceed_assignments |
+| 16 | 소비 접근자 고정 | 검출, exit 101 | arbitrary_consumption_sequences_never_repeat_or_exceed_assignments, consumption_is_atomic_and_repeated_consumption_is_rejected |
 | 17 | 해시 긴 값 허용 | 검출, exit 101 | prompt_hash_rejects_bad_length_and_non_hex |
-| 18 | 해시 문자 반전 | 검출, exit 101 | prompt_hash_rejects_bad_length_and_non_hex, record_rejects_calibration_period_that_differs_from_issued_task, complete_record_preserves_independent_fields_without_trade_input, source_absence_includes_tool_only_and_preserves_all_references |
-| 19 | 과제 결합 반전 | 검출, exit 101 | complete_record_preserves_independent_fields_without_trade_input, record_rejects_calibration_period_that_differs_from_issued_task, source_absence_includes_tool_only_and_preserves_all_references |
+| 18 | 해시 문자 반전 | 검출, exit 101 | prompt_hash_rejects_bad_length_and_non_hex, record_rejects_calibration_period_that_differs_from_issued_task, source_absence_includes_tool_only_and_preserves_all_references, complete_record_preserves_independent_fields_without_trade_input |
+| 19 | 과제 결합 반전 | 검출, exit 101 | source_absence_includes_tool_only_and_preserves_all_references, record_rejects_calibration_period_that_differs_from_issued_task, complete_record_preserves_independent_fields_without_trade_input |
 | 20 | 해시 원문 소실 | 검출, exit 101 | prompt_hash_rejects_bad_length_and_non_hex, complete_record_preserves_independent_fields_without_trade_input |
 | 21 | 실질 출처 소실 | 검출, exit 101 | source_absence_includes_tool_only_and_preserves_all_references |
 | 22 | 도구 출처 오인 | 검출, exit 101 | complete_record_preserves_independent_fields_without_trade_input, source_absence_includes_tool_only_and_preserves_all_references |
 | 23 | 도구 참조 출처 포함 | 검출, exit 101 | source_absence_includes_tool_only_and_preserves_all_references |
 | 24 | 해시 정규화 제거 | 검출, exit 101 | prompt_hash_rejects_bad_length_and_non_hex |
-| 25 | 기록 기간 비교 반전 | 검출, exit 101 | complete_record_preserves_independent_fields_without_trade_input, source_absence_includes_tool_only_and_preserves_all_references, record_rejects_calibration_period_that_differs_from_issued_task |
+| 25 | 기록 기간 비교 반전 | 검출, exit 101 | record_rejects_calibration_period_that_differs_from_issued_task, complete_record_preserves_independent_fields_without_trade_input, source_absence_includes_tool_only_and_preserves_all_references |
 | 26 | 기간 오류 종류 혼동 | 검출, exit 101 | record_rejects_calibration_period_that_differs_from_issued_task |
 | 27 | 증거 묶음 식별값 소실 | 컴파일 불가(집계 제외), exit 101 | - |
 | 28 | 증거 묶음 오류 혼동 | 검출, exit 101 | evidence_bundle_preserves_its_own_boundary_without_task_id_access |
+| 29 | 뉴스 출처 분기만 제거 | 검출, exit 101 | source_absence_includes_tool_only_and_preserves_all_references |
+| 30 | 공시 출처 분기만 제거 | 검출, exit 101 | source_absence_includes_tool_only_and_preserves_all_references |
+
+환경 종료 안내 이후에는 DEVELOPER_DIR와 환경 사유의 훅 예외를 사용하지 않는다. 과거 승인된 환경 예외와 최종 정상 훅 검증을 구별하며 최종 병합은 정상 훅으로 확정한다.
+
+최종 변경분 자동 변이: 기준 4433fb28a524c418127ffcafc2f262cf03070bab, 공식 mutants-diff 47개 중 검출 22·컴파일 불가 25·생존 0·시간 초과 0으로 완주했다. News·Disclosure 개별 분기는 위 손 변형 표의 별도 실행으로 확인했다.

@@ -121,14 +121,14 @@ impl<Run: Clone + Eq> EstimateAssignments<Run> {
 mod tests {
     use crate::{
         AiProbability, AiProbabilityInput, CalibrationEstimateId, CalibrationKey, CalibrationModel,
-        CommissionRateFact, CommissionValidity, CostEligibleTask, CostRate,
-        EstimateAssignmentError, EstimateAssignments, EstimateConsumption, EstimateCostPeriod,
-        EstimateMetadata, EstimateMetadataError, EstimateNarrative, EstimatePrompt,
-        EstimateRecordError, EstimateSourceStatus, EstimateSubmissionRecord, Evidence,
-        EvidenceBundleId, EvidenceRef, EvidenceUrl, Horizon, HorizonSelection, InstrumentId,
-        Market, ModelIdentityPart, NormalizedUrl, PromptHash, Ratio, ScorecardPromptId,
-        SignalSubmission, SignalTaskKey, ToolReference, TradeCost, TradeTaxFact, UntrustedText,
-        candle, thresholds,
+        CommissionRateFact, CommissionValidity, CostEligibleTask, CostRate, DartReceiptNo,
+        Disclosure, EstimateAssignmentError, EstimateAssignments, EstimateConsumption,
+        EstimateCostPeriod, EstimateMetadata, EstimateMetadataError, EstimateNarrative,
+        EstimatePrompt, EstimateRecordError, EstimateSourceStatus, EstimateSubmissionRecord,
+        Evidence, EvidenceBundleId, EvidenceRef, EvidenceUrl, Horizon, HorizonSelection,
+        InstrumentId, Market, ModelIdentityPart, NewsSource, NormalizedUrl, PromptHash, Ratio,
+        ReceiptNo, ScorecardPromptId, SignalSubmission, SignalTaskKey, ToolReference, TradeCost,
+        TradeTaxFact, UntrustedText, candle, thresholds,
     };
     use proptest::test_runner::{Config, TestRunner};
     use proptest::{collection, prop_assert, prop_assert_eq};
@@ -371,8 +371,22 @@ mod tests {
             NormalizedUrl::try_new("https://example.com/research").expect("URL"),
         )
         .expect("출처");
+        let disclosure = Disclosure::new(
+            ReceiptNo::Dart(DartReceiptNo::try_new("20261117000001").expect("접수 번호")),
+            url.as_url().clone(),
+            UntrustedText::try_new("공시 근거").expect("제목"),
+            None,
+        );
         for (refs, status) in [
             (vec![tool.clone()], EstimateSourceStatus::Missing),
+            (
+                vec![EvidenceRef::News(NewsSource::Yonhap, url.clone())],
+                EstimateSourceStatus::External,
+            ),
+            (
+                vec![EvidenceRef::from_disclosure(&disclosure).expect("공시 참조")],
+                EstimateSourceStatus::External,
+            ),
             (
                 vec![EvidenceRef::Web(url.clone())],
                 EstimateSourceStatus::External,
