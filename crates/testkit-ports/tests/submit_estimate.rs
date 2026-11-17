@@ -561,6 +561,7 @@ mod tests {
             vec![input("one", "24"), input("two", "65")],
         ))
         .expect("둘 다 소비 가능");
+        assert_eq!(seen.write().expect("잠금").len(), 2);
     }
     #[test]
     fn read_failure_preserves_exact_cause_and_never_commits_or_publishes() {
