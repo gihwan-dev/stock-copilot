@@ -10,3 +10,13 @@ export const Dark0 = {
   parameters: { theme: "dark", sample: 0 },
   render: () => renderCatalog("Quantity", "dark", 0),
 };
+export const Light1 = {
+  name: "부하 · 002 · 라이트",
+  parameters: { theme: "light", sample: 1 },
+  render: () => renderCatalog("Quantity", "light", 1),
+};
+export const Dark1 = {
+  name: "부하 · 002 · 다크",
+  parameters: { theme: "dark", sample: 1 },
+  render: () => renderCatalog("Quantity", "dark", 1),
+};

@@ -50,3 +50,13 @@ export const Dark4 = {
   parameters: { theme: "dark", sample: 4 },
   render: () => renderCatalog("Skeleton", "dark", 4),
 };
+export const Light5 = {
+  name: "부하 · 006 · 라이트",
+  parameters: { theme: "light", sample: 5 },
+  render: () => renderCatalog("Skeleton", "light", 5),
+};
+export const Dark5 = {
+  name: "부하 · 006 · 다크",
+  parameters: { theme: "dark", sample: 5 },
+  render: () => renderCatalog("Skeleton", "dark", 5),
+};

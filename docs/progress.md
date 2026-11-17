@@ -217,6 +217,7 @@ T3의 기존 세션에 새 훅이 자동으로 적용된다고 가정하지 않�
 | DS-15 | 완료 | 12d991ad | [DS-15](reviews/DS-15.md) | DS-12: 전체 이야기 확대와 타이머·rAF 마운트 완료 조건. DS-20: 부하·넘침. DS-11: 폭 구간. DS-19: 정적 넘침. 실제 GitHub arm64 실행과 WKWebView 비교는 미실행 |
 | DS-18 | 완료 | d1f6417 | [DS-18](reviews/DS-18.md) | C-03·C-05·C-11: 실패 메시지 보존·재시도, 수집 목록과 주소 동일성, 외부 열기 연결. DS-07·15·16·19·20: 실제 WKWebView·IME·VoiceOver·넘침 실측은 NOT_RUN |
 | DS-19 | 완료 | 3b79bfb3 | [DS-19](reviews/DS-19.md) | DS-11: 긴 글 폭 책임 재검토, Tooltip 도입 때 IconButton 예외 제거. DS-20: 실제 WKWebView 넘침 검증. DS-12: 시각 기준 확대 |
+| DS-20 | 완료 | d6c4e79c | [DS-20](reviews/DS-20.md) | DS-22: 남은 넘침 판정(174개 이야기) 해소와 문 편입. DS-11: Text의 keep-all 누락과 최소 폭. DS-12: 화면 검사 통합. 실제 WKWebView hit-test 미실행 |
 | DS-21 | 완료 | bc4d115 | [DS-21](reviews/DS-21.md) | U 묶음: 화면은 라벨·동작만 넘김. DS-20: 넘침 실측. DS-07: 목록 반영 |
 
 H-20 잠금 전에 도메인과 디자인 시스템 작업을 시작했다. 잠금 전에는 구현 담당이 생성물(`.codex/config.toml`, 해시 목록, 잠금 조각)을 기존 스크립트로 다시 만든다.
