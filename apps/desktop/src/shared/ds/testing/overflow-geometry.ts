@@ -22,15 +22,27 @@ type Escape = "none" | "absolute" | "fixed";
 const establishesContainingBlock = (
   style: Readonly<CSSStyleDeclaration>,
 ): boolean =>
-  [style.transform, style.perspective, style.filter, style.backdropFilter].some(
-    (value) => value !== "" && value !== "none",
-  ) ||
+  [
+    style.transform,
+    style.translate,
+    style.rotate,
+    style.scale,
+    style.perspective,
+    style.filter,
+    style.backdropFilter,
+  ].some((value) => value !== "" && value !== "none") ||
   ["layout", "paint", "strict", "content"].some((value) =>
     style.contain.split(/\s+/u).includes(value),
   ) ||
-  ["transform", "perspective", "filter", "backdrop-filter"].some((value) =>
-    style.willChange.split(/\s*,\s*/u).includes(value),
-  );
+  [
+    "transform",
+    "translate",
+    "rotate",
+    "scale",
+    "perspective",
+    "filter",
+    "backdrop-filter",
+  ].some((value) => style.willChange.split(/\s*,\s*/u).includes(value));
 
 const nextEscape = (position: string, escaping: Escape): Escape => {
   if (escaping !== "none") return escaping;
@@ -49,15 +61,28 @@ const settledEscape = (
   return pending;
 };
 
-const clips = (style: Readonly<CSSStyleDeclaration>): boolean =>
+const clipsOverflow = (style: Readonly<CSSStyleDeclaration>): boolean =>
   style.overflowX !== "visible" || style.overflowY !== "visible";
+
+const clipsPaint = (style: Readonly<CSSStyleDeclaration>): boolean =>
+  ["paint", "strict", "content"].some((value) =>
+    style.contain.split(/\s+/u).includes(value),
+  );
+
+const clips = (style: Readonly<CSSStyleDeclaration>): boolean =>
+  clipsOverflow(style) || clipsPaint(style);
 
 const bodyClipsViewport = (
   parent: Readonly<Element>,
   style: Readonly<CSSStyleDeclaration>,
 ): boolean => {
   const root = parent.ownerDocument.documentElement;
-  if (parent !== parent.ownerDocument.body || !clips(style)) return false;
+  if (
+    parent !== parent.ownerDocument.body ||
+    !clipsOverflow(style) ||
+    clipsPaint(style)
+  )
+    return false;
   const rootStyle = getComputedStyle(root);
   return rootStyle.overflowX === "visible" && rootStyle.overflowY === "visible";
 };

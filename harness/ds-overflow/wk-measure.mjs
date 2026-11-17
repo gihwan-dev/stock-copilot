@@ -53,11 +53,31 @@ const expected = {
   "fixed-locked": [],
   "fixed-transformed": ["clipped"],
   "padding-edge": ["clipped"],
+  "individual-translate": ["clipped"],
+  "individual-rotate": ["clipped"],
+  "individual-scale": ["clipped"],
+  "paint-clip": ["unauthorized-overflow", "clipped"],
+  "axis-clipped": ["clipped"],
+  "rtl-reachable": [],
+  "row-reverse": [],
+  "column-reverse": [],
+  "rtl-row-reverse": [],
+  "hidden-root": ["layout-unavailable"],
+  "hidden-body": ["layout-unavailable"],
+  "native-textareas": ["nested-scroll"],
 };
 const geometryExpected = {
   "fixed-locked": true,
   "fixed-transformed": true,
   "padding-edge": true,
+  "individual-translate": true,
+  "individual-rotate": true,
+  "individual-scale": true,
+  "paint-clip": true,
+  "rtl-reachable": true,
+  "row-reverse": true,
+  "column-reverse": true,
+  "rtl-row-reverse": true,
 };
 if (
   actual.length !== Object.keys(expected).length ||

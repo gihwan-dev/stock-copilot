@@ -415,6 +415,61 @@ describe("review regressions", () => {
     });
   });
 
+  it.each([
+    ["translate", "translate:0px", "fixed"],
+    ["translate", "translate:0px", "absolute"],
+    ["rotate", "rotate:0deg", "fixed"],
+    ["rotate", "rotate:0deg", "absolute"],
+    ["scale", "scale:1", "fixed"],
+    ["scale", "scale:1", "absolute"],
+    ["will-change translate", "will-change:translate", "fixed"],
+    ["will-change rotate", "will-change:rotate", "fixed"],
+    ["will-change scale", "will-change:scale", "fixed"],
+  ])(
+    "detects clipping through individual %s for %s as %s",
+    async (_name, individualTransform, position) => {
+      const doc = await makeDocument(
+        `<div style="overflow:hidden;width:60px;height:60px"><div style="${individualTransform};width:60px;height:60px"><div id="positioned-child" style="position:${position};left:50px;top:10px;width:40px;height:30px;background:red"></div></div></div>`,
+      );
+      expect(doc.elementFromPoint(55, 15)?.id).toBe("positioned-child");
+      expect(doc.elementFromPoint(70, 15)?.id).not.toBe("positioned-child");
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "clipped",
+        element: "div#positioned-child",
+      });
+    },
+  );
+
+  it.each(["paint", "content", "strict"])(
+    "detects clipping caused by %s containment",
+    async (containment) => {
+      const doc = await makeDocument(
+        `<div style="contain:${containment};width:60px;height:60px"><div id="paint-child" style="position:absolute;left:50px;top:10px;width:40px;height:30px;background:red"></div></div>`,
+      );
+      expect(doc.elementFromPoint(55, 15)?.id).toBe("paint-child");
+      expect(doc.elementFromPoint(70, 15)?.id).not.toBe("paint-child");
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "clipped",
+        element: "div#paint-child",
+      });
+    },
+  );
+
+  it("does not propagate body paint containment to the viewport", async () => {
+    const doc = await makeDocument(
+      '<div id="paint-child" style="position:fixed;left:50px;top:50px;width:30px;height:30px;background:red"></div>',
+    );
+    doc.body.style.height = "60px";
+    doc.body.style.overflow = "hidden";
+    doc.body.style.contain = "paint";
+    expect(doc.elementFromPoint(55, 55)?.id).toBe("paint-child");
+    expect(doc.elementFromPoint(55, 70)?.id).not.toBe("paint-child");
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#paint-child",
+    });
+  });
+
   it("matches clipping behavior for a size container", async () => {
     const doc = await makeDocument(
       '<div id="container" style="position:relative;margin-left:100px;margin-top:100px;container-type:inline-size;overflow:hidden;width:60px;height:60px"><div id="fixed-child" style="position:fixed;left:50px;top:10px;width:40px;height:30px"></div></div>',

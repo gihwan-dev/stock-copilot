@@ -14,6 +14,7 @@ import {
   catalogProblems,
   stressProblems,
   stressRenderProblems,
+  stressFixtureProblems,
 } from "./rules.mjs";
 const folder = mkdtempSync(join(desktop, "node_modules/.ds07-index-"));
 try {
@@ -39,6 +40,12 @@ try {
     loaded.protectedStressStories,
   );
   stress.push(...stressRenderProblems(loaded.protectedStressStories));
+  stress.push(
+    ...stressFixtureProblems(
+      loaded.stressFixtures,
+      loaded.protectedStressStories,
+    ),
+  );
   if (stress.length !== 0) throw new Error(stress.join("\n"));
   const entries = Object.values(index.entries)
     .filter((entry) => entry.type === "story")

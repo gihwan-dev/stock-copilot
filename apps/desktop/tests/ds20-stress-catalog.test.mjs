@@ -89,6 +89,45 @@ window.renderChat=()=>render(stressComponentStories.find(story=>story.component=
   }
 });
 
+test("the protected Table story renders all 200 holdings", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const catalog = await loadCatalog();
+  const story = catalog.protectedStressStories.find(
+    (item) => item.component === "Table",
+  );
+  assert.ok(story);
+  const markup = renderToStaticMarkup(story.render("light"));
+  assert.equal((markup.match(/<tr(?:\s|>)/gu) ?? []).length, 201);
+});
+
+test("the protected Markdown story retains 20 paragraphs and 30 sources", async () => {
+  const catalog = await loadCatalog();
+  const story = catalog.protectedStressStories.find(
+    (item) => item.component === "Markdown",
+  );
+  assert.ok(story);
+  const content = story.render("light").props.content;
+  assert.equal(typeof content, "string");
+  const parts = content.split("\n\n");
+  assert.equal(parts.length, 50);
+  assert.ok(
+    parts
+      .slice(0, 20)
+      .every(
+        (part) =>
+          part ===
+          "실적과 현금 흐름을 살펴보고 여러 출처를 비교한 가상의 근거 문단입니다.",
+      ),
+  );
+  assert.deepEqual(
+    parts.slice(20).map((part) => part.match(/\]\(([^)]+)\)$/u)?.[1]),
+    Array.from(
+      { length: 30 },
+      (_, index) => `https://example.test/source-${index}`,
+    ),
+  );
+});
+
 test("stress stories exercise long digits and an empty value", async () => {
   const catalog = await loadCatalog();
   const input = catalog.samples.find(

@@ -219,7 +219,7 @@ export const runExamples = ({ root, output, container, vitest, image }) => {
   );
   if (
     !report.success ||
-    report.numTotalTests < 66 ||
+    report.numTotalTests < 79 ||
     report.numPendingTests !== 0 ||
     report.numTodoTests !== 0 ||
     assertions.length !== report.numTotalTests ||

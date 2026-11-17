@@ -1,5 +1,21 @@
 [
   {
+    "name": "보호된 보유 종목 하나가 파서에서 거부됨",
+    "file": "apps/desktop/src/shared/lib/brand.ts",
+    "from": "const entityIdSchema = z.string().min(1).brand<\"EntityId\">();",
+    "to": "const entityIdSchema = z.string().min(1).refine((value) => value !== \"holding-199\").brand<\"EntityId\">();",
+    "compile": "typescript",
+    "expected": "보유 종목 부하 자료"
+  },
+  {
+    "name": "보호된 Markdown 내용이 파서에서 거부됨",
+    "file": "apps/desktop/src/shared/lib/brand.ts",
+    "from": "const freeTextSchema = z.string().brand<\"FreeText\">();",
+    "to": "const freeTextSchema = z.string().refine((value) => !value.includes(\"https://example.test/source-29\")).brand<\"FreeText\">();",
+    "compile": "typescript",
+    "expected": "Markdown 부하 자료"
+  },
+  {
     "name": "부하 수치 이야기가 빈 값으로 렌더",
     "file": "apps/desktop/src/shared/ds/testing/StressContent.stories.tsx",
     "from": "money.kind === \"ok\" ? <Money value={money.value} /> : null",
