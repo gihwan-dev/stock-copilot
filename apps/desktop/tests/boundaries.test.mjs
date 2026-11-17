@@ -123,6 +123,7 @@ test("the boundary tables hold exactly the folder table of architecture 5", () =
     "feature-model": {},
   });
   assert.deepEqual(BOUNDARY_TABLES.PACKAGE_LOCATIONS, {
+    "@base-ui/react": ["src/shared/ds/**"],
     "react-dom": ["src/shared/platform/index.ts"],
     "@tauri-apps/api": ["src/shared/ipc/**"],
     zod: ["src/shared/ipc/**", "src/shared/lib/brand.ts"],
