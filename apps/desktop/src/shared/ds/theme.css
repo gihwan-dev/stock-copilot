@@ -2,6 +2,12 @@
 @import "./tokens.css";
 @source "../../";
 
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+}
+
 @utility markdown-bullets {
   list-style-type: disc;
 }

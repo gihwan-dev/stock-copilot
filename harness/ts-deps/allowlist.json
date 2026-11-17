@@ -167,6 +167,10 @@
         "@storybook/react-vite": {
           "target": "@storybook/react-vite",
           "reason": "DS-07 Storybook 10.6.7 (architecture 5.2)"
+        },
+        "@playwright/test": {
+          "target": "@playwright/test",
+          "reason": "DS-15 고정 컨테이너 시각 회귀 (harness 6.6, R-15)"
         }
       }
     }

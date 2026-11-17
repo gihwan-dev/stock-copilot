@@ -1,0 +1,74 @@
+{
+  "settings": {
+    "image": "mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
+    "engine": "chromium",
+    "viewport": { "width": 960, "height": 640 },
+    "scale": 1,
+    "locale": "ko-KR",
+    "timezone": "Asia/Seoul",
+    "time": "2026-01-02T03:04:05.000Z",
+    "random": 0.3141592653589793,
+    "animations": "disabled",
+    "caret": "hide",
+    "components": ["Button", "Card", "Money", "TextField"],
+    "themes": ["light", "dark"]
+  },
+  "measurements": [
+    {
+      "component": "Button",
+      "theme": "light",
+      "bytes": 5498,
+      "first": "267bdcda3bf78111797749786f9054cfa000b9988b9f23a90d5163e603f42188",
+      "second": "267bdcda3bf78111797749786f9054cfa000b9988b9f23a90d5163e603f42188"
+    },
+    {
+      "component": "Button",
+      "theme": "dark",
+      "bytes": 5454,
+      "first": "4c3926bdd7ffdf7d05caab0ef5c59ff402e8350d585e9cc7da03050e69ed9810",
+      "second": "4c3926bdd7ffdf7d05caab0ef5c59ff402e8350d585e9cc7da03050e69ed9810"
+    },
+    {
+      "component": "Card",
+      "theme": "light",
+      "bytes": 20559,
+      "first": "30ebd21cd6259b7cc6840752e98abf2f43ed44464aaf3a0714becc4250a3a50b",
+      "second": "30ebd21cd6259b7cc6840752e98abf2f43ed44464aaf3a0714becc4250a3a50b"
+    },
+    {
+      "component": "Card",
+      "theme": "dark",
+      "bytes": 21037,
+      "first": "932c69b9a22da0af1ecc195800947dae1689fabb2320cc77eb253948e0f5c999",
+      "second": "932c69b9a22da0af1ecc195800947dae1689fabb2320cc77eb253948e0f5c999"
+    },
+    {
+      "component": "Money",
+      "theme": "light",
+      "bytes": 6489,
+      "first": "28e5f4db79c024f93c85844c447fab6b96c41cb56491f3622933753ab18eadf4",
+      "second": "28e5f4db79c024f93c85844c447fab6b96c41cb56491f3622933753ab18eadf4"
+    },
+    {
+      "component": "Money",
+      "theme": "dark",
+      "bytes": 6540,
+      "first": "42645f4f694ff7e25edd1422962ae02080d03be5d77cdf492f0aebc2fd3f8101",
+      "second": "42645f4f694ff7e25edd1422962ae02080d03be5d77cdf492f0aebc2fd3f8101"
+    },
+    {
+      "component": "TextField",
+      "theme": "light",
+      "bytes": 5201,
+      "first": "dbc23bca9e6205d149a0a1a3c6317595633027f0b210f3fd5e884bb0c2fa7920",
+      "second": "dbc23bca9e6205d149a0a1a3c6317595633027f0b210f3fd5e884bb0c2fa7920"
+    },
+    {
+      "component": "TextField",
+      "theme": "dark",
+      "bytes": 5260,
+      "first": "71489712506bf539c408d7d5093bf5e8e71b0aebf0902dfa378c3f9fe8d5e84f",
+      "second": "71489712506bf539c408d7d5093bf5e8e71b0aebf0902dfa378c3f9fe8d5e84f"
+    }
+  ]
+}
