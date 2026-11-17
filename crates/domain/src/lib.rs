@@ -55,6 +55,7 @@ mod market_session;
 pub use domain_time::{
     CalendarDate, CalendarDays, CalendarYear, DayNumber, MonthNumber, Nanosecond, OffsetSeconds,
     SpanSeconds, TimeError, TimeInterval, TimeIntervalError, TimeSpan, Timestamp, UnixSeconds,
+    valuation_time,
 };
 pub use market_session::{
     AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
@@ -604,3 +605,8 @@ pub use valuation_gap::{ValuationCalendarDay, ValuationDayResult, ValuationGapPl
 pub use valuation_price_evidence::{
     ValuationAmountPresence, ValuationPriceEvidence, valuation_amount_presence,
 };
+
+mod valuation_recompute_contract;
+
+mod valuation_recompute;
+pub use valuation_recompute::{ValuationHistoryEvidence, ValuationRecomputeInput};

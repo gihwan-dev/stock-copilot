@@ -38,6 +38,12 @@ impl<'action> SnapshotLedgers<'action> {
         self.us_classifications = us;
         self
     }
+    pub(crate) fn require_day(self, day: crate::CalendarDate) -> Result<(), SnapshotError> {
+        if self.kr.1.window().to() != day || self.us.1.window().to() != day {
+            return Err(SnapshotError::WrongPeriod);
+        }
+        Ok(())
+    }
     pub(crate) fn load(self, at: Timestamp, rows: &crate::SettledRowSet) -> SnapshotCashData {
         if self.kr.1.window() != self.us.1.window() {
             let mut result = SnapshotCashData::unavailable();
