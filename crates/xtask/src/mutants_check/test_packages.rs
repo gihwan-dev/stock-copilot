@@ -57,6 +57,102 @@ pub(super) fn companion_sources(globs: &[String], changed: &BTreeSet<String>) ->
 
 #[cfg(test)]
 mod tests {
+    fn assert_configured_arguments(sources: &[&str], packages: &[&str]) {
+        let mut command = std::process::Command::new("cargo");
+        command.args(["mutants", "--cap-lints=true"]);
+        super::configure(
+            &mut command,
+            &sources
+                .iter()
+                .map(|source| String::from(*source))
+                .collect::<Vec<_>>(),
+        )
+        .expect("declared combination");
+        let mut expected = vec![
+            std::ffi::OsString::from("mutants"),
+            std::ffi::OsString::from("--cap-lints=true"),
+        ];
+        for package in packages {
+            expected.extend([
+                std::ffi::OsString::from(format!("--cargo-arg=--package={package}")),
+                std::ffi::OsString::from("--test-package"),
+                std::ffi::OsString::from(*package),
+            ]);
+        }
+        assert_eq!(
+            command
+                .get_args()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    fn assert_source_subset(mut sources: Vec<&str>, packages: &[&str]) {
+        assert_configured_arguments(&sources, &[]);
+        sources.push("crates/application/src/lib.rs");
+        assert_configured_arguments(&sources, packages);
+    }
+
+    #[test]
+    fn empty_and_single_sources_preserve_existing_arguments_and_exact_owners() {
+        let domain = "crates/domain/src/lib.rs";
+        let order = "crates/order-execution/src/lib.rs";
+        let store = "crates/adapters/store-sqlite/src/lib.rs";
+        for (sources, packages) in [
+            (vec![], vec!["application", "testkit-ports"]),
+            (vec![domain], vec!["application", "domain", "testkit-ports"]),
+            (
+                vec![order],
+                vec!["application", "order-execution", "testkit-ports"],
+            ),
+            (
+                vec![store],
+                vec!["application", "store-sqlite", "testkit-ports"],
+            ),
+        ] {
+            assert_source_subset(sources, &packages);
+        }
+    }
+
+    #[test]
+    fn multiple_sources_preserve_existing_arguments_and_exact_owners() {
+        let domain = "crates/domain/src/lib.rs";
+        let order = "crates/order-execution/src/lib.rs";
+        let store = "crates/adapters/store-sqlite/src/lib.rs";
+        for (sources, packages) in [
+            (
+                vec![domain, order],
+                vec!["application", "domain", "order-execution", "testkit-ports"],
+            ),
+            (
+                vec![domain, store],
+                vec!["application", "domain", "store-sqlite", "testkit-ports"],
+            ),
+            (
+                vec![order, store],
+                vec![
+                    "application",
+                    "order-execution",
+                    "store-sqlite",
+                    "testkit-ports",
+                ],
+            ),
+            (
+                vec![domain, order, store],
+                vec![
+                    "application",
+                    "domain",
+                    "order-execution",
+                    "store-sqlite",
+                    "testkit-ports",
+                ],
+            ),
+        ] {
+            assert_source_subset(sources, &packages);
+        }
+    }
+
     #[test]
     fn combinations_without_application_preserve_default_arguments() {
         for sources in [

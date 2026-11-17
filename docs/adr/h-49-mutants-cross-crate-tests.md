@@ -73,9 +73,15 @@ test-diff의 최종 실패는 승인된 준비 변경2건뿐이다. 사용자 �
 
 application없는 두 패키지 조합3가지와 세 패키지 조합을 새 테스트 하나로 고정했다. 제품·실행기 구현은3cf4a7aa와 바이트 동일하며 기존 단언을 바꾸지 않았다. 모듈4개 회귀 통과와 xtask clippy로 검증한다. packages.len()>1 손 변형은 새 회귀에서 실제 검출된다. 최초 승인 준비2건은 master분기점 검사에 계속 나타나므로 동일 범위의 커밋 예외로 기록한다. 최신 master수신 뒤 최종 HEAD 전체 검사를 별도로 수행한다.
 
+## 3차 최종 비판 후 보강
+
+원본의 실제 결함은 없으나 비-domain단독·빈입력 인자 보존의 테스트 공백이 실행으로 확정됐다. 기존 단언을 유지하고 application없는8개 부분집합과 포함8개, 총16개 조합의 정확한 인자 목록을 추가한다. Command에 이미 있는 mutants·cap-lints 인자도 보존해야 한다. 새 모듈6개 회귀·xtask clippy 통과. 실행기 구현은253a01c7과 바이트 동일하다. 비판자가 확인한 등가 변형은 검출 수로 요구하지 않는다. 최대3회차 검토를 마쳤고4차 위임은 하지 않는다.
+
+최신 master c22117c94038c27d252fdf220d88919605afde54는 병합00dc11fd2bd64e9385196858c02e990b5d693f50로 수신했다. 생성 설정·해시 충돌만 정식 생성기로 해결했다. 정상 훅의 Rust2001/2001·커버리지1114/1114와 기준 검사 통과 뒤 승인 준비2건 test-diff만 실패했다. 후속검사 뒤 같은두건한정 예외로 병합했으며 정상훅 성공으로 기록하지 않는다. tasks/progress 변경은 master A-24 수신분이다.
+
 ## 최종 선택·안내 모듈 손 변형
 
-mktemp 임시 복사본에서 원본 테스트와 선택·안내 모듈을 rustc --test로 실제 컴파일하고 실행했다.30개 중 컴파일 성공29개·검출29개, 컴파일 불가1개 집계 제외. 실행기 연결부 손 변형은 별도 임시 전체 복사본에서 cargo nextest로 검출했다. 독립 비판자는 companion_sources 체인 제거도 실제 컴파일 후 안내 회귀에서 검출했다.
+최종 모듈을 mktemp 임시 복사본에서 원본 테스트와 함께 rustc --test로 실제 컴파일·실행했다.33개 중 컴파일 성공32개·검출32개, 컴파일 불가1개 집계 제외. 실행기 연결부 변형은 임시 전체 복사본의 nextest 회귀로 검출했고 독립 비판자도 연결·안내 제거를 재검증했다.
 
 | 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
 |---|---|---|---|
@@ -101,11 +107,14 @@ mktemp 임시 복사본에서 원본 테스트와 선택·안내 모듈을 rustc
 | 20 | `Ok(packages) =>     packages.insert(String::from("testkit-ports"));     Ok(packages)` | 검출 | test_packages::tests |
 | 21 | `packages.contains("testkit-ports") => !packages.contains("testkit-ports")` | 검출 | test_packages::tests |
 | 22 | `packages.contains("testkit-ports") => packages.len() > 1` | 검출 | test_packages::tests |
-| 23 | `command.arg("--test-package").arg(package); => command.arg("--package").arg(package);` | 검출 | test_packages::tests |
-| 24 | `command.arg("--test-package").arg(package); => command.arg("--test-package").arg("application");` | 검출 | test_packages::tests |
-| 25 | `Ok(packages) =>     Err(String::from("failure"))` | 검출 | test_packages::tests |
-| 26 | `glob.starts_with(&format!("{directory}/src/")) => !glob.starts_with(&format!("{directory}/src/"))` | 검출 | test_packages::tests |
-| 27 | `&& changed => || changed` | 검출 | test_packages::tests |
-| 28 | `path.starts_with => path.ends_with` | 검출 | test_packages::tests |
-| 29 | `format!("{}/", COMPANION.2) => format!("{}", COMPANION.2)` | 검출 | test_packages::tests |
-| 30 | `COMPANION.0)]) => COMPANION.1)])` | 검출 | test_packages::tests |
+| 23 | `packages.contains("testkit-ports") => packages.contains("testkit-ports") || (packages.len() == 1 && !packages.contains("domain"))` | 검출 | test_packages::tests |
+| 24 | `let packages = selected(globs)?; => let packages = selected(globs)?; if globs.is_empty() { command.arg("--test-package=application"); }` | 검출 | test_packages::tests |
+| 25 | `let packages = selected(globs)?; => *command = std::process::Command::new("cargo"); let packages = selected(globs)?;` | 검출 | test_packages::tests |
+| 26 | `command.arg("--test-package").arg(package); => command.arg("--package").arg(package);` | 검출 | test_packages::tests |
+| 27 | `command.arg("--test-package").arg(package); => command.arg("--test-package").arg("application");` | 검출 | test_packages::tests |
+| 28 | `Ok(packages) =>     Err(String::from("failure"))` | 검출 | test_packages::tests |
+| 29 | `glob.starts_with(&format!("{directory}/src/")) => !glob.starts_with(&format!("{directory}/src/"))` | 검출 | test_packages::tests |
+| 30 | `&& changed => || changed` | 검출 | test_packages::tests |
+| 31 | `path.starts_with => path.ends_with` | 검출 | test_packages::tests |
+| 32 | `format!("{}/", COMPANION.2) => format!("{}", COMPANION.2)` | 검출 | test_packages::tests |
+| 33 | `COMPANION.0)]) => COMPANION.1)])` | 검출 | test_packages::tests |
