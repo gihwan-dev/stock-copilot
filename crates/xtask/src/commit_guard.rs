@@ -243,6 +243,35 @@ fn toplevel() -> Result<PathBuf, String> {
     ))
 }
 
+fn prepare_merge(root: &Path, arguments: &[String]) -> Result<(), String> {
+    let mut command = git(root);
+    command.args(["rev-parse", "--git-path", "stock-copilot-merge-gate.json"]);
+    let marker = output(command, "merge-gate 경로")?;
+    let path = root.join(String::from_utf8_lossy(&marker).trim());
+    if !path
+        .try_exists()
+        .map_err(|error| format!("merge-gate 요청: {error}"))?
+    {
+        return Ok(());
+    }
+    let [index] = arguments else {
+        return Err(String::from("merge-gate: 커밋 인덱스를 받지 못했다"));
+    };
+    if index.is_empty() {
+        return Err(String::from("merge-gate: 커밋 인덱스를 받지 못했다"));
+    }
+    let status = Command::new("node")
+        .current_dir(root)
+        .arg(root.join("harness/ci/merge-gate.mjs"))
+        .args(["--prepare-hook", index])
+        .status()
+        .map_err(|error| format!("merge-gate 실행: {error}"))?;
+    if !status.success() {
+        return Err(String::from("merge-gate: 커밋 인덱스 확인에 실패했다"));
+    }
+    Ok(())
+}
+
 fn run(arguments: &[String]) -> Result<BTreeSet<GuardFinding>, String> {
     let root = toplevel()?;
     let index = match arguments {
@@ -251,7 +280,11 @@ fn run(arguments: &[String]) -> Result<BTreeSet<GuardFinding>, String> {
         [given] => Some(root.join(given)),
         [_, _, ..] => return Err(String::from("사용법: xtask commit-guard [인덱스 파일]")),
     };
-    guard_findings(&root, index.as_deref())
+    let findings = guard_findings(&root, index.as_deref())?;
+    if findings.is_empty() {
+        prepare_merge(&root, arguments)?;
+    }
+    Ok(findings)
 }
 
 fn write(outcome: Result<BTreeSet<GuardFinding>, String>) -> io::Result<ExitCode> {

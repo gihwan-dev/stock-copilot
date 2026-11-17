@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PROGRESS_FILE = "docs/progress.md";
 
 export const REVIEWS_DIRECTORY = "docs/reviews";
+
+export const LEGACY_REVIEW_BASE = "d235aaf8d3f3a6387e0a20aede316cc5b7d0edbf";
 
 export const TABLE_HEADER = ["작업", "상태", "대상 커밋", "리뷰 기록"];
 
@@ -122,7 +124,7 @@ const sectionLines = (lines, heading) => {
   return lines.slice(start + 1, end === -1 ? lines.length : end);
 };
 
-const tableRows = (lines, header) => {
+const tableRowsWithLines = (lines, header, offset = 0) => {
   const index = lines.findIndex((line) => {
     const row = cells(line);
     return row !== undefined && isHeader(row, header);
@@ -135,14 +137,31 @@ const tableRows = (lines, header) => {
     return undefined;
   }
   const rows = [];
-  for (const line of lines.slice(index + 2)) {
+  for (const [position, line] of lines.slice(index + 2).entries()) {
     const row = cells(line);
     if (row === undefined) {
       break;
     }
-    rows.push(row);
+    rows.push({ row, line: offset + index + position + 3 });
   }
   return rows;
+};
+
+const tableRows = (lines, header) =>
+  tableRowsWithLines(lines, header)?.map(({ row }) => row);
+
+export const reviewCommitRows = (text) => {
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => SECTIONS[0].heading.test(line));
+  if (start === -1) return [];
+  const end = lines.findIndex(
+    (line, index) => index > start && /^## /u.test(line),
+  );
+  return tableRowsWithLines(
+    lines.slice(start + 1, end === -1 ? lines.length : end),
+    SECTIONS[0].table,
+    start + 1,
+  );
 };
 
 const commitOf = (root, cell) => {
@@ -234,7 +253,134 @@ export const waiverProblems = (lines) => {
   ];
 };
 
-export const recordProblems = (root, text, tasks) => {
+const tierRows = (text) => {
+  const lines = text.split("\n");
+  const measure = sectionLines(lines, /^## 측정/u);
+  const measurements =
+    measure === undefined ? undefined : tableRows(measure, ["항목", "값"]);
+  return (measurements ?? []).filter((row) => row[0] === "리뷰 등급");
+};
+
+export const tierProblems = (text) => {
+  const lines = text.split("\n");
+  const tiers = tierRows(text);
+  if (tiers.length === 0) {
+    return [];
+  }
+  if (tiers.length !== 1 || !/^[123]$/u.test(tiers[0][1] ?? "")) {
+    return ["리뷰 등급은 1·2·3 중 하나로 한 번만 적는다"];
+  }
+  const body = sectionLines(lines, /^## 커밋/u);
+  const rows =
+    body === undefined
+      ? undefined
+      : tableRows(body, ["회차", "기준 SHA", "대상 SHA"]);
+  if (rows === undefined) {
+    return ["리뷰 등급을 검사할 커밋 표가 없다"];
+  }
+  let reviews = 0;
+  let corrected = false;
+  const issues = [];
+  rows.forEach((row, index) => {
+    const value = row[0] ?? "";
+    const match = /^(\d+)(?: \((.+)\))?$/u.exec(value);
+    if (match === null || Number(match[1]) !== index + 1) {
+      issues.push("리뷰 등급이 있는 커밋 표는 회차를 1부터 순서대로 적는다");
+      return;
+    }
+    const correction = /(?:^|\s)수정$/u.test(match[2] ?? "");
+    if (correction) {
+      if (reviews === 0) {
+        issues.push("수정 행은 리뷰 회차 뒤에 둔다");
+      }
+      corrected = true;
+    } else {
+      if (corrected) {
+        issues.push("수정 행 다음에 리뷰 회차를 둘 수 없다");
+      }
+      reviews += 1;
+    }
+  });
+  if (reviews > Number(tiers[0][1])) {
+    issues.push(`리뷰 회차 ${reviews}가 등급 ${tiers[0][1]}의 상한을 넘는다`);
+  }
+  const measure = sectionLines(lines, /^## 측정/u);
+  const measurements =
+    measure === undefined ? [] : (tableRows(measure, ["항목", "값"]) ?? []);
+  const counts = measurements.filter((row) => row[0] === "리뷰 회차");
+  const headings = lines.filter((line) => /^## 리뷰(?! 생략)/u.test(line));
+  const waived = waiverProblems(sectionLines(lines, /^## 리뷰 생략/u));
+  if (waived !== undefined) {
+    issues.push(...waived);
+    if (headings.length !== 0)
+      issues.push("리뷰 생략 기록에는 리뷰 절을 함께 둘 수 없다");
+    if (counts.length !== 1 || counts[0][1] !== "0")
+      issues.push("리뷰 생략 기록의 실제 리뷰 회차는 0이다");
+    return issues;
+  }
+  if (
+    counts.length !== 1 ||
+    !/^[1-3]$/u.test(counts[0][1] ?? "") ||
+    Number(counts[0][1]) !== reviews
+  ) {
+    issues.push("측정 표의 리뷰 회차는 커밋 표의 실제 리뷰 회차와 같아야 한다");
+  }
+  const rounds = headings.map((heading) =>
+    /^## 리뷰(?:와 비판)? \(회차 (\d+)\)$/u.exec(heading),
+  );
+  if (
+    rounds.length !== reviews ||
+    rounds.some(
+      (round, index) => round === null || Number(round[1]) !== index + 1,
+    )
+  ) {
+    issues.push("리뷰 절은 각 회차를 '## 리뷰 (회차 N)'으로 순서대로 적는다");
+  }
+  return issues;
+};
+
+const hasTier = (text) => tierRows(text).length > 0;
+
+export const isLegacyRecord = (root, path, text) => {
+  if (dirname(path) !== REVIEWS_DIRECTORY || !path.endsWith(".md")) {
+    return false;
+  }
+  const redirected = new Set([
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_SHALLOW_FILE",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_PARAMETERS",
+  ]);
+  const env = {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !redirected.has(name)),
+    ),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_GRAFT_FILE: "/dev/null",
+  };
+  const result = spawnSync(
+    "git",
+    [
+      "--no-replace-objects",
+      "-C",
+      root,
+      "show",
+      `${LEGACY_REVIEW_BASE}:${path}`,
+    ],
+    { encoding: "utf8", env },
+  );
+  return result.status === 0 && result.stdout === text;
+};
+
+export const recordProblems = (root, text, tasks, legacy = false) => {
   const lines = text.split("\n");
   const title = lines.find((line) => line.startsWith("# ")) ?? "";
   const missingIds = (tasks.match(TASK_ID) ?? []).filter(
@@ -257,12 +403,32 @@ export const recordProblems = (root, text, tasks) => {
     }
     return tableProblems(root, section, rows);
   });
-  return [
+  const reviewHeadings = lines.flatMap((line, index) =>
+    SECTIONS[1].heading.test(line) ? [index] : [],
+  );
+  const laterReviews = hasTier(text)
+    ? reviewHeadings.slice(1).flatMap((start) => {
+        const end = lines.findIndex(
+          (line, index) => index > start && /^## /u.test(line),
+        );
+        const rows = tableRows(
+          lines.slice(start + 1, end === -1 ? lines.length : end),
+          SECTIONS[1].table,
+        );
+        return tableProblems(root, SECTIONS[1], rows);
+      })
+    : [];
+  const structural = [
     ...(missingIds.length === 0
       ? []
       : [`제목에 작업 ID가 없다: ${missingIds.join(", ")}`]),
     ...sections,
+    ...laterReviews,
   ];
+  if (structural.length !== 0) return structural;
+  if (!hasTier(text) && !legacy)
+    return ["새 리뷰 기록에는 리뷰 등급이 필요하다"];
+  return tierProblems(text);
 };
 
 const progressRowProblems = (root, row) => {
@@ -296,11 +462,11 @@ const progressRowProblems = (root, row) => {
   if (!existsSync(join(root, target))) {
     return [`${where}: 리뷰 기록이 없다: ${target}`];
   }
-  return recordProblems(
-    root,
-    readFileSync(join(root, target), "utf8"),
-    row.tasks,
-  ).map((problem) => `${where}: ${target}: ${problem}`);
+  const text = readFileSync(join(root, target), "utf8");
+  const legacy = !hasTier(text) && isLegacyRecord(root, target, text);
+  return recordProblems(root, text, row.tasks, legacy).map(
+    (problem) => `${where}: ${target}: ${problem}`,
+  );
 };
 
 export const reviewProblems = (root) => {
@@ -312,7 +478,33 @@ export const reviewProblems = (root) => {
   if (!rows.some((row) => row.progress)) {
     return [`${PROGRESS_FILE}에 진행 표가 없다`];
   }
-  return rows.flatMap((row) => progressRowProblems(root, row));
+  const referenced = new Set(
+    rows
+      .filter((row) => row.progress && isDone(row.state))
+      .map((row) => LINK.exec(row.record)?.[1])
+      .filter((path) => path !== undefined)
+      .map((path) => normalize(join(dirname(PROGRESS_FILE), path))),
+  );
+  const directory = join(root, REVIEWS_DIRECTORY);
+  const unreferenced = existsSync(directory)
+    ? readdirSync(directory)
+        .filter((name) => name.endsWith(".md"))
+        .filter((name) => !referenced.has(join(REVIEWS_DIRECTORY, name)))
+        .flatMap((name) => {
+          const text = readFileSync(join(directory, name), "utf8");
+          const path = join(REVIEWS_DIRECTORY, name);
+          const legacy = !hasTier(text) && isLegacyRecord(root, path, text);
+          return legacy
+            ? []
+            : recordProblems(root, text, "").map(
+                (problem) => `${path}: ${problem}`,
+              );
+        })
+    : [];
+  return [
+    ...rows.flatMap((row) => progressRowProblems(root, row)),
+    ...unreferenced,
+  ];
 };
 
 const repoRoot = resolve(

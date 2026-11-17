@@ -10,12 +10,15 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "visible": false,
         "title": "Stock Copilot"
       }
     ],
     "security": {
-      "capabilities": ["main"]
+      "capabilities": ["main"],
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc:; worker-src 'none'; font-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'",
+      "freezePrototype": true
     }
   },
   "bundle": {
