@@ -1,0 +1,53 @@
+{
+  "origin": "synthetic",
+  "method": "get",
+  "path": "/api/v1/transactions",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1transactions/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "transactions": [
+        {
+          "transactionType": "BUY",
+          "marketCountry": "US",
+          "currency": "USD",
+          "symbol": "AAPL",
+          "assetClass": "STOCK",
+          "isinCode": "US0378331005",
+          "quantity": "3",
+          "filledPrice": null,
+          "amount": "567.36",
+          "commission": "0.57",
+          "tax": "0",
+          "netAmount": "567.93",
+          "exchangeRate": null,
+          "settlementDate": "2026-10-02",
+          "settled": false,
+          "transactionTime": null,
+          "isCancellation": false
+        },
+        {
+          "transactionType": "BUY",
+          "marketCountry": "US",
+          "currency": "USD",
+          "symbol": "AAPL",
+          "assetClass": "STOCK",
+          "isinCode": "US0378331005",
+          "quantity": "3",
+          "filledPrice": "189.12",
+          "amount": "567.36",
+          "commission": "0.57",
+          "tax": "0",
+          "netAmount": "567.93",
+          "exchangeRate": null,
+          "settlementDate": "2026-10-01",
+          "settled": true,
+          "transactionTime": "2026-10-01T06:30:00+09:00",
+          "isCancellation": false
+        }
+      ],
+      "nextCursor": null,
+      "hasNext": false
+    }
+  }
+}
