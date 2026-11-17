@@ -1,7 +1,8 @@
 use crate::PortError;
+use crate::{CompleteTransactionObservation, ObservedTransactionBatch};
 use domain::{
-    AccountId, CompleteTransactionResponse, Holding, Quote, QuoteInstrument, ReportedPortfolio,
-    SettlementWindow, TransactionBatch, TransactionFilter, UntrustedText,
+    AccountId, Holding, Quote, QuoteInstrument, ReportedPortfolio, SettlementWindow,
+    TransactionFilter, UntrustedText,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,14 +42,14 @@ pub struct IncompleteTransactions {
     pub account: AccountId,
     pub window: SettlementWindow,
     pub filter: TransactionFilter,
-    pub received: Vec<TransactionBatch>,
+    pub received: Vec<ObservedTransactionBatch>,
     pub quarantined: Vec<QuarantinedTransaction>,
     pub reason: IncompleteReason,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionRead {
-    Complete(CompleteTransactionResponse),
+    Complete(CompleteTransactionObservation),
     Incomplete(IncompleteTransactions),
 }
 

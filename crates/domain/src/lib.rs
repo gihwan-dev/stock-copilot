@@ -591,3 +591,9 @@ pub use estimate_record::{
     EstimateRecordError, EstimateSourceStatus, EstimateSubmissionRecord, EvidenceBundleId,
     PromptHash,
 };
+
+pub use settled_row_set::{
+    FullInspectionCompletion, FullInspectionCompletionError, FullInspectionError,
+    FullInspectionPlan, FullInspectionProgress, FullInspectionStatus, InspectionRangeDays,
+    InspectionRangeResult, InspectionReportError, split_full_inspection,
+};

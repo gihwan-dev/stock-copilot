@@ -13,21 +13,20 @@ mod tests {
         BrokerOrderRow, BrokerOrderSet, BrokerOrderSize, BrokerOrderStatus, BrokerOrderTime,
         BrokerOrderType, BrokerTimeInForce, BuyingPower, CalendarDate, Cancellation, Candle,
         CandlePeriod, ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet,
-        CommissionRateFact, CommissionValidity, CommonShare, CompleteTransactionResponse,
-        CompletionAttestation, CostRate, Currency, CurrencyAmounts, DisplayInstrumentName,
-        FlowInterval, FxPair, FxRate, FxRateKind, FxSource, Holding, HoldingObservation,
-        IndicatorCode, IndicatorUnit, InstrumentId, InvestorFlow, KnownMarket, ListingStatus,
-        Market, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote, MarketSession,
-        MasterCode, MasterInstrument, MasterInstrumentFacts, MasterInstrumentRow,
-        MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds, OpenOrderCoverage,
-        OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment, PriceLimitRange,
-        PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument, RankingCautionFilter,
-        RankingDuration, RankingKind, RankingLimit, RankingResponseInput, Ratio, ReportedPortfolio,
-        ResolvedOrderInstrument, SectorComposition, SectorCompositionScope, SectorId,
-        SellableQuantityFact, SessionInformation, Settlement, SettlementWindow, SpanSeconds,
-        StockRanking, StockWarning, StockWarnings, Symbol, TimeInterval, TimeSpan, Timestamp,
-        Transaction, TransactionBatch, TransactionData, TransactionFilter, TransactionKind,
-        UnixSeconds, UntrustedText,
+        CommissionRateFact, CommissionValidity, CommonShare, CompletionAttestation, CostRate,
+        Currency, CurrencyAmounts, DisplayInstrumentName, FlowInterval, FxPair, FxRate, FxRateKind,
+        FxSource, Holding, HoldingObservation, IndicatorCode, IndicatorUnit, InstrumentId,
+        InvestorFlow, KnownMarket, ListingStatus, Market, MarketCalendar, MarketIndicatorCandle,
+        MarketIndicatorQuote, MarketSession, MasterCode, MasterInstrument, MasterInstrumentFacts,
+        MasterInstrumentRow, MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds,
+        OpenOrderCoverage, OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment,
+        PriceLimitRange, PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument,
+        RankingCautionFilter, RankingDuration, RankingKind, RankingLimit, RankingResponseInput,
+        Ratio, ReportedPortfolio, ResolvedOrderInstrument, SectorComposition,
+        SectorCompositionScope, SectorId, SellableQuantityFact, SessionInformation, Settlement,
+        SettlementWindow, SpanSeconds, StockRanking, StockWarning, StockWarnings, Symbol,
+        TimeInterval, TimeSpan, Timestamp, Transaction, TransactionData, TransactionFilter,
+        TransactionKind, UnixSeconds, UntrustedText,
     };
     use std::{
         collections::BTreeSet,
@@ -147,29 +146,39 @@ mod tests {
             ReportedPortfolio::new(amounts, amounts, amounts, instant()),
         )
     }
-    fn received() -> TransactionBatch {
-        TransactionBatch::try_new(vec![
-            Transaction::try_new(TransactionData {
-                kind: TransactionKind::Deposit,
-                market: Market::Us,
-                currency: Currency::Usd,
-                symbol: None,
-                asset_class: None,
-                isin: None,
-                quantity: None,
-                filled_price: None,
-                amount: Some(money(Currency::Usd)),
-                commission: money(Currency::Usd),
-                tax: money(Currency::Usd),
-                net_amount: Some(money(Currency::Usd)),
-                exchange_rate: None,
-                settlement_date: instant().offset_calendar_date(),
-                settlement: Settlement::Settled,
-                transaction_time: Some(instant()),
-                cancellation: Cancellation::Regular,
+    fn received() -> application::ObservedTransactionBatch {
+        application::ObservedTransactionBatch::try_new(
+            vec![
+                Transaction::try_new(TransactionData {
+                    kind: TransactionKind::Deposit,
+                    market: Market::Us,
+                    currency: Currency::Usd,
+                    symbol: None,
+                    asset_class: None,
+                    isin: None,
+                    quantity: None,
+                    filled_price: None,
+                    amount: Some(money(Currency::Usd)),
+                    commission: money(Currency::Usd),
+                    tax: money(Currency::Usd),
+                    net_amount: Some(money(Currency::Usd)),
+                    exchange_rate: None,
+                    settlement_date: instant().offset_calendar_date(),
+                    settlement: Settlement::Settled,
+                    transaction_time: Some(instant()),
+                    cancellation: Cancellation::Regular,
+                })
+                .expect("거래 행"),
+            ]
+            .into_iter()
+            .map(|row| {
+                application::ObservedTransaction::new(
+                    row,
+                    application::RawTransactionRow::new("{}".to_owned()),
+                )
             })
-            .expect("거래 행"),
-        ])
+            .collect(),
+        )
         .expect("거래 묶음")
     }
     fn quarantined() -> Vec<QuarantinedTransaction> {
@@ -231,7 +240,7 @@ mod tests {
         ) -> impl Future<Output = Result<TransactionRead, PortError>> + Send {
             let response = match self.0 {
                 Scenario::Complete => Ok(TransactionRead::Complete(
-                    CompleteTransactionResponse::after_last_page_without_quarantine(
+                    application::CompleteTransactionObservation::after_last_page_without_quarantine(
                         account.clone(),
                         window,
                         filter.clone(),

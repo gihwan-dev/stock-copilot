@@ -354,3 +354,9 @@ pub use submit_estimate::{
     EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository, SubmitEstimate,
     SubmitEstimateError,
 };
+
+mod transaction_observation;
+pub use transaction_observation::{
+    CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,
+    RawTransactionRow,
+};
