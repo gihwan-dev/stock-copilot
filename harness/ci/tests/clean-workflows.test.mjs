@@ -10,7 +10,10 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { FRESH_STEPS } from "../../../.claude/hooks/lib/check-sandbox.mjs";
+import {
+  FRESH_STEPS,
+  runHarnessCheck,
+} from "../../../.claude/hooks/lib/check-sandbox.mjs";
 import { dumpJustfile, renderLine } from "../../check-list/list.mjs";
 import { knownGaps } from "../../known-gaps/list.mjs";
 import { installActionSpec, readTools } from "../tools.mjs";
@@ -127,6 +130,16 @@ test("the known dependency-artifact gap is listed and full cleanup is manual", (
         ),
     ),
   );
+  const gap = gaps.find((entry) =>
+    entry.location.startsWith("docs/adr/h-51-shared-compile-cache.md:"),
+  );
+  assert.ok(gap);
+  assert.match(gap.text, /`just fresh-all`/u);
+  assert.match(
+    gap.text,
+    /원격 CI와 조건이 충족된 밤 전체 검사는 로컬 오염 산출물을 재사용하지 않는다/u,
+  );
+  assert.match(gap.text, /외부 의존성 전체의 무결성을 증명하지는 않는다\.$/u);
   const recipes = dumpJustfile(join(repoRoot, "justfile")).recipes;
   assert.deepEqual(recipes["fresh-all"].body.map(renderLine), [
     "cargo clean --locked",
@@ -156,6 +169,27 @@ test("the known dependency-artifact gap is listed and full cleanup is manual", (
       "--ignore-scripts",
     ],
   ]);
+});
+
+test("the default stop check selects workspace cleanup before starting a sandbox", () => {
+  const directory = scratch("h51-stop-default-");
+  try {
+    const missing = join(directory, "missing-worktree");
+    const places = {
+      temporary: directory,
+      writable: [],
+      denied: [],
+      unreadable: [],
+    };
+    const result = runHarnessCheck(places, missing, "HEAD");
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.output.split("\n")[0],
+      "$ cargo clean --locked --offline --workspace",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("workspace cleanup preserves external dependency artifacts and manual full cleanup removes them", () => {
