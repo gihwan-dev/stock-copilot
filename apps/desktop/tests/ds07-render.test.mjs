@@ -53,7 +53,9 @@ const tick = (window) =>
 test("DS07 every actual CSF render uses its component, example and real theme", async () => {
   const originalBundle =
     await componentsDom(`import {render,cleanup} from "@testing-library/react";
-import * as sources from STORY_ENTRY;
+import * as storySources from STORY_ENTRY;
+import {stressComponentStories} from ${JSON.stringify(join(desktopRoot, "src/shared/ds/testing/Stress.stories.tsx"))};
+const sources={...storySources,stressComponentStories};
 window.cleanup=cleanup;
 window.findSource=(component,sample)=>Object.keys(sources).sort().flatMap(key=>sources[key]).filter(story=>story.component===component && (!("theme" in story)||story.theme==="light"))[sample];
 window.expected=(story,theme)=>{document.documentElement.dataset.theme=theme;return render(story.render(theme));};`);

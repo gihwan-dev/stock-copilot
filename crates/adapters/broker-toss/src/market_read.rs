@@ -1,4 +1,4 @@
-mod candles;
+pub(crate) mod candles;
 use crate::{QueryKey, ReadRequest, ReadRoute, TokenRenewal, TossAccountRead, TossTimestamp};
 use application::{
     Clock, HttpStatus, PortError, PortErrorKind, QuoteObservation, ReadEndpoint, RequestRejection,

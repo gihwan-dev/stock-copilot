@@ -12,6 +12,7 @@ const witnesses = {
   "ds/no-screen-format": "const value=new Intl.NumberFormat();",
   "ds/no-ui-attributes": '<Button title="Search"/>',
   "ds/no-dom-values": "const read=(ref)=>ref.current;",
+  "ds/no-overflow-markers": '<Button data-truncate=""/>',
   "ds/no-dom-styling": "<Button dangerouslySetInnerHTML={html}/>",
   "ds/no-element-factory": "const value=createElement(Button);",
   "ds/no-style-object": "const value={className: classes};",
