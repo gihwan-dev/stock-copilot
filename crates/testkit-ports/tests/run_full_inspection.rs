@@ -312,7 +312,6 @@ mod tests {
             plan.ranges()[0],
             SettlementWindow::try_new(date(4), date(17)).expect("외부 창"),
         ] {
-            let repo = Repository::default();
             let mut progress = plan.begin();
             progress
                 .report(plan.ranges()[0], domain::InspectionRangeResult::Succeeded)
@@ -330,7 +329,6 @@ mod tests {
                     domain::InspectionReportError::UnexpectedRange
                 })
             );
-            assert_eq!(repo.completed.calls(), []);
         }
     }
 
@@ -431,5 +429,121 @@ mod tests {
             ))
         );
         assert_eq!(repo.completed.calls(), []);
+    }
+
+    #[test]
+    fn matching_partial_and_access_denied_never_mark_completion() {
+        let account = AccountId::new(701);
+        let state = SettledRowSet::new(account.clone());
+        let window = SettlementWindow::try_new(
+            CalendarDate::from_parts(CalendarYear::new(1), MonthNumber::new(1), DayNumber::new(1))
+                .expect("시작"),
+            date(17),
+        )
+        .expect("요청 창");
+        let partial =
+            application::TransactionRead::Incomplete(application::IncompleteTransactions {
+                account,
+                window,
+                filter: domain::TransactionFilter::all(),
+                received: vec![],
+                quarantined: vec![],
+                reason: application::IncompleteReason::PageInterrupted,
+            });
+        let denied = PortError::new(
+            ReadEndpoint::Transactions,
+            HttpStatus::Forbidden,
+            PortErrorKind::AccessDenied(application::AccessDenial::Forbidden),
+        );
+        for (observation, expected) in [
+            (Ok(partial), domain::SyncOutcome::Partial(state.clone())),
+            (Err(denied), domain::SyncOutcome::AccessBlocked),
+        ] {
+            let repo = Repository::default();
+            let broker = ScriptedBrokerRead::default();
+            repo.last.push(Ok(None));
+            repo.state.push(Ok(state.clone()));
+            repo.latest.push(Ok(None));
+            repo.records.push(Ok(WriteCompleted));
+            broker.script_transactions().push(observation);
+            assert_eq!(
+                execute(
+                    &repo,
+                    &broker,
+                    &SteppedClock::new(at(1_794_841_201)),
+                    u32::MAX
+                ),
+                Err(FullInspectionRunError::Completion(
+                    FullInspectionCompletionError::Incomplete
+                ))
+            );
+            let records = repo.records.calls();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].3.summary().outcome(), &expected);
+            assert_eq!(repo.completed.calls(), []);
+        }
+    }
+    #[test]
+    fn day_mismatch_retry_covers_the_new_today() {
+        let repo = Repository::default();
+        let broker = ScriptedBrokerRead::default();
+        repo.last.push(Ok(None));
+        prepare(&repo, &broker, u32::MAX, None);
+        let clock = SequenceClock(std::sync::RwLock::new(
+            vec![at(1_794_927_599), at(1_794_927_599), at(1_794_927_600)].into(),
+        ));
+        assert_eq!(
+            execute(&repo, &broker, &clock, u32::MAX),
+            Err(FullInspectionRunError::Completion(
+                FullInspectionCompletionError::DayMismatch
+            ))
+        );
+        assert_eq!(repo.completed.calls(), []);
+        let account = AccountId::new(701);
+        let window = SettlementWindow::try_new(
+            CalendarDate::from_parts(CalendarYear::new(1), MonthNumber::new(1), DayNumber::new(1))
+                .expect("시작"),
+            date(18),
+        )
+        .expect("새 오늘");
+        repo.last.push(Ok(None));
+        repo.state.push(Ok(SettledRowSet::new(account.clone())));
+        repo.latest.push(Ok(None));
+        repo.records.push(Ok(WriteCompleted));
+        repo.completed.push(Ok(WriteCompleted));
+        broker
+            .script_transactions()
+            .push(Ok(application::TransactionRead::Complete(
+                application::CompleteTransactionObservation::after_last_page_without_quarantine(
+                    account.clone(),
+                    window,
+                    domain::TransactionFilter::all(),
+                    application::ObservedTransactionBatch::try_new(vec![]).expect("행"),
+                    domain::CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
+                )
+                .expect("응답"),
+            )));
+        assert_eq!(
+            execute(
+                &repo,
+                &broker,
+                &SteppedClock::new(at(1_794_927_601)),
+                u32::MAX
+            ),
+            Ok(FullInspectionRun::Completed {
+                completed_at: at(1_794_927_601),
+                deliveries: vec![DeliveryReport::default()]
+            })
+        );
+        assert_eq!(
+            broker.calls().last(),
+            Some(&BrokerReadCall::Transactions(
+                account.clone(),
+                window,
+                domain::TransactionFilter::all()
+            ))
+        );
+        assert_eq!(broker.calls().len(), 2);
+        assert_eq!(repo.completed.calls(), [(account, None, at(1_794_927_601))]);
     }
 }
