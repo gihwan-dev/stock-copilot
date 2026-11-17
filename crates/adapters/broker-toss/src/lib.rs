@@ -30,7 +30,13 @@ mod transaction_read;
 mod market_read;
 
 mod market_calendar;
+mod market_flow;
 mod market_fx;
 mod market_indicators;
 mod market_info;
+mod market_investor_rankings;
+mod market_pages;
+mod market_rankings;
 mod market_sector;
+mod market_sector_rankings;
+mod market_supply;

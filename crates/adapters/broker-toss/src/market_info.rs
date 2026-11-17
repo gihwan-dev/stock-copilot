@@ -37,41 +37,41 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
     }
     fn program_trades(
         &self,
-        _: &QuoteInstrument,
-        _: CalendarDate,
-        _: CalendarDate,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
     ) -> impl Future<Output = Result<Vec<ProgramTrade>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::ProgramTrades))
+        crate::market_supply::programs(self, instrument, from, through)
     }
     fn short_selling(
         &self,
-        _: &QuoteInstrument,
-        _: CalendarDate,
-        _: CalendarDate,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
     ) -> impl Future<Output = Result<Vec<ShortSelling>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::ShortSelling))
+        crate::market_supply::shorts(self, instrument, from, through)
     }
     fn credit_trades(
         &self,
-        _: &QuoteInstrument,
-        _: CalendarDate,
-        _: CalendarDate,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
     ) -> impl Future<Output = Result<Vec<CreditTrade>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::CreditTrades))
+        crate::market_supply::credits(self, instrument, from, through)
     }
     fn securities_lending(
         &self,
-        _: &QuoteInstrument,
-        _: CalendarDate,
-        _: CalendarDate,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
     ) -> impl Future<Output = Result<Vec<SecuritiesLending>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::SecuritiesLending))
+        crate::market_supply::loans(self, instrument, from, through)
     }
     fn investor_trading_rankings(
         &self,
-        _: RankingLimit,
+        limit: RankingLimit,
     ) -> impl Future<Output = Result<InvestorTradingRankings, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::InvestorTradingRankings))
+        crate::market_investor_rankings::fetch(self, limit)
     }
     fn sectors(&self) -> impl Future<Output = Result<SectorCatalog, PortError>> + Send {
         crate::market_sector::sectors(self)
@@ -85,9 +85,9 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
     }
     fn sector_rankings(
         &self,
-        _: &SectorRankingQuery,
+        query: &SectorRankingQuery,
     ) -> impl Future<Output = Result<SectorRanking, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::SectorRankings))
+        crate::market_sector_rankings::fetch(self, query)
     }
     fn sector_etfs(
         &self,
@@ -112,26 +112,26 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
     }
     fn rankings(
         &self,
-        _: &RankingQuery,
+        query: &RankingQuery,
     ) -> impl Future<Output = Result<StockRanking, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::Rankings))
+        crate::market_rankings::rankings(self, query)
     }
     fn stock_investor_flow(
         &self,
-        _: &QuoteInstrument,
-        _: CalendarDate,
-        _: CalendarDate,
+        instrument: &QuoteInstrument,
+        from: CalendarDate,
+        through: CalendarDate,
     ) -> impl Future<Output = Result<Vec<InvestorFlow>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::StockInvestorFlow))
+        crate::market_flow::stocks(self, instrument, from, through)
     }
     fn indicator_investor_flow(
         &self,
-        _: IndicatorCode,
-        _: CalendarDate,
-        _: CalendarDate,
-        _: FlowInterval,
+        code: IndicatorCode,
+        from: CalendarDate,
+        through: CalendarDate,
+        interval: FlowInterval,
     ) -> impl Future<Output = Result<Vec<InvestorFlow>, PortError>> + Send {
-        std::future::ready(unsupported(ReadEndpoint::IndicatorInvestorFlow))
+        crate::market_flow::indices(self, code, from, through, interval)
     }
     fn sector_composition(
         &self,
