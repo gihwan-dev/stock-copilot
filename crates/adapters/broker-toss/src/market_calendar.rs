@@ -18,6 +18,7 @@ pub(crate) async fn fetch<S: SecretStore, T: Clock, R: TokenRenewal>(
     let value = reader
         .market_read(ReadRequest::new(route), ENDPOINT)
         .await?;
+    fields(&value, &["previousBusinessDay", "today", "nextBusinessDay"])?;
     let previous = day(required(&value, "previousBusinessDay")?, market)?;
     let today = day(required(&value, "today")?, market)?;
     let next = day(required(&value, "nextBusinessDay")?, market)?;
@@ -29,12 +30,20 @@ fn invalid() -> PortError {
 fn required<'a>(value: &'a Value, key: &str) -> Result<&'a Value, PortError> {
     value.get(key).ok_or_else(invalid)
 }
+fn fields(value: &Value, allowed: &[&str]) -> Result<(), PortError> {
+    let object = value.as_object().ok_or_else(invalid)?;
+    if object.keys().any(|key| !allowed.contains(&key.as_str())) {
+        return Err(invalid());
+    }
+    Ok(())
+}
 fn day(value: &Value, market: KnownMarket) -> Result<MarketSession, PortError> {
     let date = TossDate::try_from(crate::market_read::text(value, "date", ENDPOINT)?)
         .map_err(|_error| invalid())?
         .into_domain();
     let information = match market {
         KnownMarket::Kr => {
+            fields(value, &["date", "integrated"])?;
             let integrated = required(value, "integrated")?;
             if integrated.is_null() {
                 SessionInformation::Kr {
@@ -43,6 +52,7 @@ fn day(value: &Value, market: KnownMarket) -> Result<MarketSession, PortError> {
                     after_market: None,
                 }
             } else {
+                fields(integrated, &["preMarket", "regularMarket", "afterMarket"])?;
                 SessionInformation::Kr {
                     pre_market: session(
                         required(integrated, "preMarket")?,
@@ -59,12 +69,24 @@ fn day(value: &Value, market: KnownMarket) -> Result<MarketSession, PortError> {
                 }
             }
         }
-        KnownMarket::Us => SessionInformation::Us {
-            day_market: session(required(value, "dayMarket")?, None)?,
-            pre_market: session(required(value, "preMarket")?, None)?,
-            regular_market: session(required(value, "regularMarket")?, None)?,
-            after_market: session(required(value, "afterMarket")?, None)?,
-        },
+        KnownMarket::Us => {
+            fields(
+                value,
+                &[
+                    "date",
+                    "dayMarket",
+                    "preMarket",
+                    "regularMarket",
+                    "afterMarket",
+                ],
+            )?;
+            SessionInformation::Us {
+                day_market: session(required(value, "dayMarket")?, None)?,
+                pre_market: session(required(value, "preMarket")?, None)?,
+                regular_market: session(required(value, "regularMarket")?, None)?,
+                after_market: session(required(value, "afterMarket")?, None)?,
+            }
+        }
     };
     MarketSession::try_new(date, information).map_err(|_error| invalid())
 }
@@ -72,6 +94,11 @@ fn session(value: &Value, auction_key: Option<&str>) -> Result<Option<SessionDat
     if value.is_null() {
         return Ok(None);
     }
+    let mut allowed = vec!["startTime", "endTime"];
+    if let Some(key) = auction_key {
+        allowed.push(key);
+    }
+    fields(value, &allowed)?;
     let start = parse_time(crate::market_read::text(value, "startTime", ENDPOINT)?)?;
     let end = parse_time(crate::market_read::text(value, "endTime", ENDPOINT)?)?;
     let interval = TimeInterval::try_new(start, end).map_err(|_error| invalid())?;

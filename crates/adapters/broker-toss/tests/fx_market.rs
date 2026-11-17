@@ -369,6 +369,10 @@ mod tests {
         assert_eq!(second.as_str(), "2812.45");
         assert_eq!(
             values[0].observation().server_at(),
+            Some(at("2026-06-11T15:29:00+09:00"))
+        );
+        assert_eq!(
+            values[1].observation().server_at(),
             Some(at("2026-06-11T15:30:00+09:00"))
         );
         let captured = server.finish().expect("requests");
@@ -482,5 +486,176 @@ mod tests {
         run(adapter(&server).fx_rate(FxPair::UsdKrw, FxRateKind::Buy, None))
             .expect_err("stale response");
         server.finish().expect("requests");
+    }
+    #[test]
+    fn calendar_keeps_regular_close_separate_from_extended_sessions() {
+        let fixture = recording("kr");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &fixture["body"])])
+                .expect("server");
+        let calendar = run(adapter(&server).calendar(KnownMarket::Kr)).expect("calendar");
+        let sessions = calendar.today().sessions();
+        assert_eq!(sessions.len(), 3);
+        assert_eq!(sessions[0].state(), MarketState::PreMarket);
+        assert_eq!(sessions[1].state(), MarketState::RegularMarket);
+        assert_eq!(
+            sessions[1].session().interval().start(),
+            at("2026-03-25T09:00:00+09:00")
+        );
+        assert_eq!(
+            sessions[1].session().interval().end(),
+            at("2026-03-25T15:30:00+09:00")
+        );
+        assert_eq!(sessions[2].state(), MarketState::AfterMarket);
+        assert_eq!(
+            sessions[2].session().interval().start(),
+            at("2026-03-25T15:30:00+09:00")
+        );
+        assert_eq!(
+            sessions[2].session().interval().end(),
+            at("2026-03-25T20:00:00+09:00")
+        );
+        assert_eq!(
+            calendar.state_at(at("2026-03-25T16:00:00+09:00")),
+            MarketState::AfterMarket
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn us_calendar_keeps_day_pre_regular_and_after_market_distinct() {
+        let fixture = recording("us");
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &fixture["body"])])
+                .expect("server");
+        let calendar = run(adapter(&server).calendar(KnownMarket::Us)).expect("calendar");
+        let sessions = calendar.today().sessions();
+        assert_eq!(sessions.len(), 4);
+        assert_eq!(sessions[0].state(), MarketState::DayMarket);
+        assert_eq!(sessions[1].state(), MarketState::PreMarket);
+        assert_eq!(sessions[2].state(), MarketState::RegularMarket);
+        assert_eq!(
+            sessions[2].session().interval().end(),
+            at("2026-03-26T05:00:00+09:00")
+        );
+        assert_eq!(sessions[3].state(), MarketState::AfterMarket);
+        assert_eq!(
+            sessions[3].session().interval().start(),
+            at("2026-03-26T05:00:00+09:00")
+        );
+        assert_eq!(
+            sessions[3].session().interval().end(),
+            at("2026-03-26T07:00:00+09:00")
+        );
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn calendar_rejects_unknown_session_kinds() {
+        let mut integrated = recording("kr")["body"].clone();
+        integrated["result"]["today"]["integrated"]["unknownMarket"] =
+            json!({"startTime":"2026-03-25T20:00:00+09:00", "endTime":"2026-03-25T21:00:00+09:00"});
+        let mut segment = recording("kr")["body"].clone();
+        segment["result"]["today"]["integrated"]["regularMarket"]["unknownSession"] =
+            json!({"startTime":"2026-03-25T09:00:00+09:00"});
+        let mut us = recording("us")["body"].clone();
+        us["result"]["today"]["unknownMarket"] =
+            json!({"startTime":"2026-03-25T07:00:00+09:00", "endTime":"2026-03-25T08:00:00+09:00"});
+        let mut top = recording("kr")["body"].clone();
+        top["result"]["unknownMarket"] = json!({"startTime":"2026-03-25T20:00:00+09:00"});
+        for (market, body) in [
+            (KnownMarket::Kr, integrated),
+            (KnownMarket::Kr, segment),
+            (KnownMarket::Us, us),
+            (KnownMarket::Kr, top),
+        ] {
+            let server = ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)])
+                .expect("server");
+            let error = run(adapter(&server).calendar(market)).expect_err("unknown session");
+            assert_eq!(
+                error.kind(),
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation
+                )
+            );
+            server.finish().expect("requests");
+        }
+    }
+
+    #[test]
+    fn reverse_currency_pair_preserves_pair_and_distinct_rates() {
+        let mut input = body();
+        input["result"]["baseCurrency"] = json!("KRW");
+        input["result"]["quoteCurrency"] = json!("USD");
+        input["result"]["rate"] = json!("0.00073");
+        input["result"]["midRate"] = json!("0.00072");
+        for (kind, expected) in [(FxRateKind::Buy, "0.00073"), (FxRateKind::Mid, "0.00072")] {
+            let server = ScriptedHttpServer::start(vec![issued(), response("200 OK", &input)])
+                .expect("server");
+            let result = run(adapter(&server).fx_rate(
+                FxPair::KrwUsd,
+                kind,
+                Some(at("2026-03-25T09:30:30+09:00")),
+            ))
+            .expect("rate");
+            assert_eq!(result.pair(), FxPair::KrwUsd);
+            assert_eq!(result.kind(), kind);
+            assert_eq!(
+                result.quote_per_base(),
+                Price::parse(
+                    &NumericInput::try_new(expected).expect("input"),
+                    Currency::Usd
+                )
+                .expect("price")
+            );
+            let captured = server.finish().expect("requests");
+            let captured_text = String::from_utf8_lossy(&captured);
+            assert!(captured_text.contains("baseCurrency=KRW"));
+            assert!(captured_text.contains("quoteCurrency=USD"));
+        }
+    }
+
+    #[test]
+    fn us_index_proxy_etf_reuses_existing_quote_endpoint() {
+        use application::BrokerRead;
+        use domain::{
+            CommonShare, DisplayInstrumentName, InstrumentId, ListingStatus, MasterCode,
+            MasterInstrument, MasterInstrumentRow, MasterSecurityType, Symbol,
+        };
+        let instrument = MasterInstrument::try_new(MasterInstrumentRow {
+            listing_market: MasterCode::try_new("NYSE").expect("market"),
+            symbol: Symbol::try_new("SPY").expect("symbol"),
+            instrument_id: InstrumentId::try_new("synthetic-proxy-etf").expect("id"),
+            name: DisplayInstrumentName::try_new("합성 지수 대용 ETF").expect("name"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("FOREIGN_ETF").expect("type"),
+            ),
+            currency: Currency::Usd,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: None,
+            observed_at: at("2026-03-25T09:00:00+09:00"),
+        })
+        .expect("master")
+        .quote_instrument()
+        .expect("quote instrument");
+        let body = json!({"result":[{"symbol":"SPY", "timestamp":"2026-03-25T15:30:00Z", "lastPrice":"531.27", "currency":"USD"}]});
+        let server =
+            ScriptedHttpServer::start(vec![issued(), response("200 OK", &body)]).expect("server");
+        let result =
+            run(adapter(&server).quotes(std::slice::from_ref(&instrument))).expect("quotes");
+        assert_eq!(result[0].instrument, instrument);
+        let quote = result[0].result.as_ref().expect("price");
+        assert_eq!(quote.currency(), Currency::Usd);
+        assert_eq!(
+            quote.last_price(),
+            Some(
+                Price::parse(
+                    &NumericInput::try_new("531.27").expect("input"),
+                    Currency::Usd
+                )
+                .expect("price")
+            )
+        );
+        let captured = server.finish().expect("requests");
+        assert!(String::from_utf8_lossy(&captured).contains("GET /api/v1/prices?symbols=SPY"));
     }
 }
