@@ -135,6 +135,21 @@ impl CalendarDate {
             Ok(Self(first))
         }
     }
+    pub(crate) fn inspection_earliest() -> Self {
+        Self(Date::MIN.saturating_add(SignedDuration::days(i64::from(
+            1_721_426_i32.saturating_sub(Date::MIN.to_julian_day()),
+        ))))
+    }
+    pub(crate) fn inspection_chunk_end(self, end: Self, limit: crate::InspectionRangeDays) -> Self {
+        let remaining =
+            i64::from(end.0.to_julian_day()).saturating_sub(i64::from(self.0.to_julian_day()));
+        Self(self.0.saturating_add(SignedDuration::days(
+            remaining.min(i64::from(*limit.as_u32()).saturating_sub(1)),
+        )))
+    }
+    pub(crate) fn inspection_successor(self) -> Self {
+        Self(self.0.saturating_add(SignedDuration::days(1)))
+    }
     pub fn days_until(self, other: Self) -> Result<CalendarDays, TimeError> {
         i64::from(other.0.to_julian_day())
             .checked_sub(i64::from(self.0.to_julian_day()))
