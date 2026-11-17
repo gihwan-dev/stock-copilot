@@ -591,3 +591,10 @@ pub use estimate_record::{
     EstimateRecordError, EstimateSourceStatus, EstimateSubmissionRecord, EvidenceBundleId,
     PromptHash,
 };
+
+mod valuation_gap;
+mod valuation_price_evidence;
+pub use valuation_gap::{ValuationCalendarDay, ValuationDayResult, ValuationGapPlan};
+pub use valuation_price_evidence::{
+    ValuationAmountPresence, ValuationPriceEvidence, valuation_amount_presence,
+};
