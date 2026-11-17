@@ -62,6 +62,16 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node harness/visual/check.mjs",
+      "kind": "check",
+      "cases": "harness/visual/cases.json",
+      "test": {
+        "file": "apps/desktop/tests/ds15-visual.test.mjs",
+        "name": "DS15 rejects darwin baselines including fixed violation paths"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "node harness/ds-style/check.mjs",
       "kind": "check",
       "cases": "apps/desktop/tests/ds-style.test.mjs",

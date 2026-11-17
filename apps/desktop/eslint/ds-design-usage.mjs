@@ -131,7 +131,7 @@ export const designUtilities = (tokens) => [
     ),
 ];
 export const themeSource = (tokens) =>
-  '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@source "../../";\n\n' +
+  '@import "tailwindcss" source(none);\n@import "./tokens.css";\n@source "../../";\n\n@layer base {\n  html {\n    font-family: var(--font-sans);\n  }\n}\n\n' +
   designUtilities(tokens)
     .map(
       ([name, property, value]) =>

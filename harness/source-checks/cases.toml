@@ -873,3 +873,18 @@ expect = ["clock-env:now"]
 example = "clock-system-time.rs"
 path = "crates/adapters/platform-macos/src/system_clock.rs"
 expect = []
+
+[[workspace]]
+name = "darwin-baseline-harness"
+overlay = "darwin-baseline-harness"
+expect = ["file:darwin-baseline"]
+
+[[workspace]]
+name = "darwin-baseline-snapshots"
+overlay = "darwin-baseline-snapshots"
+expect = ["file:darwin-baseline"]
+
+[[workspace]]
+name = "darwin-baseline-member"
+overlay = "darwin-baseline-member"
+expect = ["file:darwin-baseline"]

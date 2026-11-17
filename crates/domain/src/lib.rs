@@ -580,6 +580,17 @@ mod transaction_sync;
 pub use transaction_sync::{DailyFullInspection, TransactionSyncTimeError, daily_full_inspection};
 
 pub use settled_row_set::recent_transaction_window;
+mod estimate_assignment;
+pub use estimate_assignment::{
+    EstimateAssignmentError, EstimateAssignments, EstimateConsumption, IssuedEstimateTask,
+    IssuedEstimateTaskId,
+};
+mod estimate_record;
+pub use estimate_record::{
+    EstimateMetadata, EstimateMetadataError, EstimateNarrative, EstimatePrompt,
+    EstimateRecordError, EstimateSourceStatus, EstimateSubmissionRecord, EvidenceBundleId,
+    PromptHash,
+};
 
 pub use settled_row_set::{
     FullInspectionCompletion, FullInspectionCompletionError, FullInspectionError,

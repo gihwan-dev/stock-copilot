@@ -91,7 +91,8 @@
     "node harness/ci/mutants-summary.mjs",
     "node harness/ci/mutation-range.mjs plan",
     "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
-    "node harness/ci/mutation-range.mjs verify"
+    "node harness/ci/mutation-range.mjs verify",
+    "node harness/ci/visual.mjs"
   ],
   "expressions": [
     "${{ github.event.before }}",
@@ -225,6 +226,10 @@
             {
               "name": "advisory db",
               "run": "just advisory-db-fetch"
+            },
+            {
+              "name": "container visual regression",
+              "run": "node harness/ci/visual.mjs"
             },
             {
               "name": "linux check",

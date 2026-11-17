@@ -69,6 +69,7 @@ check: check-node require-base check-ts
     "{{just_executable()}}" hooks-installed
 
 check-full: advisory-db-fetch check
+    "{{just_executable()}}" visual-check
     "{{just_executable()}}" mutants-diff {{quote(base)}}
 
 require-base:
@@ -85,6 +86,7 @@ check-ts: check-node check-pnpm
     pnpm install --frozen-lockfile --ignore-scripts
     node harness/ts-deps/check.mjs
     node harness/ds-catalog/check.mjs
+    node harness/visual/check.mjs
     node harness/ds-style/check.mjs
     node harness/ds-tokens/check.mjs
     cargo run --locked --quiet --package xtask -- gen-tokens --check
@@ -272,3 +274,12 @@ frontend-build: check-pnpm
 
 check-fast-generated: frontend-build
     node harness/generated-files/check.mjs
+
+visual-update:
+    node harness/visual/launch.mjs update
+
+visual-measure:
+    node harness/visual/launch.mjs measure
+
+visual-check:
+    node harness/visual/launch.mjs compare

@@ -5,8 +5,7 @@ use application::{
     ReadEndpoint, ResponseMismatch, SecretStore, SecretValue, TransactionRead,
 };
 use domain::{
-    AccountId, CompleteTransactionResponse, CompletionAttestation, SettlementWindow,
-    TransactionBatch, TransactionFilter, UntrustedText,
+    AccountId, CompletionAttestation, SettlementWindow, TransactionFilter, UntrustedText,
 };
 use serde_json::{Value, value::RawValue};
 
@@ -155,7 +154,7 @@ impl Pages {
         } else {
             reason
         };
-        let (rows, _sources) = row::project(self.rows);
+        let rows = row::project(self.rows);
         let mut remaining = rows.into_iter();
         let mut received = Vec::new();
         loop {
@@ -163,7 +162,10 @@ impl Pages {
             if batch.is_empty() {
                 break;
             }
-            received.push(TransactionBatch::try_new(batch).map_err(|_error| invalid())?);
+            received.push(
+                application::ObservedTransactionBatch::try_new(batch)
+                    .map_err(|_error| invalid())?,
+            );
         }
         Ok(TransactionRead::Incomplete(IncompleteTransactions {
             account: account.clone(),
@@ -195,12 +197,12 @@ impl Pages {
         if !self.quarantined.is_empty() {
             return self.incomplete(account, window, filter, IncompleteReason::QuarantinedRows);
         }
-        let (rows, _sources) = row::project(self.rows);
-        CompleteTransactionResponse::after_last_page_without_quarantine(
+        let rows = row::project(self.rows);
+        application::CompleteTransactionObservation::after_last_page_without_quarantine(
             account.clone(),
             window,
             filter.clone(),
-            TransactionBatch::try_new(rows).map_err(|_error| invalid())?,
+            application::ObservedTransactionBatch::try_new(rows).map_err(|_error| invalid())?,
             CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
         )
         .map(TransactionRead::Complete)
@@ -331,9 +333,13 @@ mod tests {
             )
             .expect("page");
         assert_eq!(pages.rows[0].source.get(), source);
-        let (rows, sources) = super::row::project(pages.rows);
+        let rows = super::row::project(pages.rows);
+        let sources: Vec<_> = rows
+            .iter()
+            .map(application::ObservedTransaction::source)
+            .collect();
         assert_eq!(rows.len(), 1);
-        assert_eq!(sources[0].get(), source);
+        assert_eq!(sources[0].as_str(), source);
         let unknown_source = source.replace("\"KRW\"", "\"EUR\"");
         let unknown_body = format!(
             r#"{{"result":{{"transactions":[{unknown_source}],"hasNext":false,"nextCursor":null}}}}"#
