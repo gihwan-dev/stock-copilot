@@ -95,6 +95,7 @@ fn load(
     let tag = fields.take()?;
     let (previous, before_count) = state::get(connection, id, "before", account, &mut fields)?;
     let (state, after_count) = state::get(connection, id, "after", account, &mut fields)?;
+    validate_record_time(&previous, &state, at)?;
     let summary = summary(at, &tag, &state)?;
     let (detail, observed) = match mode.as_str() {
         "sync" => {
@@ -135,6 +136,20 @@ fn load(
         state,
         detail,
     }))
+}
+fn validate_record_time(
+    previous: &SettledRowSet,
+    state: &SettledRowSet,
+    at: Timestamp,
+) -> rusqlite::Result<()> {
+    if previous
+        .last_synchronized_at()
+        .is_some_and(|last| last > at)
+        || state.last_synchronized_at().is_some_and(|last| last > at)
+    {
+        return Err(invalid(()));
+    }
+    Ok(())
 }
 fn validate_counts(
     connection: &Connection,

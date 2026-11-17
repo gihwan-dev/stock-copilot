@@ -10,3 +10,6 @@ pub(crate) const BAD_HEADER: &str = "UPDATE transaction_entries SET payload = '1
 pub(crate) const BAD_MODE: &str = "UPDATE transaction_entries SET mode = 'summary'";
 pub(crate) const BAD_COMPLETION: &str =
     "UPDATE transaction_full_inspections SET completed_at = 'broken'";
+
+pub(crate) const REVERSE_FAILED_TIME: &str = "UPDATE transaction_entries SET payload = substr(payload, 1, 3) || '1:9' || substr(payload, 8) WHERE id = 2";
+pub(crate) const REVERSE_FIRST_TIME: &str = "UPDATE transaction_entries SET payload = substr(payload, 1, 3) || '1:9' || substr(payload, 8) WHERE id = 1";

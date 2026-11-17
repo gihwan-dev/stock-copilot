@@ -785,3 +785,70 @@ fn usd_values_and_rejected_scope_observation_roundtrip() {
         );
     });
 }
+
+#[test]
+fn failed_record_timestamp_before_preserved_state_fails_closed() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    runtime().block_on(async {
+        let store = TransactionStore::new(&db);
+        let account = AccountId::new(141);
+        let empty = SettledRowSet::new(account.clone());
+        let first = TransactionSyncRecord::from_observation(
+            &empty,
+            window(),
+            at(10),
+            Ok(complete(&account, &["{}"])),
+        );
+        store
+            .record_sync(&account, &empty, None, &first)
+            .await
+            .expect("정상");
+        let failed = TransactionSyncRecord::from_observation(
+            first.state(),
+            window(),
+            at(20),
+            Err(port_errors()[0]),
+        );
+        store
+            .record_sync(&account, first.state(), Some(at(10)), &failed)
+            .await
+            .expect("실패");
+        db.write(|tx| tx.execute_batch(crate::sql::transactions_tests::REVERSE_FAILED_TIME))
+            .await
+            .expect("유효하지만 역행하는 시각 손상");
+        store
+            .latest_sync(&account)
+            .await
+            .expect_err("정상 상태 시각보다 오래된 실패 기록");
+    });
+}
+#[test]
+fn legacy_summary_timestamp_before_preserved_state_fails_closed() {
+    let fixture = Fixture::new();
+    let db = Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("열기");
+    runtime().block_on(async {
+        let store = TransactionStore::new(&db);
+        let account = AccountId::new(151);
+        let empty = SettledRowSet::new(account.clone());
+        let first = TransactionSyncRecord::from_observation(
+            &empty,
+            window(),
+            at(10),
+            Ok(complete(&account, &["{}"])),
+        );
+        let summary =
+            domain::SyncRecord::new(at(10), domain::SyncOutcome::Complete(first.state().clone()));
+        store
+            .record(&account, &summary)
+            .await
+            .expect("기존 포트 정상 저장");
+        db.write(|tx| tx.execute_batch(crate::sql::transactions_tests::REVERSE_FIRST_TIME))
+            .await
+            .expect("유효하지만 역행하는 시각 손상");
+        store
+            .latest(&account)
+            .await
+            .expect_err("정상 상태보다 오래된 요약 시각");
+    });
+}
