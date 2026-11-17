@@ -33,6 +33,7 @@ const fixture = ({
     { family: "IBM Plex Mono", status: "loaded" },
   ];
   if (fontList === "missingMono") fonts.splice(1, 1);
+  if (fontList === "missingSans") fonts.splice(0, 1);
   fonts.ready = Promise.resolve();
   fonts.load = async (value) => {
     calls.push(["load", value]);
@@ -58,6 +59,7 @@ const fixture = ({
       calls.push(["detach"]);
     },
   };
+  let installedTime;
   const page = {
     on: (name, handler) => {
       calls.push(["on", name]);
@@ -66,12 +68,15 @@ const fixture = ({
     clock: {
       install: async (value) => {
         calls.push(["install", value.time.toISOString()]);
-        realm.Date = {
-          now: () => (input === "fixed" ? value.time.getTime() : 1),
-        };
+        installedTime = value.time.getTime() + 1;
       },
       pauseAt: async (time) => {
         calls.push(["pauseAt", time.toISOString()]);
+        if (time.getTime() < installedTime)
+          throw new Error("Cannot fast-forward to the past");
+        realm.Date = {
+          now: () => (input === "moving" ? 1 : time.getTime()),
+        };
       },
     },
     goto: async (...args) => {
@@ -106,6 +111,7 @@ const fixture = ({
     },
     addInitScript: async (fn, value) => {
       runInContext(`(${fn.toString()})(${JSON.stringify(value)})`, realm);
+      if (input === "random") runInContext("Math.random = () => 0.9", realm);
     },
     newPage: async () => page,
     newCDPSession: async () => session,
@@ -151,7 +157,7 @@ test("DS15 normal capture applies inputs and checks actual fonts before its scre
   assert.deepEqual(
     calls.filter(([name]) => ["install", "pauseAt"].includes(name)),
     [
-      ["install", "2026-01-02T03:04:05.000Z"],
+      ["install", "1970-01-01T00:00:00.000Z"],
       ["pauseAt", "2026-01-02T03:04:05.000Z"],
     ],
   );
@@ -175,6 +181,14 @@ test("DS15 normal capture applies inputs and checks actual fonts before its scre
     ["ready", '[data-catalog-component="Money"][data-catalog-theme="dark"]'],
   );
   assert.equal(calls.filter(([name]) => name === "detach").length, 1);
+
+  assert.deepEqual(
+    calls.filter(([name]) => name === "load"),
+    [
+      ["load", '400 16px "IBM Plex Sans KR"'],
+      ["load", '400 16px "IBM Plex Mono"'],
+    ],
+  );
   const css = calls.find(([name]) => name === "style")[1];
   assert.match(css, /animation: none/);
   assert.match(css, /transition: none/);
@@ -230,6 +244,7 @@ test("DS15 product stylesheet selects the bundled font without a capture overrid
 });
 
 test("DS15 malformed static requests return errors while the server keeps serving", async () => {
+  mkdirSync(join(repoRoot, "target"), { recursive: true });
   const folder = mkdtempSync(join(repoRoot, "target/DS-15-server-"));
   mkdirSync(join(folder, "directory"));
   writeFileSync(join(folder, "normal.html"), "normal");
@@ -283,6 +298,7 @@ test("DS15 Linux CI and check-full require the container comparison", () => {
   );
   const missing = structuredClone(workflow);
   missing.jobs.linux.steps.splice(compare, 1);
+  mkdirSync(join(repoRoot, "target"), { recursive: true });
   const folder = mkdtempSync(join(repoRoot, "target/DS-15-ci-"));
   try {
     cpSync(join(repoRoot, ".github"), join(folder, ".github"), {
@@ -317,6 +333,7 @@ test("DS15 normal capture permits zero-glyph system font records", async () => {
 test("DS15 normal capture rejects a missing bundled family or page error", async () => {
   for (const options of [
     { fontList: "missingMono" },
+    { fontList: "missingSans" },
     { pageError: "present" },
   ]) {
     const { browser, calls } = fixture(options);
@@ -327,4 +344,14 @@ test("DS15 normal capture rejects a missing bundled family or page error", async
     );
     assert.deepEqual(calls.at(-1), ["close"]);
   }
+});
+
+test("DS15 normal capture rejects a random source that did not freeze", async () => {
+  const { browser, calls } = fixture({ input: "random" });
+  await assert.rejects(captureStory(browser, story), /시계·난수 고정 실패/);
+  assert.equal(
+    calls.some(([name]) => name === "screenshot"),
+    false,
+  );
+  assert.deepEqual(calls.at(-1), ["close"]);
 });

@@ -28,7 +28,7 @@ export const captureStory = async (
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.clock.install({ time: new Date(settings.time) });
+    await page.clock.install({ time: new Date(0) });
     await page.clock.pauseAt(new Date(settings.time));
     await page.goto(
       `${origin}/iframe.html?id=${encodeURIComponent(entry.id)}&viewMode=story`,

@@ -1,3 +1,5 @@
+import { baselineFixture } from "./ds15-records-fixture.mjs";
+import { writeBaselineSet } from "../../../harness/visual/records.mjs";
 import { readFileSync } from "node:fs";
 import { chromium } from "@playwright/test";
 import { strict as assert } from "node:assert";
@@ -104,6 +106,7 @@ test("DS15 actual registered checker rejects fixed darwin files in another repos
   const { join, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const root = fileURLToPath(new URL("../../../", import.meta.url));
+  mkdirSync(join(root, "target"), { recursive: true });
   const folder = mkdtempSync(join(root, "target/DS-15-cli-"));
   const checker = fileURLToPath(
     new URL("../../../harness/visual/check.mjs", import.meta.url),
@@ -112,6 +115,12 @@ test("DS15 actual registered checker rejects fixed darwin files in another repos
     assert.equal(spawnSync("git", ["init", "--quiet", folder]).status, 0);
     const check = () =>
       spawnSync(process.execPath, [checker, folder], { encoding: "utf8" });
+    const { images, measurements } = baselineFixture();
+    await writeBaselineSet(
+      join(folder, "harness/visual/baselines"),
+      measurements,
+      images,
+    );
     assert.equal(check().status, 0);
     for (const path of cases.rejected) {
       mkdirSync(dirname(join(folder, path)), { recursive: true });
@@ -132,6 +141,7 @@ test("DS15 browser startup failure closes its server and exits", async () => {
   const { join, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const root = fileURLToPath(new URL("../../../", import.meta.url));
+  mkdirSync(join(root, "target"), { recursive: true });
   const folder = mkdtempSync(join(root, "target/DS-15-startup-"));
   const put = (path, content) => {
     mkdirSync(dirname(join(folder, path)), { recursive: true });
@@ -144,9 +154,9 @@ test("DS15 browser startup failure closes its server and exits", async () => {
     );
     put(
       "harness/visual/policy.mjs",
-      `export const settings=${JSON.stringify(settings)}; export const environmentProblems=()=>[]; export const compareCaptures=()=>[];`,
+      `export const settings=${JSON.stringify(settings)}; export const environmentProblems=()=>[]; export const compareCaptures=()=>[]; export const baselineProblems=()=>[];`,
     );
-    for (const module of ["capture", "server"])
+    for (const module of ["capture", "server", "records"])
       put(
         `harness/visual/${module}.mjs`,
         readFileSync(
@@ -171,6 +181,29 @@ test("DS15 browser startup failure closes its server and exits", async () => {
     assert.equal(run.error, undefined);
     assert.equal(run.status, 1);
     assert.match(run.stderr, /forced launch failure/);
+    const compare = () =>
+      spawnSync(
+        process.execPath,
+        [join(folder, "harness/visual/run.mjs"), "compare"],
+        { encoding: "utf8", timeout: 10000 },
+      );
+    const missing = compare();
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /실측 자료 누락/);
+    assert.doesNotMatch(missing.stderr, /forced launch failure/);
+    const { images, measurements } = baselineFixture();
+    const baselineFolder = join(folder, "harness/visual/baselines");
+    await writeBaselineSet(baselineFolder, measurements, images);
+    assert.match(compare().stderr, /forced launch failure/);
+    const extra = join(
+      baselineFolder,
+      "Deleted-light-chromium-linux-arm64.png",
+    );
+    writeFileSync(extra, "stale");
+    assert.match(compare().stderr, /기준 PNG 목록 불일치/);
+    rmSync(extra);
+    writeFileSync(join(baselineFolder, "measurement.json"), "invalid JSON");
+    assert.match(compare().stderr, /실측 자료 누락 또는 형식 오류/);
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

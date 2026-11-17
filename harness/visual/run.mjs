@@ -1,3 +1,4 @@
+import { storedProblems, writeBaselineSet } from "./records.mjs";
 import { captureStory } from "./capture.mjs";
 import { staticServer } from "./server.mjs";
 import { createRequire } from "node:module";
@@ -20,13 +21,18 @@ const require = createRequire(join(root, "apps/desktop/package.json"));
 const { chromium } = require("@playwright/test");
 const build = join(root, "target/DS-15/storybook");
 const index = JSON.parse(readFileSync(join(build, "index.json"), "utf8"));
+const output = join(root, "target/DS-15/captures");
+const baselines = join(root, "harness/visual/baselines");
+if (mode === "compare") {
+  const invalid = storedProblems(baselines);
+  if (invalid.length) throw new Error(invalid.join("\n"));
+}
 const server = staticServer(build);
 await new Promise((done) => server.listen(0, "127.0.0.1", done));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const output = join(root, "target/DS-15/captures");
-const baselines = join(root, "harness/visual/baselines");
 mkdirSync(output, { recursive: true });
 const measurements = [];
+const images = {};
 try {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -58,10 +64,7 @@ try {
         if (differences.length !== 0)
           throw new Error(`${component}/${theme}: ${differences.join()}`);
         const name = `${component}-${theme}-chromium-linux-arm64.png`;
-        if (mode === "update") {
-          mkdirSync(baselines, { recursive: true });
-          writeFileSync(join(baselines, name), captures[0]);
-        }
+        images[name] = captures[0];
         if (mode === "compare") {
           const baseline = existsSync(join(baselines, name))
             ? readFileSync(join(baselines, name))
@@ -77,6 +80,8 @@ try {
           second: createHash("sha256").update(captures[1]).digest("hex"),
         });
       }
+    if (mode === "update")
+      await writeBaselineSet(baselines, measurements, images);
     writeFileSync(
       join(output, "measurement.json"),
       JSON.stringify({ settings, measurements }, null, 2),

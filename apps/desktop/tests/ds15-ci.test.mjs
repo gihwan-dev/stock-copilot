@@ -1,7 +1,13 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  mkdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "./paths.mjs";
 
@@ -11,6 +17,7 @@ for (const [name, install, compare, expected] of [
   ["comparison failure", 0, 9, 9],
 ]) {
   test(`DS15 CI entry preserves frozen install ordering and ${name}`, () => {
+    mkdirSync(join(repoRoot, "target"), { recursive: true });
     const folder = mkdtempSync(join(repoRoot, "target/DS-15-ci-entry-"));
     const trace = join(folder, "calls.jsonl");
     const fake = (command, exit) => {

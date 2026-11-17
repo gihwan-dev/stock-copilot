@@ -1,0 +1,53 @@
+{
+  "origin": "synthetic",
+  "method": "get",
+  "path": "/api/v1/transactions",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1transactions/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "transactions": [
+        {
+          "transactionType": "SECURITIES_TRANSFER_IN",
+          "marketCountry": "KR",
+          "currency": "KRW",
+          "symbol": "005930",
+          "assetClass": "STOCK",
+          "isinCode": "KR7005930003",
+          "quantity": "10",
+          "filledPrice": null,
+          "amount": null,
+          "commission": "0",
+          "tax": "0",
+          "netAmount": null,
+          "exchangeRate": null,
+          "settlementDate": "2026-09-18",
+          "settled": true,
+          "transactionTime": "2026-09-18T10:30:00+09:00",
+          "isCancellation": false
+        },
+        {
+          "transactionType": "SECURITIES_TRANSFER_OUT",
+          "marketCountry": "US",
+          "currency": "USD",
+          "symbol": "AAPL261218C00150000",
+          "assetClass": "OPTION",
+          "isinCode": null,
+          "quantity": "1",
+          "filledPrice": null,
+          "amount": null,
+          "commission": "0",
+          "tax": "0",
+          "netAmount": null,
+          "exchangeRate": null,
+          "settlementDate": "2026-09-17",
+          "settled": true,
+          "transactionTime": "2026-09-17T06:30:00+09:00",
+          "isCancellation": false
+        }
+      ],
+      "nextCursor": null,
+      "hasNext": false
+    }
+  }
+}

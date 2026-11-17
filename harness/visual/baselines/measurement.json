@@ -2,10 +2,7 @@
   "settings": {
     "image": "mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
     "engine": "chromium",
-    "viewport": {
-      "width": 960,
-      "height": 640
-    },
+    "viewport": { "width": 960, "height": 640 },
     "scale": 1,
     "locale": "ko-KR",
     "timezone": "Asia/Seoul",
@@ -73,12 +70,5 @@
       "first": "71489712506bf539c408d7d5093bf5e8e71b0aebf0902dfa378c3f9fe8d5e84f",
       "second": "71489712506bf539c408d7d5093bf5e8e71b0aebf0902dfa378c3f9fe8d5e84f"
     }
-  ],
-  "image": {
-    "tag": "mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
-    "id": "sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe",
-    "digests": [
-      "mcr.microsoft.com/playwright@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe"
-    ]
-  }
+  ]
 }
