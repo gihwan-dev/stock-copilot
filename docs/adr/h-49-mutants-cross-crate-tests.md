@@ -69,9 +69,13 @@ test-diff의 최종 실패는 승인된 준비 변경2건뿐이다. 사용자 �
 
 1차 수정의 정상 커밋 훅은 Rust1996/1996·커버리지1114/1114와 기준 검사까지 통과하고, master분기점 대비 최초 승인 준비2건의 test-diff에서만 종료1이었다. 준비 부분을 추가 변경하지 않았다. 정상 훅 성공으로 기록하지 않으며 같은 승인2건 범위의 커밋 한정 예외를 적용한다. 후속 끄기 보고·훅 설치 확인을 유지한다. 전체 target_globs 연결 손 변형은 컴파일 성공 후 새 domain회귀가 실패(생존0 대 기대5)하여 검출했다.
 
+## 2차 비판 후 회귀 보강
+
+application없는 두 패키지 조합3가지와 세 패키지 조합을 새 테스트 하나로 고정했다. 제품·실행기 구현은3cf4a7aa와 바이트 동일하며 기존 단언을 바꾸지 않았다. 모듈4개 회귀 통과와 xtask clippy로 검증한다. packages.len()>1 손 변형은 새 회귀에서 실제 검출된다. 최초 승인 준비2건은 master분기점 검사에 계속 나타나므로 동일 범위의 커밋 예외로 기록한다. 최신 master수신 뒤 최종 HEAD 전체 검사를 별도로 수행한다.
+
 ## 최종 선택·안내 모듈 손 변형
 
-mktemp 임시 복사본에서 원본 테스트와 선택·안내 모듈을 rustc --test로 실제 컴파일하고 실행했다.29개 중 컴파일 성공28개·검출28개, 컴파일 불가1개 집계 제외. 실행기 연결부 손 변형은 별도 임시 전체 복사본에서 cargo nextest로 검증한다.
+mktemp 임시 복사본에서 원본 테스트와 선택·안내 모듈을 rustc --test로 실제 컴파일하고 실행했다.30개 중 컴파일 성공29개·검출29개, 컴파일 불가1개 집계 제외. 실행기 연결부 손 변형은 별도 임시 전체 복사본에서 cargo nextest로 검출했다. 독립 비판자는 companion_sources 체인 제거도 실제 컴파일 후 안내 회귀에서 검출했다.
 
 | 번호 | 바꾼 것 | 결과 | 잡은 테스트 |
 |---|---|---|---|
@@ -96,11 +100,12 @@ mktemp 임시 복사본에서 원본 테스트와 선택·안내 모듈을 rustc
 | 19 | `Ok(packages) =>     Ok(BTreeSet::new())` | 검출 | test_packages::tests |
 | 20 | `Ok(packages) =>     packages.insert(String::from("testkit-ports"));     Ok(packages)` | 검출 | test_packages::tests |
 | 21 | `packages.contains("testkit-ports") => !packages.contains("testkit-ports")` | 검출 | test_packages::tests |
-| 22 | `command.arg("--test-package").arg(package); => command.arg("--package").arg(package);` | 검출 | test_packages::tests |
-| 23 | `command.arg("--test-package").arg(package); => command.arg("--test-package").arg("application");` | 검출 | test_packages::tests |
-| 24 | `Ok(packages) =>     Err(String::from("failure"))` | 검출 | test_packages::tests |
-| 25 | `glob.starts_with(&format!("{directory}/src/")) => !glob.starts_with(&format!("{directory}/src/"))` | 검출 | test_packages::tests |
-| 26 | `&& changed => || changed` | 검출 | test_packages::tests |
-| 27 | `path.starts_with => path.ends_with` | 검출 | test_packages::tests |
-| 28 | `format!("{}/", COMPANION.2) => format!("{}", COMPANION.2)` | 검출 | test_packages::tests |
-| 29 | `COMPANION.0)]) => COMPANION.1)])` | 검출 | test_packages::tests |
+| 22 | `packages.contains("testkit-ports") => packages.len() > 1` | 검출 | test_packages::tests |
+| 23 | `command.arg("--test-package").arg(package); => command.arg("--package").arg(package);` | 검출 | test_packages::tests |
+| 24 | `command.arg("--test-package").arg(package); => command.arg("--test-package").arg("application");` | 검출 | test_packages::tests |
+| 25 | `Ok(packages) =>     Err(String::from("failure"))` | 검출 | test_packages::tests |
+| 26 | `glob.starts_with(&format!("{directory}/src/")) => !glob.starts_with(&format!("{directory}/src/"))` | 검출 | test_packages::tests |
+| 27 | `&& changed => || changed` | 검출 | test_packages::tests |
+| 28 | `path.starts_with => path.ends_with` | 검출 | test_packages::tests |
+| 29 | `format!("{}/", COMPANION.2) => format!("{}", COMPANION.2)` | 검출 | test_packages::tests |
+| 30 | `COMPANION.0)]) => COMPANION.1)])` | 검출 | test_packages::tests |

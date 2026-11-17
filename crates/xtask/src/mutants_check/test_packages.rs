@@ -58,6 +58,36 @@ pub(super) fn companion_sources(globs: &[String], changed: &BTreeSet<String>) ->
 #[cfg(test)]
 mod tests {
     #[test]
+    fn combinations_without_application_preserve_default_arguments() {
+        for sources in [
+            vec![
+                "crates/domain/src/lib.rs",
+                "crates/order-execution/src/lib.rs",
+            ],
+            vec![
+                "crates/domain/src/lib.rs",
+                "crates/adapters/store-sqlite/src/lib.rs",
+            ],
+            vec![
+                "crates/order-execution/src/lib.rs",
+                "crates/adapters/store-sqlite/src/lib.rs",
+            ],
+            vec![
+                "crates/domain/src/lib.rs",
+                "crates/order-execution/src/lib.rs",
+                "crates/adapters/store-sqlite/src/lib.rs",
+            ],
+        ] {
+            let mut command = std::process::Command::new("cargo");
+            super::configure(
+                &mut command,
+                &sources.into_iter().map(String::from).collect::<Vec<_>>(),
+            )
+            .expect("declared owners");
+            assert_eq!(command.get_args().count(), 0);
+        }
+    }
+    #[test]
     fn companion_notice_requires_the_source_scope_and_exact_companion_directory() {
         let globs = [String::from("crates/application/src/**/*.rs")];
         let changed = std::collections::BTreeSet::from([String::from(
