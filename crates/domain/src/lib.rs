@@ -580,3 +580,8 @@ mod transaction_sync;
 pub use transaction_sync::{DailyFullInspection, TransactionSyncTimeError, daily_full_inspection};
 
 pub use settled_row_set::recent_transaction_window;
+
+pub use settled_row_set::{
+    FullInspectionError, FullInspectionPlan, FullInspectionProgress, FullInspectionStatus,
+    InspectionRangeDays, InspectionRangeResult, split_full_inspection,
+};
