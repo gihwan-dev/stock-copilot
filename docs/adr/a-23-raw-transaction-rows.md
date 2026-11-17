@@ -84,13 +84,13 @@ T-06의 ParsedTransaction.source를 직렬화하지 않고 get()의 원문으로
 | 27 | 관측 행 반환 마지막 원본 제외 | tests::observed_batch_bounds_and_order_are_preserved, tests::raw_rows_reach_repository_with_duplicates_and_partial_quarantine | 컴파일 성공·검출 |
 | 28 | 완전 응답 정규화 행 소실 | tests::cancellation_notice_survives_storage_and_lookup, tests::disappearance_warning_survives_storage_and_lookup, tests::domain_history_limit_is_recorded_as_failure_with_the_original_state, tests::duplicate_disappearance_preserves_both_boundaries_and_outside_rows, tests::new_rows_and_equal_clock_are_accepted_without_changing_transaction_fields | 컴파일 성공·검출 |
 
-## 자동 변이와 환경 예외
+## 최초 자동 변이와 과거 환경 예외
 
-just mutants-diff를 실행했다. 첫 실행은 frontendDist 생성 전이라 테스트 목록 컴파일에서 실패했다. 빌드 후 재실행은 승인된 test-diff13건을 거부하여 변이 실행 전에 종료했다. 자동 변이 통과나 선택0개를 주장하지 않는다. 손 변형28개와 자동 명령의 미실행을 구별한다. H-47에 승인된 기계적 test-diff와 변경분 변이 전처리의 연계를 인계한다.
+just mutants-diff를 실행했다. 첫 실행은 frontendDist 생성 전이라 테스트 목록 컴파일에서 실패했다. 빌드 후 재실행은 승인된 test-diff13건을 거부하여 변이 실행 전에 종료했다. 자동 변이 통과나 선택0개를 주장하지 않는다. 당시 손 변형28개와 자동 명령의 미실행을 구별한다. 이후 보강까지 포함한 구현자 손 변형은 아래 표의33개다. H-47에 승인된 기계적 test-diff와 변경분 변이 전처리의 연계를 인계한다.
 
-정상 커밋 훅은 check-ts의 Xcode 라이선스 R4 테스트1건만 실패했다. 다른 Node 테스트는 실패0이다. 지시문의 환경2 예외에 따라 그 뒤 check-ts 단계와 check 본문을 순차로 직접 검사한다. 기존 테스트 변경 예외와 환경 예외는 커밋 메시지에 함께 기록한다. 검사 규칙이나 테스트 자체는 변경하지 않는다.
+정상 커밋 훅은 check-ts의 Xcode 라이선스 R4 테스트1건만 실패했다. 다른 Node 테스트는 실패0이다. 환경2 당시에는 지시문에 따라 그 뒤 check-ts 단계와 check 본문을 순차로 직접 검사했다. 기존 테스트 변경 예외와 환경 예외는 커밋 메시지에 함께 기록한다. 검사 규칙이나 테스트 자체는 변경하지 않는다.
 
-검사 최종 결과: 정상 훅의 Node 테스트는 R4 단1건만 실패했다. 그 뒤 check-ts 단계(CI 회귀88개 포함), fmt·clippy·deny·arch/source/sql·sqlcipher·migration·capability·generated-files·gen-schema·raw-types·disable-check, 전체 nextest1868개, coverage-check(계측1076개), disable-report·hooks-installed가 통과했다. test-diff는 위 승인13건만 실패했다. 환경 예외 사용: 예. 새 테스트를 구현 전에 실행한 동작 red 증거는 없으며, 손 변형 실패와 원복 통과를 별도의 검증으로 남긴다.
+최초 구현 검사 결과: 정상 훅의 Node 테스트는 R4 단1건만 실패했다. 그 뒤 check-ts 단계(CI 회귀88개 포함), fmt·clippy·deny·arch/source/sql·sqlcipher·migration·capability·generated-files·gen-schema·raw-types·disable-check, 전체 nextest1868개, coverage-check(계측1076개), disable-report·hooks-installed가 통과했다. test-diff는 위 승인13건만 실패했다. 환경 예외 사용: 예. 새 테스트를 구현 전에 실행한 동작 red 증거는 없으며, 손 변형 실패와 원복 통과를 별도의 검증으로 남긴다.
 
 ## 리뷰 후 보완과 중복 키 실행 관측
 
@@ -111,3 +111,16 @@ just mutants-diff를 실행했다. 첫 실행은 frontendDist 생성 전이라 �
 ## 환경 예외 종료
 
 환경3 안내로 Xcode 라이선스 문제가 해결된 뒤에는 DEVELOPER_DIR 설정과 R4 사유의 커밋 예외를 종료했다. 앞서 환경 예외로 만든 커밋은 이력에 남기며, 이후에는 정상 훅의 전체 검사를 실행한다. 기존에 사전 승인된 기계적 test-diff 예외는 해당 승인 범위에만 적용한다. 서버 재시작으로 중단된 정상 커밋은 HEAD·인덱스·실행 프로세스를 확인한 뒤 다시 실행했다.
+
+## 타입과 포트의 변경
+
+| 대상 | 전 | 후 |
+|---|---|---|
+| 정상 행 | Transaction만 전달 | ObservedTransaction이 Transaction과 불투명 RawTransactionRow를 소유 |
+| `TransactionRead::Complete` | domain CompleteTransactionResponse | application CompleteTransactionObservation |
+| `IncompleteTransactions.received` | `Vec<TransactionBatch>` | `Vec<ObservedTransactionBatch>` |
+| TransactionSyncRecord::from_observation | `Result<TransactionRead, PortError>` | 서명 유지, 내부 관측에 결합된 원문 포함 |
+| TransactionSyncRepository::record_sync | `record: &TransactionSyncRecord` | 서명 유지, 같은 상세 기록으로 원문 전달 |
+| domain 대조 | CompleteTransactionResponse | 동일. application의 normalized() 투영으로 연결 |
+
+3차 비판은 헬퍼 이름의 사소한 문제만 확정했다. expected_krw_amount로 명확히 하고 동등한 두 번째 정상 행의 금액도 직접 단언했다. 후자는 이미 거래 전체 동등성으로 보장되는 내용을 읽기 쉽게 보강한 것이다. 제품 코드 변경과 추가 리뷰 회차는 없다. 보호 생성물 두 파일의 변경은 새 ADR 읽기 등록과 해당 설정 해시의 공식 재생성에 한정하며, 구체적인 사전 승인 범위를 벗어나지 않는다.

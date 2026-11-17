@@ -1,0 +1,17 @@
+{
+  "origin": "synthetic",
+  "method": "get",
+  "path": "/api/v1/prices",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1prices/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": [
+      {
+        "symbol": "005930",
+        "timestamp": "2026-03-25T09:30:00.123+09:00",
+        "lastPrice": "72000",
+        "currency": "KRW"
+      }
+    ]
+  }
+}

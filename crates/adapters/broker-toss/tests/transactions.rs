@@ -1051,14 +1051,18 @@ mod tests {
         assert_eq!(rows[0].transaction(), rows[1].transaction());
         assert_eq!(
             rows[0].transaction().data().amount,
-            Some(expected_tail_amount("731"))
+            Some(expected_krw_amount("731"))
+        );
+        assert_eq!(
+            rows[1].transaction().data().amount,
+            Some(expected_krw_amount("731"))
         );
         assert_eq!(
             rows[2].transaction().data().amount,
-            Some(expected_tail_amount("733"))
+            Some(expected_krw_amount("733"))
         );
     }
-    fn expected_tail_amount(value: &str) -> domain::Money {
+    fn expected_krw_amount(value: &str) -> domain::Money {
         domain::Money::parse(
             &domain::NumericInput::try_new(value).expect("numeric"),
             domain::Currency::Krw,
@@ -1077,14 +1081,14 @@ mod tests {
         assert_eq!(last.source().as_str(), source);
         assert_eq!(
             last.transaction().data().amount,
-            Some(expected_tail_amount("733"))
+            Some(expected_krw_amount("733"))
         );
         assert_eq!(
             actual.received[0].observed_rows()[0]
                 .transaction()
                 .data()
                 .amount,
-            Some(expected_tail_amount("731"))
+            Some(expected_krw_amount("731"))
         );
     }
     #[test]

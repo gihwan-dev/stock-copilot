@@ -12,6 +12,8 @@ mod globs;
 mod manifest;
 mod test_impls;
 mod tokens;
+#[cfg(test)]
+mod visual_tests;
 
 #[cfg(test)]
 mod cargo_config_tests;
@@ -355,6 +357,14 @@ fn entry_findings(
     })
 }
 
+fn darwin_baseline(name: &str) -> bool {
+    let lowercase = name.to_ascii_lowercase();
+    (lowercase.contains("-darwin.") || lowercase.contains("-darwin-"))
+        && ["png", "jpg", "jpeg", "webp"]
+            .iter()
+            .any(|extension| lowercase.ends_with(&format!(".{extension}")))
+}
+
 fn entry_text_findings(
     entry: &Entry,
     members: &[String],
@@ -378,6 +388,9 @@ fn entry_text_findings(
             } else {
                 vec![Finding::whole_file(path, rule)]
             }
+        }
+        EntryKind::File if darwin_baseline(&entry.name) => {
+            vec![Finding::whole_file(path, Rule::DarwinBaseline)]
         }
         EntryKind::Symlink => vec![Finding::whole_file(path, Rule::Symlink)],
         EntryKind::File if entry.name == IGNORE_FILE && path.contains('/') => {
