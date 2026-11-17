@@ -17,3 +17,7 @@ pub(crate) mod third_tests;
 pub(crate) mod holdings;
 #[cfg(test)]
 pub(crate) mod holdings_tests;
+
+pub(crate) mod transactions;
+#[cfg(test)]
+pub(crate) mod transactions_tests;

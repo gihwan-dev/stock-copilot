@@ -5,6 +5,7 @@ pub mod ipc;
 pub mod lifecycle;
 pub mod ports;
 pub mod product_ports;
+mod security;
 pub mod startup;
 pub mod unavailable;
 
@@ -20,11 +21,13 @@ pub fn build_app<R: Runtime, P: PortTypes>(
 ) -> Result<App<R>, tauri::Error> {
     for window in &mut context.config_mut().app.windows {
         window.visible = false;
+        window.create = false;
     }
     builder
         .invoke_handler(ipc::registry::specta_builder::<R>().invoke_handler())
         .setup(move |app| {
             ipc::registry::specta_builder::<R>().mount_events(app);
+            security::create_windows(app)?;
             let database = tauri::async_runtime::block_on(database::open_database(
                 ports.secrets.as_ref(),
                 Arc::clone(&ports.database),
@@ -94,5 +97,7 @@ where
     });
 }
 
+#[cfg(test)]
+mod security_tests;
 #[cfg(test)]
 mod tests;

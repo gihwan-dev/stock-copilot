@@ -1,0 +1,926 @@
+[
+  {
+    "name": "overflow-0",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"overflow-hidden\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-variant-0",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:overflow-hidden\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-1",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"overflow-x-clip\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-variant-1",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:overflow-x-clip\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-2",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"truncate\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-variant-2",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:truncate\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-3",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"line-clamp-3\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-variant-3",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:line-clamp-3\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-4",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"text-ellipsis\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-variant-4",
+    "row": 18,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:text-ellipsis\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "overflow-control",
+    "row": 18,
+    "file": "src/shared/ds/Text.tsx",
+    "code": "const probe = <div className=\"truncate\" />;",
+    "rule": null
+  },
+  {
+    "name": "scroll-0",
+    "row": 19,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"overflow-auto\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "scroll-variant-0",
+    "row": 19,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:overflow-auto\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "scroll-1",
+    "row": 19,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"overflow-x-scroll\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "scroll-variant-1",
+    "row": 19,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:overflow-x-scroll\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "scroll-2",
+    "row": 19,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"overflow-y-overlay\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "scroll-variant-2",
+    "row": 19,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:overflow-y-overlay\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "scroll-control",
+    "row": 19,
+    "file": "src/shared/ds/ScrollArea.tsx",
+    "code": "const probe = <div className=\"overflow-auto\" />;",
+    "rule": null
+  },
+  {
+    "name": "position-0",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"absolute\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-0",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:absolute\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-1",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"fixed\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-1",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:fixed\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-2",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"sticky\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-2",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:sticky\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-3",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"inset-0\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-3",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:inset-0\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-4",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"top-sidebar-width\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-4",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:top-sidebar-width\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-5",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"dialog-overlay\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-5",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:dialog-overlay\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-6",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"sr-only\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-variant-6",
+    "row": 20,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:sr-only\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "position-control",
+    "row": 20,
+    "file": "src/shared/ds/Dialog.tsx",
+    "code": "const probe = <div className=\"dialog-overlay\" />;",
+    "rule": null
+  },
+  {
+    "name": "length-0",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"h-control-height\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-0",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:h-control-height\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-1",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"max-w-dialog-width\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-1",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:max-w-dialog-width\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-2",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"min-h-chart-height\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-2",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:min-h-chart-height\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-3",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"size-icon-sm\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-3",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:size-icon-sm\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-4",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"chat-input\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-4",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:chat-input\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-5",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"markdown-content\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-5",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:markdown-content\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-6",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"skeleton-line\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-variant-6",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:skeleton-line\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "length-control",
+    "row": 21,
+    "file": "src/shared/ds/Button.tsx",
+    "code": "const probe = <div className=\"h-control-height\" />;",
+    "rule": null
+  },
+  {
+    "name": "viewport-0",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"h-screen\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-variant-0",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:h-screen\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-1",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"w-screen\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-variant-1",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:w-screen\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-2",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"h-dvh\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-variant-2",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:h-dvh\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-3",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"min-h-svh\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-variant-3",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:min-h-svh\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-4",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"w-lvw\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-variant-4",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:w-lvw\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "viewport-control",
+    "row": 22,
+    "file": "src/shared/ds/AppShell.tsx",
+    "code": "const probe = <div className=\"h-screen\" />;",
+    "rule": null
+  },
+  {
+    "name": "nowrap-0",
+    "row": 23,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"whitespace-nowrap\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "nowrap-variant-0",
+    "row": 23,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:whitespace-nowrap\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "nowrap-control",
+    "row": 23,
+    "file": "src/shared/ds/Numbers.tsx",
+    "code": "const probe = <div className=\"whitespace-nowrap\" />;",
+    "rule": null
+  },
+  {
+    "name": "offset-0",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"-m-space-4\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-variant-0",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:-m-space-4\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-1",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"-mx-space-2\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-variant-1",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:-mx-space-2\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-2",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"translate-x-full\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-variant-2",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:translate-x-full\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-3",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"-translate-y-full\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-variant-3",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:-translate-y-full\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-4",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"scale-50\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-variant-4",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"hover:scale-50\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "offset-control",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"p-space-4\" />;",
+    "rule": null
+  },
+  {
+    "name": "Text-no-scroll",
+    "row": 19,
+    "file": "src/shared/ds/Text.tsx",
+    "code": "const probe = <div className=\"overflow-auto\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Text-no-line-clamp",
+    "row": 18,
+    "file": "src/shared/ds/Text.tsx",
+    "code": "const probe = <div className=\"line-clamp-3\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-max-w-prose-max",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"max-w-prose-max\" />;",
+    "rule": null
+  },
+  {
+    "name": "Markdown-markdown-content",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"markdown-content\" />;",
+    "rule": null
+  },
+  {
+    "name": "Markdown-reject-0",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"max-w-dialog-width\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-reject-1",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"w-prose-max\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-reject-2",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"h-prose-max\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-reject-3",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"max-w-[720px]\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-reject-4",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"max-w-(--spacing-prose-max)\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-reject-5",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"w-full max-w-content-max\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-reject-6",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"h-control-height\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Markdown-prose-variant",
+    "row": 21,
+    "file": "src/shared/ds/Markdown.tsx",
+    "code": "const probe = <div className=\"hover:max-w-prose-max\" />;",
+    "rule": null
+  },
+  {
+    "name": "prose-outside-Markdown",
+    "row": 21,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe = <div className=\"max-w-prose-max\" />;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "features/home/ui/Probe.tsx-0",
+    "row": 25,
+    "file": "src/features/home/ui/Probe.tsx",
+    "code": "import {ScrollArea} from \"../../../shared/ds\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "features/home/ui/Probe.tsx-1",
+    "row": 25,
+    "file": "src/features/home/ui/Probe.tsx",
+    "code": "import {ScrollArea as Scroller} from \"../../../shared/ds\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "features/home/ui/Probe.tsx-2",
+    "row": 25,
+    "file": "src/features/home/ui/Probe.tsx",
+    "code": "export {ScrollArea as Scroller} from \"../../../shared/ds\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "features/home/ui/Probe.tsx-3",
+    "row": 25,
+    "file": "src/features/home/ui/Probe.tsx",
+    "code": "import Scroller from \"../../../shared/ds/ScrollArea\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "features/home/ui/Probe.tsx-control",
+    "row": 25,
+    "file": "src/features/home/ui/Probe.tsx",
+    "code": "import {Text} from \"../../../shared/ds\";",
+    "rule": null
+  },
+  {
+    "name": "app/Probe.tsx-0",
+    "row": 25,
+    "file": "src/app/Probe.tsx",
+    "code": "import {ScrollArea} from \"../../../shared/ds\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "app/Probe.tsx-1",
+    "row": 25,
+    "file": "src/app/Probe.tsx",
+    "code": "import {ScrollArea as Scroller} from \"../../../shared/ds\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "app/Probe.tsx-2",
+    "row": 25,
+    "file": "src/app/Probe.tsx",
+    "code": "export {ScrollArea as Scroller} from \"../../../shared/ds\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "app/Probe.tsx-3",
+    "row": 25,
+    "file": "src/app/Probe.tsx",
+    "code": "import Scroller from \"../../../shared/ds/ScrollArea\";",
+    "rule": "no-restricted-imports"
+  },
+  {
+    "name": "app/Probe.tsx-control",
+    "row": 25,
+    "file": "src/app/Probe.tsx",
+    "code": "import {Text} from \"../../../shared/ds\";",
+    "rule": null
+  },
+  {
+    "name": "DS-internal-scroll-import",
+    "row": 25,
+    "file": "src/shared/ds/Dialog.tsx",
+    "code": "import {ScrollArea} from \"./ScrollArea\";",
+    "rule": null
+  },
+  {
+    "name": "review-equivalent-0",
+    "row": 23,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"text-nowrap\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "review-equivalent-1",
+    "row": 23,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"whitespace-pre\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "review-equivalent-2",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"-space-x-space-2\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "review-equivalent-3",
+    "row": 24,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"-space-y-space-2\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-w-vi",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"w-vi\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-h-vb",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"h-vb\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-w-dvi",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"w-dvi\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-h-dvb",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"h-dvb\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "round2-viewport-w-[100vi]",
+    "row": 22,
+    "file": "src/shared/ds/Probe.tsx",
+    "code": "const probe=<div className=\"w-[100vi]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-no-absolute",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<div className=\"absolute\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-no-fixed",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<div className=\"fixed\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-no-sticky",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<div className=\"sticky\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "ChartTable-sr-only",
+    "row": 20,
+    "file": "src/shared/ds/ChartTable.tsx",
+    "code": "const probe=<table className=\"sr-only\"/>;",
+    "rule": null
+  },
+  {
+    "name": "EmptyState-own-width",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"max-w-dialog-width\"/>;",
+    "rule": null
+  },
+  {
+    "name": "EmptyState-no-height",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"h-control-height\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "EmptyState-no-other-max",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"max-w-prose-max\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "EmptyState-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/EmptyState.tsx",
+    "code": "const probe=<div className=\"max-w-[47rem]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Skeleton-own-line",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"skeleton-line\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-own-sm",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-chart-height-sm\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-own-md",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-chart-height\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-own-lg",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-chart-height-lg\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Skeleton-no-control",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-control-height\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Skeleton-no-width",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"max-w-dialog-width\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Skeleton-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/Skeleton.tsx",
+    "code": "const probe=<div className=\"h-[31px]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-own-header",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"min-h-toolbar-height\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Card-no-fixed-body",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"h-chart-height\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-no-max-width",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"max-w-content-max\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-no-width",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"w-sidebar-width\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Card-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/Card.tsx",
+    "code": "const probe=<div className=\"h-[17px]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Icon-own-small",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-icon-sm\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Icon-own-medium",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-icon-md\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Icon-own-large",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-icon-lg\"/>;",
+    "rule": null
+  },
+  {
+    "name": "Icon-no-chart",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"h-chart-height-lg\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Icon-no-max-width",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"max-w-content-max\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  },
+  {
+    "name": "Icon-no-arbitrary",
+    "row": 21,
+    "file": "src/shared/ds/Icon.tsx",
+    "code": "const probe=<div className=\"size-[29px]\"/>;",
+    "rule": "better-tailwindcss/no-restricted-classes"
+  }
+]

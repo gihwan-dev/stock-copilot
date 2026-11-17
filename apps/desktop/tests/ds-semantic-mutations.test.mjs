@@ -221,6 +221,10 @@ const importRules = async (source, publicCode = publicSource) => {
       '"./ds-classes.mjs"',
       JSON.stringify(new URL("../eslint/ds-classes.mjs", import.meta.url).href),
     );
+  source = source.replace(
+    '"./ds-overflow.mjs"',
+    JSON.stringify(new URL("../eslint/ds-overflow.mjs", import.meta.url).href),
+  );
   const semanticUrl = data(source);
   const semantic = await import(semanticUrl);
   let pub = publicCode

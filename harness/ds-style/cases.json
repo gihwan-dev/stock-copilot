@@ -301,7 +301,12 @@
   },
   "review-ref.tsx": {
     "row": "review",
-    "expect": ["ds/no-dom-styling", "ds/no-style-literals", "ds/no-dom-values"]
+    "expect": [
+      "ds/no-dom-styling",
+      "ds/no-style-literals",
+      "ds/no-dom-values",
+      "better-tailwindcss/no-restricted-classes"
+    ]
   },
   "review-factory.tsx": {
     "row": "review",

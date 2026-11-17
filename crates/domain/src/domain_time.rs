@@ -260,6 +260,13 @@ pub struct TimeSpan(SignedDuration);
 pub(crate) const BUYING_POWER_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 pub(crate) const SIGNAL_HOLDING_MAX_AGE: TimeSpan = TimeSpan(SignedDuration::seconds(60));
 impl TimeSpan {
+    #[must_use]
+    pub fn as_parts(self) -> (SpanSeconds, Nanosecond) {
+        (
+            SpanSeconds::new(self.0.whole_seconds().unsigned_abs()),
+            Nanosecond::new(self.0.subsec_nanoseconds().unsigned_abs()),
+        )
+    }
     pub const DAY: Self = Self(SignedDuration::seconds(86400));
     pub const NANOSECOND: Self = Self(SignedDuration::nanoseconds(1));
     pub fn try_new(seconds: SpanSeconds, nanosecond: Nanosecond) -> Result<Self, TimeError> {
@@ -508,5 +515,22 @@ mod tests {
             TimeInterval::try_new(start, start),
             Err(TimeIntervalError::NonIncreasing)
         );
+    }
+}
+
+#[cfg(test)]
+mod span_parts_tests {
+    use super::{Nanosecond, SpanSeconds, TimeSpan};
+    #[test]
+    fn span_components_roundtrip_zero_fraction_and_largest_seconds() {
+        for seconds in [0, 1, 7, i64::MAX.unsigned_abs()] {
+            for nanos in [0, 1, 123_456_789, 999_999_999] {
+                let parts = (SpanSeconds::new(seconds), Nanosecond::new(nanos));
+                let span = TimeSpan::try_new(parts.0, parts.1).expect("기간");
+                assert_eq!(span.as_parts(), parts);
+                let decoded = span.as_parts();
+                assert_eq!(TimeSpan::try_new(decoded.0, decoded.1).expect("복원"), span);
+            }
+        }
     }
 }
