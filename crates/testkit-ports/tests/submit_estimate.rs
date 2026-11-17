@@ -257,6 +257,35 @@ mod tests {
         }
     }
     impl EstimateSubmissionRepository for Repo {
+        fn submission_records(
+            &self,
+            instrument: &InstrumentId,
+        ) -> impl Future<
+            Output = Result<
+                Vec<EstimateSubmissionRecord<AiRunId, ReasoningEffort>>,
+                SystemPortError,
+            >,
+        > {
+            let records = self
+                .state
+                .write()
+                .expect("잠금")
+                .records
+                .iter()
+                .filter(|record| {
+                    record
+                        .submission()
+                        .task_key()
+                        .task()
+                        .volatility()
+                        .instrument()
+                        == instrument
+                })
+                .cloned()
+                .collect();
+            std::future::ready(Ok(records))
+        }
+
         fn assignments(
             &self,
         ) -> impl Future<Output = Result<EstimateAssignments<AiRunId>, SystemPortError>> {
@@ -574,14 +603,16 @@ mod tests {
         repo: &Arc<Repo>,
         second_run: &AiRunId,
         second_id: &CalibrationEstimateId,
-    ) -> (AiRunId, CalibrationEstimateId) {
+    ) -> (AiRunId, EstimateSubmissionInput) {
         let (events, seen) = bus(repo, Ok(()));
         let service = SubmitEstimate::new(repo.as_ref(), &events);
+        let first_request = input("one", "36");
+        let second_request = input(second_id.as_str(), "79");
         let results = std::thread::scope(|scope| {
             let first =
-                scope.spawn(|| run(service.execute(&ai_run("alpha"), vec![input("one", "36")])));
-            let second = scope
-                .spawn(|| run(service.execute(second_run, vec![input(second_id.as_str(), "79")])));
+                scope.spawn(|| run(service.execute(&ai_run("alpha"), vec![first_request.clone()])));
+            let second =
+                scope.spawn(|| run(service.execute(second_run, vec![second_request.clone()])));
             [
                 first.join().expect("첫 스레드"),
                 second.join().expect("둘째 스레드"),
@@ -599,9 +630,9 @@ mod tests {
         assert_eq!(seen.write().expect("잠금").len(), 1);
         let failed = results.iter().position(Result::is_err).expect("충돌 하나");
         if failed == 0 {
-            (ai_run("alpha"), task_id("one"))
+            (ai_run("alpha"), first_request)
         } else {
-            (second_run.clone(), second_id.clone())
+            (second_run.clone(), second_request)
         }
     }
     #[test]
@@ -613,7 +644,9 @@ mod tests {
             let mut repository = Repo::new();
             repository.barrier = Some(Barrier::new(2));
             let mut repo = Arc::new(repository);
-            let (retry_run, retry_id) = collide_distinct(&repo, &second_run, &second_id);
+            let (retry_run, retry_request) = collide_distinct(&repo, &second_run, &second_id);
+            let retry_id = retry_request.task_id.clone();
+            let expected = retry_request.clone();
             assert_eq!(
                 repo.state
                     .write()
@@ -627,10 +660,14 @@ mod tests {
             Arc::get_mut(&mut repo).expect("경쟁 종료").barrier = None;
             let (events, seen) = bus(&repo, Ok(()));
             run(SubmitEstimate::new(repo.as_ref(), &events)
-                .execute(&retry_run, vec![input(retry_id.as_str(), "79")]))
+                .execute(&retry_run, vec![retry_request]))
             .expect("최신 원장 재시도");
             let stored = repo.state.write().expect("잠금");
             assert_eq!(stored.records.len(), 2);
+            let retried = stored.records.last().expect("재시도 기록");
+            assert_eq!(retried.submission(), &expected.submission);
+            assert_eq!(retried.narrative(), &expected.narrative);
+            assert_eq!(retried.metadata(), &expected.metadata);
             assert_eq!(
                 stored
                     .assignments
@@ -641,5 +678,177 @@ mod tests {
             );
             assert_eq!(seen.write().expect("잠금").len(), 1);
         }
+    }
+    fn source_cases() -> [(Vec<domain::EvidenceRef>, EstimateSourceStatus); 5] {
+        let url = domain::EvidenceUrl::try_new(
+            domain::NormalizedUrl::try_new("https://example.com/research").expect("URL"),
+        )
+        .expect("출처");
+        let disclosure = domain::Disclosure::new(
+            domain::ReceiptNo::Dart(
+                domain::DartReceiptNo::try_new("20261117000001").expect("접수 번호"),
+            ),
+            url.as_url().clone(),
+            UntrustedText::try_new("공시 근거").expect("제목"),
+            None,
+        );
+        let tool = domain::EvidenceRef::Tool(
+            domain::ToolReference::try_new("tool:quote/a").expect("도구"),
+        );
+        [
+            (
+                vec![domain::EvidenceRef::Web(url.clone())],
+                EstimateSourceStatus::External,
+            ),
+            (
+                vec![domain::EvidenceRef::News(
+                    domain::NewsSource::Yonhap,
+                    url.clone(),
+                )],
+                EstimateSourceStatus::External,
+            ),
+            (
+                vec![domain::EvidenceRef::from_disclosure(&disclosure).expect("공시 참조")],
+                EstimateSourceStatus::External,
+            ),
+            (vec![tool.clone()], EstimateSourceStatus::Missing),
+            (
+                vec![tool, domain::EvidenceRef::Web(url)],
+                EstimateSourceStatus::External,
+            ),
+        ]
+    }
+    #[test]
+    fn source_references_and_status_survive_submission() {
+        for (references, status) in source_cases() {
+            let repo = Arc::new(Repo::new());
+            let (events, seen) = bus(&repo, Ok(()));
+            let mut request = input("one", "62");
+            let before = request.submission;
+            let evidence = domain::Evidence::try_new(references).expect("근거");
+            request.submission = SignalSubmission::create(
+                before.task_key().clone(),
+                before.calibration_key().clone(),
+                before.probability(),
+                Some(evidence.clone()),
+                before.submitted_at(),
+            )
+            .expect("제출");
+            let expected = request.clone();
+            run(SubmitEstimate::new(repo.as_ref(), &events)
+                .execute(&ai_run("alpha"), vec![request]))
+            .expect("수락");
+            let state = repo.state.write().expect("잠금");
+            let record = state.records.first().expect("기록");
+            assert_eq!(record.source_status(), status);
+            assert_eq!(record.submission(), &expected.submission);
+            assert_eq!(record.submission().evidence(), Some(&evidence));
+            assert_eq!(
+                *seen.write().expect("잠금"),
+                vec![DomainEvent::EstimateSubmitted(id("sample-a"))]
+            );
+        }
+    }
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ObservedSubmission {
+        event: DomainEvent,
+        records: Vec<EstimateSubmissionRecord<AiRunId, ReasoningEffort>>,
+    }
+    #[derive(Debug)]
+    struct SnapshotListener {
+        repo: Arc<Repo>,
+        observations: Arc<RwLock<Vec<ObservedSubmission>>>,
+        instrument: InstrumentId,
+    }
+    impl SnapshotListener {
+        fn capture(&self, event: &DomainEvent) {
+            let records =
+                run(self.repo.submission_records(&self.instrument)).expect("저장 기록 조회");
+            self.observations
+                .write()
+                .expect("관측")
+                .push(ObservedSubmission {
+                    event: event.clone(),
+                    records,
+                });
+        }
+    }
+    impl EventSubscriber for SnapshotListener {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            self.capture(event);
+            Ok(())
+        }
+    }
+    #[test]
+    fn each_event_observes_its_new_record_after_existing_records_and_failed_commit() {
+        let repo = Arc::new(Repo::new());
+        let observations = Arc::new(RwLock::new(Vec::new()));
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            std::iter::once(DomainEventKind::EstimateSubmitted).collect(),
+            SnapshotListener {
+                repo: Arc::clone(&repo),
+                observations: Arc::clone(&observations),
+                instrument: id("sample-a"),
+            },
+        );
+        let events = builder.build();
+        let service = SubmitEstimate::new(repo.as_ref(), &events);
+        run(service.execute(&ai_run("alpha"), vec![input("one", "27")])).expect("첫 저장");
+        let first_records = repo.state.write().expect("잠금").records.clone();
+        assert_eq!(first_records.len(), 1);
+        let failure =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity);
+        *repo.fail.write().expect("잠금") = Some(failure);
+        assert_eq!(
+            run(service.execute(&ai_run("alpha"), vec![input("two", "73")])),
+            Err(SubmitEstimateError::Storage(failure))
+        );
+        assert_eq!(observations.write().expect("관측").len(), 1);
+        assert_eq!(repo.state.write().expect("잠금").records, first_records);
+        run(service.execute(&ai_run("alpha"), vec![input("two", "73")])).expect("둘째 저장");
+        let second_records = repo.state.write().expect("잠금").records.clone();
+        assert_eq!(second_records.len(), 2);
+        assert_eq!(
+            *observations.write().expect("관측"),
+            vec![
+                ObservedSubmission {
+                    event: DomainEvent::EstimateSubmitted(id("sample-a")),
+                    records: first_records
+                },
+                ObservedSubmission {
+                    event: DomainEvent::EstimateSubmitted(id("sample-a")),
+                    records: second_records
+                }
+            ]
+        );
+    }
+    #[test]
+    fn complete_record_query_filters_instruments_and_preserves_every_field() {
+        let second_task = other_task();
+        let repo = Arc::new(Repo::with_second_task(second_task.clone()));
+        let (events, seen) = bus(&repo, Ok(()));
+        run(SubmitEstimate::new(repo.as_ref(), &events).execute(
+            &ai_run("alpha"),
+            vec![
+                input("one", "25"),
+                input_for_task("two", "82", &second_task),
+            ],
+        ))
+        .expect("저장");
+        let all = repo.state.write().expect("잠금").records.clone();
+        assert_eq!(
+            run(repo.submission_records(&id("sample-a"))).expect("첫 종목 조회"),
+            vec![all.first().expect("첫 기록").clone()]
+        );
+        assert_eq!(
+            run(repo.submission_records(&id("sample-b"))).expect("둘째 종목 조회"),
+            vec![all.last().expect("둘째 기록").clone()]
+        );
+        assert_eq!(
+            run(repo.submission_records(&id("unknown-instrument"))).expect("없는 종목 조회"),
+            Vec::new()
+        );
+        assert_eq!(seen.write().expect("잠금").len(), 2);
     }
 }

@@ -19,6 +19,12 @@ pub enum EstimateCommitOutcome {
     Conflict,
 }
 pub trait EstimateSubmissionRepository: Send + Sync {
+    fn submission_records(
+        &self,
+        instrument: &domain::InstrumentId,
+    ) -> impl Future<
+        Output = Result<Vec<EstimateSubmissionRecord<AiRunId, ReasoningEffort>>, SystemPortError>,
+    > + Send;
     fn assignments(
         &self,
     ) -> impl Future<Output = Result<EstimateAssignments<AiRunId>, SystemPortError>> + Send;
