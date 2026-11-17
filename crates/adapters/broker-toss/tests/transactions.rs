@@ -136,7 +136,7 @@ mod tests {
         "amount":"731","commission":"13","tax":"17","netAmount":"701","exchangeRate":null,
         "settlementDate":"2026-09-18","settled":true,"transactionTime":null,"isCancellation":false})
     }
-    fn complete(bodies: Vec<Value>) -> domain::CompleteTransactionResponse {
+    fn complete(bodies: Vec<Value>) -> application::CompleteTransactionObservation {
         let mut responses = vec![issued()];
         responses.extend(bodies.into_iter().map(|body| response("200 OK", &body)));
         let server = ScriptedHttpServer::start(responses).expect("server");
@@ -149,6 +149,58 @@ mod tests {
         match outcome_1 {
             application::TransactionRead::Complete(completed) => completed,
             application::TransactionRead::Incomplete(_) => panic!("incomplete"),
+        }
+    }
+    #[test]
+    fn raw_spelling_survives_complete_and_interrupted_observation() {
+        let first = serde_json::to_string(&row()).expect("json");
+        let second = first
+            .replace("DEPOSIT", r"DEPO\u0053IT")
+            .replace("731", "731.000");
+        let third = first.replace("731", "733");
+        for suffix in [
+            r#","hasNext":false,"nextCursor":null"#,
+            r#","hasNext":true,"nextCursor":"next""#,
+        ] {
+            let body = format!(
+                r#"{{"result":{{"transactions":[{first},{second},{third},{first}]{suffix}}}}}"#
+            );
+            let mut replies = vec![
+                issued(),
+                response(
+                    "200 OK",
+                    &serde_json::from_str::<Value>(&body).expect("json"),
+                ),
+            ];
+            replies[1] = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).into_bytes();
+            replies.push(response("500 Internal Server Error", &json!({})));
+            let server = ScriptedHttpServer::start(replies).expect("server");
+            let observation = run(adapter(&server).transactions(
+                &AccountId::new(731),
+                window(),
+                &TransactionFilter::all(),
+            ))
+            .expect("read");
+            let record = application::TransactionSyncRecord::from_observation(
+                &domain::SettledRowSet::new(AccountId::new(731)),
+                window(),
+                crate::support::time().now(),
+                Ok(observation),
+            );
+            let rows = match record.observation().as_ref().expect("observation") {
+                application::TransactionRead::Complete(value) => value.rows(),
+                application::TransactionRead::Incomplete(value) => &value.received[0],
+            };
+            assert_eq!(rows.observed_rows().len(), 4);
+            for (observed, expected) in rows
+                .observed_rows()
+                .iter()
+                .zip([&first, &second, &third, &first])
+            {
+                assert_eq!(observed.source().as_str(), expected);
+            }
+            assert_eq!(rows.as_slice()[0], rows.as_slice()[1]);
+            assert_ne!(rows.as_slice()[1], rows.as_slice()[2]);
         }
     }
     #[test]

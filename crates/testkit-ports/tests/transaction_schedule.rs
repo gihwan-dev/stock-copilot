@@ -466,11 +466,11 @@ mod tests {
         let account = AccountId::new(104);
         let window = SettlementWindow::try_new(date(4), date(17)).expect("fixture 창");
         let complete = application::TransactionRead::Complete(
-            domain::CompleteTransactionResponse::after_last_page_without_quarantine(
+            application::CompleteTransactionObservation::after_last_page_without_quarantine(
                 account.clone(),
                 window,
                 domain::TransactionFilter::all(),
-                domain::TransactionBatch::try_new(vec![]).expect("빈 행"),
+                application::ObservedTransactionBatch::try_new(vec![]).expect("빈 행"),
                 domain::CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
             )
             .expect("완전 응답"),
@@ -506,7 +506,7 @@ mod tests {
             let expected = match observation {
                 application::TransactionRead::Complete(response) => domain::SyncOutcome::Complete(
                     SettledRowSet::new(account.clone())
-                        .reconcile(&response, at(1_794_841_201))
+                        .reconcile(response.normalized(), at(1_794_841_201))
                         .expect("정상 대조")
                         .state()
                         .clone(),

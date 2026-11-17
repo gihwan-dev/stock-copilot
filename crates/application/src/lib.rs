@@ -344,3 +344,9 @@ mod transaction_schedule;
 pub use transaction_schedule::{
     FullInspectionRepository, TransactionSchedule, TransactionScheduleError,
 };
+
+mod transaction_observation;
+pub use transaction_observation::{
+    CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,
+    RawTransactionRow,
+};
