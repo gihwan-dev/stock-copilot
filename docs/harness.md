@@ -505,6 +505,8 @@ R-14는 `shared/ds`에서 3, 5, 7번을 풀어 주자고 했다. 이 문서는 �
 | 생존 허용 | 보호된 허용 목록에 있는 것만. 설정 파일(`.cargo/mutants.toml`)도 보호 파일 |
 | 코드로 건너뛰기 | `#[mutants::skip]`, `cfg_attr` 형태 모두 xtask가 실패시킨다 |
 
+H-49: 변이 소스 선택과 테스트 패키지 선택을 분리한다. `crates/xtask/src/mutants_check/test_packages.rs`의 명시 소유 선언에 따라 application 변이는 application과 testkit-ports 테스트를 함께 실행한다(ADR 0091, 0119, 0120). domain·order-execution·store-sqlite 단독 변이는 각 자기 패키지 테스트를 유지한다. application이 포함된 여러 대상은 합집합을 `--test-package`로 전달한다. 선택 패키지를 `--cargo-arg=--package=...`에도 전달해 정상 소스 사전 실행부터 같은 테스트를 확인한다. application이 없으면 기존 기본 인자를 유지한다. 변경분·일일·주간 전체가 같은 실행 함수를 쓰며 알 수 없는 소스 소유자는 실패한다. testkit-ports의 테스트·지원 파일만 바뀌어도 application의 주간 전체 검사 대상임을 안내한다. 새 대상·외부 테스트 소유자를 추가할 때 선언과 회귀도 함께 갱신한다.
+
 H-46에서 참조 그래프·추가 전용 선택기를 제거했다. 변경분은 대상 src 파일과 diff 영역의 교집합만 검사한다. `cargo mutants --in-diff`는 변경 영역과 겹치는 변이에 적용하며, 테스트 코드 변경으로 다른 파일의 변이가 살아남는 영향은 검증하지 못한다. 테스트·지원 파일만 바뀐 crate는 주간 전체 실행 대상임을 출력한다. 변경분 실행의 전체 시간 제한은 20분이다. 제한 때 자신이 만든 프로세스 그룹만 종료하고 실패한다. 매일은 지난24시간의 변경분, 전체는 주1회다. 일일 기준은 master 첫 부모 이력에서24시간 전 커밋이며 얕은 이력은 먼저 가져온다. 그 이전 커밋이 없는 첫날은 빈 트리부터, 변경이 없으면 변경 없음으로 성공한다. 일일은 실행 생성 시각에서 예약18:00 UTC를 복원한 기준으로 기존 파일·diff 교집합 선택을 재사용한다. 계획 작업이 변이를 열거하고100개당 한 조각, 최대8개를 만든다. 일일 변이 단계330분·작업360분이며 계획 작업은30분이다. GitHub 실행 메타데이터 조회의 Actions 읽기 권한은 계획 작업에만 둔다. 일반 macOS/Linux 검사는 일일 cron에서만 돌린다. 주간128조각은 같은 전체 대상을 나눈다. 성공 종료한 빈 조각은 대상 없음으로 표시하며, 자료 유실·취소·불완전 실행은 실패로 구분한다. 미검출·시간 초과 실패 정책을 유지하며 결과는 Actions 로그와 작업 요약에 남긴다.
 
 `error_class.rs`에서 현재 생성되는 변이 2개는 모두 `ErrorClass: Default` 미구현으로 컴파일되지 않는다. 오류별 매핑 검증은 자동 변이가 아니라 `crates/application/tests/error_class.rs`의 exhaustive 기대 함수와 `every_leaf_matches_the_decision_table`에 의존한다. 생성된 변이의 미검출 0건을 매핑 검출력의 증거로 해석하지 않는다.
@@ -700,11 +702,11 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 역할 | 실행 | 강제 |
 |---|---|---|
 | 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸 가드 |
-| 구현·수정 | T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다), 별도 작업 사본. sol high, terra max. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 정확한 두 모델·구현 역할·작업 사본·브리프를 확인 |
+| 구현·수정 | T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다), 별도 작업 사본. sol high, terra max. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 정확한 두 모델·작업 사본·브리프를 확인. Terra만 implementation 역할 명시를 요구하며 sol 역할 생략은 기존 호환으로 허용 |
 | 조사·비판 | T3 Codex `gpt-6.1-sol` high, 별도 작업 사본 | Claude 위임 가드가 sol만 허용 |
 | 적대적 리뷰 | 새 Claude Opus 5.5 adversarial-reviewer | T3 격리, 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
 
-Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모델별 위임 판정은 메인 Claude의 orchestrationFindings가 수행한다. Terra에는 max 옵션을 명시하며 생략·빈 옵션은 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude Agent 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. 적대적 리뷰는 정확한 Opus 모델·review 역할·worktree 격리의 T3 위임만 허용한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모델별 위임 판정은 메인 Claude의 orchestrationFindings가 수행한다. sol high는 운영 기본 요청이며 기존 옵션 생략·빈 객체·빈 배열에서는 실제 강도가 T3 상속·기본값에 따른다. Terra에는 max 옵션을 명시하며 생략·빈 옵션은 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude Agent 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. 적대적 리뷰는 정확한 Opus 모델·review 역할·worktree 격리의 T3 위임만 허용한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
 
 #### Claude 적대적 리뷰어 통제
 

@@ -26,12 +26,12 @@ const codexModel = (model, role) =>
 const codexFindings = (model, role, value) => {
   if (!codexModel(model, role))
     return denied(
-      "Codex 모델과 역할: sol만 조사·비판에 허용하며 terra는 명시한 implementation 역할만 허용한다",
+      "Codex 허용 모델은 gpt-6.1-sol 또는 gpt-6.1-terra이며 역할은 terra에 implementation을 명시한다. 조사·비판은 sol만 허용한다",
     );
   return options(value, model)
     ? []
     : denied(
-        "Codex 추론 강도는 sol high, terra max이며 Terra의 max 옵션을 명시한다",
+        "Codex 추론 강도는 sol high, terra max이며 Terra의 max 옵션을 명시한다. effort와 reasoningEffort는 혼합하지 않고 한 키만 쓴다",
       );
 };
 const launchRole = (message) => {

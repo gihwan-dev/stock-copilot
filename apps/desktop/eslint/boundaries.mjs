@@ -39,6 +39,7 @@ export const FEATURE_DEPENDENCIES = {
 };
 
 export const PACKAGE_LOCATIONS = {
+  "@base-ui/react": ["src/shared/ds/**"],
   "react-dom": ["src/shared/platform/index.ts"],
   "@tauri-apps/api": ["src/shared/ipc/**"],
   zod: ["src/shared/ipc/**", "src/shared/lib/brand.ts"],

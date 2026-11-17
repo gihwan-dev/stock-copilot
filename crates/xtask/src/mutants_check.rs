@@ -2,6 +2,7 @@ mod catalog;
 mod daily;
 mod environment;
 mod scope;
+mod test_packages;
 use scope::{diff_scope, jobs_for};
 #[cfg(test)]
 mod tests;
@@ -230,6 +231,7 @@ pub(crate) fn touched_crates(globs: &[String], changed: &BTreeSet<String>) -> BT
                 .iter()
                 .any(|path| path.starts_with(&prefix) || workspace_support(path))
         })
+        .chain(test_packages::companion_sources(globs, changed))
         .collect()
 }
 
@@ -372,6 +374,7 @@ fn run_with_diff(
         .arg("--output")
         .arg(&output)
         .stdin(Stdio::null());
+    test_packages::configure(&mut command, &globs)?;
     configure_profile(&mut command);
     configure_parallelism(&mut command, workspace, &globs)?;
     if let Scope::Sharded(shard) | Scope::DailySharded(_, shard) = scope {

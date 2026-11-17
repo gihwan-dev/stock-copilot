@@ -248,3 +248,42 @@ test("model role and effort failures explain the rejected contract", () => {
     );
   }
 });
+
+test("mixed option keys are denied even when both values match", () => {
+  for (const model of ["gpt-6.1-sol", "gpt-6.1-terra"]) {
+    const expected = model === "gpt-6.1-terra" ? "max" : "high";
+    const options = { effort: expected, reasoningEffort: expected };
+    assert.equal(verdict(delegate(model, "implementation", options)).length, 1);
+    assert.equal(
+      verdict(launch(model, "implementation", options), true).length,
+      1,
+    );
+  }
+});
+
+test("Terra launch role marker must start its own line", () => {
+  for (const prefix of ["prefix", " ", "* "]) {
+    const input = launch("gpt-6.1-terra", "implementation", {
+      reasoningEffort: "max",
+    });
+    input.message = input.message.replace("\n- 역할:", `\n${prefix}- 역할:`);
+    assert.equal(verdict(input, true).length, 1);
+  }
+});
+
+test("diagnostics list exact models and prohibit mixed option keys", () => {
+  const model = verdict(
+    delegate("gpt-6-luna", "implementation", { effort: "high" }),
+  )[0].message;
+  assert.match(model, /gpt-6\.1-sol/u);
+  assert.match(model, /gpt-6\.1-terra/u);
+  const keys = verdict(
+    delegate("gpt-6.1-terra", "implementation", {
+      effort: "max",
+      reasoningEffort: "max",
+    }),
+  )[0].message;
+  assert.match(keys, /effort/u);
+  assert.match(keys, /reasoningEffort/u);
+  assert.match(keys, /혼합/u);
+});
