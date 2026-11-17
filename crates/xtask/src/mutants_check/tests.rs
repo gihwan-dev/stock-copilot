@@ -80,11 +80,11 @@ fn prepared_workspace(root: &Path) -> std::path::PathBuf {
     )
     .expect("write manifest");
     fs::create_dir_all(directory.join(".cargo")).expect("create .cargo");
-    fs::copy(
-        root.join(".cargo/mutants.toml"),
+    fs::write(
         directory.join(".cargo/mutants.toml"),
+        "examine_globs=[\"crates/domain/src/**/*.rs\"]\n",
     )
-    .expect("copy mutants settings");
+    .expect("fixture mutants settings");
     generate_lockfile(&directory.join("Cargo.toml"));
     directory
 }
@@ -513,23 +513,28 @@ fn nightly_rejects_an_empty_catalog_and_clears_previous_evidence() {
 #[test]
 fn nightly_allows_an_empty_shard_only_after_a_nonempty_catalog() {
     let directory = fresh_directory(&repository_root(), "h47-empty-shard");
-    fs::create_dir_all(directory.join("src")).expect("source");
+    fs::create_dir_all(directory.join("crates/domain/src")).expect("source");
     fs::create_dir_all(directory.join(".cargo")).expect("settings");
     fs::write(
-        directory.join("Cargo.toml"),
-        "[package]\nname=\"h47-empty\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n",
+        directory.join("crates/domain/Cargo.toml"),
+        "[package]\nname=\"domain\"\nversion=\"0.1.0\"\nedition=\"2024\"\n",
     )
     .expect("manifest");
     fs::write(
-        directory.join("src/lib.rs"),
+        directory.join("crates/domain/src/lib.rs"),
         "pub fn positive(value: i32) -> bool { value > 0 }\n",
     )
     .expect("source");
     fs::write(
         directory.join(".cargo/mutants.toml"),
-        "examine_globs = [\"src/**/*.rs\"]\n",
+        "examine_globs = [\"crates/domain/src/**/*.rs\"]\n",
     )
     .expect("fixture target");
+    fs::write(
+        directory.join("Cargo.toml"),
+        "[workspace]\nresolver=\"3\"\nmembers=[\"crates/domain\"]\n",
+    )
+    .expect("workspace manifest");
     generate_lockfile(&directory.join("Cargo.toml"));
     assert_eq!(
         run(
@@ -555,4 +560,140 @@ fn nightly_allows_an_empty_shard_only_after_a_nonempty_catalog() {
             .trim(),
         "[]"
     );
+}
+
+fn cross_crate_fixture(name: &str) -> std::path::PathBuf {
+    let root = fresh_directory(&repository_root(), name);
+    for directory in [
+        "crates/application/src",
+        "crates/testkit-ports/src",
+        ".cargo",
+    ] {
+        fs::create_dir_all(root.join(directory)).expect("fixture directory");
+    }
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nresolver=\"3\"\nmembers=[\"crates/application\",\"crates/testkit-ports\"]\n",
+    )
+    .expect("workspace");
+    fs::write(
+        root.join("crates/application/Cargo.toml"),
+        "[package]\nname=\"application\"\nversion=\"0.1.0\"\nedition=\"2024\"\n",
+    )
+    .expect("application manifest");
+    fs::write(
+        root.join("crates/application/src/lib.rs"),
+        "pub fn accepts(value: i32) -> bool { value > 7 }\n#[test] fn baseline() { assert_eq!(3 + 4, 7); }\n",
+    )
+    .expect("application source");
+    fs::write(root.join("crates/testkit-ports/Cargo.toml"), "[package]\nname=\"testkit-ports\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[dependencies]\napplication={path=\"../application\"}\n").expect("test manifest");
+    fs::write(root.join("crates/testkit-ports/src/lib.rs"), "").expect("test library");
+    fs::create_dir_all(root.join("crates/testkit-ports/tests")).expect("integration directory");
+    let test_path = root.join("crates/testkit-ports/tests/accepts.rs");
+    fs::write(&test_path, "#[test] fn boundary() { assert!(!application::accepts(7)); assert!(application::accepts(8)); }\n").expect("external tests");
+    fs::write(
+        root.join(".cargo/mutants.toml"),
+        "examine_globs=[\"crates/application/src/**/*.rs\"]\n",
+    )
+    .expect("selection");
+    generate_lockfile(&root.join("Cargo.toml"));
+    root
+}
+
+#[test]
+fn cross_crate_tests_catch_application_mutants_and_disconnection_survives() {
+    let root = cross_crate_fixture("h49-cross-crate");
+    let files = BTreeSet::from([String::from("crates/application/src/lib.rs")]);
+    for scope in [
+        Scope::Files(files.clone()),
+        Scope::DailyFiles(files),
+        Scope::Everything,
+    ] {
+        let connected = run(&root, &scope, IgnoreFiles::Disregarded).expect("connected run");
+        assert_eq!(connected, Outcomes::default());
+        let results: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join("target/mutants/mutants.out/outcomes.json")).expect("outcomes"),
+        )
+        .expect("json");
+        assert_eq!(results["caught"], 5_i32);
+    }
+    let patch = root.join("changes.diff");
+    fs::write(&patch, "diff --git a/crates/application/src/lib.rs b/crates/application/src/lib.rs\n--- a/crates/application/src/lib.rs\n+++ b/crates/application/src/lib.rs\n@@ -1 +1 @@\n-pub fn accepts(value: i32) -> bool { value > 6 }\n+pub fn accepts(value: i32) -> bool { value > 7 }\n").expect("diff");
+    assert_eq!(
+        super::run_with_diff(
+            &root,
+            &Scope::Files(BTreeSet::from([String::from(
+                "crates/application/src/lib.rs"
+            )])),
+            IgnoreFiles::Disregarded,
+            Some(&patch)
+        )
+        .expect("diff execution"),
+        Outcomes::default()
+    );
+    let disconnected = std::process::Command::new("cargo")
+        .current_dir(&root)
+        .args([
+            "mutants",
+            "--no-config",
+            "--test-tool=nextest",
+            "--cap-lints=true",
+            "--no-shuffle",
+            "--colors=never",
+            "--file=crates/application/src/lib.rs",
+            "--test-package=application",
+            "--gitignore=false",
+            "--output=target/disconnected",
+        ])
+        .output()
+        .expect("disconnected configuration");
+    assert_eq!(disconnected.status.code(), Some(2_i32));
+    let results: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("target/disconnected/mutants.out/outcomes.json"))
+            .expect("disconnected outcomes"),
+    )
+    .expect("json");
+    assert_eq!(results["missed"], 5_i32);
+    assert_eq!(results["caught"], 0_i32);
+    assert_eq!(results["unviable"], 0_i32);
+    assert_eq!(results["timeout"], 0_i32);
+}
+
+#[test]
+fn companion_declaration_matches_workspace_dependency_and_test_location() {
+    let root = repository_root();
+    let manifest: toml::Table = read_text(&root.join("crates/testkit-ports/Cargo.toml"))
+        .expect("manifest")
+        .parse()
+        .expect("toml");
+    assert_eq!(manifest["package"]["name"].as_str(), Some("testkit-ports"));
+    assert_eq!(
+        manifest["dependencies"]["application"]["path"].as_str(),
+        Some("../application")
+    );
+    for file in ["submit_estimate.rs", "run_full_inspection.rs"] {
+        assert!(
+            root.join("crates/testkit-ports/tests").join(file).is_file(),
+            "{file}"
+        );
+    }
+}
+
+#[test]
+fn broken_companion_tests_fail_baseline_instead_of_counting_as_caught() {
+    let root = cross_crate_fixture("h49-broken-companion");
+    fs::write(
+        root.join("crates/testkit-ports/tests/accepts.rs"),
+        "#[test] fn broken() { assert_eq!(2, 3); }\n",
+    )
+    .expect("broken external test");
+    let error = run(&root, &Scope::Everything, IgnoreFiles::Disregarded)
+        .expect_err("broken baseline must fail");
+    assert!(error.contains("exit status: 4"), "{error}");
+    let results: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("target/mutants/mutants.out/outcomes.json")).expect("outcomes"),
+    )
+    .expect("json");
+    assert_eq!(results["caught"], 0_i32);
+    assert_eq!(results["missed"], 0_i32);
 }
