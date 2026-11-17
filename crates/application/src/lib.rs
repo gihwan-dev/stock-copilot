@@ -355,4 +355,6 @@ pub use transaction_observation::{
     RawTransactionRow,
 };
 mod run_full_inspection;
-pub use run_full_inspection::{FullInspectionRun, FullInspectionRunError, RunFullInspection};
+pub use run_full_inspection::{
+    FullInspectionReport, FullInspectionRun, FullInspectionRunError, RunFullInspection,
+};

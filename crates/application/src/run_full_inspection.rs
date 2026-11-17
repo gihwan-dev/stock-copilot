@@ -4,8 +4,8 @@ use crate::{
 };
 use domain::{
     AccountId, DailyFullInspection, FullInspectionCompletionError, FullInspectionError,
-    FullInspectionPlan, InspectionRangeDays, InspectionRangeResult, InspectionReportError,
-    SyncOutcome, Timestamp, TransactionSyncTimeError, daily_full_inspection,
+    FullInspectionPlan, FullInspectionProgress, InspectionRangeDays, InspectionRangeResult,
+    InspectionReportError, SyncOutcome, Timestamp, TransactionSyncTimeError, daily_full_inspection,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,10 +21,13 @@ pub enum FullInspectionRunError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FullInspectionRun {
     AlreadyCompletedToday,
-    Completed {
-        completed_at: Timestamp,
-        deliveries: Vec<DeliveryReport>,
-    },
+    Completed { completed_at: Timestamp },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FullInspectionReport {
+    pub outcome: Result<FullInspectionRun, FullInspectionRunError>,
+    pub deliveries: Vec<DeliveryReport>,
 }
 
 #[derive(Debug)]
@@ -47,6 +50,20 @@ impl<
         &self,
         account: &AccountId,
         limit: InspectionRangeDays,
+    ) -> FullInspectionReport {
+        let mut deliveries = Vec::new();
+        let outcome = self.execute(account, limit, &mut deliveries).await;
+        FullInspectionReport {
+            outcome,
+            deliveries,
+        }
+    }
+
+    async fn execute(
+        &self,
+        account: &AccountId,
+        limit: InspectionRangeDays,
+        deliveries: &mut Vec<DeliveryReport>,
     ) -> Result<FullInspectionRun, FullInspectionRunError> {
         let previous = self
             .inspections
@@ -62,8 +79,31 @@ impl<
         }
         let plan = FullInspectionPlan::new(None, started_at, limit)
             .map_err(FullInspectionRunError::Plan)?;
+        let progress = self.inspect_ranges(account, &plan, deliveries).await?;
+        let completed_at = self.clock.now();
+        if completed_at < started_at {
+            return Err(FullInspectionRunError::Time(
+                TransactionSyncTimeError::ClockReversed,
+            ));
+        }
+        let completion = progress
+            .completion_at(completed_at)
+            .map_err(FullInspectionRunError::Completion)?;
+        self.inspections
+            .record_completed(account, previous, completion.completed_at())
+            .await
+            .map_err(FullInspectionRunError::Repository)?;
+        Ok(FullInspectionRun::Completed {
+            completed_at: completion.completed_at(),
+        })
+    }
+    async fn inspect_ranges(
+        &self,
+        account: &AccountId,
+        plan: &FullInspectionPlan,
+        deliveries: &mut Vec<DeliveryReport>,
+    ) -> Result<FullInspectionProgress, FullInspectionRunError> {
         let mut progress = plan.begin();
-        let mut deliveries = Vec::new();
         let sync = SyncTransactions {
             broker: self.broker,
             repository: self.repository,
@@ -75,35 +115,24 @@ impl<
                 .sync_window_record(account, *range)
                 .await
                 .map_err(FullInspectionRunError::Sync)?;
-            let result = match record.summary().outcome() {
+            deliveries.push(delivery);
+            let summary = record.summary();
+            let result = match summary.outcome() {
                 SyncOutcome::Complete(_) => InspectionRangeResult::Succeeded,
-                SyncOutcome::Partial(_) | SyncOutcome::Failed | SyncOutcome::AccessBlocked => {
-                    InspectionRangeResult::Failed
+                SyncOutcome::AccessBlocked => {
+                    progress
+                        .report(record.window(), InspectionRangeResult::Failed)
+                        .map_err(FullInspectionRunError::Report)?;
+                    return Err(FullInspectionRunError::Completion(
+                        FullInspectionCompletionError::Incomplete,
+                    ));
                 }
+                SyncOutcome::Partial(_) | SyncOutcome::Failed => InspectionRangeResult::Failed,
             };
             progress
                 .report(record.window(), result)
                 .map_err(FullInspectionRunError::Report)?;
-            deliveries.push(delivery);
         }
-        let completed_at = self.clock.now();
-        if completed_at < started_at {
-            return Err(FullInspectionRunError::Time(
-                TransactionSyncTimeError::ClockReversed,
-            ));
-        }
-        let completion = progress
-            .completion_at(completed_at)
-            .map_err(FullInspectionRunError::Completion)?;
-        daily_full_inspection(previous, completion.completed_at())
-            .map_err(FullInspectionRunError::Time)?;
-        self.inspections
-            .record_completed(account, previous, completion.completed_at())
-            .await
-            .map_err(FullInspectionRunError::Repository)?;
-        Ok(FullInspectionRun::Completed {
-            completed_at: completion.completed_at(),
-            deliveries,
-        })
+        Ok(progress)
     }
 }

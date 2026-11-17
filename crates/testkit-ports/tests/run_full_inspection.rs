@@ -144,6 +144,7 @@ mod tests {
             &AccountId::new(701),
             InspectionRangeDays::try_new(cap).map_err(FullInspectionRunError::Plan)?,
         ))
+        .outcome
     }
     fn prepare(repo: &Repository, broker: &ScriptedBrokerRead, cap: u32, failed: Option<usize>) {
         let account = AccountId::new(701);
@@ -188,7 +189,6 @@ mod tests {
                 result,
                 FullInspectionRun::Completed {
                     completed_at: at(1_794_841_201),
-                    deliveries: vec![DeliveryReport::default(); count],
                 }
             );
             assert_eq!(repo.last.calls(), [AccountId::new(701)]);
@@ -253,7 +253,6 @@ mod tests {
                 result,
                 FullInspectionRun::Completed {
                     completed_at: at(1_794_841_201),
-                    deliveries: vec![DeliveryReport::default(); 2]
                 }
             );
             assert_eq!(broker.calls().len(), 4);
@@ -279,7 +278,6 @@ mod tests {
                 vec![at(1_794_841_201), at(1_794_841_202), at(1_794_841_203)],
                 Ok(FullInspectionRun::Completed {
                     completed_at: at(1_794_841_203),
-                    deliveries: vec![DeliveryReport::default()],
                 }),
             ),
         ] {
@@ -532,7 +530,6 @@ mod tests {
             ),
             Ok(FullInspectionRun::Completed {
                 completed_at: at(1_794_927_601),
-                deliveries: vec![DeliveryReport::default()]
             })
         );
         assert_eq!(
@@ -545,5 +542,184 @@ mod tests {
         );
         assert_eq!(broker.calls().len(), 2);
         assert_eq!(repo.completed.calls(), [(account, None, at(1_794_927_601))]);
+    }
+
+    fn failing_events() -> (EventBus, DeliveryReport) {
+        struct Failing;
+        impl application::EventSubscriber for Failing {
+            fn on_event(
+                &self,
+                _event: &domain::DomainEvent,
+            ) -> Result<(), application::SubscriberFailure> {
+                Err(application::SubscriberFailure::Unavailable)
+            }
+        }
+        let mut builder = application::EventBusBuilder::default();
+        let subscription = builder.subscribe(
+            [domain::DomainEventKind::TransactionsSyncRecorded].into(),
+            Failing,
+        );
+        (
+            builder.build(),
+            DeliveryReport {
+                failures: vec![application::DeliveryFailure {
+                    subscription,
+                    cause: application::SubscriberFailure::Unavailable,
+                }],
+            },
+        )
+    }
+    fn report(
+        repo: &Repository,
+        broker: &ScriptedBrokerRead,
+        clock: &impl application::Clock,
+        events: &EventBus,
+        cap: u32,
+    ) -> application::FullInspectionReport {
+        run(RunFullInspection {
+            broker,
+            repository: repo,
+            inspections: repo,
+            clock,
+            events,
+        }
+        .run_full_inspection(
+            &AccountId::new(701),
+            InspectionRangeDays::try_new(cap).expect("상한"),
+        ))
+    }
+    #[test]
+    fn blocked_account_stops_after_one_range_and_retries_next_run() {
+        for cap in [365, 400_000] {
+            let repo = Repository::default();
+            let broker = ScriptedBrokerRead::default();
+            let clock = SteppedClock::new(at(1_794_841_201));
+            let account = AccountId::new(701);
+            repo.last.push(Ok(None));
+            repo.state.push(Ok(SettledRowSet::new(account)));
+            repo.latest.push(Ok(None));
+            repo.records.push(Ok(WriteCompleted));
+            broker.script_transactions().push(Err(PortError::new(
+                ReadEndpoint::Transactions,
+                HttpStatus::Forbidden,
+                PortErrorKind::AccessDenied(application::AccessDenial::Forbidden),
+            )));
+            let (events, delivery) = failing_events();
+            let result = report(&repo, &broker, &clock, &events, cap);
+            assert_eq!(
+                result.outcome,
+                Err(FullInspectionRunError::Completion(
+                    FullInspectionCompletionError::Incomplete
+                ))
+            );
+            assert_eq!(result.deliveries, [delivery]);
+            assert_eq!(broker.calls().len(), 1);
+            assert_eq!(repo.records.calls().len(), 1);
+            assert_eq!(repo.completed.calls(), []);
+            repo.last.push(Ok(None));
+            prepare(&repo, &broker, cap, None);
+            repo.completed.push(Ok(WriteCompleted));
+            assert_eq!(
+                execute(&repo, &broker, &clock, cap),
+                Ok(FullInspectionRun::Completed {
+                    completed_at: at(1_794_841_201)
+                })
+            );
+            assert_eq!(repo.completed.calls().len(), 1);
+        }
+    }
+    #[derive(Clone, Copy)]
+    enum Ending {
+        Incomplete,
+        Midnight,
+        Save,
+    }
+    #[test]
+    fn reports_survive_incomplete_midnight_and_completion_save_failure() {
+        for ending in [Ending::Incomplete, Ending::Midnight, Ending::Save] {
+            let repo = Repository::default();
+            let broker = ScriptedBrokerRead::default();
+            repo.last.push(Ok(None));
+            let (failed, samples, expected) = match ending {
+                Ending::Incomplete => (
+                    Some(0),
+                    vec![at(1_794_841_201); 3],
+                    FullInspectionRunError::Completion(FullInspectionCompletionError::Incomplete),
+                ),
+                Ending::Midnight => (
+                    None,
+                    vec![at(1_794_927_599), at(1_794_927_599), at(1_794_927_600)],
+                    FullInspectionRunError::Completion(FullInspectionCompletionError::DayMismatch),
+                ),
+                Ending::Save => {
+                    repo.completed.push(Err(failure()));
+                    (
+                        None,
+                        vec![at(1_794_841_201); 3],
+                        FullInspectionRunError::Repository(failure()),
+                    )
+                }
+            };
+            prepare(&repo, &broker, u32::MAX, failed);
+            let (events, delivery) = failing_events();
+            let clock = SequenceClock(std::sync::RwLock::new(samples.into()));
+            let result = report(&repo, &broker, &clock, &events, u32::MAX);
+            assert_eq!(result.outcome, Err(expected));
+            assert_eq!(result.deliveries, [delivery]);
+        }
+    }
+    #[test]
+    fn reports_survive_later_sync_failure_and_success() {
+        let repo = Repository::default();
+        let broker = ScriptedBrokerRead::default();
+        let clock = SteppedClock::new(at(1_794_841_201));
+        let (events, delivery) = failing_events();
+        repo.last.push(Ok(None));
+        let plan = FullInspectionPlan::new(
+            None,
+            at(1_794_841_201),
+            InspectionRangeDays::try_new(400_000).expect("상한"),
+        )
+        .expect("계획");
+        let account = AccountId::new(701);
+        repo.state.push(Ok(SettledRowSet::new(account.clone())));
+        repo.state.push(Err(failure()));
+        repo.latest.push(Ok(None));
+        repo.records.push(Ok(WriteCompleted));
+        broker
+            .script_transactions()
+            .push(Ok(application::TransactionRead::Complete(
+                application::CompleteTransactionObservation::after_last_page_without_quarantine(
+                    account,
+                    plan.ranges()[0],
+                    domain::TransactionFilter::all(),
+                    application::ObservedTransactionBatch::try_new(vec![]).expect("행"),
+                    domain::CompletionAttestation::AllPagesAndAllMatchingPendingReceived,
+                )
+                .expect("응답"),
+            )));
+        let result = report(&repo, &broker, &clock, &events, 400_000);
+        assert_eq!(
+            result.outcome,
+            Err(FullInspectionRunError::Sync(
+                application::TransactionSyncError::Repository(failure())
+            ))
+        );
+        assert_eq!(
+            result.deliveries.as_slice(),
+            std::slice::from_ref(&delivery)
+        );
+        assert_eq!(repo.completed.calls(), []);
+        repo.last.push(Ok(None));
+        prepare(&repo, &broker, 400_000, None);
+        repo.completed.push(Ok(WriteCompleted));
+        let completed = report(&repo, &broker, &clock, &events, 400_000);
+        assert_eq!(
+            completed.outcome,
+            Ok(FullInspectionRun::Completed {
+                completed_at: at(1_794_841_201)
+            })
+        );
+        assert_eq!(completed.deliveries, [delivery.clone(), delivery]);
     }
 }
