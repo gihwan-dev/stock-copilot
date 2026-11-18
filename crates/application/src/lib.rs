@@ -262,9 +262,9 @@ mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod storage_ports;
 pub use storage_ports::{
-    EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
-    ProposalRepository, SettingsRepository, SignalRepository, ThesisRepository,
-    TransactionRepository, ValuationRepository,
+    CacheWriteOutcome, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
+    PortfolioRepository, ProposalRepository, SettingsRepository, SignalRepository,
+    ThesisRepository, TransactionRepository, ValuationRepository,
 };
 
 mod information_error;
@@ -373,3 +373,9 @@ pub use run_full_inspection::{
 mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
 pub mod resolve_estimates;
+
+mod information_storage;
+pub use information_storage::{
+    DisclosureRepository, InformationKey, InformationLinks, InformationSearch, SearchLimit,
+    SearchLimitError,
+};

@@ -1,4 +1,4 @@
-use crate::{DeliveryReport, EventBus, MarketDataRepository, SystemPortError};
+use crate::{CacheWriteOutcome, DeliveryReport, EventBus, MarketDataRepository, SystemPortError};
 use domain::{DomainEvent, FxRate};
 
 #[derive(Debug)]
@@ -12,8 +12,14 @@ impl<'a, Repository: MarketDataRepository> StoreFxRate<'a, Repository> {
         Self { repository, events }
     }
     pub async fn execute(&self, rate: FxRate) -> Result<DeliveryReport, SystemPortError> {
-        self.repository.store_fx_rate(&rate).await?;
-        Ok(self.events.publish(DomainEvent::FxRateUpdated(rate.pair())))
+        match self.repository.store_fx_rate(&rate).await? {
+            CacheWriteOutcome::Changed => {
+                Ok(self.events.publish(DomainEvent::FxRateUpdated(rate.pair())))
+            }
+            CacheWriteOutcome::Unchanged | CacheWriteOutcome::OlderIgnored => {
+                Ok(DeliveryReport::default())
+            }
+        }
     }
 }
 

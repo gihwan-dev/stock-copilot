@@ -1,7 +1,7 @@
 use application::{
-    AuditEntry, AuditLog, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
-    PortfolioRepository, ProposalRepository, RecordOutcome, SecretKey, SecretStore, SecretValue,
-    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
+    AuditEntry, AuditLog, CacheWriteOutcome, EstimateRepository, FxRateQuery, MarketDataRepository,
+    NewsRepository, PortfolioRepository, ProposalRepository, RecordOutcome, SecretKey, SecretStore,
+    SecretValue, SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
     ValuationRepository, WriteCompleted,
 };
 use domain::{
@@ -452,11 +452,14 @@ pub async fn quote_latest<P: MarketDataRepository>(
         "서로 다른 수집 시각 증인"
     );
     super::market_data_repository_quote(port, instrument, Ok(None)).await;
-    for quote in [newer, older] {
-        super::market_data_repository_store_quote(port, instrument, quote, Ok(WriteCompleted))
-            .await;
+    for (quote, outcome) in [
+        (newer, CacheWriteOutcome::Changed),
+        (older, CacheWriteOutcome::OlderIgnored),
+    ] {
+        super::market_data_repository_store_quote(port, instrument, quote, Ok(outcome)).await;
     }
-    super::market_data_repository_store_quote(port, other, older, Ok(WriteCompleted)).await;
+    super::market_data_repository_store_quote(port, other, older, Ok(CacheWriteOutcome::Changed))
+        .await;
     super::market_data_repository_quote(port, instrument, Ok(Some(newer.clone()))).await;
     super::market_data_repository_quote(port, other, Ok(Some(older.clone()))).await;
 }
@@ -487,8 +490,9 @@ pub async fn fx_latest_not_after<P: MarketDataRepository>(
     );
     let pair = older.pair();
     let kind = older.kind();
-    for rate in [newer, older, others.0, others.1] {
-        super::market_data_repository_store_fx_rate(port, rate, Ok(WriteCompleted)).await;
+    for rate in [older, newer, others.0, others.1] {
+        super::market_data_repository_store_fx_rate(port, rate, Ok(CacheWriteOutcome::Changed))
+            .await;
     }
     for (query, expected) in [
         (FxRateQuery::Latest, Some(*newer)),
