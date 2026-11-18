@@ -273,9 +273,13 @@ mod review_tests {
                 }
             }
         }
-        let history =
-            crate::BuySignalRecord::from_signal(&buys[1], source.created_at(), &calendars)
-                .expect("타 종목 이력");
+        let history = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("history").expect("발생 ID"),
+            &buys[1],
+            source.created_at(),
+            &calendars,
+        )
+        .expect("타 종목 이력");
         assert_eq!(
             ScorecardSignalRecord::from_buy(identity(), &buys[0], source.reference(), &history),
             Err(SignalReturnError::ConflictingReturn)

@@ -23,7 +23,7 @@ mod tests {
     };
     use std::{
         future::Future,
-        sync::{Arc, Barrier, RwLock},
+        sync::{Arc, Barrier, RwLock, mpsc},
         task::{Context, Poll, Waker},
     };
     fn price(value: &str) -> Price {
@@ -211,14 +211,16 @@ mod tests {
             },
         }
     }
-    use application::{
-        EstimateResolutionRepository, ResolutionCommitOutcome, ResolutionDataIssue,
-        ResolutionInputs, ResolutionMarketData, ResolutionStatus, ResolveEstimates,
+    use application::resolve_estimates::{
+        EstimateResolutionRepository, ResolutionCalibration, ResolutionCommitOutcome,
+        ResolutionDataIssue, ResolutionInputs, ResolutionMarketData, ResolutionReport,
+        ResolutionStatus, ResolveEstimates,
     };
     use domain::{
-        Calibration, Candle as Bar, EstimateOutcome, MarketCalendar, MarketSession,
-        OutcomeAdjustment, OutcomeFailure, OutcomeState, OutcomeUnavailable, SessionData,
-        SessionInformation, TimeInterval,
+        Calibration, CalibrationLedgerHead, CalibrationPosition, CalibrationSnapshot,
+        Candle as Bar, EstimateOutcome, MarketCalendar, MarketSession, OutcomeAdjustment,
+        OutcomeFailure, OutcomeState, OutcomeUnavailable, SessionData, SessionInformation,
+        TimeInterval,
     };
 
     fn row(day_number: i64) -> MarketSession {
@@ -330,7 +332,7 @@ mod tests {
         assignments: EstimateAssignments<AiRunId>,
         submissions: Vec<EstimateSubmissionRecord<AiRunId, ReasoningEffort>>,
         outcomes: Vec<(CalibrationEstimateId, EstimateOutcome)>,
-        tables: Vec<(CalibrationKey, Calibration)>,
+        tables: Vec<(CalibrationKey, ResolutionCalibration)>,
         unavailable: Vec<(CalibrationEstimateId, ResolutionDataIssue)>,
         fail: bool,
     }
@@ -338,6 +340,7 @@ mod tests {
     struct Repo {
         state: RwLock<State>,
         barrier: Option<Barrier>,
+        forced_commit: Option<ResolutionCommitOutcome>,
     }
     impl EstimateSubmissionRepository for Repo {
         fn submission_records(
@@ -422,7 +425,7 @@ mod tests {
         fn calibration(
             &self,
             key: &CalibrationKey,
-        ) -> impl Future<Output = Result<Option<Calibration>, SystemPortError>> {
+        ) -> impl Future<Output = Result<Option<ResolutionCalibration>, SystemPortError>> {
             let table = self
                 .state
                 .read()
@@ -469,9 +472,12 @@ mod tests {
             &self,
             record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
             outcome: &EstimateOutcome,
-            previous: Option<&Calibration>,
+            previous: &ResolutionCalibration,
             next: &Calibration,
         ) -> impl Future<Output = Result<ResolutionCommitOutcome, SystemPortError>> {
+            if let Some(result) = self.forced_commit {
+                return std::future::ready(Ok(result));
+            }
             let mut state = self.state.write().expect("쓰기");
             if state.fail {
                 return std::future::ready(Err(storage_error()));
@@ -486,13 +492,24 @@ mod tests {
                 .iter()
                 .find(|(candidate, _)| candidate == key)
                 .map(|(_, table)| table);
-            if current != previous {
+            if current != Some(previous) {
                 return std::future::ready(Ok(ResolutionCommitOutcome::Conflict));
             }
+            let Some(next_position) = previous.head.position().as_u64().checked_add(1) else {
+                return std::future::ready(Err(storage_error()));
+            };
+            let head =
+                CalibrationLedgerHead::new(key.clone(), CalibrationPosition::new(next_position));
+            let snapshot = match CalibrationSnapshot::try_new(next.clone(), head.clone()) {
+                Ok(value) => value,
+                Err(_error) => return std::future::ready(Err(storage_error())),
+            };
             state.outcomes.push((id.clone(), outcome.clone()));
             state.unavailable.retain(|(candidate, _)| candidate != id);
             state.tables.retain(|(candidate, _)| candidate != key);
-            state.tables.push((key.clone(), next.clone()));
+            state
+                .tables
+                .push((key.clone(), ResolutionCalibration { snapshot, head }));
             std::future::ready(Ok(ResolutionCommitOutcome::Committed))
         }
     }
@@ -537,10 +554,15 @@ mod tests {
             self.data.inputs(record, now)
         }
     }
+    #[derive(Debug, PartialEq, Eq)]
+    enum DelaySignal {
+        Entered,
+        Finished,
+    }
     #[derive(Debug)]
     struct DelayedData {
         data: Data,
-        entered: Arc<Barrier>,
+        entered: mpsc::Sender<DelaySignal>,
         resume: Arc<Barrier>,
     }
     impl ResolutionMarketData for DelayedData {
@@ -549,10 +571,20 @@ mod tests {
             record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
             now: Timestamp,
         ) -> impl Future<Output = Result<ResolutionInputs, ResolutionDataIssue>> {
-            self.entered.wait();
+            self.entered.send(DelaySignal::Entered).expect("조회 시작");
             self.resume.wait();
             self.data.inputs(record, now)
         }
+    }
+    fn delayed_reports(
+        repo: &Repo,
+        market: &DelayedData,
+        bus: &application::EventBus,
+        finished: &mpsc::Sender<DelaySignal>,
+    ) -> Vec<ResolutionReport> {
+        let reports = run(ResolveEstimates::new(repo, market, bus).execute(day(70)));
+        finished.send(DelaySignal::Finished).expect("실행 종료");
+        reports.expect("판정 실행")
     }
     #[derive(Clone)]
     struct Collector(Arc<RwLock<Vec<DomainEvent>>>);
@@ -574,6 +606,29 @@ mod tests {
         );
         (builder.build(), collected)
     }
+    fn calibration_state(
+        key: &CalibrationKey,
+        table: Calibration,
+        position: CalibrationPosition,
+    ) -> ResolutionCalibration {
+        let head = CalibrationLedgerHead::new(key.clone(), position);
+        let snapshot = CalibrationSnapshot::try_new(table, head.clone()).expect("반영 위치");
+        ResolutionCalibration { snapshot, head }
+    }
+    fn initialize_calibrations(state: &mut State) {
+        let keys: Vec<_> = state
+            .submissions
+            .iter()
+            .map(|record| record.submission().calibration_key().clone())
+            .collect();
+        for key in keys {
+            if state.tables.iter().all(|(stored, _)| stored != &key) {
+                let table = Calibration::try_new(key.clone(), &[]).expect("빈 표");
+                let value = calibration_state(&key, table, CalibrationPosition::new(0));
+                state.tables.push((key, value));
+            }
+        }
+    }
     fn setup(tasks: &[CostEligibleTask]) -> Repo {
         let (assignments, requests) = issued_records(tasks);
         let repo = Repo {
@@ -586,9 +641,11 @@ mod tests {
                 fail: false,
             }),
             barrier: None,
+            forced_commit: None,
         };
         let (bus, _) = events();
         run(SubmitEstimate::new(&repo, &bus).execute(&ai_run("alpha"), requests)).expect("제출");
+        initialize_calibrations(&mut repo.state.write().expect("쓰기"));
         repo
     }
     fn data(tasks: &[CostEligibleTask]) -> Data {
@@ -624,9 +681,18 @@ mod tests {
         );
         assert_eq!(state.tables.len(), 1);
         assert_eq!(
+            state.tables[0].1.snapshot.through(),
+            &state.tables[0].1.head
+        );
+        assert_eq!(*state.tables[0].1.head.position().as_u64(), 3);
+        assert_eq!(state.tables[0].1.snapshot.calibration().facts().len(), 3);
+        assert_eq!(
             state.tables[0]
                 .1
+                .snapshot
+                .calibration()
                 .for_combination(&state.tables[0].0)
+                .expect("같은 조합")
                 .judgment_count()
                 .as_usize(),
             1
@@ -655,6 +721,139 @@ mod tests {
                 .expect("재실행"),
             Vec::new()
         );
+    }
+    #[test]
+    fn report_keeps_the_identity_of_each_submitted_estimate() {
+        let tasks = vec![eligible(), eligible()];
+        let repo = setup(&tasks);
+        let (bus, _) = events();
+        let reports =
+            run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70))).expect("판정");
+        assert_eq!(
+            reports
+                .into_iter()
+                .map(|report| report.id)
+                .collect::<Vec<_>>(),
+            vec![task_id("estimate-0"), task_id("estimate-1")]
+        );
+    }
+    #[test]
+    fn commit_conflict_keeps_the_estimate_pending_without_an_event() {
+        let tasks = vec![eligible()];
+        let mut repo = setup(&tasks);
+        let initial = repo.state.read().expect("읽기").tables.clone();
+        repo.forced_commit = Some(ResolutionCommitOutcome::Conflict);
+        let (bus, collected) = events();
+        let reports =
+            run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70))).expect("판정");
+        assert_eq!(reports[0].status, ResolutionStatus::Conflict);
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(pending(&state).len(), 1);
+        assert_eq!(state.outcomes, Vec::new());
+        assert_eq!(state.tables, initial);
+        assert!(collected.read().expect("이벤트").is_empty());
+    }
+    #[test]
+    fn missing_calibration_snapshot_keeps_the_estimate_pending() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        repo.state.write().expect("쓰기").tables.clear();
+        let (bus, collected) = events();
+        let reports =
+            run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70))).expect("판정");
+        assert_eq!(
+            reports[0].status,
+            ResolutionStatus::Calibration(domain::CalibrationError::MissingCalibration)
+        );
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(pending(&state).len(), 1);
+        assert_eq!(state.outcomes, Vec::new());
+        assert_eq!(state.tables, Vec::new());
+        assert!(collected.read().expect("이벤트").is_empty());
+    }
+    #[test]
+    fn stale_calibration_snapshot_never_commits_or_publishes() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let key = repo.state.read().expect("읽기").tables[0].0.clone();
+        repo.state.write().expect("쓰기").tables[0].1.head =
+            CalibrationLedgerHead::new(key, CalibrationPosition::new(1));
+        let initial = repo.state.read().expect("읽기").tables.clone();
+        let (bus, collected) = events();
+        let reports =
+            run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70))).expect("판정");
+        assert_eq!(
+            reports[0].status,
+            ResolutionStatus::Calibration(domain::CalibrationError::StaleCalibration)
+        );
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(pending(&state).len(), 1);
+        assert_eq!(state.outcomes, Vec::new());
+        assert_eq!(state.tables, initial);
+        assert!(collected.read().expect("이벤트").is_empty());
+    }
+    #[test]
+    fn calibration_head_for_another_model_is_rejected() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let horizon = repo.state.read().expect("읽기").tables[0].0.horizon();
+        let model = CalibrationModel::new(identity("other"), identity("model"), identity("v1"));
+        let key = CalibrationKey::new(model, horizon);
+        repo.state.write().expect("쓰기").tables[0].1.head =
+            CalibrationLedgerHead::new(key, CalibrationPosition::new(0));
+        let initial = repo.state.read().expect("읽기").tables.clone();
+        let (bus, collected) = events();
+        let reports =
+            run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70))).expect("판정");
+        assert_eq!(
+            reports[0].status,
+            ResolutionStatus::Calibration(domain::CalibrationError::MismatchedCombination)
+        );
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(state.outcomes, Vec::new());
+        assert_eq!(state.tables, initial);
+        assert!(collected.read().expect("이벤트").is_empty());
+    }
+    #[test]
+    fn changed_ledger_head_rejects_stale_atomic_commit() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let market = data(&tasks);
+        let (record, previous) = {
+            let state = repo.state.read().expect("읽기");
+            (state.submissions[0].clone(), state.tables[0].1.clone())
+        };
+        let input = market.0[0].1.as_ref().expect("입력");
+        let outcome = EstimateOutcome::evaluate_with_complete_data(
+            record.submission().task_key().task(),
+            &input.calendars,
+            &input.adjustment,
+            &input.candles,
+            day(70),
+        );
+        let key = record.submission().calibration_key();
+        let fact = outcome
+            .calibration_fact(
+                record.task_id().as_estimate_id().clone(),
+                key.model().clone(),
+                record.submission().probability(),
+            )
+            .expect("사실");
+        let next = previous
+            .snapshot
+            .calibration()
+            .with_fact(fact)
+            .expect("새 표");
+        repo.state.write().expect("쓰기").tables[0].1.head =
+            CalibrationLedgerHead::new(key.clone(), CalibrationPosition::new(1));
+        assert_eq!(
+            run(repo.commit_resolution(&record, &outcome, &previous, &next)),
+            Ok(ResolutionCommitOutcome::Conflict)
+        );
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(state.outcomes, Vec::new());
+        assert_eq!(state.tables[0].1.snapshot, previous.snapshot);
+        assert_eq!(*state.tables[0].1.head.position().as_u64(), 1);
     }
     #[test]
     fn target_stop_and_same_minute_ambiguity_follow_domain() {
@@ -699,6 +898,7 @@ mod tests {
     fn incomplete_minute_and_daily_data_remain_pending_and_retry() {
         let tasks = vec![eligible(), eligible()];
         let repo = setup(&tasks);
+        let initial = repo.state.read().expect("읽기").tables.clone();
         let mut market = data(&tasks);
         market.0[0].1.as_mut().expect("자료").candles.retain(|bar| {
             bar.time().timestamp()
@@ -723,7 +923,7 @@ mod tests {
             ))));
         assert_eq!(run(repo.pending_submissions()).expect("조회").len(), 2);
         assert_eq!(*collected.read().expect("이벤트"), Vec::new());
-        assert_eq!(repo.state.read().expect("읽기").tables, Vec::new());
+        assert_eq!(repo.state.read().expect("읽기").tables, initial);
         assert_eq!(
             repo.state.read().expect("읽기").unavailable,
             vec![
@@ -749,6 +949,7 @@ mod tests {
     fn ongoing_and_storage_failure_do_not_commit_or_publish() {
         let tasks = vec![eligible()];
         let repo = setup(&tasks);
+        let initial = repo.state.read().expect("읽기").tables.clone();
         let (bus, collected) = events();
         let ongoing = run(
             ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(local(at(day(60)
@@ -765,7 +966,7 @@ mod tests {
         assert_eq!(failed[0].status, ResolutionStatus::Storage(storage_error()));
         let state = repo.state.read().expect("읽기");
         assert_eq!(state.outcomes, Vec::new());
-        assert_eq!(state.tables, Vec::new());
+        assert_eq!(state.tables, initial);
         assert_eq!(*collected.read().expect("이벤트"), Vec::new());
     }
     #[test]
@@ -793,12 +994,20 @@ mod tests {
         assert_eq!(
             state.tables[0]
                 .1
+                .snapshot
+                .calibration()
                 .for_combination(&state.tables[0].0)
+                .expect("같은 조합")
                 .judgment_count()
                 .as_usize(),
             2
         );
-        let table = state.tables[0].1.for_combination(&state.tables[0].0);
+        let table = state.tables[0]
+            .1
+            .snapshot
+            .calibration()
+            .for_combination(&state.tables[0].0)
+            .expect("같은 조합");
         let facts = table.selected_facts();
         assert_eq!(facts[0].estimate().id(), &task_id("estimate-0"));
         assert_eq!(facts[0].estimate().instrument(), &id("sample-a"));
@@ -922,11 +1131,8 @@ mod tests {
             })
             .collect();
         let old = Calibration::try_new(key.clone(), &facts).expect("기존 표");
-        repo.state
-            .write()
-            .expect("쓰기")
-            .tables
-            .push((key, old.clone()));
+        repo.state.write().expect("쓰기").tables[0].1 =
+            calibration_state(&key, old.clone(), CalibrationPosition::new(65_536));
         let (bus, collected) = events();
         let reports =
             run(ResolveEstimates::new(&repo, &market, &bus).execute(day(70))).expect("실행");
@@ -938,7 +1144,7 @@ mod tests {
         );
         let state = repo.state.read().expect("읽기");
         assert_eq!(state.outcomes.len(), 0);
-        assert_eq!(state.tables[0].1, old);
+        assert_eq!(state.tables[0].1.snapshot.calibration(), &old);
         assert_eq!(
             state.unavailable,
             vec![(
@@ -1013,7 +1219,12 @@ mod tests {
         let replacement = replacement_outcome(&tasks[0], &market, &record);
         assert_eq!(replacement.state(), OutcomeState::Success);
         assert_eq!(
-            run(repo.commit_resolution(&record, &replacement, Some(&calibration), &calibration)),
+            run(repo.commit_resolution(
+                &record,
+                &replacement,
+                &calibration,
+                calibration.snapshot.calibration()
+            )),
             Ok(ResolutionCommitOutcome::AlreadyResolved)
         );
         let state = repo.state.read().expect("읽기");
@@ -1028,20 +1239,20 @@ mod tests {
         let mut latest = data(&tasks);
         let input = latest.0[0].1.as_mut().expect("입력");
         input.candles[0] = bar(&tasks[0], &input.adjustment, 60, 1, ("200", "100"));
-        let entered = Arc::new(Barrier::new(2));
+        let (entered_tx, entered_rx) = mpsc::channel();
         let resume = Arc::new(Barrier::new(2));
         let delayed = DelayedData {
             data: latest,
-            entered: Arc::clone(&entered),
+            entered: entered_tx.clone(),
             resume: Arc::clone(&resume),
         };
         let (bus, collected) = events();
         let delayed_report = std::thread::scope(|scope| {
-            let runner = scope.spawn(|| {
-                run(ResolveEstimates::new(&repo, &delayed, &bus).execute(day(70)))
-                    .expect("느린 실행")
-            });
-            entered.wait();
+            let repo_ref = &repo;
+            let bus_ref = &bus;
+            let runner =
+                scope.spawn(move || delayed_reports(repo_ref, &delayed, bus_ref, &entered_tx));
+            assert_eq!(entered_rx.recv().expect("시작 신호"), DelaySignal::Entered);
             let first_result =
                 run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70)));
             resume.wait();
@@ -1058,7 +1269,43 @@ mod tests {
             state.outcomes[0].1.state(),
             OutcomeState::Failure(OutcomeFailure::Expired)
         );
-        assert_eq!(state.tables[0].1.facts().len(), 1);
+        assert_eq!(state.tables[0].1.snapshot.calibration().facts().len(), 1);
+        assert_eq!(collected.read().expect("이벤트").len(), 1);
+    }
+    #[test]
+    fn stale_data_failure_cannot_overwrite_a_completed_resolution() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let mut missing = data(&tasks);
+        missing.0[0].1 = Err(ResolutionDataIssue::Incomplete(
+            OutcomeUnavailable::Calendar,
+        ));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let resume = Arc::new(Barrier::new(2));
+        let delayed = DelayedData {
+            data: missing,
+            entered: entered_tx.clone(),
+            resume: Arc::clone(&resume),
+        };
+        let (bus, collected) = events();
+        let reports = std::thread::scope(|scope| {
+            let repo_ref = &repo;
+            let bus_ref = &bus;
+            let runner =
+                scope.spawn(move || delayed_reports(repo_ref, &delayed, bus_ref, &entered_tx));
+            assert_eq!(entered_rx.recv().expect("시작 신호"), DelaySignal::Entered);
+            let first = run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70)));
+            resume.wait();
+            assert_eq!(
+                resolved_state(&first.expect("먼저 확정")[0].status),
+                Some(OutcomeState::Failure(OutcomeFailure::Expired))
+            );
+            runner.join().expect("늦은 실행 종료")
+        });
+        assert_eq!(reports[0].status, ResolutionStatus::AlreadyResolved);
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(state.outcomes.len(), 1);
+        assert_eq!(state.unavailable, Vec::new());
         assert_eq!(collected.read().expect("이벤트").len(), 1);
     }
     #[test]
@@ -1090,21 +1337,21 @@ mod tests {
             )
             .expect("사실");
         let inconsistent_table = Calibration::try_new(key.clone(), &[success_fact]).expect("표");
-        let entered = Arc::new(Barrier::new(2));
+        let (entered_tx, entered_rx) = mpsc::channel();
         let resume = Arc::new(Barrier::new(2));
         let delayed = DelayedData {
             data: market,
-            entered: Arc::clone(&entered),
+            entered: entered_tx.clone(),
             resume: Arc::clone(&resume),
         };
         let (bus, collected) = events();
         let reports = std::thread::scope(|scope| {
-            let runner = scope.spawn(|| {
-                run(ResolveEstimates::new(&repo, &delayed, &bus).execute(day(70)))
-                    .expect("느린 실행")
-            });
-            entered.wait();
-            insert_inconsistent_resolution(&repo, &expired, key, &inconsistent_table);
+            let repo_ref = &repo;
+            let bus_ref = &bus;
+            let runner =
+                scope.spawn(move || delayed_reports(repo_ref, &delayed, bus_ref, &entered_tx));
+            assert_eq!(entered_rx.recv().expect("시작 신호"), DelaySignal::Entered);
+            insert_inconsistent_resolution(&repo, &expired, &key, &inconsistent_table);
             resume.wait();
             runner.join().expect("느린 실행 종료")
         });
@@ -1117,20 +1364,23 @@ mod tests {
         );
         let state = repo.state.read().expect("읽기");
         assert_eq!(state.outcomes[0].1, expired);
-        assert_eq!(state.tables[0].1, inconsistent_table);
+        assert_eq!(
+            state.tables[0].1.snapshot.calibration(),
+            &inconsistent_table
+        );
         assert!(collected.read().expect("이벤트").is_empty());
     }
     fn insert_inconsistent_resolution(
         repo: &Repo,
         outcome: &EstimateOutcome,
-        key: CalibrationKey,
+        key: &CalibrationKey,
         table: &Calibration,
     ) {
         let mut state = repo.state.write().expect("쓰기");
         state
             .outcomes
             .push((task_id("estimate-0"), outcome.clone()));
-        state.tables.push((key, table.clone()));
+        state.tables[0].1 = calibration_state(key, table.clone(), CalibrationPosition::new(1));
     }
     #[test]
     fn conflicting_table_without_resolution_stays_an_error_and_read_failure_is_preserved() {
@@ -1155,11 +1405,8 @@ mod tests {
             )
             .expect("사실");
         let table = Calibration::try_new(key.clone(), &[fact]).expect("보정표");
-        repo.state
-            .write()
-            .expect("쓰기")
-            .tables
-            .push((key, table.clone()));
+        repo.state.write().expect("쓰기").tables[0].1 =
+            calibration_state(&key, table.clone(), CalibrationPosition::new(1));
         let changed = market.0[0].1.as_mut().expect("입력");
         changed.candles[0] = bar(&tasks[0], &changed.adjustment, 60, 1, ("200", "100"));
         let (bus, collected) = events();
@@ -1175,7 +1422,7 @@ mod tests {
         assert_eq!(second[0].status, ResolutionStatus::Storage(storage_error()));
         let state = repo.state.read().expect("읽기");
         assert_eq!(state.outcomes, Vec::new());
-        assert_eq!(state.tables[0].1, table);
+        assert_eq!(state.tables[0].1.snapshot.calibration(), &table);
         assert_eq!(*collected.read().expect("이벤트"), Vec::new());
     }
     fn replacement_outcome(

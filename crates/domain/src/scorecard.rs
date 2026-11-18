@@ -227,7 +227,7 @@ pub(crate) fn scorecard_calculate(
     counts: Result<ScorecardCounts, ScorecardError>,
 ) -> Result<Scorecard, ScorecardError> {
     let key = crate::calibration::scorecard_calibration_key(calibration);
-    let table = calibration.for_combination(key);
+    let table = calibration.table();
     let metadata = Metadata {
         key: key.clone(),
         count: table.judgment_count(),
@@ -321,8 +321,7 @@ mod tests {
         calibration: &Calibration,
         comparisons: &ScorecardComparisons,
     ) -> Result<Scorecard, super::ScorecardError> {
-        let table =
-            calibration.for_combination(crate::calibration::scorecard_calibration_key(calibration));
+        let table = calibration.table();
         super::scorecard_calculate(
             calibration,
             comparisons,
@@ -353,12 +352,14 @@ mod tests {
             count: Calibration::try_new(key("v1", HorizonSelection::FewDays), &[])
                 .expect("빈 표")
                 .for_combination(&key("v1", HorizonSelection::FewDays))
+                .expect("같은 조합")
                 .judgment_count(),
             comparisons: super::ScorecardComparisonCount(0),
             counts: crate::scorecard_input::tests::counts_from_table(
                 &Calibration::try_new(key("v1", HorizonSelection::FewDays), &[])
                     .expect("표")
-                    .for_combination(&key("v1", HorizonSelection::FewDays)),
+                    .for_combination(&key("v1", HorizonSelection::FewDays))
+                    .expect("같은 조합"),
             ),
         };
         assert_eq!(

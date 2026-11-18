@@ -227,6 +227,67 @@ mod tests {
         );
     }
     #[test]
+    fn existing_missing_minute_changes_from_ongoing_to_ambiguous_at_close() {
+        let factor = adjustment();
+        let mut bars = flat(&factor, "100");
+        bars.retain(|bar| bar.time().timestamp() != instant(61, 902));
+        assert_eq!(
+            EstimateOutcome::evaluate(&task(), &calendars(), &factor, &bars, instant(61, 903))
+                .state(),
+            OutcomeState::Ongoing
+        );
+        assert_eq!(
+            EstimateOutcome::evaluate(&task(), &calendars(), &factor, &bars, instant(61, 904))
+                .state(),
+            OutcomeState::Failure(OutcomeFailure::Ambiguous)
+        );
+    }
+    #[test]
+    fn completed_later_session_uses_daily_candle_at_close() {
+        let factor = adjustment();
+        let mut bars = flat(&factor, "100");
+        bars[4] = candle(62, 0, CandlePeriod::Daily, ("200", "100"), &factor);
+        assert_eq!(
+            EstimateOutcome::evaluate_with_complete_data(
+                &task(),
+                &calendars(),
+                &factor,
+                &bars,
+                instant(62, 904)
+            )
+            .state(),
+            OutcomeState::Success
+        );
+    }
+    #[test]
+    fn final_minute_is_required_when_it_has_just_finished() {
+        let factor = adjustment();
+        let mut bars = flat(&factor, "100");
+        bars.retain(|bar| bar.time().timestamp() != instant(61, 904));
+        assert_eq!(
+            EstimateOutcome::evaluate_with_complete_data(
+                &task(),
+                &calendars(),
+                &factor,
+                &bars,
+                instant(61, 903)
+            )
+            .state(),
+            OutcomeState::Ongoing
+        );
+        assert_eq!(
+            EstimateOutcome::evaluate_with_complete_data(
+                &task(),
+                &calendars(),
+                &factor,
+                &bars,
+                instant(61, 904)
+            )
+            .state(),
+            OutcomeState::Unavailable(OutcomeUnavailable::MissingCandles)
+        );
+    }
+    #[test]
     fn strict_outcome_keeps_complete_simultaneous_and_calibration_facts() {
         let factor = adjustment();
         let both = [candle(61, 901, CandlePeriod::Minute, ("200", "1"), &factor)];
@@ -265,7 +326,14 @@ mod tests {
         let initial = domain::Calibration::try_new(key.clone(), &[first]).expect("보정표");
         let updated = initial.with_fact(next).expect("갱신");
         assert_ne!(initial, updated);
-        assert_eq!(updated.for_combination(&key).judgment_count().as_usize(), 1);
+        assert_eq!(
+            updated
+                .for_combination(&key)
+                .expect("같은 조합")
+                .judgment_count()
+                .as_usize(),
+            1
+        );
     }
     #[test]
     fn established_combination_limit_applies_to_single_fact_updates() {
@@ -301,6 +369,10 @@ mod tests {
             .map(|index| fact(&format!("estimate-{index:05}")))
             .collect();
         let key = initial[0].estimate().key().clone();
+        let almost_full =
+            domain::Calibration::try_new(key.clone(), &initial[..65_535]).expect("상한 직전 표");
+        let filled = almost_full.with_fact(fact("extra")).expect("마지막 사실");
+        assert_eq!(filled.facts().len(), 65_536);
         let table = domain::Calibration::try_new(key.clone(), &initial).expect("기존 상한");
         assert_eq!(table.facts().len(), 65_536);
         assert_eq!(

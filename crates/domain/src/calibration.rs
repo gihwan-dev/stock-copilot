@@ -11,6 +11,8 @@ pub enum CalibrationError {
     InvalidEstimateId,
     ConflictingEstimate,
     MismatchedCombination,
+    MissingCalibration,
+    StaleCalibration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -383,6 +385,64 @@ pub struct Calibration {
     key: CalibrationKey,
     facts: Vec<CalibrationFact>,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CalibrationPosition(u64);
+impl CalibrationPosition {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+    #[must_use]
+    pub const fn as_u64(&self) -> &u64 {
+        &self.0
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalibrationLedgerHead {
+    key: CalibrationKey,
+    position: CalibrationPosition,
+}
+impl CalibrationLedgerHead {
+    #[must_use]
+    pub const fn new(key: CalibrationKey, position: CalibrationPosition) -> Self {
+        Self { key, position }
+    }
+    #[must_use]
+    pub const fn key(&self) -> &CalibrationKey {
+        &self.key
+    }
+    #[must_use]
+    pub const fn position(&self) -> CalibrationPosition {
+        self.position
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalibrationSnapshot {
+    calibration: Calibration,
+    through: CalibrationLedgerHead,
+}
+impl CalibrationSnapshot {
+    pub fn try_new(
+        calibration: Calibration,
+        through: CalibrationLedgerHead,
+    ) -> Result<Self, CalibrationError> {
+        if calibration.key != through.key {
+            return Err(CalibrationError::MismatchedCombination);
+        }
+        Ok(Self {
+            calibration,
+            through,
+        })
+    }
+    #[must_use]
+    pub const fn calibration(&self) -> &Calibration {
+        &self.calibration
+    }
+    #[must_use]
+    pub const fn through(&self) -> &CalibrationLedgerHead {
+        &self.through
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FactRepetition {
     New,
@@ -441,13 +501,16 @@ impl Calibration {
         }
         Ok(Self { key, facts: unique })
     }
-    #[must_use]
-    pub fn for_combination(&self, key: &CalibrationKey) -> CalibrationTable {
+    pub fn for_combination(
+        &self,
+        key: &CalibrationKey,
+    ) -> Result<CalibrationTable, CalibrationError> {
         if &self.key != key {
-            return CalibrationTable {
-                selected: Vec::new(),
-            };
+            return Err(CalibrationError::MismatchedCombination);
         }
+        Ok(self.table())
+    }
+    pub(crate) fn table(&self) -> CalibrationTable {
         let mut facts = self.facts.clone();
         facts.sort_by(selection_order);
         let mut selected: Vec<CalibrationFact> = Vec::new();
@@ -462,16 +525,25 @@ impl Calibration {
         }
         CalibrationTable { selected }
     }
-    #[must_use]
     pub fn calibrate(
         &self,
         key: &CalibrationKey,
         probability: AiProbability,
+    ) -> Result<CalibratedProbability, CalibrationError> {
+        let table = self.for_combination(key)?;
+        Ok(self.calibrate_table(&table, probability))
+    }
+    pub(crate) fn calibrate_bound(&self, probability: AiProbability) -> CalibratedProbability {
+        self.calibrate_table(&self.table(), probability)
+    }
+    fn calibrate_table(
+        &self,
+        table: &CalibrationTable,
+        probability: AiProbability,
     ) -> CalibratedProbability {
-        let table = self.for_combination(key);
         let evidence = CalibrationEvidence {
             probability: probability.into_probability(),
-            key: key.clone(),
+            key: self.key.clone(),
             judgment_count: table.judgment_count(),
         };
         match table.readiness() {
@@ -577,6 +649,7 @@ mod tests {
     fn selected(rows: &[CalibrationFact]) -> Vec<CalibrationFact> {
         snapshot(rows)
             .for_combination(&key("v1"))
+            .expect("같은 조합")
             .selected_facts()
             .to_vec()
     }
@@ -678,7 +751,9 @@ mod tests {
                 })
                 .collect();
             let calibration = snapshot(&rows);
-            let result = calibration.calibrate(&key("v1"), ai(37));
+            let result = calibration
+                .calibrate(&key("v1"), ai(37))
+                .expect("같은 조합");
             assert_eq!(evidence(&result).key(), &key("v1"));
             assert_eq!(evidence(&result).judgment_count().as_usize(), count);
             assert_eq!(
@@ -690,14 +765,16 @@ mod tests {
                 CalibratedProbability::InsufficientSamples(_) => assert!(count < 30),
                 CalibratedProbability::EligibleBeforeE91(_) => assert_eq!(count, 30),
             }
-            let missing = calibration.calibrate(&key("v2"), ai(37));
-            assert_eq!(evidence(&missing).judgment_count().as_usize(), 0_usize);
-            assert!(matches_insufficient(&missing));
+            assert_eq!(
+                calibration.calibrate(&key("v2"), ai(37)),
+                Err(CalibrationError::MismatchedCombination)
+            );
         }
         let empty = snapshot(&[]);
-        assert!(matches_insufficient(
-            &empty.calibrate(&key("arbitrary"), ai(60))
-        ));
+        assert_eq!(
+            empty.calibrate(&key("arbitrary"), ai(60)),
+            Err(CalibrationError::MismatchedCombination)
+        );
     }
     fn matches_insufficient(value: &CalibratedProbability) -> bool {
         match value {
@@ -754,6 +831,7 @@ mod tests {
         assert_eq!(
             snapshot(&rows)
                 .for_combination(&key("v1"))
+                .expect("같은 조합")
                 .judgment_count()
                 .as_usize(),
             10400
@@ -768,9 +846,27 @@ mod tests {
             Calibration::try_new(key("v2"), &rows),
             Err(CalibrationError::MismatchedCombination)
         );
-        assert!(matches_insufficient(
-            &snapshot(&rows).calibrate(&key("v2"), ai(60))
-        ));
+        assert_eq!(
+            snapshot(&rows).calibrate(&key("v2"), ai(60)),
+            Err(CalibrationError::MismatchedCombination)
+        );
+    }
+    #[test]
+    fn d51_matching_empty_table_is_conservative_and_mismatch_is_error() {
+        let calibration = snapshot(&[]);
+        let matching = calibration
+            .calibrate(&key("v1"), ai(63))
+            .expect("같은 조합");
+        assert!(matches_insufficient(&matching));
+        assert_eq!(evidence(&matching).judgment_count().as_usize(), 0);
+        assert_eq!(
+            evidence(&matching).probability().as_decimal(),
+            Decimal::new(63, 2)
+        );
+        assert_eq!(
+            calibration.for_combination(&key("v2")),
+            Err(CalibrationError::MismatchedCombination)
+        );
     }
     #[test]
     fn bins_rates_accessors_and_ai_canonical_scale_preserve_contracts() {
@@ -791,7 +887,8 @@ mod tests {
                 percent,
                 CalibrationOutcome::Hit,
             )])
-            .for_combination(&key("v1"));
+            .for_combination(&key("v1"))
+            .expect("같은 조합");
             assert_eq!(table.bin(bin).judgment_count().as_usize(), 1);
             assert_eq!(table.bin(bin).hits().as_usize(), 1);
             assert_eq!(
@@ -804,7 +901,9 @@ mod tests {
             row("b", "B", (0, 1, 0_i32), 60, CalibrationOutcome::Miss),
             row("c", "C", (0, 1, 0_i32), 60, CalibrationOutcome::Miss),
         ];
-        let table = snapshot(&rows).for_combination(&key("v1"));
+        let table = snapshot(&rows)
+            .for_combination(&key("v1"))
+            .expect("같은 조합");
         assert_eq!(
             format!("{:?}", table.bin(CalibrationBin::From60To70).hit_rate()),
             "Ok(Some(Approximate(ApproximateRatio(0.3333333333333333333333333333))))"

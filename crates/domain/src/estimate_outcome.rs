@@ -456,7 +456,7 @@ fn minutes(
         cursor = end;
     }
     let required = next_minute_seconds(cursor);
-    if required.as_i64() <= limit.utc_seconds().as_i64() && cursor < limit {
+    if required.as_i64() <= limit.utc_seconds().as_i64() {
         return Some(unresolved_minutes(
             evidence,
             session,
