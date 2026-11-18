@@ -158,7 +158,8 @@ fn all(connection: &Connection) -> rusqlite::Result<Vec<Stored>> {
 }
 fn tokens(text: &str) -> String {
     let mut grams = Vec::new();
-    for (first, second) in text.chars().zip(text.chars().skip(1)) {
+    let folded = text.to_ascii_lowercase();
+    for (first, second) in folded.chars().zip(folded.chars().skip(1)) {
         let mut gram = String::from("u");
         gram.push_str(&u32::from(first).to_string());
         gram.push('v');
@@ -222,10 +223,16 @@ fn linked(
 }
 fn contains(entry: &CollectedEntry, query: &str) -> bool {
     let item = content(entry);
-    item.title().as_untrusted_str().contains(query)
-        || item
-            .body()
-            .is_some_and(|body| body.as_untrusted_str().contains(query))
+    let folded_query = query.to_ascii_lowercase();
+    item.title()
+        .as_untrusted_str()
+        .to_ascii_lowercase()
+        .contains(&folded_query)
+        || item.body().is_some_and(|body| {
+            body.as_untrusted_str()
+                .to_ascii_lowercase()
+                .contains(&folded_query)
+        })
 }
 fn search(
     connection: &Connection,

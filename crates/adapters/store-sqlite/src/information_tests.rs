@@ -90,6 +90,66 @@ fn bigram_search_preserves_raw_text_and_rebuilds_identically() {
         );
     }
 }
+
+#[test]
+fn ascii_case_insensitive_search_preserves_original_and_survives_rebuild() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = InformationStore::new(&database);
+    let item = news(
+        NewsSource::YahooFinance,
+        "https://example.com/nvidia",
+        "NVIDIA 삼성전자가 ABC-123!! Ä",
+        Some("GPU ghZ"),
+    );
+    rt.block_on(store.store(&item)).expect("save");
+    let expected = vec![CollectedEntry::News(item)];
+    let limit = SearchLimit::try_new(10).expect("limit");
+    for rebuild in [false, true] {
+        if rebuild {
+            rt.block_on(store.rebuild_index()).expect("rebuild");
+        }
+        for query in [
+            "N", "n", "NV", "nv", "NVIDIA", "nViDiA", "가 ab", "gpu", "GHZ", "Ä",
+        ] {
+            assert_eq!(
+                rt.block_on(store.search(&text(query), limit)),
+                Ok(expected.clone()),
+                "{query}"
+            );
+        }
+        assert_eq!(rt.block_on(store.search(&text("ä"), limit)), Ok(vec![]));
+    }
+}
+
+#[test]
+fn updating_an_item_removes_every_old_bigram_from_search() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = InformationStore::new(&database);
+    let old = news(NewsSource::Yonhap, "https://example.com/item", "ABCD", None);
+    let updated = news(NewsSource::Yonhap, "https://example.com/item", "WXYZ", None);
+    let limit = SearchLimit::try_new(10).expect("limit");
+    rt.block_on(store.store(&old)).expect("old");
+    rt.block_on(store.store(&updated)).expect("updated");
+    for rebuild in [false, true] {
+        if rebuild {
+            rt.block_on(store.rebuild_index()).expect("rebuild");
+        }
+        for query in ["AB", "ABC", "ABCD"] {
+            assert_eq!(rt.block_on(store.search(&text(query), limit)), Ok(vec![]));
+        }
+        assert_eq!(
+            rt.block_on(store.search(&text("WX"), limit)),
+            Ok(vec![CollectedEntry::News(updated.clone())])
+        );
+    }
+}
+
 #[test]
 fn news_identity_dedup_and_links_are_scoped_by_source() {
     let fixture = Fixture::new();
