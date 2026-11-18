@@ -14,6 +14,8 @@ I-09, ADR 0112·0113·0127·0130·0134. T-07 종목 일봉과 D-50 평가 달력
 
 이 일치는 제공된 종가·마스터·관측값의 일관성을 확인한다. 원본이 진짜 정규장 종가인지 또는 수집 경로가 정본인지 자체 인증하지 않는다. 평가액이나 수량을 새로 계산하는 규칙은 추가하지 않고 기존 domain 평가 결과를 대조한다.
 
+병합한 S-04의 SQLite `MarketStore`는 일봉을 포함한 시장 데이터 캐시를 저장하지만, 이 작업의 `ValuationCloseEvidenceRepository`를 구현하지 않는다. 조회에 쓰는 `ResolvedOrderInstrument`만으로는 마스터가 부여한 `InstrumentId`를 복구할 수 없다. 실제 연결에서는 신뢰할 수 있는 마스터에서 `QuoteInstrument`를 얻어 봉과 대조해야 한다. 평가 스냅샷과 종가 증거의 실제 영속 구현도 아직 없다. 이번 저장·재조회 검증은 메모리 가짜에 한정한다.
+
 정규장이 끝나기 전 연장 거래 달력의 비0 보유는 전일 봉이 공급되어도 기존과 같이 `MissingPrice`로 거부한다. 증거 저장소 오류가 이 사유를 덮지 않도록 해당 통화의 가격 기준이 당일 정규장 종가인지 domain 달력에서 확인한 뒤에만 증거를 조회한다. 미국 전일 봉도 해당 시장의 당일 정규장이 끝나기 전에는 같은 거부를 유지한다.
 
 ## 미해결과 제안
@@ -42,6 +44,8 @@ T-13: 실제 토스 일봉의 OHLC와 거래량이 정규장 이후 체결을 �
 
 합성 녹화의 정규장 15:30, 애프터마켓 20:00 사례에서 기존 구현은 15:30에 `InProgress`여서 경계 테스트가 실패했고 변경 뒤 통과했다. 양수 3주의 당일 종가 72,000원은 D-49에서 주식 216,000원·계좌 217,000원으로 계산되고 A-16 관측에 같은 종가 증거와 함께 기록된다. 15:00·정각·연장 거래, 반일장, 휴장, 정규장 누락, 미국 전일과 잘못된 증거 사례는 합성 자료로 확인한다.
 
+변경분 자동 변이는 테스트 추가 전에 domain·application의 63개를 실행해 40개를 검출했고 7개가 생존했으며 16개는 컴파일 불가였다. 시간 제한에는 걸리지 않았다. `testkit-ports`에 종가 증거 저장·재조회, 같은 시장과 통화의 다른 심볼 거부, 분봉·수정주가·미확정 봉 거부 회귀를 추가했다. 생존한 7개는 새 테스트를 포함한 별도 사본에서 다시 각각 적용해 모두 검출했고 기준·복원 후 테스트도 통과했다. 자동 변이 전체를 다시 실행한 결과는 아니다. 빈 증거 반환의 재현은 미사용 인자 이름만 바꾸어 컴파일하며 반환 동작은 같다.
+
 ## 보호 파일
 
 `harness/arch-check/rules.toml`의 broker-toss 시험 허용 목록에 이 작업의 새 계약 테스트 파일만 등록한다. 이 파일은 로컬 가짜 HTTP 응답과 A-16의 `execute`를 함께 호출한다. 제품 HTTP 전송 경로는 추가하지 않는다. 공식 생성기가 ADR 초안의 보호 경로를 `.codex/config.toml`에 등록하고 해당 설정의 해시를 `harness/claude-hooks/hashes.json`에 갱신한다. 생성기는 경로를 자동 열거하므로 초안 이름을 생성물에 넣지 말라는 일반 지시와 충돌한다. 생성기를 바꾸거나 보호 범위를 줄이지 않고 훅이 요구하는 결과를 따랐다.
@@ -49,3 +53,49 @@ T-13: 실제 토스 일봉의 OHLC와 거래량이 정규장 이후 체결을 �
 이 예외는 해당 테스트 파일 전체에 적용된다. 나중에 그 파일에 HTTP 쓰기 호출이 추가되면 `http-write` 규칙 하나로는 탐지하지 못하므로 변경을 따로 검토해야 한다. 다른 파일과 다른 검사에는 예외를 확장하지 않는다.
 
 이 세 파일의 변경 내용은 브리프가 미리 승인한 범위다. 그러나 이를 포함한 구현 커밋은 사용자 서명이 없다. 기준 커밋의 서명 잠금점과 서명자 목록은 비어 있으며, 실제 서명 검증을 통과했다는 뜻은 아니다. 보호 경로의 사용자 서명 요건은 내용 승인과 별개로 메인이 통합 전에 해결해야 한다.
+
+## 손 변형
+
+병합된 코드의 `mktemp -d` 사본에서 각 변형을 하나씩 적용하고 `cargo test --locked -p domain -p broker-toss t22_`를 실행했다. 기준과 복원 후 실행은 관련 테스트 24개가 각각 통과했다. 컴파일 가능한 변형은 30개이고 모두 아래 테스트가 검출했다. 컴파일 불가 2개는 이 수에 넣지 않는다. 자동 변이에서 생존한 7개도 아래에 별도로 실행해 검출했다.
+
+| 번호 | 바꾼 것 | 잡은 테스트 또는 결과 |
+|---|---|---|
+| 1 | 종료 정각을 미확정 | `tests::t22_half_day_and_missing_regular_session_remain_distinct` |
+| 2 | 종료 비교 방향 반전 | `tests::t22_evidence_repository_error_prevents_snapshot_storage` |
+| 3 | 정규장 중에도 확정 | `tests::t22_intraday_previous_close_keeps_missing_price_without_querying_evidence` |
+| 4 | 정규장 없는 날을 진행 중으로 수용 | `tests::t22_missing_regular_and_holiday_reject_returned_candles` |
+| 5 | 정규장 대신 연장 구간 선택 | `tests::t22_multiple_close_observations_remain_ambiguous_even_when_prices_match` |
+| 6 | 어댑터 일봉 상태를 항상 확정 | `tests::t22_half_day_and_missing_regular_session_remain_distinct` |
+| 7 | 어댑터 일봉 상태를 항상 진행 중 | `tests::t22_us_previous_local_day_is_finalized_at_korean_16` |
+| 8 | 증거 개수 상한을 0으로 축소 | `tests::t22_multiple_close_observations_remain_ambiguous_even_when_prices_match` |
+| 9 | 증거 상한 정각도 거부 | `valuation_snapshot::tests::t22_exact_evidence_limit_reaches_duplicate_validation` |
+| 10 | 연장 거래의 증거 검사를 건너뜀 | 컴파일 불가 (도달 불가능 코드·미사용 경고) |
+| 11 | 종목 심볼 비교 반전 | `tests::t22_multiple_close_observations_remain_ambiguous_even_when_prices_match` |
+| 12 | 시장 비교 반전 | `tests::t22_multiple_close_observations_remain_ambiguous_even_when_prices_match` |
+| 13 | 통화 비교 반전 | `tests::t22_multiple_close_observations_remain_ambiguous_even_when_prices_match` |
+| 14 | 중복 검출을 반전 | `tests::t22_multiple_close_observations_remain_ambiguous_even_when_prices_match` |
+| 15 | 미사용 증거 검사 반전 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 16 | 봉 식별자 검사를 반전 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 17 | 봉 통화 검사를 반전 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 18 | 일봉 검사를 반전 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 19 | 원주가 검사를 반전 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 20 | 확정 상태 검사를 반전 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 21 | 평가 시각과 같은 수집도 거부 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 22 | 보유 관측 시각과 같은 수집도 거부 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 23 | 수집 시각의 가격일 비교 반전 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 24 | 관측 가격과 종가 비교 반전 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 25 | 개별 평가액 비교 반전 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 26 | 요약 평가액 정확 비교 반전 | `tests::t22_recorded_candle_supplies_observed_snapshot_evidence` |
+| 27 | 관측 스냅샷 증거를 버림 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 28 | 관측 시각의 정규장 기준 삭제 | 컴파일 불가 (미사용 함수 경고) |
+| 29 | 증거 조회 전 정규장 기준 삭제 | `tests::t22_intraday_previous_close_keeps_missing_price_without_querying_evidence` |
+| 30 | 보유 관측 뒤 수집 거부 삭제 | `valuation_snapshot::tests::t22_close_evidence_must_not_postdate_the_holding_observation` |
+| 31 | 비0 보유의 보고액 0 대조 삭제 | `valuation_snapshot::tests::t22_zero_report_must_match_nonzero_holdings_with_close_evidence` |
+| 32 | 조회 기준을 보유 관측에서 기록 시각으로 | `tests::t22_evidence_query_uses_holding_observation_time` |
+| 33 | 자동 생존 재검: 빈 증거 반환 | `tests::t22_observed_snapshot_records_the_repository_close_evidence` |
+| 34 | 자동 생존 재검: 심볼과 시장의 AND를 OR로 | `tests::t22_same_market_and_currency_do_not_match_another_symbol` |
+| 35 | 자동 생존 재검: 종목과 통화의 AND를 OR로 | `tests::t22_same_market_and_currency_do_not_match_another_symbol` |
+| 36 | 자동 생존 재검: 일봉 조건 앞 OR를 AND로 | `tests::t22_close_evidence_requires_a_finalized_raw_daily_candle` |
+| 37 | 자동 생존 재검: 원주가 조건 앞 OR를 AND로 | `tests::t22_close_evidence_requires_a_finalized_raw_daily_candle` |
+| 38 | 자동 생존 재검: 확정 조건 앞 OR를 AND로 | `tests::t22_close_evidence_requires_a_finalized_raw_daily_candle` |
+| 39 | 자동 생존 재검: 기록 시각 조건 앞 OR를 AND로 | `tests::t22_close_evidence_requires_a_finalized_raw_daily_candle` |
