@@ -224,11 +224,52 @@ impl EstimateOutcome {
         candles: &[Candle],
         now: Timestamp,
     ) -> Self {
-        match evaluate(task, calendars, adjustment, candles, now) {
+        match evaluate(
+            task,
+            calendars,
+            adjustment,
+            candles,
+            EvaluationTime {
+                now,
+                policy: MissingMinutePolicy::Ambiguous,
+            },
+        ) {
             Ok(result) => result,
             Err(reason) => Self::Unavailable(reason),
         }
     }
+    #[must_use]
+    pub fn evaluate_with_complete_data(
+        task: &EstimateTask,
+        calendars: &[MarketCalendar],
+        adjustment: &OutcomeAdjustment,
+        candles: &[Candle],
+        now: Timestamp,
+    ) -> Self {
+        match evaluate(
+            task,
+            calendars,
+            adjustment,
+            candles,
+            EvaluationTime {
+                now,
+                policy: MissingMinutePolicy::Unavailable,
+            },
+        ) {
+            Ok(result) => result,
+            Err(reason) => Self::Unavailable(reason),
+        }
+    }
+}
+#[derive(Clone, Copy)]
+enum MissingMinutePolicy {
+    Ambiguous,
+    Unavailable,
+}
+#[derive(Clone, Copy)]
+struct EvaluationTime {
+    now: Timestamp,
+    policy: MissingMinutePolicy,
 }
 struct Schedule {
     rows: Vec<MarketSession>,
@@ -346,16 +387,21 @@ fn unresolved_minutes(
     session: TimeInterval,
     now: Timestamp,
     at: Timestamp,
+    policy: MissingMinutePolicy,
 ) -> EstimateOutcome {
-    if now < session.end().min(evidence.interval.end()) {
-        EstimateOutcome::Ongoing(OutcomePending(evidence.clone()))
-    } else {
-        resolved(
+    match policy {
+        MissingMinutePolicy::Unavailable => {
+            EstimateOutcome::Unavailable(OutcomeUnavailable::MissingCandles)
+        }
+        MissingMinutePolicy::Ambiguous if now < session.end().min(evidence.interval.end()) => {
+            EstimateOutcome::Ongoing(OutcomePending(evidence.clone()))
+        }
+        MissingMinutePolicy::Ambiguous => resolved(
             evidence.clone(),
             at,
             Some(CandlePeriod::Minute),
             Resolution::Failure(OutcomeFailure::Ambiguous),
-        )
+        ),
     }
 }
 fn observation_resolution(candle: &Candle, boundaries: &OutcomeBoundaries) -> Option<Resolution> {
@@ -370,8 +416,9 @@ fn minutes(
     session: TimeInterval,
     boundaries: &OutcomeBoundaries,
     candles: &[&Candle],
-    now: Timestamp,
+    timing: EvaluationTime,
 ) -> Option<EstimateOutcome> {
+    let now = timing.now;
     let mut cursor = session.start().max(evidence.interval.start());
     let terminal = session.end().min(evidence.interval.end());
     let limit = terminal.min(now);
@@ -383,7 +430,13 @@ fn minutes(
     }) {
         let end = candle.time().timestamp();
         if end.utc_seconds() != next_minute_seconds(cursor) {
-            return Some(unresolved_minutes(evidence, session, now, cursor));
+            return Some(unresolved_minutes(
+                evidence,
+                session,
+                now,
+                cursor,
+                timing.policy,
+            ));
         }
         let partial =
             *cursor.nanosecond().as_u32() != 0 || cursor.utc_seconds().as_i64().rem_euclid(60) != 0;
@@ -403,8 +456,14 @@ fn minutes(
         cursor = end;
     }
     let required = next_minute_seconds(cursor);
-    if required.as_i64() <= limit.utc_seconds().as_i64() && cursor < limit {
-        return Some(unresolved_minutes(evidence, session, now, cursor));
+    if required.as_i64() <= limit.utc_seconds().as_i64() {
+        return Some(unresolved_minutes(
+            evidence,
+            session,
+            now,
+            cursor,
+            timing.policy,
+        ));
     }
     None
 }
@@ -414,8 +473,9 @@ fn evaluate(
     calendars: &[MarketCalendar],
     adjustment: &OutcomeAdjustment,
     candles: &[Candle],
-    now: Timestamp,
+    timing: EvaluationTime,
 ) -> Result<EstimateOutcome, OutcomeUnavailable> {
+    let now = timing.now;
     let schedule = schedule(task, calendars)?;
     if adjustment.instrument() != task.volatility().instrument()
         || adjustment.reference_at() != task.reference().observed_at()
@@ -438,7 +498,7 @@ fn evaluate(
         period: None,
         adjustment: adjustment.clone(),
     };
-    if let Some(result) = scan_rows(&schedule, &evidence, &boundaries, &bars, now)? {
+    if let Some(result) = scan_rows(&schedule, &evidence, &boundaries, &bars, timing)? {
         return Ok(result);
     }
     if now >= schedule.interval.end() {
@@ -632,8 +692,9 @@ fn scan_rows(
     evidence: &OutcomeEvidence,
     boundaries: &OutcomeBoundaries,
     bars: &[&Candle],
-    now: Timestamp,
+    timing: EvaluationTime,
 ) -> Result<Option<EstimateOutcome>, OutcomeUnavailable> {
+    let now = timing.now;
     for (row, session) in schedule
         .rows
         .iter()
@@ -645,7 +706,7 @@ fn scan_rows(
         let reference_day = row.date() == schedule.start_day;
         let hours = schedule.horizon.selection() == HorizonSelection::Hours;
         if reference_day || hours || now < session.end() {
-            if let Some(result) = minutes(evidence, session, boundaries, bars, now) {
+            if let Some(result) = minutes(evidence, session, boundaries, bars, timing) {
                 return Ok(Some(result));
             }
             continue;
@@ -661,7 +722,7 @@ fn scan_rows(
             Touch::Target => Some(Resolution::Success),
             Touch::Stop => Some(Resolution::Failure(OutcomeFailure::Stop)),
             Touch::Both => {
-                if let Some(result) = minutes(evidence, session, boundaries, bars, now) {
+                if let Some(result) = minutes(evidence, session, boundaries, bars, timing) {
                     return Ok(Some(result));
                 }
                 return Ok(Some(resolved(
