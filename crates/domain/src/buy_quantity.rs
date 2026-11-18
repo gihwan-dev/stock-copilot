@@ -1184,6 +1184,106 @@ mod tests {
         );
     }
     #[test]
+    fn d53_both_markets_preserve_matching_sizing_and_reject_mismatched_prices() {
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(
+                &(
+                    1_000_000_i64..100_000_000,
+                    5_i64..500,
+                    1_i64..100,
+                    0_u32..10_000,
+                ),
+                |input| {
+                    for market in [Market::Kr, Market::Us] {
+                        d53_verify_market(&market, input).expect("시장별 검증");
+                    }
+                    Ok(())
+                },
+            )
+            .expect("양 시장의 가격 종목과 수량");
+    }
+    fn d53_verify_market(
+        market: &Market,
+        (krw, usd, price, suffix): (i64, i64, i64, u32),
+    ) -> proptest::test_runner::TestCaseResult {
+        let mut fixture = Fixture::new(market.clone(), krw, usd, price, (30, 0));
+        let expected = d53_expected_quantity(market, krw, usd, price);
+        let original = fixture.price.clone();
+        let matched = fixture.calculate(&[]).into_plan();
+        if expected == 0 {
+            proptest::prop_assert!(matched.is_none());
+        } else {
+            let plan = matched.expect("일치하는 가격 계획");
+            proptest::prop_assert_eq!(
+                plan.quantity().quantity().as_decimal(),
+                Decimal::from(expected)
+            );
+            proptest::prop_assert_eq!(plan.price(), &original);
+        }
+        for mismatch in d53_mismatched_prices(&fixture, suffix) {
+            fixture.price = mismatch;
+            proptest::prop_assert_eq!(
+                fixture.calculate(&[]),
+                BuyQuantityDecision::None(NoBuyQuantity::InvalidPriceInstrument)
+            );
+        }
+        Ok(())
+    }
+    fn d53_expected_quantity(market: &Market, krw: i64, usd: i64, price: i64) -> i64 {
+        let target = usd
+            .checked_mul(1000)
+            .and_then(|cash| krw.checked_add(cash))
+            .and_then(|total| total.checked_div(50))
+            .expect("목표");
+        if market == &Market::Kr {
+            target.checked_div(price).expect("수량")
+        } else {
+            target
+                .checked_div(price.checked_mul(1100).expect("환산 가격"))
+                .expect("목표 수량")
+                .min(usd.checked_div(price).expect("잔고 수량"))
+        }
+    }
+    fn d53_mismatched_prices(fixture: &Fixture, suffix: u32) -> Vec<PriceObservation> {
+        let original = &fixture.price;
+        let instrument = original.instrument().clone();
+        let market = instrument.market();
+        let other_market = if market == Market::Kr {
+            Market::Us
+        } else {
+            Market::Kr
+        };
+        let other_symbol = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("OTHER").expect("심볼"),
+            market,
+        )
+        .expect("다른 심볼");
+        let other_instrument = ResolvedOrderInstrument::from_master_lookup_result(
+            instrument.symbol().clone(),
+            other_market.clone(),
+        )
+        .expect("다른 시장");
+        let identified = |id, target, observed_at| {
+            PriceObservation::from_identified_quote_parts(id, target, original.price(), observed_at)
+                .expect("식별된 시세")
+        };
+        vec![
+            PriceObservation::from_quote_parts(instrument.clone(), original.price(), fixture.now)
+                .expect("ID 없는 시세"),
+            identified(
+                InstrumentId::try_new(&format!("d53-other-{suffix}")).expect("다른 ID"),
+                instrument,
+                fixture.now,
+            ),
+            identified(fixture.instrument_id().clone(), other_symbol, fixture.now),
+            identified(
+                fixture.instrument_id().clone(),
+                other_instrument,
+                at(61, &other_market),
+            ),
+        ]
+    }
+    #[test]
     fn d53_matching_prices_preserve_sizing_and_nonmatching_ids_never_plan() {
         TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
