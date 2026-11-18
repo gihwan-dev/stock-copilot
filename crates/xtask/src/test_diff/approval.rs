@@ -286,7 +286,9 @@ fn contains_assertion(stream: TokenStream) -> bool {
                 let named_check = macro_name.starts_with("assert")
                     || macro_name == "check"
                     || macro_name.starts_with("check_")
-                    || macro_name.starts_with("verify");
+                    || macro_name.starts_with("verify")
+                    || macro_name == "expect_err"
+                    || macro_name == "unwrap_err";
                 if named_check
                     || ((macro_name.contains("assert")
                         || macro_name == "panic"
@@ -432,10 +434,14 @@ fn trivial_predicate(expression: &syn::Expr) -> bool {
     if constant_boolean(expression) == Some(true) {
         return true;
     }
-    if let syn::Expr::Binary(binary) = canonical_expr(expression)
-        && let syn::BinOp::Eq(_) = binary.op
-    {
-        return same_expression(&binary.left, &binary.right);
+    if let syn::Expr::Binary(binary) = canonical_expr(expression) {
+        if let syn::BinOp::Eq(_) | syn::BinOp::Le(_) | syn::BinOp::Ge(_) = binary.op {
+            return same_expression(&binary.left, &binary.right);
+        }
+        if let syn::BinOp::Or(_) = binary.op {
+            return constant_boolean(&binary.left) == Some(true)
+                || constant_boolean(&binary.right) == Some(true);
+        }
     }
     false
 }
@@ -512,6 +518,9 @@ impl<'ast> Visit<'ast> for AssertionHeads {
 
     fn visit_expr_method_call(&mut self, i: &'ast syn::ExprMethodCall) {
         self.calls.push(format!("method:{}", i.method));
+        if ["expect_err", "unwrap_err"].contains(&i.method.to_string().as_str()) {
+            self.names.push(format!("method:{}", i.method));
+        }
         visit::visit_expr_method_call(self, i);
     }
 
@@ -536,12 +545,33 @@ fn assertion_heads(statement: &syn::Stmt) -> Option<AssertionHeads> {
     (!control.blocked && !heads.unsafe_code && !heads.names.is_empty()).then_some(heads)
 }
 
+fn protected_statement(statement: &syn::Stmt) -> bool {
+    if let syn::Stmt::Local(local) = statement
+        && let syn::Pat::Ident(binding) = &local.pat
+        && binding.ident == "check"
+        && binding.subpat.is_none()
+    {
+        return local
+            .attrs
+            .iter()
+            .chain(&binding.attrs)
+            .any(|attribute| contains_assertion(attribute.to_token_stream()))
+            || local.init.as_ref().is_some_and(|initial| {
+                contains_assertion(initial.expr.to_token_stream())
+                    || initial
+                        .diverge
+                        .as_ref()
+                        .is_some_and(|(_, branch)| contains_assertion(branch.to_token_stream()))
+            });
+    }
+    contains_assertion(statement.to_token_stream())
+}
+
 fn protected(block: &syn::Block) -> Option<Vec<&syn::Stmt>> {
     let mut control = SetupControl::default();
     let mut assertions = Vec::new();
     for statement in &block.stmts {
-        let tokens = statement.to_token_stream();
-        if contains_assertion(tokens) {
+        if protected_statement(statement) {
             assertions.push(statement);
         } else {
             control.visit_stmt(statement);
@@ -559,21 +589,67 @@ fn safe_block(
     let (Some(left), Some(right)) = (protected(before), protected(after)) else {
         return false;
     };
-    if left.len() != right.len() || (kind == ItemKind::Test && left.is_empty()) {
+    if kind == ItemKind::Test && left.is_empty() {
         return false;
     }
-    left.iter().zip(&right).all(|(old, new)| {
-        old.to_token_stream().to_string() == new.to_token_stream().to_string()
-            || (approval == AssertionChange::Approved
-                && assertion_heads(old).zip(assertion_heads(new)).is_some_and(
-                    |(before_heads, after_heads)| {
-                        before_heads.names == after_heads.names
-                            && before_heads.calls == after_heads.calls
-                            && before_heads.opaque_macros == after_heads.opaque_macros
-                            && before_heads.lazy_operators == after_heads.lazy_operators
-                            && !after_heads.trivial
-                    },
-                ))
+    if left.len() == right.len() {
+        return left
+            .iter()
+            .zip(&right)
+            .all(|(old, new)| same_assertion(old, new, approval));
+    }
+    if kind != ItemKind::Support
+        || approval != AssertionChange::Approved
+        || left.len() > right.len()
+    {
+        return false;
+    }
+    let mut remaining = right.iter();
+    for old in &left {
+        loop {
+            let Some(new) = remaining.next() else {
+                return false;
+            };
+            if same_assertion(old, new, approval) {
+                break;
+            }
+            if !safe_added_assertion(new) {
+                return false;
+            }
+        }
+    }
+    remaining.all(|new| safe_added_assertion(new))
+}
+
+fn same_assertion(old: &syn::Stmt, new: &syn::Stmt, approval: AssertionChange) -> bool {
+    old.to_token_stream().to_string() == new.to_token_stream().to_string()
+        || (approval == AssertionChange::Approved
+            && assertion_heads(old).zip(assertion_heads(new)).is_some_and(
+                |(before_heads, after_heads)| {
+                    before_heads.names == after_heads.names
+                        && before_heads.calls == after_heads.calls
+                        && before_heads.opaque_macros == after_heads.opaque_macros
+                        && before_heads.lazy_operators == after_heads.lazy_operators
+                        && !after_heads.trivial
+                },
+            ))
+}
+
+fn safe_added_assertion(statement: &syn::Stmt) -> bool {
+    assertion_heads(statement).is_some_and(|heads| {
+        !heads.trivial
+            && heads.opaque_macros.is_empty()
+            && heads.names.iter().all(|name| {
+                [
+                    "macro:assert",
+                    "macro:assert_eq",
+                    "macro:assert_ne",
+                    "macro:debug_assert",
+                    "macro:debug_assert_eq",
+                    "macro:debug_assert_ne",
+                ]
+                .contains(&name.as_str())
+            })
     })
 }
 

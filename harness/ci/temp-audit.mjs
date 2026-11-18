@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { prefixes } from "./temp-prefixes.mjs";
 
 const [command, ...args] = process.argv.slice(2);
@@ -23,28 +24,62 @@ const child = spawn(command, args, {
   detached: true,
 });
 let interrupted;
-const groupExists = () => {
-  if (child.pid === undefined) return false;
-  try {
-    process.kill(-child.pid, 0);
-    return true;
-  } catch (error) {
-    if (error.code === "ESRCH") return false;
-    throw error;
+let inspectionError;
+const sessionGroups = () => {
+  if (child.pid === undefined) return [];
+  const result = spawnSync(
+    "python3",
+    [
+      "-I",
+      fileURLToPath(new URL("session-groups.py", import.meta.url)),
+      String(child.pid),
+    ],
+    {
+      encoding: "utf8",
+    },
+  );
+  const lines = result.stdout?.trimEnd().split("\n");
+  if (
+    result.status !== 0 ||
+    lines?.[0] !== "ok" ||
+    lines
+      .slice(1)
+      .some(
+        (line) =>
+          !/^\d+$/u.test(line) ||
+          !Number.isSafeInteger(Number(line)) ||
+          Number(line) <= 0,
+      )
+  ) {
+    inspectionError = "소유 세션을 확인하지 못했다";
+    return undefined;
+  }
+  const groups = lines.slice(1).map(Number);
+  return [...new Set(groups)];
+};
+const signalSession = (signal) => {
+  const groups = sessionGroups();
+  if (groups === undefined) {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill(signal);
+    return;
+  }
+  for (const group of groups) {
+    try {
+      process.kill(-group, signal);
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
   }
 };
-const signalGroup = (signal) => {
-  if (child.pid === undefined) return;
-  try {
-    process.kill(-child.pid, signal);
-  } catch (error) {
-    if (error.code !== "ESRCH") throw error;
-  }
+const sessionHasGroups = () => {
+  const groups = sessionGroups();
+  return groups !== undefined && groups.length > 0;
 };
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.once(signal, () => {
     interrupted = signal;
-    signalGroup(signal);
+    signalSession(signal);
   });
 }
 child.once("error", (error) => {
@@ -52,16 +87,19 @@ child.once("error", (error) => {
   process.exitCode = 1;
 });
 child.once("close", async (code, signal) => {
-  const descendants = groupExists();
-  if (descendants) {
+  const groups = sessionGroups();
+  const descendants = groups === undefined || groups.length > 0;
+  if (groups !== undefined && groups.length > 0) {
     process.stderr.write("temp-audit: 종료되지 않은 자손 프로세스가 있다\n");
-    signalGroup("SIGTERM");
-    for (let attempt = 0; attempt < 20 && groupExists(); attempt += 1)
+    signalSession("SIGTERM");
+    for (let attempt = 0; attempt < 20 && sessionHasGroups(); attempt += 1)
       await new Promise((done) => setTimeout(done, 50));
-    if (groupExists()) signalGroup("SIGKILL");
-    for (let attempt = 0; attempt < 20 && groupExists(); attempt += 1)
+    if (sessionHasGroups()) signalSession("SIGKILL");
+    for (let attempt = 0; attempt < 20 && sessionHasGroups(); attempt += 1)
       await new Promise((done) => setTimeout(done, 50));
   }
+  if (inspectionError !== undefined)
+    process.stderr.write(`temp-audit: ${inspectionError}\n`);
   rmSync(compileCache, { recursive: true, force: true });
   rmSync(join(directory, ".pnpm-store"), { recursive: true, force: true });
   const remaining = readdirSync(directory);

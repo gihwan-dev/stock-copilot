@@ -2,7 +2,9 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const parts = 4;
+const initialParts = 4;
+const maximumParts = 128;
+const targetPerPart = 7;
 const output = "target/mutants";
 const validCatalog = (catalog) =>
   Array.isArray(catalog) &&
@@ -14,9 +16,17 @@ const validCatalog = (catalog) =>
       item.file.length > 0,
   );
 
-export const verifyShard = (catalog, previous, planned, outcomes, index) => {
+export const verifyShard = (
+  catalog,
+  previous,
+  planned,
+  outcomes,
+  index,
+  parts = initialParts,
+) => {
   if (
     !validCatalog(catalog) ||
+    ![4, 8, 16, 32, 64, 128].includes(parts) ||
     !Number.isInteger(index) ||
     index < 0 ||
     index >= parts
@@ -56,31 +66,53 @@ const writeStatus = (status) => {
   appendFileSync(process.env.GITHUB_OUTPUT, `status=${status}\n`);
 };
 
-export const runShards = (base, run, read, write) => {
+export const runShards = (base, run, read, write, plan) => {
   if (typeof base !== "string" || !/^[0-9a-f]{40}$/u.test(base))
     throw new Error("변이 기준 SHA가 없다");
-  let previous;
-  for (let index = 0; index < parts; index += 1) {
-    const shard = `${index}/${parts}`;
-    process.stdout.write(`변경분 변이 조각 ${shard}\n`);
-    const status = run(base, shard);
-    if (status === 124) {
-      write("deadline");
+  if (plan(base) !== 0) throw new Error("변경분 변이 계획 실패");
+  const selected = read(`${output}/catalog.json`);
+  if (!validCatalog(selected))
+    throw new Error("변경분 변이 목록이 올바르지 않다");
+  let parts = initialParts;
+  while (
+    Math.ceil(selected.length / parts) > targetPerPart &&
+    parts < maximumParts
+  )
+    parts *= 2;
+  if (Math.ceil(selected.length / parts) > targetPerPart)
+    throw new Error("변경분이 너무 커서 작업을 나누어야 한다");
+  while (true) {
+    let retry = false;
+    for (let index = 0; index < parts; index += 1) {
+      const chunk = Math.ceil(selected.length / parts);
+      if (selected.length > 0 && index * chunk >= selected.length) continue;
+      const shard = `${index}/${parts}`;
+      process.stdout.write(`변경분 변이 조각 ${shard}\n`);
+      const status = run(base, shard);
+      if (status === 124) {
+        if (chunk > 1 && parts < maximumParts) {
+          retry = true;
+          break;
+        }
+        write("deadline");
+        return;
+      }
+      if (status !== 0) throw new Error(`변이 조각 ${shard} 실패`);
+      const catalog = read(`${output}/catalog.json`);
+      const planned =
+        catalog.length === 0 ? [] : read(`${output}/mutants.out/mutants.json`);
+      const outcomes =
+        catalog.length === 0
+          ? undefined
+          : read(`${output}/mutants.out/outcomes.json`);
+      verifyShard(catalog, selected, planned, outcomes, index, parts);
+    }
+    if (!retry) {
+      write("passed");
       return;
     }
-    if (status !== 0) throw new Error(`변이 조각 ${shard} 실패`);
-    const catalog = read(`${output}/catalog.json`);
-    const chunk = Math.ceil(catalog.length / parts);
-    const empty = catalog.length === 0 || index * chunk >= catalog.length;
-    const planned =
-      catalog.length === 0 ? [] : read(`${output}/mutants.out/mutants.json`);
-    const outcomes = empty
-      ? undefined
-      : read(`${output}/mutants.out/outcomes.json`);
-    verifyShard(catalog, previous, planned, outcomes, index);
-    previous = catalog;
+    parts *= 2;
   }
-  write("passed");
 };
 
 if (
@@ -96,6 +128,9 @@ if (
         }).status,
       readJson,
       writeStatus,
+      (base) =>
+        spawnSync("just", ["mutants-diff-plan", base], { stdio: "inherit" })
+          .status,
     );
   } catch (error) {
     process.stderr.write(`diff-mutants: ${error.message}\n`);

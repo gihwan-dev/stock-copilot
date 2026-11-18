@@ -85,6 +85,20 @@ fn age(path: &std::path::Path, by: std::time::Duration) {
 }
 
 #[test]
+fn stale_directory_from_a_different_process_is_preserved() {
+    use crate::harness_workspace_tests::{fresh_directory, repository_root};
+
+    let root = fresh_directory(&repository_root(), "h53-foreign-private");
+    let prefix = "stock-copilot-foreign-private";
+    let other = root.join(format!("{prefix}-{}0-other", std::process::id()));
+    super::create_private(&other).expect("other process fixture");
+    age(&other, std::time::Duration::from_hours(2));
+    let owned = PrivateDirectory::create_in(&root, prefix).expect("owned directory");
+    assert!(other.is_dir(), "another process directory must remain");
+    owned.remove().expect("remove owned directory");
+}
+
+#[test]
 fn creating_removes_only_stale_private_folders_of_the_same_prefix() {
     let prefix = "stock-copilot-private-stale-test";
     let two_hours = std::time::Duration::from_hours(2);
@@ -94,9 +108,10 @@ fn creating_removes_only_stale_private_folders_of_the_same_prefix() {
     let outside = scratch();
     fs::write(outside.root.join("kept.txt"), "kept\n").expect("write outside file");
     let parent = stale.root.parent().expect("parent").to_path_buf();
-    let linked = parent.join(format!("{prefix}-planted-link"));
+    let owned_prefix = format!("{prefix}-{}", std::process::id());
+    let linked = parent.join(format!("{owned_prefix}-planted-link"));
     symlink(&outside.root, &linked).expect("plant link");
-    let open = parent.join(format!("{prefix}-open-folder"));
+    let open = parent.join(format!("{owned_prefix}-open-folder"));
     fs::create_dir_all(&open).expect("open folder");
     fs::set_permissions(&open, fs::Permissions::from_mode(0o755)).expect("open mode");
     age(&open, two_hours);

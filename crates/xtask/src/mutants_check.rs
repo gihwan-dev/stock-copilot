@@ -176,6 +176,42 @@ fn read_outcome(directory: &Path, name: &str, written: Written) -> Result<String
     }
 }
 
+fn partial_findings(
+    directory: &Path,
+    survivors: &[Survivor],
+) -> Result<BTreeSet<Finding<Rule>>, String> {
+    evaluate(
+        &Outcomes {
+            missed: read_outcome(directory, MISSED_FILE, Written::WhenTested)?,
+            timeouts: read_outcome(directory, TIMEOUT_FILE, Written::WhenTested)?,
+        },
+        survivors,
+    )
+}
+
+fn bounded_status(
+    command: Command,
+    workspace: &Path,
+    results: &Path,
+) -> Result<std::process::ExitStatus, String> {
+    match environment::run_bounded(command) {
+        Err(failure) if failure == environment::DEADLINE => {
+            let survivors = load_survivors(workspace, SURVIVORS_FILE)?;
+            let findings = partial_findings(results, &survivors)?;
+            if findings.is_empty() {
+                return Err(failure);
+            }
+            let details = findings
+                .iter()
+                .map(|finding| finding.rule.to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(format!("변경분 변이 제한 전 발견:\n{details}"))
+        }
+        result => result,
+    }
+}
+
 pub(crate) fn crate_of(glob: &str) -> String {
     glob.split('/')
         .take(CRATE_DEPTH)
@@ -415,7 +451,7 @@ fn run_with_diff(
     configure_selection(&mut command, scope, ignore, &globs, patch);
     let results = output.join("mutants.out");
     let status = match scope {
-        Scope::Files(_) | Scope::DiffSharded(_, _) => environment::run_bounded(command)?,
+        Scope::Files(_) | Scope::DiffSharded(_, _) => bounded_status(command, workspace, &results)?,
         Scope::Everything
         | Scope::Sharded(_)
         | Scope::DailyFiles(_)
@@ -444,7 +480,7 @@ fn scope_for(
         {
             Ok(Scope::Sharded(shard.clone()))
         }
-        [flag, base] if flag == "--in-diff" => {
+        [flag, base] if flag == "--in-diff" || flag == "--in-diff-plan" => {
             let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
             let changed = changed_paths(root, &commit)?;
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
@@ -452,7 +488,9 @@ fn scope_for(
         [flag, base, option, shard]
             if flag == "--in-diff"
                 && option == "--shard"
-                && (0..4).any(|index| shard == &format!("{index}/4")) =>
+                && [4_u16, 8, 16, 32, 64, 128]
+                    .iter()
+                    .any(|parts| (0..*parts).any(|index| shard == &format!("{index}/{parts}"))) =>
         {
             let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
             let changed = changed_paths(root, &commit)?;
@@ -475,7 +513,7 @@ fn checked_scope(
 ) -> Result<Scope, String> {
     let scope = scope_for(root, arguments, base_use)?;
     if let Some([flag, base, ..]) = arguments.get(..)
-        && flag == "--in-diff"
+        && (flag == "--in-diff" || flag == "--in-diff-plan")
     {
         let findings = crate::test_diff::check_for(root, base, base_use)?;
         if !findings.is_empty() {
@@ -619,12 +657,12 @@ pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) 
         let survivors = load_survivors(&root, SURVIVORS_FILE)?;
         let scope = checked_scope(&root, arguments, base_use)?;
         let outcomes = if let Some([flag, base, ..]) = arguments.get(..)
-            && flag == "--in-diff"
+            && (flag == "--in-diff" || flag == "--in-diff-plan")
         {
             let patch = diff_patch(&root, base)?;
             let mutated = list_changed_mutants(&root, &scope, &patch)?;
             report_nightly_targets(&root, base, &mutated)?;
-            if mutated.is_empty() {
+            if flag == "--in-diff-plan" || mutated.is_empty() {
                 Outcomes::default()
             } else {
                 run_with_diff(&root, &scope, IgnoreFiles::Respected, Some(&patch))?

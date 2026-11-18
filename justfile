@@ -198,6 +198,9 @@ test-diff commit:
 mutants-diff commit:
     cargo run --locked --quiet --package xtask -- mutants --in-diff "$1"
 
+mutants-diff-plan commit:
+    cargo run --locked --quiet --package xtask -- mutants --in-diff-plan "$1"
+
 mutants-diff-shard commit shard:
     cargo run --locked --quiet --package xtask -- mutants --in-diff "$1" --shard "$2"
 
