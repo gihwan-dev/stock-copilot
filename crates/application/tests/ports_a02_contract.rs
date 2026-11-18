@@ -89,11 +89,11 @@ mod tests {
             &source,
             "MarketDataRepository",
             &[
-                "fn store_quote(&self, instrument: &InstrumentId, quote: &Quote) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn store_quote(&self, instrument: &InstrumentId, quote: &Quote) -> impl Future<Output = Result<CacheWriteOutcome, SystemPortError>> + Send",
                 "fn quote(&self, instrument: &InstrumentId) -> impl Future<Output = Result<Option<Quote>, SystemPortError>> + Send",
                 "fn store_candles(&self, instrument: &InstrumentId, candles: &[Candle]) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
                 "fn candles(&self, instrument: &InstrumentId, window: TimeInterval, period: CandlePeriod, adjustment: PriceAdjustment) -> impl Future<Output = Result<Vec<Candle>, SystemPortError>> + Send",
-                "fn store_fx_rate(&self, rate: &FxRate) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn store_fx_rate(&self, rate: &FxRate) -> impl Future<Output = Result<CacheWriteOutcome, SystemPortError>> + Send",
                 "fn fx_rate(&self, pair: FxPair, kind: FxRateKind, at: FxRateQuery) -> impl Future<Output = Result<Option<FxRate>, SystemPortError>> + Send",
             ],
         );

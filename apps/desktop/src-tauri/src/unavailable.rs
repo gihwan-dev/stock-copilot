@@ -500,7 +500,7 @@ impl MarketDataRepository for Unavailable {
         &self,
         _instrument: &InstrumentId,
         _quote: &Quote,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<application::CacheWriteOutcome, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,
             SystemFailure::Unavailable(RetryDelay::Unknown),
@@ -540,7 +540,7 @@ impl MarketDataRepository for Unavailable {
     fn store_fx_rate(
         &self,
         _rate: &FxRate,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<application::CacheWriteOutcome, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,
             SystemFailure::Unavailable(RetryDelay::Unknown),

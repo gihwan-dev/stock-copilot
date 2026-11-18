@@ -25,6 +25,11 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_migration_ledger.sql", sql::CREATE_LEDGER),
     ("0002_holdings_snapshots.sql", crate::sql::holdings::CREATE),
     ("0003_transactions.sql", crate::sql::transactions::CREATE),
+    ("0004_market_cache.sql", crate::sql::market::CREATE),
+    (
+        "0005_information_store.sql",
+        crate::sql::information::CREATE,
+    ),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {
@@ -110,30 +115,17 @@ fn apply_guarded(
         "user_version",
         i64::try_from(migrations.len()).map_err(|_error| rusqlite::Error::InvalidQuery)?,
     )?;
-    validate_schema(&transaction)?;
+    if migrations == MIGRATIONS {
+        validate_schema(&transaction)?;
+    } else {
+        crate::fts_schema::validate(&transaction, migrations)?;
+    }
     verify_applied(&transaction, at, &rows, migrations)?;
     transaction.commit()
 }
 
 pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
-    let tables = connection
-        .prepare(sql::TABLES)?
-        .query_map([], |row| row.get::<_, i64>(1))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    if tables.iter().any(|strict| *strict != 1) {
-        return Err(rusqlite::Error::InvalidQuery);
-    }
-    for row in connection.prepare(sql::SCHEMA)?.query_map([], |row| {
-        Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
-    })? {
-        let (ddl, kind) = row?;
-        match kind.as_str() {
-            "table" => crate::schema::validate(&ddl)?,
-            "index" | "view" | "trigger" => {}
-            _ => return Err(rusqlite::Error::InvalidQuery),
-        }
-    }
-    Ok(())
+    crate::fts_schema::validate(connection, MIGRATIONS)
 }
 
 #[derive(PartialEq, Eq)]

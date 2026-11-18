@@ -52,6 +52,18 @@ mod tests {
             std::task::Poll::Pending => panic!("즉시 완료"),
         }
     }
+    fn link_news(repository: &MemoryNewsRepository, instrument: InstrumentId, item: &NewsItem) {
+        let domain::InformationSource::News(source) = item.collected().source() else {
+            panic!("news source");
+        };
+        let key = application::InformationKey::News(source.clone(), item.collected().url().clone());
+        run(application::InformationLinks::set_instruments(
+            repository,
+            &key,
+            &[instrument],
+        ))
+        .expect("link");
+    }
     fn id(value: &str) -> InstrumentId {
         InstrumentId::try_new(value).expect("종목")
     }
@@ -78,8 +90,8 @@ mod tests {
             UntrustedText::try_new("기사").expect("제목"),
             None,
         );
-        repository.link(instrument.clone(), item.clone());
-        repository.link(instrument.clone(), item.clone());
+        link_news(&repository, instrument.clone(), &item);
+        link_news(&repository, instrument.clone(), &item);
         memory(repository.script_for_instrument(), 3);
         run(contracts::news_repository_for_instrument(
             &repository,
@@ -864,15 +876,15 @@ mod tests {
             UntrustedText::try_new("기사").expect("제목"),
             None,
         );
-        repository.link(instrument.clone(), item.clone());
-        repository.link(instrument.clone(), item.clone());
+        link_news(&repository, instrument.clone(), &item);
+        link_news(&repository, instrument.clone(), &item);
         let other_item = NewsItem::new(
             NewsSource::Yonhap,
             NormalizedUrl::try_new("https://example.com/d").expect("주소"),
             UntrustedText::try_new("다른 기사").expect("제목"),
             None,
         );
-        repository.link(id("news-other"), other_item.clone());
+        link_news(&repository, id("news-other"), &other_item);
         memory(repository.script_store(), 3);
         memory(repository.script_for_instrument(), 3);
         run(contracts::scenarios::news_roundtrip(
@@ -1123,7 +1135,7 @@ mod tests {
             &self,
             instrument: &InstrumentId,
             quote: &Quote,
-        ) -> Result<WriteCompleted, SystemPortError> {
+        ) -> Result<application::CacheWriteOutcome, SystemPortError> {
             self.inner.store_quote(instrument, quote).await
         }
         async fn quote(&self, instrument: &InstrumentId) -> Result<Option<Quote>, SystemPortError> {
@@ -1166,7 +1178,10 @@ mod tests {
                 .candles(instrument, window, period, adjustment)
                 .await
         }
-        async fn store_fx_rate(&self, rate: &FxRate) -> Result<WriteCompleted, SystemPortError> {
+        async fn store_fx_rate(
+            &self,
+            rate: &FxRate,
+        ) -> Result<application::CacheWriteOutcome, SystemPortError> {
             self.inner.store_fx_rate(rate).await
         }
         async fn fx_rate(
