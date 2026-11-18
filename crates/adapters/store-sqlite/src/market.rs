@@ -61,42 +61,58 @@ fn price(text: &str, unit: Currency) -> rusqlite::Result<Price> {
 fn text_price(value: Price) -> String {
     value.as_money().amount().as_decimal().to_string()
 }
-fn decode_quote(row: &Row<'_>) -> rusqlite::Result<(InstrumentId, Quote)> {
-    let unit = currency(&row.get::<_, String>(2)?)?;
-    let observed = match (
-        row.get::<_, Option<i64>>(4)?,
-        row.get::<_, Option<u32>>(5)?,
-        row.get::<_, Option<i32>>(6)?,
+fn optional_timestamp(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<Timestamp>> {
+    match (
+        row.get::<_, Option<i64>>(index)?,
+        row.get::<_, Option<u32>>(index.checked_add(1).ok_or_else(|| invalid(()))?)?,
+        row.get::<_, Option<i32>>(index.checked_add(2).ok_or_else(|| invalid(()))?)?,
     ) {
-        (Some(seconds), Some(nanos), Some(offset)) => Some(
+        (Some(seconds), Some(nanos), Some(offset)) => Ok(Some(
             Timestamp::from_parts(
                 UnixSeconds::new(seconds),
                 Nanosecond::new(nanos),
                 OffsetSeconds::new(offset),
             )
             .map_err(invalid)?,
-        ),
-        (None, None, None) => None,
-        _ => return Err(invalid(())),
-    };
+        )),
+        (None, None, None) => Ok(None),
+        _ => Err(invalid(())),
+    }
+}
+struct CachedQuote {
+    quote: Quote,
+    last_server: Option<Timestamp>,
+}
+fn decode_quote(row: &Row<'_>) -> rusqlite::Result<(InstrumentId, CachedQuote)> {
+    let unit = currency(&row.get::<_, String>(2)?)?;
+    let observed = optional_timestamp(row, 4)?;
+    let last_server = optional_timestamp(row, 10)?;
+    match (observed, last_server) {
+        (Some(actual), Some(last)) if actual <= last => {}
+        (None, Some(_) | None) => {}
+        (Some(_), Some(_) | None) => return Err(invalid(())),
+    }
     Ok((
         InstrumentId::try_new(&row.get::<_, String>(0)?).map_err(invalid)?,
-        Quote::try_new(
-            Symbol::try_new(&row.get::<_, String>(1)?).map_err(invalid)?,
-            unit,
-            row.get::<_, Option<String>>(3)?
-                .map(|text| price(&text, unit))
-                .transpose()?,
-            observed,
-            timestamp(row, 7)?,
-        )
-        .map_err(invalid)?,
+        CachedQuote {
+            quote: Quote::try_new(
+                Symbol::try_new(&row.get::<_, String>(1)?).map_err(invalid)?,
+                unit,
+                row.get::<_, Option<String>>(3)?
+                    .map(|text| price(&text, unit))
+                    .transpose()?,
+                observed,
+                timestamp(row, 7)?,
+            )
+            .map_err(invalid)?,
+            last_server,
+        },
     ))
 }
 fn load_quote(
     connection: &Connection,
     instrument: &InstrumentId,
-) -> rusqlite::Result<Option<Quote>> {
+) -> rusqlite::Result<Option<CachedQuote>> {
     let found = connection
         .query_row(sql::QUOTE, [instrument.as_str()], decode_quote)
         .optional()?;
@@ -111,20 +127,23 @@ fn save_quote(
     id: &InstrumentId,
     quote: &Quote,
 ) -> rusqlite::Result<CacheWriteOutcome> {
-    if let Some(current) = load_quote(tx, id)? {
-        if quote.collected_at() < current.collected_at() {
+    let observed = quote.timestamp();
+    let last_server = if let Some(current) = load_quote(tx, id)? {
+        if quote.collected_at() < current.quote.collected_at() {
             return Ok(CacheWriteOutcome::OlderIgnored);
         }
-        if let (Some(observed), Some(previous)) = (quote.timestamp(), current.timestamp())
-            && observed < previous
+        if let (Some(actual), Some(previous)) = (observed, current.last_server)
+            && actual < previous
         {
             return Ok(CacheWriteOutcome::OlderIgnored);
         }
-        if *quote == current {
+        if *quote == current.quote {
             return Ok(CacheWriteOutcome::Unchanged);
         }
-    }
-    let observed = quote.timestamp();
+        observed.or(current.last_server)
+    } else {
+        observed
+    };
     let collected = quote.collected_at();
     tx.execute(sql::DELETE_QUOTE, [id.as_str()])?;
     tx.execute(
@@ -140,6 +159,9 @@ fn save_quote(
             collected.utc_seconds().as_i64(),
             collected.nanosecond().as_u32(),
             collected.offset_seconds().as_i32(),
+            last_server.map(|at| *at.utc_seconds().as_i64()),
+            last_server.map(|at| *at.nanosecond().as_u32()),
+            last_server.map(|at| *at.offset_seconds().as_i32()),
         ],
     )?;
     Ok(CacheWriteOutcome::Changed)
@@ -373,7 +395,7 @@ impl MarketDataRepository for MarketStore<'_> {
     async fn quote(&self, instrument: &InstrumentId) -> Result<Option<Quote>, SystemPortError> {
         let id = instrument.clone();
         self.database
-            .read(move |connection| load_quote(connection, &id))
+            .read(move |connection| Ok(load_quote(connection, &id)?.map(|cached| cached.quote)))
             .await
     }
     async fn store_candles(

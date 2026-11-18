@@ -9,7 +9,7 @@ use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
     Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
-    SignalTaskKey, SyncRecord, Thesis, TimeInterval, ValuationSnapshot,
+    SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 fn append_candles(stored: &mut Vec<Candle>, incoming: &[Candle]) {
     for value in incoming {
@@ -166,30 +166,45 @@ impl TransactionRepository for MemoryTransactionRepository {
 }
 #[derive(Debug, Default)]
 struct MarketDataRepositoryState {
-    quotes: Vec<(InstrumentId, Quote)>,
+    quotes: Vec<MemoryQuote>,
     candles: Vec<Candle>,
     rates: Vec<FxRate>,
+}
+#[derive(Debug)]
+struct MemoryQuote {
+    instrument: InstrumentId,
+    quote: Quote,
+    last_server: Option<Timestamp>,
 }
 fn remember_quote(
     state: &mut MarketDataRepositoryState,
     instrument: &InstrumentId,
     quote: &Quote,
 ) -> CacheWriteOutcome {
-    if let Some((_, current)) = state.quotes.iter_mut().find(|(key, _)| key == instrument) {
-        if quote.collected_at() < current.collected_at() {
+    if let Some(current) = state
+        .quotes
+        .iter_mut()
+        .find(|value| &value.instrument == instrument)
+    {
+        if quote.collected_at() < current.quote.collected_at() {
             return CacheWriteOutcome::OlderIgnored;
         }
-        if let (Some(observed), Some(previous)) = (quote.timestamp(), current.timestamp())
+        if let (Some(observed), Some(previous)) = (quote.timestamp(), current.last_server)
             && observed < previous
         {
             return CacheWriteOutcome::OlderIgnored;
         }
-        if quote == current {
+        if *quote == current.quote {
             return CacheWriteOutcome::Unchanged;
         }
-        *current = quote.clone();
+        current.last_server = quote.timestamp().or(current.last_server);
+        current.quote = quote.clone();
     } else {
-        state.quotes.push((instrument.clone(), quote.clone()));
+        state.quotes.push(MemoryQuote {
+            instrument: instrument.clone(),
+            quote: quote.clone(),
+            last_server: quote.timestamp(),
+        });
     }
     CacheWriteOutcome::Changed
 }
@@ -298,9 +313,8 @@ impl MarketDataRepository for MemoryMarketDataRepository {
                 Ok(state
                     .quotes
                     .iter()
-                    .filter(|(key, _)| key == instrument)
-                    .max_by_key(|(_, value)| value.collected_at())
-                    .map(|(_, value)| value.clone()))
+                    .find(|value| &value.instrument == instrument)
+                    .map(|value| value.quote.clone()))
             }
         }
     }

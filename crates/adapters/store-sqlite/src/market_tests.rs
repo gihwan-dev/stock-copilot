@@ -392,3 +392,185 @@ fn later_collection_does_not_replace_a_newer_server_observation() {
     assert_eq!(restored_unknown.timestamp(), None);
     assert_eq!(restored_unknown, unknown);
 }
+
+#[test]
+fn missing_server_time_does_not_erase_last_known_observation_after_reopen() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let path = DatabasePath::new(fixture.path());
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let other = InstrumentId::try_new("asset-two").expect("id");
+    let first = server_quote("100", Some(105), 106);
+    let unknown = server_quote("101", None, 107);
+    let delayed = server_quote("99", Some(103), 108);
+    let closed = {
+        let database = Database::open(&path, &key(), &clock()).expect("open");
+        let store = MarketStore::new(&database);
+        assert_eq!(
+            rt.block_on(store.store_quote(&instrument, &first)),
+            Ok(CacheWriteOutcome::Changed)
+        );
+        assert_eq!(
+            rt.block_on(store.store_quote(&instrument, &unknown)),
+            Ok(CacheWriteOutcome::Changed)
+        );
+        assert_eq!(
+            rt.block_on(store.quote(&instrument)),
+            Ok(Some(unknown.clone()))
+        );
+        rt.block_on(database.close()).expect("close")
+    };
+    assert_eq!(closed, application::WriteCompleted);
+    let database = Database::open(&path, &key(), &clock()).expect("reopen");
+    let store = MarketStore::new(&database);
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &delayed)),
+        Ok(CacheWriteOutcome::OlderIgnored)
+    );
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(unknown)));
+    assert_eq!(
+        rt.block_on(store.store_quote(&other, &delayed)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    assert_eq!(rt.block_on(store.quote(&other)), Ok(Some(delayed)));
+}
+
+#[test]
+fn first_known_server_time_after_missing_is_not_replaced_by_collection_time() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let unknown = server_quote("100", None, 100);
+    let known = server_quote("101", Some(90), 110);
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &unknown)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &known)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(known)));
+}
+
+#[test]
+fn later_known_server_time_remains_the_lower_bound_after_missing() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let first = server_quote("100", Some(90), 100);
+    let later = server_quote("101", Some(95), 110);
+    let unknown = server_quote("102", None, 120);
+    let delayed = server_quote("99", Some(92), 130);
+    for quote in [&first, &later, &unknown] {
+        assert_eq!(
+            rt.block_on(store.store_quote(&instrument, quote)),
+            Ok(CacheWriteOutcome::Changed)
+        );
+    }
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &delayed)),
+        Ok(CacheWriteOutcome::OlderIgnored)
+    );
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(unknown)));
+}
+
+#[test]
+fn known_server_times_are_not_forced_to_the_later_collection_time() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let unknown = server_quote("100", None, 100);
+    let known = server_quote("101", Some(90), 110);
+    let next = server_quote("102", Some(95), 120);
+    for quote in [&unknown, &known, &next] {
+        assert_eq!(
+            rt.block_on(store.store_quote(&instrument, quote)),
+            Ok(CacheWriteOutcome::Changed)
+        );
+    }
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(next)));
+}
+
+#[test]
+fn partial_server_watermark_is_rejected_by_the_schema() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let quote = server_quote("100", Some(105), 106);
+    rt.block_on(store.store_quote(&instrument, &quote))
+        .expect("store");
+    rt.block_on(
+        database.write(|tx| tx.execute_batch(crate::sql::market_tests::PARTIAL_SERVER_TIME)),
+    )
+    .expect_err("partial watermark must fail");
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(quote)));
+}
+
+#[test]
+fn corrupt_server_watermark_fails_closed_without_affecting_another_instrument() {
+    for corrupt in [
+        crate::sql::market_tests::CORRUPT_SERVER_TIME,
+        crate::sql::market_tests::CORRUPT_SERVER_ORDER,
+    ] {
+        let fixture = Fixture::new();
+        let rt = runtime();
+        let database =
+            Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+        let store = MarketStore::new(&database);
+        let first = InstrumentId::try_new("asset-one").expect("id");
+        let second = InstrumentId::try_new("asset-two").expect("id");
+        let quote = server_quote("100", Some(105), 106);
+        rt.block_on(store.store_quote(&first, &quote))
+            .expect("first");
+        rt.block_on(store.store_quote(&second, &quote))
+            .expect("second");
+        rt.block_on(database.write(move |tx| tx.execute_batch(corrupt)))
+            .expect("corrupt");
+        assert_eq!(
+            rt.block_on(store.quote(&first))
+                .expect_err("corrupt")
+                .failure(),
+            application::SystemFailure::RepositoryIntegrity
+        );
+        assert_eq!(rt.block_on(store.quote(&second)), Ok(Some(quote)));
+    }
+}
+
+#[test]
+fn failed_unknown_time_write_preserves_previous_server_watermark() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let first = server_quote("100", Some(105), 106);
+    let unknown = server_quote("101", None, 107);
+    let delayed = server_quote("99", Some(103), 108);
+    rt.block_on(store.store_quote(&instrument, &first))
+        .expect("first");
+    rt.block_on(database.write(|tx| tx.execute_batch(crate::sql::market_tests::BLOCK_QUOTE)))
+        .expect("block");
+    rt.block_on(store.store_quote(&instrument, &unknown))
+        .expect_err("write blocked");
+    rt.block_on(database.write(|tx| tx.execute_batch(crate::sql::market_tests::UNBLOCK_QUOTE)))
+        .expect("unblock");
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &delayed)),
+        Ok(CacheWriteOutcome::OlderIgnored)
+    );
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(first)));
+}

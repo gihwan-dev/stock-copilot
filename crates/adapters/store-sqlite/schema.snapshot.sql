@@ -75,7 +75,12 @@ CREATE TABLE market_quotes (
     collected_seconds INTEGER NOT NULL,
     collected_nanos INTEGER NOT NULL,
     collected_offset INTEGER NOT NULL,
-    CHECK ((observed_seconds IS NULL AND observed_nanos IS NULL AND observed_offset IS NULL) OR (observed_seconds IS NOT NULL AND observed_nanos IS NOT NULL AND observed_offset IS NOT NULL))
+    last_server_seconds INTEGER,
+    last_server_nanos INTEGER,
+    last_server_offset INTEGER,
+    CHECK ((observed_seconds IS NULL AND observed_nanos IS NULL AND observed_offset IS NULL) OR (observed_seconds IS NOT NULL AND observed_nanos IS NOT NULL AND observed_offset IS NOT NULL)),
+    CHECK ((last_server_seconds IS NULL AND last_server_nanos IS NULL AND last_server_offset IS NULL) OR (last_server_seconds IS NOT NULL AND last_server_nanos IS NOT NULL AND last_server_offset IS NOT NULL)),
+    CHECK (observed_seconds IS NULL OR last_server_seconds IS NOT NULL)
 ) STRICT;
 CREATE TABLE migration_ledger (
     number INTEGER PRIMARY KEY CHECK (number > 0),

@@ -3,3 +3,10 @@ pub(crate) const CORRUPT_FX: &str =
 pub(crate) const CORRUPT_QUOTE: &str =
     "UPDATE market_quotes SET observed_nanos = 1000000000 WHERE instrument = 'asset-one'";
 pub(crate) const BLOCK_QUOTE: &str = "CREATE TRIGGER reject_market_quote BEFORE INSERT ON market_quotes BEGIN SELECT RAISE(ABORT, 'rejected'); END";
+pub(crate) const CORRUPT_SERVER_TIME: &str =
+    "UPDATE market_quotes SET last_server_nanos = 1000000000 WHERE instrument = 'asset-one'";
+pub(crate) const CORRUPT_SERVER_ORDER: &str =
+    "UPDATE market_quotes SET last_server_seconds = 1 WHERE instrument = 'asset-one'";
+pub(crate) const UNBLOCK_QUOTE: &str = "DROP TRIGGER reject_market_quote";
+pub(crate) const PARTIAL_SERVER_TIME: &str =
+    "UPDATE market_quotes SET last_server_nanos = NULL WHERE instrument = 'asset-one'";
