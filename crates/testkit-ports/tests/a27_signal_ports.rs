@@ -43,9 +43,20 @@ mod tests {
             run(repository.commit(
                 &instrument,
                 &snapshot,
+                &SignalMutation::Discard(Box::new(SignalTransition::Unchanged))
+            )),
+            Ok(SignalCommitOutcome::Applied(application::SignalCommit {
+                events: vec![],
+                no_signal_reason: None,
+            }))
+        );
+        assert_eq!(
+            run(repository.commit(
+                &instrument,
+                &snapshot,
                 &SignalMutation::Discard(Box::new(SignalTransition::Cleared(instrument.clone())))
             )),
-            Ok(SignalCommitOutcome::Conflict)
+            Err(invalid())
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(snapshot));
     }

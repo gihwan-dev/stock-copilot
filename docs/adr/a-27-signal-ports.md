@@ -1,6 +1,8 @@
 # A-27: 신호 평가 저장·조회 포트
 - 상태: 초안
-- 기준: `10bf351a1b1b3e85caa3981f41beed5bdca9e16a`
+- 최초 작업 기준: `10bf351a1b1b3e85caa3981f41beed5bdca9e16a`
+- 통합 기준: `3bdca225c839fac1e2a6ef793977f3fde08683ba`
+- 2차 리뷰 대상: `a95388cc8f6d26b8630f52a3f129c098aba8dc0d`
 - 관련 작업: A-12, A-13, A-14, A-15, A-27, D-51, S-07, S-18
 
 ## 결정
@@ -11,7 +13,7 @@
 
 평가는 실제로 읽어 판정한 제출의 과제 ID를 스냅숏과 별도로 담아 D-51의 `SignalDecision`과 `signal_transition` 결과를 제출한다. 저장소는 이 근거 ID가 스냅숏과 저장 시 최신 ID에 모두 같은지 검사한다. 제출 내용이 우연히 같아도 이전 과제의 평가를 새 과제에 연결할 수 없다. 어댑터는 도메인 함수를 이용해 전이의 일치와 제출·종목·보정 위치를 검증하고 규칙을 따로 계산하지 않는다. 보정 원장 위치는 해당 모델·기간의 실제 최신 위치와 같은 트랜잭션에서 대조한다. 생성된 매수·매도 신호가 보정에 실제 쓴 위치도 요청 위치와 일치해야 한다. 원장이 도중에 증가하면 거부한다. 최신 표와 위치는 A-15의 `EstimateResolutionRepository::calibration`이 반환하는 `ResolutionCalibration`을 사용한다. A-15의 `commit_resolution`은 판정·표·원장 위치를 함께 갱신하며 이 계약을 다시 정의하지 않는다. 그 저장과 신호 커밋의 위치 비교가 같은 직렬화 경계를 공유하는 실제 어댑터의 구현은 S-18에 인계한다.
 
-A-14의 가격 범위 이탈 폐기는 같은 조건부 커밋을 사용하고 실제 현재 신호에 연결된 과제 ID를 폐기 원장에 기록한다. 같은 과제의 재평가는 현재 신호를 다시 읽어도 거부한다. 최신 스냅숏을 기준으로 폐기된 과제를 평가하면 재시도로 해소되지 않는 `SubmissionDiscarded`를 돌려준다. 이는 판정 사유가 아니라 평가를 적용하지 않았다는 종료 결과이며, 신호 없음 판정도 저장하지 않는다. A-13은 이 결과에서 재시도를 멈추고 새 제출을 기다린다. 저장 상태가 바뀐 경우의 `Conflict`는 처음부터 다시 읽는다. 새 제출이 이미 있다면 이전 신호의 과제만 폐기하므로 새 과제는 재평가할 수 있다. 제안 만료는 이 폐기와 다르다. 현재 신호가 없을 때 `Unchanged` 폐기는 상태나 이벤트가 없는 성공이고, 다른 폐기 전이는 거부한다.
+A-14의 가격 범위 이탈 폐기는 같은 조건부 커밋을 사용하고 실제 현재 신호에 연결된 과제 ID를 폐기 원장에 기록한다. 같은 과제의 재평가는 현재 신호를 다시 읽어도 거부한다. 최신 스냅숏을 기준으로 폐기된 과제를 평가하면 재시도로 해소되지 않는 `SubmissionDiscarded`를 돌려준다. 이는 판정 사유가 아니라 평가를 적용하지 않았다는 종료 결과이며, 신호 없음 판정도 저장하지 않는다. A-13은 이 결과에서 재시도를 멈추고 새 제출을 기다린다. 저장 상태가 바뀐 경우의 `Conflict`는 처음부터 다시 읽는다. 최신 제출 자체가 없는데 평가하거나 현재 신호가 없는데 해제 전이를 전달하는 잘못된 요청은 `InvalidData`이며 같은 요청을 재시도하지 않는다. 새 제출이 이미 있다면 이전 신호의 과제만 폐기하므로 새 과제는 재평가할 수 있다. 제안 만료는 이 폐기와 다르다. 현재 신호가 없을 때 `Unchanged` 폐기는 상태나 이벤트가 없는 성공이고, 다른 폐기 전이는 거부한다.
 
 매수 발생 때 D-51이 만든 `BuySignalRecord`를 현재 신호와 같은 원자 작업으로 저장한다. 기록에는 생성에 쓴 원본 과제도 남긴다. 새 발생과 방향 전환은 기록의 원본 과제가 새 신호의 과제와 같은지 확인하며, 발생 ID 충돌과 신호·발생 종목 불일치도 거부한다. 같은 방향 내용 갱신은 새 과제의 기간이 달라져도 기존 ID·원본 과제·발생 시각·H를 보존하고 새 이력을 만들지 않는다. 발생 시각이 실제 관측 시각인지는 호출자와 저장소의 책임이다. 해제 뒤에도 이력은 남는다. 조회는 내부 종목 ID 또는 시장·심볼 중 하나가 같은 기록을 포함한다. 현재 발생의 자기 제외는 D-51에 맡긴다. 도메인 전이 이벤트는 커밋 성공 결과에만 순서대로 담고 발행은 A-13이 한다. 이 포트는 영속 이벤트 전달을 보장하지 않는다. 반환값과 출처 값의 생성 자체는 실제 저장이나 독립 원장의 진위를 인증하지 않으며, 어댑터의 구현과 계약 테스트가 이를 보장한다.
 
@@ -36,10 +38,55 @@ A-14의 가격 범위 이탈 폐기는 같은 조건부 커밋을 사용하고 �
 
 - A-13: 같은 스냅숏의 최신 제출·보정 위치·출처·현재 상태를 읽고 D-51 전이를 전달한다. 충돌 시 처음부터 다시 읽고 `SubmissionDiscarded`에서는 재시도를 끝낸다. 성공 결과에 담긴 이벤트만 발행하고 사유를 반환한다. 내용 갱신의 화면 재조회와 이벤트 유실 복구는 별도 연결한다.
 - A-14: 가격 범위 이탈은 현재 발생에 연결된 과제를 조건부 폐기한다. 제안 만료만으로 신호를 폐기하지 않는다.
+- A-13·A-14·S-07·S-18: 내부 종목 ID는 같지만 시장·심볼이 달라 `InstrumentMismatch`가 나면 기존 전이를 저장하지 않는다. 마스터와 입력을 다시 확인하고 조정이 끝나기 전 기존 신호를 새 주문 제안에 쓰지 않는다. 현재 상태·발생 ID·원본 H 이력·관련 제안을 같은 직렬화 경계에서 조정하는 실제 경로와 저장 뒤 이벤트는 아직 연결되지 않았다. 가격 범위 이탈 폐기로 임의로 대체하지 않고 후속 구현에서 정한다.
 - A-15·S-18: 판정과 표의 계약은 A-15 것을 사용한다. 그 저장이 신호 커밋의 최신 보정 위치 비교와 원자적으로 직렬화되어야 한다. 이 작업의 가짜 보정 위치 주입만으로 실저장을 증명하지 않는다.
-- S-07·S-18: 제출 ID의 전역 고유성·저장 순서, 단조 리비전, 폐기 기록, 현재 신호와 원본 과제를 포함한 발생 이력의 일체 저장과 복원, ID 충돌 거부 및 서로 다른 프로세스 간 경쟁을 구현·검증한다.
+- S-07·S-18: 제출 ID의 전역 고유성·저장 순서, 단조 리비전, 폐기 기록, 현재 신호와 원본 과제를 포함한 발생 이력의 일체 저장과 복원, ID 충돌 거부 및 서로 다른 프로세스 간 경쟁을 구현·검증한다. 제출 기록은 생성자의 성공만 믿지 않고 현재 발급 원장과 소비 상태를 같은 트랜잭션에서 대조한다.
 - S-05·S-09·M-02·AI-14·E-02: 제출별 수집 원장을 독립 사실로 보존하고 누락 없이 조회한다.
 
 ## 손 변형
 
-실행 결과는 검증 뒤 기록한다.
+검증 시점의 인덱스 트리 `447f1720a6f0bf03dd5ea9cabab02174678f9c46`를 별도 `mktemp -d` 복사본에 내보내 변형을 하나씩 적용했다. 각 변형은 컴파일됐고 `cargo test --offline --locked -p testkit-ports --test a27_signal_ports --test a27_submission_and_rejection`에서 검출됐다. 변형 전 기준과 모든 변형 뒤 원본 복구 대조도 통과했다. 실행 41개 중 검출 41개, 생존·컴파일 실패 0개다. 공식 변경분 변이는 사전 승인된 기존 테스트의 `test-diff` 여섯 건이 기계 승인 목록에 없어 시작 전 차단됐으며 이 수에 포함하지 않는다.
+
+| 번호 | 바꾼 것 | 검출한 시험 |
+|---|---|---|
+| 1 | 최신 제출 대신 첫 제출 선택 | `tests::discarded_old_signal_does_not_discard_a_newer_submission` |
+| 2 | 상태 리비전을 항상 0으로 반환 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 3 | 스냅숏 충돌 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 4 | 폐기 과제 판정 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 5 | 평가 근거 제출 ID 비교 삭제 | `tests::identical_old_submission_cannot_be_rebound_to_a_newer_snapshot` |
+| 6 | 평가 근거 제출 ID 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 7 | 보정 원장 위치 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 8 | 평가 전이 비교 반전 | `tests::another_instrument_does_not_invalidate_the_first_snapshot` |
+| 9 | 신호가 사용한 보정 위치 비교 반전 | `tests::another_instrument_does_not_invalidate_the_first_snapshot` |
+| 10 | 신호 종목 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 11 | 신호 제출 내용 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 12 | 발생 ID 중복 비교 반전 | `tests::discarded_task_cannot_return_even_after_the_evaluator_rereads` |
+| 13 | 발생 이력 저장 생략 | `tests::concurrent_discard_and_evaluation_cannot_resurrect_the_discarded_task` |
+| 14 | 평가 이벤트 생략 | `tests::direction_reversal_returns_clear_then_raise` |
+| 15 | 무신호 사유 생략 | `tests::source_facts_are_independent_and_reason_survives_the_commit` |
+| 16 | 폐기 과제 표식 생략 | `tests::concurrent_discard_and_evaluation_cannot_resurrect_the_discarded_task` |
+| 17 | 발생 이력 조회에서 종목 ID와 시장·심볼 둘 다 요구 | `tests::occurrence_id_collision_is_atomic_and_history_matches_id_or_symbol` |
+| 18 | 다른 과제의 출처 원장 조회 | `tests::source_facts_are_independent_and_reason_survives_the_commit` |
+| 19 | 폐기 전이 비교 반전 | `tests::concurrent_discard_and_evaluation_cannot_resurrect_the_discarded_task` |
+| 20 | 상태 리비전을 증가시키지 않음 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 21 | 제출 조회의 종목 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 22 | 과제 배정 충돌 비교 반전 | `tests::clearing_and_recreating_does_not_reuse_an_old_empty_snapshot` |
+| 23 | 제출 기록 저장 대신 기록 삭제 | `tests::concurrent_discard_and_evaluation_cannot_resurrect_the_discarded_task` |
+| 24 | 갱신의 새 발생 유무 검사 반전 | `tests::failed_transition_has_no_occurrence_and_update_keeps_one` |
+| 25 | 보정 위치 단조 증가 검사 반전 | `tests::evaluation_cannot_claim_a_head_newer_than_the_signal_used` |
+| 26 | 저장 실패를 충돌로 반환 | `tests::failed_transition_has_no_occurrence_and_update_keeps_one` |
+| 27 | 폐기된 제출을 충돌로 반환 | `tests::concurrent_discard_and_evaluation_cannot_resurrect_the_discarded_task` |
+| 28 | 새 발생의 원본 과제 비교 삭제 | `tests::new_buy_rejects_an_occurrence_from_a_different_horizon` |
+| 29 | 새 발생의 원본 과제 대신 기간만 비교 | `tests::new_buy_rejects_a_different_task_even_when_the_horizon_matches` |
+| 30 | 스냅숏에서 제출·현재 상태를 무시하고 리비전만 비교 | `tests::submission_alone_invalidates_the_older_evaluation_snapshot` |
+| 31 | 위조된 평가 Unchanged 전이 허용 | `tests::forged_clear_or_discard_transition_leaves_current_and_history_intact` |
+| 32 | 위조된 폐기 Unchanged 전이 허용 | `tests::forged_clear_or_discard_transition_leaves_current_and_history_intact` |
+| 33 | 현재 신호가 있어도 Unchanged 폐기 허용 | `tests::forged_clear_or_discard_transition_leaves_current_and_history_intact` |
+| 34 | 매도에 새 발생 기록 허용 | `tests::supplied_occurrence_is_rejected_without_a_new_buy` |
+| 35 | 갱신·유지에 새 발생 기록 허용 | `tests::supplied_occurrence_is_rejected_without_a_new_buy` |
+| 36 | 무신호 판정에 새 발생 기록 허용 | `tests::supplied_occurrence_is_rejected_without_a_new_buy` |
+| 37 | 제출 없는 평가를 충돌로 반환 | `tests::current_snapshot_without_submission_rejects_evaluation` |
+| 38 | 현재 신호 없는 해제 폐기를 적용 | `tests::empty_instrument_has_an_initial_revision_and_cannot_discard_a_missing_signal` |
+| 39 | 폐기 검사에서 최신 제출 일치 조건 삭제 | `tests::discarded_old_task_cannot_mask_newer_submission_as_discarded` |
+| 40 | 제출 기록 없이 과제 소비 변경 허용 | `tests::assignment_change_without_records_is_rejected_atomically` |
+| 41 | 현재 발급 원장과 과제 내용 비교 삭제 | `tests::forged_issued_task_content_is_rejected_atomically` |

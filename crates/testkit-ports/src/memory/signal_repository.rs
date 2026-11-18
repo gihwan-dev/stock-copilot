@@ -165,7 +165,7 @@ fn prepare_evaluation(
     evaluation: &application::SignalEvaluation,
 ) -> Result<Option<Change>, SystemPortError> {
     let Some(submission_id) = &expected.submission else {
-        return Ok(None);
+        return Err(invalid());
     };
     if &evaluation.submission != submission_id {
         return Ok(None);
@@ -246,9 +246,9 @@ fn prepare_current(
 fn prepare_discard(
     expected: &SignalSnapshot,
     transition: &SignalTransition,
-) -> Result<Option<Change>, SystemPortError> {
+) -> Result<Change, SystemPortError> {
     let Some(current) = &expected.current else {
-        return Ok(None);
+        return Err(invalid());
     };
     let decision = SignalDecision::None(NoSignalReason::Expired);
     if signal_transition(Some(&current.signal), &decision).map_err(|_error| invalid())?
@@ -256,13 +256,13 @@ fn prepare_discard(
     {
         return Err(invalid());
     }
-    Ok(Some(Change {
+    Ok(Change {
         current: None,
         occurrence: None,
         discarded: Some(current.submission.clone()),
         events: transition.events(),
         reason: None,
-    }))
+    })
 }
 
 fn apply_change(
@@ -335,7 +335,7 @@ fn commit_signal(
         .checked_add(1)
         .ok_or_else(invalid)?;
     let change = match mutation {
-        SignalMutation::Discard(transition) => prepare_discard(expected, transition)?,
+        SignalMutation::Discard(transition) => Some(prepare_discard(expected, transition)?),
         SignalMutation::Evaluate(evaluation) => {
             prepare_evaluation(state, instrument, expected, evaluation)?
         }
