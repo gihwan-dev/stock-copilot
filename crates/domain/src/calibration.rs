@@ -463,6 +463,18 @@ fn repetition(
     Ok(FactRepetition::New)
 }
 impl Calibration {
+    pub fn with_fact(&self, fact: CalibrationFact) -> Result<Self, CalibrationError> {
+        if self.facts.len() >= 65_536 {
+            return Err(CalibrationError::TooManyFacts);
+        }
+        let mut combined = self.facts.clone();
+        combined.push(fact);
+        Self::try_new(self.key.clone(), &combined)
+    }
+    #[must_use]
+    pub fn facts(&self) -> &[CalibrationFact] {
+        &self.facts
+    }
     pub fn try_new(
         key: CalibrationKey,
         facts: &[CalibrationFact],
@@ -473,7 +485,12 @@ impl Calibration {
         if facts.iter().any(|fact| fact.estimate.key != key) {
             return Err(CalibrationError::MismatchedCombination);
         }
-        let mut ordered = facts.to_vec();
+        Self::from_validated_facts(key, facts.to_vec())
+    }
+    fn from_validated_facts(
+        key: CalibrationKey,
+        mut ordered: Vec<CalibrationFact>,
+    ) -> Result<Self, CalibrationError> {
         ordered.sort_by(|left, right| left.estimate.id.cmp(&right.estimate.id));
         let mut unique = Vec::new();
         for fact in ordered {

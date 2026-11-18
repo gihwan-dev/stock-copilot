@@ -123,3 +123,20 @@ mod transactions_tests;
 
 mod transactions;
 pub use transactions::TransactionStore;
+
+mod market;
+pub use market::MarketStore;
+
+#[cfg(test)]
+mod market_tests;
+
+#[cfg(test)]
+mod fts_guard_tests;
+
+mod fts_schema;
+
+#[cfg(test)]
+mod information_tests;
+
+mod information;
+pub use information::InformationStore;

@@ -1,14 +1,15 @@
 use crate::{Script, script::State};
 use application::{
-    EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
-    ProposalRepository, RecordOutcome, SettingsRepository, SignalRepository, SystemPortError,
-    ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
+    CacheWriteOutcome, EstimateRepository, FxRateQuery, InformationKey, InformationLinks,
+    MarketDataRepository, NewsRepository, PortfolioRepository, ProposalRepository, RecordOutcome,
+    SettingsRepository, SignalRepository, SystemPortError, ThesisRepository, TransactionRepository,
+    ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
     Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
-    SignalTaskKey, SyncRecord, Thesis, TimeInterval, ValuationSnapshot,
+    SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 fn append_candles(stored: &mut Vec<Candle>, incoming: &[Candle]) {
     for value in incoming {
@@ -165,11 +166,74 @@ impl TransactionRepository for MemoryTransactionRepository {
 }
 #[derive(Debug, Default)]
 struct MarketDataRepositoryState {
-    quotes: Vec<(InstrumentId, Quote)>,
+    quotes: Vec<MemoryQuote>,
     candles: Vec<Candle>,
     rates: Vec<FxRate>,
     close_evidence: Vec<domain::ObservedCloseEvidence>,
     close_evidence_error: Option<SystemPortError>,
+}
+#[derive(Debug)]
+struct MemoryQuote {
+    instrument: InstrumentId,
+    quote: Quote,
+    last_server: Option<Timestamp>,
+}
+fn remember_quote(
+    state: &mut MarketDataRepositoryState,
+    instrument: &InstrumentId,
+    quote: &Quote,
+) -> CacheWriteOutcome {
+    if let Some(current) = state
+        .quotes
+        .iter_mut()
+        .find(|value| &value.instrument == instrument)
+    {
+        if quote.collected_at() < current.quote.collected_at() {
+            return CacheWriteOutcome::OlderIgnored;
+        }
+        if let (Some(observed), Some(previous)) = (quote.timestamp(), current.last_server)
+            && observed < previous
+        {
+            return CacheWriteOutcome::OlderIgnored;
+        }
+        if *quote == current.quote {
+            return CacheWriteOutcome::Unchanged;
+        }
+        current.last_server = quote.timestamp().or(current.last_server);
+        current.quote = quote.clone();
+    } else {
+        state.quotes.push(MemoryQuote {
+            instrument: instrument.clone(),
+            quote: quote.clone(),
+            last_server: quote.timestamp(),
+        });
+    }
+    CacheWriteOutcome::Changed
+}
+fn remember_fx(state: &mut MarketDataRepositoryState, rate: FxRate) -> CacheWriteOutcome {
+    let previous = state
+        .rates
+        .iter_mut()
+        .filter(|value| value.pair() == rate.pair() && value.kind() == rate.kind())
+        .max_by_key(|value| value.as_of());
+    if let Some(current) = previous {
+        if rate.as_of() < current.as_of() {
+            return CacheWriteOutcome::OlderIgnored;
+        }
+        if rate.as_of() == current.as_of() {
+            let outcome = if rate.quote_per_base() == current.quote_per_base()
+                && rate.source() == current.source()
+            {
+                CacheWriteOutcome::Unchanged
+            } else {
+                CacheWriteOutcome::Changed
+            };
+            *current = rate;
+            return outcome;
+        }
+    }
+    state.rates.push(rate);
+    CacheWriteOutcome::Changed
 }
 #[derive(Debug, Default)]
 pub struct MemoryMarketDataRepository {
@@ -225,7 +289,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
         &self,
         instrument: &InstrumentId,
         quote: &Quote,
-    ) -> Result<WriteCompleted, SystemPortError> {
+    ) -> Result<CacheWriteOutcome, SystemPortError> {
         self.calls
             .write()
             .push(crate::scripted::MarketDataRepositoryCall::StoreQuote(
@@ -240,8 +304,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                state.quotes.push((instrument.clone(), quote.clone()));
-                Ok(WriteCompleted)
+                Ok(remember_quote(&mut state, instrument, quote))
             }
         }
     }
@@ -258,9 +321,8 @@ impl MarketDataRepository for MemoryMarketDataRepository {
                 Ok(state
                     .quotes
                     .iter()
-                    .filter(|(key, _)| key == instrument)
-                    .max_by_key(|(_, value)| value.collected_at())
-                    .map(|(_, value)| value.clone()))
+                    .find(|value| &value.instrument == instrument)
+                    .map(|value| value.quote.clone()))
             }
         }
     }
@@ -334,7 +396,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             }
         }
     }
-    async fn store_fx_rate(&self, rate: &FxRate) -> Result<WriteCompleted, SystemPortError> {
+    async fn store_fx_rate(&self, rate: &FxRate) -> Result<CacheWriteOutcome, SystemPortError> {
         self.calls
             .write()
             .push(crate::scripted::MarketDataRepositoryCall::StoreFxRate(
@@ -344,8 +406,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                state.rates.push(*rate);
-                Ok(WriteCompleted)
+                Ok(remember_fx(&mut state, *rate))
             }
         }
     }
@@ -383,8 +444,43 @@ impl MarketDataRepository for MemoryMarketDataRepository {
 }
 #[derive(Debug, Default)]
 struct NewsRepositoryState {
-    linked: Vec<(InstrumentId, NewsItem)>,
+    linked: Vec<(InformationKey, Vec<InstrumentId>)>,
     items: Vec<NewsItem>,
+}
+fn news_matches(key: &InformationKey, item: &NewsItem) -> bool {
+    match (key, item.collected().source()) {
+        (InformationKey::News(source, url), domain::InformationSource::News(actual)) => {
+            source == actual && url == item.collected().url()
+        }
+        (
+            InformationKey::News(_, _),
+            domain::InformationSource::Web | domain::InformationSource::Disclosure(_),
+        )
+        | (InformationKey::Disclosure(_), _) => false,
+    }
+}
+fn remember_news(state: &mut NewsRepositoryState, item: &NewsItem) {
+    let existing = state.items.iter_mut().find(|value| {
+        value.collected().source() == item.collected().source()
+            && value.collected().url() == item.collected().url()
+    });
+    if let Some(value) = existing {
+        *value = item.clone();
+    } else {
+        state.items.push(item.clone());
+    }
+}
+fn linked_news(state: &NewsRepositoryState, instrument: &InstrumentId) -> Vec<NewsItem> {
+    state
+        .items
+        .iter()
+        .filter(|item| {
+            state.linked.iter().any(|(key, instruments)| {
+                instruments.contains(instrument) && news_matches(key, item)
+            })
+        })
+        .cloned()
+        .collect()
 }
 #[derive(Debug, Default)]
 pub struct MemoryNewsRepository {
@@ -408,12 +504,25 @@ impl MemoryNewsRepository {
     pub fn calls(&self) -> Vec<crate::scripted::NewsRepositoryCall> {
         self.calls.write().clone()
     }
-    pub fn link(&self, instrument: InstrumentId, item: NewsItem) {
+}
+impl InformationLinks for MemoryNewsRepository {
+    fn set_instruments(
+        &self,
+        item: &InformationKey,
+        instruments: &[InstrumentId],
+    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
         let mut state = self.state.write();
-        let link = (instrument, item);
-        if !state.linked.contains(&link) {
-            state.linked.push(link);
+        state.linked.retain(|(existing, _)| existing != item);
+        let unique = instruments
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        if !unique.is_empty() {
+            state
+                .linked
+                .push((item.clone(), unique.into_iter().collect()));
         }
+        std::future::ready(Ok(WriteCompleted))
     }
 }
 impl NewsRepository for MemoryNewsRepository {
@@ -425,9 +534,7 @@ impl NewsRepository for MemoryNewsRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                if !state.items.contains(item) {
-                    state.items.push(item.clone());
-                }
+                remember_news(&mut state, item);
                 Ok(WriteCompleted)
             }
         }
@@ -445,12 +552,7 @@ impl NewsRepository for MemoryNewsRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let state = self.state.write();
-                Ok(state
-                    .linked
-                    .iter()
-                    .filter(|(key, value)| key == instrument && state.items.contains(value))
-                    .map(|(_, value)| value.clone())
-                    .collect())
+                Ok(linked_news(&state, instrument))
             }
         }
     }
@@ -982,7 +1084,7 @@ impl application::ValuationCloseEvidenceRepository for MemoryMarketDataRepositor
         &self,
         instrument: &domain::ResolvedOrderInstrument,
         date: domain::CalendarDate,
-        as_of: domain::Timestamp,
+        as_of: Timestamp,
     ) -> impl Future<Output = Result<Vec<domain::ObservedCloseEvidence>, SystemPortError>> + Send
     {
         let state = self.state.write();
@@ -1162,7 +1264,7 @@ pub type MemoryMarketDataRepositoryCandlesScript = Script<
     MemoryReply<Result<Vec<Candle>, SystemPortError>>,
 >;
 pub type MemoryMarketDataRepositoryStoreFxRateScript =
-    Script<(FxRate,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+    Script<(FxRate,), MemoryReply<Result<CacheWriteOutcome, SystemPortError>>>;
 pub type MemoryMarketDataRepositoryFxRateScript =
     Script<(FxPair, FxRateKind, FxRateQuery), MemoryReply<Result<Option<FxRate>, SystemPortError>>>;
 pub type MemoryNewsRepositoryStoreScript =
@@ -1191,7 +1293,7 @@ pub type MemorySettingsRepositoryRiskSettingsScript =
 pub type MemoryPortfolioRepositoryLatestScript =
     Script<(AccountId,), MemoryReply<Result<Option<SyncRecord<Portfolio>>, SystemPortError>>>;
 pub type MemoryMarketDataRepositoryStoreQuoteScript =
-    Script<(InstrumentId, Quote), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+    Script<(InstrumentId, Quote), MemoryReply<Result<CacheWriteOutcome, SystemPortError>>>;
 pub type MemoryMarketDataRepositoryStoreCandlesScript =
     Script<(InstrumentId, Vec<Candle>), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
 pub type MemoryNewsRepositoryForInstrumentScript =

@@ -36,7 +36,7 @@ pub trait MarketDataRepository: Send + Sync {
         &self,
         instrument: &InstrumentId,
         quote: &Quote,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<CacheWriteOutcome, SystemPortError>> + Send;
     fn quote(
         &self,
         instrument: &InstrumentId,
@@ -56,7 +56,7 @@ pub trait MarketDataRepository: Send + Sync {
     fn store_fx_rate(
         &self,
         rate: &FxRate,
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<CacheWriteOutcome, SystemPortError>> + Send;
     fn fx_rate(
         &self,
         pair: FxPair,
@@ -72,6 +72,13 @@ pub trait ValuationCloseEvidenceRepository: Send + Sync {
         _date: domain::CalendarDate,
         _as_of: Timestamp,
     ) -> impl Future<Output = Result<Vec<domain::ObservedCloseEvidence>, SystemPortError>> + Send;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheWriteOutcome {
+    Changed,
+    Unchanged,
+    OlderIgnored,
 }
 
 pub trait NewsRepository: Send + Sync {
