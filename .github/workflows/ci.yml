@@ -82,6 +82,11 @@
       "timeout-minutes": 120,
       "steps": [
         {
+          "name": "job clock",
+          "id": "job_clock",
+          "run": "date +\"started=%s\" >> \"$GITHUB_OUTPUT\""
+        },
+        {
           "name": "checkout",
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
@@ -152,12 +157,21 @@
           "id": "mutation",
           "run": "node harness/ci/diff-mutants.mjs",
           "env": {
-            "BASE": "${{ steps.range.outputs.base }}"
+            "BASE": "${{ steps.range.outputs.base }}",
+            "JOB_STARTED_AT": "${{ steps.job_clock.outputs.started }}"
           }
         },
         {
           "name": "diff mutants timeout",
           "if": "steps.mutation.outputs.status == 'deadline'",
+          "run": "node harness/ci/diff-mutants-verdict.mjs",
+          "env": {
+            "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+          }
+        },
+        {
+          "name": "diff mutants budget",
+          "if": "steps.mutation.outputs.status == 'budget'",
           "run": "node harness/ci/diff-mutants-verdict.mjs",
           "env": {
             "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
@@ -177,6 +191,11 @@
       "runs-on": "macos-15",
       "timeout-minutes": 120,
       "steps": [
+        {
+          "name": "job clock",
+          "id": "job_clock",
+          "run": "date +\"started=%s\" >> \"$GITHUB_OUTPUT\""
+        },
         {
           "name": "checkout",
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -252,12 +271,21 @@
           "id": "mutation",
           "run": "node harness/ci/diff-mutants.mjs",
           "env": {
-            "BASE": "${{ steps.range.outputs.base }}"
+            "BASE": "${{ steps.range.outputs.base }}",
+            "JOB_STARTED_AT": "${{ steps.job_clock.outputs.started }}"
           }
         },
         {
           "name": "diff mutants timeout",
           "if": "steps.mutation.outputs.status == 'deadline'",
+          "run": "node harness/ci/diff-mutants-verdict.mjs",
+          "env": {
+            "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+          }
+        },
+        {
+          "name": "diff mutants budget",
+          "if": "steps.mutation.outputs.status == 'budget'",
           "run": "node harness/ci/diff-mutants-verdict.mjs",
           "env": {
             "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"

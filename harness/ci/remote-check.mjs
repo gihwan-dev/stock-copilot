@@ -270,7 +270,7 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
   const failedStep = (job) =>
     Array.isArray(job.steps) &&
     job.steps.some((step) => step.conclusion === "failure");
-  const mutationDeadline = (job) => {
+  const mutationLimit = (job, stepName) => {
     if (
       !["macos", "macos-branch"].includes(job.name) ||
       job.conclusion !== "failure" ||
@@ -287,15 +287,23 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
       ).length === 1;
     return (
       failures.length === 1 &&
-      failures[0].name === "diff mutants timeout" &&
+      failures[0].name === stepName &&
       failures[0].status === "completed" &&
       passed("just check") &&
       passed("diff mutants") &&
       (job.name !== "macos-branch" || passed("branch checkout"))
     );
   };
-  if (failed.length > 0 && failed.every(mutationDeadline))
+  if (
+    failed.length > 0 &&
+    failed.every((job) => mutationLimit(job, "diff mutants timeout"))
+  )
     return "RETRY_MUTATION_TIMED_OUT";
+  if (
+    failed.length > 0 &&
+    failed.every((job) => mutationLimit(job, "diff mutants budget"))
+  )
+    return "RETRY_MUTATION_BUDGET";
   if (
     failed.some(
       (job) =>
@@ -443,6 +451,8 @@ const FAILURE_MESSAGES = {
     "작업이 시간 초과되어 재시도 대상이다; 원인은 확인되지 않았다",
   RETRY_MUTATION_TIMED_OUT:
     "변경분 변이 조각이 20분 제한에 도달해 재시도 또는 추가 분할 대상이다",
+  RETRY_MUTATION_BUDGET:
+    "변경분 변이의 다음 조각을 실행하기에 작업 시간이 부족해 재시도 또는 변경 분할 대상이다",
   PENDING: "작업이 아직 진행 중이다",
   CHECK_FAILED: "검사 또는 준비 단계가 실패했다; 실행 로그를 확인한다",
   MISSING_REQUIRED_STEPS: "성공 실행에 현재 필수 단계가 없다",

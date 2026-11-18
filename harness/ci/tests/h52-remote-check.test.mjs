@@ -419,6 +419,29 @@ test("변이 시간 제한은 코드 실패와 분리하되 성공으로 인정�
     failureCode(sha, failedRun, [jobs[0], deadline]),
     "RETRY_MUTATION_TIMED_OUT",
   );
+  const budget = {
+    ...deadline,
+    steps: deadline.steps.map((step) =>
+      step.name === "diff mutants timeout"
+        ? { ...step, name: "diff mutants budget" }
+        : step,
+    ),
+  };
+  assert.equal(checkRun(sha, failedRun, [jobs[0], budget]), false);
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], budget]),
+    "RETRY_MUTATION_BUDGET",
+  );
+  const budgetAndCodeFailure = {
+    ...budget,
+    steps: budget.steps.map((step) =>
+      step.name === "diff mutants" ? { ...step, conclusion: "failure" } : step,
+    ),
+  };
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], budgetAndCodeFailure]),
+    "CHECK_FAILED",
+  );
   const codeFailure = {
     ...deadline,
     steps: deadline.steps.map((step) =>

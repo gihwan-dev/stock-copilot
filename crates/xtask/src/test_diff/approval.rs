@@ -310,7 +310,35 @@ struct SetupControl {
     blocked: bool,
 }
 
+fn macro_contains_control(stream: TokenStream) -> bool {
+    stream.into_iter().any(|token| match token {
+        TokenTree::Ident(name) => [
+            "return", "break", "continue", "if", "match", "loop", "while", "for", "unsafe", "try",
+            "exit", "abort",
+        ]
+        .contains(&name.to_string().as_str()),
+        TokenTree::Punct(punct) => punct.as_char() == '?',
+        TokenTree::Group(group) => macro_contains_control(group.stream()),
+        TokenTree::Literal(_) => false,
+    })
+}
+
 impl<'ast> Visit<'ast> for SetupControl {
+    fn visit_macro(&mut self, i: &'ast syn::Macro) {
+        let arguments = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+            .parse2(i.tokens.clone());
+        match arguments {
+            Ok(expressions) => {
+                let mut nested = Self::default();
+                for expression in &expressions {
+                    nested.visit_expr(expression);
+                }
+                self.blocked |= nested.blocked;
+            }
+            Err(_) => self.blocked |= macro_contains_control(i.tokens.clone()),
+        }
+    }
+
     fn visit_expr_return(&mut self, i: &'ast syn::ExprReturn) {
         self.blocked = true;
         visit::visit_expr_return(self, i);
@@ -786,23 +814,117 @@ fn support<'a>(scan: &'a Scan, id: &str) -> Option<(&'a str, &'a str)> {
     found.next().is_none().then_some(value)
 }
 
+fn method_names(fingerprint: &str) -> BTreeSet<String> {
+    parsed_impl(fingerprint).map_or_else(BTreeSet::new, |(_, item)| {
+        item.items
+            .iter()
+            .filter_map(|method| {
+                if let syn::ImplItem::Fn(function) = method {
+                    Some(function.sig.ident.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    })
+}
+
+fn new_helper_names(before: &Scan, after: &Scan) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for (module, record) in &after.modules {
+        let previous = before.modules.get(module);
+        for ((kind, name), fingerprint) in &record.support {
+            let old = previous.and_then(|entry| entry.support.get(&(kind.clone(), name.clone())));
+            match kind.as_str() {
+                "fn" if old.is_none() => {
+                    names.insert(name.clone());
+                }
+                "impl" => {
+                    let old_methods = old.map_or_else(BTreeSet::new, |item| method_names(item));
+                    names.extend(method_names(fingerprint).difference(&old_methods).cloned());
+                }
+                _ => {}
+            }
+        }
+    }
+    names
+}
+
+fn count_new_helpers(
+    stream: TokenStream,
+    names: &BTreeSet<String>,
+    counts: &mut BTreeMap<String, usize>,
+) {
+    for token in stream {
+        match token {
+            TokenTree::Ident(name) => {
+                let normalized = crate::rust_names::ident(&name);
+                if names.contains(&normalized) {
+                    let count = counts.entry(normalized).or_default();
+                    *count = count.saturating_add(1);
+                }
+            }
+            TokenTree::Group(group) => count_new_helpers(group.stream(), names, counts),
+            TokenTree::Punct(_) | TokenTree::Literal(_) => {}
+        }
+    }
+}
+
+fn helper_tokens(fingerprint: &str) -> Option<TokenStream> {
+    if let Some((_, function)) = parsed_item(fingerprint) {
+        Some(function.block.to_token_stream())
+    } else if let Some((_, item)) = parsed_impl(fingerprint) {
+        let mut stream = TokenStream::new();
+        for method in &item.items {
+            if let syn::ImplItem::Fn(function) = method {
+                stream.extend(function.block.to_token_stream());
+            }
+        }
+        Some(stream)
+    } else {
+        None
+    }
+}
+
+fn references_new_helper(before: &str, after: &str, names: &BTreeSet<String>) -> bool {
+    let (Some(old), Some(new)) = (helper_tokens(before), helper_tokens(after)) else {
+        return true;
+    };
+    let mut old_counts = BTreeMap::new();
+    let mut new_counts = BTreeMap::new();
+    count_new_helpers(old, names, &mut old_counts);
+    count_new_helpers(new, names, &mut new_counts);
+    new_counts
+        .iter()
+        .any(|(name, count)| *count > old_counts.get(name).copied().unwrap_or(0))
+}
+
 fn safe_finding(
     finding: &Finding<Rule>,
     before: &Scan,
     after: &Scan,
     approval: AssertionChange,
+    new_helpers: &BTreeSet<String>,
 ) -> bool {
     match &finding.rule {
-        Rule::Modified(id) => before
-            .tests
-            .get(id)
-            .zip(after.tests.get(id))
-            .is_some_and(|(old, new)| safe_item(old, new, ItemKind::Test, approval)),
+        Rule::Modified(id) => {
+            before
+                .tests
+                .get(id)
+                .zip(after.tests.get(id))
+                .is_some_and(|(old, new)| {
+                    !references_new_helper(old, new, new_helpers)
+                        && safe_item(old, new, ItemKind::Test, approval)
+                })
+        }
         Rule::SupportModified(id) => support(before, id).zip(support(after, id)).is_some_and(
-            |((old_kind, old), (new_kind, new))| match (old_kind, new_kind) {
-                ("fn", "fn") => safe_item(old, new, ItemKind::Support, approval),
-                ("impl", "impl") => safe_impl(old, new, approval),
-                _ => false,
+            |((old_kind, old), (new_kind, new))| {
+                !references_new_helper(old, new, new_helpers)
+                    && match (old_kind, new_kind) {
+                        ("fn", "fn") => safe_item(old, new, ItemKind::Support, approval),
+                        ("impl", "impl") => safe_impl(old, new, approval),
+                        _ => false,
+                    }
             },
         ),
         Rule::Removed(_)
@@ -849,6 +971,7 @@ pub(super) fn apply_with_authority(
         return Ok(findings);
     }
     let base_scan = scan(before);
+    let new_helpers = new_helper_names(&base_scan, &scan(current));
     for (group, expected) in groups {
         let Some((old, new)) = before.get(&group.path).zip(current.get(&group.path)) else {
             continue;
@@ -868,7 +991,7 @@ pub(super) fn apply_with_authority(
                     && expected
                         .get(&item.rule.to_string())
                         .is_some_and(|approval| {
-                            safe_finding(item, &base_scan, &target_scan, *approval)
+                            safe_finding(item, &base_scan, &target_scan, *approval, &new_helpers)
                         })
             })
         {

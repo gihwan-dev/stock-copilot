@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
 const initialParts = 4;
 const maximumParts = 128;
 const targetPerPart = 7;
+const shardBudget = 22 * 60_000;
+const jobBudget = 115 * 60_000;
 const output = "target/mutants";
 const validCatalog = (catalog) =>
   Array.isArray(catalog) &&
@@ -66,7 +69,16 @@ const writeStatus = (status) => {
   appendFileSync(process.env.GITHUB_OUTPUT, `status=${status}\n`);
 };
 
-export const runShards = (base, run, read, write, plan) => {
+export const jobDeadline = (started, now) => {
+  if (typeof started !== "string" || !/^\d{10}$/u.test(started))
+    throw new Error("작업 시작 시각이 없다");
+  const start = Number(started) * 1000;
+  if (!Number.isSafeInteger(now) || now < start || now > start + 120 * 60_000)
+    throw new Error("작업 시작 시각이 올바르지 않다");
+  return start + jobBudget;
+};
+
+export const runShards = (base, run, read, write, plan, budget) => {
   if (typeof base !== "string" || !/^[0-9a-f]{40}$/u.test(base))
     throw new Error("변이 기준 SHA가 없다");
   if (plan(base) !== 0) throw new Error("변경분 변이 계획 실패");
@@ -86,6 +98,18 @@ export const runShards = (base, run, read, write, plan) => {
     for (let index = 0; index < parts; index += 1) {
       const chunk = Math.ceil(selected.length / parts);
       if (selected.length > 0 && index * chunk >= selected.length) continue;
+      if (budget !== undefined) {
+        const remaining = budget.deadline - budget.now();
+        if (!Number.isFinite(remaining))
+          throw new Error("작업 시간 예산이 올바르지 않다");
+        if (remaining < shardBudget) {
+          process.stdout.write(
+            `다음 조각을 시작할 작업 시간 부족: ${Math.max(0, Math.floor(remaining / 1000))}초\n`,
+          );
+          write("budget");
+          return;
+        }
+      }
       const shard = `${index}/${parts}`;
       process.stdout.write(`변경분 변이 조각 ${shard}\n`);
       const status = run(base, shard);
@@ -120,6 +144,8 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
+    const wallTime = Date.now();
+    const monotonicTime = performance.now();
     runShards(
       process.env.BASE,
       (base, shard) =>
@@ -131,6 +157,13 @@ if (
       (base) =>
         spawnSync("just", ["mutants-diff-plan", base], { stdio: "inherit" })
           .status,
+      {
+        now: () => performance.now(),
+        deadline:
+          monotonicTime +
+          jobDeadline(process.env.JOB_STARTED_AT, wallTime) -
+          wallTime,
+      },
     );
   } catch (error) {
     process.stderr.write(`diff-mutants: ${error.message}\n`);

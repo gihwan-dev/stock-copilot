@@ -733,6 +733,138 @@ fn approved_preparation_cannot_skip_an_unchanged_assertion() {
 }
 
 #[test]
+fn approved_preparation_cannot_hide_control_flow_inside_a_macro() {
+    let (root, _) = repository("h55-macro-early-return");
+    let bypass = BEFORE.replacen(
+        "let _fixture = \"old\";",
+        "let _fixture = \"new\"; let _text = format!(\"{}\", if std::hint::black_box(true) { return; } else { 0 });",
+        1,
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn approved_preparation_cannot_hide_control_flow_in_macro_repeat_syntax() {
+    let (root, _) = repository("h55-macro-repeat-early-return");
+    let bypass = BEFORE.replacen(
+        "let _fixture = \"old\";",
+        "let _fixture = \"new\"; let _values = vec![0; if std::hint::black_box(true) { return; } else { 1 }];",
+        1,
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn approved_preparation_cannot_hide_an_exit_in_a_new_helper() {
+    let (root, _) = repository("h55-new-helper-exit");
+    let bypass = BEFORE
+        .replacen(
+            "#[test] fn first()",
+            "fn settle() { std::process::exit(0); } #[test] fn first()",
+            1,
+        )
+        .replacen(
+            "let _fixture = \"old\";",
+            "let _fixture = \"new\"; settle();",
+            1,
+        );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn approved_preparation_cannot_hide_an_exit_in_a_new_method() {
+    let (root, _) = repository("h55-new-method-exit");
+    let bypass = BEFORE
+        .replacen(
+            "#[test] fn first()",
+            "struct Helper; impl Helper { fn settle() { std::process::exit(0); } } #[test] fn first()",
+            1,
+        )
+        .replacen(
+            "let _fixture = \"old\";",
+            "let _fixture = \"new\"; Helper::settle();",
+            1,
+        );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn unrelated_new_helper_does_not_block_an_approved_preparation() {
+    let (root, _) = repository("h55-unrelated-helper");
+    let change = AFTER_ONE.replacen(
+        "#[test] fn first()",
+        "fn unrelated() {} #[test] fn first()",
+        1,
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&change, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &change);
+    assert_eq!(
+        remaining(&root, &authority, &head, &change),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn approved_preparation_cannot_call_a_new_helper_in_another_file() {
+    let (root, _) = repository("h55-new-helper-other-file");
+    let old = format!("mod extra;\n{BEFORE}");
+    let bypass = old.replacen(
+        "let _fixture = \"old\";",
+        "let _fixture = \"new\"; super::extra::settle();",
+        1,
+    );
+    let path = "crates/sample/src/extra.rs";
+    let old_extra = "pub fn existing() {}";
+    let new_extra = "pub fn existing() {} pub fn settle() { std::process::exit(0); }";
+    write(&root, SOURCE, &old);
+    write(&root, path, old_extra);
+    git(&root, &["add", SOURCE, path]);
+    git(&root, &["commit", "--quiet", "-m", "fixture modules"]);
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(
+        &root,
+        &record_for(SOURCE, &digest(&old), &digest(&bypass), &[finding]),
+    );
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    write(&root, SOURCE, &bypass);
+    write(&root, path, new_extra);
+    git(&root, &["add", SOURCE, path]);
+    git(&root, &["commit", "--quiet", "-m", "change"]);
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    let mut before = files(&old);
+    before.insert(String::from(path), old_extra.as_bytes().to_vec());
+    let mut current = files(&bypass);
+    current.insert(String::from(path), new_extra.as_bytes().to_vec());
+    let (findings, _) = compare_files(&before, &current);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &current), findings)
+            .expect("approval evaluation");
+    assert!(
+        remaining
+            .iter()
+            .any(|item| item.rule.to_string() == finding)
+    );
+}
+
+#[test]
 fn a_shallow_repository_never_supplies_approval_authority() {
     let (root, _) = repository("h52-approval-shallow");
     let authority = commit_record(

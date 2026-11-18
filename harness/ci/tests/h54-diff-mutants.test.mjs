@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { runShards, verifyShard } from "../diff-mutants.mjs";
+import { jobDeadline, runShards, verifyShard } from "../diff-mutants.mjs";
 
 const catalog = Array.from({ length: 25 }, (_, index) => ({
   name: `mutation-${index}`,
@@ -168,6 +168,74 @@ test("제한 초과한 조각은 더 잘게 나누어 전체 조각을 다시 �
     ...Array.from({ length: 7 }, (_, index) => `${index}/8`),
   ]);
   assert.deepEqual(written, ["passed"]);
+});
+
+test("남은 작업 시간이 부족하면 새 조각을 시작하지 않고 예산 소진으로 실패한다", () => {
+  let now = 45 * 60_000;
+  let current;
+  const calls = [];
+  const written = [];
+  runShards(
+    "a".repeat(40),
+    (_, shard) => {
+      current = shard;
+      calls.push(shard);
+      now += 20 * 60_000;
+      return 0;
+    },
+    (path) => {
+      if (path.endsWith("catalog.json")) return catalog;
+      const [index, count] = current.split("/").map(Number);
+      const length = Math.ceil(catalog.length / count);
+      const slice = catalog.slice(index * length, (index + 1) * length);
+      return path.endsWith("mutants.json") ? slice : success(slice.length);
+    },
+    (value) => written.push(value),
+    () => 0,
+    { now: () => now, deadline: 115 * 60_000 },
+  );
+  assert.deepEqual(calls, ["0/4", "1/4", "2/4"]);
+  assert.deepEqual(written, ["budget"]);
+});
+
+test("작업 시작 시각이 없거나 미래이면 시간 예산을 만들지 않는다", () => {
+  const start = 1_700_000_000;
+  assert.equal(
+    jobDeadline(String(start), start * 1000),
+    start * 1000 + 115 * 60_000,
+  );
+  for (const value of [undefined, "", "no", String(start + 1)]) {
+    assert.throws(() => jobDeadline(value, start * 1000));
+  }
+  assert.throws(() => jobDeadline(String(start), start * 1000 + 121 * 60_000));
+});
+
+test("제한 초과 뒤 재분할을 시작할 시간이 없으면 예산 소진으로 남긴다", () => {
+  let now = 70 * 60_000;
+  let current;
+  const calls = [];
+  const written = [];
+  runShards(
+    "a".repeat(40),
+    (_, shard) => {
+      current = shard;
+      calls.push(shard);
+      now += 20 * 60_000;
+      return shard === "1/4" ? 124 : 0;
+    },
+    (path) => {
+      if (path.endsWith("catalog.json")) return catalog;
+      const [index, count] = current.split("/").map(Number);
+      const length = Math.ceil(catalog.length / count);
+      const slice = catalog.slice(index * length, (index + 1) * length);
+      return path.endsWith("mutants.json") ? slice : success(slice.length);
+    },
+    (value) => written.push(value),
+    () => 0,
+    { now: () => now, deadline: 115 * 60_000 },
+  );
+  assert.deepEqual(calls, ["0/4", "1/4"]);
+  assert.deepEqual(written, ["budget"]);
 });
 
 test("계획 실패와 조각 목록 변경은 성공으로 처리하지 않는다", () => {

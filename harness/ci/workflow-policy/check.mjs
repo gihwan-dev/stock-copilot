@@ -107,6 +107,10 @@ const stepFindings = (job, step, policy, toolSpec) => {
       step.name === "diff mutants timeout" &&
       step.run === "node harness/ci/diff-mutants-verdict.mjs" &&
       step.if === "steps.mutation.outputs.status == 'deadline'") ||
+    (["macos", "macos-branch"].includes(job) &&
+      step.name === "diff mutants budget" &&
+      step.run === "node harness/ci/diff-mutants-verdict.mjs" &&
+      step.if === "steps.mutation.outputs.status == 'budget'") ||
     (step.if === "always()" &&
       policy.alwaysSteps.some(
         (allowed) =>
