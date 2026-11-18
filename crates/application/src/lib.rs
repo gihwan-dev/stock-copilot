@@ -261,6 +261,7 @@ pub use user_presence::{OrderConfirmation, RiskChangeConfirmation};
 mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod storage_ports;
+pub use storage_ports::ValuationCloseEvidenceRepository;
 pub use storage_ports::{
     EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
     ProposalRepository, SettingsRepository, SignalRepository, ThesisRepository,

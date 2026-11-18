@@ -167,29 +167,124 @@ fn lot_error(error: LotError) -> SnapshotError {
     SnapshotError::Lot(error)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservedCloseEvidence {
+    instrument: crate::QuoteInstrument,
+    candle: Candle,
+}
+impl ObservedCloseEvidence {
+    #[must_use]
+    pub const fn new(instrument: crate::QuoteInstrument, candle: Candle) -> Self {
+        Self { instrument, candle }
+    }
+    #[must_use]
+    pub const fn instrument(&self) -> &crate::QuoteInstrument {
+        &self.instrument
+    }
+    #[must_use]
+    pub const fn candle(&self) -> &Candle {
+        &self.candle
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObservedCloseRequirement {
+    Required,
+    NotRequired,
+}
+
 fn validate_observed_extended_prices(
     calendar: &SnapshotCalendar,
     portfolio: &PortfolioValuation,
+    at: Timestamp,
+    evidence: &[ObservedCloseEvidence],
 ) -> Result<(), SnapshotError> {
+    if evidence.len() > 4096 {
+        return Err(SnapshotError::TooManyInputs);
+    }
+    let mut used = BTreeSet::new();
     for currency in [Currency::Krw, Currency::Usd] {
         if calendar.observation_sessions(currency)
-            == crate::valuation_snapshot_calendar::ObservationSessionScope::HasExtended
-            && (portfolio.holdings().iter().any(|item| {
-                let holding = item.holding();
-                holding.currency() == currency
-                    && (!holding.quantity().as_decimal().is_zero()
-                        || holding.reported().is_some_and(|reported| {
-                            !reported.valuation().amount().as_decimal().is_zero()
-                        }))
-            }) || portfolio.reported().is_some_and(|reported| {
-                reported
-                    .valuation()
-                    .amount(currency)
-                    .is_some_and(|amount| !amount.amount().as_decimal().is_zero())
-            }))
+            != crate::valuation_snapshot_calendar::ObservationSessionScope::HasExtended
         {
-            return Err(SnapshotError::MissingPrice);
+            continue;
         }
+        let mut required = BTreeSet::new();
+        for item in portfolio
+            .holdings()
+            .iter()
+            .filter(|item| item.holding().currency() == currency)
+        {
+            let holding = item.holding();
+            if calendar.observed_close_requirement(holding) == ObservedCloseRequirement::NotRequired
+            {
+                continue;
+            }
+            let mut matches = evidence.iter().enumerate().filter(|(_, entry)| {
+                entry.instrument.symbol() == holding.instrument().symbol()
+                    && crate::Market::from(*entry.instrument.market())
+                        == holding.instrument().market()
+                    && entry.instrument.currency() == currency
+            });
+            let (index, entry) = matches.next().ok_or(SnapshotError::MissingPrice)?;
+            if matches.next().is_some() {
+                return Err(SnapshotError::DuplicateInstrument);
+            }
+            used.insert(index);
+            validate_observed_close(calendar, at, item, entry)?;
+            required.insert(index);
+        }
+        if let Some(amount) = portfolio
+            .reported()
+            .and_then(|reported| reported.valuation().amount(currency))
+            && (!amount.amount().as_decimal().is_zero() || !required.is_empty())
+        {
+            match portfolio
+                .currency_summary(currency)
+                .valuation()
+                .items_total()
+            {
+                Total::Complete(total) if *total.value() == amount => {}
+                Total::Complete(_) | Total::Incomplete(_) => {
+                    return Err(SnapshotError::MissingPrice);
+                }
+            }
+        }
+    }
+    if used.len() != evidence.len() {
+        return Err(SnapshotError::InvalidCandle);
+    }
+    Ok(())
+}
+
+fn validate_observed_close(
+    calendar: &SnapshotCalendar,
+    at: Timestamp,
+    item: &crate::ValuedHolding,
+    entry: &ObservedCloseEvidence,
+) -> Result<(), SnapshotError> {
+    let candle = &entry.candle;
+    let holding = item.holding();
+    let currency = holding.currency();
+    if candle.instrument() != entry.instrument.instrument_id()
+        || candle.values().currency() != currency
+        || candle.time().period() != CandlePeriod::Daily
+        || candle.adjustment() != PriceAdjustment::Raw
+        || candle.status() != CandleStatus::Finalized
+        || candle.collected_at() > at
+        || candle.collected_at() > holding.observed_at()
+        || calendar.price(currency, candle.collected_at())
+            != Ok((candle.time().date(), SnapshotPriceBasis::CurrentSession))
+        || holding.current_price() != Some(candle.values().close())
+    {
+        return Err(SnapshotError::InvalidCandle);
+    }
+    let computed = item
+        .valuation()
+        .computed()
+        .map_err(|_error| SnapshotError::IncompleteValuation)?
+        .valuation();
+    if item.valuation().selected().ok() != Some(computed) {
+        return Err(SnapshotError::InvalidCandle);
     }
     Ok(())
 }
@@ -244,6 +339,7 @@ pub struct ValuationSnapshot {
     account_converted: Result<KrwValuation, SnapshotError>,
     positions: Vec<SnapshotPosition>,
     assumptions: BTreeSet<LotAssumption>,
+    observed_close_evidence: Vec<ObservedCloseEvidence>,
 }
 impl ValuationSnapshot {
     pub fn recompute(input: crate::ValuationRecomputeInput<'_>) -> Result<Self, SnapshotError> {
@@ -255,8 +351,17 @@ impl ValuationSnapshot {
         at: Timestamp,
         fx: Option<FxRate>,
     ) -> Result<Self, SnapshotError> {
+        Self::observe_with_evidence(calendar, portfolio, at, fx, &[])
+    }
+    pub fn observe_with_evidence(
+        calendar: &SnapshotCalendar,
+        portfolio: &PortfolioValuation,
+        at: Timestamp,
+        fx: Option<FxRate>,
+        evidence: &[ObservedCloseEvidence],
+    ) -> Result<Self, SnapshotError> {
         let context = SnapshotContext::new(calendar, SnapshotObservation::new(at, at, fx))?;
-        validate_observed_extended_prices(calendar, portfolio)?;
+        validate_observed_extended_prices(calendar, portfolio, at, evidence)?;
         let stock = |currency| match portfolio.currency_total(currency) {
             Total::Complete(entry) => Ok(*entry.value()),
             Total::Incomplete(_) => Err(SnapshotError::IncompleteValuation),
@@ -272,12 +377,9 @@ impl ValuationSnapshot {
                 reported_holdings(portfolio, Currency::Usd),
             ),
         };
-        Ok(Self::finish(
-            context,
-            SnapshotSource::Observed,
-            inputs,
-            Vec::new(),
-        ))
+        let mut snapshot = Self::finish(context, SnapshotSource::Observed, inputs, Vec::new());
+        snapshot.observed_close_evidence = evidence.to_vec();
+        Ok(snapshot)
     }
     pub fn recalculate(
         calendar: &SnapshotCalendar,
@@ -356,7 +458,12 @@ impl ValuationSnapshot {
             account_converted,
             positions,
             assumptions,
+            observed_close_evidence: Vec::new(),
         }
+    }
+    #[must_use]
+    pub fn observed_close_evidence(&self) -> &[ObservedCloseEvidence] {
+        &self.observed_close_evidence
     }
     #[must_use]
     pub const fn dates(&self) -> SnapshotDates {
@@ -2802,6 +2909,286 @@ pub(crate) mod tests {
         assert_eq!(
             snapshot.stock_value(Currency::Krw),
             Ok(money("0", Currency::Krw))
+        );
+    }
+    fn t22_master(currency: Currency) -> crate::MasterInstrument {
+        let (symbol, market) = match currency {
+            Currency::Krw => ("005930", "KOSPI"),
+            Currency::Usd => ("AAPL", "NASDAQ"),
+        };
+        crate::MasterInstrument::try_new(crate::MasterInstrumentRow {
+            listing_market: crate::MasterCode::try_new(market).expect("시장"),
+            symbol: Symbol::try_new(symbol).expect("심볼"),
+            instrument_id: InstrumentId::try_new(symbol).expect("ID"),
+            name: crate::DisplayInstrumentName::try_new("합성 종목").expect("이름"),
+            security_type: crate::MasterSecurityType::from_code(
+                crate::MasterCode::try_new("STOCK").expect("종류"),
+            ),
+            currency,
+            listing_status: crate::ListingStatus::Active,
+            common_share: crate::CommonShare::Common,
+            korean_detail: (currency == Currency::Krw).then_some(crate::KoreanMasterDetail {
+                liquidation: crate::LiquidationTrading::Regular,
+                krx: crate::TradingSuspension::Clear,
+                nxt: crate::NxtTrading::Unsupported,
+            }),
+            observed_at: at(3, 7),
+        })
+        .expect("마스터")
+    }
+    fn t22_observed_fixture(currency: Currency) -> (crate::Holding, crate::ObservedCloseEvidence) {
+        let master = t22_master(currency);
+        let number = |text| Price::try_new(money(text, currency)).expect("가격");
+        let values = Ohlcv::try_new(
+            number("16"),
+            number("20"),
+            number("14"),
+            number("17"),
+            Quantity::parse(&NumericInput::try_new("7").expect("입력")).expect("거래량"),
+        )
+        .expect("OHLCV");
+        let instrument = master.quote_instrument().expect("시세 종목");
+        let candle = Candle::try_new(
+            instrument.instrument_id().clone(),
+            CandleTime::try_new(at(3, 0), CandlePeriod::Daily).expect("일봉"),
+            PriceAdjustment::Raw,
+            values,
+            CandleObservation::new(at(3, 7), CandleStatus::Finalized),
+        )
+        .expect("봉");
+        let holding = crate::Holding::new(
+            master.order_instrument().expect("종목"),
+            Quantity::parse(&NumericInput::try_new("1").expect("입력")).expect("수량"),
+            crate::AcquisitionPrice::try_new(money("10", currency)).expect("원가"),
+            crate::HoldingObservation::new(Some(number("17")), None, at(3, 7)),
+        )
+        .expect("보유");
+        (
+            holding,
+            crate::ObservedCloseEvidence::new(instrument, candle),
+        )
+    }
+    #[test]
+    fn t22_observed_close_validates_and_preserves_each_instrument() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let cal = extended_observation_calendar(currency);
+            let (holding, evidence) = t22_observed_fixture(currency);
+            assert_eq!(evidence.instrument().currency(), currency);
+            assert_eq!(
+                evidence.candle().values().close().as_money(),
+                money("17", currency)
+            );
+            let portfolio = observation_portfolio(vec![holding]);
+            let result = ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                std::slice::from_ref(&evidence),
+            )
+            .expect("종가 증거");
+            assert_eq!(result.stock_value(currency), Ok(money("17", currency)));
+            assert_eq!(result.observed_close_evidence(), &[evidence]);
+        }
+    }
+    #[test]
+    fn t22_observed_close_rejects_duplicate_unmatched_and_oversized_evidence() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        let portfolio = observation_portfolio(vec![holding]);
+        let evaluated = portfolio.evaluate(None);
+        let observe = |entries: &[crate::ObservedCloseEvidence]| {
+            ValuationSnapshot::observe_with_evidence(&cal, &evaluated, at(3, 7), None, entries)
+                .err()
+        };
+        assert_eq!(observe(&[]), Some(SnapshotError::MissingPrice));
+        assert_eq!(
+            observe(&[evidence.clone(), evidence.clone()]),
+            Some(SnapshotError::DuplicateInstrument)
+        );
+        let other = t22_observed_fixture(Currency::Usd).1;
+        assert_eq!(observe(&[other]), Some(SnapshotError::MissingPrice));
+        let oversized = vec![evidence.clone(); 4097];
+        assert_eq!(observe(&oversized), Some(SnapshotError::TooManyInputs));
+        let empty = observation_portfolio(vec![]);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &empty.evaluate(None),
+                at(3, 7),
+                None,
+                &[evidence]
+            )
+            .err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+    }
+    #[test]
+    fn t22_observed_close_requires_exact_reported_amounts() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        let zero = CurrencyAmounts::new(money("0", Currency::Krw), None).expect("0");
+        let valuation = CurrencyAmounts::new(money("17", Currency::Krw), None).expect("평가");
+        let portfolio = observation_portfolio(vec![holding]).with_reported(
+            crate::ReportedPortfolio::new(valuation, zero, zero, at(3, 7)),
+        );
+        let result = ValuationSnapshot::observe_with_evidence(
+            &cal,
+            &portfolio.evaluate(None),
+            at(3, 7),
+            None,
+            std::slice::from_ref(&evidence),
+        )
+        .expect("정확히 일치");
+        assert_eq!(
+            result.stock_value(Currency::Krw),
+            Ok(money("17", Currency::Krw))
+        );
+        let different = CurrencyAmounts::new(money("16", Currency::Krw), None).expect("다른 평가");
+        let mismatch = portfolio.with_reported(crate::ReportedPortfolio::new(
+            different,
+            zero,
+            zero,
+            at(3, 7),
+        ));
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &mismatch.evaluate(None),
+                at(3, 7),
+                None,
+                &[evidence]
+            )
+            .err(),
+            Some(SnapshotError::MissingPrice)
+        );
+    }
+    #[test]
+    fn t22_observed_close_rejects_invalid_candle_and_holding_price() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        let original = evidence.candle();
+        let wrong = Candle::try_new(
+            InstrumentId::try_new("other").expect("ID"),
+            original.time(),
+            PriceAdjustment::Raw,
+            original.values(),
+            CandleObservation::new(at(3, 7), CandleStatus::Finalized),
+        )
+        .expect("봉");
+        let bad = crate::ObservedCloseEvidence::new(evidence.instrument().clone(), wrong);
+        let portfolio = observation_portfolio(vec![holding.clone()]);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                &[bad]
+            )
+            .err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+        let different = crate::Holding::new(
+            holding.instrument().clone(),
+            holding.quantity(),
+            holding.acquisition_price(),
+            crate::HoldingObservation::new(
+                Some(Price::try_new(money("16", Currency::Krw)).expect("가격")),
+                None,
+                at(3, 7),
+            ),
+        )
+        .expect("보유");
+        let different_portfolio = observation_portfolio(vec![different]);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &different_portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                &[evidence]
+            )
+            .err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+    }
+    #[test]
+    fn t22_observed_close_rejects_a_candle_collected_before_close() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        let original = evidence.candle();
+        let early = Candle::try_new(
+            original.instrument().clone(),
+            original.time(),
+            original.adjustment(),
+            original.values(),
+            CandleObservation::new(at(3, 6), CandleStatus::Finalized),
+        )
+        .expect("early");
+        let invalid = crate::ObservedCloseEvidence::new(evidence.instrument().clone(), early);
+        let portfolio = observation_portfolio(vec![holding]);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                &[invalid]
+            )
+            .err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+    }
+    #[test]
+    fn t22_observed_close_rejects_inconsistent_report_and_uncomputable_value() {
+        let cal = extended_observation_calendar(Currency::Krw);
+        let (template, evidence) = t22_observed_fixture(Currency::Krw);
+        let ratio = Ratio::parse(&NumericInput::try_new("0").expect("input")).expect("ratio");
+        let report = crate::ReportedHolding::new(
+            money("16", Currency::Krw),
+            money("0", Currency::Krw),
+            ratio,
+        )
+        .expect("report");
+        let different = crate::Holding::new(
+            template.instrument().clone(),
+            template.quantity(),
+            template.acquisition_price(),
+            crate::HoldingObservation::new(template.current_price(), Some(report), at(3, 7)),
+        )
+        .expect("holding");
+        let portfolio = observation_portfolio(vec![different]);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                std::slice::from_ref(&evidence)
+            )
+            .err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+        let overflow = crate::Holding::new(
+            template.instrument().clone(),
+            Quantity::parse(&NumericInput::try_new("2").expect("input")).expect("quantity"),
+            crate::AcquisitionPrice::try_new(money("79228162514264337593543950335", Currency::Krw))
+                .expect("cost"),
+            crate::HoldingObservation::new(template.current_price(), None, at(3, 7)),
+        )
+        .expect("holding");
+        let overflow_portfolio = observation_portfolio(vec![overflow]);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &cal,
+                &overflow_portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                &[evidence]
+            )
+            .err(),
+            Some(SnapshotError::IncompleteValuation)
         );
     }
 }
