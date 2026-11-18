@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -5,6 +6,38 @@ use std::process::Command;
 use cargo_metadata::MetadataCommand;
 
 use crate::private_temp::PrivateDirectory;
+
+thread_local! {
+    static TEST_DIRECTORIES: Cell<Vec<TestDirectory>> = const { Cell::new(Vec::new()) };
+}
+
+struct TestDirectory(Option<PrivateDirectory>);
+
+impl Drop for TestDirectory {
+    fn drop(&mut self) {
+        if let Some(directory) = self.0.take()
+            && let Err(error) = directory.remove()
+        {
+            panic!("temporary fixture cleanup failed: {error}");
+        }
+    }
+}
+
+fn tracked_child(directory: PrivateDirectory, name: &str) -> PathBuf {
+    let owner = TestDirectory(Some(directory));
+    let child = owner
+        .0
+        .as_ref()
+        .expect("directory")
+        .child(name)
+        .expect("fixture child");
+    TEST_DIRECTORIES.with(|directories| {
+        let mut entries = directories.take();
+        entries.push(owner);
+        directories.set(entries);
+    });
+    child
+}
 
 pub(crate) fn repository_root() -> PathBuf {
     MetadataCommand::new()
@@ -28,15 +61,14 @@ pub(crate) fn fresh_directory(root: &Path, name: &str) -> PathBuf {
 pub(crate) fn unique_directory(root: &Path, name: &str) -> PathBuf {
     let parent = root.join("target").join("harness");
     fs::create_dir_all(&parent).expect("create harness parent");
-    PrivateDirectory::create_in(&parent, name)
-        .and_then(|directory| directory.child("fixture"))
-        .expect("unique harness directory")
+    let directory = PrivateDirectory::create_in(&parent, name).expect("unique harness directory");
+    tracked_child(directory, "fixture")
 }
 
 pub(crate) fn outside_git_directory() -> PathBuf {
-    PrivateDirectory::create("stock-copilot-harness-git")
-        .and_then(|private| private.child("git"))
-        .expect("create private git directory")
+    let directory = PrivateDirectory::create("stock-copilot-harness-git")
+        .expect("create private git directory");
+    tracked_child(directory, "git")
 }
 
 pub(crate) fn place_git_directory_outside(directory: &Path, arguments: &[&str]) {
@@ -90,4 +122,39 @@ pub(crate) fn generate_lockfile(manifest: &Path) {
         "cargo generate-lockfile failed for {}",
         manifest.display()
     );
+}
+
+#[test]
+fn outside_git_fixture_is_removed_when_its_test_thread_finishes() {
+    let parent = std::thread::spawn(|| {
+        let path = outside_git_directory();
+        assert!(path.is_dir());
+        path.parent().expect("parent").to_path_buf()
+    })
+    .join()
+    .expect("fixture thread");
+    let remains = parent.exists();
+    if remains {
+        fs::remove_dir_all(&parent).expect("remove test parent");
+    }
+    assert!(!remains, "temporary git parent remains");
+}
+
+#[test]
+fn outside_git_fixture_is_removed_when_its_test_thread_panics() {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        let path = outside_git_directory();
+        sender
+            .send(path.parent().expect("parent").to_path_buf())
+            .expect("send parent");
+        panic!("fixture failure");
+    });
+    let parent = receiver.recv().expect("fixture parent");
+    assert!(thread.join().is_err());
+    let remains = parent.exists();
+    if remains {
+        fs::remove_dir_all(&parent).expect("remove test parent");
+    }
+    assert!(!remains, "temporary git parent remains after panic");
 }

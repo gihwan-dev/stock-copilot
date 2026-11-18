@@ -1,12 +1,12 @@
 import {
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,18 +55,21 @@ export const fixtureExpectations = {
 
 export const withFixture = (name, action) => {
   const root = mkdtempSync(join(tmpdir(), "source-tree-"));
-  const { files, links } = fixtures[name];
-  Object.entries(files).forEach(([path, text]) => {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), text);
-  });
-  Object.entries(links).forEach(([path, target]) => {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    symlinkSync(target, join(root, path));
-  });
-  const result = action(root);
-  rmSync(root, { recursive: true, force: true });
-  return result;
+  try {
+    const { files, links } = fixtures[name];
+    Object.entries(files).forEach(([path, text]) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    });
+    Object.entries(links).forEach(([path, target]) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      symlinkSync(target, join(root, path));
+    });
+    const result = action(root);
+    return result;
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 };
 
 export const fixtureNames = Object.keys(fixtures);

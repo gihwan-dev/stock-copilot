@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   cpSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   writeFileSync,
   existsSync,
@@ -11,6 +10,7 @@ import {
   symlinkSync,
   rmSync,
 } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { repoRoot } from "./paths.mjs";
@@ -30,6 +30,7 @@ test("DS07 actual Storybook index and CSF mutations fail the registered checker"
       "pnpm-lock.yaml",
       "apps/desktop",
       "harness/ds-catalog",
+      "harness/ci",
       "design/fonts",
     ])
       cpSync(join(repoRoot, path), join(scratch, path), {

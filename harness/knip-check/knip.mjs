@@ -1,11 +1,6 @@
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,11 +71,14 @@ export const runKnip = (directory, configFile = appConfigFile, flags = []) => {
 
 export const withConfig = (config, action) => {
   const scratch = mkdtempSync(join(tmpdir(), "knip-config-"));
-  const file = join(scratch, "knip.json");
-  writeFileSync(file, `${JSON.stringify(config)}\n`);
-  const result = action(file);
-  rmSync(scratch, { recursive: true, force: true });
-  return result;
+  try {
+    const file = join(scratch, "knip.json");
+    writeFileSync(file, `${JSON.stringify(config)}\n`);
+    const result = action(file);
+    return result;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 };
 
 export const PRODUCTION_FLAGS = ["--strict"];

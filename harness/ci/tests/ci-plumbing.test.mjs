@@ -43,6 +43,7 @@ import {
 
 const VERIFIER_FILES = [
   "harness/ci/signatures/verify.mjs",
+  "harness/ci/managed-temp.mjs",
   "harness/ci/signatures/manifests.mjs",
   "harness/ci/signatures/owner-keys.mjs",
   "harness/ci/signatures/owner.txt",

@@ -5,13 +5,13 @@ import {
   existsSync,
   mkdirSync,
   lstatSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -4,12 +4,12 @@ import {
   linkSync,
   mkdirSync,
   rmSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../../ci/test-temp.mjs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
