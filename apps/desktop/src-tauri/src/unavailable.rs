@@ -6,23 +6,24 @@ use application::{
     MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
     Notifier, PortError, PortErrorKind, PortfolioRepository, ProposalRepository, QuoteObservation,
     RankingQuery, ReadEndpoint, RecordOutcome, ResetTime, RetryDelay, RunKind, RunSpec, SecretKey,
-    SecretStore, SecretValue, SectorRankingQuery, SettingsRepository, SignalRepository,
-    SystemFailure, SystemPort, SystemPortError, ThesisRepository, TransactionRead,
-    TransactionRepository, ValuationRepository, WriteCompleted,
+    SecretStore, SecretValue, SectorRankingQuery, SettingsRepository, SignalCommitOutcome,
+    SignalMutation, SignalRepository, SignalSnapshot, SignalSourceFacts, SystemFailure, SystemPort,
+    SystemPortError, ThesisRepository, TransactionRead, TransactionRepository, ValuationRepository,
+    WriteCompleted,
 };
 use domain::{
-    AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
+    AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuySignalRecord,
+    BuyingPower, CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, CreditTrade, Currency, Draft, EstimateOutcome, FlowInterval, FxPair,
     FxRate, FxRateKind, IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile,
-    InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
-    MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
-    PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote, QuoteInstrument,
-    RaisedSignal, RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog,
-    SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
-    SellableQuantityFact, SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission,
-    SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval,
-    Timestamp, TransactionFilter, UntrustedText, ValuationSnapshot,
+    InvestorTradingRankings, IssuedEstimateTaskId, KnownMarket, MarketCalendar,
+    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates,
+    Orderbook, Portfolio, PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote,
+    QuoteInstrument, RaisedSignal, RankingLimit, ResolvedOrderInstrument, RiskSettings,
+    SectorCatalog, SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking,
+    SecuritiesLending, SellableQuantityFact, SettledRowSet, SettlementWindow, ShortSelling,
+    SignalSubmission, SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis,
+    TimeInterval, Timestamp, TransactionFilter, UntrustedText, ValuationSnapshot,
 };
 impl BrokerRead for Unavailable {
     fn accounts(&self) -> impl Future<Output = Result<BrokerAccountRows, PortError>> + Send {
@@ -657,11 +658,40 @@ impl EstimateRepository for Unavailable {
     }
 }
 impl SignalRepository for Unavailable {
-    fn replace(
+    fn snapshot(
         &self,
         _instrument: &InstrumentId,
-        _signals: &[RaisedSignal],
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<SignalSnapshot, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn commit(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &SignalSnapshot,
+        _mutation: &SignalMutation,
+    ) -> impl Future<Output = Result<SignalCommitOutcome, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn occurrences(
+        &self,
+        _instrument: &InstrumentId,
+        _identity: &ResolvedOrderInstrument,
+    ) -> impl Future<Output = Result<Vec<BuySignalRecord>, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn sources(
+        &self,
+        _task: &IssuedEstimateTaskId,
+    ) -> impl Future<Output = Result<SignalSourceFacts, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,
             SystemFailure::Unavailable(RetryDelay::Unknown),

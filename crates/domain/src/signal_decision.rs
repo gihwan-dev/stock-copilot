@@ -79,6 +79,10 @@ impl SignalEstimate {
         self.submitted.submission()
     }
     #[must_use]
+    pub const fn calibration_head(&self) -> &crate::CalibrationLedgerHead {
+        self.submitted.through()
+    }
+    #[must_use]
     pub const fn evidence(&self) -> Option<&Evidence> {
         self.submission().evidence()
     }
@@ -830,6 +834,23 @@ mod tests {
         } else {
             PolicyCostFit::WithinLimit
         }
+    }
+    #[test]
+    fn a27_signal_estimate_retains_its_calibration_ledger_head() {
+        let issued = eligible();
+        let record = submission(&issued, 99, evidence(1));
+        let key = record.calibration_key().clone();
+        let head =
+            crate::CalibrationLedgerHead::new(key.clone(), crate::CalibrationPosition::new(17));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(key, &[]).expect("보정"),
+            head.clone(),
+        )
+        .expect("표");
+        let prepared = calibrate_signal_submission(Some(&snapshot), &head, record).expect("보정");
+        let signal =
+            SignalEstimate::create(&issued, &prepared, Margin::default()).expect("신호 입력");
+        assert_eq!(signal.calibration_head(), &head);
     }
     #[test]
     fn d51_calibration_snapshot_distinguishes_missing_empty_stale_and_wrong_key() {

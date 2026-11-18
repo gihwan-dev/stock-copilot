@@ -1,8 +1,8 @@
 use application::{
     AuditEntry, AuditLog, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
     PortfolioRepository, ProposalRepository, RecordOutcome, SecretKey, SecretStore, SecretValue,
-    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
-    ValuationRepository, WriteCompleted,
+    SettingsRepository, SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalMutation,
+    SignalRepository, ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, Draft, EstimateOutcome, FxRate, InstrumentId,
@@ -62,10 +62,12 @@ pub async fn transaction_latest<P: TransactionRepository>(
 pub async fn signal_replacement<P: SignalRepository>(
     port: &P,
     instruments: (&InstrumentId, &InstrumentId),
-    versions: (&[RaisedSignal], &[RaisedSignal]),
+    versions: (&RaisedSignal, &RaisedSignal, &RaisedSignal),
 ) {
     let (instrument, other) = instruments;
-    let (first, second) = versions;
+    let (first_signal, second_signal, other_first) = versions;
+    let first = std::slice::from_ref(first_signal);
+    let second = std::slice::from_ref(second_signal);
     assert_ne!(
         instrument, other,
         "ADR 계약: 독립된 증인과 저장·조회 의미 보존"
@@ -74,14 +76,118 @@ pub async fn signal_replacement<P: SignalRepository>(
     assert_ne!(second, [], "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
     assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
     super::signal_repository_current(port, instrument, Ok(vec![])).await;
-    super::signal_repository_replace(port, instrument, first, Ok(WriteCompleted)).await;
+    assert_eq!(
+        signal_evaluate(port, instrument, Some(first_signal.clone())).await,
+        Ok(()),
+        "ADR 계약: 조건부 신호 전이가 성공해야 함"
+    );
     super::signal_repository_current(port, instrument, Ok(first.to_vec())).await;
-    super::signal_repository_replace(port, other, first, Ok(WriteCompleted)).await;
-    super::signal_repository_replace(port, instrument, second, Ok(WriteCompleted)).await;
+    assert_eq!(
+        signal_evaluate(port, other, Some(other_first.clone())).await,
+        Ok(()),
+        "ADR 계약: 조건부 신호 전이가 성공해야 함"
+    );
+    assert_eq!(
+        signal_evaluate(port, instrument, Some(second_signal.clone())).await,
+        Ok(()),
+        "ADR 계약: 조건부 신호 전이가 성공해야 함"
+    );
     super::signal_repository_current(port, instrument, Ok(second.to_vec())).await;
-    super::signal_repository_replace(port, instrument, &[], Ok(WriteCompleted)).await;
+    assert_eq!(
+        signal_evaluate(port, instrument, None).await,
+        Ok(()),
+        "ADR 계약: 해제 전이가 성공해야 함"
+    );
     super::signal_repository_current(port, instrument, Ok(vec![])).await;
+    signal_other_current(port, other, std::slice::from_ref(other_first)).await;
+}
+
+async fn signal_other_current<P: SignalRepository>(
+    port: &P,
+    other: &InstrumentId,
+    first: &[RaisedSignal],
+) {
     super::signal_repository_current(port, other, Ok(first.to_vec())).await;
+}
+
+fn signal_calibration_head(
+    decision: &domain::SignalDecision,
+    snapshot: &application::SignalSnapshot,
+) -> Result<domain::CalibrationLedgerHead, application::SystemPortError> {
+    let key = match decision {
+        domain::SignalDecision::Buy(value) => value.facts().submission().calibration_key(),
+        domain::SignalDecision::Sell(value) => value.facts().submission().calibration_key(),
+        domain::SignalDecision::None(_) => match &snapshot.current {
+            Some(current) => match &current.signal {
+                RaisedSignal::Buy(value) => value.facts().submission().calibration_key(),
+                RaisedSignal::Sell(value) => value.facts().submission().calibration_key(),
+            },
+            None => {
+                return Err(application::SystemPortError::new(
+                    application::SystemPort::Repository,
+                    application::SystemFailure::InvalidData,
+                ));
+            }
+        },
+    };
+    Ok(domain::CalibrationLedgerHead::new(
+        key.clone(),
+        domain::CalibrationPosition::new(0),
+    ))
+}
+
+async fn signal_evaluate<P: SignalRepository>(
+    port: &P,
+    instrument: &InstrumentId,
+    next: Option<RaisedSignal>,
+) -> Result<(), application::SystemPortError> {
+    let snapshot = port.snapshot(instrument).await?;
+    let decision = match next {
+        Some(RaisedSignal::Buy(value)) => domain::SignalDecision::Buy(value),
+        Some(RaisedSignal::Sell(value)) => domain::SignalDecision::Sell(value),
+        None => domain::SignalDecision::None(domain::NoSignalReason::Expired),
+    };
+    let transition = domain::signal_transition(
+        snapshot.current.as_ref().map(|value| &value.signal),
+        &decision,
+    )
+    .map_err(|_error| {
+        application::SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )
+    })?;
+    let reason = match decision {
+        domain::SignalDecision::None(reason) => Some(reason),
+        domain::SignalDecision::Buy(_) | domain::SignalDecision::Sell(_) => None,
+    };
+    let events = transition.events();
+    let head = signal_calibration_head(&decision, &snapshot)?;
+    let submission = snapshot.submission.clone().ok_or_else(|| {
+        application::SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )
+    })?;
+    let mutation = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+        submission,
+        decision,
+        transition,
+        calibration_head: Some(head),
+        occurrence: None,
+    }));
+    super::signal_repository_commit(
+        port,
+        instrument,
+        &snapshot,
+        &mutation,
+        Ok(SignalCommitOutcome::Applied(SignalCommit {
+            events,
+            no_signal_reason: reason,
+        })),
+    )
+    .await;
+    Ok(())
 }
 
 pub async fn thesis_roundtrip<P: ThesisRepository>(

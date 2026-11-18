@@ -5,8 +5,9 @@ use application::{
     HoldingsObservation, InformationError, MacroObservation, MacroSeries, MacroSeriesId,
     MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
     Notifier, PortError, PortfolioRepository, QuoteObservation, RankingQuery, RecordOutcome,
-    SectorRankingQuery, SettingsRepository, SignalRepository, SystemPortError, ThesisRepository,
-    TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
+    SectorRankingQuery, SettingsRepository, SignalCommitOutcome, SignalMutation, SignalRepository,
+    SignalSnapshot, SystemPortError, ThesisRepository, TransactionRead, TransactionRepository,
+    ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
@@ -584,14 +585,15 @@ pub async fn estimate_repository_calibration<P: EstimateRepository>(
         "ADR 포트 계약: 입력에 대응하는 사실과 오류를 보존"
     );
 }
-pub async fn signal_repository_replace<P: SignalRepository>(
+pub async fn signal_repository_commit<P: SignalRepository>(
     port: &P,
     instrument: &InstrumentId,
-    signals: &[RaisedSignal],
-    expected: Result<WriteCompleted, SystemPortError>,
+    expected_state: &SignalSnapshot,
+    mutation: &SignalMutation,
+    expected: Result<SignalCommitOutcome, SystemPortError>,
 ) {
     assert_eq!(
-        port.replace(instrument, signals).await,
+        port.commit(instrument, expected_state, mutation).await,
         expected,
         "ADR 포트 계약: 입력에 대응하는 사실과 오류를 보존"
     );

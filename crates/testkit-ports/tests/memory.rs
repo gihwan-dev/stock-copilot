@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use application::SignalRepository;
     use application::{
         AuditEntry, AuditIntegrity, AuditKind, FxRateQuery, PortfolioRepository, RecordOutcome,
         SecretKey, SecretValue, SystemFailure, SystemPort, SystemPortError, WriteCompleted,
@@ -140,13 +141,19 @@ mod tests {
             Ok(Some(record)),
         ));
         let signals = MemorySignalRepository::default();
-        signals.script_replace().push(MemoryReply::Memory);
-        signals.script_current().push(MemoryReply::Memory);
-        run(contracts::signal_repository_replace(
+        let signal_instrument = id("instrument-a");
+        let snapshot = run(signals.snapshot(&signal_instrument)).expect("상태");
+        run(contracts::signal_repository_commit(
             &signals,
-            &id("instrument-a"),
-            &[],
-            Ok(WriteCompleted),
+            &signal_instrument,
+            &snapshot,
+            &application::SignalMutation::Discard(Box::new(domain::SignalTransition::Unchanged)),
+            Ok(application::SignalCommitOutcome::Applied(
+                application::SignalCommit {
+                    events: vec![],
+                    no_signal_reason: None,
+                },
+            )),
         ));
         run(contracts::signal_repository_current(
             &signals,

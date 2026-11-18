@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    mod a27_fixtures;
+    use a27_fixtures as a27;
     use application::{
         AuditEntry, AuditKind, FxRateQuery, MarketDataRepository, RiskChangeConfirmation,
         SecretKey, SecretValue, SettingsRepository, SignalRepository, SystemFailure, SystemPort,
@@ -688,39 +690,126 @@ mod tests {
             (&other_key, &other),
         ));
     }
+    fn prepared_signal_repository() -> MemorySignalRepository {
+        let repository = MemorySignalRepository::new(a27::assignments());
+        repository
+            .advance_calibration_head(a27::head(0))
+            .expect("보정 위치");
+        let events = application::EventBusBuilder::default().build();
+        run(
+            application::SubmitEstimate::new(&repository, &events).execute(
+                &a27::run_id(),
+                vec![
+                    a27::input("task-old", "10", &a27::master()),
+                    a27::input("task-other", "10", &a27::other_master()),
+                ],
+            ),
+        )
+        .expect("제출");
+        repository
+    }
+    fn other_signal() -> RaisedSignal {
+        a27::decision(&a27::other_master(), "10", Some("7"))
+            .into_signal()
+            .expect("다른 종목 신호")
+    }
     #[test]
     fn generic_signal_contract_requires_nonempty_replacement_and_clearing() {
-        let repository = MemorySignalRepository::default();
-        memory(repository.script_replace(), 4);
-        memory(repository.script_current(), 5);
+        let repository = prepared_signal_repository();
         run(contracts::scenarios::signal_replacement(
             &repository,
-            (&id("signal-a"), &id("signal-b")),
-            (&[signal("7")], &[signal("11")]),
+            (&id("sample-a"), &id("sample-b")),
+            (&signal("7"), &signal("11"), &other_signal()),
         ));
     }
-    struct DiscardSignals;
+    #[derive(Default)]
+    struct DiscardSignals {
+        commits: std::sync::atomic::AtomicUsize,
+    }
     impl SignalRepository for DiscardSignals {
-        async fn replace(
+        async fn snapshot(
             &self,
             _: &InstrumentId,
-            _: &[RaisedSignal],
-        ) -> Result<WriteCompleted, SystemPortError> {
-            std::future::ready(Ok(WriteCompleted)).await
+        ) -> Result<application::SignalSnapshot, SystemPortError> {
+            let assignments = a27::assignments();
+            let submission = assignments
+                .lookup(&a27::task_id("task-old"))
+                .expect("과제")
+                .id()
+                .clone();
+            std::future::ready(Ok(application::SignalSnapshot {
+                revision: application::SignalRevision::new(0),
+                submission: Some(submission),
+                current: None,
+            }))
+            .await
+        }
+        async fn commit(
+            &self,
+            _: &InstrumentId,
+            _: &application::SignalSnapshot,
+            mutation: &application::SignalMutation,
+        ) -> Result<application::SignalCommitOutcome, SystemPortError> {
+            self.commits
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let (events, no_signal_reason) = match mutation {
+                application::SignalMutation::Evaluate(evaluation) => (
+                    evaluation.transition.events(),
+                    match evaluation.decision {
+                        SignalDecision::None(reason) => Some(reason),
+                        SignalDecision::Buy(_) | SignalDecision::Sell(_) => None,
+                    },
+                ),
+                application::SignalMutation::Discard(transition) => (transition.events(), None),
+            };
+            std::future::ready(Ok(application::SignalCommitOutcome::Applied(
+                application::SignalCommit {
+                    events,
+                    no_signal_reason,
+                },
+            )))
+            .await
+        }
+        async fn occurrences(
+            &self,
+            _: &InstrumentId,
+            _: &ResolvedOrderInstrument,
+        ) -> Result<Vec<domain::BuySignalRecord>, SystemPortError> {
+            std::future::ready(Ok(vec![])).await
+        }
+        async fn sources(
+            &self,
+            _: &domain::IssuedEstimateTaskId,
+        ) -> Result<application::SignalSourceFacts, SystemPortError> {
+            std::future::ready(Ok(application::SignalSourceFacts::default())).await
         }
         async fn current(&self, _: &InstrumentId) -> Result<Vec<RaisedSignal>, SystemPortError> {
             std::future::ready(Ok(vec![])).await
         }
     }
     #[test]
+    fn signal_contract_rejects_discarded_writes_after_a_commit_attempt() {
+        let discard = DiscardSignals::default();
+        let outcome = std::panic::catch_unwind(|| {
+            run(contracts::scenarios::signal_replacement(
+                &discard,
+                (&id("sample-a"), &id("sample-b")),
+                (&signal("7"), &signal("11"), &other_signal()),
+            ));
+        });
+        outcome.expect_err("쓰기를 버리는 구현 거부");
+        assert_eq!(discard.commits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+    #[test]
     fn generic_scenarios_reject_discarded_writes_and_changed_price_range() {
         let first = [signal("7")];
         let second = [signal("11")];
+        let discard = DiscardSignals::default();
         std::panic::catch_unwind(|| {
             run(contracts::scenarios::signal_replacement(
-                &DiscardSignals,
-                (&id("signal-a"), &id("signal-b")),
-                (&first, &second),
+                &discard,
+                (&id("sample-a"), &id("sample-b")),
+                (&first[0], &second[0], &other_signal()),
             ));
         })
         .expect_err("쓰기를 버리는 구현 거부");
