@@ -21,6 +21,12 @@ pub enum SignalUnavailable {
     Calendar,
     StaleHolding,
     SubmissionFromFuture,
+    MissingTargetPrice,
+    StaleTargetPrice,
+    InvalidTargetPrice,
+    MissingCalibration,
+    StaleCalibration,
+    CalibrationCombinationMismatch,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoSignalReason {
@@ -160,13 +166,33 @@ impl<'facts> SignalSourceLedger<'facts> {
     }
 }
 
+#[derive(Debug)]
+pub struct SignalAssessmentFacts<'facts> {
+    timing: SignalTiming<'facts>,
+    target_price: Option<crate::PriceObservation>,
+    calibration_head: Option<crate::CalibrationLedgerHead>,
+}
+impl<'facts> SignalAssessmentFacts<'facts> {
+    #[must_use]
+    pub const fn new(
+        timing: SignalTiming<'facts>,
+        target_price: Option<crate::PriceObservation>,
+        calibration_head: Option<crate::CalibrationLedgerHead>,
+    ) -> Self {
+        Self {
+            timing,
+            target_price,
+            calibration_head,
+        }
+    }
+}
 pub struct SignalContext<'facts> {
     valuation: Option<&'facts PortfolioValuation>,
     policy: &'facts Policy,
     assignments: &'facts SectorAssignments,
     security: &'facts PolicySecurityFacts,
     sources: &'facts SignalSourceLedger<'facts>,
-    timing: SignalTiming<'facts>,
+    facts: SignalAssessmentFacts<'facts>,
 }
 impl<'facts> SignalContext<'facts> {
     #[must_use]
@@ -175,7 +201,7 @@ impl<'facts> SignalContext<'facts> {
         policy: &'facts Policy,
         classification: (&'facts SectorAssignments, &'facts PolicySecurityFacts),
         sources: &'facts SignalSourceLedger<'facts>,
-        timing: SignalTiming<'facts>,
+        facts: SignalAssessmentFacts<'facts>,
     ) -> Self {
         Self {
             valuation,
@@ -183,7 +209,7 @@ impl<'facts> SignalContext<'facts> {
             assignments: classification.0,
             security: classification.1,
             sources,
-            timing,
+            facts,
         }
     }
 }
@@ -238,6 +264,76 @@ pub enum SignalDecision {
     Sell(SellSignal),
     None(NoSignalReason),
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalTransitionError {
+    InstrumentMismatch,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignalTransition {
+    Raised(RaisedSignal),
+    Unchanged,
+    Updated(RaisedSignal),
+    Cleared(crate::InstrumentId),
+    Reversed(RaisedSignal),
+}
+impl SignalTransition {
+    #[must_use]
+    pub fn events(&self) -> Vec<crate::DomainEvent> {
+        match self {
+            Self::Raised(signal) => {
+                vec![crate::DomainEvent::SignalRaised(signal_id(signal).clone())]
+            }
+            Self::Cleared(id) => vec![crate::DomainEvent::SignalCleared(id.clone())],
+            Self::Reversed(signal) => vec![
+                crate::DomainEvent::SignalCleared(signal_id(signal).clone()),
+                crate::DomainEvent::SignalRaised(signal_id(signal).clone()),
+            ],
+            Self::Unchanged | Self::Updated(_) => Vec::new(),
+        }
+    }
+}
+fn signal_facts(signal: &RaisedSignal) -> &SignalEstimate {
+    match signal {
+        RaisedSignal::Buy(value) => value.facts(),
+        RaisedSignal::Sell(value) => value.facts(),
+    }
+}
+fn signal_id(signal: &RaisedSignal) -> &crate::InstrumentId {
+    signal_facts(signal).task().volatility().instrument()
+}
+pub fn signal_transition(
+    previous: Option<&RaisedSignal>,
+    decision: &SignalDecision,
+) -> Result<SignalTransition, SignalTransitionError> {
+    let next = decision.clone().into_signal();
+    match (previous, next) {
+        (None, None) => Ok(SignalTransition::Unchanged),
+        (None, Some(value)) => Ok(SignalTransition::Raised(value)),
+        (Some(old), None) => Ok(SignalTransition::Cleared(signal_id(old).clone())),
+        (Some(old), Some(value)) => {
+            if signal_id(old) != signal_id(&value)
+                || signal_facts(old).task().reference().instrument()
+                    != signal_facts(&value).task().reference().instrument()
+            {
+                return Err(SignalTransitionError::InstrumentMismatch);
+            }
+            match (old, &value) {
+                (RaisedSignal::Buy(_), RaisedSignal::Buy(_))
+                | (RaisedSignal::Sell(_), RaisedSignal::Sell(_)) => {
+                    if old == &value {
+                        Ok(SignalTransition::Unchanged)
+                    } else {
+                        Ok(SignalTransition::Updated(value))
+                    }
+                }
+                (RaisedSignal::Buy(_), RaisedSignal::Sell(_))
+                | (RaisedSignal::Sell(_), RaisedSignal::Buy(_)) => {
+                    Ok(SignalTransition::Reversed(value))
+                }
+            }
+        }
+    }
+}
 impl SignalDecision {
     #[must_use]
     pub fn assess(estimate: &SignalEstimate, context: &SignalContext<'_>) -> Self {
@@ -262,8 +358,26 @@ fn assess(
     estimate: &SignalEstimate,
     context: &SignalContext<'_>,
 ) -> Result<RaisedSignal, NoSignalReason> {
+    let head = context
+        .facts
+        .calibration_head
+        .as_ref()
+        .ok_or(NoSignalReason::Unavailable(
+            SignalUnavailable::MissingCalibration,
+        ))?;
+    if head.key() != estimate.submitted.through().key() {
+        return Err(NoSignalReason::Unavailable(
+            SignalUnavailable::CalibrationCombinationMismatch,
+        ));
+    }
+    if head.position() != estimate.submitted.through().position() {
+        return Err(NoSignalReason::Unavailable(
+            SignalUnavailable::StaleCalibration,
+        ));
+    }
     context.sources.check(estimate.evidence())?;
     context
+        .facts
         .timing
         .check(estimate.task(), estimate.submission().submitted_at())?;
     if estimate.sell == SignalCondition::Met {
@@ -281,12 +395,38 @@ fn assess(
     )
     .map_err(|violation| policy_reason(&violation))?;
     if estimate.buy == SignalCondition::Met {
+        check_target_price(estimate, context)?;
         return Ok(RaisedSignal::Buy(BuySignal {
             facts: estimate.clone(),
             limit,
         }));
     }
     Err(NoSignalReason::ConditionsUnmet)
+}
+fn check_target_price(
+    estimate: &SignalEstimate,
+    context: &SignalContext<'_>,
+) -> Result<(), NoSignalReason> {
+    let unavailable = |reason| NoSignalReason::Unavailable(reason);
+    let price = context
+        .facts
+        .target_price
+        .as_ref()
+        .ok_or_else(|| unavailable(SignalUnavailable::MissingTargetPrice))?;
+    let reference = estimate.task().reference();
+    if price.instrument() != reference.instrument()
+        || price.price().as_money().currency() != reference.price().as_money().currency()
+        || price.instrument_id() != Some(estimate.task().volatility().instrument())
+    {
+        return Err(unavailable(SignalUnavailable::InvalidTargetPrice));
+    }
+    if price.observed_at() < reference.observed_at()
+        || price.check(reference.instrument(), context.facts.timing.now())
+            != crate::CheckResult::Passed
+    {
+        return Err(unavailable(SignalUnavailable::StaleTargetPrice));
+    }
+    Ok(())
 }
 fn sell_signal(
     estimate: &SignalEstimate,
@@ -306,6 +446,7 @@ fn sell_signal(
         return Err(NoSignalReason::UnheldLowProbability);
     }
     context
+        .facts
         .timing
         .check_holding(estimate.task(), holding.observed_at())?;
     Ok(RaisedSignal::Sell(SellSignal {
@@ -502,10 +643,14 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        calibrate_signal_submission(
-            &Calibration::try_new(key, &facts).expect("집계"),
-            submission,
+        let head =
+            crate::CalibrationLedgerHead::new(key.clone(), crate::CalibrationPosition::new(0));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(key, &facts).expect("집계"),
+            head.clone(),
         )
+        .expect("완전한 표");
+        calibrate_signal_submission(Some(&snapshot), &head, submission).expect("보정")
     }
     fn submission(
         eligible: &CostEligibleTask,
@@ -541,6 +686,28 @@ mod tests {
             market,
         )
         .expect("종목")
+    }
+    fn fresh_price(now: Timestamp) -> PriceObservation {
+        PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("sample").expect("종목 ID"),
+            instrument(Market::Kr, "ABC"),
+            crate::Price::try_new(money("100")).expect("가격"),
+            now,
+        )
+        .expect("시세")
+    }
+    fn latest_calibration() -> crate::CalibrationLedgerHead {
+        crate::CalibrationLedgerHead::new(key(), crate::CalibrationPosition::new(0))
+    }
+    fn assessment_facts(
+        now: Timestamp,
+        calendars: &[MarketCalendar],
+    ) -> crate::SignalAssessmentFacts<'_> {
+        crate::SignalAssessmentFacts::new(
+            SignalTiming::new(now, calendars),
+            Some(fresh_price(now)),
+            Some(latest_calibration()),
+        )
     }
     fn holding(market: Market, symbol: &str, quantity: &str, observed_at: Timestamp) -> Holding {
         let currency = if market == Market::Kr {
@@ -636,12 +803,648 @@ mod tests {
             RaisedSignal::Buy(_) => None,
         }
     }
+    fn conservative(value: &crate::CalibratedProbability) -> bool {
+        match value {
+            crate::CalibratedProbability::InsufficientSamples(_) => true,
+            crate::CalibratedProbability::EligibleBeforeE91(_) => false,
+        }
+    }
+    fn is_buy(value: &SignalDecision) -> bool {
+        match value {
+            SignalDecision::Buy(_) => true,
+            SignalDecision::Sell(_) | SignalDecision::None(_) => false,
+        }
+    }
+    fn transition_kind(value: &crate::SignalTransition) -> u8 {
+        match value {
+            crate::SignalTransition::Raised(_) => 1,
+            crate::SignalTransition::Unchanged => 2,
+            crate::SignalTransition::Updated(_) => 3,
+            crate::SignalTransition::Cleared(_) => 4,
+            crate::SignalTransition::Reversed(_) => 5,
+        }
+    }
     fn expected_fit(policy: &Policy, amount: &str) -> PolicyCostFit {
         if (policy.minimum_cash().is_some() && amount != "1") || amount == "13" {
             PolicyCostFit::AboveLimit
         } else {
             PolicyCostFit::WithinLimit
         }
+    }
+    #[test]
+    fn d51_calibration_snapshot_distinguishes_missing_empty_stale_and_wrong_key() {
+        let eligible = eligible();
+        let submitted = submission(&eligible, 63, evidence(1));
+        let head = crate::CalibrationLedgerHead::new(key(), crate::CalibrationPosition::new(12));
+        assert_eq!(*head.position().as_u64(), 12);
+        let empty = Calibration::try_new(key(), &[]).expect("빈 표");
+        let snapshot = crate::CalibrationSnapshot::try_new(empty, head.clone()).expect("완전한 표");
+        assert_eq!(
+            calibrate_signal_submission(None, &head, submitted.clone()),
+            Err(crate::CalibrationError::MissingCalibration)
+        );
+        let valid = calibrate_signal_submission(Some(&snapshot), &head, submitted.clone())
+            .expect("정상 빈 표");
+        assert!(conservative(valid.calibration()));
+        let ready = calibrated(submission(&eligible, 63, evidence(1)), 30);
+        assert!(!conservative(ready.calibration()));
+        let later = crate::CalibrationLedgerHead::new(key(), crate::CalibrationPosition::new(13));
+        assert_eq!(
+            calibrate_signal_submission(Some(&snapshot), &later, submitted.clone()),
+            Err(crate::CalibrationError::StaleCalibration)
+        );
+        let wrong = crate::CalibrationLedgerHead::new(
+            CalibrationKey::new(key().model().clone(), Horizon::new(HorizonSelection::Hours)),
+            crate::CalibrationPosition::new(12),
+        );
+        assert_eq!(
+            calibrate_signal_submission(Some(&snapshot), &wrong, submitted),
+            Err(crate::CalibrationError::MismatchedCombination)
+        );
+        let other_key = wrong.key().clone();
+        let other_table = Calibration::try_new(other_key, &[]).expect("다른 조합");
+        assert_eq!(
+            crate::CalibrationSnapshot::try_new(other_table.clone(), head.clone()),
+            Err(crate::CalibrationError::MismatchedCombination)
+        );
+        let other_snapshot =
+            crate::CalibrationSnapshot::try_new(other_table, wrong).expect("다른 표");
+        assert_eq!(
+            calibrate_signal_submission(
+                Some(&other_snapshot),
+                &head,
+                submission(&eligible, 63, evidence(1))
+            ),
+            Err(crate::CalibrationError::MismatchedCombination)
+        );
+    }
+    #[test]
+    fn d51_submission_rejects_a_consistent_snapshot_for_another_model() {
+        let eligible = eligible();
+        let part = ModelIdentityPart::try_new("other").expect("다른 모델");
+        let other = CalibrationKey::new(
+            CalibrationModel::new(part.clone(), part.clone(), part),
+            Horizon::new(HorizonSelection::FewDays),
+        );
+        let head =
+            crate::CalibrationLedgerHead::new(other.clone(), crate::CalibrationPosition::new(0));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(other, &[]).expect("다른 모델의 표"),
+            head.clone(),
+        )
+        .expect("다른 모델의 완전한 표");
+        assert_eq!(
+            calibrate_signal_submission(
+                Some(&snapshot),
+                &head,
+                submission(&eligible, 63, evidence(1))
+            ),
+            Err(crate::CalibrationError::MismatchedCombination)
+        );
+    }
+    #[test]
+    fn d51_calibration_positions_and_combinations_property() {
+        let eligible = eligible();
+        let submitted = submission(&eligible, 67, evidence(1));
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(
+                &(0_u64..10_000, 0_u8..3, 0_u8..2),
+                |(through, offset, mismatch)| {
+                    let latest = match offset {
+                        0 => through,
+                        1 => through.saturating_add(1),
+                        _ => through.saturating_sub(1),
+                    };
+                    let own = crate::CalibrationLedgerHead::new(
+                        key(),
+                        crate::CalibrationPosition::new(through),
+                    );
+                    let snapshot = crate::CalibrationSnapshot::try_new(
+                        Calibration::try_new(key(), &[]).expect("표"),
+                        own,
+                    )
+                    .expect("스냅숏");
+                    let requested = if mismatch == 0 {
+                        key()
+                    } else {
+                        CalibrationKey::new(
+                            key().model().clone(),
+                            Horizon::new(HorizonSelection::WeeksToMonths),
+                        )
+                    };
+                    let head = crate::CalibrationLedgerHead::new(
+                        requested,
+                        crate::CalibrationPosition::new(latest),
+                    );
+                    let result =
+                        calibrate_signal_submission(Some(&snapshot), &head, submitted.clone());
+                    if mismatch != 0 {
+                        proptest::prop_assert_eq!(
+                            result,
+                            Err(crate::CalibrationError::MismatchedCombination)
+                        );
+                    } else if through != latest {
+                        proptest::prop_assert_eq!(
+                            result,
+                            Err(crate::CalibrationError::StaleCalibration)
+                        );
+                    } else {
+                        proptest::prop_assert!(conservative(result.expect("일치").calibration()));
+                    }
+                    Ok(())
+                },
+            )
+            .expect("조합과 위치");
+    }
+    fn decide_calibration_head(head: Option<crate::CalibrationLedgerHead>) -> SignalDecision {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let valuation = portfolio(vec![]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let facts = crate::SignalAssessmentFacts::new(
+            SignalTiming::new(at(61), &calendar),
+            Some(fresh_price(at(61))),
+            head,
+        );
+        let context = SignalContext::new(
+            Some(&valuation),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            facts,
+        );
+        SignalDecision::assess(&estimate, &context)
+    }
+    #[test]
+    fn d51_assessment_rechecks_ledger_head_after_preparation() {
+        let latest = crate::CalibrationLedgerHead::new(key(), crate::CalibrationPosition::new(1));
+        assert_eq!(
+            decide_calibration_head(Some(latest)),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::StaleCalibration
+            ))
+        );
+        assert_eq!(
+            decide_calibration_head(None),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::MissingCalibration
+            ))
+        );
+        let wrong = crate::CalibrationLedgerHead::new(
+            CalibrationKey::new(key().model().clone(), Horizon::new(HorizonSelection::Hours)),
+            crate::CalibrationPosition::new(0),
+        );
+        assert_eq!(
+            decide_calibration_head(Some(wrong)),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::CalibrationCombinationMismatch
+            ))
+        );
+    }
+    fn decide_target_price(price: Option<PriceObservation>, now: Timestamp) -> SignalDecision {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let valuation = portfolio(vec![]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(&valuation),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            crate::SignalAssessmentFacts::new(
+                SignalTiming::new(now, &calendar),
+                price,
+                Some(latest_calibration()),
+            ),
+        );
+        SignalDecision::assess(&estimate, &context)
+    }
+    fn target_quote(
+        instrument: ResolvedOrderInstrument,
+        price: crate::Price,
+        observed: Timestamp,
+    ) -> PriceObservation {
+        PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("sample").expect("종목 ID"),
+            instrument,
+            price,
+            observed,
+        )
+        .expect("시세")
+    }
+    #[test]
+    fn d51_buy_target_price_rejects_a_quote_without_an_instrument_id() {
+        let task = eligible();
+        let reference = task.task().reference();
+        let now = at(61);
+        let unidentified = PriceObservation::from_quote_parts(
+            reference.instrument().clone(),
+            reference.price(),
+            now,
+        )
+        .expect("종목 ID 없는 시세");
+        assert_eq!(
+            decide_target_price(Some(unidentified), now),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::InvalidTargetPrice
+            ))
+        );
+    }
+    #[test]
+    fn d51_buy_target_price_missing_stale_and_boundary() {
+        let task = eligible();
+        let reference = task.task().reference();
+        let now = at(61);
+        let valid = target_quote(reference.instrument().clone(), reference.price(), now);
+        let before = now.checked_sub(TimeSpan::NANOSECOND).expect("기준 이전");
+        let before_reference =
+            target_quote(reference.instrument().clone(), reference.price(), before);
+        let future = target_quote(
+            reference.instrument().clone(),
+            reference.price(),
+            later(now, 1),
+        );
+        let just_before = later(now, 5)
+            .checked_sub(TimeSpan::NANOSECOND)
+            .expect("경계 직전");
+        let missing = decide_target_price(None, now);
+        assert!(!is_buy(&missing));
+        assert_eq!(
+            missing,
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::MissingTargetPrice
+            ))
+        );
+        assert_eq!(
+            decide_target_price(Some(valid.clone()), later(now, 5)),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::StaleTargetPrice
+            ))
+        );
+        assert_eq!(
+            decide_target_price(Some(before_reference), now),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::StaleTargetPrice
+            ))
+        );
+        assert_eq!(
+            decide_target_price(Some(future), now),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::StaleTargetPrice
+            ))
+        );
+        assert!(is_buy(&decide_target_price(
+            Some(valid.clone()),
+            just_before
+        )));
+        assert!(is_buy(&decide_target_price(Some(valid), now)));
+    }
+    #[test]
+    fn d51_buy_target_price_rejects_wrong_currency_instrument_and_id() {
+        let task = eligible();
+        let reference = task.task().reference();
+        let now = at(61);
+        let wrong_currency = target_quote(
+            reference.instrument().clone(),
+            crate::Price::try_new(Money::new(Amount::new(Decimal::ONE), Currency::Usd))
+                .expect("단가"),
+            now,
+        );
+        let wrong_instrument =
+            target_quote(instrument(Market::Kr, "OTHER"), reference.price(), now);
+        let wrong_id = PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("other-id").expect("다른 ID"),
+            reference.instrument().clone(),
+            reference.price(),
+            now,
+        )
+        .expect("다른 ID 시세");
+        for price in [wrong_currency, wrong_instrument, wrong_id] {
+            assert_eq!(
+                decide_target_price(Some(price), now),
+                SignalDecision::None(NoSignalReason::Unavailable(
+                    SignalUnavailable::InvalidTargetPrice
+                ))
+            );
+        }
+    }
+    #[test]
+    fn d51_target_price_freshness_boundary_property() {
+        let eligible = eligible();
+        let estimate = estimate(&eligible, 99, 0, 10, 1);
+        let valuation = portfolio(vec![]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(&(0_u64..10), |seconds| {
+                let now = later(at(61), seconds);
+                let context = SignalContext::new(
+                    Some(&valuation),
+                    &policy,
+                    (&mapping, &types),
+                    &ledger,
+                    crate::SignalAssessmentFacts::new(
+                        SignalTiming::new(now, &calendar),
+                        Some(fresh_price(at(61))),
+                        Some(latest_calibration()),
+                    ),
+                );
+                let result = SignalDecision::assess(&estimate, &context);
+                if seconds < 5 {
+                    proptest::prop_assert!(is_buy(&result));
+                } else {
+                    proptest::prop_assert_eq!(
+                        result,
+                        SignalDecision::None(NoSignalReason::Unavailable(
+                            SignalUnavailable::StaleTargetPrice
+                        ))
+                    );
+                }
+                Ok(())
+            })
+            .expect("가격 시각 경계");
+    }
+    fn transition_decisions() -> (SignalDecision, SignalDecision, SignalDecision, InstrumentId) {
+        let eligible = eligible();
+        let valuation = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(&valuation),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            assessment_facts(at(61), &calendar),
+        );
+        (
+            SignalDecision::assess(&estimate(&eligible, 99, 0, 10, 1), &context),
+            SignalDecision::assess(&estimate(&eligible, 98, 0, 10, 1), &context),
+            SignalDecision::assess(&estimate(&eligible, 1, 0, 10, 1), &context),
+            eligible.task().volatility().instrument().clone(),
+        )
+    }
+    fn d51_eligible_with_instrument_id(id: &str) -> CostEligibleTask {
+        let original = eligible();
+        let task = original.task();
+        let instrument_id = InstrumentId::try_new(id).expect("종목 ID");
+        let values = (0_usize..61)
+            .map(|index| if index % 2 == 0 { "100" } else { "102" })
+            .collect::<Vec<_>>();
+        let candles = candle::tests::series(&values)
+            .into_iter()
+            .map(|row| {
+                crate::Candle::try_new(
+                    instrument_id.clone(),
+                    row.time(),
+                    row.adjustment(),
+                    row.values(),
+                    crate::CandleObservation::new(row.collected_at(), row.status()),
+                )
+                .expect("종목의 봉")
+            })
+            .collect::<Vec<_>>();
+        let reference = PriceObservation::from_identified_quote_parts(
+            instrument_id,
+            task.reference().instrument().clone(),
+            task.reference().price(),
+            task.reference().observed_at(),
+        )
+        .expect("종목 시세");
+        let new_task = EstimateTask::create(
+            EstimateContext::new(reference, task.created_at()),
+            crate::Volatility::calculate(&candles).expect("변동성"),
+            Horizon::new(HorizonSelection::FewDays),
+            HoursPermission::default(),
+            RiskAppetite::Neutral,
+        )
+        .expect("종목 과제");
+        eligible_for(new_task)
+    }
+    fn d51_buy_with_instrument_id(id: &str) -> crate::BuySignal {
+        let eligible = d51_eligible_with_instrument_id(id);
+        let valuation = portfolio(vec![]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(&valuation),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            crate::SignalAssessmentFacts::new(
+                SignalTiming::new(at(61), &calendar),
+                Some(eligible.task().reference().clone()),
+                Some(latest_calibration()),
+            ),
+        );
+        let signal = SignalDecision::assess(&estimate(&eligible, 99, 0, 10, 1), &context)
+            .into_signal()
+            .expect("매수 발생");
+        buy_payload(signal).expect("매수 신호")
+    }
+    #[test]
+    fn d51_transition_rejects_same_symbol_with_a_different_instrument_id() {
+        let previous = d51_buy_with_instrument_id("previous");
+        let next = d51_buy_with_instrument_id("next");
+        assert_eq!(
+            previous.facts().task().reference().instrument(),
+            next.facts().task().reference().instrument()
+        );
+        assert_ne!(
+            previous.facts().task().volatility().instrument(),
+            next.facts().task().volatility().instrument()
+        );
+        assert_eq!(
+            crate::signal_transition(
+                Some(&RaisedSignal::Buy(previous)),
+                &SignalDecision::Buy(next)
+            ),
+            Err(crate::SignalTransitionError::InstrumentMismatch)
+        );
+    }
+    #[test]
+    fn d51_current_occurrence_rejects_same_symbol_with_a_different_instrument_id() {
+        let previous = d51_buy_with_instrument_id("previous");
+        let next = d51_buy_with_instrument_id("next");
+        assert_eq!(
+            previous.facts().task().reference().instrument(),
+            next.facts().task().reference().instrument()
+        );
+        let occurrence = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("occurrence").expect("발생 ID"),
+            &previous,
+            at(61),
+            &calendars(),
+        )
+        .expect("발생 기록");
+        assert_eq!(
+            crate::CurrentBuySignal::try_new(next, occurrence),
+            Err(crate::NoBuyQuantity::Indeterminate)
+        );
+    }
+    #[test]
+    fn d51_history_blocks_same_symbol_with_a_different_instrument_id() {
+        let previous = d51_buy_with_instrument_id("previous");
+        let next = d51_buy_with_instrument_id("next");
+        assert_ne!(
+            previous.facts().task().volatility().instrument(),
+            next.facts().task().volatility().instrument()
+        );
+        assert_eq!(
+            previous.facts().task().reference().instrument(),
+            next.facts().task().reference().instrument()
+        );
+        let record = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("previous").expect("이전 ID"),
+            &previous,
+            at(61),
+            &calendars(),
+        )
+        .expect("이전 발생");
+        let occurrence = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("current").expect("현재 ID"),
+            &next,
+            at(61),
+            &calendars(),
+        )
+        .expect("현재 발생");
+        let current = crate::CurrentBuySignal::try_new(next, occurrence).expect("현재 신호");
+        assert_eq!(
+            crate::buy_signal_history::check_buy_history(&current, at(61), &[record]),
+            Err(crate::NoBuyQuantity::RepeatedSignal)
+        );
+    }
+    #[test]
+    fn d51_transition_table_emits_expected_events() {
+        let (buy, _, sell, id) = transition_decisions();
+        let none = SignalDecision::None(NoSignalReason::ConditionsUnmet);
+        let buy_previous = buy.clone().into_signal().expect("매수");
+        let sell_previous = sell.clone().into_signal().expect("매도");
+        let raised = vec![crate::DomainEvent::SignalRaised(id.clone())];
+        let cleared = vec![crate::DomainEvent::SignalCleared(id.clone())];
+        let reversed = vec![
+            crate::DomainEvent::SignalCleared(id.clone()),
+            crate::DomainEvent::SignalRaised(id),
+        ];
+        for decision in [&buy, &sell] {
+            let transition = crate::signal_transition(None, decision).expect("발생");
+            assert_eq!(transition_kind(&transition), 1);
+            assert_eq!(transition.events(), raised);
+        }
+        let no_transition = crate::signal_transition(None, &none).expect("없음 유지");
+        assert_eq!(transition_kind(&no_transition), 2);
+        for (previous, same, opposite) in
+            [(&buy_previous, &buy, &sell), (&sell_previous, &sell, &buy)]
+        {
+            let same_transition = crate::signal_transition(Some(previous), same).expect("유지");
+            assert_eq!(transition_kind(&same_transition), 2);
+            assert_eq!(same_transition.events(), Vec::new());
+            let cleared_transition = crate::signal_transition(Some(previous), &none).expect("해제");
+            assert_eq!(transition_kind(&cleared_transition), 4);
+            assert_eq!(cleared_transition.events(), cleared);
+            let opposite_transition =
+                crate::signal_transition(Some(previous), opposite).expect("변경");
+            assert_eq!(transition_kind(&opposite_transition), 5);
+            assert_eq!(opposite_transition.events(), reversed);
+        }
+    }
+    #[test]
+    fn d51_transition_updates_content_without_a_new_event() {
+        let (buy, updated, _, _) = transition_decisions();
+        let previous = buy.into_signal().expect("매수");
+        let transition = crate::signal_transition(Some(&previous), &updated).expect("내용 갱신");
+        assert_eq!(transition_kind(&transition), 3);
+        assert_eq!(transition.events(), Vec::new());
+    }
+    #[test]
+    fn d51_transition_rejects_a_different_instrument() {
+        let (buy, _, _, _) = transition_decisions();
+        let previous = buy.clone().into_signal().expect("매수");
+        let original = eligible();
+        let task = original.task();
+        let other_reference = PriceObservation::from_identified_quote_parts(
+            task.volatility().instrument().clone(),
+            instrument(Market::Kr, "OTHER"),
+            task.reference().price(),
+            task.reference().observed_at(),
+        )
+        .expect("다른 종목");
+        let other_task = EstimateTask::create(
+            EstimateContext::new(other_reference, task.created_at()),
+            task.volatility().clone(),
+            Horizon::new(HorizonSelection::FewDays),
+            HoursPermission::default(),
+            RiskAppetite::Neutral,
+        )
+        .expect("다른 과제");
+        let other_facts = estimate(&eligible_for(other_task), 99, 0, 10, 1);
+        let signal = buy_payload(buy.into_signal().expect("매수")).expect("매수 신호");
+        let other_decision = SignalDecision::Buy(super::BuySignal {
+            facts: other_facts,
+            limit: signal.limit,
+        });
+        assert_eq!(
+            crate::signal_transition(Some(&previous), &other_decision),
+            Err(crate::SignalTransitionError::InstrumentMismatch)
+        );
+    }
+    #[test]
+    fn d51_transition_property_preserves_same_direction_occurrence() {
+        let eligible = eligible();
+        let valuation = portfolio(vec![holding(Market::Kr, "ABC", "1", at(61))]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(&valuation),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            assessment_facts(at(61), &calendar),
+        );
+        let buy = SignalDecision::assess(&estimate(&eligible, 99, 0, 10, 1), &context);
+        let sell = SignalDecision::assess(&estimate(&eligible, 1, 0, 10, 1), &context);
+        let none = SignalDecision::None(NoSignalReason::ConditionsUnmet);
+        let decisions = [none, buy, sell];
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(&(0_usize..3, 0_usize..3), |(before, after)| {
+                let old = decisions[before].clone().into_signal();
+                let transition =
+                    crate::signal_transition(old.as_ref(), &decisions[after]).expect("전이");
+                let count = transition.events().len();
+                let expected = match (before, after) {
+                    (0, 0) | (1, 1) | (2, 2) => 0,
+                    (1, 2) | (2, 1) => 2,
+                    _ => 1,
+                };
+                proptest::prop_assert_eq!(count, expected);
+                Ok(())
+            })
+            .expect("전이 표");
     }
     #[test]
     fn signal_limit_is_always_present_and_cash_minimum_is_enforced() {
@@ -665,7 +1468,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(at(61), &calendar),
+                assessment_facts(at(61), &calendar),
             );
             let decision = SignalDecision::assess(&estimate, &context);
             let raised = decision.into_signal().expect("신호");
@@ -723,7 +1526,7 @@ mod tests {
                     &policy,
                     (candidate_mapping, candidate_types),
                     &ledger,
-                    SignalTiming::new(at(61), &calendar),
+                    assessment_facts(at(61), &calendar),
                 );
                 let raised = SignalDecision::assess(&estimate, &context)
                     .into_signal()
@@ -772,7 +1575,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(at(61), &calendar),
+                assessment_facts(at(61), &calendar),
             );
             let expected = buy_block_reason(&policy);
             assert_eq!(
@@ -786,7 +1589,7 @@ mod tests {
                 &plain,
                 classification,
                 &ledger,
-                SignalTiming::new(at(61), &calendar),
+                assessment_facts(at(61), &calendar),
             );
             assert_eq!(
                 SignalDecision::assess(&estimate, &context).into_signal(),
@@ -798,7 +1601,7 @@ mod tests {
             &plain,
             (&mapping, &types),
             &ledger,
-            SignalTiming::new(at(61), &calendar),
+            assessment_facts(at(61), &calendar),
         );
         assert_eq!(
             SignalDecision::assess(&estimate, &context),
@@ -831,7 +1634,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(at(61), &calendar),
+                assessment_facts(at(61), &calendar),
             );
             assert_eq!(
                 SignalDecision::assess(&estimate, &context),
@@ -843,7 +1646,7 @@ mod tests {
             &policy,
             (&mapping, &types),
             &ledger,
-            SignalTiming::new(at(61), &calendar),
+            assessment_facts(at(61), &calendar),
         );
         assert_eq!(
             SignalDecision::assess(&estimate, &context).into_signal(),
@@ -963,7 +1766,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(endpoint, &calendar),
+                assessment_facts(endpoint, &calendar),
             );
             assert_eq!(
                 SignalDecision::assess(&estimate, &context),
@@ -974,7 +1777,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(at(61), &[]),
+                assessment_facts(at(61), &[]),
             );
             assert_eq!(
                 SignalDecision::assess(&estimate, &missing),
@@ -988,7 +1791,7 @@ mod tests {
             &policy,
             (&mapping, &types),
             &ledger,
-            SignalTiming::new(before, &calendar),
+            assessment_facts(before, &calendar),
         );
         assert_eq!(classify(&SignalDecision::assess(&estimate, &context)), 1);
     }
@@ -1022,7 +1825,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(now, &calendar),
+                assessment_facts(now, &calendar),
             );
             let decision = SignalDecision::assess(&estimate, &context);
             assert_eq!(classify(&decision), expected);
@@ -1058,7 +1861,7 @@ mod tests {
             &policy,
             (&mapping, &types),
             &ledger,
-            SignalTiming::new(at(61), &calendar),
+            assessment_facts(at(61), &calendar),
         );
         assert_eq!(
             SignalDecision::assess(&future_input, &context),
@@ -1086,7 +1889,7 @@ mod tests {
             &policy,
             (&mapping, &types),
             ledger,
-            SignalTiming::new(at(61), &calendar),
+            assessment_facts(at(61), &calendar),
         );
         SignalDecision::assess(&input, &context)
     }
@@ -1180,7 +1983,7 @@ mod tests {
                         &policy,
                         (&mapping, &types),
                         &ledger,
-                        SignalTiming::new(at(61), &calendar),
+                        assessment_facts(at(61), &calendar),
                     );
                     let decision = SignalDecision::assess(&estimate, &context);
                     proptest::prop_assert_eq!(
@@ -1226,7 +2029,7 @@ mod tests {
                     &policy,
                     (&mapping, &types),
                     &ledger,
-                    SignalTiming::new(now, calendars),
+                    assessment_facts(now, calendars),
                 );
                 proptest::prop_assert_eq!(
                     SignalDecision::assess(&input, &context).into_signal(),
@@ -1293,7 +2096,7 @@ mod tests {
                 &policy,
                 (&mapping, &types),
                 &ledger,
-                SignalTiming::new(at(61), &calendar),
+                assessment_facts(at(61), &calendar),
             );
             assert_eq!(
                 SignalDecision::assess(&input, &context),
@@ -1514,7 +2317,7 @@ mod tests {
             &policy,
             (&mapping, &types),
             &ledger,
-            SignalTiming::new(at(61), &calendar),
+            assessment_facts(at(61), &calendar),
         );
         assert_eq!(
             SignalDecision::assess(&estimate, &context),

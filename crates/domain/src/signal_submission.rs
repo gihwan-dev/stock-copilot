@@ -1,6 +1,6 @@
 use crate::{
-    AiProbability, CalibratedProbability, Calibration, CalibrationKey, CostEligibleTask,
-    EstimateTask, Evidence, Timestamp,
+    AiProbability, CalibratedProbability, CalibrationError, CalibrationKey, CalibrationLedgerHead,
+    CalibrationSnapshot, CostEligibleTask, EstimateTask, Evidence, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +71,7 @@ impl SignalSubmission {
 pub struct SubmittedCalibration {
     submission: SignalSubmission,
     calibration: CalibratedProbability,
+    through: CalibrationLedgerHead,
 }
 impl SubmittedCalibration {
     #[must_use]
@@ -81,15 +82,32 @@ impl SubmittedCalibration {
     pub const fn calibration(&self) -> &CalibratedProbability {
         &self.calibration
     }
+    #[must_use]
+    pub const fn through(&self) -> &CalibrationLedgerHead {
+        &self.through
+    }
 }
-#[must_use]
 pub fn calibrate_signal_submission(
-    calibration: &Calibration,
+    snapshot: Option<&CalibrationSnapshot>,
+    head: &CalibrationLedgerHead,
     submission: SignalSubmission,
-) -> SubmittedCalibration {
-    let probability = calibration.calibrate(submission.calibration_key(), submission.probability());
-    SubmittedCalibration {
+) -> Result<SubmittedCalibration, CalibrationError> {
+    if head.key() != submission.calibration_key() {
+        return Err(CalibrationError::MismatchedCombination);
+    }
+    let present = snapshot.ok_or(CalibrationError::MissingCalibration)?;
+    if present.through().key() != head.key() {
+        return Err(CalibrationError::MismatchedCombination);
+    }
+    if present.through().position() != head.position() {
+        return Err(CalibrationError::StaleCalibration);
+    }
+    let probability = present
+        .calibration()
+        .calibrate_bound(submission.probability());
+    Ok(SubmittedCalibration {
         submission,
         calibration: probability,
-    }
+        through: head.clone(),
+    })
 }

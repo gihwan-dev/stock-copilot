@@ -153,26 +153,34 @@ impl<'facts> BuyQuantityFacts<'facts> {
 }
 #[must_use]
 pub fn calculate_buy_quantity(
-    signal: &BuySignal,
+    current: &crate::CurrentBuySignal,
     facts: &BuyQuantityFacts<'_>,
     now: Timestamp,
     calendars: &[MarketCalendar],
     history: &[BuySignalRecord],
 ) -> BuyQuantityDecision {
-    match calculate(signal, facts, now, calendars, history) {
+    match calculate(current, facts, now, calendars, history) {
         Ok(plan) => BuyQuantityDecision::Plan(Box::new(plan)),
         Err(reason) => BuyQuantityDecision::None(reason),
     }
 }
 fn calculate(
-    signal: &BuySignal,
+    current: &crate::CurrentBuySignal,
     facts: &BuyQuantityFacts<'_>,
     now: Timestamp,
     calendars: &[MarketCalendar],
     history: &[BuySignalRecord],
 ) -> Result<BuyQuantityPlan, NoBuyQuantity> {
-    crate::buy_signal_history::check_buy_history(signal, now, history)?;
-    BuySignalRecord::from_signal(signal, now, calendars).map(|_record| ())?;
+    crate::buy_signal_history::check_buy_history(current, now, history)?;
+    let signal = current.signal();
+    crate::SignalTiming::new(now, calendars)
+        .check(
+            signal.facts().task(),
+            signal.facts().submission().submitted_at(),
+        )
+        .or(Err(NoBuyQuantity::Indeterminate))?;
+    crate::estimate_outcome::buy_signal_interval_from(signal.facts().task(), now, calendars)
+        .or(Err(NoBuyQuantity::Indeterminate))?;
     let (available, total) =
         prepare_balances(facts, signal.facts().task().reference().instrument(), now)?;
     let (quantity, constraint) = size_quantity(signal, facts, now, available, total)?;
@@ -743,14 +751,21 @@ mod tests {
             )
         }
         fn calculate(&self, history: &[BuySignalRecord]) -> BuyQuantityDecision {
-            calculate_buy_quantity(
-                &self.signal,
-                &self.facts(),
-                self.now,
-                &self.calendars,
-                history,
-            )
+            let current = match self.current() {
+                Ok(value) => value,
+                Err(reason) => return BuyQuantityDecision::None(reason),
+            };
+            calculate_buy_quantity(&current, &self.facts(), self.now, &self.calendars, history)
         }
+        fn current(&self) -> Result<crate::CurrentBuySignal, NoBuyQuantity> {
+            let id = occurrence_id("current");
+            let occurrence =
+                BuySignalRecord::from_signal(id, &self.signal, self.now, &self.calendars)?;
+            crate::CurrentBuySignal::try_new(self.signal.clone(), occurrence)
+        }
+    }
+    fn occurrence_id(value: &str) -> crate::BuySignalOccurrenceId {
+        crate::BuySignalOccurrenceId::try_new(value).expect("발생 ID")
     }
     fn securities_for(instrument: &ResolvedOrderInstrument) -> PolicySecurityFacts {
         PolicySecurityFacts::from_master_lookup_results(
@@ -760,6 +775,13 @@ mod tests {
             ))
             .collect(),
         )
+    }
+    fn history_record(
+        signal: &BuySignal,
+        raised_at: Timestamp,
+        calendars: &[MarketCalendar],
+    ) -> Result<BuySignalRecord, NoBuyQuantity> {
+        BuySignalRecord::from_signal(occurrence_id("history"), signal, raised_at, calendars)
     }
     fn raise(
         estimate: &SignalEstimate,
@@ -775,7 +797,14 @@ mod tests {
             policy.0,
             (policy.1, policy.2),
             &ledger,
-            SignalTiming::new(estimate.task().created_at(), calendars),
+            crate::SignalAssessmentFacts::new(
+                SignalTiming::new(estimate.task().created_at(), calendars),
+                Some(estimate.task().reference().clone()),
+                Some(crate::CalibrationLedgerHead::new(
+                    estimate.submission().calibration_key().clone(),
+                    crate::CalibrationPosition::new(0),
+                )),
+            ),
         );
         buy_from_decision(SignalDecision::assess(estimate, &context)).expect("매수 신호")
     }
@@ -857,6 +886,74 @@ mod tests {
         .expect("비용");
         CostEligibleTask::assess(task, &cost).expect("적격")
     }
+    fn d51_task_with_instrument_id(source: &EstimateTask, id: &str) -> EstimateTask {
+        let instrument_id = InstrumentId::try_new(id).expect("종목 ID");
+        let values = (0_usize..61)
+            .map(|index| if index % 2 == 0 { "100" } else { "102" })
+            .collect::<Vec<_>>();
+        let candles = candle::tests::series(&values)
+            .into_iter()
+            .map(|row| {
+                crate::Candle::try_new(
+                    instrument_id.clone(),
+                    row.time(),
+                    row.adjustment(),
+                    row.values(),
+                    crate::CandleObservation::new(row.collected_at(), row.status()),
+                )
+                .expect("종목의 봉")
+            })
+            .collect::<Vec<_>>();
+        let reference = PriceObservation::from_identified_quote_parts(
+            instrument_id,
+            source.reference().instrument().clone(),
+            source.reference().price(),
+            source.reference().observed_at(),
+        )
+        .expect("종목 시세");
+        EstimateTask::create(
+            EstimateContext::new(reference, source.created_at()),
+            Volatility::calculate(&candles).expect("변동성"),
+            Horizon::new(HorizonSelection::FewDays),
+            HoursPermission::default(),
+            RiskAppetite::Neutral,
+        )
+        .expect("종목 과제")
+    }
+    fn d51_fixture_with_instrument_id(mut fixture: Fixture, id: &str) -> Fixture {
+        let task = d51_task_with_instrument_id(fixture.signal.facts().task(), id);
+        let market = task.reference().instrument().market();
+        let end = crate::estimate_outcome::signal_task_interval(&task, &fixture.calendars)
+            .expect("캘린더 만기")
+            .end();
+        let period = EstimateCostPeriod::from_calendar_result(&task, end).expect("만기");
+        let zero = CostRate::try_new(Ratio::new(Decimal::ZERO)).expect("비용");
+        let commission = CommissionRateFact::from_commissions_result(
+            market.clone(),
+            zero,
+            CommissionValidity::try_new(None, None).expect("기간"),
+        );
+        let cost = TradeCost::from_facts(
+            Some(commission),
+            Some(TradeTaxFact::from_schedule_result(
+                market.clone(),
+                zero,
+                zero,
+            )),
+            period,
+        )
+        .expect("비용");
+        let eligible = CostEligibleTask::assess(task, &cost).expect("적격");
+        let (estimate, item) = estimate_for(&eligible, fixture.now, &market, 30);
+        fixture.signal = raise(
+            &estimate,
+            &fixture.portfolio,
+            (&fixture.policy, &fixture.assignments, &fixture.securities),
+            item,
+            &fixture.calendars,
+        );
+        fixture
+    }
     fn estimate_for(
         eligible: &CostEligibleTask,
         now: Timestamp,
@@ -919,10 +1016,14 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        calibrate_signal_submission(
-            &Calibration::try_new(key, &records).expect("집계"),
-            submission,
+        let head =
+            crate::CalibrationLedgerHead::new(key.clone(), crate::CalibrationPosition::new(0));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(key, &records).expect("집계"),
+            head.clone(),
         )
+        .expect("완전한 표");
+        calibrate_signal_submission(Some(&snapshot), &head, submission).expect("보정")
     }
     #[test]
     fn plans_are_maximal_and_final_policy_passes_independent_integer_reference() {
@@ -992,10 +1093,237 @@ mod tests {
         assert_eq!(fixture.calculate(&[]).into_plan(), None);
     }
     #[test]
+    fn d51_occurrence_id_rejects_empty_long_and_non_graphic_values() {
+        for value in ["", " ", "é", "bad\nvalue"] {
+            assert_eq!(
+                crate::BuySignalOccurrenceId::try_new(value),
+                Err(NoBuyQuantity::Indeterminate)
+            );
+        }
+        assert_eq!(
+            crate::BuySignalOccurrenceId::try_new(&"x".repeat(65)),
+            Err(NoBuyQuantity::Indeterminate)
+        );
+        assert_eq!(
+            crate::BuySignalOccurrenceId::try_new(&"y".repeat(64))
+                .expect("최대 길이")
+                .as_str(),
+            "y".repeat(64)
+        );
+    }
+    #[test]
+    fn d51_existing_occurrence_rejects_an_expired_signal() {
+        let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        let current = fixture.current().expect("현재 발생");
+        let after_expiry = at(67, &Market::Kr);
+        assert_eq!(
+            calculate_buy_quantity(
+                &current,
+                &fixture.facts(),
+                after_expiry,
+                &fixture.calendars,
+                &[]
+            ),
+            BuyQuantityDecision::None(NoBuyQuantity::Indeterminate)
+        );
+    }
+    #[test]
+    fn d51_current_occurrence_is_excluded_but_prior_occurrence_blocks() {
+        let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        let current_id = crate::BuySignalOccurrenceId::try_new("current").expect("발생 ID");
+        let earlier_id = crate::BuySignalOccurrenceId::try_new("earlier").expect("과거 ID");
+        let current_record = BuySignalRecord::from_signal(
+            current_id,
+            &fixture.signal,
+            fixture.now,
+            &fixture.calendars,
+        )
+        .expect("현재 발생");
+        let current =
+            crate::CurrentBuySignal::try_new(fixture.signal.clone(), current_record.clone())
+                .expect("현재 신호");
+        assert_eq!(current.occurrence().id().as_str(), "current");
+        assert_eq!(
+            current.occurrence().instrument_id(),
+            fixture.signal.facts().task().volatility().instrument()
+        );
+        let previous = BuySignalRecord::from_signal(
+            earlier_id,
+            &fixture.signal,
+            fixture.now,
+            &fixture.calendars,
+        )
+        .expect("과거 발생");
+        assert!(
+            calculate_buy_quantity(
+                &current,
+                &fixture.facts(),
+                fixture.now,
+                &fixture.calendars,
+                std::slice::from_ref(&current_record)
+            )
+            .into_plan()
+            .is_some()
+        );
+        assert_eq!(
+            calculate_buy_quantity(
+                &current,
+                &fixture.facts(),
+                fixture.now,
+                &fixture.calendars,
+                &[current_record, previous]
+            ),
+            BuyQuantityDecision::None(NoBuyQuantity::RepeatedSignal)
+        );
+    }
+    #[test]
+    fn d51_history_exclusion_is_independent_of_order_and_duplicates() {
+        let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        let record = |id: &str| {
+            BuySignalRecord::from_signal(
+                crate::BuySignalOccurrenceId::try_new(id).expect("ID"),
+                &fixture.signal,
+                fixture.now,
+                &fixture.calendars,
+            )
+            .expect("발생")
+        };
+        let own = record("current");
+        let previous = record("previous");
+        let current =
+            crate::CurrentBuySignal::try_new(fixture.signal.clone(), own.clone()).expect("현재");
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(&(0_usize..4, 0_u8..2), |(duplicates, include_previous)| {
+                let mut rows = vec![own.clone(); duplicates];
+                if include_previous == 1 {
+                    rows.push(previous.clone());
+                }
+                rows.reverse();
+                let expected = if include_previous == 1 {
+                    Err(NoBuyQuantity::RepeatedSignal)
+                } else {
+                    Ok(())
+                };
+                proptest::prop_assert_eq!(
+                    crate::buy_signal_history::check_buy_history(&current, fixture.now, &rows),
+                    expected
+                );
+                Ok(())
+            })
+            .expect("발생 이력");
+    }
+    #[test]
+    fn d51_history_blocks_the_same_instrument_after_a_symbol_change() {
+        let current = Fixture::new(Market::Kr, 100_000, 0, 1, (30, 0));
+        let previous = Fixture::new_for(Market::Kr, (100_000, 0), 1, (30, 0), "OLD");
+        assert_eq!(
+            current.signal.facts().task().volatility().instrument(),
+            previous.signal.facts().task().volatility().instrument()
+        );
+        assert_ne!(
+            current.signal.facts().task().reference().instrument(),
+            previous.signal.facts().task().reference().instrument()
+        );
+        let record =
+            history_record(&previous.signal, previous.now, &previous.calendars).expect("이전 발생");
+        assert!(current.now >= record.interval().start());
+        assert!(current.now < record.interval().end());
+        assert_eq!(
+            current.calculate(&[record]),
+            BuyQuantityDecision::None(NoBuyQuantity::RepeatedSignal)
+        );
+    }
+    #[test]
+    fn d51_history_rejects_conflicting_identity_and_expires_at_horizon_end() {
+        let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        let own_id = crate::BuySignalOccurrenceId::try_new("current").expect("ID");
+        let own = BuySignalRecord::from_signal(
+            own_id.clone(),
+            &fixture.signal,
+            fixture.now,
+            &fixture.calendars,
+        )
+        .expect("현재");
+        let current =
+            crate::CurrentBuySignal::try_new(fixture.signal.clone(), own.clone()).expect("결합");
+        let duplicate_id = BuySignalRecord::from_signal(
+            own_id,
+            &fixture.signal,
+            later(fixture.now, 1),
+            &fixture.calendars,
+        )
+        .expect("충돌");
+        assert_eq!(
+            crate::buy_signal_history::check_buy_history(
+                &current,
+                later(fixture.now, 1),
+                &[duplicate_id]
+            ),
+            Err(NoBuyQuantity::Indeterminate)
+        );
+        let previous = BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("previous").expect("과거 ID"),
+            &fixture.signal,
+            fixture.now,
+            &fixture.calendars,
+        )
+        .expect("과거");
+        assert_eq!(
+            crate::buy_signal_history::check_buy_history(
+                &current,
+                previous.interval().end(),
+                &[previous]
+            ),
+            Ok(())
+        );
+        let other = Fixture::new_for(Market::Kr, (100_000, 0), 10, (30, 0), "OTHER");
+        assert_eq!(
+            crate::CurrentBuySignal::try_new(other.signal, own),
+            Err(NoBuyQuantity::Indeterminate)
+        );
+    }
+    #[test]
+    fn d51_update_preserves_occurrence_and_horizon() {
+        let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        let own = BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("current").expect("ID"),
+            &fixture.signal,
+            fixture.now,
+            &fixture.calendars,
+        )
+        .expect("발생");
+        let current =
+            crate::CurrentBuySignal::try_new(fixture.signal.clone(), own.clone()).expect("현재");
+        let mut later_fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        renew_signal(
+            &mut later_fixture,
+            at(62, &Market::Kr),
+            RiskAppetite::Neutral,
+        );
+        let updated = current
+            .update(later_fixture.signal.clone())
+            .expect("내용 갱신");
+        assert_eq!(updated.signal(), &later_fixture.signal);
+        assert_eq!(updated.occurrence(), &own);
+        assert_eq!(updated.occurrence().interval().start(), fixture.now);
+        assert_eq!(updated.occurrence().interval().end(), own.interval().end());
+        assert!(
+            calculate_buy_quantity(
+                &updated,
+                &later_fixture.facts(),
+                later_fixture.now,
+                &later_fixture.calendars,
+                &[own]
+            )
+            .into_plan()
+            .is_some()
+        );
+    }
+    #[test]
     fn repeated_signal_is_blocked_without_an_order_and_history_order_is_irrelevant() {
         let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
-        let record = BuySignalRecord::from_signal(&fixture.signal, fixture.now, &fixture.calendars)
-            .expect("기록");
+        let record =
+            history_record(&fixture.signal, fixture.now, &fixture.calendars).expect("기록");
         assert_eq!(record.instrument(), fixture.price.instrument());
         assert_eq!(record.interval().start(), fixture.now);
         assert_eq!(record.raised_at(), fixture.now);
@@ -1103,7 +1431,13 @@ mod tests {
             (zero.fx, &zero.fee),
         );
         assert_eq!(
-            calculate_buy_quantity(&zero.signal, &facts, zero.now, &zero.calendars, &[]),
+            calculate_buy_quantity(
+                &zero.current().expect("현재 신호"),
+                &facts,
+                zero.now,
+                &zero.calendars,
+                &[]
+            ),
             BuyQuantityDecision::None(NoBuyQuantity::InsufficientBuyingPower)
         );
     }
@@ -1140,21 +1474,24 @@ mod tests {
             BuyQuantityDecision::None(NoBuyQuantity::Indeterminate)
         );
         assert_eq!(
-            BuySignalRecord::from_signal(&fixture.signal, fixture.now, &[]),
+            history_record(&fixture.signal, fixture.now, &[]),
             Err(NoBuyQuantity::Indeterminate)
         );
     }
     #[test]
     fn history_identity_expiry_future_and_arbitrary_order_are_enforced() {
         let fixture = Fixture::new(Market::Kr, 100_000, 0, 1, (30, 0));
-        let other = Fixture::new_for(Market::Kr, (100_000, 0), 1, (30, 0), "OTHER");
-        let us = Fixture::new(Market::Us, 100_000, 100, 1, (30, 0));
-        let first = BuySignalRecord::from_signal(&fixture.signal, fixture.now, &fixture.calendars)
-            .expect("기록");
-        let second = BuySignalRecord::from_signal(&other.signal, other.now, &other.calendars)
-            .expect("다른 종목");
-        let third =
-            BuySignalRecord::from_signal(&us.signal, us.now, &us.calendars).expect("다른 시장");
+        let other = d51_fixture_with_instrument_id(
+            Fixture::new_for(Market::Kr, (100_000, 0), 1, (30, 0), "OTHER"),
+            "other",
+        );
+        let us = d51_fixture_with_instrument_id(
+            Fixture::new(Market::Us, 100_000, 100, 1, (30, 0)),
+            "us",
+        );
+        let first = history_record(&fixture.signal, fixture.now, &fixture.calendars).expect("기록");
+        let second = history_record(&other.signal, other.now, &other.calendars).expect("다른 종목");
+        let third = history_record(&us.signal, us.now, &us.calendars).expect("다른 시장");
         assert!(
             fixture
                 .calculate(&[second.clone(), third.clone()])
@@ -1163,18 +1500,14 @@ mod tests {
         );
         assert_eq!(
             crate::buy_signal_history::check_buy_history(
-                &fixture.signal,
+                &fixture.current().expect("현재 신호"),
                 first.interval().end(),
                 std::slice::from_ref(&first)
             ),
             Ok(())
         );
-        let future = BuySignalRecord::from_signal(
-            &fixture.signal,
-            later(fixture.now, 1),
-            &fixture.calendars,
-        )
-        .expect("미래 기록");
+        let future = history_record(&fixture.signal, later(fixture.now, 1), &fixture.calendars)
+            .expect("미래 기록");
         assert_eq!(
             fixture.calculate(&[future]),
             BuyQuantityDecision::None(NoBuyQuantity::Indeterminate)
@@ -1388,14 +1721,10 @@ mod tests {
             fixture.calculate(&[]),
             BuyQuantityDecision::None(NoBuyQuantity::InvalidPriceOrFx)
         );
-        let record = BuySignalRecord::from_signal(&fixture.signal, fixture.now, &fixture.calendars)
-            .expect("기록");
+        let record =
+            history_record(&fixture.signal, fixture.now, &fixture.calendars).expect("기록");
         assert_eq!(
-            BuySignalRecord::from_signal(
-                &fixture.signal,
-                record.interval().end(),
-                &fixture.calendars
-            ),
+            history_record(&fixture.signal, record.interval().end(), &fixture.calendars),
             Err(NoBuyQuantity::Indeterminate)
         );
     }
@@ -1619,8 +1948,7 @@ mod tests {
     fn review_late_signal_blocks_new_task_for_a_full_horizon() {
         let first = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
         let late = later(at(66, &Market::Kr), 3599);
-        let record =
-            BuySignalRecord::from_signal(&first.signal, late, &first.calendars).expect("늦은 신호");
+        let record = history_record(&first.signal, late, &first.calendars).expect("늦은 신호");
         assert_eq!(record.interval().start(), late);
         assert_eq!(record.interval().end(), later(at(71, &Market::Kr), 3600));
         let short = first
@@ -1630,11 +1958,17 @@ mod tests {
             .cloned()
             .collect::<Vec<_>>();
         assert_eq!(
-            BuySignalRecord::from_signal(&first.signal, late, &short),
+            history_record(&first.signal, late, &short),
             Err(NoBuyQuantity::Indeterminate)
         );
         assert_eq!(
-            calculate_buy_quantity(&first.signal, &first.facts(), late, &short, &[]),
+            calculate_buy_quantity(
+                &first.current().expect("현재 신호"),
+                &first.facts(),
+                late,
+                &short,
+                &[]
+            ),
             BuyQuantityDecision::None(NoBuyQuantity::Indeterminate)
         );
         let mut next = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
@@ -1646,7 +1980,7 @@ mod tests {
         );
         assert_eq!(
             crate::buy_signal_history::check_buy_history(
-                &next.signal,
+                &next.current().expect("현재 신호"),
                 record.interval().end(),
                 &[record]
             ),
