@@ -267,4 +267,127 @@ mod tests {
         assert_ne!(initial, updated);
         assert_eq!(updated.for_combination(&key).judgment_count().as_usize(), 1);
     }
+    #[test]
+    fn accumulated_facts_beyond_one_batch_survive_reconstruction() {
+        let factor = adjustment();
+        let candle = candle(61, 901, CandlePeriod::Minute, ("200", "100"), &factor);
+        let outcome = EstimateOutcome::evaluate_with_complete_data(
+            &task(),
+            &calendars(),
+            &factor,
+            &[candle],
+            instant(70, 904),
+        );
+        assert_eq!(outcome.state(), OutcomeState::Success);
+        let identity = |value: &str| domain::ModelIdentityPart::try_new(value).expect("모델");
+        let model = domain::CalibrationModel::new(
+            identity("provider"),
+            identity("model"),
+            identity("version"),
+        );
+        let probability =
+            domain::AiProbability::parse(&domain::AiProbabilityInput::try_new("71").expect("입력"))
+                .expect("확률");
+        let fact = |id: &str| {
+            outcome
+                .calibration_fact(
+                    domain::CalibrationEstimateId::try_new(id).expect("ID"),
+                    model.clone(),
+                    probability,
+                )
+                .expect("사실")
+        };
+        let initial: Vec<_> = (0..65_536_u32)
+            .map(|index| fact(&format!("estimate-{index:05}")))
+            .collect();
+        let key = initial[0].estimate().key().clone();
+        let table = domain::Calibration::try_new(key.clone(), &initial).expect("기존 상한");
+        let updated = table.with_fact(fact("extra")).expect("상한 이후 판정");
+        assert_eq!(updated.facts().len(), 65_537);
+        assert_eq!(updated.for_combination(&key).judgment_count().as_usize(), 1);
+        let mut restored = domain::Calibration::try_new(key.clone(), &[]).expect("빈 표");
+        let batches = [
+            updated.facts().get(..32_768).expect("첫 묶음"),
+            updated.facts().get(32_768..65_536).expect("둘째 묶음"),
+            updated.facts().get(65_536..).expect("마지막 묶음"),
+        ];
+        for batch in batches {
+            restored = restored.with_facts(batch).expect("이력 복원");
+        }
+        assert_eq!(restored, updated);
+        assert_eq!(
+            restored.with_fact(fact("extra")).expect("동일 재요청"),
+            restored
+        );
+        assert_eq!(
+            domain::Calibration::try_new(key, updated.facts()),
+            Err(domain::CalibrationError::TooManyFacts)
+        );
+        assert_eq!(
+            restored.with_facts(updated.facts()),
+            Err(domain::CalibrationError::TooManyFacts)
+        );
+    }
+    #[test]
+    fn batch_extension_rejects_conflicting_ids_and_different_combinations() {
+        let factor = adjustment();
+        let target = candle(61, 901, CandlePeriod::Minute, ("200", "100"), &factor);
+        let stop = candle(61, 901, CandlePeriod::Minute, ("100", "1"), &factor);
+        let success = EstimateOutcome::evaluate_with_complete_data(
+            &task(),
+            &calendars(),
+            &factor,
+            &[target],
+            instant(70, 904),
+        );
+        let failure = EstimateOutcome::evaluate_with_complete_data(
+            &task(),
+            &calendars(),
+            &factor,
+            &[stop],
+            instant(70, 904),
+        );
+        let identity = |value: &str| domain::ModelIdentityPart::try_new(value).expect("모델");
+        let model = domain::CalibrationModel::new(
+            identity("provider"),
+            identity("model"),
+            identity("version"),
+        );
+        let other = domain::CalibrationModel::new(
+            identity("provider"),
+            identity("other"),
+            identity("version"),
+        );
+        let probability =
+            domain::AiProbability::parse(&domain::AiProbabilityInput::try_new("71").expect("입력"))
+                .expect("확률");
+        let id = domain::CalibrationEstimateId::try_new("same").expect("ID");
+        let first = success
+            .calibration_fact(id.clone(), model.clone(), probability)
+            .expect("사실");
+        let different_outcome = failure
+            .calibration_fact(id.clone(), model, probability)
+            .expect("사실");
+        let different_model = success
+            .calibration_fact(id, other, probability)
+            .expect("사실");
+        let table = domain::Calibration::try_new(
+            first.estimate().key().clone(),
+            std::slice::from_ref(&first),
+        )
+        .expect("표");
+        assert_eq!(
+            table.with_facts(std::slice::from_ref(&different_outcome)),
+            Err(domain::CalibrationError::ConflictingEstimate)
+        );
+        assert_eq!(
+            table.with_facts(&[first.clone(), different_outcome]),
+            Err(domain::CalibrationError::ConflictingEstimate)
+        );
+        assert_eq!(
+            table.with_fact(different_model),
+            Err(domain::CalibrationError::MismatchedCombination)
+        );
+        assert_eq!(table.facts(), &[first]);
+    }
 }

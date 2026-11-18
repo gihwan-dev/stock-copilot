@@ -45,6 +45,10 @@ pub trait EstimateResolutionRepository: Send + Sync {
         &self,
         key: &CalibrationKey,
     ) -> impl Future<Output = Result<Option<Calibration>, SystemPortError>> + Send;
+    fn resolution(
+        &self,
+        id: &CalibrationEstimateId,
+    ) -> impl Future<Output = Result<Option<EstimateOutcome>, SystemPortError>> + Send;
     fn record_unavailable(
         &self,
         record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
@@ -154,7 +158,7 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
         };
         let next = match next_result {
             Ok(value) => value,
-            Err(error) => return ResolutionStatus::Calibration(error),
+            Err(error) => return self.calibration_error(record, error).await,
         };
         match self
             .repository
@@ -165,6 +169,25 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
             Ok(ResolutionCommitOutcome::AlreadyResolved) => ResolutionStatus::AlreadyResolved,
             Ok(ResolutionCommitOutcome::Conflict) => ResolutionStatus::Conflict,
             Err(error) => ResolutionStatus::Storage(error),
+        }
+    }
+
+    async fn calibration_error(
+        &self,
+        record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+        error: CalibrationError,
+    ) -> ResolutionStatus {
+        if error != CalibrationError::ConflictingEstimate {
+            return ResolutionStatus::Calibration(error);
+        }
+        match self
+            .repository
+            .resolution(record.task_id().as_estimate_id())
+            .await
+        {
+            Ok(Some(_outcome)) => ResolutionStatus::AlreadyResolved,
+            Ok(None) => ResolutionStatus::Calibration(error),
+            Err(failure) => ResolutionStatus::Storage(failure),
         }
     }
 

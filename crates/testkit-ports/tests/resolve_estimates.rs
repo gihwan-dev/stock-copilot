@@ -433,6 +433,21 @@ mod tests {
                 .map(|(_, table)| table.clone());
             std::future::ready(Ok(table))
         }
+        fn resolution(
+            &self,
+            id: &CalibrationEstimateId,
+        ) -> impl Future<Output = Result<Option<EstimateOutcome>, SystemPortError>> {
+            let state = self.state.read().expect("읽기");
+            if state.fail {
+                return std::future::ready(Err(storage_error()));
+            }
+            let outcome = state
+                .outcomes
+                .iter()
+                .find(|(candidate, _)| candidate == id)
+                .map(|(_, value)| value.clone());
+            std::future::ready(Ok(outcome))
+        }
         fn record_unavailable(
             &self,
             record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
@@ -519,6 +534,23 @@ mod tests {
                 .write()
                 .expect("조회 기록")
                 .push((record.task_id().as_estimate_id().clone(), now));
+            self.data.inputs(record, now)
+        }
+    }
+    #[derive(Debug)]
+    struct DelayedData {
+        data: Data,
+        entered: Arc<Barrier>,
+        resume: Arc<Barrier>,
+    }
+    impl ResolutionMarketData for DelayedData {
+        fn inputs(
+            &self,
+            record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+            now: Timestamp,
+        ) -> impl Future<Output = Result<ResolutionInputs, ResolutionDataIssue>> {
+            self.entered.wait();
+            self.resume.wait();
             self.data.inputs(record, now)
         }
     }
@@ -864,6 +896,61 @@ mod tests {
         assert_eq!(run(repo.pending_submissions()).expect("미판정").len(), 1);
     }
     #[test]
+    fn resolution_continues_after_existing_table_reaches_single_batch_limit() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let market = data(&tasks);
+        let record = repo.state.read().expect("읽기").submissions[0].clone();
+        let input = market.0[0].1.as_ref().expect("입력");
+        let outcome = EstimateOutcome::evaluate_with_complete_data(
+            record.submission().task_key().task(),
+            &input.calendars,
+            &input.adjustment,
+            &input.candles,
+            day(70),
+        );
+        let key = record.submission().calibration_key().clone();
+        let facts: Vec<_> = (0..65_536_u32)
+            .map(|index| {
+                outcome
+                    .calibration_fact(
+                        task_id(&format!("past-{index:05}")),
+                        key.model().clone(),
+                        record.submission().probability(),
+                    )
+                    .expect("사실")
+            })
+            .collect();
+        let old = Calibration::try_new(key.clone(), &facts).expect("기존 표");
+        repo.state
+            .write()
+            .expect("쓰기")
+            .tables
+            .push((key.clone(), old));
+        let (bus, collected) = events();
+        let reports =
+            run(ResolveEstimates::new(&repo, &market, &bus).execute(day(70))).expect("실행");
+        assert_eq!(
+            resolved_state(&reports[0].status),
+            Some(OutcomeState::Failure(OutcomeFailure::Expired))
+        );
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(state.outcomes.len(), 1);
+        assert_eq!(state.tables[0].1.facts().len(), 65_537);
+        assert_eq!(
+            state.tables[0]
+                .1
+                .for_combination(&key)
+                .judgment_count()
+                .as_usize(),
+            1
+        );
+        assert_eq!(
+            *collected.read().expect("이벤트"),
+            vec![DomainEvent::EstimateResolved(id("sample-a"))]
+        );
+    }
+    #[test]
     fn each_market_request_receives_the_submitted_id_and_execution_time() {
         let tasks = vec![eligible(), eligible()];
         let repo = setup(&tasks);
@@ -934,6 +1021,92 @@ mod tests {
         assert_eq!(state.outcomes[0].1, original);
         assert_eq!(state.tables[0].1, calibration);
         assert_eq!(collected.read().expect("이벤트").len(), 1);
+    }
+    #[test]
+    fn stale_different_result_reports_already_resolved_after_other_commit() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let mut latest = data(&tasks);
+        let input = latest.0[0].1.as_mut().expect("입력");
+        input.candles[0] = bar(&tasks[0], &input.adjustment, 60, 1, ("200", "100"));
+        let entered = Arc::new(Barrier::new(2));
+        let resume = Arc::new(Barrier::new(2));
+        let delayed = DelayedData {
+            data: latest,
+            entered: Arc::clone(&entered),
+            resume: Arc::clone(&resume),
+        };
+        let (bus, collected) = events();
+        let delayed_report = std::thread::scope(|scope| {
+            let runner = scope.spawn(|| {
+                run(ResolveEstimates::new(&repo, &delayed, &bus).execute(day(70)))
+                    .expect("느린 실행")
+            });
+            entered.wait();
+            let first_result =
+                run(ResolveEstimates::new(&repo, &data(&tasks), &bus).execute(day(70)));
+            resume.wait();
+            let first = first_result.expect("먼저 확정");
+            assert_eq!(
+                resolved_state(&first[0].status),
+                Some(OutcomeState::Failure(OutcomeFailure::Expired))
+            );
+            runner.join().expect("느린 실행 종료")
+        });
+        assert_eq!(delayed_report[0].status, ResolutionStatus::AlreadyResolved);
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(
+            state.outcomes[0].1.state(),
+            OutcomeState::Failure(OutcomeFailure::Expired)
+        );
+        assert_eq!(state.tables[0].1.facts().len(), 1);
+        assert_eq!(collected.read().expect("이벤트").len(), 1);
+    }
+    #[test]
+    fn conflicting_table_without_resolution_stays_an_error_and_read_failure_is_preserved() {
+        let tasks = vec![eligible()];
+        let repo = setup(&tasks);
+        let mut market = data(&tasks);
+        let record = repo.state.read().expect("읽기").submissions[0].clone();
+        let original = market.0[0].1.as_ref().expect("입력");
+        let expired = EstimateOutcome::evaluate_with_complete_data(
+            record.submission().task_key().task(),
+            &original.calendars,
+            &original.adjustment,
+            &original.candles,
+            day(70),
+        );
+        let key = record.submission().calibration_key().clone();
+        let fact = expired
+            .calibration_fact(
+                record.task_id().as_estimate_id().clone(),
+                key.model().clone(),
+                record.submission().probability(),
+            )
+            .expect("사실");
+        let table = Calibration::try_new(key.clone(), &[fact]).expect("보정표");
+        repo.state
+            .write()
+            .expect("쓰기")
+            .tables
+            .push((key, table.clone()));
+        let changed = market.0[0].1.as_mut().expect("입력");
+        changed.candles[0] = bar(&tasks[0], &changed.adjustment, 60, 1, ("200", "100"));
+        let (bus, collected) = events();
+        let first =
+            run(ResolveEstimates::new(&repo, &market, &bus).execute(day(70))).expect("실행");
+        assert_eq!(
+            first[0].status,
+            ResolutionStatus::Calibration(domain::CalibrationError::ConflictingEstimate)
+        );
+        repo.state.write().expect("쓰기").fail = true;
+        let second =
+            run(ResolveEstimates::new(&repo, &market, &bus).execute(day(70))).expect("실행");
+        assert_eq!(second[0].status, ResolutionStatus::Storage(storage_error()));
+        let state = repo.state.read().expect("읽기");
+        assert_eq!(state.outcomes, Vec::new());
+        assert_eq!(state.tables[0].1, table);
+        assert_eq!(*collected.read().expect("이벤트"), Vec::new());
     }
     fn replacement_outcome(
         task: &CostEligibleTask,
