@@ -195,7 +195,7 @@ pub enum ObservedCloseRequirement {
 fn validate_observed_extended_prices(
     calendar: &SnapshotCalendar,
     portfolio: &PortfolioValuation,
-    at: Timestamp,
+    context: SnapshotContext,
     evidence: &[ObservedCloseEvidence],
 ) -> Result<(), SnapshotError> {
     if evidence.len() > 4096 {
@@ -219,6 +219,9 @@ fn validate_observed_extended_prices(
             {
                 continue;
             }
+            if context.price_basis(currency) != SnapshotPriceBasis::CurrentSession {
+                return Err(SnapshotError::MissingPrice);
+            }
             let mut matches = evidence.iter().enumerate().filter(|(_, entry)| {
                 entry.instrument.symbol() == holding.instrument().symbol()
                     && crate::Market::from(*entry.instrument.market())
@@ -230,7 +233,7 @@ fn validate_observed_extended_prices(
                 return Err(SnapshotError::DuplicateInstrument);
             }
             used.insert(index);
-            validate_observed_close(calendar, at, item, entry)?;
+            validate_observed_close(calendar, context.valuation_at, item, entry)?;
             required.insert(index);
         }
         if let Some(amount) = portfolio
@@ -301,6 +304,12 @@ struct SnapshotContext {
     fx: Option<FxRate>,
 }
 impl SnapshotContext {
+    const fn price_basis(self, currency: Currency) -> SnapshotPriceBasis {
+        match currency {
+            Currency::Krw => self.kr_basis,
+            Currency::Usd => self.us_basis,
+        }
+    }
     fn new(
         calendar: &SnapshotCalendar,
         observation: SnapshotObservation,
@@ -361,7 +370,7 @@ impl ValuationSnapshot {
         evidence: &[ObservedCloseEvidence],
     ) -> Result<Self, SnapshotError> {
         let context = SnapshotContext::new(calendar, SnapshotObservation::new(at, at, fx))?;
-        validate_observed_extended_prices(calendar, portfolio, at, evidence)?;
+        validate_observed_extended_prices(calendar, portfolio, context, evidence)?;
         let stock = |currency| match portfolio.currency_total(currency) {
             Total::Complete(entry) => Ok(*entry.value()),
             Total::Incomplete(_) => Err(SnapshotError::IncompleteValuation),
@@ -495,10 +504,7 @@ impl ValuationSnapshot {
     }
     #[must_use]
     pub const fn price_basis(&self, currency: Currency) -> SnapshotPriceBasis {
-        match currency {
-            Currency::Krw => self.context.kr_basis,
-            Currency::Usd => self.context.us_basis,
-        }
+        self.context.price_basis(currency)
     }
     #[must_use]
     pub const fn cash_basis(&self) -> SnapshotCashBasis {
@@ -3022,6 +3028,43 @@ pub(crate) mod tests {
             .err(),
             Some(SnapshotError::InvalidCandle)
         );
+    }
+    #[test]
+    fn t22_previous_close_keeps_missing_price_until_the_regular_session_closes() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let calendar = extended_observation_calendar(currency);
+            let (template, current) = t22_observed_fixture(currency);
+            let original = current.candle();
+            let previous = Candle::try_new(
+                original.instrument().clone(),
+                CandleTime::try_new(at(2, 0), CandlePeriod::Daily).expect("전일"),
+                original.adjustment(),
+                original.values(),
+                CandleObservation::new(at(2, 7), CandleStatus::Finalized),
+            )
+            .expect("전일 봉");
+            let holding = crate::Holding::new(
+                template.instrument().clone(),
+                template.quantity(),
+                template.acquisition_price(),
+                crate::HoldingObservation::new(template.current_price(), None, at(3, 6)),
+            )
+            .expect("보유");
+            let portfolio = observation_portfolio(vec![holding]);
+            let evidence =
+                crate::ObservedCloseEvidence::new(current.instrument().clone(), previous);
+            assert_eq!(
+                ValuationSnapshot::observe_with_evidence(
+                    &calendar,
+                    &portfolio.evaluate(None),
+                    at(3, 6),
+                    None,
+                    &[evidence],
+                )
+                .err(),
+                Some(SnapshotError::MissingPrice),
+            );
+        }
     }
     #[test]
     fn t22_observed_close_requires_exact_reported_amounts() {

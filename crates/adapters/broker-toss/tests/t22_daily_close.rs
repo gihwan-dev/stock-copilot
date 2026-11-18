@@ -1042,6 +1042,245 @@ mod tests {
         assert_eq!(repository.calls().len(), 0);
     }
 
+    fn t22_flat_candle(
+        quote: &domain::QuoteInstrument,
+        price: Price,
+        date: Timestamp,
+        collected_at: Timestamp,
+    ) -> domain::Candle {
+        domain::Candle::try_new(
+            quote.instrument_id().clone(),
+            domain::CandleTime::try_new(date, CandlePeriod::Daily).expect("day"),
+            PriceAdjustment::Raw,
+            domain::Ohlcv::try_new(price, price, price, price, t22_quantity()).expect("values"),
+            domain::CandleObservation::new(collected_at, CandleStatus::Finalized),
+        )
+        .expect("candle")
+    }
+
+    fn t22_us_extended_calendar(now: Timestamp) -> domain::SnapshotCalendar {
+        let interval = |start, end| {
+            SessionData::try_new(TimeInterval::try_new(start, end).expect("interval"), None)
+                .expect("session")
+        };
+        let us_session = |date: &str| {
+            let open = at(&format!("{date}T09:30:00-04:00"));
+            let close = at(&format!("{date}T16:00:00-04:00"));
+            let end = at(&format!("{date}T20:00:00-04:00"));
+            MarketSession::try_new(
+                open.offset_calendar_date(),
+                SessionInformation::Us {
+                    day_market: None,
+                    pre_market: None,
+                    regular_market: Some(interval(open, close)),
+                    after_market: Some(interval(close, end)),
+                },
+            )
+            .expect("us session")
+        };
+        let kr = t22_kr_rows(now);
+        let next_open = at("2026-03-26T09:00:00+09:00");
+        let next_close = at("2026-03-26T15:30:00+09:00");
+        let next = MarketSession::try_new(
+            next_open.offset_calendar_date(),
+            SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(interval(next_open, next_close)),
+                after_market: None,
+            },
+        )
+        .expect("kr next");
+        let kr_calendar = domain::MarketCalendar::try_new(kr[0].clone(), kr[1].clone(), next)
+            .expect("kr calendar");
+        let us_calendar = domain::MarketCalendar::try_new(
+            us_session("2026-03-24"),
+            us_session("2026-03-25"),
+            us_session("2026-03-26"),
+        )
+        .expect("us calendar");
+        domain::SnapshotCalendar::new(&kr_calendar, &us_calendar).expect("calendar")
+    }
+
+    #[test]
+    fn t22_multiple_close_observations_remain_ambiguous_even_when_prices_match() {
+        use application::{TakeValuationSnapshot, ValuationSnapshotError};
+        use domain::{AccountId, SyncOutcome, SyncRecord};
+        use testkit_ports::{
+            SteppedClock,
+            memory::{
+                MemoryMarketDataRepository, MemoryPortfolioRepository, MemoryReply,
+                MemoryValuationRepository,
+            },
+        };
+        let now = at("2026-03-25T16:00:00+09:00");
+        let observed = at("2026-03-25T15:59:00+09:00");
+        let earlier = at("2026-03-25T15:45:00+09:00");
+        let calendar = t22_calendar(&t22_kr_rows(now));
+        let quote = instrument();
+        let last = Price::try_new(t22_money("72000", Currency::Krw)).expect("last");
+        for first_text in ["72000", "71000"] {
+            let first = Price::try_new(t22_money(first_text, Currency::Krw)).expect("first");
+            let day = at("2026-03-25T00:00:00+09:00");
+            let store = MemoryPortfolioRepository::default();
+            store
+                .script_latest()
+                .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                    now,
+                    SyncOutcome::Complete(t22_portfolio(observed, last)),
+                )))));
+            let market = MemoryMarketDataRepository::default();
+            market.script_fx_rate().push(MemoryReply::Return(Ok(None)));
+            market.supply_close_evidence(domain::ObservedCloseEvidence::new(
+                quote.clone(),
+                t22_flat_candle(&quote, first, day, earlier),
+            ));
+            market.supply_close_evidence(domain::ObservedCloseEvidence::new(
+                quote.clone(),
+                t22_flat_candle(&quote, last, day, observed),
+            ));
+            let repository = MemoryValuationRepository::default();
+            let result = run(TakeValuationSnapshot::new(
+                &store,
+                &market,
+                &repository,
+                &SteppedClock::new(now),
+                &EventBus::default(),
+            )
+            .execute(&AccountId::new(71), &calendar));
+            assert_eq!(
+                result,
+                Err(ValuationSnapshotError::Snapshot(
+                    domain::SnapshotError::DuplicateInstrument
+                ))
+            );
+            assert_eq!(repository.calls().len(), 0);
+        }
+    }
+
+    #[test]
+    fn t22_intraday_previous_close_keeps_missing_price_without_querying_evidence() {
+        use application::{TakeValuationSnapshot, ValuationSnapshotError};
+        use domain::{AccountId, SyncOutcome, SyncRecord};
+        use testkit_ports::{
+            SteppedClock,
+            memory::{
+                MemoryMarketDataRepository, MemoryPortfolioRepository, MemoryReply,
+                MemoryValuationRepository,
+            },
+        };
+        let now = at("2026-03-25T15:00:00+09:00");
+        let calendar = t22_calendar(&t22_kr_rows(now));
+        let price = Price::try_new(t22_money("72000", Currency::Krw)).expect("price");
+        let quote = instrument();
+        let previous = t22_flat_candle(
+            &quote,
+            price,
+            at("2026-03-24T00:00:00+09:00"),
+            at("2026-03-24T16:00:00+09:00"),
+        );
+        for state in ["available", "repository-error"] {
+            let store = MemoryPortfolioRepository::default();
+            store
+                .script_latest()
+                .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                    now,
+                    SyncOutcome::Complete(t22_portfolio(now, price)),
+                )))));
+            let market = MemoryMarketDataRepository::default();
+            market.script_fx_rate().push(MemoryReply::Return(Ok(None)));
+            market.supply_close_evidence(domain::ObservedCloseEvidence::new(
+                quote.clone(),
+                previous.clone(),
+            ));
+            if state == "repository-error" {
+                market.fail_close_evidence(SystemPortError::new(
+                    application::SystemPort::Repository,
+                    application::SystemFailure::PermissionDenied,
+                ));
+            }
+            let repository = MemoryValuationRepository::default();
+            let result = run(TakeValuationSnapshot::new(
+                &store,
+                &market,
+                &repository,
+                &SteppedClock::new(now),
+                &EventBus::default(),
+            )
+            .execute(&AccountId::new(71), &calendar));
+            assert_eq!(
+                result,
+                Err(ValuationSnapshotError::Snapshot(
+                    domain::SnapshotError::MissingPrice
+                )),
+                "{state}"
+            );
+            assert_eq!(repository.calls().len(), 0);
+        }
+    }
+
+    #[test]
+    fn t22_us_extended_session_before_close_keeps_previous_price_rejected() {
+        use application::{TakeValuationSnapshot, ValuationSnapshotError};
+        use domain::{AccountId, SyncOutcome, SyncRecord};
+        use testkit_ports::{
+            SteppedClock,
+            memory::{
+                MemoryMarketDataRepository, MemoryPortfolioRepository, MemoryReply,
+                MemoryValuationRepository,
+            },
+        };
+        let now = at("2026-03-25T16:00:00+09:00");
+        let calendar = t22_us_extended_calendar(now);
+        let master = master(now);
+        let quote = master.instruments()[1].quote_instrument().expect("quote");
+        let price = Price::try_new(t22_money("17", Currency::Usd)).expect("price");
+        let previous = t22_flat_candle(
+            &quote,
+            price,
+            at("2026-03-24T00:00:00-04:00"),
+            at("2026-03-24T16:05:00-04:00"),
+        );
+        let holding = domain::Holding::new(
+            master.instruments()[1].order_instrument().expect("order"),
+            t22_quantity(),
+            domain::AcquisitionPrice::try_new(t22_money("10", Currency::Usd)).expect("cost"),
+            domain::HoldingObservation::new(Some(price), None, now),
+        )
+        .expect("holding");
+        let portfolio = domain::Portfolio::new(
+            vec![holding],
+            domain::BuyingPower::new(t22_money("0", Currency::Krw), now),
+            domain::BuyingPower::new(t22_money("0", Currency::Usd), now),
+        )
+        .expect("portfolio");
+        let store = MemoryPortfolioRepository::default();
+        store
+            .script_latest()
+            .push(MemoryReply::Return(Ok(Some(SyncRecord::new(
+                now,
+                SyncOutcome::Complete(portfolio),
+            )))));
+        let market = MemoryMarketDataRepository::default();
+        market.script_fx_rate().push(MemoryReply::Return(Ok(None)));
+        market.supply_close_evidence(domain::ObservedCloseEvidence::new(quote, previous));
+        let repository = MemoryValuationRepository::default();
+        let result = run(TakeValuationSnapshot::new(
+            &store,
+            &market,
+            &repository,
+            &SteppedClock::new(now),
+            &EventBus::default(),
+        )
+        .execute(&AccountId::new(71), &calendar));
+        assert_eq!(
+            result,
+            Err(ValuationSnapshotError::Snapshot(
+                domain::SnapshotError::MissingPrice
+            ))
+        );
+        assert_eq!(repository.calls().len(), 0);
+    }
+
     #[test]
     fn t22_recorded_candle_supplies_observed_snapshot_evidence() {
         let now = at("2026-03-25T16:00:00+09:00");

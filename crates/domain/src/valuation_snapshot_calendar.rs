@@ -221,7 +221,7 @@ impl SnapshotCalendar {
     ) -> Result<CalendarDate, SnapshotError> {
         self.price(currency, at).map(|(day, _basis)| day)
     }
-    pub(crate) fn price(
+    pub fn price(
         self,
         currency: Currency,
         at: Timestamp,

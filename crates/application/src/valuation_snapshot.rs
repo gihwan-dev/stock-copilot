@@ -120,6 +120,20 @@ where
         for holding in portfolio.holdings() {
             if calendar.observed_close_requirement(holding)
                 == domain::ObservedCloseRequirement::Required
+                && calendar
+                    .price(holding.currency(), at)
+                    .map_err(ValuationSnapshotError::Snapshot)?
+                    .1
+                    != SnapshotPriceBasis::CurrentSession
+            {
+                return Err(ValuationSnapshotError::Snapshot(
+                    SnapshotError::MissingPrice,
+                ));
+            }
+        }
+        for holding in portfolio.holdings() {
+            if calendar.observed_close_requirement(holding)
+                == domain::ObservedCloseRequirement::Required
             {
                 let date = calendar
                     .price_date(holding.currency(), at)
