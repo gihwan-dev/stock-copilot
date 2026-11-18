@@ -88,25 +88,33 @@ fn decode_quote(row: &Row<'_>) -> rusqlite::Result<(InstrumentId, CachedQuote)> 
     let observed = optional_timestamp(row, 4)?;
     let last_server = optional_timestamp(row, 10)?;
     match (observed, last_server) {
-        (Some(actual), Some(last)) if actual <= last => {}
+        (Some(actual), Some(last)) if actual == last => {}
         (None, Some(_) | None) => {}
         (Some(_), Some(_) | None) => return Err(invalid(())),
     }
+    let quote = Quote::try_new(
+        Symbol::try_new(&row.get::<_, String>(1)?).map_err(invalid)?,
+        unit,
+        row.get::<_, Option<String>>(3)?
+            .map(|text| price(&text, unit))
+            .transpose()?,
+        observed,
+        timestamp(row, 7)?,
+    )
+    .map_err(invalid)?;
+    if let Some(last) = last_server {
+        Quote::try_new(
+            quote.symbol().clone(),
+            quote.currency(),
+            quote.last_price(),
+            Some(last),
+            quote.collected_at(),
+        )
+        .map_err(invalid)?;
+    }
     Ok((
         InstrumentId::try_new(&row.get::<_, String>(0)?).map_err(invalid)?,
-        CachedQuote {
-            quote: Quote::try_new(
-                Symbol::try_new(&row.get::<_, String>(1)?).map_err(invalid)?,
-                unit,
-                row.get::<_, Option<String>>(3)?
-                    .map(|text| price(&text, unit))
-                    .transpose()?,
-                observed,
-                timestamp(row, 7)?,
-            )
-            .map_err(invalid)?,
-            last_server,
-        },
+        CachedQuote { quote, last_server },
     ))
 }
 fn load_quote(

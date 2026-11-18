@@ -550,6 +550,134 @@ fn corrupt_server_watermark_fails_closed_without_affecting_another_instrument() 
 }
 
 #[test]
+fn server_watermark_must_equal_the_current_server_observation() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let other = InstrumentId::try_new("asset-two").expect("id");
+    let first = server_quote("100", Some(105), 106);
+    let next = server_quote("101", Some(106), 107);
+    rt.block_on(store.store_quote(&instrument, &first))
+        .expect("first");
+    rt.block_on(store.store_quote(&other, &first))
+        .expect("other");
+    rt.block_on(
+        database.write(|tx| tx.execute_batch(crate::sql::market_tests::SERVER_TIME_DISAGREES)),
+    )
+    .expect("corrupt");
+    assert_eq!(
+        rt.block_on(store.quote(&instrument))
+            .expect_err("inconsistent server time")
+            .failure(),
+        application::SystemFailure::RepositoryIntegrity
+    );
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &next))
+            .expect_err("inconsistent server time")
+            .failure(),
+        application::SystemFailure::RepositoryIntegrity
+    );
+    assert_eq!(rt.block_on(store.quote(&other)), Ok(Some(first)));
+}
+
+#[test]
+fn server_watermark_equality_compares_instants_instead_of_offsets() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let first = server_quote("100", Some(105), 106);
+    rt.block_on(store.store_quote(&instrument, &first))
+        .expect("first");
+    rt.block_on(
+        database.write(|tx| tx.execute_batch(crate::sql::market_tests::SERVER_TIME_OTHER_OFFSET)),
+    )
+    .expect("different offset");
+    let restored = rt
+        .block_on(store.quote(&instrument))
+        .expect("read")
+        .expect("quote");
+    assert_eq!(restored, first);
+    assert_eq!(
+        restored
+            .timestamp()
+            .expect("time")
+            .offset_seconds()
+            .as_i32(),
+        &-18_000_i32
+    );
+}
+
+#[test]
+fn missing_server_time_rejects_watermark_beyond_the_domain_future_tolerance() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let first = server_quote("100", Some(105), 106);
+    let unknown = server_quote("101", None, 107);
+    let next = server_quote("102", Some(106), 108);
+    rt.block_on(store.store_quote(&instrument, &first))
+        .expect("first");
+    rt.block_on(store.store_quote(&instrument, &unknown))
+        .expect("unknown");
+    rt.block_on(
+        database.write(|tx| tx.execute_batch(crate::sql::market_tests::SERVER_TIME_TOO_FAR_AHEAD)),
+    )
+    .expect("corrupt");
+    assert_eq!(
+        rt.block_on(store.quote(&instrument))
+            .expect_err("future watermark")
+            .failure(),
+        application::SystemFailure::RepositoryIntegrity
+    );
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &next))
+            .expect_err("future watermark")
+            .failure(),
+        application::SystemFailure::RepositoryIntegrity
+    );
+}
+
+#[test]
+fn missing_server_time_preserves_a_watermark_at_the_future_tolerance() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let initial = Quote::try_new(
+        Symbol::try_new("AAPL").expect("symbol"),
+        Currency::Usd,
+        Some(
+            Price::parse(&NumericInput::try_new("100").expect("input"), Currency::Usd)
+                .expect("price"),
+        ),
+        Some(at(109, 13, -18_000)),
+        at(107, 13, 32_400),
+    )
+    .expect("allowed future observation");
+    let unknown = server_quote("101", None, 107);
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &initial)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &unknown)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(unknown)));
+}
+
+#[test]
 fn failed_unknown_time_write_preserves_previous_server_watermark() {
     let fixture = Fixture::new();
     let rt = runtime();

@@ -8,6 +8,8 @@ MarketDataRepository의 시세와 환율 저장은 Changed, Unchanged, OlderIgno
 
 시세는 종목 키로 수집 시각과 마지막으로 확인한 서버 관측 시각을 각각 비교한다. 새 수집 시각이 직전보다 이르거나 새 서버 관측 시각이 마지막으로 확인한 서버 시각보다 이르면 저장하지 않는다. 서버 시각이 없는 관측의 원래 부재는 보존하면서 마지막으로 확인한 서버 시각은 별도 저장해 다음 관측의 역행 판정에 사용한다. 한 번도 서버 시각을 받지 않았다면 수집 시각을 서버 시각으로 추측하지 않는다. 도메인 Quote 전체가 같으면 Unchanged, 그 밖에는 Changed다. 도메인 Quote에 없는 시장이나 가격 기준을 저장소가 추측하지 않는다. 읽기는 최신 관측을 복원한다. 현재 시각을 기준으로 한 시세의 오래됨은 판단하지 않는다.
 
+시세에 서버 시각이 있으면 별도로 저장된 마지막 서버 시각과 같은 순간이어야 한다. 시각이 없을 때도 보존한 마지막 시각을 도메인 Quote 생성자로 다시 검증해 수집 시각에 대한 기존 허용 오차를 적용한다. 따라서 합법적인 2초 선행은 받아들이고 2초와 1나노초의 선행은 거부한다. 저장 시각의 오프셋이 달라도 같은 순간이면 같으며 원래 Quote의 오프셋은 보존한다. 시각 없는 시세만 남은 행에서 과거 이력이 손상돼 마지막 서버 시각이 실제보다 낮아진 경우는 현재 행만으로 감지할 수 없다.
+
 0004_market_cache.sql은 시세, 환율 이력, 봉의 STRICT 테이블을 추가한다. 값은 기존 십진수 CHECK가 있는 TEXT와 통화로 보존한다. 환율은 통화쌍·kind·관측 시각으로 분리하고 시각의 초·나노초·오프셋과 유효 종료를 보존한다. 봉은 종목·봉 기간·수정 기준·시각으로 구분한다. 모든 읽기는 domain 생성자로 재검증한다. 저장은 Database의 단일 쓰기 트랜잭션을 사용한다.
 
 1차 리뷰 수정에서 이 작업이 새로 만든 0004에 마지막 서버 관측 시각을 추가하고 해시와 스키마 스냅샷을 갱신했다. 이전 개발 커밋의 0004를 적용한 데이터베이스는 해시 불일치로 닫힌 실패가 되며 자동 이행하지 않는다. 실제 계좌 데이터나 기존 사용자 데이터베이스는 열지 않았다.
@@ -72,3 +74,17 @@ MarketDataRepository의 시세와 환율 저장은 Changed, Unchanged, OlderIgno
 | 10 | 가짜가 수집 시각을 서버 시각으로 씀 | `known_server_times_are_not_forced_to_the_later_collection_time` |
 | 11 | 가짜의 서버 시각 역행 비교 반전 | `missing_server_time_does_not_erase_last_known_observation` |
 | 12 | 가짜가 같은 서버 시각을 거부함 | `equal_server_time_allows_a_newer_collection_to_change_the_quote` |
+
+## 2차 리뷰 수정 손 변형
+
+수정된 소스와 테스트를 별도의 mktemp 사본과 빌드 디렉터리에서 실행했다. 아래 7개 모두 컴파일되고 테스트가 검출됐으며 실행 후 소스와 테스트가 원본과 바이트 단위로 같았다.
+
+| 번호 | 변형 | 잡은 테스트 |
+|---|---|---|
+| 1 | 현재 서버 시각보다 더 늦은 기준값 허용 | `server_watermark_must_equal_the_current_server_observation` |
+| 2 | 현재 서버 시각보다 더 이른 기준값 허용 | `corrupt_server_watermark_fails_closed_without_affecting_another_instrument` |
+| 3 | 서버 시각이 있는 행에서만 기준값 검증 | `missing_server_time_rejects_watermark_beyond_the_domain_future_tolerance` |
+| 4 | 기준값을 수집 시각으로 잘라 검증 | `missing_server_time_rejects_watermark_beyond_the_domain_future_tolerance` |
+| 5 | 기준값 검증에 시각 전달 생략 | `missing_server_time_rejects_watermark_beyond_the_domain_future_tolerance` |
+| 6 | 기준값을 수집 시각 대신 자신과 비교 | `missing_server_time_rejects_watermark_beyond_the_domain_future_tolerance` |
+| 7 | 수집 시각보다 앞선 합법적 서버 시각을 거부 | `missing_server_time_preserves_a_watermark_at_the_future_tolerance` |
