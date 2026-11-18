@@ -403,6 +403,11 @@ fn repetition(
     Ok(FactRepetition::New)
 }
 impl Calibration {
+    pub fn with_fact(&self, fact: CalibrationFact) -> Result<Self, CalibrationError> {
+        let mut facts = self.facts.clone();
+        facts.push(fact);
+        Self::try_new(self.key.clone(), &facts)
+    }
     pub fn try_new(
         key: CalibrationKey,
         facts: &[CalibrationFact],

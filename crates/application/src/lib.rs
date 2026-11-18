@@ -372,3 +372,8 @@ pub use run_full_inspection::{
 
 mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
+mod resolve_estimates;
+pub use resolve_estimates::{
+    EstimateResolutionRepository, ResolutionCommitOutcome, ResolutionDataIssue, ResolutionInputs,
+    ResolutionMarketData, ResolutionReport, ResolutionStatus, ResolveEstimates,
+};
