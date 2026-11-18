@@ -107,10 +107,14 @@ pub(crate) mod tests {
             now,
         )
         .expect("제출");
-        let submitted = calibrate_signal_submission(
-            &Calibration::try_new(key(), &[]).expect("보정"),
-            submission,
-        );
+        let head = crate::CalibrationLedgerHead::new(key(), crate::CalibrationPosition::new(0));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(key(), &[]).expect("보정"),
+            head.clone(),
+        )
+        .expect("완전한 표");
+        let submitted =
+            calibrate_signal_submission(Some(&snapshot), &head, submission).expect("보정");
         let facts = SignalEstimate::create(
             &eligible,
             &submitted,
@@ -157,7 +161,14 @@ pub(crate) mod tests {
             &policy,
             (&assignments, &security),
             &sources,
-            SignalTiming::new(now, calendars),
+            crate::SignalAssessmentFacts::new(
+                SignalTiming::new(now, calendars),
+                Some(facts.task().reference().clone()),
+                Some(crate::CalibrationLedgerHead::new(
+                    facts.submission().calibration_key().clone(),
+                    crate::CalibrationPosition::new(0),
+                )),
+            ),
         );
         SignalDecision::assess(facts, &context)
             .into_signal()
@@ -182,8 +193,13 @@ pub(crate) mod tests {
         match signal {
             RaisedSignal::Buy(buy) => {
                 assert_eq!(direction, ScorecardSignalDirection::Buy);
-                let history =
-                    BuySignalRecord::from_signal(&buy, now, &calendars).expect("매수 이력");
+                let history = BuySignalRecord::from_signal(
+                    crate::BuySignalOccurrenceId::try_new("history").expect("발생 ID"),
+                    &buy,
+                    now,
+                    &calendars,
+                )
+                .expect("매수 이력");
                 ScorecardSignalRecord::from_buy(identity, &buy, source.reference(), &history)
                     .expect("봉인 매수")
             }

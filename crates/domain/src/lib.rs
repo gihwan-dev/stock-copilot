@@ -220,8 +220,9 @@ mod calibration;
 pub use calibration::{
     CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
     CalibrationError, CalibrationEstimate, CalibrationEstimateId, CalibrationEvidence,
-    CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey, CalibrationModel,
-    CalibrationOutcome, CalibrationReadiness, CalibrationTable, ConservativeCalibration,
+    CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey,
+    CalibrationLedgerHead, CalibrationModel, CalibrationOutcome, CalibrationPosition,
+    CalibrationReadiness, CalibrationSnapshot, CalibrationTable, ConservativeCalibration,
     EligibleCalibration, ModelIdentityPart,
 };
 
@@ -288,8 +289,9 @@ mod concentration_arithmetic;
 
 mod signal_decision;
 pub use signal_decision::{
-    BuySignal, NoSignalReason, RaisedSignal, SellSignal, SignalContext, SignalDecision,
-    SignalEstimate, SignalOperation, SignalPreparationError, SignalSourceLedger, SignalUnavailable,
+    BuySignal, NoSignalReason, RaisedSignal, SellSignal, SignalAssessmentFacts, SignalContext,
+    SignalDecision, SignalEstimate, SignalOperation, SignalPreparationError, SignalSourceLedger,
+    SignalTransition, SignalTransitionError, SignalUnavailable, signal_transition,
 };
 mod daily_profit;
 mod daily_profit_account;
@@ -387,7 +389,7 @@ pub use buy_quantity::{
     BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,
     calculate_buy_quantity,
 };
-pub use buy_signal_history::BuySignalRecord;
+pub use buy_signal_history::{BuySignalOccurrenceId, BuySignalRecord, CurrentBuySignal};
 pub use concentration_policy::concentration_for_policy;
 mod buy_minimum_unit;
 mod buy_plan_price;
