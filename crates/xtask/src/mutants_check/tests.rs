@@ -765,3 +765,84 @@ fn companion_changes_mark_only_the_declared_source_for_weekly_tests() {
         BTreeSet::new()
     );
 }
+
+fn h55_git(root: &Path, args: &[&str]) -> String {
+    let mut command = crate::git_base::git(root);
+    command.args([
+        "-c",
+        "user.name=Harness",
+        "-c",
+        "user.email=harness@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+    ]);
+    command.args(args);
+    String::from_utf8(crate::git_base::output(command, "h55 fixture git").expect("git"))
+        .expect("utf8")
+        .trim()
+        .to_owned()
+}
+
+fn h55_write(root: &Path, path: &str, text: &str) {
+    let file = root.join(path);
+    fs::create_dir_all(file.parent().expect("parent")).expect("directory");
+    fs::write(file, text).expect("fixture file");
+}
+
+#[test]
+fn h55_diff_precondition_accepts_only_the_exact_approved_assertion_change() {
+    use sha2::{Digest, Sha256};
+    let root = fresh_directory(&repository_root(), "h55-mutants-approved");
+    let path = "crates/domain/src/sample.rs";
+    let before = "pub fn value() -> usize { 1 } #[cfg(test)] mod tests { #[test] fn stable() { assert_eq!(super::value(), 1); } }";
+    let after = "pub fn value() -> usize { 1 } #[cfg(test)] mod tests { #[test] fn stable() { assert_eq!(super::value(), 2); } }";
+    for (file, text) in [
+        (
+            "Cargo.lock",
+            "version = 4\n[[package]]\nname='domain'\nversion='0.1.0'\n",
+        ),
+        (
+            "Cargo.toml",
+            "[workspace]\nmembers=['crates/domain']\nresolver='2'\n",
+        ),
+        (
+            "crates/domain/Cargo.toml",
+            "[package]\nname='domain'\nversion='0.1.0'\nedition='2024'\n",
+        ),
+        (
+            ".cargo/mutants.toml",
+            "examine_globs=['crates/domain/src/**/*.rs']\n",
+        ),
+        ("crates/domain/src/lib.rs", "pub mod sample;"),
+        (path, before),
+    ] {
+        h55_write(&root, file, text);
+    }
+    h55_git(&root, &["init", "--quiet", "-b", "master"]);
+    h55_git(&root, &["add", "."]);
+    h55_git(&root, &["commit", "--quiet", "-m", "baseline"]);
+    let base = h55_git(&root, &["rev-parse", "HEAD"]);
+    let old_hash = format!("{:x}", Sha256::digest(before.as_bytes()));
+    let new_hash = format!("{:x}", Sha256::digest(after.as_bytes()));
+    let approval = format!(
+        "[[approval]]\ntask = 'H-55'\npath = '{path}'\nbefore_sha256 = '{old_hash}'\nafter_sha256 = '{new_hash}'\nfinding = 'test-diff:modified:domain sample::tests::stable'\nassertion_change = true\ndecision = 'approved'\nreason = 'changed expectation reviewed'\n"
+    );
+    h55_write(&root, "harness/test-diff/approvals.toml", &approval);
+    h55_git(&root, &["add", "harness/test-diff/approvals.toml"]);
+    h55_git(&root, &["commit", "--quiet", "-m", "main approval"]);
+    h55_git(
+        &root,
+        &["fetch", "--quiet", ".", "master:refs/remotes/origin/master"],
+    );
+    h55_git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    h55_write(&root, path, after);
+    h55_git(&root, &["add", path]);
+    h55_git(&root, &["commit", "--quiet", "-m", "approved change"]);
+    let args = [String::from("--in-diff"), base];
+    super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
+        .expect("approved change passes precondition");
+    h55_write(&root, path, &after.replace(", 2)", ", 3)"));
+    let error = super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
+        .expect_err("wrong file hash must fail");
+    assert!(error.contains("test-diff:modified"), "{error}");
+}
