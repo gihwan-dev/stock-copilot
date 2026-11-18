@@ -1,12 +1,12 @@
 pub mod scenarios;
 use application::{
-    AuditEntry, AuditIntegrity, AuditLog, BrokerRead, CollectedObservation, DataAvailability,
-    EstimateRepository, FeedCursor, FeedSource, FinancialStatement, Fundamentals, FxRateQuery,
-    HoldingsObservation, InformationError, MacroObservation, MacroSeries, MacroSeriesId,
-    MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
-    Notifier, PortError, PortfolioRepository, QuoteObservation, RankingQuery, RecordOutcome,
-    SectorRankingQuery, SettingsRepository, SignalRepository, SystemPortError, ThesisRepository,
-    TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
+    AuditEntry, AuditIntegrity, AuditLog, BrokerRead, CacheWriteOutcome, CollectedObservation,
+    DataAvailability, EstimateRepository, FeedCursor, FeedSource, FinancialStatement, Fundamentals,
+    FxRateQuery, HoldingsObservation, InformationError, MacroObservation, MacroSeries,
+    MacroSeriesId, MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository,
+    Notification, Notifier, PortError, PortfolioRepository, QuoteObservation, RankingQuery,
+    RecordOutcome, SectorRankingQuery, SettingsRepository, SignalRepository, SystemPortError,
+    ThesisRepository, TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
@@ -403,7 +403,7 @@ pub async fn market_data_repository_store_quote<P: MarketDataRepository>(
     port: &P,
     instrument: &InstrumentId,
     quote: &Quote,
-    expected: Result<WriteCompleted, SystemPortError>,
+    expected: Result<CacheWriteOutcome, SystemPortError>,
 ) {
     assert_eq!(
         port.store_quote(instrument, quote).await,
@@ -450,7 +450,7 @@ pub async fn market_data_repository_candles<P: MarketDataRepository>(
 pub async fn market_data_repository_store_fx_rate<P: MarketDataRepository>(
     port: &P,
     rate: &FxRate,
-    expected: Result<WriteCompleted, SystemPortError>,
+    expected: Result<CacheWriteOutcome, SystemPortError>,
 ) {
     assert_eq!(
         port.store_fx_rate(rate).await,

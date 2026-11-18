@@ -283,6 +283,7 @@ pub(crate) mod tests {
         Calibration::try_new(key.clone(), &facts)
             .expect("자료")
             .calibrate(&key, base)
+            .expect("같은 조합")
     }
 
     #[test]
@@ -635,7 +636,8 @@ pub(crate) mod tests {
             AiProbability::parse(&AiProbabilityInput::try_new("50").expect("입력")).expect("확률");
         let other = Calibration::try_new(other_key.clone(), &[])
             .expect("자료")
-            .calibrate(&other_key, probability);
+            .calibrate(&other_key, probability)
+            .expect("같은 조합");
         assert_eq!(
             Thresholds::create(
                 &crate::CostEligibleTask::assess(task(), &free_cost(Market::Kr))

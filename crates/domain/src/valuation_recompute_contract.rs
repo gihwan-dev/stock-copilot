@@ -1265,4 +1265,104 @@ mod tests {
             ))
         );
     }
+    fn after_market_calendar() -> SnapshotCalendar {
+        let half_hour =
+            crate::TimeSpan::try_new(crate::SpanSeconds::new(1_800), crate::Nanosecond::new(0))
+                .expect("30분");
+        let close_at = at(3, 6).checked_add(half_hour).expect("종료 시각");
+        let regular = SessionData::try_new(
+            TimeInterval::try_new(at(3, 0), close_at).expect("정규장"),
+            None,
+        )
+        .expect("세션");
+        let extended = SessionData::try_new(
+            TimeInterval::try_new(close_at, at(3, 11)).expect("애프터마켓"),
+            None,
+        )
+        .expect("세션");
+        let today = MarketSession::try_new(
+            date(3),
+            SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(regular),
+                after_market: Some(extended),
+            },
+        )
+        .expect("한국 세션");
+        let kr = MarketCalendar::try_new(
+            market_row(2, &Market::Kr, TestSession::Open),
+            today,
+            market_row(4, &Market::Kr, TestSession::Open),
+        )
+        .expect("한국 달력");
+        let us = MarketCalendar::try_new(
+            market_row(2, &Market::Us, TestSession::Open),
+            market_row(3, &Market::Us, TestSession::Open),
+            market_row(4, &Market::Us, TestSession::Open),
+        )
+        .expect("미국 달력");
+        SnapshotCalendar::new(&kr, &us).expect("평가 달력")
+    }
+
+    #[test]
+    fn regular_close_recompute_uses_today_during_after_market() {
+        let cal = after_market_calendar();
+        let fixture = fixture_window(
+            vec![trade("A", Currency::Krw, 1, "10", "100")],
+            ("1000", "0"),
+            ("900", "0"),
+            test_window(3),
+        );
+        let histories = [history("A", Currency::Krw, 3, "12", vec![])];
+        let evidence = [close("A", Currency::Krw, 3, "12")];
+        let direct = ValuationSnapshot::recalculate(
+            &cal,
+            &fixture.rows,
+            &histories,
+            Some(ledgers(&fixture)),
+            observation(3, None),
+        )
+        .expect("직접 재계산");
+        assert_eq!(direct.price_date(Currency::Krw), date(3));
+        assert_eq!(
+            direct.stock_value(Currency::Krw),
+            Ok(money("120", Currency::Krw))
+        );
+        let input = ValuationRecomputeInput::new(
+            &cal,
+            &fixture.rows,
+            ValuationHistoryEvidence::new(&histories, &evidence),
+            DatedSnapshotLedgers::new(date(3), ledgers(&fixture)),
+            observation(3, None),
+        )
+        .expect("종가 증거");
+        let snapshot = ValuationSnapshot::recompute(input).expect("과거 평가");
+        assert_eq!(snapshot.price_date(Currency::Krw), date(3));
+        assert_eq!(
+            snapshot.price_basis(Currency::Krw),
+            crate::SnapshotPriceBasis::CurrentSession
+        );
+        assert_eq!(
+            snapshot.stock_value(Currency::Krw),
+            Ok(money("120", Currency::Krw))
+        );
+        let after_trade = [(
+            id("A"),
+            ValuationPriceEvidence::Intraday {
+                price: price("12", Currency::Krw),
+                observed_at: at(3, 7),
+            },
+        )];
+        assert_eq!(
+            ValuationRecomputeInput::new(
+                &cal,
+                &fixture.rows,
+                ValuationHistoryEvidence::new(&histories, &after_trade),
+                DatedSnapshotLedgers::new(date(3), ledgers(&fixture)),
+                observation(3, None),
+            )
+            .err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+    }
 }
