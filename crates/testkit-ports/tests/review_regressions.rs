@@ -369,14 +369,7 @@ mod tests {
     ) -> domain::SignalAssessmentFacts<'facts> {
         domain::SignalAssessmentFacts::new(
             SignalTiming::new(at, calendars),
-            Some(
-                domain::PriceObservation::from_quote_parts(
-                    estimate.task().reference().instrument().clone(),
-                    estimate.task().reference().price(),
-                    at,
-                )
-                .expect("대상 시세"),
-            ),
+            Some(estimate.task().reference().clone()),
             Some(domain::CalibrationLedgerHead::new(
                 estimate.submission().calibration_key().clone(),
                 domain::CalibrationPosition::new(0),

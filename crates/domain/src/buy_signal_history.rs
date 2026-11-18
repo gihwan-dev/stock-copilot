@@ -120,10 +120,10 @@ pub(crate) fn check_buy_history(
         return Err(NoBuyQuantity::Indeterminate);
     }
     let instrument = current.signal.facts().task().reference().instrument();
+    let instrument_id = current.signal.facts().task().volatility().instrument();
     if records.iter().any(|record| {
         record.id != current.occurrence.id
-            && record.instrument.market() == instrument.market()
-            && record.instrument.symbol() == instrument.symbol()
+            && (record.instrument_id() == instrument_id || record.instrument() == instrument)
             && now >= record.interval.start()
             && now < record.interval.end()
     }) {

@@ -416,9 +416,7 @@ fn check_target_price(
     let reference = estimate.task().reference();
     if price.instrument() != reference.instrument()
         || price.price().as_money().currency() != reference.price().as_money().currency()
-        || price
-            .instrument_id()
-            .is_some_and(|id| id != estimate.task().volatility().instrument())
+        || price.instrument_id() != Some(estimate.task().volatility().instrument())
     {
         return Err(unavailable(SignalUnavailable::InvalidTargetPrice));
     }
@@ -690,7 +688,8 @@ mod tests {
         .expect("종목")
     }
     fn fresh_price(now: Timestamp) -> PriceObservation {
-        PriceObservation::from_quote_parts(
+        PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("sample").expect("종목 ID"),
             instrument(Market::Kr, "ABC"),
             crate::Price::try_new(money("100")).expect("가격"),
             now,
@@ -1035,7 +1034,31 @@ mod tests {
         price: crate::Price,
         observed: Timestamp,
     ) -> PriceObservation {
-        PriceObservation::from_quote_parts(instrument, price, observed).expect("시세")
+        PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("sample").expect("종목 ID"),
+            instrument,
+            price,
+            observed,
+        )
+        .expect("시세")
+    }
+    #[test]
+    fn d51_buy_target_price_rejects_a_quote_without_an_instrument_id() {
+        let task = eligible();
+        let reference = task.task().reference();
+        let now = at(61);
+        let unidentified = PriceObservation::from_quote_parts(
+            reference.instrument().clone(),
+            reference.price(),
+            now,
+        )
+        .expect("종목 ID 없는 시세");
+        assert_eq!(
+            decide_target_price(Some(unidentified), now),
+            SignalDecision::None(NoSignalReason::Unavailable(
+                SignalUnavailable::InvalidTargetPrice
+            ))
+        );
     }
     #[test]
     fn d51_buy_target_price_missing_stale_and_boundary() {
@@ -1278,6 +1301,38 @@ mod tests {
         assert_eq!(
             crate::CurrentBuySignal::try_new(next, occurrence),
             Err(crate::NoBuyQuantity::Indeterminate)
+        );
+    }
+    #[test]
+    fn d51_history_blocks_same_symbol_with_a_different_instrument_id() {
+        let previous = d51_buy_with_instrument_id("previous");
+        let next = d51_buy_with_instrument_id("next");
+        assert_ne!(
+            previous.facts().task().volatility().instrument(),
+            next.facts().task().volatility().instrument()
+        );
+        assert_eq!(
+            previous.facts().task().reference().instrument(),
+            next.facts().task().reference().instrument()
+        );
+        let record = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("previous").expect("이전 ID"),
+            &previous,
+            at(61),
+            &calendars(),
+        )
+        .expect("이전 발생");
+        let occurrence = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("current").expect("현재 ID"),
+            &next,
+            at(61),
+            &calendars(),
+        )
+        .expect("현재 발생");
+        let current = crate::CurrentBuySignal::try_new(next, occurrence).expect("현재 신호");
+        assert_eq!(
+            crate::buy_signal_history::check_buy_history(&current, at(61), &[record]),
+            Err(crate::NoBuyQuantity::RepeatedSignal)
         );
     }
     #[test]

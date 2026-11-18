@@ -163,14 +163,7 @@ pub(crate) mod tests {
             &sources,
             crate::SignalAssessmentFacts::new(
                 SignalTiming::new(now, calendars),
-                Some(
-                    crate::PriceObservation::from_quote_parts(
-                        facts.task().reference().instrument().clone(),
-                        facts.task().reference().price(),
-                        now,
-                    )
-                    .expect("대상 시세"),
-                ),
+                Some(facts.task().reference().clone()),
                 Some(crate::CalibrationLedgerHead::new(
                     facts.submission().calibration_key().clone(),
                     crate::CalibrationPosition::new(0),

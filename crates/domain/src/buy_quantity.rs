@@ -886,6 +886,74 @@ mod tests {
         .expect("비용");
         CostEligibleTask::assess(task, &cost).expect("적격")
     }
+    fn d51_task_with_instrument_id(source: &EstimateTask, id: &str) -> EstimateTask {
+        let instrument_id = InstrumentId::try_new(id).expect("종목 ID");
+        let values = (0_usize..61)
+            .map(|index| if index % 2 == 0 { "100" } else { "102" })
+            .collect::<Vec<_>>();
+        let candles = candle::tests::series(&values)
+            .into_iter()
+            .map(|row| {
+                crate::Candle::try_new(
+                    instrument_id.clone(),
+                    row.time(),
+                    row.adjustment(),
+                    row.values(),
+                    crate::CandleObservation::new(row.collected_at(), row.status()),
+                )
+                .expect("종목의 봉")
+            })
+            .collect::<Vec<_>>();
+        let reference = PriceObservation::from_identified_quote_parts(
+            instrument_id,
+            source.reference().instrument().clone(),
+            source.reference().price(),
+            source.reference().observed_at(),
+        )
+        .expect("종목 시세");
+        EstimateTask::create(
+            EstimateContext::new(reference, source.created_at()),
+            Volatility::calculate(&candles).expect("변동성"),
+            Horizon::new(HorizonSelection::FewDays),
+            HoursPermission::default(),
+            RiskAppetite::Neutral,
+        )
+        .expect("종목 과제")
+    }
+    fn d51_fixture_with_instrument_id(mut fixture: Fixture, id: &str) -> Fixture {
+        let task = d51_task_with_instrument_id(fixture.signal.facts().task(), id);
+        let market = task.reference().instrument().market();
+        let end = crate::estimate_outcome::signal_task_interval(&task, &fixture.calendars)
+            .expect("캘린더 만기")
+            .end();
+        let period = EstimateCostPeriod::from_calendar_result(&task, end).expect("만기");
+        let zero = CostRate::try_new(Ratio::new(Decimal::ZERO)).expect("비용");
+        let commission = CommissionRateFact::from_commissions_result(
+            market.clone(),
+            zero,
+            CommissionValidity::try_new(None, None).expect("기간"),
+        );
+        let cost = TradeCost::from_facts(
+            Some(commission),
+            Some(TradeTaxFact::from_schedule_result(
+                market.clone(),
+                zero,
+                zero,
+            )),
+            period,
+        )
+        .expect("비용");
+        let eligible = CostEligibleTask::assess(task, &cost).expect("적격");
+        let (estimate, item) = estimate_for(&eligible, fixture.now, &market, 30);
+        fixture.signal = raise(
+            &estimate,
+            &fixture.portfolio,
+            (&fixture.policy, &fixture.assignments, &fixture.securities),
+            item,
+            &fixture.calendars,
+        );
+        fixture
+    }
     fn estimate_for(
         eligible: &CostEligibleTask,
         now: Timestamp,
@@ -1145,6 +1213,27 @@ mod tests {
             .expect("발생 이력");
     }
     #[test]
+    fn d51_history_blocks_the_same_instrument_after_a_symbol_change() {
+        let current = Fixture::new(Market::Kr, 100_000, 0, 1, (30, 0));
+        let previous = Fixture::new_for(Market::Kr, (100_000, 0), 1, (30, 0), "OLD");
+        assert_eq!(
+            current.signal.facts().task().volatility().instrument(),
+            previous.signal.facts().task().volatility().instrument()
+        );
+        assert_ne!(
+            current.signal.facts().task().reference().instrument(),
+            previous.signal.facts().task().reference().instrument()
+        );
+        let record =
+            history_record(&previous.signal, previous.now, &previous.calendars).expect("이전 발생");
+        assert!(current.now >= record.interval().start());
+        assert!(current.now < record.interval().end());
+        assert_eq!(
+            current.calculate(&[record]),
+            BuyQuantityDecision::None(NoBuyQuantity::RepeatedSignal)
+        );
+    }
+    #[test]
     fn d51_history_rejects_conflicting_identity_and_expires_at_horizon_end() {
         let fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
         let own_id = crate::BuySignalOccurrenceId::try_new("current").expect("ID");
@@ -1392,8 +1481,14 @@ mod tests {
     #[test]
     fn history_identity_expiry_future_and_arbitrary_order_are_enforced() {
         let fixture = Fixture::new(Market::Kr, 100_000, 0, 1, (30, 0));
-        let other = Fixture::new_for(Market::Kr, (100_000, 0), 1, (30, 0), "OTHER");
-        let us = Fixture::new(Market::Us, 100_000, 100, 1, (30, 0));
+        let other = d51_fixture_with_instrument_id(
+            Fixture::new_for(Market::Kr, (100_000, 0), 1, (30, 0), "OTHER"),
+            "other",
+        );
+        let us = d51_fixture_with_instrument_id(
+            Fixture::new(Market::Us, 100_000, 100, 1, (30, 0)),
+            "us",
+        );
         let first = history_record(&fixture.signal, fixture.now, &fixture.calendars).expect("기록");
         let second = history_record(&other.signal, other.now, &other.calendars).expect("다른 종목");
         let third = history_record(&us.signal, us.now, &us.calendars).expect("다른 시장");
