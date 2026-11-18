@@ -372,3 +372,9 @@ pub use run_full_inspection::{
 
 mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
+
+mod information_storage;
+pub use information_storage::{
+    DisclosureRepository, InformationKey, InformationLinks, InformationSearch, SearchLimit,
+    SearchLimitError,
+};

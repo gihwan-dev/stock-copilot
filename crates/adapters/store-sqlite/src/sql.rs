@@ -25,3 +25,11 @@ pub(crate) mod transactions_tests;
 
 #[cfg(test)]
 pub(crate) mod market_tests;
+
+#[cfg(test)]
+pub(crate) mod fts_guard_tests;
+
+#[cfg(test)]
+pub(crate) mod information_tests;
+
+pub(crate) mod information;

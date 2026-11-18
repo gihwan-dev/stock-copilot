@@ -45,6 +45,18 @@ mod tests {
         )
         .expect("시각")
     }
+    fn link_news(repository: &MemoryNewsRepository, instrument: InstrumentId, item: &NewsItem) {
+        let domain::InformationSource::News(source) = item.collected().source() else {
+            panic!("news source");
+        };
+        let key = application::InformationKey::News(source.clone(), item.collected().url().clone());
+        run(application::InformationLinks::set_instruments(
+            repository,
+            &key,
+            &[instrument],
+        ))
+        .expect("link");
+    }
     fn id(value: &str) -> InstrumentId {
         InstrumentId::try_new(value).expect("종목")
     }
@@ -341,7 +353,7 @@ mod tests {
             UntrustedText::try_new("고정 기사 제목").expect("제목"),
             None,
         );
-        repository.link(id("news-a"), item.clone());
+        link_news(&repository, id("news-a"), &item);
         repository.script_store().push(MemoryReply::Memory);
         repository.script_for_instrument().push(MemoryReply::Memory);
         repository.script_for_instrument().push(MemoryReply::Memory);
