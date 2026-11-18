@@ -404,18 +404,12 @@ fn repetition(
 }
 impl Calibration {
     pub fn with_fact(&self, fact: CalibrationFact) -> Result<Self, CalibrationError> {
-        if fact.estimate.key != self.key {
-            return Err(CalibrationError::MismatchedCombination);
+        if self.facts.len() >= 65_536 {
+            return Err(CalibrationError::TooManyFacts);
         }
         let mut combined = self.facts.clone();
         combined.push(fact);
-        Self::from_validated_facts(self.key.clone(), combined)
-    }
-    pub fn with_facts(&self, facts: &[CalibrationFact]) -> Result<Self, CalibrationError> {
-        let batch = Self::try_new(self.key.clone(), facts)?;
-        let mut combined = self.facts.clone();
-        combined.extend(batch.facts);
-        Self::from_validated_facts(self.key.clone(), combined)
+        Self::try_new(self.key.clone(), &combined)
     }
     #[must_use]
     pub fn facts(&self) -> &[CalibrationFact] {

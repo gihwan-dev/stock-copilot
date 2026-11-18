@@ -1,4 +1,7 @@
-use crate::{AiRunId, DeliveryReport, EventBus, PortError, ReasoningEffort, SystemPortError};
+use crate::{
+    AiRunId, DeliveryReport, EventBus, PortError, ReasoningEffort, SystemFailure, SystemPort,
+    SystemPortError,
+};
 use domain::{
     Calibration, CalibrationError, CalibrationEstimateId, CalibrationKey, Candle, DomainEvent,
     EstimateOutcome, EstimateSubmissionRecord, MarketCalendar, OutcomeAdjustment, OutcomeState,
@@ -18,6 +21,7 @@ pub enum ResolutionDataIssue {
     Incomplete(OutcomeUnavailable),
     Read(PortError),
     Storage(SystemPortError),
+    Calibration(CalibrationError),
 }
 
 pub trait ResolutionMarketData: Send + Sync {
@@ -158,7 +162,11 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
         };
         let next = match next_result {
             Ok(value) => value,
-            Err(error) => return self.calibration_error(record, error).await,
+            Err(error) => {
+                return self
+                    .calibration_error(record, previous.as_ref(), error)
+                    .await;
+            }
         };
         match self
             .repository
@@ -175,19 +183,50 @@ impl<'a, Repository: EstimateResolutionRepository, Data: ResolutionMarketData>
     async fn calibration_error(
         &self,
         record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+        previous: Option<&Calibration>,
         error: CalibrationError,
     ) -> ResolutionStatus {
-        if error != CalibrationError::ConflictingEstimate {
-            return ResolutionStatus::Calibration(error);
+        match error {
+            CalibrationError::TooManyFacts => {
+                self.unavailable(record, ResolutionDataIssue::Calibration(error))
+                    .await
+            }
+            CalibrationError::ConflictingEstimate => {
+                match self
+                    .repository
+                    .resolution(record.task_id().as_estimate_id())
+                    .await
+                {
+                    Ok(Some(outcome)) => Self::existing_resolution(record, previous, &outcome),
+                    Ok(None) => ResolutionStatus::Calibration(error),
+                    Err(failure) => ResolutionStatus::Storage(failure),
+                }
+            }
+            CalibrationError::InvalidModelIdentity
+            | CalibrationError::InvalidEstimateId
+            | CalibrationError::MismatchedCombination => ResolutionStatus::Calibration(error),
         }
-        match self
-            .repository
-            .resolution(record.task_id().as_estimate_id())
-            .await
-        {
-            Ok(Some(_outcome)) => ResolutionStatus::AlreadyResolved,
-            Ok(None) => ResolutionStatus::Calibration(error),
-            Err(failure) => ResolutionStatus::Storage(failure),
+    }
+
+    fn existing_resolution(
+        record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+        previous: Option<&Calibration>,
+        outcome: &EstimateOutcome,
+    ) -> ResolutionStatus {
+        let id = record.task_id().as_estimate_id();
+        let expected = outcome.calibration_fact(
+            id.clone(),
+            record.submission().calibration_key().model().clone(),
+            record.submission().probability(),
+        );
+        let stored =
+            previous.and_then(|table| table.facts().iter().find(|fact| fact.estimate().id() == id));
+        match (expected.as_ref(), stored) {
+            (Some(fact), Some(prior)) if fact == prior => ResolutionStatus::AlreadyResolved,
+            _ => ResolutionStatus::Storage(SystemPortError::new(
+                SystemPort::Repository,
+                SystemFailure::RepositoryIntegrity,
+            )),
         }
     }
 

@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(updated.for_combination(&key).judgment_count().as_usize(), 1);
     }
     #[test]
-    fn accumulated_facts_beyond_one_batch_survive_reconstruction() {
+    fn established_combination_limit_applies_to_single_fact_updates() {
         let factor = adjustment();
         let candle = candle(61, 901, CandlePeriod::Minute, ("200", "100"), &factor);
         let outcome = EstimateOutcome::evaluate_with_complete_data(
@@ -302,34 +302,20 @@ mod tests {
             .collect();
         let key = initial[0].estimate().key().clone();
         let table = domain::Calibration::try_new(key.clone(), &initial).expect("기존 상한");
-        let updated = table.with_fact(fact("extra")).expect("상한 이후 판정");
-        assert_eq!(updated.facts().len(), 65_537);
-        assert_eq!(updated.for_combination(&key).judgment_count().as_usize(), 1);
-        let mut restored = domain::Calibration::try_new(key.clone(), &[]).expect("빈 표");
-        let batches = [
-            updated.facts().get(..32_768).expect("첫 묶음"),
-            updated.facts().get(32_768..65_536).expect("둘째 묶음"),
-            updated.facts().get(65_536..).expect("마지막 묶음"),
-        ];
-        for batch in batches {
-            restored = restored.with_facts(batch).expect("이력 복원");
-        }
-        assert_eq!(restored, updated);
+        assert_eq!(table.facts().len(), 65_536);
         assert_eq!(
-            restored.with_fact(fact("extra")).expect("동일 재요청"),
-            restored
+            table.with_fact(fact("extra")).err(),
+            Some(domain::CalibrationError::TooManyFacts)
         );
+        let mut over_limit = initial;
+        over_limit.push(fact("extra"));
         assert_eq!(
-            domain::Calibration::try_new(key, updated.facts()),
-            Err(domain::CalibrationError::TooManyFacts)
-        );
-        assert_eq!(
-            restored.with_facts(updated.facts()),
-            Err(domain::CalibrationError::TooManyFacts)
+            domain::Calibration::try_new(key, &over_limit).err(),
+            Some(domain::CalibrationError::TooManyFacts)
         );
     }
     #[test]
-    fn batch_extension_rejects_conflicting_ids_and_different_combinations() {
+    fn single_fact_extension_rejects_conflicting_ids_and_different_combinations() {
         let factor = adjustment();
         let target = candle(61, 901, CandlePeriod::Minute, ("200", "100"), &factor);
         let stop = candle(61, 901, CandlePeriod::Minute, ("100", "1"), &factor);
@@ -377,11 +363,7 @@ mod tests {
         )
         .expect("표");
         assert_eq!(
-            table.with_facts(std::slice::from_ref(&different_outcome)),
-            Err(domain::CalibrationError::ConflictingEstimate)
-        );
-        assert_eq!(
-            table.with_facts(&[first.clone(), different_outcome]),
+            table.with_fact(different_outcome),
             Err(domain::CalibrationError::ConflictingEstimate)
         );
         assert_eq!(
