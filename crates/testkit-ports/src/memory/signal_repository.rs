@@ -126,6 +126,9 @@ fn add_occurrence(
                     if history.iter().any(|old| old.id() == record.id()) {
                         return Err(invalid());
                     }
+                    if record.originating_task().task() != buy.facts().task() {
+                        return Err(invalid());
+                    }
                     CurrentBuySignal::try_new(buy.clone(), record.clone())
                         .map_err(|_error| invalid())?;
                     return Ok((Some(record.clone()), Some(record.clone())));
@@ -165,14 +168,6 @@ fn prepare_evaluation(
         return Ok(None);
     };
     if &evaluation.submission != submission_id {
-        return Ok(None);
-    }
-    if state
-        .instruments
-        .iter()
-        .find(|entry| entry.instrument.as_ref() == Some(instrument))
-        .is_some_and(|entry| entry.discarded.contains(submission_id))
-    {
         return Ok(None);
     }
     let record = state
@@ -314,6 +309,16 @@ fn commit_signal(
     }
     if snapshot(state, instrument) != *expected {
         return Ok(SignalCommitOutcome::Conflict);
+    }
+    if let SignalMutation::Evaluate(evaluation) = mutation
+        && expected.submission.as_ref() == Some(&evaluation.submission)
+        && state
+            .instruments
+            .iter()
+            .find(|entry| entry.instrument.as_ref() == Some(instrument))
+            .is_some_and(|entry| entry.discarded.contains(&evaluation.submission))
+    {
+        return Ok(SignalCommitOutcome::SubmissionDiscarded);
     }
     if let SignalMutation::Discard(transition) = mutation
         && expected.current.is_none()

@@ -8,9 +8,10 @@ mod tests {
         SystemFailure, SystemPort, SystemPortError,
     };
     use domain::{
-        BuySignalOccurrenceId, BuySignalRecord, DartReceiptNo, Disclosure, DomainEvent,
-        InstrumentId, Market, NoSignalReason, NormalizedUrl, ReceiptNo, SignalDecision,
-        SignalTransition, ToolReference, UntrustedText, signal_transition,
+        BuySignalOccurrenceId, BuySignalRecord, CurrentBuySignal, DartReceiptNo, Disclosure,
+        DomainEvent, HorizonSelection, InstrumentId, Market, NoSignalReason, NormalizedUrl,
+        ReceiptNo, SignalDecision, SignalTransition, ToolReference, UntrustedText,
+        signal_transition,
     };
     use std::{
         future::Future,
@@ -67,6 +68,7 @@ mod tests {
         match result.expect("저장 성공") {
             SignalCommitOutcome::Applied(commit) => commit,
             SignalCommitOutcome::Conflict => panic!("예상치 못한 충돌"),
+            SignalCommitOutcome::SubmissionDiscarded => panic!("예상치 못한 폐기"),
         }
     }
     fn invalid() -> SystemPortError {
@@ -174,7 +176,7 @@ mod tests {
             .iter()
             .flat_map(|value| match value {
                 SignalCommitOutcome::Applied(commit) => commit.events.clone(),
-                SignalCommitOutcome::Conflict => vec![],
+                SignalCommitOutcome::Conflict | SignalCommitOutcome::SubmissionDiscarded => vec![],
             })
             .collect::<Vec<_>>();
         assert_eq!(events, vec![DomainEvent::SignalRaised(instrument.clone())]);
@@ -266,7 +268,7 @@ mod tests {
         );
         assert_eq!(
             run(repository.commit(&instrument, &after, &retried)),
-            Ok(SignalCommitOutcome::Conflict)
+            Ok(SignalCommitOutcome::SubmissionDiscarded)
         );
         assert_eq!(
             run(repository.occurrences(
@@ -633,5 +635,588 @@ mod tests {
             Ok(SignalCommitOutcome::Conflict)
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(latest));
+    }
+
+    #[test]
+    fn fresh_snapshot_for_a_discarded_submission_is_not_a_retryable_conflict() {
+        let repository = repository();
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let instrument = fixtures::id("sample-a");
+        let initial = run(repository.snapshot(&instrument)).expect("초기");
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        committed(run(repository.commit(
+            &instrument,
+            &initial,
+            &evaluation(
+                &initial,
+                decision.clone(),
+                Some(buy_record(&decision, "terminal-original")),
+            ),
+        )));
+        let raised = run(repository.snapshot(&instrument)).expect("발생");
+        committed(run(repository.commit(
+            &instrument,
+            &raised,
+            &SignalMutation::Discard(Box::new(SignalTransition::Cleared(instrument.clone()))),
+        )));
+        let fresh = run(repository.snapshot(&instrument)).expect("폐기 후 재조회");
+        let mutation = evaluation(
+            &fresh,
+            decision.clone(),
+            Some(buy_record(&decision, "terminal-retry")),
+        );
+        let result = run(repository.commit(&instrument, &fresh, &mutation));
+        assert_eq!(result, Ok(SignalCommitOutcome::SubmissionDiscarded));
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(fresh.clone()));
+        run(
+            testkit_ports::contracts::scenarios::signal_rejects_discarded_submission(
+                &repository,
+                &instrument,
+                &fresh,
+                &mutation,
+            ),
+        );
+        assert_eq!(
+            run(repository.commit(
+                &instrument,
+                &fresh,
+                &evaluation(
+                    &fresh,
+                    SignalDecision::None(NoSignalReason::MissingSource),
+                    None,
+                ),
+            )),
+            Ok(SignalCommitOutcome::SubmissionDiscarded)
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(fresh));
+    }
+
+    #[test]
+    fn submission_alone_invalidates_the_older_evaluation_snapshot() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let old = run(repository.snapshot(&instrument)).expect("이전 제출");
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        let mutation = evaluation(
+            &old,
+            decision.clone(),
+            Some(buy_record(&decision, "stale-after-submit")),
+        );
+        submit(&repository, "task-new", "98", InstrumentChoice::First);
+        let latest = run(repository.snapshot(&instrument)).expect("새 제출");
+        assert_eq!(old.revision, latest.revision);
+        assert_ne!(old.submission, latest.submission);
+        assert_eq!(latest.current, None);
+        assert_eq!(
+            run(repository.commit(&instrument, &old, &mutation)),
+            Ok(SignalCommitOutcome::Conflict)
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(latest.clone()));
+        run(
+            testkit_ports::contracts::scenarios::signal_rejects_stale_snapshot(
+                &repository,
+                &instrument,
+                &old,
+                &latest,
+                &mutation,
+            ),
+        );
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![])
+        );
+    }
+
+    #[test]
+    fn forged_clear_or_discard_transition_leaves_current_and_history_intact() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let initial = run(repository.snapshot(&instrument)).expect("초기");
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        let record = buy_record(&decision, "forgery-original");
+        committed(run(repository.commit(
+            &instrument,
+            &initial,
+            &evaluation(&initial, decision, Some(record.clone())),
+        )));
+        let raised = run(repository.snapshot(&instrument)).expect("발생");
+        let forged = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+            submission: raised.submission.clone().expect("제출"),
+            decision: SignalDecision::None(NoSignalReason::ConditionsUnmet),
+            transition: SignalTransition::Unchanged,
+            calibration_head: Some(fixtures::head(0)),
+            occurrence: None,
+        }));
+        for mutation in [
+            forged,
+            SignalMutation::Discard(Box::new(SignalTransition::Unchanged)),
+            SignalMutation::Discard(Box::new(SignalTransition::Cleared(fixtures::id(
+                "sample-b",
+            )))),
+        ] {
+            assert_eq!(
+                run(repository.commit(&instrument, &raised, &mutation)),
+                Err(invalid())
+            );
+            assert_eq!(run(repository.snapshot(&instrument)), Ok(raised.clone()));
+            assert_eq!(
+                run(repository.occurrences(
+                    &instrument,
+                    &fixtures::master().order_instrument().expect("종목")
+                )),
+                Ok(vec![record.clone()])
+            );
+        }
+    }
+
+    #[test]
+    fn signal_and_buy_occurrence_must_match_their_submission_and_instrument() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "98", InstrumentChoice::First);
+        let snapshot = run(repository.snapshot(&instrument)).expect("제출");
+        let wrong_submission = fixtures::decision(&fixtures::master(), "99", None);
+        let wrong_occurrence = fixtures::decision(&fixtures::other_master(), "99", None);
+        let correct = fixtures::decision(&fixtures::master(), "98", None);
+        let mutations = [
+            evaluation(
+                &snapshot,
+                wrong_submission.clone(),
+                Some(buy_record(&wrong_submission, "wrong-submission")),
+            ),
+            evaluation(
+                &snapshot,
+                correct,
+                Some(buy_record(&wrong_occurrence, "wrong-occurrence")),
+            ),
+        ];
+        for mutation in mutations {
+            assert_eq!(
+                run(repository.commit(&instrument, &snapshot, &mutation)),
+                Err(invalid())
+            );
+            assert_eq!(run(repository.snapshot(&instrument)), Ok(snapshot.clone()));
+            assert_eq!(
+                run(repository.occurrences(
+                    &instrument,
+                    &fixtures::master().order_instrument().expect("종목")
+                )),
+                Ok(vec![])
+            );
+        }
+    }
+
+    #[test]
+    fn supplied_occurrence_is_rejected_without_a_new_buy() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "10", InstrumentChoice::First);
+        let initial = run(repository.snapshot(&instrument)).expect("이전 제출");
+        let unrelated_buy = fixtures::decision(&fixtures::master(), "99", None);
+        let extra = buy_record(&unrelated_buy, "unexpected-occurrence");
+        for decision in [
+            fixtures::decision(&fixtures::master(), "10", Some("7")),
+            SignalDecision::None(NoSignalReason::ConditionsUnmet),
+        ] {
+            assert_eq!(
+                run(repository.commit(
+                    &instrument,
+                    &initial,
+                    &evaluation(&initial, decision, Some(extra.clone())),
+                )),
+                Err(invalid())
+            );
+            assert_eq!(run(repository.snapshot(&instrument)), Ok(initial.clone()));
+        }
+        submit(&repository, "task-new", "99", InstrumentChoice::First);
+        let latest = run(repository.snapshot(&instrument)).expect("새 제출");
+        let buy = fixtures::decision(&fixtures::master(), "99", None);
+        let original = buy_record(&buy, "actual-occurrence");
+        committed(run(repository.commit(
+            &instrument,
+            &latest,
+            &evaluation(&latest, buy.clone(), Some(original.clone())),
+        )));
+        let raised = run(repository.snapshot(&instrument)).expect("발생");
+        assert_eq!(
+            run(repository.commit(&instrument, &raised, &evaluation(&raised, buy, Some(extra)),)),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(raised));
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![original])
+        );
+    }
+
+    #[test]
+    fn updated_buy_rejects_a_second_occurrence_and_preserves_the_first() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let initial = run(repository.snapshot(&instrument)).expect("초기");
+        let first = fixtures::decision(&fixtures::master(), "99", None);
+        let original = buy_record(&first, "update-original");
+        committed(run(repository.commit(
+            &instrument,
+            &initial,
+            &evaluation(&initial, first, Some(original.clone())),
+        )));
+        submit(&repository, "task-new", "98", InstrumentChoice::First);
+        let latest = run(repository.snapshot(&instrument)).expect("새 제출");
+        let next = fixtures::decision(&fixtures::master(), "98", None);
+        let extra = buy_record(&next, "update-extra");
+        let mutation = evaluation(&latest, next.clone(), Some(extra));
+        let SignalMutation::Evaluate(value) = &mutation else {
+            panic!("평가 필요");
+        };
+        assert_eq!(
+            value.transition,
+            SignalTransition::Updated(next.into_signal().expect("갱신 신호"))
+        );
+        assert_eq!(
+            run(repository.commit(&instrument, &latest, &mutation)),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(latest));
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![original])
+        );
+    }
+
+    fn race_evaluation_and_discard(
+        repository: &MemorySignalEvaluationRepository,
+        instrument: &InstrumentId,
+        raised: &application::SignalSnapshot,
+        mutations: (&SignalMutation, &SignalMutation),
+    ) -> (SignalCommitOutcome, SignalCommitOutcome) {
+        let (evaluation_mutation, discard) = mutations;
+        let barrier = Barrier::new(3);
+        std::thread::scope(|scope| {
+            let evaluate = scope.spawn(|| {
+                barrier.wait();
+                run(repository.commit(instrument, raised, evaluation_mutation)).expect("평가")
+            });
+            let remove = scope.spawn(|| {
+                barrier.wait();
+                run(repository.commit(instrument, raised, discard)).expect("폐기")
+            });
+            barrier.wait();
+            (
+                evaluate.join().expect("평가 스레드"),
+                remove.join().expect("폐기 스레드"),
+            )
+        })
+    }
+
+    #[test]
+    fn concurrent_discard_and_evaluation_cannot_resurrect_the_discarded_task() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let initial = run(repository.snapshot(&instrument)).expect("초기");
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        let record = buy_record(&decision, "race-original");
+        committed(run(repository.commit(
+            &instrument,
+            &initial,
+            &evaluation(&initial, decision.clone(), Some(record.clone())),
+        )));
+        let raised = run(repository.snapshot(&instrument)).expect("발생");
+        let evaluation_mutation = evaluation(&raised, decision.clone(), None);
+        let discard =
+            SignalMutation::Discard(Box::new(SignalTransition::Cleared(instrument.clone())));
+        let (evaluated, discarded) = race_evaluation_and_discard(
+            &repository,
+            &instrument,
+            &raised,
+            (&evaluation_mutation, &discard),
+        );
+        let cleared = match (evaluated, discarded) {
+            (SignalCommitOutcome::Applied(evaluation), SignalCommitOutcome::Conflict) => {
+                assert_eq!(evaluation.events, vec![]);
+                let latest = run(repository.snapshot(&instrument)).expect("평가 후");
+                committed(run(repository.commit(&instrument, &latest, &discard)))
+            }
+            (SignalCommitOutcome::Conflict, SignalCommitOutcome::Applied(commit)) => commit,
+            other => panic!("경쟁 결과: {other:?}"),
+        };
+        assert_eq!(
+            cleared.events,
+            vec![DomainEvent::SignalCleared(instrument.clone())]
+        );
+        let after = run(repository.snapshot(&instrument)).expect("폐기 후");
+        assert_eq!(after.current, None);
+        assert_eq!(
+            run(repository.commit(
+                &instrument,
+                &after,
+                &evaluation(
+                    &after,
+                    decision.clone(),
+                    Some(buy_record(&decision, "race-retry")),
+                ),
+            )),
+            Ok(SignalCommitOutcome::SubmissionDiscarded)
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(after));
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![record])
+        );
+    }
+
+    #[test]
+    fn new_buy_rejects_an_occurrence_from_a_different_horizon() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let state = run(repository.snapshot(&instrument)).expect("제출");
+        let short = fixtures::decision(&fixtures::master(), "99", None);
+        let long = fixtures::decision_with_horizon(
+            &fixtures::master(),
+            "99",
+            None,
+            &[fixtures::item()],
+            (HorizonSelection::WeeksToMonths, None),
+        );
+        let SignalDecision::Buy(long_signal) = &long else {
+            panic!("긴 기간 매수 신호 필요: {long:?}");
+        };
+        let calendars: Vec<_> = (60..=101)
+            .map(|value| fixtures::calendar(value, &Market::Kr))
+            .collect();
+        let foreign = BuySignalRecord::from_signal(
+            BuySignalOccurrenceId::try_new("different-horizon").expect("발생 ID"),
+            long_signal,
+            fixtures::day(60),
+            &calendars,
+        )
+        .expect("긴 기간 발생");
+        let original = buy_record(&short, "matching-horizon");
+        assert_ne!(foreign.interval(), original.interval());
+        assert_eq!(
+            run(repository.commit(
+                &instrument,
+                &state,
+                &evaluation(&state, short, Some(foreign)),
+            )),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(state));
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![])
+        );
+    }
+
+    #[test]
+    fn new_buy_rejects_a_different_task_even_when_the_horizon_matches() {
+        let repository = repository();
+        let instrument = fixtures::id("sample-a");
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let state = run(repository.snapshot(&instrument)).expect("제출");
+        let original = fixtures::decision(&fixtures::master(), "99", None);
+        let other = fixtures::decision_with_horizon(
+            &fixtures::master(),
+            "99",
+            None,
+            &[fixtures::item()],
+            (HorizonSelection::FewDays, Some("104")),
+        );
+        let own_record = buy_record(&original, "own-task");
+        let other_record = buy_record(&other, "other-task");
+        assert_eq!(own_record.interval(), other_record.interval());
+        assert_ne!(
+            own_record.originating_task(),
+            other_record.originating_task()
+        );
+        assert_eq!(
+            run(repository.commit(
+                &instrument,
+                &state,
+                &evaluation(&state, original, Some(other_record)),
+            )),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(state));
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![])
+        );
+    }
+
+    #[test]
+    fn continuing_buy_keeps_its_original_occurrence_when_horizon_changes() {
+        let short = fixtures::decision(&fixtures::master(), "99", None);
+        let long = fixtures::decision_with_horizon(
+            &fixtures::master(),
+            "99",
+            None,
+            &[fixtures::item()],
+            (HorizonSelection::WeeksToMonths, None),
+        );
+        let original = buy_record(&short, "existing-horizon");
+        let SignalDecision::Buy(short_signal) = short else {
+            panic!("짧은 기간 매수 신호 필요");
+        };
+        let SignalDecision::Buy(long_signal) = long else {
+            panic!("긴 기간 매수 신호 필요");
+        };
+        assert_ne!(
+            short_signal.facts().task().horizon(),
+            long_signal.facts().task().horizon()
+        );
+        let current = CurrentBuySignal::try_new(short_signal, original.clone()).expect("현재 매수");
+        let updated = current.update(long_signal).expect("발생을 이어가는 갱신");
+        assert_eq!(updated.occurrence(), &original);
+    }
+
+    fn repository_with_horizon_change() -> (
+        MemorySignalEvaluationRepository,
+        domain::CostEligibleTask,
+        domain::CalibrationLedgerHead,
+    ) {
+        let source = fixtures::master();
+        let short_task = fixtures::eligible_for_master("102", &source);
+        let long_task =
+            fixtures::eligible_for_horizon("102", &source, HorizonSelection::WeeksToMonths);
+        let assignments = domain::EstimateAssignments::default()
+            .issue(
+                fixtures::task_id("task-old"),
+                fixtures::run_id(),
+                short_task,
+            )
+            .expect("짧은 과제")
+            .issue(
+                fixtures::task_id("task-new"),
+                fixtures::run_id(),
+                long_task.clone(),
+            )
+            .expect("긴 과제");
+        let repository = MemorySignalEvaluationRepository::new(assignments);
+        repository
+            .advance_calibration_head(fixtures::head(0))
+            .expect("짧은 기간 보정");
+        let long_key = fixtures::calibration_key_for(HorizonSelection::WeeksToMonths);
+        let long_head =
+            domain::CalibrationLedgerHead::new(long_key, domain::CalibrationPosition::new(0));
+        repository
+            .advance_calibration_head(long_head.clone())
+            .expect("긴 기간 보정");
+        (repository, long_task, long_head)
+    }
+
+    fn submit_long_horizon(
+        repository: &MemorySignalEvaluationRepository,
+        task: &domain::CostEligibleTask,
+        head: &domain::CalibrationLedgerHead,
+    ) {
+        let mut input = fixtures::input("task-new", "99", &fixtures::master());
+        input.submission = fixtures::submission_with_key(task, "99", head.key().clone());
+        let events = EventBusBuilder::default().build();
+        run(SubmitEstimate::new(repository, &events).execute(&fixtures::run_id(), vec![input]))
+            .expect("긴 기간 제출");
+    }
+
+    #[test]
+    fn new_long_buy_rejects_a_shorter_horizon_occurrence() {
+        let (repository, long_task, long_head) = repository_with_horizon_change();
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        submit_long_horizon(&repository, &long_task, &long_head);
+        let instrument = fixtures::id("sample-a");
+        let state = run(repository.snapshot(&instrument)).expect("긴 제출");
+        let short = fixtures::decision(&fixtures::master(), "99", None);
+        let long = fixtures::decision_with_horizon(
+            &fixtures::master(),
+            "99",
+            None,
+            &[fixtures::item()],
+            (HorizonSelection::WeeksToMonths, None),
+        );
+        let shorter = buy_record(&short, "shorter-horizon");
+        let mut mutation = evaluation(&state, long, Some(shorter));
+        let SignalMutation::Evaluate(value) = &mut mutation else {
+            panic!("평가 필요");
+        };
+        value.calibration_head = Some(long_head);
+        assert_eq!(
+            run(repository.commit(&instrument, &state, &mutation)),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(state));
+        assert_eq!(
+            run(repository.occurrences(
+                &instrument,
+                &fixtures::master().order_instrument().expect("종목")
+            )),
+            Ok(vec![])
+        );
+    }
+
+    #[test]
+    fn repository_update_preserves_original_horizon_across_new_submission() {
+        let source = fixtures::master();
+        let (repository, long_task, long_head) = repository_with_horizon_change();
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let instrument = fixtures::id("sample-a");
+        let initial = run(repository.snapshot(&instrument)).expect("짧은 제출");
+        let first = fixtures::decision(&source, "99", None);
+        let original = buy_record(&first, "keep-original-horizon");
+        committed(run(repository.commit(
+            &instrument,
+            &initial,
+            &evaluation(&initial, first, Some(original.clone())),
+        )));
+        submit_long_horizon(&repository, &long_task, &long_head);
+        let snapshot = run(repository.snapshot(&instrument)).expect("새 제출");
+        let long = fixtures::decision_with_horizon(
+            &source,
+            "99",
+            None,
+            &[fixtures::item()],
+            (HorizonSelection::WeeksToMonths, None),
+        );
+        let mut mutation = evaluation(&snapshot, long.clone(), None);
+        let SignalMutation::Evaluate(value) = &mut mutation else {
+            panic!("평가 필요");
+        };
+        assert_eq!(
+            value.transition,
+            SignalTransition::Updated(long.into_signal().expect("갱신 신호"))
+        );
+        value.calibration_head = Some(long_head);
+        let result = committed(run(repository.commit(&instrument, &snapshot, &mutation)));
+        assert_eq!(result.events, vec![]);
+        let current = run(repository.snapshot(&instrument))
+            .expect("갱신")
+            .current
+            .expect("매수");
+        assert_eq!(current.occurrence, Some(original.clone()));
+        assert_eq!(
+            run(repository.occurrences(&instrument, &source.order_instrument().expect("종목"))),
+            Ok(vec![original])
+        );
     }
 }

@@ -2,7 +2,8 @@ use application::{
     AuditEntry, AuditLog, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
     PortfolioRepository, ProposalRepository, RecordOutcome, SecretKey, SecretStore, SecretValue,
     SettingsRepository, SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalMutation,
-    SignalRepository, ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
+    SignalRepository, SignalSnapshot, ThesisRepository, TransactionRepository, ValuationRepository,
+    WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, Draft, EstimateOutcome, FxRate, InstrumentId,
@@ -102,6 +103,54 @@ pub async fn signal_replacement<P: SignalRepository>(
     signal_other_current(port, other, std::slice::from_ref(other_first)).await;
 }
 
+pub async fn signal_rejects_stale_snapshot<P: SignalRepository>(
+    port: &P,
+    instrument: &InstrumentId,
+    stale: &SignalSnapshot,
+    latest: &SignalSnapshot,
+    mutation: &SignalMutation,
+) {
+    assert_ne!(stale, latest, "서로 다른 이전·최신 상태 필요");
+    assert_eq!(
+        port.snapshot(instrument).await,
+        Ok(latest.clone()),
+        "이전 평가 전에 최신 상태가 저장돼야 함"
+    );
+    assert_eq!(
+        port.commit(instrument, stale, mutation).await,
+        Ok(SignalCommitOutcome::Conflict),
+        "이전 스냅숏을 거부해야 함"
+    );
+    assert_eq!(
+        port.snapshot(instrument).await,
+        Ok(latest.clone()),
+        "충돌 뒤 최신 상태를 보존해야 함"
+    );
+}
+
+pub async fn signal_rejects_discarded_submission<P: SignalRepository>(
+    port: &P,
+    instrument: &InstrumentId,
+    latest: &SignalSnapshot,
+    mutation: &SignalMutation,
+) {
+    assert_eq!(
+        port.snapshot(instrument).await,
+        Ok(latest.clone()),
+        "폐기 뒤 재평가 전에 최신 상태가 저장돼야 함"
+    );
+    assert_eq!(
+        port.commit(instrument, latest, mutation).await,
+        Ok(SignalCommitOutcome::SubmissionDiscarded),
+        "폐기된 제출은 충돌이 아닌 종료 결과를 반환해야 함"
+    );
+    assert_eq!(
+        port.snapshot(instrument).await,
+        Ok(latest.clone()),
+        "폐기된 제출을 거부해도 상태를 보존해야 함"
+    );
+}
+
 async fn signal_other_current<P: SignalRepository>(
     port: &P,
     other: &InstrumentId,
@@ -112,7 +161,7 @@ async fn signal_other_current<P: SignalRepository>(
 
 fn signal_calibration_head(
     decision: &domain::SignalDecision,
-    snapshot: &application::SignalSnapshot,
+    snapshot: &SignalSnapshot,
 ) -> Result<domain::CalibrationLedgerHead, application::SystemPortError> {
     let key = match decision {
         domain::SignalDecision::Buy(value) => value.facts().submission().calibration_key(),

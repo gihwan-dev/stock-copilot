@@ -1324,6 +1324,20 @@ mod tests {
             Err(crate::NoBuyQuantity::Indeterminate)
         );
     }
+
+    #[test]
+    fn a27_new_occurrence_retains_the_originating_task() {
+        let signal = d51_buy_with_instrument_id("origin");
+        let occurrence = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("origin-occurrence").expect("발생 ID"),
+            &signal,
+            at(61),
+            &calendars(),
+        )
+        .expect("발생 기록");
+        assert_eq!(occurrence.originating_task().task(), signal.facts().task());
+    }
+
     #[test]
     fn d51_history_blocks_same_symbol_with_a_different_instrument_id() {
         let previous = d51_buy_with_instrument_id("previous");

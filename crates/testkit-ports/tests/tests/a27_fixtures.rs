@@ -130,6 +130,23 @@ pub(super) fn calendar(value: i64, market: &Market) -> MarketCalendar {
 }
 
 pub(super) fn eligible_for_master(high: &str, source: &MasterInstrument) -> CostEligibleTask {
+    eligible_for_horizon(high, source, HorizonSelection::FewDays)
+}
+
+fn last_day(selection: HorizonSelection) -> i64 {
+    match selection {
+        HorizonSelection::Hours => 61,
+        HorizonSelection::FewDays => 65,
+        HorizonSelection::WeeksToMonths => 100,
+        HorizonSelection::HalfYearOrMore => 186,
+    }
+}
+
+pub(super) fn eligible_for_horizon(
+    high: &str,
+    source: &MasterInstrument,
+    selection: HorizonSelection,
+) -> CostEligibleTask {
     let candles: Vec<_> = (0_i64..61)
         .map(|index| {
             let fixture_price = price(if index % 2 == 0 { "100" } else { high });
@@ -159,7 +176,7 @@ pub(super) fn eligible_for_master(high: &str, source: &MasterInstrument) -> Cost
             day(60),
         ),
         volatility,
-        Horizon::new(HorizonSelection::FewDays),
+        Horizon::new(selection),
         HoursPermission::default(),
         RiskAppetite::Neutral,
     )
@@ -167,7 +184,7 @@ pub(super) fn eligible_for_master(high: &str, source: &MasterInstrument) -> Cost
     let zero = CostRate::try_new(ratio("0")).expect("비용");
     let period = EstimateCostPeriod::from_calendar_result(
         &task,
-        at(day(65)
+        at(day(last_day(selection))
             .utc_seconds()
             .as_i64()
             .checked_add(3600)
@@ -188,10 +205,14 @@ pub(super) fn eligible_for_master(high: &str, source: &MasterInstrument) -> Cost
 }
 
 pub(super) fn calibration_key() -> CalibrationKey {
+    calibration_key_for(HorizonSelection::FewDays)
+}
+
+pub(super) fn calibration_key_for(selection: HorizonSelection) -> CalibrationKey {
     let part = ModelIdentityPart::try_new("fixture").expect("모델");
     CalibrationKey::new(
         CalibrationModel::new(part.clone(), part.clone(), part),
-        Horizon::new(HorizonSelection::FewDays),
+        Horizon::new(selection),
     )
 }
 
@@ -220,9 +241,17 @@ pub(super) fn item() -> CollectedItem {
     )
 }
 pub(super) fn submission(task: &CostEligibleTask, probability: &str) -> SignalSubmission {
+    submission_with_key(task, probability, calibration_key())
+}
+
+pub(super) fn submission_with_key(
+    task: &CostEligibleTask,
+    probability: &str,
+    key: CalibrationKey,
+) -> SignalSubmission {
     SignalSubmission::create(
         SignalTaskKey::from_task(task),
-        calibration_key(),
+        key,
         AiProbability::parse(&AiProbabilityInput::try_new(probability).expect("입력"))
             .expect("확률"),
         Some(
@@ -354,19 +383,41 @@ pub(super) fn decision_with_sources(
     held: Option<&str>,
     items: &[CollectedItem],
 ) -> SignalDecision {
-    let task = eligible_for_master(
-        if source.row().instrument_id == master().row().instrument_id {
-            "102"
-        } else {
-            "104"
-        },
+    decision_with_horizon(
         source,
+        probability,
+        held,
+        items,
+        (HorizonSelection::FewDays, None),
+    )
+}
+
+pub(super) fn decision_with_horizon(
+    source: &MasterInstrument,
+    probability: &str,
+    held: Option<&str>,
+    items: &[CollectedItem],
+    setup: (HorizonSelection, Option<&str>),
+) -> SignalDecision {
+    let (selection, high) = setup;
+    let task = eligible_for_horizon(
+        high.unwrap_or_else(|| {
+            if source.row().instrument_id == master().row().instrument_id {
+                "102"
+            } else {
+                "104"
+            }
+        }),
+        source,
+        selection,
     );
-    let submitted = submission(&task, probability);
-    let calibration = Calibration::try_new(calibration_key(), &[]).expect("보정");
-    let snapshot = CalibrationSnapshot::try_new(calibration, head(0)).expect("표");
+    let key = calibration_key_for(selection);
+    let submitted = submission_with_key(&task, probability, key.clone());
+    let calibration = Calibration::try_new(key.clone(), &[]).expect("보정");
+    let position = CalibrationLedgerHead::new(key, CalibrationPosition::new(0));
+    let snapshot = CalibrationSnapshot::try_new(calibration, position.clone()).expect("표");
     let calibrated =
-        calibrate_signal_submission(Some(&snapshot), &head(0), submitted).expect("보정");
+        calibrate_signal_submission(Some(&snapshot), &position, submitted).expect("보정");
     let estimate = SignalEstimate::create(&task, &calibrated, Margin::default()).expect("입력");
     let at = task.task().created_at();
     let portfolio = portfolio_for(source, held, at);
@@ -381,7 +432,7 @@ pub(super) fn decision_with_sources(
         tools: vec![],
     };
     let ledger = facts.ledger();
-    let calendars: Vec<_> = (60..=66)
+    let calendars: Vec<_> = (60..=last_day(selection).checked_add(1).expect("마지막 달력"))
         .map(|value| calendar(value, &Market::Kr))
         .collect();
     let context = SignalContext::new(
@@ -392,7 +443,7 @@ pub(super) fn decision_with_sources(
         SignalAssessmentFacts::new(
             SignalTiming::new(at, &calendars),
             Some(estimate.task().reference().clone()),
-            Some(head(0)),
+            Some(position),
         ),
     );
     SignalDecision::assess(&estimate, &context)

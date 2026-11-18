@@ -58,6 +58,7 @@ pub struct SignalCommit {
 pub enum SignalCommitOutcome {
     Applied(SignalCommit),
     Conflict,
+    SubmissionDiscarded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
