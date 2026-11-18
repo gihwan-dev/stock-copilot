@@ -1291,3 +1291,44 @@ fn h55_an_approval_introduced_in_a_root_commit_is_not_authority() {
     let head = commit_change(&root, AFTER_ONE);
     assert_eq!(remaining(&root, &authority, &head, AFTER_ONE), [finding]);
 }
+
+#[test]
+fn h55_explicit_approval_rejects_obviously_true_comparisons() {
+    let finding = "test-diff:modified:sample tests::first";
+    for (name, before_check, after_check) in [
+        (
+            "comparison",
+            "let value = 7; assert!(value == 7)",
+            "let value = 7; assert!(value == value)",
+        ),
+        (
+            "negation",
+            "let flag = false; assert!(!flag)",
+            "let flag = false; assert!(!false)",
+        ),
+        (
+            "parentheses",
+            "let value = 7; assert_eq!(value, 7)",
+            "let value = 7; assert_eq!(value, (value))",
+        ),
+    ] {
+        let old = BEFORE.replace("assert_eq!(1, 1)", before_check);
+        let changed = BEFORE.replace("assert_eq!(1, 1)", after_check);
+        let (root, _) = repository(&format!("h55-trivial-{name}"));
+        write(&root, SOURCE, &old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "baseline"]);
+        let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+            .replace("decision =", "assertion_change = true\ndecision =");
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(&old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("trivial comparison evaluation");
+        assert_eq!(remaining.len(), 1, "{name}");
+    }
+}

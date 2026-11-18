@@ -74,6 +74,22 @@ test("로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 
   assert.equal(source.status, 0, source.stderr);
   assert.equal(tracked.status, 0, tracked.stderr);
   assert.equal(tracked.stdout, source.stdout);
+  const branchCheck = "harness/ci/branch-checkout.mjs";
+  cpSync(join(repoRoot, branchCheck), join(clone, branchCheck));
+  assert.equal(run(clone, process.execPath, [branchCheck]).status, 0);
+  const extraMaster = run(clone, "git", [
+    "update-ref",
+    "refs/heads/master",
+    tracked.stdout.trim(),
+  ]);
+  assert.equal(extraMaster.status, 0, extraMaster.stderr);
+  assert.equal(run(clone, process.execPath, [branchCheck]).status, 1);
+  const removeMaster = run(clone, "git", [
+    "update-ref",
+    "-d",
+    "refs/heads/master",
+  ]);
+  assert.equal(removeMaster.status, 0, removeMaster.stderr);
   const testFile = "harness/claude-hooks/tests/agent-stop.test.mjs";
   mkdirSync(join(clone, "harness/claude-hooks/tests"), { recursive: true });
   cpSync(join(repoRoot, testFile), join(clone, testFile));
@@ -90,6 +106,7 @@ test("로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 
     "refs/remotes/origin/master",
   ]);
   assert.equal(deleted.status, 0, deleted.stderr);
+  assert.equal(run(clone, process.execPath, [branchCheck]).status, 1);
   const missing = run(clone, process.execPath, [
     "--test",
     "--test-name-pattern=hook entry scripts record a start",

@@ -529,6 +529,26 @@
         "file": "apps/desktop/tests/sqlcipher.test.mjs",
         "name": "SQLCipher rejects missing pins and OpenSSL graph or linkage"
       }
+    },
+    {
+      "recipe": "check",
+      "command": "node harness/ci/temp-audit.mjs \"{{just_executable()}}\" base={{quote(base)}} check-audited",
+      "kind": "check",
+      "cases": "harness/ci/temp-audit.mjs",
+      "test": {
+        "file": "harness/ci/tests/h53-temp.test.mjs",
+        "name": "임시 검사기는 실행별 공간에서 남은 항목을 실패로 보고 정리한다"
+      }
+    },
+    {
+      "recipe": "check",
+      "command": "[ \"$(node -e 'process.stdout.write(\"audit-ready\")')\" = audit-ready ]",
+      "kind": "check",
+      "cases": "apps/desktop/tests/node-pin.test.mjs",
+      "test": {
+        "file": "apps/desktop/tests/node-pin.test.mjs",
+        "name": "a version-only Node impersonator cannot skip the full check"
+      }
     }
   ]
 }

@@ -396,6 +396,50 @@ struct AssertionHeads {
     unsafe_code: bool,
 }
 
+fn canonical_expr(expression: &syn::Expr) -> &syn::Expr {
+    if let syn::Expr::Paren(inner) = expression {
+        canonical_expr(&inner.expr)
+    } else if let syn::Expr::Group(inner) = expression {
+        canonical_expr(&inner.expr)
+    } else if let syn::Expr::Cast(inner) = expression {
+        canonical_expr(&inner.expr)
+    } else {
+        expression
+    }
+}
+
+fn constant_boolean(expression: &syn::Expr) -> Option<bool> {
+    let canonical = canonical_expr(expression);
+    if let syn::Expr::Lit(literal) = canonical
+        && let syn::Lit::Bool(value) = &literal.lit
+    {
+        Some(value.value)
+    } else if let syn::Expr::Unary(unary) = canonical
+        && let syn::UnOp::Not(_) = unary.op
+    {
+        constant_boolean(&unary.expr).map(|value| !value)
+    } else {
+        None
+    }
+}
+
+fn same_expression(left: &syn::Expr, right: &syn::Expr) -> bool {
+    canonical_expr(left).to_token_stream().to_string()
+        == canonical_expr(right).to_token_stream().to_string()
+}
+
+fn trivial_predicate(expression: &syn::Expr) -> bool {
+    if constant_boolean(expression) == Some(true) {
+        return true;
+    }
+    if let syn::Expr::Binary(binary) = canonical_expr(expression)
+        && let syn::BinOp::Eq(_) = binary.op
+    {
+        return same_expression(&binary.left, &binary.right);
+    }
+    false
+}
+
 fn trivial_assertion(item: &syn::Macro) -> bool {
     let Some(name) = item
         .path
@@ -411,16 +455,8 @@ fn trivial_assertion(item: &syn::Macro) -> bool {
         return false;
     };
     match (name.as_str(), args.first(), args.iter().nth(1)) {
-        ("assert" | "debug_assert", Some(syn::Expr::Lit(expr)), _) => {
-            if let syn::Lit::Bool(value) = &expr.lit {
-                value.value
-            } else {
-                false
-            }
-        }
-        ("assert_eq" | "debug_assert_eq", Some(left), Some(right)) => {
-            left.to_token_stream().to_string() == right.to_token_stream().to_string()
-        }
+        ("assert" | "debug_assert", Some(expr), _) => trivial_predicate(expr),
+        ("assert_eq" | "debug_assert_eq", Some(left), Some(right)) => same_expression(left, right),
         (
             "assert_ne" | "debug_assert_ne",
             Some(syn::Expr::Lit(left)),

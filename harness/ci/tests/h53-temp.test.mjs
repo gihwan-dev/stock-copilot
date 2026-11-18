@@ -168,3 +168,76 @@ test("테스트 임시 폴더 관리자는 종료 신호에서도 자신이 만�
   assert.equal(outcome.signal, "SIGTERM");
   assert.deepEqual(readdirSync(directory), ["ready"]);
 });
+
+test("임시 검사기는 남아 있는 자손을 실패로 보고 정리한다", (t) => {
+  const directory = fixture(t);
+  const source = `const child = require("child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore"}); child.unref();`;
+  const result = spawnSync(
+    process.execPath,
+    [audit, process.execPath, "-e", source],
+    {
+      env: { ...environment(), TMPDIR: directory },
+      encoding: "utf8",
+      timeout: 10000,
+    },
+  );
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /자손 프로세스/u);
+  assert.deepEqual(readdirSync(directory), []);
+});
+
+test("임시 검사기는 Node의 컴파일 캐시를 정리하면서 누출은 계속 거부한다", (t) => {
+  const directory = fixture(t);
+  for (const [leak, expected] of [
+    [false, 0],
+    [true, 1],
+  ]) {
+    const source = `require("module").enableCompileCache(); ${leak ? 'require("fs").mkdirSync(require("path").join(process.env.TMPDIR, "h47-summary-left"));' : ""}`;
+    const result = spawnSync(
+      process.execPath,
+      [audit, process.execPath, "-e", source],
+      {
+        env: { ...environment(), TMPDIR: directory },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, expected, result.stderr);
+    if (leak) assert.match(result.stderr, /h47-summary-left/u);
+    assert.deepEqual(readdirSync(directory), []);
+  }
+});
+
+test("임시 검사기는 실행 공간의 pnpm 저장소를 정리하면서 누출은 계속 거부한다", (t) => {
+  const directory = fixture(t);
+  for (const [leak, expected] of [
+    [false, 0],
+    [true, 1],
+  ]) {
+    const source = `const fs = require("fs"), path = require("path"); fs.mkdirSync(path.join(process.env.TMPDIR, ".pnpm-store")); ${leak ? 'fs.mkdirSync(path.join(process.env.TMPDIR, "h47-summary-left"));' : ""}`;
+    const result = spawnSync(
+      process.execPath,
+      [audit, process.execPath, "-e", source],
+      {
+        env: { ...environment(), TMPDIR: directory },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, expected, result.stderr);
+    if (leak) assert.match(result.stderr, /h47-summary-left/u);
+    assert.deepEqual(readdirSync(directory), []);
+  }
+});
+
+test("임시 검사 공간에서도 Unix 소켓을 만들 수 있다", () => {
+  const source =
+    'const fs = require("fs"), net = require("net"), path = require("path"); const file = path.join(process.env.TMPDIR, `stock-copilot-net-unix-${process.pid}`); const server = net.createServer(); server.listen(file, () => server.close(() => { if (fs.existsSync(file)) fs.unlinkSync(file); }));';
+  const result = spawnSync(
+    process.execPath,
+    [audit, process.execPath, "-e", source],
+    {
+      env: environment(),
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+});

@@ -75,7 +75,6 @@
     "echo '알림 없음: 기준 checkout에 harness/ci/notify.mjs가 없다'",
     "just advisory-db-fetch",
     "just base=\"$BASE\" check",
-    "just mutants-diff \"$BASE\"",
     "just base=HEAD check",
     "just linux-check",
     "lefthook install",
@@ -94,7 +93,10 @@
     "node harness/ci/mutation-range.mjs plan",
     "just mutants-daily \"$MUTATION_BASE\" \"$MUTATION_SHARD\"",
     "node harness/ci/mutation-range.mjs verify",
-    "node harness/ci/visual.mjs"
+    "node harness/ci/visual.mjs",
+    "node harness/ci/diff-mutants.mjs",
+    "node harness/ci/diff-mutants-verdict.mjs",
+    "node harness/ci/branch-checkout.mjs"
   ],
   "expressions": [
     "${{ github.event.before }}",
@@ -118,7 +120,8 @@
     "${{ steps.plan.outputs.count }}",
     "${{ steps.plan.outputs.anchor }}",
     "${{ steps.plan.outcome }}",
-    "${{ needs.daily-plan.outputs.base }}"
+    "${{ needs.daily-plan.outputs.base }}",
+    "${{ steps.mutation.outputs.status }}"
   ],
   "envNames": [
     "BASE",
@@ -137,7 +140,8 @@
     "MUTATION_OUTCOME",
     "MUTATION_SHARD",
     "MUTATION_BASE",
-    "MUTATION_MODE"
+    "MUTATION_MODE",
+    "MUTATION_STATUS"
   ],
   "inputValues": {
     "fetch-depth": [0, 1],
@@ -316,9 +320,25 @@
             },
             {
               "name": "diff mutants",
-              "run": "just mutants-diff \"$BASE\"",
+              "id": "mutation",
+              "run": "node harness/ci/diff-mutants.mjs",
               "env": {
                 "BASE": "${{ steps.range.outputs.base }}"
+              }
+            },
+            {
+              "name": "diff mutants timeout",
+              "if": "steps.mutation.outputs.status == 'deadline'",
+              "run": "node harness/ci/diff-mutants-verdict.mjs",
+              "env": {
+                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+              }
+            },
+            {
+              "name": "diff mutants verdict",
+              "run": "node harness/ci/diff-mutants-verdict.mjs",
+              "env": {
+                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
               }
             }
           ]
@@ -388,6 +408,10 @@
               }
             },
             {
+              "name": "branch checkout",
+              "run": "node harness/ci/branch-checkout.mjs"
+            },
+            {
               "name": "just check",
               "run": "just base=\"$BASE\" check",
               "env": {
@@ -396,9 +420,25 @@
             },
             {
               "name": "diff mutants",
-              "run": "just mutants-diff \"$BASE\"",
+              "id": "mutation",
+              "run": "node harness/ci/diff-mutants.mjs",
               "env": {
                 "BASE": "${{ steps.range.outputs.base }}"
+              }
+            },
+            {
+              "name": "diff mutants timeout",
+              "if": "steps.mutation.outputs.status == 'deadline'",
+              "run": "node harness/ci/diff-mutants-verdict.mjs",
+              "env": {
+                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
+              }
+            },
+            {
+              "name": "diff mutants verdict",
+              "run": "node harness/ci/diff-mutants-verdict.mjs",
+              "env": {
+                "MUTATION_STATUS": "${{ steps.mutation.outputs.status }}"
               }
             }
           ]

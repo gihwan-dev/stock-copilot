@@ -60,6 +60,7 @@ pub(crate) enum Scope {
     Everything,
     Sharded(String),
     Files(BTreeSet<String>),
+    DiffSharded(BTreeSet<String>, String),
     DailyFiles(BTreeSet<String>),
     DailySharded(BTreeSet<String>, String),
 }
@@ -188,14 +189,21 @@ pub(crate) fn target_globs(workspace: &Path) -> Result<Vec<String>, String> {
 }
 
 pub(crate) fn selected_globs(globs: &[String], scope: &Scope) -> Vec<String> {
-    if let Scope::Files(files) | Scope::DailyFiles(files) | Scope::DailySharded(files, _) = scope {
+    if let Scope::Files(files)
+    | Scope::DiffSharded(files, _)
+    | Scope::DailyFiles(files)
+    | Scope::DailySharded(files, _) = scope
+    {
         return files.iter().cloned().collect();
     }
     globs
         .iter()
         .filter(|_| match scope {
             Scope::Everything | Scope::Sharded(_) => true,
-            Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => false,
+            Scope::Files(_)
+            | Scope::DiffSharded(_, _)
+            | Scope::DailyFiles(_)
+            | Scope::DailySharded(_, _) => false,
         })
         .cloned()
         .collect()
@@ -335,10 +343,36 @@ fn prepare_output(
         fs::remove_dir_all(results).map_err(|error| error.to_string())?;
     }
     match scope {
-        Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => {}
+        Scope::Files(_)
+        | Scope::DiffSharded(_, _)
+        | Scope::DailyFiles(_)
+        | Scope::DailySharded(_, _) => {}
         Scope::Everything | Scope::Sharded(_) => catalog::prepare(root, globs, ignore, &output)?,
     }
     Ok(output)
+}
+
+fn configure_selection(
+    command: &mut Command,
+    scope: &Scope,
+    ignore: IgnoreFiles,
+    globs: &[String],
+    patch: Option<&Path>,
+) {
+    if let Scope::Sharded(shard) | Scope::DiffSharded(_, shard) | Scope::DailySharded(_, shard) =
+        scope
+    {
+        command.arg("--shard").arg(shard);
+    }
+    for glob in globs {
+        command.arg("--file").arg(glob);
+    }
+    if ignore == IgnoreFiles::Disregarded {
+        command.arg("--gitignore=false");
+    }
+    if let Some(file) = patch {
+        command.arg("--in-diff").arg(file);
+    }
 }
 
 fn run_with_diff(
@@ -350,9 +384,10 @@ fn run_with_diff(
     let globs = selected_globs(&target_globs(workspace)?, scope);
     if globs.is_empty() {
         return match scope {
-            Scope::Files(_) | Scope::DailyFiles(_) | Scope::DailySharded(_, _) => {
-                Ok(Outcomes::default())
-            }
+            Scope::Files(_)
+            | Scope::DiffSharded(_, _)
+            | Scope::DailyFiles(_)
+            | Scope::DailySharded(_, _) => Ok(Outcomes::default()),
             Scope::Everything | Scope::Sharded(_) => Err(String::from("밤 전체 변이 대상이 없다")),
         };
     }
@@ -377,21 +412,10 @@ fn run_with_diff(
     test_packages::configure(&mut command, &globs)?;
     configure_profile(&mut command);
     configure_parallelism(&mut command, workspace, &globs)?;
-    if let Scope::Sharded(shard) | Scope::DailySharded(_, shard) = scope {
-        command.arg("--shard").arg(shard);
-    }
-    for glob in &globs {
-        command.arg("--file").arg(glob);
-    }
-    if ignore == IgnoreFiles::Disregarded {
-        command.arg("--gitignore=false");
-    }
-    if let Some(file) = patch {
-        command.arg("--in-diff").arg(file);
-    }
+    configure_selection(&mut command, scope, ignore, &globs, patch);
     let results = output.join("mutants.out");
     let status = match scope {
-        Scope::Files(_) => environment::run_bounded(command)?,
+        Scope::Files(_) | Scope::DiffSharded(_, _) => environment::run_bounded(command)?,
         Scope::Everything
         | Scope::Sharded(_)
         | Scope::DailyFiles(_)
@@ -425,6 +449,19 @@ fn scope_for(
             let changed = changed_paths(root, &commit)?;
             Ok(diff_scope(root, &commit, &target_globs(root)?, &changed))
         }
+        [flag, base, option, shard]
+            if flag == "--in-diff"
+                && option == "--shard"
+                && (0..4).any(|index| shard == &format!("{index}/4")) =>
+        {
+            let commit = crate::git_base::resolve_base_for(root, base, base_use)?;
+            let changed = changed_paths(root, &commit)?;
+            let Scope::Files(files) = diff_scope(root, &commit, &target_globs(root)?, &changed)
+            else {
+                return Err(String::from("변경분 변이 파일 선택 실패"));
+            };
+            Ok(Scope::DiffSharded(files, shard.clone()))
+        }
         _ => Err(String::from(
             "사용법: xtask mutants [--in-diff <HEAD|커밋 ID> | --shard <0/128..127/128> | --daily <커밋 ID|initial>]",
         )),
@@ -437,7 +474,7 @@ fn checked_scope(
     base_use: crate::git_base::BaseUse,
 ) -> Result<Scope, String> {
     let scope = scope_for(root, arguments, base_use)?;
-    if let [flag, base] = arguments
+    if let Some([flag, base, ..]) = arguments.get(..)
         && flag == "--in-diff"
     {
         let findings = crate::test_diff::check_for(root, base, base_use)?;
@@ -572,32 +609,38 @@ fn diff_patch(root: &Path, base: &str) -> Result<std::path::PathBuf, String> {
 }
 
 pub(crate) fn command(arguments: &[String], base_use: crate::git_base::BaseUse) -> ExitCode {
-    report(
-        "mutants",
-        workspace_root().and_then(|root| {
-            if arguments
-                .first()
-                .is_some_and(|flag| flag.starts_with("--daily"))
-            {
-                return daily::dispatch(&root, arguments, base_use);
-            }
-            let survivors = load_survivors(&root, SURVIVORS_FILE)?;
-            let scope = checked_scope(&root, arguments, base_use)?;
-            let outcomes = if let [flag, base] = arguments
-                && flag == "--in-diff"
-            {
-                let patch = diff_patch(&root, base)?;
-                let mutated = list_changed_mutants(&root, &scope, &patch)?;
-                report_nightly_targets(&root, base, &mutated)?;
-                if mutated.is_empty() {
-                    Outcomes::default()
-                } else {
-                    run_with_diff(&root, &scope, IgnoreFiles::Respected, Some(&patch))?
-                }
+    let result = workspace_root().and_then(|root| {
+        if arguments
+            .first()
+            .is_some_and(|flag| flag.starts_with("--daily"))
+        {
+            return daily::dispatch(&root, arguments, base_use);
+        }
+        let survivors = load_survivors(&root, SURVIVORS_FILE)?;
+        let scope = checked_scope(&root, arguments, base_use)?;
+        let outcomes = if let Some([flag, base, ..]) = arguments.get(..)
+            && flag == "--in-diff"
+        {
+            let patch = diff_patch(&root, base)?;
+            let mutated = list_changed_mutants(&root, &scope, &patch)?;
+            report_nightly_targets(&root, base, &mutated)?;
+            if mutated.is_empty() {
+                Outcomes::default()
             } else {
-                run(&root, &scope, IgnoreFiles::Respected)?
-            };
-            evaluate(&outcomes, &survivors)
-        }),
-    )
+                run_with_diff(&root, &scope, IgnoreFiles::Respected, Some(&patch))?
+            }
+        } else {
+            run(&root, &scope, IgnoreFiles::Respected)?
+        };
+        evaluate(&outcomes, &survivors)
+    });
+    if result
+        .as_ref()
+        .is_err_and(|failure| failure == environment::DEADLINE)
+    {
+        let _reported = report("mutants", result);
+        ExitCode::from(124)
+    } else {
+        report("mutants", result)
+    }
 }

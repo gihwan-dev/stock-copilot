@@ -46,8 +46,12 @@ export RUSTC_WORKSPACE_WRAPPER := ""
 
 base := ""
 
+check: check-node
+    [ "$(node -e 'process.stdout.write("audit-ready")')" = audit-ready ]
+    node harness/ci/temp-audit.mjs "{{just_executable()}}" base={{quote(base)}} check-audited
+
 [env("STOCK_COPILOT_PROPTEST_CASES", "4096")]
-check: check-node require-base check-ts
+check-audited: check-node require-base check-ts
     cargo fmt --all --check
     "{{just_executable()}}" clippy Cargo.toml
     "{{just_executable()}}" deny
@@ -193,6 +197,9 @@ test-diff commit:
 
 mutants-diff commit:
     cargo run --locked --quiet --package xtask -- mutants --in-diff "$1"
+
+mutants-diff-shard commit shard:
+    cargo run --locked --quiet --package xtask -- mutants --in-diff "$1" --shard "$2"
 
 mutants-daily commit shard:
     cargo run --locked --quiet --package xtask -- mutants --daily "$1" --shard "$2"

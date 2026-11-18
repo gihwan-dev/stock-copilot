@@ -107,9 +107,19 @@ export const checkSteps = (dump, top = "check") => {
       return;
     }
     recipe.dependencies.forEach((dependency) => visit(dependency.recipe));
-    recipe.body.forEach((line) =>
-      steps.push({ recipe: name, command: renderLine(line) }),
-    );
+    recipe.body.forEach((line) => {
+      const command = renderLine(line);
+      if (
+        name === "check" &&
+        command ===
+          'node harness/ci/temp-audit.mjs "{{just_executable()}}" base={{quote(base)}} check-audited'
+      )
+        visit("check-audited");
+      steps.push({
+        recipe: name === "check-audited" ? "check" : name,
+        command,
+      });
+    });
   };
   visit(top);
   return steps;

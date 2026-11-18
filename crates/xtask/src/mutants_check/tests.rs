@@ -315,6 +315,45 @@ fn shard_selection_accepts_only_fixed_partition() {
 }
 
 #[test]
+fn h54_changed_diff_accepts_only_all_four_canonical_shards() {
+    let root = fresh_directory(&repository_root(), "h54-diff-shards");
+    fs::create_dir_all(root.join(".cargo")).expect("settings directory");
+    fs::write(
+        root.join(".cargo/mutants.toml"),
+        "examine_globs=['crates/domain/src/**/*.rs']\n",
+    )
+    .expect("settings");
+    h55_git(&root, &["init", "--quiet", "-b", "master"]);
+    h55_git(&root, &["add", "."]);
+    h55_git(&root, &["commit", "--quiet", "-m", "base"]);
+    let base = h55_git(&root, &["rev-parse", "HEAD"]);
+    for index in 0_u16..4 {
+        let arguments = [
+            "--in-diff".to_owned(),
+            base.clone(),
+            "--shard".to_owned(),
+            format!("{index}/4"),
+        ];
+        let selected = super::scope_for(&root, &arguments, crate::git_base::BaseUse::Ancestor)
+            .expect("canonical diff shard");
+        assert_eq!(
+            selected,
+            Scope::DiffSharded(BTreeSet::new(), format!("{index}/4"))
+        );
+    }
+    for shard in ["0/1", "4/4", "00/4", "0/5", "0/4;true"] {
+        let arguments = [
+            "--in-diff".to_owned(),
+            base.clone(),
+            "--shard".to_owned(),
+            shard.to_owned(),
+        ];
+        super::scope_for(&root, &arguments, crate::git_base::BaseUse::Ancestor)
+            .expect_err("invalid diff shard");
+    }
+}
+
+#[test]
 fn environment_reads_only_jobs_key() {
     use syn::visit::Visit;
     struct Calls(Vec<String>);
@@ -844,5 +883,68 @@ fn h55_diff_precondition_accepts_only_the_exact_approved_assertion_change() {
     h55_write(&root, path, &after.replace(", 2)", ", 3)"));
     let error = super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
         .expect_err("wrong file hash must fail");
+    assert!(error.contains("test-diff:modified"), "{error}");
+}
+
+#[test]
+fn h54_sharded_diff_preserves_approved_test_diff_precondition() {
+    use sha2::{Digest, Sha256};
+    let root = fresh_directory(&repository_root(), "h54-shard-approved");
+    let path = "crates/domain/src/sample.rs";
+    let before = "pub fn value() -> usize { 1 } #[cfg(test)] mod tests { #[test] fn stable() { assert_eq!(super::value(), 1); } }";
+    let after = "pub fn value() -> usize { 1 } #[cfg(test)] mod tests { #[test] fn stable() { assert_eq!(super::value(), 2); } }";
+    for (file, text) in [
+        (
+            "Cargo.lock",
+            "version = 4\n[[package]]\nname='domain'\nversion='0.1.0'\n",
+        ),
+        (
+            "Cargo.toml",
+            "[workspace]\nmembers=['crates/domain']\nresolver='2'\n",
+        ),
+        (
+            "crates/domain/Cargo.toml",
+            "[package]\nname='domain'\nversion='0.1.0'\nedition='2024'\n",
+        ),
+        (
+            ".cargo/mutants.toml",
+            "examine_globs=['crates/domain/src/**/*.rs']\n",
+        ),
+        ("crates/domain/src/lib.rs", "pub mod sample;"),
+        (path, before),
+    ] {
+        h55_write(&root, file, text);
+    }
+    h55_git(&root, &["init", "--quiet", "-b", "master"]);
+    h55_git(&root, &["add", "."]);
+    h55_git(&root, &["commit", "--quiet", "-m", "baseline"]);
+    let base = h55_git(&root, &["rev-parse", "HEAD"]);
+    let old_hash = format!("{:x}", Sha256::digest(before.as_bytes()));
+    let new_hash = format!("{:x}", Sha256::digest(after.as_bytes()));
+    let approval = format!(
+        "[[approval]]\ntask='H-55'\npath='{path}'\nbefore_sha256='{old_hash}'\nafter_sha256='{new_hash}'\nfinding='test-diff:modified:domain sample::tests::stable'\nassertion_change=true\ndecision='approved'\nreason='reviewed'\n"
+    );
+    h55_write(&root, "harness/test-diff/approvals.toml", &approval);
+    h55_git(&root, &["add", "harness/test-diff/approvals.toml"]);
+    h55_git(&root, &["commit", "--quiet", "-m", "main approval"]);
+    h55_git(
+        &root,
+        &["fetch", "--quiet", ".", "master:refs/remotes/origin/master"],
+    );
+    h55_git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    h55_write(&root, path, after);
+    h55_git(&root, &["add", path]);
+    h55_git(&root, &["commit", "--quiet", "-m", "approved change"]);
+    let args = [
+        String::from("--in-diff"),
+        base,
+        String::from("--shard"),
+        String::from("0/4"),
+    ];
+    super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
+        .expect("approved change passes the sharded precondition");
+    h55_write(&root, path, &after.replace(", 2)", ", 3)"));
+    let error = super::checked_scope(&root, &args, crate::git_base::BaseUse::Ancestor)
+        .expect_err("wrong file hash must fail for a shard");
     assert!(error.contains("test-diff:modified"), "{error}");
 }

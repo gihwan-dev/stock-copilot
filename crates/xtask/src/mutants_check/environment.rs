@@ -1,3 +1,5 @@
+pub(super) const DEADLINE: &str = "변경분 변이 검사 20분 제한 초과";
+
 pub(super) fn jobs_override() -> Result<Option<String>, String> {
     match std::env::var("STOCK_COPILOT_MUTANTS_JOBS") {
         Ok(value) => Ok(Some(value)),
@@ -59,7 +61,7 @@ fn wait_with_limit(
         if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
             return match interrupted {
                 Interrupt::Pending => Ok(status),
-                Interrupt::Sent => Err(String::from("변경분 변이 검사 20분 제한 초과")),
+                Interrupt::Sent => Err(String::from(DEADLINE)),
             };
         }
         if interrupted == Interrupt::Pending && start.elapsed() >= limit.saturating_sub(grace) {
@@ -69,7 +71,7 @@ fn wait_with_limit(
         if start.elapsed() >= limit {
             signal_group(child, "-KILL")?;
             child.wait().map_err(|error| error.to_string())?;
-            return Err(String::from("변경분 변이 검사 20분 제한 초과"));
+            return Err(String::from(DEADLINE));
         }
         std::thread::park_timeout(std::time::Duration::from_millis(100));
     }

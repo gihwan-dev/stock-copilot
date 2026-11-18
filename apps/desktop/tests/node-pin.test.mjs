@@ -59,3 +59,14 @@ test("the Node pin step passes with the pinned version", () => {
   );
   assert.equal(result.status, 0, result.stderr);
 });
+
+test("a version-only Node impersonator cannot skip the full check", () => {
+  const result = withFakeNode(pinnedNode, (env) =>
+    spawnSync("just", ["base=HEAD", "check"], {
+      cwd: repoRoot,
+      env,
+      encoding: "utf8",
+    }),
+  );
+  assert.notEqual(result.status, 0, result.stdout);
+});

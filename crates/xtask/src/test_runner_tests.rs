@@ -47,7 +47,7 @@ fn no_recipe_runs_rust_tests_outside_nextest() {
 
 #[test]
 fn check_runs_nextest_coverage_and_test_diff() {
-    let check = recipe("check");
+    let check = recipe("check-audited");
     for expected in [
         "cargo nextest run --workspace --locked",
         "\"{{ just_executable() }}\" coverage-check",
@@ -99,10 +99,10 @@ fn check_refuses_to_run_without_an_explicit_base() {
             "{arguments:?}: {stderr}"
         );
     }
-    let check = recipe("check");
+    let check = recipe("check-audited");
     assert_eq!(
         check.get(1).map(String::as_str),
-        Some("check: check-node require-base check-ts"),
+        Some("check-audited: check-node require-base check-ts"),
         "{check:?}"
     );
 }
@@ -120,7 +120,7 @@ fn check_full_does_not_repeat_nightly_mutation_testing() {
 
 #[test]
 fn full_check_forces_property_cases_and_fast_keeps_static_guards() {
-    let full = recipe("check");
+    let full = recipe("check-audited");
     assert_eq!(
         full.first().map(String::as_str),
         Some("[env(\"STOCK_COPILOT_PROPTEST_CASES\", \"4096\")]")
