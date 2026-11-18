@@ -684,6 +684,19 @@
       "namepath": "disable-report-since",
       "shebang": false
     },
+    "fresh-all": {
+      "attributes": [],
+      "body": [["cargo clean --locked"], ["cargo llvm-cov clean --locked"]],
+      "dependencies": [],
+      "doc": null,
+      "name": "fresh-all",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "fresh-all",
+      "shebang": false
+    },
     "fresh-build": {
       "attributes": [],
       "body": [],

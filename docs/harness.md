@@ -894,3 +894,7 @@ H-48 회귀 판정: S8은 clean/contaminated 상태와 차단 횟수 및 정확�
 H-48 최종 역할 경계: Claude 별도 Git 작업 사본은 훅 모듈의 위치와 common directory로 리뷰어에 고정한다. 도구 입력의 cwd·agent_type으로 메인이 되지 않는다. 주 작업 사본의 Claude만 메인이다. T3 review는 대상40자리SHA·대상HEAD일치·엄격조상과 보고표식/줄지문을 검사한다. review와 역할 없는 기존 스레드의 재개는 거부한다. native guard-agent pending은 현재 생산 Agent 경로에 연결되지 않은 호환 회귀이며 T3 자동 훅 보장이 아니다.
 
 D-43: 커버리지는 측정 전에 기존 워크스페이스 계측 산출물과 profraw를 정리해 이전 실행의 결과가 섞이지 않게 한다. 단독 coverage-check도 전체 검사와 같은 기존 STOCK_COPILOT_PROPTEST_CASES=4096 설정을 사용한다. testkit의 횟수 해석 규칙은 유지한다. 커버리지의 난수 의존 실패를 막기 위해 `just coverage-check`에만 `PROPTEST_RNG_SEED=5`을 설정한다. 전체 검사·훅·CI는 이 레시피를 통해 같은 시드를 사용한다. 일반 테스트는 기존 무작위 시드를 유지하며 testkit의 256/4096 횟수 규칙과 최소 횟수 단언은 변경하지 않는다. 관찰된 portfolio_valuation과 tick_size의 희귀 분기는 고정 예제로 보완한다.
+
+### H-51 로컬 빌드 산출물 정리
+
+`fresh-cargo`와 에이전트 종료 훅은 workspace 산출물만 정리한다. 외부 의존성 산출물이 남는 한계는 `just known-gaps`에 기록한다. 수동 `just fresh-all`은 외부 의존성을 포함한 현재 작업 사본의 `target/`을 지우며 자동 훅에는 들어가지 않는다. 메인 `target/`의 APFS 복제 씨앗은 실측한 첫 검사 중앙값이 10% 이상 빨라지지 않아 채택하지 않았다.
