@@ -115,6 +115,11 @@ fn save_quote(
         if quote.collected_at() < current.collected_at() {
             return Ok(CacheWriteOutcome::OlderIgnored);
         }
+        if let (Some(observed), Some(previous)) = (quote.timestamp(), current.timestamp())
+            && observed < previous
+        {
+            return Ok(CacheWriteOutcome::OlderIgnored);
+        }
         if *quote == current {
             return Ok(CacheWriteOutcome::Unchanged);
         }

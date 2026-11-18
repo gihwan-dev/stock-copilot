@@ -179,6 +179,11 @@ fn remember_quote(
         if quote.collected_at() < current.collected_at() {
             return CacheWriteOutcome::OlderIgnored;
         }
+        if let (Some(observed), Some(previous)) = (quote.timestamp(), current.timestamp())
+            && observed < previous
+        {
+            return CacheWriteOutcome::OlderIgnored;
+        }
         if quote == current {
             return CacheWriteOutcome::Unchanged;
         }

@@ -324,3 +324,71 @@ fn all_market_sql_constants_prepare_on_the_migrated_database() {
         connection.prepare(sql).expect("prepare");
     }
 }
+
+fn server_quote(value: &str, observed: Option<i64>, collected: i64) -> Quote {
+    Quote::try_new(
+        Symbol::try_new("AAPL").expect("symbol"),
+        Currency::Usd,
+        Some(
+            Price::parse(&NumericInput::try_new(value).expect("input"), Currency::Usd)
+                .expect("price"),
+        ),
+        observed.map(|seconds| at(seconds, 71, -18_000)),
+        at(collected, 13, 32_400),
+    )
+    .expect("quote")
+}
+
+#[test]
+fn later_collection_does_not_replace_a_newer_server_observation() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = MarketStore::new(&database);
+    let instrument = InstrumentId::try_new("asset-one").expect("id");
+    let first = server_quote("192.41", Some(90), 100);
+    let delayed = server_quote("181.12", Some(80), 110);
+    let newer = server_quote("193.82", Some(95), 120);
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &first)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &delayed)),
+        Ok(CacheWriteOutcome::OlderIgnored)
+    );
+    assert_eq!(rt.block_on(store.quote(&instrument)), Ok(Some(first)));
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &newer)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    let restored = rt
+        .block_on(store.quote(&instrument))
+        .expect("read")
+        .expect("quote");
+    assert_eq!(restored, newer);
+    assert_eq!(
+        restored
+            .timestamp()
+            .expect("observed")
+            .offset_seconds()
+            .as_i32(),
+        &-18_000_i32
+    );
+    assert_eq!(
+        restored.collected_at().offset_seconds().as_i32(),
+        &32_400_i32
+    );
+    let unknown = server_quote("194.13", None, 130);
+    assert_eq!(
+        rt.block_on(store.store_quote(&instrument, &unknown)),
+        Ok(CacheWriteOutcome::Changed)
+    );
+    let restored_unknown = rt
+        .block_on(store.quote(&instrument))
+        .expect("read")
+        .expect("quote");
+    assert_eq!(restored_unknown.timestamp(), None);
+    assert_eq!(restored_unknown, unknown);
+}
