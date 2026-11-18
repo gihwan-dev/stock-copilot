@@ -1015,7 +1015,13 @@ test("hook entry scripts record a start and leave an unrecorded stop unchecked",
     });
   const tip = execFileSync(
     "git",
-    ["-C", repoRoot, "rev-parse", "refs/heads/master"],
+    [
+      "-C",
+      repoRoot,
+      "rev-parse",
+      "--verify",
+      "refs/remotes/origin/master^{commit}",
+    ],
     { encoding: "utf8" },
   ).trim();
   writeRecord(state, "pending", "s9-t9", {
