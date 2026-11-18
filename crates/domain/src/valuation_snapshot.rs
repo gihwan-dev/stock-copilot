@@ -2980,6 +2980,50 @@ pub(crate) mod tests {
             crate::ObservedCloseEvidence::new(instrument, candle),
         )
     }
+    fn t22_fractional_holding(currency: Currency, reported: Option<&str>) -> crate::Holding {
+        let (template, evidence) = t22_observed_fixture(currency);
+        let report = reported.map(|value| {
+            let rate = Ratio::parse(&NumericInput::try_new("0").expect("입력")).expect("비율");
+            crate::ReportedHolding::new(money(value, currency), money("0", currency), rate)
+                .expect("보고")
+        });
+        crate::Holding::new(
+            template.instrument().clone(),
+            Quantity::parse(&NumericInput::try_new("0.5").expect("입력")).expect("수량"),
+            template.acquisition_price(),
+            crate::HoldingObservation::new(
+                Some(evidence.candle().values().close()),
+                report,
+                at(3, 7),
+            ),
+        )
+        .expect("소수 보유")
+    }
+    fn t22_reported_currency_amounts(currency: Currency, amount: &str) -> CurrencyAmounts {
+        match currency {
+            Currency::Krw => CurrencyAmounts::new(money(amount, Currency::Krw), None),
+            Currency::Usd => CurrencyAmounts::new(
+                money("0", Currency::Krw),
+                Some(money(amount, Currency::Usd)),
+            ),
+        }
+        .expect("통화별 금액")
+    }
+    fn t22_fractional_summary(currency: Currency, reported: Option<&str>) -> Portfolio {
+        let portfolio = observation_portfolio(vec![t22_fractional_holding(currency, None)]);
+        match reported {
+            Some(value) => {
+                let zero = t22_reported_currency_amounts(currency, "0");
+                portfolio.with_reported(crate::ReportedPortfolio::new(
+                    t22_reported_currency_amounts(currency, value),
+                    zero,
+                    zero,
+                    at(3, 7),
+                ))
+            }
+            None => portfolio,
+        }
+    }
     #[test]
     fn t22_observed_close_validates_and_preserves_each_instrument() {
         for currency in [Currency::Krw, Currency::Usd] {
@@ -3047,6 +3091,121 @@ pub(crate) mod tests {
             .err(),
             Some(SnapshotError::InvalidCandle)
         );
+    }
+    #[test]
+    fn t22_exact_evidence_limit_reaches_duplicate_validation() {
+        let calendar = extended_observation_calendar(Currency::Krw);
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        let portfolio = observation_portfolio(vec![holding]);
+        let evaluated = portfolio.evaluate(None);
+        let limit = vec![evidence.clone(); 4096];
+        let over = vec![evidence; 4097];
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(&calendar, &evaluated, at(3, 7), None, &limit)
+                .err(),
+            Some(SnapshotError::DuplicateInstrument)
+        );
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(&calendar, &evaluated, at(3, 7), None, &over)
+                .err(),
+            Some(SnapshotError::TooManyInputs)
+        );
+    }
+    #[test]
+    fn t22_fractional_holding_report_requires_exact_close_valuation() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let extended = extended_observation_calendar(currency);
+            let regular = calendar(3);
+            let evidence = t22_observed_fixture(currency).1;
+            for (reported, comparison, failure) in [
+                (None, Comparison::NotProvided, None),
+                (Some("8.5"), Comparison::Matches, None),
+                (
+                    Some("9"),
+                    Comparison::Matches,
+                    Some(SnapshotError::InvalidCandle),
+                ),
+                (
+                    Some("9.0"),
+                    Comparison::Different,
+                    Some(SnapshotError::InvalidCandle),
+                ),
+            ] {
+                let portfolio =
+                    observation_portfolio(vec![t22_fractional_holding(currency, reported)]);
+                let evaluated = portfolio.evaluate(None);
+                let item = evaluated.holdings().first().expect("보유 평가");
+                assert_eq!(item.valuation().comparisons().valuation(), comparison);
+                let value = reported.unwrap_or("8.5");
+                let ordinary = ValuationSnapshot::observe(&regular, &evaluated, at(3, 7), None)
+                    .expect("정규장만 있는 달력");
+                assert_eq!(ordinary.stock_value(currency), Ok(money(value, currency)));
+                let observed = ValuationSnapshot::observe_with_evidence(
+                    &extended,
+                    &evaluated,
+                    at(3, 7),
+                    None,
+                    std::slice::from_ref(&evidence),
+                );
+                match failure {
+                    Some(error) => assert_eq!(observed.err(), Some(error)),
+                    None => assert_eq!(
+                        observed.expect("정확한 보유 평가").stock_value(currency),
+                        Ok(money("8.5", currency))
+                    ),
+                }
+            }
+        }
+    }
+    #[test]
+    fn t22_fractional_summary_report_requires_exact_close_valuation() {
+        for currency in [Currency::Krw, Currency::Usd] {
+            let extended = extended_observation_calendar(currency);
+            let regular = calendar(3);
+            let evidence = t22_observed_fixture(currency).1;
+            for (reported, comparison, failure) in [
+                (None, Comparison::NotProvided, None),
+                (Some("8.5"), Comparison::Matches, None),
+                (
+                    Some("9"),
+                    Comparison::Matches,
+                    Some(SnapshotError::MissingPrice),
+                ),
+                (
+                    Some("9.0"),
+                    Comparison::Different,
+                    Some(SnapshotError::MissingPrice),
+                ),
+            ] {
+                let portfolio = t22_fractional_summary(currency, reported);
+                let evaluated = portfolio.evaluate(None);
+                assert_eq!(
+                    evaluated
+                        .currency_summary(currency)
+                        .valuation()
+                        .comparison(),
+                    comparison
+                );
+                let value = reported.unwrap_or("8.5");
+                let ordinary = ValuationSnapshot::observe(&regular, &evaluated, at(3, 7), None)
+                    .expect("정규장만 있는 달력");
+                assert_eq!(ordinary.stock_value(currency), Ok(money(value, currency)));
+                let observed = ValuationSnapshot::observe_with_evidence(
+                    &extended,
+                    &evaluated,
+                    at(3, 7),
+                    None,
+                    std::slice::from_ref(&evidence),
+                );
+                match failure {
+                    Some(error) => assert_eq!(observed.err(), Some(error)),
+                    None => assert_eq!(
+                        observed.expect("정확한 통화별 평가").stock_value(currency),
+                        Ok(money("8.5", currency))
+                    ),
+                }
+            }
+        }
     }
     #[test]
     fn t22_previous_close_keeps_missing_price_until_the_regular_session_closes() {
