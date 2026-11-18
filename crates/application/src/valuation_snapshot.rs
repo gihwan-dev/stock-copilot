@@ -118,33 +118,37 @@ where
     ) -> Result<Vec<domain::ObservedCloseEvidence>, ValuationSnapshotError> {
         let mut evidence = Vec::new();
         for holding in portfolio.holdings() {
-            if calendar.observed_close_requirement(holding)
-                == domain::ObservedCloseRequirement::Required
-                && calendar
-                    .price(holding.currency(), at)
-                    .map_err(ValuationSnapshotError::Snapshot)?
-                    .1
-                    != SnapshotPriceBasis::CurrentSession
+            match calendar.observed_close_requirement(holding) {
+                domain::ObservedCloseRequirement::NotRequired => continue,
+                domain::ObservedCloseRequirement::Required => {}
+            }
+            match calendar
+                .price(holding.currency(), at)
+                .map_err(ValuationSnapshotError::Snapshot)?
+                .1
             {
-                return Err(ValuationSnapshotError::Snapshot(
-                    SnapshotError::MissingPrice,
-                ));
+                SnapshotPriceBasis::CurrentSession => {}
+                SnapshotPriceBasis::AwaitingSession | SnapshotPriceBasis::HolidayCarry => {
+                    return Err(ValuationSnapshotError::Snapshot(
+                        SnapshotError::MissingPrice,
+                    ));
+                }
             }
         }
         for holding in portfolio.holdings() {
-            if calendar.observed_close_requirement(holding)
-                == domain::ObservedCloseRequirement::Required
-            {
-                let date = calendar
-                    .price_date(holding.currency(), at)
-                    .map_err(ValuationSnapshotError::Snapshot)?;
-                evidence.extend(
-                    self.market
-                        .observed_close_evidence(holding.instrument(), date, holding.observed_at())
-                        .await
-                        .map_err(ValuationSnapshotError::Repository)?,
-                );
+            match calendar.observed_close_requirement(holding) {
+                domain::ObservedCloseRequirement::NotRequired => continue,
+                domain::ObservedCloseRequirement::Required => {}
             }
+            let date = calendar
+                .price_date(holding.currency(), at)
+                .map_err(ValuationSnapshotError::Snapshot)?;
+            evidence.extend(
+                self.market
+                    .observed_close_evidence(holding.instrument(), date, holding.observed_at())
+                    .await
+                    .map_err(ValuationSnapshotError::Repository)?,
+            );
         }
         Ok(evidence)
     }

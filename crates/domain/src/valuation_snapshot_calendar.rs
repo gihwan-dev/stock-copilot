@@ -184,11 +184,16 @@ impl SnapshotCalendar {
         &self,
         holding: &crate::Holding,
     ) -> crate::ObservedCloseRequirement {
-        if self.observation_sessions(holding.currency()) == ObservationSessionScope::HasExtended
-            && (!holding.quantity().as_decimal().is_zero()
-                || holding
-                    .reported()
-                    .is_some_and(|reported| !reported.valuation().amount().as_decimal().is_zero()))
+        match self.observation_sessions(holding.currency()) {
+            ObservationSessionScope::NoExtended => {
+                return crate::ObservedCloseRequirement::NotRequired;
+            }
+            ObservationSessionScope::HasExtended => {}
+        }
+        if !holding.quantity().as_decimal().is_zero()
+            || holding
+                .reported()
+                .is_some_and(|reported| !reported.valuation().amount().as_decimal().is_zero())
         {
             crate::ObservedCloseRequirement::Required
         } else {

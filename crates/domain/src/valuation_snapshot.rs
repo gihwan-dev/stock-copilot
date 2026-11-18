@@ -1,3 +1,4 @@
+use crate::valuation_snapshot_calendar::ObservationSessionScope;
 use crate::valuation_snapshot_cash::{SnapshotAmounts, SnapshotCashData};
 use crate::{
     CalendarDate, Candle, CandlePeriod, CandleStatus, CorporateAction, CostBasisMethod, Currency,
@@ -203,10 +204,9 @@ fn validate_observed_extended_prices(
     }
     let mut used = BTreeSet::new();
     for currency in [Currency::Krw, Currency::Usd] {
-        if calendar.observation_sessions(currency)
-            != crate::valuation_snapshot_calendar::ObservationSessionScope::HasExtended
-        {
-            continue;
+        match calendar.observation_sessions(currency) {
+            ObservationSessionScope::NoExtended => continue,
+            ObservationSessionScope::HasExtended => {}
         }
         let mut required = BTreeSet::new();
         for item in portfolio
@@ -215,13 +215,11 @@ fn validate_observed_extended_prices(
             .filter(|item| item.holding().currency() == currency)
         {
             let holding = item.holding();
-            if calendar.observed_close_requirement(holding) == ObservedCloseRequirement::NotRequired
-            {
-                continue;
+            match calendar.observed_close_requirement(holding) {
+                ObservedCloseRequirement::NotRequired => continue,
+                ObservedCloseRequirement::Required => {}
             }
-            if context.price_basis(currency) != SnapshotPriceBasis::CurrentSession {
-                return Err(SnapshotError::MissingPrice);
-            }
+            context.require_current_price(currency)?;
             let mut matches = evidence.iter().enumerate().filter(|(_, entry)| {
                 entry.instrument.symbol() == holding.instrument().symbol()
                     && crate::Market::from(*entry.instrument.market())
@@ -308,6 +306,14 @@ impl SnapshotContext {
         match currency {
             Currency::Krw => self.kr_basis,
             Currency::Usd => self.us_basis,
+        }
+    }
+    const fn require_current_price(self, currency: Currency) -> Result<(), SnapshotError> {
+        match self.price_basis(currency) {
+            SnapshotPriceBasis::CurrentSession => Ok(()),
+            SnapshotPriceBasis::AwaitingSession | SnapshotPriceBasis::HolidayCarry => {
+                Err(SnapshotError::MissingPrice)
+            }
         }
     }
     fn new(
@@ -2998,6 +3004,19 @@ pub(crate) mod tests {
         }
     }
     #[test]
+    fn t22_regular_only_calendar_does_not_require_close_evidence() {
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        assert_eq!(evidence.instrument().currency(), Currency::Krw);
+        assert_eq!(
+            calendar(3).observed_close_requirement(&holding),
+            crate::ObservedCloseRequirement::NotRequired
+        );
+        assert_eq!(
+            extended_observation_calendar(Currency::Krw).observed_close_requirement(&holding),
+            crate::ObservedCloseRequirement::Required
+        );
+    }
+    #[test]
     fn t22_observed_close_rejects_duplicate_unmatched_and_oversized_evidence() {
         let cal = extended_observation_calendar(Currency::Krw);
         let (holding, evidence) = t22_observed_fixture(Currency::Krw);
@@ -3101,6 +3120,67 @@ pub(crate) mod tests {
                 at(3, 7),
                 None,
                 &[evidence]
+            )
+            .err(),
+            Some(SnapshotError::MissingPrice)
+        );
+    }
+    #[test]
+    fn t22_close_evidence_must_not_postdate_the_holding_observation() {
+        let calendar = extended_observation_calendar(Currency::Krw);
+        let (holding, timely) = t22_observed_fixture(Currency::Krw);
+        let portfolio = observation_portfolio(vec![holding]);
+        let evaluated = portfolio.evaluate(None);
+        let observe = |evidence: &crate::ObservedCloseEvidence| {
+            ValuationSnapshot::observe_with_evidence(
+                &calendar,
+                &evaluated,
+                at(3, 8),
+                None,
+                std::slice::from_ref(evidence),
+            )
+        };
+        let accepted = observe(&timely).expect("관측 시각에 수집한 증거");
+        assert_eq!(
+            accepted.stock_value(Currency::Krw),
+            Ok(money("17", Currency::Krw))
+        );
+        let original = timely.candle();
+        let late = Candle::try_new(
+            original.instrument().clone(),
+            original.time(),
+            original.adjustment(),
+            original.values(),
+            CandleObservation::new(at(3, 8), CandleStatus::Finalized),
+        )
+        .expect("늦게 수집한 봉");
+        let late_evidence = crate::ObservedCloseEvidence::new(timely.instrument().clone(), late);
+        assert_eq!(
+            observe(&late_evidence).err(),
+            Some(SnapshotError::InvalidCandle)
+        );
+    }
+    #[test]
+    fn t22_zero_report_must_match_nonzero_holdings_with_close_evidence() {
+        let calendar = extended_observation_calendar(Currency::Krw);
+        let (holding, evidence) = t22_observed_fixture(Currency::Krw);
+        let zero = CurrencyAmounts::new(money("0", Currency::Krw), None).expect("0");
+        let reported = crate::ReportedPortfolio::new(zero, zero, zero, at(3, 7));
+        let empty = observation_portfolio(vec![]).with_reported(reported);
+        let accepted = ValuationSnapshot::observe(&calendar, &empty.evaluate(None), at(3, 7), None)
+            .expect("빈 보유와 0 보고");
+        assert_eq!(
+            accepted.stock_value(Currency::Krw),
+            Ok(money("0", Currency::Krw))
+        );
+        let portfolio = observation_portfolio(vec![holding]).with_reported(reported);
+        assert_eq!(
+            ValuationSnapshot::observe_with_evidence(
+                &calendar,
+                &portfolio.evaluate(None),
+                at(3, 7),
+                None,
+                &[evidence],
             )
             .err(),
             Some(SnapshotError::MissingPrice)
