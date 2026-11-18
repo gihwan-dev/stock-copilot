@@ -161,6 +161,10 @@ fresh-cargo:
     cargo clean --locked --workspace
     cargo llvm-cov clean --locked --workspace
 
+fresh-all:
+    cargo clean --locked
+    cargo llvm-cov clean --locked
+
 fresh-node:
     pnpm install --frozen-lockfile --force --ignore-scripts
 

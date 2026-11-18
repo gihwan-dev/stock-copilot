@@ -880,6 +880,30 @@ mod tests {
         );
     }
     #[test]
+    fn d51_submission_rejects_a_consistent_snapshot_for_another_model() {
+        let eligible = eligible();
+        let part = ModelIdentityPart::try_new("other").expect("다른 모델");
+        let other = CalibrationKey::new(
+            CalibrationModel::new(part.clone(), part.clone(), part),
+            Horizon::new(HorizonSelection::FewDays),
+        );
+        let head =
+            crate::CalibrationLedgerHead::new(other.clone(), crate::CalibrationPosition::new(0));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(other, &[]).expect("다른 모델의 표"),
+            head.clone(),
+        )
+        .expect("다른 모델의 완전한 표");
+        assert_eq!(
+            calibrate_signal_submission(
+                Some(&snapshot),
+                &head,
+                submission(&eligible, 63, evidence(1))
+            ),
+            Err(crate::CalibrationError::MismatchedCombination)
+        );
+    }
+    #[test]
     fn d51_calibration_positions_and_combinations_property() {
         let eligible = eligible();
         let submitted = submission(&eligible, 67, evidence(1));
@@ -1153,6 +1177,108 @@ mod tests {
             SignalDecision::assess(&estimate(&eligible, 1, 0, 10, 1), &context),
             eligible.task().volatility().instrument().clone(),
         )
+    }
+    fn d51_eligible_with_instrument_id(id: &str) -> CostEligibleTask {
+        let original = eligible();
+        let task = original.task();
+        let instrument_id = InstrumentId::try_new(id).expect("종목 ID");
+        let values = (0_usize..61)
+            .map(|index| if index % 2 == 0 { "100" } else { "102" })
+            .collect::<Vec<_>>();
+        let candles = candle::tests::series(&values)
+            .into_iter()
+            .map(|row| {
+                crate::Candle::try_new(
+                    instrument_id.clone(),
+                    row.time(),
+                    row.adjustment(),
+                    row.values(),
+                    crate::CandleObservation::new(row.collected_at(), row.status()),
+                )
+                .expect("종목의 봉")
+            })
+            .collect::<Vec<_>>();
+        let reference = PriceObservation::from_identified_quote_parts(
+            instrument_id,
+            task.reference().instrument().clone(),
+            task.reference().price(),
+            task.reference().observed_at(),
+        )
+        .expect("종목 시세");
+        let new_task = EstimateTask::create(
+            EstimateContext::new(reference, task.created_at()),
+            crate::Volatility::calculate(&candles).expect("변동성"),
+            Horizon::new(HorizonSelection::FewDays),
+            HoursPermission::default(),
+            RiskAppetite::Neutral,
+        )
+        .expect("종목 과제");
+        eligible_for(new_task)
+    }
+    fn d51_buy_with_instrument_id(id: &str) -> crate::BuySignal {
+        let eligible = d51_eligible_with_instrument_id(id);
+        let valuation = portfolio(vec![]);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let context = SignalContext::new(
+            Some(&valuation),
+            &policy,
+            (&mapping, &types),
+            &ledger,
+            crate::SignalAssessmentFacts::new(
+                SignalTiming::new(at(61), &calendar),
+                Some(eligible.task().reference().clone()),
+                Some(latest_calibration()),
+            ),
+        );
+        let signal = SignalDecision::assess(&estimate(&eligible, 99, 0, 10, 1), &context)
+            .into_signal()
+            .expect("매수 발생");
+        buy_payload(signal).expect("매수 신호")
+    }
+    #[test]
+    fn d51_transition_rejects_same_symbol_with_a_different_instrument_id() {
+        let previous = d51_buy_with_instrument_id("previous");
+        let next = d51_buy_with_instrument_id("next");
+        assert_eq!(
+            previous.facts().task().reference().instrument(),
+            next.facts().task().reference().instrument()
+        );
+        assert_ne!(
+            previous.facts().task().volatility().instrument(),
+            next.facts().task().volatility().instrument()
+        );
+        assert_eq!(
+            crate::signal_transition(
+                Some(&RaisedSignal::Buy(previous)),
+                &SignalDecision::Buy(next)
+            ),
+            Err(crate::SignalTransitionError::InstrumentMismatch)
+        );
+    }
+    #[test]
+    fn d51_current_occurrence_rejects_same_symbol_with_a_different_instrument_id() {
+        let previous = d51_buy_with_instrument_id("previous");
+        let next = d51_buy_with_instrument_id("next");
+        assert_eq!(
+            previous.facts().task().reference().instrument(),
+            next.facts().task().reference().instrument()
+        );
+        let occurrence = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("occurrence").expect("발생 ID"),
+            &previous,
+            at(61),
+            &calendars(),
+        )
+        .expect("발생 기록");
+        assert_eq!(
+            crate::CurrentBuySignal::try_new(next, occurrence),
+            Err(crate::NoBuyQuantity::Indeterminate)
+        );
     }
     #[test]
     fn d51_transition_table_emits_expected_events() {
