@@ -414,9 +414,8 @@ fn check_target_price(
         .as_ref()
         .ok_or_else(|| unavailable(SignalUnavailable::MissingTargetPrice))?;
     let reference = estimate.task().reference();
-    if price.instrument() != reference.instrument()
+    if price.check_task_instrument(estimate.task()) != crate::CheckResult::Passed
         || price.price().as_money().currency() != reference.price().as_money().currency()
-        || price.instrument_id() != Some(estimate.task().volatility().instrument())
     {
         return Err(unavailable(SignalUnavailable::InvalidTargetPrice));
     }

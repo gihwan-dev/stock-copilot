@@ -13,6 +13,7 @@ pub enum NoBuyQuantity {
     ZeroPolicyLimit,
     BelowMinimumUnit(crate::MinimumBuyUnit),
     RepeatedSignal,
+    InvalidPriceInstrument,
     InvalidPriceOrFx,
     Indeterminate,
     StaleBuyingPower,
@@ -28,6 +29,7 @@ impl NoBuyQuantity {
             | Self::NoDollarsExchangeRequired
             | Self::ZeroPolicyLimit
             | Self::RepeatedSignal
+            | Self::InvalidPriceInstrument
             | Self::InvalidPriceOrFx
             | Self::Indeterminate
             | Self::StaleBuyingPower
@@ -181,8 +183,7 @@ fn calculate(
         .or(Err(NoBuyQuantity::Indeterminate))?;
     crate::estimate_outcome::buy_signal_interval_from(signal.facts().task(), now, calendars)
         .or(Err(NoBuyQuantity::Indeterminate))?;
-    let (available, total) =
-        prepare_balances(facts, signal.facts().task().reference().instrument(), now)?;
+    let (available, total) = prepare_balances(facts, signal.facts().task(), now)?;
     let (quantity, constraint) = size_quantity(signal, facts, now, available, total)?;
     finish_plan(signal, facts, now, quantity, constraint)
 }
@@ -318,9 +319,13 @@ where
 }
 fn prepare_balances(
     facts: &BuyQuantityFacts<'_>,
-    instrument: &ResolvedOrderInstrument,
+    task: &crate::EstimateTask,
     now: Timestamp,
 ) -> Result<(Money, Money), NoBuyQuantity> {
+    let instrument = task.reference().instrument();
+    if facts.price.check_task_instrument(task) != CheckResult::Passed {
+        return Err(NoBuyQuantity::InvalidPriceInstrument);
+    }
     let currency = if instrument.market() == Market::Kr {
         Currency::Krw
     } else {
@@ -716,12 +721,7 @@ mod tests {
                 item,
                 &calendars,
             );
-            let price = PriceObservation::from_quote_parts(
-                instrument,
-                Price::try_new(money(price_value, currency)).expect("가격"),
-                now,
-            )
-            .expect("관측");
+            let price = fixture_price(&eligible, instrument, price_value, currency, now);
             let fx = OrderFxRates::from_broker_fx_result(rate(FxRateKind::Buy, &market), mid);
             let fee = CommissionRateFact::from_commissions_result(
                 market,
@@ -740,6 +740,9 @@ mod tests {
                 calendars,
                 now,
             }
+        }
+        fn instrument_id(&self) -> &InstrumentId {
+            self.signal.facts().task().volatility().instrument()
         }
         fn facts(&self) -> BuyQuantityFacts<'_> {
             BuyQuantityFacts::new(
@@ -763,6 +766,21 @@ mod tests {
                 BuySignalRecord::from_signal(id, &self.signal, self.now, &self.calendars)?;
             crate::CurrentBuySignal::try_new(self.signal.clone(), occurrence)
         }
+    }
+    fn fixture_price(
+        eligible: &CostEligibleTask,
+        instrument: ResolvedOrderInstrument,
+        value: i64,
+        currency: Currency,
+        now: Timestamp,
+    ) -> PriceObservation {
+        PriceObservation::from_identified_quote_parts(
+            eligible.task().volatility().instrument().clone(),
+            instrument,
+            Price::try_new(money(value, currency)).expect("가격"),
+            now,
+        )
+        .expect("관측")
     }
     fn occurrence_id(value: &str) -> crate::BuySignalOccurrenceId {
         crate::BuySignalOccurrenceId::try_new(value).expect("발생 ID")
@@ -952,6 +970,13 @@ mod tests {
             item,
             &fixture.calendars,
         );
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
+            fixture.price.instrument().clone(),
+            fixture.price.price(),
+            fixture.price.observed_at(),
+        )
+        .expect("종목 시세");
         fixture
     }
     fn estimate_for(
@@ -1082,6 +1107,129 @@ mod tests {
                 },
             )
             .expect("독립 최대 수량");
+    }
+    #[test]
+    fn d53_rejects_same_symbol_price_with_different_internal_id() {
+        let mut fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("different-id").expect("다른 종목 ID"),
+            fixture.price.instrument().clone(),
+            fixture.price.price(),
+            fixture.now,
+        )
+        .expect("시세");
+        assert_eq!(
+            fixture.calculate(&[]),
+            BuyQuantityDecision::None(NoBuyQuantity::InvalidPriceInstrument)
+        );
+    }
+    #[test]
+    fn d53_missing_id_and_changed_market_or_symbol_are_rejected() {
+        let mut fixture = Fixture::new(Market::Kr, 100_000, 0, 13, (30, 0));
+        let id = fixture.instrument_id().clone();
+        let missing = PriceObservation::from_quote_parts(
+            fixture.price.instrument().clone(),
+            fixture.price.price(),
+            fixture.now,
+        )
+        .expect("ID 없는 시세");
+        let other_symbol = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("OTHER").expect("다른 심볼"),
+            Market::Kr,
+        )
+        .expect("종목");
+        let other_market = ResolvedOrderInstrument::from_master_lookup_result(
+            Symbol::try_new("ABC").expect("심볼"),
+            Market::Us,
+        )
+        .expect("종목");
+        let symbol = PriceObservation::from_identified_quote_parts(
+            id.clone(),
+            other_symbol,
+            fixture.price.price(),
+            fixture.now,
+        )
+        .expect("다른 심볼 시세");
+        let market = PriceObservation::from_identified_quote_parts(
+            id,
+            other_market,
+            fixture.price.price(),
+            at(61, &Market::Us),
+        )
+        .expect("다른 시장 시세");
+        for price in [missing, symbol, market] {
+            fixture.price = price;
+            assert_eq!(
+                fixture.calculate(&[]),
+                BuyQuantityDecision::None(NoBuyQuantity::InvalidPriceInstrument)
+            );
+        }
+        assert_eq!(NoBuyQuantity::InvalidPriceInstrument.minimum_unit(), None);
+    }
+    #[test]
+    fn d53_us_price_requires_the_same_internal_id() {
+        let mut fixture = Fixture::new(Market::Us, 100_000_000, 100, 2, (30, 0));
+        let plan = fixture.calculate(&[]).into_plan().expect("미국 종목 계획");
+        assert_eq!(plan.price(), &fixture.price);
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            InstrumentId::try_new("another-us-id").expect("다른 ID"),
+            fixture.price.instrument().clone(),
+            fixture.price.price(),
+            fixture.now,
+        )
+        .expect("미국 시세");
+        assert_eq!(
+            fixture.calculate(&[]),
+            BuyQuantityDecision::None(NoBuyQuantity::InvalidPriceInstrument)
+        );
+    }
+    #[test]
+    fn d53_matching_prices_preserve_sizing_and_nonmatching_ids_never_plan() {
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(
+                &(100_000_i64..1_000_000, 1_i64..10_000, 0_u32..10_000),
+                |(cash, price, suffix)| {
+                    let mut fixture = Fixture::new(Market::Kr, cash, 0, price, (30, 0));
+                    let target = cash.checked_div(50).expect("목표");
+                    let expected = target.checked_div(price).expect("수량");
+                    let matched = fixture.calculate(&[]);
+                    if expected == 0 {
+                        let reason = reason_of(matched).expect("최소 수량 부족");
+                        assert_minimum(&reason, price, target);
+                    } else {
+                        let plan = matched.into_plan().expect("일치하는 가격 계획");
+                        proptest::prop_assert_eq!(
+                            plan.quantity().quantity().as_decimal(),
+                            Decimal::from(expected)
+                        );
+                        proptest::prop_assert_eq!(plan.price(), &fixture.price);
+                        proptest::prop_assert_eq!(
+                            plan.amount().money(),
+                            money(expected * price, Currency::Krw)
+                        );
+                        proptest::prop_assert_eq!(plan.fee(), money(0, Currency::Krw));
+                    }
+                    let wrong_id =
+                        InstrumentId::try_new(&format!("d53-other-{suffix}")).expect("다른 ID");
+                    proptest::prop_assert_ne!(
+                        &wrong_id,
+                        fixture.signal.facts().task().volatility().instrument()
+                    );
+                    fixture.price = PriceObservation::from_identified_quote_parts(
+                        wrong_id,
+                        fixture.price.instrument().clone(),
+                        fixture.price.price(),
+                        fixture.now,
+                    )
+                    .expect("다른 ID 시세");
+                    proptest::prop_assert_eq!(
+                        fixture.calculate(&[]),
+                        BuyQuantityDecision::None(NoBuyQuantity::InvalidPriceInstrument)
+                    );
+                    Ok(())
+                },
+            )
+            .expect("가격 종목과 수량");
     }
     #[test]
     fn no_dollars_requires_exchange_even_with_large_krw_balance() {
@@ -1389,7 +1537,8 @@ mod tests {
         let plan = fixture.calculate(&[]).into_plan().expect("한 주");
         assert_eq!(plan.quantity().quantity().as_decimal(), Decimal::ONE);
         assert_eq!(plan.constraint(), BuyQuantityConstraint::PolicyLimit);
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::try_new(money(11, Currency::Krw)).expect("단가"),
             fixture.now,
@@ -1553,7 +1702,8 @@ mod tests {
     #[test]
     fn future_cash_incomplete_assets_decimal_prices_and_fx_overflow_fail_closed() {
         let mut fixture = Fixture::new(Market::Us, 100_000_000, 100, 1, (30, 0));
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::parse(
                 &NumericInput::try_new("1.2345").expect("입력"),
@@ -1570,7 +1720,8 @@ mod tests {
         );
         assert_eq!(format!("{plan:?}"), "BuyQuantityPlan(..)");
         assert_eq!(format!("{:?}", fixture.facts()), "BuyQuantityFacts(..)");
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::try_new(Money::new(Amount::new(Decimal::MAX), Currency::Usd)).expect("단가"),
             fixture.now,
@@ -1700,7 +1851,8 @@ mod tests {
             CostRate::try_new(Ratio::new(Decimal::new(1, 4))).expect("요율"),
             CommissionValidity::try_new(None, None).expect("기간"),
         );
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::try_new(Money::new(Amount::new(Decimal::new(1, 28)), Currency::Usd))
                 .expect("단가"),
@@ -1711,7 +1863,8 @@ mod tests {
             fixture.calculate(&[]),
             BuyQuantityDecision::None(NoBuyQuantity::Indeterminate)
         );
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::try_new(money(1, Currency::Krw)).expect("단가"),
             fixture.now,
@@ -1800,7 +1953,8 @@ mod tests {
             ),
             Err(NoBuyQuantity::Indeterminate)
         );
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::try_new(Money::new(Amount::new(Decimal::MAX), Currency::Krw)).expect("단가"),
             fixture.now,
@@ -1898,7 +2052,8 @@ mod tests {
     }
     fn renew_signal(fixture: &mut Fixture, now: Timestamp, appetite: RiskAppetite) {
         fixture.now = now;
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             fixture.price.price(),
             now,
@@ -1991,7 +2146,8 @@ mod tests {
     fn review_cash_freshness_accepts_sixty_seconds_and_rejects_one_nanosecond_more() {
         let mut fixture = Fixture::new(Market::Kr, 100_000, 0, 10, (30, 0));
         fixture.now = later(fixture.now, 60);
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             fixture.price.price(),
             fixture.now,
@@ -2218,7 +2374,8 @@ mod tests {
             super::within_amount(&fixture.facts(), one, fixture.now, check),
             Ok(crate::CheckResult::Passed)
         );
-        fixture.price = PriceObservation::from_quote_parts(
+        fixture.price = PriceObservation::from_identified_quote_parts(
+            fixture.instrument_id().clone(),
             fixture.price.instrument().clone(),
             Price::try_new(Money::new(Amount::new(Decimal::MAX), Currency::Usd)).expect("단가"),
             fixture.now,
