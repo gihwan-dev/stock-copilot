@@ -730,4 +730,58 @@ mod tests {
             Err(ValuationSnapshotError::Snapshot(SnapshotError::WrongPeriod))
         );
     }
+    fn real_after_market_calendar() -> SnapshotCalendar {
+        let day = 2;
+        let regular = SessionData::try_new(
+            TimeInterval::try_new(real_at(day, 0), real_at(day, 390)).expect("정규장"),
+            None,
+        )
+        .expect("정규장");
+        let after = SessionData::try_new(
+            TimeInterval::try_new(real_at(day, 390), real_at(day, 660)).expect("연장 거래"),
+            None,
+        )
+        .expect("연장 거래");
+        let today = MarketSession::try_new(
+            real_at(day, 0).offset_calendar_date(),
+            SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(regular),
+                after_market: Some(after),
+            },
+        )
+        .expect("한국 장");
+        let kr = MarketCalendar::try_new(
+            real_session(1, &Market::Kr, SessionState::Open),
+            today,
+            real_session(3, &Market::Kr, SessionState::Open),
+        )
+        .expect("한국 달력");
+        let us = MarketCalendar::try_new(
+            real_session(1, &Market::Us, SessionState::Open),
+            real_session(2, &Market::Us, SessionState::Open),
+            real_session(3, &Market::Us, SessionState::Open),
+        )
+        .expect("미국 달력");
+        SnapshotCalendar::new(&kr, &us).expect("평가 달력")
+    }
+
+    #[test]
+    fn extended_market_observed_prices_do_not_store_or_publish_without_close_evidence() {
+        let dates = real_after_market_calendar();
+        for minute in [420, 600, 660, 720] {
+            let at = real_at(2, minute);
+            assert_eq!(
+                take_record(held_currency(at, Currency::Krw), at, at, None, &dates),
+                Err(ValuationSnapshotError::Snapshot(
+                    SnapshotError::MissingPrice
+                )),
+            );
+            let empty = take_record(portfolio(), at, at, None, &dates).expect("빈 계좌");
+            assert_eq!(
+                empty.snapshot.stock_value(Currency::Krw),
+                Ok(money("0", Currency::Krw))
+            );
+        }
+    }
 }
