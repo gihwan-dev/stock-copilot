@@ -44,32 +44,32 @@ A-15의 판정 결과는 성공·실패와 그 근거를 기록한다. 추정 �
 
 ## 검증
 
-시작 시 프로젝트 신뢰와 세션 훅 해시 신뢰의 적용은 확인하지 못했다. frozen 설치 및 Git lefthook 설치는 성공했다. 첫 변경분 검사에서 타입 별칭에 대한 raw-types 위반이 발견되어 별칭을 제거했다. D-51 이전 병합 정상 훅의 전체 검사·커버리지와 보강 후 대상 시험 23개, Clippy는 통과했다. D-51 병합 후 검증은 아래 기록을 갱신한다. 기존 기준 테스트의 변경은 없으며 승인된 test-diff 변경은 0건이다.
+시작 시 프로젝트 신뢰와 세션 훅 해시 신뢰의 적용은 확인하지 못했다. frozen 설치 및 Git lefthook 설치는 성공했다. 첫 변경분 검사에서 타입 별칭에 대한 raw-types 위반이 발견되어 별칭을 제거했다. D-51 병합 정상 훅에서 전체 시험 2,249개와 커버리지 대상 1,192개가 통과했고, 새 원장 위치 계약을 포함한 대상 시험 27개와 Clippy도 통과했다. 기존 기준 테스트의 변경은 없으며 승인된 test-diff 변경은 0건이다.
 
-변경분 자동 변이의 첫 실행은 40개 중 검출 21, 생존 3, 시간 초과 1, 컴파일 불가 15였다. 장 종료 경계의 생존 두 개는 시험을 더해 검출했고, 나머지는 위에서 설명한 결과 동등 비교를 제거했다. 조기 완료 시 동시성 시험이 무기한 기다리지 않도록 시작과 완료 신호를 구분한 뒤 D-51 이전 재실행한 결과는 36개 중 검출 21, 컴파일 불가 15, 생존·시간 초과 0이다. 첫 실행의 시간 초과는 재실행에서 검출됐고 컴파일 불가는 검출 수에 넣지 않는다.
+변경분 자동 변이의 첫 실행은 40개 중 검출 21, 생존 3, 시간 초과 1, 컴파일 불가 15였다. 장 종료 경계의 생존 두 개는 시험을 더해 검출했고, 나머지는 위에서 설명한 결과 동등 비교를 제거했다. 조기 완료 시 동시성 시험이 무기한 기다리지 않도록 시작과 완료 신호를 구분했다. D-51 병합 후 최신 master 기준 재실행은 38개 중 검출 23, 컴파일 불가 15, 생존·시간 초과 0이다. 첫 실행의 시간 초과는 재실행에서 검출됐고 컴파일 불가는 검출 수에 넣지 않는다.
 
-다음 손 변형은 D-51 이전 코드와 시험이 담긴 인덱스 트리 `934006e427c16762d6050c0440317c0ac74b7b5a`를 `mktemp -d` 복사본에 내보내 하나씩 실행한 결과다. 38개 모두 컴파일되고 표의 시험에서 실패했다. 첫 시도의 두 컴파일 실패는 세지 않고 유효한 변형으로 고쳐 다시 실행했다. 첫 시도에서 대기한 시험 프로세스 하나는 직접 종료했으며, 동기화 보강 뒤 전체 변형을 다시 실행한 결과만 표에 적는다. D-51 병합 뒤 다시 검증한다.
+다음 손 변형은 D-51 병합 후 코드와 시험이 담긴 인덱스 트리 `56bd30083981931c57703f50d8f9dec85d53c49c`를 `mktemp -d` 복사본에 내보내 하나씩 실행한 결과다. 42개 모두 컴파일되고 표의 시험에서 실패했다. 첫 시도의 두 컴파일 실패는 세지 않고 유효한 변형으로 고쳐 다시 실행했다. 첫 시도에서 대기한 시험 프로세스 하나는 직접 종료했으며, 동기화 보강 뒤 전체 변형을 다시 실행한 결과만 표에 적는다.
 
 | 번호 | 바꾼 것 | 검출한 시험 |
 |---|---|---|
 | 1 | 열거를 한 건으로 제한 | `tests::distinct_instruments_update_the_same_model_without_losing_either_fact` |
-| 2 | 첫 제출 누락 | `tests::commit_conflict_keeps_the_estimate_pending_without_an_event` |
+| 2 | 첫 제출 누락 | `tests::calibration_head_for_another_model_is_rejected` |
 | 3 | 보고 ID 고정 | `tests::report_keeps_the_identity_of_each_submitted_estimate` |
-| 4 | 봉 전체 누락 | `tests::concurrent_resolution_commits_only_once_and_rejects_replacement` |
-| 5 | 달력 전체 누락 | `tests::conflicting_stored_outcome_and_calibration_report_repository_integrity` |
-| 6 | 판정 시각 대신 제출 시각 | `tests::commit_conflict_keeps_the_estimate_pending_without_an_event` |
+| 4 | 봉 전체 누락 | `tests::calibration_head_for_another_model_is_rejected` |
+| 5 | 달력 전체 누락 | `tests::calibration_head_for_another_model_is_rejected` |
+| 6 | 판정 시각 대신 제출 시각 | `tests::calibration_head_for_another_model_is_rejected` |
 | 7 | 진행 중을 충돌로 반환 | `tests::ongoing_and_storage_failure_do_not_commit_or_publish` |
 | 8 | 시장 자료 오류를 진행 중으로 반환 | `tests::market_read_failure_keeps_endpoint_and_retry_reason_for_the_next_run` |
 | 9 | 판정 자료 오류를 진행 중으로 반환 | `tests::incomplete_minute_and_daily_data_remain_pending_and_retry` |
 | 10 | 기존 보정표 사실 제거 | `tests::conflicting_stored_outcome_and_calibration_report_repository_integrity` |
-| 11 | 첫 보정표의 사실 누락 | `tests::distinct_instruments_update_the_same_model_without_losing_either_fact` |
-| 12 | 원자 저장에 이전 표 생략 | `tests::distinct_instruments_update_the_same_model_without_losing_either_fact` |
+| 11 | 없는 보정 스냅숏을 진행 중으로 반환 | `tests::missing_calibration_snapshot_keeps_the_estimate_pending` |
+| 12 | 원자 저장에 과거 원장 위치 전달 | `tests::distinct_instruments_update_the_same_model_without_losing_either_fact` |
 | 13 | 판정 이벤트 종류 변경 | `tests::concurrent_resolution_commits_only_once_and_rejects_replacement` |
 | 14 | 판정 이벤트 중복 | `tests::concurrent_resolution_commits_only_once_and_rejects_replacement` |
 | 15 | 판정 이벤트 종목 고정 | `tests::distinct_instruments_update_the_same_model_without_losing_either_fact` |
 | 16 | 보정 사실 ID 교체 | `tests::conflicting_stored_outcome_and_calibration_report_repository_integrity` |
 | 17 | 보정 확률 고정 | `tests::distinct_instruments_update_the_same_model_without_losing_either_fact` |
-| 18 | 미판정 사유 대신 달력 사유 저장 | `tests::market_read_failure_keeps_endpoint_and_retry_reason_for_the_next_run` |
+| 18 | 미판정 사유 대신 달력 사유 저장 | `tests::incomplete_minute_and_daily_data_remain_pending_and_retry` |
 | 19 | 이미 판정을 충돌로 반환 | `tests::concurrent_resolution_commits_only_once_and_rejects_replacement` |
 | 20 | 보정 갱신에 새 사실 생략 | `tests::single_fact_extension_rejects_conflicting_ids_and_different_combinations` |
 | 21 | 필수 분봉 누락을 모호 실패로 반환 | `tests::final_minute_is_required_when_it_has_just_finished` |
@@ -82,7 +82,7 @@ A-15의 판정 결과는 성공·실패와 그 근거를 기록한다. 추정 �
 | 28 | 판정 재조회 실패를 보정 충돌로 치환 | `tests::conflicting_table_without_resolution_stays_an_error_and_read_failure_is_preserved` |
 | 29 | 보정표 상한 사유 기록 생략 | `tests::full_calibration_table_leaves_resolution_pending_with_reason` |
 | 30 | 마감된 분봉 누락을 달력 오류로 변경 | `tests::final_minute_is_required_when_it_has_just_finished` |
-| 31 | 실패 판정을 진행 중으로 반환 | `tests::commit_conflict_keeps_the_estimate_pending_without_an_event` |
+| 31 | 실패 판정을 진행 중으로 반환 | `tests::calibration_head_for_another_model_is_rejected` |
 | 32 | 성공 판정을 진행 중으로 반환 | `tests::conflicting_table_without_resolution_stays_an_error_and_read_failure_is_preserved` |
 | 33 | 사유 기록 성공을 진행 중으로 반환 | `tests::incomplete_minute_and_daily_data_remain_pending_and_retry` |
 | 34 | 사유 기록 경합의 이미 판정됨을 충돌로 반환 | `tests::stale_data_failure_cannot_overwrite_a_completed_resolution` |
@@ -90,3 +90,7 @@ A-15의 판정 결과는 성공·실패와 그 근거를 기록한다. 추정 �
 | 36 | 기존 분봉 결측의 장 종료 비교를 다음 시각까지 연장 | `tests::existing_missing_minute_changes_from_ongoing_to_ambiguous_at_close` |
 | 37 | 완료된 마지막 분봉의 필수 경계를 제외 | `tests::final_minute_is_required_when_it_has_just_finished` |
 | 38 | 정확한 장 종료를 아직 장중으로 처리 | `tests::completed_later_session_uses_daily_candle_at_close` |
+| 39 | 다른 조합의 원장 위치를 허용 | `tests::calibration_head_for_another_model_is_rejected` |
+| 40 | 스냅숏과 원장 위치 일치 검사를 반전 | `tests::commit_conflict_keeps_the_estimate_pending_without_an_event` |
+| 41 | 오래된 보정표를 없는 보정표로 분류 | `tests::stale_calibration_snapshot_never_commits_or_publishes` |
+| 42 | 오래된 보정표를 정상으로 통과 | `tests::stale_calibration_snapshot_never_commits_or_publishes` |
