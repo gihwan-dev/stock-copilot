@@ -252,3 +252,7 @@ git --no-replace-objects diff --quiet --no-ext-diff --no-textconv master <branch
 - 구현 담당은 docs/progress.md를 편집하지 않는다. 진행 상태는 보고서에 쓰고 메인이 한 줄 메모나 완료 행을 반영한다.
 
 T3 도구는 전체 matcher에서 기본 거부한다. 허용된 launch·send·read·wait와 project_list·orchestrator_capabilities·background_wait만 쓴다. configure·queue 편집으로 모델이나 브리프를 바꾸지 않는다. 하네스 프로필 삭제와 잠금 전 prelock 절차는 ADR 0021 B를 따른다.
+
+## H-51 로컬 전체 정리
+
+`fresh-cargo`와 `fresh-build`는 workspace 산출물을 정리한다. 외부 의존성까지 지운 전체 빌드를 수동으로 확인하려면 `just fresh-all` 다음에 `just base=HEAD check`를 실행한다. 전체 정리는 `target/` 아래 기록도 지우므로 중요한 로컬 자료는 밖에 둔다. 메인 빌드 산출물 복제는 실측 개선 기준을 충족하지 못해 사용하지 않는다.

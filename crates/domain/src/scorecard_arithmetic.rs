@@ -213,7 +213,8 @@ mod tests {
         );
         let table = crate::Calibration::try_new(key.clone(), &[])
             .expect("빈 표")
-            .for_combination(&key);
+            .for_combination(&key)
+            .expect("같은 조합");
         assert_eq!(
             super::bin_result(
                 &table,

@@ -263,7 +263,7 @@ fn single(
         })
         .collect();
     let calibration = Calibration::try_new(key.clone(), &facts).map_err(calibration_error)?;
-    let table = calibration.for_combination(key);
+    let table = calibration.table();
     let counts = ScorecardCount(facts.len())
         .difference(&ScorecardCount(table.judgment_count().as_usize()))
         .map(|overlapping| ScorecardCounts {
@@ -344,7 +344,7 @@ pub(crate) fn scorecard_edge_facts(
                 .map(|calibration| (calibration, completed))
         })
         .map(|(calibration, completed)| {
-            let table = calibration.for_combination(key);
+            let table = calibration.table();
             let selected = table
                 .selected_facts()
                 .iter()

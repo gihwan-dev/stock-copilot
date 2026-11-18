@@ -495,4 +495,67 @@ mod tests {
             for result in results { prop_assert_eq!(result.result(), Err(&SnapshotError::MissingPrice)); }
         }
     }
+    fn extended_only_calendar(market: &Market) -> MarketCalendar {
+        let baseline = market_calendar(3, market, Open);
+        let information = match market {
+            Market::Kr => SessionInformation::Kr {
+                pre_market: None,
+                regular_market: None,
+                after_market: Some(trading(3)),
+            },
+            Market::Us | Market::Unknown(_) => SessionInformation::Us {
+                day_market: None,
+                pre_market: None,
+                regular_market: None,
+                after_market: Some(trading(3)),
+            },
+        };
+        MarketCalendar::try_new(
+            baseline.previous_business_day().clone(),
+            MarketSession::try_new(date(3), information).expect("연장 거래"),
+            baseline.next_business_day().clone(),
+        )
+        .expect("달력")
+    }
+
+    #[test]
+    fn extended_only_and_opposite_holiday_remain_failed_planned_days() {
+        let kr_extended = extended_only_calendar(&Market::Kr);
+        let us_extended = extended_only_calendar(&Market::Us);
+        let kr_closed = market_calendar(3, &Market::Kr, Closed);
+        let us_closed = market_calendar(3, &Market::Us, Closed);
+        let resolve = |plan: &ValuationGapPlan, currency| {
+            plan.resolve(|_, day| {
+                day.price_date(currency, at(3, 7))
+                    .map(|_| observed(3, "0", "0"))
+            })
+        };
+        for (kr, us, currency) in [
+            (&kr_extended, &us_closed, crate::Currency::Krw),
+            (&kr_closed, &us_extended, crate::Currency::Usd),
+        ] {
+            let calendar = crate::SnapshotCalendar::new(kr, us).expect("확인되지 않은 장");
+            assert_eq!(
+                calendar.price_date(currency, at(3, 7)),
+                Err(SnapshotError::MissingPrice)
+            );
+            let row = ValuationCalendarDay::new(kr, us).expect("평가일");
+            let plan = ValuationGapPlan::new(date(2), at(3, 7), &[row]).expect("계획");
+            assert_eq!(plan.dates().collect::<Vec<_>>(), vec![date(3)]);
+            let results = resolve(&plan, currency);
+            assert_eq!(
+                results.first().expect("결과").result(),
+                Err(&SnapshotError::MissingPrice)
+            );
+        }
+        let control =
+            ValuationGapPlan::new(date(2), at(3, 7), &[row(3, Open, Open)]).expect("정규장 계획");
+        let successful = resolve(&control, crate::Currency::Krw);
+        let snapshot = successful
+            .first()
+            .expect("정규장 결과")
+            .result()
+            .expect("완료");
+        assert_eq!(snapshot.price_date(crate::Currency::Krw), date(3));
+    }
 }
