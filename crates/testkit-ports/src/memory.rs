@@ -1,8 +1,8 @@
 use crate::{Script, script::State};
 use application::{
-    EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
-    ProposalRepository, RecordOutcome, SettingsRepository, SignalRepository, SystemPortError,
-    ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
+    CacheWriteOutcome, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
+    PortfolioRepository, ProposalRepository, RecordOutcome, SettingsRepository, SignalRepository,
+    SystemPortError, ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
@@ -169,6 +169,49 @@ struct MarketDataRepositoryState {
     candles: Vec<Candle>,
     rates: Vec<FxRate>,
 }
+fn remember_quote(
+    state: &mut MarketDataRepositoryState,
+    instrument: &InstrumentId,
+    quote: &Quote,
+) -> CacheWriteOutcome {
+    if let Some((_, current)) = state.quotes.iter_mut().find(|(key, _)| key == instrument) {
+        if quote.collected_at() < current.collected_at() {
+            return CacheWriteOutcome::OlderIgnored;
+        }
+        if quote == current {
+            return CacheWriteOutcome::Unchanged;
+        }
+        *current = quote.clone();
+    } else {
+        state.quotes.push((instrument.clone(), quote.clone()));
+    }
+    CacheWriteOutcome::Changed
+}
+fn remember_fx(state: &mut MarketDataRepositoryState, rate: FxRate) -> CacheWriteOutcome {
+    let previous = state
+        .rates
+        .iter_mut()
+        .filter(|value| value.pair() == rate.pair() && value.kind() == rate.kind())
+        .max_by_key(|value| value.as_of());
+    if let Some(current) = previous {
+        if rate.as_of() < current.as_of() {
+            return CacheWriteOutcome::OlderIgnored;
+        }
+        if rate.as_of() == current.as_of() {
+            let outcome = if rate.quote_per_base() == current.quote_per_base()
+                && rate.source() == current.source()
+            {
+                CacheWriteOutcome::Unchanged
+            } else {
+                CacheWriteOutcome::Changed
+            };
+            *current = rate;
+            return outcome;
+        }
+    }
+    state.rates.push(rate);
+    CacheWriteOutcome::Changed
+}
 #[derive(Debug, Default)]
 pub struct MemoryMarketDataRepository {
     store_quote: MemoryMarketDataRepositoryStoreQuoteScript,
@@ -217,7 +260,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
         &self,
         instrument: &InstrumentId,
         quote: &Quote,
-    ) -> Result<WriteCompleted, SystemPortError> {
+    ) -> Result<CacheWriteOutcome, SystemPortError> {
         self.calls
             .write()
             .push(crate::scripted::MarketDataRepositoryCall::StoreQuote(
@@ -232,8 +275,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                state.quotes.push((instrument.clone(), quote.clone()));
-                Ok(WriteCompleted)
+                Ok(remember_quote(&mut state, instrument, quote))
             }
         }
     }
@@ -326,7 +368,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             }
         }
     }
-    async fn store_fx_rate(&self, rate: &FxRate) -> Result<WriteCompleted, SystemPortError> {
+    async fn store_fx_rate(&self, rate: &FxRate) -> Result<CacheWriteOutcome, SystemPortError> {
         self.calls
             .write()
             .push(crate::scripted::MarketDataRepositoryCall::StoreFxRate(
@@ -336,8 +378,7 @@ impl MarketDataRepository for MemoryMarketDataRepository {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
                 let mut state = self.state.write();
-                state.rates.push(*rate);
-                Ok(WriteCompleted)
+                Ok(remember_fx(&mut state, *rate))
             }
         }
     }
@@ -1128,7 +1169,7 @@ pub type MemoryMarketDataRepositoryCandlesScript = Script<
     MemoryReply<Result<Vec<Candle>, SystemPortError>>,
 >;
 pub type MemoryMarketDataRepositoryStoreFxRateScript =
-    Script<(FxRate,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+    Script<(FxRate,), MemoryReply<Result<CacheWriteOutcome, SystemPortError>>>;
 pub type MemoryMarketDataRepositoryFxRateScript =
     Script<(FxPair, FxRateKind, FxRateQuery), MemoryReply<Result<Option<FxRate>, SystemPortError>>>;
 pub type MemoryNewsRepositoryStoreScript =
@@ -1157,7 +1198,7 @@ pub type MemorySettingsRepositoryRiskSettingsScript =
 pub type MemoryPortfolioRepositoryLatestScript =
     Script<(AccountId,), MemoryReply<Result<Option<SyncRecord<Portfolio>>, SystemPortError>>>;
 pub type MemoryMarketDataRepositoryStoreQuoteScript =
-    Script<(InstrumentId, Quote), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+    Script<(InstrumentId, Quote), MemoryReply<Result<CacheWriteOutcome, SystemPortError>>>;
 pub type MemoryMarketDataRepositoryStoreCandlesScript =
     Script<(InstrumentId, Vec<Candle>), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
 pub type MemoryNewsRepositoryForInstrumentScript =

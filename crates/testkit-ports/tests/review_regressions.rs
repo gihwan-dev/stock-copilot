@@ -1011,7 +1011,7 @@ mod tests {
             &self,
             instrument: &InstrumentId,
             quote: &Quote,
-        ) -> Result<WriteCompleted, SystemPortError> {
+        ) -> Result<application::CacheWriteOutcome, SystemPortError> {
             self.inner.store_quote(instrument, quote).await
         }
         async fn quote(&self, instrument: &InstrumentId) -> Result<Option<Quote>, SystemPortError> {
@@ -1054,7 +1054,10 @@ mod tests {
                 .candles(instrument, window, period, adjustment)
                 .await
         }
-        async fn store_fx_rate(&self, rate: &FxRate) -> Result<WriteCompleted, SystemPortError> {
+        async fn store_fx_rate(
+            &self,
+            rate: &FxRate,
+        ) -> Result<application::CacheWriteOutcome, SystemPortError> {
             self.inner.store_fx_rate(rate).await
         }
         async fn fx_rate(

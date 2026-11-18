@@ -1,0 +1,48 @@
+CREATE TABLE market_quotes (
+    instrument TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    currency TEXT NOT NULL CHECK (currency IN ('KRW', 'USD')),
+    last_price TEXT CHECK (instr(last_price, char(0)) = 0 AND last_price NOT GLOB '*[^0-9.-]*' AND last_price GLOB '*[0-9]*' AND last_price NOT GLOB '?*-*' AND last_price NOT GLOB '*.*.*' AND last_price NOT GLOB '.*' AND last_price NOT GLOB '-.*' AND last_price NOT GLOB '*.'),
+    observed_seconds INTEGER,
+    observed_nanos INTEGER,
+    observed_offset INTEGER,
+    collected_seconds INTEGER NOT NULL,
+    collected_nanos INTEGER NOT NULL,
+    collected_offset INTEGER NOT NULL,
+    CHECK ((observed_seconds IS NULL AND observed_nanos IS NULL AND observed_offset IS NULL) OR (observed_seconds IS NOT NULL AND observed_nanos IS NOT NULL AND observed_offset IS NOT NULL))
+) STRICT;
+CREATE TABLE market_fx_rates (
+    pair TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    seconds INTEGER NOT NULL,
+    nanos INTEGER NOT NULL,
+    offset INTEGER NOT NULL,
+    until_seconds INTEGER NOT NULL,
+    until_nanos INTEGER NOT NULL,
+    until_offset INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    exchange_rate TEXT NOT NULL CHECK (instr(exchange_rate, char(0)) = 0 AND exchange_rate NOT GLOB '*[^0-9.-]*' AND exchange_rate GLOB '*[0-9]*' AND exchange_rate NOT GLOB '?*-*' AND exchange_rate NOT GLOB '*.*.*' AND exchange_rate NOT GLOB '.*' AND exchange_rate NOT GLOB '-.*' AND exchange_rate NOT GLOB '*.'),
+    source TEXT NOT NULL,
+    PRIMARY KEY (pair, kind, seconds, nanos)
+) STRICT;
+CREATE TABLE market_candles (
+    instrument TEXT NOT NULL,
+    period TEXT NOT NULL,
+    adjustment TEXT NOT NULL,
+    basis TEXT NOT NULL,
+    basis_offset INTEGER,
+    seconds INTEGER NOT NULL,
+    nanos INTEGER NOT NULL,
+    offset INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    open_price TEXT NOT NULL CHECK (instr(open_price, char(0)) = 0 AND open_price NOT GLOB '*[^0-9.-]*' AND open_price GLOB '*[0-9]*' AND open_price NOT GLOB '?*-*' AND open_price NOT GLOB '*.*.*' AND open_price NOT GLOB '.*' AND open_price NOT GLOB '-.*' AND open_price NOT GLOB '*.'),
+    high_price TEXT NOT NULL CHECK (instr(high_price, char(0)) = 0 AND high_price NOT GLOB '*[^0-9.-]*' AND high_price GLOB '*[0-9]*' AND high_price NOT GLOB '?*-*' AND high_price NOT GLOB '*.*.*' AND high_price NOT GLOB '.*' AND high_price NOT GLOB '-.*' AND high_price NOT GLOB '*.'),
+    low_price TEXT NOT NULL CHECK (instr(low_price, char(0)) = 0 AND low_price NOT GLOB '*[^0-9.-]*' AND low_price GLOB '*[0-9]*' AND low_price NOT GLOB '?*-*' AND low_price NOT GLOB '*.*.*' AND low_price NOT GLOB '.*' AND low_price NOT GLOB '-.*' AND low_price NOT GLOB '*.'),
+    close_price TEXT NOT NULL CHECK (instr(close_price, char(0)) = 0 AND close_price NOT GLOB '*[^0-9.-]*' AND close_price GLOB '*[0-9]*' AND close_price NOT GLOB '?*-*' AND close_price NOT GLOB '*.*.*' AND close_price NOT GLOB '.*' AND close_price NOT GLOB '-.*' AND close_price NOT GLOB '*.'),
+    quantity TEXT NOT NULL CHECK (instr(quantity, char(0)) = 0 AND quantity NOT GLOB '*[^0-9.-]*' AND quantity GLOB '*[0-9]*' AND quantity NOT GLOB '?*-*' AND quantity NOT GLOB '*.*.*' AND quantity NOT GLOB '.*' AND quantity NOT GLOB '-.*' AND quantity NOT GLOB '*.'),
+    collected_seconds INTEGER NOT NULL,
+    collected_nanos INTEGER NOT NULL,
+    collected_offset INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    PRIMARY KEY (instrument, period, adjustment, basis, seconds, nanos)
+) STRICT;

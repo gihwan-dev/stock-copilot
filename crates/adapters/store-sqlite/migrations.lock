@@ -12,3 +12,8 @@ sha256 = "85eb69d7b1e4dc46ff5522233ebd9c35b33423d1cad8e5ca37bd7c3c686b9d80"
 number = 3
 file = "0003_transactions.sql"
 sha256 = "1192925c5b26c17998e2f688d1e6e475b870d450dbff2029e515bf59f44d551e"
+
+[[migration]]
+number = 4
+file = "0004_market_cache.sql"
+sha256 = "7ea527ec7ee75205363b94e5a24f918cc36aacb3937f186ae396593f8974bae8"

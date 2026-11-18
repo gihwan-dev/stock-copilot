@@ -18,6 +18,10 @@ pub(crate) mod holdings;
 #[cfg(test)]
 pub(crate) mod holdings_tests;
 
+pub(crate) mod market;
 pub(crate) mod transactions;
 #[cfg(test)]
 pub(crate) mod transactions_tests;
+
+#[cfg(test)]
+pub(crate) mod market_tests;

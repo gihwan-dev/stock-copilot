@@ -262,9 +262,9 @@ mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod storage_ports;
 pub use storage_ports::{
-    EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
-    ProposalRepository, SettingsRepository, SignalRepository, ThesisRepository,
-    TransactionRepository, ValuationRepository,
+    CacheWriteOutcome, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
+    PortfolioRepository, ProposalRepository, SettingsRepository, SignalRepository,
+    ThesisRepository, TransactionRepository, ValuationRepository,
 };
 
 mod information_error;
