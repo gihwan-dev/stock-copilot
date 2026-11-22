@@ -149,7 +149,7 @@ export const TextField = (props: Props): ReactElement | null => {
   };
   return (
     <label className="flex flex-col gap-space-1 text-ink">
-      <span className="text-label">{props.label}</span>
+      <span className="status-sentence text-label">{props.label}</span>
       <span className="flex items-center gap-space-1 bg-surface-sunken rounded-md">
         <TextInput
           field={props}
@@ -170,11 +170,18 @@ export const TextField = (props: Props): ReactElement | null => {
         ) : null}
       </span>
       {state.error !== undefined ? (
-        <span id={id.value} role="alert" className="text-caption text-alert">
+        <span
+          id={id.value}
+          role="alert"
+          className="status-sentence text-caption text-alert"
+        >
           {state.error}
         </span>
       ) : (
-        <span id={id.value} className="text-caption text-ink-subtle">
+        <span
+          id={id.value}
+          className="status-sentence text-caption text-ink-subtle"
+        >
           {props.hint}
         </span>
       )}

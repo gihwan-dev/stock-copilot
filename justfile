@@ -73,6 +73,12 @@ check-full: advisory-db-fetch check
     node harness/ds-overflow/examples.mjs
     "{{just_executable()}}" mutants-diff {{quote(base)}}
 
+ds-check: check-pnpm
+    node harness/ds-catalog/check.mjs
+    node harness/ds-overflow/typecheck.mjs
+    node --test apps/desktop/tests/ds22-overflow-verdict.test.mjs
+    node harness/ds-overflow/launch.mjs
+
 require-base:
     [ -n {{quote(base)}} ] || { printf 'base가 필요하다: just base=<HEAD|40자리 커밋 ID> check (커밋 훅은 HEAD, 종료 훅은 브리프의 기준 커밋, 푸시 훅은 푸시 전 원격 커밋)\n' >&2; exit 1; }
     cargo run --locked --quiet --manifest-path "{{justfile_directory()}}/Cargo.toml" --package xtask -- require-comparison-base {{quote(base)}}

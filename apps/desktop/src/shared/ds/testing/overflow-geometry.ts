@@ -5,7 +5,6 @@ export const isViewport = (element: Readonly<Element>): boolean => {
     ["auto", "scroll", "overlay"].includes(value),
   );
 };
-
 export const isTruncated = (element: Readonly<Element>): boolean => {
   if (!element.hasAttribute("data-truncate")) return false;
   const style = getComputedStyle(element);
@@ -16,9 +15,13 @@ export const isTruncated = (element: Readonly<Element>): boolean => {
       (clamp !== "" && clamp !== "none" && clamp !== "0"))
   );
 };
+export const editableScrollableTextarea = (
+  element: Readonly<Element>,
+): boolean =>
+  element.matches("textarea:not([readonly]):not(:disabled)") &&
+  ["auto", "scroll"].includes(getComputedStyle(element).overflowY);
 
 type Escape = "none" | "absolute" | "fixed";
-
 const establishesContainingBlock = (
   style: Readonly<CSSStyleDeclaration>,
 ): boolean =>
@@ -50,7 +53,6 @@ const nextEscape = (position: string, escaping: Escape): Escape => {
   if (position === "absolute") return "absolute";
   return "none";
 };
-
 const settledEscape = (
   pending: Escape,
   style: Readonly<CSSStyleDeclaration>,
@@ -63,7 +65,6 @@ const settledEscape = (
 
 const clipsOverflow = (style: Readonly<CSSStyleDeclaration>): boolean =>
   style.overflowX !== "visible" || style.overflowY !== "visible";
-
 const clipsPaint = (style: Readonly<CSSStyleDeclaration>): boolean =>
   ["paint", "strict", "content"].some((value) =>
     style.contain.split(/\s+/u).includes(value),
@@ -71,7 +72,6 @@ const clipsPaint = (style: Readonly<CSSStyleDeclaration>): boolean =>
 
 const clips = (style: Readonly<CSSStyleDeclaration>): boolean =>
   clipsOverflow(style) || clipsPaint(style);
-
 const bodyClipsViewport = (
   parent: Readonly<Element>,
   style: Readonly<CSSStyleDeclaration>,
@@ -103,7 +103,6 @@ const nearestClipFrom = (
     ? parent
     : nearestClipFrom(parent, settled);
 };
-
 const isScrollable = (value: string): boolean =>
   ["auto", "scroll", "overlay"].includes(value);
 
@@ -135,7 +134,6 @@ type ClipBounds = {
   readonly top: number;
   readonly bottom: number;
 };
-
 const reversedFlex = (
   style: Readonly<CSSStyleDeclaration>,
   direction: string,
@@ -173,7 +171,6 @@ const viewportClipped = (
     )
   );
 };
-
 export const clipped = (element: Readonly<Element>): boolean => {
   const parent = nearestClipFrom(element, "none");
   if (parent === null) return false;
@@ -191,5 +188,63 @@ export const clipped = (element: Readonly<Element>): boolean => {
     inner.top < top ||
     inner.right > right ||
     inner.bottom > bottom
+  );
+};
+
+const irregularClip = (style: Readonly<CSSStyleDeclaration>): boolean =>
+  style.clipPath !== "none" ||
+  style.getPropertyValue("clip") !== "auto" ||
+  ["paint", "strict", "content"].some((value) =>
+    style.contain.split(/\s+/u).includes(value),
+  );
+const textOutsideClip = (
+  parent: Readonly<Element>,
+  text: Readonly<DOMRect>,
+  style: Readonly<CSSStyleDeclaration>,
+): boolean => {
+  const bounds = parent.getBoundingClientRect();
+  const left = bounds.left + parent.clientLeft;
+  const top = bounds.top + parent.clientTop;
+  return (
+    (style.overflowX !== "visible" &&
+      (text.left < left || text.right > left + parent.clientWidth)) ||
+    (style.overflowY !== "visible" &&
+      (text.top < top || text.bottom > top + parent.clientHeight))
+  );
+};
+export const textInsideClippingAncestors = (
+  parent: Readonly<Element> | null,
+  text: Readonly<DOMRect>,
+): boolean => {
+  if (parent === null) return true;
+  const style = getComputedStyle(parent);
+  if (irregularClip(style)) return false;
+  if (!bodyClipsViewport(parent, style) && textOutsideClip(parent, text, style))
+    return false;
+  return textInsideClippingAncestors(parent.parentElement, text);
+};
+const isScreenReaderClip = (element: Readonly<Element>): boolean => {
+  const style = getComputedStyle(element);
+  return (
+    style.position === "absolute" &&
+    style.overflowX === "hidden" &&
+    style.overflowY === "hidden" &&
+    (style.getPropertyValue("clip") === "rect(0px, 0px, 0px, 0px)" ||
+      style.clipPath === "inset(50%)")
+  );
+};
+export const isScreenReaderTable = (element: Readonly<Element>): boolean => {
+  const table = element.matches("div.sr-only")
+    ? element.querySelector(":scope > table.sr-only")
+    : element.closest("table.sr-only");
+  if (table === null) return false;
+  const wrapper = table.parentElement;
+  if (wrapper === null) return false;
+  return (
+    wrapper.matches("div.sr-only") &&
+    wrapper.getBoundingClientRect().width <= 1 &&
+    wrapper.getBoundingClientRect().height <= 1 &&
+    isScreenReaderClip(wrapper) &&
+    isScreenReaderClip(table)
   );
 };
