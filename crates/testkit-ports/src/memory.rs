@@ -1,16 +1,19 @@
 use crate::{Script, script::State};
 use application::{
     CacheWriteOutcome, EstimateRepository, FxRateQuery, InformationKey, InformationLinks,
-    MarketDataRepository, NewsRepository, PortfolioRepository, ProposalRepository, RecordOutcome,
-    SettingsRepository, SystemPortError, ThesisRepository, TransactionRepository,
-    ValuationRepository, WriteCompleted,
+    InstrumentMappingRepository, MappingStoreError, MarketDataRepository, NewsRepository,
+    PortfolioRepository, ProposalRepository, RecordOutcome, SettingsRepository, SystemPortError,
+    ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
-    FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
+    FxRate, FxRateKind, InstrumentId, InstrumentMappingRecord, InstrumentMappings,
+    InstrumentSource, InvestorProfile, MappingAssignment, NewsItem, Portfolio, PriceAdjustment,
     Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
     SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
+use std::{future::poll_fn, task::Poll};
+
 fn append_candles(stored: &mut Vec<Candle>, incoming: &[Candle]) {
     for value in incoming {
         if !stored.contains(value) {
@@ -1233,6 +1236,84 @@ pub type MemorySettingsRepositoryStoreProfileScript =
     Script<(InvestorProfile,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
 pub type MemorySettingsRepositoryStoreRiskSettingsScript =
     Script<(RiskSettings,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+
+#[derive(Debug, Default)]
+pub struct MemoryInstrumentMappingRepository {
+    mappings: State<InstrumentMappings>,
+}
+
+impl InstrumentMappingRepository for MemoryInstrumentMappingRepository {
+    fn resolve(
+        &self,
+        source: &InstrumentSource,
+    ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send {
+        poll_fn(move |_| {
+            Poll::Ready(
+                self.mappings
+                    .write()
+                    .resolve(source)
+                    .map_err(MappingStoreError::Mapping),
+            )
+        })
+    }
+
+    fn lookup(
+        &self,
+        source: &InstrumentSource,
+    ) -> impl Future<Output = Result<InstrumentMappingRecord, MappingStoreError>> + Send {
+        poll_fn(move |_| {
+            Poll::Ready(
+                self.mappings
+                    .write()
+                    .lookup(source)
+                    .map_err(MappingStoreError::Mapping),
+            )
+        })
+    }
+
+    fn for_id(
+        &self,
+        id: &InstrumentId,
+    ) -> impl Future<Output = Result<Vec<InstrumentMappingRecord>, MappingStoreError>> + Send {
+        poll_fn(move |_| {
+            Poll::Ready(
+                self.mappings
+                    .write()
+                    .for_id(id)
+                    .map_err(MappingStoreError::Mapping),
+            )
+        })
+    }
+
+    fn ensure(
+        &self,
+        source: &InstrumentSource,
+        candidate: &InstrumentId,
+    ) -> impl Future<Output = Result<MappingAssignment, MappingStoreError>> + Send {
+        poll_fn(move |_| {
+            Poll::Ready(
+                self.mappings
+                    .write()
+                    .ensure(source, candidate)
+                    .map_err(MappingStoreError::Mapping),
+            )
+        })
+    }
+
+    fn retire(
+        &self,
+        source: &InstrumentSource,
+    ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send {
+        poll_fn(move |_| {
+            Poll::Ready(
+                self.mappings
+                    .write()
+                    .retire(source)
+                    .map_err(MappingStoreError::Mapping),
+            )
+        })
+    }
+}
 mod signal_repository;
 pub use signal_repository::MemorySignalEvaluationRepository;
 pub use signal_repository::MemorySignalEvaluationRepository as MemorySignalRepository;
