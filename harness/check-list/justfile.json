@@ -90,6 +90,36 @@
       "shebang": false
     },
     "check": {
+      "attributes": [],
+      "body": [
+        [
+          "[ \"$(node -e 'process.stdout.write(\"audit-ready\")')\" = audit-ready ]"
+        ],
+        [
+          "node harness/ci/temp-audit.mjs \"",
+          [["call", "just_executable"]],
+          "\" base=",
+          [["call", "quote", ["variable", "base"]]],
+          " check-audited"
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-node",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "check",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "check",
+      "shebang": false
+    },
+    "check-audited": {
       "attributes": [
         {
           "env": ["STOCK_COPILOT_PROPTEST_CASES", "4096"]
@@ -144,12 +174,12 @@
         }
       ],
       "doc": null,
-      "name": "check",
+      "name": "check-audited",
       "parameters": [],
       "priors": 3,
       "private": false,
       "quiet": false,
-      "namepath": "check",
+      "namepath": "check-audited",
       "shebang": false
     },
     "check-fast": {
@@ -1068,6 +1098,87 @@
       "private": false,
       "quiet": false,
       "namepath": "mutants-diff",
+      "shebang": false
+    },
+    "mutants-diff-plan": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- mutants --in-diff-plan \"$1\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff-plan",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff-plan",
+      "shebang": false
+    },
+    "mutants-diff-shard": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo run --locked --quiet --package xtask -- mutants --in-diff \"$1\" --shard \"$2\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "mutants-diff-shard",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "commit",
+          "pattern": null,
+          "short": null,
+          "value": null
+        },
+        {
+          "default": null,
+          "export": false,
+          "flag": false,
+          "help": null,
+          "kind": "singular",
+          "long": null,
+          "max": null,
+          "min": null,
+          "multiple": false,
+          "name": "shard",
+          "pattern": null,
+          "short": null,
+          "value": null
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "namepath": "mutants-diff-shard",
       "shebang": false
     },
     "mutants-shard": {

@@ -34,7 +34,7 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "3e0938a7a570e6962b964a0f85fe97df5733f49585a852296851355f23dc82b9",
   ".claude/hooks/subagent-start.mjs": "1a7e0742a7bdafcd8c576fe5e00fab4514a7a175b99d93c8f9706e3c6378eeea",
-  ".codex/config.toml": "e6637d3edf4fc6dd267685b45177692bb45240636fbb1ba12366068c282ae70a",
+  ".codex/config.toml": "a044b6f842c2484c0c7f4c0170c67e25e92c676a09ef455baa86b6cf8f63a48a",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "crates/testkit-ports/src/lib.rs": "9722bbb925bcbcfac26b493ab1fb0cfb8caa5c1b31dcc5395752befa54ca4d41",
   "crates/testkit-ports/src/script.rs": "d0d8ac1f007d6b7ed2564cf78f6d2e9ed510e8f6dc908855546d35265b32aa08",
@@ -62,12 +62,12 @@
   "harness/codex-hooks/tests/policy-r2.test.mjs": "c076d08e442c82f782f6ef33d3745539a1230519c2314f7a39f1a8f25b4a6816",
   "harness/codex-hooks/tests/portable-r1.test.mjs": "fda699d5b9cb0ac6de8cd9ac0f5ee24851bd532f6c40f0ebc6642ba004af34b3",
   "harness/codex-hooks/tests/regression.test.mjs": "6eacbbd093cfb48f903c9ff82eaf59aab41b3517c77fb431dc07b8e17bb212ff",
-  "harness/codex-hooks/tests/revision3.test.mjs": "1402f33cd4f2b7b8db614a670fa6d6b6d9826475640afdf047878dc45575e95a",
+  "harness/codex-hooks/tests/revision3.test.mjs": "fba0f41362be56110432ba80d1cf70ebd1a63ee4859d7e4c7c1c9b37fc638580",
   "harness/codex-hooks/tests/security-r1.test.mjs": "385e9b45626eeb225d0b3762b865ce142e0dce6831dc523da8c07cc32586d5bd",
   "harness/codex-hooks/tests/security-r2.test.mjs": "cc27fe850636b8c364d3016207994a7504b6b3b578440a55d9ae60016516dc68",
   "harness/codex-hooks/tests/session-r1.test.mjs": "b6e8ba88975c4156bcebb45f4c71bd7ae7ff8df1387ecfc59e4edd76194e5c5b",
   "harness/codex-hooks/tests/t3-r1.test.mjs": "2c0d47dea6d1eccac7f8bfb9b6df9c4e0e5839c3c797cc7b5987df52e41be0a8",
-  "harness/codex-regression/run.mjs": "b43d193ecfb5684c82d808f30884d09bf6805faa5d2774172efb22a83e5a977b",
+  "harness/codex-regression/run.mjs": "275cb59066721e2a6b35367e63a8ddf5e235a6c90a34e062ea67838fc7ddbc54",
   "harness/sandbox/lock-fragment.json": "09d29ec7f04bb0a71762c6aeda7587c12a9bfd5f3bf4a60a40124b5fd1bb3764",
   "harness/toolchain/pnpm.mjs": "f5f5269bb302000c1bd2c13fa1026ab88a60f1e7c7b7618fb7f431caafd2fbfd"
 }

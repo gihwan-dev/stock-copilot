@@ -11,10 +11,14 @@ pub(crate) struct Fixture(PathBuf);
 
 impl Fixture {
     pub(crate) fn new() -> Self {
-        let path = std::env::temp_dir()
-            .join("stock-copilot-s01")
-            .join(std::process::id().to_string())
-            .join(NEXT.fetch_add(1, Ordering::Relaxed).to_string());
+        let name = [
+            String::from("stock-copilot-s01"),
+            std::process::id().to_string(),
+            NEXT.fetch_add(1, Ordering::Relaxed).to_string(),
+        ]
+        .join("-");
+        let path = std::env::temp_dir().join(name);
+        assert!(!path.exists(), "fixture directory already exists");
         std::fs::create_dir_all(&path).expect("test operation succeeds");
         Self(path)
     }
@@ -612,4 +616,16 @@ fn explicit_shutdown_reports_a_failed_writer_instead_of_silent_drop() {
             application::SystemFailure::RepositoryIntegrity
         ))
     );
+}
+
+#[test]
+fn fixture_owns_and_removes_its_complete_temporary_directory() {
+    let directory = {
+        let fixture = Fixture::new();
+        let directory = fixture.0.clone();
+        assert_eq!(directory.parent(), Some(std::env::temp_dir().as_path()));
+        assert!(directory.is_dir());
+        directory
+    };
+    assert!(!directory.exists());
 }

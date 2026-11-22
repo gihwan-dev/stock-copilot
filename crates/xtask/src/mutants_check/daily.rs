@@ -289,4 +289,46 @@ mod tests {
         }
         assert_eq!(union, catalog);
     }
+
+    #[test]
+    fn h54_diff_shards_cover_the_actual_changed_mutation_catalog() {
+        let root = fixture();
+        std::fs::write(
+            root.join("crates/domain/src/lib.rs"),
+            "pub fn yes(v: i32) -> bool { v > 0 && v < 10 } #[test] fn catches() { assert!(yes(1)); assert!(!yes(0)); assert!(!yes(10)); }",
+        )
+        .expect("changed fixture");
+        let patch = super::super::diff_patch(&root, "HEAD").expect("patch");
+        let files = std::collections::BTreeSet::from([String::from("crates/domain/src/lib.rs")]);
+        let whole = super::Scope::Files(files.clone());
+        super::super::list_changed_mutants(&root, &whole, &patch).expect("catalog");
+        let catalog: Vec<serde_json::Value> = serde_json::from_slice(
+            &std::fs::read(root.join("target/mutants/catalog.json")).expect("catalog"),
+        )
+        .expect("catalog array");
+        assert_ne!(catalog.len(), 0);
+        let mut union = Vec::new();
+        for index in 0..4 {
+            let scope = super::Scope::DiffSharded(files.clone(), format!("{index}/4"));
+            let outcomes = super::super::run_with_diff(
+                &root,
+                &scope,
+                super::IgnoreFiles::Respected,
+                Some(&patch),
+            )
+            .expect("diff shard");
+            assert_eq!(outcomes, super::Outcomes::default());
+            let selected: Vec<serde_json::Value> = serde_json::from_slice(
+                &std::fs::read(root.join("target/mutants/mutants.out/mutants.json"))
+                    .expect("shard list"),
+            )
+            .expect("array");
+            let chunk = catalog.len().div_ceil(4);
+            let start = (index * chunk).min(catalog.len());
+            let end = (start + chunk).min(catalog.len());
+            assert_eq!(selected, catalog[start..end]);
+            union.extend(selected);
+        }
+        assert_eq!(union, catalog);
+    }
 }

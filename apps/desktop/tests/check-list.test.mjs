@@ -3,13 +3,13 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
@@ -87,8 +87,8 @@ const VARIANTS = [
     "the dependency order changes",
     () =>
       replaced(
-        "check: check-node require-base check-ts",
-        "check: check-ts check-node require-base",
+        "check-audited: check-node require-base check-ts",
+        "check-audited: check-ts check-node require-base",
       ),
   ],
   ["set ignore-errors", () => `set ignore-errors\n${justfileText}`],

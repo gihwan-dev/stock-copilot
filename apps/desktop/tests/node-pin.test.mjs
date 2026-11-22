@@ -1,12 +1,7 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import {
-  chmodSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -63,4 +58,15 @@ test("the Node pin step passes with the pinned version", () => {
     spawnSync("just", ["check-node"], { cwd: repoRoot, env, encoding: "utf8" }),
   );
   assert.equal(result.status, 0, result.stderr);
+});
+
+test("a version-only Node impersonator cannot skip the full check", () => {
+  const result = withFakeNode(pinnedNode, (env) =>
+    spawnSync("just", ["base=HEAD", "check"], {
+      cwd: repoRoot,
+      env,
+      encoding: "utf8",
+    }),
+  );
+  assert.notEqual(result.status, 0, result.stdout);
 });

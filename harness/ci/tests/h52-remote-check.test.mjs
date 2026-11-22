@@ -1,3 +1,4 @@
+import { mkdtempSync } from "../test-temp.mjs";
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
@@ -36,7 +37,7 @@ const jobs = required.map((name) => ({
         "linux check",
         "linux tests without network",
       ]
-    : ["just check", "diff mutants"]
+    : ["branch checkout", "just check", "diff mutants", "diff mutants verdict"]
   ).map((step) => ({ name: step, status: "completed", conclusion: "success" })),
 }));
 const check = (candidate = run, entries = jobs, target = sha) =>
@@ -262,7 +263,7 @@ test("영수증의 주장만으로는 성공을 만들 수 없다", () => {
 
 test("로컬 영수증은 신뢰된 서명과 동일한 내용에만 유효하다", async () => {
   const { spawnSync } = await import("node:child_process");
-  const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } =
+  const { mkdirSync, readFileSync, rmSync, writeFileSync } =
     await import("node:fs");
   const { join } = await import("node:path");
   const { repoRoot } = await import("./signature-repo.mjs");
@@ -391,6 +392,73 @@ test("러너 미배정·취소·시간 초과는 통과가 아닌 재시도 대�
   await assert.rejects(
     remoteCheckFrom(sha, read),
     (error) => error.code === "RETRY_RUNNER_UNASSIGNED",
+  );
+});
+
+test("변이 시간 제한은 코드 실패와 분리하되 성공으로 인정하지 않는다", () => {
+  const failedRun = { ...run, conclusion: "failure" };
+  const deadline = {
+    ...jobs[1],
+    conclusion: "failure",
+    steps: [
+      ...jobs[1].steps.filter((step) => step.name !== "diff mutants verdict"),
+      {
+        name: "diff mutants timeout",
+        status: "completed",
+        conclusion: "failure",
+      },
+      {
+        name: "diff mutants verdict",
+        status: "completed",
+        conclusion: "skipped",
+      },
+    ],
+  };
+  assert.equal(checkRun(sha, failedRun, [jobs[0], deadline]), false);
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], deadline]),
+    "RETRY_MUTATION_TIMED_OUT",
+  );
+  const budget = {
+    ...deadline,
+    steps: deadline.steps.map((step) =>
+      step.name === "diff mutants timeout"
+        ? { ...step, name: "diff mutants budget" }
+        : step,
+    ),
+  };
+  assert.equal(checkRun(sha, failedRun, [jobs[0], budget]), false);
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], budget]),
+    "RETRY_MUTATION_BUDGET",
+  );
+  const budgetAndCodeFailure = {
+    ...budget,
+    steps: budget.steps.map((step) =>
+      step.name === "diff mutants" ? { ...step, conclusion: "failure" } : step,
+    ),
+  };
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], budgetAndCodeFailure]),
+    "CHECK_FAILED",
+  );
+  const codeFailure = {
+    ...deadline,
+    steps: deadline.steps.map((step) =>
+      step.name === "diff mutants" ? { ...step, conclusion: "failure" } : step,
+    ),
+  };
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], codeFailure]),
+    "CHECK_FAILED",
+  );
+  const noEvidence = {
+    ...deadline,
+    steps: deadline.steps.filter((step) => step.name !== "branch checkout"),
+  };
+  assert.equal(
+    failureCode(sha, failedRun, [jobs[0], noEvidence]),
+    "CHECK_FAILED",
   );
 });
 

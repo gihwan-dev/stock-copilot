@@ -1,11 +1,6 @@
 import { ESLint as BaseESLint } from "eslint";
-import {
-  mkdtempSync as makeDirectory,
-  realpathSync,
-  symlinkSync,
-  writeFileSync,
-  rmSync,
-} from "node:fs";
+import { realpathSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync as makeDirectory } from "../../../harness/ci/test-temp.mjs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { desktopRoot } from "./paths.mjs";

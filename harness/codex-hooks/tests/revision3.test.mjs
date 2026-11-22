@@ -5,10 +5,10 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
-  mkdtempSync,
   symlinkSync,
   chmodSync,
 } from "node:fs";
+import { mkdtempSync } from "../../ci/test-temp.mjs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codexPreTool } from "../adapter.mjs";

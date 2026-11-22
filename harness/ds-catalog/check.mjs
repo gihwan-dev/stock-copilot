@@ -1,10 +1,5 @@
-import {
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { join, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { desktop, loadCatalog } from "./load.mjs";

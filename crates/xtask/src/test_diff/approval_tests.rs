@@ -247,6 +247,264 @@ fn approval_must_match_every_finding_and_the_exact_file_bytes() {
 }
 
 #[test]
+fn approval_rejects_a_declared_finding_that_did_not_occur() {
+    let (root, _) = repository("h55-extra-approved-finding");
+    let findings = [
+        "test-diff:modified:sample tests::first",
+        "test-diff:modified:sample tests::second",
+    ];
+    let authority = commit_record(&root, &record(AFTER_ONE, &findings));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, AFTER_ONE);
+    assert_eq!(
+        remaining(&root, &authority, &head, AFTER_ONE),
+        ["test-diff:modified:sample tests::first"]
+    );
+}
+
+#[test]
+fn h55_approved_assertions_reject_self_order_and_constant_disjunction() {
+    let finding = "test-diff:modified:sample tests::first";
+    for (name, before_check, after_check) in [
+        (
+            "less",
+            "let value = 7_i32; assert!(value <= 9)",
+            "let value = 7_i32; assert!(value <= value)",
+        ),
+        (
+            "greater",
+            "let value = 7_i32; assert!(value >= 1)",
+            "let value = 7_i32; assert!(value >= value)",
+        ),
+        (
+            "or-left",
+            "let left = false; let right = true; assert!(left || right)",
+            "let left = false; let right = true; assert!(true || right)",
+        ),
+        (
+            "or-right",
+            "let left = false; let right = true; assert!(left || right)",
+            "let left = false; let right = true; assert!(left || true)",
+        ),
+    ] {
+        let old = BEFORE.replace("assert_eq!(1, 1)", before_check);
+        let changed = BEFORE.replace("assert_eq!(1, 1)", after_check);
+        let (root, _) = repository(&format!("h55-trivial-order-{name}"));
+        write(&root, SOURCE, &old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "baseline"]);
+        let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+            .replace("decision =", "assertion_change = true\ndecision =");
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(&old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("trivial order evaluation");
+        assert_eq!(remaining.len(), 1, "{name}");
+    }
+}
+
+#[test]
+fn h55_approved_support_may_add_a_guard_without_removing_existing_checks() {
+    let old = r"#[cfg(test)] mod tests {
+        struct Fixture;
+        impl Fixture { fn new(value: u8) -> Self { assert_eq!(value, 1); Self } }
+        #[test] fn first() { let _fixture = Fixture::new(1); assert_eq!(1, 1); }
+    }";
+    let finding = "test-diff:support-modified:sample tests::impl impl Fixture";
+    for (name, changed, marked, accepted) in [
+        (
+            "unmarked",
+            old.replace("Self } }", "assert!(value < 3); Self } }"),
+            false,
+            false,
+        ),
+        (
+            "guard",
+            old.replace("Self } }", "assert!(value < 3); Self } }"),
+            true,
+            true,
+        ),
+        (
+            "removed",
+            old.replace("assert_eq!(value, 1); Self", "assert!(value < 3); Self"),
+            true,
+            false,
+        ),
+        (
+            "trivial",
+            old.replace("Self } }", "assert!(true); Self } }"),
+            true,
+            false,
+        ),
+        (
+            "unsafe-guard",
+            old.replace("Self } }", "if value < 3 { assert!(value != 0); } Self } }"),
+            true,
+            false,
+        ),
+    ] {
+        let (root, _) = repository(&format!("h55-extra-guard-{name}"));
+        write(&root, SOURCE, old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "baseline"]);
+        let mut approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding]);
+        if marked {
+            approval = approval.replace("decision =", "assertion_change = true\ndecision =");
+        }
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("guard evaluation");
+        assert_eq!(remaining.is_empty(), accepted, "{name}: {remaining:?}");
+    }
+}
+
+#[test]
+fn h55_preparation_named_check_is_not_mistaken_for_a_check_call() {
+    let old = r"#[cfg(test)] mod tests {
+        #[test] fn first() { let check = recipe(1); assert_eq!(check, 7); }
+    }";
+    let changed = old.replace("recipe(1)", "recipe(2)");
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-check-binding");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "baseline"]);
+    let authority = commit_record(
+        &root,
+        &record_for(SOURCE, &digest(old), &digest(&changed), &[finding]),
+    );
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("preparation approval");
+    assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+#[test]
+fn h55_an_approved_preparation_change_cannot_remove_a_real_check_call() {
+    let old = r"#[cfg(test)] mod tests {
+        #[test] fn first() { check(1); assert_eq!(7, 7); }
+    }";
+    let changed = old.replace("check(1); ", "");
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-check-call");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "baseline"]);
+    let approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("check call evaluation");
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_a_check_binding_cannot_hide_removing_a_check_call() {
+    let old = r"#[cfg(test)] mod tests {
+        #[test] fn first() { let check = check(1); assert_eq!(check, 7); }
+    }";
+    let changed = old.replace("check(1)", "recipe(1)");
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-check-initializer");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "baseline"]);
+    let approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("initializer check evaluation");
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_approval_cannot_hide_removing_expected_error_checks() {
+    let finding = "test-diff:modified:sample tests::first";
+    for (name, check) in [
+        ("expect", "observe().expect_err(\"must fail\")"),
+        ("unwrap", "observe().unwrap_err()"),
+    ] {
+        let old = format!(
+            "#[cfg(test)] mod tests {{ #[test] fn first() {{ let error = {check}; assert_eq!(error, 7); }} }}"
+        );
+        let changed = old.replace(check, "observe().err().unwrap_or(7)");
+        let (root, _) = repository(&format!("h55-expected-error-{name}"));
+        write(&root, SOURCE, &old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "baseline"]);
+        let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+            .replace("decision =", "assertion_change = true\ndecision =");
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(&old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("expected error evaluation");
+        assert_eq!(remaining.len(), 1, "{name}");
+    }
+}
+
+#[test]
+fn h55_expected_error_message_changes_require_assertion_approval() {
+    let old = r#"#[cfg(test)] mod tests {
+        #[test] fn first() { let error = observe().expect_err("before"); assert_eq!(error, 7); }
+    }"#;
+    let changed = old.replace("before", "after");
+    let finding = "test-diff:modified:sample tests::first";
+    for (marked, accepted) in [(false, false), (true, true)] {
+        let (root, _) = repository("h55-error-message");
+        write(&root, SOURCE, old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "baseline"]);
+        let mut approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding]);
+        if marked {
+            approval = approval.replace("decision =", "assertion_change = true\ndecision =");
+        }
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("expected error approval");
+        assert_eq!(remaining.is_empty(), accepted, "marked={marked}");
+    }
+}
+
+#[test]
 fn approval_never_allows_deleting_an_assertion() {
     let (root, _) = repository("h52-approval-assertion");
     let authority = commit_record(
@@ -471,6 +729,138 @@ fn approved_preparation_cannot_skip_an_unchanged_assertion() {
     assert_eq!(
         remaining(&root, &authority, &head, bypass),
         ["test-diff:modified:sample tests::first"]
+    );
+}
+
+#[test]
+fn approved_preparation_cannot_hide_control_flow_inside_a_macro() {
+    let (root, _) = repository("h55-macro-early-return");
+    let bypass = BEFORE.replacen(
+        "let _fixture = \"old\";",
+        "let _fixture = \"new\"; let _text = format!(\"{}\", if std::hint::black_box(true) { return; } else { 0 });",
+        1,
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn approved_preparation_cannot_hide_control_flow_in_macro_repeat_syntax() {
+    let (root, _) = repository("h55-macro-repeat-early-return");
+    let bypass = BEFORE.replacen(
+        "let _fixture = \"old\";",
+        "let _fixture = \"new\"; let _values = vec![0; if std::hint::black_box(true) { return; } else { 1 }];",
+        1,
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn approved_preparation_cannot_hide_an_exit_in_a_new_helper() {
+    let (root, _) = repository("h55-new-helper-exit");
+    let bypass = BEFORE
+        .replacen(
+            "#[test] fn first()",
+            "fn settle() { std::process::exit(0); } #[test] fn first()",
+            1,
+        )
+        .replacen(
+            "let _fixture = \"old\";",
+            "let _fixture = \"new\"; settle();",
+            1,
+        );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn approved_preparation_cannot_hide_an_exit_in_a_new_method() {
+    let (root, _) = repository("h55-new-method-exit");
+    let bypass = BEFORE
+        .replacen(
+            "#[test] fn first()",
+            "struct Helper; impl Helper { fn settle() { std::process::exit(0); } } #[test] fn first()",
+            1,
+        )
+        .replacen(
+            "let _fixture = \"old\";",
+            "let _fixture = \"new\"; Helper::settle();",
+            1,
+        );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&bypass, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &bypass);
+    assert_eq!(remaining(&root, &authority, &head, &bypass), [finding]);
+}
+
+#[test]
+fn unrelated_new_helper_does_not_block_an_approved_preparation() {
+    let (root, _) = repository("h55-unrelated-helper");
+    let change = AFTER_ONE.replacen(
+        "#[test] fn first()",
+        "fn unrelated() {} #[test] fn first()",
+        1,
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(&root, &record(&change, &[finding]));
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &change);
+    assert_eq!(
+        remaining(&root, &authority, &head, &change),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn approved_preparation_cannot_call_a_new_helper_in_another_file() {
+    let (root, _) = repository("h55-new-helper-other-file");
+    let old = format!("mod extra;\n{BEFORE}");
+    let bypass = old.replacen(
+        "let _fixture = \"old\";",
+        "let _fixture = \"new\"; super::extra::settle();",
+        1,
+    );
+    let path = "crates/sample/src/extra.rs";
+    let old_extra = "pub fn existing() {}";
+    let new_extra = "pub fn existing() {} pub fn settle() { std::process::exit(0); }";
+    write(&root, SOURCE, &old);
+    write(&root, path, old_extra);
+    git(&root, &["add", SOURCE, path]);
+    git(&root, &["commit", "--quiet", "-m", "fixture modules"]);
+    let finding = "test-diff:modified:sample tests::first";
+    let authority = commit_record(
+        &root,
+        &record_for(SOURCE, &digest(&old), &digest(&bypass), &[finding]),
+    );
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    write(&root, SOURCE, &bypass);
+    write(&root, path, new_extra);
+    git(&root, &["add", SOURCE, path]);
+    git(&root, &["commit", "--quiet", "-m", "change"]);
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    let mut before = files(&old);
+    before.insert(String::from(path), old_extra.as_bytes().to_vec());
+    let mut current = files(&bypass);
+    current.insert(String::from(path), new_extra.as_bytes().to_vec());
+    let (findings, _) = compare_files(&before, &current);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &current), findings)
+            .expect("approval evaluation");
+    assert!(
+        remaining
+            .iter()
+            .any(|item| item.rule.to_string() == finding)
     );
 }
 
@@ -846,4 +1236,489 @@ fn master_merge_cannot_validate_a_same_commit_self_approval() {
     )
     .expect("master merge self approval");
     assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_explicitly_approved_assertion_expectation_change_passes_but_unmarked_does_not() {
+    let changed = BEFORE.replace("assert_eq!(1, 1)", "assert_eq!(1, 3)");
+    let finding = "test-diff:modified:sample tests::first";
+    for (marked, expected) in [(false, vec![finding]), (true, Vec::new())] {
+        let (root, _) = repository("h55-assertion-approval");
+        let mut approval = record(&changed, &[finding]);
+        if marked {
+            approval = approval.replace("decision =", "assertion_change = true\ndecision =");
+        }
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        assert_eq!(remaining(&root, &authority, &head, &changed), expected);
+    }
+}
+
+#[test]
+fn h55_an_assertion_approval_does_not_authorize_assertion_deletion() {
+    let (root, _) = repository("h55-no-assertion-deletion");
+    let finding = "test-diff:modified:sample tests::first";
+    let approval = record(ASSERTION_DELETED, &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, ASSERTION_DELETED);
+    assert_eq!(
+        remaining(&root, &authority, &head, ASSERTION_DELETED),
+        [finding]
+    );
+}
+
+#[test]
+fn h55_explicitly_approved_impl_and_method_signature_change_passes() {
+    let old = r"#[cfg(test)] mod tests {
+        struct Fixture;
+        impl Fixture { fn value(&self, value: u8) -> u8 { value } }
+        #[test] fn first() { let fixture = Fixture; assert_eq!(fixture.value(1), 1); }
+    }";
+    let new = r"#[cfg(test)] mod tests {
+        struct Fixture;
+        impl Fixture { fn value(&self, value: u8, scale: u8) -> u8 { value * scale } }
+        #[test] fn first() { let fixture = Fixture; assert_eq!(fixture.value(1, 1), 1); }
+    }";
+    let (root, _) = repository("h55-impl-approval");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "impl baseline"]);
+    let findings = [
+        "test-diff:modified:sample tests::first",
+        "test-diff:support-modified:sample tests::impl impl Fixture",
+    ];
+    let approval = record_for(SOURCE, &digest(old), &digest(new), &findings)
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, new);
+    let before = files(old);
+    let after = files(new);
+    let (found, _) = compare_files(&before, &after);
+    let actual: std::collections::BTreeSet<_> =
+        found.iter().map(|entry| entry.rule.to_string()).collect();
+    assert_eq!(actual, findings.into_iter().map(String::from).collect());
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("approved impl");
+    assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+struct SyntheticSources {
+    old: String,
+    new: String,
+    findings: Vec<(String, bool)>,
+}
+
+fn synthetic_support(sources: &mut SyntheticSources, module: &str, index: usize, count: usize) {
+    for support in 0..count {
+        if index == 0 && support == 0 {
+            sources
+                .old
+                .push_str("struct Fixture; impl Fixture { fn make(value: u8) -> u8 { value } }\n");
+            sources.new.push_str("struct Fixture; impl Fixture { fn make(value: u8, offset: u8) -> u8 { value + offset } }\n");
+            sources.findings.push((
+                format!("test-diff:support-modified:sample {module}::impl impl Fixture"),
+                false,
+            ));
+        } else {
+            writeln!(
+                sources.old,
+                "fn helper_{support}(value: u8) -> u8 {{ value }}"
+            )
+            .expect("fixture source");
+            writeln!(
+                sources.new,
+                "fn helper_{support}(value: u8, offset: u8) -> u8 {{ value + offset }}"
+            )
+            .expect("fixture source");
+            sources.findings.push((
+                format!("test-diff:support-modified:sample {module}::fn helper_{support}"),
+                false,
+            ));
+        }
+    }
+}
+
+fn synthetic_tests(
+    sources: &mut SyntheticSources,
+    module: &str,
+    index: usize,
+    supports: usize,
+    count: usize,
+) {
+    if count == 0 {
+        let sentinel = "#[test] fn sentinel() { assert_eq!(observed(11), 11); }\n";
+        sources.old.push_str(sentinel);
+        sources.new.push_str(sentinel);
+    }
+    let (prior, current) = if index == 0 {
+        ("Fixture::make(7)", "Fixture::make(7, 9)")
+    } else if supports > 0 {
+        ("helper_0(7)", "helper_0(7, 9)")
+    } else {
+        ("7", "9")
+    };
+    for test_index in 0..count {
+        let changed = index < 2 && test_index == 0;
+        let value = 20_usize.checked_add(test_index).expect("fixture value");
+        let after_value = value
+            .checked_add(usize::from(changed))
+            .expect("fixture after value");
+        writeln!(sources.old, "#[test] fn case_{test_index}() {{ let _context = {prior}; assert_eq!(observed({value}), {value}); }}").expect("fixture source");
+        writeln!(sources.new, "#[test] fn case_{test_index}() {{ let _context = {current}; assert_eq!(observed({after_value}), {after_value}); }}").expect("fixture source");
+        sources.findings.push((
+            format!("test-diff:modified:sample {module}::case_{test_index}"),
+            changed,
+        ));
+    }
+}
+
+fn synthetic_file(index: usize, supports: usize, tests: usize) -> SyntheticSources {
+    let source = String::from("fn observed(value: u8) -> u8 { value }\n");
+    let mut result = SyntheticSources {
+        old: source.clone(),
+        new: source,
+        findings: Vec::new(),
+    };
+    let module = format!("sample_{index}");
+    synthetic_support(&mut result, &module, index, supports);
+    synthetic_tests(&mut result, &module, index, supports, tests);
+    result
+}
+
+const H55_DISTRIBUTION: [(usize, usize); 9] = [
+    (3, 6),
+    (1, 3),
+    (1, 1),
+    (0, 1),
+    (0, 1),
+    (3, 0),
+    (3, 10),
+    (1, 1),
+    (1, 0),
+];
+
+#[test]
+fn h55_nine_files_and_thirty_six_exact_findings_require_complete_approval() {
+    let (root, _) = repository("h55-nine-files");
+    let mut before = files("");
+    let mut after = files("");
+    let mut declarations = String::new();
+    let mut records = String::new();
+    let mut expected = std::collections::BTreeSet::new();
+    for (index, (supports, tests)) in H55_DISTRIBUTION.into_iter().enumerate() {
+        let module = format!("sample_{index}");
+        let path = format!("crates/sample/src/{module}.rs");
+        writeln!(declarations, "#[cfg(test)] mod {module};").expect("fixture module");
+        let sources = synthetic_file(index, supports, tests);
+        before.insert(path.clone(), sources.old.as_bytes().to_vec());
+        after.insert(path.clone(), sources.new.as_bytes().to_vec());
+        write(&root, &path, &sources.old);
+        for (finding, assertion) in sources.findings {
+            let row = record_for(
+                &path,
+                &digest(&sources.old),
+                &digest(&sources.new),
+                &[&finding],
+            );
+            records.push_str(&if assertion {
+                row.replace("decision =", "assertion_change = true\ndecision =")
+            } else {
+                row
+            });
+            assert!(expected.insert(finding));
+        }
+    }
+    before.insert(String::from(SOURCE), declarations.as_bytes().to_vec());
+    after.insert(String::from(SOURCE), declarations.as_bytes().to_vec());
+    write(&root, SOURCE, &declarations);
+    git(&root, &["add", "crates/sample/src"]);
+    git(&root, &["commit", "--quiet", "-m", "fixture baseline"]);
+    let authority = commit_record(&root, &records);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    for (path, bytes) in &after {
+        if path.starts_with("crates/sample/src/") {
+            write(
+                &root,
+                path,
+                std::str::from_utf8(bytes).expect("fixture text"),
+            );
+        }
+    }
+    git(&root, &["add", "crates/sample/src"]);
+    git(&root, &["commit", "--quiet", "-m", "fixture changes"]);
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    let (found, _) = compare_files(&before, &after);
+    let actual: std::collections::BTreeSet<_> =
+        found.iter().map(|item| item.rule.to_string()).collect();
+    assert_eq!(actual, expected);
+    assert_eq!(actual.len(), 36);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("matching approvals");
+    assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+#[test]
+fn h55_explicit_approval_cannot_replace_an_assertion_with_a_trivial_one() {
+    let old = BEFORE.replace("assert_eq!(1, 1)", "assert_eq!(observe(), 7)");
+    let changed = old.replace("assert_eq!(observe(), 7)", "assert_eq!(9, 9)");
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-trivial-assertion");
+    write(&root, SOURCE, &old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "assertion baseline"]);
+    let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(&old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("trivial assertion evaluation");
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_approved_impl_associated_constant_change_is_accepted() {
+    let old = r"#[cfg(test)] mod tests {
+        struct Fixture;
+        impl Fixture { const LIMIT: u8 = 7; fn value(&self) -> u8 { Self::LIMIT } }
+        #[test] fn first() { assert_eq!(Fixture.value(), 7); }
+    }";
+    let new = old.replace("LIMIT: u8 = 7", "LIMIT: u8 = 9");
+    let (root, _) = repository("h55-impl-const");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "impl baseline"]);
+    let finding = "test-diff:support-modified:sample tests::impl impl Fixture";
+    let approval = record_for(SOURCE, &digest(old), &digest(&new), &[finding]);
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &new);
+    let before = files(old);
+    let after = files(&new);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("impl const approval");
+    assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+#[test]
+fn h55_approval_cannot_bypass_an_assertion_with_short_circuit() {
+    let old = BEFORE.replace("assert_eq!(1, 1)", "assert!(observe())");
+    let changed = old.replace("assert!(observe())", "assert!(true || observe())");
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-short-circuit");
+    write(&root, SOURCE, &old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "assertion baseline"]);
+    let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(&old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("short-circuit evaluation");
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_assertion_approval_field_requires_a_boolean() {
+    let changed = BEFORE.replace("assert_eq!(1, 1)", "assert_eq!(1, 3)");
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-invalid-assertion-field");
+    let approval = record(&changed, &[finding])
+        .replace("decision =", "assertion_change = \"true\"\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(BEFORE);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+        .expect_err("invalid assertion field must fail");
+}
+
+#[test]
+fn h55_impl_assertion_change_requires_its_own_explicit_field() {
+    let old = r"#[cfg(test)] mod tests {
+        struct Fixture;
+        impl Fixture { fn verify(&self, value: u8) { assert_eq!(value, 7); } }
+        #[test] fn first() { Fixture.verify(7); assert_eq!(3, 3); }
+    }";
+    let changed = old.replace("assert_eq!(value, 7)", "assert_eq!(value, 9)");
+    let finding = "test-diff:support-modified:sample tests::impl impl Fixture";
+    for (marked, expected) in [(false, 1_usize), (true, 0_usize)] {
+        let (root, _) = repository("h55-impl-assertion");
+        write(&root, SOURCE, old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "impl baseline"]);
+        let mut approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding]);
+        if marked {
+            approval = approval.replace("decision =", "assertion_change = true\ndecision =");
+        }
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("impl assertion approval");
+        assert_eq!(remaining.len(), expected);
+    }
+}
+
+#[test]
+fn h55_impl_type_change_cannot_delete_a_compile_time_assertion() {
+    let old = r"#[cfg(test)] mod tests {
+        trait Example { type Output; }
+        struct Fixture;
+        impl Example for Fixture { type Output = [u8; { assert!(std::mem::size_of::<u8>() == 1); 1 }]; }
+        #[test] fn first() { assert_eq!(std::mem::size_of::<<Fixture as Example>::Output>(), 1); }
+    }";
+    let changed = old.replace("{ assert!(std::mem::size_of::<u8>() == 1); 1 }", "1");
+    let finding = "test-diff:support-modified:sample tests::impl impl Example for Fixture";
+    let (root, _) = repository("h55-type-assertion");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "impl baseline"]);
+    let approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    assert_eq!(found.len(), 1);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("impl type evaluation");
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_approval_cannot_hide_assertion_bypass_inside_nested_macro() {
+    let old = BEFORE.replace("assert_eq!(1, 1)", "assert!(matches!(observe(), Some(7)))");
+    let changed = old.replace(
+        "matches!(observe(), Some(7))",
+        "matches!({ if false { observe(); } Some(7) }, Some(7))",
+    );
+    let finding = "test-diff:modified:sample tests::first";
+    let (root, _) = repository("h55-nested-assertion");
+    write(&root, SOURCE, &old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "assertion baseline"]);
+    let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+        .replace("decision =", "assertion_change = true\ndecision =");
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(&old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("nested assertion evaluation");
+    assert_eq!(remaining.len(), 1);
+}
+
+#[test]
+fn h55_approved_impl_associated_type_change_is_accepted() {
+    let old = r"#[cfg(test)] mod tests {
+        trait Example { type Output; }
+        struct Fixture;
+        impl Example for Fixture { type Output = [u8; 7]; }
+        #[test] fn first() { assert_eq!(3, 3); }
+    }";
+    let changed = old.replace("[u8; 7]", "[u8; 9]");
+    let finding = "test-diff:support-modified:sample tests::impl impl Example for Fixture";
+    let (root, _) = repository("h55-impl-type");
+    write(&root, SOURCE, old);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "impl baseline"]);
+    let approval = record_for(SOURCE, &digest(old), &digest(&changed), &[finding]);
+    let authority = commit_record(&root, &approval);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, &changed);
+    let before = files(old);
+    let after = files(&changed);
+    let (found, _) = compare_files(&before, &after);
+    let remaining =
+        approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+            .expect("impl type approval");
+    assert!(remaining.is_empty(), "{remaining:?}");
+}
+
+#[test]
+fn h55_an_approval_introduced_in_a_root_commit_is_not_authority() {
+    let root = fresh_directory(&repository_root(), "h55-root-approval");
+    git(&root, &["init", "--quiet", "-b", "master"]);
+    let finding = "test-diff:modified:sample tests::first";
+    write(&root, RECORD, &record(AFTER_ONE, &[finding]));
+    git(&root, &["add", RECORD]);
+    git(&root, &["commit", "--quiet", "-m", "root approval"]);
+    let authority = git(&root, &["rev-parse", "HEAD"]);
+    write(&root, SOURCE, BEFORE);
+    git(&root, &["add", SOURCE]);
+    git(&root, &["commit", "--quiet", "-m", "baseline"]);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    let head = commit_change(&root, AFTER_ONE);
+    assert_eq!(remaining(&root, &authority, &head, AFTER_ONE), [finding]);
+}
+
+#[test]
+fn h55_explicit_approval_rejects_obviously_true_comparisons() {
+    let finding = "test-diff:modified:sample tests::first";
+    for (name, before_check, after_check) in [
+        (
+            "comparison",
+            "let value = 7; assert!(value == 7)",
+            "let value = 7; assert!(value == value)",
+        ),
+        (
+            "negation",
+            "let flag = false; assert!(!flag)",
+            "let flag = false; assert!(!false)",
+        ),
+        (
+            "parentheses",
+            "let value = 7; assert_eq!(value, 7)",
+            "let value = 7; assert_eq!(value, (value))",
+        ),
+    ] {
+        let old = BEFORE.replace("assert_eq!(1, 1)", before_check);
+        let changed = BEFORE.replace("assert_eq!(1, 1)", after_check);
+        let (root, _) = repository(&format!("h55-trivial-{name}"));
+        write(&root, SOURCE, &old);
+        git(&root, &["add", SOURCE]);
+        git(&root, &["commit", "--quiet", "-m", "baseline"]);
+        let approval = record_for(SOURCE, &digest(&old), &digest(&changed), &[finding])
+            .replace("decision =", "assertion_change = true\ndecision =");
+        let authority = commit_record(&root, &approval);
+        git(&root, &["checkout", "--quiet", "-b", "feature"]);
+        let head = commit_change(&root, &changed);
+        let before = files(&old);
+        let after = files(&changed);
+        let (found, _) = compare_files(&before, &after);
+        let remaining =
+            approval::apply_with_authority(&root, &authority, &head, (&before, &after), found)
+                .expect("trivial comparison evaluation");
+        assert_eq!(remaining.len(), 1, "{name}");
+    }
 }

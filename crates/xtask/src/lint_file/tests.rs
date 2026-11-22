@@ -219,7 +219,11 @@ fn paths_outside_links_folders_and_missing_files_are_refused() {
     symlink(&real, work.join("link.rs")).expect("file link");
     symlink(work.join("folder"), work.join("linked-folder")).expect("folder link");
     fs::write(work.join("folder").join("inside.rs"), "fn inside() {}\n").expect("write inside");
-    let relative = "target/harness/lint-file-paths";
+    let relative = work
+        .strip_prefix(&root)
+        .expect("fixture in repository")
+        .to_str()
+        .expect("UTF-8 fixture path");
     assert_eq!(
         resolve(&root, &real),
         Ok(format!("{relative}/real.rs")),

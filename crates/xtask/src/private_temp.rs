@@ -1,4 +1,6 @@
 #[cfg(test)]
+pub(crate) mod fixture_support_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod vanished_tests;
@@ -81,12 +83,27 @@ fn create_private(path: &Path) -> io::Result<()> {
     fs::set_permissions(path, fs::Permissions::from_mode(PRIVATE_MODE))
 }
 
+fn temporary_base() -> PathBuf {
+    std::env::temp_dir()
+}
+
 impl PrivateDirectory {
     pub(crate) fn create(prefix: &str) -> Result<Self, String> {
-        Self::create_in(&std::env::temp_dir(), prefix)
+        Self::create_in(&temporary_base(), prefix)
     }
 
     pub(crate) fn create_in(base: &Path, prefix: &str) -> Result<Self, String> {
+        let owned_prefix = format!("{prefix}-{}", std::process::id());
+        let created = Self::create_owned(base, &owned_prefix)?;
+        let parent = created
+            .root
+            .parent()
+            .ok_or("임시 폴더의 상위 경로가 없다")?;
+        created.remove_stale(parent, &owned_prefix)?;
+        Ok(created)
+    }
+
+    fn create_owned(base: &Path, prefix: &str) -> Result<Self, String> {
         let parent =
             fs::canonicalize(base).map_err(|error| format!("{}: {error}", base.display()))?;
         plain_directory(&parent)?;
@@ -96,9 +113,7 @@ impl PrivateDirectory {
                 Ok(()) => {
                     let owner = plain_directory(&root)?.uid();
                     private_directory(&root, owner)?;
-                    let created = Self { root, owner };
-                    created.remove_stale(&parent, prefix)?;
-                    return Ok(created);
+                    return Ok(Self { root, owner });
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(format!("{}: {error}", root.display())),

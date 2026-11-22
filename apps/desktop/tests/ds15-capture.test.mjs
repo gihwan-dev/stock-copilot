@@ -3,12 +3,12 @@ import { test } from "node:test";
 import { createContext, runInContext } from "node:vm";
 import {
   readFileSync,
-  mkdtempSync,
   mkdirSync,
   writeFileSync,
   rmSync,
   cpSync,
 } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join } from "node:path";
 import { request } from "node:http";
 import { captureStory } from "../../../harness/visual/capture.mjs";
