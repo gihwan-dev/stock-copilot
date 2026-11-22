@@ -169,6 +169,8 @@ struct MarketDataRepositoryState {
     quotes: Vec<MemoryQuote>,
     candles: Vec<Candle>,
     rates: Vec<FxRate>,
+    close_evidence: Vec<domain::ObservedCloseEvidence>,
+    close_evidence_error: Option<SystemPortError>,
 }
 #[derive(Debug)]
 struct MemoryQuote {
@@ -245,6 +247,12 @@ pub struct MemoryMarketDataRepository {
     calls: State<Vec<crate::scripted::MarketDataRepositoryCall>>,
 }
 impl MemoryMarketDataRepository {
+    pub fn supply_close_evidence(&self, evidence: domain::ObservedCloseEvidence) {
+        self.state.write().close_evidence.push(evidence);
+    }
+    pub fn fail_close_evidence(&self, error: SystemPortError) {
+        self.state.write().close_evidence_error = Some(error);
+    }
     #[must_use]
     pub fn script_store_quote(&self) -> &MemoryMarketDataRepositoryStoreQuoteScript {
         &self.store_quote
@@ -1069,6 +1077,32 @@ impl ValuationRepository for MemoryValuationRepository {
                 Ok(values)
             }
         }
+    }
+}
+impl application::ValuationCloseEvidenceRepository for MemoryMarketDataRepository {
+    fn observed_close_evidence(
+        &self,
+        instrument: &domain::ResolvedOrderInstrument,
+        date: domain::CalendarDate,
+        as_of: Timestamp,
+    ) -> impl Future<Output = Result<Vec<domain::ObservedCloseEvidence>, SystemPortError>> + Send
+    {
+        let state = self.state.write();
+        let result = match state.close_evidence_error {
+            Some(error) => Err(error),
+            None => Ok(state
+                .close_evidence
+                .iter()
+                .filter(|entry| {
+                    entry.instrument().symbol() == instrument.symbol()
+                        && domain::Market::from(*entry.instrument().market()) == instrument.market()
+                        && entry.candle().time().date() == date
+                        && entry.candle().collected_at() <= as_of
+                })
+                .cloned()
+                .collect()),
+        };
+        std::future::ready(result)
     }
 }
 fn risk_with_profile(previous: Option<RiskSettings>, profile: &InvestorProfile) -> RiskSettings {

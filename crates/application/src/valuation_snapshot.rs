@@ -1,6 +1,6 @@
 use crate::{
     Clock, DeliveryReport, EventBus, FxRateQuery, MarketDataRepository, PortfolioRepository,
-    RecordOutcome, SystemPortError, ValuationRepository,
+    RecordOutcome, SystemPortError, ValuationCloseEvidenceRepository, ValuationRepository,
 };
 use domain::{
     AccountId, CalendarDate, Currency, DomainEvent, FxPair, FxRateKind, SnapshotCalendar,
@@ -35,7 +35,7 @@ impl<'a, Portfolio, Market, Repository, Time>
     TakeValuationSnapshot<'a, Portfolio, Market, Repository, Time>
 where
     Portfolio: PortfolioRepository,
-    Market: MarketDataRepository,
+    Market: MarketDataRepository + ValuationCloseEvidenceRepository,
     Repository: ValuationRepository,
     Time: Clock,
 {
@@ -78,8 +78,15 @@ where
             .fx_rate(FxPair::UsdKrw, FxRateKind::Mid, FxRateQuery::At(at))
             .await
             .map_err(ValuationSnapshotError::Repository)?;
-        let snapshot = ValuationSnapshot::observe(calendar, &portfolio.evaluate(fx), at, fx)
-            .map_err(ValuationSnapshotError::Snapshot)?;
+        let evaluated = portfolio.evaluate(fx);
+        let snapshot = match ValuationSnapshot::observe(calendar, &evaluated, at, fx) {
+            Err(SnapshotError::MissingPrice) => {
+                let evidence = self.close_evidence(portfolio, calendar, at).await?;
+                ValuationSnapshot::observe_with_evidence(calendar, &evaluated, at, fx, &evidence)
+                    .map_err(ValuationSnapshotError::Snapshot)?
+            }
+            result => result.map_err(ValuationSnapshotError::Snapshot)?,
+        };
         validate_price_basis(
             snapshot.price_basis(Currency::Krw),
             price_requirement(portfolio, Currency::Krw),
@@ -102,6 +109,48 @@ where
             recorded,
             delivery,
         })
+    }
+    async fn close_evidence(
+        &self,
+        portfolio: &domain::Portfolio,
+        calendar: &SnapshotCalendar,
+        at: Timestamp,
+    ) -> Result<Vec<domain::ObservedCloseEvidence>, ValuationSnapshotError> {
+        let mut evidence = Vec::new();
+        for holding in portfolio.holdings() {
+            match calendar.observed_close_requirement(holding) {
+                domain::ObservedCloseRequirement::NotRequired => continue,
+                domain::ObservedCloseRequirement::Required => {}
+            }
+            match calendar
+                .price(holding.currency(), at)
+                .map_err(ValuationSnapshotError::Snapshot)?
+                .1
+            {
+                SnapshotPriceBasis::CurrentSession => {}
+                SnapshotPriceBasis::AwaitingSession | SnapshotPriceBasis::HolidayCarry => {
+                    return Err(ValuationSnapshotError::Snapshot(
+                        SnapshotError::MissingPrice,
+                    ));
+                }
+            }
+        }
+        for holding in portfolio.holdings() {
+            match calendar.observed_close_requirement(holding) {
+                domain::ObservedCloseRequirement::NotRequired => continue,
+                domain::ObservedCloseRequirement::Required => {}
+            }
+            let date = calendar
+                .price_date(holding.currency(), at)
+                .map_err(ValuationSnapshotError::Snapshot)?;
+            evidence.extend(
+                self.market
+                    .observed_close_evidence(holding.instrument(), date, holding.observed_at())
+                    .await
+                    .map_err(ValuationSnapshotError::Repository)?,
+            );
+        }
+        Ok(evidence)
     }
 }
 

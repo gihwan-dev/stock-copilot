@@ -65,6 +65,15 @@ pub trait MarketDataRepository: Send + Sync {
     ) -> impl Future<Output = Result<Option<FxRate>, SystemPortError>> + Send;
 }
 
+pub trait ValuationCloseEvidenceRepository: Send + Sync {
+    fn observed_close_evidence(
+        &self,
+        _instrument: &domain::ResolvedOrderInstrument,
+        _date: domain::CalendarDate,
+        _as_of: Timestamp,
+    ) -> impl Future<Output = Result<Vec<domain::ObservedCloseEvidence>, SystemPortError>> + Send;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheWriteOutcome {
     Changed,
