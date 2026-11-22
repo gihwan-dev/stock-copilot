@@ -47,7 +47,6 @@ impl InstrumentSource {
     }
 }
 
-#[derive(PartialEq, Eq)]
 enum SourceRelation {
     Uncertain,
     Distinct,

@@ -12,8 +12,12 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn source(symbol: &str, isin: &str) -> InstrumentSource {
+        source_in(KnownMarket::Us, symbol, isin)
+    }
+
+    fn source_in(market: KnownMarket, symbol: &str, isin: &str) -> InstrumentSource {
         InstrumentSource::new(
-            KnownMarket::Us,
+            market,
             Symbol::try_new(symbol).expect("심볼"),
             IsinCode::try_new(isin).expect("ISIN"),
         )
@@ -67,7 +71,7 @@ mod tests {
     }
 
     #[test]
-    fn storage_adapter_can_form_a_typed_record_without_changing_the_ledger() {
+    fn typed_storage_record_preserves_source_id_and_status() {
         let original = source("AAPL", "US0378331005");
         let record = InstrumentMappingRecord::new(
             original.clone(),
@@ -86,11 +90,21 @@ mod tests {
     }
 
     fn related(left: u8, right: u8) -> bool {
-        (left == 0 && (right == 2 || right == 3)) || (right == 0 && (left == 2 || left == 3))
+        [
+            (0, 2),
+            (2, 0),
+            (0, 3),
+            (3, 0),
+            (0, 5),
+            (5, 0),
+            (2, 5),
+            (5, 2),
+        ]
+        .contains(&(left, right))
     }
 
     struct ReferenceCase {
-        sources: [InstrumentSource; 4],
+        sources: [InstrumentSource; 6],
         candidates: [InstrumentId; 3],
         model: BTreeMap<u8, (u8, ModelStatus)>,
         ledger: InstrumentMappings,
@@ -104,6 +118,8 @@ mod tests {
                     source(&format!("S{salt}B"), &format!("I{salt}B")),
                     source(&format!("S{salt}A"), &format!("I{salt}C")),
                     source(&format!("S{salt}C"), &format!("I{salt}A")),
+                    source_in(KnownMarket::Kr, &format!("S{salt}A"), &format!("I{salt}D")),
+                    source(&format!("s{salt}a"), &format!("I{salt}E")),
                 ],
                 candidates: [id("candidate-0"), id("candidate-1"), id("candidate-2")],
                 model: BTreeMap::new(),
@@ -181,6 +197,62 @@ mod tests {
             }
         }
 
+        fn model_record(
+            &self,
+            source_number: u8,
+            assigned: u8,
+            status: ModelStatus,
+        ) -> InstrumentMappingRecord {
+            let source = self
+                .sources
+                .get(usize::from(source_number))
+                .expect("원본 범위")
+                .clone();
+            let state = match status {
+                ModelStatus::Active => InstrumentMappingStatus::Active,
+                ModelStatus::Retired => InstrumentMappingStatus::Retired,
+            };
+            InstrumentMappingRecord::new(source, self.candidate(assigned), state)
+        }
+
+        fn check_lookup(&self, source_number: u8) -> proptest::test_runner::TestCaseResult {
+            let before = self.ledger.clone();
+            let source = self
+                .sources
+                .get(usize::from(source_number))
+                .expect("원본 범위");
+            let expected = match self.model.get(&source_number).copied() {
+                Some((assigned, status)) => Ok(self.model_record(source_number, assigned, status)),
+                None if self.is_uncertain(source_number) => {
+                    Err(InstrumentMappingError::IdentityUncertain)
+                }
+                None => Err(InstrumentMappingError::Missing),
+            };
+            prop_assert_eq!(self.ledger.lookup(source), expected);
+            prop_assert_eq!(&self.ledger, &before);
+            Ok(())
+        }
+
+        fn check_for_id(&self, candidate_number: u8) -> proptest::test_runner::TestCaseResult {
+            let before = self.ledger.clone();
+            let expected = match self
+                .model
+                .iter()
+                .find(|(_, (assigned, _))| *assigned == candidate_number)
+            {
+                Some((source_number, (assigned, status))) => {
+                    Ok(vec![self.model_record(*source_number, *assigned, *status)])
+                }
+                None => Err(InstrumentMappingError::Missing),
+            };
+            prop_assert_eq!(
+                self.ledger.for_id(&self.candidate(candidate_number)),
+                expected
+            );
+            prop_assert_eq!(&self.ledger, &before);
+            Ok(())
+        }
+
         fn check_ensure(
             &mut self,
             source_number: u8,
@@ -240,6 +312,8 @@ mod tests {
                     1 => self.check_retire(source_number)?,
                     _ => self.check_resolve(source_number)?,
                 }
+                self.check_lookup(source_number)?;
+                self.check_for_id(candidate_number)?;
             }
             Ok(())
         }
@@ -249,7 +323,7 @@ mod tests {
     fn generated_operation_sequences_match_the_independent_reference_model() {
         TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
-                &(0_u16..10_000, vec((0_u8..3, 0_u8..4, 0_u8..3), 0..40)),
+                &(0_u16..10_000, vec((0_u8..3, 0_u8..6, 0_u8..3), 0..40)),
                 |(salt, operations)| ReferenceCase::new(salt).run(operations),
             )
             .expect("원장 상태 기계 속성");
