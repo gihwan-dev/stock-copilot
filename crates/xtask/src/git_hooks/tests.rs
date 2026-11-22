@@ -880,7 +880,7 @@ const FRESH_NODE_RECIPE: [&str; 2] = [
 
 #[test]
 fn check_ends_with_the_new_disables_and_the_hook_installation() {
-    let check = recipe("check");
+    let check = recipe("check-audited");
     let tail: Vec<&str> = check
         .iter()
         .rev()

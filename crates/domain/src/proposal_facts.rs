@@ -62,6 +62,15 @@ impl PriceObservation {
     pub fn observed_at(&self) -> Timestamp {
         self.observed_at
     }
+    pub(crate) fn check_task_instrument(&self, task: &crate::EstimateTask) -> CheckResult {
+        if self.instrument() == task.reference().instrument()
+            && self.instrument_id() == Some(task.volatility().instrument())
+        {
+            CheckResult::Passed
+        } else {
+            CheckResult::Failed
+        }
+    }
     pub(crate) fn check(
         &self,
         instrument: &ResolvedOrderInstrument,

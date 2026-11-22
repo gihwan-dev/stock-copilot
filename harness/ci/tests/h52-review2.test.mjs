@@ -228,7 +228,12 @@ test("같은 SHA의 실행 후보 하나라도 ID가 없으면 오래된 성공�
         "linux check",
         "linux tests without network",
       ],
-      "macos-branch": ["just check", "diff mutants"],
+      "macos-branch": [
+        "branch checkout",
+        "just check",
+        "diff mutants",
+        "diff mutants verdict",
+      ],
       signatures: ["signatures from the base checkout"],
     };
     return {

@@ -308,7 +308,9 @@ pub use daily_profit::{
     SnapshotPrevious,
 };
 pub use daily_profit_account::{AccountChange, AccountCurrencyChange, AccountKrwChange};
+pub use valuation_snapshot::{ObservedCloseEvidence, ObservedCloseRequirement};
 pub use valuation_snapshot::{SnapshotInstrumentHistory, SnapshotPosition, ValuationSnapshot};
+pub use valuation_snapshot_calendar::regular_session_candle_status;
 pub use valuation_snapshot_calendar::{
     SnapshotCalendar, SnapshotDates, SnapshotError, SnapshotObservation, SnapshotPriceBasis,
     SnapshotSource,

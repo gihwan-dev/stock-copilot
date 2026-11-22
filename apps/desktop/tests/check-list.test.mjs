@@ -87,8 +87,8 @@ const VARIANTS = [
     "the dependency order changes",
     () =>
       replaced(
-        "check: check-node require-base check-ts",
-        "check: check-ts check-node require-base",
+        "check-audited: check-node require-base check-ts",
+        "check-audited: check-ts check-node require-base",
       ),
   ],
   ["set ignore-errors", () => `set ignore-errors\n${justfileText}`],

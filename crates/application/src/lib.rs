@@ -263,6 +263,7 @@ pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod instrument_mapping;
 pub use instrument_mapping::{InstrumentMappingRepository, MappingStoreError};
 mod storage_ports;
+pub use storage_ports::ValuationCloseEvidenceRepository;
 pub use storage_ports::{
     CacheWriteOutcome, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,
     PortfolioRepository, ProposalRepository, SettingsRepository, SignalRepository,
@@ -374,6 +375,12 @@ pub use run_full_inspection::{
 
 mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
+mod signal_ports;
+pub use signal_ports::{
+    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalMutation, SignalRevision,
+    SignalSnapshot, SignalSourceFacts, StoredSignal,
+};
+
 pub mod resolve_estimates;
 
 mod information_storage;

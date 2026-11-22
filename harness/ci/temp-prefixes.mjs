@@ -10,6 +10,7 @@ export const prefixes = [
   "h41-",
   "h46-",
   "h47-",
+  "h54-",
   "harness-prefetch-",
   "knip-config-",
   "main-hook-context-",

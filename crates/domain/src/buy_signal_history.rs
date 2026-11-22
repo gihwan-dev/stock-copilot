@@ -24,6 +24,7 @@ pub struct BuySignalRecord {
     id: BuySignalOccurrenceId,
     instrument_id: crate::InstrumentId,
     instrument: ResolvedOrderInstrument,
+    originating_task: crate::SignalTaskKey,
     interval: TimeInterval,
     raised_at: Timestamp,
 }
@@ -49,6 +50,7 @@ impl BuySignalRecord {
                 id,
                 instrument_id: task.volatility().instrument().clone(),
                 instrument: task.reference().instrument().clone(),
+                originating_task: signal.facts().submission().task_key().clone(),
                 interval,
                 raised_at,
             })
@@ -64,6 +66,10 @@ impl BuySignalRecord {
     #[must_use]
     pub const fn instrument(&self) -> &ResolvedOrderInstrument {
         &self.instrument
+    }
+    #[must_use]
+    pub const fn originating_task(&self) -> &crate::SignalTaskKey {
+        &self.originating_task
     }
     #[must_use]
     pub const fn interval(&self) -> TimeInterval {

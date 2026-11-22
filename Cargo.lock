@@ -211,6 +211,7 @@ dependencies = [
  "serde",
  "serde_json",
  "testkit",
+ "testkit-ports",
  "time",
  "tokio",
 ]

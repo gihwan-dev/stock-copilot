@@ -2,15 +2,15 @@ use crate::{Script, script::State};
 use application::{
     CacheWriteOutcome, EstimateRepository, FxRateQuery, InformationKey, InformationLinks,
     InstrumentMappingRepository, MappingStoreError, MarketDataRepository, NewsRepository,
-    PortfolioRepository, ProposalRepository, RecordOutcome, SettingsRepository, SignalRepository,
-    SystemPortError, ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
+    PortfolioRepository, ProposalRepository, RecordOutcome, SettingsRepository, SystemPortError,
+    ThesisRepository, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InstrumentMappingRecord, InstrumentMappings,
     InstrumentSource, InvestorProfile, MappingAssignment, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
-    SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
+    Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
+    SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 use std::{future::poll_fn, task::Poll};
 
@@ -172,6 +172,8 @@ struct MarketDataRepositoryState {
     quotes: Vec<MemoryQuote>,
     candles: Vec<Candle>,
     rates: Vec<FxRate>,
+    close_evidence: Vec<domain::ObservedCloseEvidence>,
+    close_evidence_error: Option<SystemPortError>,
 }
 #[derive(Debug)]
 struct MemoryQuote {
@@ -248,6 +250,12 @@ pub struct MemoryMarketDataRepository {
     calls: State<Vec<crate::scripted::MarketDataRepositoryCall>>,
 }
 impl MemoryMarketDataRepository {
+    pub fn supply_close_evidence(&self, evidence: domain::ObservedCloseEvidence) {
+        self.state.write().close_evidence.push(evidence);
+    }
+    pub fn fail_close_evidence(&self, error: SystemPortError) {
+        self.state.write().close_evidence_error = Some(error);
+    }
     #[must_use]
     pub fn script_store_quote(&self) -> &MemoryMarketDataRepositoryStoreQuoteScript {
         &self.store_quote
@@ -835,85 +843,6 @@ impl EstimateRepository for MemoryEstimateRepository {
     }
 }
 #[derive(Debug, Default)]
-struct SignalRepositoryState {
-    records: Vec<(InstrumentId, Vec<RaisedSignal>)>,
-}
-#[derive(Debug, Default)]
-pub struct MemorySignalRepository {
-    replace: MemorySignalRepositoryReplaceScript,
-    current: MemorySignalRepositoryCurrentScript,
-    state: State<SignalRepositoryState>,
-    calls: State<Vec<crate::scripted::SignalRepositoryCall>>,
-}
-impl MemorySignalRepository {
-    #[must_use]
-    pub fn script_replace(&self) -> &MemorySignalRepositoryReplaceScript {
-        &self.replace
-    }
-    #[must_use]
-    pub fn script_current(&self) -> &MemorySignalRepositoryCurrentScript {
-        &self.current
-    }
-
-    #[must_use]
-    pub fn calls(&self) -> Vec<crate::scripted::SignalRepositoryCall> {
-        self.calls.write().clone()
-    }
-}
-impl SignalRepository for MemorySignalRepository {
-    async fn replace(
-        &self,
-        instrument: &InstrumentId,
-        signals: &[RaisedSignal],
-    ) -> Result<WriteCompleted, SystemPortError> {
-        self.calls
-            .write()
-            .push(crate::scripted::SignalRepositoryCall::Replace(
-                instrument.clone(),
-                signals.to_vec(),
-            ));
-        match self
-            .replace
-            .run((instrument.clone(), signals.to_vec()))
-            .await
-        {
-            MemoryReply::Return(value) => value,
-            MemoryReply::Memory => {
-                let mut state = self.state.write();
-                state.records.push((instrument.clone(), signals.to_vec()));
-                Ok(WriteCompleted)
-            }
-        }
-    }
-    async fn current(
-        &self,
-        instrument: &InstrumentId,
-    ) -> Result<Vec<RaisedSignal>, SystemPortError> {
-        self.calls
-            .write()
-            .push(crate::scripted::SignalRepositoryCall::Current(
-                instrument.clone(),
-            ));
-        match self.current.run((instrument.clone(),)).await {
-            MemoryReply::Return(value) => value,
-            MemoryReply::Memory => {
-                let state = self.state.write();
-                Ok(
-                    match state
-                        .records
-                        .iter()
-                        .rev()
-                        .find(|(key, _)| key == instrument)
-                    {
-                        Some((_, value)) => value.clone(),
-                        None => Vec::new(),
-                    },
-                )
-            }
-        }
-    }
-}
-#[derive(Debug, Default)]
 struct ProposalRepositoryState {
     records: Vec<(ProposalId, Proposal<Draft>)>,
 }
@@ -1072,6 +1001,32 @@ impl ValuationRepository for MemoryValuationRepository {
                 Ok(values)
             }
         }
+    }
+}
+impl application::ValuationCloseEvidenceRepository for MemoryMarketDataRepository {
+    fn observed_close_evidence(
+        &self,
+        instrument: &domain::ResolvedOrderInstrument,
+        date: domain::CalendarDate,
+        as_of: Timestamp,
+    ) -> impl Future<Output = Result<Vec<domain::ObservedCloseEvidence>, SystemPortError>> + Send
+    {
+        let state = self.state.write();
+        let result = match state.close_evidence_error {
+            Some(error) => Err(error),
+            None => Ok(state
+                .close_evidence
+                .iter()
+                .filter(|entry| {
+                    entry.instrument().symbol() == instrument.symbol()
+                        && domain::Market::from(*entry.instrument().market()) == instrument.market()
+                        && entry.candle().time().date() == date
+                        && entry.candle().collected_at() <= as_of
+                })
+                .cloned()
+                .collect()),
+        };
+        std::future::ready(result)
     }
 }
 fn risk_with_profile(previous: Option<RiskSettings>, profile: &InvestorProfile) -> RiskSettings {
@@ -1246,10 +1201,6 @@ pub type MemoryThesisRepositoryLoadScript =
     Script<(InstrumentId,), MemoryReply<Result<Option<Thesis>, SystemPortError>>>;
 pub type MemoryEstimateRepositoryAppendResolutionScript =
     Script<(SignalTaskKey, EstimateOutcome), MemoryReply<Result<RecordOutcome, SystemPortError>>>;
-pub type MemorySignalRepositoryReplaceScript =
-    Script<(InstrumentId, Vec<RaisedSignal>), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
-pub type MemorySignalRepositoryCurrentScript =
-    Script<(InstrumentId,), MemoryReply<Result<Vec<RaisedSignal>, SystemPortError>>>;
 pub type MemoryProposalRepositoryDraftScript =
     Script<(ProposalId,), MemoryReply<Result<Option<Proposal<Draft>>, SystemPortError>>>;
 pub type MemoryValuationRepositoryHistoryScript =
@@ -1363,3 +1314,6 @@ impl InstrumentMappingRepository for MemoryInstrumentMappingRepository {
         })
     }
 }
+mod signal_repository;
+pub use signal_repository::MemorySignalEvaluationRepository;
+pub use signal_repository::MemorySignalEvaluationRepository as MemorySignalRepository;

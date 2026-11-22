@@ -204,7 +204,7 @@ fn recipe_lines(recipe: &str) -> Vec<String> {
 
 #[test]
 fn check_recipe_runs_offline_cargo_deny() {
-    let check = recipe_lines("check");
+    let check = recipe_lines("check-audited");
     assert!(
         check
             .iter()
