@@ -1,13 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  writeFileSync,
-  readFileSync,
-  rmSync,
-  mkdirSync,
-} from "node:fs";
+import { writeFileSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join } from "node:path";
 import { repoRoot } from "./paths.mjs";
 

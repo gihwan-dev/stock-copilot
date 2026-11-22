@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { shardsFor, sliceFor, runAnchor } from "../mutation-plan.mjs";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  chmodSync,
-} from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, chmodSync } from "node:fs";
+import { mkdtempSync } from "../test-temp.mjs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";

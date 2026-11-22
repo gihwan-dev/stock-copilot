@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   writeFileSync,
   rmSync,
 } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join } from "node:path";
 import { settings } from "../../../harness/visual/policy.mjs";
 import {

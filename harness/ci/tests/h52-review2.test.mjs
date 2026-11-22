@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "../test-temp.mjs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { recordProblems, tierProblems } from "../review-records/check.mjs";

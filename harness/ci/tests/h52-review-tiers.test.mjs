@@ -1,3 +1,4 @@
+import { mkdtempSync } from "../test-temp.mjs";
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
@@ -128,8 +129,7 @@ test("등급이 없는 새 기록은 회차 수와 관계없이 거부한다", (
 });
 
 test("아직 완료 progress에 연결되지 않은 새 리뷰 기록도 등급을 검사한다", async () => {
-  const { mkdirSync, mkdtempSync, rmSync, writeFileSync } =
-    await import("node:fs");
+  const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
   const parent = join(repoRoot, "target/h52-tier");
   mkdirSync(parent, { recursive: true });
@@ -150,8 +150,7 @@ test("아직 완료 progress에 연결되지 않은 새 리뷰 기록도 등급�
 });
 
 test("progress에 연결되지 않은 새 기록에도 리뷰 등급이 필요하다", async () => {
-  const { mkdirSync, mkdtempSync, rmSync, writeFileSync } =
-    await import("node:fs");
+  const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
   const parent = join(repoRoot, "target/h52-tier");
   mkdirSync(parent, { recursive: true });
