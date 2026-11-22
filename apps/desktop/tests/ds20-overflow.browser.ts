@@ -422,6 +422,50 @@ describe("overflow measurements", () => {
     });
   });
 
+  it.each(["number", "unsupported"])(
+    "accepts editable %s input content scrolling",
+    async (type) => {
+      const doc = await makeDocument(
+        `<input id="numeric-editor" type="${type}" value="123456789012345678901234567890" style="width:50px">`,
+      );
+      const input = doc.querySelector<HTMLInputElement>("#numeric-editor");
+      if (input === null) throw new Error("input missing");
+      expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+      expect(inspectOverflow(doc)).not.toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#numeric-editor",
+      });
+    },
+  );
+
+  it.each([
+    [
+      "vertical",
+      '<textarea id="truncated-editor" data-truncate title="one two three four five" style="width:120px;height:30px;overflow:hidden;text-overflow:ellipsis">one\ntwo\nthree\nfour\nfive</textarea>',
+    ],
+    [
+      "horizontal",
+      '<textarea id="truncated-editor" data-truncate wrap="off" title="longlonglonglonglonglonglonglong" style="width:60px;height:50px;overflow:hidden;text-overflow:ellipsis">longlonglonglonglonglonglonglong</textarea>',
+    ],
+  ])(
+    "still detects %s textarea overflow with a truncation marker",
+    async (axis, markup) => {
+      const doc = await makeDocument(markup);
+      const input = doc.querySelector<HTMLTextAreaElement>("#truncated-editor");
+      if (input === null) throw new Error("textarea missing");
+      expect(getComputedStyle(input).overflowY).toBe("hidden");
+      expect(
+        axis === "vertical"
+          ? input.scrollHeight > input.clientHeight
+          : input.scrollWidth > input.clientWidth,
+      ).toBe(true);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#truncated-editor",
+      });
+    },
+  );
+
   it("still detects textarea vertical overflow with overflow-y hidden", async () => {
     const doc = await makeDocument(
       '<textarea id="clipped-textarea" style="width:120px;height:40px;overflow:hidden">one\ntwo\nthree\nfour\nfive\nsix</textarea>',

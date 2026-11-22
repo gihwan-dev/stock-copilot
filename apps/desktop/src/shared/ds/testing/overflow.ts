@@ -34,11 +34,10 @@ const finding = (
 const hasOverflow = (element: Readonly<Element>): boolean =>
   element.scrollWidth > element.clientWidth ||
   element.scrollHeight > element.clientHeight;
-
 const editableTextInput = (element: Readonly<Element>): boolean =>
   element.matches("input:not([readonly]):not(:disabled)") &&
-  ["text", "search", "tel", "url", "email", "password"].includes(
-    (element.getAttribute("type") ?? "text").toLowerCase(),
+  ["text", "search", "tel", "url", "email", "password", "number"].includes(
+    element.closest("input")?.type ?? "",
   );
 const hasOnePixelTextOverflow = (element: Readonly<Element>): boolean =>
   element.scrollHeight === element.clientHeight + 1 &&
@@ -98,7 +97,6 @@ const isVisible = (element: Readonly<Element>): boolean =>
   element.getClientRects().length !== 0;
 const trimmedText = (text: string | null): string =>
   (text ?? "").replace(/\s+/gu, " ").trim();
-
 const hasFullTooltip = (
   element: Readonly<Element>,
   doc: Readonly<Document>,
@@ -183,7 +181,7 @@ const overlapsSibling = (element: Readonly<Element>): boolean =>
 const unauthorized = (element: Readonly<Element>): boolean =>
   hasUnpermittedContentOverflow(element) &&
   (!isViewport(element) || element.matches("input,textarea")) &&
-  !isTruncated(element);
+  (!isTruncated(element) || element.matches("input,textarea"));
 const missingTooltip = (
   element: Readonly<Element>,
   doc: Readonly<Document>,
