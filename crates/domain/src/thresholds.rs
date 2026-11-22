@@ -164,7 +164,7 @@ impl Thresholds {
         self.compare(calibration, ThresholdKind::Sell)
             .map(sell_condition_from_order)
     }
-    pub(crate) fn compare(
+    pub fn compare(
         &self,
         calibration: &CalibratedProbability,
         kind: ThresholdKind,
