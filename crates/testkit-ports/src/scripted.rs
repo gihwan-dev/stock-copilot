@@ -13,12 +13,11 @@ use domain::{
     FxRateKind, IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
     MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
-    PriceAdjustment, PriceLimits, ProgramTrade, ProposalId, Quote, QuoteInstrument, RaisedSignal,
-    RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition,
-    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
-    SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking,
-    StockWarnings, Symbol, SyncRecord, TimeInterval, Timestamp, TransactionFilter,
-    ValuationSnapshot,
+    PriceAdjustment, PriceLimits, ProgramTrade, ProposalId, Quote, QuoteInstrument, RankingLimit,
+    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
+    SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
+    SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
+    Symbol, SyncRecord, TimeInterval, Timestamp, TransactionFilter, ValuationSnapshot,
 };
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrokerReadCall {
@@ -742,12 +741,6 @@ pub enum EstimateRepositoryCall {
     Resolution(SignalTaskKey),
     AppendCalibration(CalibrationKey, Calibration),
     Calibration(CalibrationKey),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SignalRepositoryCall {
-    Replace(InstrumentId, Vec<RaisedSignal>),
-    Current(InstrumentId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

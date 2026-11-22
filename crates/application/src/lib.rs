@@ -373,6 +373,12 @@ pub use run_full_inspection::{
 
 mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
+mod signal_ports;
+pub use signal_ports::{
+    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalMutation, SignalRevision,
+    SignalSnapshot, SignalSourceFacts, StoredSignal,
+};
+
 pub mod resolve_estimates;
 
 mod information_storage;

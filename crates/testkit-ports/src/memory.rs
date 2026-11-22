@@ -2,14 +2,14 @@ use crate::{Script, script::State};
 use application::{
     CacheWriteOutcome, EstimateRepository, FxRateQuery, InformationKey, InformationLinks,
     MarketDataRepository, NewsRepository, PortfolioRepository, ProposalRepository, RecordOutcome,
-    SettingsRepository, SignalRepository, SystemPortError, ThesisRepository, TransactionRepository,
+    SettingsRepository, SystemPortError, ThesisRepository, TransactionRepository,
     ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
-    SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
+    Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
+    SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 fn append_candles(stored: &mut Vec<Candle>, incoming: &[Candle]) {
     for value in incoming {
@@ -840,85 +840,6 @@ impl EstimateRepository for MemoryEstimateRepository {
     }
 }
 #[derive(Debug, Default)]
-struct SignalRepositoryState {
-    records: Vec<(InstrumentId, Vec<RaisedSignal>)>,
-}
-#[derive(Debug, Default)]
-pub struct MemorySignalRepository {
-    replace: MemorySignalRepositoryReplaceScript,
-    current: MemorySignalRepositoryCurrentScript,
-    state: State<SignalRepositoryState>,
-    calls: State<Vec<crate::scripted::SignalRepositoryCall>>,
-}
-impl MemorySignalRepository {
-    #[must_use]
-    pub fn script_replace(&self) -> &MemorySignalRepositoryReplaceScript {
-        &self.replace
-    }
-    #[must_use]
-    pub fn script_current(&self) -> &MemorySignalRepositoryCurrentScript {
-        &self.current
-    }
-
-    #[must_use]
-    pub fn calls(&self) -> Vec<crate::scripted::SignalRepositoryCall> {
-        self.calls.write().clone()
-    }
-}
-impl SignalRepository for MemorySignalRepository {
-    async fn replace(
-        &self,
-        instrument: &InstrumentId,
-        signals: &[RaisedSignal],
-    ) -> Result<WriteCompleted, SystemPortError> {
-        self.calls
-            .write()
-            .push(crate::scripted::SignalRepositoryCall::Replace(
-                instrument.clone(),
-                signals.to_vec(),
-            ));
-        match self
-            .replace
-            .run((instrument.clone(), signals.to_vec()))
-            .await
-        {
-            MemoryReply::Return(value) => value,
-            MemoryReply::Memory => {
-                let mut state = self.state.write();
-                state.records.push((instrument.clone(), signals.to_vec()));
-                Ok(WriteCompleted)
-            }
-        }
-    }
-    async fn current(
-        &self,
-        instrument: &InstrumentId,
-    ) -> Result<Vec<RaisedSignal>, SystemPortError> {
-        self.calls
-            .write()
-            .push(crate::scripted::SignalRepositoryCall::Current(
-                instrument.clone(),
-            ));
-        match self.current.run((instrument.clone(),)).await {
-            MemoryReply::Return(value) => value,
-            MemoryReply::Memory => {
-                let state = self.state.write();
-                Ok(
-                    match state
-                        .records
-                        .iter()
-                        .rev()
-                        .find(|(key, _)| key == instrument)
-                    {
-                        Some((_, value)) => value.clone(),
-                        None => Vec::new(),
-                    },
-                )
-            }
-        }
-    }
-}
-#[derive(Debug, Default)]
 struct ProposalRepositoryState {
     records: Vec<(ProposalId, Proposal<Draft>)>,
 }
@@ -1277,10 +1198,6 @@ pub type MemoryThesisRepositoryLoadScript =
     Script<(InstrumentId,), MemoryReply<Result<Option<Thesis>, SystemPortError>>>;
 pub type MemoryEstimateRepositoryAppendResolutionScript =
     Script<(SignalTaskKey, EstimateOutcome), MemoryReply<Result<RecordOutcome, SystemPortError>>>;
-pub type MemorySignalRepositoryReplaceScript =
-    Script<(InstrumentId, Vec<RaisedSignal>), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
-pub type MemorySignalRepositoryCurrentScript =
-    Script<(InstrumentId,), MemoryReply<Result<Vec<RaisedSignal>, SystemPortError>>>;
 pub type MemoryProposalRepositoryDraftScript =
     Script<(ProposalId,), MemoryReply<Result<Option<Proposal<Draft>>, SystemPortError>>>;
 pub type MemoryValuationRepositoryHistoryScript =
@@ -1316,3 +1233,6 @@ pub type MemorySettingsRepositoryStoreProfileScript =
     Script<(InvestorProfile,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
 pub type MemorySettingsRepositoryStoreRiskSettingsScript =
     Script<(RiskSettings,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+mod signal_repository;
+pub use signal_repository::MemorySignalEvaluationRepository;
+pub use signal_repository::MemorySignalEvaluationRepository as MemorySignalRepository;

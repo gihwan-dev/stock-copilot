@@ -79,6 +79,10 @@ impl SignalEstimate {
         self.submitted.submission()
     }
     #[must_use]
+    pub const fn calibration_head(&self) -> &crate::CalibrationLedgerHead {
+        self.submitted.through()
+    }
+    #[must_use]
     pub const fn evidence(&self) -> Option<&Evidence> {
         self.submission().evidence()
     }
@@ -832,6 +836,23 @@ mod tests {
         }
     }
     #[test]
+    fn a27_signal_estimate_retains_its_calibration_ledger_head() {
+        let issued = eligible();
+        let record = submission(&issued, 99, evidence(1));
+        let key = record.calibration_key().clone();
+        let head =
+            crate::CalibrationLedgerHead::new(key.clone(), crate::CalibrationPosition::new(17));
+        let snapshot = crate::CalibrationSnapshot::try_new(
+            Calibration::try_new(key, &[]).expect("보정"),
+            head.clone(),
+        )
+        .expect("표");
+        let prepared = calibrate_signal_submission(Some(&snapshot), &head, record).expect("보정");
+        let signal =
+            SignalEstimate::create(&issued, &prepared, Margin::default()).expect("신호 입력");
+        assert_eq!(signal.calibration_head(), &head);
+    }
+    #[test]
     fn d51_calibration_snapshot_distinguishes_missing_empty_stale_and_wrong_key() {
         let eligible = eligible();
         let submitted = submission(&eligible, 63, evidence(1));
@@ -1303,6 +1324,20 @@ mod tests {
             Err(crate::NoBuyQuantity::Indeterminate)
         );
     }
+
+    #[test]
+    fn a27_new_occurrence_retains_the_originating_task() {
+        let signal = d51_buy_with_instrument_id("origin");
+        let occurrence = crate::BuySignalRecord::from_signal(
+            crate::BuySignalOccurrenceId::try_new("origin-occurrence").expect("발생 ID"),
+            &signal,
+            at(61),
+            &calendars(),
+        )
+        .expect("발생 기록");
+        assert_eq!(occurrence.originating_task().task(), signal.facts().task());
+    }
+
     #[test]
     fn d51_history_blocks_same_symbol_with_a_different_instrument_id() {
         let previous = d51_buy_with_instrument_id("previous");
