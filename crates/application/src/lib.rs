@@ -260,6 +260,8 @@ pub mod user_presence;
 pub use user_presence::{OrderConfirmation, RiskChangeConfirmation};
 mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
+mod instrument_mapping;
+pub use instrument_mapping::{InstrumentMappingRepository, MappingStoreError};
 mod storage_ports;
 pub use storage_ports::{
     CacheWriteOutcome, EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository,

@@ -12,3 +12,5 @@ mod thesis_record;
 pub use thesis_record::ThesisRecord;
 pub mod memory;
 pub mod system_fakes;
+
+pub mod instrument_mapping;
