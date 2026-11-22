@@ -32,17 +32,19 @@
 | A-15, S-18 | 보정 표와 최신 원장 위치의 일관된 조회 및 최초 정상 빈 표를 제공한다. |
 | E-06, U-09, U-14 | 같은 방향 내용 갱신의 화면 재조회 경로를 연결한다. |
 
-`apps/desktop`의 현재 포트 묶음은 `SignalInvalidationRepository`나 제출 저장소와의 공통 객체를 요구하지 않는다. 실제 연결 작업은 세 계약이 동일한 영속 직렬화 경계를 쓰도록 포트 묶음과 어댑터를 구성하고 경쟁 테스트로 검증한다.
+`apps/desktop`의 현재 포트 묶음은 `SignalInvalidationRepository`나 제출 저장소와의 공통 객체를 요구하지 않는다. 실제 연결 작업은 세 계약이 동일한 영속 직렬화 경계를 쓰도록 포트 묶음과 어댑터를 구성하고 경쟁 테스트로 검증한다. 폐기된 최신 제출이면 조회 오류의 원인이 반환되지 않는다. S-07·S-18은 저장소 불일치 등의 진단을 별도로 보존해야 하는지 검토한다. 현재 별도의 영속 진단은 구현하지 않았다.
 
 ## 보호 생성물
 
-새 ADR 추적 후 지정된 생성 스크립트로 `.codex/config.toml`과 `harness/claude-hooks/hashes.json`을 갱신했다. 생성기가 추적 ADR 이름을 자동 열거하므로 초안 이름이 생성물에 나타나지만 생성기를 바꾸거나 보호 범위를 줄이지 않았다. 이 내용 변경은 지시문의 구체적 사전 허용 범위이며 사용자 서명은 없다. 기준의 서명 잠금이 비활성인 사실은 서명이 검증됐다는 뜻이 아니다.
+새 ADR 추적 후 지정된 생성 스크립트로 `.codex/config.toml`과 `harness/claude-hooks/hashes.json`을 갱신했다. 생성기가 추적 ADR 이름을 자동 열거하므로 초안 이름이 생성물에 나타나지만 생성기를 바꾸거나 보호 범위를 줄이지 않았다. 최신 master 병합에서 D-52의 ADR 등록과 A-13 초안 등록이 충돌해 두 항목을 포함하도록 같은 생성물들을 다시 만들었다. 이 내용 변경은 지시문의 구체적 사전 허용 범위이며 사용자 서명은 없다. 기준의 서명 잠금이 비활성인 사실은 서명이 검증됐다는 뜻이 아니다.
 
 ## 검증과 한계
 
 가짜 저장소의 동시성은 단일 프로세스 메모리 계약 검증이다. 실제 계좌, 키, API 및 SQLite 저장은 사용하지 않았다. 프로젝트 신뢰와 이 세션에 훅 신뢰가 적용됐는지는 확인할 수 없다. 세션 신뢰와 별도로 Git 훅 및 명시적으로 실행한 검사 결과를 리뷰 기록에 남긴다.
 
 ## 손 변형
+
+초기 손 변형은 임시 복사본의 빌드 경로를 `CARGO_TARGET_DIR`로 지정해 실행했다. 저장소의 검사 환경 규칙에 맞지 않아 아래 초기 결과는 참고 기록으로만 두며 완료 기준의 준수 근거로 세지 않는다.
 
 기준 커밋 `36344262612d7f359d6c171c271c6e1550025ccb`를 Python `tempfile.mkdtemp`로 만든 작업 사본에 내보내고 각 변형마다 `cargo test --offline --locked -p testkit-ports --test evaluate_signals`를 실행했다. 기준과 모든 변형 복원 뒤 테스트가 통과했다. 25개 중 컴파일된 24개를 검출했고 18번은 미사용 인자로 컴파일되지 않아 수에서 제외한다. 아래의 각 행은 실제로 실행한 변형이다.
 
@@ -85,3 +87,48 @@
 | 5 | 비활성화 스냅숏 비교 반전 | `failed_source_or_history_reads_clear_old_signal_and_preserve_the_failure`, `invalidation_with_no_current_signal_returns_the_read_failure_without_an_event` |
 | 6 | 기존 발생에도 새 기간 요구 | `existing_buy_occurrence_is_preserved_without_requiring_a_new_horizon`, `raises_once_then_retains_without_another_event` |
 | 7 | 새 발생 기간의 시작을 제출 시각으로 변경 | `missing_future_occurrence_calendar_clears_the_old_sell_signal` |
+
+### 2차 수정분의 초기 재실행
+
+커밋 `2e3851000d2f89d7bbb0351663991d2d3a35af7d`의 손 변형 34개도 초기에는 `CARGO_TARGET_DIR`를 지정해 실행했으므로 결과는 완료 기준의 준수 근거에서 제외한다.
+
+### 기본 Cargo 경로 재실행
+
+커밋 `2e3851000d2f89d7bbb0351663991d2d3a35af7d`을 `mktemp -d`로 만든 별도 복사본에 `git archive`로 내보냈다. `CARGO_TARGET_DIR`를 지정하지 않고 변형마다 `cargo nextest run --offline --locked -p testkit-ports --test evaluate_signals`를 순차 실행했다. 기준과 원본 복원 뒤에도 같은 테스트가 통과했다. 검출 34개, 생존 0개, 컴파일 불가 0개, 미적용 0개다.
+
+| 번호 | 변형 | 실제 검출 테스트 또는 결과 |
+|---|---|---|
+| 1 | 제출 조회 실패의 비활성화 생략 | `prerequisite_read_and_preparation_failures_clear_the_old_signal` |
+| 2 | 과제 원장 조회 실패의 비활성화 생략 | `prerequisite_read_and_preparation_failures_clear_the_old_signal` |
+| 3 | 과제 조회 실패의 비활성화 생략 | `prerequisite_read_and_preparation_failures_clear_the_old_signal` |
+| 4 | 판정 준비 실패의 비활성화 생략 | `failed_source_or_history_reads_clear_old_signal_and_preserve_the_failure` |
+| 5 | 최신 대신 첫 제출 | `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 6 | 재시도 상한 2 | `conflicts_are_bounded_and_discarded_submissions_do_not_retry` |
+| 7 | 재시도 상한 4 | `conflicts_are_bounded_and_discarded_submissions_do_not_retry` |
+| 8 | 제출 버전 비교 반전 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 9 | 제출 없음 조건 반전 | `absence_of_any_submission_has_no_event` |
+| 10 | 충돌을 폐기로 처리 | `concurrent_new_submission_forces_a_fresh_read_before_commit`, `conflicts_are_bounded_and_discarded_submissions_do_not_retry` |
+| 11 | 폐기 후 재시도 | `actual_discarded_submission_cannot_be_raised_again` |
+| 12 | 발생 이벤트를 해제 이벤트로 발행 | `actual_discarded_submission_cannot_be_raised_again` |
+| 13 | 신호 없음 사유 삭제 | `buy_threshold_below_equal_and_above_follow_the_domain_decision`, `cash_failure_is_preserved_from_domain_without_creating_a_buy` |
+| 14 | 커밋에 스냅숏 반영 위치 전달 | `mismatched_calibration_is_reported_without_a_signal`, `missing_calibration_clears_after_commit_and_keeps_the_reason` |
+| 15 | 발생 이력 비우기 | `old_buy_occurrence_is_passed_to_domain_quantity_after_clear_and_raise` |
+| 16 | 위험 성향 무시 | `threshold_margin_follows_the_current_risk_appetite` |
+| 17 | 보정 부재 사유 변경 | `missing_calibration_clears_after_commit_and_keeps_the_reason` |
+| 18 | 보정 노후 사유 변경 | `stale_calibration_is_distinct_and_clears_a_signal` |
+| 19 | 보정 조합 불일치 사유 변경 | `mismatched_calibration_is_reported_without_a_signal` |
+| 20 | 보유 관측 누락 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 21 | 대상 가격 누락 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 22 | 미래 제출 시 평가 시각을 제출 시각으로 올림 | `decision_failures_clear_the_old_signal_and_preserve_specific_reasons` |
+| 23 | 판정 달력 비우기 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 24 | 평가 시 최신 원장 위치 누락 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 25 | 독립 웹 출처 원장 누락 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 26 | 이전 신호 무시한 전이 | `decision_failures_clear_the_old_signal_and_preserve_specific_reasons`, `existing_buy_occurrence_is_preserved_without_requiring_a_new_horizon` |
+| 27 | 수량 계산 비용 사실 무시 | `old_buy_occurrence_is_passed_to_domain_quantity_after_clear_and_raise` |
+| 28 | 수량 결과 누락 | `old_buy_occurrence_is_passed_to_domain_quantity_after_clear_and_raise` |
+| 29 | 비활성화 충돌을 성공으로 처리 | `stale_read_failure_does_not_clear_a_newer_submission` |
+| 30 | 달력 부족 이유 삭제 | `missing_future_occurrence_calendar_clears_the_old_sell_signal` |
+| 31 | 동일 발생에 새 만기 요구 | `existing_buy_occurrence_is_preserved_without_requiring_a_new_horizon` |
+| 32 | 제출 버전을 항상 비움 | `actual_discarded_submission_cannot_be_raised_again`, `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
+| 33 | 폐기된 최신 제출을 비활성화 성공으로 처리 | `discarded_submission_is_not_retried_when_input_read_fails` |
+| 34 | 다른 제출의 폐기를 최신 제출에 적용 | `an_older_discard_does_not_mask_a_new_submissions_input_failure` |
