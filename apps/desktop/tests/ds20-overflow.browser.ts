@@ -1732,6 +1732,39 @@ describe("font metrics and clipping boundaries", () => {
     });
   });
 
+  it.each([
+    { owner: "self", expected: ["p#box-metric"] },
+    { owner: "parent", expected: ["div#box-parent", "p#box-metric"] },
+  ])(
+    "rejects a metric hidden by a box mask on $owner",
+    async ({ owner, expected }) => {
+      const mask =
+        "-webkit-mask-box-image:linear-gradient(transparent,transparent) 0 fill / 0 / 0 stretch";
+      const doc = await makeDocument(
+        `<div style="padding-top:20px"><div id="box-parent" style="height:16px;${owner === "parent" ? mask : ""}"><p id="box-metric" style="font:12px/16px IBM Plex Sans KR;margin:0;${owner === "self" ? mask : ""}">주식 코파일럿</p></div></div>`,
+      );
+      await loadProbeFont(doc);
+      const metric = doc.querySelector<HTMLElement>("#box-metric");
+      const parent = doc.querySelector<HTMLElement>("#box-parent");
+      if (metric === null || parent === null) throw new Error("metric missing");
+      const style = getComputedStyle(owner === "self" ? metric : parent);
+      expect(style.getPropertyValue("mask-image")).toBe("none");
+      expect(style.getPropertyValue("-webkit-mask-box-image-source")).not.toBe(
+        "none",
+      );
+      expect(style.getPropertyValue("-webkit-mask-box-image-source")).not.toBe(
+        "",
+      );
+      expect(metric.scrollHeight - metric.clientHeight).toBe(1);
+      const findings = inspectOverflow(doc);
+      for (const element of expected)
+        expect(findings).toContainEqual({
+          kind: "unauthorized-overflow",
+          element,
+        });
+    },
+  );
+
   it("detects a real overflowing sibling beside a metric child", async () => {
     const doc = await makeDocument(
       '<div style="padding-top:20px"><div id="metric-with-sibling" style="position:relative;height:16px"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p><div style="position:absolute;top:16px;width:1px;height:1px"></div></div></div>',

@@ -175,7 +175,6 @@ export const clipped = (element: ElementView): boolean => {
     inner.bottom > bottom
   );
 };
-
 export const childInside = (host: ElementView, child: ElementView): boolean => {
   const inner = child.getBoundingClientRect();
   const outer = host.getBoundingClientRect();
@@ -192,9 +191,11 @@ export const childInside = (host: ElementView, child: ElementView): boolean => {
 const irregularClip = (style: StyleView): boolean =>
   style.clipPath !== "none" ||
   style.getPropertyValue("clip") !== "auto" ||
-  ["mask-image", "-webkit-mask-image"].some(
-    (property) => !["", "none"].includes(style.getPropertyValue(property)),
-  ) ||
+  "mask-image -webkit-mask-image -webkit-mask-box-image-source mask-border-source"
+    .split(" ")
+    .some(
+      (property) => !["", "none"].includes(style.getPropertyValue(property)),
+    ) ||
   clipsPaint(style);
 const textOutsideClip = (
   parent: ElementView,
