@@ -40,12 +40,22 @@ impl BuySignalRecord {
         raised_at: Timestamp,
         calendars: &[MarketCalendar],
     ) -> Result<Self, NoBuyQuantity> {
+        Self::from_signal_checked(id, signal, raised_at, calendars)
+            .or(Err(NoBuyQuantity::Indeterminate))
+    }
+    pub fn from_signal_checked(
+        id: BuySignalOccurrenceId,
+        signal: &BuySignal,
+        raised_at: Timestamp,
+        calendars: &[MarketCalendar],
+    ) -> Result<Self, crate::NoSignalReason> {
         let task = signal.facts().task();
         crate::SignalTiming::new(raised_at, calendars)
-            .check(task, signal.facts().submission().submitted_at())
-            .or(Err(NoBuyQuantity::Indeterminate))?;
+            .check(task, signal.facts().submission().submitted_at())?;
         crate::estimate_outcome::buy_signal_interval_from(task, raised_at, calendars)
-            .or(Err(NoBuyQuantity::Indeterminate))
+            .or(Err(crate::NoSignalReason::Unavailable(
+                crate::SignalUnavailable::Calendar,
+            )))
             .map(|interval| Self {
                 id,
                 instrument_id: task.volatility().instrument().clone(),

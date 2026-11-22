@@ -1,8 +1,9 @@
 use crate::script::State;
 use application::{
     AiRunId, EstimateCommitOutcome, EstimateSubmissionRepository, ReasoningEffort, SignalCommit,
-    SignalCommitOutcome, SignalMutation, SignalRepository, SignalRevision, SignalSnapshot,
-    SignalSourceFacts, StoredSignal, SystemFailure, SystemPort, SystemPortError,
+    SignalCommitOutcome, SignalInvalidationOutcome, SignalInvalidationRepository, SignalMutation,
+    SignalRepository, SignalRevision, SignalSnapshot, SignalSourceFacts, StoredSignal,
+    SystemFailure, SystemPort, SystemPortError,
 };
 use domain::{
     BuySignalRecord, CalibrationLedgerHead, CurrentBuySignal, EstimateAssignments,
@@ -457,6 +458,60 @@ impl SignalRepository for MemorySignalEvaluationRepository {
         })
     }
 }
+fn invalidate_signal(
+    state: &mut RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+) -> Result<SignalInvalidationOutcome, SystemPortError> {
+    if let Some(error) = state.fail_next_commit.take() {
+        return Err(error);
+    }
+    if snapshot(state, instrument) != *expected {
+        return Ok(SignalInvalidationOutcome::Conflict);
+    }
+    if expected.submission.as_ref().is_some_and(|submission| {
+        state
+            .instruments
+            .iter()
+            .find(|entry| entry.instrument.as_ref() == Some(instrument))
+            .is_some_and(|entry| entry.discarded.contains(submission))
+    }) {
+        return Ok(SignalInvalidationOutcome::SubmissionDiscarded);
+    }
+    if expected.current.is_none() {
+        return Ok(SignalInvalidationOutcome::Applied(Vec::new()));
+    }
+    let revision = expected
+        .revision
+        .as_u64()
+        .checked_add(1)
+        .ok_or_else(invalid)?;
+    let transition = SignalTransition::Cleared(instrument.clone());
+    let mut change = prepare_discard(expected, &transition)?;
+    change.discarded = None;
+    let SignalCommitOutcome::Applied(commit) = apply_change(state, instrument, revision, change)
+    else {
+        return Err(invalid());
+    };
+    Ok(SignalInvalidationOutcome::Applied(commit.events))
+}
+
+impl SignalInvalidationRepository for MemorySignalEvaluationRepository {
+    fn invalidate(
+        &self,
+        instrument: &InstrumentId,
+        expected: &SignalSnapshot,
+    ) -> impl Future<Output = Result<SignalInvalidationOutcome, SystemPortError>> + Send {
+        std::future::poll_fn(move |_context| {
+            std::task::Poll::Ready(invalidate_signal(
+                &mut self.state.write(),
+                instrument,
+                expected,
+            ))
+        })
+    }
+}
+
 impl EstimateSubmissionRepository for MemorySignalEvaluationRepository {
     fn submission_records(
         &self,
