@@ -222,6 +222,9 @@ impl<
             })?;
         match outcome {
             SignalInvalidationOutcome::Conflict => Ok(None),
+            SignalInvalidationOutcome::SubmissionDiscarded => {
+                Ok(Some(EvaluateSignalOutcome::SubmissionDiscarded))
+            }
             SignalInvalidationOutcome::Applied(events) => {
                 let deliveries = events
                     .into_iter()

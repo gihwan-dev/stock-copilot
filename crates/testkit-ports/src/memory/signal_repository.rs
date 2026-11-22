@@ -469,6 +469,15 @@ fn invalidate_signal(
     if snapshot(state, instrument) != *expected {
         return Ok(SignalInvalidationOutcome::Conflict);
     }
+    if expected.submission.as_ref().is_some_and(|submission| {
+        state
+            .instruments
+            .iter()
+            .find(|entry| entry.instrument.as_ref() == Some(instrument))
+            .is_some_and(|entry| entry.discarded.contains(submission))
+    }) {
+        return Ok(SignalInvalidationOutcome::SubmissionDiscarded);
+    }
     if expected.current.is_none() {
         return Ok(SignalInvalidationOutcome::Applied(Vec::new()));
     }

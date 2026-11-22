@@ -104,6 +104,7 @@ pub trait SignalRepository: Send + Sync {
 pub enum SignalInvalidationOutcome {
     Applied(Vec<DomainEvent>),
     Conflict,
+    SubmissionDiscarded,
 }
 
 pub trait SignalInvalidationRepository: Send + Sync {
