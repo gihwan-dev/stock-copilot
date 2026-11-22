@@ -1,7 +1,7 @@
 use crate::{
     AiRunId, DeliveryReport, EstimateSubmissionRepository, EventBus, ReasoningEffort,
-    SignalCommitOutcome, SignalEvaluation, SignalMutation, SignalRepository, SignalSnapshot,
-    SystemPortError,
+    SignalCommitOutcome, SignalEvaluation, SignalInvalidationOutcome, SignalInvalidationRepository,
+    SignalMutation, SignalRepository, SignalSnapshot, SystemPortError,
 };
 use domain::{
     BuyQuantityDecision, BuyQuantityFacts, BuySignalOccurrenceId, BuySignalRecord,
@@ -51,11 +51,22 @@ pub enum EvaluateSignalOutcome {
     },
     NoSubmission,
     SubmissionDiscarded,
+    Unavailable {
+        cause: Box<EvaluateSignalError>,
+        deliveries: Vec<DeliveryReport>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluateSignalError {
     Storage(SystemPortError),
+    Inputs(SystemPortError),
+    Sources(SystemPortError),
+    Occurrences(SystemPortError),
+    Invalidation {
+        cause: Box<Self>,
+        error: SystemPortError,
+    },
     Assignment(EstimateAssignmentError),
     Preparation(SignalPreparationError),
     Calibration(CalibrationError),
@@ -71,8 +82,11 @@ pub struct EvaluateSignals<'a, Repository, Data> {
     events: &'a EventBus,
 }
 
-impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: SignalEvaluationData>
-    EvaluateSignals<'a, Repository, Data>
+impl<
+    'a,
+    Repository: SignalRepository + SignalInvalidationRepository + EstimateSubmissionRepository,
+    Data: SignalEvaluationData,
+> EvaluateSignals<'a, Repository, Data>
 {
     #[must_use]
     pub const fn new(repository: &'a Repository, data: &'a Data, events: &'a EventBus) -> Self {
@@ -108,11 +122,14 @@ impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: Sign
             .snapshot(instrument)
             .await
             .map_err(EvaluateSignalError::Storage)?;
-        let records = self
-            .repository
-            .submission_records(instrument)
-            .await
-            .map_err(EvaluateSignalError::Storage)?;
+        let records = match self.repository.submission_records(instrument).await {
+            Ok(value) => value,
+            Err(error) => {
+                return self
+                    .invalidate(instrument, &snapshot, EvaluateSignalError::Storage(error))
+                    .await;
+            }
+        };
         let Some(record) = records.last() else {
             return Ok(snapshot
                 .submission
@@ -122,36 +139,63 @@ impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: Sign
         if snapshot.submission.as_ref() != Some(record.task_id()) {
             return Ok(None);
         }
-        let assignments = self
-            .repository
-            .assignments()
+        self.evaluate_record(instrument, &snapshot, record, (now, occurrence_id))
             .await
-            .map_err(EvaluateSignalError::Storage)?;
-        let issued = assignments
-            .lookup(record.task_id().as_estimate_id())
-            .map_err(EvaluateSignalError::Assignment)?;
-        let inputs = self
-            .data
-            .inputs(record, now)
+    }
+
+    async fn evaluate_record(
+        &self,
+        instrument: &InstrumentId,
+        snapshot: &SignalSnapshot,
+        record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+        timing: (Timestamp, &BuySignalOccurrenceId),
+    ) -> Result<Option<EvaluateSignalOutcome>, EvaluateSignalError> {
+        let (now, occurrence_id) = timing;
+        let assignments = match self.repository.assignments().await {
+            Ok(value) => value,
+            Err(error) => {
+                return self
+                    .invalidate(instrument, snapshot, EvaluateSignalError::Storage(error))
+                    .await;
+            }
+        };
+        let issued = match assignments.lookup(record.task_id().as_estimate_id()) {
+            Ok(value) => value,
+            Err(error) => {
+                return self
+                    .invalidate(instrument, snapshot, EvaluateSignalError::Assignment(error))
+                    .await;
+            }
+        };
+        let inputs = match self.data.inputs(record, now).await {
+            Ok(value) => value,
+            Err(error) => {
+                return self
+                    .invalidate(instrument, snapshot, EvaluateSignalError::Inputs(error))
+                    .await;
+            }
+        };
+        let sources = match self.repository.sources(record.task_id()).await {
+            Ok(value) => value,
+            Err(error) => {
+                return self
+                    .invalidate(instrument, snapshot, EvaluateSignalError::Sources(error))
+                    .await;
+            }
+        };
+        let initial = match assess(record, issued.task(), &inputs, &sources, now) {
+            Ok(value) => value,
+            Err(error) => return self.invalidate(instrument, snapshot, error).await,
+        };
+        let (decision, transition, occurrence) =
+            prepare_transition(snapshot, initial, (&inputs.calendars, now, occurrence_id))?;
+        let quantity = match self
+            .quantity((snapshot, &decision, occurrence.as_ref()), (&inputs, now))
             .await
-            .map_err(EvaluateSignalError::Storage)?;
-        let sources = self
-            .repository
-            .sources(record.task_id())
-            .await
-            .map_err(EvaluateSignalError::Storage)?;
-        let decision = assess(record, issued.task(), &inputs, &sources, now)?;
-        let transition = signal_transition(
-            snapshot.current.as_ref().map(|entry| &entry.signal),
-            &decision,
-        )
-        .map_err(EvaluateSignalError::Transition)?;
-        let (occurrence, quantity) = self
-            .quantity(
-                (&snapshot, &transition, &decision),
-                (&inputs, now, occurrence_id),
-            )
-            .await?;
+        {
+            Ok(value) => value,
+            Err(error) => return self.invalidate(instrument, snapshot, error).await,
+        };
         let mutation = SignalMutation::Evaluate(Box::new(SignalEvaluation {
             submission: record.task_id().clone(),
             decision,
@@ -159,8 +203,36 @@ impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: Sign
             calibration_head: inputs.calibration_head.clone(),
             occurrence,
         }));
-        self.commit(instrument, &snapshot, &mutation, quantity)
+        self.commit(instrument, snapshot, &mutation, quantity).await
+    }
+
+    async fn invalidate(
+        &self,
+        instrument: &InstrumentId,
+        snapshot: &SignalSnapshot,
+        cause: EvaluateSignalError,
+    ) -> Result<Option<EvaluateSignalOutcome>, EvaluateSignalError> {
+        let outcome = self
+            .repository
+            .invalidate(instrument, snapshot)
             .await
+            .map_err(|error| EvaluateSignalError::Invalidation {
+                cause: Box::new(cause.clone()),
+                error,
+            })?;
+        match outcome {
+            SignalInvalidationOutcome::Conflict => Ok(None),
+            SignalInvalidationOutcome::Applied(events) => {
+                let deliveries = events
+                    .into_iter()
+                    .map(|event| self.events.publish(event))
+                    .collect();
+                Ok(Some(EvaluateSignalOutcome::Unavailable {
+                    cause: Box::new(cause),
+                    deliveries,
+                }))
+            }
+        }
     }
 
     async fn commit(
@@ -197,28 +269,15 @@ impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: Sign
 
     async fn quantity(
         &self,
-        state: (&SignalSnapshot, &SignalTransition, &SignalDecision),
-        request: (&EvaluateSignalInputs, Timestamp, &BuySignalOccurrenceId),
-    ) -> Result<(Option<BuySignalRecord>, Option<BuyQuantityDecision>), EvaluateSignalError> {
-        let (snapshot, transition, decision) = state;
-        let (inputs, now, occurrence_id) = request;
+        state: (&SignalSnapshot, &SignalDecision, Option<&BuySignalRecord>),
+        request: (&EvaluateSignalInputs, Timestamp),
+    ) -> Result<Option<BuyQuantityDecision>, EvaluateSignalError> {
+        let (snapshot, decision, occurrence) = state;
+        let (inputs, now) = request;
         let SignalDecision::Buy(buy) = decision else {
-            return Ok((None, None));
-        };
-        let occurrence = match transition {
-            SignalTransition::Raised(_) | SignalTransition::Reversed(_) => Some(
-                BuySignalRecord::from_signal(occurrence_id.clone(), buy, now, &inputs.calendars)
-                    .map_err(EvaluateSignalError::Occurrence)?,
-            ),
-            SignalTransition::Unchanged | SignalTransition::Updated(_) => None,
-            SignalTransition::Cleared(_) => {
-                return Err(EvaluateSignalError::Occurrence(
-                    NoBuyQuantity::Indeterminate,
-                ));
-            }
+            return Ok(None);
         };
         let existing = occurrence
-            .as_ref()
             .or_else(|| {
                 let entry = snapshot.current.as_ref()?;
                 entry.occurrence.as_ref()
@@ -235,7 +294,7 @@ impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: Sign
                 buy.facts().task().reference().instrument(),
             )
             .await
-            .map_err(EvaluateSignalError::Storage)?;
+            .map_err(EvaluateSignalError::Occurrences)?;
         let quantity = match (
             &inputs.valuation,
             &inputs.target_price,
@@ -253,7 +312,39 @@ impl<'a, Repository: SignalRepository + EstimateSubmissionRepository, Data: Sign
             }
             _ => BuyQuantityDecision::None(NoBuyQuantity::Indeterminate),
         };
-        Ok((occurrence, Some(quantity)))
+        Ok(Some(quantity))
+    }
+}
+
+fn prepare_transition(
+    snapshot: &SignalSnapshot,
+    decision: SignalDecision,
+    timing: (&[MarketCalendar], Timestamp, &BuySignalOccurrenceId),
+) -> Result<(SignalDecision, SignalTransition, Option<BuySignalRecord>), EvaluateSignalError> {
+    let previous = snapshot.current.as_ref().map(|entry| &entry.signal);
+    let transition =
+        signal_transition(previous, &decision).map_err(EvaluateSignalError::Transition)?;
+    let (calendars, now, occurrence_id) = timing;
+    let result = match (&decision, &transition) {
+        (SignalDecision::Buy(buy), SignalTransition::Raised(_) | SignalTransition::Reversed(_)) => {
+            Some(BuySignalRecord::from_signal_checked(
+                occurrence_id.clone(),
+                buy,
+                now,
+                calendars,
+            ))
+        }
+        _ => None,
+    };
+    match result {
+        Some(Ok(occurrence)) => Ok((decision, transition, Some(occurrence))),
+        None => Ok((decision, transition, None)),
+        Some(Err(reason)) => {
+            let rejected = SignalDecision::None(reason);
+            let cleared =
+                signal_transition(previous, &rejected).map_err(EvaluateSignalError::Transition)?;
+            Ok((rejected, cleared, None))
+        }
     }
 }
 

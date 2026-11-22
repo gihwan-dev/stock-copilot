@@ -99,3 +99,17 @@ pub trait SignalRepository: Send + Sync {
         instrument: &InstrumentId,
     ) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send;
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignalInvalidationOutcome {
+    Applied(Vec<DomainEvent>),
+    Conflict,
+}
+
+pub trait SignalInvalidationRepository: Send + Sync {
+    fn invalidate(
+        &self,
+        instrument: &InstrumentId,
+        expected: &SignalSnapshot,
+    ) -> impl Future<Output = Result<SignalInvalidationOutcome, SystemPortError>> + Send;
+}

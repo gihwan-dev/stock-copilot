@@ -269,7 +269,9 @@ mod tests {
     fn reason(outcome: &EvaluateSignalOutcome) -> Option<domain::NoSignalReason> {
         match outcome {
             EvaluateSignalOutcome::Applied { reason, .. } => *reason,
-            EvaluateSignalOutcome::NoSubmission | EvaluateSignalOutcome::SubmissionDiscarded => {
+            EvaluateSignalOutcome::NoSubmission
+            | EvaluateSignalOutcome::SubmissionDiscarded
+            | EvaluateSignalOutcome::Unavailable { .. } => {
                 panic!("평가 결과 필요")
             }
         }
@@ -278,7 +280,9 @@ mod tests {
     fn quantity(outcome: &EvaluateSignalOutcome) -> Option<&domain::BuyQuantityDecision> {
         match outcome {
             EvaluateSignalOutcome::Applied { quantity, .. } => quantity.as_ref(),
-            EvaluateSignalOutcome::NoSubmission | EvaluateSignalOutcome::SubmissionDiscarded => {
+            EvaluateSignalOutcome::NoSubmission
+            | EvaluateSignalOutcome::SubmissionDiscarded
+            | EvaluateSignalOutcome::Unavailable { .. } => {
                 panic!("평가 결과 필요")
             }
         }
@@ -893,6 +897,17 @@ mod tests {
         }
     }
 
+    impl application::SignalInvalidationRepository for CommitOverride<'_> {
+        async fn invalidate(
+            &self,
+            instrument: &domain::InstrumentId,
+            expected: &application::SignalSnapshot,
+        ) -> Result<application::SignalInvalidationOutcome, SystemPortError> {
+            application::SignalInvalidationRepository::invalidate(self.inner, instrument, expected)
+                .await
+        }
+    }
+
     #[test]
     fn conflicts_are_bounded_and_discarded_submissions_do_not_retry() {
         let source = fixtures::master();
@@ -1141,5 +1156,753 @@ mod tests {
                 expected
             );
         }
+    }
+
+    type EventObservation = (DomainEvent, Result<usize, SystemPortError>);
+    struct StoredEventObserver {
+        repository: Arc<MemorySignalEvaluationRepository>,
+        instrument: domain::InstrumentId,
+        observations: Arc<RwLock<Vec<EventObservation>>>,
+    }
+    impl EventSubscriber for StoredEventObserver {
+        fn on_event(&self, event: &DomainEvent) -> Result<(), SubscriberFailure> {
+            let state = run(self.repository.current(&self.instrument)).map(|signals| signals.len());
+            match self.observations.write() {
+                Ok(mut rows) => rows.push((event.clone(), state)),
+                Err(poison) => poison.into_inner().push((event.clone(), state)),
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn subscribers_observe_the_committed_state_for_both_transitions() {
+        let source = fixtures::master();
+        let repository = Arc::new(repository());
+        submit(&repository, "task-old", "99", &source);
+        let observations = Arc::new(RwLock::new(Vec::new()));
+        let mut builder = EventBusBuilder::default();
+        builder.subscribe(
+            [
+                DomainEventKind::SignalRaised,
+                DomainEventKind::SignalCleared,
+            ]
+            .into_iter()
+            .collect(),
+            StoredEventObserver {
+                repository: Arc::clone(&repository),
+                instrument: source.row().instrument_id.clone(),
+                observations: Arc::clone(&observations),
+            },
+        );
+        let bus = builder.build();
+        run(
+            EvaluateSignals::new(repository.as_ref(), &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("saved"),
+            ),
+        )
+        .expect("발생");
+        let error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        run(
+            EvaluateSignals::new(repository.as_ref(), &FailingInputs(error), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("clear"),
+            ),
+        )
+        .expect("해제");
+        assert_eq!(
+            *observations.read().expect("이벤트"),
+            vec![
+                (
+                    DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+                    Ok(1)
+                ),
+                (
+                    DomainEvent::SignalCleared(source.row().instrument_id.clone()),
+                    Ok(0)
+                ),
+            ]
+        );
+    }
+
+    fn portfolio_with_holding(source: &MasterInstrument) -> domain::PortfolioValuation {
+        let now = fixtures::day(60);
+        let holding = domain::Holding::new(
+            source.order_instrument().expect("종목"),
+            fixtures::quantity("7"),
+            domain::AcquisitionPrice::try_new(fixtures::money("87", domain::Currency::Krw))
+                .expect("원가"),
+            domain::HoldingObservation::new(
+                None,
+                Some(
+                    domain::ReportedHolding::new(
+                        fixtures::money("113", domain::Currency::Krw),
+                        fixtures::money("7", domain::Currency::Krw),
+                        fixtures::ratio("0.07"),
+                    )
+                    .expect("평가"),
+                ),
+                now,
+            ),
+        )
+        .expect("보유");
+        domain::Portfolio::new(
+            vec![holding],
+            domain::BuyingPower::new(fixtures::money("10000", domain::Currency::Krw), now),
+            domain::BuyingPower::new(fixtures::money("0", domain::Currency::Usd), now),
+        )
+        .expect("포트")
+        .evaluate(None)
+    }
+
+    #[test]
+    fn reverse_direction_clears_then_raises_and_keeps_the_buy_history() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("buy"),
+            ),
+        )
+        .expect("매수");
+        submit(&repository, "task-new", "10", &source);
+        let mut input = setup(&source);
+        input.valuation = Some(portfolio_with_holding(&source));
+        run(
+            EvaluateSignals::new(&repository, &Inputs(input), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("unused"),
+            ),
+        )
+        .expect("매도");
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![
+                DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+                DomainEvent::SignalCleared(source.row().instrument_id.clone()),
+                DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+            ]
+        );
+        let current = run(repository.current(&source.row().instrument_id)).expect("신호");
+        match current.as_slice() {
+            [domain::RaisedSignal::Sell(_)] => (),
+            [] | [domain::RaisedSignal::Buy(_)] | [_, _, ..] => panic!("매도 신호 필요"),
+        }
+        assert_eq!(
+            run(repository.occurrences(
+                &source.row().instrument_id,
+                &source.order_instrument().expect("종목")
+            ))
+            .expect("이력")
+            .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn price_without_internal_id_is_not_used_for_buy_quantity() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let mut input = with_costs(setup(&source));
+        input.target_price = Some(
+            domain::PriceObservation::from_quote_parts(
+                source.order_instrument().expect("종목"),
+                fixtures::price("100"),
+                fixtures::day(60),
+            )
+            .expect("시세"),
+        );
+        let (bus, observed) = events();
+        let result = run(
+            EvaluateSignals::new(&repository, &Inputs(input), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("no-id"),
+            ),
+        )
+        .expect("평가");
+        assert_eq!(
+            reason(&result),
+            Some(domain::NoSignalReason::Unavailable(
+                domain::SignalUnavailable::InvalidTargetPrice
+            ))
+        );
+        assert_eq!(quantity(&result), None);
+        assert_eq!(*observed.read().expect("이벤트"), Vec::new());
+    }
+
+    #[test]
+    fn missing_future_occurrence_calendar_clears_the_old_sell_signal() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "10", &source);
+        let (bus, observed) = events();
+        let mut previous_input = setup(&source);
+        previous_input.valuation = Some(portfolio_with_holding(&source));
+        run(
+            EvaluateSignals::new(&repository, &Inputs(previous_input), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("sell"),
+            ),
+        )
+        .expect("이전 매도");
+        submit(&repository, "task-new", "99", &source);
+        let now = fixtures::day(62);
+        let mut input = setup(&source);
+        input.target_price = Some(
+            source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("최신 시세"),
+        );
+        let result = run(
+            EvaluateSignals::new(&repository, &Inputs(input), &bus).execute(
+                &source.row().instrument_id,
+                now,
+                occurrence("buy"),
+            ),
+        )
+        .expect("달력 부족도 해제로 저장");
+        assert_eq!(
+            reason(&result),
+            Some(domain::NoSignalReason::Unavailable(
+                domain::SignalUnavailable::Calendar
+            ))
+        );
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id)).expect("현재"),
+            Vec::new()
+        );
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![
+                DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+                DomainEvent::SignalCleared(source.row().instrument_id.clone())
+            ]
+        );
+    }
+
+    #[test]
+    fn existing_buy_occurrence_is_preserved_without_requiring_a_new_horizon() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("original"),
+            ),
+        )
+        .expect("발생");
+        let now = fixtures::day(62);
+        let mut input = setup(&source);
+        input.target_price = Some(
+            source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("현재가"),
+        );
+        let result = run(
+            EvaluateSignals::new(&repository, &Inputs(input), &bus).execute(
+                &source.row().instrument_id,
+                now,
+                occurrence("unused"),
+            ),
+        )
+        .expect("유지");
+        assert_eq!(reason(&result), None);
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id))
+                .expect("신호")
+                .len(),
+            1
+        );
+        assert_eq!(
+            run(repository.occurrences(
+                &source.row().instrument_id,
+                &source.order_instrument().expect("종목")
+            ))
+            .expect("이력")
+            .len(),
+            1
+        );
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![DomainEvent::SignalRaised(
+                source.row().instrument_id.clone()
+            )]
+        );
+    }
+
+    struct FailingInputs(SystemPortError);
+    impl SignalEvaluationData for FailingInputs {
+        fn inputs(
+            &self,
+            _record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<EvaluateSignalInputs, SystemPortError>> + Send {
+            std::future::ready(Err(self.0))
+        }
+    }
+
+    #[test]
+    fn failed_input_read_invalidates_old_signal_and_recovery_can_reassess_same_submission() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("before"),
+            ),
+        )
+        .expect("이전 신호");
+        let error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        let failed = run(
+            EvaluateSignals::new(&repository, &FailingInputs(error), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("failed"),
+            ),
+        )
+        .expect("비활성화");
+        match failed {
+            EvaluateSignalOutcome::Unavailable { cause, deliveries } => {
+                assert_eq!(*cause, application::EvaluateSignalError::Inputs(error));
+                assert_eq!(deliveries.len(), 1);
+            }
+            EvaluateSignalOutcome::Applied { .. }
+            | EvaluateSignalOutcome::NoSubmission
+            | EvaluateSignalOutcome::SubmissionDiscarded => panic!("조회 오류 필요"),
+        }
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id)).expect("신호"),
+            Vec::new()
+        );
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![
+                DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+                DomainEvent::SignalCleared(source.row().instrument_id.clone())
+            ]
+        );
+        let recovered = run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("after"),
+            ),
+        )
+        .expect("복구");
+        assert_eq!(reason(&recovered), None);
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id))
+                .expect("신호")
+                .len(),
+            1
+        );
+    }
+
+    #[derive(Clone, Copy)]
+    enum ReadPoint {
+        Sources,
+        Occurrences,
+    }
+    struct ReadOverride<'a> {
+        inner: &'a MemorySignalEvaluationRepository,
+        point: ReadPoint,
+        error: SystemPortError,
+    }
+    impl EstimateSubmissionRepository for ReadOverride<'_> {
+        async fn submission_records(
+            &self,
+            instrument: &domain::InstrumentId,
+        ) -> Result<
+            Vec<EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>>,
+            SystemPortError,
+        > {
+            self.inner.submission_records(instrument).await
+        }
+        async fn assignments(
+            &self,
+        ) -> Result<domain::EstimateAssignments<application::AiRunId>, SystemPortError> {
+            self.inner.assignments().await
+        }
+        async fn commit_submission(
+            &self,
+            previous: &domain::EstimateAssignments<application::AiRunId>,
+            next: &domain::EstimateAssignments<application::AiRunId>,
+            records: &[EstimateSubmissionRecord<
+                application::AiRunId,
+                application::ReasoningEffort,
+            >],
+        ) -> Result<application::EstimateCommitOutcome, SystemPortError> {
+            self.inner.commit_submission(previous, next, records).await
+        }
+    }
+    impl SignalRepository for ReadOverride<'_> {
+        async fn snapshot(
+            &self,
+            instrument: &domain::InstrumentId,
+        ) -> Result<application::SignalSnapshot, SystemPortError> {
+            self.inner.snapshot(instrument).await
+        }
+        async fn commit(
+            &self,
+            instrument: &domain::InstrumentId,
+            expected: &application::SignalSnapshot,
+            mutation: &application::SignalMutation,
+        ) -> Result<application::SignalCommitOutcome, SystemPortError> {
+            self.inner.commit(instrument, expected, mutation).await
+        }
+        async fn sources(
+            &self,
+            task: &domain::IssuedEstimateTaskId,
+        ) -> Result<application::SignalSourceFacts, SystemPortError> {
+            match self.point {
+                ReadPoint::Sources => Err(self.error),
+                ReadPoint::Occurrences => self.inner.sources(task).await,
+            }
+        }
+        async fn occurrences(
+            &self,
+            instrument: &domain::InstrumentId,
+            identity: &domain::ResolvedOrderInstrument,
+        ) -> Result<Vec<domain::BuySignalRecord>, SystemPortError> {
+            match self.point {
+                ReadPoint::Sources => self.inner.occurrences(instrument, identity).await,
+                ReadPoint::Occurrences => Err(self.error),
+            }
+        }
+        async fn current(
+            &self,
+            instrument: &domain::InstrumentId,
+        ) -> Result<Vec<domain::RaisedSignal>, SystemPortError> {
+            self.inner.current(instrument).await
+        }
+    }
+    impl application::SignalInvalidationRepository for ReadOverride<'_> {
+        async fn invalidate(
+            &self,
+            instrument: &domain::InstrumentId,
+            expected: &application::SignalSnapshot,
+        ) -> Result<application::SignalInvalidationOutcome, SystemPortError> {
+            application::SignalInvalidationRepository::invalidate(self.inner, instrument, expected)
+                .await
+        }
+    }
+
+    #[test]
+    fn failed_source_or_history_reads_clear_old_signal_and_preserve_the_failure() {
+        let source = fixtures::master();
+        for point in [ReadPoint::Sources, ReadPoint::Occurrences] {
+            let repository = repository();
+            submit(&repository, "task-old", "99", &source);
+            let (bus, observed) = events();
+            run(
+                EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                    &source.row().instrument_id,
+                    fixtures::day(60),
+                    occurrence("before"),
+                ),
+            )
+            .expect("이전 신호");
+            let error = SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::InvalidData,
+            );
+            let wrapper = ReadOverride {
+                inner: &repository,
+                point,
+                error,
+            };
+            let outcome = run(
+                EvaluateSignals::new(&wrapper, &Inputs(setup(&source)), &bus).execute(
+                    &source.row().instrument_id,
+                    fixtures::day(60),
+                    occurrence("failed"),
+                ),
+            )
+            .expect("비활성화");
+            let expected = match point {
+                ReadPoint::Sources => application::EvaluateSignalError::Sources(error),
+                ReadPoint::Occurrences => application::EvaluateSignalError::Occurrences(error),
+            };
+            match outcome {
+                EvaluateSignalOutcome::Unavailable { cause, deliveries } => {
+                    assert_eq!(*cause, expected);
+                    assert_eq!(deliveries.len(), 1);
+                }
+                EvaluateSignalOutcome::Applied { .. }
+                | EvaluateSignalOutcome::NoSubmission
+                | EvaluateSignalOutcome::SubmissionDiscarded => panic!("조회 오류 필요"),
+            }
+            assert_eq!(
+                run(repository.current(&source.row().instrument_id)).expect("신호"),
+                Vec::new()
+            );
+            assert_eq!(
+                *observed.read().expect("이벤트"),
+                vec![
+                    DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+                    DomainEvent::SignalCleared(source.row().instrument_id.clone())
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn failed_invalidation_preserves_both_errors_and_never_emits_a_clear_event() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("before"),
+            ),
+        )
+        .expect("이전 신호");
+        let read_error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        let write_error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::RepositoryIntegrity,
+        );
+        repository.fail_next_commit(write_error);
+        let result = run(
+            EvaluateSignals::new(&repository, &FailingInputs(read_error), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("failed"),
+            ),
+        );
+        assert_eq!(
+            result,
+            Err(application::EvaluateSignalError::Invalidation {
+                cause: Box::new(application::EvaluateSignalError::Inputs(read_error)),
+                error: write_error
+            })
+        );
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id))
+                .expect("신호")
+                .len(),
+            1
+        );
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![DomainEvent::SignalRaised(
+                source.row().instrument_id.clone()
+            )]
+        );
+    }
+
+    struct FailOldThenNew<'a> {
+        repository: &'a MemorySignalEvaluationRepository,
+        source: MasterInstrument,
+        input: EvaluateSignalInputs,
+        error: SystemPortError,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl SignalEvaluationData for FailOldThenNew<'_> {
+        fn inputs(
+            &self,
+            _record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<EvaluateSignalInputs, SystemPortError>> + Send {
+            let result = if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                submit(self.repository, "task-new", "98", &self.source);
+                Err(self.error)
+            } else {
+                Ok(self.input.clone())
+            };
+            std::future::ready(result)
+        }
+    }
+
+    #[test]
+    fn stale_read_failure_does_not_clear_a_newer_submission() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("before"),
+            ),
+        )
+        .expect("이전 신호");
+        let inputs = FailOldThenNew {
+            repository: &repository,
+            source: source.clone(),
+            input: setup(&source),
+            error: SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::InvalidData,
+            ),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        };
+        let result = run(EvaluateSignals::new(&repository, &inputs, &bus).execute(
+            &source.row().instrument_id,
+            fixtures::day(60),
+            occurrence("retry"),
+        ))
+        .expect("재평가");
+        assert_eq!(reason(&result), None);
+        assert_eq!(inputs.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("현재");
+        assert_eq!(
+            snapshot.current.expect("신호").submission.as_estimate_id(),
+            &fixtures::task_id("task-new")
+        );
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![DomainEvent::SignalRaised(
+                source.row().instrument_id.clone()
+            )]
+        );
+    }
+
+    #[test]
+    fn invalidation_with_no_current_signal_returns_the_read_failure_without_an_event() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        let error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        let result = run(
+            EvaluateSignals::new(&repository, &FailingInputs(error), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("unused"),
+            ),
+        )
+        .expect("실패 기록");
+        match result {
+            EvaluateSignalOutcome::Unavailable { cause, deliveries } => {
+                assert_eq!(*cause, application::EvaluateSignalError::Inputs(error));
+                assert_eq!(deliveries, Vec::new());
+            }
+            EvaluateSignalOutcome::Applied { .. }
+            | EvaluateSignalOutcome::NoSubmission
+            | EvaluateSignalOutcome::SubmissionDiscarded => panic!("조회 오류 필요"),
+        }
+        assert_eq!(*observed.read().expect("이벤트"), Vec::new());
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id)).expect("신호"),
+            Vec::new()
+        );
+    }
+
+    struct RacingFailures {
+        error: SystemPortError,
+        barrier: std::sync::Barrier,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl SignalEvaluationData for RacingFailures {
+        fn inputs(
+            &self,
+            _record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<EvaluateSignalInputs, SystemPortError>> + Send {
+            if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 2 {
+                self.barrier.wait();
+            }
+            std::future::ready(Err(self.error))
+        }
+    }
+
+    fn assert_unavailable(result: EvaluateSignalOutcome, error: SystemPortError) {
+        match result {
+            EvaluateSignalOutcome::Unavailable { cause, deliveries } => {
+                assert_eq!(*cause, application::EvaluateSignalError::Inputs(error));
+                assert!(deliveries.len() <= 1);
+            }
+            EvaluateSignalOutcome::Applied { .. }
+            | EvaluateSignalOutcome::NoSubmission
+            | EvaluateSignalOutcome::SubmissionDiscarded => panic!("조회 오류 필요"),
+        }
+    }
+
+    #[test]
+    fn concurrent_input_failures_clear_once() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("before"),
+            ),
+        )
+        .expect("이전 신호");
+        let error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        let failing = RacingFailures {
+            error,
+            barrier: std::sync::Barrier::new(2),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        };
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| {
+                run(EvaluateSignals::new(&repository, &failing, &bus).execute(
+                    &source.row().instrument_id,
+                    fixtures::day(60),
+                    occurrence("first"),
+                ))
+            });
+            let second = scope.spawn(|| {
+                run(EvaluateSignals::new(&repository, &failing, &bus).execute(
+                    &source.row().instrument_id,
+                    fixtures::day(60),
+                    occurrence("second"),
+                ))
+            });
+            assert_unavailable(first.join().expect("스레드").expect("비활성화"), error);
+            assert_unavailable(second.join().expect("스레드").expect("비활성화"), error);
+        });
+        assert_eq!(
+            *observed.read().expect("이벤트"),
+            vec![
+                DomainEvent::SignalRaised(source.row().instrument_id.clone()),
+                DomainEvent::SignalCleared(source.row().instrument_id.clone())
+            ]
+        );
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id)).expect("신호"),
+            Vec::new()
+        );
     }
 }
