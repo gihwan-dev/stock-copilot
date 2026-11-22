@@ -1,5 +1,6 @@
 import { inspectOverflow } from "../src/shared/ds/testing/overflow";
 import { stressFixtures } from "../src/shared/ds/testing/stress";
+import { identifyOverflowElement } from "./ds20-overflow-identity.browser";
 
 const makeDocument = async (
   body: string,
@@ -204,6 +205,134 @@ describe("overflow measurements", () => {
       kind: "unauthorized-overflow",
       element: "p#metric",
     });
+  });
+
+  it("does not report a parent for its child's visible one-pixel font metric", async () => {
+    const doc = await makeDocument(
+      '<div id="metric-parent" style="padding-top:20px"><p id="metric-child" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#metric-parent");
+    const child = doc.querySelector<HTMLElement>("#metric-child");
+    if (parent === null || child === null) throw new Error("metric missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(child.scrollHeight - child.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toEqual([]);
+  });
+
+  it("does not report a chain of parents for the same visible font metric", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><section id="metric-ancestor"><div id="metric-wrapper"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></section></div>',
+    );
+    await loadProbeFont(doc);
+    const ancestor = doc.querySelector<HTMLElement>("#metric-ancestor");
+    const wrapper = doc.querySelector<HTMLElement>("#metric-wrapper");
+    if (ancestor === null || wrapper === null)
+      throw new Error("metric missing");
+    expect(ancestor.scrollHeight - ancestor.clientHeight).toBe(1);
+    expect(wrapper.scrollHeight - wrapper.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toEqual([]);
+  });
+
+  it.each(["contain:paint", "clip-path:inset(0)"])(
+    "still detects a font metric clipped by the text element's %s",
+    async (clip) => {
+      const doc = await makeDocument(
+        `<div style="padding-top:20px"><p id="own-clip" style="font:12px/16px IBM Plex Sans KR;margin:0;${clip}">주식 코파일럿</p></div>`,
+      );
+      await loadProbeFont(doc);
+      const text = doc.querySelector<HTMLElement>("#own-clip");
+      if (text === null) throw new Error("text missing");
+      expect(text.scrollHeight - text.clientHeight).toBe(1);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "p#own-clip",
+      });
+    },
+  );
+
+  it.each(["contain:paint", "clip-path:inset(0)"])(
+    "still detects a font metric clipped by its parent's %s",
+    async (clip) => {
+      const doc = await makeDocument(
+        `<div style="padding-top:20px"><div id="parent-clip" style="height:16px;${clip}"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>`,
+      );
+      await loadProbeFont(doc);
+      const parent = doc.querySelector<HTMLElement>("#parent-clip");
+      if (parent === null) throw new Error("parent missing");
+      expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "div#parent-clip",
+      });
+    },
+  );
+
+  it("still detects a real one-pixel child overflow without clipping", async () => {
+    const doc = await makeDocument(
+      '<div id="real-visible" style="height:15px"><div style="height:16px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#real-visible");
+    if (parent === null) throw new Error("parent missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#real-visible",
+    });
+  });
+
+  it.each(["::before", "::after"])(
+    "still detects generated content %s overflowing beside a font metric",
+    async (pseudo) => {
+      const doc = await makeDocument(
+        `<style>#generated-metric${pseudo}{content:"";position:absolute;top:16px;width:1px;height:1px}</style><div id="generated-metric" style="position:relative;top:20px;height:16px"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>`,
+      );
+      await loadProbeFont(doc);
+      const parent = doc.querySelector<HTMLElement>("#generated-metric");
+      if (parent === null) throw new Error("parent missing");
+      expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "div#generated-metric",
+      });
+    },
+  );
+
+  it("still detects a metric child positioned outside its parent", async () => {
+    const doc = await makeDocument(
+      '<div style="padding:20px"><div id="metric-edge" style="width:100px;height:16px"><p id="metric-outside" style="position:relative;left:-1px;font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>',
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#metric-edge");
+    const child = doc.querySelector<HTMLElement>("#metric-outside");
+    if (parent === null || child === null) throw new Error("metric missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(parent.scrollWidth).toBe(parent.clientWidth);
+    expect(child.getBoundingClientRect().left).toBeLessThan(
+      parent.getBoundingClientRect().left,
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#metric-edge",
+    });
+  });
+
+  it("distinguishes overflowing elements of the same tag in the catalog", async () => {
+    const first = await makeDocument(
+      '<div><span style="display:inline-block;width:40px;white-space:nowrap">longlonglonglong</span><span style="display:inline-block;width:40px;white-space:nowrap">ok</span></div>',
+    );
+    const second = await makeDocument(
+      '<div><span style="display:inline-block;width:40px;white-space:nowrap">ok</span><span style="display:inline-block;width:40px;white-space:nowrap">longlonglonglong</span></div>',
+    );
+    const a = inspectOverflow(first, identifyOverflowElement).filter(
+      (finding) => finding.kind === "unauthorized-overflow",
+    );
+    const b = inspectOverflow(second, identifyOverflowElement).filter(
+      (finding) => finding.kind === "unauthorized-overflow",
+    );
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(1);
+    expect(a).not.toEqual(b);
   });
 
   it("accepts the same visible font metric across wrapped lines", async () => {
@@ -559,6 +688,46 @@ describe("overflow measurements", () => {
       element: "input#disabled-input",
     });
   });
+
+  it.each([
+    [
+      "input itself",
+      '<input id="inert-field" inert value="longlonglonglonglonglonglong" style="width:60px">',
+      "input#inert-field",
+    ],
+    [
+      "input ancestor",
+      '<div inert><input id="inert-field" value="longlonglonglonglonglonglong" style="width:60px"></div>',
+      "input#inert-field",
+    ],
+    [
+      "textarea itself",
+      '<textarea id="inert-field" inert style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea>',
+      "textarea#inert-field",
+    ],
+    [
+      "textarea ancestor",
+      '<div inert><textarea id="inert-field" style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea></div>',
+      "textarea#inert-field",
+    ],
+  ])(
+    "still detects %s content overflow when inert",
+    async (_label, markup, element) => {
+      const doc = await makeDocument(markup);
+      const field = doc.querySelector<HTMLElement>("#inert-field");
+      if (field === null) throw new Error("field missing");
+      expect(
+        field.scrollWidth > field.clientWidth ||
+          field.scrollHeight > field.clientHeight,
+      ).toBe(true);
+      field.focus();
+      expect(doc.activeElement).not.toBe(field);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element,
+      });
+    },
+  );
 
   it.each([
     {
@@ -975,6 +1144,26 @@ describe("review regressions", () => {
       });
     },
   );
+
+  it.each([
+    "perspective:1px",
+    "filter:blur(0px)",
+    "backdrop-filter:blur(0px)",
+    "will-change:transform",
+    "will-change:perspective",
+    "will-change:filter",
+    "will-change:backdrop-filter",
+  ])("detects fixed-child clipping through %s", async (containingStyle) => {
+    const doc = await makeDocument(
+      `<div style="overflow:hidden;width:60px;height:60px"><div style="${containingStyle};width:60px;height:60px"><div id="fixed-effect" style="position:fixed;left:50px;top:10px;width:40px;height:30px;background:red"></div></div></div>`,
+    );
+    expect(doc.elementFromPoint(55, 15)?.id).toBe("fixed-effect");
+    expect(doc.elementFromPoint(70, 15)?.id).not.toBe("fixed-effect");
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#fixed-effect",
+    });
+  });
 
   it.each(["paint", "content", "strict"])(
     "detects clipping caused by %s containment",

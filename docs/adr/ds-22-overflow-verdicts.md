@@ -8,11 +8,11 @@ DS-20의 고정 Chromium 실행에서 1,034개 테마 이야기 중 174개 이�
 
 ## 결정
 
-- 메인 결정에 따라 편집 가능한 한 줄 텍스트·숫자 입력의 가로 내용 스크롤과 편집 가능한 textarea의 실제로 스크롤 가능한 세로 내용 초과만 해당 축의 내용 크기 판정에서 면제한다. 숫자 입력도 숫자를 직접 치면 자체 가로 스크롤이 생긴다. input 타입은 브라우저가 해석한 값을 써서 알 수 없는 타입의 text 대체 동작도 따른다. 읽기 전용·비활성 입력은 면제하지 않는다. 글자를 받지 않는 입력 타입, textarea 가로 초과, 스크롤할 수 없는 textarea 세로 초과, 컨트롤 상자와 주변 문구의 넘침은 계속 검사한다. 입력과 textarea는 생략 표식이 있어도 실제 초과를 검사한다. ADR 0129의 의도된 입력 내부 스크롤 인계를 해소한다.
-- IBM Plex Sans KR의 텍스트 노드에서 실제 줄 사각형이 첫 줄 위와 마지막 줄 아래에 각각 최대 1px만 뻗고 글줄과 모든 관련 자르기 경계가 창 안에 있는 경우, 이 글꼴 지표만 내용 크기 오탐에서 제외한다. 여러 줄도 각 사각형을 검사한다. 다른 축의 초과, 자르는 조상, 1px 실제 자식 넘침과 가상 요소는 면제하지 않는다. body 스크롤 잠금이 뷰포트에 전파되는 경우의 고정 대화 상자는 실제 뷰포트 경계로 판정한다.
+- 메인 결정에 따라 편집 가능한 한 줄 텍스트·숫자 입력의 가로 내용 스크롤과 편집 가능한 textarea의 실제로 스크롤 가능한 세로 내용 초과만 해당 축의 내용 크기 판정에서 면제한다. 숫자 입력도 숫자를 직접 치면 자체 가로 스크롤이 생긴다. input 타입은 브라우저가 해석한 값을 써서 알 수 없는 타입의 text 대체 동작도 따른다. 읽기 전용·비활성 입력과 자신 또는 조상이 inert인 입력은 면제하지 않는다. 글자를 받지 않는 입력 타입, textarea 가로 초과, 스크롤할 수 없는 textarea 세로 초과, 컨트롤 상자와 주변 문구의 넘침은 계속 검사한다. 입력과 textarea는 생략 표식이 있어도 실제 초과를 검사한다. ADR 0129의 의도된 입력 내부 스크롤 인계를 해소한다.
+- IBM Plex Sans KR의 텍스트 노드에서 실제 줄 사각형이 첫 줄 위와 마지막 줄 아래에 각각 최대 1px만 뻗고 글줄과 요소 자신을 포함한 모든 관련 자르기 경계가 창 안에 있는 경우, 이 글꼴 지표만 내용 크기 오탐에서 제외한다. 여러 줄도 각 사각형을 검사한다. 같은 1px 지표가 부모로 전파되는 경우 단일 자식, 자식 상자의 실제 경계, 가상 요소와 자르기 여부를 확인한다. 다른 축의 초과, 자르는 자신이나 조상, 1px 실제 자식 넘침과 가상 요소는 면제하지 않는다. body 스크롤 잠금이 뷰포트에 전파되는 경우의 고정 대화 상자는 실제 뷰포트 경계로 판정한다.
 - 화면 읽기용으로 완전히 숨긴 표는 정확한 표·래퍼 구조와 계산된 크기·자르기 스타일을 모두 확인하고 해당 표의 내용 크기와 잘림만 제외한다. 나머지 판정은 그대로 실행한다. 보이는 가짜 표식, 부분 clip-path, 표 밖의 실제 넘침과 숨긴 비표 요소는 계속 보고한다.
 - EmptyState, TextField, Checkbox, Switch, Heading, Select의 텍스트는 기존 status-sentence 유틸리티로 줄을 바꾼다. 공개 속성이나 토큰을 바꾸지 않고 긴 글을 자르지 않는다. 버튼 높이, 숫자 줄바꿈과 표·차트의 스크롤 배치처럼 겉모습의 결정이 필요한 항목은 고치지 않는다.
-- just ds-check는 카탈로그·브라우저 타입·보류 대조 회귀와 고정 브라우저 전체 실행을 차례로 수행한다. 보류 표의 이야기 ID, 폭, 글자 크기와 판정 종류·요소가 관찰과 정확히 일치해야만 성공한다. 보류가 늘거나 줄거나 판정이 바뀌면 실패한다. 보류 일치는 잔여 UI 문제가 없다는 뜻이 아니다.
+- just ds-check는 카탈로그·브라우저 타입·보류 대조 회귀와 고정 브라우저 전체 실행을 차례로 수행한다. 카탈로그 판정 대상은 기존 태그·id와 문서 루트부터의 nth-child 구조 경로를 함께 기록해 같은 태그라도 서로 구분한다. 보류 표의 이야기 ID, 폭, 글자 크기와 판정 종류·요소가 관찰과 정확히 일치해야만 성공한다. 보류가 늘거나 줄거나 판정이 바뀌면 실패한다. 보류 일치는 잔여 UI 문제가 없다는 뜻이 아니다.
 
 ## 측정과 분류
 
@@ -105,6 +105,10 @@ DS-20의 고정 Chromium 실행에서 1,034개 테마 이야기 중 174개 이�
 
 별도 복사본의 고정 Chromium 반례에서는 생략 표식이 붙은 textarea의 가로·세로 초과 두 건이 수정 전 누락되고 수정 후 보고됐다. 숫자 input과 브라우저가 text로 대체하는 미지원 타입의 자체 스크롤 두 건도 수정 전 잘못 보고되고 수정 후 면제됐다. 이 반례를 추가한 판정 예제 124개가 통과했다. 이후 ds-check 재실행은 482.59초에 종료 0이었고 1,034개 이야기의 보류 224조건과 정확히 일치했다.
 
+1차 독립 리뷰와 비판에서 글꼴 지표의 부모 전파, 같은 태그 사이의 판정 대상 이동, 요소 자신이 자르는 글꼴 지표, 자신이나 조상이 inert인 입력을 재현했다. 수정 전 새 고정 브라우저 회귀는 133개 중 위 네 종류에 해당하는 8개가 실패했다. 수정 후 ds-check는 385.98초에 종료 0이었고 예제 146개와 전체 1,034개 이야기를 실행했다. 보류는 224조건·600건으로 일치했으며, 이전 판정의 종류·태그·id로 다시 대조해 모든 조건의 다중집합과 이유가 같음을 확인했다. 구조 경로를 더한 같은 조건의 판정은 종류와 경로의 조합으로 서로 구별된다.
+
+고정 환경의 visual-check는 16.43초에 종료 0이었고 기준 이미지 8쌍이 바이트 단위로 일치했다. 이 여덟 쌍은 전체 부하 이야기의 시각 검토를 뜻하지 않는다.
+
 고정 Chromium은 textarea에 overflow-y: visible을 지정해도 계산값을 auto로 바꾼다. visible 분기는 실제 내용이 넘치는 textarea의 계산 스타일 반환만 대체해 검증했다. hidden 분기와 auto·scroll 허용은 실제 계산값으로 검증했다.
 
 ## 승인된 기존 테스트 단언
@@ -116,57 +120,78 @@ DS-20의 고정 Chromium 실행에서 1,034개 테마 이야기 중 174개 이�
 | measures the real ChatInput draft and keeps its nested exception narrow | textarea 자체의 세로 스크롤을 unauthorized-overflow로 보고 | 보고하지 않음 |
 | reports native TextField overflow without assigning a viewport marker   | input 자체의 가로 스크롤을 unauthorized-overflow로 보고    | 보고하지 않음 |
 
-승인 자료의 task는 DS-22, path는 apps/desktop/tests/ds20-catalog.browser.ts, 변경 전 SHA-256은 4986090e1f8158163d8df3883e73ea97a5d106f75bf785324dda0c6a482c7ca0, 변경 후는 3b4b65318ac228f1337b5a08e36a7939bee822073f2df1a72238e264bbcb86e3이며 단언 변경은 `assertion_change = true`다. H-55의 test-diff는 Rust 파일만 검사하고 승인 경로에도 rs 확장자만 허용하므로 이 TypeScript 파일의 정확한 test-diff 지적 문자열은 존재하지 않으며 승인 행을 등록할 수 없다. 메인의 명시적 승인과 H-55 기계 승인 경로는 별개다.
+승인 자료의 task는 DS-22, path는 apps/desktop/tests/ds20-catalog.browser.ts, 변경 전 SHA-256은 4986090e1f8158163d8df3883e73ea97a5d106f75bf785324dda0c6a482c7ca0, 변경 후는 44eb5cffce0d699e4a43096c029be545dfaee384bb116f11e33324fbb880c6e3이며 단언 변경은 `assertion_change = true`다. 변경 후 해시는 판정 대상의 구조 경로를 전달하는 측정 준비 변경까지 포함한다. H-55의 test-diff는 Rust 파일만 검사하고 승인 경로에도 rs 확장자만 허용하므로 이 TypeScript 파일의 정확한 test-diff 지적 문자열은 존재하지 않으며 승인 행을 등록할 수 없다. 메인의 명시적 승인과 H-55 기계 승인 경로는 별개다.
 
 ## 병합 시 기존 테스트 준비
 
-H-53~H-55를 받는 병합 중 H-54의 `로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다`는 이전 HEAD의 복제본에 최신 agent-stop 테스트만 복사했다. 최신 테스트가 새로 가져오는 test-temp와 managed-temp 모듈이 복제본에 없어 모듈 로딩이 실패했다. 기존 테스트 한 건의 준비 단계에 두 모듈 복사만 추가하고 모든 기존 단언을 유지했다. 수정 전 실패와 수정 후 통과를 확인했다. 파일 `harness/ci/tests/h54-branch-master.test.mjs`의 master 기준 SHA-256은 76150354bbf03d4b35d8a8f2ec7e493f246d8c06e7fb2c6b52b3fa7449ac98d7, 변경 후는 1285cbf30f6d6202280f68e21c2d66be84e65ca33cb2b6305744657691da079e다. 이 준비 변경은 지시문의 기존 테스트 준비 사전 승인에 따르며 검사를 끄지 않는다. 훅 진입을 검증하는 하네스 테스트가 범위에 추가되어 리뷰 등급을 2에서 3으로 올린다.
+H-53~H-55를 받는 병합 중 H-54의 `로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다`는 이전 HEAD의 복제본에 최신 agent-stop 테스트만 복사했다. 최신 테스트가 새로 가져오는 test-temp와 managed-temp 모듈이 복제본에 없어 모듈 로딩이 실패했다. 기존 테스트 한 건의 준비 단계에 두 모듈 복사를 추가하고 모든 기존 단언을 유지했다. 병합 후 HEAD에는 두 모듈이 이미 있으므로 복사 직전 복제본에서 각각 제거해 병합 전과 같은 준비 조건을 만든다. 수정 전 실패와 수정 후 통과, 병합된 HEAD에서 두 복사를 각각 제거한 변형의 실패를 확인했다. 파일 `harness/ci/tests/h54-branch-master.test.mjs`의 master 기준 SHA-256은 76150354bbf03d4b35d8a8f2ec7e493f246d8c06e7fb2c6b52b3fa7449ac98d7, 변경 후는 2cf7dae6638ae1980c914ba2c82c38c8182f83f95ba090a42e19cae9eaa57e00다. 이 준비 변경은 지시문의 기존 테스트 준비 사전 승인에 따르며 검사를 끄지 않는다. 훅 진입을 검증하는 하네스 테스트가 범위에 추가되어 리뷰 등급을 2에서 3으로 올린다.
 
 ## 손 변형
 
-1~28번은 mktemp -d 복사본에서 TypeScript 컴파일을 통과한 뒤 고정 Chromium의 해당 회귀를 실제로 실행했다. 기준 복사본의 전체 예제가 먼저 통과했다. 29~37번은 별도 복사본에서 node --check와 보류 대조 Node 테스트를 실제로 실행했다. 38~40번은 보완 후 다른 복사본에서 TypeScript 컴파일과 고정 Chromium의 해당 회귀를 실행했다. 41~42번은 다른 복사본에서 node --check와 H-54 테스트를 실행했다. 병렬 변이는 사용하지 않았다.
+1~28번은 mktemp -d 복사본에서 TypeScript 컴파일을 통과한 뒤 고정 Chromium의 해당 회귀를 실제로 실행했다. 기준 복사본의 전체 예제가 먼저 통과했다. 29~37번은 별도 복사본에서 node --check와 보류 대조 Node 테스트를 실제로 실행했다. 38~40번은 보완 후 다른 복사본에서 TypeScript 컴파일과 고정 Chromium의 해당 회귀를 실행했다. 41~42번은 병합된 HEAD의 복제본에서 node --check와 H-54 테스트를 실행했다. 43~62번은 1차 리뷰 수정 뒤 다시 만든 복사본에서 TypeScript 컴파일과 고정 Chromium의 해당 회귀를 실행했다. 63번은 카탈로그 호출에서 구조 경로를 빼고 별도 복사본의 첫 60개 이야기를 실행한 뒤 실제 보류 대조를 수행했다. 8조건에 대해 새 판정 8건과 사라진 보류 8건이 각각 검출됐다. 병렬 변이는 사용하지 않았다.
 
-| 번호 | 바꾼 것                                     | 잡은 테스트                                                                                     | 결과 |
-| ---- | ------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---- |
-| 1    | input text 타입 제외                        | overflow measurements accepts the editable text input's own horizontal scrolling                | 검출 |
-| 2    | input search 타입 제외                      | overflow measurements accepts the editable search input's own horizontal scrolling              | 검출 |
-| 3    | input tel 타입 제외                         | overflow measurements accepts the editable tel input's own horizontal scrolling                 | 검출 |
-| 4    | input url 타입 제외                         | overflow measurements accepts the editable url input's own horizontal scrolling                 | 검출 |
-| 5    | input email 타입 제외                       | overflow measurements accepts the editable email input's own horizontal scrolling               | 검출 |
-| 6    | input password 타입 제외                    | overflow measurements accepts the editable password input's own horizontal scrolling            | 검출 |
-| 7    | 읽기 전용 input 제한 제거                   | overflow measurements still detects a readonly input's overflowing content                      | 검출 |
-| 8    | 비활성 input 제한 제거                      | overflow measurements still detects a disabled input's overflowing content                      | 검출 |
-| 9    | textarea auto 스크롤 제외                   | overflow measurements accepts an editable textarea's own vertical scrolling with auto           | 검출 |
-| 10   | textarea scroll 스크롤 제외                 | overflow measurements accepts an editable textarea's own vertical scrolling with scroll         | 검출 |
-| 11   | textarea 뷰포트 표식 면제 확대              | overflow measurements still detects horizontal textarea overflow even with a viewport marker    | 검출 |
-| 12   | 숨긴 표 position을 fixed로 변경             | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 13   | 숨긴 표 overflow-x를 visible로 변경         | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 14   | 숨긴 표 overflow-y를 visible로 변경         | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 15   | 숨긴 표 clip 사각형 변경                    | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 16   | 숨긴 표 clip-path 비율 변경                 | overflow measurements keeps the full hidden LineChart table without false clipping verdicts     | 검출 |
-| 17   | 숨긴 래퍼 너비 경계 변경                    | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 18   | 숨긴 래퍼 높이 경계 변경                    | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 19   | 숨긴 래퍼 선택자 변경                       | overflow measurements does not report the clipped content of a visually hidden accessible table | 검출 |
-| 20   | 글꼴 이름 변경                              | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 21   | 글꼴 1px 경계 변경                          | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 22   | 글꼴 텍스트 노드 개수 변경                  | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 23   | 글꼴 상단 경계 변경                         | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 24   | 글꼴 하단 경계 변경                         | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 25   | 글꼴 첫 줄 방향 반전                        | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 26   | 글꼴 마지막 줄 방향 반전                    | overflow measurements accepts the visible one-pixel font metric for an unconstrained line       | 검출 |
-| 27   | body 뷰포트 전파 제거                       | overflow measurements accepts a visible font metric in a fixed dialog with body scroll locked   | 검출 |
-| 28   | 조상 자르기 검사 제거                       | overflow measurements still detects the font metric when an ancestor clips the text             | 검출 |
-| 29   | 새 판정 대조 제거                           | only the exact pending conditions and findings pass                                             | 검출 |
-| 30   | 사라진 보류 대조 제거                       | only the exact pending conditions and findings pass                                             | 검출 |
-| 31   | 보류 이유 확인 제거                         | missing reasons, invalid conditions, and duplicate conditions fail                              | 검출 |
-| 32   | 조건 중복 검사 제거                         | missing reasons, invalid conditions, and duplicate conditions fail                              | 검출 |
-| 33   | 요소 이름 대조 제거                         | only the exact pending conditions and findings pass                                             | 검출 |
-| 34   | 판정 종류 검증 제거                         | missing reasons, invalid conditions, and duplicate conditions fail                              | 검출 |
-| 35   | 폭 조건 검증 제거                           | missing reasons, invalid conditions, and duplicate conditions fail                              | 검출 |
-| 36   | 글자 크기 조건 검증 제거                    | missing reasons, invalid conditions, and duplicate conditions fail                              | 검출 |
-| 37   | 빈 판정 허용                                | missing reasons, invalid conditions, and duplicate conditions fail                              | 검출 |
-| 38   | 숫자 input 제외                             | accepts editable number input content scrolling                                                 | 검출 |
-| 39   | 브라우저 유효 타입 대신 원시 type 속성 사용 | accepts editable unsupported input content scrolling                                            | 검출 |
-| 40   | 입력에 생략 표식 예외 적용                  | still detects vertical/horizontal textarea overflow with a truncation marker                    | 검출 |
-| 41   | H-54 복제본의 managed-temp 모듈 복사 제거   | 로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다                                  | 검출 |
-| 42   | H-54 복제본의 test-temp 모듈 복사 제거      | 로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다                                  | 검출 |
+| 번호 | 바꾼 것                                     | 잡은 테스트                                                                                                                                                                                         | 결과 |
+| ---- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| 1    | input text 타입 제외                        | overflow measurements accepts the editable text input's own horizontal scrolling                                                                                                                    | 검출 |
+| 2    | input search 타입 제외                      | overflow measurements accepts the editable search input's own horizontal scrolling                                                                                                                  | 검출 |
+| 3    | input tel 타입 제외                         | overflow measurements accepts the editable tel input's own horizontal scrolling                                                                                                                     | 검출 |
+| 4    | input url 타입 제외                         | overflow measurements accepts the editable url input's own horizontal scrolling                                                                                                                     | 검출 |
+| 5    | input email 타입 제외                       | overflow measurements accepts the editable email input's own horizontal scrolling                                                                                                                   | 검출 |
+| 6    | input password 타입 제외                    | overflow measurements accepts the editable password input's own horizontal scrolling                                                                                                                | 검출 |
+| 7    | 읽기 전용 input 제한 제거                   | overflow measurements still detects a readonly input's overflowing content                                                                                                                          | 검출 |
+| 8    | 비활성 input 제한 제거                      | overflow measurements still detects a disabled input's overflowing content                                                                                                                          | 검출 |
+| 9    | textarea auto 스크롤 제외                   | overflow measurements accepts an editable textarea's own vertical scrolling with auto                                                                                                               | 검출 |
+| 10   | textarea scroll 스크롤 제외                 | overflow measurements accepts an editable textarea's own vertical scrolling with scroll                                                                                                             | 검출 |
+| 11   | textarea 뷰포트 표식 면제 확대              | overflow measurements still detects horizontal textarea overflow even with a viewport marker                                                                                                        | 검출 |
+| 12   | 숨긴 표 position을 fixed로 변경             | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 13   | 숨긴 표 overflow-x를 visible로 변경         | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 14   | 숨긴 표 overflow-y를 visible로 변경         | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 15   | 숨긴 표 clip 사각형 변경                    | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 16   | 숨긴 표 clip-path 비율 변경                 | overflow measurements keeps the full hidden LineChart table without false clipping verdicts                                                                                                         | 검출 |
+| 17   | 숨긴 래퍼 너비 경계 변경                    | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 18   | 숨긴 래퍼 높이 경계 변경                    | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 19   | 숨긴 래퍼 선택자 변경                       | overflow measurements does not report the clipped content of a visually hidden accessible table                                                                                                     | 검출 |
+| 20   | 글꼴 이름 변경                              | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 21   | 글꼴 1px 경계 변경                          | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 22   | 글꼴 텍스트 노드 개수 변경                  | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 23   | 글꼴 상단 경계 변경                         | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 24   | 글꼴 하단 경계 변경                         | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 25   | 글꼴 첫 줄 방향 반전                        | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 26   | 글꼴 마지막 줄 방향 반전                    | overflow measurements accepts the visible one-pixel font metric for an unconstrained line                                                                                                           | 검출 |
+| 27   | body 뷰포트 전파 제거                       | overflow measurements accepts a visible font metric in a fixed dialog with body scroll locked                                                                                                       | 검출 |
+| 28   | 조상 자르기 검사 제거                       | overflow measurements still detects the font metric when an ancestor clips the text                                                                                                                 | 검출 |
+| 29   | 새 판정 대조 제거                           | only the exact pending conditions and findings pass                                                                                                                                                 | 검출 |
+| 30   | 사라진 보류 대조 제거                       | only the exact pending conditions and findings pass                                                                                                                                                 | 검출 |
+| 31   | 보류 이유 확인 제거                         | missing reasons, invalid conditions, and duplicate conditions fail                                                                                                                                  | 검출 |
+| 32   | 조건 중복 검사 제거                         | missing reasons, invalid conditions, and duplicate conditions fail                                                                                                                                  | 검출 |
+| 33   | 요소 이름 대조 제거                         | only the exact pending conditions and findings pass                                                                                                                                                 | 검출 |
+| 34   | 판정 종류 검증 제거                         | missing reasons, invalid conditions, and duplicate conditions fail                                                                                                                                  | 검출 |
+| 35   | 폭 조건 검증 제거                           | missing reasons, invalid conditions, and duplicate conditions fail                                                                                                                                  | 검출 |
+| 36   | 글자 크기 조건 검증 제거                    | missing reasons, invalid conditions, and duplicate conditions fail                                                                                                                                  | 검출 |
+| 37   | 빈 판정 허용                                | missing reasons, invalid conditions, and duplicate conditions fail                                                                                                                                  | 검출 |
+| 38   | 숫자 input 제외                             | accepts editable number input content scrolling                                                                                                                                                     | 검출 |
+| 39   | 브라우저 유효 타입 대신 원시 type 속성 사용 | accepts editable unsupported input content scrolling                                                                                                                                                | 검출 |
+| 40   | 입력에 생략 표식 예외 적용                  | still detects vertical/horizontal textarea overflow with a truncation marker                                                                                                                        | 검출 |
+| 41   | H-54 복제본의 managed-temp 모듈 복사 제거   | 로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다                                                                                                                                      | 검출 |
+| 42   | H-54 복제본의 test-temp 모듈 복사 제거      | 로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다                                                                                                                                      | 검출 |
+| 43   | 부모 글꼴 지표 전파 제거                    | overflow measurements does not report a parent for its child's visible one-pixel font metric                                                                                                        | 검출 |
+| 44   | 중첩 부모 글꼴 지표 전파 제거               | overflow measurements does not report a chain of parents for the same visible font metric                                                                                                           | 검출 |
+| 45   | 글자 요소 자신의 자르기 확인 제거           | overflow measurements still detects a font metric clipped by the text element's contain:paint<br>overflow measurements still detects a font metric clipped by the text element's clip-path:inset(0) | 검출 |
+| 46   | inert input 제한 제거                       | overflow measurements still detects input itself content overflow when inert<br>overflow measurements still detects input ancestor content overflow when inert                                      | 검출 |
+| 47   | inert textarea 제한 제거                    | overflow measurements still detects textarea itself content overflow when inert<br>overflow measurements still detects textarea ancestor content overflow when inert                                | 검출 |
+| 48   | 부모의 가상 요소 확인 제거                  | overflow measurements still detects generated content ::before overflowing beside a font metric<br>overflow measurements still detects generated content ::after overflowing beside a font metric   | 검출 |
+| 49   | 자식 상자의 실제 경계 확인 제거             | overflow measurements still detects a metric child positioned outside its parent                                                                                                                    | 검출 |
+| 50   | 사용자 지정 요소 식별자 무시                | overflow measurements distinguishes overflowing elements of the same tag in the catalog                                                                                                             | 검출 |
+| 51   | 요소 구조 경로 제거                         | overflow measurements distinguishes overflowing elements of the same tag in the catalog                                                                                                             | 검출 |
+| 52   | 숨겨진 textarea 내용 면제                   | overflow measurements still detects textarea vertical overflow with overflow-y hidden                                                                                                               | 검출 |
+| 53   | visible textarea 내용 면제                  | overflow measurements still detects textarea vertical overflow when computed overflow-y is visible                                                                                                  | 검출 |
+| 54   | before 가상 요소 검사 제거                  | overflow measurements still detects generated content ::before overflowing beside a font metric                                                                                                     | 검출 |
+| 55   | after 가상 요소 검사 제거                   | overflow measurements still detects generated content ::after overflowing beside a font metric                                                                                                      | 검출 |
+| 56   | containing block transform 제거             | review regressions detects a fixed element clipped by its transformed containing block                                                                                                              | 검출 |
+| 57   | containing block translate 제거             | review regressions detects clipping through individual translate for translate:0px as fixed<br>review regressions detects clipping through individual translate for translate:0px as absolute       | 검출 |
+| 58   | containing block rotate 제거                | review regressions detects clipping through individual rotate for rotate:0deg as fixed<br>review regressions detects clipping through individual rotate for rotate:0deg as absolute                 | 검출 |
+| 59   | containing block scale 제거                 | review regressions detects clipping through individual scale for scale:1 as fixed<br>review regressions detects clipping through individual scale for scale:1 as absolute                           | 검출 |
+| 60   | containing block perspective 제거           | review regressions detects fixed-child clipping through perspective:1px                                                                                                                             | 검출 |
+| 61   | containing block filter 제거                | review regressions detects fixed-child clipping through filter:blur(0px)                                                                                                                            | 검출 |
+| 62   | containing block backdrop-filter 제거       | review regressions detects fixed-child clipping through backdrop-filter:blur(0px)                                                                                                                   | 검출 |
+| 63   | 카탈로그 판정에서 구조 경로 전달 제거       | measures every catalog story in the narrow slot and at enlarged text 및 실제 보류 대조                                                                                                              | 검출 |

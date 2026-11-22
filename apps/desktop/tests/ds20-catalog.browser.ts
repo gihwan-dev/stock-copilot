@@ -1,5 +1,6 @@
 import { inspectOverflow } from "../src/shared/ds/testing/overflow";
 import { stressFixtures } from "../src/shared/ds/testing/stress";
+import { identifyOverflowElement } from "./ds20-overflow-identity.browser";
 import { commands } from "vitest/browser";
 
 declare const __DS20_FIRST__: number;
@@ -252,7 +253,7 @@ it("measures every catalog story in the narrow slot and at enlarged text", async
         for (const scale of ["100%", "125%"] as const) {
           doc.documentElement.style.fontSize = scale;
           await waitForLayout(frame);
-          const findings = inspectOverflow(doc);
+          const findings = inspectOverflow(doc, identifyOverflowElement);
           if (findings.length > 0)
             results.push({
               story: story.title,

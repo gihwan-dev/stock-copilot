@@ -89,6 +89,25 @@ test("comparison preserves finding multiplicity but ignores ordering", () => {
   );
 });
 
+test("a finding moved between same-tag elements does not match the pending entry", () => {
+  const original = {
+    ...first,
+    findings: [{ kind: "unauthorized-overflow", element: "p @ html > p:1" }],
+  };
+  const moved = {
+    ...first,
+    findings: [{ kind: "unauthorized-overflow", element: "p @ html > p:2" }],
+  };
+  assert.deepEqual(
+    comparePending([original], [{ ...original, reason: "보류" }]),
+    [],
+  );
+  assert.notDeepEqual(
+    comparePending([moved], [{ ...original, reason: "보류" }]),
+    [],
+  );
+});
+
 test("missing reasons, invalid conditions, and duplicate conditions fail", () => {
   assert.notDeepEqual(
     comparePending(

@@ -7,19 +7,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2) > span:nth-child(2)"
       }
     ],
     "reason": "카드의 줄바꿈 없는 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 카드 배치 결정이 필요하다."
@@ -32,27 +32,27 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2) > span:nth-child(2)"
       }
     ],
     "reason": "카드의 줄바꿈 없는 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 카드 배치 결정이 필요하다."
@@ -65,19 +65,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2) > span:nth-child(2)"
       }
     ],
     "reason": "카드의 줄바꿈 없는 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 카드 배치 결정이 필요하다."
@@ -90,27 +90,27 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > div:nth-child(2) > span:nth-child(2)"
       }
     ],
     "reason": "카드의 줄바꿈 없는 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 카드 배치 결정이 필요하다."
@@ -123,15 +123,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > header:nth-child(1) > button:nth-child(2)"
       }
     ],
     "reason": "긴 카드 동작 버튼 문구가 고정 높이를 넘어 버튼 높이와 배치 결정이 필요하다."
@@ -144,15 +144,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > header:nth-child(1) > button:nth-child(2)"
       }
     ],
     "reason": "긴 카드 동작 버튼 문구가 고정 높이를 넘어 버튼 높이와 배치 결정이 필요하다."
@@ -165,15 +165,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > header:nth-child(1) > button:nth-child(2)"
       }
     ],
     "reason": "긴 카드 동작 버튼 문구가 고정 높이를 넘어 버튼 높이와 배치 결정이 필요하다."
@@ -186,15 +186,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > section:nth-child(1) > header:nth-child(1) > button:nth-child(2)"
       }
     ],
     "reason": "긴 카드 동작 버튼 문구가 고정 높이를 넘어 버튼 높이와 배치 결정이 필요하다."
@@ -207,19 +207,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 버튼 문구가 기존 고정 높이를 넘어 버튼 높이와 배치의 결정이 필요하다."
@@ -232,27 +232,27 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 버튼 문구가 기존 고정 높이를 넘어 버튼 높이와 배치의 결정이 필요하다."
@@ -265,19 +265,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 버튼 문구가 기존 고정 높이를 넘어 버튼 높이와 배치의 결정이 필요하다."
@@ -290,27 +290,27 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 버튼 문구가 기존 고정 높이를 넘어 버튼 높이와 배치의 결정이 필요하다."
@@ -323,11 +323,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -340,11 +340,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -357,15 +357,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "label"
+        "element": "label @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -378,15 +378,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "label"
+        "element": "label @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -399,11 +399,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -416,11 +416,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -433,15 +433,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "label"
+        "element": "label @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -454,15 +454,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "label"
+        "element": "label @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(3)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -475,11 +475,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -492,11 +492,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -509,11 +509,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -526,15 +526,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "label"
+        "element": "label @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -547,11 +547,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -564,11 +564,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -581,11 +581,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -598,15 +598,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "label"
+        "element": "label @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(2) > button:nth-child(2)"
       }
     ],
     "reason": "비밀 입력의 붙여넣기 버튼이 고정 높이 또는 좁은 폭을 넘어 입력과 버튼의 배치 결정이 필요하다."
@@ -619,19 +619,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -644,19 +644,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -669,19 +669,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -694,19 +694,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -719,11 +719,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -736,11 +736,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -753,19 +753,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -778,19 +778,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -803,11 +803,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -820,11 +820,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -837,19 +837,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -862,19 +862,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       }
     ],
     "reason": "표의 너비 또는 높이가 최소 영역을 넘어 표의 스크롤과 배치 결정이 필요하다."
@@ -887,7 +887,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -900,7 +900,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -913,7 +913,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -926,7 +926,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -939,7 +939,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -952,7 +952,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -965,7 +965,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -978,7 +978,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -991,7 +991,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1004,7 +1004,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1017,7 +1017,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1030,7 +1030,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1043,7 +1043,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1056,7 +1056,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1069,7 +1069,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1082,7 +1082,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 금액이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1095,7 +1095,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 백분율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1108,7 +1108,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 백분율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1121,7 +1121,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 백분율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1134,7 +1134,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 백분율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1147,7 +1147,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 수량이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1160,7 +1160,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 수량이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1173,7 +1173,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 수량이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1186,7 +1186,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 수량이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1199,7 +1199,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1212,7 +1212,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1225,7 +1225,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1238,7 +1238,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1251,7 +1251,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1264,7 +1264,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1277,7 +1277,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1290,7 +1290,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1303,7 +1303,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1316,7 +1316,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1329,7 +1329,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1342,7 +1342,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1355,7 +1355,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1368,7 +1368,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈을 금지한 등락 금액과 비율이 최소 영역보다 넓어 가로 스크롤을 포함한 배치 결정이 필요하다."
@@ -1381,11 +1381,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1398,11 +1398,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1415,11 +1415,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1432,11 +1432,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1449,11 +1449,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1466,11 +1466,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1483,11 +1483,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1500,11 +1500,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1517,11 +1517,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1534,11 +1534,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1551,11 +1551,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1568,11 +1568,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1585,11 +1585,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1602,11 +1602,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1619,11 +1619,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1636,11 +1636,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1653,11 +1653,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1670,11 +1670,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1687,11 +1687,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1704,11 +1704,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 축·안내가 최소 창 높이를 넘어 차트가 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -1721,11 +1721,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1738,15 +1738,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1759,11 +1759,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1776,15 +1776,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1797,11 +1797,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1814,11 +1814,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1831,11 +1831,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1848,11 +1848,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1865,11 +1865,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1882,11 +1882,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1899,11 +1899,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1916,11 +1916,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1933,11 +1933,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1950,11 +1950,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1967,15 +1967,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -1988,19 +1988,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2013,15 +2013,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2034,19 +2034,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2059,11 +2059,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2076,15 +2076,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2097,11 +2097,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2114,15 +2114,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2135,11 +2135,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2152,11 +2152,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2169,11 +2169,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2186,11 +2186,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2203,11 +2203,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2220,11 +2220,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2237,11 +2237,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2254,11 +2254,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2271,11 +2271,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2288,11 +2288,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2305,15 +2305,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2326,19 +2326,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2351,15 +2351,15 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2372,19 +2372,19 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "figure"
+        "element": "figure @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > figure:nth-child(1)"
       }
     ],
     "reason": "차트와 대체 표가 최소 폭 또는 창 높이를 넘어 스크롤 영역과 배치 결정이 필요하다."
@@ -2397,11 +2397,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2414,11 +2414,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2431,11 +2431,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2448,11 +2448,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2465,11 +2465,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2482,11 +2482,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2499,11 +2499,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2516,11 +2516,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2533,11 +2533,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2550,11 +2550,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2567,11 +2567,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2584,11 +2584,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2601,11 +2601,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2618,11 +2618,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2635,11 +2635,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2652,11 +2652,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "긴 근거 본문이 최소 창 높이를 넘어 본문이 놓일 스크롤 영역과 배치 결정이 필요하다."
@@ -2669,11 +2669,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2686,11 +2686,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2703,11 +2703,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2720,11 +2720,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2737,11 +2737,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2754,11 +2754,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2771,11 +2771,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2788,11 +2788,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2805,11 +2805,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2822,11 +2822,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2839,11 +2839,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2856,11 +2856,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2873,11 +2873,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2890,11 +2890,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2907,11 +2907,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2924,11 +2924,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "span"
+        "element": "span @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button#base-ui-_r_1_"
+        "element": "button#base-ui-_r_1_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > label:nth-child(1) > span:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "선택된 체크 표시가 기존 고정 크기 안에 들지 않아 표시기 크기와 정렬 결정이 필요하다."
@@ -2941,19 +2941,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -2966,23 +2966,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -2995,19 +2995,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3020,23 +3020,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3049,19 +3049,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3074,23 +3074,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3103,19 +3103,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3128,23 +3128,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3157,19 +3157,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3182,23 +3182,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3211,19 +3211,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3236,23 +3236,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3265,11 +3265,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3282,23 +3282,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3311,39 +3311,39 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3356,39 +3356,39 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3401,11 +3401,11 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3418,23 +3418,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3447,39 +3447,39 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3492,39 +3492,39 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "고정 높이의 선택 버튼과 긴 선택지가 좁은 폭 또는 높이를 넘어 배치 결정이 필요하다."
@@ -3537,7 +3537,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 제목이 펼침 버튼의 고정 높이를 넘어 높이와 제목 배치의 결정이 필요하다."
@@ -3550,7 +3550,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 제목이 펼침 버튼의 고정 높이를 넘어 높이와 제목 배치의 결정이 필요하다."
@@ -3563,7 +3563,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 제목이 펼침 버튼의 고정 높이를 넘어 높이와 제목 배치의 결정이 필요하다."
@@ -3576,7 +3576,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > button:nth-child(1)"
       }
     ],
     "reason": "긴 제목이 펼침 버튼의 고정 높이를 넘어 높이와 제목 배치의 결정이 필요하다."
@@ -3589,7 +3589,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈하지 않는 긴 배지가 최소 영역보다 넓어 배지 표시 정책의 결정이 필요하다."
@@ -3602,7 +3602,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈하지 않는 긴 배지가 최소 영역보다 넓어 배지 표시 정책의 결정이 필요하다."
@@ -3615,7 +3615,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈하지 않는 긴 배지가 최소 영역보다 넓어 배지 표시 정책의 결정이 필요하다."
@@ -3628,7 +3628,7 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       }
     ],
     "reason": "줄바꿈하지 않는 긴 배지가 최소 영역보다 넓어 배지 표시 정책의 결정이 필요하다."
@@ -3641,15 +3641,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3662,15 +3662,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3683,15 +3683,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3704,15 +3704,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3725,15 +3725,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3746,15 +3746,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3767,15 +3767,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3788,15 +3788,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3809,15 +3809,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3830,15 +3830,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3851,15 +3851,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3872,15 +3872,15 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3893,23 +3893,23 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3922,23 +3922,23 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3951,23 +3951,23 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -3980,23 +3980,23 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > div:nth-child(2) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(1) > button:nth-child(3)"
       }
     ],
     "reason": "좁은 폭에서 상태 문구와 동작 버튼의 공간이 부족해 배치 결정이 필요하다."
@@ -4009,23 +4009,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4038,23 +4038,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4067,23 +4067,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4096,23 +4096,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4125,23 +4125,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4154,23 +4154,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4183,23 +4183,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4212,23 +4212,23 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "div#_r_0_"
+        "element": "div#_r_0_ @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "header"
+        "element": "header @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > header:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "footer"
+        "element": "footer @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(9) > div:nth-child(3) > div:nth-child(2) > footer:nth-child(3) > button:nth-child(2)"
       }
     ],
     "reason": "긴 대화 상자 제목과 동작 문구가 기존 머리글과 버튼 높이를 넘어 배치 결정이 필요하다."
@@ -4241,11 +4241,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "좁은 영역의 빈 상태 설명과 여백이 최소 창 높이를 넘어 배치와 스크롤 결정이 필요하다."
@@ -4258,11 +4258,11 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       }
     ],
     "reason": "좁은 영역의 빈 상태 설명과 여백이 최소 창 높이를 넘어 배치와 스크롤 결정이 필요하다."
@@ -4275,19 +4275,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4) > button:nth-child(1)"
       }
     ],
     "reason": "긴 빈 상태 동작 버튼 문구가 고정 높이를 넘고 내용이 창보다 길어 배치 결정이 필요하다."
@@ -4300,43 +4300,43 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4) > button:nth-child(1)"
       }
     ],
     "reason": "긴 빈 상태 동작 버튼 문구가 고정 높이를 넘고 내용이 창보다 길어 배치 결정이 필요하다."
@@ -4349,19 +4349,19 @@
     "findings": [
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4) > button:nth-child(1)"
       }
     ],
     "reason": "긴 빈 상태 동작 버튼 문구가 고정 높이를 넘고 내용이 창보다 길어 배치 결정이 필요하다."
@@ -4374,43 +4374,43 @@
     "findings": [
       {
         "kind": "document-scroll",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "document-scroll",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "html"
+        "element": "html @ html:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "body"
+        "element": "body @ html:nth-child(1) > body:nth-child(2)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div#storybook-root"
+        "element": "div#storybook-root @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "section"
+        "element": "section @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "div"
+        "element": "div @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4)"
       },
       {
         "kind": "unauthorized-overflow",
-        "element": "button"
+        "element": "button @ html:nth-child(1) > body:nth-child(2) > div:nth-child(5) > div:nth-child(1) > section:nth-child(1) > div:nth-child(1) > div:nth-child(4) > button:nth-child(1)"
       }
     ],
     "reason": "긴 빈 상태 동작 버튼 문구가 고정 높이를 넘고 내용이 창보다 길어 배치 결정이 필요하다."

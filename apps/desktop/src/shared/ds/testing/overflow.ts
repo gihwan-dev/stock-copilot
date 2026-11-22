@@ -1,8 +1,10 @@
 import {
+  childInside,
   clipped,
   isScreenReaderTable,
   isTruncated,
   isViewport,
+  noGeneratedContent,
   textInsideClippingAncestors,
   editableScrollableTextarea,
 } from "./overflow-geometry";
@@ -21,41 +23,46 @@ export type OverflowFinding = {
   readonly kind: OverflowKind;
   readonly element: string;
 };
+type Namer = (element: Readonly<Element>) => string;
 const nameOf = (element: Readonly<Element>): string =>
   `${element.tagName.toLowerCase()}${element.id === "" ? "" : `#${element.id}`}`;
 
 const finding = (
   kind: OverflowKind,
-  element: Readonly<Element>,
+  el: Readonly<Element>,
+  name: Namer,
 ): OverflowFinding => ({
   kind,
-  element: nameOf(element),
+  element: name(el),
 });
 const hasOverflow = (element: Readonly<Element>): boolean =>
   element.scrollWidth > element.clientWidth ||
   element.scrollHeight > element.clientHeight;
 const editableTextInput = (element: Readonly<Element>): boolean =>
   element.matches("input:not([readonly]):not(:disabled)") &&
+  element.closest("[inert]") === null &&
   ["text", "search", "tel", "url", "email", "password", "number"].includes(
     element.closest("input")?.type ?? "",
   );
-const hasOnePixelTextOverflow = (element: Readonly<Element>): boolean =>
+const onePixelOverflow = (element: Readonly<Element>): boolean =>
   element.scrollHeight === element.clientHeight + 1 &&
-  element.scrollWidth <= element.clientWidth &&
+  element.scrollWidth <= element.clientWidth;
+const hasOnePixelTextOverflow = (element: Readonly<Element>): boolean =>
+  onePixelOverflow(element) &&
   element.childNodes.length === 1 &&
   element.childNodes[0]?.nodeType === 3 &&
   element.textContent.trim() !== "";
 
+const visibleOverflow = (style: Readonly<CSSStyleDeclaration>): boolean =>
+  style.overflowX === "visible" && style.overflowY === "visible";
 const hasMetricStyle = (
   element: Readonly<Element>,
   style: Readonly<CSSStyleDeclaration>,
 ): boolean =>
   style.fontFamily.split(",")[0]?.replace(/["']/gu, "").trim() ===
     "IBM Plex Sans KR" &&
-  style.overflowX === "visible" &&
-  style.overflowY === "visible" &&
-  ["none", "normal"].includes(getComputedStyle(element, "::before").content) &&
-  ["none", "normal"].includes(getComputedStyle(element, "::after").content);
+  visibleOverflow(style) &&
+  noGeneratedContent(element);
 const textMatchesMetric = (
   text: Readonly<DOMRect>,
   bounds: Readonly<DOMRect>,
@@ -83,40 +90,53 @@ const isVisibleFontMetric = (element: Readonly<Element>): boolean => {
       (text) =>
         textMatchesMetric(text, bounds) &&
         !outsideWindow(text, element.ownerDocument) &&
-        textInsideClippingAncestors(element.parentElement, text),
+        textInsideClippingAncestors(element, text),
     )
+  );
+};
+const containsVisibleMetric = (element: Readonly<Element>): boolean => {
+  const child = element.firstElementChild;
+  if (
+    child === null ||
+    element.childNodes.length !== 1 ||
+    !onePixelOverflow(element)
+  )
+    return false;
+  if (
+    !visibleOverflow(getComputedStyle(element)) ||
+    !noGeneratedContent(element)
+  )
+    return false;
+  return (
+    childInside(element, child) &&
+    (isVisibleFontMetric(child) || containsVisibleMetric(child))
   );
 };
 const hasUnpermittedContentOverflow = (element: Readonly<Element>): boolean =>
   (element.scrollWidth > element.clientWidth && !editableTextInput(element)) ||
   (element.scrollHeight > element.clientHeight &&
     !editableScrollableTextarea(element) &&
-    !isVisibleFontMetric(element));
+    !isVisibleFontMetric(element) &&
+    !containsVisibleMetric(element));
 
 const isVisible = (element: Readonly<Element>): boolean =>
   element.getClientRects().length !== 0;
 const trimmedText = (text: string | null): string =>
   (text ?? "").replace(/\s+/gu, " ").trim();
-const hasFullTooltip = (
-  element: Readonly<Element>,
-  doc: Readonly<Document>,
-): boolean => {
+const hasFullTooltip = (element: Readonly<Element>): boolean => {
   const text = trimmedText(element.textContent);
-  const title = trimmedText(element.getAttribute("title"));
+  if (text === "") return false;
+  if (trimmedText(element.getAttribute("title")) === text) return true;
   const ids = (element.getAttribute("aria-describedby") ?? "")
     .trim()
     .split(/\s+/u);
-  return (
-    text !== "" &&
-    (title === text ||
-      ids.some((id) => {
-        const tooltip = doc.getElementById(id);
-        return (
-          tooltip?.getAttribute("role") === "tooltip" &&
-          trimmedText(tooltip.textContent) === text
-        );
-      }))
-  );
+  return ids.some((id) => {
+    const tooltip = element.ownerDocument.getElementById(id);
+    return (
+      tooltip?.getAttribute("role") === "tooltip" &&
+      trimmedText(tooltip.textContent) === text
+    );
+  });
 };
 const verticalViewport = (element: Readonly<Element>): boolean => {
   const overflow = getComputedStyle(element).overflowY;
@@ -127,11 +147,10 @@ const verticalViewport = (element: Readonly<Element>): boolean => {
 };
 
 const hasVerticalAncestor = (element: Readonly<Element>): boolean => {
-  const parent = element.parentElement?.closest("[data-scroll-viewport]");
+  const parent =
+    element.parentElement?.closest("[data-scroll-viewport]") ?? null;
   return (
-    parent !== null &&
-    parent !== undefined &&
-    (verticalViewport(parent) || hasVerticalAncestor(parent))
+    parent !== null && (verticalViewport(parent) || hasVerticalAncestor(parent))
   );
 };
 const nestedViewport = (element: Readonly<Element>): boolean =>
@@ -182,67 +201,49 @@ const unauthorized = (element: Readonly<Element>): boolean =>
   hasUnpermittedContentOverflow(element) &&
   (!isViewport(element) || element.matches("input,textarea")) &&
   (!isTruncated(element) || element.matches("input,textarea"));
-const missingTooltip = (
-  element: Readonly<Element>,
-  doc: Readonly<Document>,
-): boolean =>
-  element.hasAttribute("data-truncate") && !hasFullTooltip(element, doc);
-const outsideOverlay = (
-  element: Readonly<Element>,
-  doc: Readonly<Document>,
-): boolean =>
+const missingTooltip = (element: Readonly<Element>): boolean =>
+  element.hasAttribute("data-truncate") && !hasFullTooltip(element);
+const outsideOverlay = (element: Readonly<Element>): boolean =>
   element.matches(overlays) &&
-  outsideWindow(element.getBoundingClientRect(), doc);
-const reportIf = (
-  condition: boolean,
-  kind: OverflowKind,
-  element: Readonly<Element>,
-): readonly OverflowFinding[] => (condition ? [finding(kind, element)] : []);
+  outsideWindow(element.getBoundingClientRect(), element.ownerDocument);
 const findingsFor = (
   element: Readonly<Element>,
-  doc: Readonly<Document>,
-): readonly OverflowFinding[] => [
-  ...reportIf(
-    !isScreenReaderTable(element) && unauthorized(element),
-    "unauthorized-overflow",
-    element,
-  ),
-  ...reportIf(
-    !isScreenReaderTable(element) && clipped(element),
-    "clipped",
-    element,
-  ),
-  ...reportIf(missingTooltip(element, doc), "missing-tooltip", element),
-  ...reportIf(nestedViewport(element), "nested-scroll", element),
-  ...reportIf(outsideOverlay(element, doc), "outside-window", element),
-  ...reportIf(overlapsSibling(element), "overlapping-controls", element),
-];
+  describe: Namer,
+): readonly OverflowFinding[] => {
+  const visible = !isScreenReaderTable(element);
+  const checks = [
+    [visible && unauthorized(element), "unauthorized-overflow"],
+    [visible && clipped(element), "clipped"],
+    [missingTooltip(element), "missing-tooltip"],
+    [nestedViewport(element), "nested-scroll"],
+    [outsideOverlay(element), "outside-window"],
+    [overlapsSibling(element), "overlapping-controls"],
+  ] as const;
+  return checks.flatMap(([found, kind]) =>
+    found ? [finding(kind, element, describe)] : [],
+  );
+};
 export const inspectOverflow = (
   doc: Readonly<Document>,
+  describe: Namer = nameOf,
 ): readonly OverflowFinding[] => {
+  const root = doc.documentElement;
   if (
-    doc.documentElement.clientWidth === 0 ||
-    doc.documentElement.clientHeight === 0
+    root.clientWidth === 0 ||
+    root.clientHeight === 0 ||
+    getComputedStyle(root).display === "none"
   )
-    return [finding("layout-unavailable", doc.documentElement)];
-  if (getComputedStyle(doc.documentElement).display === "none")
-    return [finding("layout-unavailable", doc.documentElement)];
+    return [finding("layout-unavailable", root, describe)];
   const body = doc.querySelector("body");
-  if (body === null)
-    return [finding("layout-unavailable", doc.documentElement)];
+  if (body === null) return [finding("layout-unavailable", root, describe)];
   if (getComputedStyle(body).display === "none")
-    return [finding("layout-unavailable", body)];
-  const elements = [
-    doc.documentElement,
-    ...doc.querySelectorAll("body, body *"),
-  ];
-  const documentFindings = [doc.documentElement, body]
-    .filter(hasOverflow)
-    .map((element) => finding("document-scroll", element));
+    return [finding("layout-unavailable", body, describe)];
   return [
-    ...documentFindings,
-    ...elements
+    ...[root, body]
+      .filter(hasOverflow)
+      .map((element) => finding("document-scroll", element, describe)),
+    ...[root, ...doc.querySelectorAll("body, body *")]
       .filter(isVisible)
-      .flatMap((element) => findingsFor(element, doc)),
+      .flatMap((element) => findingsFor(element, describe)),
   ];
 };

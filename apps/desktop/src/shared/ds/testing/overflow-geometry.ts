@@ -19,34 +19,28 @@ export const editableScrollableTextarea = (
   element: Readonly<Element>,
 ): boolean =>
   element.matches("textarea:not([readonly]):not(:disabled)") &&
+  element.closest("[inert]") === null &&
   ["auto", "scroll"].includes(getComputedStyle(element).overflowY);
+export const noGeneratedContent = (element: Readonly<Element>): boolean =>
+  ["none", "normal"].includes(getComputedStyle(element, "::before").content) &&
+  ["none", "normal"].includes(getComputedStyle(element, "::after").content);
 
 type Escape = "none" | "absolute" | "fixed";
+const containingEffects =
+  "transform translate rotate scale perspective filter backdrop-filter".split(
+    " ",
+  );
 const establishesContainingBlock = (
   style: Readonly<CSSStyleDeclaration>,
 ): boolean =>
-  [
-    style.transform,
-    style.translate,
-    style.rotate,
-    style.scale,
-    style.perspective,
-    style.filter,
-    style.backdropFilter,
-  ].some((value) => value !== "" && value !== "none") ||
+  containingEffects.some(
+    (property) =>
+      !["", "none"].includes(style.getPropertyValue(property)) ||
+      style.willChange.split(/\s*,\s*/u).includes(property),
+  ) ||
   ["layout", "paint", "strict", "content"].some((value) =>
     style.contain.split(/\s+/u).includes(value),
-  ) ||
-  [
-    "transform",
-    "translate",
-    "rotate",
-    "scale",
-    "perspective",
-    "filter",
-    "backdrop-filter",
-  ].some((value) => style.willChange.split(/\s*,\s*/u).includes(value));
-
+  );
 const nextEscape = (position: string, escaping: Escape): Escape => {
   if (escaping !== "none") return escaping;
   if (position === "fixed") return "fixed";
@@ -62,14 +56,12 @@ const settledEscape = (
   if (pending === "absolute" && style.position !== "static") return "none";
   return pending;
 };
-
 const clipsOverflow = (style: Readonly<CSSStyleDeclaration>): boolean =>
   style.overflowX !== "visible" || style.overflowY !== "visible";
 const clipsPaint = (style: Readonly<CSSStyleDeclaration>): boolean =>
   ["paint", "strict", "content"].some((value) =>
     style.contain.split(/\s+/u).includes(value),
   );
-
 const clips = (style: Readonly<CSSStyleDeclaration>): boolean =>
   clipsOverflow(style) || clipsPaint(style);
 const bodyClipsViewport = (
@@ -86,7 +78,6 @@ const bodyClipsViewport = (
   const rootStyle = getComputedStyle(root);
   return rootStyle.overflowX === "visible" && rootStyle.overflowY === "visible";
 };
-
 const nearestClipFrom = (
   element: Readonly<Element>,
   escaping: Escape,
@@ -113,7 +104,6 @@ type Axis = {
   readonly canScroll: boolean;
   readonly reverse: boolean;
 };
-
 const outsideReach = (
   inner: Readonly<Interval>,
   clip: Readonly<Interval>,
@@ -128,19 +118,13 @@ const outsideReach = (
   );
 };
 
-type ClipBounds = {
-  readonly left: number;
-  readonly right: number;
-  readonly top: number;
-  readonly bottom: number;
-};
+type ClipBounds = Pick<DOMRectReadOnly, "left" | "right" | "top" | "bottom">;
 const reversedFlex = (
   style: Readonly<CSSStyleDeclaration>,
   direction: string,
 ): boolean =>
   ["flex", "inline-flex"].includes(style.display) &&
   style.flexDirection === direction;
-
 const viewportClipped = (
   parent: Readonly<Element>,
   inner: Readonly<DOMRect>,
@@ -188,6 +172,22 @@ export const clipped = (element: Readonly<Element>): boolean => {
     inner.top < top ||
     inner.right > right ||
     inner.bottom > bottom
+  );
+};
+
+export const childInside = (
+  element: Readonly<Element>,
+  child: Readonly<Element>,
+): boolean => {
+  const inner = child.getBoundingClientRect();
+  const outer = element.getBoundingClientRect();
+  const left = outer.left + element.clientLeft;
+  const top = outer.top + element.clientTop;
+  return (
+    inner.left >= left &&
+    inner.right <= left + element.clientWidth &&
+    inner.top >= top &&
+    inner.bottom <= top + element.clientHeight
   );
 };
 
