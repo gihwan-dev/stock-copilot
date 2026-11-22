@@ -2082,6 +2082,69 @@ mod tests {
         );
     }
 
+    struct DiscardOldThenNew<'a> {
+        repository: &'a MemorySignalEvaluationRepository,
+        source: MasterInstrument,
+        input: EvaluateSignalInputs,
+        error: SystemPortError,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    impl SignalEvaluationData for DiscardOldThenNew<'_> {
+        fn inputs(
+            &self,
+            _record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<EvaluateSignalInputs, SystemPortError>> + Send {
+            let result = if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                discard_current(self.repository, &self.source.row().instrument_id);
+                submit(self.repository, "task-new", "98", &self.source);
+                Err(self.error)
+            } else {
+                Ok(self.input.clone())
+            };
+            std::future::ready(result)
+        }
+    }
+
+    #[test]
+    fn discarded_stale_submission_does_not_hide_a_concurrent_new_submission() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, _) = events();
+        run(
+            EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("before"),
+            ),
+        )
+        .expect("이전 신호");
+        let inputs = DiscardOldThenNew {
+            repository: &repository,
+            source: source.clone(),
+            input: setup(&source),
+            error: SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::InvalidData,
+            ),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        };
+        let result = run(EvaluateSignals::new(&repository, &inputs, &bus).execute(
+            &source.row().instrument_id,
+            fixtures::day(60),
+            occurrence("retry"),
+        ))
+        .expect("새 제출 재평가");
+        assert_eq!(reason(&result), None);
+        assert_eq!(inputs.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("현재");
+        assert_eq!(
+            snapshot.current.expect("신호").submission.as_estimate_id(),
+            &fixtures::task_id("task-new")
+        );
+    }
+
     #[test]
     fn invalidation_with_no_current_signal_returns_the_read_failure_without_an_event() {
         let source = fixtures::master();
