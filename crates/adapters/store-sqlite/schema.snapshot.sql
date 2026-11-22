@@ -182,4 +182,5 @@ CREATE TRIGGER proposal_consumptions_no_delete BEFORE DELETE ON proposal_consump
 CREATE TRIGGER proposal_consumptions_no_replace BEFORE INSERT ON proposal_consumptions WHEN EXISTS (SELECT 1 FROM proposal_consumptions WHERE proposal_id = NEW.proposal_id) BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER proposal_consumptions_no_update BEFORE UPDATE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER thesis_history_no_delete BEFORE DELETE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
+CREATE TRIGGER thesis_history_no_replace BEFORE INSERT ON thesis_history WHEN EXISTS (SELECT 1 FROM thesis_history WHERE instrument = NEW.instrument AND sequence = NEW.sequence) BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
 CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;

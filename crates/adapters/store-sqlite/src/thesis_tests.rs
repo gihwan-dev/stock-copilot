@@ -438,3 +438,32 @@ fn orphan_history_is_corruption_instead_of_an_absent_note() {
     rt.block_on(store.store(&id, &Thesis::new()))
         .expect_err("orphan history is corrupt");
 }
+
+#[test]
+fn sqlite_rejects_conflict_replacement_of_past_history() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = ThesisStore::new(&database);
+    let id = instrument("instrument-a");
+    let thesis = changed_thesis();
+    rt.block_on(store.store(&id, &thesis)).expect("store");
+    for statement in [
+        crate::sql::thesis_tests::REPLACE_HISTORY,
+        crate::sql::thesis_tests::UPSERT_HISTORY,
+    ] {
+        rt.block_on(database.write(move |tx| {
+            tx.execute(statement, ["instrument-a"])?;
+            Ok(())
+        }))
+        .expect_err("past history cannot be replaced");
+    }
+    assert_eq!(
+        rt.block_on(store.load(&id))
+            .expect("load")
+            .expect("present")
+            .history(),
+        thesis.history()
+    );
+}

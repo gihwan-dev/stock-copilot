@@ -7,3 +7,6 @@ pub(crate) const FAIL_SECOND: &str = "CREATE TRIGGER thesis_fixture_failure BEFO
 pub(crate) const INSERT_ORPHAN: &str =
     "INSERT INTO thesis_history(instrument, sequence, payload) VALUES (?1, 1, 'broken')";
 pub(crate) const DISABLE_FK_FIXTURE: &str = "PRAGMA foreign_keys = OFF";
+
+pub(crate) const REPLACE_HISTORY: &str = "INSERT OR REPLACE INTO thesis_history(instrument, sequence, payload) VALUES (?1, 1, 'changed')";
+pub(crate) const UPSERT_HISTORY: &str = "INSERT INTO thesis_history(instrument, sequence, payload) VALUES (?1, 1, 'changed') ON CONFLICT(instrument, sequence) DO UPDATE SET payload = excluded.payload";
