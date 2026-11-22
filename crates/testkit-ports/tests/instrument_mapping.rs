@@ -10,7 +10,7 @@ mod tests {
         sync::{Arc, Barrier},
         task::{Context, Poll, Waker},
     };
-    use testkit_ports::instrument_mapping::MemoryInstrumentMappingRepository;
+    use testkit_ports::memory::MemoryInstrumentMappingRepository;
 
     fn run<F: Future>(future: F) -> F::Output {
         let mut pinned = std::pin::pin!(future);

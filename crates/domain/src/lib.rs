@@ -17,7 +17,8 @@ pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_mapping::{
-    InstrumentMappingError, InstrumentMappings, InstrumentSource, MappingAssignment,
+    InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
+    InstrumentSource, MappingAssignment,
 };
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 

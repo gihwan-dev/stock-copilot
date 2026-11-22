@@ -6,30 +6,34 @@
 
 `InstrumentSource`는 알려진 국가 시장, 원문 심볼, 토스 응답의 ISIN을 함께 보존한다. `ListedStock` 및 `StockInfo`에는 `isinCode`가 있으나 내부 ID는 없다. 기존 `IsinCode`의 입력 제한은 원문 보존용이며 체크디지트 검증이나 발행 사실을 증명하지 않는다. 토스 명세는 액면분할·병합 뒤 ISIN이 달라질 수도 있다고 명시한다. 심볼이나 ISIN에서 내부 ID를 계산하지 않는다(ADR 0022).
 
-`InstrumentMappings`는 한 저장소 원장 안에서 원본과 불투명 ID를 묶는다. `ensure`는 이미 있는 활성 원본이면 제안 ID를 무시하고 기존 ID를, 없으면 충돌 검사 후 제안 ID를 발급한다. 제안 ID는 원본의 시장·심볼·ISIN에서 유도하지 않는 독립적인 발급자가 준비한다. 빈 원장에서 선택한 제안값이 같으면 결과는 결정적이고 서로 다른 제안값으로 시작한 두 원장 사이의 ID 동등성은 약속하지 않는다. 충돌은 `IdAlreadyUsed`로 거부하며 재시도는 새로운 독립 ID로 한다. 기존에 다른 곳에서 발급된 종목 ID도 사용 중인 ID 집합에 포함한 뒤 이 계약을 사용해야 한다. 모든 원장과 저장 이력에서 ID 유일성을 보존해야 한다. 무작위 생성 자체의 충돌 확률을 유일성 보장으로 삼지 않는다. 동시 호출과 재시작 이후에도 저장소가 이 판정과 저장을 하나의 직렬화 경계에서 처리한다.
+`InstrumentMappings`는 한 저장소 원장 안에서 원본과 불투명 ID를 묶는다. `ensure`는 이미 있는 활성 원본이면 제안 ID를 무시하고 기존 ID를, 없으면 충돌 검사 후 제안 ID를 발급한다. 제안 ID는 원본의 시장·심볼·ISIN에서 유도하지 않는 독립적인 발급자가 준비한다. 빈 원장에서 선택한 제안값이 같으면 결과는 결정적이고 서로 다른 제안값으로 시작한 두 원장 사이의 ID 동등성은 약속하지 않는다. 충돌은 `IdAlreadyUsed`로 거부하며 재시도는 새로운 독립 ID로 한다. 기존에 다른 곳에서 발급된 종목 ID도 사용 중인 ID 집합에 포함한 뒤 이 계약을 사용해야 한다. 모든 원장과 저장 이력에서 ID 유일성을 보존해야 한다. 무작위 생성 자체의 충돌 확률을 유일성 보장으로 삼지 않는다. 동시 호출과 재시작 이후에도 저장소가 이 판정과 저장을 하나의 직렬화 경계에서 처리한다. 현재 후보 타입만으로 발급자의 독립성이나 다른 원장에 이미 쓰인 ID의 부재를 증명할 수 없다. 심볼이나 ISIN에서 후보를 만드는 호출도 컴파일되므로 S의 발급원·전역 제약이 준비되기 전에는 연결하지 않는다.
 
 판정에는 현 시점의 목록이 충분하고 누락된 상장폐지·재상장·식별자 변경이 없음을 호출자가 확인했다는 전제가 있다. 이 코드는 외부 자료의 진위·완전성이나 관측 사이에 발생했다가 사라진 사건을 증명하지 않는다. 그 전제를 확인할 수 없으면 호출자는 원장을 조회·발급하기 전에 실패시킨다. 특히 현재 토스 응답만으로 이 전제를 충족한다고 주장하지 않는다. `retire`는 확인된 기존 원본의 종료를 기록하고 원본과 ID를 영구 보존한다. 삭제·재활성화 API는 없다. 불확정 식별 변경의 자동 이관도 없다.
 
-| 상황                                                  | 판정                                                         |
-| ----------------------------------------------------- | ------------------------------------------------------------ |
-| 같은 시장·심볼·ISIN의 연속 관측, 연속성이 확인됨      | 기존 활성 ID 반환                                            |
-| 같은 시장·심볼에 다른 ISIN                            | 동일 여부 불확정, `IdentityUncertain`                        |
-| 같은 ISIN에 다른 심볼 또는 시장                       | 동일 여부 불확정, `IdentityUncertain`                        |
-| 대소문자만 다른 심볼 또는 ISIN이 겹침                 | 원문은 보존하되 신규 발급하지 않고 `IdentityUncertain`       |
-| 위의 겹침 없는 새 원본, 신규성과 연속성 전제가 충족됨 | 사용되지 않은 제안 ID로 발급                                 |
-| 매핑이 없는 원본의 조회                               | `Missing`으로 실패. 심볼만으로 새 ID를 추측하지 않음         |
-| 기존 원본의 확인된 상장폐지                           | `retire`가 이력을 보존하고 이후 조회·발급을 `Retired`로 거부 |
-| 상장폐지 뒤 같은 값으로 재상장                        | `Retired`, 자동 복구하지 않음                                |
-| 상장폐지 뒤 같은 심볼의 다른 ISIN으로 재상장          | `IdentityUncertain`, 자동 재발급하지 않음                    |
-| 이미 쓰인 제안 ID로 다른 원본을 발급                  | `IdAlreadyUsed`, 상태 불변                                   |
+| 상황                                                  | 판정                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------- |
+| 같은 시장·심볼·ISIN의 연속 관측, 연속성이 확인됨      | 기존 활성 ID 반환                                                 |
+| 같은 시장·심볼에 다른 ISIN                            | 동일 여부 불확정, `IdentityUncertain`                             |
+| 같은 ISIN에 다른 심볼 또는 시장                       | 동일 여부 불확정, `IdentityUncertain`                             |
+| 대소문자만 다른 심볼 또는 ISIN이 겹침                 | 원문은 보존하되 신규 발급하지 않고 `IdentityUncertain`            |
+| 위의 겹침 없는 새 원본, 신규성과 연속성 전제가 충족됨 | 사용되지 않은 제안 ID로 발급                                      |
+| 매핑이 없는 원본의 조회                               | `Missing`으로 실패. 심볼만으로 새 ID를 추측하지 않음              |
+| 기존 원본의 확인된 상장폐지                           | `retire`가 이력을 보존하고 이후 `resolve`·발급을 `Retired`로 거부 |
+| 상장폐지 뒤 같은 값으로 재상장                        | `Retired`, 자동 복구하지 않음                                     |
+| 상장폐지 뒤 같은 심볼의 다른 ISIN으로 재상장          | `IdentityUncertain`, 자동 재발급하지 않음                         |
+| 이미 쓰인 제안 ID로 다른 원본을 발급                  | `IdAlreadyUsed`, 상태 불변                                        |
 
 `InstrumentMappingRepository`는 아래 연산을 제공한다. `ensure`의 확인·충돌 검사·발급·저장은 원자적이다. `retire`도 같은 직렬화 경계에 참여한다. 저장 실패나 판정 오류는 부분 변경이 없어야 한다. 가짜는 하나의 잠금으로 이 계약을 재현하며 영속 저장은 하지 않는다.
 
 | 메서드                      | 계약                                                                         |
 | --------------------------- | ---------------------------------------------------------------------------- |
 | `resolve(source)`           | 정확히 같은 활성 원본의 기존 ID 또는 전용 판정 오류                          |
+| `lookup(source)`            | 저장된 원본·ID·상태를 변경 없이 반환. 폐지 이력도 읽을 수 있음               |
+| `for_id(id)`                | ID의 원본·상태 목록을 변경 없이 반환. 없으면 `Missing`                       |
 | `ensure(source, candidate)` | 원자적으로 기존 ID 반환 또는 제안 ID 발급. 충돌·불확실·종료는 변경 없이 오류 |
 | `retire(source)`            | 기존 원본의 종료를 원자적으로 기록. 반복은 같은 ID 반환                      |
+
+조회 결과 `InstrumentMappingRecord`는 DB 어댑터가 검증된 값으로 만들 수 있는 자료형이며, 생성 자체가 실제 원장의 일치나 사용자의 확인을 증명하지 않는다. 저장소는 조회 결과와 영속 원장이 일치하도록 보장한다. 폐지 이력을 읽는 `lookup`·`for_id`가 거래 가능한 현재 종목을 뜻하지는 않는다. 현재 원장은 ID 하나에 원본 하나만 보관하고, 확인된 코드 변경을 이력으로 연결하는 연산은 없다.
 
 ## 실측 대기
 
@@ -40,42 +44,51 @@
 ## 인계
 
 - T-21: 종목 조회의 완전성과 상태 연속성을 먼저 입증하고 불확실하면 전용 사유로 전체 실패한다. 원본 시장·심볼·ISIN을 상세와 대조하고, 원장에 폐지 사실을 기록하는 과정과 조회·갱신 경쟁을 같은 직렬화 경계로 통합한다. 실측에서 연속성을 보장할 수 없으면 연결하지 않는다.
-- S 묶음(종목 대응 저장소): 독립 ID 발급원과 원장 영속성·복원, 원본 겹침 및 ID 유일성 제약, 원자적 `ensure`·`retire`, 충돌 재시도, 장애 롤백과 동시성·재시작 계약 테스트를 구현한다. 확인된 변경을 어떻게 이관할지는 별도 결정 전까지 닫아 둔다.
+- T-21·S-15 후속 종목 대응 저장소 작업(ID 정의 대기): R-11의 사용자 확인을 거친 코드·ISIN 변경은 내부 ID를 유지하고 원본 이력으로 연결해야 한다. **현재 미구현·정의 대기**다. 제안은 확인 사실과 기업행위 기록, 변경 전후 원본과 내부 ID를 함께 전달하고 기존 이력을 남긴 채 원자적으로 연결하는 것이다. 확인 증거의 출처·권한, 충돌·재상장·정정의 판정과 과거 조회를 먼저 정한다. 그 전에는 추정으로 연결하거나 재발급하지 않는다.
+- S-15 후속 종목 대응 저장소 작업(ID 정의 대기): 독립 ID 발급원과 원장 영속성·복원, 기존 발급 ID의 편입, 원본 겹침 및 전역 ID 유일성 제약, 원자적 `ensure`·`retire`, 충돌 재시도, 장애 롤백과 동시성·재시작 계약 테스트를 구현한다. 임의 후보를 허용하는 현재 타입은 발급 출처를 인증하지 않는다.
 
 ## 검사
 
-완료 기준에서 도출한 테스트를 구현 전 추가하여 미정의 API로 컴파일 실패를 확인했다. 각 소스 필드 보존, 중복 발급·제안 ID 충돌, 심볼 변경·재사용, 시장 변경, 폐지·재상장, 발급 순서 속성 및 동시에 같은 소스 발급을 검사한다. 손 변형 결과는 아래 표에 기록한다.
+완료 기준에서 도출한 테스트를 구현 전 추가하여 미정의 API로 컴파일 실패를 확인했다. 각 소스 필드 보존, 중복 발급·제안 ID 충돌, 심볼 변경·재사용, 시장 변경, 폐지·재상장, 비파괴 이력 조회 및 동시에 같은 소스 발급을 검사한다. 독립 참조 모델과 임의 연산열로 실패 시 상태 불변, 충돌 및 폐지된 ID 재사용 거부를 검증한다. 손 변형 결과는 아래 표에 기록한다.
 
 ## 손 변형
 
-| 번호 | 변형                                  | 결과                                                                                |
-| ---- | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| 1    | 시장 비교 반전                        | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 2    | 시장과 심볼 조건을 OR로 변경          | 검출: `tests::same_symbol_in_different_markets_needs_a_distinct_isin_and_candidate` |
-| 3    | 심볼 대소문자 비교를 구분 비교로 변경 | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
-| 4    | ISIN 대소문자 비교를 구분 비교로 변경 | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
-| 5    | 시장 심볼과 ISIN 결합을 AND로 변경    | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
-| 6    | 불확실 분기를 구별 분기로 변경        | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 7    | 정확 조회 비교 반전                   | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
-| 8    | 활성 조회를 폐지 오류로 변경          | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
-| 9    | 폐지 조회에서 이전 ID 반환            | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 10   | 조회 불확실 조건 반전                 | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 11   | 조회 불확실 오류를 없음으로 변경      | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 12   | 조회 없음 오류를 폐지로 변경          | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 13   | 기존 대응을 새 발급으로 보고          | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
-| 14   | 기존 대응 대신 제안 ID 반환           | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
-| 15   | 판정 오류를 없음으로 변경             | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
-| 16   | ID 충돌 비교 반전                     | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 17   | ID 충돌 거부 제거                     | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 18   | 저장 시장을 미국으로 고정             | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 19   | 저장 심볼을 변경                      | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
-| 20   | 저장 ISIN을 변경                      | 검출: `tests::same_symbol_in_different_markets_needs_a_distinct_isin_and_candidate` |
-| 21   | 저장 ID를 변경                        | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 22   | 신규 발급 결과를 기존으로 변경        | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
-| 23   | 폐지 대상 비교 반전                   | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
-| 24   | 폐지 불확실 조건 반전                 | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
-| 25   | 폐지 불확실 오류를 없음으로 변경      | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
-| 26   | 폐지 대상 없음을 폐지 오류로 변경     | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
-| 27   | 폐지 반환 ID 변경                     | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
+| 번호 | 변형                                    | 결과                                                                                |
+| ---- | --------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1    | 시장 비교 반전                          | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
+| 2    | 시장과 심볼 조건을 OR로 변경            | 검출: `tests::same_symbol_in_different_markets_needs_a_distinct_isin_and_candidate` |
+| 3    | 심볼 대소문자 비교를 구분 비교로 변경   | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
+| 4    | ISIN 대소문자 비교를 구분 비교로 변경   | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
+| 5    | 시장 심볼과 ISIN 결합을 AND로 변경      | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
+| 6    | 기록된 상태를 항상 활성으로 변경        | 검출: `tests::storage_adapter_can_form_a_typed_record_without_changing_the_ledger`  |
+| 7    | 정확한 원본 조회 비교 반전              | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
+| 8    | 불확실 원본을 없는 원본으로 분류        | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
+| 9    | 독립된 원본을 불확실로 분류             | 검출: `tests::retiring_an_unrelated_source_leaves_the_existing_mapping_unchanged`   |
+| 10   | 조회에서 없는 원본을 폐지로 분류        | 검출: `tests::same_symbol_in_different_markets_needs_a_distinct_isin_and_candidate` |
+| 11   | 활성 종목 조회를 폐지 오류로 변경       | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
+| 12   | 폐지 종목을 활성 ID로 반환              | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
+| 13   | 비파괴 원본 조회를 항상 없음으로 변경   | 검출: `tests::read_only_lookup_keeps_identity_and_status_after_delisting`           |
+| 14   | 비파괴 조회에서 폐지를 활성으로 변경    | 검출: `tests::read_only_lookup_keeps_identity_and_status_after_delisting`           |
+| 15   | ID 역조회 비교 반전                     | 검출: `tests::read_only_lookup_keeps_identity_and_status_after_delisting`           |
+| 16   | ID 역조회 빈 결과 판정 반전             | 검출: `tests::read_only_lookup_keeps_identity_and_status_after_delisting`           |
+| 17   | ID 역조회 결과를 빈 목록으로 변경       | 검출: `tests::read_only_lookup_keeps_identity_and_status_after_delisting`           |
+| 18   | 기존 대응을 신규 발급으로 보고          | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
+| 19   | 기존 대응 대신 새 후보 반환             | 검출: `tests::mapping_preserves_each_source_field_and_uses_existing_id`             |
+| 20   | 판정 오류를 없음으로 변경               | 검출: `tests::case_variants_never_become_distinct_new_sources`                      |
+| 21   | ID 충돌 비교 반전                       | 검출: `tests::same_symbol_in_different_markets_needs_a_distinct_isin_and_candidate` |
+| 22   | ID 충돌 거부 제거                       | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
+| 23   | 신규 발급 결과를 기존으로 변경          | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
+| 24   | 폐지 대상 비교 반전                     | 검출: `tests::retiring_an_unrelated_source_leaves_the_existing_mapping_unchanged`   |
+| 25   | 폐지 상태를 활성으로 유지               | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
+| 26   | 폐지 불확실 오류를 없음으로 변경        | 검출: `tests::uncertain_changes_fail_without_mutating_or_reusing_candidates`        |
+| 27   | 무관한 폐지 대상을 불확실로 변경        | 검출: `tests::retiring_an_unrelated_source_leaves_the_existing_mapping_unchanged`   |
+| 28   | 폐지 반환 ID 변경                       | 검출: `tests::delisting_is_permanent_and_relisting_requires_external_resolution`    |
+| 29   | 가짜: 발급 future를 생성 즉시 실행      | 검출: `tests::dropping_unpolled_writes_does_not_change_the_mapping`                 |
+| 30   | 가짜: 폐지 future를 생성 즉시 실행      | 검출: `tests::dropping_unpolled_writes_does_not_change_the_mapping`                 |
+| 31   | 가짜: 저장하지 않고 새 발급만 반환      | 검출: `tests::concurrent_retirement_never_reactivates_a_source`                     |
+| 32   | 가짜: 폐지하지 않고 활성 ID만 반환      | 검출: `tests::repository_retains_mapping_and_retirement_across_calls`               |
+| 33   | 가짜: 원본 이력 조회에서 항상 없음 반환 | 검출: `tests::repository_reads_retired_history_without_reactivating_or_writing`     |
+| 34   | 가짜: ID 이력 조회를 빈 목록으로 변경   | 검출: `tests::repository_reads_retired_history_without_reactivating_or_writing`     |
+| 35   | 가짜: 현재 원본 조회에서 항상 없음 반환 | 검출: `tests::dropping_unpolled_writes_does_not_change_the_mapping`                 |
 
-컴파일되지 않은 변형 4개는 건수에서 제외했다. 위 표는 격리 복사본에서 정상 테스트 통과를 먼저 확인한 뒤 각 변형을 따로 적용한 실제 실행 결과다. 이후 전체 훅의 커버리지 검사에서 무관한 원본의 폐지 분기가 빠진 것이 드러나 해당 회귀 테스트를 추가했다. 계측 재실행에서 새 파일의 줄·영역은 각각 100%다.
+컴파일되지 않은 도메인 변형 4개는 건수에서 제외했다. 위 표는 격리 복사본에서 정상 테스트가 통과한 뒤 변형을 하나씩 적용한 실제 실행 결과다. 제3의 관계 변형을 추가한 별도 컴파일 실험은 소진 `match` 두 곳에서 E0004로 실패했다. 이 컴파일 실패는 표의 변형 검출 건수에 넣지 않는다.
