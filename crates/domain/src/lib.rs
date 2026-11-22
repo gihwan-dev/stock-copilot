@@ -55,6 +55,11 @@ pub use ratio::Ratio;
 
 mod exact_arithmetic;
 pub use exact_arithmetic::{ApproximateRatio, RatioQuotient};
+mod estimate_return;
+pub use estimate_return::{
+    BenchmarkCashFlows, EstimateCashFlows, EstimateEntryError, EstimateEntryPrice,
+    EstimateReturnError,
+};
 mod domain_time;
 mod market_session;
 pub use domain_time::{
@@ -223,9 +228,9 @@ pub use order_summary_facts::{
 
 mod calibration;
 pub use calibration::{
-    CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
-    CalibrationError, CalibrationEstimate, CalibrationEstimateId, CalibrationEvidence,
-    CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey,
+    CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCapacity,
+    CalibrationCount, CalibrationError, CalibrationEstimate, CalibrationEstimateId,
+    CalibrationEvidence, CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey,
     CalibrationLedgerHead, CalibrationModel, CalibrationOutcome, CalibrationPosition,
     CalibrationReadiness, CalibrationSnapshot, CalibrationTable, ConservativeCalibration,
     EligibleCalibration, ModelIdentityPart,
