@@ -1,0 +1,6 @@
+use application::ProposalRepository;
+use domain::ProposalId;
+pub async fn cannot_restore<R: ProposalRepository>(repo: &R, id: &ProposalId) {
+    let _loaded = repo.validated(id).await;
+}
+fn main() {}

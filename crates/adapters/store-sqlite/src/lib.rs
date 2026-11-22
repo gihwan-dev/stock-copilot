@@ -146,3 +146,15 @@ mod thesis_tests;
 
 mod thesis;
 pub use thesis::ThesisStore;
+
+#[cfg(test)]
+mod consumption_tests;
+#[cfg(test)]
+mod validation_report_tests;
+
+mod proposal_consumption;
+pub use proposal_consumption::ProposalConsumptionStore;
+mod validation_report;
+pub use validation_report::ValidationReportStore;
+#[cfg(test)]
+mod proposal_boundary_tests;

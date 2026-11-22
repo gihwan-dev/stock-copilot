@@ -123,7 +123,7 @@ mod volatility_display;
 mod volatility_reference;
 pub use proposal::{
     CheckResult, Draft, Proposal, ProposalError, ProposalExecutionError, Validated,
-    ValidationCheck, ValidationReport,
+    ValidationCheck, ValidationReport, ValidationReportResults,
 };
 mod proposal_id;
 pub use proposal_id::ProposalId;

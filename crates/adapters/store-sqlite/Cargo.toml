@@ -16,4 +16,5 @@ domain = { path = "../../domain" }
 sha2 = { version = "=0.10.9", default-features = false }
 
 [dev-dependencies]
+testkit = { path = "../../testkit" }
 testkit-ports = { path = "../../testkit-ports" }

@@ -379,3 +379,9 @@ pub use information_storage::{
     DisclosureRepository, InformationKey, InformationLinks, InformationSearch, SearchLimit,
     SearchLimitError,
 };
+
+mod proposal_storage;
+pub use proposal_storage::{
+    ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
+    ValidationReportRepository,
+};
