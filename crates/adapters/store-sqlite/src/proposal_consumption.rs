@@ -36,13 +36,15 @@ fn consume(
     transaction: &Transaction<'_>,
     proposal: &ProposalId,
 ) -> rusqlite::Result<ConsumptionOutcome> {
-    if status(transaction, proposal)? == ConsumptionStatus::Consumed {
-        return Ok(ConsumptionOutcome::AlreadyConsumed);
-    }
-    match transaction.execute(sql::INSERT, [proposal.as_client_order_id().as_str()]) {
-        Ok(1) => Ok(ConsumptionOutcome::Recorded),
-        Ok(_) => Err(rusqlite::Error::InvalidQuery),
-        Err(error) => Err(error),
+    match status(transaction, proposal)? {
+        ConsumptionStatus::Consumed => Ok(ConsumptionOutcome::AlreadyConsumed),
+        ConsumptionStatus::NotConsumed => {
+            match transaction.execute(sql::INSERT, [proposal.as_client_order_id().as_str()]) {
+                Ok(1) => Ok(ConsumptionOutcome::Recorded),
+                Ok(_) => Err(rusqlite::Error::InvalidQuery),
+                Err(error) => Err(error),
+            }
+        }
     }
 }
 impl ProposalConsumptionRepository for ProposalConsumptionStore<'_> {
