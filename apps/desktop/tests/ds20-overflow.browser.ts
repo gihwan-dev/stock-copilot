@@ -1367,3 +1367,449 @@ describe("protected stress data", () => {
     expect(stressFixtures.empty).toBe("");
   });
 });
+
+describe("editable content around native modals", () => {
+  const input =
+    '<input id="modal-field" type="text" value="longlonglonglonglonglonglong" style="width:60px">';
+  const textarea =
+    '<textarea id="modal-field" style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea>';
+  it.each([
+    {
+      name: "input outside one modal",
+      markup: `${input}<dialog id="first">modal</dialog>`,
+      open: ["first"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea outside one modal",
+      markup: `${textarea}<dialog id="first">modal</dialog>`,
+      open: ["first"],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input escaping an inert ancestor in a modal",
+      markup: `<div inert><dialog id="first">${input}</dialog></div>`,
+      open: ["first"],
+      type: "input",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "textarea escaping an inert ancestor in a modal",
+      markup: `<div inert><dialog id="first">${textarea}</dialog></div>`,
+      open: ["first"],
+      type: "textarea",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "input escaping a CSS inert ancestor in a modal",
+      markup: `<div style="interactivity:inert"><dialog id="first">${input}</dialog></div>`,
+      open: ["first"],
+      type: "input",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "input below a later modal",
+      markup: `<dialog id="first">${input}</dialog><dialog id="second">upper</dialog>`,
+      open: ["first", "second"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea below a modal opened in reverse DOM order",
+      markup: `<dialog id="first">upper</dialog><dialog id="second">${textarea}</dialog>`,
+      open: ["second", "first"],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input in a modal containing another modal",
+      markup: `<dialog id="first">${input}<dialog id="second">upper</dialog></dialog>`,
+      open: ["first", "second"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input inside the upper modal",
+      markup: `<dialog id="first">lower</dialog><dialog id="second">${input}</dialog>`,
+      open: ["first", "second"],
+      type: "input",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "textarea inside the upper modal opened in reverse DOM order",
+      markup: `<dialog id="first">${textarea}</dialog><dialog id="second">lower</dialog>`,
+      open: ["second", "first"],
+      type: "textarea",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "input in an inert descendant of the modal",
+      markup: `<dialog id="first"><div inert>${input}</div></dialog>`,
+      open: ["first"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input in a CSS inert descendant of the modal",
+      markup: `<dialog id="first"><div style="interactivity:inert"><div style="interactivity:auto">${input}</div></div></dialog>`,
+      open: ["first"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea in an inert modal",
+      markup: `<dialog id="first" inert>${textarea}</dialog>`,
+      open: ["first"],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input with CSS interactivity inert",
+      markup: `<div style="interactivity:inert">${input}</div>`,
+      open: [],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input with an inert attribute and CSS auto override",
+      markup: `<div inert style="interactivity:auto"><div style="interactivity:auto">${input}</div></div>`,
+      open: [],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea inside CSS inert despite an auto override",
+      markup: `<div style="interactivity:inert"><div style="interactivity:auto">${textarea}</div></div>`,
+      open: [],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+  ])(
+    "classifies $name without changing focus",
+    async ({ markup, open, type, focus, report }) => {
+      const doc = await makeDocument(markup);
+      for (const id of open) {
+        const dialog = doc.querySelector<HTMLDialogElement>(`#${id}`);
+        if (dialog === null) throw new Error("modal missing");
+        dialog.showModal();
+      }
+      const field = doc.querySelector<HTMLElement>("#modal-field");
+      if (field === null) throw new Error("field missing");
+      expect(
+        field.scrollWidth > field.clientWidth ||
+          field.scrollHeight > field.clientHeight,
+      ).toBe(true);
+      field.focus();
+      expect(doc.activeElement === field).toBe(focus);
+      const active = doc.activeElement;
+      const findings = inspectOverflow(doc);
+      expect(doc.activeElement).toBe(active);
+      expect(findings).not.toContainEqual({
+        kind: "layout-unavailable",
+        element: "html",
+      });
+      expect(
+        findings.some(
+          (finding) =>
+            finding.kind === "unauthorized-overflow" &&
+            finding.element === `${type}#modal-field`,
+        ),
+      ).toBe(report);
+    },
+  );
+
+  it("does not treat an ordinary open dialog as modal", async () => {
+    const doc = await makeDocument(
+      `${input}<dialog id="modeless">dialog</dialog>`,
+    );
+    const dialog = doc.querySelector<HTMLDialogElement>("#modeless");
+    const field = doc.querySelector<HTMLInputElement>("#modal-field");
+    if (dialog === null || field === null) throw new Error("fixture missing");
+    dialog.show();
+    field.focus();
+    expect(doc.activeElement).toBe(field);
+    expect(field.scrollWidth).toBeGreaterThan(field.clientWidth);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "input#modal-field",
+    });
+  });
+
+  it("detects an inert attribute when CSS interactivity is unavailable", async () => {
+    const doc = await makeDocument(`<div inert>${input}</div>`);
+    const field = doc.querySelector<HTMLInputElement>("#modal-field");
+    if (field === null) throw new Error("field missing");
+    field.focus();
+    expect(doc.activeElement).not.toBe(field);
+    expect(field.scrollWidth).toBeGreaterThan(field.clientWidth);
+    const original = globalThis.getComputedStyle;
+    const styles = vi
+      .spyOn(globalThis, "getComputedStyle")
+      .mockImplementation((element, pseudo) => {
+        const style = original(element, pseudo);
+        return new Proxy(style, {
+          get(target, property) {
+            if (property === "getPropertyValue")
+              return (name: string): string =>
+                name === "interactivity" ? "" : target.getPropertyValue(name);
+            const value = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      });
+    try {
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#modal-field",
+      });
+    } finally {
+      styles.mockRestore();
+    }
+  });
+
+  it("keeps an editable input in a single modal after focus is cleared", async () => {
+    const doc = await makeDocument(`<dialog id="first">${input}</dialog>`);
+    const dialog = doc.querySelector<HTMLDialogElement>("#first");
+    const field = doc.querySelector<HTMLInputElement>("#modal-field");
+    if (dialog === null || field === null) throw new Error("fixture missing");
+    dialog.showModal();
+    field.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    expect(field.scrollWidth).toBeGreaterThan(field.clientWidth);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "input#modal-field",
+    });
+    expect(doc.activeElement).toBe(doc.body);
+  });
+
+  it.each([
+    ["first", "second"],
+    ["second", "first"],
+  ])(
+    "fails closed if multiple modals opened as %s then %s lose focus",
+    async (first, second) => {
+      const doc = await makeDocument(
+        `<label id="modal-label" style="display:block;width:20px;white-space:nowrap">labeltextlabeltext</label><dialog id="first">${input}</dialog><dialog id="second">${textarea}</dialog>`,
+      );
+      const firstDialog = doc.querySelector<HTMLDialogElement>(`#${first}`);
+      const secondDialog = doc.querySelector<HTMLDialogElement>(`#${second}`);
+      if (firstDialog === null || secondDialog === null)
+        throw new Error("modal missing");
+      firstDialog.showModal();
+      secondDialog.showModal();
+      const active = doc.activeElement as HTMLElement | null;
+      if (active === null) throw new Error("focus missing");
+      active.blur();
+      expect(doc.activeElement).toBe(doc.body);
+      const findings = inspectOverflow(doc);
+      expect(doc.activeElement).toBe(doc.body);
+      expect(findings).toContainEqual({
+        kind: "layout-unavailable",
+        element: "html",
+      });
+      expect(findings).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "label#modal-label",
+      });
+      expect(findings).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#modal-field",
+      });
+      expect(findings).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#modal-field",
+      });
+    },
+  );
+
+  it.each([
+    ["input", input],
+    ["textarea", textarea],
+  ])("fails closed with only %s content overflow", async (tag, markup) => {
+    const doc = await makeDocument(
+      `<dialog id="first">${markup}</dialog><dialog id="second">second</dialog>`,
+    );
+    const first = doc.querySelector<HTMLDialogElement>("#first");
+    const second = doc.querySelector<HTMLDialogElement>("#second");
+    if (first === null || second === null) throw new Error("modal missing");
+    first.showModal();
+    second.showModal();
+    const active = doc.activeElement as HTMLElement | null;
+    if (active === null) throw new Error("focus missing");
+    active.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+    expect(findings).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: `${tag}#modal-field`,
+    });
+    expect(doc.activeElement).toBe(doc.body);
+  });
+
+  it("does not reject an unresolved modal stack without overflowing controls", async () => {
+    const doc = await makeDocument(
+      '<input id="small-field" value="ok" style="width:120px"><dialog id="first">first</dialog><dialog id="second">second</dialog>',
+    );
+    const first = doc.querySelector<HTMLDialogElement>("#first");
+    const second = doc.querySelector<HTMLDialogElement>("#second");
+    const field = doc.querySelector<HTMLInputElement>("#small-field");
+    if (first === null || second === null || field === null)
+      throw new Error("fixture missing");
+    expect(field.scrollWidth).toBe(field.clientWidth);
+    first.showModal();
+    second.showModal();
+    const active = doc.activeElement as HTMLElement | null;
+    if (active === null) throw new Error("focus missing");
+    active.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+  });
+});
+
+describe("font metrics and clipping boundaries", () => {
+  it.each([
+    ["mask-image", "linear-gradient(transparent,transparent)"],
+    ["-webkit-mask-image", "linear-gradient(#000 50%,transparent 50%)"],
+  ])("rejects a metric hidden by its own %s", async (property, value) => {
+    const doc = await makeDocument(
+      `<div style="padding-top:20px"><p id="masked-metric" style="font:12px/16px IBM Plex Sans KR;margin:0;${property}:${value}">주식 코파일럿</p></div>`,
+    );
+    await loadProbeFont(doc);
+    const paragraph = doc.querySelector<HTMLElement>("#masked-metric");
+    if (paragraph === null) throw new Error("metric missing");
+    expect(paragraph.scrollHeight - paragraph.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#masked-metric",
+    });
+  });
+
+  it.each([
+    ["mask-image", "linear-gradient(transparent,transparent)"],
+    ["-webkit-mask-image", "linear-gradient(#000 50%,transparent 50%)"],
+  ])("rejects a metric hidden by its parent's %s", async (property, value) => {
+    const doc = await makeDocument(
+      `<div style="padding-top:20px"><div id="masked-parent" style="height:16px;${property}:${value}"><p id="masked-child" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>`,
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#masked-parent");
+    if (parent === null) throw new Error("parent missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#masked-parent",
+    });
+    expect(findings).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#masked-child",
+    });
+  });
+
+  it("detects a real overflowing sibling beside a metric child", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><div id="metric-with-sibling" style="position:relative;height:16px"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p><div style="position:absolute;top:16px;width:1px;height:1px"></div></div></div>',
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#metric-with-sibling");
+    if (parent === null) throw new Error("parent missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#metric-with-sibling",
+    });
+  });
+});
+describe("unresolved modal order and already known findings", () => {
+  it.each([
+    [
+      "readonly input",
+      '<input readonly id="known-field" value="longlonglonglonglonglong" style="width:60px">',
+      "input#known-field",
+    ],
+    [
+      "disabled input",
+      '<input disabled id="known-field" value="longlonglonglonglonglong" style="width:60px">',
+      "input#known-field",
+    ],
+    [
+      "textarea with hidden vertical overflow",
+      '<textarea id="known-field" style="width:120px;height:35px;overflow:hidden">one\ntwo\nthree\nfour\nfive</textarea>',
+      "textarea#known-field",
+    ],
+    [
+      "textarea with only horizontal overflow",
+      '<textarea id="known-field" wrap="off" style="width:60px;height:80px;overflow:auto">longlonglonglonglonglonglonglong</textarea>',
+      "textarea#known-field",
+    ],
+  ])("does not mark %s unavailable", async (_name, markup, element) => {
+    const doc = await makeDocument(
+      `${markup}<dialog id="first">first</dialog><dialog id="second">second</dialog>`,
+    );
+    const first = doc.querySelector<HTMLDialogElement>("#first");
+    const second = doc.querySelector<HTMLDialogElement>("#second");
+    const field = doc.querySelector<HTMLElement>("#known-field");
+    if (first === null || second === null || field === null)
+      throw new Error("fixture missing");
+    first.showModal();
+    second.showModal();
+    const active = doc.activeElement as HTMLElement | null;
+    if (active === null) throw new Error("focus missing");
+    active.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    expect(
+      field.scrollWidth > field.clientWidth ||
+        field.scrollHeight > field.clientHeight,
+    ).toBe(true);
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({ kind: "unauthorized-overflow", element });
+    expect(findings).not.toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+  });
+});
+
+describe("non-editable native textarea", () => {
+  it.each(["readonly", "disabled"])(
+    "reports vertical scrolling on a %s textarea",
+    async (state) => {
+      const doc = await makeDocument(
+        `<textarea id="locked-area" ${state} style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea>`,
+      );
+      const area = doc.querySelector<HTMLTextAreaElement>("#locked-area");
+      if (area === null) throw new Error("textarea missing");
+      expect(area.scrollHeight).toBeGreaterThan(area.clientHeight);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#locked-area",
+      });
+    },
+  );
+});
