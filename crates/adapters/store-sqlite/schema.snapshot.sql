@@ -108,6 +108,15 @@ CREATE TABLE snapshot_holdings (
     UNIQUE (snapshot, symbol, currency),
     CHECK ((valuation IS NULL AND profit IS NULL AND return_rate IS NULL AND daily_profit IS NULL AND daily_rate IS NULL) OR (valuation IS NOT NULL AND profit IS NOT NULL AND return_rate IS NOT NULL AND ((daily_profit IS NULL AND daily_rate IS NULL) OR (daily_profit IS NOT NULL AND daily_rate IS NOT NULL))))
 ) STRICT;
+CREATE TABLE thesis_history (
+    instrument TEXT NOT NULL REFERENCES thesis_notes(instrument),
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    payload TEXT NOT NULL,
+    PRIMARY KEY (instrument, sequence)
+) STRICT;
+CREATE TABLE thesis_notes (
+    instrument TEXT PRIMARY KEY
+) STRICT;
 CREATE TABLE transaction_entries (
     id INTEGER PRIMARY KEY,
     account INTEGER NOT NULL,
@@ -149,3 +158,5 @@ CREATE TABLE transaction_sources (
     row_id INTEGER PRIMARY KEY REFERENCES transaction_rows(id),
     source TEXT NOT NULL
 ) STRICT;
+CREATE TRIGGER thesis_history_no_delete BEFORE DELETE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
+CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;

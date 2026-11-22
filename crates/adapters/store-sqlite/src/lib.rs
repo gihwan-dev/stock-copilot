@@ -140,3 +140,9 @@ mod information_tests;
 
 mod information;
 pub use information::InformationStore;
+
+#[cfg(test)]
+mod thesis_tests;
+
+mod thesis;
+pub use thesis::ThesisStore;

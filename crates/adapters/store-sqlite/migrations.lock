@@ -22,3 +22,8 @@ sha256 = "c9027af836ec85e7cca116b0ad79c801a09da7b0262aa6ec51eb9fbd8b7484a7"
 number = 5
 file = "0005_information_store.sql"
 sha256 = "4866d88f610a04cef5a03b603cb4cad214c072ed2bc8312ef38778ea20c910f4"
+
+[[migration]]
+number = 6
+file = "0006_thesis_store.sql"
+sha256 = "ccfbe21e1dd34b42241006512f41b9957b98ac39e36196f7c3e2286c1e744e8e"

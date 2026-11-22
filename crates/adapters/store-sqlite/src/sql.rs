@@ -33,3 +33,7 @@ pub(crate) mod fts_guard_tests;
 pub(crate) mod information_tests;
 
 pub(crate) mod information;
+
+pub(crate) mod thesis;
+#[cfg(test)]
+pub(crate) mod thesis_tests;
