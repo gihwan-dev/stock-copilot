@@ -1,3 +1,4 @@
+import { mkdtempSync } from "../test-temp.mjs";
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
@@ -262,7 +263,7 @@ test("영수증의 주장만으로는 성공을 만들 수 없다", () => {
 
 test("로컬 영수증은 신뢰된 서명과 동일한 내용에만 유효하다", async () => {
   const { spawnSync } = await import("node:child_process");
-  const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } =
+  const { mkdirSync, readFileSync, rmSync, writeFileSync } =
     await import("node:fs");
   const { join } = await import("node:path");
   const { repoRoot } = await import("./signature-repo.mjs");

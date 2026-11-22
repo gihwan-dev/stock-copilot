@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "./managed-temp.mjs";
 import { get } from "node:https";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

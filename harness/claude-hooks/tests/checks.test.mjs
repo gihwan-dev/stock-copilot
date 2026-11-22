@@ -3,11 +3,11 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../../ci/test-temp.mjs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";

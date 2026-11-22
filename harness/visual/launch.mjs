@@ -1,12 +1,7 @@
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-  existsSync,
-} from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { resolve, join } from "node:path";
 import { settings } from "./policy.mjs";
 const root = resolve(import.meta.dirname, "../..");

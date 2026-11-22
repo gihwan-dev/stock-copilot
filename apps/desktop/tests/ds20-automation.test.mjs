@@ -1,11 +1,6 @@
 import { strict as assert } from "node:assert";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { repoRoot } from "./paths.mjs";

@@ -2,12 +2,12 @@ import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
-  mkdtempSync,
   existsSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../test-temp.mjs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { inspectMerge } from "../merge-gate.mjs";
@@ -44,6 +44,7 @@ const fixture = ({ withGate = false } = {}) => {
     for (const path of [
       "harness/ci/merge-gate.mjs",
       "harness/ci/remote-check.mjs",
+      "harness/ci/managed-temp.mjs",
       "harness/ci/review-records/check.mjs",
       ".claude/hooks/lib/allowlist.mjs",
     ]) {
