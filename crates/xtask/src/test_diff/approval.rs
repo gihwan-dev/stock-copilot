@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write;
 use std::path::Path;
 
 use proc_macro2::{TokenStream, TokenTree};
@@ -936,6 +937,234 @@ fn safe_finding(
     }
 }
 
+fn unsafe_item_reason(
+    before: &str,
+    after: &str,
+    kind: ItemKind,
+    approval: AssertionChange,
+) -> String {
+    let (Some((old_context, old)), Some((new_context, new))) =
+        (parsed_item(before), parsed_item(after))
+    else {
+        return String::from("함수 구조를 파싱할 수 없음");
+    };
+    if old_context != new_context
+        || old.sig.ident != new.sig.ident
+        || old.vis.to_token_stream().to_string() != new.vis.to_token_stream().to_string()
+        || (kind == ItemKind::Test
+            && old.sig.to_token_stream().to_string() != new.sig.to_token_stream().to_string())
+    {
+        return String::from("함수의 문맥·이름·가시성·테스트 서명 변경");
+    }
+    let (Some(left), Some(right)) = (protected(&old.block), protected(&new.block)) else {
+        return String::from("준비 코드에 제어 흐름 또는 탈출 경로가 있음");
+    };
+    if kind == ItemKind::Test && left.is_empty() {
+        return String::from("기존 테스트에서 보호할 단언을 찾지 못함");
+    }
+    if left.len() != right.len() {
+        return format!(
+            "보호된 단언 수 또는 순서가 달라짐 ({} → {})",
+            left.len(),
+            right.len()
+        );
+    }
+    if let Some(index) = left
+        .iter()
+        .zip(&right)
+        .position(|(previous, updated)| !same_assertion(previous, updated, approval))
+    {
+        return format!("보호된 단언 {}의 구조가 달라짐", index.saturating_add(1));
+    }
+    String::from("함수 구조 보존 규칙 위반")
+}
+
+fn unsafe_finding_reason(
+    finding: &Finding<Rule>,
+    before: &Scan,
+    after: &Scan,
+    approval: AssertionChange,
+    helpers: &BTreeSet<String>,
+) -> String {
+    match &finding.rule {
+        Rule::Modified(id) => match before.tests.get(id).zip(after.tests.get(id)) {
+            Some((old, new)) if references_new_helper(old, new, helpers) => {
+                String::from("새 보조 함수 참조가 추가됨")
+            }
+            Some((old, new)) => unsafe_item_reason(old, new, ItemKind::Test, approval),
+            None => String::from("기존 또는 변경된 테스트를 찾을 수 없음"),
+        },
+        Rule::SupportModified(id) => match support(before, id).zip(support(after, id)) {
+            Some(((_, old), (_, new))) if references_new_helper(old, new, helpers) => {
+                String::from("새 보조 함수 참조가 추가됨")
+            }
+            Some((("fn", old), ("fn", new))) => {
+                unsafe_item_reason(old, new, ItemKind::Support, approval)
+            }
+            Some((("impl", old), ("impl", new))) => match (parsed_impl(old), parsed_impl(new)) {
+                (Some((old_context, old_impl)), Some((new_context, new_impl)))
+                    if old_context == new_context =>
+                {
+                    for item in &old_impl.items {
+                        if let syn::ImplItem::Fn(method) = item
+                            && !safe_method(method, &new_impl.items, approval)
+                        {
+                            return format!("impl 메서드 {}의 구조 보존 실패", method.sig.ident);
+                        }
+                    }
+                    String::from("impl의 기존 상수·타입·항목 구조 보존 실패")
+                }
+                _ => String::from("impl 문맥 변경 또는 파싱 실패"),
+            },
+            Some(_) => String::from("보조 항목 종류 변경"),
+            None => format!("승인 불가 보조 항목 종류 또는 항목 누락: {id}"),
+        },
+        Rule::Removed(_)
+        | Rule::NotListed(_)
+        | Rule::CountDecreased { .. }
+        | Rule::Unreachable(_)
+        | Rule::SupportRemoved(_)
+        | Rule::Shadowing(_) => String::from("승인 불가 지적 종류"),
+    }
+}
+
+struct Diagnosis<'a> {
+    before: &'a Files,
+    current: &'a Files,
+    findings: &'a Findings,
+    base_scan: Scan,
+    helpers: BTreeSet<String>,
+}
+
+impl Diagnosis<'_> {
+    fn blockers(&self, isolated: &Findings, target: &Scan, expected: &ApprovedFindings) -> String {
+        let blockers: Vec<String> = isolated
+            .iter()
+            .filter_map(|item| {
+                let approved = expected.get(&item.rule.to_string())?;
+                (!safe_finding(item, &self.base_scan, target, *approved, &self.helpers)).then(
+                    || {
+                        format!(
+                            "{}: {}",
+                            item.rule,
+                            unsafe_finding_reason(
+                                item,
+                                &self.base_scan,
+                                target,
+                                *approved,
+                                &self.helpers
+                            )
+                        )
+                    },
+                )
+            })
+            .collect();
+        if blockers.is_empty() {
+            String::from("동일 파일의 승인 조건 미충족")
+        } else {
+            blockers.join("; ")
+        }
+    }
+
+    fn reason(&self, group: &Group, expected: &ApprovedFindings) -> String {
+        let Some((old, new)) = self
+            .before
+            .get(&group.path)
+            .zip(self.current.get(&group.path))
+        else {
+            return String::from("승인 대상 전·후 파일 누락");
+        };
+        if digest(old) != group.before || digest(new) != group.after {
+            return String::from("파일 전·후 SHA-256 불일치");
+        }
+        let mut hybrid = self.before.clone();
+        hybrid.insert(group.path.clone(), new.clone());
+        let (isolated, _) = compare_files(self.before, &hybrid);
+        let actual: BTreeSet<String> = isolated.iter().map(|item| item.rule.to_string()).collect();
+        if actual != expected.keys().cloned().collect() || isolated.is_empty() {
+            return format!(
+                "지적 집합 불일치: 실제 {:?}, 승인 {:?}",
+                actual,
+                expected.keys().collect::<Vec<_>>()
+            );
+        }
+        if let Some(missing) = isolated.iter().find(|item| !self.findings.contains(*item)) {
+            return format!("현재 지적 집합에 없음: {}", missing.rule);
+        }
+        self.blockers(&isolated, &scan(&hybrid), expected)
+    }
+}
+
+fn diagnostic_trusted(
+    root: &Path,
+    authority: &str,
+    head: &str,
+    groups: &BTreeMap<Group, ApprovedFindings>,
+) -> bool {
+    let incoming = match merge_base_kind(root) {
+        Ok(MergeBase::IncomingDefault(base)) => base == authority,
+        Ok(MergeBase::ForkPoint) | Err(_) => false,
+    };
+    git_base::is_commit_id(authority)
+        && git_base::is_commit_id(head)
+        && (is_ancestor(root, authority, head)
+            || first_parent_ancestor(root, head, authority)
+            || incoming)
+        && git(root, &["ls-tree", authority, "--", APPROVAL_FILE]).is_some_and(|entry| {
+            entry.starts_with("100644 blob ") && entry.ends_with(&format!("\t{APPROVAL_FILE}"))
+        })
+        && trusted_history(root, authority, head, groups)
+}
+
+pub(super) fn diagnose(
+    root: &Path,
+    authority: &str,
+    head: &str,
+    files: (&Files, &Files),
+    findings: &Findings,
+) -> BTreeMap<String, String> {
+    let mut result = BTreeMap::new();
+    if findings.is_empty() {
+        return result;
+    }
+    let Some(contents) = git(root, &["show", &format!("{authority}:{APPROVAL_FILE}")]) else {
+        return result;
+    };
+    let Ok(groups) = parse(&contents) else {
+        return result;
+    };
+    let trusted = diagnostic_trusted(root, authority, head, &groups);
+    let (before, current) = files;
+    let base_scan = scan(before);
+    let helpers = new_helper_names(&base_scan, &scan(current));
+    let context = Diagnosis {
+        before,
+        current,
+        findings,
+        base_scan,
+        helpers,
+    };
+    for (group, expected) in groups {
+        let applicable: Vec<String> = findings
+            .iter()
+            .map(|item| item.rule.to_string())
+            .filter(|name| expected.contains_key(name))
+            .collect();
+        if applicable.is_empty() {
+            continue;
+        }
+        let reason = if trusted {
+            context.reason(&group, &expected)
+        } else {
+            String::from("승인 이력 또는 기준 커밋 신뢰 실패")
+        };
+        for item in applicable {
+            result.insert(item, reason.clone());
+        }
+    }
+    result
+}
+
 pub(super) fn apply_with_authority(
     root: &Path,
     authority: &str,
@@ -1008,7 +1237,7 @@ pub(super) fn apply(
     findings: Findings,
     _base_use: BaseUse,
 ) -> Result<Findings, String> {
-    if !findings.iter().any(|finding| match &finding.rule {
+    let eligible = findings.iter().any(|finding| match &finding.rule {
         Rule::Modified(_) | Rule::SupportModified(_) => true,
         Rule::Removed(_)
         | Rule::NotListed(_)
@@ -1016,14 +1245,23 @@ pub(super) fn apply(
         | Rule::Unreachable(_)
         | Rule::SupportRemoved(_)
         | Rule::Shadowing(_) => false,
-    }) {
-        return Ok(findings);
-    }
+    });
     let Some(head) = commit(root, "HEAD") else {
         return Ok(findings);
     };
     let Some(authority) = trusted_authority(root, &head) else {
         return Ok(findings);
     };
-    apply_with_authority(root, &authority, &head, (before, current), findings)
+    let remaining = if eligible {
+        apply_with_authority(root, &authority, &head, (before, current), findings)?
+    } else {
+        findings
+    };
+    let source = commit(root, MASTER).unwrap_or_else(|| authority.clone());
+    for (finding, reason) in diagnose(root, &source, &head, (before, current), &remaining) {
+        if writeln!(std::io::stderr().lock(), "승인 거부: {finding}: {reason}").is_err() {
+            break;
+        }
+    }
+    Ok(remaining)
 }
