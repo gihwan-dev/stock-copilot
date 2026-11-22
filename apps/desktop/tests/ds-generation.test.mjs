@@ -4,10 +4,10 @@ import {
   readFileSync,
   writeFileSync,
   mkdirSync,
-  mkdtempSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";

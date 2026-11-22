@@ -158,17 +158,8 @@ fn assemble<S: SecretStore, T: Clock, R: TokenRenewal>(
         CandlePeriod::Minute => CandleStatus::Finalized,
         CandlePeriod::Daily => {
             let session = session_for(reader, instrument, parsed.time.date())?;
-            let end = session
-                .sessions()
-                .iter()
-                .map(|segment| segment.session().interval().end())
-                .max()
-                .ok_or_else(|| invalid(ENDPOINT))?;
-            if parsed.collected_at >= end {
-                CandleStatus::Finalized
-            } else {
-                CandleStatus::InProgress
-            }
+            domain::regular_session_candle_status(session, parsed.collected_at)
+                .map_err(|_error| invalid(ENDPOINT))?
         }
     };
     Candle::try_new(

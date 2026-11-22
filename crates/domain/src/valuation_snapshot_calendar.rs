@@ -1,6 +1,6 @@
 use crate::{
-    CalendarDate, Currency, FxRate, Market, MarketCalendar, MarketSession, MarketState,
-    OffsetSeconds, Timestamp,
+    CalendarDate, CandleStatus, Currency, FxRate, Market, MarketCalendar, MarketSession,
+    MarketState, OffsetSeconds, Timestamp,
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapshotError {
@@ -105,6 +105,25 @@ impl RegularClose {
             None => Self::Missing,
         }
     }
+    fn scheduled_status(close: Timestamp, at: Timestamp) -> CandleStatus {
+        if close <= at {
+            CandleStatus::Finalized
+        } else {
+            CandleStatus::InProgress
+        }
+    }
+    fn status(self, at: Timestamp) -> Result<CandleStatus, SnapshotError> {
+        match self {
+            Self::Scheduled(close) => Ok(Self::scheduled_status(close, at)),
+            Self::Holiday | Self::Missing => Err(SnapshotError::MissingPrice),
+        }
+    }
+}
+pub fn regular_session_candle_status(
+    session: &MarketSession,
+    at: Timestamp,
+) -> Result<CandleStatus, SnapshotError> {
+    RegularClose::from_session(session).status(at)
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ObservationSessionScope {
@@ -139,18 +158,18 @@ impl MarketDay {
     }
     fn price(self, at: Timestamp) -> Result<(CalendarDate, SnapshotPriceBasis), SnapshotError> {
         let basis = match self.close {
-            RegularClose::Scheduled(close) if close <= at => {
-                return Ok((self.date, SnapshotPriceBasis::CurrentSession));
-            }
-            RegularClose::Scheduled(_) => SnapshotPriceBasis::AwaitingSession,
+            RegularClose::Scheduled(close) => match RegularClose::scheduled_status(close, at) {
+                CandleStatus::Finalized => {
+                    return Ok((self.date, SnapshotPriceBasis::CurrentSession));
+                }
+                CandleStatus::InProgress => SnapshotPriceBasis::AwaitingSession,
+            },
             RegularClose::Holiday => SnapshotPriceBasis::HolidayCarry,
             RegularClose::Missing => return Err(SnapshotError::MissingPrice),
         };
-        match self.previous_close {
-            RegularClose::Scheduled(close) if close <= at => Ok((self.previous, basis)),
-            RegularClose::Scheduled(_) | RegularClose::Holiday | RegularClose::Missing => {
-                Err(SnapshotError::MissingPrice)
-            }
+        match self.previous_close.status(at) {
+            Ok(CandleStatus::Finalized) => Ok((self.previous, basis)),
+            Ok(CandleStatus::InProgress) | Err(_) => Err(SnapshotError::MissingPrice),
         }
     }
 }
@@ -160,6 +179,27 @@ pub struct SnapshotCalendar {
     us: MarketDay,
 }
 impl SnapshotCalendar {
+    #[must_use]
+    pub fn observed_close_requirement(
+        &self,
+        holding: &crate::Holding,
+    ) -> crate::ObservedCloseRequirement {
+        match self.observation_sessions(holding.currency()) {
+            ObservationSessionScope::NoExtended => {
+                return crate::ObservedCloseRequirement::NotRequired;
+            }
+            ObservationSessionScope::HasExtended => {}
+        }
+        if !holding.quantity().as_decimal().is_zero()
+            || holding
+                .reported()
+                .is_some_and(|reported| !reported.valuation().amount().as_decimal().is_zero())
+        {
+            crate::ObservedCloseRequirement::Required
+        } else {
+            crate::ObservedCloseRequirement::NotRequired
+        }
+    }
     pub fn new(
         kr_calendar: &MarketCalendar,
         us_calendar: &MarketCalendar,
@@ -186,7 +226,7 @@ impl SnapshotCalendar {
     ) -> Result<CalendarDate, SnapshotError> {
         self.price(currency, at).map(|(day, _basis)| day)
     }
-    pub(crate) fn price(
+    pub fn price(
         self,
         currency: Currency,
         at: Timestamp,
@@ -550,5 +590,27 @@ mod regular_close_tests {
                 expected
             );
         }
+    }
+    #[test]
+    fn t22_public_daily_status_checks_regular_close_and_holiday() {
+        let row = kr(
+            3,
+            Some(kr_regular(3)),
+            None,
+            Some(interval(3, 23_400, 39_600)),
+        );
+        assert_eq!(
+            super::regular_session_candle_status(&row, instant(3, 23_399)),
+            Ok(crate::CandleStatus::InProgress)
+        );
+        assert_eq!(
+            super::regular_session_candle_status(&row, instant(3, 23_400)),
+            Ok(crate::CandleStatus::Finalized)
+        );
+        let holiday = kr(3, None, None, None);
+        assert_eq!(
+            super::regular_session_candle_status(&holiday, instant(3, 24_000)),
+            Err(SnapshotError::MissingPrice)
+        );
     }
 }

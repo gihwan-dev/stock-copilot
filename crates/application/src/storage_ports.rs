@@ -2,8 +2,8 @@ use crate::{RecordOutcome, SystemPortError, WriteCompleted};
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RaisedSignal, RiskSettings, SettledRowSet, SignalSubmission,
-    SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
+    Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
+    SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 use std::future::Future;
 
@@ -65,6 +65,15 @@ pub trait MarketDataRepository: Send + Sync {
     ) -> impl Future<Output = Result<Option<FxRate>, SystemPortError>> + Send;
 }
 
+pub trait ValuationCloseEvidenceRepository: Send + Sync {
+    fn observed_close_evidence(
+        &self,
+        _instrument: &domain::ResolvedOrderInstrument,
+        _date: domain::CalendarDate,
+        _as_of: Timestamp,
+    ) -> impl Future<Output = Result<Vec<domain::ObservedCloseEvidence>, SystemPortError>> + Send;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheWriteOutcome {
     Changed,
@@ -124,18 +133,6 @@ pub trait EstimateRepository: Send + Sync {
     ) -> impl Future<Output = Result<Option<Calibration>, SystemPortError>> + Send;
 }
 
-pub trait SignalRepository: Send + Sync {
-    fn replace(
-        &self,
-        instrument: &InstrumentId,
-        signals: &[RaisedSignal],
-    ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
-    fn current(
-        &self,
-        instrument: &InstrumentId,
-    ) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send;
-}
-
 pub trait ProposalRepository: Send + Sync {
     fn store_draft(
         &self,
@@ -182,3 +179,5 @@ pub enum FxRateQuery {
     Latest,
     At(Timestamp),
 }
+
+pub use crate::signal_ports::SignalRepository;

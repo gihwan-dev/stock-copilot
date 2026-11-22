@@ -4,13 +4,13 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { settings } from "../visual/policy.mjs";

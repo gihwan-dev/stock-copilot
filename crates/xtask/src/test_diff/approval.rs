@@ -4,6 +4,7 @@ use std::path::Path;
 use proc_macro2::{TokenStream, TokenTree};
 use quote::ToTokens;
 use sha2::{Digest, Sha256};
+use syn::parse::Parser;
 use syn::visit::{self, Visit};
 
 use crate::check_support::Finding;
@@ -25,6 +26,13 @@ const FIELDS: [&str; 7] = [
 ];
 
 type Findings = BTreeSet<Finding<Rule>>;
+type ApprovedFindings = BTreeMap<String, AssertionChange>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AssertionChange {
+    Forbidden,
+    Approved,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Group {
@@ -114,7 +122,7 @@ fn trusted_history(
     root: &Path,
     authority: &str,
     head: &str,
-    groups: &BTreeMap<Group, BTreeSet<String>>,
+    groups: &BTreeMap<Group, ApprovedFindings>,
 ) -> bool {
     if git(root, &["rev-parse", "--is-shallow-repository"]).as_deref() != Some("false") {
         return false;
@@ -145,7 +153,7 @@ fn trusted_history(
         match same_entry(root, revision, parent, APPROVAL_FILE) {
             Some(true) => true,
             Some(false) => {
-                parents.len() <= 1
+                parents.len() == 1
                     && (revision != head || pending_merge)
                     && groups
                         .keys()
@@ -193,7 +201,17 @@ fn valid_path(path: &str) -> bool {
             .any(|part| part.is_empty() || part == "." || part == "..")
 }
 
-fn parse(contents: &str) -> Result<BTreeMap<Group, BTreeSet<String>>, String> {
+fn assertion_change(row: &toml::Table) -> Result<AssertionChange, String> {
+    match row.get("assertion_change") {
+        None | Some(toml::Value::Boolean(false)) => Ok(AssertionChange::Forbidden),
+        Some(toml::Value::Boolean(true)) => Ok(AssertionChange::Approved),
+        Some(_) => Err(format!(
+            "{APPROVAL_FILE}: assertion_change는 불린이어야 한다"
+        )),
+    }
+}
+
+fn parse(contents: &str) -> Result<BTreeMap<Group, ApprovedFindings>, String> {
     let table: toml::Table = contents
         .parse()
         .map_err(|error: toml::de::Error| format!("{APPROVAL_FILE}: {error}"))?;
@@ -204,12 +222,16 @@ fn parse(contents: &str) -> Result<BTreeMap<Group, BTreeSet<String>>, String> {
         .get("approval")
         .and_then(toml::Value::as_array)
         .ok_or_else(|| format!("{APPROVAL_FILE}: approval 목록이 없다"))?;
-    let mut groups: BTreeMap<Group, BTreeSet<String>> = BTreeMap::new();
+    let mut groups: BTreeMap<Group, ApprovedFindings> = BTreeMap::new();
     for entry in entries {
         let row = entry
             .as_table()
             .ok_or_else(|| format!("{APPROVAL_FILE}: 승인 행이 표가 아니다"))?;
-        if row.len() != FIELDS.len() || FIELDS.iter().any(|field| !row.contains_key(*field)) {
+        if FIELDS.iter().any(|field| !row.contains_key(*field))
+            || row
+                .keys()
+                .any(|field| !FIELDS.contains(&field.as_str()) && field != "assertion_change")
+        {
             return Err(format!("{APPROVAL_FILE}: 승인 필드가 다르다"));
         }
         let task = text(row, "task")?;
@@ -219,6 +241,7 @@ fn parse(contents: &str) -> Result<BTreeMap<Group, BTreeSet<String>>, String> {
         let finding = text(row, "finding")?;
         let decision = text(row, "decision")?;
         let _reason = text(row, "reason")?;
+        let assertion_change = assertion_change(row)?;
         if !valid_task(task)
             || !valid_path(path)
             || !valid_hash(before)
@@ -233,10 +256,11 @@ fn parse(contents: &str) -> Result<BTreeMap<Group, BTreeSet<String>>, String> {
             before: String::from(before),
             after: String::from(after),
         };
-        if !groups
+        if groups
             .entry(group)
             .or_default()
-            .insert(String::from(finding))
+            .insert(String::from(finding), assertion_change)
+            .is_some()
         {
             return Err(format!("{APPROVAL_FILE}: 중복 승인이다"));
         }
@@ -262,7 +286,9 @@ fn contains_assertion(stream: TokenStream) -> bool {
                 let named_check = macro_name.starts_with("assert")
                     || macro_name == "check"
                     || macro_name.starts_with("check_")
-                    || macro_name.starts_with("verify");
+                    || macro_name.starts_with("verify")
+                    || macro_name == "expect_err"
+                    || macro_name == "unwrap_err";
                 if named_check
                     || ((macro_name.contains("assert")
                         || macro_name == "panic"
@@ -284,7 +310,35 @@ struct SetupControl {
     blocked: bool,
 }
 
+fn macro_contains_control(stream: TokenStream) -> bool {
+    stream.into_iter().any(|token| match token {
+        TokenTree::Ident(name) => [
+            "return", "break", "continue", "if", "match", "loop", "while", "for", "unsafe", "try",
+            "exit", "abort",
+        ]
+        .contains(&name.to_string().as_str()),
+        TokenTree::Punct(punct) => punct.as_char() == '?',
+        TokenTree::Group(group) => macro_contains_control(group.stream()),
+        TokenTree::Literal(_) => false,
+    })
+}
+
 impl<'ast> Visit<'ast> for SetupControl {
+    fn visit_macro(&mut self, i: &'ast syn::Macro) {
+        let arguments = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+            .parse2(i.tokens.clone());
+        match arguments {
+            Ok(expressions) => {
+                let mut nested = Self::default();
+                for expression in &expressions {
+                    nested.visit_expr(expression);
+                }
+                self.blocked |= nested.blocked;
+            }
+            Err(_) => self.blocked |= macro_contains_control(i.tokens.clone()),
+        }
+    }
+
     fn visit_expr_return(&mut self, i: &'ast syn::ExprReturn) {
         self.blocked = true;
         visit::visit_expr_return(self, i);
@@ -362,64 +416,517 @@ fn parsed_item(fingerprint: &str) -> Option<(&str, syn::ItemFn)> {
     })
 }
 
-fn safe_item(before: &str, after: &str, kind: ItemKind) -> bool {
+#[derive(Default)]
+struct AssertionHeads {
+    names: Vec<String>,
+    calls: Vec<String>,
+    opaque_macros: Vec<String>,
+    lazy_operators: Vec<String>,
+    trivial: bool,
+    unsafe_code: bool,
+}
+
+fn canonical_expr(expression: &syn::Expr) -> &syn::Expr {
+    if let syn::Expr::Paren(inner) = expression {
+        canonical_expr(&inner.expr)
+    } else if let syn::Expr::Group(inner) = expression {
+        canonical_expr(&inner.expr)
+    } else if let syn::Expr::Cast(inner) = expression {
+        canonical_expr(&inner.expr)
+    } else {
+        expression
+    }
+}
+
+fn constant_boolean(expression: &syn::Expr) -> Option<bool> {
+    let canonical = canonical_expr(expression);
+    if let syn::Expr::Lit(literal) = canonical
+        && let syn::Lit::Bool(value) = &literal.lit
+    {
+        Some(value.value)
+    } else if let syn::Expr::Unary(unary) = canonical
+        && let syn::UnOp::Not(_) = unary.op
+    {
+        constant_boolean(&unary.expr).map(|value| !value)
+    } else {
+        None
+    }
+}
+
+fn same_expression(left: &syn::Expr, right: &syn::Expr) -> bool {
+    canonical_expr(left).to_token_stream().to_string()
+        == canonical_expr(right).to_token_stream().to_string()
+}
+
+fn trivial_predicate(expression: &syn::Expr) -> bool {
+    if constant_boolean(expression) == Some(true) {
+        return true;
+    }
+    if let syn::Expr::Binary(binary) = canonical_expr(expression) {
+        if let syn::BinOp::Eq(_) | syn::BinOp::Le(_) | syn::BinOp::Ge(_) = binary.op {
+            return same_expression(&binary.left, &binary.right);
+        }
+        if let syn::BinOp::Or(_) = binary.op {
+            return constant_boolean(&binary.left) == Some(true)
+                || constant_boolean(&binary.right) == Some(true);
+        }
+    }
+    false
+}
+
+fn trivial_assertion(item: &syn::Macro) -> bool {
+    let Some(name) = item
+        .path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+    else {
+        return false;
+    };
+    let Ok(args) = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+        .parse2(item.tokens.clone())
+    else {
+        return false;
+    };
+    match (name.as_str(), args.first(), args.iter().nth(1)) {
+        ("assert" | "debug_assert", Some(expr), _) => trivial_predicate(expr),
+        ("assert_eq" | "debug_assert_eq", Some(left), Some(right)) => same_expression(left, right),
+        (
+            "assert_ne" | "debug_assert_ne",
+            Some(syn::Expr::Lit(left)),
+            Some(syn::Expr::Lit(right)),
+        ) => left.to_token_stream().to_string() != right.to_token_stream().to_string(),
+        _ => false,
+    }
+}
+
+impl AssertionHeads {
+    fn inspect_arguments(&mut self, tokens: TokenStream) {
+        let Ok(arguments) =
+            syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                .parse2(tokens)
+        else {
+            self.unsafe_code = true;
+            return;
+        };
+        let mut control = SetupControl::default();
+        for argument in &arguments {
+            control.visit_expr(argument);
+            self.visit_expr(argument);
+        }
+        self.unsafe_code |= control.blocked;
+    }
+}
+
+impl<'ast> Visit<'ast> for AssertionHeads {
+    fn visit_macro(&mut self, i: &'ast syn::Macro) {
+        if contains_assertion(i.path.to_token_stream()) {
+            self.trivial |= trivial_assertion(i);
+            self.names
+                .push(format!("macro:{}", i.path.to_token_stream()));
+            self.inspect_arguments(i.tokens.clone());
+        } else {
+            self.opaque_macros.push(i.to_token_stream().to_string());
+        }
+        visit::visit_macro(self, i);
+    }
+
+    fn visit_expr_call(&mut self, i: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(path) = i.func.as_ref() {
+            let name = path.path.to_token_stream().to_string();
+            self.calls.push(name.clone());
+            if contains_assertion(path.path.to_token_stream()) {
+                self.names.push(format!("call:{name}"));
+            }
+        } else {
+            self.unsafe_code = true;
+        }
+        visit::visit_expr_call(self, i);
+    }
+
+    fn visit_expr_method_call(&mut self, i: &'ast syn::ExprMethodCall) {
+        self.calls.push(format!("method:{}", i.method));
+        if ["expect_err", "unwrap_err"].contains(&i.method.to_string().as_str()) {
+            self.names.push(format!("method:{}", i.method));
+        }
+        visit::visit_expr_method_call(self, i);
+    }
+
+    fn visit_expr_binary(&mut self, i: &'ast syn::ExprBinary) {
+        if let syn::BinOp::And(_) | syn::BinOp::Or(_) = i.op {
+            self.lazy_operators.push(i.op.to_token_stream().to_string());
+        }
+        visit::visit_expr_binary(self, i);
+    }
+
+    fn visit_expr_block(&mut self, i: &'ast syn::ExprBlock) {
+        self.unsafe_code = true;
+        visit::visit_expr_block(self, i);
+    }
+}
+
+fn assertion_heads(statement: &syn::Stmt) -> Option<AssertionHeads> {
+    let mut control = SetupControl::default();
+    control.visit_stmt(statement);
+    let mut heads = AssertionHeads::default();
+    heads.visit_stmt(statement);
+    (!control.blocked && !heads.unsafe_code && !heads.names.is_empty()).then_some(heads)
+}
+
+fn protected_statement(statement: &syn::Stmt) -> bool {
+    if let syn::Stmt::Local(local) = statement
+        && let syn::Pat::Ident(binding) = &local.pat
+        && binding.ident == "check"
+        && binding.subpat.is_none()
+    {
+        return local
+            .attrs
+            .iter()
+            .chain(&binding.attrs)
+            .any(|attribute| contains_assertion(attribute.to_token_stream()))
+            || local.init.as_ref().is_some_and(|initial| {
+                contains_assertion(initial.expr.to_token_stream())
+                    || initial
+                        .diverge
+                        .as_ref()
+                        .is_some_and(|(_, branch)| contains_assertion(branch.to_token_stream()))
+            });
+    }
+    contains_assertion(statement.to_token_stream())
+}
+
+fn protected(block: &syn::Block) -> Option<Vec<&syn::Stmt>> {
+    let mut control = SetupControl::default();
+    let mut assertions = Vec::new();
+    for statement in &block.stmts {
+        if protected_statement(statement) {
+            assertions.push(statement);
+        } else {
+            control.visit_stmt(statement);
+        }
+    }
+    (!control.blocked).then_some(assertions)
+}
+
+fn safe_block(
+    before: &syn::Block,
+    after: &syn::Block,
+    kind: ItemKind,
+    approval: AssertionChange,
+) -> bool {
+    let (Some(left), Some(right)) = (protected(before), protected(after)) else {
+        return false;
+    };
+    if kind == ItemKind::Test && left.is_empty() {
+        return false;
+    }
+    if left.len() == right.len() {
+        return left
+            .iter()
+            .zip(&right)
+            .all(|(old, new)| same_assertion(old, new, approval));
+    }
+    if kind != ItemKind::Support
+        || approval != AssertionChange::Approved
+        || left.len() > right.len()
+    {
+        return false;
+    }
+    let mut remaining = right.iter();
+    for old in &left {
+        loop {
+            let Some(new) = remaining.next() else {
+                return false;
+            };
+            if same_assertion(old, new, approval) {
+                break;
+            }
+            if !safe_added_assertion(new) {
+                return false;
+            }
+        }
+    }
+    remaining.all(|new| safe_added_assertion(new))
+}
+
+fn same_assertion(old: &syn::Stmt, new: &syn::Stmt, approval: AssertionChange) -> bool {
+    old.to_token_stream().to_string() == new.to_token_stream().to_string()
+        || (approval == AssertionChange::Approved
+            && assertion_heads(old).zip(assertion_heads(new)).is_some_and(
+                |(before_heads, after_heads)| {
+                    before_heads.names == after_heads.names
+                        && before_heads.calls == after_heads.calls
+                        && before_heads.opaque_macros == after_heads.opaque_macros
+                        && before_heads.lazy_operators == after_heads.lazy_operators
+                        && !after_heads.trivial
+                },
+            ))
+}
+
+fn safe_added_assertion(statement: &syn::Stmt) -> bool {
+    assertion_heads(statement).is_some_and(|heads| {
+        !heads.trivial
+            && heads.opaque_macros.is_empty()
+            && heads.names.iter().all(|name| {
+                [
+                    "macro:assert",
+                    "macro:assert_eq",
+                    "macro:assert_ne",
+                    "macro:debug_assert",
+                    "macro:debug_assert_eq",
+                    "macro:debug_assert_ne",
+                ]
+                .contains(&name.as_str())
+            })
+    })
+}
+
+fn safe_item(before: &str, after: &str, kind: ItemKind, approval: AssertionChange) -> bool {
     let (Some((before_context, before_fn)), Some((after_context, after_fn))) =
         (parsed_item(before), parsed_item(after))
+    else {
+        return false;
+    };
+    if before_context != after_context
+        || before_fn.sig.ident != after_fn.sig.ident
+        || before_fn.vis.to_token_stream().to_string() != after_fn.vis.to_token_stream().to_string()
+        || (kind == ItemKind::Test
+            && before_fn.sig.to_token_stream().to_string()
+                != after_fn.sig.to_token_stream().to_string())
+    {
+        return false;
+    }
+    safe_block(&before_fn.block, &after_fn.block, kind, approval)
+}
+
+fn parsed_impl(fingerprint: &str) -> Option<(&str, syn::ItemImpl)> {
+    fingerprint.match_indices('|').find_map(|(index, _)| {
+        let (context, tail) = fingerprint.split_at_checked(index)?;
+        syn::parse_str::<syn::ItemImpl>(tail.strip_prefix('|')?)
+            .ok()
+            .map(|item| (context, item))
+    })
+}
+
+fn equal_attributes(before: &[syn::Attribute], after: &[syn::Attribute]) -> bool {
+    before
+        .iter()
+        .map(ToTokens::to_token_stream)
+        .map(|tokens| tokens.to_string())
+        .eq(after
+            .iter()
+            .map(ToTokens::to_token_stream)
+            .map(|tokens| tokens.to_string()))
+}
+
+fn safe_method(
+    before: &syn::ImplItemFn,
+    items: &[syn::ImplItem],
+    approval: AssertionChange,
+) -> bool {
+    let mut matches = items.iter().filter_map(|item| {
+        if let syn::ImplItem::Fn(new) = item {
+            (new.sig.ident == before.sig.ident).then_some(new)
+        } else {
+            None
+        }
+    });
+    let Some(after) = matches.next() else {
+        return false;
+    };
+    matches.next().is_none()
+        && equal_attributes(&before.attrs, &after.attrs)
+        && before.vis.to_token_stream().to_string() == after.vis.to_token_stream().to_string()
+        && safe_block(&before.block, &after.block, ItemKind::Support, approval)
+}
+
+fn safe_constant(before: &syn::ImplItemConst, items: &[syn::ImplItem]) -> bool {
+    items.iter().any(|item| {
+        if let syn::ImplItem::Const(after) = item {
+            let old_expr = before.expr.to_token_stream();
+            let new_expr = after.expr.to_token_stream();
+            before.ident == after.ident
+                && before.vis.to_token_stream().to_string()
+                    == after.vis.to_token_stream().to_string()
+                && before.ty.to_token_stream().to_string() == after.ty.to_token_stream().to_string()
+                && equal_attributes(&before.attrs, &after.attrs)
+                && ((!contains_assertion(old_expr.clone())
+                    && !contains_assertion(new_expr.clone()))
+                    || old_expr.to_string() == new_expr.to_string())
+        } else {
+            false
+        }
+    })
+}
+
+fn safe_type(before: &syn::ImplItemType, items: &[syn::ImplItem]) -> bool {
+    items.iter().any(|item| {
+        if let syn::ImplItem::Type(after) = item {
+            let old_type = before.ty.to_token_stream();
+            let new_type = after.ty.to_token_stream();
+            before.ident == after.ident
+                && before.vis.to_token_stream().to_string()
+                    == after.vis.to_token_stream().to_string()
+                && before.generics.to_token_stream().to_string()
+                    == after.generics.to_token_stream().to_string()
+                && equal_attributes(&before.attrs, &after.attrs)
+                && ((!contains_assertion(old_type.clone())
+                    && !contains_assertion(new_type.clone()))
+                    || old_type.to_string() == new_type.to_string())
+        } else {
+            false
+        }
+    })
+}
+
+fn safe_impl(before: &str, after: &str, approval: AssertionChange) -> bool {
+    let (Some((before_context, before_impl)), Some((after_context, after_impl))) =
+        (parsed_impl(before), parsed_impl(after))
     else {
         return false;
     };
     if before_context != after_context {
         return false;
     }
-    if before_fn.sig.to_token_stream().to_string() != after_fn.sig.to_token_stream().to_string()
-        || before_fn.vis.to_token_stream().to_string() != after_fn.vis.to_token_stream().to_string()
-    {
-        return false;
-    }
-    let protected = |item: &syn::ItemFn| {
-        let mut control = SetupControl::default();
-        let mut assertions = Vec::new();
-        for statement in &item.block.stmts {
-            let tokens = statement.to_token_stream();
-            if contains_assertion(tokens.clone()) {
-                assertions.push(tokens.to_string());
-            } else {
-                control.visit_stmt(statement);
-            }
-        }
-        (!control.blocked).then_some(assertions)
-    };
-    match (protected(&before_fn), protected(&after_fn)) {
-        (Some(left), Some(right)) => {
-            left == right && (kind == ItemKind::Support || !left.is_empty())
-        }
+    before_impl.items.iter().all(|old| match old {
+        syn::ImplItem::Fn(before_fn) => safe_method(before_fn, &after_impl.items, approval),
+        syn::ImplItem::Const(before_const) => safe_constant(before_const, &after_impl.items),
+        syn::ImplItem::Type(before_type) => safe_type(before_type, &after_impl.items),
+        syn::ImplItem::Macro(_) | syn::ImplItem::Verbatim(_) => after_impl
+            .items
+            .iter()
+            .any(|new| old.to_token_stream().to_string() == new.to_token_stream().to_string()),
         _ => false,
-    }
+    })
 }
 
-fn support<'a>(scan: &'a Scan, id: &str) -> Option<&'a str> {
+fn support<'a>(scan: &'a Scan, id: &str) -> Option<(&'a str, &'a str)> {
     let mut found = scan.modules.iter().flat_map(|(module, record)| {
         record
             .support
             .iter()
             .filter_map(move |((kind, name), value)| {
-                (kind == "fn" && format!("{module}::{kind} {name}") == id).then_some(value.as_str())
+                ((kind == "fn" || kind == "impl") && format!("{module}::{kind} {name}") == id)
+                    .then_some((kind.as_str(), value.as_str()))
             })
     });
     let value = found.next()?;
     found.next().is_none().then_some(value)
 }
 
-fn safe_finding(finding: &Finding<Rule>, before: &Scan, after: &Scan) -> bool {
+fn method_names(fingerprint: &str) -> BTreeSet<String> {
+    parsed_impl(fingerprint).map_or_else(BTreeSet::new, |(_, item)| {
+        item.items
+            .iter()
+            .filter_map(|method| {
+                if let syn::ImplItem::Fn(function) = method {
+                    Some(function.sig.ident.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    })
+}
+
+fn new_helper_names(before: &Scan, after: &Scan) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for (module, record) in &after.modules {
+        let previous = before.modules.get(module);
+        for ((kind, name), fingerprint) in &record.support {
+            let old = previous.and_then(|entry| entry.support.get(&(kind.clone(), name.clone())));
+            match kind.as_str() {
+                "fn" if old.is_none() => {
+                    names.insert(name.clone());
+                }
+                "impl" => {
+                    let old_methods = old.map_or_else(BTreeSet::new, |item| method_names(item));
+                    names.extend(method_names(fingerprint).difference(&old_methods).cloned());
+                }
+                _ => {}
+            }
+        }
+    }
+    names
+}
+
+fn count_new_helpers(
+    stream: TokenStream,
+    names: &BTreeSet<String>,
+    counts: &mut BTreeMap<String, usize>,
+) {
+    for token in stream {
+        match token {
+            TokenTree::Ident(name) => {
+                let normalized = crate::rust_names::ident(&name);
+                if names.contains(&normalized) {
+                    let count = counts.entry(normalized).or_default();
+                    *count = count.saturating_add(1);
+                }
+            }
+            TokenTree::Group(group) => count_new_helpers(group.stream(), names, counts),
+            TokenTree::Punct(_) | TokenTree::Literal(_) => {}
+        }
+    }
+}
+
+fn helper_tokens(fingerprint: &str) -> Option<TokenStream> {
+    if let Some((_, function)) = parsed_item(fingerprint) {
+        Some(function.block.to_token_stream())
+    } else if let Some((_, item)) = parsed_impl(fingerprint) {
+        let mut stream = TokenStream::new();
+        for method in &item.items {
+            if let syn::ImplItem::Fn(function) = method {
+                stream.extend(function.block.to_token_stream());
+            }
+        }
+        Some(stream)
+    } else {
+        None
+    }
+}
+
+fn references_new_helper(before: &str, after: &str, names: &BTreeSet<String>) -> bool {
+    let (Some(old), Some(new)) = (helper_tokens(before), helper_tokens(after)) else {
+        return true;
+    };
+    let mut old_counts = BTreeMap::new();
+    let mut new_counts = BTreeMap::new();
+    count_new_helpers(old, names, &mut old_counts);
+    count_new_helpers(new, names, &mut new_counts);
+    new_counts
+        .iter()
+        .any(|(name, count)| *count > old_counts.get(name).copied().unwrap_or(0))
+}
+
+fn safe_finding(
+    finding: &Finding<Rule>,
+    before: &Scan,
+    after: &Scan,
+    approval: AssertionChange,
+    new_helpers: &BTreeSet<String>,
+) -> bool {
     match &finding.rule {
-        Rule::Modified(id) => before
-            .tests
-            .get(id)
-            .zip(after.tests.get(id))
-            .is_some_and(|(old, new)| safe_item(old, new, ItemKind::Test)),
-        Rule::SupportModified(id) => support(before, id)
-            .zip(support(after, id))
-            .is_some_and(|(old, new)| safe_item(old, new, ItemKind::Support)),
+        Rule::Modified(id) => {
+            before
+                .tests
+                .get(id)
+                .zip(after.tests.get(id))
+                .is_some_and(|(old, new)| {
+                    !references_new_helper(old, new, new_helpers)
+                        && safe_item(old, new, ItemKind::Test, approval)
+                })
+        }
+        Rule::SupportModified(id) => support(before, id).zip(support(after, id)).is_some_and(
+            |((old_kind, old), (new_kind, new))| {
+                !references_new_helper(old, new, new_helpers)
+                    && match (old_kind, new_kind) {
+                        ("fn", "fn") => safe_item(old, new, ItemKind::Support, approval),
+                        ("impl", "impl") => safe_impl(old, new, approval),
+                        _ => false,
+                    }
+            },
+        ),
         Rule::Removed(_)
         | Rule::NotListed(_)
         | Rule::CountDecreased { .. }
@@ -464,6 +971,7 @@ pub(super) fn apply_with_authority(
         return Ok(findings);
     }
     let base_scan = scan(before);
+    let new_helpers = new_helper_names(&base_scan, &scan(current));
     for (group, expected) in groups {
         let Some((old, new)) = before.get(&group.path).zip(current.get(&group.path)) else {
             continue;
@@ -476,11 +984,16 @@ pub(super) fn apply_with_authority(
         let (isolated, _) = compare_files(before, &hybrid);
         let actual: BTreeSet<String> = isolated.iter().map(|item| item.rule.to_string()).collect();
         let target_scan = scan(&hybrid);
-        if actual == expected
+        if actual == expected.keys().cloned().collect()
             && !isolated.is_empty()
-            && isolated
-                .iter()
-                .all(|item| findings.contains(item) && safe_finding(item, &base_scan, &target_scan))
+            && isolated.iter().all(|item| {
+                findings.contains(item)
+                    && expected
+                        .get(&item.rule.to_string())
+                        .is_some_and(|approval| {
+                            safe_finding(item, &base_scan, &target_scan, *approval, &new_helpers)
+                        })
+            })
         {
             findings = findings.difference(&isolated).cloned().collect();
         }

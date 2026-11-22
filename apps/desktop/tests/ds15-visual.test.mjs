@@ -1,3 +1,4 @@
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { baselineFixture } from "./ds15-records-fixture.mjs";
 import { writeBaselineSet } from "../../../harness/visual/records.mjs";
 import { readFileSync } from "node:fs";
@@ -101,8 +102,7 @@ test("DS15 real entry refuses an untrusted image before any baseline write", asy
 
 test("DS15 actual registered checker rejects fixed darwin files in another repository", async () => {
   const { spawnSync } = await import("node:child_process");
-  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } =
-    await import("node:fs");
+  const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
   const { join, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -149,8 +149,7 @@ test("DS15 actual registered checker rejects fixed darwin files in another repos
 
 test("DS15 browser startup failure closes its server and exits", async () => {
   const { spawnSync } = await import("node:child_process");
-  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } =
-    await import("node:fs");
+  const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
   const { join, dirname } = await import("node:path");
   const { fileURLToPath } = await import("node:url");
   const root = fileURLToPath(new URL("../../../", import.meta.url));

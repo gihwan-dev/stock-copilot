@@ -1,10 +1,5 @@
-import {
-  mkdtempSync,
-  writeFileSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-} from "node:fs";
+import { writeFileSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join } from "node:path";
 import { build } from "vite";
 import { MessageChannel } from "node:worker_threads";

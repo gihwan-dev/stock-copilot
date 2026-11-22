@@ -118,9 +118,13 @@ DS-20의 고정 Chromium 실행에서 1,034개 테마 이야기 중 174개 이�
 
 승인 자료의 task는 DS-22, path는 apps/desktop/tests/ds20-catalog.browser.ts, 변경 전 SHA-256은 4986090e1f8158163d8df3883e73ea97a5d106f75bf785324dda0c6a482c7ca0, 변경 후는 3b4b65318ac228f1337b5a08e36a7939bee822073f2df1a72238e264bbcb86e3이며 단언 변경은 `assertion_change = true`다. H-55의 test-diff는 Rust 파일만 검사하고 승인 경로에도 rs 확장자만 허용하므로 이 TypeScript 파일의 정확한 test-diff 지적 문자열은 존재하지 않으며 승인 행을 등록할 수 없다. 메인의 명시적 승인과 H-55 기계 승인 경로는 별개다.
 
+## 병합 시 기존 테스트 준비
+
+H-53~H-55를 받는 병합 중 H-54의 `로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다`는 이전 HEAD의 복제본에 최신 agent-stop 테스트만 복사했다. 최신 테스트가 새로 가져오는 test-temp와 managed-temp 모듈이 복제본에 없어 모듈 로딩이 실패했다. 기존 테스트 한 건의 준비 단계에 두 모듈 복사만 추가하고 모든 기존 단언을 유지했다. 수정 전 실패와 수정 후 통과를 확인했다. 파일 `harness/ci/tests/h54-branch-master.test.mjs`의 master 기준 SHA-256은 76150354bbf03d4b35d8a8f2ec7e493f246d8c06e7fb2c6b52b3fa7449ac98d7, 변경 후는 1285cbf30f6d6202280f68e21c2d66be84e65ca33cb2b6305744657691da079e다. 이 준비 변경은 지시문의 기존 테스트 준비 사전 승인에 따르며 검사를 끄지 않는다. 훅 진입을 검증하는 하네스 테스트가 범위에 추가되어 리뷰 등급을 2에서 3으로 올린다.
+
 ## 손 변형
 
-1~28번은 mktemp -d 복사본에서 TypeScript 컴파일을 통과한 뒤 고정 Chromium의 해당 회귀를 실제로 실행했다. 기준 복사본의 전체 예제가 먼저 통과했다. 29~37번은 별도 복사본에서 node --check와 보류 대조 Node 테스트를 실제로 실행했다. 38~40번은 보완 후 다른 복사본에서 TypeScript 컴파일과 고정 Chromium의 해당 회귀를 실행했다. 병렬 변이는 사용하지 않았다.
+1~28번은 mktemp -d 복사본에서 TypeScript 컴파일을 통과한 뒤 고정 Chromium의 해당 회귀를 실제로 실행했다. 기준 복사본의 전체 예제가 먼저 통과했다. 29~37번은 별도 복사본에서 node --check와 보류 대조 Node 테스트를 실제로 실행했다. 38~40번은 보완 후 다른 복사본에서 TypeScript 컴파일과 고정 Chromium의 해당 회귀를 실행했다. 41~42번은 다른 복사본에서 node --check와 H-54 테스트를 실행했다. 병렬 변이는 사용하지 않았다.
 
 | 번호 | 바꾼 것                                     | 잡은 테스트                                                                                     | 결과 |
 | ---- | ------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---- |
@@ -164,3 +168,5 @@ DS-20의 고정 Chromium 실행에서 1,034개 테마 이야기 중 174개 이�
 | 38   | 숫자 input 제외                             | accepts editable number input content scrolling                                                 | 검출 |
 | 39   | 브라우저 유효 타입 대신 원시 type 속성 사용 | accepts editable unsupported input content scrolling                                            | 검출 |
 | 40   | 입력에 생략 표식 예외 적용                  | still detects vertical/horizontal textarea overflow with a truncation marker                    | 검출 |
+| 41   | H-54 복제본의 managed-temp 모듈 복사 제거   | 로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다                                  | 검출 |
+| 42   | H-54 복제본의 test-temp 모듈 복사 제거      | 로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 통과한다                                  | 검출 |

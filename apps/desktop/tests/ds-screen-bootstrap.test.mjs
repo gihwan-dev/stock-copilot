@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   cpSync,
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
   rmSync,
 } from "node:fs";
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { ESLint } from "./ds-runtime-environment.mjs";

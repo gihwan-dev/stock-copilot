@@ -1,4 +1,5 @@
-import { mkdtempSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { readdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";

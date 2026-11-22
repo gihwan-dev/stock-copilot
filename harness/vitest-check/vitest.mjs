@@ -1,12 +1,12 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { mkdtempSync } from "../ci/managed-temp.mjs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -84,34 +84,40 @@ export const vitestEnvironment = (source) =>
 
 export const runVitest = (root, configFile = appConfigFile) => {
   const scratch = mkdtempSync(join(tmpdir(), "vitest-check-"));
-  const output = join(scratch, "report.json");
-  const run = spawnSync(
-    vitestBin,
-    [
-      "run",
-      "--config",
-      configFile,
-      "--root",
-      root,
-      "--reporter=json",
-      `--outputFile.json=${output}`,
-    ],
-    { cwd: root, encoding: "utf8", env: vitestEnvironment(process.env) },
-  );
-  const report = existsSync(output)
-    ? JSON.parse(readFileSync(output, "utf8"))
-    : undefined;
-  rmSync(scratch, { recursive: true, force: true });
-  return { status: run.status, report, output: run.stdout + run.stderr };
+  try {
+    const output = join(scratch, "report.json");
+    const run = spawnSync(
+      vitestBin,
+      [
+        "run",
+        "--config",
+        configFile,
+        "--root",
+        root,
+        "--reporter=json",
+        `--outputFile.json=${output}`,
+      ],
+      { cwd: root, encoding: "utf8", env: vitestEnvironment(process.env) },
+    );
+    const report = existsSync(output)
+      ? JSON.parse(readFileSync(output, "utf8"))
+      : undefined;
+    return { status: run.status, report, output: run.stdout + run.stderr };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 };
 
 export const withConfig = (config, action) => {
   const scratch = mkdtempSync(join(tmpdir(), "vitest-config-"));
-  const file = join(scratch, "vitest.config.mjs");
-  writeFileSync(file, `export default ${JSON.stringify(config)};\n`);
-  const result = action(file);
-  rmSync(scratch, { recursive: true, force: true });
-  return result;
+  try {
+    const file = join(scratch, "vitest.config.mjs");
+    writeFileSync(file, `export default ${JSON.stringify(config)};\n`);
+    const result = action(file);
+    return result;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 };
 
 export const casesRoot = join(here, "cases");

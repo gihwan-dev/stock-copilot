@@ -119,10 +119,13 @@ mod tests {
             ],
         );
         check_trait(
-            &source,
+            &port_source("src/signal_ports.rs"),
             "SignalRepository",
             &[
-                "fn replace(&self, instrument: &InstrumentId, signals: &[RaisedSignal]) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn snapshot(&self, instrument: &InstrumentId) -> impl Future<Output = Result<SignalSnapshot, SystemPortError>> + Send",
+                "fn commit(&self, instrument: &InstrumentId, expected: &SignalSnapshot, mutation: &SignalMutation) -> impl Future<Output = Result<SignalCommitOutcome, SystemPortError>> + Send",
+                "fn occurrences(&self, instrument: &InstrumentId, identity: &ResolvedOrderInstrument) -> impl Future<Output = Result<Vec<BuySignalRecord>, SystemPortError>> + Send",
+                "fn sources(&self, task: &IssuedEstimateTaskId) -> impl Future<Output = Result<SignalSourceFacts, SystemPortError>> + Send",
                 "fn current(&self, instrument: &InstrumentId) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send",
             ],
         );

@@ -1,3 +1,4 @@
+import { mkdtempSync } from "../../../harness/ci/test-temp.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
@@ -119,7 +120,7 @@ test("DS02 fixes plugin cwd and entryPoint in the effective application config",
 });
 
 test("DS02 wrong entryPoint fixtures expose fail-open default classes", async () => {
-  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { writeFileSync, rmSync } = await import("node:fs");
   const folder = mkdtempSync(`${desktopRoot}/.ds-02-entry-`);
   try {
     writeFileSync(
