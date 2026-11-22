@@ -10,3 +10,4 @@ pub(crate) const DISABLE_FK_FIXTURE: &str = "PRAGMA foreign_keys = OFF";
 
 pub(crate) const REPLACE_HISTORY: &str = "INSERT OR REPLACE INTO thesis_history(instrument, sequence, payload) VALUES (?1, 1, 'changed')";
 pub(crate) const UPSERT_HISTORY: &str = "INSERT INTO thesis_history(instrument, sequence, payload) VALUES (?1, 1, 'changed') ON CONFLICT(instrument, sequence) DO UPDATE SET payload = excluded.payload";
+pub(crate) const COPY_NONCANONICAL: &str = "INSERT INTO thesis_history(instrument, sequence, payload) SELECT ?1, sequence, '0' || payload FROM thesis_history WHERE instrument = ?2 AND sequence = 1";

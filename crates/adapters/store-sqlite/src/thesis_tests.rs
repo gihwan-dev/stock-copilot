@@ -467,3 +467,36 @@ fn sqlite_rejects_conflict_replacement_of_past_history() {
         thesis.history()
     );
 }
+
+#[test]
+fn noncanonical_history_fails_closed_without_affecting_original() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let database =
+        Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open");
+    let store = ThesisStore::new(&database);
+    let original = instrument("instrument-a");
+    let corrupted = instrument("instrument-b");
+    let thesis = changed_thesis();
+    rt.block_on(store.store(&original, &thesis)).expect("store");
+    rt.block_on(store.store(&corrupted, &Thesis::new()))
+        .expect("empty note");
+    let inserted = rt
+        .block_on(database.write(|tx| {
+            tx.execute(
+                crate::sql::thesis_tests::COPY_NONCANONICAL,
+                ["instrument-b", "instrument-a"],
+            )
+        }))
+        .expect("copy noncanonical history");
+    assert_eq!(inserted, 1);
+    rt.block_on(store.load(&corrupted))
+        .expect_err("noncanonical history is corrupt");
+    assert_eq!(
+        rt.block_on(store.load(&original))
+            .expect("load")
+            .expect("present")
+            .history(),
+        thesis.history()
+    );
+}
