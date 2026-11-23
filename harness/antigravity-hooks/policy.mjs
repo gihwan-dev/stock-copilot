@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   patternMatches,
@@ -9,6 +9,8 @@ import { readPolicy } from "../sandbox/fragment.mjs";
 
 export const ANTIGRAVITY_DENY_READ = Object.freeze([
   "~/.gemini",
+  "~/.antigravity",
+  "~/Library/Application Support/Antigravity",
   "~/.zsh_history",
   "~/.bash_history",
   "~/.sh_history",
@@ -16,7 +18,17 @@ export const ANTIGRAVITY_DENY_READ = Object.freeze([
   "~/.zhistory",
 ]);
 
-export const ANTIGRAVITY_PROTECTED_HOME = Object.freeze(["~/.gemini/**"]);
+export const ANTIGRAVITY_PROTECTED_HOME = Object.freeze([
+  "~/.gemini/**",
+  "~/.antigravity/**",
+  "~/Library/Application Support/Antigravity/**",
+  "~/.zshrc",
+  "~/.zprofile",
+  "~/.zshenv",
+  "~/.bashrc",
+  "~/.bash_profile",
+  "~/.profile",
+]);
 
 export const ANTIGRAVITY_HOOK_CONFIG = ".agents/hooks.json";
 
@@ -527,6 +539,59 @@ export const homeWriteFindings = (rawPath, policy, home = homedir()) => {
     }
   }
   return [];
+};
+
+const DEV_WRITABLES = ["/dev/null", "/dev/stdout", "/dev/stderr"];
+
+export const outsideWorktreeShellWriteFindings = (
+  candidate,
+  ownedWorktree,
+  home = homedir(),
+) => {
+  if (
+    within(candidate, ownedWorktree) ||
+    within(candidate, realOrSelf(ownedWorktree ?? ""))
+  ) {
+    return [];
+  }
+  if (DEV_WRITABLES.includes(candidate) || candidate.startsWith("/dev/fd/")) {
+    return [];
+  }
+  const homes = [
+    ...new Set([
+      home.replace(/\/+$/u, ""),
+      realOrSelf(home).replace(/\/+$/u, ""),
+    ]),
+  ];
+  if (homes.some((homeRoot) => within(candidate, homeRoot))) {
+    return [
+      {
+        rule: "outside-worktree-write",
+        gated: false,
+        message: `작업 사본 밖의 사용자 홈 경로에는 셸로 쓰지 않는다: ${candidate}`,
+      },
+    ];
+  }
+  const tempRoots = [
+    ...new Set([
+      "/tmp",
+      "/private/tmp",
+      "/var/folders",
+      "/private/var/folders",
+      tmpdir().replace(/\/+$/u, ""),
+      realOrSelf(tmpdir()).replace(/\/+$/u, ""),
+    ]),
+  ];
+  if (tempRoots.some((root) => within(candidate, root))) {
+    return [];
+  }
+  return [
+    {
+      rule: "outside-worktree-write",
+      gated: false,
+      message: `작업 사본과 임시 폴더 밖 경로에는 셸로 쓰지 않는다: ${candidate}`,
+    },
+  ];
 };
 
 const nameMatches = (pattern, target) => {

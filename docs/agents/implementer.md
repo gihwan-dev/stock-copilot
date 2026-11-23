@@ -74,4 +74,4 @@ fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. d
 - 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 담당한다.
 - 리뷰 비판자(`review-critic`)와 조사 역할은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 담당하며, Antigravity 세션 훅(`.agents/hooks.json`)이 `gemini-4-neon-xhigh` 외 모델·주 작업 트리 세션·리뷰 브랜치·detached HEAD를 읽기 전용 리뷰어 역할로 고정한다.
 - 적대적 리뷰(`adversarial-reviewer`)는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `claudeAgent` 형식 인스턴스 이름 허용)가 담당한다.
-- Antigravity 세션의 `delegate_task` 위임은 잠금(`lock.txt = on`)에서 전면 차단된다. 잠금 전(`lock.txt = off`)에는 메인이 원격 리뷰 회차를 명시 위임한 경우에 한해 구현자 역할의 `role=review`만 허용하며, 현재 작업 사본 브랜치·커밋된 `HEAD`·조상 기준 SHA·구현자 보고서 차단(`reviewBriefCheck`·`reportProblems`)을 모두 통과해야 한다.
+- Antigravity 세션 훅(`.agents/hooks.json`)은 역할·잠금 상태와 무관하게 `mcp_t3-code_delegate_task`, `invoke_subagent` 등 모든 하위 에이전트 위임을 차단한다(Claude 서브에이전트·Codex 훅과 동일하며, 위임은 메인 Claude만 수행한다).

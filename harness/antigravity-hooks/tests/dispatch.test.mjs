@@ -136,7 +136,7 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
   );
   assert.equal(dirtyImplementerStop.decision, "continue");
 
-  const continuedStop = dispatchEvent(
+  const continuedDirtyStop = dispatchEvent(
     {
       hookEventName: "Stop",
       cwd: f.worktree,
@@ -144,12 +144,61 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
       terminationReason: "NO_TOOL_CALL",
       fullyIdle: true,
       continuationActive: true,
+      executionNum: 2,
     },
     session,
     record,
     { branch: "h-61", hooksReady: true, dirty: " M crates/domain/src/lib.rs" },
   );
-  assert.equal(continuedStop.decision, "allow");
+  assert.equal(continuedDirtyStop.decision, "continue");
+
+  const continuedReviewerDirtyStop = dispatchEvent(
+    {
+      hookEventName: "Stop",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-high",
+      terminationReason: "NO_TOOL_CALL",
+      fullyIdle: true,
+      continuationActive: true,
+      executionNum: 2,
+    },
+    session,
+    record,
+    { branch: "h-61", trackedDirty: " M docs/notes.md" },
+  );
+  assert.equal(continuedReviewerDirtyStop.decision, "continue");
+
+  const continuedCleanStop = dispatchEvent(
+    {
+      hookEventName: "Stop",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-xhigh",
+      terminationReason: "NO_TOOL_CALL",
+      fullyIdle: true,
+      continuationActive: true,
+      executionNum: 2,
+    },
+    session,
+    record,
+    { branch: "h-61", hooksReady: true, dirty: "" },
+  );
+  assert.equal(continuedCleanStop.decision, "allow");
+
+  const cappedStop = dispatchEvent(
+    {
+      hookEventName: "Stop",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-xhigh",
+      terminationReason: "NO_TOOL_CALL",
+      fullyIdle: true,
+      continuationActive: true,
+      executionNum: 9,
+    },
+    session,
+    record,
+    { branch: "h-61", hooksReady: true, dirty: " M crates/domain/src/lib.rs" },
+  );
+  assert.equal(cappedStop.decision, "allow");
 
   const missingHooksStop = dispatchEvent(
     {

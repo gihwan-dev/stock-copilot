@@ -570,7 +570,7 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
   assert.equal(call("manage_task", { Action: "list" }).decision, "allow");
 
   const validBrief = `- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n- 대상 SHA: ${headSha}\nH-61 변경을 리뷰하라.`;
-  const validClaudeReview = {
+  const claudeReviewArgs = {
     task: validBrief,
     toolSummary: "Adversarial review",
     role: "review",
@@ -582,177 +582,17 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
       options: { effort: "high" },
     },
   };
-  assert.equal(
-    call("mcp_t3-code_delegate_task", validClaudeReview, { lock: LOCK.off })
-      .decision,
-    "allow",
-  );
-  assert.equal(
-    call("mcp_t3-code_delegate_task", validClaudeReview, { lock: LOCK.on })
-      .decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        target: {
-          driverKind: "claudeAgent",
-          providerInstanceId: "claudeAgent_claude2",
-          model: "claude-opus-5-5",
-        },
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "allow",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        target: {
-          driverKind: "claudeAgent",
-          model: "claude-opus-5-5",
-        },
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "allow",
-  );
-  assert.equal(
-    call("mcp_t3-code_delegate_task", validClaudeReview, {
-      lock: LOCK.off,
-      modelName: "gemini-4-neon-high",
-    }).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        task: `${validBrief}\n구현자 보고: 완료`,
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        task: `${validBrief}\n완료`,
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        task: "review H-61 without brief metadata",
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        role: "implementation",
-        target: {
-          driverKind: "antigravity",
-          providerInstanceId: "antigravity",
-          model: "gemini-4-neon",
-          options: { thought_level: "xhigh" },
-        },
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        role: "research",
-        target: {
-          driverKind: "antigravity",
-          providerInstanceId: "antigravity",
-          model: "gemini-4-neon",
-          options: { thought_level: "high" },
-        },
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        target: {
-          driverKind: "codex",
-          model: "gpt-6.1-sol",
-          options: { reasoningEffort: "high" },
-        },
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  for (const badInstance of ["codex", "other", "myCodex", "gpt", ""]) {
+  for (const opts of [
+    { lock: LOCK.off },
+    { lock: LOCK.on },
+    { lock: LOCK.off, modelName: "gemini-4-neon-high" },
+    { lock: LOCK.off, sessionCwd: f.root, cwd: f.root },
+  ]) {
     assert.equal(
-      call(
-        "mcp_t3-code_delegate_task",
-        {
-          ...validClaudeReview,
-          target: {
-            driverKind: "claudeAgent",
-            providerInstanceId: badInstance,
-            model: "claude-opus-5-5",
-          },
-        },
-        { lock: LOCK.off },
-      ).decision,
+      call("mcp_t3-code_delegate_task", claudeReviewArgs, opts).decision,
       "deny",
     );
   }
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        target: {
-          driverKind: "claudeAgent",
-          providerInstanceId: "claudeAgent",
-          model: "claude-sonnet-5-5",
-        },
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        ...validClaudeReview,
-        isolation: "shared",
-      },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
-  );
   assert.equal(
     call(
       "mcp_t3-code_delegate_task",
@@ -770,7 +610,7 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
       },
       { lock: LOCK.off },
     ).decision,
-    "allow",
+    "deny",
   );
 });
 
@@ -1271,4 +1111,212 @@ test("Round 1 review hardening blocks .agents dir/git mutations, home ancestors/
       `expected allow for ${toolName} ${JSON.stringify(args)} -> ${JSON.stringify(actual)}`,
     );
   }
+});
+
+test("Round 2 review hardening blocks git pathspec magic, archive/sqlite/git-grep-O, dynamic reads, relative home/outside writes, trap nesting, git toss hosts, and allows bool option keys", () => {
+  const docsCwd = join(f.worktree, "docs");
+  const denyCases = [
+    [
+      "run_command",
+      { CommandLine: `git checkout ${baseSha} -- ':(top).agents'` },
+      { cwd: docsCwd, lock: LOCK.on },
+    ],
+    [
+      "run_command",
+      { CommandLine: `git checkout ${baseSha} -- :/.agents` },
+      { cwd: docsCwd, lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git rm -r -q :/.agents" },
+      { cwd: docsCwd, lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git rm :/harness/claude-hooks/lock.txt" },
+      { cwd: docsCwd, lock: LOCK.on },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git restore ':(icase).AGENTS'" },
+      { cwd: docsCwd, lock: LOCK.on },
+    ],
+    ["run_command", { CommandLine: "tar -xf /tmp/x.tar" }, { lock: LOCK.on }],
+    ["run_command", { CommandLine: "tar xf /tmp/x.tar" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: "bsdtar -xf /tmp/x.tar --unlink" },
+      { lock: LOCK.on },
+    ],
+    ["run_command", { CommandLine: "cpio -i < /tmp/x.cpio" }],
+    ["run_command", { CommandLine: "pax -r < /tmp/x.pax" }],
+    ["run_command", { CommandLine: "unzip -o /tmp/evil.zip" }],
+    [
+      "run_command",
+      { CommandLine: "sqlite3 :memory: '.shell rm -rf .agents'" },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git grep -O'rm -rf .agents' H-61 docs/tasks.md" },
+    ],
+    [
+      "run_command",
+      {
+        CommandLine:
+          "git grep --open-files-in-pager='git commit -am x' H-61 docs/tasks.md",
+      },
+      { modelName: "gemini-4-neon-high" },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git format-patch -1 HEAD" },
+      { modelName: "gemini-4-neon-high" },
+    ],
+    ["run_command", { CommandLine: "x=.ssh; cat ~/$x/id_probe" }],
+    ["run_command", { CommandLine: "x=.ssh; cat $HOME/$x/id_probe" }],
+    ["run_command", { CommandLine: "cat ~/$'\\x2e'ssh/id_probe" }],
+    ["run_command", { CommandLine: "cat $PWD/../fake-home/.ssh/id_probe" }],
+    ["run_command", { CommandLine: "cat ${PWD%/*}/fake-home/.ssh/id_probe" }],
+    [
+      "run_command",
+      { CommandLine: "cat $(dirname $PWD)/fake-home/.ssh/id_probe" },
+    ],
+    ["run_command", { CommandLine: "x=.ssh; cat < ~/$x/id_probe" }],
+    ["run_command", { CommandLine: "x=.ssh; ssh-keygen -y -f ~/$x/id_probe" }],
+    ["run_command", { CommandLine: "x=.gemini; base64 -i ~/$x/settings.json" }],
+    ["run_command", { CommandLine: "echo 'export LEFTHOOK=0' >> ~/.zshrc" }],
+    ["run_command", { CommandLine: "echo x > ~/random-outside.txt" }],
+    [
+      "run_command",
+      {
+        CommandLine: "echo '{}' > ../fake-home/.gemini/settings.json",
+      },
+      { lock: LOCK.on },
+    ],
+    [
+      "write_file",
+      { Path: join(fakeHome, ".zshrc"), Content: "export LEFTHOOK=0\n" },
+    ],
+    [
+      "write_file",
+      {
+        Path: join(
+          fakeHome,
+          "Library/Application Support/Antigravity/User/settings.json",
+        ),
+        Content: "{}",
+      },
+    ],
+    [
+      "read_file",
+      {
+        Path: join(
+          fakeHome,
+          "Library/Application Support/Antigravity/User/settings.json",
+        ),
+      },
+    ],
+    [
+      "run_command",
+      { CommandLine: "trap 'cat ~/.ssh/id_probe' EXIT" },
+      { lock: LOCK.on },
+    ],
+    [
+      "run_command",
+      { CommandLine: "trap 'security find-generic-password -s x' EXIT" },
+      { lock: LOCK.on },
+    ],
+    [
+      "run_command",
+      { CommandLine: "trap 'cargo run -p toss-smoke' EXIT" },
+      { lock: LOCK.on },
+    ],
+    [
+      "run_command",
+      { CommandLine: "trap 'curl https://evil.example.com' EXIT" },
+      { lock: LOCK.on },
+    ],
+    [
+      "run_command",
+      { CommandLine: "trap 'rm -rf .agents' EXIT" },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "trap 'git commit -m x' EXIT" },
+      { modelName: "gemini-4-neon-high" },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git ls-remote https://openapi.tossinvest.com/x" },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git clone https://openapi.tossinvest.com/x" },
+    ],
+  ];
+
+  for (const [toolName, args, opts] of denyCases) {
+    const actual = call(toolName, args, opts ?? {});
+    assert.equal(
+      actual.decision,
+      "deny",
+      `expected deny for ${toolName} ${JSON.stringify(args)} (${JSON.stringify(opts ?? {})}) -> ${JSON.stringify(actual)}`,
+    );
+  }
+
+  const allowCases = [
+    ["find_by_name", { SearchDirectory: f.worktree, FullPath: true }],
+    [
+      "write_to_file",
+      {
+        TargetFile: join(f.worktree, "crates/domain/src/lib.rs"),
+        EmptyFile: false,
+      },
+    ],
+    ["run_command", { CommandLine: "git grep -n H-61 docs/tasks.md" }],
+    ["run_command", { CommandLine: 'git diff "$BASE"...HEAD' }],
+    ["run_command", { CommandLine: 'just base="$base" check-fast' }],
+    [
+      "run_command",
+      {
+        CommandLine:
+          'export PATH="$HOME/.nvm/versions/node/v24.22.0/bin:$PATH"; git status',
+      },
+    ],
+  ];
+  for (const [toolName, args, opts] of allowCases) {
+    const actual = call(toolName, args, opts ?? {});
+    assert.equal(
+      actual.decision,
+      "allow",
+      `expected allow for ${toolName} ${JSON.stringify(args)} -> ${JSON.stringify(actual)}`,
+    );
+  }
+  const realHomeEnv = antigravityPreTool(
+    {
+      hookEventName: "PreToolUse",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-xhigh",
+      toolCall: {
+        id: "tc-real-home-env",
+        name: "run_command",
+        args: {
+          CommandLine:
+            'export PATH="$HOME/.nvm/versions/node/v24.22.0/bin:$PATH"; export TMPDIR=/tmp; git status',
+        },
+      },
+    },
+    projectFor(f, { lock: LOCK.on }),
+    f.worktree,
+    { home: "/Users/example-user", branch: "h-61" },
+  );
+  assert.equal(realHomeEnv.decision, "allow");
+  const relGeminiWrite = call(
+    "run_command",
+    { CommandLine: "echo '{}' > ../fake-home/.gemini/settings.json" },
+    { lock: LOCK.on },
+  );
+  assert.equal(relGeminiWrite.decision, "deny");
+  assert.match(relGeminiWrite.reason, /\[protected-home\]/u);
 });

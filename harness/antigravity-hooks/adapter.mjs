@@ -1,29 +1,13 @@
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import {
-  AGENT_RULES_FILE,
-  knownReportDigests,
-  readAgentRules,
-} from "../../.claude/hooks/lib/agent-facts.mjs";
-import { reportProblems } from "../../.claude/hooks/lib/agent-guard.mjs";
 import {
   DEFINITIONS,
   WRITERS,
   bashFindings,
   unwrap,
 } from "../../.claude/hooks/lib/bash-guard.mjs";
-import {
-  parseBrief,
-  reviewTargetCommit,
-} from "../../.claude/hooks/lib/brief.mjs";
 import { editFindings } from "../../.claude/hooks/lib/edit-guard.mjs";
-import {
-  headOf,
-  isAncestor,
-  resolveCommit,
-} from "../../.claude/hooks/lib/git-facts.mjs";
-import { delegateTargetFindings } from "../../.claude/hooks/lib/orchestration.mjs";
 import {
   locate,
   realTarget,
@@ -32,7 +16,6 @@ import {
 import { LOCK, git } from "../../.claude/hooks/lib/project.mjs";
 import { ROLE } from "../../.claude/hooks/lib/roles.mjs";
 import { parseScript } from "../../.claude/hooks/lib/shell.mjs";
-import { stateDirectory } from "../../.claude/hooks/lib/state.mjs";
 import { DECISION, decide } from "../../.claude/hooks/lib/verdict.mjs";
 import {
   patchPaths,
@@ -47,6 +30,7 @@ import {
   expandHome,
   homeWriteFindings,
   loadAntigravityPolicy,
+  outsideWorktreeShellWriteFindings,
   readTargetFindings,
 } from "./policy.mjs";
 
@@ -145,7 +129,84 @@ const REVIEWER_DENIED_GIT_SUBCOMMANDS = new Set([
   "read-tree",
   "write-tree",
   "checkout-index",
+  "format-patch",
+  "bundle",
+  "archive",
 ]);
+
+const FILE_READ_COMMANDS = new Set([
+  "cat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "find",
+  "ls",
+  "stat",
+  "file",
+  "diff",
+  "cmp",
+  "jq",
+  "base64",
+  "xxd",
+  "od",
+  "hexdump",
+  "strings",
+  "wc",
+  "sort",
+  "cut",
+  "awk",
+  "gawk",
+  "mawk",
+  "nawk",
+  "sed",
+  "tr",
+  "nl",
+  "tac",
+  "rev",
+  "du",
+  "tree",
+  "shasum",
+  "sha256sum",
+  "md5",
+  "ssh-keygen",
+  "openssl",
+  "plutil",
+  "defaults",
+  "sqlite3",
+  "tar",
+  "bsdtar",
+  "gtar",
+  "gnutar",
+  "cpio",
+  "pax",
+  "unzip",
+  "zip",
+  "gzip",
+  "bzip2",
+  "xz",
+]);
+
+const GIT_NETWORK_SUBCOMMANDS = new Set([
+  "ls-remote",
+  "clone",
+  "fetch",
+  "pull",
+  "push",
+  "remote",
+  "submodule",
+]);
+
+const ARCHIVE_EXTRACT_ONLY = new Set(["unzip", "unar", "unrar", "ditto"]);
+
+const TAR_COMMANDS = new Set(["tar", "bsdtar", "gtar", "gnutar"]);
+
+const SQLITE_META_PATTERN =
+  /^\.(?:shell|system|output|once|load|read|excel|save|backup|restore|import|clone)\b/iu;
 
 const REVIEWER_READONLY_BRANCH_FLAGS = new Set([
   "--show-current",
@@ -488,7 +549,7 @@ const writePathsFromArgs = (toolName, args) => {
   const extra = Object.entries(args)
     .filter(
       ([key, value]) =>
-        value !== undefined &&
+        typeof value === "string" &&
         /(?:path|file|dir|directory|root)$/iu.test(key) &&
         !explicit.includes(value),
     )
@@ -521,7 +582,7 @@ const readPathsFromArgs = (toolName, args, fallbackCwd) => {
   const extra = Object.entries(args)
     .filter(
       ([key, value]) =>
-        value !== undefined &&
+        typeof value === "string" &&
         /(?:path|file|dir|directory|root)$/iu.test(key) &&
         !explicit.includes(value),
     )
@@ -699,7 +760,169 @@ const shellNestedScripts = (invocation, rules) => {
   ) {
     scripts.push(invocation.args.map((word) => word.text).join(" "));
   }
+  if (name === "trap") {
+    const action = invocation.args.find(
+      (word) =>
+        !word.dynamic && !(word.text.startsWith("-") && word.text !== "-"),
+    );
+    if (action !== undefined && action.text !== "-" && action.text !== "") {
+      scripts.push(action.text);
+    }
+  }
   return scripts;
+};
+
+const dynamicPathRisk = (word) => {
+  const raw = word.raw ?? word.text ?? "";
+  return (
+    raw.startsWith("~") ||
+    raw.includes("/") ||
+    raw.includes("$HOME") ||
+    raw.includes("${HOME") ||
+    raw.includes("$PWD") ||
+    raw.includes("${PWD") ||
+    raw.includes("$'") ||
+    raw.includes("$(") ||
+    raw.includes("`") ||
+    /(?:^|\/)\.\.(?:$|\/)/u.test(raw)
+  );
+};
+
+const opaqueShellExecFindings = (invocation) => {
+  const name = invocation.name;
+  if (name === undefined) return [];
+  const findings = [];
+  const beforeDashDash = [];
+  for (const word of invocation.args) {
+    if (word.text === "--" && !word.dynamic) break;
+    beforeDashDash.push(word);
+  }
+  if (TAR_COMMANDS.has(name)) {
+    const first = beforeDashDash[0]?.text ?? "";
+    const oldStyleExtract =
+      first.length > 0 &&
+      first.length <= 10 &&
+      !first.startsWith("-") &&
+      /^[a-zA-Z]*x[a-zA-Z]*$/u.test(first);
+    const flagExtract = beforeDashDash.some(
+      (word) =>
+        word.text === "--extract" ||
+        word.text === "--get" ||
+        (/^-[a-zA-Z]*x[a-zA-Z]*$/u.test(word.text) &&
+          !word.text.startsWith("--")),
+    );
+    if (oldStyleExtract || flagExtract) {
+      findings.push(
+        finding(
+          "antigravity-hook-config",
+          `아카이브 해제(${name})는 보호 경로와 .agents/hooks.json을 덮어쓸 수 있어 허용하지 않는다`,
+        ),
+      );
+    }
+  }
+  if (name === "cpio") {
+    const extracts = beforeDashDash.some(
+      (word) =>
+        word.text === "--extract" ||
+        word.text === "--pass-through" ||
+        (/^-[a-zA-Z]*[ip][a-zA-Z]*$/u.test(word.text) &&
+          !word.text.startsWith("--")),
+    );
+    if (extracts) {
+      findings.push(
+        finding(
+          "antigravity-hook-config",
+          "아카이브 해제(cpio)는 보호 경로와 .agents/hooks.json을 덮어쓸 수 있어 허용하지 않는다",
+        ),
+      );
+    }
+  }
+  if (name === "pax") {
+    const extracts = beforeDashDash.some(
+      (word) =>
+        word.text === "--read" ||
+        (/^-[a-zA-Z]*r[a-zA-Z]*$/u.test(word.text) &&
+          !word.text.startsWith("--")),
+    );
+    if (extracts) {
+      findings.push(
+        finding(
+          "antigravity-hook-config",
+          "아카이브 해제(pax)는 보호 경로와 .agents/hooks.json을 덮어쓸 수 있어 허용하지 않는다",
+        ),
+      );
+    }
+  }
+  if (ARCHIVE_EXTRACT_ONLY.has(name)) {
+    findings.push(
+      finding(
+        "antigravity-hook-config",
+        `아카이브·복사 해제 도구(${name})는 보호 경로와 .agents/hooks.json을 덮어쓸 수 있어 허용하지 않는다`,
+      ),
+    );
+  }
+  if (
+    ["7z", "7za", "7zz"].includes(name) &&
+    ["x", "e"].includes(beforeDashDash[0]?.text ?? "")
+  ) {
+    findings.push(
+      finding(
+        "antigravity-hook-config",
+        `아카이브 해제(${name})는 허용하지 않는다`,
+      ),
+    );
+  }
+  if (
+    (name === "jar" || name === "ar") &&
+    beforeDashDash.some((word) => /^-?[a-zA-Z]*x[a-zA-Z]*$/u.test(word.text))
+  ) {
+    findings.push(
+      finding(
+        "antigravity-hook-config",
+        `아카이브 해제(${name})는 허용하지 않는다`,
+      ),
+    );
+  }
+  if (name === "sqlite3") {
+    const dangerous = invocation.args.some(
+      (word) =>
+        word.dynamic ||
+        SQLITE_META_PATTERN.test(word.text.trim()) ||
+        ["-init", "-cmd"].includes(flagName(word.text)),
+    );
+    if (dangerous) {
+      findings.push(
+        finding(
+          "antigravity-hook-config",
+          "sqlite3의 셸·파일 실행 옵션(.shell, -cmd, -init 등)은 허용하지 않는다",
+        ),
+      );
+    }
+  }
+  if (name === "git") {
+    const { sub, rest } = parseGitSubcommand(invocation.args);
+    if (sub === "grep") {
+      for (const word of rest) {
+        if (word.text === "--" && !word.dynamic) break;
+        if (
+          word.text === "-O" ||
+          (word.text.startsWith("-O") && !word.text.startsWith("--")) ||
+          word.text === "--open-files-in-pager" ||
+          word.text.startsWith("--open-files-in-pager=") ||
+          (/^-[a-zA-Z]*O/u.test(word.text) && !word.text.startsWith("--"))
+        ) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              "git grep의 -O/--open-files-in-pager 명령 실행 옵션은 허용하지 않는다",
+            ),
+          );
+          break;
+        }
+      }
+    }
+  }
+  return findings;
 };
 
 const hostFromWord = (text) => {
@@ -975,8 +1198,22 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         for (const piece of valueText.split(":")) {
           if (piece && looksLikePath(piece)) checkReadCandidate(piece, cwd);
         }
-      } else if (valueText && looksLikePath(valueText)) {
-        checkReadCandidate(valueText, cwd);
+      } else {
+        if (
+          assignment.name !== "TMPDIR" &&
+          assignment.value?.dynamic &&
+          dynamicPathRisk(assignment.value)
+        ) {
+          findings.push(
+            finding(
+              "protected-home-read",
+              `동적 경로 대입(${assignment.name}=${assignment.value.raw})은 허용하지 않는다`,
+            ),
+          );
+        }
+        if (valueText && looksLikePath(valueText)) {
+          checkReadCandidate(valueText, cwd);
+        }
       }
       if (valueText.toLowerCase().includes(context.policy.tossHost)) {
         findings.push(
@@ -1009,8 +1246,18 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
           for (const piece of valueText.split(":")) {
             if (piece && looksLikePath(piece)) checkReadCandidate(piece, cwd);
           }
-        } else if (valueText && looksLikePath(valueText)) {
-          checkReadCandidate(valueText, cwd);
+        } else {
+          if (name !== "TMPDIR" && word.dynamic && dynamicPathRisk(word)) {
+            findings.push(
+              finding(
+                "protected-home-read",
+                `동적 경로 내보내기(${word.raw})는 허용하지 않는다`,
+              ),
+            );
+          }
+          if (valueText && looksLikePath(valueText)) {
+            checkReadCandidate(valueText, cwd);
+          }
         }
         if (valueText.toLowerCase().includes(context.policy.tossHost)) {
           findings.push(
@@ -1024,12 +1271,22 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
     }
     for (const redir of command.redirects) {
       if (["<", "<>", "<&"].includes(redir.operator)) {
-        checkReadCandidate(
-          redir.target.text,
-          invocation.cwdUnknown ? undefined : cwd,
-        );
+        if (redir.target.dynamic) {
+          findings.push(
+            finding(
+              "protected-home-read",
+              `동적 입력 리다이렉션 대상(${redir.target.raw})은 허용하지 않는다`,
+            ),
+          );
+        } else {
+          checkReadCandidate(
+            redir.target.text,
+            invocation.cwdUnknown ? undefined : cwd,
+          );
+        }
       }
     }
+    findings.push(...opaqueShellExecFindings(invocation));
     const name = invocation.name;
     const effectiveCwd = invocation.cwdUnknown ? undefined : cwd;
     if (name === "security") {
@@ -1327,9 +1584,16 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
       }
     }
     const isPureEcho = ["echo", "printf"].includes(name ?? "");
+    const gitSub =
+      name === "git" ? parseGitSubcommand(invocation.args).sub : undefined;
+    const isGitNetwork =
+      gitSub !== undefined && GIT_NETWORK_SUBCOMMANDS.has(gitSub);
+    const isExporter =
+      name !== undefined && context.rules.environment.exporters.includes(name);
     const isReader =
       name !== undefined &&
       name !== "open" &&
+      !isGitNetwork &&
       (context.rules.readers.includes(name) ||
         name === "git" ||
         name === "just");
@@ -1345,6 +1609,27 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         );
       }
       if (isPureEcho || isGitMessageWord(invocation, index)) continue;
+      if (isExporter) {
+        const equals = text.indexOf("=");
+        const exportedName = (
+          equals === -1 ? text : text.slice(0, equals)
+        ).replace(/\+$/u, "");
+        if (exportedName === "PATH" || exportedName === "TMPDIR") continue;
+      }
+      if (word.dynamic) {
+        if (
+          (name !== undefined && FILE_READ_COMMANDS.has(name)) ||
+          dynamicPathRisk(word)
+        ) {
+          findings.push(
+            finding(
+              "protected-home-read",
+              `동적 읽기·경로 인자(${word.raw})는 홈·자격 증명 우회 방지를 위해 허용하지 않는다`,
+            ),
+          );
+          continue;
+        }
+      }
       for (const candidate of extractOptionPath(text)) {
         if (candidate && looksLikePath(candidate)) {
           checkReadCandidate(candidate, effectiveCwd);
@@ -1482,7 +1767,15 @@ const shellWriteTargets = (
           ? undefined
           : resolve(effectiveCwd, expanded.path);
       if (absolute === undefined) continue;
-      for (const candidate of [absolute, realTarget(absolute)]) {
+      for (const candidate of [...new Set([absolute, realTarget(absolute)])]) {
+        findings.push(...homeWriteFindings(candidate, policy, home));
+        findings.push(
+          ...outsideWorktreeShellWriteFindings(
+            candidate,
+            project.ownedWorktree,
+            home,
+          ),
+        );
         const located = locate(candidate, project.worktrees);
         if (located.root !== undefined && located.relative !== undefined) {
           findings.push(...antigravityPathFindings(located.relative));
@@ -1547,11 +1840,16 @@ const gitPathOperandFindings = (words, gitCwd, project, actor) => {
     ];
   }
   for (const word of words) {
-    if (word.dynamic || word.glob || /[*?[\]]/u.test(word.text)) {
+    if (
+      word.dynamic ||
+      word.glob ||
+      word.text.startsWith(":") ||
+      /[*?[\]]/u.test(word.text)
+    ) {
       findings.push(
         finding(
           "antigravity-hook-config",
-          `동적·와일드카드 git 경로 인자(${word.raw})는 허용하지 않는다`,
+          `동적·와일드카드·pathspec 매직 git 경로 인자(${word.raw})는 허용하지 않는다`,
         ),
       );
       continue;
@@ -2071,6 +2369,8 @@ const patchFindings = (patch, cwd, actor, project, owned, policy, home) =>
     const homeDenied = homeWriteFindings(path, policy, home);
     if (homeDenied.length > 0) return homeDenied;
     const absolute = resolve(cwd, path);
+    const resolvedHomeDenied = homeWriteFindings(absolute, policy, home);
+    if (resolvedHomeDenied.length > 0) return resolvedHomeDenied;
     if (!absolute.startsWith(`${owned}/`)) {
       throw new Error("세션 작업 사본 밖의 편집이다");
     }
@@ -2088,131 +2388,12 @@ const patchFindings = (patch, cwd, actor, project, owned, policy, home) =>
     ];
   });
 
-const loadAgentRulesFor = (projectRoot, extraFacts) => {
-  if (extraFacts.agentRules !== undefined) return extraFacts.agentRules;
-  const candidate = join(projectRoot, AGENT_RULES_FILE);
-  return existsSync(candidate) ? readAgentRules(projectRoot) : readAgentRules();
-};
-
-const loadReportDigestsFor = (extraFacts) => {
-  if (extraFacts.reportDigests !== undefined) return extraFacts.reportDigests;
-  try {
-    return knownReportDigests(stateDirectory());
-  } catch {
-    return new Set();
-  }
-};
-
-const delegateTaskFindings = (
-  args,
-  role,
-  branch,
-  root,
-  project,
-  extraFacts,
-) => {
-  if (role === ROLE.reviewer || role === ROLE.unknown) {
-    return [
-      finding(
-        "role-without-delegation",
-        "리뷰어·비판자는 하위 에이전트를 위임하지 않는다",
-      ),
-    ];
-  }
-  if (!plainObject(args)) {
-    return [finding("orchestration", "delegate_task 인자가 객체가 아니다")];
-  }
-  const allowedKeys = [
-    "task",
-    "title",
-    "target",
-    "isolation",
-    "mode",
-    "role",
-    "runtimeMode",
-    "interactionMode",
-    "clientRequestId",
-    "timeoutMs",
-    "toolSummary",
-  ];
-  if (!Object.keys(args).every((key) => allowedKeys.includes(key))) {
-    return [finding("orchestration", "허용하지 않은 delegate_task 인자다")];
-  }
-  if (
-    args.runtimeMode !== undefined &&
-    !["inherit", "approval-required"].includes(args.runtimeMode)
-  ) {
-    return [finding("orchestration", "권한 확대는 허용하지 않는다")];
-  }
-  if (
-    args.interactionMode !== undefined &&
-    !["default", "plan"].includes(args.interactionMode)
-  ) {
-    return [finding("orchestration", "허용하지 않은 interactionMode다")];
-  }
-  if (
-    args.isolation !== "worktree" ||
-    (args.mode !== undefined && !["wait", "async"].includes(args.mode)) ||
-    typeof args.task !== "string" ||
-    args.task.trim() === ""
-  ) {
-    return [finding("orchestration", "worktree 격리와 작업 문구가 필요하다")];
-  }
-  if (args.role !== "review") {
-    return [
-      finding(
-        "role-without-delegation",
-        "Antigravity 구현자는 구현·조사 하위 에이전트를 위임하지 않는다",
-      ),
-    ];
-  }
-  const targetFindings = delegateTargetFindings(args.target, args.role);
-  if (targetFindings.length > 0) return targetFindings;
-  const brief = parseBrief(args.task);
-  const base =
-    brief.problem === undefined ? resolveCommit(root, brief.commit) : undefined;
-  const head = headOf(root);
-  const requested = reviewTargetCommit(args.task);
-  const targetCommit =
-    requested === undefined ? undefined : resolveCommit(root, requested);
-  if (
-    typeof branch !== "string" ||
-    branch === "" ||
-    brief.branch !== branch ||
-    base === undefined ||
-    head === undefined ||
-    targetCommit === undefined ||
-    base === targetCommit ||
-    targetCommit !== head ||
-    !isAncestor(root, base, targetCommit)
-  ) {
-    return [
-      finding(
-        "orchestration",
-        "리뷰 기준은 현재 작업 사본 브랜치와 커밋된 HEAD 이력의 커밋이어야 한다",
-      ),
-    ];
-  }
-  const agentRules = loadAgentRulesFor(project.root, extraFacts);
-  const reportDigests = loadReportDigestsFor(extraFacts);
-  const reportFindings = reportProblems(args.task, agentRules, reportDigests);
-  if (reportFindings.length > 0) return reportFindings;
-  if (/(?:^|\n)[ \t]*(?:#+\s*)?구현(?:자)?\s*보고[ \t]*:/u.test(args.task)) {
-    return [
-      finding(
-        "implementer-report",
-        "리뷰어·비판자에게 구현자의 보고를 넘기지 않는다 (docs/workflow.md 2.3, docs/harness.md 7.5)",
-      ),
-    ];
-  }
-  return [
-    finding(
-      "role-without-delegation",
-      "잠금 on에서는 Antigravity 서브에이전트가 하위 위임을 하지 않는다",
-      true,
-    ),
-  ];
-};
+const delegateTaskFindings = () => [
+  finding(
+    "role-without-delegation",
+    "Antigravity 세션에서는 하위 에이전트를 위임하지 않는다. 위임은 메인 Claude만 수행한다 (docs/workflow.md 1장, docs/harness.md 7.4)",
+  ),
+];
 
 export const antigravityPreTool = (
   input,
@@ -2221,7 +2402,7 @@ export const antigravityPreTool = (
   extraFacts = {},
 ) => {
   try {
-    const { root, role, branch, actor } = actorInput(
+    const { root, role, actor } = actorInput(
       input,
       project,
       sessionCwd,
@@ -2257,6 +2438,17 @@ export const antigravityPreTool = (
         if (homeDenied.length > 0) {
           allFindings.push(...homeDenied);
           continue;
+        }
+        const expanded = expandHome(target, home);
+        if (expanded.path !== undefined) {
+          const resolved = isAbsolute(expanded.path)
+            ? resolve(expanded.path)
+            : resolve(cwd, expanded.path);
+          const resolvedHomeDenied = homeWriteFindings(resolved, policy, home);
+          if (resolvedHomeDenied.length > 0) {
+            allFindings.push(...resolvedHomeDenied);
+            continue;
+          }
         }
         const shape = shapeProblem(target);
         const rawEditFindings = editFindings(
@@ -2360,18 +2552,7 @@ export const antigravityPreTool = (
     }
 
     if (toolName === "mcp_t3-code_delegate_task") {
-      const findings = delegateTaskFindings(
-        args,
-        role,
-        branch,
-        root,
-        scoped,
-        extraFacts,
-      );
-      const verdict = decide(findings, project.lock);
-      return verdict.decision === DECISION.deny
-        ? denyOutput(verdict.findings)
-        : { decision: "allow" };
+      return denyOutput(delegateTaskFindings());
     }
 
     if (toolName === "manage_task") {
@@ -2421,7 +2602,10 @@ export const antigravityStop = (input, session, facts = {}) => {
     ) {
       return { decision: "allow" };
     }
-    if (input.fullyIdle === false || input.continuationActive === true) {
+    if (input.fullyIdle === false) {
+      return { decision: "allow" };
+    }
+    if (typeof input.executionNum === "number" && input.executionNum > 8) {
       return { decision: "allow" };
     }
     if (role === ROLE.reviewer || role === ROLE.unknown) {
