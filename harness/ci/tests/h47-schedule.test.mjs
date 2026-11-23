@@ -20,6 +20,7 @@ test("H47 daily and weekly schedules and manual choices are bounded and explicit
   assert.deepEqual(w.jobs["mutants-daily"].strategy, {
     "fail-fast": false,
     matrix: { shard: "${{ fromJSON(needs.daily-plan.outputs.shards) }}" },
+    "max-parallel": 2,
   });
   assert.equal(w.jobs["mutants-daily"]["timeout-minutes"], 360);
   assert.equal(w.jobs["mutants-daily"].steps[0].with.ref, "${{ github.sha }}");

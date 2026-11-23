@@ -416,7 +416,7 @@ fn prepare_transition(
     }
 }
 
-fn assess(
+pub(crate) fn assess(
     record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
     task: &domain::CostEligibleTask,
     inputs: &EvaluateSignalInputs,

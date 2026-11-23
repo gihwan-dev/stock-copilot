@@ -1,15 +1,15 @@
 use application::{
     AccessDenial, AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, AuditEntry, AuditIntegrity,
-    AuditLog, BrokerRead, ChatHistory, CollectedObservation, DataAvailability, EstimateRepository,
-    FeedCursor, FeedSource, FinancialStatement, Fundamentals, FxRateQuery, HoldingsObservation,
-    HttpStatus, InformationError, IsolationCheck, MacroObservation, MacroSeries, MacroSeriesId,
-    MarketDataRepository, MarketInfo, NewsFeed, NewsMetadata, NewsRepository, Notification,
-    Notifier, PortError, PortErrorKind, PortfolioRepository, ProposalRepository, QuoteObservation,
-    RankingQuery, ReadEndpoint, RecordOutcome, ResetTime, RetryDelay, RunKind, RunSpec, SecretKey,
-    SecretStore, SecretValue, SectorRankingQuery, SettingsRepository, SignalCommitOutcome,
-    SignalMutation, SignalRepository, SignalSnapshot, SignalSourceFacts, SystemFailure, SystemPort,
-    SystemPortError, ThesisRepository, TransactionRead, TransactionRepository, ValuationRepository,
-    WriteCompleted,
+    AuditLog, BrokerRead, ChatHistory, CollectedObservation, ConditionalDraftOutcome,
+    DataAvailability, EstimateRepository, FeedCursor, FeedSource, FinancialStatement, Fundamentals,
+    FxRateQuery, HoldingsObservation, HttpStatus, InformationError, IsolationCheck,
+    MacroObservation, MacroSeries, MacroSeriesId, MarketDataRepository, MarketInfo, NewsFeed,
+    NewsMetadata, NewsRepository, Notification, Notifier, PortError, PortErrorKind,
+    PortfolioRepository, ProposalRepository, QuoteObservation, RankingQuery, ReadEndpoint,
+    RecordOutcome, ResetTime, RetryDelay, RunKind, RunSpec, SecretKey, SecretStore, SecretValue,
+    SectorRankingQuery, SettingsRepository, SignalCommitOutcome, SignalMutation, SignalRepository,
+    SignalSnapshot, SignalSourceFacts, SystemFailure, SystemPort, SystemPortError,
+    ThesisRepository, TransactionRead, TransactionRepository, ValuationRepository, WriteCompleted,
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
@@ -709,6 +709,30 @@ impl SignalRepository for Unavailable {
     }
 }
 impl ProposalRepository for Unavailable {
+    fn current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &SignalSnapshot,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
+    fn store_current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &SignalSnapshot,
+        _candidate: application::DraftStoreCandidate<'_>,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
     fn store_draft(
         &self,
         _proposal: &Proposal<Draft>,

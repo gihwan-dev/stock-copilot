@@ -1,15 +1,17 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "../test-temp.mjs";
+import { applyIndexToClone } from "../index-clone.mjs";
 import { repoRoot } from "./signature-repo.mjs";
 
 const environment = () => ({
   ...Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => key !== "NODE_TEST_CONTEXT"),
+    Object.entries(process.env).filter(
+      ([key]) => key !== "NODE_TEST_CONTEXT" && !key.startsWith("GIT_"),
+    ),
   ),
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
@@ -30,6 +32,7 @@ test("로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 
     clone,
   ]);
   assert.equal(made.status, 0, made.stderr);
+  applyIndexToClone(repoRoot, clone, process.env.GIT_INDEX_FILE);
   const head = run(clone, "git", ["rev-parse", "HEAD"]);
   assert.equal(head.status, 0, head.stderr);
   const checkout = run(clone, "git", [
@@ -75,7 +78,6 @@ test("로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 
   assert.equal(tracked.status, 0, tracked.stderr);
   assert.equal(tracked.stdout, source.stdout);
   const branchCheck = "harness/ci/branch-checkout.mjs";
-  cpSync(join(repoRoot, branchCheck), join(clone, branchCheck));
   assert.equal(run(clone, process.execPath, [branchCheck]).status, 0);
   const extraMaster = run(clone, "git", [
     "update-ref",
@@ -90,16 +92,7 @@ test("로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 
     "refs/heads/master",
   ]);
   assert.equal(removeMaster.status, 0, removeMaster.stderr);
-  for (const file of [
-    "harness/ci/managed-temp.mjs",
-    "harness/ci/test-temp.mjs",
-  ]) {
-    rmSync(join(clone, file), { force: true });
-    cpSync(join(repoRoot, file), join(clone, file));
-  }
   const testFile = "harness/claude-hooks/tests/agent-stop.test.mjs";
-  mkdirSync(join(clone, "harness/claude-hooks/tests"), { recursive: true });
-  cpSync(join(repoRoot, testFile), join(clone, testFile));
   const result = run(clone, process.execPath, [
     "--test",
     "--test-name-pattern=hook entry scripts record a start",

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     mod a27_fixtures;
+    mod d56_evidence;
     use a27_fixtures as fixtures;
     use application::{
         AiRunId, EstimateSubmissionInput, EstimateSubmissionRepository, EventBusBuilder,
@@ -66,7 +67,7 @@ mod tests {
             &decision,
         )
         .expect("전이");
-        let evidence = fixtures::evidence_for_decision(&decision, occurrence.as_ref());
+        let evidence = d56_evidence::evidence_for_decision(&decision, occurrence.as_ref());
         SignalMutation::Evaluate(Box::new(SignalEvaluation {
             submission: snapshot.submission.clone().expect("과제"),
             decision,

@@ -2,9 +2,9 @@ use crate::{RecordOutcome, SystemPortError, WriteCompleted};
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, DraftRestoreEvidence,
     EstimateOutcome, FxPair, FxRate, FxRateKind, InstrumentId, InvestorProfile, MasterInstrument,
-    NewsItem, Portfolio, PriceAdjustment, Proposal, ProposalId, Quote, RiskSettings, SettledRowSet,
-    SignalSubmission, SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp,
-    ValuationSnapshot,
+    NewsItem, Portfolio, PriceAdjustment, PriceObservation, Proposal, ProposalExecutionError,
+    ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey, SyncRecord,
+    Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 use std::future::Future;
 
@@ -146,6 +146,51 @@ pub trait ProposalRepository: Send + Sync {
         proposal: &ProposalId,
         master: &MasterInstrument,
     ) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send;
+    fn current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &crate::SignalSnapshot,
+        check: DraftCheck<'_>,
+    ) -> impl Future<Output = Result<CurrentDraftOutcome, SystemPortError>> + Send;
+    fn store_current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &crate::SignalSnapshot,
+        candidate: DraftStoreCandidate<'_>,
+        check: DraftCheck<'_>,
+    ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DraftStoreCandidate<'a> {
+    pub proposal: &'a Proposal<Draft>,
+    pub evidence: &'a DraftRestoreEvidence,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DraftCheck<'a> {
+    pub account: &'a AccountId,
+    pub at: Timestamp,
+    pub observation: &'a PriceObservation,
+    pub master: &'a MasterInstrument,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CurrentDraftOutcome {
+    Absent,
+    Existing(ProposalId),
+    Conflict,
+    AccountChanged,
+    Invalid(ProposalExecutionError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConditionalDraftOutcome {
+    Stored,
+    Existing(ProposalId),
+    Conflict,
+    AccountChanged,
+    Invalid(ProposalExecutionError),
 }
 
 pub trait ValuationRepository: Send + Sync {

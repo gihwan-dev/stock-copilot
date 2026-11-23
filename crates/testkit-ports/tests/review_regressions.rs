@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     mod a27_fixtures;
+    mod d56_evidence;
     use a27_fixtures as a27;
     use application::ProposalRepository;
     use application::{
@@ -817,14 +818,14 @@ mod tests {
                 RaisedSignal::Buy(value) => SignalDecision::Buy(value.clone()),
                 RaisedSignal::Sell(value) => SignalDecision::Sell(value.clone()),
             };
-            return a27::evidence_for_decision(&decision, None).expect("다른 종목 근거");
+            return d56_evidence::evidence_for_decision(&decision, None).expect("다른 종목 근거");
         }
         let item = CollectedItem::from_web(
             NormalizedUrl::try_new("https://example.com/evidence").expect("주소"),
             UntrustedText::try_new("근거").expect("제목"),
             None,
         );
-        a27::evidence_for_signal(
+        d56_evidence::evidence_for_signal(
             signal,
             None,
             "131",

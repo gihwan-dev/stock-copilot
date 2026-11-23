@@ -10,16 +10,28 @@ pub use money_display::{
 mod account_id;
 mod client_order_id;
 mod instrument_id;
+mod instrument_issuer;
 mod instrument_mapping;
+mod instrument_mapping_change;
 mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
+pub use instrument_issuer::{
+    IdAdoption, IndependentInstrumentIdIssuer, InstrumentIdIssueError, IssuedInstrumentId,
+    ReservationStatus,
+};
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
     InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
+};
+pub use instrument_mapping_change::{
+    ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
+    IdentityChangeConfirmation, IdentityChangeEvidence, IdentityConfirmationOrigin,
+    MappingCorrectionConfirmation, MappingCorrectionEvidence, MappingHistoryEvent,
+    MappingTransitionError, UserIdentityConfirmation,
 };
 pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
@@ -57,6 +69,11 @@ pub use ratio::Ratio;
 
 mod exact_arithmetic;
 pub use exact_arithmetic::{ApproximateRatio, RatioQuotient};
+mod estimate_return;
+pub use estimate_return::{
+    EstimateEntryError, EstimateEntryPrice, EstimateExcess, EstimateExitKind, EstimateReturn,
+    EstimateReturnError, EstimateReturnFacts, estimate_return,
+};
 mod domain_time;
 mod market_session;
 pub use domain_time::{
@@ -66,7 +83,8 @@ pub use domain_time::{
 };
 pub use market_session::{
     AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
-    MarketSessionError, MarketState, MarketTransition, SessionData, SessionInformation,
+    MarketSessionError, MarketState, MarketTradingStatus, MarketTransition, SessionData,
+    SessionInformation, market_state_at,
 };
 mod probability;
 pub use probability::{
@@ -225,9 +243,9 @@ pub use order_summary_facts::{
 
 mod calibration;
 pub use calibration::{
-    CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCount,
-    CalibrationError, CalibrationEstimate, CalibrationEstimateId, CalibrationEvidence,
-    CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey,
+    CalibratedProbability, Calibration, CalibrationBin, CalibrationBinStats, CalibrationCapacity,
+    CalibrationCount, CalibrationError, CalibrationEstimate, CalibrationEstimateId,
+    CalibrationEvidence, CalibrationFact, CalibrationInstant, CalibrationInterval, CalibrationKey,
     CalibrationLedgerHead, CalibrationModel, CalibrationOutcome, CalibrationPosition,
     CalibrationReadiness, CalibrationSnapshot, CalibrationTable, ConservativeCalibration,
     EligibleCalibration, ModelIdentityPart,

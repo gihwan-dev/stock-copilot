@@ -203,6 +203,22 @@ impl StoredEstimateEvidence {
         Ok(())
     }
 
+    pub fn verify_same_as(&self, other: &Self) -> Result<(), EstimateRestoreError> {
+        self.check_stored_offsets(other)
+    }
+
+    pub fn verify_matches_task(
+        &self,
+        task: &EstimateTask,
+        current: &MasterInstrument,
+    ) -> Result<(), EstimateRestoreError> {
+        let (rebuilt, _) = self.replay(current, MasterReplayMode::LiveOrderGate)?;
+        if &rebuilt != task {
+            return Err(EstimateRestoreError::ChangedResult);
+        }
+        check_task_offsets(&rebuilt, task)
+    }
+
     pub fn restore_history(
         &self,
         current: &MasterInstrument,

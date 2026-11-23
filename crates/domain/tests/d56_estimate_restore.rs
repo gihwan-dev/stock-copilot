@@ -3716,4 +3716,211 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn draft_intent_side_and_historical_signal_inspection_cover_all_branches() {
+        let (draft, _, _, _, _) = draft_fixture();
+        assert_eq!(draft.intent().side(), OrderSide::Buy);
+        let cost = signal_cost_fixture();
+        let (signal, input, master) = signal_fixture("99");
+        let historical = domain::HistoricalSignal::from_signal(&signal);
+        assert_eq!(historical.market(), domain::Market::Us);
+        assert_eq!(
+            historical.calibration_head(),
+            input.assessment.calibration_head.as_ref().expect("위치")
+        );
+        assert_eq!(historical.range_facts(), cost.eligible.task().range_facts());
+        let valid_obs = master
+            .price_observation(price("104"), at(61, -18_000))
+            .expect("시세");
+        assert_eq!(
+            historical.validate_observation(&valid_obs, at(61, -18_000)),
+            Ok(())
+        );
+        assert_eq!(
+            historical.validate_observation(&valid_obs, at(62, -18_000)),
+            Err(domain::SignalUnavailable::StaleTargetPrice)
+        );
+        let resolved = master.order_instrument().expect("주문 종목");
+        let id = &master.row().instrument_id;
+        assert_eq!(
+            historical.verify_task_identity(id, &cost.eligible, &resolved),
+            Ok(())
+        );
+        let wrong_id = InstrumentId::try_new("wrong-id").expect("다른 ID");
+        assert_eq!(
+            historical.verify_task_identity(&wrong_id, &cost.eligible, &resolved),
+            Err(domain::SignalTransitionError::InstrumentMismatch)
+        );
+        let mut alt_row = master.row().clone();
+        alt_row.symbol = Symbol::try_new("OTHER").expect("다른 심볼");
+        let alt_resolved = MasterInstrument::try_new(alt_row)
+            .expect("다른 마스터")
+            .order_instrument()
+            .expect("다른 종목");
+        assert_eq!(
+            historical.verify_task_identity(id, &cost.eligible, &alt_resolved),
+            Err(domain::SignalTransitionError::InstrumentMismatch)
+        );
+        let other_task = original(
+            &evidence(HorizonSelection::WeeksToMonths, RiskAppetite::Neutral),
+            &master,
+        );
+        let period = domain::EstimateCostPeriod::from_calendar_result(&other_task, cost.maturity)
+            .expect("기간");
+        let other_cost =
+            domain::TradeCost::from_facts(Some(cost.commission), Some(cost.tax), period)
+                .expect("비용");
+        let other_eligible =
+            domain::CostEligibleTask::assess(other_task, &other_cost).expect("적격");
+        assert_eq!(
+            historical.verify_task_identity(id, &other_eligible, &resolved),
+            Err(domain::SignalTransitionError::InstrumentMismatch)
+        );
+    }
+
+    #[test]
+    fn stored_estimate_verify_same_as_and_matches_task_reject_drift() {
+        let input = evidence(HorizonSelection::FewDays, RiskAppetite::Neutral);
+        let master = MasterInstrument::try_new(row()).expect("마스터");
+        let task = original(&input, &master);
+        let saved = input.capture(&task, &master).expect("근거");
+        assert_eq!(saved.verify_same_as(&saved), Ok(()));
+        let mut shifted_saved = saved.clone();
+        shifted_saved.evidence.task_at = with_offset(shifted_saved.evidence.task_at, 0);
+        assert_eq!(
+            saved.verify_same_as(&shifted_saved),
+            Err(EstimateRestoreError::ChangedEvidence)
+        );
+        assert_eq!(saved.verify_matches_task(&task, &master), Ok(()));
+        let mut wrong_row = row();
+        wrong_row.instrument_id = InstrumentId::try_new("mismatch-inst").expect("다른 ID");
+        let wrong_master = MasterInstrument::try_new(wrong_row).expect("다른 마스터");
+        assert_eq!(
+            saved.verify_matches_task(&task, &wrong_master),
+            Err(EstimateRestoreError::CurrentInstrumentMismatch)
+        );
+        let mut diff_input = input.clone();
+        diff_input.reference_price = price("105");
+        let diff_task = original(&diff_input, &master);
+        assert_eq!(
+            saved.verify_matches_task(&diff_task, &master),
+            Err(EstimateRestoreError::ChangedResult)
+        );
+        let mut offset_input = input;
+        offset_input.task_at = with_offset(offset_input.task_at, 0);
+        let offset_task = original(&offset_input, &master);
+        assert_eq!(
+            saved.verify_matches_task(&offset_task, &master),
+            Err(EstimateRestoreError::ChangedResult)
+        );
+    }
+
+    #[derive(Clone, Copy)]
+    struct CustomProposalSpec<'a> {
+        id_text: &'a str,
+        account: i64,
+        created_at: Timestamp,
+        lifetime_secs: u64,
+        card_price: &'a str,
+        card_at: Timestamp,
+    }
+
+    fn custom_proposal(
+        master: &MasterInstrument,
+        spec: CustomProposalSpec<'_>,
+    ) -> domain::Proposal<domain::Draft> {
+        let input = evidence(HorizonSelection::FewDays, RiskAppetite::Neutral);
+        let task = original(&input, master);
+        let card = master
+            .price_observation(price(spec.card_price), spec.card_at)
+            .expect("시세");
+        let range =
+            domain::ProposalPriceRange::from_estimate_task(task.range_facts(), card).expect("범위");
+        let id = domain::ProposalId::new(domain::ClientOrderId::try_new(spec.id_text).expect("ID"));
+        let intent = domain::OrderIntent::new(
+            domain::AccountId::new(spec.account),
+            master.order_instrument().expect("종목"),
+            id.as_client_order_id().clone(),
+            domain::OrderTerms::UsMarketBuy {
+                quantity: domain::WholeOrderQuantity::try_new(
+                    Quantity::parse(&NumericInput::try_new("7").expect("입력")).expect("수량"),
+                )
+                .expect("수량"),
+            },
+        )
+        .expect("의도");
+        let lifetime =
+            domain::ProposalLifetime::try_new(domain::SpanSeconds::new(spec.lifetime_secs))
+                .expect("기간");
+        domain::Proposal::new(id, intent, spec.created_at, range, lifetime).expect("초안")
+    }
+
+    fn mismatched_proposal_specs(base_ts: Timestamp) -> [CustomProposalSpec<'static>; 7] {
+        let base = CustomProposalSpec {
+            id_text: "restore-1",
+            account: 418,
+            created_at: base_ts,
+            lifetime_secs: 379,
+            card_price: "105",
+            card_at: base_ts,
+        };
+        [
+            CustomProposalSpec {
+                id_text: "restore-2",
+                ..base
+            },
+            CustomProposalSpec {
+                account: 999,
+                ..base
+            },
+            CustomProposalSpec {
+                created_at: shifted(61, 1),
+                ..base
+            },
+            CustomProposalSpec {
+                created_at: with_offset(base_ts, 0),
+                ..base
+            },
+            CustomProposalSpec {
+                lifetime_secs: 400,
+                ..base
+            },
+            CustomProposalSpec {
+                card_price: "106",
+                ..base
+            },
+            CustomProposalSpec {
+                card_at: with_offset(base_ts, -14_400),
+                ..base
+            },
+        ]
+    }
+
+    #[test]
+    fn draft_restore_verify_matches_proposal_rejects_every_mismatch() {
+        let (draft, estimate, master, lifetime, card) = draft_fixture();
+        let saved =
+            domain::DraftRestoreEvidence::capture(&draft, estimate, &master, lifetime, &card)
+                .expect("근거");
+        assert_eq!(saved.verify_matches_proposal(&draft, &master), Ok(()));
+        let mut wrong_row = row();
+        wrong_row.instrument_id = InstrumentId::try_new("bad-master").expect("다른 ID");
+        assert_eq!(
+            saved.verify_matches_proposal(
+                &draft,
+                &MasterInstrument::try_new(wrong_row).expect("다른 마스터"),
+            ),
+            Err(domain::DraftRestoreError::Estimate(
+                EstimateRestoreError::CurrentInstrumentMismatch
+            ))
+        );
+        for spec in mismatched_proposal_specs(at(61, -18_000)) {
+            let mismatched = custom_proposal(&master, spec);
+            assert_eq!(
+                saved.verify_matches_proposal(&mismatched, &master),
+                Err(domain::DraftRestoreError::ChangedDraft)
+            );
+        }
+    }
 }

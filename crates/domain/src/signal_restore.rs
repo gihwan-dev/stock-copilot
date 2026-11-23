@@ -222,11 +222,45 @@ impl HistoricalSignal {
         self.estimate().submission().calibration_key()
     }
     #[must_use]
+    pub fn calibration_head(&self) -> &CalibrationLedgerHead {
+        self.estimate().calibration_head()
+    }
+    #[must_use]
     pub fn side(&self) -> OrderSide {
         match self {
             Self::Buy(_) => OrderSide::Buy,
             Self::Sell(_) => OrderSide::Sell,
         }
+    }
+    #[must_use]
+    pub fn market(&self) -> crate::Market {
+        self.estimate().task().reference().instrument().market()
+    }
+    #[must_use]
+    pub fn range_facts(&self) -> crate::EstimateRangeFacts {
+        self.estimate().task().range_facts()
+    }
+    pub fn validate_observation(
+        &self,
+        observation: &crate::PriceObservation,
+        now: Timestamp,
+    ) -> Result<(), crate::SignalUnavailable> {
+        observation.validate_for_task(self.estimate().task(), now)
+    }
+    pub fn verify_task_identity(
+        &self,
+        instrument: &crate::InstrumentId,
+        issued: &CostEligibleTask,
+        master: &crate::ResolvedOrderInstrument,
+    ) -> Result<(), crate::SignalTransitionError> {
+        let task = self.estimate().task();
+        if task.volatility().instrument() != instrument
+            || task.reference().instrument() != master
+            || issued.task() != task
+        {
+            return Err(crate::SignalTransitionError::InstrumentMismatch);
+        }
+        Ok(())
     }
     pub fn display_probability(&self) -> Result<ThresholdDisplay, NoThresholds> {
         self.estimate().display_probability()

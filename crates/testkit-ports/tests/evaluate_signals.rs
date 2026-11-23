@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     mod a27_fixtures;
+    mod d56_evidence;
     use a27_fixtures as fixtures;
     use application::{
         EstimateSubmissionRepository, EvaluateSignalInputs, EvaluateSignalOutcome, EvaluateSignals,
@@ -151,7 +152,7 @@ mod tests {
         portfolio: domain::Portfolio,
     ) -> application::SignalRestorationBasis {
         let decision = fixtures::decision(source, "99", None);
-        let proof = fixtures::evidence_for_decision(&decision, None).expect("복원 근거");
+        let proof = d56_evidence::evidence_for_decision(&decision, None).expect("복원 근거");
         let restored = proof.signal.evidence;
         application::SignalRestorationBasis {
             master: proof.master,

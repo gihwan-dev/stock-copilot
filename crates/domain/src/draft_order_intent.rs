@@ -206,6 +206,10 @@ impl DraftOrderIntent {
         self.0.market()
     }
     #[must_use]
+    pub fn side(&self) -> OrderSide {
+        self.0.side()
+    }
+    #[must_use]
     pub fn terms(&self) -> HistoricalOrderTerms {
         HistoricalOrderTerms::from_order_terms(*self.0.terms())
     }

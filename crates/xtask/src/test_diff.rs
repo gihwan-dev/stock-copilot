@@ -6,6 +6,9 @@ mod modules;
 mod approval_tests;
 
 #[cfg(test)]
+mod h56_tests;
+
+#[cfg(test)]
 mod tests;
 
 use std::collections::{BTreeMap, BTreeSet};

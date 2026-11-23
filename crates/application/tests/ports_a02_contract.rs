@@ -135,6 +135,8 @@ mod tests {
             &[
                 "fn store_draft(&self, proposal: &Proposal<Draft>, evidence: &DraftRestoreEvidence, master: &MasterInstrument) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
                 "fn draft(&self, proposal: &ProposalId, master: &MasterInstrument) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send",
+                "fn current_draft(&self, instrument: &InstrumentId, expected: &crate::SignalSnapshot, check: DraftCheck<'_>) -> impl Future<Output = Result<CurrentDraftOutcome, SystemPortError>> + Send",
+                "fn store_current_draft(&self, instrument: &InstrumentId, expected: &crate::SignalSnapshot, candidate: DraftStoreCandidate<'_>, check: DraftCheck<'_>) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send",
             ],
         );
         check_trait(

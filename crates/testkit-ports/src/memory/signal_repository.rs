@@ -44,6 +44,26 @@ struct RepositoryState {
     heads: Vec<CalibrationLedgerHead>,
     masters: Vec<domain::MasterInstrument>,
     fail_next_commit: Option<SystemPortError>,
+    drafts: Vec<StoredDraft>,
+    selected_account: Option<domain::AccountId>,
+    fail_next_draft: Option<SystemPortError>,
+    draft_conflicts: usize,
+    draft_attempts: usize,
+    snapshot_reads: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DraftState {
+    Current,
+    Superseded,
+}
+
+#[derive(Debug)]
+struct StoredDraft {
+    instrument: InstrumentId,
+    snapshot: SignalSnapshot,
+    evidence: domain::DraftRestoreEvidence,
+    state: DraftState,
 }
 
 #[derive(Debug, Default)]
@@ -90,6 +110,318 @@ impl MemorySignalEvaluationRepository {
             .masters
             .retain(|old| old.row().instrument_id != master.row().instrument_id);
         state.masters.push(master);
+    }
+    pub fn fail_next_draft(&self, error: SystemPortError) {
+        self.state.write().fail_next_draft = Some(error);
+    }
+    pub fn select_account(&self, account: domain::AccountId) {
+        self.state.write().selected_account = Some(account);
+    }
+    pub fn conflict_next_drafts(&self, count: usize) {
+        self.state.write().draft_conflicts = count;
+    }
+    #[must_use]
+    pub fn draft_attempts(&self) -> usize {
+        self.state.write().draft_attempts
+    }
+    #[must_use]
+    pub fn snapshot_reads(&self) -> usize {
+        self.state.write().snapshot_reads
+    }
+}
+
+impl application::ProposalRepository for MemorySignalEvaluationRepository {
+    fn store_draft(
+        &self,
+        _proposal: &domain::Proposal<domain::Draft>,
+        _evidence: &domain::DraftRestoreEvidence,
+        _master: &domain::MasterInstrument,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        std::future::ready(Err(invalid()))
+    }
+
+    fn draft(
+        &self,
+        proposal: &domain::ProposalId,
+        master: &domain::MasterInstrument,
+    ) -> impl Future<Output = Result<Option<domain::Proposal<domain::Draft>>, SystemPortError>> + Send
+    {
+        std::future::poll_fn(move |_context| {
+            std::task::Poll::Ready(read_draft(&self.state.write(), proposal, master))
+        })
+    }
+
+    fn current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &SignalSnapshot,
+        check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::poll_fn(move |_context| {
+            std::task::Poll::Ready(current_draft_guarded(
+                &mut self.state.write(),
+                instrument,
+                expected,
+                check,
+            ))
+        })
+    }
+
+    fn store_current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &SignalSnapshot,
+        candidate: application::DraftStoreCandidate<'_>,
+        check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::poll_fn(move |_context| {
+            std::task::Poll::Ready(store_draft_guarded(
+                &mut self.state.write(),
+                instrument,
+                expected,
+                candidate,
+                check,
+            ))
+        })
+    }
+}
+
+fn read_draft(
+    state: &RepositoryState,
+    proposal: &domain::ProposalId,
+    master: &domain::MasterInstrument,
+) -> Result<Option<domain::Proposal<domain::Draft>>, SystemPortError> {
+    let Some(stored) = state
+        .drafts
+        .iter()
+        .rev()
+        .find(|value| value.state == DraftState::Current && value.evidence.id == *proposal)
+    else {
+        return Ok(None);
+    };
+    if state.selected_account.as_ref() != Some(&stored.evidence.account) {
+        return Ok(None);
+    }
+    let current = snapshot(state, &stored.instrument)?;
+    let Some(signal) = stored.snapshot.current.as_ref() else {
+        return Ok(None);
+    };
+    let head = signal.signal.calibration_head();
+    if current != stored.snapshot
+        || state.heads.iter().find(|item| item.key() == head.key()) != Some(head)
+    {
+        return Ok(None);
+    }
+    stored
+        .evidence
+        .restore(master)
+        .map(Some)
+        .map_err(|_error| integrity())
+}
+
+fn check_existing_for_store(
+    state: &RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    check: application::DraftCheck<'_>,
+) -> Result<Option<application::ConditionalDraftOutcome>, SystemPortError> {
+    let Some(old) = state
+        .drafts
+        .iter()
+        .find(|value| value.instrument == *instrument && value.state == DraftState::Current)
+    else {
+        return Ok(None);
+    };
+    if old.snapshot != *expected {
+        return Ok(None);
+    }
+    let old_proposal = old
+        .evidence
+        .restore(check.master)
+        .map_err(|_error| integrity())?;
+    match old_proposal.check_current(check.at, check.observation) {
+        Ok(()) if old_proposal.intent().account_id() == check.account => Ok(Some(
+            application::ConditionalDraftOutcome::Existing(old_proposal.id().clone()),
+        )),
+        Ok(())
+        | Err(
+            domain::ProposalExecutionError::Expired
+            | domain::ProposalExecutionError::PriceOutsideRange,
+        ) => Ok(None),
+        Err(
+            error @ (domain::ProposalExecutionError::ClockRollback
+            | domain::ProposalExecutionError::ObservationInvalid),
+        ) => Ok(Some(application::ConditionalDraftOutcome::Invalid(error))),
+    }
+}
+
+fn verify_draft_evidence(
+    state: &RepositoryState,
+    instrument: &InstrumentId,
+    candidate: application::DraftStoreCandidate<'_>,
+    master: &domain::MasterInstrument,
+) -> Result<(), SystemPortError> {
+    if candidate.evidence.estimate.evidence.master.instrument_id != *instrument {
+        return Err(integrity());
+    }
+    let saved_estimate = state
+        .instruments
+        .iter()
+        .find(|entry| entry.instrument.as_ref() == Some(instrument))
+        .and_then(|entry| entry.current.as_ref())
+        .map(|entry| &entry.evidence.signal.evidence.estimate)
+        .ok_or_else(integrity)?;
+    candidate
+        .evidence
+        .estimate
+        .verify_same_as(saved_estimate)
+        .map_err(|_error| integrity())?;
+    candidate
+        .evidence
+        .verify_matches_proposal(candidate.proposal, master)
+        .map_err(|_error| integrity())
+}
+
+fn validate_store_draft(
+    state: &RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    candidate: application::DraftStoreCandidate<'_>,
+    check: application::DraftCheck<'_>,
+) -> Result<Option<application::ConditionalDraftOutcome>, SystemPortError> {
+    let current = expected.current.as_ref().ok_or_else(invalid)?;
+    let expected_side = current.signal.side();
+    let head = current.signal.calibration_head();
+    if candidate.proposal.intent().side() != expected_side
+        || candidate.proposal.intent().account_id() != check.account
+    {
+        return Err(invalid());
+    }
+    if snapshot(state, instrument)? != *expected
+        || state.heads.iter().find(|value| value.key() == head.key()) != Some(head)
+    {
+        return Ok(Some(application::ConditionalDraftOutcome::Conflict));
+    }
+    if state.selected_account.as_ref() != Some(check.account) {
+        return Ok(Some(application::ConditionalDraftOutcome::AccountChanged));
+    }
+    if current
+        .signal
+        .validate_observation(check.observation, check.at)
+        .is_err()
+    {
+        return Ok(Some(application::ConditionalDraftOutcome::Invalid(
+            domain::ProposalExecutionError::ObservationInvalid,
+        )));
+    }
+    if let Err(error) = candidate
+        .proposal
+        .check_current(check.at, check.observation)
+    {
+        return Ok(Some(application::ConditionalDraftOutcome::Invalid(error)));
+    }
+    if state
+        .drafts
+        .iter()
+        .any(|value| value.evidence.id == *candidate.proposal.id())
+    {
+        return Err(invalid());
+    }
+    verify_draft_evidence(state, instrument, candidate, check.master)?;
+    check_existing_for_store(state, instrument, expected, check)
+}
+
+fn store_draft_guarded(
+    state: &mut RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    candidate: application::DraftStoreCandidate<'_>,
+    check: application::DraftCheck<'_>,
+) -> Result<application::ConditionalDraftOutcome, SystemPortError> {
+    state.draft_attempts = state.draft_attempts.saturating_add(1);
+    if let Some(error) = state.fail_next_draft.take() {
+        return Err(error);
+    }
+    if state.draft_conflicts > 0 {
+        state.draft_conflicts = state.draft_conflicts.saturating_sub(1);
+        return Ok(application::ConditionalDraftOutcome::Conflict);
+    }
+    if let Some(outcome) = validate_store_draft(state, instrument, expected, candidate, check)? {
+        return Ok(outcome);
+    }
+    for value in &mut state.drafts {
+        if value.instrument == *instrument && value.state == DraftState::Current {
+            value.state = DraftState::Superseded;
+        }
+    }
+    state.drafts.push(StoredDraft {
+        instrument: instrument.clone(),
+        snapshot: expected.clone(),
+        evidence: candidate.evidence.clone(),
+        state: DraftState::Current,
+    });
+    Ok(application::ConditionalDraftOutcome::Stored)
+}
+
+fn current_draft_guarded(
+    state: &mut RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    check: application::DraftCheck<'_>,
+) -> Result<application::CurrentDraftOutcome, SystemPortError> {
+    if snapshot(state, instrument)? != *expected {
+        return Ok(application::CurrentDraftOutcome::Conflict);
+    }
+    let current = expected.current.as_ref().ok_or_else(invalid)?;
+    let head = current.signal.calibration_head();
+    if state.heads.iter().find(|value| value.key() == head.key()) != Some(head) {
+        return Ok(application::CurrentDraftOutcome::Conflict);
+    }
+    if state.selected_account.as_ref() != Some(check.account) {
+        return Ok(application::CurrentDraftOutcome::AccountChanged);
+    }
+    if current
+        .signal
+        .validate_observation(check.observation, check.at)
+        .is_err()
+    {
+        return Ok(application::CurrentDraftOutcome::Invalid(
+            domain::ProposalExecutionError::ObservationInvalid,
+        ));
+    }
+    let Some(old) = state
+        .drafts
+        .iter_mut()
+        .find(|value| value.instrument == *instrument && value.state == DraftState::Current)
+    else {
+        return Ok(application::CurrentDraftOutcome::Absent);
+    };
+    if old.snapshot != *expected {
+        old.state = DraftState::Superseded;
+        return Ok(application::CurrentDraftOutcome::Absent);
+    }
+    let old_proposal = old
+        .evidence
+        .restore(check.master)
+        .map_err(|_error| integrity())?;
+    match old_proposal.check_current(check.at, check.observation) {
+        Ok(()) if old_proposal.intent().account_id() == check.account => Ok(
+            application::CurrentDraftOutcome::Existing(old_proposal.id().clone()),
+        ),
+        Ok(())
+        | Err(
+            domain::ProposalExecutionError::Expired
+            | domain::ProposalExecutionError::PriceOutsideRange,
+        ) => {
+            old.state = DraftState::Superseded;
+            Ok(application::CurrentDraftOutcome::Absent)
+        }
+        Err(
+            error @ (domain::ProposalExecutionError::ClockRollback
+            | domain::ProposalExecutionError::ObservationInvalid),
+        ) => Ok(application::CurrentDraftOutcome::Invalid(error)),
     }
 }
 
@@ -617,7 +949,9 @@ impl SignalRepository for MemorySignalEvaluationRepository {
         instrument: &InstrumentId,
     ) -> impl Future<Output = Result<SignalSnapshot, SystemPortError>> + Send {
         std::future::poll_fn(move |_context| {
-            std::task::Poll::Ready(snapshot(&self.state.write(), instrument))
+            let mut state = self.state.write();
+            state.snapshot_reads = state.snapshot_reads.saturating_add(1);
+            std::task::Poll::Ready(snapshot(&state, instrument))
         })
     }
     fn current(

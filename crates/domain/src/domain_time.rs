@@ -268,6 +268,7 @@ impl TimeSpan {
         )
     }
     pub const DAY: Self = Self(SignedDuration::seconds(86400));
+    pub(crate) const MINUTE: Self = Self(SignedDuration::seconds(60));
     pub const NANOSECOND: Self = Self(SignedDuration::nanoseconds(1));
     pub fn try_new(seconds: SpanSeconds, nanosecond: Nanosecond) -> Result<Self, TimeError> {
         if nanosecond.0 >= 1_000_000_000 {

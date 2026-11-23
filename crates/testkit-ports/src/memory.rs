@@ -871,6 +871,31 @@ impl MemoryProposalRepository {
     }
 }
 impl ProposalRepository for MemoryProposalRepository {
+    fn current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &application::SignalSnapshot,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::ready(Err(SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )))
+    }
+    fn store_current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &application::SignalSnapshot,
+        _candidate: application::DraftStoreCandidate<'_>,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::ready(Err(SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )))
+    }
     async fn store_draft(
         &self,
         proposal: &Proposal<Draft>,
@@ -1262,8 +1287,166 @@ pub type MemorySettingsRepositoryStoreRiskSettingsScript =
     Script<(RiskSettings,), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
 
 #[derive(Debug, Default)]
+struct GlobalInstrumentIdState {
+    issuer: domain::IndependentInstrumentIdIssuer,
+    assigned_or_adopted: std::collections::BTreeSet<InstrumentId>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MemoryGlobalInstrumentIds {
+    state: std::sync::Arc<State<GlobalInstrumentIdState>>,
+}
+
+impl MemoryGlobalInstrumentIds {
+    #[must_use]
+    pub fn with_existing(existing: &[InstrumentId]) -> Self {
+        let registry = Self::default();
+        for id in existing {
+            let _adopted = registry.adopt_existing(id.clone());
+        }
+        registry
+    }
+
+    #[must_use]
+    pub fn adopt_existing(&self, id: InstrumentId) -> domain::IdAdoption {
+        let mut state = self.state.write();
+        let inserted = state.assigned_or_adopted.insert(id.clone());
+        let issuer_adopted = state.issuer.adopt_existing(id);
+        match (inserted, issuer_adopted) {
+            (false, domain::IdAdoption::AlreadyKnown) => domain::IdAdoption::AlreadyKnown,
+            (true, _) | (false, domain::IdAdoption::Adopted) => domain::IdAdoption::Adopted,
+        }
+    }
+
+    #[must_use]
+    pub fn reservation(&self, id: &InstrumentId) -> domain::ReservationStatus {
+        let state = self.state.write();
+        if state.assigned_or_adopted.contains(id) {
+            domain::ReservationStatus::Reserved
+        } else {
+            state.issuer.reservation(id)
+        }
+    }
+
+    #[must_use]
+    pub fn issuer(&self) -> MemoryInstrumentIdIssuer {
+        MemoryInstrumentIdIssuer {
+            global: self.clone(),
+        }
+    }
+
+    #[must_use]
+    pub fn repository(&self) -> MemoryInstrumentMappingRepository {
+        MemoryInstrumentMappingRepository {
+            mappings: State::default(),
+            global: self.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct MemoryInstrumentIdIssuer {
+    global: MemoryGlobalInstrumentIds,
+}
+
+impl MemoryInstrumentIdIssuer {
+    #[must_use]
+    pub fn with_existing(existing: &[InstrumentId]) -> Self {
+        Self {
+            global: MemoryGlobalInstrumentIds::with_existing(existing),
+        }
+    }
+
+    #[must_use]
+    pub fn adopt_existing(&self, id: InstrumentId) -> domain::IdAdoption {
+        self.global.adopt_existing(id)
+    }
+
+    #[must_use]
+    pub fn reservation(&self, id: &InstrumentId) -> domain::ReservationStatus {
+        self.global.reservation(id)
+    }
+}
+
+impl application::InstrumentIdIssuer for MemoryInstrumentIdIssuer {
+    fn issue(
+        &self,
+    ) -> impl Future<Output = Result<domain::IssuedInstrumentId, SystemPortError>> + Send {
+        poll_fn(move |_| {
+            Poll::Ready(self.global.state.write().issuer.issue().map_err(|_error| {
+                SystemPortError::new(
+                    application::SystemPort::Repository,
+                    application::SystemFailure::RepositoryIntegrity,
+                )
+            }))
+        })
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct MemoryInstrumentMappingRepository {
     mappings: State<InstrumentMappings>,
+    global: MemoryGlobalInstrumentIds,
+}
+
+impl MemoryInstrumentMappingRepository {
+    #[must_use]
+    pub fn with_existing_ids(existing: &[InstrumentId]) -> Self {
+        let repo = Self::default();
+        for id in existing {
+            let _adopted = repo.adopt_existing_id(id.clone());
+        }
+        repo
+    }
+
+    #[must_use]
+    pub fn adopt_existing_id(&self, id: InstrumentId) -> domain::IdAdoption {
+        let mut mappings = self.mappings.write();
+        let local = mappings.adopt_existing_id(id.clone());
+        let global = self.global.adopt_existing(id);
+        match (local, global) {
+            (domain::IdAdoption::AlreadyKnown, domain::IdAdoption::AlreadyKnown) => {
+                domain::IdAdoption::AlreadyKnown
+            }
+            (domain::IdAdoption::Adopted, _)
+            | (domain::IdAdoption::AlreadyKnown, domain::IdAdoption::Adopted) => {
+                domain::IdAdoption::Adopted
+            }
+        }
+    }
+
+    fn ensure_now(
+        &self,
+        source: &InstrumentSource,
+        candidate: domain::IssuedInstrumentId,
+    ) -> Result<MappingAssignment, MappingStoreError> {
+        let mut mappings = self.mappings.write();
+        match mappings.resolve(source) {
+            Ok(id) => return Ok(MappingAssignment::Existing(id)),
+            Err(domain::InstrumentMappingError::Missing) => {}
+            Err(error) => return Err(MappingStoreError::Mapping(error)),
+        }
+        let mut global = self.global.state.write();
+        if global
+            .assigned_or_adopted
+            .contains(candidate.as_instrument_id())
+        {
+            return Err(MappingStoreError::Mapping(
+                domain::InstrumentMappingError::IdAlreadyUsed,
+            ));
+        }
+        let assigned = mappings
+            .ensure(source, candidate)
+            .map_err(MappingStoreError::Mapping)?;
+        match &assigned {
+            MappingAssignment::Issued(issued_id) => {
+                global.assigned_or_adopted.insert(issued_id.clone());
+                let _adopted = global.issuer.adopt_existing(issued_id.clone());
+            }
+            MappingAssignment::Existing(_) => {}
+        }
+        Ok(assigned)
+    }
 }
 
 impl InstrumentMappingRepository for MemoryInstrumentMappingRepository {
@@ -1312,15 +1495,17 @@ impl InstrumentMappingRepository for MemoryInstrumentMappingRepository {
     fn ensure(
         &self,
         source: &InstrumentSource,
-        candidate: &InstrumentId,
+        candidate: domain::IssuedInstrumentId,
     ) -> impl Future<Output = Result<MappingAssignment, MappingStoreError>> + Send {
+        let mut pending = Some(candidate);
         poll_fn(move |_| {
-            Poll::Ready(
-                self.mappings
-                    .write()
-                    .ensure(source, candidate)
-                    .map_err(MappingStoreError::Mapping),
-            )
+            let Some(issued) = pending.take() else {
+                return Poll::Ready(Err(MappingStoreError::Storage(SystemPortError::new(
+                    application::SystemPort::Repository,
+                    application::SystemFailure::RepositoryIntegrity,
+                ))));
+            };
+            Poll::Ready(self.ensure_now(source, issued))
         })
     }
 

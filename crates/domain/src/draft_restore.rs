@@ -151,6 +151,26 @@ impl DraftRestoreEvidence {
         Ok(saved)
     }
 
+    pub fn verify_matches_proposal(
+        &self,
+        original: &Proposal<Draft>,
+        current: &MasterInstrument,
+    ) -> Result<(), DraftRestoreError> {
+        let rebuilt = self.restore(current)?;
+        if rebuilt.id() != original.id()
+            || rebuilt.intent() != original.intent()
+            || rebuilt.created_at() != original.created_at()
+            || rebuilt.created_at().offset_seconds() != original.created_at().offset_seconds()
+            || rebuilt.expires_at() != original.expires_at()
+            || rebuilt.price_range() != original.price_range()
+            || rebuilt.price_range().card().observed_at().offset_seconds()
+                != original.price_range().card().observed_at().offset_seconds()
+        {
+            return Err(DraftRestoreError::ChangedDraft);
+        }
+        Ok(())
+    }
+
     pub fn restore(
         &self,
         current: &MasterInstrument,
