@@ -156,16 +156,11 @@ fn rebuild_signal(
     masters: &[domain::MasterInstrument],
 ) -> Result<domain::StoredSignalEvidence, SystemPortError> {
     let mut reconstructed = evidence.clone();
-    for assessment in [
-        &mut reconstructed.evidence.assessment,
-        &mut reconstructed.original.assessment,
-    ] {
-        if let Some(portfolio) = &assessment.portfolio {
-            assessment.portfolio = Some(
-                domain::HistoricalPortfolio::from_saved_facts(portfolio.facts().clone(), masters)
-                    .map_err(|_error| integrity())?,
-            );
-        }
+    if let Some(portfolio) = &reconstructed.evidence.assessment.portfolio {
+        reconstructed.evidence.assessment.portfolio = Some(
+            domain::HistoricalPortfolio::from_saved_facts(portfolio.facts().clone(), masters)
+                .map_err(|_error| integrity())?,
+        );
     }
     Ok(reconstructed)
 }
@@ -234,7 +229,15 @@ fn merge_evidence_masters(
             merged.push(candidate.clone());
         }
     }
-    domain::MasterInstrumentFacts::try_new(merged.clone()).map_err(|_error| invalid())?;
+    let non_delisted: Vec<_> = merged
+        .iter()
+        .filter(|master| match master.row().listing_status {
+            domain::ListingStatus::Scheduled | domain::ListingStatus::Active => true,
+            domain::ListingStatus::Delisted => false,
+        })
+        .cloned()
+        .collect();
+    domain::MasterInstrumentFacts::try_new(non_delisted).map_err(|_error| invalid())?;
     Ok(merged)
 }
 fn add_occurrence(
@@ -360,6 +363,39 @@ type PreparedCurrent = (
     Option<Vec<domain::MasterInstrument>>,
 );
 
+fn verify_commit_evidence(
+    existing: &[domain::MasterInstrument],
+    signal: &RaisedSignal,
+    occurrence: Option<&BuySignalRecord>,
+    evidence: &SignalCommitEvidence,
+) -> Result<Vec<domain::MasterInstrument>, SystemPortError> {
+    let masters = merge_evidence_masters(existing, evidence)?;
+    let current_master =
+        master_for_signal(&evidence.signal, &masters).map_err(|_error| invalid())?;
+    let rebuilt = rebuild_signal(&evidence.signal, &masters).map_err(|_error| invalid())?;
+    rebuilt
+        .evidence
+        .capture(signal, current_master)
+        .map_err(|_error| invalid())?;
+    let historical = rebuilt
+        .restore_history(current_master)
+        .map_err(|_error| invalid())?;
+    if historical != HistoricalSignal::from_signal(signal) {
+        return Err(invalid());
+    }
+    let expected_occurrence = occurrence.map(HistoricalSignalOccurrence::from_record);
+    let stored_occurrence = evidence
+        .occurrence
+        .as_ref()
+        .map(|value| restore_occurrence(value, &masters))
+        .transpose()
+        .map_err(|_error| invalid())?;
+    if expected_occurrence != stored_occurrence {
+        return Err(invalid());
+    }
+    Ok(masters)
+}
+
 fn prepare_current(
     context: (&RepositoryState, &InstrumentId, &SignalSnapshot),
     evaluation: &application::SignalEvaluation,
@@ -391,24 +427,12 @@ fn prepare_current(
         &state.history,
     )?;
     let evidence = evaluation.evidence.as_ref().ok_or_else(invalid)?;
-    let masters = merge_evidence_masters(&state.masters, evidence)?;
-    let historical = restore_signal(&evidence.signal, &masters).map_err(|_error| invalid())?;
-    if historical != HistoricalSignal::from_signal(&signal) {
-        return Err(invalid());
-    }
-    let expected_occurrence = evaluation
-        .occurrence
-        .as_ref()
-        .map(HistoricalSignalOccurrence::from_record);
-    let stored_occurrence = evidence
-        .occurrence
-        .as_ref()
-        .map(|value| restore_occurrence(value, &masters))
-        .transpose()
-        .map_err(|_error| invalid())?;
-    if expected_occurrence != stored_occurrence {
-        return Err(invalid());
-    }
+    let masters = verify_commit_evidence(
+        &state.masters,
+        &signal,
+        evaluation.occurrence.as_ref(),
+        evidence,
+    )?;
     Ok((
         Some(StoredCurrentEntry {
             submission: record.task_id().clone(),

@@ -16,11 +16,11 @@
 
 제안 포트의 저장은 `Proposal<Draft>`, 복원 근거와 현재 마스터 조회를 함께 받는다. 조회는 제안 ID와 현재 마스터 조회를 받는다. 메모리 가짜도 근거로 복원한 초안과 저장 요청을 대조하고, 현재 식별이 다르거나 거래 불가로 바뀌면 실패한다.
 
-신호 평가 포트의 원자적 커밋은 발생 신호가 있을 때 `SignalCommitEvidence`를 함께 받는다. 현재 신호와 이력 조회는 각각 `HistoricalSignal`, `HistoricalSignalOccurrence`를 반환한다. 평가 입력에는 과제·수수료·세율·만기·원래 포트폴리오·환율과 보유 종목 마스터 목록(`holding_masters`)의 복원 근거가 필요하다. 근거가 없거나 마스터가 충돌하거나 실제 평가와 맞지 않으면 신호 커밋과 이벤트를 내지 않는다. 메모리 가짜는 대상 종목과 보유 종목 마스터를 검증·병합해 커밋 근거를 원자적으로 저장하고, 조회 때마다 저장된 근거와 현재 마스터 목록으로 `HistoricalSignal`·`HistoricalSignalOccurrence`를 다시 복원한다.
+신호 평가 포트의 원자적 커밋은 발생 신호가 있을 때 `SignalCommitEvidence`를 함께 받는다. 현재 신호와 이력 조회는 각각 `HistoricalSignal`, `HistoricalSignalOccurrence`를 반환한다. 평가 입력에는 과제·수수료·세율·만기·원래 포트폴리오·환율과 보유 종목 마스터 목록(`holding_masters`)의 복원 근거가 필요하다. 근거가 없거나 마스터가 충돌하거나 실제 평가와 맞지 않으면 신호 커밋과 이벤트를 내지 않는다. 메모리 가짜는 대상 종목과 보유 종목 마스터를 검증·병합해 커밋 근거를 원자적으로 저장하고(이미 등록된 현재 마스터를 덮어쓰지 않으며 신규 신호 커밋 시 현재 저장소 마스터의 주문 게이트까지 확인한다), 조회 때마다 저장된 근거와 현재 마스터 목록으로 `HistoricalSignal`·`HistoricalSignalOccurrence`를 다시 복원한다.
 
 두 포트가 현재 마스터를 받는 방식은 의도적으로 다르다. `ProposalRepository`는 단일 종목의 실거래 `Proposal<Draft>`를 반환하므로 호출자가 확보한 단일 현재 마스터(`&MasterInstrument`)를 메서드 인자로 받아 주문 게이트까지 검사한다. 반면 `SignalRepository`는 A-27에서 확정된 조회 계약(`snapshot`, `current`, `occurrences`)을 유지하면서 단일 대상 종목뿐 아니라 당시 포트폴리오에 포함된 여러 보유 종목의 마스터까지 함께 검증해야 하므로, 저장소 어댑터가 `SignalCommitEvidence`의 마스터와 최신 마스터 저장소를 조회해 복원한다.
 
-평가 당시 보유·현금은 `HistoricalPortfolioFacts`로 읽으며 현재 `Portfolio`를 내보내지 않는다. 과거 현금(`HistoricalBuyingPower`)은 `Money`를 직접 노출하지 않고 `HistoricalBuyingPowerState`(`Available(HistoricalCashMoney)`, `NegativeBuyingPower`, `CashLookupFailed`)로만 표현해 외부에서 `BuyingPower::new`로 재조립할 수 없게 한다. 보유 수량 역시 과거 수량 타입으로만 노출해 주문 수량 생성자에 직접 넘길 수 없다. 각 과거 보유 종목(`HistoricalHolding`)은 `instrument_id`를 함께 보존하며, 저장된 보유 사실을 다시 조립할 때 `instrument_id`로 유일한 현재 마스터를 찾은 뒤 심볼·시장·통화 일치를 대조해 심볼 재사용으로 다른 종목이 매칭되는 것을 막는다. 분류·증권 유형도 `HistoricalClassifications`로 보존하고 내부 재판정에만 사용한다. 과거 유효한 값과 표시 결과를 별도 원본 필드와 대조해 단일 필드의 손상을 검출한다. 이 중복은 오류 검출을 위한 것이며 두 사본을 함께 바꾸는 변조에 대한 인증은 제공하지 않는다.
+평가 당시 보유·현금은 `HistoricalPortfolioFacts`로 읽으며 현재 `Portfolio`를 내보내지 않는다. 과거 현금(`HistoricalBuyingPower`)은 `Money`를 직접 노출하지 않고 `HistoricalBuyingPowerState`(`Available(HistoricalCashMoney)`, `NegativeBuyingPower`, `CashLookupFailed`)로만 표현해 외부에서 `BuyingPower::new`로 재조립할 수 없게 한다. 보유 수량 역시 과거 수량 타입으로만 노출해 주문 수량 생성자에 직접 넘길 수 없다. 각 과거 보유 종목(`HistoricalHolding`)은 `instrument_id`를 함께 보존하며, 저장된 보유 사실을 다시 조립할 때 `instrument_id`로 유일한 현재 마스터를 찾은 뒤 심볼·시장·통화 일치를 대조해 심볼 재사용으로 다른 종목이 매칭되는 것을 막는다. 상장폐지된 원래 마스터와 심볼을 재사용한 새 활성 마스터가 마스터 목록에 공존하더라도 `from_saved_facts`는 `instrument_id` 매칭과 정준 정렬만 검증하므로 기존 신호의 조회·폐기·무효화·재평가가 막히지 않는다. 분류·증권 유형도 `HistoricalClassifications`로 보존하고 내부 재판정에만 사용한다. 과거 유효한 값과 표시 결과를 별도 원본 필드와 대조해 단일 필드의 손상을 검출한다. 이 중복은 오류 검출을 위한 것이며 두 사본을 함께 바꾸는 변조에 대한 인증은 제공하지 않는다.
 
 같은 UTC 순간이어도 추정 과제와 신호의 원본·저장 근거, 만기, 환율·시장 시간, 보유·현금 관측과 매도 표시의 오프셋이 바뀌면 저장 또는 복원 오류다. 복원된 과거 계좌·현금·보유 수량과 매수 한도는 `Debug` 출력에서 가린다.
 
@@ -32,7 +32,8 @@
 
 - E-01·A-12·S-18: 추정 과제를 발급·저장하고 신호 평가 입력을 조립하는 측이 `StoredEstimateEvidence`(당시 마스터 행, 일봉, 기준 시세, 과제 시각·기간·허용 상태·성향)와 비용·만기 근거(`commission`, `tax`, `maturity`) 및 보유 종목별 `holding_masters`를 함께 보존·공급해야 한다.
 - A-14: 제안 초안을 생성·저장할 때 추정 근거(`StoredEstimateEvidence`), 카드 시세, 유효 기간으로 `DraftRestoreEvidence`를 조립해 `ProposalRepository::store_draft`에 넘겨야 한다.
-- S-22: SQL·JSON 형식과 원자적 저장, 현재 마스터 조회를 주입하는 제안·신호 및 발생 이력의 SQLite 연결은 별도다. `HistoricalHolding::instrument_id` 기준 보유별 현재 마스터 조회와 누락·중복·식별 불일치의 닫힌 실패, 비거래 종목의 과거 이력 조회 허용과 실거래 초안 복원 거부를 구현해야 한다.
+- S-22: SQL·JSON 형식과 원자적 저장, 현재 마스터 조회를 주입하는 제안·신호 및 발생 이력의 SQLite 연결은 별도다. `HistoricalHolding::instrument_id` 기준 보유별 현재 마스터 조회와 누락·중복·식별 불일치의 닫힌 실패, 상장폐지 심볼 재사용 공존 허용, 비거래 종목의 과거 이력 조회 허용과 실거래 초안 복원·신규 신호 커밋 거부를 구현해야 한다.
+- D-55: 확인된 티커 변경 이력을 도입할 때 대상 종목뿐 아니라 과거 보유 종목(`HistoricalHolding`)의 이전 심볼 이력 대조·조정 경로도 함께 정의해야 한다.
 - O-04·O-08: 주문 전 제안 조회 시 현재 마스터 조회를 선행해 `ProposalRepository::draft`에 전달하며, 필요하면 두 포트의 마스터 조회 주입 방식을 저장소 어댑터 기준으로 통일하는 후속 정리를 검토할 수 있다.
 
 ## 손 변형

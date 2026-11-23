@@ -2340,6 +2340,38 @@ mod tests {
         );
     }
     #[test]
+    fn historical_portfolio_captures_negative_and_failed_cash_observations() {
+        let portfolio = domain::portfolio_from_cash_observations(
+            vec![],
+            domain::CashObservation::Observed(domain::BuyingPower::new(
+                money("-100", Currency::Krw),
+                at(61, -18_000),
+            )),
+            domain::CashObservation::Failed {
+                currency: Currency::Usd,
+                reason: domain::CashObservationFailure::NotFound(domain::CashMissingData::Stock),
+                observed_at: at(61, -18_000),
+            },
+        )
+        .expect("오류 현금 포트폴리오");
+        let captured = domain::HistoricalPortfolio::capture(&portfolio, &[]).expect("수집");
+        assert_eq!(
+            captured.facts().krw.state,
+            domain::HistoricalBuyingPowerState::NegativeBuyingPower
+        );
+        assert_eq!(
+            captured.facts().usd.state,
+            domain::HistoricalBuyingPowerState::CashLookupFailed(
+                domain::CashObservationFailure::NotFound(domain::CashMissingData::Stock),
+            )
+        );
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(captured.facts().clone(), &[])
+                .expect("복원"),
+            captured
+        );
+    }
+    #[test]
     fn historical_portfolio_rejects_unsorted_holdings_facts() {
         let (_, _, master) = signal_fixture("1");
         let mut unsorted = domain::HistoricalPortfolio::capture(
@@ -2358,7 +2390,36 @@ mod tests {
         second_holding.symbol = Symbol::try_new("AAA").expect("심볼");
         unsorted.holdings.push(second_holding);
         assert_eq!(
-            domain::HistoricalPortfolio::from_saved_facts(unsorted, &[master, second_master]),
+            domain::HistoricalPortfolio::from_saved_facts(
+                unsorted,
+                &[master.clone(), second_master],
+            ),
+            Err(domain::HistoricalPortfolioError::ChangedFacts)
+        );
+        let kr_master = MasterInstrument::try_new(kr_active_row()).expect("한국 마스터");
+        let mut market_unsorted = domain::HistoricalPortfolio::capture(
+            &signal_portfolio(&master, "1"),
+            std::slice::from_ref(&master),
+        )
+        .expect("미국 포트")
+        .facts()
+        .clone();
+        let kr_holding = domain::HistoricalHolding {
+            instrument_id: kr_master.row().instrument_id.clone(),
+            market: domain::Market::Kr,
+            symbol: kr_master.row().symbol.clone(),
+            quantity: domain::HistoricalSignalQuantity::new(
+                Quantity::parse(&NumericInput::try_new("2").expect("입력")).expect("수량"),
+            ),
+            acquisition_price: domain::AcquisitionPrice::try_new(money("50000", Currency::Krw))
+                .expect("원가"),
+            current_price: None,
+            reported: None,
+            observed_at: at(61, 32_400),
+        };
+        market_unsorted.holdings.push(kr_holding);
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(market_unsorted, &[master, kr_master],),
             Err(domain::HistoricalPortfolioError::ChangedFacts)
         );
     }
@@ -3125,10 +3186,23 @@ mod tests {
             ),
             Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
         );
+        let mut delisted_orig_row = master.row().clone();
+        delisted_orig_row.listing_status = ListingStatus::Delisted;
+        let delisted_orig = MasterInstrument::try_new(delisted_orig_row).expect("상장폐지 원래");
         assert_eq!(
             domain::HistoricalPortfolio::from_saved_facts(
                 hist.facts().clone(),
-                &[master.clone(), reused_master],
+                &[delisted_orig, reused_master],
+            ),
+            Ok(hist.clone())
+        );
+        let mut same_id_renamed_row = master.row().clone();
+        same_id_renamed_row.symbol = Symbol::try_new("DUPNAME").expect("중복 심볼");
+        let same_id_renamed = MasterInstrument::try_new(same_id_renamed_row).expect("중복 ID");
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                hist.facts().clone(),
+                &[master.clone(), same_id_renamed],
             ),
             Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
         );
@@ -3191,9 +3265,15 @@ mod tests {
             domain::BuyingPower::new(money("0", Currency::Usd), at(61, 32_400)),
         )
         .expect("포트");
-        let kr_hist =
-            domain::HistoricalPortfolio::capture(&kr_portfolio, std::slice::from_ref(&kr_abcdef))
-                .expect("한국 캡처");
+        assert_eq!(
+            domain::HistoricalPortfolio::capture(&kr_portfolio, std::slice::from_ref(&us_abcdef)),
+            Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
+        );
+        let kr_hist = domain::HistoricalPortfolio::capture(
+            &kr_portfolio,
+            &[kr_abcdef.clone(), us_abcdef.clone()],
+        )
+        .expect("한국 캡처");
         assert_eq!(
             domain::HistoricalPortfolio::from_saved_facts(
                 kr_hist.facts().clone(),

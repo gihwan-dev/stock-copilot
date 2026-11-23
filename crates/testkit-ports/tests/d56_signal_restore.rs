@@ -714,4 +714,197 @@ mod tests {
             Ok(_) => panic!("거래정지 초안 거부 필요"),
         }
     }
+
+    fn shifted_offset_master(base: &MasterInstrument) -> MasterInstrument {
+        let mut row = base.row().clone();
+        let next_offset = if row.observed_at.offset_seconds() == domain::OffsetSeconds::new(0) {
+            domain::OffsetSeconds::new(32_400)
+        } else {
+            domain::OffsetSeconds::new(0)
+        };
+        row.observed_at = Timestamp::from_parts(
+            row.observed_at.utc_seconds(),
+            row.observed_at.nanosecond(),
+            next_offset,
+        )
+        .expect("오프셋");
+        assert_ne!(
+            row.observed_at.offset_seconds(),
+            base.row().observed_at.offset_seconds()
+        );
+        MasterInstrument::try_new(row).expect("오프셋 마스터")
+    }
+
+    fn run_applied_signal(
+        repo: &MemorySignalEvaluationRepository,
+        events: &application::EventBus,
+        id: &domain::InstrumentId,
+        inputs: EvaluateSignalInputs,
+        occ: &str,
+    ) {
+        let outcome = run(
+            EvaluateSignals::new(repo, &StaticInputs(inputs), events).execute(
+                id,
+                fixtures::day(60),
+                BuySignalOccurrenceId::try_new(occ).expect("ID"),
+            ),
+        )
+        .expect("평가 성공");
+        assert_eq!(
+            match outcome {
+                EvaluateSignalOutcome::Applied { reason, .. } => reason,
+                EvaluateSignalOutcome::NoSubmission
+                | EvaluateSignalOutcome::SubmissionDiscarded
+                | EvaluateSignalOutcome::Unavailable { .. } => panic!("적용 필요"),
+            },
+            None
+        );
+    }
+
+    #[test]
+    fn delisted_holding_symbol_reuse_still_allows_signal_lifecycle_and_new_active_commits() {
+        let master_a = fixtures::master();
+        let master_b = fixtures::other_master();
+        let repo = repository_with_submissions();
+        let events = EventBusBuilder::default().build();
+        let id_a = &master_a.row().instrument_id;
+        run_applied_signal(
+            &repo,
+            &events,
+            id_a,
+            inputs_for(
+                &master_a,
+                vec![master_b.clone()],
+                portfolio_holding_other(&master_b),
+            ),
+            "occ-reuse",
+        );
+        let mut delisted_b_row = master_b.row().clone();
+        delisted_b_row.listing_status = ListingStatus::Delisted;
+        repo.save_master(MasterInstrument::try_new(delisted_b_row).expect("폐지 B"));
+        let mut reused_c_row = master_b.row().clone();
+        reused_c_row.instrument_id = domain::InstrumentId::try_new("sample-c-reused").expect("C");
+        let reused_c = MasterInstrument::try_new(reused_c_row).expect("재사용 C");
+        repo.save_master(reused_c.clone());
+        let identity_a = master_a.order_instrument().expect("종목 A");
+        let snap = run(repo.snapshot(id_a)).expect("심볼 재사용 공존 조회");
+        assert!(snap.current.is_some());
+        assert_eq!(run(repo.current(id_a)).expect("현재").len(), 1);
+        assert_eq!(
+            run(repo.occurrences(id_a, &identity_a))
+                .expect("이력")
+                .len(),
+            1
+        );
+        match run(repo.invalidate(id_a, &snap)).expect("무효화 허용") {
+            SignalInvalidationOutcome::Applied(emitted) => assert_ne!(emitted, Vec::new()),
+            SignalInvalidationOutcome::Conflict
+            | SignalInvalidationOutcome::SubmissionDiscarded => panic!("무효화 적용 필요"),
+        }
+        assert_eq!(run(repo.snapshot(id_a)).expect("무효화 후").current, None);
+        run_applied_signal(
+            &repo,
+            &events,
+            id_a,
+            inputs_for(
+                &master_a,
+                vec![reused_c.clone()],
+                portfolio_holding_other(&reused_c),
+            ),
+            "occ-reuse-2",
+        );
+        assert_eq!(
+            run(repo.occurrences(id_a, &identity_a))
+                .expect("이력 2")
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn stale_tradable_commit_is_rejected_when_stored_master_is_non_tradable() {
+        let master = fixtures::master();
+        let invalid = SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData);
+        let decision = fixtures::decision(&master, "99", None);
+        let record = buy_record(&decision, "occ-stale-nt");
+        let proof = fixtures::evidence_for_decision(&decision, Some(&record)).expect("근거");
+        let transition = signal_transition_from_history(None, &decision).expect("전이");
+        for non_tradable in non_tradable_variants(&master) {
+            let repo = repository_with_submissions();
+            repo.save_master(non_tradable);
+            let snap = run(repo.snapshot(&master.row().instrument_id)).expect("스냅숏");
+            let mutation = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+                submission: snap.submission.clone().expect("제출"),
+                decision: decision.clone(),
+                transition: transition.clone(),
+                calibration_head: Some(fixtures::head(0)),
+                occurrence: Some(record.clone()),
+                evidence: Some(proof.clone()),
+            }));
+            assert_eq!(
+                run(repo.commit(&master.row().instrument_id, &snap, &mutation)),
+                Err(invalid)
+            );
+        }
+    }
+
+    #[test]
+    fn master_dedup_checks_offset_and_rejects_active_symbol_collision_in_repo() {
+        let master_a = fixtures::master();
+        let master_b = fixtures::other_master();
+        let invalid = SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData);
+        let portfolio = portfolio_holding_other(&master_b);
+        let diff_offset_a = shifted_offset_master(&master_a);
+        assert_eq!(
+            execute_expecting_unavailable(
+                inputs_for(
+                    &master_a,
+                    vec![diff_offset_a.clone(), master_b.clone()],
+                    portfolio
+                ),
+                "occ-off"
+            ),
+            EvaluateSignalError::RestorationMasters(MasterInstrumentError::DuplicateIdentity)
+        );
+        let repo = repository_with_submissions();
+        repo.save_master(master_b.clone());
+        let snap = run(repo.snapshot(&master_a.row().instrument_id)).expect("스냅숏");
+        let decision = fixtures::decision(&master_a, "99", None);
+        let record = buy_record(&decision, "occ-off-repo");
+        let transition = signal_transition_from_history(None, &decision).expect("전이");
+        let mut proof_offset =
+            fixtures::evidence_for_decision(&decision, Some(&record)).expect("근거");
+        proof_offset.holding_masters = vec![diff_offset_a];
+        let bad_offset = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+            submission: snap.submission.clone().expect("제출"),
+            decision: decision.clone(),
+            transition: transition.clone(),
+            calibration_head: Some(fixtures::head(0)),
+            occurrence: Some(record.clone()),
+            evidence: Some(proof_offset),
+        }));
+        assert_eq!(
+            run(repo.commit(&master_a.row().instrument_id, &snap, &bad_offset)),
+            Err(invalid)
+        );
+        let mut active_collision_row = master_b.row().clone();
+        active_collision_row.instrument_id =
+            domain::InstrumentId::try_new("active-dup-symbol").expect("충돌 ID");
+        let mut proof_collide =
+            fixtures::evidence_for_decision(&decision, Some(&record)).expect("근거");
+        proof_collide.holding_masters =
+            vec![MasterInstrument::try_new(active_collision_row).expect("활성 충돌")];
+        let bad_collide = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+            submission: snap.submission.clone().expect("제출"),
+            decision,
+            transition,
+            calibration_head: Some(fixtures::head(0)),
+            occurrence: Some(record),
+            evidence: Some(proof_collide),
+        }));
+        assert_eq!(
+            run(repo.commit(&master_a.row().instrument_id, &snap, &bad_collide)),
+            Err(invalid)
+        );
+    }
 }

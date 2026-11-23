@@ -252,7 +252,15 @@ impl HistoricalPortfolio {
         if let Some(reported) = facts.reported {
             portfolio = portfolio.with_reported(reported);
         }
-        if Self::capture(&portfolio, masters)?.0 != facts {
+        if portfolio
+            .holdings()
+            .iter()
+            .zip(&facts.holdings)
+            .any(|(holding, fact)| {
+                holding.instrument().market() != fact.market
+                    || holding.instrument().symbol() != &fact.symbol
+            })
+        {
             return Err(HistoricalPortfolioError::ChangedFacts);
         }
         Ok(Self(facts, portfolio))
