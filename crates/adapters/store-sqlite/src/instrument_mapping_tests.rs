@@ -12,6 +12,7 @@ use domain::{
     InstrumentSource, IsinCode, KnownMarket, MappingAssignment, Symbol,
 };
 use rusqlite::params;
+use std::{sync::mpsc, time::Duration};
 
 type RawRow = (
     &'static str,
@@ -42,6 +43,14 @@ fn integrity_error() -> MappingStoreError {
         SystemPort::Repository,
         SystemFailure::RepositoryIntegrity,
     ))
+}
+
+fn market_from_tag(tag: &str) -> KnownMarket {
+    match tag {
+        "KR" => KnownMarket::Kr,
+        "US" => KnownMarket::Us,
+        other => panic!("unexpected market tag: {other}"),
+    }
 }
 
 fn insert_row_expect_err(
@@ -81,20 +90,6 @@ fn assert_all_ops_fail_integrity(
         Err(integrity_error())
     );
     assert_eq!(rt.block_on(store.retire(probe.0)), Err(integrity_error()));
-}
-
-fn seed_unconstrained_rows(rt: &tokio::runtime::Runtime, path: &DatabasePath, rows: &[RawRow]) {
-    let db = Database::open(path, &key(), &clock()).expect("open");
-    let entries = rows.to_vec();
-    rt.block_on(db.write(move |tx| {
-        tx.execute_batch(fixtures::RECREATE_UNCONSTRAINED_STRICT)?;
-        for (inst_id, market, sym, isin, status) in entries {
-            tx.execute(sql::INSERT, params![inst_id, market, sym, isin, status])?;
-        }
-        Ok(())
-    }))
-    .expect("seed unconstrained rows");
-    rt.block_on(db.close()).expect("close");
 }
 
 fn corrupt_row_sets() -> [&'static [RawRow]; 13] {
@@ -167,11 +162,32 @@ fn verify_corrupt_set(rt: &tokio::runtime::Runtime, rows: &[RawRow]) {
         Ok(())
     }))
     .expect("seed corrupt rows");
-    let probe = source(KnownMarket::Kr, "005930", "KR7005930003");
+    rt.block_on(db.read(|conn| {
+        assert!(crate::instrument_mapping::validate_ledger(conn).is_err());
+        Ok(())
+    }))
+    .expect("validate_ledger direct check");
+
+    let first_row = rows[0];
+    let probe = source(market_from_tag(first_row.1), first_row.2, first_row.3);
+    let probe_id = id(first_row.0);
     let fresh = source(KnownMarket::Us, "NVDA", "US67066G1040");
-    let probe_id = id("id-1");
-    let fresh_id = id("id-fresh");
-    assert_all_ops_fail_integrity(rt, &db, (&probe, &probe_id), (&fresh, &fresh_id));
+    let store = InstrumentMappingStore::new(&db);
+    if rows[0].0 == rows[1].0 {
+        assert_eq!(rt.block_on(store.for_id(&probe_id)), Err(integrity_error()));
+        assert_eq!(
+            rt.block_on(store.ensure(&fresh, &probe_id)),
+            Err(integrity_error())
+        );
+    } else {
+        assert_eq!(rt.block_on(store.resolve(&probe)), Err(integrity_error()));
+        assert_eq!(rt.block_on(store.lookup(&probe)), Err(integrity_error()));
+        assert_eq!(rt.block_on(store.retire(&probe)), Err(integrity_error()));
+        assert_eq!(
+            rt.block_on(store.ensure(&probe, &id("id-fresh"))),
+            Err(integrity_error())
+        );
+    }
     rt.block_on(db.close()).expect("close");
     assert_eq!(
         Database::open(&path, &key(), &clock())
@@ -191,9 +207,7 @@ fn verify_corrupt_column(
     let db = Database::open(&path, &key(), &clock()).expect("open");
     let store = InstrumentMappingStore::new(&db);
     let valid = source(KnownMarket::Kr, "005930", "KR7005930003");
-    let fresh = source(KnownMarket::Us, "AAPL", "US0378331005");
     let valid_id = id("opaque-1");
-    let fresh_id = id("opaque-2");
     rt.block_on(store.ensure(&valid, &valid_id)).expect("seed");
     let bad = bad_value.to_owned();
     rt.block_on(db.write(move |tx| {
@@ -201,16 +215,46 @@ fn verify_corrupt_column(
         tx.execute_batch(fixtures::IGNORE_CHECKS_ON)?;
         tx.execute(statement, params!["opaque-1", bad])?;
         tx.execute_batch(fixtures::IGNORE_CHECKS_OFF)?;
+        tx.execute_batch(fixtures::RESTORE_GUARD_TRIGGERS)?;
         Ok(())
     }))
-    .expect("corrupt column");
-    assert_all_ops_fail_integrity(rt, &db, (&valid, &valid_id), (&fresh, &fresh_id));
+    .expect("corrupt column with intact schema");
+    rt.block_on(db.read(|conn| {
+        crate::instrument_mapping::validate_schema(conn)?;
+        assert!(crate::instrument_mapping::validate_ledger(conn).is_err());
+        assert!(crate::instrument_mapping::validate_on_open(conn).is_err());
+        Ok(())
+    }))
+    .expect("intact schema passes while validate_ledger rejects corrupt value");
+    let fresh_id = id("opaque-2");
+    if statement == fixtures::UPDATE_CORRUPT_ID {
+        assert_eq!(rt.block_on(store.resolve(&valid)), Err(integrity_error()));
+        assert_eq!(rt.block_on(store.lookup(&valid)), Err(integrity_error()));
+        assert_eq!(
+            rt.block_on(store.ensure(&valid, &fresh_id)),
+            Err(integrity_error())
+        );
+        assert_eq!(rt.block_on(store.retire(&valid)), Err(integrity_error()));
+    } else {
+        assert_all_ops_fail_integrity(rt, &db, (&valid, &valid_id), (&valid, &fresh_id));
+    }
     rt.block_on(db.close()).expect("close");
     assert_eq!(
         Database::open(&path, &key(), &clock())
-            .expect_err("reopen must fail closed on broken field")
+            .expect_err("reopen must fail closed on broken field with intact schema")
             .failure(),
         SystemFailure::RepositoryIntegrity
+    );
+}
+
+fn wait_contender_blocked_on_lock(started_rx: &mpsc::Receiver<()>, done_rx: &mpsc::Receiver<()>) {
+    started_rx
+        .recv()
+        .expect("contender thread ready to call ensure");
+    assert_eq!(
+        done_rx.recv_timeout(Duration::from_millis(80)),
+        Err(mpsc::RecvTimeoutError::Timeout),
+        "contender must stay blocked on BEGIN IMMEDIATE lock while holder has not finished"
     );
 }
 
@@ -222,11 +266,68 @@ fn instrument_mapping_sql_prepares_and_matches_migration_file() {
     );
     let mut connection = rusqlite::Connection::open_in_memory().expect("memory");
     crate::migration::run(&mut connection, crate::tests::timestamp()).expect("migrate");
-    for statement in [sql::ALL, sql::INSERT, sql::RETIRE] {
+    for statement in [
+        sql::SCHEMA_OBJECTS,
+        sql::ALL,
+        sql::BY_SOURCE,
+        sql::BY_SOURCE_OR_ID,
+        sql::BY_ID,
+        sql::INSERT,
+        sql::RETIRE,
+    ] {
         connection
             .prepare(statement)
             .expect("runtime SQL prepares cleanly");
     }
+}
+
+#[test]
+fn indexed_point_queries_use_indexes_without_table_scan() {
+    let fixture = Fixture::new();
+    let rt = runtime();
+    let db = open_fixture(&fixture);
+
+    for (query, expected_index) in [
+        (
+            fixtures::EXPLAIN_BY_SOURCE,
+            "instrument_mappings_symbol_key",
+        ),
+        (fixtures::EXPLAIN_BY_SOURCE, "instrument_mappings_isin_key"),
+        (
+            fixtures::EXPLAIN_BY_SOURCE_OR_ID,
+            "sqlite_autoindex_instrument_mappings_1",
+        ),
+        (
+            fixtures::EXPLAIN_BY_SOURCE_OR_ID,
+            "instrument_mappings_symbol_key",
+        ),
+        (
+            fixtures::EXPLAIN_BY_SOURCE_OR_ID,
+            "instrument_mappings_isin_key",
+        ),
+        (
+            fixtures::EXPLAIN_BY_ID,
+            "sqlite_autoindex_instrument_mappings_1",
+        ),
+    ] {
+        let details = rt
+            .block_on(db.read(move |conn| {
+                let mut stmt = conn.prepare(query)?;
+                stmt.query_map([], |row| row.get::<_, String>(3))?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            }))
+            .expect("query plan");
+        let joined = details.join("\n");
+        assert!(
+            !joined.contains("SCAN instrument_mappings"),
+            "point query must not full-scan instrument_mappings: {joined}"
+        );
+        assert!(
+            joined.contains(expected_index),
+            "expected index {expected_index} in query plan: {joined}"
+        );
+    }
+    rt.block_on(db.close()).expect("close");
 }
 
 #[test]
@@ -487,39 +588,56 @@ fn sqlite_triggers_protect_identity_and_retired_history() {
 }
 
 #[test]
-fn open_succeeds_on_valid_unindexed_strict_table() {
-    let fixture = Fixture::new();
+fn open_rejects_tampered_mapping_schema_objects() {
     let rt = runtime();
-    let path = DatabasePath::new(fixture.path());
-    seed_unconstrained_rows(
-        &rt,
-        &path,
-        &[
-            ("id-kr", "KR", "005930", "KR7005930003", "active"),
-            ("id-us", "US", "AAPL", "US0378331005", "retired"),
-        ],
-    );
-
-    let reopened = open_fixture(&fixture);
-    let store = InstrumentMappingStore::new(&reopened);
-    assert_eq!(
-        rt.block_on(store.resolve(&source(KnownMarket::Kr, "005930", "KR7005930003"))),
-        Ok(id("id-kr"))
-    );
-    assert_eq!(
-        rt.block_on(store.lookup(&source(KnownMarket::Us, "AAPL", "US0378331005"))),
-        Ok(InstrumentMappingRecord::new(
-            source(KnownMarket::Us, "AAPL", "US0378331005"),
-            id("id-us"),
-            InstrumentMappingStatus::Retired
-        ))
-    );
-    rt.block_on(reopened.close()).expect("close");
+    for tamper in [
+        fixtures::RECREATE_UNCONSTRAINED_STRICT,
+        fixtures::DROP_SYMBOL_INDEX,
+        fixtures::DROP_ISIN_INDEX,
+        fixtures::DROP_NO_DELETE_TRIGGER,
+        fixtures::DROP_RETIRE_ONLY_TRIGGER,
+        fixtures::DROP_NO_REPLACE_TRIGGER,
+        fixtures::DROP_INSERT_ACTIVE_TRIGGER,
+        fixtures::EXTRA_ROGUE_TRIGGER,
+        fixtures::REPLACE_WEAK_NO_DELETE_TRIGGER,
+    ] {
+        let fixture = Fixture::new();
+        let path = DatabasePath::new(fixture.path());
+        let db = Database::open(&path, &key(), &clock()).expect("open");
+        rt.block_on(db.write(move |tx| tx.execute_batch(tamper)))
+            .expect("apply tamper");
+        rt.block_on(db.close()).expect("close");
+        assert_eq!(
+            Database::open(&path, &key(), &clock())
+                .expect_err("reopen must reject tampered mapping schema")
+                .failure(),
+            SystemFailure::RepositoryIntegrity
+        );
+    }
 }
 
 #[test]
-fn open_and_operations_fail_on_duplicate_overlap_or_shared_id() {
+fn validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or_shared_id() {
     let rt = runtime();
+    let valid_fixture = Fixture::new();
+    let valid_db = open_fixture(&valid_fixture);
+    rt.block_on(valid_db.write(|tx| {
+        tx.execute_batch(fixtures::RECREATE_UNCONSTRAINED_STRICT)?;
+        tx.execute(
+            sql::INSERT,
+            params!["id-kr", "KR", "005930", "KR7005930003", "active"],
+        )?;
+        tx.execute(
+            sql::INSERT,
+            params!["id-us", "US", "AAPL", "US0378331005", "retired"],
+        )?;
+        Ok(())
+    }))
+    .expect("seed positive control");
+    rt.block_on(valid_db.read(crate::instrument_mapping::validate_ledger))
+        .expect("positive control passes validate_ledger");
+    rt.block_on(valid_db.close()).expect("close");
+
     for rows in corrupt_row_sets() {
         verify_corrupt_set(&rt, rows);
     }
@@ -598,8 +716,10 @@ fn two_connections_serialize_immediate_transaction_commit() {
     let first_db = open_fixture(&fixture);
     let second_db = open_fixture(&fixture);
     let sample = source(KnownMarket::Kr, "005930", "KR7005930003");
-    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
-    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (locked_tx, locked_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (done_tx, done_rx) = mpsc::channel();
     let holder = first_db
         .writer
         .submit(move |tx| {
@@ -617,15 +737,22 @@ fn two_connections_serialize_immediate_transaction_commit() {
         let contender_db = &second_db;
         locked_rx.recv().expect("holder holds immediate lock");
         let handle = scope.spawn(move || {
+            let contender_rt = runtime();
             let store = InstrumentMappingStore::new(contender_db);
-            runtime().block_on(store.ensure(&contender_source, &id("opaque-contender")))
+            started_tx.send(()).expect("signal contender start");
+            let outcome =
+                contender_rt.block_on(store.ensure(&contender_source, &id("opaque-contender")));
+            done_tx.send(()).expect("signal contender done");
+            outcome
         });
+        wait_contender_blocked_on_lock(&started_rx, &done_rx);
         release_tx.send(()).expect("commit holder");
+        rt.block_on(holder)
+            .expect("holder recv")
+            .expect("holder commit");
+        done_rx.recv().expect("contender finishes after commit");
         handle.join().expect("contender thread")
     });
-    rt.block_on(holder)
-        .expect("holder recv")
-        .expect("holder commit");
     assert_eq!(
         second_result,
         Ok(MappingAssignment::Existing(id("opaque-holder")))
@@ -641,8 +768,10 @@ fn two_connections_serialize_immediate_transaction_rollback() {
     let first_db = open_fixture(&fixture);
     let second_db = open_fixture(&fixture);
     let sample = source(KnownMarket::Us, "AAPL", "US0378331005");
-    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
-    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (locked_tx, locked_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (done_tx, done_rx) = mpsc::channel();
     let holder = first_db
         .writer
         .submit(move |tx| {
@@ -660,15 +789,22 @@ fn two_connections_serialize_immediate_transaction_rollback() {
         let contender_db = &second_db;
         locked_rx.recv().expect("holder holds immediate lock");
         let handle = scope.spawn(move || {
+            let contender_rt = runtime();
             let store = InstrumentMappingStore::new(contender_db);
-            runtime().block_on(store.ensure(&contender_source, &id("opaque-winner")))
+            started_tx.send(()).expect("signal contender start");
+            let outcome =
+                contender_rt.block_on(store.ensure(&contender_source, &id("opaque-winner")));
+            done_tx.send(()).expect("signal contender done");
+            outcome
         });
+        wait_contender_blocked_on_lock(&started_rx, &done_rx);
         release_tx.send(()).expect("abort holder");
+        rt.block_on(holder)
+            .expect("holder recv")
+            .expect_err("holder rolled back");
+        done_rx.recv().expect("contender finishes after rollback");
         handle.join().expect("contender thread")
     });
-    rt.block_on(holder)
-        .expect("holder recv")
-        .expect_err("holder rolled back");
     assert_eq!(
         second_result,
         Ok(MappingAssignment::Issued(id("opaque-winner")))
@@ -690,8 +826,8 @@ fn two_connections_report_busy_unavailable_when_lock_times_out() {
     rt.block_on(second_db.write(|tx| tx.execute_batch(fixtures::ZERO_BUSY_TIMEOUT)))
         .expect("zero busy timeout on contender");
 
-    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
-    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (locked_tx, locked_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
     let holder = first_db
         .writer
         .submit(move |tx| {
@@ -724,4 +860,54 @@ fn two_connections_report_busy_unavailable_when_lock_times_out() {
     );
     rt.block_on(first_db.close()).expect("close first");
     rt.block_on(second_db.close()).expect("close second");
+}
+
+#[test]
+fn large_ledger_reopens_and_resolves_indexed_entries_accurately() {
+    let rt = runtime();
+    let fixture = Fixture::new();
+    let db = open_fixture(&fixture);
+    rt.block_on(db.write(|tx| {
+        for index in 0_u32..1000 {
+            let market = if index & 1 == 0 { "KR" } else { "US" };
+            let inst_id = ["inst-", &index.to_string()].join("");
+            let sym = ["SYM", &index.to_string()].join("");
+            let isin = ["ISIN", &index.to_string()].join("");
+            tx.execute(sql::INSERT, params![inst_id, market, sym, isin, "active"])?;
+        }
+        Ok(())
+    }))
+    .expect("seed 1000 mappings");
+    rt.block_on(db.close()).expect("close");
+
+    let reopened = open_fixture(&fixture);
+    let store = InstrumentMappingStore::new(&reopened);
+    for index in [0_u32, 333, 500, 999] {
+        let market = if index & 1 == 0 {
+            KnownMarket::Kr
+        } else {
+            KnownMarket::Us
+        };
+        let sym = ["SYM", &index.to_string()].join("");
+        let isin = ["ISIN", &index.to_string()].join("");
+        let expected_id = id(&["inst-", &index.to_string()].join(""));
+        let entry = source(market, &sym, &isin);
+        assert_eq!(rt.block_on(store.resolve(&entry)), Ok(expected_id.clone()));
+        assert_eq!(
+            rt.block_on(store.for_id(&expected_id)),
+            Ok(vec![InstrumentMappingRecord::new(
+                entry,
+                expected_id,
+                InstrumentMappingStatus::Active
+            )])
+        );
+    }
+    let overlap = source(KnownMarket::Kr, "sym500", "ISIN-DIFFERENT");
+    assert_eq!(
+        rt.block_on(store.resolve(&overlap)),
+        Err(MappingStoreError::Mapping(
+            InstrumentMappingError::IdentityUncertain
+        ))
+    );
+    rt.block_on(reopened.close()).expect("close");
 }

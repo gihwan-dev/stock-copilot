@@ -129,4 +129,88 @@ mod tests {
             &ImmediateRuntime,
         );
     }
+
+    struct AlwaysErrorRepo {
+        error: application::MappingStoreError,
+    }
+
+    impl application::InstrumentMappingRepository for AlwaysErrorRepo {
+        fn resolve(
+            &self,
+            _source: &domain::InstrumentSource,
+        ) -> impl Future<Output = Result<domain::InstrumentId, application::MappingStoreError>>
+        {
+            std::future::ready(Err(self.error.clone()))
+        }
+
+        fn lookup(
+            &self,
+            _source: &domain::InstrumentSource,
+        ) -> impl Future<Output = Result<domain::InstrumentMappingRecord, application::MappingStoreError>>
+        {
+            std::future::ready(Err(self.error.clone()))
+        }
+
+        fn for_id(
+            &self,
+            _id: &domain::InstrumentId,
+        ) -> impl Future<
+            Output = Result<Vec<domain::InstrumentMappingRecord>, application::MappingStoreError>,
+        > {
+            std::future::ready(Err(self.error.clone()))
+        }
+
+        fn ensure(
+            &self,
+            _source: &domain::InstrumentSource,
+            _candidate: &domain::InstrumentId,
+        ) -> impl Future<Output = Result<domain::MappingAssignment, application::MappingStoreError>>
+        {
+            std::future::ready(Err(self.error.clone()))
+        }
+
+        fn retire(
+            &self,
+            _source: &domain::InstrumentSource,
+        ) -> impl Future<Output = Result<domain::InstrumentId, application::MappingStoreError>>
+        {
+            std::future::ready(Err(self.error.clone()))
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "겹침 원본 경쟁은 Issued 1건과 IdentityUncertain 1건이어야 함")]
+    fn overlapping_race_contract_rejects_double_uncertain_without_winner() {
+        let broken = AlwaysErrorRepo {
+            error: application::MappingStoreError::Mapping(
+                domain::InstrumentMappingError::IdentityUncertain,
+            ),
+        };
+        instrument_mapping::concurrent_overlapping_sources_has_one_winner(
+            &broken,
+            &broken,
+            &ImmediateRuntime,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "겹침 원본 경쟁은 Issued 1건과 IdentityUncertain 1건이어야 함")]
+    fn overlapping_race_contract_rejects_uncertain_plus_storage_unavailable() {
+        let left = AlwaysErrorRepo {
+            error: application::MappingStoreError::Mapping(
+                domain::InstrumentMappingError::IdentityUncertain,
+            ),
+        };
+        let right = AlwaysErrorRepo {
+            error: application::MappingStoreError::Storage(application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::Unavailable(application::RetryDelay::Unknown),
+            )),
+        };
+        instrument_mapping::concurrent_overlapping_sources_has_one_winner(
+            &left,
+            &right,
+            &ImmediateRuntime,
+        );
+    }
 }

@@ -123,7 +123,7 @@ fn apply_guarded(
     )?;
     if migrations == MIGRATIONS {
         validate_schema(&transaction)?;
-        let _restored = crate::instrument_mapping::restore(&transaction)?;
+        crate::instrument_mapping::validate_on_open(&transaction)?;
     } else {
         crate::fts_schema::validate(&transaction, migrations)?;
     }

@@ -818,35 +818,36 @@ where
     };
     let uncertain_ensure = Err(mapping_err(InstrumentMappingError::IdentityUncertain));
     let uncertain_resolve = Err(mapping_err(InstrumentMappingError::IdentityUncertain));
-    match (&left_result, &right_result) {
-        (Ok(MappingAssignment::Issued(winner)), right_err) if *right_err == uncertain_ensure => {
+    let winner = match (&left_result, &right_result) {
+        (Ok(MappingAssignment::Issued(issued)), right_err)
+            if *issued == left_id && *right_err == uncertain_ensure =>
+        {
+            Some((&first, &overlapping, issued.clone()))
+        }
+        (left_err, Ok(MappingAssignment::Issued(issued)))
+            if *left_err == uncertain_ensure && *issued == right_id =>
+        {
+            Some((&overlapping, &first, issued.clone()))
+        }
+        _ => None,
+    };
+    assert!(
+        winner.is_some(),
+        "겹침 원본 경쟁은 Issued 1건과 IdentityUncertain 1건이어야 함: ({left_result:?}, {right_result:?})"
+    );
+    if let Some((winner_source, loser_source, winner_id)) = winner {
+        for peer in [left, right] {
             assert_eq!(
-                runtime.block_on(right.resolve(&first)),
-                Ok(winner.clone()),
-                "승자 원본은 다른 연결에서도 조회되어야 함"
+                runtime.block_on(peer.resolve(winner_source)),
+                Ok(winner_id.clone()),
+                "승자 원본은 양쪽 연결에서 승자 ID로 조회되어야 함"
             );
             assert_eq!(
-                runtime.block_on(left.resolve(&overlapping)),
+                runtime.block_on(peer.resolve(loser_source)),
                 uncertain_resolve,
-                "패자 겹침 원본은 IdentityUncertain이어야 함"
+                "패자 겹침 원본은 양쪽 연결에서 IdentityUncertain이어야 함"
             );
         }
-        (left_err, Ok(MappingAssignment::Issued(winner))) if *left_err == uncertain_ensure => {
-            assert_eq!(
-                runtime.block_on(left.resolve(&overlapping)),
-                Ok(winner.clone()),
-                "승자 원본은 다른 연결에서도 조회되어야 함"
-            );
-            assert_eq!(
-                runtime.block_on(right.resolve(&first)),
-                uncertain_resolve,
-                "패자 겹침 원본은 IdentityUncertain이어야 함"
-            );
-        }
-        _ => assert_eq!(
-            left_result, uncertain_ensure,
-            "겹침 원본 경쟁은 Issued 1건과 IdentityUncertain 1건이어야 함: ({left_result:?}, {right_result:?})"
-        ),
     }
 }
 
