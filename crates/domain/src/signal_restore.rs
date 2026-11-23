@@ -390,32 +390,50 @@ impl StoredSignalEvidence {
             current,
             crate::estimate_restore::MasterReplayMode::HistoricalIdentity,
         )?;
-        if self.evidence != self.original
-            || self.evidence.maturity.offset_seconds() != self.original.maturity.offset_seconds()
-            || self.evidence.submitted_at.offset_seconds()
-                != self.original.submitted_at.offset_seconds()
-            || self.evidence.assessment.evaluated_at.offset_seconds()
-                != self.original.assessment.evaluated_at.offset_seconds()
-            || self
-                .evidence
-                .assessment
-                .target
-                .map(|value| value.observed_at.offset_seconds())
-                != self
-                    .original
-                    .assessment
-                    .target
-                    .map(|value| value.observed_at.offset_seconds())
-        {
-            return Err(SignalRestoreError::ChangedSignal);
-        }
-        check_context_offsets(&self.evidence.assessment, &self.original.assessment)?;
+        check_signal_evidence_match(&self.evidence, &self.original)?;
         let actual = SignalDisplayFacts::from_signal(&signal);
         if actual != self.expected || display_offset(&actual) != display_offset(&self.expected) {
             return Err(SignalRestoreError::ChangedSignal);
         }
         Ok(HistoricalSignal::from_signal(&signal))
     }
+
+    pub fn verify_same_as(&self, other: &Self) -> Result<(), SignalRestoreError> {
+        check_signal_evidence_match(&self.evidence, &other.evidence)?;
+        check_signal_evidence_match(&self.original, &other.original)?;
+        if self.expected != other.expected
+            || display_offset(&self.expected) != display_offset(&other.expected)
+        {
+            return Err(SignalRestoreError::ChangedSignal);
+        }
+        Ok(())
+    }
+}
+
+fn check_signal_evidence_match(
+    left: &SignalRestoreEvidence,
+    right: &SignalRestoreEvidence,
+) -> Result<(), SignalRestoreError> {
+    if left != right
+        || left.maturity.offset_seconds() != right.maturity.offset_seconds()
+        || left.submitted_at.offset_seconds() != right.submitted_at.offset_seconds()
+        || left.assessment.evaluated_at.offset_seconds()
+            != right.assessment.evaluated_at.offset_seconds()
+        || left
+            .assessment
+            .target
+            .map(|value| value.observed_at.offset_seconds())
+            != right
+                .assessment
+                .target
+                .map(|value| value.observed_at.offset_seconds())
+    {
+        return Err(SignalRestoreError::ChangedSignal);
+    }
+    left.estimate
+        .check_stored_offsets(&right.estimate)
+        .map_err(SignalRestoreError::Estimate)?;
+    check_context_offsets(&left.assessment, &right.assessment)
 }
 
 fn display_offset(facts: &SignalDisplayFacts) -> Option<crate::OffsetSeconds> {
@@ -539,6 +557,27 @@ impl StoredSignalOccurrence {
             return Err(SignalOccurrenceRestoreError::ChangedOccurrence);
         }
         Ok(HistoricalSignalOccurrence(record))
+    }
+
+    pub fn verify_commit_binding(
+        &self,
+        signal: &StoredSignalEvidence,
+        record: &crate::BuySignalRecord,
+    ) -> Result<(), SignalOccurrenceRestoreError> {
+        self.signal
+            .verify_same_as(signal)
+            .map_err(SignalOccurrenceRestoreError::Signal)?;
+        if self.id != *record.id()
+            || self.expected_id != *record.id()
+            || self.raised_at != record.raised_at()
+            || self.raised_at.offset_seconds() != record.raised_at().offset_seconds()
+            || self.interval != record.interval()
+            || self.interval.start().offset_seconds() != record.interval().start().offset_seconds()
+            || self.interval.end().offset_seconds() != record.interval().end().offset_seconds()
+        {
+            return Err(SignalOccurrenceRestoreError::ChangedOccurrence);
+        }
+        Ok(())
     }
 }
 

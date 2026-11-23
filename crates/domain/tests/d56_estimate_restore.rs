@@ -3039,9 +3039,30 @@ mod tests {
                 .restore(&non_tradable)
                 .expect("과거 발생 복원 허용");
             assert_eq!(occ.interval(), record.interval());
-            saved_draft
+            match saved_draft
                 .restore(&non_tradable)
-                .expect_err("실거래 초안 복원 거부");
+                .expect_err("실거래 초안 복원 거부")
+            {
+                domain::DraftRestoreError::Estimate(EstimateRestoreError::CurrentMaster(_)) => {}
+                domain::DraftRestoreError::Estimate(
+                    EstimateRestoreError::HistoricalMaster(_)
+                    | EstimateRestoreError::CurrentInstrumentMismatch
+                    | EstimateRestoreError::CandleCurrencyMismatch
+                    | EstimateRestoreError::Volatility(_)
+                    | EstimateRestoreError::Task(_)
+                    | EstimateRestoreError::ChangedResult
+                    | EstimateRestoreError::ChangedEvidence,
+                )
+                | domain::DraftRestoreError::Master(_)
+                | domain::DraftRestoreError::Time(_)
+                | domain::DraftRestoreError::Intent(_)
+                | domain::DraftRestoreError::Proposal(_)
+                | domain::DraftRestoreError::ExpiryMismatch
+                | domain::DraftRestoreError::ChangedRange
+                | domain::DraftRestoreError::ChangedDraft => {
+                    panic!("실거래 초안 추정 주문 게이트 거부 필요")
+                }
+            }
             input
                 .capture(&signal, &non_tradable)
                 .expect_err("실거래 신호 저장 거부");
@@ -3549,5 +3570,150 @@ mod tests {
             start_offset.restore(&master_99),
             Err(domain::SignalOccurrenceRestoreError::ChangedOccurrence)
         );
+    }
+
+    #[test]
+    fn historical_portfolio_rejects_same_symbol_unsorted_markets() {
+        let mut kr_row = kr_active_row();
+        kr_row.symbol = Symbol::try_new("ABCDEF").expect("KR 심볼");
+        kr_row.instrument_id = InstrumentId::try_new("kr-abcdef-ord").expect("KR ID");
+        let kr_master = MasterInstrument::try_new(kr_row).expect("KR 마스터");
+        let mut us_row = row();
+        us_row.symbol = Symbol::try_new("ABCDEF").expect("US 심볼");
+        us_row.instrument_id = InstrumentId::try_new("us-abcdef-ord").expect("US ID");
+        let us_master = MasterInstrument::try_new(us_row).expect("US 마스터");
+        let us_holding = domain::HistoricalHolding {
+            instrument_id: us_master.row().instrument_id.clone(),
+            market: domain::Market::Us,
+            symbol: us_master.row().symbol.clone(),
+            quantity: domain::HistoricalSignalQuantity::new(
+                Quantity::parse(&NumericInput::try_new("1").expect("입력")).expect("수량"),
+            ),
+            acquisition_price: domain::AcquisitionPrice::try_new(money("100", Currency::Usd))
+                .expect("원가"),
+            current_price: None,
+            reported: None,
+            observed_at: at(61, -18_000),
+        };
+        let kr_holding = domain::HistoricalHolding {
+            instrument_id: kr_master.row().instrument_id.clone(),
+            market: domain::Market::Kr,
+            symbol: kr_master.row().symbol.clone(),
+            quantity: domain::HistoricalSignalQuantity::new(
+                Quantity::parse(&NumericInput::try_new("2").expect("입력")).expect("수량"),
+            ),
+            acquisition_price: domain::AcquisitionPrice::try_new(money("50000", Currency::Krw))
+                .expect("원가"),
+            current_price: None,
+            reported: None,
+            observed_at: at(61, 32_400),
+        };
+        let mut facts = domain::HistoricalPortfolio::capture(
+            &domain::Portfolio::new(
+                vec![],
+                domain::BuyingPower::new(money("0", Currency::Krw), at(61, 32_400)),
+                domain::BuyingPower::new(money("0", Currency::Usd), at(61, -18_000)),
+            )
+            .expect("빈 포트"),
+            &[],
+        )
+        .expect("빈 과거 포트")
+        .facts()
+        .clone();
+        facts.holdings = vec![us_holding, kr_holding];
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(facts, &[kr_master, us_master]),
+            Err(domain::HistoricalPortfolioError::ChangedFacts)
+        );
+    }
+
+    fn binding_fixture() -> (
+        domain::StoredSignalEvidence,
+        domain::BuySignalRecord,
+        domain::StoredSignalOccurrence,
+    ) {
+        let (signal_99, input_99, master_99) = signal_fixture("99");
+        let saved = input_99.capture(&signal_99, &master_99).expect("근거");
+        let buy = match &signal_99 {
+            domain::RaisedSignal::Buy(value) => value,
+            domain::RaisedSignal::Sell(_) => panic!("매수"),
+        };
+        let record = domain::BuySignalRecord::from_signal_checked(
+            domain::BuySignalOccurrenceId::try_new("occ-bind").expect("ID"),
+            buy,
+            at(61, -18_000),
+            &input_99.assessment.calendars,
+        )
+        .expect("발생");
+        let occ = domain::StoredSignalOccurrence::capture(&record, saved.clone(), &master_99)
+            .expect("이력 근거");
+        (saved, record, occ)
+    }
+
+    #[test]
+    fn stored_signal_occurrence_verify_commit_binding_checks_signal_and_record() {
+        let (saved, record, occ) = binding_fixture();
+        occ.verify_commit_binding(&saved, &record)
+            .expect("정상 결합");
+        let signal_cases: [fn(&mut domain::StoredSignalOccurrence); 3] = [
+            |entry| {
+                entry.signal.evidence.maturity = with_offset(entry.signal.evidence.maturity, 0);
+            },
+            |entry| {
+                entry.signal.original.maturity = with_offset(entry.signal.original.maturity, 0);
+            },
+            |entry| {
+                entry.signal.expected.probability = domain::AiProbability::parse(
+                    &domain::AiProbabilityInput::try_new("91").expect("입력"),
+                )
+                .expect("확률")
+                .into_probability();
+            },
+        ];
+        for mutate in signal_cases {
+            let mut copy = occ.clone();
+            mutate(&mut copy);
+            assert_eq!(
+                copy.verify_commit_binding(&saved, &record),
+                Err(domain::SignalOccurrenceRestoreError::Signal(
+                    domain::SignalRestoreError::ChangedSignal
+                ))
+            );
+        }
+        let mut raised_offset = occ;
+        raised_offset.raised_at = with_offset(raised_offset.raised_at, 0);
+        assert_eq!(
+            raised_offset.verify_commit_binding(&saved, &record),
+            Err(domain::SignalOccurrenceRestoreError::ChangedOccurrence)
+        );
+    }
+
+    #[test]
+    fn stored_signal_occurrence_verify_commit_binding_checks_estimate_offsets() {
+        let (saved, record, occ) = binding_fixture();
+        let estimate_cases: [fn(&mut domain::StoredSignalOccurrence); 3] = [
+            |entry| {
+                entry.signal.evidence.estimate.evidence.reference_at =
+                    with_offset(entry.signal.evidence.estimate.evidence.reference_at, 0);
+            },
+            |entry| {
+                entry.signal.evidence.estimate.original.reference_at =
+                    with_offset(entry.signal.evidence.estimate.original.reference_at, 0);
+            },
+            |entry| {
+                entry.signal.evidence.estimate.expected.created_at =
+                    with_offset(entry.signal.evidence.estimate.expected.created_at, 0);
+            },
+        ];
+        for mutate in estimate_cases {
+            let mut copy = occ.clone();
+            mutate(&mut copy);
+            assert_eq!(
+                copy.verify_commit_binding(&saved, &record),
+                Err(domain::SignalOccurrenceRestoreError::Signal(
+                    domain::SignalRestoreError::Estimate(EstimateRestoreError::ChangedEvidence)
+                ))
+            );
+        }
     }
 }

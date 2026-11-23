@@ -907,4 +907,158 @@ mod tests {
             Err(invalid)
         );
     }
+
+    fn shift_ts_offset(value: Timestamp) -> Timestamp {
+        let next = if value.offset_seconds() == domain::OffsetSeconds::new(0) {
+            domain::OffsetSeconds::new(32_400)
+        } else {
+            domain::OffsetSeconds::new(0)
+        };
+        Timestamp::from_parts(value.utc_seconds(), value.nanosecond(), next).expect("시각 오프셋")
+    }
+
+    fn assert_commit_invalid(
+        repo: &MemorySignalEvaluationRepository,
+        master: &MasterInstrument,
+        decision: &SignalDecision,
+        record: &BuySignalRecord,
+        evidence: SignalCommitEvidence,
+    ) {
+        let invalid = SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData);
+        let snap = run(repo.snapshot(&master.row().instrument_id)).expect("스냅숏");
+        let transition = signal_transition_from_history(None, decision).expect("전이");
+        let mutation = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+            submission: snap.submission.clone().expect("제출"),
+            decision: decision.clone(),
+            transition,
+            calibration_head: Some(fixtures::head(0)),
+            occurrence: Some(record.clone()),
+            evidence: Some(evidence),
+        }));
+        assert_eq!(
+            run(repo.commit(&master.row().instrument_id, &snap, &mutation)),
+            Err(invalid)
+        );
+    }
+
+    #[test]
+    fn commit_rejects_occurrence_signal_swap_offset_drift_and_wrong_master() {
+        let master_a = fixtures::master();
+        let master_b = fixtures::other_master();
+        let decision_99 = fixtures::decision(&master_a, "99", None);
+        let decision_98 = fixtures::decision(&master_a, "98", None);
+        let rec_99 = buy_record(&decision_99, "occ-bind");
+        let rec_98 = buy_record(&decision_98, "occ-bind");
+        let base_proof =
+            fixtures::evidence_for_decision(&decision_99, Some(&rec_99)).expect("근거");
+        let repo = repository_with_submissions();
+        repo.save_master(master_a.clone());
+        let mut swapped_occ = base_proof.clone();
+        swapped_occ.occurrence = fixtures::evidence_for_decision(&decision_98, Some(&rec_98))
+            .expect("98 근거")
+            .occurrence;
+        assert_commit_invalid(&repo, &master_a, &decision_99, &rec_99, swapped_occ);
+        let mut maturity_offset = base_proof.clone();
+        let occ_sig = &mut maturity_offset.occurrence.as_mut().expect("이력").signal;
+        occ_sig.evidence.maturity = shift_ts_offset(occ_sig.evidence.maturity);
+        occ_sig.original.maturity = occ_sig.evidence.maturity;
+        assert_commit_invalid(&repo, &master_a, &decision_99, &rec_99, maturity_offset);
+        let buy_99 = match &decision_99 {
+            SignalDecision::Buy(value) => value,
+            SignalDecision::Sell(_) | SignalDecision::None(_) => panic!("매수"),
+        };
+        let shifted_rec = BuySignalRecord::from_signal_checked(
+            BuySignalOccurrenceId::try_new("occ-bind").expect("ID"),
+            buy_99,
+            shift_ts_offset(fixtures::day(60)),
+            &kr_calendars(),
+        )
+        .expect("시프트 발생");
+        let mut raised_offset = base_proof.clone();
+        raised_offset.occurrence = Some(
+            domain::StoredSignalOccurrence::capture(
+                &shifted_rec,
+                base_proof.signal.clone(),
+                &master_a,
+            )
+            .expect("시프트 근거"),
+        );
+        assert_commit_invalid(&repo, &master_a, &decision_99, &rec_99, raised_offset);
+        let mut wrong_master = base_proof;
+        wrong_master.master = master_b;
+        assert_commit_invalid(&repo, &master_a, &decision_99, &rec_99, wrong_master);
+    }
+
+    #[test]
+    fn commit_rejects_scheduled_symbol_collision_and_tampered_original_or_expected() {
+        let master_a = fixtures::master();
+        let master_b = fixtures::other_master();
+        let decision = fixtures::decision(&master_a, "99", None);
+        let record = buy_record(&decision, "occ-m5-m10");
+        let base_proof = fixtures::evidence_for_decision(&decision, Some(&record)).expect("근거");
+        let repo = repository_with_submissions();
+        let mut scheduled_b_row = master_b.row().clone();
+        scheduled_b_row.listing_status = ListingStatus::Scheduled;
+        repo.save_master(MasterInstrument::try_new(scheduled_b_row).expect("상장예정 B"));
+        let mut dup_active_row = master_b.row().clone();
+        dup_active_row.instrument_id =
+            domain::InstrumentId::try_new("active-vs-sched").expect("ID");
+        let mut sched_collide = base_proof.clone();
+        sched_collide.holding_masters =
+            vec![MasterInstrument::try_new(dup_active_row).expect("활성 충돌")];
+        assert_commit_invalid(&repo, &master_a, &decision, &record, sched_collide);
+        let mut tampered_original = base_proof.clone();
+        tampered_original.signal.original.maturity =
+            shift_ts_offset(tampered_original.signal.original.maturity);
+        assert_commit_invalid(&repo, &master_a, &decision, &record, tampered_original);
+        let mut tampered_expected = base_proof;
+        tampered_expected.signal.expected.probability =
+            domain::AiProbability::parse(&domain::AiProbabilityInput::try_new("91").expect("입력"))
+                .expect("확률")
+                .into_probability();
+        assert_commit_invalid(&repo, &master_a, &decision, &record, tampered_expected);
+    }
+
+    #[test]
+    fn sell_commit_without_occurrence_rejects_tampered_original_or_expected() {
+        let master = fixtures::master();
+        let invalid = SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData);
+        let repo = MemorySignalEvaluationRepository::new(fixtures::assignments());
+        repo.advance_calibration_head(fixtures::head(0))
+            .expect("보정");
+        let events = EventBusBuilder::default().build();
+        run(SubmitEstimate::new(&repo, &events).execute(
+            &fixtures::run_id(),
+            vec![fixtures::input("task-old", "10", &master)],
+        ))
+        .expect("제출");
+        let snap = run(repo.snapshot(&master.row().instrument_id)).expect("스냅숏");
+        let sell = fixtures::decision(&master, "10", Some("5"));
+        let transition = signal_transition_from_history(None, &sell).expect("전이");
+        let base_proof = fixtures::evidence_for_decision(&sell, None).expect("매도 근거");
+        let mut tampered_original = base_proof.clone();
+        tampered_original.signal.original.maturity =
+            shift_ts_offset(tampered_original.signal.original.maturity);
+        let mut tampered_expected = base_proof;
+        tampered_expected.signal.expected.probability =
+            domain::AiProbability::parse(&domain::AiProbabilityInput::try_new("15").expect("입력"))
+                .expect("확률")
+                .into_probability();
+        let assert_rejected = |proof: SignalCommitEvidence| {
+            let mutation = SignalMutation::Evaluate(Box::new(SignalEvaluation {
+                submission: snap.submission.clone().expect("제출"),
+                decision: sell.clone(),
+                transition: transition.clone(),
+                calibration_head: Some(fixtures::head(0)),
+                occurrence: None,
+                evidence: Some(proof),
+            }));
+            assert_eq!(
+                run(repo.commit(&master.row().instrument_id, &snap, &mutation)),
+                Err(invalid)
+            );
+        };
+        assert_rejected(tampered_original);
+        assert_rejected(tampered_expected);
+    }
 }

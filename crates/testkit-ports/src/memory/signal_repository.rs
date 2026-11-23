@@ -369,6 +369,17 @@ fn verify_commit_evidence(
     occurrence: Option<&BuySignalRecord>,
     evidence: &SignalCommitEvidence,
 ) -> Result<Vec<domain::MasterInstrument>, SystemPortError> {
+    if evidence.master.row().instrument_id
+        != evidence
+            .signal
+            .evidence
+            .estimate
+            .evidence
+            .master
+            .instrument_id
+    {
+        return Err(invalid());
+    }
     let masters = merge_evidence_masters(existing, evidence)?;
     let current_master =
         master_for_signal(&evidence.signal, &masters).map_err(|_error| invalid())?;
@@ -392,6 +403,11 @@ fn verify_commit_evidence(
         .map_err(|_error| invalid())?;
     if expected_occurrence != stored_occurrence {
         return Err(invalid());
+    }
+    if let (Some(stored), Some(record)) = (&evidence.occurrence, occurrence) {
+        stored
+            .verify_commit_binding(&evidence.signal, record)
+            .map_err(|_error| invalid())?;
     }
     Ok(masters)
 }

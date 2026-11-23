@@ -185,32 +185,22 @@ impl StoredEstimateEvidence {
         {
             return Err(EstimateRestoreError::ChangedResult);
         }
-        if self.evidence != self.original
-            || self.evidence.master.observed_at.offset_seconds()
-                != self.original.master.observed_at.offset_seconds()
-            || self
-                .evidence
-                .candles
-                .iter()
-                .zip(&self.original.candles)
-                .any(|(left, right)| {
-                    left.time().timestamp().offset_seconds()
-                        != right.time().timestamp().offset_seconds()
-                        || left.collected_at().offset_seconds()
-                            != right.collected_at().offset_seconds()
-                        || left
-                            .adjustment()
-                            .adjustment_basis()
-                            .map(|basis| basis.as_timestamp().offset_seconds())
-                            != right
-                                .adjustment()
-                                .adjustment_basis()
-                                .map(|basis| basis.as_timestamp().offset_seconds())
-                })
+        check_evidence_offsets(&self.evidence, &self.original)?;
+        Ok((result, quote))
+    }
+
+    pub(crate) fn check_stored_offsets(&self, other: &Self) -> Result<(), EstimateRestoreError> {
+        check_evidence_offsets(&self.evidence, &other.evidence)?;
+        check_evidence_offsets(&self.original, &other.original)?;
+        if self.expected != other.expected
+            || self.expected.reference_at.offset_seconds()
+                != other.expected.reference_at.offset_seconds()
+            || self.expected.created_at.offset_seconds()
+                != other.expected.created_at.offset_seconds()
         {
             return Err(EstimateRestoreError::ChangedEvidence);
         }
-        Ok((result, quote))
+        Ok(())
     }
 
     pub fn restore_history(
@@ -220,6 +210,38 @@ impl StoredEstimateEvidence {
         self.replay(current, MasterReplayMode::HistoricalIdentity)
             .map(|(task, _)| HistoricalEstimate(task))
     }
+}
+
+pub(crate) fn check_evidence_offsets(
+    left: &EstimateRestoreEvidence,
+    right: &EstimateRestoreEvidence,
+) -> Result<(), EstimateRestoreError> {
+    if left != right
+        || left.reference_at.offset_seconds() != right.reference_at.offset_seconds()
+        || left.task_at.offset_seconds() != right.task_at.offset_seconds()
+        || left.master.observed_at.offset_seconds() != right.master.observed_at.offset_seconds()
+        || left
+            .candles
+            .iter()
+            .zip(&right.candles)
+            .any(|(first, second)| {
+                first.time().timestamp().offset_seconds()
+                    != second.time().timestamp().offset_seconds()
+                    || first.collected_at().offset_seconds()
+                        != second.collected_at().offset_seconds()
+                    || first
+                        .adjustment()
+                        .adjustment_basis()
+                        .map(|basis| basis.as_timestamp().offset_seconds())
+                        != second
+                            .adjustment()
+                            .adjustment_basis()
+                            .map(|basis| basis.as_timestamp().offset_seconds())
+            })
+    {
+        return Err(EstimateRestoreError::ChangedEvidence);
+    }
+    Ok(())
 }
 
 pub(crate) fn check_task_offsets(
