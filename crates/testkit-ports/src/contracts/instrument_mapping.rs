@@ -1,8 +1,14 @@
-use application::{InstrumentIdIssuer, InstrumentMappingRepository, MappingStoreError};
+use application::{
+    InstrumentIdIssuer, InstrumentMappingHistoryRepository, InstrumentMappingRepository,
+    MappingStoreError,
+};
 use domain::{
-    IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingError, InstrumentMappingRecord,
-    InstrumentMappingStatus, InstrumentSource, IsinCode, IssuedInstrumentId, KnownMarket,
-    MappingAssignment, Symbol,
+    CalendarDate, CalendarYear, CorporateAction, CorporateActionId, CorporateActionKind,
+    DartReceiptNo, DayNumber, DisclosureKey, IndependentInstrumentIdIssuer, InstrumentId,
+    InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentSource,
+    IsinCode, IssuedInstrumentId, KindReceiptNo, KnownMarket, MappingAssignment,
+    MappingHistoryEvent, MonthNumber, Nanosecond, OffsetSeconds, ReceiptNo, SecEdgarReceiptNo,
+    ShareCount, ShareRatio, Symbol, Timestamp, UnixSeconds, UntrustedText, UserReason,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -1139,4 +1145,336 @@ where
         assert!(seen.insert(id), "동시 발급에서 중복 ID가 나오면 안 됨");
     }
     assert_eq!(seen.len(), 20, "동시 발급 총 20건이 모두 고유해야 함");
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryContractDataset {
+    pub primary_id: InstrumentId,
+    pub secondary_id: InstrumentId,
+    pub quiet_id: InstrumentId,
+    pub unknown_id: InstrumentId,
+    pub records: Vec<InstrumentMappingRecord>,
+    pub events: Vec<MappingHistoryEvent>,
+}
+
+fn parse_reason(text: &str) -> Option<UserReason> {
+    let untrusted = UntrustedText::try_new(text);
+    assert!(untrusted.is_ok(), "계약 증인 사유 텍스트가 유효해야 함");
+    let parsed = untrusted
+        .ok()
+        .and_then(|value| UserReason::try_new(value).ok());
+    assert!(parsed.is_some(), "계약 증인 사유가 유효해야 함");
+    parsed
+}
+
+fn parse_timestamp(seconds: i64, nanos: u32, offset: i32) -> Option<Timestamp> {
+    let parsed = Timestamp::from_parts(
+        UnixSeconds::new(seconds),
+        Nanosecond::new(nanos),
+        OffsetSeconds::new(offset),
+    );
+    assert!(parsed.is_ok(), "계약 증인 시각이 유효해야 함");
+    parsed.ok()
+}
+
+fn parse_date(year: i32, month: u8, day: u8) -> Option<CalendarDate> {
+    let parsed = CalendarDate::from_parts(
+        CalendarYear::new(year),
+        MonthNumber::new(month),
+        DayNumber::new(day),
+    );
+    assert!(parsed.is_ok(), "계약 증인 일자가 유효해야 함");
+    parsed.ok()
+}
+
+fn parse_disclosure_dart(raw: &str) -> Option<DisclosureKey> {
+    let receipt = DartReceiptNo::try_new(raw);
+    assert!(receipt.is_ok(), "계약 증인 DART 접수번호가 유효해야 함");
+    receipt
+        .ok()
+        .map(|value| DisclosureKey::from_receipt(ReceiptNo::Dart(value)))
+}
+
+fn parse_disclosure_kind(raw: &str) -> Option<DisclosureKey> {
+    let receipt = KindReceiptNo::try_new(raw);
+    assert!(receipt.is_ok(), "계약 증인 KIND 접수번호가 유효해야 함");
+    receipt
+        .ok()
+        .map(|value| DisclosureKey::from_receipt(ReceiptNo::Kind(value)))
+}
+
+fn parse_disclosure_sec(raw: &str) -> Option<DisclosureKey> {
+    let receipt = SecEdgarReceiptNo::try_new(raw);
+    assert!(receipt.is_ok(), "계약 증인 SEC 접수번호가 유효해야 함");
+    receipt
+        .ok()
+        .map(|value| DisclosureKey::from_receipt(ReceiptNo::SecEdgar(value)))
+}
+
+fn build_contract_action(
+    id: &InstrumentId,
+    date: CalendarDate,
+    kind: CorporateActionKind,
+) -> Option<CorporateAction> {
+    let action = CorporateAction::try_new(CorporateActionId::new(id.clone()), date, kind);
+    assert!(action.is_ok(), "계약 증인 기업행위가 유효해야 함");
+    action.ok()
+}
+
+fn build_primary_history_events(
+    primary_id: &InstrumentId,
+    us_prev: &InstrumentSource,
+    us_next: &InstrumentSource,
+    us_mistake: &InstrumentSource,
+) -> Option<Vec<MappingHistoryEvent>> {
+    let action_sym = build_contract_action(
+        primary_id,
+        parse_date(2026, 10, 28)?,
+        CorporateActionKind::SymbolChange {
+            from: Symbol::try_new("FB.A").ok()?,
+            to: Symbol::try_new("META").ok()?,
+        },
+    )?;
+    let action_split = build_contract_action(
+        primary_id,
+        parse_date(2026, 11, 2)?,
+        CorporateActionKind::Split(ShareRatio::new(
+            ShareCount::try_new(1).ok()?,
+            ShareCount::try_new(10).ok()?,
+        )),
+    )?;
+    Some(vec![
+        MappingHistoryEvent::IdentifierChanged {
+            instrument_id: primary_id.clone(),
+            previous: us_prev.clone(),
+            next: us_next.clone(),
+            disclosure: parse_disclosure_sec("0001326801-26-000012")?,
+            action: Box::new(action_sym),
+            note: parse_reason("사명 및 심볼 변경 확인")?,
+            confirmed_at: parse_timestamp(1_762_000_000, 123_456_789, -18_000)?,
+        },
+        MappingHistoryEvent::IdentifierChanged {
+            instrument_id: primary_id.clone(),
+            previous: us_next.clone(),
+            next: us_mistake.clone(),
+            disclosure: parse_disclosure_kind("20261102000001")?,
+            action: Box::new(action_split),
+            note: parse_reason("오연결 분할 기록")?,
+            confirmed_at: parse_timestamp(1_761_000_000, 999_999_999, 0)?,
+        },
+        MappingHistoryEvent::LinkCorrected {
+            instrument_id: primary_id.clone(),
+            restored_previous: us_next.clone(),
+            unlinked_next: us_mistake.clone(),
+            disclosure: parse_disclosure_dart("20261103000002")?,
+            note: parse_reason("오연결 정정 및 이전 활성 복구")?,
+            corrected_at: parse_timestamp(1_760_000_000, 42, 32_400)?,
+        },
+    ])
+}
+
+fn build_secondary_history_events(
+    secondary_id: &InstrumentId,
+    kr_prev: &InstrumentSource,
+    kr_next: &InstrumentSource,
+) -> Option<Vec<MappingHistoryEvent>> {
+    let action_reverse = build_contract_action(
+        secondary_id,
+        parse_date(2026, 11, 10)?,
+        CorporateActionKind::ReverseSplit(ShareRatio::new(
+            ShareCount::try_new(u64::MAX).ok()?,
+            ShareCount::try_new(1).ok()?,
+        )),
+    )?;
+    Some(vec![
+        MappingHistoryEvent::IdentifierChanged {
+            instrument_id: secondary_id.clone(),
+            previous: kr_prev.clone(),
+            next: kr_next.clone(),
+            disclosure: parse_disclosure_dart("20261110000003")?,
+            action: Box::new(action_reverse),
+            note: parse_reason("액면병합 ISIN 변경")?,
+            confirmed_at: parse_timestamp(1_759_000_000, 500_000, 32_400)?,
+        },
+        MappingHistoryEvent::RetirementCorrected {
+            instrument_id: secondary_id.clone(),
+            source: kr_next.clone(),
+            disclosure: parse_disclosure_kind("20261111000004")?,
+            note: parse_reason("오폐지 복구")?,
+            corrected_at: parse_timestamp(1_758_000_000, 0, 32_400)?,
+        },
+    ])
+}
+
+#[must_use]
+pub fn history_contract_dataset() -> Option<HistoryContractDataset> {
+    let primary_id = slot_id(0)?;
+    let secondary_id = slot_id(1)?;
+    let quiet_id = slot_id(2)?;
+    let unknown_id = slot_id(3)?;
+
+    let us_prev = parse_source(KnownMarket::Us, "fb.A", "us30303m1027")?;
+    let us_next = parse_source(KnownMarket::Us, "META", "us30303m1027")?;
+    let us_mistake = parse_source(KnownMarket::Us, "MIST", "US30303M9999")?;
+    let kr_prev = parse_source(KnownMarket::Kr, "005930", "KR7005930003")?;
+    let kr_next = parse_source(KnownMarket::Kr, "005930", "KR7005930999")?;
+    let quiet_src = parse_source(KnownMarket::Us, "NVDA", "US67066G1040")?;
+
+    let mut events = build_primary_history_events(&primary_id, &us_prev, &us_next, &us_mistake)?;
+    events.extend(build_secondary_history_events(
+        &secondary_id,
+        &kr_prev,
+        &kr_next,
+    )?);
+
+    let records = vec![
+        InstrumentMappingRecord::new(
+            us_prev,
+            primary_id.clone(),
+            InstrumentMappingStatus::Superseded,
+        ),
+        InstrumentMappingRecord::new(us_next, primary_id.clone(), InstrumentMappingStatus::Active),
+        InstrumentMappingRecord::new(
+            kr_prev,
+            secondary_id.clone(),
+            InstrumentMappingStatus::Superseded,
+        ),
+        InstrumentMappingRecord::new(
+            kr_next,
+            secondary_id.clone(),
+            InstrumentMappingStatus::Active,
+        ),
+        InstrumentMappingRecord::new(quiet_src, quiet_id.clone(), InstrumentMappingStatus::Active),
+    ];
+
+    Some(HistoryContractDataset {
+        primary_id,
+        secondary_id,
+        quiet_id,
+        unknown_id,
+        records,
+        events,
+    })
+}
+
+fn event_timestamp(event: &MappingHistoryEvent) -> Timestamp {
+    match event {
+        MappingHistoryEvent::IdentifierChanged { confirmed_at, .. } => *confirmed_at,
+        MappingHistoryEvent::RetirementCorrected { corrected_at, .. }
+        | MappingHistoryEvent::LinkCorrected { corrected_at, .. } => *corrected_at,
+    }
+}
+
+pub async fn empty_history_contract<P, H>(repo: &P, history_repo: &H)
+where
+    P: InstrumentMappingRepository,
+    H: InstrumentMappingHistoryRepository,
+{
+    let Some(sample) = parse_source(KnownMarket::Kr, "005930", "KR7005930003") else {
+        return;
+    };
+    let Some(candidate) = issue_slot(0) else {
+        return;
+    };
+    let id = candidate.as_instrument_id().clone();
+
+    assert_eq!(
+        history_repo.history().await,
+        Ok(Vec::new()),
+        "초기 저장소의 전체 감사 이력은 비어 있어야 함"
+    );
+    assert_eq!(
+        history_repo.history_for_id(&id).await,
+        Ok(Vec::new()),
+        "미등록 ID의 감사 이력은 비어 있어야 함"
+    );
+    assert_eq!(
+        repo.ensure(&sample, candidate).await,
+        Ok(MappingAssignment::Issued(id.clone())),
+        "일반 등록 성공"
+    );
+    assert_eq!(repo.retire(&sample).await, Ok(id.clone()), "일반 폐지 성공");
+    assert_eq!(
+        history_repo.history().await,
+        Ok(Vec::new()),
+        "일반 등록·폐지 뒤에도 변경·정정 감사 이력은 비어 있어야 함"
+    );
+    assert_eq!(
+        history_repo.history_for_id(&id).await,
+        Ok(Vec::new()),
+        "일반 등록·폐지 ID의 감사 이력은 비어 있어야 함"
+    );
+}
+
+fn assert_events_match_exact(
+    actual: Result<Vec<MappingHistoryEvent>, application::SystemPortError>,
+    expected: &[MappingHistoryEvent],
+    context: &str,
+) {
+    assert_eq!(actual, Ok(expected.to_vec()), "{context}");
+    if let Ok(actual_events) = actual {
+        for (got, want) in actual_events.iter().zip(expected.iter()) {
+            let got_ts = event_timestamp(got);
+            let want_ts = event_timestamp(want);
+            assert_eq!(
+                got_ts.offset_seconds(),
+                want_ts.offset_seconds(),
+                "{context}: 감사 이력 시각 오프셋이 보존되어야 함"
+            );
+            assert_eq!(
+                got_ts.nanosecond(),
+                want_ts.nanosecond(),
+                "{context}: 감사 이력 시각 나노초가 보존되어야 함"
+            );
+        }
+    }
+}
+
+pub async fn populated_history_contract<H>(history_repo: &H, dataset: &HistoryContractDataset)
+where
+    H: InstrumentMappingHistoryRepository,
+{
+    {
+        let _unpolled_all = history_repo.history();
+        let _unpolled_for_id = history_repo.history_for_id(&dataset.primary_id);
+    }
+
+    assert_events_match_exact(
+        history_repo.history().await,
+        &dataset.events,
+        "전체 이력은 순번 순서와 모든 사건 필드를 그대로 보존해야 함",
+    );
+
+    let expected_primary: Vec<_> = dataset
+        .events
+        .iter()
+        .filter(|event| event.instrument_id() == &dataset.primary_id)
+        .cloned()
+        .collect();
+    let expected_secondary: Vec<_> = dataset
+        .events
+        .iter()
+        .filter(|event| event.instrument_id() == &dataset.secondary_id)
+        .cloned()
+        .collect();
+    assert_events_match_exact(
+        history_repo.history_for_id(&dataset.primary_id).await,
+        &expected_primary,
+        "primary_id 이력은 해당 종목 사건만 순번 순으로 반환해야 함",
+    );
+    assert_events_match_exact(
+        history_repo.history_for_id(&dataset.secondary_id).await,
+        &expected_secondary,
+        "secondary_id 이력은 해당 종목 사건만 순번 순으로 반환해야 함",
+    );
+    assert_eq!(
+        history_repo.history_for_id(&dataset.quiet_id).await,
+        Ok(Vec::new()),
+        "사건이 없는 등록 종목의 이력은 빈 벡터여야 함"
+    );
+    assert_eq!(
+        history_repo.history_for_id(&dataset.unknown_id).await,
+        Ok(Vec::new()),
+        "미등록 종목의 이력은 빈 벡터여야 함"
+    );
 }

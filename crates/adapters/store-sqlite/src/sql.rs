@@ -44,4 +44,6 @@ pub(crate) mod proposal_tests;
 
 pub(crate) mod instrument_mapping;
 #[cfg(test)]
+pub(crate) mod instrument_mapping_history_tests;
+#[cfg(test)]
 pub(crate) mod instrument_mapping_tests;

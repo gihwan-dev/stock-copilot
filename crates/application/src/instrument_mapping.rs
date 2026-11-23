@@ -1,7 +1,7 @@
 use crate::SystemPortError;
 use domain::{
     InstrumentId, InstrumentMappingError, InstrumentMappingRecord, InstrumentSource,
-    IssuedInstrumentId, MappingAssignment,
+    IssuedInstrumentId, MappingAssignment, MappingHistoryEvent,
 };
 use std::future::Future;
 
@@ -67,4 +67,15 @@ pub trait InstrumentMappingRepository: Send + Sync {
         &self,
         source: &InstrumentSource,
     ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send;
+}
+
+pub trait InstrumentMappingHistoryRepository: Send + Sync {
+    fn history(
+        &self,
+    ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send;
+
+    fn history_for_id(
+        &self,
+        id: &InstrumentId,
+    ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send;
 }

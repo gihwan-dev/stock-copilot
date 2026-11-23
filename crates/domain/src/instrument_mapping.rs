@@ -1,5 +1,6 @@
 use crate::instrument_mapping_change::{
-    verify_change_evidence, verify_link_correction, verify_retirement_correction,
+    validate_change_action, verify_change_evidence, verify_link_correction,
+    verify_retirement_correction,
 };
 use crate::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection, IdAdoption,
@@ -503,4 +504,410 @@ impl InstrumentMappings {
             .cloned()
             .collect()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MappingLedgerIntegrityError {
+    DuplicateRecord,
+    OverlappingSources,
+    MultipleTerminalRecordsForId,
+    OrphanSupersededRecord,
+    InvalidEventEvidence,
+    EventReplayMismatch,
+    LedgerStateMismatch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SourceConflictCheck {
+    Clear,
+    Conflicting,
+}
+
+struct OwnerSourceEntries {
+    owner: InstrumentId,
+    sources: BTreeSet<(KnownMarket, Symbol, IsinCode)>,
+}
+
+impl OwnerSourceEntries {
+    fn new(owner: &InstrumentId, source: &InstrumentSource) -> Self {
+        let mut sources = BTreeSet::new();
+        sources.insert(source.normalized_key());
+        Self {
+            owner: owner.clone(),
+            sources,
+        }
+    }
+
+    fn has_other_owner(&self, candidate: &InstrumentId) -> SourceConflictCheck {
+        if self.owner == *candidate {
+            SourceConflictCheck::Clear
+        } else {
+            SourceConflictCheck::Conflicting
+        }
+    }
+
+    fn insert(&mut self, source: &InstrumentSource) {
+        self.sources.insert(source.normalized_key());
+    }
+
+    fn remove(&mut self, source: &InstrumentSource) -> EntryPresence {
+        self.sources.remove(&source.normalized_key());
+        if self.sources.is_empty() {
+            EntryPresence::Empty
+        } else {
+            EntryPresence::Occupied
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EntryPresence {
+    Empty,
+    Occupied,
+}
+
+#[derive(Default)]
+struct ReplaySourceIndex {
+    symbols: BTreeMap<(KnownMarket, Symbol), OwnerSourceEntries>,
+    isins: BTreeMap<IsinCode, OwnerSourceEntries>,
+}
+
+impl ReplaySourceIndex {
+    fn conflict_with_other_id(
+        &self,
+        owner: &InstrumentId,
+        source: &InstrumentSource,
+    ) -> SourceConflictCheck {
+        let symbol_conflict = self
+            .symbols
+            .get(&source.symbol_key())
+            .map_or(SourceConflictCheck::Clear, |entry| {
+                entry.has_other_owner(owner)
+            });
+        let isin_conflict = self
+            .isins
+            .get(&source.isin_key())
+            .map_or(SourceConflictCheck::Clear, |entry| {
+                entry.has_other_owner(owner)
+            });
+        match (symbol_conflict, isin_conflict) {
+            (SourceConflictCheck::Clear, SourceConflictCheck::Clear) => SourceConflictCheck::Clear,
+            _ => SourceConflictCheck::Conflicting,
+        }
+    }
+
+    fn insert(&mut self, owner: &InstrumentId, source: &InstrumentSource) {
+        self.symbols
+            .entry(source.symbol_key())
+            .and_modify(|entry| entry.insert(source))
+            .or_insert_with(|| OwnerSourceEntries::new(owner, source));
+        self.isins
+            .entry(source.isin_key())
+            .and_modify(|entry| entry.insert(source))
+            .or_insert_with(|| OwnerSourceEntries::new(owner, source));
+    }
+
+    fn remove(&mut self, source: &InstrumentSource) {
+        let symbol_key = source.symbol_key();
+        if let Some(entry) = self.symbols.get_mut(&symbol_key)
+            && entry.remove(source) == EntryPresence::Empty
+        {
+            self.symbols.remove(&symbol_key);
+        }
+        let isin_key = source.isin_key();
+        if let Some(entry) = self.isins.get_mut(&isin_key)
+            && entry.remove(source) == EntryPresence::Empty
+        {
+            self.isins.remove(&isin_key);
+        }
+    }
+}
+
+struct ReplayIdState {
+    superseded: Vec<InstrumentSource>,
+    tip: InstrumentSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NormalizedMembership {
+    Present,
+    Absent,
+}
+
+impl ReplayIdState {
+    fn superseded_contains_normalized(&self, candidate: &InstrumentSource) -> NormalizedMembership {
+        let candidate_key = candidate.normalized_key();
+        if self
+            .superseded
+            .iter()
+            .any(|entry| entry.normalized_key() == candidate_key)
+        {
+            NormalizedMembership::Present
+        } else {
+            NormalizedMembership::Absent
+        }
+    }
+}
+
+#[derive(Default)]
+struct ReplayLedger {
+    live_by_id: BTreeMap<InstrumentId, ReplayIdState>,
+    live_index: ReplaySourceIndex,
+}
+
+impl ReplayLedger {
+    fn apply_identifier_changed(
+        &mut self,
+        instrument_id: &InstrumentId,
+        previous: &InstrumentSource,
+        next: &InstrumentSource,
+        action: &crate::CorporateAction,
+    ) -> Result<(), MappingLedgerIntegrityError> {
+        if previous.normalized_key() == next.normalized_key()
+            || previous.market() != next.market()
+            || validate_change_action(instrument_id, previous, next, action).is_err()
+        {
+            return Err(MappingLedgerIntegrityError::InvalidEventEvidence);
+        }
+        if let Some(state) = self.live_by_id.get(instrument_id) {
+            if state.tip != *previous {
+                return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+            }
+            match state.superseded_contains_normalized(next) {
+                NormalizedMembership::Present => {
+                    return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+                }
+                NormalizedMembership::Absent => {}
+            }
+        } else {
+            match self
+                .live_index
+                .conflict_with_other_id(instrument_id, previous)
+            {
+                SourceConflictCheck::Conflicting => {
+                    return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+                }
+                SourceConflictCheck::Clear => {}
+            }
+        }
+        match self.live_index.conflict_with_other_id(instrument_id, next) {
+            SourceConflictCheck::Conflicting => {
+                return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+            }
+            SourceConflictCheck::Clear => {}
+        }
+        self.live_index.insert(instrument_id, previous);
+        self.live_index.insert(instrument_id, next);
+        match self.live_by_id.get_mut(instrument_id) {
+            Some(state) => {
+                state.superseded.push(previous.clone());
+                state.tip = next.clone();
+            }
+            None => {
+                self.live_by_id.insert(
+                    instrument_id.clone(),
+                    ReplayIdState {
+                        superseded: vec![previous.clone()],
+                        tip: next.clone(),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_retirement_corrected(
+        &mut self,
+        instrument_id: &InstrumentId,
+        source: &InstrumentSource,
+    ) -> Result<(), MappingLedgerIntegrityError> {
+        if let Some(state) = self.live_by_id.get(instrument_id) {
+            if state.tip != *source {
+                return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+            }
+            return Ok(());
+        }
+        match self
+            .live_index
+            .conflict_with_other_id(instrument_id, source)
+        {
+            SourceConflictCheck::Conflicting => {
+                return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+            }
+            SourceConflictCheck::Clear => {}
+        }
+        self.live_index.insert(instrument_id, source);
+        self.live_by_id.insert(
+            instrument_id.clone(),
+            ReplayIdState {
+                superseded: Vec::new(),
+                tip: source.clone(),
+            },
+        );
+        Ok(())
+    }
+
+    fn apply_link_corrected(
+        &mut self,
+        instrument_id: &InstrumentId,
+        restored_previous: &InstrumentSource,
+        unlinked_next: &InstrumentSource,
+    ) -> Result<(), MappingLedgerIntegrityError> {
+        if restored_previous.normalized_key() == unlinked_next.normalized_key() {
+            return Err(MappingLedgerIntegrityError::InvalidEventEvidence);
+        }
+        let Some(state) = self.live_by_id.get_mut(instrument_id) else {
+            return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+        };
+        if state.tip != *unlinked_next {
+            return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+        }
+        let Some(previous_tip) = state.superseded.pop() else {
+            return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+        };
+        if previous_tip != *restored_previous {
+            return Err(MappingLedgerIntegrityError::EventReplayMismatch);
+        }
+        state.tip = previous_tip;
+        self.live_index.remove(unlinked_next);
+        Ok(())
+    }
+}
+
+fn validate_stored_records(
+    records: &[InstrumentMappingRecord],
+) -> Result<BTreeMap<&InstrumentId, Vec<&InstrumentMappingRecord>>, MappingLedgerIntegrityError> {
+    let mut stored_by_id: BTreeMap<&InstrumentId, Vec<&InstrumentMappingRecord>> = BTreeMap::new();
+    let mut seen_exact: BTreeSet<(KnownMarket, &Symbol, &IsinCode)> = BTreeSet::new();
+    let mut seen_normalized_per_id: BTreeSet<(&InstrumentId, KnownMarket, Symbol, IsinCode)> =
+        BTreeSet::new();
+    let mut id_market: BTreeMap<&InstrumentId, KnownMarket> = BTreeMap::new();
+    let mut symbols: BTreeMap<(KnownMarket, Symbol), &InstrumentId> = BTreeMap::new();
+    let mut isins: BTreeMap<IsinCode, &InstrumentId> = BTreeMap::new();
+
+    for record in records {
+        let id = record.id();
+        let source = record.source();
+        if !seen_exact.insert((source.market(), source.symbol(), source.isin())) {
+            return Err(MappingLedgerIntegrityError::DuplicateRecord);
+        }
+        let (norm_market, norm_symbol, norm_isin) = source.normalized_key();
+        if !seen_normalized_per_id.insert((id, norm_market, norm_symbol.clone(), norm_isin.clone()))
+        {
+            return Err(MappingLedgerIntegrityError::DuplicateRecord);
+        }
+        if let Some(existing_market) = id_market.insert(id, norm_market)
+            && existing_market != norm_market
+        {
+            return Err(MappingLedgerIntegrityError::LedgerStateMismatch);
+        }
+        if let Some(existing_owner) = symbols.insert((norm_market, norm_symbol), id)
+            && existing_owner != id
+        {
+            return Err(MappingLedgerIntegrityError::OverlappingSources);
+        }
+        if let Some(existing_owner) = isins.insert(norm_isin, id)
+            && existing_owner != id
+        {
+            return Err(MappingLedgerIntegrityError::OverlappingSources);
+        }
+        stored_by_id.entry(id).or_default().push(record);
+    }
+
+    for id_records in stored_by_id.values() {
+        let terminal_count = id_records
+            .iter()
+            .filter(|entry| match entry.status() {
+                InstrumentMappingStatus::Active | InstrumentMappingStatus::Retired => true,
+                InstrumentMappingStatus::Superseded => false,
+            })
+            .count();
+        match terminal_count {
+            0 => return Err(MappingLedgerIntegrityError::OrphanSupersededRecord),
+            1 => {}
+            _ => return Err(MappingLedgerIntegrityError::MultipleTerminalRecordsForId),
+        }
+    }
+
+    Ok(stored_by_id)
+}
+
+fn replay_history(
+    history: &[MappingHistoryEvent],
+) -> Result<BTreeMap<InstrumentId, ReplayIdState>, MappingLedgerIntegrityError> {
+    let mut ledger = ReplayLedger::default();
+
+    for event in history {
+        match event {
+            MappingHistoryEvent::IdentifierChanged {
+                instrument_id,
+                previous,
+                next,
+                action,
+                ..
+            } => ledger.apply_identifier_changed(instrument_id, previous, next, action)?,
+            MappingHistoryEvent::RetirementCorrected {
+                instrument_id,
+                source,
+                ..
+            } => ledger.apply_retirement_corrected(instrument_id, source)?,
+            MappingHistoryEvent::LinkCorrected {
+                instrument_id,
+                restored_previous,
+                unlinked_next,
+                ..
+            } => ledger.apply_link_corrected(instrument_id, restored_previous, unlinked_next)?,
+        }
+    }
+
+    Ok(ledger.live_by_id)
+}
+
+fn verify_replayed_id_records(
+    replayed: &ReplayIdState,
+    stored: &[&InstrumentMappingRecord],
+) -> Result<(), MappingLedgerIntegrityError> {
+    if stored.len() != replayed.superseded.len().saturating_add(1) {
+        return Err(MappingLedgerIntegrityError::LedgerStateMismatch);
+    }
+    for record in stored {
+        let matched = match record.status() {
+            InstrumentMappingStatus::Superseded => replayed.superseded.contains(record.source()),
+            InstrumentMappingStatus::Active | InstrumentMappingStatus::Retired => {
+                record.source() == &replayed.tip
+            }
+        };
+        if !matched {
+            return Err(MappingLedgerIntegrityError::LedgerStateMismatch);
+        }
+    }
+    Ok(())
+}
+
+pub fn verify_persisted_mapping_ledger(
+    records: &[InstrumentMappingRecord],
+    history: &[MappingHistoryEvent],
+) -> Result<(), MappingLedgerIntegrityError> {
+    let stored_by_id = validate_stored_records(records)?;
+    let replayed_by_id = replay_history(history)?;
+
+    for (id, replayed) in &replayed_by_id {
+        let Some(stored) = stored_by_id.get(id) else {
+            return Err(MappingLedgerIntegrityError::LedgerStateMismatch);
+        };
+        verify_replayed_id_records(replayed, stored)?;
+    }
+
+    for (id, stored) in &stored_by_id {
+        if !replayed_by_id.contains_key(*id)
+            && stored.iter().any(|record| match record.status() {
+                InstrumentMappingStatus::Superseded => true,
+                InstrumentMappingStatus::Active | InstrumentMappingStatus::Retired => false,
+            })
+        {
+            return Err(MappingLedgerIntegrityError::OrphanSupersededRecord);
+        }
+    }
+
+    Ok(())
 }

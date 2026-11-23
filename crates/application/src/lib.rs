@@ -268,8 +268,9 @@ mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod instrument_mapping;
 pub use instrument_mapping::{
-    InstrumentIdIssuer, InstrumentMappingRepository, InstrumentMasterAuthority,
-    InstrumentMasterObservation, InstrumentMasterSession, MappingStoreError,
+    InstrumentIdIssuer, InstrumentMappingHistoryRepository, InstrumentMappingRepository,
+    InstrumentMasterAuthority, InstrumentMasterObservation, InstrumentMasterSession,
+    MappingStoreError,
 };
 mod storage_ports;
 pub use storage_ports::ValuationCloseEvidenceRepository;

@@ -25,7 +25,8 @@ pub use instrument_issuer::{
 };
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
-    InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
+    InstrumentSource, InstrumentSourceConflict, MappingAssignment, MappingLedgerIntegrityError,
+    instrument_source_conflicts, verify_persisted_mapping_ledger,
 };
 pub use instrument_mapping_change::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,

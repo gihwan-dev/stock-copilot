@@ -1,18 +1,36 @@
 use crate::{Database, sql::instrument_mapping as sql};
 use application::{
-    InstrumentIdIssuer, InstrumentMappingRepository, MappingStoreError, SystemPortError,
+    InstrumentIdIssuer, InstrumentMappingHistoryRepository, InstrumentMappingRepository,
+    MappingStoreError, SystemPortError,
 };
 use domain::{
-    IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingError, InstrumentMappingRecord,
-    InstrumentMappingStatus, InstrumentSource, InstrumentSourceConflict, IsinCode,
-    IssuedInstrumentId, IssuerSequence, KnownMarket, MappingAssignment, PersistedIssuerCursor,
-    Symbol, instrument_source_conflicts,
+    CalendarDate, CalendarYear, CorporateAction, CorporateActionId, CorporateActionKind,
+    DartReceiptNo, DayNumber, DisclosureKey, IndependentInstrumentIdIssuer, InstrumentId,
+    InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentSource,
+    InstrumentSourceConflict, IsinCode, IssuedInstrumentId, IssuerSequence, KindReceiptNo,
+    KnownMarket, MappingAssignment, MappingHistoryEvent, MonthNumber, Nanosecond, OffsetSeconds,
+    PersistedIssuerCursor, ReceiptNo, SecEdgarReceiptNo, ShareCount, ShareRatio, Symbol, Timestamp,
+    UnixSeconds, UntrustedText, UserReason, instrument_source_conflicts,
+    verify_persisted_mapping_ledger,
 };
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 const STATUS_ACTIVE: &str = "active";
+const STATUS_SUPERSEDED: &str = "superseded";
 const STATUS_RETIRED: &str = "retired";
+
+const EVENT_IDENTIFIER_CHANGED: &str = "identifier_changed";
+const EVENT_RETIREMENT_CORRECTED: &str = "retirement_corrected";
+const EVENT_LINK_CORRECTED: &str = "link_corrected";
+
+const ACTION_SYMBOL_CHANGE: &str = "symbol_change";
+const ACTION_SPLIT: &str = "split";
+const ACTION_REVERSE_SPLIT: &str = "reverse_split";
+
+const DISCLOSURE_DART: &str = "DART";
+const DISCLOSURE_KIND: &str = "KIND";
+const DISCLOSURE_SEC_EDGAR: &str = "SEC_EDGAR";
 
 #[derive(Debug)]
 pub struct InstrumentMappingStore<'database> {
@@ -44,8 +62,15 @@ enum IdPresence {
 }
 
 #[derive(Clone, Copy)]
-enum StoredStatus {
+enum TerminalRequirement {
+    AllowPartialSlice,
+    RequireEveryIdTerminal,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum StoredStatus {
     Active,
+    Superseded(i64),
     Retired,
 }
 
@@ -53,15 +78,16 @@ impl StoredStatus {
     const fn into_domain(self) -> InstrumentMappingStatus {
         match self {
             Self::Active => InstrumentMappingStatus::Active,
+            Self::Superseded(_) => InstrumentMappingStatus::Superseded,
             Self::Retired => InstrumentMappingStatus::Retired,
         }
     }
 }
 
-struct StoredRecord {
-    source: InstrumentSource,
-    id: InstrumentId,
-    status: StoredStatus,
+pub(crate) struct StoredRecord {
+    pub(crate) source: InstrumentSource,
+    pub(crate) id: InstrumentId,
+    pub(crate) status: StoredStatus,
 }
 
 impl StoredRecord {
@@ -76,6 +102,11 @@ impl StoredRecord {
     fn into_domain(self) -> InstrumentMappingRecord {
         InstrumentMappingRecord::new(self.source, self.id, self.status.into_domain())
     }
+}
+
+pub(crate) struct StoredEvent {
+    pub(crate) seq: i64,
+    pub(crate) event: MappingHistoryEvent,
 }
 
 fn invalid<E>(_error: E) -> rusqlite::Error {
@@ -97,10 +128,11 @@ fn decode_market(raw: &str) -> rusqlite::Result<KnownMarket> {
     }
 }
 
-fn decode_status(raw: &str) -> rusqlite::Result<StoredStatus> {
-    match raw {
-        STATUS_ACTIVE => Ok(StoredStatus::Active),
-        STATUS_RETIRED => Ok(StoredStatus::Retired),
+fn decode_status(raw: &str, superseded_event_seq: Option<i64>) -> rusqlite::Result<StoredStatus> {
+    match (raw, superseded_event_seq) {
+        (STATUS_ACTIVE, None) => Ok(StoredStatus::Active),
+        (STATUS_RETIRED, None) => Ok(StoredStatus::Retired),
+        (STATUS_SUPERSEDED, Some(seq)) if seq > 0 => Ok(StoredStatus::Superseded(seq)),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -111,18 +143,305 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<StoredRecord> {
     let raw_symbol: String = row.get(2)?;
     let raw_isin: String = row.get(3)?;
     let raw_status: String = row.get(4)?;
+    let superseded_event_seq: Option<i64> = row.get(5)?;
 
     let id = InstrumentId::try_new(&raw_id).map_err(invalid)?;
     let market = decode_market(&raw_market)?;
     let symbol = Symbol::try_new(&raw_symbol).map_err(invalid)?;
     let isin = IsinCode::try_new(&raw_isin).map_err(invalid)?;
-    let status = decode_status(&raw_status)?;
+    let status = decode_status(&raw_status, superseded_event_seq)?;
 
     Ok(StoredRecord {
         source: InstrumentSource::new(market, symbol, isin),
         id,
         status,
     })
+}
+
+fn decode_disclosure(source: &str, receipt: &str) -> rusqlite::Result<DisclosureKey> {
+    let receipt_no = match source {
+        DISCLOSURE_DART => ReceiptNo::Dart(DartReceiptNo::try_new(receipt).map_err(invalid)?),
+        DISCLOSURE_KIND => ReceiptNo::Kind(KindReceiptNo::try_new(receipt).map_err(invalid)?),
+        DISCLOSURE_SEC_EDGAR => {
+            ReceiptNo::SecEdgar(SecEdgarReceiptNo::try_new(receipt).map_err(invalid)?)
+        }
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    Ok(DisclosureKey::from_receipt(receipt_no))
+}
+
+fn decode_share_count(raw: &str) -> rusqlite::Result<ShareCount> {
+    if raw.is_empty() || raw.starts_with('0') || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let parsed = raw.parse::<u64>().map_err(invalid)?;
+    ShareCount::try_new(parsed).map_err(invalid)
+}
+
+fn decode_timestamp(seconds: i64, nanos: i64, offset: i64) -> rusqlite::Result<Timestamp> {
+    let nano = u32::try_from(nanos).map_err(invalid)?;
+    let off = i32::try_from(offset).map_err(invalid)?;
+    Timestamp::from_parts(
+        UnixSeconds::new(seconds),
+        Nanosecond::new(nano),
+        OffsetSeconds::new(off),
+    )
+    .map_err(invalid)
+}
+
+struct ActionColumns {
+    kind: Option<String>,
+    year: Option<i64>,
+    month: Option<i64>,
+    day: Option<i64>,
+    from_symbol: Option<String>,
+    to_symbol: Option<String>,
+    from_count: Option<String>,
+    to_count: Option<String>,
+}
+
+impl ActionColumns {
+    fn read(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            kind: row.get(10)?,
+            year: row.get(11)?,
+            month: row.get(12)?,
+            day: row.get(13)?,
+            from_symbol: row.get(14)?,
+            to_symbol: row.get(15)?,
+            from_count: row.get(16)?,
+            to_count: row.get(17)?,
+        })
+    }
+
+    fn require_absent(&self) -> rusqlite::Result<()> {
+        if self.kind.is_some()
+            || self.year.is_some()
+            || self.month.is_some()
+            || self.day.is_some()
+            || self.from_symbol.is_some()
+            || self.to_symbol.is_some()
+            || self.from_count.is_some()
+            || self.to_count.is_some()
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        Ok(())
+    }
+
+    fn decode_symbol_change(
+        self,
+        previous: &InstrumentSource,
+        next: &InstrumentSource,
+    ) -> rusqlite::Result<CorporateActionKind> {
+        if self.from_count.is_some() || self.to_count.is_some() {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let (Some(raw_from), Some(raw_to)) = (self.from_symbol, self.to_symbol) else {
+            return Err(rusqlite::Error::InvalidQuery);
+        };
+        let from = Symbol::try_new(&raw_from).map_err(invalid)?;
+        let to = Symbol::try_new(&raw_to).map_err(invalid)?;
+        if from.as_str().eq_ignore_ascii_case(to.as_str())
+            || !from
+                .as_str()
+                .eq_ignore_ascii_case(previous.symbol().as_str())
+            || !to.as_str().eq_ignore_ascii_case(next.symbol().as_str())
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        Ok(CorporateActionKind::SymbolChange { from, to })
+    }
+
+    fn decode_split_ratio(self) -> rusqlite::Result<ShareRatio> {
+        if self.from_symbol.is_some() || self.to_symbol.is_some() {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let (Some(raw_from), Some(raw_to)) = (self.from_count, self.to_count) else {
+            return Err(rusqlite::Error::InvalidQuery);
+        };
+        Ok(ShareRatio::new(
+            decode_share_count(&raw_from)?,
+            decode_share_count(&raw_to)?,
+        ))
+    }
+
+    fn decode(
+        self,
+        instrument_id: &InstrumentId,
+        previous: &InstrumentSource,
+        next: &InstrumentSource,
+    ) -> rusqlite::Result<CorporateAction> {
+        let (Some(raw_kind), Some(raw_year), Some(raw_month), Some(raw_day)) =
+            (self.kind.clone(), self.year, self.month, self.day)
+        else {
+            return Err(rusqlite::Error::InvalidQuery);
+        };
+        let year = i32::try_from(raw_year).map_err(invalid)?;
+        let month = u8::try_from(raw_month).map_err(invalid)?;
+        let day = u8::try_from(raw_day).map_err(invalid)?;
+        let date = CalendarDate::from_parts(
+            CalendarYear::new(year),
+            MonthNumber::new(month),
+            DayNumber::new(day),
+        )
+        .map_err(invalid)?;
+        let kind = match raw_kind.as_str() {
+            ACTION_SYMBOL_CHANGE => self.decode_symbol_change(previous, next)?,
+            ACTION_SPLIT => CorporateActionKind::Split(self.decode_split_ratio()?),
+            ACTION_REVERSE_SPLIT => CorporateActionKind::ReverseSplit(self.decode_split_ratio()?),
+            _ => return Err(rusqlite::Error::InvalidQuery),
+        };
+        CorporateAction::try_new(CorporateActionId::new(instrument_id.clone()), date, kind)
+            .map_err(invalid)
+    }
+}
+
+struct EventHeader {
+    instrument_id: InstrumentId,
+    market: KnownMarket,
+    previous: InstrumentSource,
+    disclosure: DisclosureKey,
+    note: UserReason,
+    timestamp: Timestamp,
+}
+
+fn decode_event_header(row: &Row<'_>) -> rusqlite::Result<EventHeader> {
+    let raw_id: String = row.get(2)?;
+    let raw_market: String = row.get(3)?;
+    let raw_prev_symbol: String = row.get(4)?;
+    let raw_prev_isin: String = row.get(5)?;
+    let raw_disclosure_source: String = row.get(8)?;
+    let raw_disclosure_receipt: String = row.get(9)?;
+    let raw_note: String = row.get(18)?;
+    let recorded_seconds: i64 = row.get(19)?;
+    let recorded_nanos: i64 = row.get(20)?;
+    let recorded_offset: i64 = row.get(21)?;
+
+    let instrument_id = InstrumentId::try_new(&raw_id).map_err(invalid)?;
+    let market = decode_market(&raw_market)?;
+    let previous = InstrumentSource::new(
+        market,
+        Symbol::try_new(&raw_prev_symbol).map_err(invalid)?,
+        IsinCode::try_new(&raw_prev_isin).map_err(invalid)?,
+    );
+    let disclosure = decode_disclosure(&raw_disclosure_source, &raw_disclosure_receipt)?;
+    let note = UserReason::try_new(UntrustedText::try_new(&raw_note).map_err(invalid)?)
+        .map_err(invalid)?;
+    let timestamp = decode_timestamp(recorded_seconds, recorded_nanos, recorded_offset)?;
+    Ok(EventHeader {
+        instrument_id,
+        market,
+        previous,
+        disclosure,
+        note,
+        timestamp,
+    })
+}
+
+fn decode_next_source(
+    market: KnownMarket,
+    raw_next_symbol: Option<String>,
+    raw_next_isin: Option<String>,
+) -> rusqlite::Result<InstrumentSource> {
+    let (Some(next_sym), Some(next_isin)) = (raw_next_symbol, raw_next_isin) else {
+        return Err(rusqlite::Error::InvalidQuery);
+    };
+    Ok(InstrumentSource::new(
+        market,
+        Symbol::try_new(&next_sym).map_err(invalid)?,
+        IsinCode::try_new(&next_isin).map_err(invalid)?,
+    ))
+}
+
+fn reject_unchanged_source(
+    left: &InstrumentSource,
+    right: &InstrumentSource,
+) -> rusqlite::Result<()> {
+    if left
+        .symbol()
+        .as_str()
+        .eq_ignore_ascii_case(right.symbol().as_str())
+        && left
+            .isin()
+            .as_str()
+            .eq_ignore_ascii_case(right.isin().as_str())
+    {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(())
+}
+
+fn decode_event_body(
+    event_kind: &str,
+    header: EventHeader,
+    raw_next_symbol: Option<String>,
+    raw_next_isin: Option<String>,
+    action_columns: ActionColumns,
+) -> rusqlite::Result<MappingHistoryEvent> {
+    match event_kind {
+        EVENT_IDENTIFIER_CHANGED => {
+            let next = decode_next_source(header.market, raw_next_symbol, raw_next_isin)?;
+            reject_unchanged_source(&header.previous, &next)?;
+            let action = action_columns.decode(&header.instrument_id, &header.previous, &next)?;
+            Ok(MappingHistoryEvent::IdentifierChanged {
+                instrument_id: header.instrument_id,
+                previous: header.previous,
+                next,
+                disclosure: header.disclosure,
+                action: Box::new(action),
+                note: header.note,
+                confirmed_at: header.timestamp,
+            })
+        }
+        EVENT_RETIREMENT_CORRECTED => {
+            if raw_next_symbol.is_some() || raw_next_isin.is_some() {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+            action_columns.require_absent()?;
+            Ok(MappingHistoryEvent::RetirementCorrected {
+                instrument_id: header.instrument_id,
+                source: header.previous,
+                disclosure: header.disclosure,
+                note: header.note,
+                corrected_at: header.timestamp,
+            })
+        }
+        EVENT_LINK_CORRECTED => {
+            action_columns.require_absent()?;
+            let unlinked_next = decode_next_source(header.market, raw_next_symbol, raw_next_isin)?;
+            reject_unchanged_source(&header.previous, &unlinked_next)?;
+            Ok(MappingHistoryEvent::LinkCorrected {
+                instrument_id: header.instrument_id,
+                restored_previous: header.previous,
+                unlinked_next,
+                disclosure: header.disclosure,
+                note: header.note,
+                corrected_at: header.timestamp,
+            })
+        }
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn decode_event_row(row: &Row<'_>) -> rusqlite::Result<StoredEvent> {
+    let seq: i64 = row.get(0)?;
+    if seq <= 0 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let event_kind: String = row.get(1)?;
+    let header = decode_event_header(row)?;
+    let raw_next_symbol: Option<String> = row.get(6)?;
+    let raw_next_isin: Option<String> = row.get(7)?;
+    let action_columns = ActionColumns::read(row)?;
+    let event = decode_event_body(
+        &event_kind,
+        header,
+        raw_next_symbol,
+        raw_next_isin,
+        action_columns,
+    )?;
+    Ok(StoredEvent { seq, event })
 }
 
 fn encode_sequence_hex(sequence: IssuerSequence) -> String {
@@ -149,23 +468,113 @@ fn decode_sequence_hex(raw: &str) -> rusqlite::Result<IssuerSequence> {
     IssuerSequence::try_new(parsed).map_err(invalid)
 }
 
-fn expected_schema_sql() -> BTreeSet<String> {
-    sql::CREATE
-        .split(";\n")
-        .map(str::trim)
-        .filter(|statement| !statement.is_empty())
-        .map(|statement| statement.strip_suffix(';').unwrap_or(statement).to_owned())
-        .collect()
+#[derive(Default)]
+struct MigrationSchemaTracker {
+    objects: BTreeMap<(String, String), (String, String)>,
 }
 
-fn expected_migration_triggers() -> BTreeSet<String> {
-    crate::migration::MIGRATIONS
-        .iter()
-        .flat_map(|(_, source)| source.split(";\n"))
-        .map(str::trim)
-        .filter(|statement| statement.starts_with(sql::TRIGGER_PREFIX))
-        .map(|statement| statement.strip_suffix(';').unwrap_or(statement).to_owned())
-        .collect()
+impl MigrationSchemaTracker {
+    fn from_migrations() -> Self {
+        let mut tracker = Self::default();
+        for (_, source) in crate::migration::MIGRATIONS {
+            tracker.apply_script(source);
+        }
+        tracker
+    }
+
+    fn apply_script(&mut self, source: &str) {
+        for raw in source.split(";\n") {
+            let statement = raw.trim();
+            let cleaned = statement.strip_suffix(';').unwrap_or(statement);
+            if !cleaned.is_empty() {
+                self.apply(cleaned);
+            }
+        }
+    }
+
+    fn rename_table(&mut self, old_name: &str, new_name: &str) {
+        let old_lower = old_name.to_ascii_lowercase();
+        let new_lower = new_name.to_ascii_lowercase();
+        if let Some((_, ddl)) = self
+            .objects
+            .remove(&(String::from("table"), old_lower.clone()))
+        {
+            self.objects.insert(
+                (String::from("table"), new_lower.clone()),
+                (new_lower.clone(), ddl),
+            );
+        }
+        for (owner, _) in self.objects.values_mut() {
+            if *owner == old_lower {
+                owner.clone_from(&new_lower);
+            }
+        }
+    }
+
+    fn apply(&mut self, statement: &str) {
+        let words: Vec<&str> = statement.split_whitespace().collect();
+        match words.as_slice() {
+            ["CREATE", "TABLE", table_token, ..] => {
+                let table = table_token.split('(').next().unwrap_or(table_token);
+                self.objects.insert(
+                    (String::from("table"), table.to_ascii_lowercase()),
+                    (table.to_ascii_lowercase(), statement.to_owned()),
+                );
+            }
+            ["CREATE", "INDEX", name, "ON", target, ..]
+            | ["CREATE", "UNIQUE", "INDEX", name, "ON", target, ..] => {
+                let table = target.split('(').next().unwrap_or(target);
+                self.objects.insert(
+                    (String::from("index"), name.to_ascii_lowercase()),
+                    (table.to_ascii_lowercase(), statement.to_owned()),
+                );
+            }
+            ["CREATE", "TRIGGER", name, ..] => {
+                if let Some(table) = words
+                    .iter()
+                    .zip(words.iter().skip(1))
+                    .find(|(left, _)| left.eq_ignore_ascii_case("ON"))
+                    .map(|(_, right)| *right)
+                {
+                    self.objects.insert(
+                        (String::from("trigger"), name.to_ascii_lowercase()),
+                        (table.to_ascii_lowercase(), statement.to_owned()),
+                    );
+                }
+            }
+            ["ALTER", "TABLE", old_name, "RENAME", "TO", new_name] => {
+                self.rename_table(old_name, new_name);
+            }
+            ["DROP", "TABLE", table_name] => {
+                let lower = table_name.to_ascii_lowercase();
+                self.objects.retain(|_, (owner, _)| *owner != lower);
+            }
+            _ => {}
+        }
+    }
+
+    fn mapping_objects(&self) -> BTreeSet<String> {
+        self.objects
+            .values()
+            .filter(|(owner, _)| {
+                [
+                    "instrument_mappings",
+                    "instrument_mapping_events",
+                    "instrument_id_issuer",
+                ]
+                .contains(&owner.as_str())
+            })
+            .map(|(_, ddl)| ddl.clone())
+            .collect()
+    }
+
+    fn all_triggers(&self) -> BTreeSet<String> {
+        self.objects
+            .iter()
+            .filter(|((kind, _), _)| kind == "trigger")
+            .map(|(_, (_, ddl))| ddl.clone())
+            .collect()
+    }
 }
 
 fn validate_sql_set(
@@ -188,15 +597,13 @@ fn validate_sql_set(
 }
 
 pub(crate) fn validate_mapping_objects(connection: &Connection) -> rusqlite::Result<()> {
-    validate_sql_set(connection, sql::SCHEMA_OBJECTS, &expected_schema_sql())
+    let expected = MigrationSchemaTracker::from_migrations().mapping_objects();
+    validate_sql_set(connection, sql::SCHEMA_OBJECTS, &expected)
 }
 
 pub(crate) fn validate_all_triggers(connection: &Connection) -> rusqlite::Result<()> {
-    validate_sql_set(
-        connection,
-        sql::ALL_TRIGGERS,
-        &expected_migration_triggers(),
-    )
+    let expected = MigrationSchemaTracker::from_migrations().all_triggers();
+    validate_sql_set(connection, sql::ALL_TRIGGERS, &expected)
 }
 
 pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
@@ -225,31 +632,187 @@ pub(crate) fn validate_issuer_cursor(connection: &Connection) -> rusqlite::Resul
     Ok(())
 }
 
-fn validate_records(records: &[StoredRecord]) -> rusqlite::Result<()> {
-    let mut seen_ids = BTreeSet::new();
-    let mut seen_sources = BTreeSet::new();
-    let mut sources = Vec::with_capacity(records.len());
-    for record in records {
-        if !seen_ids.insert(record.id.clone()) {
+fn load_all_events(connection: &Connection) -> rusqlite::Result<Vec<StoredEvent>> {
+    let mut statement = connection.prepare(sql::ALL_EVENTS)?;
+    let events = statement
+        .query_map([], decode_event_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (index, entry) in events.iter().enumerate() {
+        let expected_seq =
+            i64::try_from(index.checked_add(1).ok_or(rusqlite::Error::InvalidQuery)?)
+                .map_err(invalid)?;
+        if entry.seq != expected_seq {
             return Err(rusqlite::Error::InvalidQuery);
         }
-        let exact_source = (
+    }
+    Ok(events)
+}
+
+fn load_events_for_id(
+    connection: &Connection,
+    id: &InstrumentId,
+) -> rusqlite::Result<Vec<MappingHistoryEvent>> {
+    let mut statement = connection.prepare(sql::EVENTS_FOR_ID)?;
+    let stored = statement
+        .query_map([id.as_str()], decode_event_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut previous_seq = 0_i64;
+    let mut events = Vec::with_capacity(stored.len());
+    for entry in stored {
+        if entry.seq <= previous_seq {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        previous_seq = entry.seq;
+        events.push(entry.event);
+    }
+    Ok(events)
+}
+
+#[derive(Default)]
+struct RecordSetValidator<'a> {
+    seen_exact: BTreeSet<(KnownMarket, Symbol, IsinCode)>,
+    seen_normalized_per_id: BTreeSet<(&'a InstrumentId, KnownMarket, String, String)>,
+    id_market: BTreeMap<&'a InstrumentId, KnownMarket>,
+    terminal_counts: BTreeMap<&'a InstrumentId, usize>,
+    symbols: BTreeMap<(KnownMarket, String), &'a InstrumentId>,
+    isins: BTreeMap<String, &'a InstrumentId>,
+}
+
+impl<'a> RecordSetValidator<'a> {
+    fn observe(&mut self, record: &'a StoredRecord) -> rusqlite::Result<()> {
+        let exact = (
             record.source.market(),
             record.source.symbol().clone(),
             record.source.isin().clone(),
         );
-        if !seen_sources.insert(exact_source) {
+        if !self.seen_exact.insert(exact) {
             return Err(rusqlite::Error::InvalidQuery);
         }
-        sources.push(record.source.clone());
+        let norm_symbol = record.source.symbol().as_str().to_ascii_uppercase();
+        let norm_isin = record.source.isin().as_str().to_ascii_uppercase();
+        if !self.seen_normalized_per_id.insert((
+            &record.id,
+            record.source.market(),
+            norm_symbol.clone(),
+            norm_isin.clone(),
+        )) {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if let Some(existing_market) = self.id_market.insert(&record.id, record.source.market())
+            && existing_market != record.source.market()
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if let Some(existing_owner) = self
+            .symbols
+            .insert((record.source.market(), norm_symbol), &record.id)
+            && *existing_owner != record.id
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if let Some(existing_owner) = self.isins.insert(norm_isin, &record.id)
+            && *existing_owner != record.id
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let counter = self.terminal_counts.entry(&record.id).or_insert(0);
+        match record.status {
+            StoredStatus::Active | StoredStatus::Retired => {
+                *counter = counter
+                    .checked_add(1)
+                    .ok_or(rusqlite::Error::InvalidQuery)?;
+                if *counter > 1 {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+            }
+            StoredStatus::Superseded(_) => {}
+        }
+        Ok(())
     }
-    for conflict in instrument_source_conflicts(&sources) {
-        match conflict {
-            InstrumentSourceConflict::Distinct => {}
-            InstrumentSourceConflict::IdentityUncertain => {
+}
+
+fn validate_records(
+    records: &[StoredRecord],
+    requirement: TerminalRequirement,
+) -> rusqlite::Result<()> {
+    let mut validator = RecordSetValidator::default();
+    for record in records {
+        validator.observe(record)?;
+    }
+    match requirement {
+        TerminalRequirement::AllowPartialSlice => Ok(()),
+        TerminalRequirement::RequireEveryIdTerminal => {
+            if validator.terminal_counts.values().any(|count| *count != 1) {
                 return Err(rusqlite::Error::InvalidQuery);
             }
+            Ok(())
         }
+    }
+}
+
+type SupersededLinkKey<'a> = (i64, &'a InstrumentId, KnownMarket, &'a Symbol, &'a IsinCode);
+
+fn expected_superseded_links(
+    events: &[StoredEvent],
+) -> rusqlite::Result<BTreeSet<SupersededLinkKey<'_>>> {
+    let mut active_links_by_id: BTreeMap<&InstrumentId, Vec<(i64, &InstrumentSource)>> =
+        BTreeMap::new();
+    for entry in events {
+        match &entry.event {
+            MappingHistoryEvent::IdentifierChanged {
+                instrument_id,
+                previous,
+                ..
+            } => {
+                active_links_by_id
+                    .entry(instrument_id)
+                    .or_default()
+                    .push((entry.seq, previous));
+            }
+            MappingHistoryEvent::LinkCorrected { instrument_id, .. } => {
+                let popped = active_links_by_id.get_mut(instrument_id).and_then(Vec::pop);
+                if popped.is_none() {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+            }
+            MappingHistoryEvent::RetirementCorrected { .. } => {}
+        }
+    }
+    Ok(active_links_by_id
+        .into_iter()
+        .flat_map(|(id, links)| {
+            links.into_iter().map(move |(seq, source)| {
+                (seq, id, source.market(), source.symbol(), source.isin())
+            })
+        })
+        .collect())
+}
+
+pub(crate) fn verify_superseded_event_links(
+    records: &[StoredRecord],
+    events: &[StoredEvent],
+) -> rusqlite::Result<()> {
+    let expected_links = expected_superseded_links(events)?;
+    let mut actual_links = BTreeSet::new();
+    for record in records {
+        match record.status {
+            StoredStatus::Superseded(seq) => {
+                let inserted = actual_links.insert((
+                    seq,
+                    &record.id,
+                    record.source.market(),
+                    record.source.symbol(),
+                    record.source.isin(),
+                ));
+                if !inserted {
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+            }
+            StoredStatus::Active | StoredStatus::Retired => {}
+        }
+    }
+    if actual_links != expected_links {
+        return Err(rusqlite::Error::InvalidQuery);
     }
     Ok(())
 }
@@ -259,7 +822,13 @@ pub(crate) fn validate_ledger(connection: &Connection) -> rusqlite::Result<()> {
     let records = statement
         .query_map([], decode_row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    validate_records(&records)
+    let events = load_all_events(connection)?;
+    let domain_records: Vec<InstrumentMappingRecord> =
+        records.iter().map(StoredRecord::to_domain).collect();
+    let domain_events: Vec<MappingHistoryEvent> =
+        events.iter().map(|entry| entry.event.clone()).collect();
+    verify_persisted_mapping_ledger(&domain_records, &domain_events).map_err(invalid)?;
+    verify_superseded_event_links(&records, &events)
 }
 
 pub(crate) fn validate_on_open(connection: &Connection) -> rusqlite::Result<()> {
@@ -283,7 +852,7 @@ fn load_for_source(
             decode_row,
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    validate_records(&records)?;
+    validate_records(&records, TerminalRequirement::AllowPartialSlice)?;
     Ok(records)
 }
 
@@ -304,7 +873,7 @@ fn load_for_source_or_id(
             decode_row,
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    validate_records(&records)?;
+    validate_records(&records, TerminalRequirement::AllowPartialSlice)?;
     Ok(records)
 }
 
@@ -313,7 +882,7 @@ fn load_for_id(connection: &Connection, id: &InstrumentId) -> rusqlite::Result<V
     let records = statement
         .query_map(params![id.as_str()], decode_row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    validate_records(&records)?;
+    validate_records(&records, TerminalRequirement::RequireEveryIdTerminal)?;
     Ok(records)
 }
 
@@ -342,6 +911,7 @@ fn resolve_in_candidates(
     let entry = lookup_in_candidates(records, source)?;
     match entry.status {
         StoredStatus::Active => Ok(entry.id.clone()),
+        StoredStatus::Superseded(_) => Err(InstrumentMappingError::Superseded),
         StoredStatus::Retired => Err(InstrumentMappingError::Retired),
     }
 }
@@ -446,6 +1016,7 @@ fn retire_mapping(
     };
     match existing.status {
         StoredStatus::Retired => Ok(Ok(existing.id.clone())),
+        StoredStatus::Superseded(_) => Ok(Err(InstrumentMappingError::Superseded)),
         StoredStatus::Active => {
             let updated = transaction.execute(
                 sql::RETIRE,
@@ -549,5 +1120,28 @@ impl InstrumentMappingRepository for InstrumentMappingStore<'_> {
                 .write(move |transaction| retire_mapping(transaction, &owned_source))
                 .await,
         )
+    }
+}
+
+impl InstrumentMappingHistoryRepository for InstrumentMappingStore<'_> {
+    async fn history(&self) -> Result<Vec<MappingHistoryEvent>, SystemPortError> {
+        self.database
+            .read(|connection| {
+                Ok(load_all_events(connection)?
+                    .into_iter()
+                    .map(|entry| entry.event)
+                    .collect())
+            })
+            .await
+    }
+
+    async fn history_for_id(
+        &self,
+        id: &InstrumentId,
+    ) -> Result<Vec<MappingHistoryEvent>, SystemPortError> {
+        let owned_id = id.clone();
+        self.database
+            .read(move |connection| load_events_for_id(connection, &owned_id))
+            .await
     }
 }

@@ -1518,6 +1518,64 @@ impl InstrumentMappingRepository for MemoryInstrumentMappingRepository {
         })
     }
 }
+
+impl application::InstrumentMappingHistoryRepository for MemoryInstrumentMappingRepository {
+    fn history(
+        &self,
+    ) -> impl Future<Output = Result<Vec<domain::MappingHistoryEvent>, SystemPortError>> + Send
+    {
+        poll_fn(move |_| Poll::Ready(Ok(self.mappings.write().history().to_vec())))
+    }
+
+    fn history_for_id(
+        &self,
+        id: &InstrumentId,
+    ) -> impl Future<Output = Result<Vec<domain::MappingHistoryEvent>, SystemPortError>> + Send
+    {
+        let owned_id = id.clone();
+        poll_fn(move |_| Poll::Ready(Ok(self.mappings.write().history_for_id(&owned_id))))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct MemoryInstrumentMappingHistoryStore {
+    history: Vec<domain::MappingHistoryEvent>,
+}
+
+impl MemoryInstrumentMappingHistoryStore {
+    pub fn try_from_verified(
+        records: &[InstrumentMappingRecord],
+        history: Vec<domain::MappingHistoryEvent>,
+    ) -> Result<Self, domain::MappingLedgerIntegrityError> {
+        domain::verify_persisted_mapping_ledger(records, &history)?;
+        Ok(Self { history })
+    }
+}
+
+impl application::InstrumentMappingHistoryRepository for MemoryInstrumentMappingHistoryStore {
+    fn history(
+        &self,
+    ) -> impl Future<Output = Result<Vec<domain::MappingHistoryEvent>, SystemPortError>> + Send
+    {
+        poll_fn(move |_| Poll::Ready(Ok(self.history.clone())))
+    }
+
+    fn history_for_id(
+        &self,
+        id: &InstrumentId,
+    ) -> impl Future<Output = Result<Vec<domain::MappingHistoryEvent>, SystemPortError>> + Send
+    {
+        let owned_id = id.clone();
+        poll_fn(move |_| {
+            Poll::Ready(Ok(self
+                .history
+                .iter()
+                .filter(|event| event.instrument_id() == &owned_id)
+                .cloned()
+                .collect()))
+        })
+    }
+}
 mod signal_repository;
 pub use signal_repository::MemorySignalEvaluationRepository;
 pub use signal_repository::MemorySignalEvaluationRepository as MemorySignalRepository;

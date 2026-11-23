@@ -380,13 +380,13 @@ pub(crate) fn verify_change_evidence(
     })
 }
 
-fn validate_change_action(
+pub(crate) fn validate_change_action(
     instrument_id: &InstrumentId,
     previous: &InstrumentSource,
     next: &InstrumentSource,
     action: &CorporateAction,
 ) -> Result<(), MappingTransitionError> {
-    if action.id().instrument_id() != instrument_id {
+    if action.id().instrument_id() != instrument_id || action.receipt().is_some() {
         return Err(MappingTransitionError::InvalidEvidence);
     }
     match action.kind() {
@@ -478,3 +478,5 @@ pub(crate) fn verify_link_correction(
 }
 
 mod history_cases;
+#[cfg(test)]
+mod verify_tests;
