@@ -26,7 +26,7 @@
 
 ## 확인 중
 
-- 변경분 검사, 독립 리뷰와 손 변형 결과는 진행 중이다.
+- 3회차 적대적 리뷰·독립 비판과 최종 수정(`119137a7`), `origin/master`(`0b223855`) `--no-ff` 병합(`9b60ce3d`), `domain` 줄·영역 커버리지 100%(`coverage-check: 위반 없음`), `check-fast-static`, `disable-report-since`(새 끄기 0건), `test-diff`(승인 29건 정확 일치), 최종 손 변형 27/27(누적 75/75) 검출을 완료했다. Docker 부재로 원격 CI에서 전체 검사를 최종 확인한다.
 
 ## 인계
 
@@ -90,3 +90,32 @@
 | 46 | 저장된 기준 표시 오프셋 대조 제거 | `saved_estimate_display_offsets_match_replayed_task` |
 | 47 | 저장된 생성 표시 오프셋 대조 제거 | `saved_estimate_display_offsets_match_replayed_task` |
 | 48 | 신호 저장 시 과제 오프셋 대조 제거 | `capture_rejects_original_signal_offset_mismatch` |
+| 49 | (`F1`) 추정 근거 `check_stored_offsets`의 `original` 대조 제거 | `stored_signal_occurrence_verify_commit_binding_checks_estimate_offsets` |
+| 50 | (`F2`) 추정 근거 `check_stored_offsets`의 `expected.created_at` 오프셋 대조 제거 | `stored_signal_occurrence_verify_commit_binding_checks_estimate_offsets` |
+| 51 | (`F3`) `EstimateRestoreEvidence::replay`의 `LiveOrderGate`를 `HistoricalIdentity`로 약화 | `estimate_restore_rejects_delisted_reference_and_candle_currency_errors` |
+| 52 | (`F4`) 추정 근거 `check_evidence_offsets`의 일봉 `collected_at` 오프셋 대조 제거 | `estimate_restore_kills_task_master_and_candle_offset_mutations` |
+| 53 | (`F5`) `DraftRestoreEvidence::restore`의 추정 복원 모드를 `HistoricalIdentity`로 약화 | `historical_restore_survives_non_tradable_current_master_while_live_draft_rejects_it` |
+| 54 | (`F6`) `DraftRestoreEvidence::restore`의 `card.replay_live`를 `replay_historical`로 약화 | `draft_restore_rejects_unidentified_card_on_liquidation_buy` |
+| 55 | (`F7`) `HistoricalPortfolio::from_saved_facts`의 보유 시장 정준 정렬 대조 제거 | `historical_portfolio_rejects_same_symbol_unsorted_markets` |
+| 56 | (`F8`) `HistoricalPortfolio::from_saved_facts`의 보유 심볼 정준 정렬 대조 제거 | `historical_portfolio_rejects_unsorted_holdings_facts` |
+| 57 | (`F9`) `HistoricalHolding::capture`의 시장 일치 조건 제거 | `identical_symbol_across_kr_and_us_markets_is_rejected_for_estimate_and_holding` |
+| 58 | (`F10`) `HistoricalHolding::replay`의 중복 `instrument_id` 거부 제거 | `historical_holding_identity_rejects_symbol_reuse_and_currency_mismatch` |
+| 59 | (`F11`) `HistoricalHolding::replay`의 매입 통화 일치 검사 제거 | `historical_holding_rejects_acquisition_and_current_price_currency_mismatch` |
+| 60 | (`F12`) `HistoricalCashMoney::try_new`의 음수 현금 거부 제거 | `historical_portfolio_covers_buying_power_variants_and_unsorted_facts` |
+| 61 | (`F13`) `SignalRestoreEvidence::capture`의 `LiveOrderGate`를 `HistoricalIdentity`로 약화 | `historical_restore_survives_non_tradable_current_master_while_live_draft_rejects_it` |
+| 62 | (`F14`) `StoredSignalEvidence::verify_same_as`의 `original` 대조 제거 | `stored_signal_occurrence_verify_commit_binding_checks_signal_and_record` |
+| 63 | (`F15`) `StoredSignalEvidence::verify_same_as`의 `expected` 대조 제거 | `stored_signal_occurrence_verify_commit_binding_checks_signal_and_record` |
+| 64 | (`F16`) `check_signal_evidence_match`의 `estimate.check_stored_offsets` 호출 무시 | `stored_signal_occurrence_verify_commit_binding_checks_estimate_offsets` |
+| 65 | (`F17`) `StoredSignalOccurrence::verify_commit_binding`의 신호 대조 제거 | `stored_signal_occurrence_verify_commit_binding_checks_signal_and_record` |
+| 66 | (`F18`) `StoredSignalOccurrence::verify_commit_binding`의 `raised_at` 오프셋 대조 제거 | `stored_signal_occurrence_verify_commit_binding_checks_signal_and_record` |
+| 67 | (`F19`) `StoredSignalOccurrence::restore`의 구간 종료 오프셋 대조 제거 | `occurrence_restore_kills_interval_start_and_end_offset_mutations` |
+| 68 | (`F20`) `EvaluateSignals::combine_masters`의 `observed_at` 오프셋 중복 비교 제거 | `master_dedup_checks_offset_and_rejects_active_symbol_collision_in_repo` |
+| 69 | (`F21`) `merge_evidence_masters`의 `observed_at` 오프셋 중복 비교 제거 | `master_dedup_checks_offset_and_rejects_active_symbol_collision_in_repo` |
+| 70 | (`F22`) `merge_evidence_masters`의 비폐지 충돌 검사에서 `ListingStatus::Scheduled` 제외 | `commit_rejects_scheduled_symbol_collision_and_tampered_original_or_expected` |
+| 71 | (`F23`) `merge_evidence_masters`의 비폐지 충돌 검사에 `ListingStatus::Delisted` 포함 | `delisted_holding_symbol_reuse_still_allows_signal_lifecycle_and_new_active_commits` |
+| 72 | (`F24`) `verify_commit_evidence`의 `evidence.master`↔`evidence.signal` 식별자 일치 검사 제거 | `commit_rejects_occurrence_signal_swap_offset_drift_and_wrong_master` |
+| 73 | (`F25`) `verify_commit_evidence`의 현재 저장소 마스터 `capture(LiveOrderGate)` 검사 제거 | `stale_tradable_commit_is_rejected_when_stored_master_is_non_tradable` |
+| 74 | (`F26`) `verify_commit_evidence`의 `rebuilt.restore_history` 검증 제거 | `sell_commit_without_occurrence_rejects_tampered_original_or_expected` |
+| 75 | (`F27`) `verify_commit_evidence`의 `verify_commit_binding` 검증 제거 | `commit_rejects_occurrence_signal_swap_offset_drift_and_wrong_master` |
+
+49–75번(`F1`–`F27`)은 3차 최종 수정 커밋 `119137a7517e44ba31e9de5142a4ad9b6f0ba7d9`을 격리 복사본으로 추출해 하나씩 적용·실행한 결과이며, 27개 모두 컴파일 후 테스트 실패로 검출됐고 격리 복사본은 종료 시 삭제했다.
