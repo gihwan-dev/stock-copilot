@@ -213,7 +213,8 @@ fn store_draft_guarded(
         RaisedSignal::Buy(_) => domain::OrderSide::Buy,
         RaisedSignal::Sell(_) => domain::OrderSide::Sell,
     };
-    if proposal.intent().side() != expected_side {
+    if proposal.intent().side() != expected_side || proposal.intent().account_id() != check.account
+    {
         return Err(invalid());
     }
     if let Err(error) = proposal.check_current(check.at, check.observation) {
@@ -274,10 +275,11 @@ fn current_draft_guarded(
         return Ok(application::CurrentDraftOutcome::Absent);
     }
     match old.proposal.check_current(check.at, check.observation) {
-        Ok(()) => Ok(application::CurrentDraftOutcome::Existing(
-            old.proposal.id().clone(),
-        )),
-        Err(
+        Ok(()) if old.proposal.intent().account_id() == check.account => Ok(
+            application::CurrentDraftOutcome::Existing(old.proposal.id().clone()),
+        ),
+        Ok(())
+        | Err(
             domain::ProposalExecutionError::Expired
             | domain::ProposalExecutionError::PriceOutsideRange,
         ) => {

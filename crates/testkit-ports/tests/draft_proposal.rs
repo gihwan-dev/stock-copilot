@@ -600,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn same_instrument_reuses_unexpired_draft_even_for_another_account() {
+    fn same_instrument_and_account_reuses_unexpired_draft() {
         let source = fixtures::master();
         let now = fixtures::day(60);
         let data = Data::new(market(&source, now));
@@ -622,7 +622,7 @@ mod tests {
         data.0.write().expect("입력").evaluation.quantity_costs = None;
         let Ok(DraftProposalOutcome::Existing { proposal_id }) = run(usecase.execute(
             &source.row().instrument_id,
-            &AccountId::new(8765),
+            &AccountId::new(4321),
             second_id.clone(),
         )) else {
             panic!("기존 초안")
@@ -632,6 +632,172 @@ mod tests {
         assert_eq!(
             events.read().expect("이벤트").as_slice(),
             &[domain::DomainEvent::ProposalCreated(first_id)]
+        );
+    }
+
+    fn two_sectors(
+        source: &MasterInstrument,
+        other: &MasterInstrument,
+        now: Timestamp,
+    ) -> SectorAssignments {
+        let tech = SectorId::try_new("tech").expect("기술");
+        let finance = SectorId::try_new("finance").expect("금융");
+        let catalog = SectorCatalog::from_response(
+            vec![
+                SectorMetadataRow {
+                    id: tech.clone(),
+                    name: domain::DisplayInstrumentName::try_new("기술").expect("이름"),
+                    depth: SectorDepth::Major,
+                    parent: None,
+                },
+                SectorMetadataRow {
+                    id: finance.clone(),
+                    name: domain::DisplayInstrumentName::try_new("금융").expect("이름"),
+                    depth: SectorDepth::Major,
+                    parent: None,
+                },
+            ],
+            now,
+        )
+        .expect("목록");
+        let comp = |id, symbol: &domain::Symbol| {
+            SectorComposition::from_stocks_response(
+                id,
+                domain::KnownMarket::Kr,
+                vec![SectorStockRow {
+                    symbol: symbol.clone(),
+                    currency: Currency::Krw,
+                    market_capitalization: Some(
+                        domain::NumericInput::try_new("100000").expect("입력"),
+                    ),
+                    trading_amount: None,
+                }],
+                now,
+            )
+            .expect("구성")
+        };
+        let compositions = [
+            comp(tech, &source.row().symbol),
+            comp(finance, &other.row().symbol),
+        ];
+        SectorAssignments::try_new(vec![
+            domain::sector_assignment_from_compositions(source, &catalog, &compositions)
+                .expect("배정"),
+            domain::sector_assignment_from_compositions(other, &catalog, &compositions)
+                .expect("타 배정"),
+        ])
+        .expect("분류")
+    }
+
+    fn low_cash_same_total_market(
+        source: &MasterInstrument,
+        now: Timestamp,
+    ) -> DraftProposalInputs {
+        let mut facts = market(source, now);
+        let mut other_row = source.row().clone();
+        other_row.instrument_id = fixtures::id("other-holding");
+        other_row.symbol = domain::Symbol::try_new("000660").expect("코드");
+        let other = MasterInstrument::try_new(other_row).expect("다른 종목");
+        facts.evaluation.assignments = two_sectors(source, &other, now);
+        facts.evaluation.security =
+            MasterInstrumentFacts::try_new(vec![source.clone(), other.clone()])
+                .expect("마스터")
+                .policy_security_facts();
+        let holding = domain::Holding::new(
+            other.order_instrument().expect("주문 종목"),
+            fixtures::quantity("1"),
+            domain::AcquisitionPrice::try_new(fixtures::money("9950", Currency::Krw))
+                .expect("매입가"),
+            domain::HoldingObservation::new(Some(fixtures::price("9950")), None, now),
+        )
+        .expect("보유");
+        facts.evaluation.valuation = Some(
+            domain::Portfolio::new(
+                vec![holding],
+                domain::BuyingPower::new(fixtures::money("50", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+            )
+            .expect("포트")
+            .evaluate(None),
+        );
+        facts
+    }
+
+    #[test]
+    fn different_account_supersedes_old_draft_even_with_same_policy_limit() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let scheduler = Scheduler::default();
+        let clock = testkit_ports::SteppedClock::new(now);
+        let (bus, events) = event_bus();
+        let usecase = DraftProposal::new(&repository, &data, &scheduler, &clock, &bus);
+        let first_id = proposal_id("acct-4321");
+        let Ok(DraftProposalOutcome::Created { proposal, .. }) = run(usecase.execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            first_id.clone(),
+        )) else {
+            panic!("첫 계좌 초안")
+        };
+        assert_eq!(proposal.intent().account_id(), &AccountId::new(4321));
+        *data.0.write().expect("입력") = low_cash_same_total_market(&source, now);
+        let second_id = proposal_id("acct-8765-low-cash");
+        let second = run(usecase.execute(
+            &source.row().instrument_id,
+            &AccountId::new(8765),
+            second_id.clone(),
+        ));
+        let Err(DraftProposalError::Quantity(domain::NoBuyQuantity::InsufficientBuyingPower)) =
+            second
+        else {
+            panic!("현금 부족 계좌는 이전 계좌 초안을 재사용하지 않아야 한다: {second:?}")
+        };
+        assert!(run(repository.draft(&first_id)).expect("대체").is_none());
+        assert!(run(repository.draft(&second_id)).expect("조회").is_none());
+        assert_eq!(
+            events.read().expect("이벤트").as_slice(),
+            &[domain::DomainEvent::ProposalCreated(first_id)]
+        );
+    }
+
+    #[test]
+    fn different_account_creates_new_draft_and_supersedes_previous_account() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let scheduler = Scheduler::default();
+        let clock = testkit_ports::SteppedClock::new(now);
+        let (bus, events) = event_bus();
+        let usecase = DraftProposal::new(&repository, &data, &scheduler, &clock, &bus);
+        let first_id = proposal_id("switch-4321");
+        let second_id = proposal_id("switch-8765");
+        let Ok(DraftProposalOutcome::Created { .. }) = run(usecase.execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            first_id.clone(),
+        )) else {
+            panic!("첫 계좌 초안")
+        };
+        let Ok(DraftProposalOutcome::Created { proposal, .. }) = run(usecase.execute(
+            &source.row().instrument_id,
+            &AccountId::new(8765),
+            second_id.clone(),
+        )) else {
+            panic!("전환 계좌 초안")
+        };
+        assert_eq!(proposal.id(), &second_id);
+        assert_eq!(proposal.intent().account_id(), &AccountId::new(8765));
+        assert!(run(repository.draft(&first_id)).expect("이전").is_none());
+        assert!(run(repository.draft(&second_id)).expect("현재").is_some());
+        assert_eq!(
+            events.read().expect("이벤트").as_slice(),
+            &[
+                domain::DomainEvent::ProposalCreated(first_id),
+                domain::DomainEvent::ProposalCreated(second_id),
+            ]
         );
     }
 
@@ -713,6 +879,7 @@ mod tests {
                 &snapshot,
                 proposal,
                 application::DraftCheck {
+                    account: &AccountId::new(4321),
                     at: now,
                     observation: &observation,
                 },
@@ -1653,6 +1820,7 @@ mod tests {
                 &stale,
                 &proposal,
                 application::DraftCheck {
+                    account: &AccountId::new(4321),
                     at: now,
                     observation: &observation,
                 },
@@ -1664,6 +1832,7 @@ mod tests {
                 &source.row().instrument_id,
                 &stale,
                 application::DraftCheck {
+                    account: &AccountId::new(4321),
                     at: now,
                     observation: &observation,
                 },
@@ -1695,6 +1864,7 @@ mod tests {
             &source.row().instrument_id,
             &snapshot,
             application::DraftCheck {
+                account: &AccountId::new(4321),
                 at: now,
                 observation: &observation,
             },
@@ -1738,6 +1908,7 @@ mod tests {
             &source.row().instrument_id,
             &snapshot,
             application::DraftCheck {
+                account: &AccountId::new(4321),
                 at: now,
                 observation: &observation,
             },
@@ -2113,6 +2284,7 @@ mod tests {
                 &sell_snapshot,
                 &buy_draft,
                 application::DraftCheck {
+                    account: &AccountId::new(4321),
                     at: now,
                     observation: &observation,
                 },
@@ -2126,6 +2298,40 @@ mod tests {
         );
     }
 
+    #[test]
+    fn store_current_draft_rejects_mismatched_account() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let draft = independent_draft(&source, &data, now, proposal_id("wrong-account"));
+        let repository = seeded(&source, &data);
+        let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("상태");
+        let observation = current_observation(&data);
+        let error = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        assert_eq!(
+            run(repository.store_current_draft(
+                &source.row().instrument_id,
+                &snapshot,
+                &draft,
+                application::DraftCheck {
+                    account: &AccountId::new(8765),
+                    at: now,
+                    observation: &observation,
+                },
+            )),
+            Err(error)
+        );
+        assert!(run(repository.draft(draft.id())).expect("조회").is_none());
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum PreemptAt {
+        Read,
+        Store,
+    }
     struct WinnerDraft {
         instrument: InstrumentId,
         snapshot: application::SignalSnapshot,
@@ -2137,6 +2343,7 @@ mod tests {
         inner: &'a MemorySignalEvaluationRepository,
         clock: &'a testkit_ports::SteppedClock,
         winner: RwLock<Option<WinnerDraft>>,
+        preempt_at: PreemptAt,
         advance_to: Option<Timestamp>,
     }
     impl PreemptingRepository<'_> {
@@ -2145,6 +2352,7 @@ mod tests {
                 return Ok(());
             };
             let check = application::DraftCheck {
+                account: item.proposal.intent().account_id(),
                 at: item.at,
                 observation: &item.observation,
             };
@@ -2157,6 +2365,13 @@ mod tests {
                 self.clock.advance_to(target).expect("시계 전진");
             }
             Ok(())
+        }
+        fn take_for(&self, stage: PreemptAt) -> Option<WinnerDraft> {
+            if self.preempt_at == stage {
+                self.winner.write().expect("선점").take()
+            } else {
+                None
+            }
         }
     }
     impl SignalRepository for PreemptingRepository<'_> {
@@ -2258,7 +2473,11 @@ mod tests {
             check: application::DraftCheck<'_>,
         ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
         {
-            self.inner.current_draft(instrument, expected, check)
+            let pending = self.take_for(PreemptAt::Read);
+            async move {
+                self.apply_pending(pending).await?;
+                self.inner.current_draft(instrument, expected, check).await
+            }
         }
         fn store_current_draft(
             &self,
@@ -2268,7 +2487,7 @@ mod tests {
             check: application::DraftCheck<'_>,
         ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
         {
-            let pending = self.winner.write().expect("선점").take();
+            let pending = self.take_for(PreemptAt::Store);
             async move {
                 self.apply_pending(pending).await?;
                 self.inner
@@ -2325,6 +2544,7 @@ mod tests {
                 observation: current_observation(&winner_data),
                 at: winner_at,
             })),
+            preempt_at: PreemptAt::Store,
             advance_to: Some(retry_at),
         };
         let (bus, events) = event_bus();
@@ -2344,6 +2564,7 @@ mod tests {
         assert_eq!(seen, winner_id);
         assert!(events.read().expect("이벤트").is_empty());
         assert!(run(repository.draft(&loser)).expect("조회").is_none());
+        let reads_before = repository.snapshot_reads();
         let harness = DraftHarness {
             repository: &repository,
             data: &data,
@@ -2355,7 +2576,323 @@ mod tests {
             rollback.expect_err("시계 역행 거부"),
             DraftProposalError::DraftStatus(domain::ProposalExecutionError::ClockRollback)
         );
+        assert_eq!(
+            repository.snapshot_reads().checked_sub(reads_before),
+            Some(3)
+        );
         assert!(run(repository.draft(&winner_id)).expect("보존").is_some());
+    }
+
+    #[test]
+    fn read_path_monotonic_clock_race_retries_to_existing() {
+        let source = fixtures::master();
+        let id = &source.row().instrument_id;
+        let now = fixtures::day(60);
+        let winner_at = fixtures::at(now.utc_seconds().as_i64().checked_add(1).expect("시각"));
+        let retry_at = fixtures::at(now.utc_seconds().as_i64().checked_add(2).expect("시각"));
+        let data = Data::new(market(&source, now));
+        let winner_id = proposal_id("read-race-winner");
+        let winner_data = Data::new(market(&source, winner_at));
+        let winner =
+            draft_at_later_time(&source, &data, &winner_data, winner_at, winner_id.clone());
+        let repository = seeded(&source, &data);
+        let snapshot = run(repository.snapshot(id)).expect("스냅숏");
+        let reads_before = repository.snapshot_reads();
+        let clock = testkit_ports::SteppedClock::new(now);
+        let racing = PreemptingRepository {
+            inner: &repository,
+            clock: &clock,
+            winner: RwLock::new(Some(WinnerDraft {
+                instrument: id.clone(),
+                snapshot,
+                proposal: winner,
+                observation: current_observation(&winner_data),
+                at: winner_at,
+            })),
+            preempt_at: PreemptAt::Read,
+            advance_to: Some(retry_at),
+        };
+        let (bus, events) = event_bus();
+        let loser = proposal_id("read-race-loser");
+        let Ok(DraftProposalOutcome::Existing { proposal_id: seen }) = run(DraftProposal::new(
+            &racing,
+            &data,
+            &Scheduler::default(),
+            &clock,
+            &bus,
+        )
+        .execute(id, &AccountId::new(4321), loser.clone())) else {
+            panic!("조회 경로 재시도 뒤 기존 초안 ID가 필요하다")
+        };
+        assert_eq!(seen, winner_id);
+        assert_eq!(
+            repository.snapshot_reads().checked_sub(reads_before),
+            Some(2)
+        );
+        assert_eq!(repository.draft_attempts(), 1);
+        assert!(events.read().expect("이벤트").is_empty());
+        assert!(run(repository.draft(&loser)).expect("조회").is_none());
+    }
+
+    #[test]
+    fn persistent_read_path_clock_rollback_retries_three_times() {
+        let source = fixtures::master();
+        let id = &source.row().instrument_id;
+        let now = fixtures::day(60);
+        let winner_at = fixtures::at(now.utc_seconds().as_i64().checked_add(1).expect("시각"));
+        let data = Data::new(market(&source, now));
+        let winner_id = proposal_id("read-stuck-winner");
+        let winner_data = Data::new(market(&source, winner_at));
+        let winner =
+            draft_at_later_time(&source, &data, &winner_data, winner_at, winner_id.clone());
+        let repository = seeded(&source, &data);
+        let snapshot = run(repository.snapshot(id)).expect("스냅숏");
+        let check = application::DraftCheck {
+            account: &AccountId::new(4321),
+            at: winner_at,
+            observation: &current_observation(&winner_data),
+        };
+        assert_eq!(
+            run(repository.store_current_draft(id, &snapshot, &winner, check)),
+            Ok(application::ConditionalDraftOutcome::Stored)
+        );
+        let reads_before = repository.snapshot_reads();
+        let (bus, events) = event_bus();
+        let err = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            id,
+            &AccountId::new(4321),
+            proposal_id("read-rollback-stuck"),
+        ))
+        .expect_err("지속 시계 역행 거부");
+        assert_eq!(
+            err,
+            DraftProposalError::DraftStatus(domain::ProposalExecutionError::ClockRollback)
+        );
+        assert_eq!(
+            repository.snapshot_reads().checked_sub(reads_before),
+            Some(3)
+        );
+        assert_eq!(repository.draft_attempts(), 1);
+        assert!(run(repository.draft(&winner_id)).expect("보존").is_some());
+        assert!(events.read().expect("이벤트").is_empty());
+    }
+
+    struct ScriptedClock {
+        ticks: RwLock<std::collections::VecDeque<Timestamp>>,
+        fallback: Timestamp,
+    }
+    impl ScriptedClock {
+        fn new(ticks: impl IntoIterator<Item = Timestamp>, fallback: Timestamp) -> Self {
+            Self {
+                ticks: RwLock::new(ticks.into_iter().collect()),
+                fallback,
+            }
+        }
+    }
+    impl application::Clock for ScriptedClock {
+        fn now(&self) -> Timestamp {
+            self.ticks
+                .write()
+                .expect("시각")
+                .pop_front()
+                .unwrap_or(self.fallback)
+        }
+    }
+
+    #[test]
+    fn pre_store_recheck_rejects_late_market_close_and_stale_price() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let closed = fixtures::at(now.utc_seconds().as_i64().checked_add(3601).expect("마감"));
+        let stale = fixtures::at(now.utc_seconds().as_i64().checked_add(5).expect("만료"));
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let scheduler = Scheduler::default();
+        let (bus, events) = event_bus();
+        let close_clock = ScriptedClock::new([now, now, now, closed], closed);
+        let Ok(DraftProposalOutcome::MarketClosed) =
+            run(
+                DraftProposal::new(&repository, &data, &scheduler, &close_clock, &bus).execute(
+                    &source.row().instrument_id,
+                    &AccountId::new(4321),
+                    proposal_id("late-close"),
+                ),
+            )
+        else {
+            panic!("저장 직전 장 마감은 닫힌 장이어야 한다")
+        };
+        assert_eq!(repository.draft_attempts(), 0);
+        let stale_clock = ScriptedClock::new([now, now, now, stale], stale);
+        assert_eq!(
+            run(
+                DraftProposal::new(&repository, &data, &scheduler, &stale_clock, &bus,).execute(
+                    &source.row().instrument_id,
+                    &AccountId::new(4321),
+                    proposal_id("late-stale"),
+                )
+            )
+            .expect_err("저장 직전 오래된 시세 거부"),
+            DraftProposalError::Observation(domain::SignalUnavailable::StaleTargetPrice)
+        );
+        assert_eq!(repository.draft_attempts(), 0);
+        assert!(events.read().expect("이벤트").is_empty());
+    }
+
+    #[test]
+    fn pre_store_check_current_rejects_local_clock_rollback_without_storing() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let later = fixtures::at(now.utc_seconds().as_i64().checked_add(1).expect("시각"));
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let reads_before = repository.snapshot_reads();
+        let scheduler = Scheduler::default();
+        let (bus, events) = event_bus();
+        let clock = ScriptedClock::new([now, now, later, now], now);
+        assert_eq!(
+            run(
+                DraftProposal::new(&repository, &data, &scheduler, &clock, &bus).execute(
+                    &source.row().instrument_id,
+                    &AccountId::new(4321),
+                    proposal_id("local-rollback"),
+                )
+            )
+            .expect_err("저장 직전 로컬 시계 역행 거부"),
+            DraftProposalError::DraftStatus(domain::ProposalExecutionError::ClockRollback)
+        );
+        assert_eq!(repository.draft_attempts(), 0);
+        assert_eq!(
+            repository.snapshot_reads().checked_sub(reads_before),
+            Some(1)
+        );
+        assert!(events.read().expect("이벤트").is_empty());
+    }
+
+    fn calendars_with_day60(
+        market_kind: &Market,
+        custom: &domain::MarketSession,
+        range: std::ops::RangeInclusive<i64>,
+    ) -> Vec<domain::MarketCalendar> {
+        let row = |day: i64| {
+            if day == 60 {
+                custom.clone()
+            } else {
+                fixtures::session(day, market_kind)
+            }
+        };
+        range
+            .map(|day| {
+                let prev = day.checked_sub(1).expect("전일");
+                let next = day.checked_add(1).expect("익일");
+                domain::MarketCalendar::try_new(row(prev), row(day), row(next)).expect("달력")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn kr_extended_open_sessions_create_drafts() {
+        let now = fixtures::day(60);
+        let kr_source = fixtures::master();
+        let base_kr = fixtures::session(60, &Market::Kr);
+        let kr_data =
+            domain::SessionData::try_new(base_kr.sessions()[0].session().interval(), None)
+                .expect("국내 세션");
+        let kr_cases = [
+            (
+                domain::MarketState::PreMarket,
+                domain::SessionInformation::Kr {
+                    pre_market: Some(kr_data),
+                    regular_market: None,
+                    after_market: None,
+                },
+                "kr-pre",
+            ),
+            (
+                domain::MarketState::AfterMarket,
+                domain::SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: None,
+                    after_market: Some(kr_data),
+                },
+                "kr-after",
+            ),
+        ];
+        for (expected_state, info, id_label) in kr_cases {
+            let custom = domain::MarketSession::try_new(base_kr.date(), info).expect("세션");
+            let mut inputs = market(&kr_source, now);
+            inputs.evaluation.calendars = calendars_with_day60(&Market::Kr, &custom, 60..=66);
+            assert_eq!(
+                domain::market_state_at(&inputs.evaluation.calendars, &Market::Kr, now),
+                expected_state
+            );
+            let data = Data::new(inputs);
+            let repository = seeded(&kr_source, &data);
+            let (bus, _) = event_bus();
+            let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                &kr_source.row().instrument_id,
+                &AccountId::new(4321),
+                proposal_id(id_label),
+            )) else {
+                panic!("확장 세션은 초안을 만들어야 한다: {id_label}")
+            };
+        }
+    }
+
+    #[test]
+    fn us_day_market_creates_draft() {
+        let now = fixtures::day(60);
+        let us_source = us_master(now);
+        let base_us = fixtures::session(60, &Market::Us);
+        let us_data =
+            domain::SessionData::try_new(base_us.sessions()[0].session().interval(), None)
+                .expect("미국 세션");
+        let us_day = domain::MarketSession::try_new(
+            base_us.date(),
+            domain::SessionInformation::Us {
+                day_market: Some(us_data),
+                pre_market: None,
+                regular_market: None,
+                after_market: None,
+            },
+        )
+        .expect("데이마켓");
+        let mut us_inputs = us_market(&us_source, now);
+        us_inputs.evaluation.calendars = calendars_with_day60(&Market::Us, &us_day, 59..=67);
+        assert_eq!(
+            domain::market_state_at(&us_inputs.evaluation.calendars, &Market::Us, now),
+            domain::MarketState::DayMarket
+        );
+        let data = Data::new(us_inputs);
+        let repository = seed_us_repository(&us_source, &data, now);
+        let (bus, _) = event_bus();
+        let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &us_source.row().instrument_id,
+            &AccountId::new(7777),
+            proposal_id("us-day"),
+        )) else {
+            panic!("미국 데이마켓은 초안을 만들어야 한다")
+        };
     }
 
     fn us_master(now: Timestamp) -> MasterInstrument {

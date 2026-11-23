@@ -7,11 +7,12 @@ use crate::{
 use domain::{
     AccountId, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, CheckResult,
     CostEligibleTask, CurrentBuySignal, DomainEvent, Draft, InstrumentId, IssuedEstimateTaskId,
-    LimitPriceError, MarketState, MasterInstrument, MasterInstrumentError, NoBuyQuantity,
+    LimitPriceError, MarketTradingStatus, MasterInstrument, MasterInstrumentError, NoBuyQuantity,
     NoSignalReason, OrderSide, Orderbook, PriceLimits, Proposal, ProposalError,
     ProposalExecutionError, ProposalId, ProposalLifetime, ProposalPriceRange, RaisedSignal,
     SignalDecision, SignalTiming, SignalTransitionError, SignalUnavailable, TickSizeError,
-    TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price, signal_transition,
+    TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price, market_state_at,
+    signal_transition,
 };
 use std::future::Future;
 
@@ -204,27 +205,15 @@ where
             return Err(DraftProposalError::SellDraftUnavailable);
         }
         let read_check = DraftCheck {
+            account: request.account,
             at: read_at,
             observation,
         };
-        match self
-            .repository
-            .current_draft(request.instrument, snapshot, read_check)
-            .await
-            .map_err(DraftProposalError::Storage)?
+        if let Some(outcome) = self
+            .check_existing_draft(request.instrument, snapshot, read_check)
+            .await?
         {
-            CurrentDraftOutcome::Absent => {}
-            CurrentDraftOutcome::Existing(proposal_id) => {
-                return Ok(Attempt::Complete(DraftProposalOutcome::Existing {
-                    proposal_id,
-                }));
-            }
-            CurrentDraftOutcome::Conflict => {
-                return Ok(Attempt::Retry(DraftProposalError::ConcurrentUpdate));
-            }
-            CurrentDraftOutcome::Invalid(error) => {
-                return Err(DraftProposalError::DraftStatus(error));
-            }
+            return Ok(outcome);
         }
         let proposal = self.make_proposal(request, current, prepared).await?;
         let Some(write_at) = self.recheck(current, &prepared.inputs)? else {
@@ -234,11 +223,46 @@ where
             .check_current(write_at, observation)
             .map_err(DraftProposalError::DraftStatus)?;
         let write_check = DraftCheck {
+            account: request.account,
             at: write_at,
             observation,
         };
         self.store_candidate(request.instrument, snapshot, proposal, write_check)
             .await
+    }
+
+    async fn check_existing_draft(
+        &self,
+        instrument: &InstrumentId,
+        snapshot: &SignalSnapshot,
+        check: DraftCheck<'_>,
+    ) -> Result<Option<Attempt>, DraftProposalError> {
+        match self
+            .repository
+            .current_draft(instrument, snapshot, check)
+            .await
+            .map_err(DraftProposalError::Storage)?
+        {
+            CurrentDraftOutcome::Absent => Ok(None),
+            CurrentDraftOutcome::Existing(proposal_id) => {
+                Ok(Some(Attempt::Complete(DraftProposalOutcome::Existing {
+                    proposal_id,
+                })))
+            }
+            CurrentDraftOutcome::Conflict => {
+                Ok(Some(Attempt::Retry(DraftProposalError::ConcurrentUpdate)))
+            }
+            CurrentDraftOutcome::Invalid(ProposalExecutionError::ClockRollback) => {
+                Ok(Some(Attempt::Retry(DraftProposalError::DraftStatus(
+                    ProposalExecutionError::ClockRollback,
+                ))))
+            }
+            CurrentDraftOutcome::Invalid(
+                error @ (ProposalExecutionError::Expired
+                | ProposalExecutionError::PriceOutsideRange
+                | ProposalExecutionError::ObservationInvalid),
+            ) => Err(DraftProposalError::DraftStatus(error)),
+        }
     }
 
     async fn store_candidate(
@@ -315,17 +339,16 @@ where
             .inputs(request.instrument, request.account, current, request.now)
             .await
             .map_err(DraftProposalError::Inputs)?;
-        match market_state(
-            &inputs.evaluation,
+        match market_state_at(
+            &inputs.evaluation.calendars,
             &signal_task(current).reference().instrument().market(),
             request.now,
-        ) {
-            MarketState::Unknown => return Err(DraftProposalError::MarketUnknown),
-            MarketState::Closed => return Ok(Some(Preparation::Closed)),
-            MarketState::DayMarket
-            | MarketState::PreMarket
-            | MarketState::RegularMarket
-            | MarketState::AfterMarket => {}
+        )
+        .trading_status()
+        {
+            MarketTradingStatus::Unknown => return Err(DraftProposalError::MarketUnknown),
+            MarketTradingStatus::Closed => return Ok(Some(Preparation::Closed)),
+            MarketTradingStatus::Open => {}
         }
         check_identity(request.instrument, current, issued.task(), &inputs.master)?;
         self.prepare_open(request, current, (record, issued.task()), inputs)
@@ -482,18 +505,16 @@ where
     ) -> Result<Option<Timestamp>, DraftProposalError> {
         let now = self.clock.now();
         let task = signal_task(current);
-        let state = market_state(
-            &inputs.evaluation,
+        let state = market_state_at(
+            &inputs.evaluation.calendars,
             &task.reference().instrument().market(),
             now,
-        );
+        )
+        .trading_status();
         match state {
-            MarketState::Unknown => return Err(DraftProposalError::MarketUnknown),
-            MarketState::Closed => return Ok(None),
-            MarketState::DayMarket
-            | MarketState::PreMarket
-            | MarketState::RegularMarket
-            | MarketState::AfterMarket => {}
+            MarketTradingStatus::Unknown => return Err(DraftProposalError::MarketUnknown),
+            MarketTradingStatus::Closed => return Ok(None),
+            MarketTradingStatus::Open => {}
         }
         let observation =
             inputs
@@ -591,26 +612,4 @@ fn check_identity(
         return Err(DraftProposalError::InstrumentMismatch);
     }
     Ok(())
-}
-
-fn market_state(
-    inputs: &EvaluateSignalInputs,
-    market: &domain::Market,
-    now: Timestamp,
-) -> MarketState {
-    let mut known = None;
-    for calendar in &inputs.calendars {
-        if &calendar.today().market() != market {
-            continue;
-        }
-        let state = calendar.state_at(now);
-        if state == MarketState::Unknown {
-            continue;
-        }
-        match known {
-            Some(previous) if previous != state => return MarketState::Unknown,
-            Some(_) | None => known = Some(state),
-        }
-    }
-    known.unwrap_or(MarketState::Unknown)
 }

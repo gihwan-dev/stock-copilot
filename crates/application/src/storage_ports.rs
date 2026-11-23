@@ -160,6 +160,7 @@ pub trait ProposalRepository: Send + Sync {
 
 #[derive(Debug, Clone, Copy)]
 pub struct DraftCheck<'a> {
+    pub account: &'a AccountId,
     pub at: Timestamp,
     pub observation: &'a PriceObservation,
 }
