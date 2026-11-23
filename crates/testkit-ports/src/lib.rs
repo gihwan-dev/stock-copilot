@@ -1,5 +1,7 @@
 mod script;
 pub use script::Script;
+mod instrument_id_issuer;
+pub use instrument_id_issuer::ScriptedInstrumentIdIssuer;
 mod stepped_clock;
 pub use stepped_clock::{ClockStepError, SteppedClock};
 mod scripted_presence;

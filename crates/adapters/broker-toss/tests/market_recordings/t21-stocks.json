@@ -1,0 +1,13 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/stocks",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1stocks/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": [
+      {"symbol":"069500","name":"합성 둘","englishName":"Second","isinCode":"KR7069500007","market":"KOSPI","securityType":"ETF","isCommonShare":false,"status":"ACTIVE","currency":"KRW","sharesOutstanding":"72","koreanMarketDetail":{"liquidationTrading":false,"nxtSupported":false,"krxTradingSuspended":true,"nxtTradingSuspended":null}},
+      {"symbol":"005930","name":"합성 하나","englishName":"First","isinCode":"KR7005930003","market":"KOSPI","securityType":"STOCK","isCommonShare":true,"status":"SCHEDULED","currency":"KRW","sharesOutstanding":"91","koreanMarketDetail":{"liquidationTrading":true,"nxtSupported":true,"krxTradingSuspended":false,"nxtTradingSuspended":true}}
+    ]
+  }
+}

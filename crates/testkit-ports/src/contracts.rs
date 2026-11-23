@@ -13,10 +13,10 @@ use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate,
-    FxRateKind, IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile,
+    FxRateKind, IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
-    MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
-    PriceAdjustment, PriceLimits, ProgramTrade, Quote, QuoteInstrument, RaisedSignal, RankingLimit,
+    MarketIndicatorQuote, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
+    PriceLimits, ProgramTrade, Quote, QuoteInstrument, RaisedSignal, RankingLimit,
     ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
     SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
     SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
@@ -153,7 +153,7 @@ pub async fn broker_read_stock_warnings<P: BrokerRead>(
 pub async fn broker_read_instruments<P: BrokerRead>(
     port: &P,
     market: KnownMarket,
-    expected: Result<MasterInstrumentFacts, PortError>,
+    expected: Result<InstrumentMaster, PortError>,
 ) {
     assert_eq!(
         port.instruments(market).await,

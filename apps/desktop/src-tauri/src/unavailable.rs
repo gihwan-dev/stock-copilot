@@ -16,15 +16,15 @@ use domain::{
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, CreditTrade, Currency, Draft, DraftRestoreEvidence, EstimateOutcome,
     FlowInterval, FxPair, FxRate, FxRateKind, HistoricalSignal, HistoricalSignalOccurrence,
-    IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile, InvestorTradingRankings,
-    IssuedEstimateTaskId, KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
-    MasterInstrument, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
-    PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote, QuoteInstrument,
-    RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition,
-    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
-    SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking,
-    StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval, Timestamp, TransactionFilter,
-    UntrustedText, ValuationSnapshot,
+    IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
+    InvestorTradingRankings, IssuedEstimateTaskId, KnownMarket, MarketCalendar,
+    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrument, NewsItem, OrderFxRates,
+    Orderbook, Portfolio, PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote,
+    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog,
+    SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
+    SellableQuantityFact, SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission,
+    SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval,
+    Timestamp, TransactionFilter, UntrustedText, ValuationSnapshot,
 };
 impl BrokerRead for Unavailable {
     fn accounts(&self) -> impl Future<Output = Result<BrokerAccountRows, PortError>> + Send {
@@ -146,7 +146,7 @@ impl BrokerRead for Unavailable {
     fn instruments(
         &self,
         _market: KnownMarket,
-    ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send {
+    ) -> impl Future<Output = Result<InstrumentMaster, PortError>> + Send {
         std::future::ready(Err(PortError::new(
             ReadEndpoint::Instruments,
             HttpStatus::NotReceived,

@@ -2,8 +2,8 @@ use crate::account_read::invalid;
 use application::{HoldingsObservation, ReadEndpoint, ResponseMismatch};
 use domain::{
     AcquisitionPrice, Currency, CurrencyAmounts, DailyProfitLoss, Holding, HoldingObservation,
-    Market, MasterInstrumentFacts, Money, NumericInput, OrderSide, PortfolioDailyProfitLoss, Price,
-    Quantity, Ratio, ReportedHolding, ReportedPortfolio, Timestamp,
+    KnownMarket, MasterInstrumentFacts, Money, NumericInput, OrderSide, PortfolioDailyProfitLoss,
+    Price, Quantity, Ratio, ReportedHolding, ReportedPortfolio, Symbol, Timestamp,
 };
 use serde_json::Value;
 
@@ -28,35 +28,28 @@ fn amounts(value: &Value) -> Conversion<CurrencyAmounts> {
     };
     CurrencyAmounts::new(krw, usd).map_err(|_error| failure())
 }
-fn holding(
-    value: &Value,
-    master: &MasterInstrumentFacts,
-    observed: Timestamp,
-) -> Conversion<Holding> {
+struct ParsedHolding {
+    market: KnownMarket,
+    currency: Currency,
+    symbol: Symbol,
+    quantity: Quantity,
+    acquisition: AcquisitionPrice,
+    price: Price,
+    reported: ReportedHolding,
+}
+
+fn parse_holding(value: &Value) -> Conversion<ParsedHolding> {
     let (market, currency) = match (
         field(value, "/marketCountry")?.as_str(),
         field(value, "/currency")?.as_str(),
     ) {
-        (Some("KR"), Some("KRW")) => (Market::Kr, Currency::Krw),
-        (Some("US"), Some("USD")) => (Market::Us, Currency::Usd),
+        (Some("KR"), Some("KRW")) => (KnownMarket::Kr, Currency::Krw),
+        (Some("US"), Some("USD")) => (KnownMarket::Us, Currency::Usd),
         _ => return Err(failure()),
     };
-    let symbol = field(value, "/symbol")?.as_str().ok_or_else(failure)?;
-    let identified = master
-        .instruments()
-        .iter()
-        .find(|row| {
-            row.row().symbol.as_str() == symbol
-                && row.row().currency == currency
-                && row
-                    .quote_instrument()
-                    .is_ok_and(|instrument| Market::from(*instrument.market()) == market)
-        })
-        .ok_or_else(failure)?;
-    let instrument = identified
-        .order_gate_facts()
-        .and_then(|gate| gate.instrument_for(OrderSide::Sell))
+    let symbol = Symbol::try_new(field(value, "/symbol")?.as_str().ok_or_else(failure)?)
         .map_err(|_error| failure())?;
+    domain::validate_market_symbol(&symbol, market).map_err(|_error| failure())?;
     let quantity =
         Quantity::parse(&numeric(field(value, "/quantity")?)?).map_err(|_error| failure())?;
     let acquisition =
@@ -75,11 +68,43 @@ fn holding(
         ratio(field(value, "/dailyProfitLoss/rate")?)?,
     ))
     .map_err(|_error| failure())?;
-    Holding::new(
-        instrument,
+    Ok(ParsedHolding {
+        market,
+        currency,
+        symbol,
         quantity,
         acquisition,
-        HoldingObservation::new(Some(price), Some(reported), observed),
+        price,
+        reported,
+    })
+}
+
+fn holding(
+    parsed: &ParsedHolding,
+    master: &MasterInstrumentFacts,
+    observed: Timestamp,
+    master_errors: crate::account_read::MasterErrorMode,
+) -> Conversion<Holding> {
+    let identified = master
+        .instruments()
+        .iter()
+        .find(|row| {
+            row.row().symbol == parsed.symbol
+                && row.row().currency == parsed.currency
+                && row
+                    .quote_instrument()
+                    .is_ok_and(|instrument| *instrument.market() == parsed.market)
+        })
+        .ok_or_else(|| master_errors.missing(ReadEndpoint::Holdings, failure()))?;
+    let instrument = identified
+        .order_gate_facts()
+        .and_then(|gate| gate.instrument_for(OrderSide::Sell))
+        .map_err(|_error| failure())?;
+    Holding::new(
+        instrument,
+        parsed.quantity,
+        parsed.acquisition,
+        HoldingObservation::new(Some(parsed.price), Some(parsed.reported), observed),
     )
     .map_err(|_error| failure())
 }
@@ -109,6 +134,7 @@ pub(crate) fn holdings(
     value: &Value,
     master: &MasterInstrumentFacts,
     observed: Timestamp,
+    master_errors: crate::account_read::MasterErrorMode,
 ) -> Conversion<HoldingsObservation> {
     let decoded: broker_toss_schema::types::HoldingsOverview =
         serde_json::from_value(value.clone())
@@ -117,14 +143,11 @@ pub(crate) fn holdings(
     validate_numbers(&modeled)?;
     let rows = field(value, "/items")?.as_array().ok_or_else(failure)?;
     let mut seen = std::collections::BTreeSet::new();
-    let holdings = rows
+    let parsed = rows
         .iter()
         .map(|row| {
-            let parsed = holding(row, master, observed)?;
-            if !seen.insert((
-                parsed.instrument().market(),
-                parsed.instrument().symbol().clone(),
-            )) {
+            let parsed = parse_holding(row)?;
+            if !seen.insert((parsed.market, parsed.symbol.clone())) {
                 return Err(failure());
             }
             Ok(parsed)
@@ -141,6 +164,10 @@ pub(crate) fn holdings(
         ratio(field(value, "/dailyProfitLoss/rate")?)?,
     ))
     .with_return_rate(ratio(field(value, "/profitLoss/rate")?)?);
+    let holdings = parsed
+        .iter()
+        .map(|row| holding(row, master, observed, master_errors))
+        .collect::<Conversion<Vec<_>>>()?;
     Ok(HoldingsObservation::from_broker_result(holdings, reported))
 }
 

@@ -11,6 +11,7 @@ mod account_id;
 mod client_order_id;
 mod instrument_id;
 mod instrument_mapping;
+mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
@@ -18,8 +19,9 @@ pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
-    InstrumentSource, MappingAssignment,
+    InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
 };
+pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 
 mod cluster;
@@ -447,7 +449,7 @@ pub use market_index::{
 mod market_ranking;
 pub use market_ranking::{
     RankingBasis, RankingCoverage, RankingDuration, RankingItem, RankingKind, RankingLimit,
-    RankingOrdinal, RankingRow, RankingUnit, StockRanking,
+    RankingOrdinal, RankingRow, RankingUnit, StockRanking, validate_market_symbol,
 };
 mod investor_flow;
 pub use investor_flow::{

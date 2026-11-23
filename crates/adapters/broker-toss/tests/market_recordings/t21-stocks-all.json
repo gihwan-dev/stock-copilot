@@ -1,0 +1,13 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/stocks/all",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1stocks~1all/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": [
+      {"symbol":"005930","name":"합성 하나","securityType":"STOCK","isCommonShare":true,"isinCode":"KR7005930003"},
+      {"symbol":"069500","name":"합성 둘","securityType":"ETF","isCommonShare":false,"isinCode":"KR7069500007"}
+    ]
+  }
+}
