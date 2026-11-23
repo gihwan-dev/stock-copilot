@@ -44,7 +44,8 @@ impl Margin {
             },
         }
     }
-    pub(crate) fn ratio(self) -> Ratio {
+    #[must_use]
+    pub fn ratio(self) -> Ratio {
         self.0
     }
 }
@@ -178,7 +179,7 @@ impl Thresholds {
     pub fn display(&self, kind: ThresholdKind) -> Result<ThresholdDisplay, NoThresholds> {
         self.value(kind).percent(kind)
     }
-    fn value(&self, kind: ThresholdKind) -> ThresholdNumber {
+    pub(crate) fn value(&self, kind: ThresholdKind) -> ThresholdNumber {
         match kind {
             ThresholdKind::Buy => self.values.buy,
             ThresholdKind::Sell => self.values.sell,

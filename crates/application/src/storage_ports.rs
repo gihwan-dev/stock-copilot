@@ -1,10 +1,10 @@
 use crate::{RecordOutcome, SystemPortError, WriteCompleted};
 use domain::{
-    AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
-    FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
-    PriceObservation, Proposal, ProposalExecutionError, ProposalId, Quote, RiskSettings,
-    SettledRowSet, SignalSubmission, SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp,
-    ValuationSnapshot,
+    AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, DraftRestoreEvidence,
+    EstimateOutcome, FxPair, FxRate, FxRateKind, InstrumentId, InvestorProfile, MasterInstrument,
+    NewsItem, Portfolio, PriceAdjustment, PriceObservation, Proposal, ProposalExecutionError,
+    ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey, SyncRecord,
+    Thesis, TimeInterval, Timestamp, ValuationSnapshot,
 };
 use std::future::Future;
 
@@ -138,10 +138,13 @@ pub trait ProposalRepository: Send + Sync {
     fn store_draft(
         &self,
         proposal: &Proposal<Draft>,
+        evidence: &DraftRestoreEvidence,
+        master: &MasterInstrument,
     ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
     fn draft(
         &self,
         proposal: &ProposalId,
+        master: &MasterInstrument,
     ) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send;
     fn current_draft(
         &self,
@@ -153,9 +156,15 @@ pub trait ProposalRepository: Send + Sync {
         &self,
         instrument: &InstrumentId,
         expected: &crate::SignalSnapshot,
-        proposal: &Proposal<Draft>,
+        candidate: DraftStoreCandidate<'_>,
         check: DraftCheck<'_>,
     ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DraftStoreCandidate<'a> {
+    pub proposal: &'a Proposal<Draft>,
+    pub evidence: &'a DraftRestoreEvidence,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -163,6 +172,7 @@ pub struct DraftCheck<'a> {
     pub account: &'a AccountId,
     pub at: Timestamp,
     pub observation: &'a PriceObservation,
+    pub master: &'a MasterInstrument,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

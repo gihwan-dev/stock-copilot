@@ -124,19 +124,19 @@ mod tests {
             &[
                 "fn snapshot(&self, instrument: &InstrumentId) -> impl Future<Output = Result<SignalSnapshot, SystemPortError>> + Send",
                 "fn commit(&self, instrument: &InstrumentId, expected: &SignalSnapshot, mutation: &SignalMutation) -> impl Future<Output = Result<SignalCommitOutcome, SystemPortError>> + Send",
-                "fn occurrences(&self, instrument: &InstrumentId, identity: &ResolvedOrderInstrument) -> impl Future<Output = Result<Vec<BuySignalRecord>, SystemPortError>> + Send",
+                "fn occurrences(&self, instrument: &InstrumentId, identity: &ResolvedOrderInstrument) -> impl Future<Output = Result<Vec<HistoricalSignalOccurrence>, SystemPortError>> + Send",
                 "fn sources(&self, task: &IssuedEstimateTaskId) -> impl Future<Output = Result<SignalSourceFacts, SystemPortError>> + Send",
-                "fn current(&self, instrument: &InstrumentId) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send",
+                "fn current(&self, instrument: &InstrumentId) -> impl Future<Output = Result<Vec<HistoricalSignal>, SystemPortError>> + Send",
             ],
         );
         check_trait(
             &source,
             "ProposalRepository",
             &[
-                "fn store_draft(&self, proposal: &Proposal<Draft>) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
-                "fn draft(&self, proposal: &ProposalId) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send",
+                "fn store_draft(&self, proposal: &Proposal<Draft>, evidence: &DraftRestoreEvidence, master: &MasterInstrument) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send",
+                "fn draft(&self, proposal: &ProposalId, master: &MasterInstrument) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send",
                 "fn current_draft(&self, instrument: &InstrumentId, expected: &crate::SignalSnapshot, check: DraftCheck<'_>) -> impl Future<Output = Result<CurrentDraftOutcome, SystemPortError>> + Send",
-                "fn store_current_draft(&self, instrument: &InstrumentId, expected: &crate::SignalSnapshot, proposal: &Proposal<Draft>, check: DraftCheck<'_>) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send",
+                "fn store_current_draft(&self, instrument: &InstrumentId, expected: &crate::SignalSnapshot, candidate: DraftStoreCandidate<'_>, check: DraftCheck<'_>) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send",
             ],
         );
         check_trait(

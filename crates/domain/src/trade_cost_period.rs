@@ -8,6 +8,14 @@ pub struct CommissionValidity {
     end: Option<CalendarDate>,
 }
 impl CommissionValidity {
+    #[must_use]
+    pub const fn start(self) -> Option<CalendarDate> {
+        self.start
+    }
+    #[must_use]
+    pub const fn end(self) -> Option<CalendarDate> {
+        self.end
+    }
     pub fn try_new(
         start: Option<CalendarDate>,
         end: Option<CalendarDate>,

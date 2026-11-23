@@ -166,6 +166,21 @@ pub fn calculate_buy_quantity(
         Err(reason) => BuyQuantityDecision::None(reason),
     }
 }
+#[must_use]
+pub fn calculate_buy_quantity_with_history(
+    current: &crate::CurrentBuySignal,
+    facts: &BuyQuantityFacts<'_>,
+    now: Timestamp,
+    calendars: &[MarketCalendar],
+    history: &[crate::HistoricalSignalOccurrence],
+) -> BuyQuantityDecision {
+    let records = history
+        .iter()
+        .map(|value| value.record().clone())
+        .collect::<Vec<_>>();
+    calculate_buy_quantity(current, facts, now, calendars, &records)
+}
+
 fn calculate(
     current: &crate::CurrentBuySignal,
     facts: &BuyQuantityFacts<'_>,
