@@ -708,11 +708,24 @@ impl SignalRepository for Unavailable {
     }
 }
 impl ProposalRepository for Unavailable {
+    fn current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &SignalSnapshot,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::ready(Err(SystemPortError::new(
+            SystemPort::Repository,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        )))
+    }
     fn store_current_draft(
         &self,
         _instrument: &InstrumentId,
         _expected: &SignalSnapshot,
         _proposal: &Proposal<Draft>,
+        _check: application::DraftCheck<'_>,
     ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send {
         std::future::ready(Err(SystemPortError::new(
             SystemPort::Repository,

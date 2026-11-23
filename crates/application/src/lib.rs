@@ -265,10 +265,10 @@ pub use instrument_mapping::{InstrumentMappingRepository, MappingStoreError};
 mod storage_ports;
 pub use storage_ports::ValuationCloseEvidenceRepository;
 pub use storage_ports::{
-    CacheWriteOutcome, ConditionalDraftOutcome, EstimateRepository, FxRateQuery,
-    MarketDataRepository, NewsRepository, PortfolioRepository, ProposalRepository,
-    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
-    ValuationRepository,
+    CacheWriteOutcome, ConditionalDraftOutcome, CurrentDraftOutcome, DraftCheck,
+    EstimateRepository, FxRateQuery, MarketDataRepository, NewsRepository, PortfolioRepository,
+    ProposalRepository, SettingsRepository, SignalRepository, ThesisRepository,
+    TransactionRepository, ValuationRepository,
 };
 
 mod buy_limit_intent;

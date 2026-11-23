@@ -1,6 +1,6 @@
 use crate::{
-    BuyLimitIntentError, Clock, ConditionalDraftOutcome, DeliveryReport,
-    EstimateSubmissionRepository, EvaluateSignalError, EvaluateSignalInputs, EventBus,
+    BuyLimitIntentError, Clock, ConditionalDraftOutcome, CurrentDraftOutcome, DeliveryReport,
+    DraftCheck, EstimateSubmissionRepository, EvaluateSignalError, EvaluateSignalInputs, EventBus,
     ProposalRepository, SignalCommitOutcome, SignalMutation, SignalRepository, SignalSnapshot,
     StoredSignal, SystemPortError, WriteCompleted, buy_limit_intent,
 };
@@ -8,10 +8,10 @@ use domain::{
     AccountId, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, CheckResult,
     CostEligibleTask, CurrentBuySignal, DomainEvent, Draft, InstrumentId, IssuedEstimateTaskId,
     LimitPriceError, MarketState, MasterInstrument, MasterInstrumentError, NoBuyQuantity,
-    NoSignalReason, OrderSide, Orderbook, PriceLimits, Proposal, ProposalError, ProposalId,
-    ProposalLifetime, ProposalPriceRange, RaisedSignal, SignalDecision, SignalTiming,
-    SignalTransitionError, SignalUnavailable, TickSizeError, TickTable, Timestamp,
-    calculate_buy_quantity, calculate_limit_price, signal_transition,
+    NoSignalReason, OrderSide, Orderbook, PriceLimits, Proposal, ProposalError,
+    ProposalExecutionError, ProposalId, ProposalLifetime, ProposalPriceRange, RaisedSignal,
+    SignalDecision, SignalTiming, SignalTransitionError, SignalUnavailable, TickSizeError,
+    TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price, signal_transition,
 };
 use std::future::Future;
 
@@ -47,6 +47,9 @@ pub enum DraftProposalOutcome {
         proposal: Box<Proposal<Draft>>,
         delivery: DeliveryReport,
     },
+    Existing {
+        proposal_id: ProposalId,
+    },
     NoSignal,
     MarketClosed,
     ReestimateScheduled {
@@ -71,10 +74,10 @@ pub enum DraftProposalError {
     Limit(LimitPriceError),
     BuyIntent(BuyLimitIntentError),
     Proposal(ProposalError),
+    DraftStatus(ProposalExecutionError),
     Transition(SignalTransitionError),
     SubmissionDiscarded,
-    SellTargetUndefined,
-    ProposalExpired,
+    SellDraftUnavailable,
     Schedule {
         error: SystemPortError,
         deliveries: Vec<DeliveryReport>,
@@ -97,6 +100,11 @@ struct PreparedDraft {
 enum Preparation {
     Closed,
     Ready(Box<PreparedDraft>),
+}
+
+enum Attempt {
+    Complete(DraftProposalOutcome),
+    Retry(DraftProposalError),
 }
 
 #[derive(Debug)]
@@ -138,6 +146,7 @@ where
         account: &AccountId,
         id: ProposalId,
     ) -> Result<DraftProposalOutcome, DraftProposalError> {
+        let mut last_retry = DraftProposalError::ConcurrentUpdate;
         for _ in 0_u8..3 {
             let request = DraftRequest {
                 instrument,
@@ -145,66 +154,129 @@ where
                 id: &id,
                 now: self.clock.now(),
             };
-            if let Some(result) = self.attempt(&request).await? {
-                return Ok(result);
+            match self.attempt(&request).await? {
+                Attempt::Complete(result) => return Ok(result),
+                Attempt::Retry(reason) => last_retry = reason,
             }
         }
-        Err(DraftProposalError::ConcurrentUpdate)
+        Err(last_retry)
     }
 
-    async fn attempt(
-        &self,
-        request: &DraftRequest<'_>,
-    ) -> Result<Option<DraftProposalOutcome>, DraftProposalError> {
+    async fn attempt(&self, request: &DraftRequest<'_>) -> Result<Attempt, DraftProposalError> {
         let snapshot = self
             .repository
             .snapshot(request.instrument)
             .await
             .map_err(DraftProposalError::Storage)?;
         let Some(current) = snapshot.current.as_ref() else {
-            return Ok(Some(DraftProposalOutcome::NoSignal));
+            return Ok(Attempt::Complete(DraftProposalOutcome::NoSignal));
         };
         if snapshot.submission.as_ref() != Some(&current.submission) {
-            return Ok(None);
+            return Ok(Attempt::Retry(DraftProposalError::SignalChanged));
         }
         let Some(preparation) = self.prepare(request, current).await? else {
-            return Ok(None);
+            return Ok(Attempt::Retry(DraftProposalError::SignalChanged));
         };
         let Preparation::Ready(prepared) = preparation else {
-            return Ok(Some(DraftProposalOutcome::MarketClosed));
+            return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
         };
-        if self.recheck(current, &prepared.inputs)?.is_none() {
-            return Ok(Some(DraftProposalOutcome::MarketClosed));
-        }
+        self.finish_attempt(request, &snapshot, current, &prepared)
+            .await
+    }
+
+    async fn finish_attempt(
+        &self,
+        request: &DraftRequest<'_>,
+        snapshot: &SignalSnapshot,
+        current: &StoredSignal,
+        prepared: &PreparedDraft,
+    ) -> Result<Attempt, DraftProposalError> {
+        let Some(read_at) = self.recheck(current, &prepared.inputs)? else {
+            return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
+        };
         let observation = prepared.inputs.evaluation.target_price.as_ref().ok_or(
             DraftProposalError::Observation(SignalUnavailable::MissingTargetPrice),
         )?;
         if prepared.range.check(observation.price()) != CheckResult::Passed {
-            return self.discard(request.instrument, &snapshot, current).await;
+            return self.discard(request.instrument, snapshot, current).await;
         }
-        let proposal = self.make_proposal(request, current, &prepared).await?;
-        let Some(checked_at) = self.recheck(current, &prepared.inputs)? else {
-            return Ok(Some(DraftProposalOutcome::MarketClosed));
+        if let RaisedSignal::Sell(_) = &current.signal {
+            return Err(DraftProposalError::SellDraftUnavailable);
+        }
+        let read_check = DraftCheck {
+            at: read_at,
+            observation,
         };
-        if proposal
-            .report(checked_at, observation)
-            .result(domain::ValidationCheck::Expiry)
-            != CheckResult::Passed
-        {
-            return Err(DraftProposalError::ProposalExpired);
-        }
         match self
             .repository
-            .store_current_draft(request.instrument, &snapshot, &proposal)
+            .current_draft(request.instrument, snapshot, read_check)
             .await
             .map_err(DraftProposalError::Storage)?
         {
-            ConditionalDraftOutcome::Conflict => Ok(None),
+            CurrentDraftOutcome::Absent => {}
+            CurrentDraftOutcome::Existing(proposal_id) => {
+                return Ok(Attempt::Complete(DraftProposalOutcome::Existing {
+                    proposal_id,
+                }));
+            }
+            CurrentDraftOutcome::Conflict => {
+                return Ok(Attempt::Retry(DraftProposalError::ConcurrentUpdate));
+            }
+            CurrentDraftOutcome::Invalid(error) => {
+                return Err(DraftProposalError::DraftStatus(error));
+            }
+        }
+        let proposal = self.make_proposal(request, current, prepared).await?;
+        let Some(write_at) = self.recheck(current, &prepared.inputs)? else {
+            return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
+        };
+        proposal
+            .check_current(write_at, observation)
+            .map_err(DraftProposalError::DraftStatus)?;
+        let write_check = DraftCheck {
+            at: write_at,
+            observation,
+        };
+        self.store_candidate(request.instrument, snapshot, proposal, write_check)
+            .await
+    }
+
+    async fn store_candidate(
+        &self,
+        instrument: &InstrumentId,
+        snapshot: &SignalSnapshot,
+        proposal: Proposal<Draft>,
+        check: DraftCheck<'_>,
+    ) -> Result<Attempt, DraftProposalError> {
+        match self
+            .repository
+            .store_current_draft(instrument, snapshot, &proposal, check)
+            .await
+            .map_err(DraftProposalError::Storage)?
+        {
+            ConditionalDraftOutcome::Conflict => {
+                Ok(Attempt::Retry(DraftProposalError::ConcurrentUpdate))
+            }
+            ConditionalDraftOutcome::Existing(proposal_id) => {
+                Ok(Attempt::Complete(DraftProposalOutcome::Existing {
+                    proposal_id,
+                }))
+            }
+            ConditionalDraftOutcome::Invalid(ProposalExecutionError::ClockRollback) => {
+                Ok(Attempt::Retry(DraftProposalError::DraftStatus(
+                    ProposalExecutionError::ClockRollback,
+                )))
+            }
+            ConditionalDraftOutcome::Invalid(
+                error @ (ProposalExecutionError::Expired
+                | ProposalExecutionError::PriceOutsideRange
+                | ProposalExecutionError::ObservationInvalid),
+            ) => Err(DraftProposalError::DraftStatus(error)),
             ConditionalDraftOutcome::Stored => {
                 let delivery = self
                     .events
-                    .publish(DomainEvent::ProposalCreated(request.id.clone()));
-                Ok(Some(DraftProposalOutcome::Created {
+                    .publish(DomainEvent::ProposalCreated(proposal.id().clone()));
+                Ok(Attempt::Complete(DraftProposalOutcome::Created {
                     proposal: Box::new(proposal),
                     delivery,
                 }))
@@ -243,7 +315,6 @@ where
             .inputs(request.instrument, request.account, current, request.now)
             .await
             .map_err(DraftProposalError::Inputs)?;
-        check_identity(request.instrument, current, issued.task(), &inputs.master)?;
         match market_state(
             &inputs.evaluation,
             &signal_task(current).reference().instrument().market(),
@@ -256,6 +327,7 @@ where
             | MarketState::RegularMarket
             | MarketState::AfterMarket => {}
         }
+        check_identity(request.instrument, current, issued.task(), &inputs.master)?;
         self.prepare_open(request, current, (record, issued.task()), inputs)
             .await
             .map(Some)
@@ -323,7 +395,7 @@ where
         prepared: &PreparedDraft,
     ) -> Result<Proposal<Draft>, DraftProposalError> {
         let RaisedSignal::Buy(buy) = &current.signal else {
-            return Err(DraftProposalError::SellTargetUndefined);
+            return Err(DraftProposalError::SellDraftUnavailable);
         };
         let occurrence = current
             .occurrence
@@ -449,7 +521,7 @@ where
         instrument: &InstrumentId,
         snapshot: &SignalSnapshot,
         current: &StoredSignal,
-    ) -> Result<Option<DraftProposalOutcome>, DraftProposalError> {
+    ) -> Result<Attempt, DraftProposalError> {
         let transition = signal_transition(
             Some(&current.signal),
             &SignalDecision::None(NoSignalReason::Expired),
@@ -462,7 +534,9 @@ where
             .await
             .map_err(DraftProposalError::Storage)?
         {
-            SignalCommitOutcome::Conflict => Ok(None),
+            SignalCommitOutcome::Conflict => {
+                Ok(Attempt::Retry(DraftProposalError::ConcurrentUpdate))
+            }
             SignalCommitOutcome::SubmissionDiscarded => {
                 Err(DraftProposalError::SubmissionDiscarded)
             }
@@ -479,9 +553,9 @@ where
                         error,
                         deliveries: deliveries.clone(),
                     })?;
-                Ok(Some(DraftProposalOutcome::ReestimateScheduled {
-                    deliveries,
-                }))
+                Ok(Attempt::Complete(
+                    DraftProposalOutcome::ReestimateScheduled { deliveries },
+                ))
             }
         }
     }

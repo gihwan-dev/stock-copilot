@@ -2,8 +2,9 @@ use crate::{RecordOutcome, SystemPortError, WriteCompleted};
 use domain::{
     AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
     FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
-    SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
+    PriceObservation, Proposal, ProposalExecutionError, ProposalId, Quote, RiskSettings,
+    SettledRowSet, SignalSubmission, SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp,
+    ValuationSnapshot,
 };
 use std::future::Future;
 
@@ -142,18 +143,41 @@ pub trait ProposalRepository: Send + Sync {
         &self,
         proposal: &ProposalId,
     ) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send;
+    fn current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &crate::SignalSnapshot,
+        check: DraftCheck<'_>,
+    ) -> impl Future<Output = Result<CurrentDraftOutcome, SystemPortError>> + Send;
     fn store_current_draft(
         &self,
         instrument: &InstrumentId,
         expected: &crate::SignalSnapshot,
         proposal: &Proposal<Draft>,
+        check: DraftCheck<'_>,
     ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
+pub struct DraftCheck<'a> {
+    pub at: Timestamp,
+    pub observation: &'a PriceObservation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CurrentDraftOutcome {
+    Absent,
+    Existing(ProposalId),
+    Conflict,
+    Invalid(ProposalExecutionError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConditionalDraftOutcome {
     Stored,
+    Existing(ProposalId),
     Conflict,
+    Invalid(ProposalExecutionError),
 }
 
 pub trait ValuationRepository: Send + Sync {
