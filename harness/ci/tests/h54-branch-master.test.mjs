@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "../test-temp.mjs";
@@ -90,6 +90,13 @@ test("로컬 master가 없는 브랜치 복제본에서 훅 진입 테스트가 
     "refs/heads/master",
   ]);
   assert.equal(removeMaster.status, 0, removeMaster.stderr);
+  for (const file of [
+    "harness/ci/managed-temp.mjs",
+    "harness/ci/test-temp.mjs",
+  ]) {
+    rmSync(join(clone, file), { force: true });
+    cpSync(join(repoRoot, file), join(clone, file));
+  }
   const testFile = "harness/claude-hooks/tests/agent-stop.test.mjs";
   mkdirSync(join(clone, "harness/claude-hooks/tests"), { recursive: true });
   cpSync(join(repoRoot, testFile), join(clone, testFile));

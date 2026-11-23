@@ -1,5 +1,6 @@
 import { inspectOverflow } from "../src/shared/ds/testing/overflow";
 import { stressFixtures } from "../src/shared/ds/testing/stress";
+import { identifyOverflowElement } from "./ds20-overflow-identity.browser";
 
 const makeDocument = async (
   body: string,
@@ -19,11 +20,715 @@ const makeDocument = async (
   return frame.contentDocument;
 };
 
+const loadProbeFont = async (doc: Document): Promise<void> => {
+  const font = new URL(
+    "../../../design/fonts/IBMPlexSansKR-Regular.woff2",
+    import.meta.url,
+  ).href;
+  const style = doc.createElement("style");
+  style.textContent = `@font-face{font-family:"IBM Plex Sans KR";src:url("${font}");font-weight:400}`;
+  doc.head.append(style);
+  const loaded = await doc.fonts.load('400 12px "IBM Plex Sans KR"');
+  if (loaded.length === 0) throw new Error("probe font missing");
+};
+
+const narrowStory = async (
+  component: string,
+  exportName: string,
+): Promise<{ doc: Document; slot: HTMLElement }> => {
+  const response = await fetch("/index.json");
+  const index = await response.json();
+  const entries = Object.values(index.entries) as {
+    id: string;
+    importPath: string;
+    exportName: string;
+  }[];
+  const story = entries.find(
+    (entry) =>
+      entry.importPath.endsWith(`/${component}.stories.mjs`) &&
+      entry.exportName === exportName,
+  );
+  if (story === undefined) throw new Error(`${component} story missing`);
+  const frame = document.createElement("iframe");
+  frame.width = "960";
+  frame.height = "640";
+  frame.src = `/iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`;
+  document.body.append(frame);
+  const deadline = Date.now() + 10000;
+  while (
+    frame.contentDocument?.querySelector(
+      "[data-catalog-component] > section",
+    ) == null
+  ) {
+    if (Date.now() >= deadline) throw new Error(`${component} did not render`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const doc = frame.contentDocument;
+  const view = frame.contentWindow;
+  const slot = doc?.querySelector<HTMLElement>(
+    "[data-catalog-component] > section",
+  );
+  if (doc === null || view === null || slot == null)
+    throw new Error(`${component} frame missing`);
+  await doc.fonts.ready;
+  slot.style.boxSizing = "content-box";
+  slot.style.width = "126px";
+  await new Promise<void>((resolve) =>
+    view.requestAnimationFrame(() =>
+      view.requestAnimationFrame(() => resolve()),
+    ),
+  );
+  return { doc, slot };
+};
+
 afterEach(() => {
   document.querySelectorAll("iframe").forEach((frame) => frame.remove());
 });
 
 describe("overflow measurements", () => {
+  it.each([
+    ["Heading", "Light0", "h1"],
+    ["Select", "Light4", "label"],
+    ["Select", "Light1", "span.text-caption"],
+    ["Select", "Light2", "span[role='alert']"],
+  ])(
+    "wraps an unbroken %s label in the narrow slot",
+    async (component, story, selector) => {
+      const { doc, slot } = await narrowStory(component, story);
+      const label = slot.querySelector<HTMLElement>(selector);
+      if (label === null) throw new Error(`${component} label missing`);
+      label.textContent = stressFixtures.english;
+      const view = doc.defaultView;
+      if (view === null) throw new Error(`${component} view missing`);
+      await new Promise<void>((resolve) =>
+        view.requestAnimationFrame(() =>
+          view.requestAnimationFrame(() => resolve()),
+        ),
+      );
+      expect(label.textContent).toBe(stressFixtures.english);
+      expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+    },
+    20000,
+  );
+
+  it.each(["LineChart", "AreaChart"])(
+    "keeps the full hidden %s table without false clipping verdicts",
+    async (component) => {
+      const { doc } = await narrowStory(component, "Light4");
+      const table = doc.querySelector<HTMLTableElement>("table.sr-only");
+      if (table === null || table.parentElement === null)
+        throw new Error(`${component} table missing`);
+      table.id = "measured-table";
+      table.parentElement.id = "measured-wrapper";
+      expect(table.querySelectorAll("tr")).toHaveLength(500);
+      const findings = inspectOverflow(doc);
+      expect(findings).not.toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "div#measured-wrapper",
+      });
+      expect(findings).not.toContainEqual({
+        kind: "clipped",
+        element: "table#measured-table",
+      });
+    },
+    20000,
+  );
+
+  it.each([
+    ["TextField", "Light6"],
+    ["Checkbox", "Light4"],
+    ["Switch", "Light4"],
+  ])(
+    "wraps the %s stress label and description without losing text",
+    async (component, story) => {
+      const { doc, slot } = await narrowStory(component, story);
+      const spans = [...slot.querySelectorAll("span")];
+      const label = spans.find(
+        (part) => part.textContent === stressFixtures.company,
+      );
+      const description = spans.find(
+        (part) => part.textContent === stressFixtures.english,
+      );
+      if (label === undefined || description === undefined)
+        throw new Error(`${component} stress text missing`);
+      const view = doc.defaultView;
+      if (view === null) throw new Error(`${component} view missing`);
+      for (const scale of ["100%", "125%"] as const) {
+        doc.documentElement.style.fontSize = scale;
+        await new Promise<void>((resolve) =>
+          view.requestAnimationFrame(() =>
+            view.requestAnimationFrame(() => resolve()),
+          ),
+        );
+        const slotBounds = slot.getBoundingClientRect();
+        for (const part of [label, description]) {
+          expect(part.scrollWidth).toBeLessThanOrEqual(part.clientWidth);
+          expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(
+            slotBounds.right,
+          );
+          expect(part.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+            slotBounds.left,
+          );
+        }
+      }
+    },
+    20000,
+  );
+
+  it("keeps the EmptyState stress text visible in a narrow slot", async () => {
+    const { slot } = await narrowStory("EmptyState", "Light5");
+    const paragraphs = [...slot.querySelectorAll("p")];
+    const title = paragraphs.find(
+      (part) => part.textContent === stressFixtures.company,
+    );
+    const description = paragraphs.find(
+      (part) => part.textContent === stressFixtures.english,
+    );
+    if (title === undefined || description === undefined)
+      throw new Error("EmptyState stress text missing");
+    expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
+    expect(description.scrollWidth).toBeLessThanOrEqual(
+      description.clientWidth,
+    );
+    expect(description.getBoundingClientRect().width).toBeLessThanOrEqual(126);
+  }, 20000);
+
+  it("accepts the visible one-pixel font metric for an unconstrained line", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><p id="metric" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    const text = doc.querySelector<HTMLElement>("#metric");
+    if (text === null) throw new Error("text missing");
+    expect(text.scrollHeight - text.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#metric",
+    });
+  });
+
+  it("does not report a parent for its child's visible one-pixel font metric", async () => {
+    const doc = await makeDocument(
+      '<div id="metric-parent" style="padding-top:20px"><p id="metric-child" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#metric-parent");
+    const child = doc.querySelector<HTMLElement>("#metric-child");
+    if (parent === null || child === null) throw new Error("metric missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(child.scrollHeight - child.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toEqual([]);
+  });
+
+  it("does not report a chain of parents for the same visible font metric", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><section id="metric-ancestor"><div id="metric-wrapper"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></section></div>',
+    );
+    await loadProbeFont(doc);
+    const ancestor = doc.querySelector<HTMLElement>("#metric-ancestor");
+    const wrapper = doc.querySelector<HTMLElement>("#metric-wrapper");
+    if (ancestor === null || wrapper === null)
+      throw new Error("metric missing");
+    expect(ancestor.scrollHeight - ancestor.clientHeight).toBe(1);
+    expect(wrapper.scrollHeight - wrapper.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toEqual([]);
+  });
+
+  it.each(["contain:paint", "clip-path:inset(0)"])(
+    "still detects a font metric clipped by the text element's %s",
+    async (clip) => {
+      const doc = await makeDocument(
+        `<div style="padding-top:20px"><p id="own-clip" style="font:12px/16px IBM Plex Sans KR;margin:0;${clip}">주식 코파일럿</p></div>`,
+      );
+      await loadProbeFont(doc);
+      const text = doc.querySelector<HTMLElement>("#own-clip");
+      if (text === null) throw new Error("text missing");
+      expect(text.scrollHeight - text.clientHeight).toBe(1);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "p#own-clip",
+      });
+    },
+  );
+
+  it.each(["contain:paint", "clip-path:inset(0)"])(
+    "still detects a font metric clipped by its parent's %s",
+    async (clip) => {
+      const doc = await makeDocument(
+        `<div style="padding-top:20px"><div id="parent-clip" style="height:16px;${clip}"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>`,
+      );
+      await loadProbeFont(doc);
+      const parent = doc.querySelector<HTMLElement>("#parent-clip");
+      if (parent === null) throw new Error("parent missing");
+      expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "div#parent-clip",
+      });
+    },
+  );
+
+  it("still detects a real one-pixel child overflow without clipping", async () => {
+    const doc = await makeDocument(
+      '<div id="real-visible" style="height:15px"><div style="height:16px"></div></div>',
+    );
+    const parent = doc.querySelector<HTMLElement>("#real-visible");
+    if (parent === null) throw new Error("parent missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#real-visible",
+    });
+  });
+
+  it.each(["::before", "::after"])(
+    "still detects generated content %s overflowing beside a font metric",
+    async (pseudo) => {
+      const doc = await makeDocument(
+        `<style>#generated-metric${pseudo}{content:"";position:absolute;top:16px;width:1px;height:1px}</style><div id="generated-metric" style="position:relative;top:20px;height:16px"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>`,
+      );
+      await loadProbeFont(doc);
+      const parent = doc.querySelector<HTMLElement>("#generated-metric");
+      if (parent === null) throw new Error("parent missing");
+      expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "div#generated-metric",
+      });
+    },
+  );
+
+  it("still detects a metric child positioned outside its parent", async () => {
+    const doc = await makeDocument(
+      '<div style="padding:20px"><div id="metric-edge" style="width:100px;height:16px"><p id="metric-outside" style="position:relative;left:-1px;font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>',
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#metric-edge");
+    const child = doc.querySelector<HTMLElement>("#metric-outside");
+    if (parent === null || child === null) throw new Error("metric missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(parent.scrollWidth).toBe(parent.clientWidth);
+    expect(child.getBoundingClientRect().left).toBeLessThan(
+      parent.getBoundingClientRect().left,
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#metric-edge",
+    });
+  });
+
+  it("distinguishes overflowing elements of the same tag in the catalog", async () => {
+    const first = await makeDocument(
+      '<div><span style="display:inline-block;width:40px;white-space:nowrap">longlonglonglong</span><span style="display:inline-block;width:40px;white-space:nowrap">ok</span></div>',
+    );
+    const second = await makeDocument(
+      '<div><span style="display:inline-block;width:40px;white-space:nowrap">ok</span><span style="display:inline-block;width:40px;white-space:nowrap">longlonglonglong</span></div>',
+    );
+    const a = inspectOverflow(first, identifyOverflowElement).filter(
+      (finding) => finding.kind === "unauthorized-overflow",
+    );
+    const b = inspectOverflow(second, identifyOverflowElement).filter(
+      (finding) => finding.kind === "unauthorized-overflow",
+    );
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(1);
+    expect(a).not.toEqual(b);
+  });
+
+  it("accepts the same visible font metric across wrapped lines", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><p id="wrapped-metric" style="width:70px;font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿 주식 코파일럿 주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    const text = doc.querySelector<HTMLElement>("#wrapped-metric");
+    if (text === null) throw new Error("text missing");
+    const range = doc.createRange();
+    range.selectNodeContents(text);
+    expect(range.getClientRects().length).toBeGreaterThan(1);
+    expect(text.scrollHeight - text.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#wrapped-metric",
+    });
+  });
+
+  it("accepts a visible font metric in a fixed dialog with body scroll locked", async () => {
+    const doc = await makeDocument(
+      '<div role="dialog" style="position:fixed;left:100px;top:100px;width:200px"><p id="dialog-metric" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    doc.body.style.height = "20px";
+    doc.body.style.overflow = "hidden";
+    const text = doc.querySelector<HTMLElement>("#dialog-metric");
+    if (text === null) throw new Error("text missing");
+    expect(text.scrollHeight - text.clientHeight).toBe(1);
+    expect(doc.elementFromPoint(105, 105)?.id).toBe("dialog-metric");
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#dialog-metric",
+    });
+  });
+
+  it("still detects the font metric when body paint containment clips it", async () => {
+    const doc = await makeDocument(
+      '<div style="position:fixed;left:100px;top:100px;width:200px"><p id="paint-metric" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    doc.body.style.height = "20px";
+    doc.body.style.overflow = "hidden";
+    doc.body.style.contain = "paint";
+    const text = doc.querySelector<HTMLElement>("#paint-metric");
+    if (text === null) throw new Error("text missing");
+    expect(text.scrollHeight - text.clientHeight).toBe(1);
+    expect(doc.elementFromPoint(105, 105)?.id).not.toBe("paint-metric");
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#paint-metric",
+    });
+  });
+
+  it("still detects horizontal overflow beside the font metric", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><p id="wide-metric" style="width:30px;white-space:nowrap;font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div>',
+    );
+    await loadProbeFont(doc);
+    const text = doc.querySelector<HTMLElement>("#wide-metric");
+    if (text === null) throw new Error("text missing");
+    expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#wide-metric",
+    });
+  });
+
+  it("still detects one pixel of real child overflow", async () => {
+    const doc = await makeDocument(
+      '<div id="real-one-pixel" style="height:15px;overflow:hidden"><div style="height:16px"></div></div>',
+    );
+    const container = doc.querySelector<HTMLElement>("#real-one-pixel");
+    if (container === null) throw new Error("container missing");
+    expect(container.scrollHeight - container.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#real-one-pixel",
+    });
+  });
+
+  it("still detects the font metric when an ancestor clips the text", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><div style="height:16px;overflow:hidden"><p id="clipped-metric" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>',
+    );
+    await loadProbeFont(doc);
+    const text = doc.querySelector<HTMLElement>("#clipped-metric");
+    if (text === null) throw new Error("text missing");
+    expect(text.scrollHeight - text.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#clipped-metric",
+    });
+  });
+
+  it("does not report the clipped content of a visually hidden accessible table", async () => {
+    const doc = await makeDocument(
+      '<div id="sr-wrapper" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"><table id="sr-table" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"><caption>접근성 표</caption><tbody><tr><td>읽을 수 있는 긴 값</td></tr></tbody></table></div>',
+    );
+    const findings = inspectOverflow(doc);
+    expect(findings).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#sr-wrapper",
+    });
+    expect(findings).not.toContainEqual({
+      kind: "clipped",
+      element: "table#sr-table",
+    });
+  });
+
+  it("detects a visible table that is falsely marked as screen-reader-only", async () => {
+    const doc = await makeDocument(
+      '<div id="fake-wrapper" class="sr-only" style="width:40px;height:30px;overflow:hidden"><table class="sr-only"><tbody><tr><td>longlonglonglonglonglong</td></tr></tbody></table></div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#fake-wrapper",
+    });
+  });
+
+  it("detects overflow when a marked table is not fully clipped by clip-path", async () => {
+    const doc = await makeDocument(
+      '<div id="partly-hidden" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(0%)"><table class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(0%)"><tbody><tr><td>longlonglonglonglonglong</td></tr></tbody></table></div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#partly-hidden",
+    });
+  });
+
+  it("detects overflowing content outside a visually hidden accessible table", async () => {
+    const doc = await makeDocument(
+      '<div class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"><table class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0"><tbody><tr><td>표</td></tr></tbody></table></div><div id="real-overflow" style="width:40px;white-space:nowrap">longlonglonglonglonglong</div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#real-overflow",
+    });
+  });
+
+  it("does not treat a hidden non-table element as an accessible table", async () => {
+    const doc = await makeDocument(
+      '<div id="hidden-non-table" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">longlonglonglonglonglong</div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#hidden-non-table",
+    });
+  });
+
+  it.each(["text", "search", "tel", "url", "email", "password"])(
+    "accepts the editable %s input's own horizontal scrolling",
+    async (type) => {
+      const doc = await makeDocument(
+        `<input id="editor" type="${type}" value="longlonglonglonglonglonglonglong" style="width:60px">`,
+      );
+      const input = doc.querySelector<HTMLInputElement>("#editor");
+      if (input === null) throw new Error("input missing");
+      expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+      expect(inspectOverflow(doc)).not.toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#editor",
+      });
+    },
+  );
+
+  it.each(["auto", "scroll"])(
+    "accepts an editable textarea's own vertical scrolling with %s",
+    async (overflow) => {
+      const doc = await makeDocument(
+        `<textarea id="editor" style="width:120px;height:40px;overflow-y:${overflow}">one\ntwo\nthree\nfour\nfive\nsix</textarea>`,
+      );
+      const input = doc.querySelector<HTMLTextAreaElement>("#editor");
+      if (input === null) throw new Error("textarea missing");
+      expect(input.scrollHeight).toBeGreaterThan(input.clientHeight);
+      expect(inspectOverflow(doc)).not.toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#editor",
+      });
+    },
+  );
+
+  it("still detects an input box clipped by its parent", async () => {
+    const doc = await makeDocument(
+      '<div style="width:40px;overflow:hidden"><input id="wide-input" type="text" value="longlonglonglonglonglong" style="width:120px"></div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "input#wide-input",
+    });
+  });
+
+  it("still detects a textarea's horizontal content overflow", async () => {
+    const doc = await makeDocument(
+      '<textarea id="wide-textarea" wrap="off" style="width:60px;height:40px;overflow:auto">longlonglonglonglonglonglonglong</textarea>',
+    );
+    const input = doc.querySelector<HTMLTextAreaElement>("#wide-textarea");
+    if (input === null) throw new Error("textarea missing");
+    expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "textarea#wide-textarea",
+    });
+  });
+
+  it("still detects horizontal textarea overflow even with a viewport marker", async () => {
+    const doc = await makeDocument(
+      '<textarea id="marked-textarea" data-scroll-viewport wrap="off" style="width:60px;height:40px;overflow:auto">longlonglonglonglonglonglonglong</textarea>',
+    );
+    const input = doc.querySelector<HTMLTextAreaElement>("#marked-textarea");
+    if (input === null) throw new Error("textarea missing");
+    expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "textarea#marked-textarea",
+    });
+  });
+
+  it.each(["number", "unsupported"])(
+    "accepts editable %s input content scrolling",
+    async (type) => {
+      const doc = await makeDocument(
+        `<input id="numeric-editor" type="${type}" value="123456789012345678901234567890" style="width:50px">`,
+      );
+      const input = doc.querySelector<HTMLInputElement>("#numeric-editor");
+      if (input === null) throw new Error("input missing");
+      expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+      expect(inspectOverflow(doc)).not.toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#numeric-editor",
+      });
+    },
+  );
+
+  it.each([
+    [
+      "vertical",
+      '<textarea id="truncated-editor" data-truncate title="one two three four five" style="width:120px;height:30px;overflow:hidden;text-overflow:ellipsis">one\ntwo\nthree\nfour\nfive</textarea>',
+    ],
+    [
+      "horizontal",
+      '<textarea id="truncated-editor" data-truncate wrap="off" title="longlonglonglonglonglonglonglong" style="width:60px;height:50px;overflow:hidden;text-overflow:ellipsis">longlonglonglonglonglonglonglong</textarea>',
+    ],
+  ])(
+    "still detects %s textarea overflow with a truncation marker",
+    async (axis, markup) => {
+      const doc = await makeDocument(markup);
+      const input = doc.querySelector<HTMLTextAreaElement>("#truncated-editor");
+      if (input === null) throw new Error("textarea missing");
+      expect(getComputedStyle(input).overflowY).toBe("hidden");
+      expect(
+        axis === "vertical"
+          ? input.scrollHeight > input.clientHeight
+          : input.scrollWidth > input.clientWidth,
+      ).toBe(true);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#truncated-editor",
+      });
+    },
+  );
+
+  it("still detects textarea vertical overflow with overflow-y hidden", async () => {
+    const doc = await makeDocument(
+      '<textarea id="clipped-textarea" style="width:120px;height:40px;overflow:hidden">one\ntwo\nthree\nfour\nfive\nsix</textarea>',
+    );
+    const input = doc.querySelector<HTMLTextAreaElement>("#clipped-textarea");
+    if (input === null) throw new Error("textarea missing");
+    expect(getComputedStyle(input).overflowY).toBe("hidden");
+    expect(input.scrollHeight).toBeGreaterThan(input.clientHeight);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "textarea#clipped-textarea",
+    });
+  });
+
+  it("still detects textarea vertical overflow when computed overflow-y is visible", async () => {
+    const doc = await makeDocument(
+      '<textarea id="visible-textarea" style="width:120px;height:40px;overflow:hidden">one\ntwo\nthree\nfour\nfive\nsix</textarea>',
+    );
+    const input = doc.querySelector<HTMLTextAreaElement>("#visible-textarea");
+    if (input === null) throw new Error("textarea missing");
+    const original = globalThis.getComputedStyle;
+    const styles = vi
+      .spyOn(globalThis, "getComputedStyle")
+      .mockImplementation((element, pseudo) => {
+        const style = original(element, pseudo);
+        if (element !== input) return style;
+        return new Proxy(style, {
+          get(target, property) {
+            if (property === "overflowY") return "visible";
+            const value = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      });
+    try {
+      expect(input.scrollHeight).toBeGreaterThan(input.clientHeight);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#visible-textarea",
+      });
+    } finally {
+      styles.mockRestore();
+    }
+  });
+
+  it("still detects the same multiline content in an ordinary element", async () => {
+    const doc = await makeDocument(
+      '<div id="ordinary" style="width:120px;height:40px;white-space:pre-wrap">one\ntwo\nthree\nfour\nfive\nsix</div>',
+    );
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#ordinary",
+    });
+  });
+
+  it.each(["label", "hint", "error"])(
+    "still detects overflowing input %s text",
+    async (part) => {
+      const doc = await makeDocument(
+        `<label for="editor" id="label" style="display:block;width:40px;white-space:nowrap">${part === "label" ? "longlonglonglonglong" : "label"}</label><input id="editor" style="width:60px"><div id="hint" style="width:40px;white-space:nowrap">${part === "hint" ? "longlonglonglonglong" : "hint"}</div><div id="error" style="width:40px;white-space:nowrap">${part === "error" ? "longlonglonglonglong" : "error"}</div>`,
+      );
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: `${part === "label" ? "label" : "div"}#${part}`,
+      });
+    },
+  );
+
+  it("still detects a readonly input's overflowing content", async () => {
+    const doc = await makeDocument(
+      '<input id="readonly-input" readonly value="longlonglonglonglonglonglonglong" style="width:60px">',
+    );
+    const input = doc.querySelector<HTMLInputElement>("#readonly-input");
+    if (input === null) throw new Error("input missing");
+    expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "input#readonly-input",
+    });
+  });
+
+  it("still detects a disabled input's overflowing content", async () => {
+    const doc = await makeDocument(
+      '<input id="disabled-input" disabled value="longlonglonglonglonglonglonglong" style="width:60px">',
+    );
+    const input = doc.querySelector<HTMLInputElement>("#disabled-input");
+    if (input === null) throw new Error("input missing");
+    expect(input.scrollWidth).toBeGreaterThan(input.clientWidth);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "input#disabled-input",
+    });
+  });
+
+  it.each([
+    [
+      "input itself",
+      '<input id="inert-field" inert value="longlonglonglonglonglonglong" style="width:60px">',
+      "input#inert-field",
+    ],
+    [
+      "input ancestor",
+      '<div inert><input id="inert-field" value="longlonglonglonglonglonglong" style="width:60px"></div>',
+      "input#inert-field",
+    ],
+    [
+      "textarea itself",
+      '<textarea id="inert-field" inert style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea>',
+      "textarea#inert-field",
+    ],
+    [
+      "textarea ancestor",
+      '<div inert><textarea id="inert-field" style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea></div>',
+      "textarea#inert-field",
+    ],
+  ])(
+    "still detects %s content overflow when inert",
+    async (_label, markup, element) => {
+      const doc = await makeDocument(markup);
+      const field = doc.querySelector<HTMLElement>("#inert-field");
+      if (field === null) throw new Error("field missing");
+      expect(
+        field.scrollWidth > field.clientWidth ||
+          field.scrollHeight > field.clientHeight,
+      ).toBe(true);
+      field.focus();
+      expect(doc.activeElement).not.toBe(field);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element,
+      });
+    },
+  );
+
   it.each([
     {
       name: "document horizontal scroll",
@@ -440,6 +1145,26 @@ describe("review regressions", () => {
     },
   );
 
+  it.each([
+    "perspective:1px",
+    "filter:blur(0px)",
+    "backdrop-filter:blur(0px)",
+    "will-change:transform",
+    "will-change:perspective",
+    "will-change:filter",
+    "will-change:backdrop-filter",
+  ])("detects fixed-child clipping through %s", async (containingStyle) => {
+    const doc = await makeDocument(
+      `<div style="overflow:hidden;width:60px;height:60px"><div style="${containingStyle};width:60px;height:60px"><div id="fixed-effect" style="position:fixed;left:50px;top:10px;width:40px;height:30px;background:red"></div></div></div>`,
+    );
+    expect(doc.elementFromPoint(55, 15)?.id).toBe("fixed-effect");
+    expect(doc.elementFromPoint(70, 15)?.id).not.toBe("fixed-effect");
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#fixed-effect",
+    });
+  });
+
   it.each(["paint", "content", "strict"])(
     "detects clipping caused by %s containment",
     async (containment) => {
@@ -641,4 +1366,483 @@ describe("protected stress data", () => {
     expect(stressFixtures.sources).toHaveLength(30);
     expect(stressFixtures.empty).toBe("");
   });
+});
+
+describe("editable content around native modals", () => {
+  const input =
+    '<input id="modal-field" type="text" value="longlonglonglonglonglonglong" style="width:60px">';
+  const textarea =
+    '<textarea id="modal-field" style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea>';
+  it.each([
+    {
+      name: "input outside one modal",
+      markup: `${input}<dialog id="first">modal</dialog>`,
+      open: ["first"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea outside one modal",
+      markup: `${textarea}<dialog id="first">modal</dialog>`,
+      open: ["first"],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input escaping an inert ancestor in a modal",
+      markup: `<div inert><dialog id="first">${input}</dialog></div>`,
+      open: ["first"],
+      type: "input",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "textarea escaping an inert ancestor in a modal",
+      markup: `<div inert><dialog id="first">${textarea}</dialog></div>`,
+      open: ["first"],
+      type: "textarea",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "input escaping a CSS inert ancestor in a modal",
+      markup: `<div style="interactivity:inert"><dialog id="first">${input}</dialog></div>`,
+      open: ["first"],
+      type: "input",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "input below a later modal",
+      markup: `<dialog id="first">${input}</dialog><dialog id="second">upper</dialog>`,
+      open: ["first", "second"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea below a modal opened in reverse DOM order",
+      markup: `<dialog id="first">upper</dialog><dialog id="second">${textarea}</dialog>`,
+      open: ["second", "first"],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input in a modal containing another modal",
+      markup: `<dialog id="first">${input}<dialog id="second">upper</dialog></dialog>`,
+      open: ["first", "second"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input inside the upper modal",
+      markup: `<dialog id="first">lower</dialog><dialog id="second">${input}</dialog>`,
+      open: ["first", "second"],
+      type: "input",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "textarea inside the upper modal opened in reverse DOM order",
+      markup: `<dialog id="first">${textarea}</dialog><dialog id="second">lower</dialog>`,
+      open: ["second", "first"],
+      type: "textarea",
+      focus: true,
+      report: false,
+    },
+    {
+      name: "input in an inert descendant of the modal",
+      markup: `<dialog id="first"><div inert>${input}</div></dialog>`,
+      open: ["first"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input in a CSS inert descendant of the modal",
+      markup: `<dialog id="first"><div style="interactivity:inert"><div style="interactivity:auto">${input}</div></div></dialog>`,
+      open: ["first"],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea in an inert modal",
+      markup: `<dialog id="first" inert>${textarea}</dialog>`,
+      open: ["first"],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input with CSS interactivity inert",
+      markup: `<div style="interactivity:inert">${input}</div>`,
+      open: [],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "input with an inert attribute and CSS auto override",
+      markup: `<div inert style="interactivity:auto"><div style="interactivity:auto">${input}</div></div>`,
+      open: [],
+      type: "input",
+      focus: false,
+      report: true,
+    },
+    {
+      name: "textarea inside CSS inert despite an auto override",
+      markup: `<div style="interactivity:inert"><div style="interactivity:auto">${textarea}</div></div>`,
+      open: [],
+      type: "textarea",
+      focus: false,
+      report: true,
+    },
+  ])(
+    "classifies $name without changing focus",
+    async ({ markup, open, type, focus, report }) => {
+      const doc = await makeDocument(markup);
+      for (const id of open) {
+        const dialog = doc.querySelector<HTMLDialogElement>(`#${id}`);
+        if (dialog === null) throw new Error("modal missing");
+        dialog.showModal();
+      }
+      const field = doc.querySelector<HTMLElement>("#modal-field");
+      if (field === null) throw new Error("field missing");
+      expect(
+        field.scrollWidth > field.clientWidth ||
+          field.scrollHeight > field.clientHeight,
+      ).toBe(true);
+      field.focus();
+      expect(doc.activeElement === field).toBe(focus);
+      const active = doc.activeElement;
+      const findings = inspectOverflow(doc);
+      expect(doc.activeElement).toBe(active);
+      expect(findings).not.toContainEqual({
+        kind: "layout-unavailable",
+        element: "html",
+      });
+      expect(
+        findings.some(
+          (finding) =>
+            finding.kind === "unauthorized-overflow" &&
+            finding.element === `${type}#modal-field`,
+        ),
+      ).toBe(report);
+    },
+  );
+
+  it("does not treat an ordinary open dialog as modal", async () => {
+    const doc = await makeDocument(
+      `${input}<dialog id="modeless">dialog</dialog>`,
+    );
+    const dialog = doc.querySelector<HTMLDialogElement>("#modeless");
+    const field = doc.querySelector<HTMLInputElement>("#modal-field");
+    if (dialog === null || field === null) throw new Error("fixture missing");
+    dialog.show();
+    field.focus();
+    expect(doc.activeElement).toBe(field);
+    expect(field.scrollWidth).toBeGreaterThan(field.clientWidth);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "input#modal-field",
+    });
+  });
+
+  it("detects an inert attribute when CSS interactivity is unavailable", async () => {
+    const doc = await makeDocument(`<div inert>${input}</div>`);
+    const field = doc.querySelector<HTMLInputElement>("#modal-field");
+    if (field === null) throw new Error("field missing");
+    field.focus();
+    expect(doc.activeElement).not.toBe(field);
+    expect(field.scrollWidth).toBeGreaterThan(field.clientWidth);
+    const original = globalThis.getComputedStyle;
+    const styles = vi
+      .spyOn(globalThis, "getComputedStyle")
+      .mockImplementation((element, pseudo) => {
+        const style = original(element, pseudo);
+        return new Proxy(style, {
+          get(target, property) {
+            if (property === "getPropertyValue")
+              return (name: string): string =>
+                name === "interactivity" ? "" : target.getPropertyValue(name);
+            const value = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+      });
+    try {
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#modal-field",
+      });
+    } finally {
+      styles.mockRestore();
+    }
+  });
+
+  it("keeps an editable input in a single modal after focus is cleared", async () => {
+    const doc = await makeDocument(`<dialog id="first">${input}</dialog>`);
+    const dialog = doc.querySelector<HTMLDialogElement>("#first");
+    const field = doc.querySelector<HTMLInputElement>("#modal-field");
+    if (dialog === null || field === null) throw new Error("fixture missing");
+    dialog.showModal();
+    field.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    expect(field.scrollWidth).toBeGreaterThan(field.clientWidth);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "input#modal-field",
+    });
+    expect(doc.activeElement).toBe(doc.body);
+  });
+
+  it.each([
+    ["first", "second"],
+    ["second", "first"],
+  ])(
+    "fails closed if multiple modals opened as %s then %s lose focus",
+    async (first, second) => {
+      const doc = await makeDocument(
+        `<label id="modal-label" style="display:block;width:20px;white-space:nowrap">labeltextlabeltext</label><dialog id="first">${input}</dialog><dialog id="second">${textarea}</dialog>`,
+      );
+      const firstDialog = doc.querySelector<HTMLDialogElement>(`#${first}`);
+      const secondDialog = doc.querySelector<HTMLDialogElement>(`#${second}`);
+      if (firstDialog === null || secondDialog === null)
+        throw new Error("modal missing");
+      firstDialog.showModal();
+      secondDialog.showModal();
+      const active = doc.activeElement as HTMLElement | null;
+      if (active === null) throw new Error("focus missing");
+      active.blur();
+      expect(doc.activeElement).toBe(doc.body);
+      const findings = inspectOverflow(doc);
+      expect(doc.activeElement).toBe(doc.body);
+      expect(findings).toContainEqual({
+        kind: "layout-unavailable",
+        element: "html",
+      });
+      expect(findings).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "label#modal-label",
+      });
+      expect(findings).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "input#modal-field",
+      });
+      expect(findings).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#modal-field",
+      });
+    },
+  );
+
+  it.each([
+    ["input", input],
+    ["textarea", textarea],
+  ])("fails closed with only %s content overflow", async (tag, markup) => {
+    const doc = await makeDocument(
+      `<dialog id="first">${markup}</dialog><dialog id="second">second</dialog>`,
+    );
+    const first = doc.querySelector<HTMLDialogElement>("#first");
+    const second = doc.querySelector<HTMLDialogElement>("#second");
+    if (first === null || second === null) throw new Error("modal missing");
+    first.showModal();
+    second.showModal();
+    const active = doc.activeElement as HTMLElement | null;
+    if (active === null) throw new Error("focus missing");
+    active.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+    expect(findings).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: `${tag}#modal-field`,
+    });
+    expect(doc.activeElement).toBe(doc.body);
+  });
+
+  it("does not reject an unresolved modal stack without overflowing controls", async () => {
+    const doc = await makeDocument(
+      '<input id="small-field" value="ok" style="width:120px"><dialog id="first">first</dialog><dialog id="second">second</dialog>',
+    );
+    const first = doc.querySelector<HTMLDialogElement>("#first");
+    const second = doc.querySelector<HTMLDialogElement>("#second");
+    const field = doc.querySelector<HTMLInputElement>("#small-field");
+    if (first === null || second === null || field === null)
+      throw new Error("fixture missing");
+    expect(field.scrollWidth).toBe(field.clientWidth);
+    first.showModal();
+    second.showModal();
+    const active = doc.activeElement as HTMLElement | null;
+    if (active === null) throw new Error("focus missing");
+    active.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    expect(inspectOverflow(doc)).not.toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+  });
+});
+
+describe("font metrics and clipping boundaries", () => {
+  it.each([
+    ["mask-image", "linear-gradient(transparent,transparent)"],
+    ["-webkit-mask-image", "linear-gradient(#000 50%,transparent 50%)"],
+  ])("rejects a metric hidden by its own %s", async (property, value) => {
+    const doc = await makeDocument(
+      `<div style="padding-top:20px"><p id="masked-metric" style="font:12px/16px IBM Plex Sans KR;margin:0;${property}:${value}">주식 코파일럿</p></div>`,
+    );
+    await loadProbeFont(doc);
+    const paragraph = doc.querySelector<HTMLElement>("#masked-metric");
+    if (paragraph === null) throw new Error("metric missing");
+    expect(paragraph.scrollHeight - paragraph.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#masked-metric",
+    });
+  });
+
+  it.each([
+    ["mask-image", "linear-gradient(transparent,transparent)"],
+    ["-webkit-mask-image", "linear-gradient(#000 50%,transparent 50%)"],
+  ])("rejects a metric hidden by its parent's %s", async (property, value) => {
+    const doc = await makeDocument(
+      `<div style="padding-top:20px"><div id="masked-parent" style="height:16px;${property}:${value}"><p id="masked-child" style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p></div></div>`,
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#masked-parent");
+    if (parent === null) throw new Error("parent missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#masked-parent",
+    });
+    expect(findings).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "p#masked-child",
+    });
+  });
+
+  it.each([
+    { owner: "self", expected: ["p#box-metric"] },
+    { owner: "parent", expected: ["div#box-parent", "p#box-metric"] },
+  ])(
+    "rejects a metric hidden by a box mask on $owner",
+    async ({ owner, expected }) => {
+      const mask =
+        "-webkit-mask-box-image:linear-gradient(transparent,transparent) 0 fill / 0 / 0 stretch";
+      const doc = await makeDocument(
+        `<div style="padding-top:20px"><div id="box-parent" style="height:16px;${owner === "parent" ? mask : ""}"><p id="box-metric" style="font:12px/16px IBM Plex Sans KR;margin:0;${owner === "self" ? mask : ""}">주식 코파일럿</p></div></div>`,
+      );
+      await loadProbeFont(doc);
+      const metric = doc.querySelector<HTMLElement>("#box-metric");
+      const parent = doc.querySelector<HTMLElement>("#box-parent");
+      if (metric === null || parent === null) throw new Error("metric missing");
+      const style = getComputedStyle(owner === "self" ? metric : parent);
+      expect(style.getPropertyValue("mask-image")).toBe("none");
+      expect(style.getPropertyValue("-webkit-mask-box-image-source")).not.toBe(
+        "none",
+      );
+      expect(style.getPropertyValue("-webkit-mask-box-image-source")).not.toBe(
+        "",
+      );
+      expect(metric.scrollHeight - metric.clientHeight).toBe(1);
+      const findings = inspectOverflow(doc);
+      for (const element of expected)
+        expect(findings).toContainEqual({
+          kind: "unauthorized-overflow",
+          element,
+        });
+    },
+  );
+
+  it("detects a real overflowing sibling beside a metric child", async () => {
+    const doc = await makeDocument(
+      '<div style="padding-top:20px"><div id="metric-with-sibling" style="position:relative;height:16px"><p style="font:12px/16px IBM Plex Sans KR;margin:0">주식 코파일럿</p><div style="position:absolute;top:16px;width:1px;height:1px"></div></div></div>',
+    );
+    await loadProbeFont(doc);
+    const parent = doc.querySelector<HTMLElement>("#metric-with-sibling");
+    if (parent === null) throw new Error("parent missing");
+    expect(parent.scrollHeight - parent.clientHeight).toBe(1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#metric-with-sibling",
+    });
+  });
+});
+describe("unresolved modal order and already known findings", () => {
+  it.each([
+    [
+      "readonly input",
+      '<input readonly id="known-field" value="longlonglonglonglonglong" style="width:60px">',
+      "input#known-field",
+    ],
+    [
+      "disabled input",
+      '<input disabled id="known-field" value="longlonglonglonglonglong" style="width:60px">',
+      "input#known-field",
+    ],
+    [
+      "textarea with hidden vertical overflow",
+      '<textarea id="known-field" style="width:120px;height:35px;overflow:hidden">one\ntwo\nthree\nfour\nfive</textarea>',
+      "textarea#known-field",
+    ],
+    [
+      "textarea with only horizontal overflow",
+      '<textarea id="known-field" wrap="off" style="width:60px;height:80px;overflow:auto">longlonglonglonglonglonglonglong</textarea>',
+      "textarea#known-field",
+    ],
+  ])("does not mark %s unavailable", async (_name, markup, element) => {
+    const doc = await makeDocument(
+      `${markup}<dialog id="first">first</dialog><dialog id="second">second</dialog>`,
+    );
+    const first = doc.querySelector<HTMLDialogElement>("#first");
+    const second = doc.querySelector<HTMLDialogElement>("#second");
+    const field = doc.querySelector<HTMLElement>("#known-field");
+    if (first === null || second === null || field === null)
+      throw new Error("fixture missing");
+    first.showModal();
+    second.showModal();
+    const active = doc.activeElement as HTMLElement | null;
+    if (active === null) throw new Error("focus missing");
+    active.blur();
+    expect(doc.activeElement).toBe(doc.body);
+    expect(
+      field.scrollWidth > field.clientWidth ||
+        field.scrollHeight > field.clientHeight,
+    ).toBe(true);
+    const findings = inspectOverflow(doc);
+    expect(findings).toContainEqual({ kind: "unauthorized-overflow", element });
+    expect(findings).not.toContainEqual({
+      kind: "layout-unavailable",
+      element: "html",
+    });
+  });
+});
+
+describe("non-editable native textarea", () => {
+  it.each(["readonly", "disabled"])(
+    "reports vertical scrolling on a %s textarea",
+    async (state) => {
+      const doc = await makeDocument(
+        `<textarea id="locked-area" ${state} style="width:120px;height:35px;overflow:auto">one\ntwo\nthree\nfour\nfive</textarea>`,
+      );
+      const area = doc.querySelector<HTMLTextAreaElement>("#locked-area");
+      if (area === null) throw new Error("textarea missing");
+      expect(area.scrollHeight).toBeGreaterThan(area.clientHeight);
+      expect(inspectOverflow(doc)).toContainEqual({
+        kind: "unauthorized-overflow",
+        element: "textarea#locked-area",
+      });
+    },
+  );
 });

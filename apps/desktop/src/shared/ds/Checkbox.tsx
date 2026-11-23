@@ -70,7 +70,7 @@ export const Checkbox = (props: Props): ReactElement => {
   return (
     <label className="flex items-start gap-space-3 cursor-pointer text-ink">
       <span>{control({ props, state, change })}</span>
-      <span className="flex flex-col gap-space-1">
+      <span className="status-sentence flex flex-col gap-space-1">
         <span className="text-label">{props.label}</span>
         <span className="text-caption text-ink-subtle">
           {props.description}
