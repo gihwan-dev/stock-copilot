@@ -1389,9 +1389,12 @@ impl MemoryInstrumentMappingRepository {
         let assigned = mappings
             .ensure(source, candidate)
             .map_err(MappingStoreError::Mapping)?;
-        if let MappingAssignment::Issued(issued_id) = &assigned {
-            global.assigned_or_adopted.insert(issued_id.clone());
-            let _adopted = global.issuer.adopt_existing(issued_id.clone());
+        match &assigned {
+            MappingAssignment::Issued(issued_id) => {
+                global.assigned_or_adopted.insert(issued_id.clone());
+                let _adopted = global.issuer.adopt_existing(issued_id.clone());
+            }
+            MappingAssignment::Existing(_) => {}
         }
         Ok(assigned)
     }

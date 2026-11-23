@@ -272,5 +272,21 @@ mod tests {
                 InstrumentId::try_new("inst-0000000000000001").expect("첫 ID")
             ))
         );
+        let fresh_global = MemoryGlobalInstrumentIds::default();
+        let fresh_repo = fresh_global.repository();
+        let fresh_issuer = fresh_global.issuer();
+        let mut rogue_two = IndependentInstrumentIdIssuer::new();
+        let preassigned = rogue_two.issue().expect("선점 후보");
+        assert_eq!(
+            run(fresh_repo.ensure(&stock, preassigned)),
+            Ok(MappingAssignment::Issued(
+                InstrumentId::try_new("inst-0000000000000001").expect("선점 ID")
+            ))
+        );
+        let next_from_global = run(fresh_issuer.issue()).expect("전역 다음 발급");
+        assert_eq!(
+            next_from_global.as_instrument_id().as_str(),
+            "inst-0000000000000002"
+        );
     }
 }

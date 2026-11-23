@@ -194,18 +194,10 @@ impl InstrumentMappingRecord {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ActiveLink {
-    instrument_id: InstrumentId,
-    previous: InstrumentSource,
-    next: InstrumentSource,
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InstrumentMappings {
     records: Vec<InstrumentMappingRecord>,
     reserved_ids: BTreeSet<InstrumentId>,
-    active_links: Vec<ActiveLink>,
     history: Vec<MappingHistoryEvent>,
 }
 
@@ -372,6 +364,30 @@ impl InstrumentMappings {
         Err(failure)
     }
 
+    fn latest_active_link(
+        &self,
+        id: &InstrumentId,
+    ) -> Option<(&InstrumentSource, &InstrumentSource)> {
+        let mut stack = Vec::new();
+        for event in &self.history {
+            match event {
+                MappingHistoryEvent::IdentifierChanged {
+                    instrument_id,
+                    previous,
+                    next,
+                    ..
+                } if instrument_id == id => stack.push((previous, next)),
+                MappingHistoryEvent::LinkCorrected { instrument_id, .. } if instrument_id == id => {
+                    let _popped = stack.pop();
+                }
+                MappingHistoryEvent::IdentifierChanged { .. }
+                | MappingHistoryEvent::RetirementCorrected { .. }
+                | MappingHistoryEvent::LinkCorrected { .. } => {}
+            }
+        }
+        stack.pop()
+    }
+
     pub fn link_confirmed_change(
         &mut self,
         change: ConfirmedIdentifierChange,
@@ -394,11 +410,6 @@ impl InstrumentMappings {
             verified.instrument_id.clone(),
             InstrumentMappingStatus::Active,
         ));
-        self.active_links.push(ActiveLink {
-            instrument_id: verified.instrument_id.clone(),
-            previous: verified.previous.clone(),
-            next: verified.next.clone(),
-        });
         let result_id = verified.instrument_id.clone();
         self.history.push(MappingHistoryEvent::IdentifierChanged {
             instrument_id: verified.instrument_id,
@@ -450,18 +461,8 @@ impl InstrumentMappings {
         let _prev_status = self.find_owned_status(&verified.previous, &verified.instrument_id)?;
         let next_status =
             self.find_owned_status(&verified.mistaken_next, &verified.instrument_id)?;
-        let expected = ActiveLink {
-            instrument_id: verified.instrument_id.clone(),
-            previous: verified.previous.clone(),
-            next: verified.mistaken_next.clone(),
-        };
-        let matches_latest = self
-            .active_links
-            .iter()
-            .rev()
-            .filter(|link| link.instrument_id == verified.instrument_id)
-            .take(1)
-            .any(|latest| *latest == expected);
+        let matches_latest = self.latest_active_link(&verified.instrument_id)
+            == Some((&verified.previous, &verified.mistaken_next));
         match next_status {
             InstrumentMappingStatus::Active if matches_latest => {}
             InstrumentMappingStatus::Active
@@ -470,7 +471,6 @@ impl InstrumentMappings {
                 return Err(MappingTransitionError::LinkNotLatest);
             }
         }
-        self.active_links.retain(|link| *link != expected);
         for entry in &mut self.records {
             if entry.source == verified.previous {
                 entry.state = InstrumentMappingStatus::Active;

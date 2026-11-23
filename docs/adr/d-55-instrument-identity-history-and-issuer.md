@@ -15,9 +15,10 @@
   - `CorporateAction`의 종목 ID가 변경 대상 내부 ID와 같아야 한다(`InvalidEvidence`).
   - 현재 보수적 기본값으로 허용하는 기업행위는 `SymbolChange`, `Split`, `ReverseSplit` 세 종류뿐이다.
   - `CorporateActionKind::SymbolChange { from, to }`는 ASCII 대소문자 무시 기준으로 `from != to`이고, `from`이 변경 전 `InstrumentSource` 심볼과, `to`가 변경 후 `InstrumentSource` 심볼과 일치해야 한다(`InvalidEvidence`).
+  - `CorporateActionKind::Split`·`ReverseSplit`에는 심볼·ISIN 필드가 없으므로 종목 ID가 일치하면 봉인된 사용자 확인·공시·사유와 함께 심볼·ISIN 동시 변경을 포함한 동일 시장 내 비충돌 변경을 허용한다(심볼·ISIN 중 최소 하나 유지를 강제할지는 "정의 대기" 3번으로 올린다).
   - `Delisting`과 `Demerger`(분할 신설은 별개 법인)는 동일 내부 ID 변경 증거로 부적합하므로 `InvalidEvidence`로 거부한다.
   - 아직 동일 ID 승계 정책이 미확정인 `BonusIssue`, `StockDividend`, `Merger`, `Exchange`는 보수적으로 `IdentityUncertain`을 유지한다.
-  - 동일 기업행위 재사용 방지, 공시 키-기업행위 교차 검증, 기업행위 일자와 `confirmed_at`의 선후 검증은 현재 미구현이며 "정의 대기" 3번으로 올린다.
+  - 동일 기업행위 재사용 방지, 공시 키-기업행위 교차 검증, 기업행위 일자와 `confirmed_at`·정정 `corrected_at`의 시각 선후·단조성 검증은 현재 미구현이며 "정의 대기" 3·11번으로 올린다.
 - **상태 전이와 보존**: 변경이 승인되면 변경 전 `InstrumentSource`는 `InstrumentMappingStatus::Superseded`로 전이하고, 변경 후 `InstrumentSource`는 같은 `InstrumentId`에 `Active`로 추가된다. 이후 변경 전 원본의 `resolve`·`ensure`·`retire`는 모두 `InstrumentMappingError::Superseded`를 반환하며, `lookup`과 `for_id`는 과거 이력을 변경 없이 조회한다.
 - **충돌·분기·순환 방지**:
   - `previous`와 `next`가 정확히 같거나 대소문자 무시 기준으로 `(시장, 심볼, ISIN)`이 모두 같으면 `UnchangedSource`, 시장 변경은 `MarketMismatch`.
@@ -26,7 +27,7 @@
 - **폐지·연결 오기록 정정**:
   - 오기록 정정도 봉인된 `UserConfirmed(UserIdentityConfirmation)` + `MappingCorrectionEvidence::DisclosureAndNote`(공시 키와 사용자 사유)를 요구한다. 부족하면 `IdentityUncertain`으로 거부한다.
   - `correct_retirement`: `Retired` 상태인 해당 ID의 원본을 `Active`로 복구한다(`Active`/`Superseded`는 `SourceNotRetired`).
-  - `correct_link`: 보수적 기본값으로 해당 ID의 **가장 최근 활성 연결**(LIFO 끝단이며 `mistaken_next`가 현재 `Active`)만 되돌린다. 되돌리면 `previous`는 `Active`로 복원되고 잘못 연결된 `mistaken_next`는 현재 `records`에서 분리되어(`lookup`은 `Missing`) 이후 독립 발급·재판정이 가능하다. 비최신이거나 `mistaken_next`가 `Retired`이면 `LinkNotLatest`로 거부한다. `records` 분리 대신 별도 `Unlinked` 상태를 남길지 여부는 "정의 대기" 6번으로 올린다.
+  - `correct_link`: 보수적 기본값으로 해당 ID의 **가장 최근 활성 연결**(감사 이력 `history`에서 유도한 LIFO 끝단이며 `mistaken_next`가 현재 `Active`)만 되돌린다. 별도의 중복 연결 스택 필드를 두지 않고 `history`의 `IdentifierChanged`·`LinkCorrected`에서 최신 연결을 직접 유도해 내부 상태 불일치 가능성을 제거했다. 되돌리면 `previous`는 `Active`로 복원되고 잘못 연결된 `mistaken_next`는 현재 `records`에서 분리되어(`lookup`은 `Missing`) 이후 독립 발급·재판정이 가능하다. 비최신이거나 `mistaken_next`가 `Retired`이면 `LinkNotLatest`로 거부한다. `records` 분리 대신 별도 `Unlinked` 상태를 남길지 여부는 "정의 대기" 6번으로 올린다.
 - **감사 이력(`MappingHistoryEvent`)**: 모든 승인된 변경(`IdentifierChanged`), 폐지 정정(`RetirementCorrected`), 연결 정정(`LinkCorrected`)은 `InstrumentMappings::history` / `history_for_id`에 불변 추가(append-only)로 남긴다. `correct_link`로 레코드가 분리되어도 원래 연결과 정정 이벤트는 감사 이력에서 삭제되지 않는다. 실패한 호출은 원장 상태를 전혀 변경하지 않는다.
 - **마스터 투영(`InstrumentMaster`)**: `InstrumentMasterEntry::Unavailable`에 `InstrumentMappingError::Superseded`를 유효한 불가 사유로 추가했다.
 
@@ -81,7 +82,7 @@ S-21(`crates/adapters/store-sqlite`)과의 병합 충돌을 최소화하기 위�
 | --- | --- | --- | --- |
 | 1. 확인 출처 증명·권한 경계 (ADR 0145 인계) | `UserIdentityConfirmation` 비공개 봉인(외부 크레이트 생성 불가, 일회성 소비) | A) 전용 사용자 확인 화면·유스케이스 어댑터만 봉인 토큰 발급 / B) 별도 쓰기 포트 + 구조 검사(`arch-check`)로 호출 가능 크레이트를 UI·application으로 제한 | A는 AI·MCP·브로커 어댑터의 위조를 컴파일 단계에서 원천 차단한다(P-9 원칙에 맞춰 확인 화면 자체는 단순하게 유지). B는 어댑터 계층 확장이 쉽지만 `arch-check` 예외 관리가 필요하다. |
 | 2. 변경 확인의 최소 증거 | `UserConfirmed` + `DisclosureAndAction`(공시 키·기업행위·사유 모두 필수) | A) 공시+기업행위+사유 필수(현재) / B) 공시+사유 허용(기업행위 미수집 시) / C) 공시 없는 사유만 허용 | A는 오연결 위험이 가장 낮으나 공시·기업행위 수집 전에는 수동 연결이 막힌다. B·C로 완화할수록 공시 지연 시 즉시 처리 가능하나 잘못된 수동 연결 위험이 커진다. |
-| 3. 기업행위 종류별 허용 범위·재사용·일자 선후 | `SymbolChange`(`from != to` 대소문자 무시)·`Split`·`ReverseSplit`만 허용, `Delisting`·`Demerger`는 `InvalidEvidence`, `BonusIssue`·`StockDividend`·`Merger`·`Exchange`는 `IdentityUncertain`. 동일 기업행위 재사용·공시 대조·일자 선후는 미검증 | A) 현재 화이트리스트 유지 + 동일 기업행위 재사용 차단·일자 선후(`action.date <= confirmed_at`) 검증 추가 / B) 합병(`Merger`)·교환(`Exchange`)에 대해 존속 법인 확인 시 조건부 허용 / C) 공시 키와 기업행위 간 메타데이터 교차 검증 강제 | A는 오연결 위험을 최소화하지만 합병으로 종목코드·ISIN이 바뀐 존속 법인을 연결하려면 정책 확정이 필요하다. B·C는 합병 사례까지 포괄하나 추가 입력·검증 절차가 늘어난다. |
+| 3. 기업행위 종류별 허용 범위·원본 일치·재사용·일자 선후 | `SymbolChange`(`from != to` 대소문자 무시)·`Split`·`ReverseSplit`만 허용(`Split`·`ReverseSplit`은 종목 ID 일치 시 심볼·ISIN 동시 변경 허용), `Delisting`·`Demerger`는 `InvalidEvidence`, `BonusIssue`·`StockDividend`·`Merger`·`Exchange`는 `IdentityUncertain`. 동일 기업행위 재사용·공시 대조·일자 선후는 미검증 | A) 현재 화이트리스트 유지 + 동일 기업행위 재사용 차단·일자 선후(`action.date <= confirmed_at`) 검증 추가 / B) `Split`·`ReverseSplit`에서 심볼·ISIN 동시 변경을 `IdentityUncertain`으로 차단(최소 한 식별자 유지 강제) / C) 합병(`Merger`)·교환(`Exchange`)에 대해 존속 법인 확인 시 조건부 허용 및 공시 키-기업행위 교차 검증 강제 | A는 액면분할로 코드·ISIN이 함께 바뀐 사례를 수용하되 합병 승계는 보류한다. B는 분할 증거 오연결을 더 강하게 막으나 심볼·ISIN 동시 변경 시 별도 절차가 필요하다. C는 합병까지 포괄하나 추가 입력·검증 절차가 늘어난다. |
 | 4. 정정 확인의 최소 증거 | `UserConfirmed` + `DisclosureAndNote`(공시 키·사유 필수) | A) 공시+사유 필수(현재) / B) 사용자 사유만으로 오입력 정정 허용 | A는 근거 없는 되돌림을 막지만 사용자가 단순 오타를 직후 정정할 때도 공시 키를 넣어야 한다. B는 오타 복구가 빠르나 감사 근거가 약해진다. |
 | 5. 연결 정정 허용 범위 | 해당 ID의 가장 최근 활성 연결(LIFO 끝단)만 정정, 끝단이 폐지 상태면 거부 | A) 최신 활성 연결만 정정(현재) / B) 연결 이후 주문·포지션·평가 참조가 없을 때만 허용 / C) 중간 이력이나 폐지 후 이력도 정정 허용 | A는 이력 그래프가 깨지지 않고 단순하다. B는 실거래 참조 이후 소급 변경을 방지하지만 하위 저장소 교차 검사가 필요하다. C는 과거 오류를 넓게 고칠 수 있으나 손익·원가 이력 정합성이 깨질 위험이 크다. |
 | 6. 연결 정정 시 잘못 연결된 원본의 저장 표현 | `records`에서 `mistaken_next` 분리(`lookup`은 `Missing`) + `history`에 불변 감사 이벤트 유지 | A) 레코드 분리 + 감사 이력 유지(현재) / B) `records`에 `Unlinked` 상태로 남겨 `lookup`에서 오연결 이력을 노출하되 별도 ID 발급 허용 | A는 정정된 종목을 즉시 새 종목으로 편입하기 쉽고 `lookup` 의미가 단순하다. B는 `lookup`만으로 과거 오연결 사실을 알 수 있으나 `InstrumentMappingStatus`와 충돌 판정 규칙이 복잡해진다. |
@@ -89,6 +90,7 @@ S-21(`crates/adapters/store-sqlite`)과의 병합 충돌을 최소화하기 위�
 | 8. 시장 이동·이전 원본 재사용(순환) | 시장 불일치(`MarketMismatch`)와 동일 ID 내 정규화 `(시장, 심볼, ISIN)` 일치 재연결(`SourceAlreadyRecorded`) 거부. 동일 ID에서 과거 심볼을 **새 ISIN**과 함께 다시 쓰는 경우는 현재 차단하지 않음 | A) 현재처럼 `(시장, 심볼, ISIN)` 일치 재연결만 차단 / B) 동일 ID의 과거 심볼 단독 재사용까지 전면 차단 / C) 이전상장(시장 이동)이나 과거 심볼 복귀를 명시적 예외로 허용 | A는 ISIN이 바뀐 재사용을 허용하면서도 동일 원본 순환을 막는다. B는 심볼 복귀 혼동을 더 강하게 차단한다. C는 드문 이전상장·심볼 복귀를 지원하지만 과거 이력 상태 조회 규칙이 복잡해진다. |
 | 9. 영속 포트(`InstrumentMappingRepository`) 확장 형태 | 기존 D-52 포트 5개 메서드 유지(S-21 충돌 최소화), 이력 변경·정정은 도메인 우선 구현 | A) `InstrumentMappingRepository`에 변경·정정·기존 ID 편입 메서드 추가 / B) 별도 쓰기 포트(`InstrumentIdentityCorrectionPort`)로 분리 | A는 트랜잭션 경계가 단일 저장소에 모인다. B는 조회·일반 동기화 경로와 사용자 확인 정정 경로의 권한을 타입 수준에서 분리할 수 있다. |
 | 10. 독립 발급원 영속 형식과 직렬화 경계 (S-21 선행 조건) | `IndependentInstrumentIdIssuer`는 결정론적 불투명 순번(`inst-{:016x}`) 발급(현재 순번 상태 읽기/복원 API 없음) | A) SQLite 단조 시퀀스 테이블 + `domain`에 시퀀스 복원 생성자 추가 / B) SQLite 어댑터 전용 발급 경계로 UUIDv7·ULID 등 독립 식별자 발급 + DB `UNIQUE` 제약 + 기존 ID 편입 | A는 짧고 결정적이며 테스트 재현성이 높으나 재시작 복원용 시퀀스 저장이 필요하다. B는 다중 원장 병합 시 충돌 가능성이 낮고 순번 복원이 불필요하나 `domain`의 `IssuedInstrumentId` 생성 경계를 별도로 열어야 한다. |
+| 11. 감사 이력 시각 선후·단조성 | `confirmed_at`·`corrected_at` 간 시간 순서나 `history` 단조성을 강제하지 않음 | A) `corrected_at >= 대상 사건 시각` 및 ID별 `history` 단조 비감소 강제 / B) 벽시계 보정(NTP 역행)을 고려해 기록 순번(sequence)을 주 순서로 두고 시각 역행은 허용 또는 경고만 표시 | A는 감사 이력의 시각 역전을 원천 차단하지만 기기 시각 보정 직후 사용자가 즉시 정정할 때 거부될 수 있다. B는 시각 보정에도 정정이 막히지 않으나 시각 기준 정렬 대신 순번 기준 정렬에 의존한다. |
 
 ## 기존 테스트 기계적 수정 기록
 
@@ -139,7 +141,7 @@ testkit-ports::instrument_mapping_review tests::repository_reads_retired_history
 
 ## 인계
 
-- **S-21 (`store-sqlite` D-52 구현)**: `InstrumentIdIssuer::issue` 반환 타입(`IssuedInstrumentId`), `InstrumentMappingRepository::ensure` 인자(`IssuedInstrumentId`), `InstrumentMappingStatus::Superseded`, `InstrumentMappingError::Superseded`를 반영하고, 기존 ID 편입과 전역 유일성 제약을 SQLite 스키마·트랜잭션에서 강제한다. 재시작 후 영속 발급원 구현을 위해서는 "정의 대기" 10번(시퀀스 복원 API 추가 vs UUIDv7/ULID 어댑터 발급 경계) 결정이 선행되어야 한다.
+- **S-21 (`store-sqlite` D-52 구현) 및 후속 영속 포트 확장**: `InstrumentIdIssuer::issue` 반환 타입(`IssuedInstrumentId`), `InstrumentMappingRepository::ensure` 인자(`IssuedInstrumentId`), `InstrumentMappingStatus::Superseded`, `InstrumentMappingError::Superseded`를 반영하고, 기존 ID 편입과 전역 유일성 제약을 SQLite 스키마·트랜잭션에서 강제한다. 재시작 후 영속 발급원 구현을 위해서는 "정의 대기" 10번(시퀀스 복원 API 추가 vs UUIDv7/ULID 어댑터 발급 경계) 결정이 선행되어야 하며, "정의 대기" 9번에 따라 이력 변경·정정을 영속 저장할 때는 `records`·`reserved_ids`·`history`(연결 LIFO 스택 유도 근거)를 하나의 원자적 트랜잭션으로 저장·복원하고 불일치 시 복원을 거부해야 한다.
 - **T-21 (`broker-toss` 종목 마스터)**: `Superseded` 반환을 `InstrumentMasterEntry::Unavailable`로 유지하고(기존 코드가 이미 모든 매핑 오류를 `Unavailable`로 보존), 향후 사용자 확인 변경·정정 유스케이스와 연결한다.
 - **후속 유스케이스 / 화면**: "정의 대기" 1~9번 정책이 확정되면 `UserIdentityConfirmation` 발급 어댑터(확인 화면·유스케이스 경계), `application` 포트 확장, 공시·기업행위 선택 UI, 오기록 정정 흐름을 연결한다.
 
@@ -153,21 +155,21 @@ testkit-ports::instrument_mapping_review tests::repository_reads_retired_history
   - `domain` 내부 이력·정정·상태 기계(`instrument_mapping_change::history_cases::tests`): 15건 통과(결정론 경로 + 독립 참조 모델 속성 테스트 포함)
   - `domain` 외부 경계·편입·유일성·마스터(`instrument_identity_history`): 4건 통과
   - `domain` 컴파일 실패 경계(`instrument_issuer_boundaries`): 14개 프로브 통과(양성 1 + 음성 13: `Symbol`/`IsinCode`/임의 `InstrumentId` 전달, `IssuedInstrumentId` 위조·복제·재사용, 발급원 복제, `UserIdentityConfirmation` 위조·`Default`·복제, 소비된 `ConfirmedIdentifierChange` 재사용)
-  - `domain` 기존 매핑 회귀(`instrument_mapping` 7건, `instrument_mapping_review` 3건, `t21_instrument_master` 5건): 전부 통과
+  - `domain` 기존 매핑 회귀(`instrument_mapping` 7건, `instrument_mapping_review` 3건, `t21_instrument_master` 6건): 전부 통과
   - `application` 포트 컴파일 실패 경계(`instrument_issuer_boundaries`): 4개 프로브 통과(양성 1 + 음성 3)
   - `testkit-ports` 가짜·전역 유일성·동시성(`instrument_mapping` 6건, `instrument_mapping_d55` 7건, `instrument_mapping_review` 1건): 전부 통과
   - `broker-toss` 종목 마스터 회귀(`t21_instruments`): 35건 통과
 - 커버리지(`cargo llvm-cov` on `domain`):
   - `crates/domain/src/instrument_id.rs`: 줄 42/42 (100.00%), 영역 59/59 (100.00%)
   - `crates/domain/src/instrument_issuer.rs`: 줄 72/72 (100.00%), 영역 109/109 (100.00%)
-  - `crates/domain/src/instrument_mapping.rs`: 줄 330/330 (100.00%), 영역 424/424 (100.00%)
+  - `crates/domain/src/instrument_mapping.rs`: 줄 331/331 (100.00%), 영역 424/424 (100.00%)
   - `crates/domain/src/instrument_mapping_change.rs`: 줄 224/224 (100.00%), 영역 196/196 (100.00%)
-  - `crates/domain/src/instrument_mapping_change/history_cases.rs`: 줄 1075/1075 (100.00%), 영역 2050/2050 (100.00%)
+  - `crates/domain/src/instrument_mapping_change/history_cases.rs`: 줄 1079/1079 (100.00%), 영역 2054/2054 (100.00%)
   - `crates/domain/src/instrument_master.rs`: 줄 40/40 (100.00%), 영역 65/65 (100.00%)
 - 정적·하네스 검사: `arch-check` 위반 0건, `source-check` 위반 없음, `raw-types` 위반 없음, `disable-check` 위반 없음, `disable-report-since 0b223855` 새 끄기 0건(Rust 0, TS 0), `hooks-installed` 통과, `just deny` 통과(`advisories/bans/licenses/sources ok`), `codex-hooks/config.mjs`·`claude-hooks/hashes.mjs`·`source-tree/check.mjs`·`config-files/check.mjs` 모두 위반 0건.
 - `just test-diff 0b2238554479d46b69be508c4375d2d09b0ea8e4`: 위 기계적 수정 30건 외 추가 위반 없음.
 
-### 손 변형 (격리 복사본 `target/D-55/mutants-work` 실측: 28/28 컴파일·검출, 생존 0)
+### 손 변형 (격리 복사본 `target/D-55/mutants-work` 실측: 30/30 컴파일·검출, 생존 0)
 
 | 번호 | 대상 파일 | 변형 | 결과 |
 | --- | --- | --- | --- |
@@ -199,3 +201,5 @@ testkit-ports::instrument_mapping_review tests::repository_reads_retired_history
 | 26 | `domain/src/instrument_mapping.rs` | `correct_link`의 최신 연결(LIFO) 제한 제거 | 검출: `link_correction_rejects_non_latest_wrong_owner_and_retired_tip` |
 | 27 | `domain/src/instrument_mapping.rs` | `correct_link`의 끝단 `Active` 상태 검사 제거(`Retired` 허용) | 검출: `link_correction_rejects_non_latest_wrong_owner_and_retired_tip` |
 | 28 | `testkit-ports/src/memory.rs` | 가짜 저장소 `ensure`의 전역 ID 유일성 검사 제거 | 검출: `global_registry_adopts_existing_ids_and_prevents_cross_ledger_collisions`, `retired_id_stays_reserved_globally_while_next_issued_id_succeeds`, `concurrent_cross_ledger_writes_preserve_global_uniqueness` |
+| 29 | `domain/src/instrument_mapping.rs` | `latest_active_link`에서 `LinkCorrected` 스택 팝 제거 | 검출: `link_correction_unwinds_latest_link_and_releases_mistaken_source` |
+| 30 | `testkit-ports/src/memory.rs` | 가짜 저장소 `ensure_now`의 전역 발급원 기존 ID 편입 제거 | 검출: `dropping_unpolled_issuer_and_repository_futures_preserves_state` |
