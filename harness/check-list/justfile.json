@@ -714,6 +714,30 @@
       "namepath": "disable-report-since",
       "shebang": false
     },
+    "ds-check": {
+      "attributes": [],
+      "body": [
+        ["node harness/ds-catalog/check.mjs"],
+        ["node harness/ds-overflow/typecheck.mjs"],
+        ["node --test apps/desktop/tests/ds22-overflow-verdict.test.mjs"],
+        ["node harness/ds-overflow/launch.mjs"]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check-pnpm",
+          "star": null
+        }
+      ],
+      "doc": null,
+      "name": "ds-check",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "namepath": "ds-check",
+      "shebang": false
+    },
     "fresh-all": {
       "attributes": [],
       "body": [["cargo clean --locked"], ["cargo llvm-cov clean --locked"]],
