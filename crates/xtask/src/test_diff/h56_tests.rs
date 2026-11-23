@@ -159,7 +159,8 @@ fn verify_reasons(
         authority,
         (before, after),
         &remaining,
-    );
+    )
+    .into_reasons();
     assert_eq!(reasons.len(), 6);
     for finding in &remaining {
         assert!(
@@ -196,7 +197,8 @@ fn verify_untrusted_and_hash_reasons(
 ) {
     let unrelated = "0000000000000000000000000000000000000000";
     let untrusted =
-        approval::diagnose(root, Some(authority), unrelated, (before, after), remaining);
+        approval::diagnose(root, Some(authority), unrelated, (before, after), remaining)
+            .into_reasons();
     assert_eq!(untrusted.len(), 6);
     assert!(
         untrusted
@@ -214,7 +216,8 @@ fn verify_untrusted_and_hash_reasons(
         authority,
         (before, &altered),
         remaining,
-    );
+    )
+    .into_reasons();
     assert!(
         hashes
             .get(*FINDINGS.get(1).expect("finding"))
@@ -404,7 +407,8 @@ fn h56_s06_merge_after_separate_approval_preserves_structural_rejection() {
         &authority,
         (&before, &after),
         &remaining,
-    );
+    )
+    .into_reasons();
     assert_eq!(reasons.len(), 2);
     assert!(
         reasons.values().all(|reason| reason.contains("클로저")),
@@ -455,7 +459,8 @@ fn h56_approval_rejection_reports_an_incomplete_finding_set() {
         &authority,
         (&before, &after),
         &remaining,
-    );
+    )
+    .into_reasons();
     assert!(
         reasons
             .get(*FINDINGS.get(4).expect("finding"))
@@ -532,7 +537,8 @@ fn h56_reports_every_candidate_when_one_finding_has_multiple_approvals() {
         &authority,
         (&before, &after),
         &remaining,
-    );
+    )
+    .into_reasons();
     let reason = reasons.get(*finding).expect("reason");
     assert!(reason.contains("클로저"), "{reason}");
     assert!(reason.contains("SHA-256 불일치"), "{reason}");
@@ -916,4 +922,289 @@ fn h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds() {
     git(&trusted_root, &["add", "."]);
     git(&trusted_root, &["commit", "--quiet", "-m", "branch"]);
     assert_ineligible_reasons(&trusted_root, &before, &after, &cases);
+}
+
+fn single_file_approval_run(
+    name: &str,
+    before: &Files,
+    after: &Files,
+    approval_toml: &str,
+) -> (usize, String) {
+    let root = fresh_directory(&repository_root(), name);
+    git(&root, &["init", "--quiet", "-b", "master"]);
+    write_files(&root, before);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "base"]);
+    let approval_path = root.join("harness/test-diff/approvals.toml");
+    fs::create_dir_all(approval_path.parent().expect("parent")).expect("mkdir");
+    fs::write(&approval_path, approval_toml).expect("write approval");
+    git(&root, &["add", "harness/test-diff/approvals.toml"]);
+    git(&root, &["commit", "--quiet", "-m", "owner approval"]);
+    let authority = git(&root, &["rev-parse", "HEAD"]);
+    git(
+        &root,
+        &["update-ref", "refs/remotes/origin/master", &authority],
+    );
+    git(&root, &["checkout", "--quiet", "-b", "branch"]);
+    write_files(&root, after);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "branch"]);
+    let (findings, _) = compare_files(before, after);
+    let mut output = Vec::new();
+    let remaining = approval::apply_to(
+        &root,
+        (before, after),
+        findings,
+        crate::git_base::BaseUse::Commit,
+        &mut output,
+    )
+    .expect("verdict");
+    (remaining.len(), String::from_utf8(output).expect("utf8"))
+}
+
+#[test]
+fn h56_reports_exact_mismatched_hash_fields_and_missing_file_sides() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { let _x = 1; assert_eq!(1, 1); }\n}\n",
+    );
+    let after = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { let _x = 2; assert_eq!(1, 1); }\n}\n",
+    );
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let new_hash = format!("{:x}", Sha256::digest(after.get(path).expect("after")));
+    let bad_before = "a".repeat(64);
+    let bad_after = "b".repeat(64);
+    let finding = "test-diff:modified:sample tests::first";
+
+    let only_before_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{bad_before}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"check\"\n"
+    );
+    let (before_rem, before_out) =
+        single_file_approval_run("h56-hash-before", &before, &after, &only_before_toml);
+    assert_eq!(before_rem, 1);
+    assert!(before_out.contains(&format!("path={path}")), "{before_out}");
+    assert!(before_out.contains("before_sha256:"), "{before_out}");
+    assert!(before_out.contains(&old_hash), "{before_out}");
+    assert!(before_out.contains(&bad_before), "{before_out}");
+    assert!(!before_out.contains("after_sha256:"), "{before_out}");
+
+    let only_after_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{bad_after}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"check\"\n"
+    );
+    let (after_rem, after_out) =
+        single_file_approval_run("h56-hash-after", &before, &after, &only_after_toml);
+    assert_eq!(after_rem, 1);
+    assert!(after_out.contains("after_sha256:"), "{after_out}");
+    assert!(after_out.contains(&new_hash), "{after_out}");
+    assert!(after_out.contains(&bad_after), "{after_out}");
+    assert!(!after_out.contains("before_sha256:"), "{after_out}");
+
+    let wrong_path = "crates/sample/src/missing.rs";
+    let missing_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{wrong_path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"check\"\n"
+    );
+    let (missing_rem, missing_out) =
+        single_file_approval_run("h56-missing-path", &before, &after, &missing_toml);
+    assert_eq!(missing_rem, 1);
+    assert!(
+        missing_out.contains(&format!("path={wrong_path}")),
+        "{missing_out}"
+    );
+    assert!(missing_out.contains("누락=before·current"), "{missing_out}");
+}
+
+#[test]
+fn h56_support_approved_assertion_addition_reports_actual_failure_reason() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    fn helper(v: i32) { assert_eq!(v, 1); }\n    #[test]\n    fn first() { helper(1); assert_eq!(1, 1); }\n}\n",
+    );
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let finding = "test-diff:support-modified:sample tests::fn helper";
+
+    for (label, replacement, marked, expected_substr, forbidden_substr) in [
+        (
+            "h56-add-trivial",
+            "fn helper(v: i32) { assert_eq!(v, 1); assert!(true); }",
+            true,
+            "자명한 참 단언은 추가할 수 없다",
+            "보호된 단언 수 또는 순서가 달라짐",
+        ),
+        (
+            "h56-add-nonstandard",
+            "fn helper(v: i32) { assert_eq!(v, 1); check_extra(v); }",
+            true,
+            "표준 assert 계열 매크로만 허용한다",
+            "보호된 단언 수 또는 순서가 달라짐",
+        ),
+        (
+            "h56-add-lost-old",
+            "fn helper(v: i32) { assert!(v > 0); assert!(v < 5); }",
+            true,
+            "기존 보호된 단언 1을 보존하지 못함",
+            "보호된 단언 수 또는 순서가 달라짐",
+        ),
+        (
+            "h56-add-unmarked",
+            "fn helper(v: i32) { assert_eq!(v, 1); assert!(v < 5); }",
+            false,
+            "단언 변경에 명시 승인이 없다",
+            "보호된 단언 수 또는 순서가 달라짐",
+        ),
+    ] {
+        let after = simple_test_files(&format!(
+            "#[cfg(test)]\nmod tests {{\n    {replacement}\n    #[test]\n    fn first() {{ helper(1); assert_eq!(1, 1); }}\n}}\n"
+        ));
+        let new_hash = format!("{:x}", Sha256::digest(after.get(path).expect("after")));
+        let mark_line = if marked {
+            "assertion_change = true\n"
+        } else {
+            ""
+        };
+        let toml = format!(
+            "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"check\"\n{mark_line}"
+        );
+        let (rem, out) = single_file_approval_run(label, &before, &after, &toml);
+        assert_eq!(rem, 1, "{label}: {out}");
+        assert!(out.contains(expected_substr), "{label}: {out}");
+        assert!(!out.contains(forbidden_substr), "{label}: {out}");
+        assert!(
+            !out.contains(&format!("{finding}: {finding}:")),
+            "{label}: {out}"
+        );
+    }
+}
+
+#[test]
+fn h56_parse_failure_does_not_misreport_new_helper_reference() {
+    let path = "crates/sample/src/lib.rs";
+
+    let before_fn = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S<const N: usize>;\n    impl S<{ 1 }> { fn f() -> i32 { 1 } }\n    #[test]\n    fn first() { assert_eq!(S::<1>::f(), 1); }\n}\n",
+    );
+    let after_fn = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S<const N: usize>;\n    fn extra_helper() {}\n    impl S<{ 1 }> { fn f() -> i32 { 2 } }\n    #[test]\n    fn first() { assert_eq!(S::<1>::f(), 1); }\n}\n",
+    );
+    let fn_old_hash = format!("{:x}", Sha256::digest(before_fn.get(path).expect("before")));
+    let fn_new_hash = format!("{:x}", Sha256::digest(after_fn.get(path).expect("after")));
+    let (fn_findings, _) = compare_files(&before_fn, &after_fn);
+    let fn_finding = fn_findings.first().expect("fn finding").rule.to_string();
+    let fn_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{fn_old_hash}\"\nafter_sha256 = \"{fn_new_hash}\"\nfinding = \"{fn_finding}\"\ndecision = \"approved\"\nreason = \"check\"\nassertion_change = true\n"
+    );
+    let (fn_rem, fn_out) =
+        single_file_approval_run("h56-parse-fail-fn", &before_fn, &after_fn, &fn_toml);
+    assert_eq!(fn_rem, 1, "{fn_out}");
+    assert!(fn_out.contains("함수 구조를 파싱할 수 없음"), "{fn_out}");
+    assert!(!fn_out.contains("새 보조 함수 참조가 추가됨"), "{fn_out}");
+
+    let before_impl = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S<const N: usize>;\n    impl S<{ 1 }> {}\n    #[test]\n    fn first() { assert_eq!(1, 1); }\n}\n",
+    );
+    let after_impl = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S<const N: usize>;\n    fn extra_helper() {}\n    impl S<{ 2 }> {}\n    #[test]\n    fn first() { assert_eq!(1, 1); }\n}\n",
+    );
+    let impl_old_hash = format!(
+        "{:x}",
+        Sha256::digest(before_impl.get(path).expect("before"))
+    );
+    let impl_new_hash = format!("{:x}", Sha256::digest(after_impl.get(path).expect("after")));
+    let (impl_findings, _) = compare_files(&before_impl, &after_impl);
+    let mut impl_toml = String::new();
+    for item in &impl_findings {
+        write!(
+            impl_toml,
+            "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{impl_old_hash}\"\nafter_sha256 = \"{impl_new_hash}\"\nfinding = \"{}\"\ndecision = \"approved\"\nreason = \"check\"\nassertion_change = true\n",
+            item.rule
+        )
+        .expect("toml");
+    }
+    let (impl_rem, impl_out) =
+        single_file_approval_run("h56-parse-fail-impl", &before_impl, &after_impl, &impl_toml);
+    assert!(impl_rem >= 1, "{impl_out}");
+    assert!(
+        impl_out.contains("impl 문맥 변경 또는 파싱 실패"),
+        "{impl_out}"
+    );
+    assert!(
+        !impl_out.contains("새 보조 함수 참조가 추가됨"),
+        "{impl_out}"
+    );
+}
+
+#[test]
+fn h56_stale_trusted_row_does_not_mask_new_untrusted_branch_row() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { let _x = 1; assert_eq!(1, 1); }\n}\n",
+    );
+    let mut after = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { let _x = 2; assert_eq!(1, 1); }\n}\n",
+    );
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let new_hash = format!("{:x}", Sha256::digest(after.get(path).expect("after")));
+    let stale_before = "c".repeat(64);
+    let finding = "test-diff:modified:sample tests::first";
+    let stale_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{stale_before}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"stale\"\n"
+    );
+    let branch_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"untrusted new row\"\n"
+    );
+    after.insert(
+        String::from("harness/test-diff/approvals.toml"),
+        branch_toml.into_bytes(),
+    );
+    let (rem, out) = single_file_approval_run("h56-stale-untrusted", &before, &after, &stale_toml);
+    assert_eq!(rem, 1, "{out}");
+    assert!(out.contains("before_sha256:"), "{out}");
+    assert!(out.contains("승인 이력 또는 기준 커밋 신뢰 실패"), "{out}");
+}
+
+#[test]
+fn h56_impl_method_and_assertion_problem_report_specific_causes() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S;\n    impl S { fn check_val(v: i32) { assert_eq!(v, 1); } fn drop_me() {} }\n    #[test]\n    fn first() { S::check_val(1); assert_eq!(1, 1); }\n}\n",
+    );
+    let after_removed = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S;\n    impl S { fn check_val(v: i32) { assert_eq!(v, 1); } }\n    #[test]\n    fn first() { S::check_val(1); assert_eq!(1, 1); }\n}\n",
+    );
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let new_hash = format!(
+        "{:x}",
+        Sha256::digest(after_removed.get(path).expect("after"))
+    );
+    let impl_finding = "test-diff:support-modified:sample tests::impl impl S";
+    let toml_removed = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{impl_finding}\"\ndecision = \"approved\"\nreason = \"check\"\nassertion_change = true\n"
+    );
+    let (removed_rem, removed_out) =
+        single_file_approval_run("h56-impl-removed", &before, &after_removed, &toml_removed);
+    assert_eq!(removed_rem, 1, "{removed_out}");
+    assert!(
+        removed_out.contains("impl 메서드 drop_me의 구조 보존 실패: 메서드가 삭제됨"),
+        "{removed_out}"
+    );
+
+    let after_trivial = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    struct S;\n    impl S { fn check_val(v: i32) { assert_eq!(v, v); } fn drop_me() {} }\n    #[test]\n    fn first() { S::check_val(1); assert_eq!(1, 1); }\n}\n",
+    );
+    let trivial_hash = format!(
+        "{:x}",
+        Sha256::digest(after_trivial.get(path).expect("after"))
+    );
+    let toml_trivial = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{trivial_hash}\"\nfinding = \"{impl_finding}\"\ndecision = \"approved\"\nreason = \"check\"\nassertion_change = true\n"
+    );
+    let (trivial_rem, trivial_out) =
+        single_file_approval_run("h56-impl-trivial", &before, &after_trivial, &toml_trivial);
+    assert_eq!(trivial_rem, 1, "{trivial_out}");
+    assert!(
+        trivial_out.contains(
+            "impl 메서드 check_val의 구조 보존 실패: 보호된 단언 1: 자명한 참 단언은 승인할 수 없다"
+        ),
+        "{trivial_out}"
+    );
 }

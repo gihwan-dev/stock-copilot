@@ -887,17 +887,24 @@ fn helper_tokens(fingerprint: &str) -> Option<TokenStream> {
     }
 }
 
-fn references_new_helper(before: &str, after: &str, names: &BTreeSet<String>) -> bool {
-    let (Some(old), Some(new)) = (helper_tokens(before), helper_tokens(after)) else {
-        return true;
-    };
+fn added_new_helpers(before: &str, after: &str, names: &BTreeSet<String>) -> Option<Vec<String>> {
+    let (old, new) = (helper_tokens(before)?, helper_tokens(after)?);
     let mut old_counts = BTreeMap::new();
     let mut new_counts = BTreeMap::new();
     count_new_helpers(old, names, &mut old_counts);
     count_new_helpers(new, names, &mut new_counts);
-    new_counts
-        .iter()
-        .any(|(name, count)| *count > old_counts.get(name).copied().unwrap_or(0))
+    Some(
+        new_counts
+            .into_iter()
+            .filter_map(|(name, count)| {
+                (count > old_counts.get(&name).copied().unwrap_or(0)).then_some(name)
+            })
+            .collect(),
+    )
+}
+
+fn references_new_helper(before: &str, after: &str, names: &BTreeSet<String>) -> bool {
+    added_new_helpers(before, after, names).is_none_or(|added| !added.is_empty())
 }
 
 fn safe_finding(
@@ -1020,30 +1027,176 @@ impl<'ast> Visit<'ast> for DiagnosticControls {
     }
 }
 
+fn control_flow_detail(statements: &[&syn::Stmt]) -> Option<String> {
+    let mut control = SetupControl::default();
+    for statement in statements {
+        control.visit_stmt(statement);
+    }
+    if !control.blocked {
+        return None;
+    }
+    let mut details = DiagnosticControls::default();
+    for statement in statements {
+        details.visit_stmt(statement);
+    }
+    Some(if details.kinds.is_empty() {
+        String::from("보호 문장에 제어 흐름이 있다")
+    } else {
+        format!(
+            "보호 문장에 제어 흐름이 있다: {}",
+            details.kinds.into_iter().collect::<Vec<_>>().join(", ")
+        )
+    })
+}
+
+fn added_assertion_problem(statement: &syn::Stmt) -> String {
+    if let Some(detail) = control_flow_detail(&[statement]) {
+        return detail;
+    }
+    let Some(heads) = assertion_heads(statement) else {
+        return String::from("단언의 호출·블록 또는 매크로 인자를 안전하게 분석할 수 없다");
+    };
+    if heads.trivial {
+        return String::from("자명한 참 단언은 추가할 수 없다");
+    }
+    if !heads.opaque_macros.is_empty() {
+        return format!(
+            "추가된 단언에 허용되지 않은 내부 매크로가 있다: {:?}",
+            heads.opaque_macros
+        );
+    }
+    format!(
+        "추가된 단언은 표준 assert 계열 매크로만 허용한다: {:?}",
+        heads.names
+    )
+}
+
 fn assertion_problem(old: &syn::Stmt, new: &syn::Stmt, approval: AssertionChange) -> String {
     if approval == AssertionChange::Forbidden {
         return String::from("단언 변경에 명시 승인이 없다");
     }
-    let mut control = SetupControl::default();
-    control.visit_stmt(old);
-    control.visit_stmt(new);
-    if control.blocked {
-        let mut details = DiagnosticControls::default();
-        details.visit_stmt(old);
-        details.visit_stmt(new);
-        return if details.kinds.is_empty() {
-            String::from("보호 문장에 제어 흐름이 있다")
-        } else {
-            format!(
-                "보호 문장에 제어 흐름이 있다: {}",
-                details.kinds.into_iter().collect::<Vec<_>>().join(", ")
-            )
-        };
+    if let Some(detail) = control_flow_detail(&[old, new]) {
+        return detail;
     }
-    if assertion_heads(old).is_none() || assertion_heads(new).is_none() {
+    let (Some(before_heads), Some(after_heads)) = (assertion_heads(old), assertion_heads(new))
+    else {
         return String::from("단언의 호출·블록 또는 매크로 인자를 안전하게 분석할 수 없다");
+    };
+    let mut problems = Vec::new();
+    if after_heads.trivial {
+        problems.push(String::from("자명한 참 단언은 승인할 수 없다"));
     }
-    String::from("단언의 호출·매크로·연산 구조 또는 비자명성 조건이 다르다")
+    if before_heads.names != after_heads.names {
+        problems.push(format!(
+            "단언 호출 종류·대상 변경 ({:?} → {:?})",
+            before_heads.names, after_heads.names
+        ));
+    }
+    if before_heads.calls != after_heads.calls {
+        problems.push(format!(
+            "단언 내부 호출 목록 변경 ({:?} → {:?})",
+            before_heads.calls, after_heads.calls
+        ));
+    }
+    if before_heads.opaque_macros != after_heads.opaque_macros {
+        problems.push(format!(
+            "단언 내부 매크로 변경 ({:?} → {:?})",
+            before_heads.opaque_macros, after_heads.opaque_macros
+        ));
+    }
+    if before_heads.lazy_operators != after_heads.lazy_operators {
+        problems.push(format!(
+            "단언 단락 연산 구조 변경 ({:?} → {:?})",
+            before_heads.lazy_operators, after_heads.lazy_operators
+        ));
+    }
+    if problems.is_empty() {
+        String::from("단언 구조 보존 규칙 위반")
+    } else {
+        problems.join(", ")
+    }
+}
+
+fn added_support_assertions_reason(
+    left: &[&syn::Stmt],
+    right: &[&syn::Stmt],
+    approval: AssertionChange,
+) -> String {
+    let mut remaining = right.iter().enumerate();
+    for (old_index, old) in left.iter().enumerate() {
+        loop {
+            let Some((new_index, new)) = remaining.next() else {
+                return format!(
+                    "기존 보호된 단언 {}을 보존하지 못함",
+                    old_index.saturating_add(1)
+                );
+            };
+            if same_assertion(old, new, approval) {
+                break;
+            }
+            if !safe_added_assertion(new) {
+                return format!(
+                    "추가된 단언 {}: {}",
+                    new_index.saturating_add(1),
+                    added_assertion_problem(new)
+                );
+            }
+        }
+    }
+    for (new_index, new) in remaining {
+        if !safe_added_assertion(new) {
+            return format!(
+                "추가된 단언 {}: {}",
+                new_index.saturating_add(1),
+                added_assertion_problem(new)
+            );
+        }
+    }
+    String::from("함수 구조 보존 규칙 위반")
+}
+
+fn unsafe_block_reason(
+    before: &syn::Block,
+    after: &syn::Block,
+    kind: ItemKind,
+    approval: AssertionChange,
+) -> String {
+    let (Some(left), Some(right)) = (protected(before), protected(after)) else {
+        return String::from("준비 코드에 제어 흐름 또는 탈출 경로가 있음");
+    };
+    if kind == ItemKind::Test && left.is_empty() {
+        return String::from("기존 테스트에서 보호할 단언을 찾지 못함");
+    }
+    if left.len() == right.len() {
+        if let Some((index, (previous, updated))) = left
+            .iter()
+            .zip(&right)
+            .enumerate()
+            .find(|(_, (previous, updated))| !same_assertion(previous, updated, approval))
+        {
+            return format!(
+                "보호된 단언 {}: {}",
+                index.saturating_add(1),
+                assertion_problem(previous, updated, approval)
+            );
+        }
+        return String::from("함수 구조 보존 규칙 위반");
+    }
+    if left.len() > right.len() || kind != ItemKind::Support {
+        return format!(
+            "보호된 단언 수 또는 순서가 달라짐 ({} → {})",
+            left.len(),
+            right.len()
+        );
+    }
+    if approval != AssertionChange::Approved {
+        return format!(
+            "단언 변경에 명시 승인이 없다 (보호된 단언 추가: {} → {})",
+            left.len(),
+            right.len()
+        );
+    }
+    added_support_assertions_reason(&left, &right, approval)
 }
 
 fn unsafe_item_reason(
@@ -1065,32 +1218,56 @@ fn unsafe_item_reason(
     {
         return String::from("함수의 문맥·이름·가시성·테스트 서명 변경");
     }
-    let (Some(left), Some(right)) = (protected(&old.block), protected(&new.block)) else {
-        return String::from("준비 코드에 제어 흐름 또는 탈출 경로가 있음");
-    };
-    if kind == ItemKind::Test && left.is_empty() {
-        return String::from("기존 테스트에서 보호할 단언을 찾지 못함");
-    }
-    if left.len() != right.len() {
-        return format!(
-            "보호된 단언 수 또는 순서가 달라짐 ({} → {})",
-            left.len(),
-            right.len()
-        );
-    }
-    if let Some((index, (previous, updated))) = left
+    unsafe_block_reason(&old.block, &new.block, kind, approval)
+}
+
+fn unsafe_method_reason(
+    before: &syn::ImplItemFn,
+    items: &[syn::ImplItem],
+    approval: AssertionChange,
+) -> String {
+    let matches: Vec<&syn::ImplItemFn> = items
         .iter()
-        .zip(&right)
-        .enumerate()
-        .find(|(_, (previous, updated))| !same_assertion(previous, updated, approval))
-    {
-        return format!(
-            "보호된 단언 {}: {}",
-            index.saturating_add(1),
-            assertion_problem(previous, updated, approval)
-        );
+        .filter_map(|item| {
+            if let syn::ImplItem::Fn(new) = item {
+                (new.sig.ident == before.sig.ident).then_some(new)
+            } else {
+                None
+            }
+        })
+        .collect();
+    match matches.as_slice() {
+        [] => format!(
+            "impl 메서드 {}의 구조 보존 실패: 메서드가 삭제됨",
+            before.sig.ident
+        ),
+        [after] => {
+            if !equal_attributes(&before.attrs, &after.attrs)
+                || before.vis.to_token_stream().to_string()
+                    != after.vis.to_token_stream().to_string()
+            {
+                format!(
+                    "impl 메서드 {}의 구조 보존 실패: 속성 또는 가시성 변경",
+                    before.sig.ident
+                )
+            } else {
+                format!(
+                    "impl 메서드 {}의 구조 보존 실패: {}",
+                    before.sig.ident,
+                    unsafe_block_reason(&before.block, &after.block, ItemKind::Support, approval)
+                )
+            }
+        }
+        _ => format!(
+            "impl 메서드 {}의 구조 보존 실패: 메서드가 중복됨",
+            before.sig.ident
+        ),
     }
-    String::from("함수 구조 보존 규칙 위반")
+}
+
+fn new_helper_reason(before: &str, after: &str, helpers: &BTreeSet<String>) -> Option<String> {
+    let added = added_new_helpers(before, after, helpers)?;
+    (!added.is_empty()).then(|| format!("새 보조 함수 참조가 추가됨: {}", added.join(", ")))
 }
 
 fn unsafe_finding_reason(
@@ -1102,28 +1279,33 @@ fn unsafe_finding_reason(
 ) -> String {
     match &finding.rule {
         Rule::Modified(id) => match before.tests.get(id).zip(after.tests.get(id)) {
-            Some((old, new)) if references_new_helper(old, new, helpers) => {
-                String::from("새 보조 함수 참조가 추가됨")
+            Some((old, new)) if parsed_item(old).is_none() || parsed_item(new).is_none() => {
+                String::from("함수 구조를 파싱할 수 없음")
             }
-            Some((old, new)) => unsafe_item_reason(old, new, ItemKind::Test, approval),
+            Some((old, new)) => new_helper_reason(old, new, helpers)
+                .unwrap_or_else(|| unsafe_item_reason(old, new, ItemKind::Test, approval)),
             None => String::from("기존 또는 변경된 테스트를 찾을 수 없음"),
         },
         Rule::SupportModified(id) => match support(before, id).zip(support(after, id)) {
-            Some(((_, old), (_, new))) if references_new_helper(old, new, helpers) => {
-                String::from("새 보조 함수 참조가 추가됨")
+            Some((("fn", old), ("fn", new)))
+                if parsed_item(old).is_none() || parsed_item(new).is_none() =>
+            {
+                String::from("함수 구조를 파싱할 수 없음")
             }
-            Some((("fn", old), ("fn", new))) => {
-                unsafe_item_reason(old, new, ItemKind::Support, approval)
-            }
+            Some((("fn", old), ("fn", new))) => new_helper_reason(old, new, helpers)
+                .unwrap_or_else(|| unsafe_item_reason(old, new, ItemKind::Support, approval)),
             Some((("impl", old), ("impl", new))) => match (parsed_impl(old), parsed_impl(new)) {
                 (Some((old_context, old_impl)), Some((new_context, new_impl)))
                     if old_context == new_context =>
                 {
+                    if let Some(reason) = new_helper_reason(old, new, helpers) {
+                        return reason;
+                    }
                     for item in &old_impl.items {
                         if let syn::ImplItem::Fn(method) = item
                             && !safe_method(method, &new_impl.items, approval)
                         {
-                            return format!("impl 메서드 {}의 구조 보존 실패", method.sig.ident);
+                            return unsafe_method_reason(method, &new_impl.items, approval);
                         }
                     }
                     String::from("impl의 기존 상수·타입·항목 구조 보존 실패")
@@ -1142,6 +1324,11 @@ fn unsafe_finding_reason(
     }
 }
 
+enum GroupDiagnosis {
+    FileLevel(String),
+    Blockers(Vec<(String, String)>),
+}
+
 struct Diagnosis<'a> {
     before: &'a Files,
     current: &'a Files,
@@ -1151,61 +1338,112 @@ struct Diagnosis<'a> {
 }
 
 impl Diagnosis<'_> {
-    fn blockers(&self, isolated: &Findings, target: &Scan, expected: &ApprovedFindings) -> String {
-        let blockers: Vec<String> = isolated
+    fn blockers(
+        &self,
+        isolated: &Findings,
+        target: &Scan,
+        expected: &ApprovedFindings,
+    ) -> GroupDiagnosis {
+        let blockers: Vec<(String, String)> = isolated
             .iter()
             .filter_map(|item| {
-                let approved = expected.get(&item.rule.to_string())?;
+                let name = item.rule.to_string();
+                let approved = expected.get(&name)?;
                 (!safe_finding(item, &self.base_scan, target, *approved, &self.helpers)).then(
                     || {
-                        format!(
-                            "{}: {}",
-                            item.rule,
+                        (
+                            name,
                             unsafe_finding_reason(
                                 item,
                                 &self.base_scan,
                                 target,
                                 *approved,
-                                &self.helpers
-                            )
+                                &self.helpers,
+                            ),
                         )
                     },
                 )
             })
             .collect();
         if blockers.is_empty() {
-            String::from("동일 파일의 승인 조건 미충족")
+            GroupDiagnosis::FileLevel(String::from("동일 파일의 승인 조건 미충족"))
         } else {
-            blockers.join("; ")
+            GroupDiagnosis::Blockers(blockers)
         }
     }
 
-    fn reason(&self, group: &Group, expected: &ApprovedFindings) -> String {
-        let Some((old, new)) = self
-            .before
-            .get(&group.path)
-            .zip(self.current.get(&group.path))
+    fn reason(&self, group: &Group, expected: &ApprovedFindings) -> GroupDiagnosis {
+        let (Some(old), Some(new)) = (self.before.get(&group.path), self.current.get(&group.path))
         else {
-            return String::from("승인 대상 전·후 파일 누락");
+            let missing = match (
+                self.before.contains_key(&group.path),
+                self.current.contains_key(&group.path),
+            ) {
+                (false, false) => "before·current",
+                (false, true) => "before",
+                (true, false) => "current",
+                (true, true) => "unknown",
+            };
+            return GroupDiagnosis::FileLevel(format!(
+                "승인 대상 전·후 파일 누락 (path={}, 누락={missing})",
+                group.path
+            ));
         };
-        if digest(old) != group.before || digest(new) != group.after {
-            return String::from("파일 전·후 SHA-256 불일치");
+        let actual_before = digest(old);
+        let actual_after = digest(new);
+        let mut mismatches = Vec::new();
+        if actual_before != group.before {
+            mismatches.push(format!(
+                "before_sha256: 실제 {actual_before}, 승인 {}",
+                group.before
+            ));
+        }
+        if actual_after != group.after {
+            mismatches.push(format!(
+                "after_sha256: 실제 {actual_after}, 승인 {}",
+                group.after
+            ));
+        }
+        if !mismatches.is_empty() {
+            return GroupDiagnosis::FileLevel(format!(
+                "파일 전·후 SHA-256 불일치 (path={}, {})",
+                group.path,
+                mismatches.join("; ")
+            ));
         }
         let mut hybrid = self.before.clone();
         hybrid.insert(group.path.clone(), new.clone());
         let (isolated, _) = compare_files(self.before, &hybrid);
         let actual: BTreeSet<String> = isolated.iter().map(|item| item.rule.to_string()).collect();
         if actual != expected.keys().cloned().collect() || isolated.is_empty() {
-            return format!(
-                "지적 집합 불일치: 실제 {:?}, 승인 {:?}",
+            return GroupDiagnosis::FileLevel(format!(
+                "지적 집합 불일치 (path={}, 실제 {:?}, 승인 {:?})",
+                group.path,
                 actual,
                 expected.keys().collect::<Vec<_>>()
-            );
+            ));
         }
         if let Some(missing) = isolated.iter().find(|item| !self.findings.contains(*item)) {
-            return format!("현재 지적 집합에 없음: {}", missing.rule);
+            return GroupDiagnosis::FileLevel(format!("현재 지적 집합에 없음: {}", missing.rule));
         }
         self.blockers(&isolated, &scan(&hybrid), expected)
+    }
+}
+
+fn format_group_diagnosis(diagnosis: &GroupDiagnosis, target_finding: &str) -> String {
+    match diagnosis {
+        GroupDiagnosis::FileLevel(message) => message.clone(),
+        GroupDiagnosis::Blockers(blockers) => blockers
+            .iter()
+            .map(|(item_name, detail)| {
+                if item_name == target_finding {
+                    detail.clone()
+                } else {
+                    format!("{item_name}: {detail}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("; "),
     }
 }
 
@@ -1242,18 +1480,18 @@ fn approvable_rule(rule: &Rule) -> bool {
     }
 }
 
-fn append_reason(result: &mut BTreeMap<String, String>, name: String, reason: String) {
-    match result.get_mut(&name) {
-        Some(previous) => {
-            if !previous.split("; ").any(|part| part == reason) {
-                previous.push_str("; ");
-                previous.push_str(&reason);
-            }
-        }
-        None => {
-            result.insert(name, reason);
-        }
+fn append_reason_entry(result: &mut BTreeMap<String, Vec<String>>, name: String, reason: String) {
+    let entries = result.entry(name).or_default();
+    if !entries.contains(&reason) {
+        entries.push(reason);
     }
+}
+
+fn join_reasons(entries: BTreeMap<String, Vec<String>>) -> BTreeMap<String, String> {
+    entries
+        .into_iter()
+        .map(|(name, parts)| (name, parts.join("; ")))
+        .collect()
 }
 
 fn diagnose_group(
@@ -1261,7 +1499,7 @@ fn diagnose_group(
     group: &Group,
     expected: &ApprovedFindings,
     trusted: Option<()>,
-    result: &mut BTreeMap<String, String>,
+    result: &mut BTreeMap<String, Vec<String>>,
 ) {
     let applicable: Vec<(&Finding<Rule>, String)> = context
         .findings
@@ -1284,11 +1522,25 @@ fn diagnose_group(
         let reason = if !approvable_rule(&item.rule) {
             String::from("승인 불가 지적 종류")
         } else if let Some(detail) = &group_reason {
-            detail.clone()
+            format_group_diagnosis(detail, &name)
         } else {
             String::from("승인 이력 또는 기준 커밋 신뢰 실패")
         };
-        append_reason(result, name, reason);
+        append_reason_entry(result, name, reason);
+    }
+}
+
+type ReasonMap = BTreeMap<String, Vec<String>>;
+type TrustedGroups = BTreeMap<Group, ApprovedFindings>;
+
+pub(super) struct DiagnosisOutcome {
+    reasons: ReasonMap,
+    trusted_groups: Option<TrustedGroups>,
+}
+
+impl DiagnosisOutcome {
+    pub(super) fn into_reasons(self) -> BTreeMap<String, String> {
+        join_reasons(self.reasons)
     }
 }
 
@@ -1298,20 +1550,29 @@ pub(super) fn diagnose(
     head: &str,
     files: (&Files, &Files),
     findings: &Findings,
-) -> BTreeMap<String, String> {
-    let mut result = BTreeMap::new();
+) -> DiagnosisOutcome {
+    let mut reasons = BTreeMap::new();
     if findings.is_empty() {
-        return result;
+        return DiagnosisOutcome {
+            reasons,
+            trusted_groups: None,
+        };
     }
     let source = authority
         .map(String::from)
         .or_else(|| commit(root, MASTER))
         .unwrap_or_else(|| String::from(head));
     let Some(contents) = git(root, &["show", &format!("{source}:{APPROVAL_FILE}")]) else {
-        return result;
+        return DiagnosisOutcome {
+            reasons,
+            trusted_groups: None,
+        };
     };
     let Ok(groups) = parse(&contents) else {
-        return result;
+        return DiagnosisOutcome {
+            reasons,
+            trusted_groups: None,
+        };
     };
     let trusted =
         (authority.is_some() && diagnostic_trusted(root, &source, head, &groups)).then_some(());
@@ -1325,10 +1586,13 @@ pub(super) fn diagnose(
         base_scan,
         helpers,
     };
-    for (group, expected) in groups {
-        diagnose_group(&context, &group, &expected, trusted, &mut result);
+    for (group, expected) in &groups {
+        diagnose_group(&context, group, expected, trusted, &mut reasons);
     }
-    result
+    DiagnosisOutcome {
+        reasons,
+        trusted_groups: trusted.map(|()| groups),
+    }
 }
 
 pub(super) fn apply_with_authority(
@@ -1396,7 +1660,11 @@ pub(super) fn apply_with_authority(
     Ok(findings)
 }
 
-fn untrusted_approval_rows(contents: &str, findings: &Findings) -> BTreeMap<String, String> {
+fn untrusted_approval_rows(
+    contents: &str,
+    findings: &Findings,
+    trusted_groups: Option<&BTreeMap<Group, ApprovedFindings>>,
+) -> BTreeMap<String, String> {
     let Ok(groups) = parse(contents) else {
         return BTreeMap::new();
     };
@@ -1404,17 +1672,22 @@ fn untrusted_approval_rows(contents: &str, findings: &Findings) -> BTreeMap<Stri
         .iter()
         .filter_map(|finding| {
             let name = finding.rule.to_string();
-            groups
-                .values()
-                .any(|expected| expected.contains_key(&name))
-                .then(|| {
-                    let reason = if approvable_rule(&finding.rule) {
-                        String::from("승인 이력 또는 기준 커밋 신뢰 실패")
-                    } else {
-                        String::from("승인 불가 지적 종류")
-                    };
-                    (name, reason)
+            let has_untrusted = groups.iter().any(|(group, expected)| {
+                expected.get(&name).is_some_and(|mark| {
+                    trusted_groups
+                        .and_then(|trusted| trusted.get(group))
+                        .and_then(|trusted_expected| trusted_expected.get(&name))
+                        != Some(mark)
                 })
+            });
+            has_untrusted.then(|| {
+                let reason = if approvable_rule(&finding.rule) {
+                    String::from("승인 이력 또는 기준 커밋 신뢰 실패")
+                } else {
+                    String::from("승인 불가 지적 종류")
+                };
+                (name, reason)
+            })
         })
         .collect()
 }
@@ -1424,6 +1697,7 @@ fn untrusted_observed_rows(
     head: &str,
     current: &Files,
     findings: &Findings,
+    trusted_groups: Option<&BTreeMap<Group, ApprovedFindings>>,
 ) -> BTreeMap<String, String> {
     if findings.is_empty() {
         return BTreeMap::new();
@@ -1434,7 +1708,7 @@ fn untrusted_observed_rows(
         .and_then(|bytes| std::str::from_utf8(bytes).ok());
     let mut result = BTreeMap::new();
     for contents in [committed.as_deref(), working].into_iter().flatten() {
-        for (name, reason) in untrusted_approval_rows(contents, findings) {
+        for (name, reason) in untrusted_approval_rows(contents, findings, trusted_groups) {
             result.entry(name).or_insert(reason);
         }
     }
@@ -1462,17 +1736,23 @@ pub(super) fn apply_to(
         }
         _ => findings,
     };
-    let mut reasons = diagnose(
+    let mut outcome = diagnose(
         root,
         authority.as_deref(),
         &head,
         (before, current),
         &remaining,
     );
-    for (finding, reason) in untrusted_observed_rows(root, &head, current, &remaining) {
-        reasons.entry(finding).or_insert(reason);
+    for (finding, reason) in untrusted_observed_rows(
+        root,
+        &head,
+        current,
+        &remaining,
+        outcome.trusted_groups.as_ref(),
+    ) {
+        append_reason_entry(&mut outcome.reasons, finding, reason);
     }
-    for (finding, reason) in reasons {
+    for (finding, reason) in outcome.into_reasons() {
         if writeln!(output, "승인 거부: {finding}: {reason}").is_err() {
             break;
         }

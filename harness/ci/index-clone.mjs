@@ -23,6 +23,8 @@ const applyPatch = (source, clone, sourceEnvironment, environment) => {
         "diff.noprefix=false",
         "-c",
         "diff.mnemonicPrefix=false",
+        "-c",
+        "diff.relative=false",
         "diff",
         "--cached",
         "--binary",

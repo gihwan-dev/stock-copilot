@@ -841,6 +841,40 @@ const hasAncestorIdentity = (entry, directory) => {
   }
 };
 
+const trackedTopEntries = (root, options) => {
+  const indexed = execFileSync("git", ["ls-files", "-z"], {
+    ...options,
+    encoding: "utf8",
+  });
+  const committed = execFileSync(
+    "git",
+    ["ls-tree", "-z", "--name-only", "HEAD"],
+    { ...options, encoding: "utf8" },
+  );
+  const names = new Set();
+  for (const entry of indexed.split("\0")) {
+    if (entry !== "") names.add(entry.split("/")[0]);
+  }
+  for (const entry of committed.split("\0")) {
+    if (entry !== "") names.add(entry);
+  }
+  return [...names];
+};
+
+const hasTrackedAlias = (root, name, info, options) => {
+  const lowered = name.toLowerCase();
+  return trackedTopEntries(root, options).some((entry) => {
+    if (entry.toLowerCase() === lowered) return true;
+    try {
+      const entryInfo = lstatSync(join(root, entry));
+      return entryInfo.dev === info.dev && entryInfo.ino === info.ino;
+    } catch (error) {
+      if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
+      throw error;
+    }
+  });
+};
+
 const reviewerRemoval = (target, invocation, context) => {
   const original = targetFindings(target, invocation, context);
   const macOS = process.platform === "darwin";
@@ -979,19 +1013,9 @@ const reviewerRemoval = (target, invocation, context) => {
         finding("reviewer-cleanup", "다른 등록 작업 사본이 포함되어 있다"),
       ];
     }
-    const indexed = execFileSync(
-      "git",
-      ["ls-files", "-z", "--", name],
-      options,
-    );
-    const committed = execFileSync(
-      "git",
-      ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", name],
-      options,
-    );
-    return indexed.length === 0 && committed.length === 0
-      ? []
-      : [finding("reviewer-cleanup", "추적 파일을 포함한 폴더다")];
+    return hasTrackedAlias(root, name, info, options)
+      ? [finding("reviewer-cleanup", "추적 파일을 포함한 폴더다")]
+      : [];
   } catch {
     return [
       finding("reviewer-cleanup", "정리 대상 또는 추적 파일을 확인할 수 없다"),

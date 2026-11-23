@@ -27,11 +27,17 @@ const ciConcurrency = {
     "${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && format('{0}-{1}', github.run_id, github.run_attempt) || 'branch' }}",
   "cancel-in-progress": "${{ github.ref != 'refs/heads/master' }}",
 };
-const nightlyConcurrency = {
-  group: "${{ github.workflow }}-runner-capacity",
+const mutationSlotConcurrency = {
+  group:
+    "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
   queue: "max",
   "cancel-in-progress": false,
 };
+
+const shardSlot = (shard) =>
+  ["0/", "2/", "4/", "6/", "8/"].some((part) => shard.includes(part))
+    ? "0"
+    : "1";
 
 test("일간과 주간 변이 matrix는 각각 1 또는 2개의 러너로 제한한다", () => {
   const workflow = read("nightly.yml");
@@ -85,9 +91,17 @@ test("CI는 master의 실행과 재시도마다 독립 그룹을 쓰고 다른 �
   }
 });
 
-test("야간 실행은 대기열을 공유해 일간과 주간 변이의 동시 점유를 합산 제한한다", () => {
+test("야간 변이 작업만 2슬롯 대기열을 공유하고 일간 macOS·Linux 검사는 막지 않는다", () => {
   const workflow = read("nightly.yml");
-  assert.deepEqual(workflow.concurrency, nightlyConcurrency);
+  assert.equal(workflow.concurrency, undefined);
+  assert.equal(workflow.jobs.changes.concurrency, undefined);
+  assert.equal(workflow.jobs.macos.concurrency, undefined);
+  assert.equal(workflow.jobs.linux.concurrency, undefined);
+  assert.deepEqual(workflow.jobs.mutants.concurrency, mutationSlotConcurrency);
+  assert.deepEqual(
+    workflow.jobs["mutants-daily"].concurrency,
+    mutationSlotConcurrency,
+  );
   assert.equal(
     workflow.jobs.mutants.if,
     "github.event.schedule == '0 14 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')",
@@ -97,18 +111,58 @@ test("야간 실행은 대기열을 공유해 일간과 주간 변이의 동시 
     "github.event.schedule == '0 18 * * *' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')",
   );
   assert.deepEqual(check(nightlyPath, workflow), []);
-  for (const changedConcurrency of [
-    { ...nightlyConcurrency, queue: "single" },
-    { ...nightlyConcurrency, "cancel-in-progress": true },
-    undefined,
-  ]) {
-    const changed = structuredClone(workflow);
-    if (changedConcurrency === undefined) delete changed.concurrency;
-    else changed.concurrency = changedConcurrency;
-    assert.notDeepEqual(
-      check(nightlyPath, changed),
-      [],
-      JSON.stringify(changedConcurrency),
-    );
+  const weeklySlots = { 0: 0, 1: 0 };
+  for (const shard of workflow.jobs.mutants.strategy.matrix.shard) {
+    const slot = shardSlot(shard);
+    const index = Number(shard.split("/")[0]);
+    assert.equal(slot, String(index % 2), shard);
+    weeklySlots[slot] += 1;
+  }
+  assert.deepEqual(weeklySlots, { 0: 64, 1: 64 });
+  for (let total = 1; total <= 8; total += 1) {
+    const slots = new Set();
+    for (let index = 0; index < total; index += 1) {
+      const shard = `${index}/${total}`;
+      const slot = shardSlot(shard);
+      assert.equal(slot, String(index % 2), shard);
+      slots.add(slot);
+    }
+    assert.ok(slots.size <= 2);
+  }
+  const withTopConcurrency = structuredClone(workflow);
+  withTopConcurrency.concurrency = {
+    group: "${{ github.workflow }}-runner-capacity",
+    queue: "max",
+    "cancel-in-progress": false,
+  };
+  assert.ok(
+    check(nightlyPath, withTopConcurrency).includes(
+      "unknown-key:top.concurrency",
+    ),
+  );
+  const withMacosConcurrency = structuredClone(workflow);
+  withMacosConcurrency.jobs.macos.concurrency = mutationSlotConcurrency;
+  assert.ok(
+    check(nightlyPath, withMacosConcurrency).includes(
+      "unknown-key:jobs.macos.concurrency",
+    ),
+  );
+  for (const jobName of ["mutants", "mutants-daily"]) {
+    for (const changedConcurrency of [
+      { ...mutationSlotConcurrency, queue: "single" },
+      { ...mutationSlotConcurrency, "cancel-in-progress": true },
+      { ...mutationSlotConcurrency, group: "${{ github.workflow }}-mutants" },
+      undefined,
+    ]) {
+      const changed = structuredClone(workflow);
+      if (changedConcurrency === undefined)
+        delete changed.jobs[jobName].concurrency;
+      else changed.jobs[jobName].concurrency = changedConcurrency;
+      assert.notDeepEqual(
+        check(nightlyPath, changed),
+        [],
+        `${jobName} ${JSON.stringify(changedConcurrency)}`,
+      );
+    }
   }
 });

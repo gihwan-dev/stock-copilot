@@ -5,6 +5,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -229,6 +230,43 @@ test("공통 역할 가드는 지정된 임시 디렉터리 정리만 허용한�
         "deny",
         "HEAD 추적 파일의 스테이징 삭제",
       );
+    for (const [trackedDir, lowerDir] of [
+      [".RV-UPPER", ".rv-upper"],
+      ["TARGET", "target"],
+    ]) {
+      const upperPath = join(fixture.worktree, trackedDir);
+      const lowerPath = join(fixture.worktree, lowerDir);
+      if (existsSync(lowerPath))
+        rmSync(lowerPath, { recursive: true, force: true });
+      mkdirSync(upperPath);
+      writeFileSync(join(upperPath, "secret.txt"), "keep\n");
+      execFileSync(
+        "git",
+        ["-C", fixture.worktree, "add", `${trackedDir}/secret.txt`],
+        { env: gitEnv },
+      );
+      execFileSync(
+        "git",
+        [
+          "-C",
+          fixture.worktree,
+          "commit",
+          "--quiet",
+          "-m",
+          `track ${trackedDir}`,
+        ],
+        { env: gitEnv },
+      );
+      const tempSwap = join(fixture.worktree, ".rv-swap-temp");
+      renameSync(upperPath, tempSwap);
+      renameSync(tempSwap, lowerPath);
+      for (const role of ["adversarial-reviewer", "review-critic"])
+        assert.equal(
+          verdict(fixture, role, `${remove} ${lowerDir}`),
+          "deny",
+          `${trackedDir} 대소문자 별칭 ${lowerDir} 거부`,
+        );
+    }
   } finally {
     rmSync(fixture.base, { recursive: true, force: true });
   }

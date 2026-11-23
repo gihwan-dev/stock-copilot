@@ -550,11 +550,6 @@
       "permissions": {
         "contents": "read"
       },
-      "concurrency": {
-        "group": "${{ github.workflow }}-runner-capacity",
-        "queue": "max",
-        "cancel-in-progress": false
-      },
       "jobs": {
         "changes": {
           "runs-on": "ubuntu-24.04-arm",
@@ -748,6 +743,11 @@
         "mutants": {
           "runs-on": "macos-15",
           "timeout-minutes": 180,
+          "concurrency": {
+            "group": "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "queue": "max",
+            "cancel-in-progress": false
+          },
           "strategy": {
             "fail-fast": false,
             "matrix": {
@@ -997,6 +997,11 @@
         "mutants-daily": {
           "runs-on": "macos-15",
           "timeout-minutes": 360,
+          "concurrency": {
+            "group": "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "queue": "max",
+            "cancel-in-progress": false
+          },
           "steps": [
             {
               "name": "checkout",

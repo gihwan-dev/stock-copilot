@@ -194,19 +194,28 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   }
   const expected = policy.jobPermissions[`${path}#${name}`];
   const timeout = job["timeout-minutes"];
+  const isMutationJob =
+    path === ".github/workflows/nightly.yml" &&
+    ["mutants", "mutants-daily"].includes(name);
+  const expectedJobConcurrency =
+    policy.expected[path]?.jobs?.[name]?.concurrency;
+  const requireJobConcurrency =
+    isMutationJob && "mutants" in jobs && "mutants-daily" in jobs;
+  const allowedJobKeys = [
+    ...policy.jobKeys,
+    ...(isMutationJob ? ["strategy"] : []),
+    ...(isMutationJob &&
+    expectedJobConcurrency !== undefined &&
+    isDeepStrictEqual(job.concurrency, expectedJobConcurrency)
+      ? ["concurrency"]
+      : []),
+  ];
   return [
-    ...keyFindings(
-      job,
-      path === ".github/workflows/nightly.yml" &&
-        ["mutants", "mutants-daily"].includes(name)
-        ? [...policy.jobKeys, "strategy"]
-        : policy.jobKeys,
-      policy.requiredJobKeys,
-      `jobs.${name}`,
-    ),
-    ...(path !== ".github/workflows/nightly.yml" ||
-    !["mutants", "mutants-daily"].includes(name) ||
-    mutationStrategyMatches(name, job.strategy, policy)
+    ...keyFindings(job, allowedJobKeys, policy.requiredJobKeys, `jobs.${name}`),
+    ...(requireJobConcurrency && !("concurrency" in job)
+      ? [finding("missing-key", `jobs.${name}.concurrency`)]
+      : []),
+    ...(!isMutationJob || mutationStrategyMatches(name, job.strategy, policy)
       ? []
       : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)
@@ -260,12 +269,9 @@ export const workflowFindings = (path, text, policy, toolSpec) => {
       ? [...policy.topKeys, "concurrency"]
       : policy.topKeys;
   const requiredConcurrency =
-    (path === ".github/workflows/ci.yml" &&
-      "macos" in jobs &&
-      "macos-branch" in jobs) ||
-    (path === ".github/workflows/nightly.yml" &&
-      "mutants" in jobs &&
-      "mutants-daily" in jobs);
+    path === ".github/workflows/ci.yml" &&
+    "macos" in jobs &&
+    "macos-branch" in jobs;
   const found = [
     ...keyFindings(parsed, allowedKeys, policy.topKeys, "top"),
     ...(requiredConcurrency && !("concurrency" in parsed)

@@ -8,7 +8,9 @@
 
 ## 결정
 
-주간·일간 변이 matrix 각각에 `max-parallel: 2`를 둔다. 계정의 다섯 자리 중 변이가 최대 두 자리를 사용해 나머지 세 자리를 다른 작업에 남기기 위한 값이다. 두 종류가 동시에 두 자리씩 쓰지 않도록 nightly 워크플로 실행 전체에 공통 대기열을 두고 취소하지 않으며, 각 실행에서 두 matrix 조건은 상호 배타적으로 유지한다. 일간 실행의 일반 macOS 검사는 변이 두 자리와 별개이므로 같은 일간 실행에서 macOS 작업 최대 세 개가 돌 수 있다. 계정 전체의 다른 작업까지 예약하거나 CI에 우선순위를 주는 기능은 아니어서 CI 대기가 절대로 없다고 보장하지 않는다.
+주간·일간 변이 matrix 각각에 `max-parallel: 2`를 둔다. 계정의 다섯 자리 중 변이가 최대 두 자리를 사용해 나머지 세 자리를 다른 작업에 남기기 위한 값이다. 두 종류가 동시에 두 자리씩 쓰지 않도록 합산 점유를 두 자리로 묶되, 1차 리뷰·비판에서 확인된 대로 워크플로 최상위 `concurrency`를 쓰면 48시간 이상 도는 주간 변이 뒤에 일간 실행 전체가 대기하게 되어, `changes` 작업의 `ci-range.mjs changed`가 실행 시점의 `Date.now()` 기준으로 지난 24시간을 계산하면서 매일 도는 `macos` 전체 검사(`just base=HEAD check`)가 건너뛰어지고 `linux`도 지연된다.
+
+따라서 `nightly.yml`의 최상위 `concurrency`는 제거하고, 변이 작업인 `jobs.mutants`와 `jobs["mutants-daily"]`에만 작업 단위 2슬롯 `concurrency`를 둔다. 각 조각 번호(`matrix.shard`, 예: `1/128`..`128/128` 또는 `1/8`..`8/8`)의 일의 자리 홀짝으로 두 개의 고정 슬롯 그룹(`${{ github.workflow }}-mutants-slot-0`, `slot-1`, `queue: "max"`, `cancel-in-progress: false`)에 매핑한다. 이렇게 하면 주간과 일간 변이가 겹쳐 실행되더라도 두 그룹 각각에 동시에 최대 1개씩만 실행되므로 변이 작업의 macOS 합산 점유는 항상 2개 이하로 제한되며, 일간 실행의 `changes`·`macos`·`linux`·`notify` 작업은 변이 대기열의 영향을 받지 않고 예정 시각에 즉시 실행된다. 주간 128조각은 두 슬롯에 정확히 64/64로 균등 분배되고 일간 1~8조각도 2슬롯을 넘지 않는다. 일간 실행의 일반 macOS 검사는 변이 두 자리와 별개이므로 같은 일간 실행에서 macOS 작업 최대 세 개가 돌 수 있다. 계정 전체의 다른 작업까지 예약하거나 CI에 우선순위를 주는 기능은 아니어서 CI 대기가 절대로 없다고 보장하지 않는다.
 
 CI는 브랜치별 그룹을 쓰고 master가 아니면 같은 그룹의 이전 실행을 취소한다. master는 `cancel-in-progress: false`만으로는 대기 중 실행이 교체될 수 있으므로 실행 ID와 재시도 번호로 그룹을 고유화한다. GitHub concurrency 그룹과 [표현식의 문자열 비교](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions)는 대소문자를 구분하지 않는다. 따라서 `Master`처럼 master와 대소문자만 다른 비-master 브랜치는 master처럼 취급돼 이전 실행이 취소되지 않고, `feature/Foo`와 `feature/foo` 같은 두 비-master 브랜치는 서로의 실행을 취소할 수 있다. 현재 워크플로 최상위 concurrency에서는 사전 작업의 출력을 참조할 수 없으므로 이름을 대소문자 보존 해시로 변환하지 않았다. 메인은 해당 이름 충돌을 피하거나 별도 실행 조정 방식을 결정해야 한다.
 
@@ -24,7 +26,7 @@ GitHub의 [concurrency 문서](https://docs.github.com/en/actions/how-tos/write-
 
 ## 검증과 인계
 
-matrix 상한의 1·2 허용과 0·분수·3·누락 거부, 두 야간 matrix의 상호 배타 조건과 공통 대기열, master 그룹의 고유성과 비-master 취소 조건을 정책 테스트로 고정한다. 두 워크플로의 새 concurrency와 두 matrix 상한을 제외한 JSON을 기존 파일과 비교해 단계·조건·시간제한이 동일함을 확인했다. GitHub에 푸시한 실행 및 실제 대기 시간은 메인이 확인한다.
+matrix 상한의 1·2 허용과 0·분수·3·누락 거부, `nightly.yml` 최상위 concurrency 금지 및 `changes`/`macos`/`linux` 비차단, `mutants`·`mutants-daily` 작업 단위 2슬롯 공통 대기열과 홀짝 분배, master 그룹의 고유성과 비-master 취소 조건을 정책 테스트로 고정한다. 두 워크플로의 새 concurrency와 두 matrix 상한을 제외한 JSON을 기존 파일과 비교해 단계·조건·시간제한이 동일함을 확인했다. GitHub에 푸시한 실행 및 실제 대기 시간은 메인이 확인한다.
 
 정상 커밋 훅의 첫 시도에서 기존의 전체 strategy 객체 비교 두 건이 새 필드를 예상하지 못해 실패했다. 사전 승인된 고정 기대값 갱신으로 `harness/ci/tests/h42-nightly.test.mjs`의 주간 strategy 기대 객체와 `harness/ci/tests/h47-schedule.test.mjs`의 일간 strategy 기대 객체에 각각 `max-parallel: 2`를 추가한다. 기존 단언과 다른 기대 필드는 그대로 유지한다.
 
@@ -41,3 +43,6 @@ matrix 상한의 1·2 허용과 0·분수·3·누락 거부, 두 야간 matrix�
 | concurrency 내용 검사 제거 | 검출: CI는 master의 실행과 재시도마다 독립 그룹을 쓰고 다른 브랜치만 취소한다; 야간 실행은 대기열을 공유해 일간과 주간 변이의 동시 점유를 합산 제한한다 |
 | 필수 concurrency 검사 제거 | 검출: CI는 master의 실행과 재시도마다 독립 그룹을 쓰고 다른 브랜치만 취소한다; 야간 실행은 대기열을 공유해 일간과 주간 변이의 동시 점유를 합산 제한한다 |
 | 정상 concurrency 설정 거부 | 검출: CI는 master의 실행과 재시도마다 독립 그룹을 쓰고 다른 브랜치만 취소한다; 야간 실행은 대기열을 공유해 일간과 주간 변이의 동시 점유를 합산 제한한다 |
+| (1차 수정) `nightly.yml` 최상위 `concurrency` 허용 | 검출: CI는 master의 실행과 재시도마다 독립 그룹을 쓰고 다른 브랜치만 취소한다; 야간 변이 작업만 2슬롯 대기열을 공유하고 일간 macOS·Linux 검사는 막지 않는다 |
+| (1차 수정) `mutants`/`mutants-daily` 작업 단위 `concurrency` 필수 검사 제거 | 검출: 야간 변이 작업만 2슬롯 대기열을 공유하고 일간 macOS·Linux 검사는 막지 않는다 |
+| (1차 수정) 작업 단위 `concurrency` 기대값 동등 비교 제거 | 검출: 야간 변이 작업만 2슬롯 대기열을 공유하고 일간 macOS·Linux 검사는 막지 않는다 |

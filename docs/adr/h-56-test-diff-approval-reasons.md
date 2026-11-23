@@ -10,7 +10,9 @@ A-27은 기존 테스트 변경의 승인 행을 입력해도 여섯 지적이 �
 
 승인 판정과 별도로, 남은 지적과 정확히 같은 승인 행이 있으면 파일 해시, 지적 집합, 이력 신뢰와 구조 보존 실패를 표시한다. 한 파일의 승인은 파일 전체 지적을 함께 검증하므로 같은 파일의 다른 지적이 거부 원인인 경우도 표시한다. 같은 지적에 여러 승인 후보가 있으면 해시가 맞지 않는 오래된 행이 다른 행의 구조 거부 사유를 덮어쓰지 않도록 모든 후보의 사유를 함께 표시한다. 진단은 승인 범위를 바꾸지 않는다.
 
-원격 추적 master가 없거나 원격 기준에 해당 승인 행이 없을 때도 HEAD와 현재 파일에 보이는 승인 행을 진단용으로만 읽어 신뢰 실패를 출력한다. 이 행으로 승인을 허용하지 않으며, 원격 추적 master가 없거나 승인 행이 브랜치 이력에만 있는 실제 이력 복사본에서 기존에는 두 위반에 이유가 없던 사례를 재현했다. 진단은 `trusted_authority`가 실제로 고른 기준 커밋을 `refs/remotes/origin/master`보다 우선해 사용하므로, `HEAD == origin/master`인 직접 커밋에서 실제 판정이 `master^1`을 따를 때도 `master^1`의 구조 거부 사유가 최신 커밋의 승인 파일 변경·삭제로 가려지지 않는다. 또 `Removed`·`NotListed`·`CountDecreased`·`Unreachable`·`SupportRemoved`·`Shadowing`처럼 승인 자체가 허용되지 않는 지적 종류는 신뢰된 행과 미신뢰 행 모두에서 신뢰 실패가 아니라 `승인 불가 지적 종류`를 출력한다. 신뢰된 행과 일치하는 지적에는 그 행의 구체 사유를 우선하고, 행이 파싱되지 않거나 어느 출처에도 보이지 않으면 진단을 만들지 못한다.
+원격 추적 master가 없거나 원격 기준에 해당 승인 행이 없을 때도 HEAD와 현재 파일에 보이는 승인 행을 진단용으로만 읽어 신뢰 실패를 출력한다. 이 행으로 승인을 허용하지 않으며, 원격 추적 master가 없거나 승인 행이 브랜치 이력에만 있는 실제 이력 복사본에서 기존에는 두 위반에 이유가 없던 사례를 재현했다. 진단은 `trusted_authority`가 실제로 고른 기준 커밋을 `refs/remotes/origin/master`보다 우선해 사용하므로, `HEAD == origin/master`인 직접 커밋에서 실제 판정이 `master^1`을 따를 때도 `master^1`의 구조 거부 사유가 최신 커밋의 승인 파일 변경·삭제로 가려지지 않는다. 또 `Removed`·`NotListed`·`CountDecreased`·`Unreachable`·`SupportRemoved`·`Shadowing`처럼 승인 자체가 허용되지 않는 지적 종류는 신뢰된 행과 미신뢰 행 모두에서 신뢰 실패가 아니라 `승인 불가 지적 종류`를 출력한다. 신뢰된 행과 일치하는 지적에는 그 행의 구체 사유를 우선하되, 현재 브랜치·작업 트리에 신뢰된 기준 행과 완전히 일치하지 않는 새 미신뢰 행이 함께 있으면 `승인 이력 또는 기준 커밋 신뢰 실패`도 함께 출력해 오래된 기준 행의 해시 불일치가 새 미신뢰 행의 신뢰 실패를 가리지 않게 한다. 행이 파싱되지 않거나 어느 출처에도 보이지 않으면 진단을 만들지 못한다.
+
+1차 리뷰·비판 반영으로 진단 정확도를 보강했다. (1) 파일 해시 진단은 `path`와 누락 측(`before`·`current`·`before·current`), 그리고 실제로 다른 `before_sha256`·`after_sha256`의 실제값과 승인값을 각각 출력한다. (2) `unsafe_block_reason`과 `added_support_assertions_reason`은 `safe_block`의 `ItemKind::Support` + `AssertionChange::Approved` 단언 추가 규칙을 1:1로 반영해 자명한 참 단언, 비표준 매크로, 기존 단언 유실, 명시 승인 누락을 단언 수 불일치로 오진하지 않는다. (3) `unsafe_finding_reason`은 `parsed_item`·`parsed_impl` 파싱 검증을 `new_helper_reason`보다 먼저 수행해 파싱 실패를 새 보조 함수 참조로 오진하지 않는다. (4) `unsafe_method_reason`과 `assertion_problem`은 메서드 삭제·중복·속성/가시성·본문 원인과 단언의 자명한 참·호출 종류·내부 호출·매크로·단락 연산 차이를 항목별로 구분해 출력한다. (5) 자기 지적 접두사 중복과 `"; "` 포함 복합 사유의 중복 제거 누락을 제거했다.
 
 A-27의 기준 `3cd28ce0690c687f996db5d5b74f45af41bbbd57`과 대상 `0bd771fb64d8c7b4f48dba76be06c210197923c9`의 세 파일을 원문과 SHA-256 그대로 보관하여 임시 저장소에 기준·작업·승인·병합 이력을 구성했다. `assertion_change` 유무 모두 여섯 건이 남았다. 판정기는 기존 구조 보존 규칙에 따라 거부했다. 종속 포트 교체로 단언 구조가 달라지고 새 보조 메서드가 호출되며, 기존 `replace` 메서드가 사라지고 `struct`가 바뀐다. 파일별 모든 지적이 함께 승인되어야 하므로 하나라도 구조 조건에 맞지 않으면 그 파일의 다른 승인도 해소되지 않는다. 이와 같은 변경의 수용 여부는 메인이 내용을 확인하는 예외 병합으로 처리한다.
 
@@ -55,3 +57,11 @@ A-27의 기준 `3cd28ce0690c687f996db5d5b74f45af41bbbd57`과 대상 `0bd771fb64d
 | (인계 후 재실행) `diagnose_group`에서 비승인 지적 종류 분기 제거 | 검출: h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds |
 | (인계 후 재실행) `untrusted_approval_rows`에서 비승인 지적 종류 분기 제거 | 검출: h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds |
 | (인계 후 재실행) `append_reason` 중복 사유 검사 반전 | 검출: h56_reports_every_candidate_when_one_finding_has_multiple_approvals |
+| (1차 수정) `before_sha256` 불일치 항목 생략 | 검출: h56_reports_exact_mismatched_hash_fields_and_missing_file_sides; h56_stale_trusted_row_does_not_mask_new_untrusted_branch_row; h56_reports_every_candidate_when_one_finding_has_multiple_approvals |
+| (1차 수정) `unsafe_block_reason`에서 단언 수 비교를 무조건 `!=`로 회귀 | 검출: h56_support_approved_assertion_addition_reports_actual_failure_reason |
+| (1차 수정) `added_support_assertions_reason`의 잔여 단언 `safe_added_assertion` 검사 생략 | 검출: h56_support_approved_assertion_addition_reports_actual_failure_reason |
+| (1차 수정) `Rule::Modified`에서 `parsed_item` 전에 `references_new_helper` 호출 | 검출: h56_parse_failure_does_not_misreport_new_helper_reference |
+| (1차 수정) `SupportModified(impl)` 파싱 실패 분기에서 `references_new_helper` 우선 호출 | 검출: h56_parse_failure_does_not_misreport_new_helper_reference |
+| (1차 수정) `format_group_diagnosis`에서 자기 지적 접두사 생략 조건 제거 | 검출: h56_support_approved_assertion_addition_reports_actual_failure_reason |
+| (1차 수정) `untrusted_approval_rows`에서 신뢰 그룹 존재 시 미신뢰 행 무시 | 검출: h56_stale_trusted_row_does_not_mask_new_untrusted_branch_row |
+| (1차 수정) `unsafe_method_reason`에서 메서드 삭제 상세 문구 제거 | 검출: h56_impl_method_and_assertion_problem_report_specific_causes |

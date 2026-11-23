@@ -8,7 +8,7 @@
 
 ## 결정
 
-HEAD 복제 직후 원본의 HEAD와 지정된 색인 사이 바이너리 패치를 복제본의 작업 사본과 색인에 적용한다. 색인의 추가·변경·삭제와 파일 모드를 보존하고 미스테이지·미추적 파일은 복사하지 않는다. 별도 `GIT_INDEX_FILE`은 원본 조회에만 쓰고 복제본의 Git 명령에서는 제거한다. Node 기본 `maxBuffer`(1 MiB) 초과(`ENOBUFS`)와 저장소 로컬 `diff.noprefix`/`diff.mnemonicPrefix` 설정 영향을 막기 위해 `git -c diff.noprefix=false -c diff.mnemonicPrefix=false diff --output=<임시 패치>`로 관리된 임시 폴더(`index-clone-`)에 패치를 쓰고 `finally`에서 즉시 정리한다. 패치를 적용할 수 없거나 적용 뒤 두 색인의 트리 ID가 다르면 실패한다.
+HEAD 복제 직후 원본의 HEAD와 지정된 색인 사이 바이너리 패치를 복제본의 작업 사본과 색인에 적용한다. 색인의 추가·변경·삭제와 파일 모드를 보존하고 미스테이지·미추적 파일은 복사하지 않는다. 별도 `GIT_INDEX_FILE`은 원본 조회에만 쓰고 복제본의 Git 명령에서는 제거한다. Node 기본 `maxBuffer`(1 MiB) 초과(`ENOBUFS`)와 저장소 로컬 `diff.noprefix`/`diff.mnemonicPrefix`/`diff.relative` 설정 영향을 막기 위해 `git -c diff.noprefix=false -c diff.mnemonicPrefix=false -c diff.relative=false diff --output=<임시 패치>`로 관리된 임시 폴더(`index-clone-`)에 패치를 쓰고 `finally`에서 즉시 정리한다. 패치를 적용할 수 없거나 적용 뒤 두 색인의 트리 ID가 다르면 실패한다.
 
 H-54의 브랜치 검사 fixture와 Claude 훅 진입 fixture에 적용한다. Claude 실제 세션 회귀의 실험 저장소에서는 색인만을 임시 커밋으로 만들고, `master~1` 등 기존 기준 이력을 가리키는 참조는 원래 HEAD 기준으로 풀어 실험 의미를 보존한다. H-47의 얕은 복제는 실제 이력 경계를 검증하므로 HEAD만 복제하는 의미를 유지한다.
 
@@ -46,3 +46,5 @@ H-54의 브랜치 검사 fixture와 Claude 훅 진입 fixture에 적용한다. C
 | 과거 참조를 현재 master로 유지 | 검출: 임시 커밋을 써도 이전 master 이력의 기준이 바뀌지 않는다 |
 | diff 기준을 HEAD 부모로 변경 | 검출: 복제본은 HEAD가 아니라 현재 색인의 새 파일·변경·삭제를 사용한다; 별도 색인을 지정하면 그 색인만 복제하고 원본 색인은 그대로 둔다; 임시 커밋을 써도 이전 master 이력의 기준이 바뀌지 않는다; 색인의 바이너리와 심볼릭 링크 내용을 복제한다; 복제본의 기준 트리가 다르면 빈 패치라도 실패한다 |
 | 패치를 원본 저장소에 적용 | 검출: 복제본은 HEAD가 아니라 현재 색인의 새 파일·변경·삭제를 사용한다; 별도 색인을 지정하면 그 색인만 복제하고 원본 색인은 그대로 둔다; 임시 커밋을 써도 이전 master 이력의 기준이 바뀌지 않는다; 색인의 바이너리와 심볼릭 링크 내용을 복제한다 |
+| (1차 수정) `diff.noprefix=false` 재정의를 `true`로 반전 | 검출: 복제본은 HEAD가 아니라 현재 색인의 새 파일·변경·삭제를 사용한다; 별도 색인을 지정하면 그 색인만 복제하고 원본 색인은 그대로 둔다; 임시 커밋을 써도 이전 master 이력의 기준이 바뀌지 않는다 |
+| (1차 수정) `finally` 임시 패치 디렉터리 삭제 생략 | 검출: 복제 패치 생성 중 오류가 나도 임시 패치 폴더를 남기지 않는다 |
