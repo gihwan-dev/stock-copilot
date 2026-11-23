@@ -61,6 +61,7 @@ fn main() -> ExitCode {
         [command, rest @ ..] if command == "lint-file" => lint_file::command(rest),
         [command] if command == "hooks-installed" => git_hooks::installed_command(),
         [command] if command == "push-base" => git_hooks::push_base_command(),
+        [command, just] if command == "push-check" => git_hooks::push_check_command(just),
         [command, base] if command == "require-base" => {
             git_hooks::commit_base::validate_command(base, git_base::BaseUse::Ancestor)
         }

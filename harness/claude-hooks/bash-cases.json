@@ -5232,5 +5232,196 @@
     "decision": "deny",
     "rules": ["git-subcommands"],
     "role": "implementer"
+  },
+  {
+    "command": "git merge --no-ff --no-edit origin/master",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin side",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "/usr/bin/git push origin side",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "command": "git push origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "review-critic"
+  },
+  {
+    "command": "git push upstream side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin master",
+    "cwd": "{root}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin side:master",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history", "git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push origin :side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push --force origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-force-push", "git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push --force-with-lease origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-force-push", "git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push --delete origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push --mirror origin",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push --all origin",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git push --tags origin",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} push origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git remote show origin",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git remote get-url origin",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git remote set-url origin /tmp/evil.git",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git remote add evil /tmp/evil.git",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git fetch --refmap=+refs/heads/*:refs/remotes/origin/* origin",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch -D -r origin/master",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git http-push origin side",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git receive-pack .",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "GIT_SSH=/tmp/evil git push origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["environment"],
+    "role": "implementer"
+  },
+  {
+    "command": "GIT_SSH_COMMAND='sh -c evil' git push origin side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["environment"],
+    "role": "implementer"
+  },
+  {
+    "command": "GIT_PROXY_COMMAND=/tmp/evil git fetch origin",
+    "decision": "deny",
+    "rules": ["environment"],
+    "role": "implementer"
+  },
+  {
+    "command": "GIT_ASKPASS=/tmp/evil git fetch origin",
+    "decision": "deny",
+    "rules": ["environment"],
+    "role": "implementer"
+  },
+  {
+    "command": "GIT_GRAFT_FILE=/tmp/evil git status",
+    "decision": "deny",
+    "rules": ["environment"],
+    "role": "implementer"
   }
 ]

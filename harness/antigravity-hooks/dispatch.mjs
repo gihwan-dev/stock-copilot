@@ -21,6 +21,13 @@ const hooksInstalled = (common) => {
   }
 };
 
+const threadIdKind = (value) => {
+  if (typeof value !== "string" || value.trim() === "") return "absent";
+  if (/^thread:delegated-task:/iu.test(value.trim())) return "delegated";
+  if (/^mcp:launch:/iu.test(value.trim())) return "launch";
+  return "other";
+};
+
 const safeRecord = (record, kind, id, payload) => {
   try {
     record(stateDirectory(), kind, id, payload);
@@ -65,6 +72,11 @@ export const dispatchEvent = (
           tool: input?.toolCall?.name,
           decision: output.decision,
           worktree: session.root,
+          threadIdKind: threadIdKind(
+            Object.hasOwn(extraFacts, "threadId")
+              ? extraFacts.threadId
+              : process.env.T3CODE_THREAD_ID,
+          ),
         },
       );
     }

@@ -1,9 +1,13 @@
 pub(crate) mod commit_base;
 
 #[cfg(test)]
+mod commit_base_remote_tests;
+#[cfg(test)]
 mod commit_base_tests;
 #[cfg(test)]
 mod push_base_tests;
+#[cfg(test)]
+mod push_check_tests;
 #[cfg(test)]
 mod tests;
 
@@ -456,6 +460,170 @@ pub(crate) fn push_base_command() -> ExitCode {
     match written {
         Ok(code) => code,
         Err(_) => ExitCode::FAILURE,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ContainerRuntime {
+    Present,
+    Absent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PushRecipe {
+    Full,
+    Fast,
+}
+
+impl PushRecipe {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Full => "check-full",
+            Self::Fast => "check-fast",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PushPlan {
+    pub(crate) base: String,
+    pub(crate) recipe: PushRecipe,
+}
+
+const DOCKER_FIXED_PATHS: [&str; 4] = [
+    "/var/run/docker.sock",
+    "/usr/local/bin/docker",
+    "/opt/homebrew/bin/docker",
+    "/Applications/Docker.app/Contents/Resources/bin/docker",
+];
+
+fn detect_container_runtime_with(program: &str, fixed_paths: &[&Path]) -> ContainerRuntime {
+    let binary_present = Command::new(program)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    if binary_present || fixed_paths.iter().any(|path| path.exists()) {
+        ContainerRuntime::Present
+    } else {
+        ContainerRuntime::Absent
+    }
+}
+
+fn detect_container_runtime() -> ContainerRuntime {
+    let fixed: Vec<&Path> = DOCKER_FIXED_PATHS.iter().map(Path::new).collect();
+    detect_container_runtime_with("docker", &fixed)
+}
+
+fn is_implementer_work_branch(reference: &str) -> bool {
+    let Some(branch) = reference.strip_prefix("refs/heads/") else {
+        return false;
+    };
+    if branch.is_empty() || !branch.is_ascii() {
+        return false;
+    }
+    let lowered = branch.to_ascii_lowercase();
+    lowered != "master"
+        && lowered != "main"
+        && !lowered.starts_with("merge/")
+        && !lowered.starts_with("review/")
+        && !lowered.starts_with("critic/")
+        && !lowered.starts_with("t3/")
+}
+
+fn current_symbolic_head(root: &Path) -> Result<Option<String>, String> {
+    let mut symbolic = git_base::git(root);
+    symbolic.args(["symbolic-ref", "--quiet", "HEAD"]);
+    let finished = symbolic
+        .output()
+        .map_err(|error| format!("symbolic-ref HEAD: {error}"))?;
+    if finished.status.code() == Some(1_i32) {
+        return Ok(None);
+    }
+    if !finished.status.success() {
+        return Err(String::from("symbolic-ref HEAD 실패"));
+    }
+    let text = String::from_utf8_lossy(&finished.stdout).trim().to_owned();
+    Ok((!text.is_empty()).then_some(text))
+}
+
+pub(crate) fn push_plan(
+    root: &Path,
+    input: &str,
+    runtime: ContainerRuntime,
+) -> Result<PushPlan, String> {
+    let base = push_base(root, input)?;
+    if runtime == ContainerRuntime::Present {
+        return Ok(PushPlan {
+            base,
+            recipe: PushRecipe::Full,
+        });
+    }
+    let lines: Vec<&str> = input
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    let [only] = lines.as_slice() else {
+        return Ok(PushPlan {
+            base,
+            recipe: PushRecipe::Full,
+        });
+    };
+    let fields: Vec<&str> = only.split_whitespace().collect();
+    let [local_ref, local, remote_ref, _remote] = fields.as_slice() else {
+        return Ok(PushPlan {
+            base,
+            recipe: PushRecipe::Full,
+        });
+    };
+    let single_work_branch = *local != ZERO_COMMIT
+        && local_ref == remote_ref
+        && is_implementer_work_branch(local_ref)
+        && current_symbolic_head(root)?.as_deref() == Some(*local_ref);
+    let recipe = if single_work_branch {
+        PushRecipe::Fast
+    } else {
+        PushRecipe::Full
+    };
+    Ok(PushPlan { base, recipe })
+}
+
+fn run_push_check(just: &str) -> Result<(), String> {
+    let mut input = String::new();
+    io::stdin()
+        .read_to_string(&mut input)
+        .map_err(|error| format!("표준 입력: {error}"))?;
+    let members = load_members(None).map_err(|failure| failure.0)?;
+    let plan = push_plan(&members.root, &input, detect_container_runtime())?;
+    if plan.recipe == PushRecipe::Fast {
+        writeln!(
+            io::stderr().lock(),
+            "push-check: 컨테이너 런타임이 없어 작업 브랜치 푸시에 check-fast를 실행한다(전체·시각·변이 검사는 원격 CI·병합 검사가 수행)"
+        )
+        .map_err(|error| format!("push-check 안내 출력: {error}"))?;
+    }
+    let status = Command::new(just)
+        .current_dir(&members.root)
+        .arg(format!("base={}", plan.base))
+        .arg(plan.recipe.name())
+        .status()
+        .map_err(|error| format!("{just}: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{just} {}: {status}", plan.recipe.name()))
+    }
+}
+
+pub(crate) fn push_check_command(just: &str) -> ExitCode {
+    match run_push_check(just) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(failure) => match writeln!(io::stderr().lock(), "push-check: {failure}") {
+            Ok(()) | Err(_) => ExitCode::FAILURE,
+        },
     }
 }
 

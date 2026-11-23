@@ -472,6 +472,102 @@ const implementerMerge = (rest, rules) => {
   );
 };
 
+const isForbiddenPushBranch = (name, rules) =>
+  rules.git.baseBranch.branches.some(
+    (branch) => branch.toLowerCase() === name.toLowerCase(),
+  ) || /^(?:merge|review|critic|t3)\//iu.test(name);
+
+const implementerPush = (parsed, invocation, context) => {
+  if (context.role !== ROLE.implementer) {
+    return false;
+  }
+  if (parsed.globals.length > 0 || parsed.rest.length !== 2) {
+    return false;
+  }
+  const [remote, target] = parsed.rest;
+  if (
+    remote.dynamic ||
+    remote.glob ||
+    target.dynamic ||
+    target.glob ||
+    remote.text.startsWith("-") ||
+    target.text.startsWith("-")
+  ) {
+    return false;
+  }
+  const allowedRemotes = context.rules.git.implementerPush?.remotes ?? [];
+  if (!allowedRemotes.includes(remote.text)) {
+    return false;
+  }
+  const ref = target.text;
+  if (
+    ref === "" ||
+    ref === "HEAD" ||
+    ref === "@" ||
+    ref.startsWith("+") ||
+    ref.startsWith("refs/") ||
+    ref.includes(":") ||
+    ref.includes("..") ||
+    ref.includes("@{") ||
+    /[\s~^?*[\]\\]/u.test(ref) ||
+    isForbiddenPushBranch(ref, context.rules)
+  ) {
+    return false;
+  }
+  if (context.moves.branch) {
+    return false;
+  }
+  const directory = currentDirectory(invocation, context);
+  if (directory === undefined) {
+    return false;
+  }
+  const located = locate(
+    resolve(directory, ".push-probe"),
+    context.project.worktrees,
+  );
+  if (
+    located.root === undefined ||
+    located.problem !== undefined ||
+    located.root === context.project.root
+  ) {
+    return false;
+  }
+  if (
+    context.project.ownedWorktree !== undefined &&
+    located.root !== context.project.ownedWorktree
+  ) {
+    return false;
+  }
+  if (/^t3-[0-9a-f]{8}-/iu.test(basename(located.root))) {
+    return false;
+  }
+  const current = branchOfDirectory(directory);
+  return (
+    typeof current === "string" &&
+    current.length > 0 &&
+    !isForbiddenPushBranch(current, context.rules) &&
+    ref === current
+  );
+};
+
+const subagentRemoteMutation = (rest, rules) => {
+  if (rest.length === 0) {
+    return false;
+  }
+  if (rest.some((word) => word.dynamic)) {
+    return true;
+  }
+  if (rest.every((word) => word.text === "-v" || word.text === "--verbose")) {
+    return false;
+  }
+  const action = rest.find((word) => !isOption(word));
+  if (action === undefined) {
+    return true;
+  }
+  const readOnly = rules.git.remoteReadOnly ?? [];
+  return !readOnly.includes(action.text);
+};
+
 const gitParts = (invocation) => {
   if (invocation.name !== "git") {
     return undefined;
@@ -1290,11 +1386,22 @@ export const CHECKS = [
           context.role === ROLE.implementer &&
           implementerMerge(rest, context.rules)
         );
-      return git.subagentDenied.includes(sub) || merging
+      if (sub === "remote" && subagentRemoteMutation(rest, context.rules)) {
+        return [
+          finding(
+            "git-subcommands",
+            "서브에이전트는 git remote로 원격 저장소 설정이나 추적 참조를 바꾸지 않는다 (docs/harness.md 7.3)",
+          ),
+        ];
+      }
+      const deniedSub =
+        git.subagentDenied.includes(sub) &&
+        !(sub === "push" && implementerPush(parsed, invocation, context));
+      return deniedSub || merging
         ? [
             finding(
               "git-subcommands",
-              `서브에이전트는 git ${sub}를 하지 않는다. 푸시와 병합은 메인만 한다. 구현자는 git merge master만 쓴다 (docs/workflow.md 2장, ADR 0017)`,
+              `서브에이전트는 git ${sub}를 하지 않는다. 병합은 메인만 한다. 구현자는 git merge master|origin/master와 자기 작업 브랜치의 git push origin <브랜치>만 쓴다 (docs/workflow.md 2장, ADR 0017)`,
             ),
           ]
         : [];
@@ -1364,6 +1471,36 @@ export const CHECKS = [
               ),
             ]
           : [];
+      const remoteBranchMutation =
+        subagent &&
+        sub === "branch" &&
+        options.some((option) =>
+          ["-r", "--remotes", "-a", "--all"].includes(
+            option.long ?? `-${option.short}`,
+          ),
+        ) &&
+        options.some((option) =>
+          [
+            "-d",
+            "-D",
+            "--delete",
+            "-m",
+            "-M",
+            "--move",
+            "-c",
+            "-C",
+            "--copy",
+            "-f",
+            "--force",
+          ].includes(option.long ?? `-${option.short}`),
+        )
+          ? [
+              finding(
+                "git-history",
+                "서브에이전트는 원격 추적 브랜치를 삭제하거나 변경하지 않는다 (docs/harness.md 7.3)",
+              ),
+            ]
+          : [];
       const dynamic = git.dynamicSensitive.includes(sub)
         ? positionals
             .filter(({ word, ended }) => word.dynamic && !ended)
@@ -1379,6 +1516,7 @@ export const CHECKS = [
         ...plus,
         ...refspec,
         ...forced,
+        ...remoteBranchMutation,
         ...baseBranchFindings(
           sub,
           options,

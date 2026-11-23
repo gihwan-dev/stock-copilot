@@ -55,11 +55,12 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61" },
+    { branch: "h-61", threadId: "mcp:launch:test-top" },
   );
   assert.equal(allowed.decision, "allow");
   assert.equal(audits.length, 1);
   assert.equal(audits[0].decision, "allow");
+  assert.equal(audits[0].threadIdKind, "launch");
 
   const denied = dispatchEvent(
     {
@@ -74,7 +75,7 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61" },
+    { branch: "h-61", threadId: "mcp:launch:test-top" },
   );
   assert.equal(denied.decision, "deny");
   assert.equal(audits[1].decision, "deny");

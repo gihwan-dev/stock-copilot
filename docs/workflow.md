@@ -7,7 +7,7 @@
 | 역할 | 누가 | 하는 일 | 강제 |
 |---|---|---|---|
 | 메인 에이전트 | 사용자와 대화하는 세션 | 작업 선정, 브리프 작성, 평가, 수정 여부 판단, 리뷰 기록, 푸시, 사용자 보고. 코드를 직접 쓰지 않는다 | 편집 훅이 메인에게 `docs/**`(보호 문서 제외)만 허용 |
-| 구현 에이전트 | T3의 새 Antigravity `gemini-4-neon`(thought_level `xhigh`, 별도 작업 사본) | 작업 하나를 구현하고 변경분 검사(`just check-fast`)와 회귀·손 변형을 통과시킨다 | Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`), Git 커밋 훅, 원격 CI 전체 검사·변이, 독립 리뷰·비판 (남은 빈틈은 [harness.md](harness.md) 7.4와 `just known-gaps`) |
+| 구현 에이전트 | T3의 최상위 Antigravity `gemini-4-neon`(thought_level `xhigh`, 별도 작업 사본) | 작업 하나를 구현하고 변경분 검사(`just check-fast`)·회귀·손 변형을 통과시키며, 독립 리뷰·비판 위임과 자기 작업 브랜치 푸시(`git push origin <현재 브랜치>`)를 수행한다 | Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`, 5개 조건으로 구현 담당 구분), Git 커밋·푸시 훅(`xtask push-check`), 원격 CI 전체 검사·변이, 독립 리뷰·비판 (남은 빈틈은 [harness.md](harness.md) 7.4와 `just known-gaps`) |
 | 적대적 리뷰어 | T3의 새 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, `adversarial-reviewer`, 별도 작업 사본) | 구현을 깨뜨릴 방법을 찾고 등급을 매긴다. 판정하지 않는다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
 | 비판자 | T3의 새 Antigravity `gemini-4-neon`(thought_level `high`, 별도 작업 사본) | 리뷰 지적을 하나씩 실행으로 반박해 본다 | Antigravity `.agents/hooks.json`(비-`xhigh`·detached HEAD `ROLE.reviewer` 쓰기·위임 차단), 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
 
@@ -27,7 +27,7 @@
 
 - 병합은 메인 에이전트가 `git merge --no-ff`로 한다. 병합 커밋도 훅의 검사를 거친다. 2.8의 조건을 통과한 경우 정적 검사만 다시 한다. fast-forward가 된 경우에는 병합 직후 `just base=<병합 전 기준 브랜치 끝> check`를 돌린다 (ADR 0015).
 - 검사 명령은 `just base=<HEAD 또는 40자리 커밋 ID> check`다. 브리프의 기준 커밋을 `base`로 준다 (ADR 0013).
-- 푸시는 메인 에이전트만 한다. 서브에이전트는 푸시하지 않는다. CI의 서명 검사는 푸시 뒤에 도는 사후 탐지다 ([harness.md](harness.md) 7.6).
+- `master`·`main`·`merge/*` 푸시와 병합은 메인 에이전트만 한다. 구현 담당은 별도 기기에서 메인이 브랜치를 받아 병합할 수 있도록 자기 작업 브랜치의 `git push origin <현재 브랜치>` 1종만 허용되며, 리뷰어·비판자·하위 스레드는 모든 푸시가 거부된다. CI의 서명 검사는 푸시 뒤에 도는 사후 탐지다 ([harness.md](harness.md) 7.6).
 
 ### 2.1 브리프
 
@@ -63,7 +63,7 @@
 
 ### 2.2 구현
 
-- 작업 하나에 브랜치 하나, 커밋은 작게. 구현 에이전트는 푸시하지 않고 서명 옵션을 쓰지 않는다.
+- 작업 하나에 브랜치 하나, 커밋은 작게. 구현 에이전트는 서명 옵션을 쓰지 않고, 자기 작업 브랜치의 `git push origin <현재 브랜치>`(`/usr/bin/git` 포함)와 독립 리뷰·비판(`isolation=worktree`) 위임만 수행하며 병합과 `master`·`main`·`merge/*` 푸시는 하지 않는다.
 - `just check`가 통과해야 끝난 것이다. 통과시키기 위해 검사를 끄거나 테스트를 지우거나 약하게 만들지 않는다. 기존 테스트의 삭제·변경은 `xtask test-diff`가 실패시킨다.
 - 하네스가 막으면 우회하지 않고 멈춘 뒤 "막힘:"으로 보고한다 ([harness.md](harness.md) 8장).
 - Antigravity 세션은 `.agents/hooks.json`(`harness/antigravity-hooks/`)이 보호 경로·홈 읽기·리뷰어 쓰기·토스 실API 명령·미커밋 종료를 검사하며, Git 커밋 훅 실행과 직접 돌린 검사 결과, 원격 CI 전체 검사와 대상 스냅숏을 메인이 확인한다. 훅이 미적용된 세션이면 리뷰 기록 `세션 훅` 행에 사실대로 적는다. (Codex를 다시 쓸 때만 해당: Codex Stop 훅이 적용된 세션은 전체 검사를 돌린다. 실패하면 계속 고치게 하고, 계속된 회차가 "막힘:"으로 보고하면 실패 상태로 끝낼 수 있다. T3가 훅을 적용하지 않은 세션에서는 메인이 직접 검사와 대상 스냅숏을 확인한다.)

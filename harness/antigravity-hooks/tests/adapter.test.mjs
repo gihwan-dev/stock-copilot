@@ -11,6 +11,7 @@ import {
   repoRoot,
 } from "../../claude-hooks/tests/fixture.mjs";
 import { LOCK } from "../../../.claude/hooks/lib/project.mjs";
+import { decideBash } from "../../../.claude/hooks/lib/bash-guard.mjs";
 
 const f = createFixture();
 const baseSha = execFileSync("git", ["-C", f.worktree, "rev-parse", "HEAD"], {
@@ -582,36 +583,134 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
       options: { effort: "high" },
     },
   };
+  const antigravityCriticArgs = {
+    task: validBrief,
+    toolSummary: "Critique review",
+    role: "review",
+    isolation: "worktree",
+    target: {
+      driverKind: "antigravity",
+      providerInstanceId: "antigravity",
+      model: "gemini-4-neon",
+      options: { thought_level: "high" },
+    },
+  };
+  const antigravityResearchArgs = {
+    task: "격리 작업 사본에서 훅을 실측하라.",
+    toolSummary: "Hook experiment",
+    role: "research",
+    isolation: "worktree",
+    target: {
+      driverKind: "antigravity",
+      model: "gemini-4-neon",
+      options: { thought_level: "high" },
+    },
+  };
+
+  for (const toolName of [
+    "mcp_t3-code_delegate_task",
+    "mcp__t3_code__delegate_task",
+    "delegate_task",
+  ]) {
+    assert.equal(
+      call(toolName, claudeReviewArgs, { lock: LOCK.on }).decision,
+      "allow",
+      toolName,
+    );
+    assert.equal(
+      call(toolName, antigravityCriticArgs, { lock: LOCK.on }).decision,
+      "allow",
+      toolName,
+    );
+    assert.equal(
+      call(toolName, antigravityResearchArgs, { lock: LOCK.off }).decision,
+      "allow",
+      toolName,
+    );
+  }
+
   for (const opts of [
-    { lock: LOCK.off },
-    { lock: LOCK.on },
     { lock: LOCK.off, modelName: "gemini-4-neon-high" },
     { lock: LOCK.off, sessionCwd: f.root, cwd: f.root },
+    { lock: LOCK.off, branch: "master" },
+    { lock: LOCK.off, branch: "merge/h-61" },
+    { lock: LOCK.off, branch: "t3/1234abcd" },
+    { lock: LOCK.off, branch: undefined },
   ]) {
     assert.equal(
       call("mcp_t3-code_delegate_task", claudeReviewArgs, opts).decision,
       "deny",
+      JSON.stringify(opts),
     );
   }
-  assert.equal(
-    call(
-      "mcp_t3-code_delegate_task",
-      {
-        task: validBrief,
-        toolSummary: "Critique review",
-        role: "review",
-        isolation: "worktree",
-        target: {
-          driverKind: "antigravity",
-          providerInstanceId: "antigravity",
-          model: "gemini-4-neon",
-          options: { thought_level: "high" },
-        },
+  const delegatedChildAttempt = antigravityPreTool(
+    {
+      hookEventName: "PreToolUse",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-xhigh",
+      toolCall: {
+        id: "tc-child-del",
+        name: "mcp_t3-code_delegate_task",
+        args: claudeReviewArgs,
       },
-      { lock: LOCK.off },
-    ).decision,
-    "deny",
+    },
+    projectFor(f, { lock: LOCK.off }),
+    f.worktree,
+    {
+      home: fakeHome,
+      branch: "h-61",
+      threadId: "thread:delegated-task:child-probe",
+    },
   );
+  assert.equal(delegatedChildAttempt.decision, "deny");
+  assert.match(delegatedChildAttempt.reason, /하위 스레드\(delegated\)/u);
+
+  for (const badArgs of [
+    {
+      ...antigravityCriticArgs,
+      role: "implementation",
+      target: {
+        driverKind: "antigravity",
+        model: "gemini-4-neon",
+        options: { thought_level: "xhigh" },
+      },
+    },
+    {
+      ...antigravityCriticArgs,
+      target: {
+        driverKind: "antigravity",
+        model: "gemini-4-neon",
+        options: { thought_level: "xhigh" },
+      },
+    },
+    {
+      ...antigravityCriticArgs,
+      target: { driverKind: "antigravity", model: "gemini-4-neon" },
+    },
+    {
+      ...antigravityCriticArgs,
+      target: {
+        driverKind: "codex",
+        model: "gpt-6.1-sol",
+        options: { reasoningEffort: "high" },
+      },
+    },
+    { ...claudeReviewArgs, role: "research" },
+    { ...claudeReviewArgs, isolation: "shared" },
+    { ...claudeReviewArgs, runtimeMode: "full-access" },
+    { ...claudeReviewArgs, extraUnexpected: true },
+    {
+      ...claudeReviewArgs,
+      target: { ...claudeReviewArgs.target, environmentId: "env-other" },
+    },
+    { ...claudeReviewArgs, task: "   " },
+  ]) {
+    assert.equal(
+      call("mcp_t3-code_delegate_task", badArgs, { lock: LOCK.off }).decision,
+      "deny",
+      JSON.stringify(badArgs),
+    );
+  }
 });
 
 test("single policy source changes propagate directly into Antigravity verdicts", () => {
@@ -1319,4 +1418,197 @@ test("Round 2 review hardening blocks git pathspec magic, archive/sqlite/git-gre
   );
   assert.equal(relGeminiWrite.decision, "deny");
   assert.match(relGeminiWrite.reason, /\[protected-home\]/u);
+});
+
+test("Implementer role allows narrow own-branch git push, origin/master merge, and denies refspec/remote/child/t3-worktree evasions", () => {
+  const pushWorktree = join(f.base, "h-61-work");
+  const mergeWorktree = join(f.base, "merge-work");
+  const t3Worktree = join(f.base, "t3-1234abcd-child");
+  const t3NamedWorktree = join(f.base, "t3-deadbeef-named");
+  execFileSync("git", [
+    "-C",
+    f.root,
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "h-61",
+    pushWorktree,
+  ]);
+  execFileSync("git", [
+    "-C",
+    f.root,
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "merge/h-61",
+    mergeWorktree,
+  ]);
+  execFileSync("git", [
+    "-C",
+    f.root,
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "t3/1234abcd",
+    t3Worktree,
+  ]);
+  execFileSync("git", [
+    "-C",
+    f.root,
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "h-62",
+    t3NamedWorktree,
+  ]);
+  const baseProject = projectFor(f, { lock: LOCK.on });
+  const extendedProject = {
+    ...baseProject,
+    worktrees: [
+      ...baseProject.worktrees,
+      pushWorktree,
+      mergeWorktree,
+      t3Worktree,
+      t3NamedWorktree,
+    ],
+  };
+  const runIn = (wt, command, opts = {}) =>
+    antigravityPreTool(
+      {
+        hookEventName: "PreToolUse",
+        cwd: opts.cwd ?? wt,
+        modelName: Object.hasOwn(opts, "modelName")
+          ? opts.modelName
+          : "gemini-4-neon-xhigh",
+        toolCall: {
+          id: "tc-push",
+          name: "run_command",
+          args: { CommandLine: command },
+        },
+      },
+      extendedProject,
+      wt,
+      {
+        home: fakeHome,
+        ...(Object.hasOwn(opts, "branch") ? { branch: opts.branch } : {}),
+        ...(Object.hasOwn(opts, "threadId") ? { threadId: opts.threadId } : {}),
+      },
+    );
+
+  assert.equal(runIn(pushWorktree, "git push origin h-61").decision, "allow");
+  assert.equal(
+    runIn(pushWorktree, "/usr/bin/git push origin h-61").decision,
+    "allow",
+  );
+  assert.equal(
+    runIn(pushWorktree, "git merge --no-ff --no-edit origin/master").decision,
+    "allow",
+  );
+  assert.equal(runIn(pushWorktree, "git remote -v").decision, "allow");
+  assert.equal(
+    runIn(pushWorktree, "git remote get-url origin").decision,
+    "allow",
+  );
+
+  for (const [wt, cmd, opts] of [
+    [pushWorktree, "git push origin other", {}],
+    [pushWorktree, "git push origin master", {}],
+    [pushWorktree, "git push origin main", {}],
+    [pushWorktree, "git push origin HEAD", {}],
+    [pushWorktree, "git push origin refs/heads/h-61", {}],
+    [pushWorktree, "git push origin h-61:master", {}],
+    [pushWorktree, "git push origin h-61:h-61", {}],
+    [pushWorktree, "git push origin :h-61", {}],
+    [pushWorktree, "git push origin +h-61", {}],
+    [pushWorktree, "git push --force origin h-61", {}],
+    [pushWorktree, "git push -f origin h-61", {}],
+    [pushWorktree, "git push --force-with-lease origin h-61", {}],
+    [pushWorktree, "git push --delete origin h-61", {}],
+    [pushWorktree, "git push --mirror origin", {}],
+    [pushWorktree, "git push --all origin", {}],
+    [pushWorktree, "git push --tags origin", {}],
+    [pushWorktree, "git push --no-verify origin h-61", {}],
+    [pushWorktree, "git push upstream h-61", {}],
+    [pushWorktree, "git push https://github.com/org/repo.git h-61", {}],
+    [pushWorktree, "git -C . push origin h-61", {}],
+    [pushWorktree, "git -c alias.p='push --force' p origin h-61", {}],
+    [pushWorktree, "GIT_SSH_COMMAND='sh -c evil' git push origin h-61", {}],
+    [pushWorktree, "LEFTHOOK=0 git push origin h-61", {}],
+    [pushWorktree, "git remote set-url origin /tmp/evil.git", {}],
+    [pushWorktree, "git remote add evil /tmp/evil.git", {}],
+    [
+      pushWorktree,
+      "git fetch --refmap=+refs/heads/*:refs/remotes/origin/* origin",
+      {},
+    ],
+    [pushWorktree, "git update-ref refs/remotes/origin/master HEAD", {}],
+    [pushWorktree, "git branch -D -r origin/master", {}],
+    [pushWorktree, "git push origin h-61", { modelName: "gemini-4-neon-high" }],
+    [
+      pushWorktree,
+      "git push origin h-61",
+      { threadId: "thread:delegated-task:child" },
+    ],
+    [mergeWorktree, "git push origin merge/h-61", {}],
+    [t3Worktree, "git push origin t3/1234abcd", {}],
+    [t3NamedWorktree, "git push origin h-62", {}],
+    [pushWorktree, "git push origin h-61", { branch: "t3/9999aaaa" }],
+    [f.root, "git push origin master", {}],
+  ]) {
+    const actual = runIn(wt, cmd, opts);
+    assert.equal(
+      actual.decision,
+      "deny",
+      `expected deny for (${wt}) ${cmd} ${JSON.stringify(opts)} -> ${JSON.stringify(actual)}`,
+    );
+  }
+  assert.equal(
+    antigravityPreTool(
+      {
+        hookEventName: "PreToolUse",
+        cwd: t3NamedWorktree,
+        modelName: "gemini-4-neon-xhigh",
+        toolCall: {
+          id: "tc-t3-named-write",
+          name: "write_file",
+          args: {
+            Path: join(t3NamedWorktree, "crates/domain/src/lib.rs"),
+            Content: "x",
+          },
+        },
+      },
+      extendedProject,
+      t3NamedWorktree,
+      { home: fakeHome },
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    decideBash(
+      {
+        cwd: t3NamedWorktree,
+        agent_type: "implementer",
+        agent_id: "a1",
+        tool_input: { command: "git push origin h-62" },
+      },
+      { ...extendedProject, ownedWorktree: t3NamedWorktree },
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    decideBash(
+      {
+        cwd: mergeWorktree,
+        agent_type: "implementer",
+        agent_id: "a1",
+        tool_input: { command: "git push origin merge/h-61" },
+      },
+      { ...extendedProject, ownedWorktree: mergeWorktree },
+    ).decision,
+    "deny",
+  );
 });

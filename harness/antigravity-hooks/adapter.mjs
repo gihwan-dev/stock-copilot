@@ -8,6 +8,7 @@ import {
   unwrap,
 } from "../../.claude/hooks/lib/bash-guard.mjs";
 import { editFindings } from "../../.claude/hooks/lib/edit-guard.mjs";
+import { delegateTargetFindings } from "../../.claude/hooks/lib/orchestration.mjs";
 import {
   locate,
   realTarget,
@@ -442,11 +443,18 @@ const isImplementerModelName = (modelName) =>
   typeof modelName === "string" &&
   /^gemini-4-neon-xhigh$/iu.test(modelName.trim());
 
-const isReviewBranch = (branch) =>
+const isDelegatedThreadId = (threadId) =>
+  typeof threadId === "string" &&
+  /^thread:delegated-task:/iu.test(threadId.trim());
+
+const isDelegatedWorktreePath = (root) =>
+  /^t3-[0-9a-f]{8}-/iu.test(basename(root));
+
+const isNonImplementerBranch = (branch) =>
   branch === undefined ||
   branch === "" ||
   ["master", "main"].includes(branch.toLowerCase()) ||
-  /^(?:review|critic)\//iu.test(branch);
+  /^(?:merge|review|critic|t3)\//iu.test(branch);
 
 export const actorInput = (
   input,
@@ -506,8 +514,23 @@ export const actorInput = (
   const branch = Object.hasOwn(extraFacts, "branch")
     ? extraFacts.branch
     : currentBranch(located.root);
+  const threadId = Object.hasOwn(extraFacts, "threadId")
+    ? extraFacts.threadId
+    : process.env.T3CODE_THREAD_ID;
+  if (isDelegatedThreadId(threadId)) {
+    return {
+      root: located.root,
+      role: ROLE.reviewer,
+      branch,
+      actor: {
+        agent_type: "review-critic",
+        agent_id: "antigravity-delegated-child",
+      },
+    };
+  }
   const reviewer =
-    isReviewBranch(branch) ||
+    isNonImplementerBranch(branch) ||
+    isDelegatedWorktreePath(located.root) ||
     !isImplementerModelName(input.modelName) ||
     extraFacts.t3Role === "review" ||
     extraFacts.t3Role === "research";
@@ -2388,12 +2411,77 @@ const patchFindings = (patch, cwd, actor, project, owned, policy, home) =>
     ];
   });
 
-const delegateTaskFindings = () => [
-  finding(
-    "role-without-delegation",
-    "Antigravity 세션에서는 하위 에이전트를 위임하지 않는다. 위임은 메인 Claude만 수행한다 (docs/workflow.md 1장, docs/harness.md 7.4)",
-  ),
-];
+const DELEGATE_TASK_TOOLS = Object.freeze([
+  "mcp_t3-code_delegate_task",
+  "mcp__t3_code__delegate_task",
+  "mcp__t3-code__delegate_task",
+  "delegate_task",
+]);
+
+const DELEGATE_ALLOWED_KEYS = Object.freeze([
+  "task",
+  "title",
+  "target",
+  "isolation",
+  "mode",
+  "role",
+  "runtimeMode",
+  "interactionMode",
+  "clientRequestId",
+  "timeoutMs",
+  "toolSummary",
+]);
+
+const delegateTaskFindings = (role, args, actor) => {
+  if (role !== ROLE.implementer) {
+    const detail =
+      actor?.agent_id === "antigravity-delegated-child"
+        ? "하위 스레드(delegated)에서는 하위 에이전트를 위임하지 않는다"
+        : "리뷰어·비판자·주 작업 트리·미확인 세션에서는 하위 에이전트를 위임하지 않는다";
+    return [
+      finding(
+        "role-without-delegation",
+        `${detail} (docs/workflow.md 1장, docs/harness.md 7.4)`,
+      ),
+    ];
+  }
+  if (
+    !plainObject(args) ||
+    !Object.keys(args).every((key) => DELEGATE_ALLOWED_KEYS.includes(key))
+  ) {
+    return [finding("orchestration", "허용하지 않은 T3 위임 인자다")];
+  }
+  if (
+    (args.runtimeMode !== undefined &&
+      !["inherit", "approval-required"].includes(args.runtimeMode)) ||
+    (args.interactionMode !== undefined &&
+      !["default", "plan"].includes(args.interactionMode))
+  ) {
+    return [finding("orchestration", "권한 확대는 허용하지 않는다")];
+  }
+  if (
+    args.isolation !== "worktree" ||
+    (args.mode !== undefined && !["wait", "async"].includes(args.mode)) ||
+    typeof args.task !== "string" ||
+    args.task.trim().length === 0
+  ) {
+    return [
+      finding(
+        "orchestration",
+        "구현 담당의 위임은 isolation=worktree와 비어 있지 않은 task를 요구한다",
+      ),
+    ];
+  }
+  if (!["review", "research"].includes(args.role)) {
+    return [
+      finding(
+        "orchestration",
+        "구현 담당은 review·research 역할만 위임할 수 있으며 implementation 등 구현 위임은 거부한다",
+      ),
+    ];
+  }
+  return delegateTargetFindings(args.target, args.role);
+};
 
 export const antigravityPreTool = (
   input,
@@ -2551,8 +2639,9 @@ export const antigravityPreTool = (
         : { decision: "allow" };
     }
 
-    if (toolName === "mcp_t3-code_delegate_task") {
-      return denyOutput(delegateTaskFindings());
+    if (DELEGATE_TASK_TOOLS.includes(toolName)) {
+      const findings = delegateTaskFindings(role, args, actor);
+      return findings.length > 0 ? denyOutput(findings) : { decision: "allow" };
     }
 
     if (toolName === "manage_task") {
