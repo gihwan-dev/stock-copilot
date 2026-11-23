@@ -173,6 +173,21 @@ const stepFindings = (job, step, policy, toolSpec) => {
   return found;
 };
 
+const mutationStrategyMatches = (name, strategy, policy) => {
+  const expected =
+    name === "mutants" ? policy.mutationStrategy : policy.dailyMutationStrategy;
+  const maximum = strategy?.["max-parallel"];
+  return (
+    isObject(strategy) &&
+    isObject(expected) &&
+    expected["max-parallel"] === 2 &&
+    Number.isInteger(maximum) &&
+    maximum > 0 &&
+    maximum <= 2 &&
+    isDeepStrictEqual({ ...strategy, "max-parallel": 2 }, expected)
+  );
+};
+
 const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   if (!isObject(job)) {
     return [finding("missing-key", `jobs.${name}`)];
@@ -191,12 +206,7 @@ const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
     ),
     ...(path !== ".github/workflows/nightly.yml" ||
     !["mutants", "mutants-daily"].includes(name) ||
-    isDeepStrictEqual(
-      job.strategy,
-      name === "mutants"
-        ? policy.mutationStrategy
-        : policy.dailyMutationStrategy,
-    )
+    mutationStrategyMatches(name, job.strategy, policy)
       ? []
       : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)
@@ -243,8 +253,24 @@ export const workflowFindings = (path, text, policy, toolSpec) => {
     return [finding("not-canonical-json")];
   }
   const jobs = isObject(parsed.jobs) ? parsed.jobs : {};
+  const expectedConcurrency = policy.expected[path]?.concurrency;
+  const allowedKeys =
+    expectedConcurrency !== undefined &&
+    isDeepStrictEqual(parsed.concurrency, expectedConcurrency)
+      ? [...policy.topKeys, "concurrency"]
+      : policy.topKeys;
+  const requiredConcurrency =
+    (path === ".github/workflows/ci.yml" &&
+      "macos" in jobs &&
+      "macos-branch" in jobs) ||
+    (path === ".github/workflows/nightly.yml" &&
+      "mutants" in jobs &&
+      "mutants-daily" in jobs);
   const found = [
-    ...keyFindings(parsed, policy.topKeys, policy.topKeys, "top"),
+    ...keyFindings(parsed, allowedKeys, policy.topKeys, "top"),
+    ...(requiredConcurrency && !("concurrency" in parsed)
+      ? [finding("missing-key", "top.concurrency")]
+      : []),
     ...eventFindings(parsed.on, policy),
     ...(isDeepStrictEqual(parsed.permissions, policy.permissions)
       ? []

@@ -189,6 +189,10 @@
       "permissions": {
         "contents": "read"
       },
+      "concurrency": {
+        "group": "${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && format('{0}-{1}', github.run_id, github.run_attempt) || 'branch' }}",
+        "cancel-in-progress": "${{ github.ref != 'refs/heads/master' }}"
+      },
       "jobs": {
         "linux": {
           "runs-on": "ubuntu-24.04-arm",
@@ -546,6 +550,11 @@
       "permissions": {
         "contents": "read"
       },
+      "concurrency": {
+        "group": "${{ github.workflow }}-runner-capacity",
+        "queue": "max",
+        "cancel-in-progress": false
+      },
       "jobs": {
         "changes": {
           "runs-on": "ubuntu-24.04-arm",
@@ -872,7 +881,8 @@
                 "126/128",
                 "127/128"
               ]
-            }
+            },
+            "max-parallel": 2
           },
           "steps": [
             {
@@ -1062,7 +1072,8 @@
             "fail-fast": false,
             "matrix": {
               "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
-            }
+            },
+            "max-parallel": 2
           }
         },
         "daily-plan": {
@@ -1410,7 +1421,8 @@
         "126/128",
         "127/128"
       ]
-    }
+    },
+    "max-parallel": 2
   },
   "alwaysSteps": [
     {
@@ -1433,6 +1445,7 @@
     "fail-fast": false,
     "matrix": {
       "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
-    }
+    },
+    "max-parallel": 2
   }
 }
