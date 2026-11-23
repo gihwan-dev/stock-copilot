@@ -52,7 +52,9 @@ impl<
         self.reader.accounts().await
     }
     async fn holdings(&self, account: &AccountId) -> Result<HoldingsObservation, PortError> {
-        self.reader.holdings(account).await
+        self.reader
+            .fetch_holdings(account, crate::account_read::MasterErrorMode::Dedicated)
+            .await
     }
     async fn transactions(
         &self,
@@ -75,9 +77,17 @@ impl<
         period: CandlePeriod,
         adjustment: PriceAdjustment,
     ) -> Result<Vec<Candle>, PortError> {
-        self.reader
-            .candles(instrument, window, period, adjustment)
-            .await
+        crate::market_read::candles(
+            &self.reader,
+            instrument,
+            window,
+            period,
+            crate::market_read::candles::CandleMode {
+                adjustment,
+                master_errors: crate::account_read::MasterErrorMode::Dedicated,
+            },
+        )
+        .await
     }
     async fn buying_power(
         &self,

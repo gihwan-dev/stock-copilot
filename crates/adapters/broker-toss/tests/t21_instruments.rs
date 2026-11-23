@@ -87,25 +87,46 @@ mod tests {
     }
     #[derive(Default)]
     struct Authority {
-        repository: MemoryInstrumentMappingRepository,
+        repository: Arc<MemoryInstrumentMappingRepository>,
         failure: Option<MasterNotReady>,
         verification_failure: Option<MasterNotReady>,
+        mapping_failure: Option<MappingFailure>,
         observations: Arc<std::sync::RwLock<Vec<InstrumentMasterObservation>>>,
         mapping_calls: Arc<std::sync::atomic::AtomicUsize>,
+        ensure_calls: Arc<std::sync::atomic::AtomicUsize>,
     }
+
+    #[derive(Clone, Copy)]
+    enum MappingFailure {
+        Resolve(SystemPortError),
+        Ensure(SystemPortError),
+        EnsureSecond(SystemPortError),
+        Retire(SystemPortError),
+    }
+
     struct Session<'a>(
         &'a MemoryInstrumentMappingRepository,
         Option<MasterNotReady>,
         &'a std::sync::RwLock<Vec<InstrumentMasterObservation>>,
         &'a std::sync::atomic::AtomicUsize,
+        Option<MappingFailure>,
+        &'a std::sync::atomic::AtomicUsize,
     );
     impl InstrumentMappingRepository for Session<'_> {
-        fn resolve(
+        async fn resolve(
             &self,
             source: &InstrumentSource,
-        ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send {
+        ) -> Result<InstrumentId, MappingStoreError> {
             self.3.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            self.0.resolve(source)
+            match self.4 {
+                Some(MappingFailure::Resolve(error)) => Err(MappingStoreError::Storage(error)),
+                Some(
+                    MappingFailure::Ensure(_)
+                    | MappingFailure::EnsureSecond(_)
+                    | MappingFailure::Retire(_),
+                )
+                | None => self.0.resolve(source).await,
+            }
         }
         fn lookup(
             &self,
@@ -121,18 +142,41 @@ mod tests {
         {
             self.0.for_id(id)
         }
-        fn ensure(
+        async fn ensure(
             &self,
             source: &InstrumentSource,
             candidate: &InstrumentId,
-        ) -> impl Future<Output = Result<MappingAssignment, MappingStoreError>> + Send {
-            self.0.ensure(source, candidate)
+        ) -> Result<MappingAssignment, MappingStoreError> {
+            let call = self.5.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            match (self.4, call) {
+                (Some(MappingFailure::Ensure(error)), _)
+                | (Some(MappingFailure::EnsureSecond(error)), 1) => {
+                    Err(MappingStoreError::Storage(error))
+                }
+                (
+                    Some(
+                        MappingFailure::Resolve(_)
+                        | MappingFailure::EnsureSecond(_)
+                        | MappingFailure::Retire(_),
+                    )
+                    | None,
+                    _,
+                ) => self.0.ensure(source, candidate).await,
+            }
         }
-        fn retire(
+        async fn retire(
             &self,
             source: &InstrumentSource,
-        ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send {
-            self.0.retire(source)
+        ) -> Result<InstrumentId, MappingStoreError> {
+            match self.4 {
+                Some(MappingFailure::Retire(error)) => Err(MappingStoreError::Storage(error)),
+                Some(
+                    MappingFailure::Resolve(_)
+                    | MappingFailure::Ensure(_)
+                    | MappingFailure::EnsureSecond(_),
+                )
+                | None => self.0.retire(source).await,
+            }
         }
     }
     impl InstrumentMasterSession for Session<'_> {
@@ -160,6 +204,8 @@ mod tests {
                     self.verification_failure,
                     &self.observations,
                     &self.mapping_calls,
+                    self.mapping_failure,
+                    &self.ensure_calls,
                 )),
             })
         }
@@ -759,6 +805,420 @@ mod tests {
             );
             assert_eq!(error.status(), application::HttpStatus::Success);
         }
+        server.finish().expect("requests");
+    }
+    fn probe_list_of_size(count: usize) -> Value {
+        let rows = (0..count)
+            .map(|index| {
+                json!({
+                    "symbol": format!("{index:06}"),
+                    "name": "합성 종목",
+                    "securityType": "STOCK",
+                    "isCommonShare": true,
+                    "isinCode": "KR7000000001"
+                })
+            })
+            .collect::<Vec<_>>();
+        json!({"result": rows})
+    }
+
+    #[test]
+    fn review_limit_exactly_8192_proceeds_to_the_next_exchange() {
+        let server = ScriptedHttpServer::start(vec![
+            token(),
+            response("200 OK", &probe_list_of_size(8192)),
+            response("500 Internal Server Error", &json!({})),
+        ])
+        .expect("server");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer(&[]));
+        let error = run(reader.instruments(KnownMarket::Kr)).expect_err("second exchange failure");
+        assert_eq!(error.status(), application::HttpStatus::ServerError);
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
+        assert!(requests.contains("market=KOSDAQ"));
+    }
+
+    #[test]
+    fn review_limit_above_8192_fails_before_next_exchange() {
+        let server =
+            ScriptedHttpServer::start(vec![token(), response("200 OK", &probe_list_of_size(8193))])
+                .expect("server");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer(&[]));
+        let error = run(reader.instruments(KnownMarket::Kr)).expect_err("oversized");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        let requests = String::from_utf8(server.finish().expect("requests")).expect("utf8");
+        assert!(!requests.contains("market=KOSDAQ"));
+    }
+
+    #[test]
+    fn review_explicit_delisted_status_cannot_become_tradable() {
+        let mut delisted_details = details();
+        delisted_details["result"][1]["status"] = json!("DELISTED");
+        let server = ScriptedHttpServer::start(vec![
+            token(),
+            response("200 OK", &list()),
+            response("200 OK", &empty()),
+            response("200 OK", &empty()),
+            response("200 OK", &delisted_details),
+        ])
+        .expect("server");
+        let authority = Authority::default();
+        let observations = Arc::clone(&authority.observations);
+        let repository = Arc::clone(&authority.repository);
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(authority, issuer(&["opaque-b"]));
+        let master = run(reader.instruments(KnownMarket::Kr)).expect("master");
+        assert_eq!(
+            master.entries()[0],
+            InstrumentMasterEntry::Unavailable {
+                source: source("005930", "KR7005930003"),
+                reason: InstrumentMappingError::IdentityUncertain,
+            }
+        );
+        assert_eq!(
+            observations.read().expect("observations")[0].listing_status,
+            domain::ListingStatus::Delisted
+        );
+        assert_eq!(
+            run(repository.resolve(&source("005930", "KR7005930003"))),
+            Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
+        );
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review_regression_verified_delisting_retires_existing_mapping() {
+        let mut details = details();
+        details["result"][1]["status"] = json!("DELISTED");
+        let server = ScriptedHttpServer::start(vec![
+            token(),
+            response("200 OK", &list()),
+            response("200 OK", &empty()),
+            response("200 OK", &empty()),
+            response("200 OK", &details),
+        ])
+        .expect("server");
+        let authority = Authority::default();
+        let repository = Arc::clone(&authority.repository);
+        let delisted = source("005930", "KR7005930003");
+        run(repository.ensure(&delisted, &id("old-delisted"))).expect("seed");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(authority, issuer(&["other"]));
+        let master = run(reader.instruments(KnownMarket::Kr)).expect("master");
+        assert_eq!(
+            master.entries()[0],
+            InstrumentMasterEntry::Unavailable {
+                source: delisted.clone(),
+                reason: InstrumentMappingError::Retired,
+            }
+        );
+        assert_eq!(
+            run(repository.resolve(&delisted)),
+            Err(MappingStoreError::Mapping(InstrumentMappingError::Retired))
+        );
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review_retirement_failure_preserves_the_system_error_and_existing_mapping() {
+        use application::{ClassifiedError, SystemFailure, SystemPort};
+        let mut details = details();
+        details["result"][1]["status"] = json!("DELISTED");
+        let server = ScriptedHttpServer::start(vec![
+            token(),
+            response("200 OK", &list()),
+            response("200 OK", &empty()),
+            response("200 OK", &empty()),
+            response("200 OK", &details),
+        ])
+        .expect("server");
+        let original =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::PermissionDenied);
+        let authority = Authority {
+            mapping_failure: Some(MappingFailure::Retire(original)),
+            ..Authority::default()
+        };
+        let repository = Arc::clone(&authority.repository);
+        let delisted = source("005930", "KR7005930003");
+        run(repository.ensure(&delisted, &id("old-delisted"))).expect("seed");
+        let reader =
+            reader(&server, crate::support::time()).with_instrument_master(authority, issuer(&[]));
+        let error = run(reader.instruments(KnownMarket::Kr)).expect_err("retire failure");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::MasterNotReady(MasterNotReady::Storage(original))
+        );
+        assert_eq!(error.class(), original.class());
+        assert_eq!(run(repository.resolve(&delisted)), Ok(id("old-delisted")));
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review_regression_issuer_errors_preserve_the_system_classification() {
+        use application::{ClassifiedError, SystemFailure, SystemPort};
+        for failure in [
+            SystemFailure::RepositoryIntegrity,
+            SystemFailure::InvalidData,
+            SystemFailure::PermissionDenied,
+            SystemFailure::Unavailable(application::RetryDelay::Unknown),
+        ] {
+            let server = ScriptedHttpServer::start(responses()).expect("server");
+            let issuer = issuer(&[]);
+            let source_error = SystemPortError::new(SystemPort::Repository, failure);
+            issuer.push(Err(source_error));
+            let reader = reader(&server, crate::support::time())
+                .with_instrument_master(Authority::default(), issuer);
+            let error = run(reader.instruments(KnownMarket::Kr)).expect_err("issuer failure");
+            assert_eq!(error.class(), source_error.class());
+            server.finish().expect("requests");
+        }
+    }
+
+    #[test]
+    fn review_regression_repository_errors_keep_their_exact_cause() {
+        use application::{ClassifiedError, SystemFailure, SystemPort};
+        for failure in [
+            SystemFailure::RepositoryIntegrity,
+            SystemFailure::InvalidData,
+            SystemFailure::PermissionDenied,
+            SystemFailure::Unavailable(application::RetryDelay::Unknown),
+        ] {
+            let original = SystemPortError::new(SystemPort::Repository, failure);
+            for mapping_failure in [
+                MappingFailure::Resolve(original),
+                MappingFailure::Ensure(original),
+            ] {
+                let server = ScriptedHttpServer::start(responses()).expect("server");
+                let authority = Authority {
+                    mapping_failure: Some(mapping_failure),
+                    ..Authority::default()
+                };
+                let reader = reader(&server, crate::support::time())
+                    .with_instrument_master(authority, issuer(&["candidate"]));
+                let error = run(reader.instruments(KnownMarket::Kr)).expect_err("repository error");
+                assert_eq!(
+                    error.kind(),
+                    application::PortErrorKind::MasterNotReady(MasterNotReady::Storage(original))
+                );
+                assert_eq!(error.class(), original.class());
+                server.finish().expect("requests");
+            }
+        }
+    }
+
+    #[test]
+    fn review_retry_reuses_successful_mapping_after_later_write_failure() {
+        use application::{SystemFailure, SystemPort};
+        let mut replies = responses();
+        replies.extend(responses().into_iter().skip(1));
+        let server = ScriptedHttpServer::start(replies).expect("server");
+        let authority = Authority {
+            mapping_failure: Some(MappingFailure::EnsureSecond(SystemPortError::new(
+                SystemPort::Repository,
+                SystemFailure::Unavailable(application::RetryDelay::Unknown),
+            ))),
+            ..Authority::default()
+        };
+        let repository = Arc::clone(&authority.repository);
+        let reader = reader(&server, crate::support::time()).with_instrument_master(
+            authority,
+            issuer(&["first-id", "failed-candidate", "retry-id"]),
+        );
+        run(reader.instruments(KnownMarket::Kr)).expect_err("second write failed");
+        assert_eq!(
+            run(repository.resolve(&source("005930", "KR7005930003"))),
+            Ok(id("first-id"))
+        );
+        assert_eq!(
+            run(repository.resolve(&source("069500", "KR7069500007"))),
+            Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
+        );
+        let retried = run(reader.instruments(KnownMarket::Kr))
+            .expect("retried")
+            .complete_facts()
+            .expect("complete");
+        assert_eq!(retried.instruments()[0].row().instrument_id, id("first-id"));
+        assert_eq!(retried.instruments()[1].row().instrument_id, id("retry-id"));
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review_regression_same_isin_never_grants_either_ambiguous_source_an_id() {
+        let mut first_list = list();
+        first_list["result"][1]["isinCode"] = json!("KR7005930003");
+        let mut first_details = details();
+        first_details["result"][0]["isinCode"] = json!("KR7005930003");
+        let server = ScriptedHttpServer::start(vec![
+            token(),
+            response("200 OK", &first_list),
+            response("200 OK", &empty()),
+            response("200 OK", &empty()),
+            response("200 OK", &first_details),
+        ])
+        .expect("server");
+        let authority = Authority::default();
+        let repository = Arc::clone(&authority.repository);
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(authority, issuer(&["ambiguous-1", "ambiguous-2"]));
+        let master = run(reader.instruments(KnownMarket::Kr)).expect("per-instrument result");
+        assert_eq!(
+            master.entries(),
+            &[
+                InstrumentMasterEntry::Unavailable {
+                    source: source("005930", "KR7005930003"),
+                    reason: InstrumentMappingError::IdentityUncertain,
+                },
+                InstrumentMasterEntry::Unavailable {
+                    source: source("069500", "KR7005930003"),
+                    reason: InstrumentMappingError::IdentityUncertain,
+                },
+            ]
+        );
+        for symbol in ["005930", "069500"] {
+            assert_eq!(
+                run(repository.resolve(&source(symbol, "KR7005930003"))),
+                Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
+            );
+        }
+        server.finish().expect("requests");
+    }
+    #[test]
+    fn review_regression_holdings_separates_missing_master_from_bad_response() {
+        let recording: Value = serde_json::from_str(
+            &std::fs::read_to_string("tests/recordings/t05-holdings.json").expect("fixture"),
+        )
+        .expect("json");
+        for (body, expected) in [
+            (
+                recording["body"].clone(),
+                application::PortErrorKind::MasterNotReady(MasterNotReady::MissingInstrument),
+            ),
+            (
+                {
+                    let mut invalid = recording["body"].clone();
+                    invalid["result"]["items"][0]["quantity"] = json!("invalid");
+                    invalid
+                },
+                application::PortErrorKind::InvalidResponse(
+                    application::ResponseMismatch::Validation,
+                ),
+            ),
+        ] {
+            let server = ScriptedHttpServer::start(vec![token(), response("200 OK", &body)])
+                .expect("server");
+            let reader = reader(&server, crate::support::time())
+                .with_instrument_master(Authority::default(), issuer(&[]));
+            let error = run(reader.holdings(&domain::AccountId::new(413))).expect_err("error");
+            assert_eq!(error.kind(), expected);
+            server.finish().expect("requests");
+        }
+    }
+
+    #[test]
+    fn review_regression_etf_type_conflict_is_not_a_missing_instrument() {
+        let mut replies = responses();
+        replies.push(response(
+            "200 OK",
+            &json!({"result":{"etfs":[{"symbol":"005930","name":"합성 하나"}]}}),
+        ));
+        let server = ScriptedHttpServer::start(replies).expect("server");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer(&["stock-probe", "etf-probe"]));
+        let master = run(reader.instruments(KnownMarket::Kr))
+            .expect("master")
+            .complete_facts()
+            .expect("complete");
+        assert_eq!(master.instruments()[0].row().symbol.as_str(), "005930");
+        assert_eq!(
+            master.instruments()[0].row().security_type.code().as_str(),
+            "STOCK"
+        );
+        let populated_reader = reader.with_market_master(master);
+        let error = run(populated_reader.sector_etfs(
+            &domain::SectorId::try_new("100").expect("sector"),
+            KnownMarket::Kr,
+        ))
+        .expect_err("wrong type");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::InvalidResponse(application::ResponseMismatch::Validation)
+        );
+        server.finish().expect("requests");
+    }
+
+    fn review_timestamp(text: &str) -> Timestamp {
+        broker_toss::TossTimestamp::try_from(text)
+            .expect("timestamp")
+            .into_domain()
+    }
+
+    fn review_candle_sessions() -> Vec<domain::MarketSession> {
+        use domain::{MarketSession, SessionData, SessionInformation, TimeInterval};
+        ["2026-03-24", "2026-03-25"]
+            .map(|date| {
+                let open = review_timestamp(&format!("{date}T09:00:00+09:00"));
+                let close = review_timestamp(&format!("{date}T15:30:00+09:00"));
+                MarketSession::try_new(
+                    open.offset_calendar_date(),
+                    SessionInformation::Kr {
+                        pre_market: None,
+                        regular_market: Some(
+                            SessionData::try_new(
+                                TimeInterval::try_new(open, close).expect("window"),
+                                None,
+                            )
+                            .expect("session data"),
+                        ),
+                        after_market: None,
+                    },
+                )
+                .expect("session")
+            })
+            .to_vec()
+    }
+
+    #[test]
+    fn review_regression_adjusted_daily_missing_master_is_a_dedicated_cause() {
+        use domain::TimeInterval;
+        let master_server = ScriptedHttpServer::start(responses()).expect("server");
+        let populated = reader(&master_server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer(&["one", "two"]));
+        let facts = run(populated.instruments(KnownMarket::Kr))
+            .expect("master")
+            .complete_facts()
+            .expect("facts");
+        let instrument = facts.instruments()[0].quote_instrument().expect("quote");
+        master_server.finish().expect("requests");
+        let fixture: Value = serde_json::from_str(
+            &std::fs::read_to_string("tests/market_recordings/t07-daily.json").expect("fixture"),
+        )
+        .expect("json");
+        let server = ScriptedHttpServer::start(vec![token(), response("200 OK", &fixture["body"])])
+            .expect("server");
+        let reader = reader(&server, crate::support::time())
+            .with_candle_sessions(review_candle_sessions())
+            .with_instrument_master(Authority::default(), issuer(&[]));
+        let error = run(reader.candles(
+            &instrument,
+            TimeInterval::try_new(
+                review_timestamp("2026-03-24T00:00:00+09:00"),
+                review_timestamp("2026-03-26T00:00:00+09:00"),
+            )
+            .expect("window"),
+            domain::CandlePeriod::Daily,
+            domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(review_timestamp(
+                "2026-03-26T00:00:00+09:00",
+            ))),
+        ))
+        .expect_err("missing master");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::MasterNotReady(MasterNotReady::MissingInstrument)
+        );
         server.finish().expect("requests");
     }
 }

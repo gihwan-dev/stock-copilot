@@ -1,7 +1,7 @@
 use crate::{TokenRenewal, TossInstrumentRead};
 use application::{
-    Clock, InstrumentIdIssuer, InstrumentMasterAuthority, MarketInfo, PortError, PortErrorKind,
-    RankingQuery, SecretStore, SectorRankingQuery,
+    Clock, InstrumentIdIssuer, InstrumentMasterAuthority, MarketInfo, PortError, RankingQuery,
+    SecretStore, SectorRankingQuery,
 };
 use domain::{
     CalendarDate, CandlePeriod, CreditTrade, FlowInterval, FxPair, FxRate, FxRateKind,
@@ -10,18 +10,6 @@ use domain::{
     RankingLimit, SectorCatalog, SectorComposition, SectorDetail, SectorEtfs, SectorId,
     SectorRanking, SecuritiesLending, ShortSelling, StockRanking, TimeInterval, Timestamp,
 };
-
-fn master_error(error: PortError) -> PortError {
-    if error.kind() == PortErrorKind::Unsupported(application::BrokerCapability::Instruments) {
-        PortError::new(
-            error.endpoint(),
-            error.status(),
-            PortErrorKind::MasterNotReady(application::MasterNotReady::MissingInstrument),
-        )
-    } else {
-        error
-    }
-}
 
 impl<S: SecretStore, T: Clock, R: TokenRenewal, A: InstrumentMasterAuthority, I: InstrumentIdIssuer>
     MarketInfo for TossInstrumentRead<S, T, R, A, I>
@@ -98,10 +86,13 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal, A: InstrumentMasterAuthority, I:
         sector: &SectorId,
         market: KnownMarket,
     ) -> Result<SectorEtfs, PortError> {
-        self.reader
-            .sector_etfs(sector, market)
-            .await
-            .map_err(master_error)
+        crate::market_sector::etfs(
+            &self.reader,
+            sector,
+            market,
+            crate::account_read::MasterErrorMode::Dedicated,
+        )
+        .await
     }
     async fn indicator_quotes(
         &self,
@@ -146,10 +137,13 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal, A: InstrumentMasterAuthority, I:
         sector: &SectorId,
         market: KnownMarket,
     ) -> Result<SectorComposition, PortError> {
-        self.reader
-            .sector_composition(sector, market)
-            .await
-            .map_err(master_error)
+        crate::market_sector::composition(
+            &self.reader,
+            sector,
+            market,
+            crate::account_read::MasterErrorMode::Dedicated,
+        )
+        .await
     }
     async fn calendar(&self, market: KnownMarket) -> Result<MarketCalendar, PortError> {
         self.reader.calendar(market).await

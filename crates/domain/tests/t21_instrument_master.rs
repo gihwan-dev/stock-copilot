@@ -111,4 +111,94 @@ mod tests {
             Err(InstrumentMasterError::InvalidEntry)
         );
     }
+
+    #[test]
+    fn source_batch_detects_all_identity_conflicts_without_changing_mapping_rules() {
+        use domain::{InstrumentSourceConflict, instrument_source_conflicts};
+
+        let first = source("AAPL", "US0378331005");
+        let changed_symbol = source("AAPX", "us0378331005");
+        let unrelated = source("MSFT", "US5949181045");
+        let same_symbol = source("aapl", "US9999999999");
+        let another_market = InstrumentSource::new(
+            KnownMarket::Kr,
+            Symbol::try_new("MSFT").expect("symbol"),
+            IsinCode::try_new("KR1234567890").expect("isin"),
+        );
+        let inputs = vec![
+            first.clone(),
+            changed_symbol.clone(),
+            unrelated.clone(),
+            same_symbol.clone(),
+            another_market.clone(),
+        ];
+        assert_eq!(
+            instrument_source_conflicts(&inputs),
+            vec![
+                InstrumentSourceConflict::IdentityUncertain,
+                InstrumentSourceConflict::IdentityUncertain,
+                InstrumentSourceConflict::Distinct,
+                InstrumentSourceConflict::IdentityUncertain,
+                InstrumentSourceConflict::Distinct,
+            ]
+        );
+        assert_eq!(
+            instrument_source_conflicts(&[first.clone(), first]),
+            vec![
+                InstrumentSourceConflict::Distinct,
+                InstrumentSourceConflict::Distinct,
+            ]
+        );
+        assert_eq!(
+            instrument_source_conflicts(&[another_market, unrelated, changed_symbol, same_symbol]),
+            vec![
+                InstrumentSourceConflict::Distinct,
+                InstrumentSourceConflict::Distinct,
+                InstrumentSourceConflict::Distinct,
+                InstrumentSourceConflict::Distinct,
+            ]
+        );
+    }
+
+    #[test]
+    fn source_batch_detects_isin_conflicts_across_markets_in_both_orders() {
+        use domain::{InstrumentSourceConflict, instrument_source_conflicts};
+
+        let same_isin_other_market = InstrumentSource::new(
+            KnownMarket::Kr,
+            Symbol::try_new("005930").expect("symbol"),
+            IsinCode::try_new("us0378331005").expect("isin"),
+        );
+        for inputs in [
+            vec![
+                source("AAPL", "US0378331005"),
+                same_isin_other_market.clone(),
+            ],
+            vec![same_isin_other_market, source("AAPL", "US0378331005")],
+        ] {
+            assert_eq!(
+                instrument_source_conflicts(&inputs),
+                vec![
+                    InstrumentSourceConflict::IdentityUncertain,
+                    InstrumentSourceConflict::IdentityUncertain,
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn source_batch_keeps_repeated_observations_of_a_conflict_unusable() {
+        use domain::{InstrumentSourceConflict, instrument_source_conflicts};
+
+        let first = source("AAPL", "US0378331005");
+        let conflicting = source("AAPX", "us0378331005");
+        assert_eq!(
+            instrument_source_conflicts(&[first.clone(), conflicting, first]),
+            vec![
+                InstrumentSourceConflict::IdentityUncertain,
+                InstrumentSourceConflict::IdentityUncertain,
+                InstrumentSourceConflict::IdentityUncertain,
+            ]
+        );
+    }
 }

@@ -228,7 +228,15 @@ mod tests {
 
     fn expected_class(kind: PortErrorKind) -> ErrorClass {
         match kind {
-            PortErrorKind::MasterNotReady(_) => ErrorClass::Wait(RetryDelay::Unknown),
+            PortErrorKind::MasterNotReady(
+                application::MasterNotReady::Storage(error)
+                | application::MasterNotReady::Issuer(error),
+            ) => error.class(),
+            PortErrorKind::MasterNotReady(
+                application::MasterNotReady::StatusCoverage
+                | application::MasterNotReady::IdentityContinuity
+                | application::MasterNotReady::MissingInstrument,
+            ) => ErrorClass::Wait(RetryDelay::Unknown),
             PortErrorKind::AccessDenied(value) => expected_access(value),
             PortErrorKind::Unavailable { cause, retry } => expected_wait(cause, retry),
             PortErrorKind::NotFound(value) => expected_no_data(value),

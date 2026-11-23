@@ -81,7 +81,7 @@ mod tests {
         for reason in [
             MasterNotReady::StatusCoverage,
             MasterNotReady::IdentityContinuity,
-            MasterNotReady::Storage,
+            MasterNotReady::MissingInstrument,
         ] {
             let error = PortError::new(
                 ReadEndpoint::Instruments,
@@ -90,6 +90,31 @@ mod tests {
             );
             assert_eq!(error.kind(), PortErrorKind::MasterNotReady(reason));
             assert_eq!(error.class(), ErrorClass::Wait(RetryDelay::Unknown));
+        }
+    }
+
+    #[test]
+    fn system_failures_keep_their_original_classification() {
+        use application::{SystemFailure, SystemPort, SystemPortError};
+        for failure in [
+            SystemFailure::RepositoryIntegrity,
+            SystemFailure::InvalidData,
+            SystemFailure::PermissionDenied,
+            SystemFailure::Unavailable(RetryDelay::Unknown),
+        ] {
+            let original = SystemPortError::new(SystemPort::Repository, failure);
+            for reason in [
+                MasterNotReady::Storage(original),
+                MasterNotReady::Issuer(original),
+            ] {
+                let error = PortError::new(
+                    ReadEndpoint::Instruments,
+                    HttpStatus::NotReceived,
+                    PortErrorKind::MasterNotReady(reason),
+                );
+                assert_eq!(error.kind(), PortErrorKind::MasterNotReady(reason));
+                assert_eq!(error.class(), original.class());
+            }
         }
     }
 }

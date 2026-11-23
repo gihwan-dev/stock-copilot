@@ -233,24 +233,74 @@ async fn map_source<M: InstrumentMappingRepository, I: InstrumentIdIssuer>(
 ) -> Result<Result<InstrumentId, InstrumentMappingError>, PortError> {
     match repository.resolve(source).await {
         Ok(id) => Ok(Ok(id)),
-        Err(MappingStoreError::Storage(_)) => {
-            Err(not_ready_after_response(MasterNotReady::Storage))
+        Err(MappingStoreError::Storage(error)) => {
+            Err(not_ready_after_response(MasterNotReady::Storage(error)))
         }
         Err(MappingStoreError::Mapping(InstrumentMappingError::Missing)) => {
             let candidate = issuer
                 .issue()
                 .await
-                .map_err(|_error| not_ready_after_response(MasterNotReady::Issuer))?;
+                .map_err(|error| not_ready_after_response(MasterNotReady::Issuer(error)))?;
             match repository.ensure(source, &candidate).await {
                 Ok(MappingAssignment::Issued(id) | MappingAssignment::Existing(id)) => Ok(Ok(id)),
-                Err(
-                    MappingStoreError::Storage(_)
-                    | MappingStoreError::Mapping(InstrumentMappingError::Missing),
-                ) => Err(not_ready_after_response(MasterNotReady::Storage)),
+                Err(MappingStoreError::Storage(error)) => {
+                    Err(not_ready_after_response(MasterNotReady::Storage(error)))
+                }
+                Err(MappingStoreError::Mapping(InstrumentMappingError::Missing)) => {
+                    Err(not_ready_after_response(MasterNotReady::Storage(
+                        application::SystemPortError::new(
+                            application::SystemPort::Repository,
+                            application::SystemFailure::InvalidData,
+                        ),
+                    )))
+                }
                 Err(MappingStoreError::Mapping(reason)) => Ok(Err(reason)),
             }
         }
         Err(MappingStoreError::Mapping(reason)) => Ok(Err(reason)),
+    }
+}
+
+async fn mapped_entry<M: InstrumentMappingRepository, I: InstrumentIdIssuer>(
+    repository: &M,
+    issuer: &I,
+    mut item: Prepared,
+    conflict: domain::InstrumentSourceConflict,
+) -> Result<InstrumentMasterEntry, PortError> {
+    if conflict == domain::InstrumentSourceConflict::IdentityUncertain {
+        return Ok(InstrumentMasterEntry::Unavailable {
+            source: item.source,
+            reason: InstrumentMappingError::IdentityUncertain,
+        });
+    }
+    if item.row.listing_status == ListingStatus::Delisted {
+        let reason = match repository.retire(&item.source).await {
+            Ok(_) | Err(MappingStoreError::Mapping(InstrumentMappingError::Retired)) => {
+                InstrumentMappingError::Retired
+            }
+            Err(MappingStoreError::Mapping(InstrumentMappingError::Missing)) => {
+                InstrumentMappingError::IdentityUncertain
+            }
+            Err(MappingStoreError::Mapping(reason)) => reason,
+            Err(MappingStoreError::Storage(error)) => {
+                return Err(not_ready_after_response(MasterNotReady::Storage(error)));
+            }
+        };
+        return Ok(InstrumentMasterEntry::Unavailable {
+            source: item.source,
+            reason,
+        });
+    }
+    match map_source(repository, issuer, &item.source).await? {
+        Ok(id) => {
+            item.row.instrument_id = id;
+            let instrument = MasterInstrument::try_new(item.row).map_err(|_error| invalid())?;
+            Ok(InstrumentMasterEntry::Available(instrument))
+        }
+        Err(reason) => Ok(InstrumentMasterEntry::Unavailable {
+            source: item.source,
+            reason,
+        }),
     }
 }
 
@@ -280,19 +330,14 @@ pub(crate) async fn fetch<
         .verify_observation(&observations)
         .await
         .map_err(not_ready_after_response)?;
+    let sources = prepared
+        .iter()
+        .map(|item| item.source.clone())
+        .collect::<Vec<_>>();
+    let conflicts = domain::instrument_source_conflicts(&sources);
     let mut entries = Vec::new();
-    for mut item in prepared {
-        match map_source(&session, &reader.issuer, &item.source).await? {
-            Ok(id) => {
-                item.row.instrument_id = id;
-                let instrument = MasterInstrument::try_new(item.row).map_err(|_error| invalid())?;
-                entries.push(InstrumentMasterEntry::Available(instrument));
-            }
-            Err(reason) => entries.push(InstrumentMasterEntry::Unavailable {
-                source: item.source,
-                reason,
-            }),
-        }
+    for (item, conflict) in prepared.into_iter().zip(conflicts) {
+        entries.push(mapped_entry(&session, &reader.issuer, item, conflict).await?);
     }
     let master = InstrumentMaster::try_new(entries).map_err(|_error| invalid())?;
     Ok(master)

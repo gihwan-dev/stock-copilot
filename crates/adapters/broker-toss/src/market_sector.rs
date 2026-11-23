@@ -164,6 +164,7 @@ pub(crate) async fn composition<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     sector: &SectorId,
     market: KnownMarket,
+    master_errors: crate::account_read::MasterErrorMode,
 ) -> Result<SectorComposition, PortError> {
     let endpoint = ReadEndpoint::SectorComposition;
     let route = ReadRoute::SectorStocks(route_id(sector, endpoint)?);
@@ -203,7 +204,7 @@ pub(crate) async fn composition<S: SecretStore, T: Clock, R: TokenRenewal>(
                 instrument.market() == &market && instrument.symbol() == symbol
             })
         }) {
-            return Err(missing_master_mapping(endpoint));
+            return Err(master_errors.missing(endpoint, missing_master_mapping(endpoint)));
         }
     }
     Ok(composition)
@@ -212,6 +213,7 @@ pub(crate) async fn etfs<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     sector: &SectorId,
     market: KnownMarket,
+    master_errors: crate::account_read::MasterErrorMode,
 ) -> Result<SectorEtfs, PortError> {
     let endpoint = ReadEndpoint::SectorEtfs;
     let route = ReadRoute::SectorEtfs(route_id(sector, endpoint)?);
@@ -236,12 +238,18 @@ pub(crate) async fn etfs<S: SecretStore, T: Clock, R: TokenRenewal>(
     let etfs = SectorEtfs::from_response(sector.clone(), market, rows, reader.market_now())
         .map_err(|_error| invalid(endpoint))?;
     for row in etfs.etfs() {
-        if !reader.market_master().instruments().iter().any(|master| {
-            master.quote_instrument().is_ok_and(|instrument| {
-                instrument.market() == &market && instrument.symbol() == row.symbol()
-            }) && matches_etf_type(master)
-        }) {
-            return Err(missing_master_mapping(endpoint));
+        let master = reader
+            .market_master()
+            .instruments()
+            .iter()
+            .find(|master| {
+                master.quote_instrument().is_ok_and(|instrument| {
+                    instrument.market() == &market && instrument.symbol() == row.symbol()
+                })
+            })
+            .ok_or_else(|| master_errors.missing(endpoint, missing_master_mapping(endpoint)))?;
+        if !matches_etf_type(master) {
+            return Err(master_errors.conflict(endpoint, missing_master_mapping(endpoint)));
         }
     }
     Ok(etfs)

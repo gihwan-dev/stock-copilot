@@ -17,7 +17,8 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
         self.fetch_accounts().await
     }
     async fn holdings(&self, account: &AccountId) -> Result<HoldingsObservation, PortError> {
-        self.fetch_holdings(account).await
+        self.fetch_holdings(account, crate::account_read::MasterErrorMode::Legacy)
+            .await
     }
     fn transactions(
         &self,
@@ -40,7 +41,16 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
         period: CandlePeriod,
         adjustment: PriceAdjustment,
     ) -> impl Future<Output = Result<Vec<Candle>, PortError>> + Send {
-        crate::market_read::candles(self, instrument, window, period, adjustment)
+        crate::market_read::candles(
+            self,
+            instrument,
+            window,
+            period,
+            crate::market_read::candles::CandleMode {
+                adjustment,
+                master_errors: crate::account_read::MasterErrorMode::Legacy,
+            },
+        )
     }
     fn buying_power(
         &self,

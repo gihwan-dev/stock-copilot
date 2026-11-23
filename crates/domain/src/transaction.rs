@@ -18,6 +18,10 @@ impl IsinCode {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub(crate) fn normalized_ascii(&self) -> Self {
+        Self(self.0.to_ascii_uppercase())
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AssetClassCode(String);

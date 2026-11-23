@@ -1,4 +1,5 @@
 use crate::{InstrumentId, IsinCode, KnownMarket, Symbol};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstrumentSource {
@@ -32,19 +33,71 @@ impl InstrumentSource {
         &self.isin
     }
 
+    fn symbol_key(&self) -> (KnownMarket, Symbol) {
+        (self.market, self.symbol.normalized_ascii())
+    }
+
+    fn isin_key(&self) -> IsinCode {
+        self.isin.normalized_ascii()
+    }
+
     fn relation(&self, other: &Self) -> SourceRelation {
-        if (self.market == other.market
-            && self
-                .symbol
-                .as_str()
-                .eq_ignore_ascii_case(other.symbol.as_str()))
-            || self.isin.as_str().eq_ignore_ascii_case(other.isin.as_str())
-        {
+        if self.symbol_key() == other.symbol_key() || self.isin_key() == other.isin_key() {
             SourceRelation::Uncertain
         } else {
             SourceRelation::Distinct
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstrumentSourceConflict {
+    Distinct,
+    IdentityUncertain,
+}
+
+enum SourceGroup<'a> {
+    Identical(&'a InstrumentSource),
+    Conflict,
+}
+
+impl<'a> SourceGroup<'a> {
+    fn observe(&mut self, source: &'a InstrumentSource) {
+        match self {
+            Self::Identical(first) if *first != source => *self = Self::Conflict,
+            Self::Identical(_) | Self::Conflict => {}
+        }
+    }
+}
+
+#[must_use]
+pub fn instrument_source_conflicts(sources: &[InstrumentSource]) -> Vec<InstrumentSourceConflict> {
+    let mut symbols: BTreeMap<(KnownMarket, Symbol), SourceGroup<'_>> = BTreeMap::new();
+    let mut isins: BTreeMap<IsinCode, SourceGroup<'_>> = BTreeMap::new();
+    for source in sources {
+        symbols
+            .entry(source.symbol_key())
+            .and_modify(|group| group.observe(source))
+            .or_insert(SourceGroup::Identical(source));
+        isins
+            .entry(source.isin_key())
+            .and_modify(|group| group.observe(source))
+            .or_insert(SourceGroup::Identical(source));
+    }
+    sources
+        .iter()
+        .map(|source| {
+            match (
+                symbols.get(&source.symbol_key()),
+                isins.get(&source.isin_key()),
+            ) {
+                (Some(SourceGroup::Conflict), _) | (_, Some(SourceGroup::Conflict)) => {
+                    InstrumentSourceConflict::IdentityUncertain
+                }
+                _ => InstrumentSourceConflict::Distinct,
+            }
+        })
+        .collect()
 }
 
 enum SourceRelation {

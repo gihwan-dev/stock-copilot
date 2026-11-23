@@ -32,6 +32,7 @@ fn holding(
     value: &Value,
     master: &MasterInstrumentFacts,
     observed: Timestamp,
+    master_errors: crate::account_read::MasterErrorMode,
 ) -> Conversion<Holding> {
     let (market, currency) = match (
         field(value, "/marketCountry")?.as_str(),
@@ -52,7 +53,7 @@ fn holding(
                     .quote_instrument()
                     .is_ok_and(|instrument| Market::from(*instrument.market()) == market)
         })
-        .ok_or_else(failure)?;
+        .ok_or_else(|| master_errors.missing(ReadEndpoint::Holdings, failure()))?;
     let instrument = identified
         .order_gate_facts()
         .and_then(|gate| gate.instrument_for(OrderSide::Sell))
@@ -109,6 +110,7 @@ pub(crate) fn holdings(
     value: &Value,
     master: &MasterInstrumentFacts,
     observed: Timestamp,
+    master_errors: crate::account_read::MasterErrorMode,
 ) -> Conversion<HoldingsObservation> {
     let decoded: broker_toss_schema::types::HoldingsOverview =
         serde_json::from_value(value.clone())
@@ -120,7 +122,7 @@ pub(crate) fn holdings(
     let holdings = rows
         .iter()
         .map(|row| {
-            let parsed = holding(row, master, observed)?;
+            let parsed = holding(row, master, observed, master_errors)?;
             if !seen.insert((
                 parsed.instrument().market(),
                 parsed.instrument().symbol().clone(),

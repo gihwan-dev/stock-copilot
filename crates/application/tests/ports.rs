@@ -17,16 +17,16 @@ mod tests {
         Currency, CurrencyAmounts, DisplayInstrumentName, FlowInterval, FxPair, FxRate, FxRateKind,
         FxSource, Holding, HoldingObservation, IndicatorCode, IndicatorUnit, InstrumentId,
         InvestorFlow, KnownMarket, ListingStatus, Market, MarketCalendar, MarketIndicatorCandle,
-        MarketIndicatorQuote, MarketSession, MasterCode, MasterInstrument, MasterInstrumentRow,
-        MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds, OpenOrderCoverage,
-        OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment, PriceLimitRange,
-        PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument, RankingCautionFilter,
-        RankingDuration, RankingKind, RankingLimit, RankingResponseInput, Ratio, ReportedPortfolio,
-        ResolvedOrderInstrument, SectorComposition, SectorCompositionScope, SectorId,
-        SellableQuantityFact, SessionInformation, Settlement, SettlementWindow, SpanSeconds,
-        StockRanking, StockWarning, StockWarnings, Symbol, TimeInterval, TimeSpan, Timestamp,
-        Transaction, TransactionData, TransactionFilter, TransactionKind, UnixSeconds,
-        UntrustedText,
+        MarketIndicatorQuote, MarketSession, MasterCode, MasterInstrument, MasterInstrumentFacts,
+        MasterInstrumentRow, MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds,
+        OpenOrderCoverage, OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment,
+        PriceLimitRange, PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument,
+        RankingCautionFilter, RankingDuration, RankingKind, RankingLimit, RankingResponseInput,
+        Ratio, ReportedPortfolio, ResolvedOrderInstrument, SectorComposition,
+        SectorCompositionScope, SectorId, SellableQuantityFact, SessionInformation, Settlement,
+        SettlementWindow, SpanSeconds, StockRanking, StockWarning, StockWarnings, Symbol,
+        TimeInterval, TimeSpan, Timestamp, Transaction, TransactionData, TransactionFilter,
+        TransactionKind, UnixSeconds, UntrustedText,
     };
     use std::{
         collections::BTreeSet,
@@ -382,12 +382,17 @@ mod tests {
             &self,
             market: KnownMarket,
         ) -> impl Future<Output = Result<domain::InstrumentMaster, PortError>> + Send {
+            let facts =
+                MasterInstrumentFacts::try_new(vec![a20_master(market)]).expect("마스터 사실");
+            let entries = facts
+                .instruments()
+                .iter()
+                .cloned()
+                .map(domain::InstrumentMasterEntry::Available)
+                .collect();
             std::future::ready(outcome(
                 self.0,
-                domain::InstrumentMaster::try_new(vec![domain::InstrumentMasterEntry::Available(
-                    a20_master(market),
-                )])
-                .expect("마스터 목록"),
+                domain::InstrumentMaster::try_new(entries).expect("마스터 목록"),
                 ReadEndpoint::Instruments,
             ))
         }

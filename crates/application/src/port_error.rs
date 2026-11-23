@@ -111,8 +111,8 @@ pub enum RequestRejection {
 pub enum MasterNotReady {
     StatusCoverage,
     IdentityContinuity,
-    Storage,
-    Issuer,
+    Storage(crate::SystemPortError),
+    Issuer(crate::SystemPortError),
     MissingInstrument,
 }
 

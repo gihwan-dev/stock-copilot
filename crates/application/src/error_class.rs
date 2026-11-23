@@ -1,6 +1,6 @@
 use crate::{
-    AccessDenial, BrokerCapability, MissingData, PortError, PortErrorKind, RequestRejection,
-    ResponseMismatch, RetryDelay, UnavailableCause,
+    AccessDenial, BrokerCapability, MasterNotReady, MissingData, PortError, PortErrorKind,
+    RequestRejection, ResponseMismatch, RetryDelay, UnavailableCause,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,7 +41,14 @@ impl ClassifiedError for PortError {
 #[must_use]
 pub fn classify_port_error(error: PortError) -> ErrorClass {
     match error.kind() {
-        PortErrorKind::MasterNotReady(_) => ErrorClass::Wait(RetryDelay::Unknown),
+        PortErrorKind::MasterNotReady(
+            MasterNotReady::Storage(system_error) | MasterNotReady::Issuer(system_error),
+        ) => system_error.class(),
+        PortErrorKind::MasterNotReady(
+            MasterNotReady::StatusCoverage
+            | MasterNotReady::IdentityContinuity
+            | MasterNotReady::MissingInstrument,
+        ) => ErrorClass::Wait(RetryDelay::Unknown),
         PortErrorKind::AccessDenied(denial) => ErrorClass::UserAction(match denial {
             AccessDenial::InvalidCredentials | AccessDenial::LoginUserNotFound => {
                 UserAction::CheckCredentials
