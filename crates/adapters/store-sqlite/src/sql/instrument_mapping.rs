@@ -2,8 +2,7 @@ pub(crate) const CREATE: &str = "CREATE TABLE instrument_mappings (\n    instrum
 
 pub(crate) const SCHEMA_OBJECTS: &str = "SELECT sql FROM sqlite_schema WHERE lower(tbl_name) = 'instrument_mappings' AND sql IS NOT NULL ORDER BY type, name";
 
-pub(crate) const ALL_TRIGGERS: &str =
-    "SELECT sql FROM sqlite_schema WHERE type = 'trigger' ORDER BY name";
+pub(crate) const ALL_TRIGGERS: &str = "SELECT sql FROM sqlite_schema WHERE typeof(type) != 'text' OR type NOT IN ('table', 'index', 'view') ORDER BY name";
 
 pub(crate) const TRIGGER_PREFIX: &str = "CREATE TRIGGER ";
 

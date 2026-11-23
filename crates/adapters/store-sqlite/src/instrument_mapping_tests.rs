@@ -646,6 +646,34 @@ fn open_rejects_tampered_mapping_schema_objects() {
 }
 
 #[test]
+fn open_rejects_writable_schema_disguised_triggers() {
+    let rt = runtime();
+    for tamper in [
+        fixtures::WRITABLE_SCHEMA_MIXED_CASE_TRIGGER,
+        fixtures::WRITABLE_SCHEMA_NUL_TEXT_TRIGGER,
+        fixtures::WRITABLE_SCHEMA_NUL_BLOB_TRIGGER,
+    ] {
+        let fixture = Fixture::new();
+        let path = DatabasePath::new(fixture.path());
+        let db = Database::open(&path, &key(), &clock()).expect("open");
+        rt.block_on(db.write(move |tx| tx.execute_batch(tamper)))
+            .expect("inject disguised trigger row");
+        rt.block_on(db.read(|conn| {
+            assert!(crate::instrument_mapping::validate_all_triggers(conn).is_err());
+            Ok(())
+        }))
+        .expect("disguised trigger row must fail validate_all_triggers");
+        rt.block_on(db.close()).expect("close");
+        assert_eq!(
+            Database::open(&path, &key(), &clock())
+                .expect_err("reopen must reject disguised writable_schema trigger")
+                .failure(),
+            SystemFailure::RepositoryIntegrity
+        );
+    }
+}
+
+#[test]
 fn validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or_shared_id() {
     let rt = runtime();
     let valid_fixture = Fixture::new();
