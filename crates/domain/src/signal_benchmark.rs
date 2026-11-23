@@ -103,6 +103,19 @@ impl SignalBenchmark {
     pub const fn series(&self) -> &BenchmarkSeries {
         &self.series
     }
+    pub(crate) fn close_on(
+        &self,
+        day: crate::CalendarDate,
+        currency: Currency,
+    ) -> Result<Timestamp, SignalReturnError> {
+        if self.series.currency() != PerformanceCurrency::Native(currency) {
+            return Err(SignalReturnError::BenchmarkMismatch);
+        }
+        self.dates
+            .get(&day)
+            .copied()
+            .ok_or(SignalReturnError::BenchmarkMismatch)
+    }
     pub(crate) fn between_dates(
         &self,
         start: crate::CalendarDate,
