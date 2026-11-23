@@ -449,7 +449,7 @@ pub use market_index::{
 mod market_ranking;
 pub use market_ranking::{
     RankingBasis, RankingCoverage, RankingDuration, RankingItem, RankingKind, RankingLimit,
-    RankingOrdinal, RankingRow, RankingUnit, StockRanking,
+    RankingOrdinal, RankingRow, RankingUnit, StockRanking, validate_market_symbol,
 };
 mod investor_flow;
 pub use investor_flow::{

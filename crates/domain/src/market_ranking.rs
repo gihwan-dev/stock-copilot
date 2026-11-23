@@ -295,10 +295,7 @@ fn ranking_item(
         change_rate,
     })
 }
-pub(crate) fn validate_market_symbol(
-    symbol: &Symbol,
-    market: KnownMarket,
-) -> Result<(), MarketDataError> {
+pub fn validate_market_symbol(symbol: &Symbol, market: KnownMarket) -> Result<(), MarketDataError> {
     let text = symbol.as_str();
     if text.bytes().any(|byte| byte.is_ascii_lowercase()) {
         return Err(MarketDataError::InvalidSymbol);

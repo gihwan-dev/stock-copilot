@@ -101,7 +101,9 @@ mod tests {
         Resolve(SystemPortError),
         Ensure(SystemPortError),
         EnsureSecond(SystemPortError),
+        EnsureMissing,
         Retire(SystemPortError),
+        RetireUncertain,
     }
 
     struct Session<'a>(
@@ -123,7 +125,9 @@ mod tests {
                 Some(
                     MappingFailure::Ensure(_)
                     | MappingFailure::EnsureSecond(_)
-                    | MappingFailure::Retire(_),
+                    | MappingFailure::EnsureMissing
+                    | MappingFailure::Retire(_)
+                    | MappingFailure::RetireUncertain,
                 )
                 | None => self.0.resolve(source).await,
             }
@@ -153,11 +157,15 @@ mod tests {
                 | (Some(MappingFailure::EnsureSecond(error)), 1) => {
                     Err(MappingStoreError::Storage(error))
                 }
+                (Some(MappingFailure::EnsureMissing), _) => {
+                    Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
+                }
                 (
                     Some(
                         MappingFailure::Resolve(_)
                         | MappingFailure::EnsureSecond(_)
-                        | MappingFailure::Retire(_),
+                        | MappingFailure::Retire(_)
+                        | MappingFailure::RetireUncertain,
                     )
                     | None,
                     _,
@@ -170,10 +178,14 @@ mod tests {
         ) -> Result<InstrumentId, MappingStoreError> {
             match self.4 {
                 Some(MappingFailure::Retire(error)) => Err(MappingStoreError::Storage(error)),
+                Some(MappingFailure::RetireUncertain) => Err(MappingStoreError::Mapping(
+                    InstrumentMappingError::IdentityUncertain,
+                )),
                 Some(
                     MappingFailure::Resolve(_)
                     | MappingFailure::Ensure(_)
-                    | MappingFailure::EnsureSecond(_),
+                    | MappingFailure::EnsureSecond(_)
+                    | MappingFailure::EnsureMissing,
                 )
                 | None => self.0.retire(source).await,
             }
@@ -1116,6 +1128,206 @@ mod tests {
             assert_eq!(error.kind(), expected);
             server.finish().expect("requests");
         }
+    }
+
+    fn review2_active_holdings_master() -> MasterInstrumentFacts {
+        let mut details = details();
+        details["result"][1]["status"] = json!("ACTIVE");
+        details["result"][1]["koreanMarketDetail"]["liquidationTrading"] = json!(false);
+        let mut replies = responses();
+        *replies.last_mut().expect("details reply") = response("200 OK", &details);
+        let server = ScriptedHttpServer::start(replies).expect("server");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer(&["stock-id", "etf-id"]));
+        let facts = run(reader.instruments(KnownMarket::Kr))
+            .expect("master")
+            .complete_facts()
+            .expect("complete");
+        server.finish().expect("requests");
+        facts
+    }
+
+    fn review2_holdings_body() -> Value {
+        let recording: Value = serde_json::from_str(
+            &std::fs::read_to_string("tests/recordings/t05-holdings.json").expect("fixture"),
+        )
+        .expect("json");
+        recording["body"].clone()
+    }
+
+    fn review2_single_holdings_body() -> Value {
+        let mut body = review2_holdings_body();
+        body["result"]["items"]
+            .as_array_mut()
+            .expect("items")
+            .truncate(1);
+        body
+    }
+
+    #[test]
+    fn review2_bad_holdings_are_rejected_before_master_lookup() {
+        let facts = review2_active_holdings_master();
+        let empty = MasterInstrumentFacts::try_new(vec![]).expect("empty master");
+        let mut cases = Vec::new();
+        for symbol in ["", "@@@", "005930 ", "12345", "00593a"] {
+            let mut body = review2_single_holdings_body();
+            body["result"]["items"][0]["symbol"] = json!(symbol);
+            cases.push(body);
+        }
+        let mut lowercase_us = review2_holdings_body();
+        let us_rows = lowercase_us["result"]["items"]
+            .as_array_mut()
+            .expect("items");
+        us_rows[0] = us_rows[1].clone();
+        us_rows.truncate(1);
+        us_rows[0]["symbol"] = json!("aapl");
+        cases.push(lowercase_us);
+        for (field, value) in [
+            ("quantity", "-1"),
+            ("lastPrice", "-1"),
+            ("averagePurchasePrice", "-1"),
+        ] {
+            let mut body = review2_single_holdings_body();
+            body["result"]["items"][0][field] = json!(value);
+            cases.push(body);
+        }
+        let mut negative_valuation = review2_single_holdings_body();
+        negative_valuation["result"]["items"][0]["marketValue"]["amount"] = json!("-1");
+        cases.push(negative_valuation);
+        let mut later_bad_row = review2_holdings_body();
+        later_bad_row["result"]["items"][1]["lastPrice"] = json!("-1");
+        cases.push(later_bad_row);
+        let mut duplicate = review2_single_holdings_body();
+        let rows = duplicate["result"]["items"].as_array_mut().expect("items");
+        rows.push(rows[0].clone());
+        cases.push(duplicate);
+        for master in [&empty, &facts] {
+            for body in &cases {
+                let server = ScriptedHttpServer::start(vec![token(), response("200 OK", body)])
+                    .expect("server");
+                let reader = reader(&server, crate::support::time())
+                    .with_market_master(master.clone())
+                    .with_instrument_master(Authority::default(), issuer(&[]));
+                let error =
+                    run(reader.holdings(&domain::AccountId::new(413))).expect_err("bad row");
+                assert_eq!(
+                    error.kind(),
+                    application::PortErrorKind::InvalidResponse(
+                        application::ResponseMismatch::Validation,
+                    )
+                );
+                assert_eq!(error.status(), application::HttpStatus::Success);
+                server.finish().expect("requests");
+            }
+        }
+    }
+
+    #[test]
+    fn review2_valid_holding_requires_a_matching_master() {
+        let facts = review2_active_holdings_master();
+        let mut body = review2_holdings_body();
+        body["result"]["items"]
+            .as_array_mut()
+            .expect("items")
+            .truncate(1);
+        for master in [
+            MasterInstrumentFacts::try_new(vec![]).expect("empty"),
+            facts,
+        ] {
+            let server = ScriptedHttpServer::start(vec![token(), response("200 OK", &body)])
+                .expect("server");
+            let reader = reader(&server, crate::support::time())
+                .with_market_master(master.clone())
+                .with_instrument_master(Authority::default(), issuer(&[]));
+            let result = run(reader.holdings(&domain::AccountId::new(413)));
+            if master.instruments().is_empty() {
+                assert_eq!(
+                    result.expect_err("missing master").kind(),
+                    application::PortErrorKind::MasterNotReady(MasterNotReady::MissingInstrument)
+                );
+            } else {
+                let holdings = result.expect("valid holding");
+                assert_eq!(holdings.holdings().len(), 1);
+                assert_eq!(
+                    holdings.holdings()[0].instrument().symbol().as_str(),
+                    "005930"
+                );
+            }
+            server.finish().expect("requests");
+        }
+    }
+
+    #[test]
+    fn review2_issuer_error_preserves_its_origin_and_response_status() {
+        use application::{SystemFailure, SystemPort};
+        let original =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::PermissionDenied);
+        let server = ScriptedHttpServer::start(responses()).expect("server");
+        let issuer = issuer(&[]);
+        issuer.push(Err(original));
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer);
+        let error = run(reader.instruments(KnownMarket::Kr)).expect_err("issuer failure");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::MasterNotReady(MasterNotReady::Issuer(original))
+        );
+        assert_eq!(error.status(), application::HttpStatus::Success);
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review2_ensure_missing_is_a_repository_error_without_assignment() {
+        use application::{SystemFailure, SystemPort};
+        let server = ScriptedHttpServer::start(responses()).expect("server");
+        let authority = Authority {
+            mapping_failure: Some(MappingFailure::EnsureMissing),
+            ..Authority::default()
+        };
+        let repository = Arc::clone(&authority.repository);
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(authority, issuer(&["candidate"]));
+        let error = run(reader.instruments(KnownMarket::Kr)).expect_err("invalid ensure result");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::MasterNotReady(MasterNotReady::Storage(
+                SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData)
+            ))
+        );
+        assert_eq!(error.status(), application::HttpStatus::Success);
+        assert_eq!(
+            run(repository.resolve(&source("005930", "KR7005930003"))),
+            Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
+        );
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review2_uncertain_retirement_preserves_the_existing_mapping() {
+        let mut details = details();
+        details["result"][1]["status"] = json!("DELISTED");
+        let mut replies = responses();
+        *replies.last_mut().expect("details reply") = response("200 OK", &details);
+        let server = ScriptedHttpServer::start(replies).expect("server");
+        let authority = Authority {
+            mapping_failure: Some(MappingFailure::RetireUncertain),
+            ..Authority::default()
+        };
+        let repository = Arc::clone(&authority.repository);
+        let original = source("005930", "KR7005930003");
+        run(repository.ensure(&original, &id("old-id"))).expect("seed");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(authority, issuer(&["other-id"]));
+        let master = run(reader.instruments(KnownMarket::Kr)).expect("master");
+        assert_eq!(
+            master.entries()[0],
+            InstrumentMasterEntry::Unavailable {
+                source: original.clone(),
+                reason: InstrumentMappingError::IdentityUncertain,
+            }
+        );
+        assert_eq!(run(repository.resolve(&original)), Ok(id("old-id")));
+        server.finish().expect("requests");
     }
 
     #[test]

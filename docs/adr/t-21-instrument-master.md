@@ -23,6 +23,8 @@
 
 섹터 구성과 ETF는 완전한 마스터를 주입받아 기존 검증을 쓴다. 새 조립 경로는 보유·수정 일봉·섹터 구성·ETF에 필요한 종목이 마스터에 없을 때 `MasterNotReady(MissingInstrument)`를 반환한다. ETF 응답과 마스터에 같은 종목이 있지만 유형이 다르면 응답 검증 오류로 구별한다. 기존 `TossAccountRead` 직접 호출의 오류 계약은 그대로 둔다. 기본 어댑터의 Instruments capability는 Unsupported지만 호출 시에는 T-21의 실측 대기 사유를 돌려주는 차이가 있다.
 
+보유 응답은 전체 행의 시장별 심볼 문법과 중복, 수량·취득가·현재가·보고 평가금액의 의미를 마스터 조회 전에 검증한다. 유효한 행에 대응이 없을 때만 마스터 미준비로 분류한다. 심볼 검증은 섹터 등 기존 시장 조회와 같은 도메인 규칙을 재사용한다. 미국 소문자를 새로 정규화해 다른 원본과 동일하다고 추정하지 않는다. 한 시장씩 따로 관측할 때 먼저 발급한 원본은 이후 다른 시장의 ISIN 충돌만으로 소급 변경하지 않으며, 뒤 원본은 D-52대로 `IdentityUncertain`이다.
+
 ## 실측 대기
 
 - `/stocks/all`의 `ACTIVE` 기본값이 필요한 전체 상장 상태를 포함하는지, 각 거래소와 상세 행이 같은 관측을 가리키는지.
@@ -33,6 +35,7 @@
 
 - S-21: 영속 원장과 함께 상태 범위·이력 연속성을 실제 근거로 확인하는 세션을 제공하고, 조회·발급·폐지와 검증을 같은 직렬화 경계로 통합한다. 요청 거래소·상태 필터·조회 시작과 종료 및 빈 거래소의 증거를 인증 입력에 포함하고, 네트워크 대기 중 잠금과 발급원 재진입·취소 시 해제를 검증한다. 원장에 없는 폐지 원본의 이력과 이후 재상장도 빠짐없이 증명해야 한다. 기존 발급 ID의 편입, 재시작·경쟁·실패 복구를 검증한다. 근거가 없으면 세션은 계속 실패해야 한다.
 - D-55: 후보 ID가 독립 발급원에서 나왔음을 타입으로 강제하고 전역 유일성 및 확인된 식별자 변경 이력을 정의한다. 현재 포트와 가짜는 독립성을 타입으로 인증하지 않는다.
+- T-05·A-06 후속: 보유 사실 생성이 기존 `ResolvedOrderInstrument`의 매도 게이트를 요구해 정지·비활성·미지 유형 종목의 정상 보유를 조회 오류로 만들 수 있다. 보유 식별과 주문 허용 판정을 분리하는 타입·호출부를 검토한다. 주문 게이트 자체를 완화하지 않는다.
 
 `entries()`에서 사용 가능 행만 새 `MasterInstrumentFacts`로 재구성하는 일은 공개 생성자가 막지 않는다. 이 생성자는 외부 응답의 진위나 목록 완전성을 인증하지 않는다. 상위 `ErrorClass`와 IPC는 준비 대기를 일반 대기와 합치므로 화면 소비가 생기면 마스터 사유를 전달하는 계약이 필요하다.
 
@@ -101,3 +104,19 @@
 | 28 | 시스템 오류 분류를 대기로 변경 | `system_failures_keep_their_original_classification` |
 | 29 | 보유 마스터 누락의 구분 제거 | `review_regression_holdings_separates_missing_master_from_bad_response` |
 | 30 | ETF 유형 충돌을 누락으로 변경 | `review_regression_etf_type_conflict_is_not_a_missing_instrument` |
+
+2차 수정 후 위 30개와 아래 11개를 다시 실행했다. 27번은 소진 `match`로 옮긴 뒤 변형 위치가 달라져 맞는 위치로 다시 실행했다. 30번의 첫 시도는 미사용 메서드 오류로 컴파일되지 않아 제외했고, 오류 사유를 바꾸는 다른 변형을 실행했다. 32번은 두 응답 행이 서로 가려 처음에는 생존했으므로 각 입력을 한 행으로 분리해 다시 실행했다. 재실행에서 41개 모두 해당 테스트가 검출했다. 기존 30개 중 테스트 보강과 무관한 것은 보강 전 같은 제품 소스에서 실행한 결과다. 재실행용 사본은 `target/T-21/` 아래에서 실행 직후 정리했다.
+
+| 번호 | 실제 변형 | 검출한 테스트 |
+|---|---|---|
+| 31 | 보유 시장별 심볼 검증 제거 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 32 | 보유 심볼을 고정값으로 변경 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 33 | 보유 수량을 고정값으로 변경 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 34 | 보유 현재가를 고정값으로 변경 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 35 | 보유 취득가를 고정값으로 변경 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 36 | 보유 평가액을 고정값으로 변경 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 37 | 보유 중복 검사 제거 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 38 | 첫 행 검증 후 빈 마스터를 먼저 반환 | `review2_bad_holdings_are_rejected_before_master_lookup` |
+| 39 | 발급원 실패를 저장소 오류로 변경 | `review2_issuer_error_preserves_its_origin_and_response_status` |
+| 40 | 발급 실패의 원장 오류 사유 변경 | `review2_ensure_missing_is_a_repository_error_without_assignment` |
+| 41 | 불확실 폐지를 확정 폐지로 변경 | `review2_uncertain_retirement_preserves_the_existing_mapping` |

@@ -267,29 +267,35 @@ async fn mapped_entry<M: InstrumentMappingRepository, I: InstrumentIdIssuer>(
     mut item: Prepared,
     conflict: domain::InstrumentSourceConflict,
 ) -> Result<InstrumentMasterEntry, PortError> {
-    if conflict == domain::InstrumentSourceConflict::IdentityUncertain {
-        return Ok(InstrumentMasterEntry::Unavailable {
-            source: item.source,
-            reason: InstrumentMappingError::IdentityUncertain,
-        });
+    match conflict {
+        domain::InstrumentSourceConflict::IdentityUncertain => {
+            return Ok(InstrumentMasterEntry::Unavailable {
+                source: item.source,
+                reason: InstrumentMappingError::IdentityUncertain,
+            });
+        }
+        domain::InstrumentSourceConflict::Distinct => {}
     }
-    if item.row.listing_status == ListingStatus::Delisted {
-        let reason = match repository.retire(&item.source).await {
-            Ok(_) | Err(MappingStoreError::Mapping(InstrumentMappingError::Retired)) => {
-                InstrumentMappingError::Retired
-            }
-            Err(MappingStoreError::Mapping(InstrumentMappingError::Missing)) => {
-                InstrumentMappingError::IdentityUncertain
-            }
-            Err(MappingStoreError::Mapping(reason)) => reason,
-            Err(MappingStoreError::Storage(error)) => {
-                return Err(not_ready_after_response(MasterNotReady::Storage(error)));
-            }
-        };
-        return Ok(InstrumentMasterEntry::Unavailable {
-            source: item.source,
-            reason,
-        });
+    match item.row.listing_status {
+        ListingStatus::Delisted => {
+            let reason = match repository.retire(&item.source).await {
+                Ok(_) | Err(MappingStoreError::Mapping(InstrumentMappingError::Retired)) => {
+                    InstrumentMappingError::Retired
+                }
+                Err(MappingStoreError::Mapping(InstrumentMappingError::Missing)) => {
+                    InstrumentMappingError::IdentityUncertain
+                }
+                Err(MappingStoreError::Mapping(reason)) => reason,
+                Err(MappingStoreError::Storage(error)) => {
+                    return Err(not_ready_after_response(MasterNotReady::Storage(error)));
+                }
+            };
+            return Ok(InstrumentMasterEntry::Unavailable {
+                source: item.source,
+                reason,
+            });
+        }
+        ListingStatus::Scheduled | ListingStatus::Active => {}
     }
     match map_source(repository, issuer, &item.source).await? {
         Ok(id) => {

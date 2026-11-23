@@ -42,7 +42,13 @@ impl InstrumentSource {
     }
 
     fn relation(&self, other: &Self) -> SourceRelation {
-        if self.symbol_key() == other.symbol_key() || self.isin_key() == other.isin_key() {
+        if (self.market == other.market
+            && self
+                .symbol
+                .as_str()
+                .eq_ignore_ascii_case(other.symbol.as_str()))
+            || self.isin.as_str().eq_ignore_ascii_case(other.isin.as_str())
+        {
             SourceRelation::Uncertain
         } else {
             SourceRelation::Distinct
@@ -94,7 +100,10 @@ pub fn instrument_source_conflicts(sources: &[InstrumentSource]) -> Vec<Instrume
                 (Some(SourceGroup::Conflict), _) | (_, Some(SourceGroup::Conflict)) => {
                     InstrumentSourceConflict::IdentityUncertain
                 }
-                _ => InstrumentSourceConflict::Distinct,
+                (
+                    Some(SourceGroup::Identical(_)) | None,
+                    Some(SourceGroup::Identical(_)) | None,
+                ) => InstrumentSourceConflict::Distinct,
             }
         })
         .collect()
