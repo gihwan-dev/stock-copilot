@@ -29,6 +29,8 @@ pub(crate) const DROP_NO_REPLACE_TRIGGER: &str = "DROP TRIGGER instrument_mappin
 pub(crate) const DROP_INSERT_ACTIVE_TRIGGER: &str =
     "DROP TRIGGER instrument_mappings_insert_active_only";
 pub(crate) const EXTRA_ROGUE_TRIGGER: &str = "CREATE TRIGGER rogue_mapping_trigger BEFORE DELETE ON instrument_mappings BEGIN SELECT RAISE(IGNORE); END";
+pub(crate) const ROGUE_UPPERCASE_TRIGGER: &str = "CREATE TRIGGER rogue_upper_retire AFTER INSERT ON INSTRUMENT_MAPPINGS BEGIN UPDATE instrument_mappings SET status = 'retired' WHERE instrument_id = NEW.instrument_id; END";
+pub(crate) const ROGUE_CROSS_TABLE_TRIGGER: &str = "CREATE TRIGGER rogue_cross_retire AFTER INSERT ON thesis_notes BEGIN UPDATE instrument_mappings SET status = 'retired'; END";
 pub(crate) const REPLACE_WEAK_NO_DELETE_TRIGGER: &str = "DROP TRIGGER instrument_mappings_no_delete; CREATE TRIGGER instrument_mappings_no_delete BEFORE DELETE ON instrument_mappings BEGIN SELECT 1; END;";
 pub(crate) const UPDATE_CORRUPT_ID: &str =
     "UPDATE instrument_mappings SET instrument_id = ?2 WHERE instrument_id = ?1";
@@ -49,3 +51,4 @@ pub(crate) const COUNT_ROWS: &str = "SELECT count(*) FROM instrument_mappings";
 pub(crate) const EXPLAIN_BY_SOURCE: &str = "EXPLAIN QUERY PLAN SELECT instrument_id, market, symbol, isin, status FROM instrument_mappings WHERE (market = 'US' AND upper(symbol) = upper('AAPL')) OR upper(isin) = upper('US0378331005') ORDER BY instrument_id, market, symbol, isin, status";
 pub(crate) const EXPLAIN_BY_SOURCE_OR_ID: &str = "EXPLAIN QUERY PLAN SELECT instrument_id, market, symbol, isin, status FROM instrument_mappings WHERE (market = 'US' AND upper(symbol) = upper('AAPL')) OR upper(isin) = upper('US0378331005') OR instrument_id = 'opaque-1' ORDER BY instrument_id, market, symbol, isin, status";
 pub(crate) const EXPLAIN_BY_ID: &str = "EXPLAIN QUERY PLAN SELECT instrument_id, market, symbol, isin, status FROM instrument_mappings WHERE instrument_id = 'opaque-1' ORDER BY instrument_id, market, symbol, isin, status";
+pub(crate) const EXPLAIN_NO_REPLACE_SUBQUERY: &str = "EXPLAIN QUERY PLAN SELECT 1 FROM instrument_mappings WHERE instrument_id = 'opaque-1' OR (market = 'US' AND upper(symbol) = upper('AAPL')) OR upper(isin) = upper('US0378331005')";

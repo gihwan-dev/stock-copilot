@@ -77,20 +77,50 @@ fn expected_schema_sql() -> BTreeSet<String> {
         .collect()
 }
 
-pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
-    let mut statement = connection.prepare(sql::SCHEMA_OBJECTS)?;
+fn expected_migration_triggers() -> BTreeSet<String> {
+    crate::migration::MIGRATIONS
+        .iter()
+        .flat_map(|(_, source)| source.split(";\n"))
+        .map(str::trim)
+        .filter(|statement| statement.starts_with(sql::TRIGGER_PREFIX))
+        .map(|statement| statement.strip_suffix(';').unwrap_or(statement).to_owned())
+        .collect()
+}
+
+fn validate_sql_set(
+    connection: &Connection,
+    query: &str,
+    expected: &BTreeSet<String>,
+) -> rusqlite::Result<()> {
+    let mut statement = connection.prepare(query)?;
     let actual_rows = statement
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let expected = expected_schema_sql();
     let actual: BTreeSet<String> = actual_rows
         .iter()
         .map(|entry| entry.trim().to_owned())
         .collect();
-    if actual_rows.len() != expected.len() || actual != expected {
+    if actual_rows.len() != expected.len() || actual != *expected {
         return Err(rusqlite::Error::InvalidQuery);
     }
     Ok(())
+}
+
+pub(crate) fn validate_mapping_objects(connection: &Connection) -> rusqlite::Result<()> {
+    validate_sql_set(connection, sql::SCHEMA_OBJECTS, &expected_schema_sql())
+}
+
+pub(crate) fn validate_all_triggers(connection: &Connection) -> rusqlite::Result<()> {
+    validate_sql_set(
+        connection,
+        sql::ALL_TRIGGERS,
+        &expected_migration_triggers(),
+    )
+}
+
+pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
+    validate_mapping_objects(connection)?;
+    validate_all_triggers(connection)
 }
 
 pub(crate) fn validate_ledger(connection: &Connection) -> rusqlite::Result<()> {

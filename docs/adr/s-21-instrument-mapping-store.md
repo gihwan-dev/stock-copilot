@@ -40,8 +40,8 @@ D-52([docs/adr/0145-instrument-id-mapping.md](0145-instrument-id-mapping.md))는
 
 | 연산 | 상황 | 결과 | 비고 |
 |---|---|---|---|
-| `Database::open` | 정상 빈 DB 또는 정상 활성·폐지 행 | `Ok(Database)` | 마이그레이션 `0008` 적용 및 `validate_on_open`(스키마 객체 검증 + O(n log n) 원장 검증) 통과 |
-| `Database::open` | 정확 중복, `(market, upper(symbol))`·`upper(isin)` 겹침, 서로 다른 원본의 `InstrumentId` 공유, 도메인 문법 위반 행, 또는 테이블·인덱스·트리거 DDL 변조 | `Err(SystemPortError { port: Repository, failure: RepositoryIntegrity })` | 열기 단계에서 스키마 객체와 전체 원장 불변식을 모두 닫힘 검증 |
+| `Database::open` | 정상 빈 DB 또는 정상 활성·폐지 행 | `Ok(Database)` | 마이그레이션 `0008` 적용 및 `validate_on_open`(`lower(tbl_name)` 기준 `instrument_mappings` DDL 7종 + DB 전체 `type = 'trigger'` 10종 대조 + O(n log n) 원장 검증) 통과 |
+| `Database::open` | 정확 중복, `(market, upper(symbol))`·`upper(isin)` 겹침, 서로 다른 원본의 `InstrumentId` 공유, 도메인 문법 위반 행, 또는 테이블·인덱스·트리거 DDL 변조(대소문자 변형 `ON INSTRUMENT_MAPPINGS` 및 타 테이블 부착 침입 트리거 포함) | `Err(SystemPortError { port: Repository, failure: RepositoryIntegrity })` | 열기 단계에서 스키마 객체·전체 트리거 집합과 원장 불변식을 모두 닫힘 검증 |
 | `resolve(source)` | 정확 일치 활성 행 존재 | `Ok(InstrumentId)` | |
 | `resolve(source)` | 정확 일치 폐지 행 존재 | `Err(MappingStoreError::Mapping(Retired))` | |
 | `resolve(source)` | 미등록 원본 | `Err(MappingStoreError::Mapping(Missing))` | |
@@ -68,7 +68,7 @@ D-52([docs/adr/0145-instrument-id-mapping.md](0145-instrument-id-mapping.md))는
 | 결정 | 근거 | 버린 대안 | 출처 |
 |---|---|---|---|
 | `STRICT` 단일 테이블 `instrument_mappings`에 도메인 문법 `CHECK`, 대소문자 무시 `UNIQUE INDEX`, 4개 보호 트리거를 둔다 | D-52의 전역 단일 대응·폐지 이력 보존·대소문자 무시 겹침 차단 규칙을 SQLite 계층에서도 1차 방어하고, `DELETE`/`UPDATE`/`INSERT OR REPLACE`/`UPSERT`/직접 `retired` 삽입을 원천 봉쇄한다 | 앱 코드 검사만으로 막고 DB 제약·트리거를 생략하는 안(직접 SQL·외부 도구 변조에 취약); 부분 인덱스(`WHERE status = 'active'`)만 두는 안(폐지된 원본의 심볼·ISIN 재사용 및 `IdAlreadyUsed`를 DB 계층에서 막지 못함) | `docs/adr/0145-instrument-id-mapping.md`, `docs/tasks.md` S-21 |
-| `Database::open`(`migration::apply_guarded`)에서 `instrument_mappings`의 DDL 객체 7종(테이블·인덱스 2·트리거 4) 일치와 전체 원장 무결성(`BTreeSet` + `domain::instrument_source_conflicts`)을 O(n log n)으로 1회 검증하고, 개별 포트 연산은 SQLite 인덱스 기반 점조회(`BY_SOURCE`, `BY_SOURCE_OR_ID`, `BY_ID`)로 일치 후보 행만 `domain::InstrumentMappings`에 복원해 판정한다 | 열기 시점에 스키마 변조와 원장 전체 중복·겹침·공유 ID·깨진 값을 O(n log n)으로 빠짐없이 거부하고, T-21 `/stocks/all`의 수천~1만 종목 연속 조회·발급에서도 SQLite `MULTI-INDEX OR` 인덱스를 타 O(log n)/호출로 `PERF-1`·`PERF-4`를 지킨다. 후보 행 판정은 여전히 `domain::InstrumentMappings` 단일 원천을 거친다 | 매 호출마다 전체 원장을 `InstrumentMappings::ensure` O(n²)로 재복원하는 안(1차 리뷰·비판에서 n=5,000 기준 Release 평균 264.5ms/호출, T-21 전체 ~22분으로 `PERF-4` 위반이 실측됨); 열기 시 `instrument_mappings` 인덱스·트리거 검증을 생략하는 안(변조 DB에서 DB 1차 방어·인덱스 상실) | `docs/tasks.md` S-21, `docs/design.md` PERF-1·PERF-4, `docs/architecture.md`, `AGENTS.md` 7번 |
+| `Database::open`(`migration::apply_guarded`)에서 `instrument_mappings`의 DDL 객체 7종(`lower(tbl_name) = 'instrument_mappings'`)과 DB 전체 `type = 'trigger'` 집합(`MIGRATIONS` 선언 10종)의 일치 여부, 그리고 전체 원장 무결성(`BTreeSet` + `domain::instrument_source_conflicts`)을 O(n log n)으로 1회 검증하고, 개별 포트 연산은 SQLite 인덱스 기반 점조회(`BY_SOURCE`, `BY_SOURCE_OR_ID`, `BY_ID`)로 일치 후보 행만 `domain::InstrumentMappings`에 복원해 판정한다 | 열기 시점에 스키마 변조(대소문자 변형 트리거 `ON INSTRUMENT_MAPPINGS` 및 타 테이블 부착 침입 트리거 포함)와 원장 전체 중복·겹침·공유 ID·깨진 값을 O(n log n)으로 빠짐없이 거부한다. 정상 스키마에서는 `PRIMARY KEY`·`UNIQUE`·`UNIQUE INDEX`가 일반 SQL 중복·겹침 삽입을 이미 차단하므로 `validate_ledger`는 `PRAGMA quick_check`가 건너뛰는 인덱스-테이블 불일치 손상과 도메인 문법 위반까지 이중 방어한다. T-21 `/stocks/all`의 수천~1만 종목 연속 조회·발급에서도 SQLite `MULTI-INDEX OR` 인덱스를 타 O(log n)/호출로 `PERF-1`·`PERF-4`를 지키며, 후보 행 판정은 여전히 `domain::InstrumentMappings` 단일 원천을 거친다 | 매 호출마다 전체 원장을 `InstrumentMappings::ensure` O(n²)로 재복원하는 안(1차 리뷰·비판에서 n=5,000 기준 Release 평균 264.5ms/호출, T-21 전체 ~22분으로 `PERF-4` 위반이 실측됨); `tbl_name = 'instrument_mappings'` 대소문자 구분 필터만 쓰는 안(2차 리뷰·비판에서 `ON INSTRUMENT_MAPPINGS` 및 타 테이블 `ON thesis_notes` 침입 트리거가 `Database::open`을 통과해 침묵 폐지 유발이 실측됨) | `docs/tasks.md` S-21, `docs/design.md` PERF-1·PERF-4, `docs/architecture.md`, `AGENTS.md` 7번 |
 | `ensure`와 `retire`는 `Database::write`(`BEGIN IMMEDIATE`) 단일 트랜잭션에서 복원·판정·갱신을 수행한다 | WAL 모드에서 두 연결이 동시에 읽은 뒤 쓰기로 승격할 때 발생하는 즉시 `SQLITE_BUSY_SNAPSHOT` 교착을 막고, 두 연결 경쟁을 SQLite 쓰기 잠금으로 직렬화한다 | `DEFERRED` 트랜잭션 사용(동시 읽기→쓰기 승격 교착 위험); 읽기와 쓰기를 별도 트랜잭션으로 분리(TOCTOU 경쟁으로 중복 발급·재활성화 위험) | `docs/tasks.md` S-21, `crates/adapters/store-sqlite/src/worker.rs` |
 | 저장소는 `InstrumentSource`, `InstrumentId`, `InstrumentMappingRecord`만 입출력하고 `MasterInstrument`나 주문 해결 타입을 만들지 않는다 | ADR 0059·0104는 종목 마스터 조회를 거친 타입의 생성을 마스터 어댑터·도메인 경계로 제한하며, 로컬 DB 캐시·대응표만으로 마스터 검증 완료 상태를 위조해서는 안 된다 | 대응 저장소에서 바로 `MasterInstrument`를 조립해 반환하는 안(ADR 0059·0104 위반) | `docs/adr/0059-master-instrument.md`, `docs/adr/0104-holdings-snapshot-store.md`, `docs/adr/0150-instrument-master.md` |
 | `crates/testkit-ports/src/contracts/instrument_mapping.rs`에 공유 계약 테스트를 두고 가짜 구현과 SQLite 구현 양쪽에서 실행한다 | D-52 가짜 구현과 SQLite 구현의 계약 일치를 기계적으로 보장하고, 두 연결 경쟁·중단(미폴링 드롭)·참조 모델 수열까지 동일 기준으로 검증한다 | 각 크레이트에 별도 복제 테스트를 작성하는 안(계약 드리프트 발생) | `docs/tasks.md` S-21, `crates/testkit-ports` |
@@ -104,10 +104,13 @@ D-52([docs/adr/0145-instrument-id-mapping.md](0145-instrument-id-mapping.md))는
   - 2차: `instrument_mapping.rs` 줄 267/269(99.26%), 함수 36/36(100.00%) (미실행 2줄은 `query_map(...)?`의 닫는 오류 경로)
 - Release `n=5,000` 성능 실측 (격리 사본, SQLCipher 암호화 DB, `cargo test --locked --release`):
   - 1차(매 호출 전체 원장 `InstrumentMappings::ensure` O(n²)): 열기 `190.1ms`, `resolve` 평균 `264.5ms`(5,000회 추정 `1,322.7s`), `ensure` 신규 `339.4ms`
-  - 2차(열기 `validate_schema` + O(n log n) `validate_ledger`, 포트 연산 인덱스 점조회): 열기 `28.39ms`(6.7배 단축), `resolve` 5,000회 `415.76ms`(평균 `0.0832ms`, 3,179배 단축), `ensure` 기존 500회 `33.97ms`, `ensure` 신규 `0.36ms`(943배 단축)
-- 손 변형 (격리 사본 `target/S-21/work`에서 실제 실행 후 사본 삭제): 1차 26건(M01~M26) + 2차 12건(M27~M38) = 총 38건 컴파일·실행, 38건 검출(생존 0건).
+  - 2차 구현자 실측(열기 `validate_schema` + O(n log n) `validate_ledger`, 포트 연산 인덱스 점조회): 열기 `28.39ms`(6.7배 단축), `resolve` 5,000회 `415.76ms`(평균 `0.0832ms`, 3,179배 단축), `ensure` 기존 500회 `33.97ms`, `ensure` 신규 `0.36ms`(943배 단축)
+  - 2차 독립 비판자 재현 실측(동일 조건): 열기 `24.71ms`, `resolve` 5,000회 `436.46ms`(평균 `0.0873ms`), `ensure` 기존 500회 `48.62ms`, `ensure` 신규 10회 평균 `0.2648ms`; `EXPLAIN QUERY PLAN` 및 VDBE 바이트코드에서 `BY_SOURCE`·`BY_SOURCE_OR_ID`·`BY_ID`와 `instrument_mappings_no_replace` 트리거 하위 질의 모두 3개 인덱스 `MULTI-INDEX OR` 사용(`SCAN instrument_mappings` 0건)을 확인하고 테스트(`indexed_point_queries_use_indexes_without_table_scan`)로 고정했다.
+- 손 변형 (격리 사본 `target/S-21/work`에서 실제 실행 후 사본 삭제): 1차 26건(M01~M26) + 2차 12건(M27~M38) + 3차 5건(M39~M43) = 총 43건 컴파일·실행, 43건 검출(생존 0건).
   - 1차 초기 실행에서 M20·M21(`symbol_key`·`isin_key` 고유 인덱스 제거)이 `no_replace` 트리거에 가려 생존했으나, 보호 트리거 제거 후 인덱스 단독 검증 테스트(`sqlite_unique_indexes_enforce_case_insensitive_keys_without_triggers`)를 추가해 26/26 검출을 확인했다.
-  - 2차 초기 실행에서 M27(`validate_schema`의 본문 비교 생략)과 M33(`validate_on_open`의 `validate_ledger` 생략이 `fts_schema::validate`의 `PRAGMA quick_check`에 가려짐)이 생존했으나, 같은 객체 수(7개)로 트리거 본문만 약화한 `REPLACE_WEAK_NO_DELETE_TRIGGER` 케이스와 `validate_on_open` 직접 단언을 추가해 12/12(누적 38/38) 검출을 확인했다.
+  - 2차 초기 실행에서 M27(`validate_schema`의 본문 비교 생략)과 M33(`validate_on_open`의 `validate_ledger` 생략이 `fts_schema::validate`의 `PRAGMA quick_check`에 가려짐)이 생존했으나, 같은 객체 수(7개)로 트리거 본문만 약화한 `REPLACE_WEAK_NO_DELETE_TRIGGER` 케이스와 `validate_on_open` 직접 단언을 추가해 12/12 검출을 확인했다.
+  - 3차에서는 `lower(tbl_name)` 대소문자 무시와 DB 전체 `type = 'trigger'` 대조(`validate_mapping_objects`·`validate_all_triggers`)에 대한 5건(M39~M43)을 추가 실행해 모두 검출을 확인했다.
+  - 참고: 정상 스키마에서는 `PRIMARY KEY`·`UNIQUE`·`UNIQUE INDEX`가 일반 SQL 중복·겹침 삽입을 이미 차단하므로, 끝단 `Database::open` 경로의 `validate_on_open -> validate_ledger` 연결은 정상 스키마 + 손상 열 테스트(`open_and_operations_reject_corrupted_column_values`)로 검증하고, 중복·겹침·공유 ID 13종은 무제약 테이블에서 `validate_ledger` 및 영향 키 점조회 경로(`validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or_shared_id`)로 검증한다.
 
 | ID | 대상·변형 내용 | 결과 | 검출 테스트(대표) |
 |---|---|---|---|
@@ -116,9 +119,9 @@ D-52([docs/adr/0145-instrument-id-mapping.md](0145-instrument-id-mapping.md))는
 | M03 | `decode_market`: 미지 시장값 `Ok(Kr)` 허용 | 검출 | `open_and_operations_reject_corrupted_column_values` |
 | M04 | `decode_status`: `active`/`retired` 뒤바꿈 | 검출 | `sqlite_store_passes_shared_lifecycle_contract` 외 |
 | M05 | `decode_status`: 미지 상태값 `Ok(Active)` 허용 | 검출 | `open_and_operations_reject_corrupted_column_values` |
-| M06 | `restore`: 정확 중복(`Existing`) 묵인 | 검출 | `open_and_operations_fail_on_duplicate_overlap_or_shared_id` |
-| M07 | `restore`: 원본 겹침·공유 ID 오류 묵인 | 검출 | `open_and_operations_fail_on_duplicate_overlap_or_shared_id` |
-| M08 | `restore`: `retired` 행의 폐지 상태 미복원 | 검출 | `sqlite_store_passes_shared_lifecycle_contract` 외 |
+| M06 | `restore_records`(1차 `restore`): 정확 중복(`Existing`) 묵인 | 검출 | `validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or_shared_id` (1차 `open_and_operations_fail_on_duplicate_overlap_or_shared_id`) |
+| M07 | `restore_records`(1차 `restore`): 원본 겹침·공유 ID 오류 묵인 | 검출 | `validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or_shared_id` (1차 `open_and_operations_fail_on_duplicate_overlap_or_shared_id`) |
+| M08 | `restore_records`(1차 `restore`): `retired` 행의 폐지 상태 미복원 | 검출 | `sqlite_store_passes_shared_lifecycle_contract` 외 |
 | M09 | `ensure_mapping`: 신규 발급 시 `INSERT` 생략 | 검출 | `sqlite_store_passes_shared_collision_contract` 외 |
 | M10 | `ensure_mapping`: `inserted != 1` 검증 제거 | 검출 | `injected_write_failures_and_zero_row_effects_roll_back_cleanly` |
 | M11 | `ensure_mapping`: 신규 행을 `retired`로 삽입 | 검출 | `sqlite_store_passes_shared_lifecycle_contract` 외 |
@@ -128,7 +131,7 @@ D-52([docs/adr/0145-instrument-id-mapping.md](0145-instrument-id-mapping.md))는
 | M15 | `map_result`: 도메인 오류를 `Missing`으로 뭉갬 | 검출 | `sqlite_store_passes_shared_collision_contract` 외 |
 | M16 | `resolve`: 폐지 행도 `lookup`으로 ID 반환 | 검출 | `sqlite_store_passes_shared_lifecycle_contract` 외 |
 | M17 | `for_id`: 미존재 시 빈 벡터 반환 | 검출 | `sqlite_store_passes_shared_lifecycle_contract` 외 |
-| M18 | `migration::apply_guarded`: 열기 시점 원장 검증 제거 | 검출 | `open_and_operations_fail_on_duplicate_overlap_or_shared_id` |
+| M18 | `migration::apply_guarded`: 열기 시점 원장 검증 제거 (1차; 2차 M37로 계승) | 검출 | `validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or_shared_id` (1차 `open_and_operations_fail_on_duplicate_overlap_or_shared_id`) |
 | M19 | DDL: `STRICT` 테이블 옵션 제거 | 검출 | `strict_table_and_valid_domain_boundaries_roundtrip` 및 스키마 검증 |
 | M20 | DDL: `(market, upper(symbol))` 고유 인덱스 제거 | 검출 | `sqlite_unique_indexes_enforce_case_insensitive_keys_without_triggers` |
 | M21 | DDL: `(upper(isin))` 고유 인덱스 제거 | 검출 | `sqlite_unique_indexes_enforce_case_insensitive_keys_without_triggers` |
@@ -149,6 +152,11 @@ D-52([docs/adr/0145-instrument-id-mapping.md](0145-instrument-id-mapping.md))는
 | M36 | `sql::BY_SOURCE`: `upper(symbol)` 대소문자 정규화 제거 | 검출 | `sqlite_store_passes_shared_overlap_and_case_contract` 외 |
 | M37 | `migration::apply_guarded`: `validate_on_open` 호출 제거 | 검출 | `open_rejects_tampered_mapping_schema_objects` 외 |
 | M38 | `testkit-ports`: `concurrent_overlapping_sources` 승자 0건 fallthrough 재주입 | 검출 | `overlapping_race_contract_rejects_double_uncertain_without_winner` 외 |
+| M39 | `sql::SCHEMA_OBJECTS`: `lower(tbl_name)` 대소문자 무시 제거 | 검출 | `open_rejects_tampered_mapping_schema_objects` |
+| M40 | `validate_schema`: `validate_all_triggers` 호출 생략 | 검출 | `open_rejects_tampered_mapping_schema_objects` |
+| M41 | `validate_schema`: `validate_mapping_objects` 호출 생략 | 검출 | `open_rejects_tampered_mapping_schema_objects` |
+| M42 | `validate_sql_set`: `actual != *expected` 내용 비교 생략 | 검출 | `open_rejects_tampered_mapping_schema_objects` |
+| M43 | `validate_all_triggers`: 전체 트리거 검증 무효화(항상 `Ok`) | 검출 | `open_rejects_tampered_mapping_schema_objects` |
 
 ## 결과
 

@@ -268,6 +268,7 @@ fn instrument_mapping_sql_prepares_and_matches_migration_file() {
     crate::migration::run(&mut connection, crate::tests::timestamp()).expect("migrate");
     for statement in [
         sql::SCHEMA_OBJECTS,
+        sql::ALL_TRIGGERS,
         sql::ALL,
         sql::BY_SOURCE,
         sql::BY_SOURCE_OR_ID,
@@ -308,6 +309,18 @@ fn indexed_point_queries_use_indexes_without_table_scan() {
         (
             fixtures::EXPLAIN_BY_ID,
             "sqlite_autoindex_instrument_mappings_1",
+        ),
+        (
+            fixtures::EXPLAIN_NO_REPLACE_SUBQUERY,
+            "sqlite_autoindex_instrument_mappings_1",
+        ),
+        (
+            fixtures::EXPLAIN_NO_REPLACE_SUBQUERY,
+            "instrument_mappings_symbol_key",
+        ),
+        (
+            fixtures::EXPLAIN_NO_REPLACE_SUBQUERY,
+            "instrument_mappings_isin_key",
         ),
     ] {
         let details = rt
@@ -599,6 +612,8 @@ fn open_rejects_tampered_mapping_schema_objects() {
         fixtures::DROP_NO_REPLACE_TRIGGER,
         fixtures::DROP_INSERT_ACTIVE_TRIGGER,
         fixtures::EXTRA_ROGUE_TRIGGER,
+        fixtures::ROGUE_UPPERCASE_TRIGGER,
+        fixtures::ROGUE_CROSS_TABLE_TRIGGER,
         fixtures::REPLACE_WEAK_NO_DELETE_TRIGGER,
     ] {
         let fixture = Fixture::new();
@@ -606,6 +621,20 @@ fn open_rejects_tampered_mapping_schema_objects() {
         let db = Database::open(&path, &key(), &clock()).expect("open");
         rt.block_on(db.write(move |tx| tx.execute_batch(tamper)))
             .expect("apply tamper");
+        if tamper == fixtures::ROGUE_UPPERCASE_TRIGGER {
+            rt.block_on(db.read(|conn| {
+                assert!(crate::instrument_mapping::validate_mapping_objects(conn).is_err());
+                Ok(())
+            }))
+            .expect("uppercase table trigger must fail validate_mapping_objects directly");
+        }
+        if tamper == fixtures::ROGUE_CROSS_TABLE_TRIGGER {
+            rt.block_on(db.read(|conn| {
+                assert!(crate::instrument_mapping::validate_all_triggers(conn).is_err());
+                Ok(())
+            }))
+            .expect("cross-table rogue trigger must fail validate_all_triggers directly");
+        }
         rt.block_on(db.close()).expect("close");
         assert_eq!(
             Database::open(&path, &key(), &clock())
