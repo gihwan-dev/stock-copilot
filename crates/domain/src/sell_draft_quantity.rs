@@ -1440,6 +1440,48 @@ mod tests {
     }
 
     #[test]
+    fn with_history_accepts_same_observation_time_and_rejects_stored_live_holding_drift() {
+        let fixture = Fixture::new(Market::Kr, qty("17"));
+        let stored_at = later(fixture.now, 10, 0);
+        let live_at = later(fixture.now, 30, 0);
+        let stored_signal = sell_signal_for(&fixture, "17", stored_at, "1");
+        let stored_history =
+            crate::HistoricalSignal::from_signal(&crate::RaisedSignal::Sell(stored_signal.clone()));
+        let same_holding = holding_for(&fixture.instrument, qty("17"), stored_at);
+        let same_val = valuation_with(&fixture.market, vec![same_holding], stored_at);
+        let same_sellable = fixture.sellable(qty("11"), stored_at);
+        let same_facts =
+            SellDraftQuantityFacts::new(&fixture.account, &same_val, Some(&same_sellable));
+        let same_plan = calculate_sell_draft_quantity_with_history(
+            &stored_signal,
+            &stored_history,
+            &same_facts,
+            stored_at,
+            &fixture.calendars,
+        )
+        .into_plan()
+        .expect("동일 관측 시각 허용");
+        assert_eq!(same_plan.default_quantity(), whole("11"));
+
+        let shifted_live = sell_signal_for(&fixture, "15", live_at, "1");
+        let shifted_holding = holding_for(&fixture.instrument, qty("15"), live_at);
+        let shifted_val = valuation_with(&fixture.market, vec![shifted_holding], live_at);
+        let shifted_sellable = fixture.sellable(qty("11"), live_at);
+        let shifted_facts =
+            SellDraftQuantityFacts::new(&fixture.account, &shifted_val, Some(&shifted_sellable));
+        assert_eq!(
+            calculate_sell_draft_quantity_with_history(
+                &shifted_live,
+                &stored_history,
+                &shifted_facts,
+                live_at,
+                &fixture.calendars,
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::HoldingChanged)
+        );
+    }
+
+    #[test]
     fn reduce_quantity_rejects_zero_fractions_and_handles_single_share() {
         let single = Fixture::new(Market::Kr, qty("1"));
         let single_sellable = single.sellable(qty("1"), single.now);

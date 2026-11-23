@@ -330,12 +330,11 @@ pub fn signal_transition(
                     }
                 }
                 (RaisedSignal::Sell(old_sell), RaisedSignal::Sell(new_sell)) => {
-                    if crate::sell_signal_matches_reassessed(old_sell, new_sell)
-                        == crate::CheckResult::Passed
-                    {
-                        Ok(SignalTransition::Unchanged)
-                    } else {
-                        Ok(SignalTransition::Updated(value))
+                    match crate::sell_signal_matches_reassessed(old_sell, new_sell) {
+                        crate::CheckResult::Passed => Ok(SignalTransition::Unchanged),
+                        crate::CheckResult::Failed | crate::CheckResult::Unknown => {
+                            Ok(SignalTransition::Updated(value))
+                        }
                     }
                 }
                 (RaisedSignal::Buy(_), RaisedSignal::Sell(_))

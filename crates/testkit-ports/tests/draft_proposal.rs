@@ -1616,18 +1616,22 @@ mod tests {
 
     #[test]
     fn sell_reversal_does_not_return_a_previous_buy_draft() {
-        let source = fixtures::master();
-        let id = &source.row().instrument_id;
-        let now = fixtures::day(60);
+        use domain::NoSellDraftQuantity::SellableQuantityUnknown;
+        let (source, now) = (fixtures::master(), fixtures::day(60));
         let data = Data::new(market(&source, now));
         let repository = seeded(&source, &data);
         let scheduler = Scheduler::default();
         let clock = testkit_ports::SteppedClock::new(now);
         let (bus, events) = event_bus();
         let old_id = proposal_id("before-sell");
-        let dp = DraftProposal::new(&repository, &data, &scheduler, &clock, &bus);
         let Ok(DraftProposalOutcome::Created { .. }) =
-            run(dp.execute(id, &AccountId::new(4321), old_id.clone()))
+            run(
+                DraftProposal::new(&repository, &data, &scheduler, &clock, &bus).execute(
+                    &source.row().instrument_id,
+                    &AccountId::new(4321),
+                    old_id.clone(),
+                ),
+            )
         else {
             panic!("기존 매수 초안")
         };
@@ -1639,7 +1643,7 @@ mod tests {
             vec![fixtures::input("task-new", "1", &source)],
         ))
         .expect("제출");
-        let submitted = run(repository.snapshot(id)).expect("신호");
+        let submitted = run(repository.snapshot(&source.row().instrument_id)).expect("신호");
         repository.save_sources(
             submitted.submission.expect("과제"),
             application::SignalSourceFacts {
@@ -1650,18 +1654,22 @@ mod tests {
         );
         run(
             EvaluateSignals::new(&repository, &data, &evaluation_bus).execute(
-                id,
+                &source.row().instrument_id,
                 now,
                 BuySignalOccurrenceId::try_new("sell-reversal").expect("발생"),
             ),
         )
         .expect("매도 평가");
-        let err = run(dp.execute(id, &AccountId::new(4321), proposal_id("after-sell")))
-            .expect_err("매도가능수량 미확인");
-        assert_eq!(
-            err,
-            DraftProposalError::SellQuantity(domain::NoSellDraftQuantity::SellableQuantityUnknown)
+        let result = run(
+            DraftProposal::new(&repository, &data, &scheduler, &clock, &bus).execute(
+                &source.row().instrument_id,
+                &AccountId::new(4321),
+                proposal_id("after-sell"),
+            ),
         );
+        let Err(DraftProposalError::SellQuantity(SellableQuantityUnknown)) = result else {
+            panic!("매도가능수량 미확인")
+        };
         assert!(
             run(repository.draft(&old_id, &source))
                 .expect("이전 초안")
@@ -6436,6 +6444,61 @@ mod tests {
                     .expect("기존 매도 초안 보존")
                     .is_some()
             );
+        }
+
+        #[test]
+        fn existing_sell_draft_is_reused_before_sellable_recalculation_until_expiry() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let (data, repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let (bus, events) = event_bus();
+            let first_id = proposal_id("sell-existing-card");
+            let created = create_draft_at(
+                &repo,
+                &data,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+                (inst, &account, first_id.clone()),
+            );
+            assert_eq!(created.id(), &first_id);
+            let later = fixtures::at(now.utc_seconds().as_i64().checked_add(30).expect("30초"));
+            let mut zero_sellable =
+                kr_sell_inputs(&source, later, account.clone(), "17", Some("0"));
+            zero_sellable.sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "0", later));
+            *data.0.write().expect("매도가능 0") = zero_sellable;
+            let reuse_zero = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(later),
+                &bus,
+            )
+            .execute(inst, &account, proposal_id("sell-retry-zero")))
+            .expect("만료 전 기존 초안 유지(0)");
+            let DraftProposalOutcome::Existing { proposal_id: id_z } = reuse_zero else {
+                panic!("기존 초안 재사용이어야 한다: {reuse_zero:?}")
+            };
+            assert_eq!(id_z, first_id);
+
+            let none_sellable = kr_sell_inputs(&source, later, account.clone(), "17", None);
+            *data.0.write().expect("매도가능 미확인") = none_sellable;
+            let reuse_none = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(later),
+                &bus,
+            )
+            .execute(inst, &account, proposal_id("sell-retry-none")))
+            .expect("만료 전 기존 초안 유지(None)");
+            let DraftProposalOutcome::Existing { proposal_id: id_n } = reuse_none else {
+                panic!("기존 초안 재사용이어야 한다: {reuse_none:?}")
+            };
+            assert_eq!(id_n, first_id);
+            assert_eq!(events.read().expect("이벤트").len(), 1);
         }
     }
 }
