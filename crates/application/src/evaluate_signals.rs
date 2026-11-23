@@ -1,17 +1,21 @@
 use crate::{
     AiRunId, DeliveryReport, EstimateSubmissionRepository, EventBus, ReasoningEffort,
-    SignalCommitOutcome, SignalEvaluation, SignalInvalidationOutcome, SignalInvalidationRepository,
-    SignalMutation, SignalRepository, SignalSnapshot, SystemPortError,
+    SignalCommitEvidence, SignalCommitOutcome, SignalEvaluation, SignalInvalidationOutcome,
+    SignalInvalidationRepository, SignalMutation, SignalRepository, SignalSnapshot,
+    SystemPortError,
 };
 use domain::{
     BuyQuantityDecision, BuyQuantityFacts, BuySignalOccurrenceId, BuySignalRecord,
     CalibrationError, CalibrationLedgerHead, CalibrationSnapshot, CommissionRateFact,
-    CurrentBuySignal, EstimateAssignmentError, EstimateSubmissionRecord, InstrumentId, Margin,
-    MarketCalendar, NoBuyQuantity, NoSignalReason, OrderFxRates, Policy, PolicySecurityFacts,
-    PortfolioValuation, PriceObservation, SectorAssignments, SignalAssessmentFacts, SignalContext,
-    SignalDecision, SignalEstimate, SignalPreparationError, SignalTiming, SignalTransition,
-    SignalTransitionError, SignalUnavailable, Timestamp, calculate_buy_quantity,
-    calibrate_signal_submission, signal_transition,
+    CurrentBuySignal, EstimateAssignmentError, EstimateSubmissionRecord, FxRate, InstrumentId,
+    Margin, MarketCalendar, MasterInstrument, NoBuyQuantity, NoSignalReason, OrderFxRates, Policy,
+    PolicySecurityFacts, Portfolio, PortfolioValuation, PriceObservation, SectorAssignments,
+    SignalAssessmentFacts, SignalContext, SignalDecision, SignalEstimate,
+    SignalOccurrenceRestoreError, SignalPreparationError, SignalRestoreError,
+    SignalRestoreEvidence, SignalTiming, SignalTransition, SignalTransitionError,
+    SignalUnavailable, StoredEstimateEvidence, StoredPriceObservation, StoredSignalOccurrence,
+    Timestamp, TradeTaxFact, calculate_buy_quantity_with_history, calibrate_signal_submission,
+    signal_transition_from_history,
 };
 use std::future::Future;
 
@@ -19,6 +23,18 @@ use std::future::Future;
 pub struct SignalQuantityCosts {
     pub fx: OrderFxRates,
     pub commission: CommissionRateFact,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalRestorationBasis {
+    pub master: MasterInstrument,
+    pub holding_masters: Vec<MasterInstrument>,
+    pub estimate: StoredEstimateEvidence,
+    pub commission: CommissionRateFact,
+    pub tax: TradeTaxFact,
+    pub maturity: Timestamp,
+    pub portfolio: Option<Portfolio>,
+    pub rate: Option<FxRate>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +48,7 @@ pub struct EvaluateSignalInputs {
     pub target_price: Option<PriceObservation>,
     pub calendars: Vec<MarketCalendar>,
     pub quantity_costs: Option<SignalQuantityCosts>,
+    pub restoration: Option<SignalRestorationBasis>,
 }
 
 pub trait SignalEvaluationData: Send + Sync {
@@ -73,6 +90,12 @@ pub enum EvaluateSignalError {
     Transition(SignalTransitionError),
     Occurrence(NoBuyQuantity),
     ConcurrentUpdate,
+    RestorationUnavailable,
+    RestorationValuationMismatch,
+    RestorationMasters(domain::MasterInstrumentError),
+    RestorationPortfolio(domain::HistoricalPortfolioError),
+    Restoration(SignalRestoreError),
+    RestorationOccurrence(SignalOccurrenceRestoreError),
 }
 
 #[derive(Debug)]
@@ -150,7 +173,7 @@ impl<
         record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
         timing: (Timestamp, &BuySignalOccurrenceId),
     ) -> Result<Option<EvaluateSignalOutcome>, EvaluateSignalError> {
-        let (now, occurrence_id) = timing;
+        let (now, _) = timing;
         let assignments = match self.repository.assignments().await {
             Ok(value) => value,
             Err(error) => {
@@ -183,16 +206,50 @@ impl<
                     .await;
             }
         };
-        let initial = match assess(record, issued.task(), &inputs, &sources, now) {
+        self.evaluate_prepared(
+            (instrument, snapshot, record),
+            (issued.task(), &inputs, &sources),
+            timing,
+        )
+        .await
+    }
+
+    async fn evaluate_prepared(
+        &self,
+        target: (
+            &InstrumentId,
+            &SignalSnapshot,
+            &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+        ),
+        prepared: (
+            &domain::CostEligibleTask,
+            &EvaluateSignalInputs,
+            &crate::SignalSourceFacts,
+        ),
+        timing: (Timestamp, &BuySignalOccurrenceId),
+    ) -> Result<Option<EvaluateSignalOutcome>, EvaluateSignalError> {
+        let (instrument, snapshot, record) = target;
+        let (task, inputs, sources) = prepared;
+        let (now, occurrence_id) = timing;
+        let initial = match assess(record, task, inputs, sources, now) {
             Ok(value) => value,
             Err(error) => return self.invalidate(instrument, snapshot, error).await,
         };
         let (decision, transition, occurrence) =
             prepare_transition(snapshot, initial, (&inputs.calendars, now, occurrence_id))?;
         let quantity = match self
-            .quantity((snapshot, &decision, occurrence.as_ref()), (&inputs, now))
+            .quantity((snapshot, &decision, occurrence.as_ref()), (inputs, now))
             .await
         {
+            Ok(value) => value,
+            Err(error) => return self.invalidate(instrument, snapshot, error).await,
+        };
+        let evidence = match restoration_evidence(
+            record,
+            &decision,
+            occurrence.as_ref(),
+            (inputs, sources, now),
+        ) {
             Ok(value) => value,
             Err(error) => return self.invalidate(instrument, snapshot, error).await,
         };
@@ -202,6 +259,7 @@ impl<
             transition,
             calibration_head: inputs.calibration_head.clone(),
             occurrence,
+            evidence,
         }));
         self.commit(instrument, snapshot, &mutation, quantity).await
     }
@@ -281,14 +339,15 @@ impl<
             return Ok(None);
         };
         let existing = occurrence
+            .map(domain::HistoricalSignalOccurrence::from_record)
             .or_else(|| {
                 let entry = snapshot.current.as_ref()?;
-                entry.occurrence.as_ref()
+                entry.occurrence.clone()
             })
             .ok_or(EvaluateSignalError::Occurrence(
                 NoBuyQuantity::Indeterminate,
             ))?;
-        let current = CurrentBuySignal::try_new(buy.clone(), existing.clone())
+        let current = CurrentBuySignal::try_from_history(buy.clone(), existing)
             .map_err(EvaluateSignalError::Occurrence)?;
         let history = self
             .repository
@@ -311,7 +370,13 @@ impl<
                     price,
                     (costs.fx, &costs.commission),
                 );
-                calculate_buy_quantity(&current, &facts, now, &inputs.calendars, &history)
+                calculate_buy_quantity_with_history(
+                    &current,
+                    &facts,
+                    now,
+                    &inputs.calendars,
+                    &history,
+                )
             }
             _ => BuyQuantityDecision::None(NoBuyQuantity::Indeterminate),
         };
@@ -325,8 +390,8 @@ fn prepare_transition(
     timing: (&[MarketCalendar], Timestamp, &BuySignalOccurrenceId),
 ) -> Result<(SignalDecision, SignalTransition, Option<BuySignalRecord>), EvaluateSignalError> {
     let previous = snapshot.current.as_ref().map(|entry| &entry.signal);
-    let transition =
-        signal_transition(previous, &decision).map_err(EvaluateSignalError::Transition)?;
+    let transition = signal_transition_from_history(previous, &decision)
+        .map_err(EvaluateSignalError::Transition)?;
     let (calendars, now, occurrence_id) = timing;
     let result = match (&decision, &transition) {
         (SignalDecision::Buy(buy), SignalTransition::Raised(_) | SignalTransition::Reversed(_)) => {
@@ -344,8 +409,8 @@ fn prepare_transition(
         None => Ok((decision, transition, None)),
         Some(Err(reason)) => {
             let rejected = SignalDecision::None(reason);
-            let cleared =
-                signal_transition(previous, &rejected).map_err(EvaluateSignalError::Transition)?;
+            let cleared = signal_transition_from_history(previous, &rejected)
+                .map_err(EvaluateSignalError::Transition)?;
             Ok((rejected, cleared, None))
         }
     }
@@ -406,4 +471,110 @@ pub(crate) fn assess(
         facts,
     );
     Ok(SignalDecision::assess(&estimate, &context))
+}
+
+fn restoration_evidence(
+    record: &EstimateSubmissionRecord<AiRunId, ReasoningEffort>,
+    decision: &SignalDecision,
+    occurrence: Option<&BuySignalRecord>,
+    context: (&EvaluateSignalInputs, &crate::SignalSourceFacts, Timestamp),
+) -> Result<Option<SignalCommitEvidence>, EvaluateSignalError> {
+    let (inputs, sources, now) = context;
+    let Some(signal) = decision.clone().into_signal() else {
+        return Ok(None);
+    };
+    let basis = inputs
+        .restoration
+        .as_ref()
+        .ok_or(EvaluateSignalError::RestorationUnavailable)?;
+    let valuation = basis
+        .portfolio
+        .as_ref()
+        .map(|portfolio| portfolio.evaluate(basis.rate));
+    if valuation != inputs.valuation {
+        return Err(EvaluateSignalError::RestorationValuationMismatch);
+    }
+    let combined = combine_masters(&basis.master, &basis.holding_masters)
+        .map_err(EvaluateSignalError::RestorationMasters)?;
+    let snapshot = inputs
+        .calibration
+        .clone()
+        .ok_or(EvaluateSignalError::RestorationUnavailable)?;
+    let submission = record.submission();
+    let evidence = SignalRestoreEvidence {
+        estimate: basis.estimate.clone(),
+        commission: basis.commission.clone(),
+        tax: basis.tax.clone(),
+        maturity: basis.maturity,
+        calibration: snapshot,
+        calibration_key: submission.calibration_key().clone(),
+        probability: submission.probability(),
+        source: submission.evidence().cloned(),
+        submitted_at: submission.submitted_at(),
+        margin: Margin::for_appetite(inputs.policy.profile().risk_appetite()),
+        assessment: historical_context(basis, combined.instruments(), inputs, sources, now)?,
+    }
+    .capture(&signal, &basis.master)
+    .map_err(EvaluateSignalError::Restoration)?;
+    let stored_occurrence = occurrence
+        .map(|value| StoredSignalOccurrence::capture(value, evidence.clone(), &basis.master))
+        .transpose()
+        .map_err(EvaluateSignalError::RestorationOccurrence)?;
+    Ok(Some(SignalCommitEvidence {
+        master: basis.master.clone(),
+        holding_masters: basis.holding_masters.clone(),
+        signal: evidence,
+        occurrence: stored_occurrence,
+    }))
+}
+
+fn combine_masters(
+    primary: &MasterInstrument,
+    extras: &[MasterInstrument],
+) -> Result<domain::MasterInstrumentFacts, domain::MasterInstrumentError> {
+    let mut all = vec![primary.clone()];
+    for extra in extras {
+        if !all.iter().any(|existing| {
+            existing == extra
+                && existing.row().observed_at.offset_seconds()
+                    == extra.row().observed_at.offset_seconds()
+        }) {
+            all.push(extra.clone());
+        }
+    }
+    domain::MasterInstrumentFacts::try_new(all)
+}
+
+fn historical_context(
+    basis: &SignalRestorationBasis,
+    masters: &[MasterInstrument],
+    inputs: &EvaluateSignalInputs,
+    sources: &crate::SignalSourceFacts,
+    now: Timestamp,
+) -> Result<domain::HistoricalSignalContext, EvaluateSignalError> {
+    let portfolio = basis
+        .portfolio
+        .as_ref()
+        .map(|value| domain::HistoricalPortfolio::capture(value, masters))
+        .transpose()
+        .map_err(EvaluateSignalError::RestorationPortfolio)?;
+    Ok(domain::HistoricalSignalContext {
+        portfolio,
+        rate: basis.rate,
+        policy: inputs.policy.clone(),
+        classifications: domain::HistoricalClassifications::capture(
+            &inputs.assignments,
+            &inputs.security,
+        ),
+        items: sources.items.clone(),
+        disclosures: sources.disclosures.clone(),
+        tools: sources.tools.clone(),
+        calendars: inputs.calendars.clone(),
+        evaluated_at: now,
+        target: inputs
+            .target_price
+            .as_ref()
+            .map(StoredPriceObservation::from_price_observation),
+        calibration_head: inputs.calibration_head.clone(),
+    })
 }

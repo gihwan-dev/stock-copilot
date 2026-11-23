@@ -175,6 +175,25 @@ impl QuoteInstrument {
     pub const fn instrument_id(&self) -> &InstrumentId {
         &self.instrument_id
     }
+    pub(crate) fn historical_instrument(&self) -> ResolvedOrderInstrument {
+        ResolvedOrderInstrument::from_known_market(self.symbol.clone(), self.market)
+    }
+    pub(crate) fn historical_price_observation(
+        &self,
+        price: crate::Price,
+        observed_at: Timestamp,
+    ) -> Result<crate::PriceObservation, MasterInstrumentError> {
+        if price.as_money().currency() != self.currency {
+            return Err(MasterInstrumentError::CurrencyMismatch);
+        }
+        crate::PriceObservation::from_identified_quote_parts(
+            self.instrument_id.clone(),
+            self.historical_instrument(),
+            price,
+            observed_at,
+        )
+        .or(Err(MasterInstrumentError::InvalidPriceObservation))
+    }
 }
 impl fmt::Debug for MasterInstrument {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

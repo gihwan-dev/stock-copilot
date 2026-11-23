@@ -83,6 +83,13 @@ impl ResolvedOrderInstrument {
         }
     }
 
+    pub(crate) fn from_known_market(symbol: Symbol, market: crate::KnownMarket) -> Self {
+        Self {
+            symbol,
+            market: Market::from(market),
+        }
+    }
+
     #[must_use]
     pub fn symbol(&self) -> &Symbol {
         &self.symbol

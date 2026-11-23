@@ -448,3 +448,45 @@ pub(super) fn decision_with_horizon(
     );
     SignalDecision::assess(&estimate, &context)
 }
+
+fn restore_candles(high: &str, source: &MasterInstrument) -> Vec<Candle> {
+    (0_i64..61)
+        .map(|index| {
+            let value = price(if index % 2 == 0 { "100" } else { high });
+            Candle::try_new(
+                source.row().instrument_id.clone(),
+                CandleTime::try_new(local_midnight(index), CandlePeriod::Daily).expect("일봉"),
+                PriceAdjustment::Adjusted(AdjustmentBasis::new(day(61))),
+                Ohlcv::try_new(value, value, value, value, quantity("13")).expect("봉"),
+                CandleObservation::new(day(61), CandleStatus::Finalized),
+            )
+            .expect("봉")
+        })
+        .collect()
+}
+
+pub(super) fn candidate_stored_task(
+    task: &EstimateTask,
+    source: &MasterInstrument,
+    horizon: Horizon,
+) -> Option<domain::StoredEstimateEvidence> {
+    for high in [
+        "101", "102", "103", "104", "105", "106", "107", "108", "110", "112", "113", "114", "116",
+    ] {
+        let input = domain::EstimateRestoreEvidence {
+            master: source.row().clone(),
+            side: domain::OrderSide::Buy,
+            candles: restore_candles(high, source),
+            reference_price: price("100"),
+            reference_at: local(day(60)),
+            task_at: day(60),
+            horizon,
+            permission: domain::HoursPermissionState::Disabled,
+            appetite: RiskAppetite::Neutral,
+        };
+        if let Ok(result) = input.capture(task, source) {
+            return Some(result);
+        }
+    }
+    None
+}

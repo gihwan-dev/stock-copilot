@@ -75,6 +75,11 @@ pub struct SectorAssignments(
     pub(crate) BTreeMap<AllocationInstrument, crate::sector_selection::AssignmentDetails>,
 );
 impl SectorAssignments {
+    pub fn entries(
+        &self,
+    ) -> impl Iterator<Item = (&AllocationInstrument, &InstrumentClassification)> {
+        self.0.iter()
+    }
     pub fn try_new(assignments: Vec<SectorAssignment>) -> Result<Self, SectorAssignmentsError> {
         let mut values = BTreeMap::new();
         let mut memberships = BTreeMap::new();

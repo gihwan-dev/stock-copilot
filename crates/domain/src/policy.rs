@@ -48,6 +48,9 @@ impl fmt::Debug for PolicyBuyLimit {
     }
 }
 impl PolicyBuyLimit {
+    pub(crate) const fn amount(self) -> Money {
+        self.0
+    }
     #[must_use]
     pub fn compare_krw_cost(self, cost: Money) -> PolicyCostFit {
         if cost.currency() != Currency::Krw || cost.amount().as_decimal().is_sign_negative() {

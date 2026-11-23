@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     mod a27_fixtures;
+    mod d56_evidence;
     use a27_fixtures as fixtures;
     use application::{
         EstimateSubmissionRepository, EvaluateSignalInputs, EvaluateSignalOutcome, EvaluateSignals,
@@ -45,11 +46,45 @@ mod tests {
     impl SignalEvaluationData for Inputs {
         fn inputs(
             &self,
-            _record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
+            record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
             _now: Timestamp,
         ) -> impl Future<Output = Result<EvaluateSignalInputs, SystemPortError>> + Send {
-            std::future::ready(Ok(self.0.clone()))
+            std::future::ready(Ok(prepare_restore(self.0.clone(), record)))
         }
+    }
+
+    fn prepare_restore(
+        mut input: EvaluateSignalInputs,
+        record: &EstimateSubmissionRecord<application::AiRunId, application::ReasoningEffort>,
+    ) -> EvaluateSignalInputs {
+        let portfolio = input.valuation.as_ref().map(|value| {
+            let holdings = value
+                .holdings()
+                .iter()
+                .map(|row| row.holding().clone())
+                .collect();
+            let result = domain::Portfolio::new(
+                holdings,
+                value.buying_power(domain::Currency::Krw),
+                value.buying_power(domain::Currency::Usd),
+            )
+            .expect("포트");
+            match value.reported() {
+                Some(reported) => result.with_reported(reported),
+                None => result,
+            }
+        });
+        if let Some(basis) = &mut input.restoration {
+            if let Some(stored) = fixtures::candidate_stored_task(
+                record.submission().task_key().task(),
+                &basis.master,
+                record.submission().calibration_key().horizon(),
+            ) {
+                basis.estimate = stored;
+            }
+            basis.portfolio = portfolio;
+        }
+        input
     }
 
     fn setup(source: &MasterInstrument) -> EvaluateSignalInputs {
@@ -61,8 +96,8 @@ mod tests {
             domain::BuyingPower::new(fixtures::money("10000", domain::Currency::Krw), now),
             domain::BuyingPower::new(fixtures::money("0", domain::Currency::Usd), now),
         )
-        .expect("포트")
-        .evaluate(None);
+        .expect("포트");
+        let valuation = portfolio.evaluate(None);
         let sector = domain::SectorId::try_new("tech").expect("섹터");
         let catalog = domain::SectorCatalog::from_response(
             vec![domain::SectorMetadataRow {
@@ -93,10 +128,11 @@ mod tests {
             .task()
             .reference()
             .clone();
+        let basis = restore_basis(source, portfolio);
         EvaluateSignalInputs {
             calibration: Some(CalibrationSnapshot::try_new(table, head.clone()).expect("스냅숏")),
             calibration_head: Some(head),
-            valuation: Some(portfolio),
+            valuation: Some(valuation),
             policy: Policy::new(InvestorProfile::default()),
             assignments: SectorAssignments::try_new(vec![assignment]).expect("분류"),
             security: MasterInstrumentFacts::try_new(vec![source.clone()])
@@ -107,6 +143,26 @@ mod tests {
                 .map(|day| fixtures::calendar(day, &Market::Kr))
                 .collect(),
             quantity_costs: None,
+            restoration: Some(basis),
+        }
+    }
+
+    fn restore_basis(
+        source: &MasterInstrument,
+        portfolio: domain::Portfolio,
+    ) -> application::SignalRestorationBasis {
+        let decision = fixtures::decision(source, "99", None);
+        let proof = d56_evidence::evidence_for_decision(&decision, None).expect("복원 근거");
+        let restored = proof.signal.evidence;
+        application::SignalRestorationBasis {
+            master: proof.master,
+            holding_masters: vec![],
+            estimate: restored.estimate,
+            commission: restored.commission,
+            tax: restored.tax,
+            maturity: restored.maturity,
+            portfolio: Some(portfolio),
+            rate: restored.assessment.rate,
         }
     }
 
@@ -717,7 +773,7 @@ mod tests {
         source: &MasterInstrument,
         high: &str,
         percent: i32,
-    ) -> Option<domain::CostEligibleTask> {
+    ) -> Option<(domain::CostEligibleTask, domain::CostRate)> {
         use std::cmp::Ordering;
         let head = fixtures::head(0);
         let table = Calibration::try_new(fixtures::calibration_key(), &[]).expect("표");
@@ -740,7 +796,13 @@ mod tests {
                 .compare(submitted.calibration(), domain::ThresholdKind::Buy)
                 .expect("비교")
             {
-                Ordering::Equal => return Some(task),
+                Ordering::Equal => {
+                    return Some((
+                        task,
+                        domain::CostRate::try_new(fixtures::ratio(&format!("0.{middle:028}")))
+                            .expect("세율"),
+                    ));
+                }
                 Ordering::Greater => lower = middle.checked_add(1)?,
                 Ordering::Less => upper = middle.checked_sub(1)?,
             }
@@ -748,20 +810,34 @@ mod tests {
         None
     }
 
-    fn exact_boundary_task(source: &MasterInstrument) -> (domain::CostEligibleTask, i32) {
+    fn exact_boundary_task(
+        source: &MasterInstrument,
+    ) -> (domain::CostEligibleTask, i32, domain::CostRate) {
         ["102", "104", "106", "108", "110", "112", "114", "116"]
             .into_iter()
             .flat_map(|high| (43_i32..=47_i32).map(move |percent| (high, percent)))
             .find_map(|(high, percent)| {
-                boundary_for(source, high, percent).map(|task| (task, percent))
+                boundary_for(source, high, percent).map(|(task, rate)| (task, percent, rate))
             })
             .expect("정확히 일치하는 임계값 필요")
+    }
+
+    fn setup_with_tax(
+        source: &MasterInstrument,
+        tax_rate: domain::CostRate,
+    ) -> EvaluateSignalInputs {
+        let mut inputs = setup(source);
+        let zero = domain::CostRate::try_new(fixtures::ratio("0")).expect("요율");
+        let basis = inputs.restoration.as_mut().expect("복원 입력");
+        basis.tax = domain::TradeTaxFact::from_schedule_result(Market::Kr, tax_rate, zero);
+        basis.maturity = fixtures::day(66);
+        inputs
     }
 
     #[test]
     fn buy_threshold_below_equal_and_above_follow_the_domain_decision() {
         let source = fixtures::master();
-        let (task, boundary) = exact_boundary_task(&source);
+        let (task, boundary, tax_rate) = exact_boundary_task(&source);
         for (probability, should_buy) in [
             (boundary.checked_sub(1).expect("아래"), false),
             (boundary, true),
@@ -794,8 +870,9 @@ mod tests {
                 },
             );
             let (bus, observed) = events();
+            let inputs = setup_with_tax(&source, tax_rate);
             let result = run(
-                EvaluateSignals::new(&repository, &Inputs(setup(&source)), &bus).execute(
+                EvaluateSignals::new(&repository, &Inputs(inputs), &bus).execute(
                     &source.row().instrument_id,
                     fixtures::day(60),
                     occurrence("boundary"),
@@ -880,7 +957,7 @@ mod tests {
             &self,
             instrument: &domain::InstrumentId,
             identity: &domain::ResolvedOrderInstrument,
-        ) -> Result<Vec<domain::BuySignalRecord>, SystemPortError> {
+        ) -> Result<Vec<domain::HistoricalSignalOccurrence>, SystemPortError> {
             self.inner.occurrences(instrument, identity).await
         }
         async fn sources(
@@ -892,7 +969,7 @@ mod tests {
         async fn current(
             &self,
             instrument: &domain::InstrumentId,
-        ) -> Result<Vec<domain::RaisedSignal>, SystemPortError> {
+        ) -> Result<Vec<domain::HistoricalSignal>, SystemPortError> {
             self.inner.current(instrument).await
         }
     }
@@ -1296,8 +1373,8 @@ mod tests {
         );
         let current = run(repository.current(&source.row().instrument_id)).expect("신호");
         match current.as_slice() {
-            [domain::RaisedSignal::Sell(_)] => (),
-            [] | [domain::RaisedSignal::Buy(_)] | [_, _, ..] => panic!("매도 신호 필요"),
+            [domain::HistoricalSignal::Sell(_)] => (),
+            [] | [domain::HistoricalSignal::Buy(_)] | [_, _, ..] => panic!("매도 신호 필요"),
         }
         assert_eq!(
             run(repository.occurrences(
@@ -1791,7 +1868,7 @@ mod tests {
             &self,
             instrument: &domain::InstrumentId,
             identity: &domain::ResolvedOrderInstrument,
-        ) -> Result<Vec<domain::BuySignalRecord>, SystemPortError> {
+        ) -> Result<Vec<domain::HistoricalSignalOccurrence>, SystemPortError> {
             match self.point {
                 ReadPoint::Occurrences => Err(self.error),
                 ReadPoint::Sources
@@ -1806,7 +1883,7 @@ mod tests {
         async fn current(
             &self,
             instrument: &domain::InstrumentId,
-        ) -> Result<Vec<domain::RaisedSignal>, SystemPortError> {
+        ) -> Result<Vec<domain::HistoricalSignal>, SystemPortError> {
             self.inner.current(instrument).await
         }
     }
@@ -2261,5 +2338,36 @@ mod tests {
             run(repository.current(&source.row().instrument_id)).expect("신호"),
             Vec::new()
         );
+    }
+    #[test]
+    fn missing_restore_basis_never_commits_a_current_signal() {
+        let source = fixtures::master();
+        let repository = repository();
+        submit(&repository, "task-old", "99", &source);
+        let (bus, observed) = events();
+        let mut inputs = setup(&source);
+        inputs.restoration = None;
+        let result = run(
+            EvaluateSignals::new(&repository, &Inputs(inputs), &bus).execute(
+                &source.row().instrument_id,
+                fixtures::day(60),
+                occurrence("missing-restore"),
+            ),
+        )
+        .expect("평가");
+        match result {
+            EvaluateSignalOutcome::Unavailable { cause, .. } => assert_eq!(
+                *cause,
+                application::EvaluateSignalError::RestorationUnavailable
+            ),
+            EvaluateSignalOutcome::Applied { .. }
+            | EvaluateSignalOutcome::NoSubmission
+            | EvaluateSignalOutcome::SubmissionDiscarded => panic!("복원 근거 실패 필요"),
+        }
+        assert_eq!(
+            run(repository.current(&source.row().instrument_id)).expect("현재"),
+            Vec::new()
+        );
+        assert_eq!(*observed.read().expect("이벤트"), Vec::new());
     }
 }

@@ -41,3 +41,7 @@ pub(crate) mod thesis_tests;
 pub(crate) mod proposal;
 #[cfg(test)]
 pub(crate) mod proposal_tests;
+
+pub(crate) mod instrument_mapping;
+#[cfg(test)]
+pub(crate) mod instrument_mapping_tests;
