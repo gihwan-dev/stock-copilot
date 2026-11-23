@@ -21,11 +21,12 @@ pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_issuer::{
     IdAdoption, IndependentInstrumentIdIssuer, InstrumentIdIssueError, IssuedInstrumentId,
-    ReservationStatus,
+    IssuerSequence, IssuerSequenceError, PersistedIssuerCursor, ReservationStatus,
 };
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
-    InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
+    InstrumentMappingsRestoreError, InstrumentSource, InstrumentSourceConflict, MappingAssignment,
+    instrument_source_conflicts,
 };
 pub use instrument_mapping_change::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,

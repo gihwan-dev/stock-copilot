@@ -160,7 +160,7 @@ pub use validation_report::ValidationReportStore;
 mod proposal_boundary_tests;
 
 mod instrument_mapping;
-pub use instrument_mapping::InstrumentMappingStore;
+pub use instrument_mapping::{InstrumentIdIssuerStore, InstrumentMappingStore};
 #[cfg(test)]
 mod instrument_mapping_contract_tests;
 #[cfg(test)]

@@ -1,11 +1,11 @@
 use crate::{
-    Database, DatabasePath, InstrumentMappingStore,
+    Database, DatabasePath, InstrumentIdIssuerStore, InstrumentMappingStore,
     tests::{Fixture, clock, key, runtime},
 };
-use application::InstrumentMappingRepository;
+use application::{InstrumentIdIssuer, InstrumentMappingRepository};
 use domain::{
-    InstrumentId, InstrumentMappingStatus, InstrumentSource, IsinCode, KnownMarket,
-    MappingAssignment, Symbol,
+    IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingStatus, InstrumentSource,
+    IsinCode, IssuedInstrumentId, KnownMarket, MappingAssignment, Symbol,
 };
 use std::future::Future;
 use testkit_ports::contracts::instrument_mapping::{self, ContractRuntime};
@@ -20,6 +20,14 @@ impl ContractRuntime for TokioRuntime {
 
 fn open_db(fixture: &Fixture) -> Database {
     Database::open(&DatabasePath::new(fixture.path()), &key(), &clock()).expect("open database")
+}
+
+fn issued_slot(slot: u16) -> IssuedInstrumentId {
+    let mut issuer = IndependentInstrumentIdIssuer::new();
+    for _ in 0..slot {
+        let _skip = issuer.issue().expect("skip slot");
+    }
+    issuer.issue().expect("issue slot")
 }
 
 #[derive(Clone, Copy)]
@@ -99,22 +107,26 @@ fn run_two_connection_race(kind: RaceKind) {
 fn seed_mappings_for_restart(
     fixture: &Fixture,
     kr: &InstrumentSource,
-    kr_id: &InstrumentId,
     us: &InstrumentSource,
-    us_id: &InstrumentId,
-) {
+) -> (InstrumentId, InstrumentId) {
     let db = open_db(fixture);
     let store = InstrumentMappingStore::new(&db);
+    let issuer = InstrumentIdIssuerStore::new(&db);
+    let kr_cand = TokioRuntime.block_on(issuer.issue()).expect("issue kr");
+    let kr_id = kr_cand.as_instrument_id().clone();
+    let us_cand = TokioRuntime.block_on(issuer.issue()).expect("issue us");
+    let us_id = us_cand.as_instrument_id().clone();
     assert_eq!(
-        TokioRuntime.block_on(store.ensure(kr, kr_id)),
+        TokioRuntime.block_on(store.ensure(kr, kr_cand)),
         Ok(MappingAssignment::Issued(kr_id.clone()))
     );
     assert_eq!(
-        TokioRuntime.block_on(store.ensure(us, us_id)),
+        TokioRuntime.block_on(store.ensure(us, us_cand)),
         Ok(MappingAssignment::Issued(us_id.clone()))
     );
     assert_eq!(TokioRuntime.block_on(store.retire(us)), Ok(us_id.clone()));
     TokioRuntime.block_on(db.close()).expect("close");
+    (kr_id, us_id)
 }
 
 #[test]
@@ -153,6 +165,33 @@ fn sqlite_store_passes_shared_unpolled_drop_contract() {
     let store = InstrumentMappingStore::new(&database);
     TokioRuntime.block_on(instrument_mapping::dropping_unpolled_writes_does_not_mutate(&store));
     TokioRuntime.block_on(database.close()).expect("close");
+}
+
+#[test]
+fn sqlite_issuer_passes_shared_issuer_contracts_and_two_connection_races() {
+    let fixture = Fixture::new();
+    let database = open_db(&fixture);
+    let issuer = InstrumentIdIssuerStore::new(&database);
+    let store = InstrumentMappingStore::new(&database);
+    TokioRuntime.block_on(
+        instrument_mapping::issuer_persists_uniqueness_and_skips_retired_and_existing(
+            &issuer, &store,
+        ),
+    );
+    TokioRuntime.block_on(database.close()).expect("close");
+
+    let race_fixture = Fixture::new();
+    let first_db = open_db(&race_fixture);
+    let second_db = open_db(&race_fixture);
+    let left_issuer = InstrumentIdIssuerStore::new(&first_db);
+    let right_issuer = InstrumentIdIssuerStore::new(&second_db);
+    instrument_mapping::concurrent_issuer_never_duplicates(
+        &left_issuer,
+        &right_issuer,
+        &TokioRuntime,
+    );
+    TokioRuntime.block_on(first_db.close()).expect("close");
+    TokioRuntime.block_on(second_db.close()).expect("close");
 }
 
 #[test]
@@ -203,8 +242,11 @@ fn sqlite_store_passes_shared_reference_model_contract_and_reopen() {
             Symbol::try_new(&["S", &salt.to_string(), "A"].join("")).expect("symbol"),
             IsinCode::try_new(&["I", &salt.to_string(), "D"].join("")).expect("isin"),
         );
-        let expected_id =
-            InstrumentId::try_new(&["cand-", &salt.to_string(), "-1"].join("")).expect("id");
+        let expected_slot = salt
+            .checked_mul(4)
+            .and_then(|base| base.checked_add(1))
+            .expect("slot");
+        let expected_id = issued_slot(expected_slot).as_instrument_id().clone();
         assert_eq!(
             TokioRuntime.block_on(reopened_store.resolve(&check_source)),
             Ok(expected_id)
@@ -242,13 +284,12 @@ fn sqlite_store_roundtrips_active_and_retired_mappings_across_restart() {
         Symbol::try_new("brk.B").expect("us symbol"),
         IsinCode::try_new("us0846707026").expect("us isin"),
     );
-    let kr_id = InstrumentId::try_new("inst-kr-001").expect("kr id");
-    let us_id = InstrumentId::try_new("inst-us-002").expect("us id");
 
-    seed_mappings_for_restart(&fixture, &kr, &kr_id, &us, &us_id);
+    let (kr_id, us_id) = seed_mappings_for_restart(&fixture, &kr, &us);
 
     let reopened = open_db(&fixture);
     let store = InstrumentMappingStore::new(&reopened);
+    let issuer = InstrumentIdIssuerStore::new(&reopened);
     assert_eq!(TokioRuntime.block_on(store.resolve(&kr)), Ok(kr_id.clone()));
     let kr_record = TokioRuntime.block_on(store.lookup(&kr)).expect("kr record");
     assert_eq!(kr_record.source(), &kr);
@@ -266,6 +307,14 @@ fn sqlite_store_roundtrips_active_and_retired_mappings_across_restart() {
     assert_eq!(
         TokioRuntime.block_on(store.for_id(&us_id)),
         Ok(vec![us_record])
+    );
+
+    let next_after_restart = TokioRuntime.block_on(issuer.issue()).expect("next issue");
+    assert_ne!(next_after_restart.as_instrument_id(), &kr_id);
+    assert_ne!(next_after_restart.as_instrument_id(), &us_id);
+    assert_eq!(
+        next_after_restart.as_instrument_id().as_str(),
+        "inst-0000000000000003"
     );
     TokioRuntime.block_on(reopened.close()).expect("close");
 }

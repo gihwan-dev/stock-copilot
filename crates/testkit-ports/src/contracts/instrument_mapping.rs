@@ -1,10 +1,11 @@
-use application::{InstrumentMappingRepository, MappingStoreError};
+use application::{InstrumentIdIssuer, InstrumentMappingRepository, MappingStoreError};
 use domain::{
-    InstrumentId, InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus,
-    InstrumentSource, IsinCode, KnownMarket, MappingAssignment, Symbol,
+    IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingError, InstrumentMappingRecord,
+    InstrumentMappingStatus, InstrumentSource, IsinCode, IssuedInstrumentId, KnownMarket,
+    MappingAssignment, Symbol,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     future::Future,
     sync::{Arc, Barrier},
 };
@@ -24,10 +25,22 @@ fn parse_source(market: KnownMarket, symbol: &str, isin: &str) -> Option<Instrum
     }
 }
 
-fn parse_id(value: &str) -> Option<InstrumentId> {
-    let parsed = InstrumentId::try_new(value);
-    assert!(parsed.is_ok(), "계약 증인 내부 ID가 유효해야 함");
-    parsed.ok()
+fn issue_slot(slot: u16) -> Option<IssuedInstrumentId> {
+    let mut issuer = IndependentInstrumentIdIssuer::new();
+    for _ in 0..slot {
+        let skipped = issuer.issue();
+        assert!(skipped.is_ok(), "계약 증인 발급원 건너뛰기가 유효해야 함");
+        if skipped.is_err() {
+            return None;
+        }
+    }
+    let candidate = issuer.issue();
+    assert!(candidate.is_ok(), "계약 증인 내부 ID 발급이 유효해야 함");
+    candidate.ok()
+}
+
+fn slot_id(slot: u16) -> Option<InstrumentId> {
+    issue_slot(slot).map(|issued| issued.as_instrument_id().clone())
 }
 
 fn mapping_err(error: InstrumentMappingError) -> MappingStoreError {
@@ -86,9 +99,12 @@ async fn assert_retired_and_reused_rejection<P: InstrumentMappingRepository>(
     original: &InstrumentSource,
     independent: &InstrumentSource,
     third: &InstrumentSource,
-    ids: (&InstrumentId, &InstrumentId),
+    slots: (u16, u16),
 ) {
-    let (first_id, second_id) = ids;
+    let (first_slot, second_slot) = slots;
+    let (Some(first_id), Some(second_id)) = (slot_id(first_slot), slot_id(second_slot)) else {
+        return;
+    };
     assert_eq!(
         repo.retire(original).await,
         Ok(first_id.clone()),
@@ -104,24 +120,32 @@ async fn assert_retired_and_reused_rejection<P: InstrumentMappingRepository>(
         Err(mapping_err(InstrumentMappingError::Retired)),
         "폐지된 원본의 resolve는 Retired여야 함"
     );
+    let (Some(cand_same), Some(cand_next), Some(cand_ind), Some(cand_reuse)) = (
+        issue_slot(first_slot),
+        issue_slot(second_slot),
+        issue_slot(second_slot),
+        issue_slot(first_slot),
+    ) else {
+        return;
+    };
     assert_eq!(
-        repo.ensure(original, first_id).await,
+        repo.ensure(original, cand_same).await,
         Err(mapping_err(InstrumentMappingError::Retired)),
         "폐지된 원본의 같은 후보 재발급은 Retired여야 함"
     );
     assert_eq!(
-        repo.ensure(original, second_id).await,
+        repo.ensure(original, cand_next).await,
         Err(mapping_err(InstrumentMappingError::Retired)),
         "폐지된 원본의 새 후보 재발급은 Retired여야 함"
     );
-    assert_record_state(repo, original, first_id, InstrumentMappingStatus::Retired).await;
+    assert_record_state(repo, original, &first_id, InstrumentMappingStatus::Retired).await;
     assert_eq!(
-        repo.ensure(independent, second_id).await,
-        Ok(MappingAssignment::Issued(second_id.clone())),
+        repo.ensure(independent, cand_ind).await,
+        Ok(MappingAssignment::Issued(second_id)),
         "무시된 후보는 다른 원본에서 정상 발급 가능해야 함"
     );
     assert_eq!(
-        repo.ensure(third, first_id).await,
+        repo.ensure(third, cand_reuse).await,
         Err(mapping_err(InstrumentMappingError::IdAlreadyUsed)),
         "폐지된 ID는 다른 원본에 재사용될 수 없어야 함"
     );
@@ -142,13 +166,14 @@ pub async fn lifecycle_roundtrip<P: InstrumentMappingRepository>(repo: &P) {
     let Some(third) = parse_source(KnownMarket::Us, "MSFT", "US5949181045") else {
         return;
     };
-    let (Some(first_id), Some(second_id)) = (parse_id("opaque-1"), parse_id("opaque-2")) else {
+    let (Some(first_id), Some(cand_1), Some(cand_2)) = (slot_id(0), issue_slot(0), issue_slot(1))
+    else {
         return;
     };
 
     assert_missing(repo, &original, &first_id).await;
     assert_eq!(
-        repo.ensure(&original, &first_id).await,
+        repo.ensure(&original, cand_1).await,
         Ok(MappingAssignment::Issued(first_id.clone())),
         "최초 발급은 Issued를 반환해야 함"
     );
@@ -158,27 +183,23 @@ pub async fn lifecycle_roundtrip<P: InstrumentMappingRepository>(repo: &P) {
         "발급 직후 resolve는 기존 ID를 반환해야 함"
     );
     assert_eq!(
-        repo.ensure(&original, &second_id).await,
+        repo.ensure(&original, cand_2).await,
         Ok(MappingAssignment::Existing(first_id.clone())),
         "기존 활성 원본은 후보 ID를 무시하고 Existing을 반환해야 함"
     );
     assert_record_state(repo, &original, &first_id, InstrumentMappingStatus::Active).await;
-    assert_retired_and_reused_rejection(
-        repo,
-        &original,
-        &independent,
-        &third,
-        (&first_id, &second_id),
-    )
-    .await;
+    assert_retired_and_reused_rejection(repo, &original, &independent, &third, (0, 1)).await;
 }
 
 async fn assert_all_uncertain<P: InstrumentMappingRepository>(
     repo: &P,
     candidates: &[InstrumentSource],
-    unused_id: &InstrumentId,
+    unused_slot: u16,
 ) {
     for candidate in candidates {
+        let Some(issued) = issue_slot(unused_slot) else {
+            return;
+        };
         assert_eq!(
             repo.resolve(candidate).await,
             Err(mapping_err(InstrumentMappingError::IdentityUncertain)),
@@ -190,7 +211,7 @@ async fn assert_all_uncertain<P: InstrumentMappingRepository>(
             "겹치는 원본의 lookup은 IdentityUncertain이어야 함"
         );
         assert_eq!(
-            repo.ensure(candidate, unused_id).await,
+            repo.ensure(candidate, issued).await,
             Err(mapping_err(InstrumentMappingError::IdentityUncertain)),
             "겹치는 원본의 ensure는 IdentityUncertain이어야 함"
         );
@@ -217,13 +238,14 @@ async fn verify_mixed_case_and_relisting<P: InstrumentMappingRepository>(
     let Some(unrelated) = parse_source(KnownMarket::Us, "NVDA", "US67066G1040") else {
         return;
     };
-    let (Some(brk_id), Some(relist_id)) = (parse_id("opaque-brk"), parse_id("opaque-relist"))
-    else {
+    let (Some(brk_cand), Some(relist_cand)) = (issue_slot(2), issue_slot(3)) else {
         return;
     };
+    let brk_id = brk_cand.as_instrument_id().clone();
+    let relist_id = relist_cand.as_instrument_id().clone();
 
     assert_eq!(
-        repo.ensure(&mixed_case, &brk_id).await,
+        repo.ensure(&mixed_case, brk_cand).await,
         Ok(MappingAssignment::Issued(brk_id.clone())),
         "대소문자 혼합 원본이 정상 발급되어야 함"
     );
@@ -243,9 +265,9 @@ async fn verify_mixed_case_and_relisting<P: InstrumentMappingRepository>(
         Ok(original_id.clone()),
         "원본 폐지가 성공해야 함"
     );
-    assert_all_uncertain(repo, overlaps, &relist_id).await;
+    assert_all_uncertain(repo, overlaps, 3).await;
     assert_eq!(
-        repo.ensure(&unrelated, &relist_id).await,
+        repo.ensure(&unrelated, relist_cand).await,
         Ok(MappingAssignment::Issued(relist_id)),
         "거부된 후보는 소비되지 않아야 함"
     );
@@ -258,9 +280,11 @@ pub async fn uncertain_overlaps_and_case_variants<P: InstrumentMappingRepository
     let Some(other_market) = parse_source(KnownMarket::Kr, "AAPL", "KR0000000001") else {
         return;
     };
-    let (Some(us_id), Some(unused_id)) = (parse_id("opaque-us"), parse_id("opaque-unused")) else {
+    let (Some(us_cand), Some(unused_cand)) = (issue_slot(0), issue_slot(1)) else {
         return;
     };
+    let us_id = us_cand.as_instrument_id().clone();
+    let unused_id = unused_cand.as_instrument_id().clone();
     let Some(overlaps) = [
         (KnownMarket::Us, "AAPL", "US0000000002"),
         (KnownMarket::Us, "APLE", "US0378331005"),
@@ -277,13 +301,13 @@ pub async fn uncertain_overlaps_and_case_variants<P: InstrumentMappingRepository
     };
 
     assert_eq!(
-        repo.ensure(&original, &us_id).await,
+        repo.ensure(&original, us_cand).await,
         Ok(MappingAssignment::Issued(us_id.clone())),
         "원본 US AAPL 발급"
     );
-    assert_all_uncertain(repo, &overlaps, &unused_id).await;
+    assert_all_uncertain(repo, &overlaps, 1).await;
     assert_eq!(
-        repo.ensure(&other_market, &unused_id).await,
+        repo.ensure(&other_market, unused_cand).await,
         Ok(MappingAssignment::Issued(unused_id.clone())),
         "다른 시장의 같은 심볼은 다른 ISIN·후보로 발급 가능해야 함"
     );
@@ -310,17 +334,21 @@ pub async fn candidate_collisions_fail_closed<P: InstrumentMappingRepository>(re
     let Some(third) = parse_source(KnownMarket::Us, "MSFT", "US5949181045") else {
         return;
     };
-    let (Some(id1), Some(id2)) = (parse_id("opaque-1"), parse_id("opaque-2")) else {
+    let (Some(cand1), Some(cand1_dup), Some(cand2), Some(cand1_retired)) =
+        (issue_slot(0), issue_slot(0), issue_slot(1), issue_slot(0))
+    else {
         return;
     };
+    let id1 = cand1.as_instrument_id().clone();
+    let id2 = cand2.as_instrument_id().clone();
 
     assert_eq!(
-        repo.ensure(&first, &id1).await,
+        repo.ensure(&first, cand1).await,
         Ok(MappingAssignment::Issued(id1.clone())),
         "첫 원본 발급"
     );
     assert_eq!(
-        repo.ensure(&second, &id1).await,
+        repo.ensure(&second, cand1_dup).await,
         Err(mapping_err(InstrumentMappingError::IdAlreadyUsed)),
         "이미 쓰인 후보 ID는 IdAlreadyUsed로 거부되어야 함"
     );
@@ -336,13 +364,13 @@ pub async fn candidate_collisions_fail_closed<P: InstrumentMappingRepository>(re
     );
     assert_record_state(repo, &first, &id1, InstrumentMappingStatus::Active).await;
     assert_eq!(
-        repo.ensure(&second, &id2).await,
+        repo.ensure(&second, cand2).await,
         Ok(MappingAssignment::Issued(id2)),
         "새 후보로 재시도하면 발급되어야 함"
     );
-    assert_eq!(repo.retire(&first).await, Ok(id1.clone()), "첫 원본 폐지");
+    assert_eq!(repo.retire(&first).await, Ok(id1), "첫 원본 폐지");
     assert_eq!(
-        repo.ensure(&third, &id1).await,
+        repo.ensure(&third, cand1_retired).await,
         Err(mapping_err(InstrumentMappingError::IdAlreadyUsed)),
         "폐지된 ID 재사용은 IdAlreadyUsed로 거부되어야 함"
     );
@@ -357,11 +385,12 @@ pub async fn dropping_unpolled_writes_does_not_mutate<P: InstrumentMappingReposi
     let Some(original) = parse_source(KnownMarket::Kr, "005930", "KR7005930003") else {
         return;
     };
-    let Some(candidate) = parse_id("opaque-1") else {
+    let (Some(cand_unpolled), Some(cand_polled)) = (issue_slot(0), issue_slot(0)) else {
         return;
     };
+    let expected_id = cand_polled.as_instrument_id().clone();
     {
-        let _pending = repo.ensure(&original, &candidate);
+        let _pending = repo.ensure(&original, cand_unpolled);
     }
     assert_eq!(
         repo.resolve(&original).await,
@@ -369,8 +398,8 @@ pub async fn dropping_unpolled_writes_does_not_mutate<P: InstrumentMappingReposi
         "폴링되지 않은 ensure는 저장소를 바꾸면 안 됨"
     );
     assert_eq!(
-        repo.ensure(&original, &candidate).await,
-        Ok(MappingAssignment::Issued(candidate.clone())),
+        repo.ensure(&original, cand_polled).await,
+        Ok(MappingAssignment::Issued(expected_id.clone())),
         "폴링된 ensure는 발급되어야 함"
     );
     {
@@ -378,8 +407,80 @@ pub async fn dropping_unpolled_writes_does_not_mutate<P: InstrumentMappingReposi
     }
     assert_eq!(
         repo.resolve(&original).await,
-        Ok(candidate),
+        Ok(expected_id),
         "폴링되지 않은 retire는 저장소를 바꾸면 안 됨"
+    );
+}
+
+async fn issue_next_candidate<I: InstrumentIdIssuer>(issuer: &I) -> Option<IssuedInstrumentId> {
+    let result = issuer.issue().await;
+    assert!(result.is_ok(), "발급원 호출이 성공해야 함");
+    result.ok()
+}
+
+pub async fn issuer_persists_uniqueness_and_skips_retired_and_existing<I, P>(issuer: &I, repo: &P)
+where
+    I: InstrumentIdIssuer,
+    P: InstrumentMappingRepository,
+{
+    let (Some(preexisting_src), Some(second_src), Some(third_src), Some(external_first)) = (
+        parse_source(KnownMarket::Kr, "005930", "KR7005930003"),
+        parse_source(KnownMarket::Us, "AAPL", "US0378331005"),
+        parse_source(KnownMarket::Us, "MSFT", "US5949181045"),
+        issue_slot(0),
+    ) else {
+        return;
+    };
+    let external_first_id = external_first.as_instrument_id().clone();
+    {
+        let _unpolled_issue = issuer.issue();
+    }
+    assert_eq!(
+        repo.ensure(&preexisting_src, external_first).await,
+        Ok(MappingAssignment::Issued(external_first_id.clone())),
+        "사전 등록 원본 발급"
+    );
+    assert_eq!(
+        repo.retire(&preexisting_src).await,
+        Ok(external_first_id.clone()),
+        "사전 등록 원본 폐지"
+    );
+
+    let Some(second_cand) = issue_next_candidate(issuer).await else {
+        return;
+    };
+    let second_id = second_cand.as_instrument_id().clone();
+    assert_ne!(
+        second_id, external_first_id,
+        "폐지된 기존 ID는 다시 발급되면 안 됨"
+    );
+    assert_eq!(
+        repo.ensure(&second_src, second_cand).await,
+        Ok(MappingAssignment::Issued(second_id.clone())),
+        "발급원이 준 후보로 등록 성공"
+    );
+    assert_eq!(
+        repo.retire(&second_src).await,
+        Ok(second_id.clone()),
+        "둘째 원본 폐지 성공"
+    );
+
+    let Some(third_cand) = issue_next_candidate(issuer).await else {
+        return;
+    };
+    let third_id = third_cand.as_instrument_id().clone();
+    assert_ne!(
+        third_id, external_first_id,
+        "셋째 발급 ID는 첫째 폐지 ID와 달라야 함"
+    );
+    assert_ne!(
+        third_id, second_id,
+        "셋째 발급 ID는 둘째 폐지 ID와 달라야 함"
+    );
+    assert_eq!(
+        repo.ensure(&third_src, third_cand).await,
+        Ok(MappingAssignment::Issued(third_id)),
+        "폐지 뒤 새 발급 후보로 등록 성공"
     );
 }
 
@@ -399,6 +500,7 @@ fn related(left: u8, right: u8) -> bool {
 
 struct ReferenceModel {
     sources: Vec<InstrumentSource>,
+    candidate_slots: [u16; 3],
     candidates: Vec<InstrumentId>,
     entries: BTreeMap<u8, (u8, InstrumentMappingStatus)>,
 }
@@ -441,16 +543,19 @@ impl ReferenceModel {
         .into_iter()
         .map(|(market, sym, isin)| parse_source(market, &sym, &isin))
         .collect::<Option<Vec<_>>>()?;
-        let candidates = [
-            ["cand-", &tag, "-0"].concat(),
-            ["cand-", &tag, "-1"].concat(),
-            ["cand-", &tag, "-2"].concat(),
-        ]
-        .into_iter()
-        .map(|value| parse_id(&value))
-        .collect::<Option<Vec<_>>>()?;
+        let base_slot = salt.checked_mul(4)?;
+        let candidate_slots = [
+            base_slot,
+            base_slot.checked_add(1)?,
+            base_slot.checked_add(2)?,
+        ];
+        let candidates = candidate_slots
+            .into_iter()
+            .map(slot_id)
+            .collect::<Option<Vec<_>>>()?;
         Some(Self {
             sources,
+            candidate_slots,
             candidates,
             entries: BTreeMap::new(),
         })
@@ -466,6 +571,12 @@ impl ReferenceModel {
         let item = self.candidates.get(usize::from(index));
         assert!(item.is_some(), "참조 모델 후보 인덱스가 범위 안이어야 함");
         item
+    }
+
+    fn issued_candidate(&self, index: u8) -> Option<IssuedInstrumentId> {
+        let slot = self.candidate_slots.get(usize::from(index)).copied();
+        assert!(slot.is_some(), "참조 모델 후보 슬롯이 범위 안이어야 함");
+        issue_slot(slot?)
     }
 
     fn is_uncertain(&self, index: u8) -> bool {
@@ -494,6 +605,9 @@ impl ReferenceModel {
             Some((assigned, InstrumentMappingStatus::Active)) => Ok(MappingAssignment::Existing(
                 self.candidate(assigned)?.clone(),
             )),
+            Some((_, InstrumentMappingStatus::Superseded)) => {
+                Err(mapping_err(InstrumentMappingError::Superseded))
+            }
             Some((_, InstrumentMappingStatus::Retired)) => {
                 Err(mapping_err(InstrumentMappingError::Retired))
             }
@@ -524,7 +638,13 @@ impl ReferenceModel {
         source_index: u8,
     ) -> Option<Result<InstrumentId, MappingStoreError>> {
         Some(match self.entries.get(&source_index).copied() {
-            Some((assigned, _)) => {
+            Some((_, InstrumentMappingStatus::Superseded)) => {
+                Err(mapping_err(InstrumentMappingError::Superseded))
+            }
+            Some((
+                assigned,
+                InstrumentMappingStatus::Active | InstrumentMappingStatus::Retired,
+            )) => {
                 self.entries
                     .insert(source_index, (assigned, InstrumentMappingStatus::Retired));
                 Ok(self.candidate(assigned)?.clone())
@@ -543,6 +663,9 @@ impl ReferenceModel {
         Some(match self.entries.get(&source_index).copied() {
             Some((assigned, InstrumentMappingStatus::Active)) => {
                 Ok(self.candidate(assigned)?.clone())
+            }
+            Some((_, InstrumentMappingStatus::Superseded)) => {
+                Err(mapping_err(InstrumentMappingError::Superseded))
             }
             Some((_, InstrumentMappingStatus::Retired)) => {
                 Err(mapping_err(InstrumentMappingError::Retired))
@@ -592,7 +715,7 @@ async fn step_reference_model<P: InstrumentMappingRepository>(
     step: (u8, u8, u8),
 ) {
     let (operation, source_index, candidate_index) = step;
-    let (Some(src), Some(cand)) = (
+    let (Some(src), Some(cand_id)) = (
         model.source(source_index).cloned(),
         model.candidate(candidate_index).cloned(),
     ) else {
@@ -600,9 +723,12 @@ async fn step_reference_model<P: InstrumentMappingRepository>(
     };
     match operation {
         0 => {
-            if let Some(expected) = model.expected_ensure(source_index, candidate_index) {
+            if let (Some(issued), Some(expected)) = (
+                model.issued_candidate(candidate_index),
+                model.expected_ensure(source_index, candidate_index),
+            ) {
                 assert_eq!(
-                    repo.ensure(&src, &cand).await,
+                    repo.ensure(&src, issued).await,
                     expected,
                     "ensure 결과가 독립 참조 모델과 일치해야 함"
                 );
@@ -636,7 +762,7 @@ async fn step_reference_model<P: InstrumentMappingRepository>(
     }
     if let Some(expected_for_id) = model.expected_for_id(candidate_index) {
         assert_eq!(
-            repo.for_id(&cand).await,
+            repo.for_id(&cand_id).await,
             expected_for_id,
             "for_id 결과가 독립 참조 모델과 일치해야 함"
         );
@@ -687,17 +813,17 @@ where
     let Some(original) = parse_source(KnownMarket::Kr, "005930", "KR7005930003") else {
         return;
     };
-    let (Some(id1), Some(id2)) = (parse_id("opaque-1"), parse_id("opaque-2")) else {
+    let (Some(cand1), Some(cand2)) = (issue_slot(0), issue_slot(1)) else {
         return;
     };
     let Some((first, second)) = race_pair(
         |barrier| {
             barrier.wait();
-            runtime.block_on(left.ensure(&original, &id1))
+            runtime.block_on(left.ensure(&original, cand1))
         },
         |barrier| {
             barrier.wait();
-            runtime.block_on(right.ensure(&original, &id2))
+            runtime.block_on(right.ensure(&original, cand2))
         },
     ) else {
         return;
@@ -745,17 +871,18 @@ pub fn concurrent_distinct_sources_same_candidate_has_one_winner<P, R>(
     let Some(second) = parse_source(KnownMarket::Us, "AAPL", "US0378331005") else {
         return;
     };
-    let Some(shared) = parse_id("opaque-shared") else {
+    let (Some(left_cand), Some(right_cand)) = (issue_slot(0), issue_slot(0)) else {
         return;
     };
+    let shared = left_cand.as_instrument_id().clone();
     let Some((left_result, right_result)) = race_pair(
         |barrier| {
             barrier.wait();
-            runtime.block_on(left.ensure(&first, &shared))
+            runtime.block_on(left.ensure(&first, left_cand))
         },
         |barrier| {
             barrier.wait();
-            runtime.block_on(right.ensure(&second, &shared))
+            runtime.block_on(right.ensure(&second, right_cand))
         },
     ) else {
         return;
@@ -800,18 +927,19 @@ where
     let Some(overlapping) = parse_source(KnownMarket::Us, "aapl", "US0000000002") else {
         return;
     };
-    let (Some(left_id), Some(right_id)) = (parse_id("opaque-left"), parse_id("opaque-right"))
-    else {
+    let (Some(left_cand), Some(right_cand)) = (issue_slot(0), issue_slot(1)) else {
         return;
     };
+    let left_id = left_cand.as_instrument_id().clone();
+    let right_id = right_cand.as_instrument_id().clone();
     let Some((left_result, right_result)) = race_pair(
         |barrier| {
             barrier.wait();
-            runtime.block_on(left.ensure(&first, &left_id))
+            runtime.block_on(left.ensure(&first, left_cand))
         },
         |barrier| {
             barrier.wait();
-            runtime.block_on(right.ensure(&overlapping, &right_id))
+            runtime.block_on(right.ensure(&overlapping, right_cand))
         },
     ) else {
         return;
@@ -859,18 +987,19 @@ where
     let Some(original) = parse_source(KnownMarket::Kr, "005930", "KR7005930003") else {
         return;
     };
-    let (Some(id1), Some(id2)) = (parse_id("opaque-1"), parse_id("opaque-2")) else {
+    let (Some(cand1), Some(cand2)) = (issue_slot(0), issue_slot(1)) else {
         return;
     };
+    let id1 = cand1.as_instrument_id().clone();
     assert_eq!(
-        runtime.block_on(left.ensure(&original, &id1)),
+        runtime.block_on(left.ensure(&original, cand1)),
         Ok(MappingAssignment::Issued(id1.clone())),
         "폐지 경쟁 전 초기 발급"
     );
     let Some((ensured, retired)) = race_pair(
         |barrier| {
             barrier.wait();
-            runtime.block_on(left.ensure(&original, &id2))
+            runtime.block_on(left.ensure(&original, cand2))
         },
         |barrier| {
             barrier.wait();
@@ -891,16 +1020,13 @@ where
         Ok(MappingAssignment::Existing(id1.clone())),
         "폐지는 기존 ID를 반환해야 함"
     );
-    assert_eq!(
-        runtime.block_on(left.resolve(&original)),
-        Err(mapping_err(InstrumentMappingError::Retired)),
-        "폐지 뒤 왼쪽 연결에서 재활성화되면 안 됨"
-    );
-    assert_eq!(
-        runtime.block_on(right.resolve(&original)),
-        Err(mapping_err(InstrumentMappingError::Retired)),
-        "폐지 뒤 오른쪽 연결에서 재활성화되면 안 됨"
-    );
+    for peer in [left, right] {
+        assert_eq!(
+            runtime.block_on(peer.resolve(&original)),
+            Err(mapping_err(InstrumentMappingError::Retired)),
+            "폐지 뒤 재활성화되면 안 됨"
+        );
+    }
     assert_eq!(
         runtime.block_on(right.lookup(&original)),
         Ok(InstrumentMappingRecord::new(
@@ -920,11 +1046,12 @@ where
     let Some(original) = parse_source(KnownMarket::Us, "AAPL", "US0378331005") else {
         return;
     };
-    let Some(id1) = parse_id("opaque-1") else {
+    let Some(cand1) = issue_slot(0) else {
         return;
     };
+    let id1 = cand1.as_instrument_id().clone();
     assert_eq!(
-        runtime.block_on(left.ensure(&original, &id1)),
+        runtime.block_on(left.ensure(&original, cand1)),
         Ok(MappingAssignment::Issued(id1.clone())),
         "동시 폐지 전 초기 발급"
     );
@@ -951,4 +1078,43 @@ where
         )]),
         "동시 폐지 뒤 단일 Retired 이력이 남아야 함"
     );
+}
+
+pub fn concurrent_issuer_never_duplicates<I, R>(left: &I, right: &I, runtime: &R)
+where
+    I: InstrumentIdIssuer,
+    R: ContractRuntime,
+{
+    let Some((left_ids, right_ids)) = race_pair(
+        |barrier| {
+            barrier.wait();
+            (0_u8..10_u8)
+                .map(|_| {
+                    let result = runtime.block_on(left.issue());
+                    assert!(result.is_ok(), "왼쪽 동시 발급 성공");
+                    result.ok().map(|issued| issued.as_instrument_id().clone())
+                })
+                .collect::<Option<Vec<_>>>()
+        },
+        |barrier| {
+            barrier.wait();
+            (0_u8..10_u8)
+                .map(|_| {
+                    let result = runtime.block_on(right.issue());
+                    assert!(result.is_ok(), "오른쪽 동시 발급 성공");
+                    result.ok().map(|issued| issued.as_instrument_id().clone())
+                })
+                .collect::<Option<Vec<_>>>()
+        },
+    ) else {
+        return;
+    };
+    let (Some(left_batch), Some(right_batch)) = (left_ids, right_ids) else {
+        return;
+    };
+    let mut seen = BTreeSet::new();
+    for id in left_batch.into_iter().chain(right_batch) {
+        assert!(seen.insert(id), "동시 발급에서 중복 ID가 나오면 안 됨");
+    }
+    assert_eq!(seen.len(), 20, "동시 발급 총 20건이 모두 고유해야 함");
 }

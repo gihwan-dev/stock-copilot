@@ -6,7 +6,7 @@ mod tests {
     };
     use testkit_ports::{
         contracts::instrument_mapping::{self, ContractRuntime},
-        memory::MemoryInstrumentMappingRepository,
+        memory::{MemoryGlobalInstrumentIds, MemoryInstrumentMappingRepository},
     };
 
     struct ImmediateRuntime;
@@ -130,6 +130,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn memory_issuer_passes_shared_issuer_contracts() {
+        let global = MemoryGlobalInstrumentIds::default();
+        let issuer = global.issuer();
+        let repo = global.repository();
+        ImmediateRuntime.block_on(
+            instrument_mapping::issuer_persists_uniqueness_and_skips_retired_and_existing(
+                &issuer, &repo,
+            ),
+        );
+
+        let concurrent_global = MemoryGlobalInstrumentIds::default();
+        let left_issuer = concurrent_global.issuer();
+        let right_issuer = concurrent_global.issuer();
+        instrument_mapping::concurrent_issuer_never_duplicates(
+            &left_issuer,
+            &right_issuer,
+            &ImmediateRuntime,
+        );
+    }
+
     struct AlwaysErrorRepo {
         error: application::MappingStoreError,
     }
@@ -163,7 +184,7 @@ mod tests {
         fn ensure(
             &self,
             _source: &domain::InstrumentSource,
-            _candidate: &domain::InstrumentId,
+            _candidate: domain::IssuedInstrumentId,
         ) -> impl Future<Output = Result<domain::MappingAssignment, application::MappingStoreError>>
         {
             std::future::ready(Err(self.error.clone()))
