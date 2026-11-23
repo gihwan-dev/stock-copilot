@@ -29,6 +29,7 @@ struct RepositoryState {
     heads: Vec<CalibrationLedgerHead>,
     fail_next_commit: Option<SystemPortError>,
     drafts: Vec<StoredDraft>,
+    selected_account: Option<domain::AccountId>,
     fail_next_draft: Option<SystemPortError>,
     draft_conflicts: usize,
     draft_attempts: usize,
@@ -89,6 +90,9 @@ impl MemorySignalEvaluationRepository {
     }
     pub fn fail_next_draft(&self, error: SystemPortError) {
         self.state.write().fail_next_draft = Some(error);
+    }
+    pub fn select_account(&self, account: domain::AccountId) {
+        self.state.write().selected_account = Some(account);
     }
     pub fn conflict_next_drafts(&self, count: usize) {
         self.state.write().draft_conflicts = count;
@@ -167,6 +171,9 @@ fn read_draft(
         .iter()
         .rev()
         .find(|value| value.state == DraftState::Current && value.proposal.id() == proposal)?;
+    if state.selected_account.as_ref() != Some(stored.proposal.intent().account_id()) {
+        return None;
+    }
     let current = snapshot(state, &stored.instrument);
     let signal = stored.snapshot.current.as_ref()?;
     let head = match &signal.signal {
@@ -179,6 +186,85 @@ fn read_draft(
         return None;
     }
     Some(stored.proposal.clone())
+}
+
+fn check_existing_for_store(
+    state: &RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    check: application::DraftCheck<'_>,
+) -> Option<application::ConditionalDraftOutcome> {
+    let old = state
+        .drafts
+        .iter()
+        .find(|value| value.instrument == *instrument && value.state == DraftState::Current)?;
+    if old.snapshot != *expected {
+        return None;
+    }
+    match old.proposal.check_current(check.at, check.observation) {
+        Ok(()) if old.proposal.intent().account_id() == check.account => Some(
+            application::ConditionalDraftOutcome::Existing(old.proposal.id().clone()),
+        ),
+        Ok(())
+        | Err(
+            domain::ProposalExecutionError::Expired
+            | domain::ProposalExecutionError::PriceOutsideRange,
+        ) => None,
+        Err(
+            error @ (domain::ProposalExecutionError::ClockRollback
+            | domain::ProposalExecutionError::ObservationInvalid),
+        ) => Some(application::ConditionalDraftOutcome::Invalid(error)),
+    }
+}
+
+fn validate_store_draft(
+    state: &RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    proposal: &domain::Proposal<domain::Draft>,
+    check: application::DraftCheck<'_>,
+) -> Result<Option<application::ConditionalDraftOutcome>, SystemPortError> {
+    let current = expected.current.as_ref().ok_or_else(invalid)?;
+    let (expected_side, head, task) = match &current.signal {
+        RaisedSignal::Buy(signal) => (
+            domain::OrderSide::Buy,
+            signal.facts().calibration_head(),
+            signal.facts().task(),
+        ),
+        RaisedSignal::Sell(signal) => (
+            domain::OrderSide::Sell,
+            signal.facts().calibration_head(),
+            signal.facts().task(),
+        ),
+    };
+    if proposal.intent().side() != expected_side || proposal.intent().account_id() != check.account
+    {
+        return Err(invalid());
+    }
+    if snapshot(state, instrument) != *expected
+        || state.heads.iter().find(|value| value.key() == head.key()) != Some(head)
+    {
+        return Ok(Some(application::ConditionalDraftOutcome::Conflict));
+    }
+    if state.selected_account.as_ref() != Some(check.account) {
+        return Ok(Some(application::ConditionalDraftOutcome::AccountChanged));
+    }
+    if check.observation.validate_for_task(task, check.at).is_err() {
+        return Ok(Some(application::ConditionalDraftOutcome::Invalid(
+            domain::ProposalExecutionError::ObservationInvalid,
+        )));
+    }
+    if let Err(error) = proposal.check_current(check.at, check.observation) {
+        return Ok(Some(application::ConditionalDraftOutcome::Invalid(error)));
+    }
+    if state
+        .drafts
+        .iter()
+        .any(|value| value.proposal.id() == proposal.id())
+    {
+        return Err(invalid());
+    }
+    Ok(check_existing_for_store(state, instrument, expected, check))
 }
 
 fn store_draft_guarded(
@@ -196,36 +282,8 @@ fn store_draft_guarded(
         state.draft_conflicts = state.draft_conflicts.saturating_sub(1);
         return Ok(application::ConditionalDraftOutcome::Conflict);
     }
-    match current_draft_guarded(state, instrument, expected, check)? {
-        application::CurrentDraftOutcome::Absent => {}
-        application::CurrentDraftOutcome::Existing(id) => {
-            return Ok(application::ConditionalDraftOutcome::Existing(id));
-        }
-        application::CurrentDraftOutcome::Conflict => {
-            return Ok(application::ConditionalDraftOutcome::Conflict);
-        }
-        application::CurrentDraftOutcome::Invalid(error) => {
-            return Ok(application::ConditionalDraftOutcome::Invalid(error));
-        }
-    }
-    let current = expected.current.as_ref().ok_or_else(invalid)?;
-    let expected_side = match &current.signal {
-        RaisedSignal::Buy(_) => domain::OrderSide::Buy,
-        RaisedSignal::Sell(_) => domain::OrderSide::Sell,
-    };
-    if proposal.intent().side() != expected_side || proposal.intent().account_id() != check.account
-    {
-        return Err(invalid());
-    }
-    if let Err(error) = proposal.check_current(check.at, check.observation) {
-        return Ok(application::ConditionalDraftOutcome::Invalid(error));
-    }
-    if state
-        .drafts
-        .iter()
-        .any(|value| value.proposal.id() == proposal.id())
-    {
-        return Err(invalid());
+    if let Some(outcome) = validate_store_draft(state, instrument, expected, proposal, check)? {
+        return Ok(outcome);
     }
     for value in &mut state.drafts {
         if value.instrument == *instrument && value.state == DraftState::Current {
@@ -257,6 +315,9 @@ fn current_draft_guarded(
     };
     if state.heads.iter().find(|value| value.key() == head.key()) != Some(head) {
         return Ok(application::CurrentDraftOutcome::Conflict);
+    }
+    if state.selected_account.as_ref() != Some(check.account) {
+        return Ok(application::CurrentDraftOutcome::AccountChanged);
     }
     if check.observation.validate_for_task(task, check.at).is_err() {
         return Ok(application::CurrentDraftOutcome::Invalid(

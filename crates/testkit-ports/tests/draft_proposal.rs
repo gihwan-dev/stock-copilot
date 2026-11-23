@@ -312,6 +312,7 @@ mod tests {
     }
     fn seeded(source: &MasterInstrument, data: &Data) -> MemorySignalEvaluationRepository {
         let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
+        repository.select_account(AccountId::new(4321));
         repository
             .advance_calibration_head(fixtures::head(0))
             .expect("위치");
@@ -742,6 +743,7 @@ mod tests {
             panic!("첫 계좌 초안")
         };
         assert_eq!(proposal.intent().account_id(), &AccountId::new(4321));
+        repository.select_account(AccountId::new(8765));
         *data.0.write().expect("입력") = low_cash_same_total_market(&source, now);
         let second_id = proposal_id("acct-8765-low-cash");
         let second = run(usecase.execute(
@@ -755,6 +757,9 @@ mod tests {
             panic!("현금 부족 계좌는 이전 계좌 초안을 재사용하지 않아야 한다: {second:?}")
         };
         assert!(run(repository.draft(&first_id)).expect("대체").is_none());
+        repository.select_account(AccountId::new(4321));
+        assert!(run(repository.draft(&first_id)).expect("복귀").is_none());
+        repository.select_account(AccountId::new(8765));
         assert!(run(repository.draft(&second_id)).expect("조회").is_none());
         assert_eq!(
             events.read().expect("이벤트").as_slice(),
@@ -781,6 +786,7 @@ mod tests {
         )) else {
             panic!("첫 계좌 초안")
         };
+        repository.select_account(AccountId::new(8765));
         let Ok(DraftProposalOutcome::Created { proposal, .. }) = run(usecase.execute(
             &source.row().instrument_id,
             &AccountId::new(8765),
@@ -1409,6 +1415,7 @@ mod tests {
         );
         let data = Data::new(facts);
         let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
+        repository.select_account(AccountId::new(4321));
         repository
             .advance_calibration_head(fixtures::head(0))
             .expect("위치");
@@ -1645,6 +1652,7 @@ mod tests {
             )
             .expect("발급");
         let repository = MemorySignalEvaluationRepository::new(assignments);
+        repository.select_account(AccountId::new(4321));
         repository
             .advance_calibration_head(fixtures::head(0))
             .expect("위치");
@@ -3152,6 +3160,7 @@ mod tests {
             )
             .expect("발급");
         let repository = MemorySignalEvaluationRepository::new(assignments);
+        repository.select_account(AccountId::new(7777));
         repository
             .advance_calibration_head(fixtures::head(0))
             .expect("위치");
@@ -3242,5 +3251,753 @@ mod tests {
             events.read().expect("이벤트").as_slice(),
             &[domain::DomainEvent::ProposalCreated(id)]
         );
+    }
+
+    struct InterleavingAccountData<'a> {
+        base: DraftProposalInputs,
+        repository: &'a MemorySignalEvaluationRepository,
+        scheduler: &'a Scheduler,
+        bus: &'a application::EventBus,
+        now: Timestamp,
+        instrument: InstrumentId,
+        switched: RwLock<Option<Result<DraftProposalOutcome, DraftProposalError>>>,
+    }
+    impl DraftProposalData for InterleavingAccountData<'_> {
+        fn inputs(
+            &self,
+            _instrument: &InstrumentId,
+            account: &AccountId,
+            _current: &StoredSignal,
+            _now: Timestamp,
+        ) -> impl Future<Output = Result<DraftProposalInputs, SystemPortError>> + Send {
+            if account == &AccountId::new(4321) && self.switched.read().expect("전환").is_none() {
+                self.repository.select_account(AccountId::new(8765));
+                let newer = run(DraftProposal::new(
+                    self.repository,
+                    self,
+                    self.scheduler,
+                    &testkit_ports::SteppedClock::new(self.now),
+                    self.bus,
+                )
+                .execute(
+                    &self.instrument,
+                    &AccountId::new(8765),
+                    proposal_id("fresh-8765"),
+                ));
+                *self.switched.write().expect("결과") = Some(newer);
+            }
+            std::future::ready(Ok(self.base.clone()))
+        }
+    }
+
+    #[test]
+    fn stale_account_request_after_account_switch_never_supersedes_new_draft() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let seed_data = Data::new(market(&source, now));
+        let repository = seeded(&source, &seed_data);
+        let scheduler = Scheduler::default();
+        let (bus, events) = event_bus();
+        let interleaving = InterleavingAccountData {
+            base: market(&source, now),
+            repository: &repository,
+            scheduler: &scheduler,
+            bus: &bus,
+            now,
+            instrument: source.row().instrument_id.clone(),
+            switched: RwLock::new(None),
+        };
+        let older = run(DraftProposal::new(
+            &repository,
+            &interleaving,
+            &scheduler,
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            proposal_id("stale-4321"),
+        ));
+        assert_eq!(
+            older.expect_err("옛 계좌 거부"),
+            DraftProposalError::AccountChanged
+        );
+        let newer = interleaving
+            .switched
+            .write()
+            .expect("결과")
+            .take()
+            .expect("새 계좌 실행");
+        let Ok(DraftProposalOutcome::Created { proposal, .. }) = newer else {
+            panic!("새 계좌 초안이 생성돼야 한다")
+        };
+        assert_eq!(proposal.id(), &proposal_id("fresh-8765"));
+        assert_eq!(proposal.intent().account_id(), &AccountId::new(8765));
+        assert!(
+            run(repository.draft(&proposal_id("fresh-8765")))
+                .expect("새 초안")
+                .is_some()
+        );
+        assert!(
+            run(repository.draft(&proposal_id("stale-4321")))
+                .expect("옛 초안")
+                .is_none()
+        );
+        assert_eq!(
+            events.read().expect("이벤트").as_slice(),
+            &[domain::DomainEvent::ProposalCreated(proposal_id(
+                "fresh-8765"
+            ))]
+        );
+    }
+
+    struct SwitchBeforeStoreRepository<'a> {
+        inner: &'a MemorySignalEvaluationRepository,
+        switch_to: AccountId,
+    }
+    impl SignalRepository for SwitchBeforeStoreRepository<'_> {
+        fn snapshot(
+            &self,
+            instrument: &InstrumentId,
+        ) -> impl Future<Output = Result<application::SignalSnapshot, SystemPortError>> + Send
+        {
+            self.inner.snapshot(instrument)
+        }
+        fn commit(
+            &self,
+            instrument: &InstrumentId,
+            expected: &application::SignalSnapshot,
+            mutation: &application::SignalMutation,
+        ) -> impl Future<Output = Result<application::SignalCommitOutcome, SystemPortError>> + Send
+        {
+            self.inner.commit(instrument, expected, mutation)
+        }
+        fn occurrences(
+            &self,
+            instrument: &InstrumentId,
+            identity: &domain::ResolvedOrderInstrument,
+        ) -> impl Future<Output = Result<Vec<domain::BuySignalRecord>, SystemPortError>> + Send
+        {
+            self.inner.occurrences(instrument, identity)
+        }
+        fn sources(
+            &self,
+            task: &IssuedEstimateTaskId,
+        ) -> impl Future<Output = Result<application::SignalSourceFacts, SystemPortError>> + Send
+        {
+            self.inner.sources(task)
+        }
+        fn current(
+            &self,
+            instrument: &InstrumentId,
+        ) -> impl Future<Output = Result<Vec<domain::RaisedSignal>, SystemPortError>> + Send
+        {
+            self.inner.current(instrument)
+        }
+    }
+    impl application::EstimateSubmissionRepository for SwitchBeforeStoreRepository<'_> {
+        fn submission_records(
+            &self,
+            instrument: &InstrumentId,
+        ) -> impl Future<
+            Output = Result<
+                Vec<
+                    domain::EstimateSubmissionRecord<
+                        application::AiRunId,
+                        application::ReasoningEffort,
+                    >,
+                >,
+                SystemPortError,
+            >,
+        > + Send {
+            self.inner.submission_records(instrument)
+        }
+        fn assignments(
+            &self,
+        ) -> impl Future<
+            Output = Result<domain::EstimateAssignments<application::AiRunId>, SystemPortError>,
+        > + Send {
+            self.inner.assignments()
+        }
+        fn commit_submission(
+            &self,
+            previous: &domain::EstimateAssignments<application::AiRunId>,
+            next: &domain::EstimateAssignments<application::AiRunId>,
+            records: &[domain::EstimateSubmissionRecord<
+                application::AiRunId,
+                application::ReasoningEffort,
+            >],
+        ) -> impl Future<Output = Result<application::EstimateCommitOutcome, SystemPortError>> + Send
+        {
+            self.inner.commit_submission(previous, next, records)
+        }
+    }
+    impl ProposalRepository for SwitchBeforeStoreRepository<'_> {
+        fn store_draft(
+            &self,
+            proposal: &domain::Proposal<domain::Draft>,
+        ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send
+        {
+            self.inner.store_draft(proposal)
+        }
+        fn draft(
+            &self,
+            proposal: &ProposalId,
+        ) -> impl Future<Output = Result<Option<domain::Proposal<domain::Draft>>, SystemPortError>> + Send
+        {
+            self.inner.draft(proposal)
+        }
+        fn current_draft(
+            &self,
+            instrument: &InstrumentId,
+            expected: &application::SignalSnapshot,
+            check: application::DraftCheck<'_>,
+        ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
+        {
+            self.inner.current_draft(instrument, expected, check)
+        }
+        fn store_current_draft(
+            &self,
+            instrument: &InstrumentId,
+            expected: &application::SignalSnapshot,
+            proposal: &domain::Proposal<domain::Draft>,
+            check: application::DraftCheck<'_>,
+        ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
+        {
+            self.inner.select_account(self.switch_to.clone());
+            self.inner
+                .store_current_draft(instrument, expected, proposal, check)
+        }
+    }
+
+    #[test]
+    fn account_switch_before_store_rejects_and_hides_old_draft() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let (bus, events) = event_bus();
+        let switching = SwitchBeforeStoreRepository {
+            inner: &repository,
+            switch_to: AccountId::new(8765),
+        };
+        let switched_err = run(DraftProposal::new(
+            &switching,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            proposal_id("before-store-switch"),
+        ))
+        .expect_err("저장 직전 계좌 전환 거부");
+        assert_eq!(switched_err, DraftProposalError::AccountChanged);
+        assert!(
+            run(repository.draft(&proposal_id("before-store-switch")))
+                .expect("조회")
+                .is_none()
+        );
+        assert!(events.read().expect("이벤트").is_empty());
+        let saved_id = proposal_id("saved-8765");
+        let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(8765),
+            saved_id.clone(),
+        )) else {
+            panic!("선택 계좌 초안")
+        };
+        assert!(run(repository.draft(&saved_id)).expect("조회").is_some());
+        repository.select_account(AccountId::new(4321));
+        assert!(
+            run(repository.draft(&saved_id))
+                .expect("전환 은닉")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn unselected_account_fails_closed() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let (bus, events) = event_bus();
+        let unselected = MemorySignalEvaluationRepository::new(fixtures::assignments());
+        unselected
+            .advance_calibration_head(fixtures::head(0))
+            .expect("위치");
+        let seed_bus = EventBusBuilder::default().build();
+        submit(&unselected, &seed_bus, "task-old", &source);
+        run(EvaluateSignals::new(&unselected, &data, &seed_bus).execute(
+            &source.row().instrument_id,
+            now,
+            BuySignalOccurrenceId::try_new("unselected-occ").expect("발생"),
+        ))
+        .expect("평가");
+        let err = run(DraftProposal::new(
+            &unselected,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            proposal_id("no-selected-account"),
+        ))
+        .expect_err("미선택 계좌 거부");
+        assert_eq!(err, DraftProposalError::AccountChanged);
+        assert!(events.read().expect("이벤트").is_empty());
+    }
+
+    fn extended_day65_calendars(
+        day65_start: Timestamp,
+        regular_end: Timestamp,
+        after_end: Timestamp,
+    ) -> Vec<domain::MarketCalendar> {
+        let base_day65 = fixtures::session(65, &Market::Kr);
+        let regular = domain::SessionData::try_new(
+            domain::TimeInterval::try_new(day65_start, regular_end).expect("정규장 구간"),
+            None,
+        )
+        .expect("정규장");
+        let after = domain::SessionData::try_new(
+            domain::TimeInterval::try_new(regular_end, after_end).expect("애프터 구간"),
+            None,
+        )
+        .expect("애프터");
+        let day65_extended = domain::MarketSession::try_new(
+            base_day65.date(),
+            domain::SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(regular),
+                after_market: Some(after),
+            },
+        )
+        .expect("연장 세션");
+        let row = |day: i64| {
+            if day == 65 {
+                day65_extended.clone()
+            } else {
+                fixtures::session(day, &Market::Kr)
+            }
+        };
+        (60..=72_i64)
+            .map(|day| {
+                let prev = day.checked_sub(1).expect("전일");
+                let next = day.checked_add(1).expect("익일");
+                domain::MarketCalendar::try_new(row(prev), row(day), row(next)).expect("달력")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pre_store_recheck_rejects_signal_expired_within_price_freshness() {
+        let source = fixtures::master();
+        let seed_data = Data::new(market(&source, fixtures::day(60)));
+        let repository = seeded(&source, &seed_data);
+        let day65_start = fixtures::day(65);
+        let regular_end = fixtures::at(
+            day65_start
+                .utc_seconds()
+                .as_i64()
+                .checked_add(3600)
+                .expect("정규장 종료"),
+        );
+        let after_end = fixtures::at(
+            day65_start
+                .utc_seconds()
+                .as_i64()
+                .checked_add(7200)
+                .expect("애프터 종료"),
+        );
+        let t0 = fixtures::at(
+            regular_end
+                .utc_seconds()
+                .as_i64()
+                .checked_sub(2)
+                .expect("종료 2초 전"),
+        );
+        let t1 = fixtures::at(
+            regular_end
+                .utc_seconds()
+                .as_i64()
+                .checked_sub(1)
+                .expect("종료 1초 전"),
+        );
+        let mut facts = market(&source, t0);
+        facts.evaluation.calendars = extended_day65_calendars(day65_start, regular_end, after_end);
+        let data = Data::new(facts);
+        let (bus, events) = event_bus();
+        let clock = ScriptedClock::new([t0, t1, t1, regular_end], regular_end);
+        let err = run(
+            DraftProposal::new(&repository, &data, &Scheduler::default(), &clock, &bus).execute(
+                &source.row().instrument_id,
+                &AccountId::new(4321),
+                proposal_id("late-expired-signal"),
+            ),
+        )
+        .expect_err("저장 직전 만료 신호 거부");
+        assert_eq!(
+            err,
+            DraftProposalError::SignalUnavailable(domain::NoSignalReason::Expired)
+        );
+        assert_eq!(repository.draft_attempts(), 0);
+        assert!(events.read().expect("이벤트").is_empty());
+    }
+
+    #[test]
+    fn sell_signal_outside_price_range_discards_and_schedules_reestimate() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let (data, repository) = sell_fixture(&source, now);
+        data.0.write().expect("입력").evaluation.target_price = Some(
+            source
+                .price_observation(fixtures::price("200"), fixtures::local(now))
+                .expect("이탈 시세"),
+        );
+        let scheduler = Scheduler::default();
+        let (bus, events) = event_bus();
+        let outcome = run(DraftProposal::new(
+            &repository,
+            &data,
+            &scheduler,
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            proposal_id("sell-out-of-range"),
+        ))
+        .expect("범위 밖 매도 폐기");
+        let DraftProposalOutcome::ReestimateScheduled { .. } = outcome else {
+            panic!("재추정 예약이어야 한다")
+        };
+        assert!(
+            run(repository.snapshot(&source.row().instrument_id))
+                .expect("상태")
+                .current
+                .is_none()
+        );
+        assert_eq!(scheduler.calls.read().expect("예약").len(), 1);
+        assert_eq!(
+            events.read().expect("이벤트").as_slice(),
+            &[domain::DomainEvent::SignalCleared(
+                source.row().instrument_id.clone()
+            )]
+        );
+    }
+
+    struct DraftSpec {
+        account: AccountId,
+        side: domain::OrderSide,
+        created_at: Timestamp,
+        id: ProposalId,
+    }
+
+    fn custom_draft(
+        source: &MasterInstrument,
+        snapshot: &application::SignalSnapshot,
+        spec: DraftSpec,
+    ) -> domain::Proposal<domain::Draft> {
+        let current = snapshot.current.as_ref().expect("신호");
+        let task = match &current.signal {
+            domain::RaisedSignal::Buy(value) => value.facts().task(),
+            domain::RaisedSignal::Sell(value) => value.facts().task(),
+        };
+        let observation = source
+            .price_observation(fixtures::price("100"), fixtures::local(spec.created_at))
+            .expect("시세");
+        let range = domain::ProposalPriceRange::from_estimate_task(task.range_facts(), observation)
+            .expect("범위");
+        let terms = domain::OrderTerms::KrLimit {
+            side: spec.side,
+            quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity("1")).expect("수량"),
+            price: domain::KrOrderPrice::try_new(fixtures::price("100")).expect("가격"),
+        };
+        let intent = domain::OrderIntent::new(
+            spec.account,
+            source.order_instrument().expect("주문 종목"),
+            spec.id.as_client_order_id().clone(),
+            terms,
+        )
+        .expect("의도");
+        domain::Proposal::new(
+            spec.id,
+            intent,
+            spec.created_at,
+            range,
+            domain::ProposalLifetime::default(),
+        )
+        .expect("제안")
+    }
+
+    fn invalid_store_specs(
+        check: application::DraftCheck<'_>,
+        existing_id: &ProposalId,
+    ) -> [DraftSpec; 3] {
+        let mismatched = if check.account == &AccountId::new(8765) {
+            AccountId::new(4321)
+        } else {
+            AccountId::new(8765)
+        };
+        [
+            DraftSpec {
+                account: mismatched,
+                side: domain::OrderSide::Buy,
+                created_at: check.at,
+                id: proposal_id("bad-acct"),
+            },
+            DraftSpec {
+                account: check.account.clone(),
+                side: domain::OrderSide::Sell,
+                created_at: check.at,
+                id: proposal_id("bad-side"),
+            },
+            DraftSpec {
+                account: check.account.clone(),
+                side: domain::OrderSide::Buy,
+                created_at: check.at,
+                id: existing_id.clone(),
+            },
+        ]
+    }
+
+    fn assert_four_invalid_stores_rejected(
+        source: &MasterInstrument,
+        repository: &MemorySignalEvaluationRepository,
+        snapshot: &application::SignalSnapshot,
+        check: application::DraftCheck<'_>,
+        existing_id: &ProposalId,
+    ) {
+        let invalid_err = SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        );
+        for spec in invalid_store_specs(check, existing_id) {
+            let draft = custom_draft(source, snapshot, spec);
+            assert_eq!(
+                run(repository.store_current_draft(
+                    &source.row().instrument_id,
+                    snapshot,
+                    &draft,
+                    check,
+                )),
+                Err(invalid_err)
+            );
+        }
+        let future_time = fixtures::at(
+            check
+                .at
+                .utc_seconds()
+                .as_i64()
+                .checked_add(10)
+                .expect("미래 시각"),
+        );
+        let future_draft = custom_draft(
+            source,
+            snapshot,
+            DraftSpec {
+                account: check.account.clone(),
+                side: domain::OrderSide::Buy,
+                created_at: future_time,
+                id: proposal_id("future-rollback"),
+            },
+        );
+        assert_eq!(
+            run(repository.store_current_draft(
+                &source.row().instrument_id,
+                snapshot,
+                &future_draft,
+                check,
+            )),
+            Ok(application::ConditionalDraftOutcome::Invalid(
+                domain::ProposalExecutionError::ClockRollback,
+            ))
+        );
+    }
+
+    #[test]
+    fn store_current_draft_preserves_existing_draft_on_validation_errors() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let (bus, _) = event_bus();
+        let valid_id = proposal_id("atomic-valid-4321");
+        let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            valid_id.clone(),
+        )) else {
+            panic!("유효 초안")
+        };
+        let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("스냅숏");
+        let observation = current_observation(&data);
+        repository.select_account(AccountId::new(8765));
+        let check_8765 = application::DraftCheck {
+            account: &AccountId::new(8765),
+            at: now,
+            observation: &observation,
+        };
+        assert_four_invalid_stores_rejected(&source, &repository, &snapshot, check_8765, &valid_id);
+        repository.select_account(AccountId::new(4321));
+        assert!(run(repository.draft(&valid_id)).expect("보존").is_some());
+    }
+
+    #[test]
+    fn store_current_draft_rejects_invalid_proposal_even_when_same_account_draft_exists() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let (bus, _) = event_bus();
+        let valid_id = proposal_id("same-acct-valid");
+        let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            valid_id.clone(),
+        )) else {
+            panic!("유효 초안")
+        };
+        let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("스냅숏");
+        let observation = current_observation(&data);
+        let check = application::DraftCheck {
+            account: &AccountId::new(4321),
+            at: now,
+            observation: &observation,
+        };
+        assert_four_invalid_stores_rejected(&source, &repository, &snapshot, check, &valid_id);
+        assert!(run(repository.draft(&valid_id)).expect("보존").is_some());
+    }
+
+    #[test]
+    fn recheck_unknown_market_fails_closed_instead_of_market_closed() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let scheduler = Scheduler::default();
+        let (bus, events) = event_bus();
+        let unknown_time = fixtures::day(80);
+        let clock = ScriptedClock::new([now, unknown_time], unknown_time);
+        let err = run(
+            DraftProposal::new(&repository, &data, &scheduler, &clock, &bus).execute(
+                &source.row().instrument_id,
+                &AccountId::new(4321),
+                proposal_id("recheck-unknown"),
+            ),
+        )
+        .expect_err("재판정 불명 장 거부");
+        assert_eq!(err, DraftProposalError::MarketUnknown);
+        assert_eq!(repository.draft_attempts(), 0);
+        assert!(
+            run(repository.snapshot(&source.row().instrument_id))
+                .expect("신호 보존")
+                .current
+                .is_some()
+        );
+        assert!(events.read().expect("이벤트").is_empty());
+    }
+
+    #[test]
+    fn draft_lookup_hides_proposal_after_calibration_head_advances() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let (bus, _) = event_bus();
+        let id = proposal_id("hide-after-head");
+        let Ok(DraftProposalOutcome::Created { .. }) = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            id.clone(),
+        )) else {
+            panic!("초안 생성")
+        };
+        assert!(run(repository.draft(&id)).expect("조회").is_some());
+        repository
+            .advance_calibration_head(fixtures::head(1))
+            .expect("보정 원장 전진");
+        assert!(run(repository.draft(&id)).expect("전진 후 은닉").is_none());
+    }
+
+    #[test]
+    fn store_current_draft_rejects_expired_proposal_directly() {
+        let source = fixtures::master();
+        let created_at = fixtures::day(60);
+        let later = fixtures::at(
+            created_at
+                .utc_seconds()
+                .as_i64()
+                .checked_add(601)
+                .expect("만료 시각"),
+        );
+        let data = Data::new(market(&source, created_at));
+        let repository = seeded(&source, &data);
+        let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("스냅숏");
+        let expired_id = proposal_id("direct-expired");
+        let expired = custom_draft(
+            &source,
+            &snapshot,
+            DraftSpec {
+                account: AccountId::new(4321),
+                side: domain::OrderSide::Buy,
+                created_at,
+                id: expired_id.clone(),
+            },
+        );
+        let later_obs = source
+            .price_observation(fixtures::price("100"), fixtures::local(later))
+            .expect("이후 시세");
+        assert_eq!(
+            run(repository.store_current_draft(
+                &source.row().instrument_id,
+                &snapshot,
+                &expired,
+                application::DraftCheck {
+                    account: &AccountId::new(4321),
+                    at: later,
+                    observation: &later_obs,
+                },
+            )),
+            Ok(application::ConditionalDraftOutcome::Invalid(
+                domain::ProposalExecutionError::Expired,
+            ))
+        );
+        assert!(run(repository.draft(&expired_id)).expect("조회").is_none());
     }
 }

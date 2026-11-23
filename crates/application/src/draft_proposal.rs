@@ -83,6 +83,7 @@ pub enum DraftProposalError {
         error: SystemPortError,
         deliveries: Vec<DeliveryReport>,
     },
+    AccountChanged,
     ConcurrentUpdate,
 }
 
@@ -252,6 +253,7 @@ where
             CurrentDraftOutcome::Conflict => {
                 Ok(Some(Attempt::Retry(DraftProposalError::ConcurrentUpdate)))
             }
+            CurrentDraftOutcome::AccountChanged => Err(DraftProposalError::AccountChanged),
             CurrentDraftOutcome::Invalid(ProposalExecutionError::ClockRollback) => {
                 Ok(Some(Attempt::Retry(DraftProposalError::DraftStatus(
                     ProposalExecutionError::ClockRollback,
@@ -286,6 +288,7 @@ where
                     proposal_id,
                 }))
             }
+            ConditionalDraftOutcome::AccountChanged => Err(DraftProposalError::AccountChanged),
             ConditionalDraftOutcome::Invalid(ProposalExecutionError::ClockRollback) => {
                 Ok(Attempt::Retry(DraftProposalError::DraftStatus(
                     ProposalExecutionError::ClockRollback,

@@ -170,6 +170,7 @@ pub enum CurrentDraftOutcome {
     Absent,
     Existing(ProposalId),
     Conflict,
+    AccountChanged,
     Invalid(ProposalExecutionError),
 }
 
@@ -178,6 +179,7 @@ pub enum ConditionalDraftOutcome {
     Stored,
     Existing(ProposalId),
     Conflict,
+    AccountChanged,
     Invalid(ProposalExecutionError),
 }
 
