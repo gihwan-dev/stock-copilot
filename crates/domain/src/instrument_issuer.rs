@@ -1,21 +1,41 @@
 use crate::InstrumentId;
 use std::collections::BTreeSet;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IssuerSequenceError {
+    Zero,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct IssuerSequence(u64);
+pub struct IssuerSequence(u64);
 
 impl IssuerSequence {
     pub(crate) const fn new(value: u64) -> Self {
         Self(value)
     }
 
-    pub(crate) const fn as_u64(&self) -> &u64 {
+    pub const fn try_new(value: u64) -> Result<Self, IssuerSequenceError> {
+        if value == 0 {
+            Err(IssuerSequenceError::Zero)
+        } else {
+            Ok(Self(value))
+        }
+    }
+
+    #[must_use]
+    pub const fn as_u64(&self) -> &u64 {
         &self.0
     }
 
     fn next(self) -> Option<Self> {
         self.0.checked_add(1).map(Self)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PersistedIssuerCursor {
+    Initial,
+    LastIssued(IssuerSequence),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -72,11 +92,34 @@ impl IndependentInstrumentIdIssuer {
 
     #[must_use]
     pub fn from_existing(existing: &[InstrumentId]) -> Self {
-        let mut issuer = Self::new();
+        Self::restore(PersistedIssuerCursor::Initial, existing)
+    }
+
+    #[must_use]
+    pub fn restore(cursor: PersistedIssuerCursor, existing: &[InstrumentId]) -> Self {
+        let next = match cursor {
+            PersistedIssuerCursor::Initial => Some(IssuerSequence::new(1)),
+            PersistedIssuerCursor::LastIssued(last) => last.next(),
+        };
+        let mut issuer = Self {
+            next,
+            reserved: BTreeSet::new(),
+        };
         for id in existing {
             let _adopted = issuer.adopt_existing(id.clone());
         }
         issuer
+    }
+
+    #[must_use]
+    pub const fn last_issued(&self) -> PersistedIssuerCursor {
+        match self.next {
+            Some(next_seq) => match IssuerSequence::try_new(next_seq.0.saturating_sub(1)) {
+                Ok(previous) => PersistedIssuerCursor::LastIssued(previous),
+                Err(IssuerSequenceError::Zero) => PersistedIssuerCursor::Initial,
+            },
+            None => PersistedIssuerCursor::LastIssued(IssuerSequence::new(u64::MAX)),
+        }
     }
 
     pub fn adopt_existing(&mut self, id: InstrumentId) -> IdAdoption {
@@ -97,10 +140,12 @@ impl IndependentInstrumentIdIssuer {
     }
 
     pub fn issue(&mut self) -> Result<IssuedInstrumentId, InstrumentIdIssueError> {
-        while let Some(sequence) = self.next {
-            self.next = sequence.next();
+        let mut cursor = self.next;
+        while let Some(sequence) = cursor {
+            cursor = sequence.next();
             let candidate = InstrumentId::from_issued_sequence(sequence);
             if self.reserved.insert(candidate.clone()) {
+                self.next = cursor;
                 return Ok(IssuedInstrumentId(candidate));
             }
         }

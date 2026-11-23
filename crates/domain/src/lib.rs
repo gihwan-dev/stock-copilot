@@ -21,7 +21,7 @@ pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_issuer::{
     IdAdoption, IndependentInstrumentIdIssuer, InstrumentIdIssueError, IssuedInstrumentId,
-    ReservationStatus,
+    IssuerSequence, IssuerSequenceError, PersistedIssuerCursor, ReservationStatus,
 };
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
