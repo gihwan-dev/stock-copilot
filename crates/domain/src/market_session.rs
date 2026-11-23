@@ -11,6 +11,49 @@ pub enum MarketState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarketTradingStatus {
+    Open,
+    Closed,
+    Unknown,
+}
+
+impl MarketState {
+    #[must_use]
+    pub const fn trading_status(self) -> MarketTradingStatus {
+        match self {
+            Self::Unknown => MarketTradingStatus::Unknown,
+            Self::Closed => MarketTradingStatus::Closed,
+            Self::DayMarket | Self::PreMarket | Self::RegularMarket | Self::AfterMarket => {
+                MarketTradingStatus::Open
+            }
+        }
+    }
+}
+
+#[must_use]
+pub fn market_state_at(
+    calendars: &[MarketCalendar],
+    market: &Market,
+    instant: Timestamp,
+) -> MarketState {
+    let mut known = None;
+    for calendar in calendars {
+        if &calendar.today().market() != market {
+            continue;
+        }
+        let state = calendar.state_at(instant);
+        if state == MarketState::Unknown {
+            continue;
+        }
+        match known {
+            Some(previous) if previous != state => return MarketState::Unknown,
+            Some(_) | None => known = Some(state),
+        }
+    }
+    known.unwrap_or(MarketState::Unknown)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuctionBoundary {
     StartsAt(Timestamp),
     EndsAt(Timestamp),
@@ -1029,5 +1072,79 @@ mod tests {
                 Ok(())
             })
             .expect("전이 경계 완주");
+    }
+
+    #[test]
+    fn market_state_at_aggregates_calendars() {
+        let us = calendar();
+        let kr_session = |day| {
+            MarketSession::try_new(
+                date(3, day),
+                SessionInformation::Kr {
+                    pre_market: None,
+                    regular_market: Some(session(at(3, day, 9, 0), at(3, day, 15, 30))),
+                    after_market: None,
+                },
+            )
+            .expect("국내")
+        };
+        let kr = MarketCalendar::try_new(kr_session(24), kr_session(25), kr_session(26))
+            .expect("국내 달력");
+        let stale_us = MarketCalendar::try_new(
+            us_row(3, 18, 19, 22, 5),
+            us_row(3, 19, 20, 22, 5),
+            us_row(3, 20, 21, 22, 5),
+        )
+        .expect("과거 미국");
+        let conflicting_us = MarketCalendar::try_new(
+            us_row(3, 24, 25, 22, 5),
+            holiday(3, 25),
+            us_row(3, 26, 27, 22, 5),
+        )
+        .expect("상충 미국");
+        assert_eq!(
+            super::market_state_at(&[], &crate::Market::Us, at(3, 25, 10, 0)),
+            MarketState::Unknown
+        );
+        assert_eq!(
+            super::market_state_at(
+                std::slice::from_ref(&kr),
+                &crate::Market::Us,
+                at(3, 25, 10, 0)
+            ),
+            MarketState::Unknown
+        );
+        assert_eq!(
+            super::market_state_at(
+                &[kr, stale_us, us.clone(), us.clone()],
+                &crate::Market::Us,
+                at(3, 25, 10, 0),
+            ),
+            MarketState::DayMarket
+        );
+        assert_eq!(
+            super::market_state_at(&[us, conflicting_us], &crate::Market::Us, at(3, 25, 10, 0)),
+            MarketState::Unknown
+        );
+    }
+
+    #[test]
+    fn market_state_classifies_trading_status() {
+        assert_eq!(
+            MarketState::Unknown.trading_status(),
+            super::MarketTradingStatus::Unknown
+        );
+        assert_eq!(
+            MarketState::Closed.trading_status(),
+            super::MarketTradingStatus::Closed
+        );
+        for open in [
+            MarketState::DayMarket,
+            MarketState::PreMarket,
+            MarketState::RegularMarket,
+            MarketState::AfterMarket,
+        ] {
+            assert_eq!(open.trading_status(), super::MarketTradingStatus::Open);
+        }
     }
 }

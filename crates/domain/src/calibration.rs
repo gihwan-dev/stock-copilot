@@ -247,6 +247,11 @@ pub enum CalibrationReadiness {
     Conservative,
     MinimumReached,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CalibrationCapacity {
+    Available,
+    Exhausted,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CalibratedProbability {
     InsufficientSamples(ConservativeCalibration),
@@ -463,9 +468,18 @@ fn repetition(
     Ok(FactRepetition::New)
 }
 impl Calibration {
-    pub fn with_fact(&self, fact: CalibrationFact) -> Result<Self, CalibrationError> {
+    #[must_use]
+    pub fn capacity(&self) -> CalibrationCapacity {
         if self.facts.len() >= 65_536 {
-            return Err(CalibrationError::TooManyFacts);
+            CalibrationCapacity::Exhausted
+        } else {
+            CalibrationCapacity::Available
+        }
+    }
+    pub fn with_fact(&self, fact: CalibrationFact) -> Result<Self, CalibrationError> {
+        match self.capacity() {
+            CalibrationCapacity::Exhausted => return Err(CalibrationError::TooManyFacts),
+            CalibrationCapacity::Available => (),
         }
         let mut combined = self.facts.clone();
         combined.push(fact);

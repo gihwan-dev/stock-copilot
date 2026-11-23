@@ -1,14 +1,14 @@
 use crate::Script;
 use application::{InstrumentIdIssuer, SystemPortError};
-use domain::InstrumentId;
+use domain::IssuedInstrumentId;
 
 #[derive(Debug, Default)]
 pub struct ScriptedInstrumentIdIssuer {
-    script: Script<(), Result<InstrumentId, SystemPortError>>,
+    script: Script<(), Result<IssuedInstrumentId, SystemPortError>>,
 }
 
 impl ScriptedInstrumentIdIssuer {
-    pub fn push(&self, result: Result<InstrumentId, SystemPortError>) {
+    pub fn push(&self, result: Result<IssuedInstrumentId, SystemPortError>) {
         self.script.push(result);
     }
 
@@ -19,7 +19,7 @@ impl ScriptedInstrumentIdIssuer {
 }
 
 impl InstrumentIdIssuer for ScriptedInstrumentIdIssuer {
-    async fn issue(&self) -> Result<InstrumentId, SystemPortError> {
+    async fn issue(&self) -> Result<IssuedInstrumentId, SystemPortError> {
         self.script.run(()).await
     }
 }

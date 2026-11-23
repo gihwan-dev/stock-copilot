@@ -17,6 +17,12 @@ pub struct VirtualExitSignal {
     target: Price,
     stop: Price,
     origin: Option<crate::ScorecardSignalRecord>,
+    anchor: ExitAnchor,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExitAnchor {
+    Recorded,
+    Estimate,
 }
 impl std::fmt::Debug for VirtualExitSignal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -24,6 +30,25 @@ impl std::fmt::Debug for VirtualExitSignal {
     }
 }
 impl VirtualExitSignal {
+    pub(crate) fn for_estimate(
+        task: &EstimateTask,
+        maturity: Timestamp,
+    ) -> Result<Self, VirtualExitSignalError> {
+        let entry = task.reference().clone();
+        if maturity <= entry.observed_at() {
+            return Err(VirtualExitSignalError::InvalidEntry);
+        }
+        let (target, stop) = task_prices(task, entry.price())?;
+        Ok(Self {
+            task: task.clone(),
+            entry,
+            maturity,
+            target,
+            stop,
+            origin: None,
+            anchor: ExitAnchor::Estimate,
+        })
+    }
     pub fn from_record(
         record: &crate::ScorecardSignalRecord,
     ) -> Result<Self, VirtualExitSignalError> {
@@ -40,6 +65,7 @@ impl VirtualExitSignal {
                 entry,
                 maturity,
                 origin: None,
+                anchor: ExitAnchor::Recorded,
             }),
         }
         .map(|mut result| {
@@ -86,6 +112,7 @@ impl VirtualExitSignal {
             target,
             stop,
             origin: None,
+            anchor: ExitAnchor::Recorded,
         })
     }
     #[must_use]
@@ -114,19 +141,28 @@ impl VirtualExitSignal {
             crate::ScorecardSignalDirection::SellAvoidance => None,
         }
     }
+    pub(crate) const fn estimate_bounds(&self) -> (Price, Price) {
+        (self.target, self.stop)
+    }
 }
 fn record_prices(
     record: &crate::ScorecardSignalRecord,
 ) -> Result<(Price, Price), VirtualExitSignalError> {
+    task_prices(record.task(), record.entry().price())
+}
+fn task_prices(
+    task: &EstimateTask,
+    entry: Price,
+) -> Result<(Price, Price), VirtualExitSignalError> {
     let one = crate::Ratio::new(rust_decimal::Decimal::ONE);
-    let up = one.checked_add(&crate::Ratio::new(record.task().target().as_decimal()));
-    let down = one.checked_sub(&crate::Ratio::new(record.task().stop().as_decimal()));
+    let up = one.checked_add(&crate::Ratio::new(task.target().as_decimal()));
+    let down = one.checked_sub(&crate::Ratio::new(task.stop().as_decimal()));
     up.ok()
         .zip(down.ok())
         .and_then(|(target, stop)| {
-            record_bound(record.entry().price(), target)
+            record_bound(entry, target)
                 .ok()
-                .zip(record_bound(record.entry().price(), stop).ok())
+                .zip(record_bound(entry, stop).ok())
         })
         .ok_or(VirtualExitSignalError::InvalidBounds)
 }
@@ -150,17 +186,26 @@ impl TargetExit {
     pub const fn as_fill(&self) -> &VirtualExitFill {
         &self.0
     }
+    pub(crate) fn into_fill(self) -> VirtualExitFill {
+        self.0.into_intraday()
+    }
 }
 impl StopExit {
     #[must_use]
     pub const fn as_fill(&self) -> &VirtualExitFill {
         &self.0
     }
+    pub(crate) fn into_fill(self) -> VirtualExitFill {
+        self.0.into_intraday()
+    }
 }
 impl MaturityExit {
     #[must_use]
     pub const fn as_fill(&self) -> &VirtualExitFill {
         &self.0
+    }
+    pub(crate) fn into_fill(self) -> VirtualExitFill {
+        self.0
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,9 +220,9 @@ impl VirtualExit {
     #[must_use]
     pub fn into_fill(self) -> Option<VirtualExitFill> {
         match self {
-            Self::Target(value) => Some(value.0.into_intraday()),
-            Self::Stop(value) => Some(value.0.into_intraday()),
-            Self::Maturity(value) => Some(value.0),
+            Self::Target(value) => Some(value.into_fill()),
+            Self::Stop(value) => Some(value.into_fill()),
+            Self::Maturity(value) => Some(value.into_fill()),
             Self::Ongoing | Self::Unavailable(_) => None,
         }
     }
@@ -228,6 +273,9 @@ impl VirtualExitFill {
     }
     pub(crate) const fn exit_day(&self) -> crate::CalendarDate {
         self.dates.exit
+    }
+    pub(crate) const fn exit_close(&self) -> crate::CheckResult {
+        self.exit_close
     }
     fn into_day(mut self, day: crate::CalendarDate) -> Self {
         self.moment = VirtualExitMoment::TradingDay(day);
@@ -324,7 +372,11 @@ fn evaluate(
     let (interval, rows, bars) =
         crate::estimate_outcome::virtual_exit_inputs(signal, calendars, adjustment, candles)?;
     let prices = prices(signal, adjustment)?;
-    signal_dates(signal.entry().observed_at(), calendars).map_or_else(Err, |dates| {
+    let date_result = match signal.anchor {
+        ExitAnchor::Recorded => signal_dates(signal.entry().observed_at(), calendars),
+        ExitAnchor::Estimate => estimate_dates(&rows),
+    };
+    date_result.map_or_else(Err, |dates| {
         let context = ExitContext {
             task,
             interval,
@@ -335,6 +387,14 @@ fn evaluate(
             exit_close: crate::CheckResult::Failed,
         };
         evaluate_rows(context, rows, &bars, now)
+    })
+}
+
+fn estimate_dates(rows: &[VirtualExitSession]) -> Result<ExitDates, OutcomeUnavailable> {
+    let day = rows.first().ok_or(OutcomeUnavailable::Calendar)?.date;
+    Ok(ExitDates {
+        entry: day,
+        exit: day,
     })
 }
 fn evaluate_rows(
@@ -413,7 +473,7 @@ fn signal_dates(
         })
         .ok_or(OutcomeUnavailable::Calendar)
 }
-fn entry_close(at: Timestamp, calendars: &[MarketCalendar]) -> crate::CheckResult {
+pub(crate) fn entry_close(at: Timestamp, calendars: &[MarketCalendar]) -> crate::CheckResult {
     let closed = calendars
         .iter()
         .flat_map(|calendar| {
@@ -595,7 +655,7 @@ struct ExitPrices {
 fn adjustment_error<Error>(_error: Error) -> OutcomeUnavailable {
     OutcomeUnavailable::Adjustment
 }
-fn adjusted_price(
+pub(crate) fn adjusted_price(
     original: Price,
     adjustment: &OutcomeAdjustment,
 ) -> Result<Price, OutcomeUnavailable> {
@@ -619,6 +679,7 @@ fn adjusted_price(
     Price::try_new(crate::Money::new(amount, original.as_money().currency()))
         .map_err(adjustment_error)
 }
+
 fn prices(
     signal: &VirtualExitSignal,
     adjustment: &OutcomeAdjustment,
@@ -642,6 +703,13 @@ pub(crate) mod tests {
         Candle, CandleObservation, CandlePeriod, CandleStatus, CandleTime, Currency, EstimateTask,
         NumericInput, Ohlcv, PriceAdjustment, Quantity, TimeInterval,
     };
+    #[test]
+    fn d54_estimate_exit_requires_a_regular_session() {
+        assert_eq!(
+            super::estimate_dates(&[]),
+            Err(crate::OutcomeUnavailable::Calendar)
+        );
+    }
     pub(crate) fn signal_fixture(
         task: EstimateTask,
         target: crate::Price,

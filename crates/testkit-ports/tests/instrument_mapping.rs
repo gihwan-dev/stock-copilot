@@ -31,8 +31,21 @@ mod tests {
         )
     }
 
+    fn issued_candidate(value: &str) -> domain::IssuedInstrumentId {
+        let slot = match value {
+            "opaque-1" => 0_u8,
+            "opaque-2" => 1,
+            other => panic!("알 수 없는 후보 라벨: {other}"),
+        };
+        let mut issuer = domain::IndependentInstrumentIdIssuer::new();
+        for _ in 0..slot {
+            let _skip = issuer.issue().expect("건너뛰기");
+        }
+        issuer.issue().expect("후보 발급")
+    }
+
     fn id(value: &str) -> InstrumentId {
-        InstrumentId::try_new(value).expect("내부 ID")
+        issued_candidate(value).as_instrument_id().clone()
     }
 
     #[test]
@@ -45,12 +58,12 @@ mod tests {
             Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
         );
         assert_eq!(
-            run(repo.ensure(&original, &id("opaque-1"))),
+            run(repo.ensure(&original, issued_candidate("opaque-1"))),
             Ok(MappingAssignment::Issued(id("opaque-1")))
         );
         assert_eq!(run(repo.resolve(&original)), Ok(id("opaque-1")));
         assert_eq!(
-            run(repo.ensure(&original, &id("opaque-2"))),
+            run(repo.ensure(&original, issued_candidate("opaque-2"))),
             Ok(MappingAssignment::Existing(id("opaque-1")))
         );
         assert_eq!(run(repo.retire(&original)), Ok(id("opaque-1")));
@@ -59,7 +72,7 @@ mod tests {
             Err(MappingStoreError::Mapping(InstrumentMappingError::Retired))
         );
         assert_eq!(
-            run(repo.ensure(&original, &id("opaque-2"))),
+            run(repo.ensure(&original, issued_candidate("opaque-2"))),
             Err(MappingStoreError::Mapping(InstrumentMappingError::Retired))
         );
     }
@@ -75,14 +88,16 @@ mod tests {
             let first_source = original.clone();
             let first = scope.spawn(move || {
                 first_barrier.wait();
-                run(first_repo.ensure(&first_source, &id("opaque-1"))).expect("첫 발급")
+                run(first_repo.ensure(&first_source, issued_candidate("opaque-1")))
+                    .expect("첫 발급")
             });
             let second_repo = Arc::clone(&repo);
             let second_barrier = Arc::clone(&barrier);
             let second_source = original.clone();
             let second = scope.spawn(move || {
                 second_barrier.wait();
-                run(second_repo.ensure(&second_source, &id("opaque-2"))).expect("둘째 발급")
+                run(second_repo.ensure(&second_source, issued_candidate("opaque-2")))
+                    .expect("둘째 발급")
             });
             barrier.wait();
             (
@@ -106,9 +121,9 @@ mod tests {
         let repo = MemoryInstrumentMappingRepository::default();
         let first = source(KnownMarket::Kr, "005930", "KR7005930003");
         let second = source(KnownMarket::Us, "AAPL", "US0378331005");
-        run(repo.ensure(&first, &id("opaque-1"))).expect("발급");
+        run(repo.ensure(&first, issued_candidate("opaque-1"))).expect("발급");
         assert_eq!(
-            run(repo.ensure(&second, &id("opaque-1"))),
+            run(repo.ensure(&second, issued_candidate("opaque-1"))),
             Err(MappingStoreError::Mapping(
                 InstrumentMappingError::IdAlreadyUsed
             ))
@@ -118,7 +133,7 @@ mod tests {
             Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
         );
         assert_eq!(
-            run(repo.ensure(&second, &id("opaque-2"))),
+            run(repo.ensure(&second, issued_candidate("opaque-2"))),
             Ok(MappingAssignment::Issued(id("opaque-2")))
         );
     }
@@ -135,14 +150,14 @@ mod tests {
             let first_source = first.clone();
             let left = scope.spawn(move || {
                 first_barrier.wait();
-                run(first_repo.ensure(&first_source, &id("opaque-1")))
+                run(first_repo.ensure(&first_source, issued_candidate("opaque-1")))
             });
             let second_repo = Arc::clone(&repo);
             let second_barrier = Arc::clone(&barrier);
             let second_source = second.clone();
             let right = scope.spawn(move || {
                 second_barrier.wait();
-                run(second_repo.ensure(&second_source, &id("opaque-1")))
+                run(second_repo.ensure(&second_source, issued_candidate("opaque-1")))
             });
             barrier.wait();
             (
@@ -178,14 +193,14 @@ mod tests {
         let repo = Arc::new(MemoryInstrumentMappingRepository::default());
         let barrier = Arc::new(Barrier::new(3));
         let original = source(KnownMarket::Kr, "005930", "KR7005930003");
-        run(repo.ensure(&original, &id("opaque-1"))).expect("발급");
+        run(repo.ensure(&original, issued_candidate("opaque-1"))).expect("발급");
         let (ensured, retired) = std::thread::scope(|scope| {
             let first_repo = Arc::clone(&repo);
             let first_barrier = Arc::clone(&barrier);
             let first_source = original.clone();
             let ensure = scope.spawn(move || {
                 first_barrier.wait();
-                run(first_repo.ensure(&first_source, &id("opaque-2")))
+                run(first_repo.ensure(&first_source, issued_candidate("opaque-2")))
             });
             let second_repo = Arc::clone(&repo);
             let second_barrier = Arc::clone(&barrier);
@@ -217,13 +232,13 @@ mod tests {
         let original = source(KnownMarket::Kr, "005930", "KR7005930003");
         let candidate = id("opaque-1");
         {
-            let _pending = repo.ensure(&original, &candidate);
+            let _pending = repo.ensure(&original, issued_candidate("opaque-1"));
         }
         assert_eq!(
             run(repo.resolve(&original)),
             Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
         );
-        run(repo.ensure(&original, &candidate)).expect("발급");
+        run(repo.ensure(&original, issued_candidate("opaque-1"))).expect("발급");
         {
             let _pending = repo.retire(&original);
         }

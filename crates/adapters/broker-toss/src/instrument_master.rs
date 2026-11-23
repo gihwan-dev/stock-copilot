@@ -241,7 +241,7 @@ async fn map_source<M: InstrumentMappingRepository, I: InstrumentIdIssuer>(
                 .issue()
                 .await
                 .map_err(|error| not_ready_after_response(MasterNotReady::Issuer(error)))?;
-            match repository.ensure(source, &candidate).await {
+            match repository.ensure(source, candidate).await {
                 Ok(MappingAssignment::Issued(id) | MappingAssignment::Existing(id)) => Ok(Ok(id)),
                 Err(MappingStoreError::Storage(error)) => {
                     Err(not_ready_after_response(MasterNotReady::Storage(error)))

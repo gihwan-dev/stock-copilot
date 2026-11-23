@@ -189,6 +189,10 @@
       "permissions": {
         "contents": "read"
       },
+      "concurrency": {
+        "group": "${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && format('{0}-{1}', github.run_id, github.run_attempt) || 'branch' }}",
+        "cancel-in-progress": "${{ github.ref != 'refs/heads/master' }}"
+      },
       "jobs": {
         "linux": {
           "runs-on": "ubuntu-24.04-arm",
@@ -739,6 +743,11 @@
         "mutants": {
           "runs-on": "macos-15",
           "timeout-minutes": 180,
+          "concurrency": {
+            "group": "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "queue": "max",
+            "cancel-in-progress": false
+          },
           "strategy": {
             "fail-fast": false,
             "matrix": {
@@ -872,7 +881,8 @@
                 "126/128",
                 "127/128"
               ]
-            }
+            },
+            "max-parallel": 2
           },
           "steps": [
             {
@@ -987,6 +997,11 @@
         "mutants-daily": {
           "runs-on": "macos-15",
           "timeout-minutes": 360,
+          "concurrency": {
+            "group": "${{ github.workflow }}-mutants-slot-${{ (contains(matrix.shard, '0/') || contains(matrix.shard, '2/') || contains(matrix.shard, '4/') || contains(matrix.shard, '6/') || contains(matrix.shard, '8/')) && '0' || '1' }}",
+            "queue": "max",
+            "cancel-in-progress": false
+          },
           "steps": [
             {
               "name": "checkout",
@@ -1062,7 +1077,8 @@
             "fail-fast": false,
             "matrix": {
               "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
-            }
+            },
+            "max-parallel": 2
           }
         },
         "daily-plan": {
@@ -1410,7 +1426,8 @@
         "126/128",
         "127/128"
       ]
-    }
+    },
+    "max-parallel": 2
   },
   "alwaysSteps": [
     {
@@ -1433,6 +1450,7 @@
     "fail-fast": false,
     "matrix": {
       "shard": "${{ fromJSON(needs.daily-plan.outputs.shards) }}"
-    }
+    },
+    "max-parallel": 2
   }
 }
