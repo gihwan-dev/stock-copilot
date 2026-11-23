@@ -32,3 +32,8 @@ sha256 = "a2875c43ac168e6db4114aa433fcedd9ede2a197b63aa390dd0885464c496389"
 number = 7
 file = "0007_proposal_store.sql"
 sha256 = "92f2a168e6756500cc661a90d69a9cdba8435f26d0ab46d806556e4923a7ee9b"
+
+[[migration]]
+number = 8
+file = "0008_instrument_mappings.sql"
+sha256 = "3ca8969d7037814b80623db44995726103048e074ca877cb92ba714d7cff0483"

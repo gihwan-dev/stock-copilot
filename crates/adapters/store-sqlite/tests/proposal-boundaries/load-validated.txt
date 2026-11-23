@@ -1,6 +1,6 @@
 use application::ProposalRepository;
-use domain::{Proposal, ProposalId, Validated};
-pub async fn cannot_restore<R: ProposalRepository>(repo: &R, id: &ProposalId) {
-    let _loaded: Option<Proposal<Validated>> = repo.draft(id).await.expect("load");
+use domain::{MasterInstrument, Proposal, ProposalId, Validated};
+pub async fn cannot_restore<R: ProposalRepository>(repo: &R, id: &ProposalId, master: &MasterInstrument) {
+    let _loaded: Option<Proposal<Validated>> = repo.draft(id, master).await.expect("load");
 }
 fn main() {}

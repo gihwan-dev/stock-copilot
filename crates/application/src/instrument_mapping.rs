@@ -1,12 +1,12 @@
 use crate::SystemPortError;
 use domain::{
     InstrumentId, InstrumentMappingError, InstrumentMappingRecord, InstrumentSource,
-    MappingAssignment,
+    IssuedInstrumentId, MappingAssignment,
 };
 use std::future::Future;
 
 pub trait InstrumentIdIssuer: Send + Sync {
-    fn issue(&self) -> impl Future<Output = Result<InstrumentId, SystemPortError>> + Send;
+    fn issue(&self) -> impl Future<Output = Result<IssuedInstrumentId, SystemPortError>> + Send;
 }
 
 pub trait InstrumentMasterAuthority: Send + Sync {
@@ -60,7 +60,7 @@ pub trait InstrumentMappingRepository: Send + Sync {
     fn ensure(
         &self,
         source: &InstrumentSource,
-        candidate: &InstrumentId,
+        candidate: IssuedInstrumentId,
     ) -> impl Future<Output = Result<MappingAssignment, MappingStoreError>> + Send;
 
     fn retire(

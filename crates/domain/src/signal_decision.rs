@@ -322,9 +322,17 @@ pub fn signal_transition(
                 return Err(SignalTransitionError::InstrumentMismatch);
             }
             match (old, &value) {
-                (RaisedSignal::Buy(_), RaisedSignal::Buy(_))
-                | (RaisedSignal::Sell(_), RaisedSignal::Sell(_)) => {
+                (RaisedSignal::Buy(_), RaisedSignal::Buy(_)) => {
                     if old == &value {
+                        Ok(SignalTransition::Unchanged)
+                    } else {
+                        Ok(SignalTransition::Updated(value))
+                    }
+                }
+                (RaisedSignal::Sell(old_sell), RaisedSignal::Sell(new_sell)) => {
+                    if crate::sell_signal_matches_reassessed(old_sell, new_sell)
+                        == crate::CheckResult::Passed
+                    {
                         Ok(SignalTransition::Unchanged)
                     } else {
                         Ok(SignalTransition::Updated(value))
@@ -2367,6 +2375,65 @@ mod tests {
             &value,
             crate::AllocationError::CashObservationFailed(failures),
             SignalUnavailable::CashObservationFailed(failures),
+        );
+    }
+    #[test]
+    fn d57_sell_transition_keeps_unchanged_on_forward_observation_and_updates_on_change() {
+        let task = eligible();
+        let base_est = estimate(&task, 1, 0, 10, 1);
+        let diff_est = estimate(&task, 2, 0, 10, 1);
+        let policy = policy(0);
+        let mapping = assignments();
+        let types = facts();
+        let items = [item()];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let calendar = calendars();
+        let t0 = at(61);
+        let t5 = t0
+            .checked_add(TimeSpan::try_new(SpanSeconds::new(5), Nanosecond::new(0)).expect("5초"))
+            .expect("t5");
+        let t10 = t0
+            .checked_add(TimeSpan::try_new(SpanSeconds::new(10), Nanosecond::new(0)).expect("10초"))
+            .expect("t10");
+        let assess_sell = |est: &SignalEstimate, qty: &str, obs: Timestamp, eval: Timestamp| {
+            let val = portfolio(vec![holding(Market::Kr, "ABC", qty, obs)]);
+            let context = SignalContext::new(
+                Some(&val),
+                &policy,
+                (&mapping, &types),
+                &ledger,
+                assessment_facts(eval, &calendar),
+            );
+            SignalDecision::assess(est, &context)
+        };
+        let prev = assess_sell(&base_est, "5", t5, t5)
+            .into_signal()
+            .expect("이전 매도");
+        let forward = assess_sell(&base_est, "5", t10, t10);
+        assert_eq!(
+            crate::signal_transition(Some(&prev), &forward),
+            Ok(crate::SignalTransition::Unchanged)
+        );
+        let qty_changed = assess_sell(&base_est, "4", t10, t10);
+        assert_eq!(
+            crate::signal_transition(Some(&prev), &qty_changed),
+            Ok(crate::SignalTransition::Updated(
+                qty_changed.clone().into_signal().expect("수량 변경 매도")
+            ))
+        );
+        let regressed = assess_sell(&base_est, "5", t0, t10);
+        assert_eq!(
+            crate::signal_transition(Some(&prev), &regressed),
+            Ok(crate::SignalTransition::Updated(
+                regressed.clone().into_signal().expect("관측 역행 매도")
+            ))
+        );
+        let facts_changed = assess_sell(&diff_est, "5", t10, t10);
+        assert_eq!(
+            crate::signal_transition(Some(&prev), &facts_changed),
+            Ok(crate::SignalTransition::Updated(
+                facts_changed.clone().into_signal().expect("사실 변경 매도")
+            ))
         );
     }
 }

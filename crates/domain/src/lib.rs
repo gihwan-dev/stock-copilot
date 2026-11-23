@@ -10,16 +10,28 @@ pub use money_display::{
 mod account_id;
 mod client_order_id;
 mod instrument_id;
+mod instrument_issuer;
 mod instrument_mapping;
+mod instrument_mapping_change;
 mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
+pub use instrument_issuer::{
+    IdAdoption, IndependentInstrumentIdIssuer, InstrumentIdIssueError, IssuedInstrumentId,
+    IssuerSequence, IssuerSequenceError, PersistedIssuerCursor, ReservationStatus,
+};
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
     InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
+};
+pub use instrument_mapping_change::{
+    ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
+    IdentityChangeConfirmation, IdentityChangeEvidence, IdentityConfirmationOrigin,
+    MappingCorrectionConfirmation, MappingCorrectionEvidence, MappingHistoryEvent,
+    MappingTransitionError, UserIdentityConfirmation,
 };
 pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
@@ -400,7 +412,7 @@ mod buy_signal_history;
 mod concentration_policy;
 pub use buy_quantity::{
     BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,
-    calculate_buy_quantity,
+    calculate_buy_quantity, calculate_buy_quantity_with_history,
 };
 pub use buy_signal_history::{BuySignalOccurrenceId, BuySignalRecord, CurrentBuySignal};
 pub use concentration_policy::concentration_for_policy;
@@ -545,7 +557,8 @@ mod sell_draft_quantity;
 pub use sell_draft_quantity::{
     NoSellDraftQuantity, SellDraftQuantityAdjustmentError, SellDraftQuantityDecision,
     SellDraftQuantityFacts, SellDraftQuantityPlan, SellQuantityAdjustment, SellQuantityConstraint,
-    calculate_sell_draft_quantity, sell_signal_matches_reassessed,
+    calculate_sell_draft_quantity, calculate_sell_draft_quantity_with_history,
+    sell_signal_matches_reassessed,
 };
 
 mod limit_price;
@@ -634,4 +647,38 @@ mod valuation_recompute_contract;
 mod valuation_recompute;
 pub use valuation_recompute::{
     DatedSnapshotLedgers, ValuationHistoryEvidence, ValuationRecomputeInput,
+};
+
+mod estimate_restore;
+pub use estimate_restore::{
+    EstimateDisplayFacts, EstimateRestoreError, EstimateRestoreEvidence, HistoricalEstimate,
+    StoredEstimateEvidence,
+};
+
+mod draft_restore;
+pub use draft_restore::{
+    DraftOriginalFacts, DraftRestoreError, DraftRestoreEvidence, StoredPriceIdentity,
+    StoredPriceObservation,
+};
+
+mod historical_signal_context;
+mod signal_restore;
+pub use historical_signal_context::{
+    HistoricalBuyingPower, HistoricalBuyingPowerState, HistoricalCashMoney,
+    HistoricalClassificationError, HistoricalClassifications, HistoricalHolding,
+    HistoricalPortfolio, HistoricalPortfolioError, HistoricalPortfolioFacts,
+    HistoricalSectorAssignment, HistoricalSecurityType,
+};
+pub use signal_restore::{
+    HistoricalBuySignal, HistoricalSellSignal, HistoricalSignal, HistoricalSignalContext,
+    HistoricalSignalDirection, HistoricalSignalLimit, HistoricalSignalOccurrence,
+    HistoricalSignalQuantity, SignalDisplayFacts, SignalOccurrenceRestoreError, SignalRestoreError,
+    SignalRestoreEvidence, StoredSignalEvidence, StoredSignalOccurrence,
+    signal_transition_from_history,
+};
+
+mod draft_order_intent;
+pub use draft_order_intent::{
+    DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
+    HistoricalSellQuantity, HistoricalWholeQuantity,
 };

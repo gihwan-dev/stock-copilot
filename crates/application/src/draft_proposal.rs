@@ -1,22 +1,22 @@
 use crate::{
     BuyLimitIntentError, Clock, ConditionalDraftOutcome, CurrentDraftOutcome, DeliveryReport,
-    DraftCheck, EstimateSubmissionRepository, EvaluateSignalError, EvaluateSignalInputs, EventBus,
-    ProposalRepository, SellLimitIntentError, SignalCommitOutcome, SignalMutation,
-    SignalRepository, SignalSnapshot, StoredSignal, SystemPortError, WriteCompleted,
-    buy_limit_intent, sell_limit_intent,
+    DraftCheck, DraftStoreCandidate, EstimateSubmissionRepository, EvaluateSignalError,
+    EvaluateSignalInputs, EventBus, ProposalRepository, SellLimitIntentError, SignalCommitOutcome,
+    SignalMutation, SignalRepository, SignalSnapshot, StoredSignal, SystemPortError,
+    WriteCompleted, buy_limit_intent, sell_limit_intent,
 };
 use domain::{
     AccountId, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, CalculatedLimitPrice,
-    CheckResult, CostEligibleTask, CurrentBuySignal, DomainEvent, Draft, InstrumentId,
-    IssuedEstimateTaskId, LimitPriceError, MarketTradingStatus, MasterInstrument,
-    MasterInstrumentError, NoBuyQuantity, NoSellDraftQuantity, NoSignalReason, OrderSide,
-    Orderbook, PriceLimits, Proposal, ProposalError, ProposalExecutionError, ProposalId,
-    ProposalLifetime, ProposalPriceRange, RaisedSignal, SellDraftQuantityDecision,
-    SellDraftQuantityFacts, SellDraftQuantityPlan, SellSignal, SellableQuantityFact,
-    SignalDecision, SignalTiming, SignalTransitionError, SignalUnavailable, TickSizeError,
-    TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price,
-    calculate_sell_draft_quantity, market_state_at, sell_signal_matches_reassessed,
-    signal_transition,
+    CheckResult, CostEligibleTask, CurrentBuySignal, DomainEvent, Draft, DraftRestoreError,
+    DraftRestoreEvidence, HistoricalSignal, InstrumentId, IssuedEstimateTaskId, LimitPriceError,
+    MarketTradingStatus, MasterInstrument, MasterInstrumentError, NoBuyQuantity,
+    NoSellDraftQuantity, NoSignalReason, OrderSide, Orderbook, PriceLimits, Proposal,
+    ProposalError, ProposalExecutionError, ProposalId, ProposalLifetime, ProposalPriceRange,
+    RaisedSignal, SellDraftQuantityDecision, SellDraftQuantityFacts, SellDraftQuantityPlan,
+    SellSignal, SellableQuantityFact, SignalDecision, SignalTiming, SignalTransitionError,
+    SignalUnavailable, TickSizeError, TickTable, Timestamp, calculate_buy_quantity_with_history,
+    calculate_limit_price, calculate_sell_draft_quantity_with_history, market_state_at,
+    signal_transition_from_history,
 };
 use std::future::Future;
 
@@ -80,6 +80,7 @@ pub enum DraftProposalError {
     Limit(LimitPriceError),
     BuyIntent(BuyLimitIntentError),
     Proposal(ProposalError),
+    Restoration(DraftRestoreError),
     DraftStatus(ProposalExecutionError),
     Transition(SignalTransitionError),
     SubmissionDiscarded,
@@ -102,6 +103,7 @@ struct DraftRequest<'a> {
 
 struct PreparedDraft {
     inputs: DraftProposalInputs,
+    live_signal: RaisedSignal,
     range: ProposalPriceRange,
 }
 
@@ -116,9 +118,13 @@ enum Attempt {
 }
 
 enum DraftCandidate {
-    Buy(Box<Proposal<Draft>>),
+    Buy {
+        proposal: Box<Proposal<Draft>>,
+        evidence: Box<DraftRestoreEvidence>,
+    },
     Sell {
         proposal: Box<Proposal<Draft>>,
+        evidence: Box<DraftRestoreEvidence>,
         plan: Box<SellDraftQuantityPlan>,
     },
 }
@@ -207,7 +213,7 @@ where
         current: &StoredSignal,
         prepared: &PreparedDraft,
     ) -> Result<Attempt, DraftProposalError> {
-        let Some(read_at) = self.recheck(current, &prepared.inputs)? else {
+        let Some(read_at) = self.recheck(&prepared.live_signal, &prepared.inputs)? else {
             return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
         };
         let observation = prepared.inputs.evaluation.target_price.as_ref().ok_or(
@@ -220,6 +226,7 @@ where
             account: request.account,
             at: read_at,
             observation,
+            master: &prepared.inputs.master,
         };
         if let Some(outcome) = self
             .check_existing_draft(request.instrument, snapshot, read_check)
@@ -228,32 +235,42 @@ where
             return Ok(outcome);
         }
         let candidate = self.make_proposal(request, current, prepared).await?;
-        let Some(write_at) = self.recheck(current, &prepared.inputs)? else {
+        let Some(write_at) = self.recheck(&prepared.live_signal, &prepared.inputs)? else {
             return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
         };
-        let proposal = match candidate {
-            DraftCandidate::Buy(proposal) => {
+        let (proposal, evidence) = match candidate {
+            DraftCandidate::Buy { proposal, evidence } => {
                 proposal
                     .check_current(write_at, observation)
                     .map_err(DraftProposalError::DraftStatus)?;
-                *proposal
+                (*proposal, *evidence)
             }
-            DraftCandidate::Sell { proposal, plan } => {
+            DraftCandidate::Sell {
+                proposal,
+                evidence,
+                plan,
+            } => {
                 proposal
                     .check_current(write_at, observation)
                     .map_err(DraftProposalError::DraftStatus)?;
                 plan.check_facts_at(write_at, &prepared.inputs.evaluation.calendars)
                     .map_err(DraftProposalError::SellQuantity)?;
-                *proposal
+                (*proposal, *evidence)
             }
         };
         let write_check = DraftCheck {
             account: request.account,
             at: write_at,
             observation,
+            master: &prepared.inputs.master,
         };
-        self.store_candidate(request.instrument, snapshot, proposal, write_check)
-            .await
+        self.store_candidate(
+            request.instrument,
+            snapshot,
+            (proposal, evidence),
+            write_check,
+        )
+        .await
     }
 
     async fn check_existing_draft(
@@ -295,12 +312,21 @@ where
         &self,
         instrument: &InstrumentId,
         snapshot: &SignalSnapshot,
-        proposal: Proposal<Draft>,
+        candidate: (Proposal<Draft>, DraftRestoreEvidence),
         check: DraftCheck<'_>,
     ) -> Result<Attempt, DraftProposalError> {
+        let (proposal, evidence) = candidate;
         match self
             .repository
-            .store_current_draft(instrument, snapshot, &proposal, check)
+            .store_current_draft(
+                instrument,
+                snapshot,
+                DraftStoreCandidate {
+                    proposal: &proposal,
+                    evidence: &evidence,
+                },
+                check,
+            )
             .await
             .map_err(DraftProposalError::Storage)?
         {
@@ -368,7 +394,7 @@ where
             .map_err(DraftProposalError::Inputs)?;
         match market_state_at(
             &inputs.evaluation.calendars,
-            &signal_task(current).reference().instrument().market(),
+            &current.signal.market(),
             request.now,
         )
         .trading_status()
@@ -402,8 +428,9 @@ where
                 .ok_or(DraftProposalError::Observation(
                     SignalUnavailable::MissingTargetPrice,
                 ))?;
-        observation
-            .validate_for_task(signal_task(current), request.now)
+        current
+            .signal
+            .validate_observation(observation, request.now)
             .map_err(DraftProposalError::Observation)?;
         let sources = self
             .repository
@@ -418,25 +445,27 @@ where
             request.now,
         )
         .map_err(DraftProposalError::Evaluation)?;
-        match &reassessed {
+        let live_signal = match reassessed {
             SignalDecision::None(reason) => {
-                return Err(DraftProposalError::SignalUnavailable(*reason));
+                return Err(DraftProposalError::SignalUnavailable(reason));
             }
-            SignalDecision::Buy(_) | SignalDecision::Sell(_) => {}
-        }
-        match signal_matches(&current.signal, &reassessed) {
+            SignalDecision::Buy(value) => RaisedSignal::Buy(value),
+            SignalDecision::Sell(value) => RaisedSignal::Sell(value),
+        };
+        match current.signal.matches_live(&live_signal) {
             CheckResult::Passed => {}
             CheckResult::Failed | CheckResult::Unknown => {
                 return Err(DraftProposalError::SignalChanged);
             }
         }
         let range = ProposalPriceRange::from_estimate_task(
-            signal_task(current).range_facts(),
+            signal_task(&live_signal).range_facts(),
             observation.clone(),
         )
         .map_err(DraftProposalError::Proposal)?;
         Ok(Preparation::Ready(Box::new(PreparedDraft {
             inputs,
+            live_signal,
             range,
         })))
     }
@@ -447,25 +476,30 @@ where
         current: &StoredSignal,
         prepared: &PreparedDraft,
     ) -> Result<DraftCandidate, DraftProposalError> {
-        match &current.signal {
+        match &prepared.live_signal {
             RaisedSignal::Buy(buy) => {
                 self.make_buy_proposal(request, (buy, current.occurrence.as_ref()), prepared)
                     .await
             }
-            RaisedSignal::Sell(signal) => self.make_sell_proposal(request, signal, prepared),
+            RaisedSignal::Sell(signal) => {
+                self.make_sell_proposal(request, (signal, &current.signal), prepared)
+            }
         }
     }
 
     async fn make_buy_proposal(
         &self,
         request: &DraftRequest<'_>,
-        buy_signal: (&domain::BuySignal, Option<&domain::BuySignalRecord>),
+        buy_signal: (
+            &domain::BuySignal,
+            Option<&domain::HistoricalSignalOccurrence>,
+        ),
         prepared: &PreparedDraft,
     ) -> Result<DraftCandidate, DraftProposalError> {
         let (buy, stored_occurrence) = buy_signal;
         let occurrence =
             stored_occurrence.ok_or(DraftProposalError::Quantity(NoBuyQuantity::Indeterminate))?;
-        let current_buy = CurrentBuySignal::try_new(buy.clone(), occurrence.clone())
+        let current_buy = CurrentBuySignal::try_from_history(buy.clone(), occurrence.clone())
             .map_err(DraftProposalError::Quantity)?;
         let (plan, calculated_at) = self
             .buy_plan(request, &current_buy, &prepared.inputs.evaluation)
@@ -486,16 +520,21 @@ where
             ProposalLifetime::default(),
         )
         .map_err(DraftProposalError::Proposal)?;
-        Ok(DraftCandidate::Buy(Box::new(proposal)))
+        let evidence = capture_draft_evidence(&proposal, &prepared.live_signal, &prepared.inputs)?;
+        Ok(DraftCandidate::Buy {
+            proposal: Box::new(proposal),
+            evidence: Box::new(evidence),
+        })
     }
 
     fn make_sell_proposal(
         &self,
         request: &DraftRequest<'_>,
-        signal: &SellSignal,
+        sell_signal: (&SellSignal, &HistoricalSignal),
         prepared: &PreparedDraft,
     ) -> Result<DraftCandidate, DraftProposalError> {
-        let (plan, calculated_at) = self.sell_plan(request, signal, &prepared.inputs)?;
+        let (signal, stored) = sell_signal;
+        let (plan, calculated_at) = self.sell_plan(request, signal, stored, &prepared.inputs)?;
         let limit = limit_price(&prepared.inputs, OrderSide::Sell, calculated_at)?;
         let intent = sell_limit_intent(
             &plan,
@@ -512,8 +551,10 @@ where
             ProposalLifetime::default(),
         )
         .map_err(DraftProposalError::Proposal)?;
+        let evidence = capture_draft_evidence(&proposal, &prepared.live_signal, &prepared.inputs)?;
         Ok(DraftCandidate::Sell {
             proposal: Box::new(proposal),
+            evidence: Box::new(evidence),
             plan: Box::new(plan),
         })
     }
@@ -522,6 +563,7 @@ where
         &self,
         request: &DraftRequest<'_>,
         signal: &SellSignal,
+        stored: &HistoricalSignal,
         inputs: &DraftProposalInputs,
     ) -> Result<(SellDraftQuantityPlan, Timestamp), DraftProposalError> {
         let valuation = inputs
@@ -535,8 +577,9 @@ where
             inputs.sellable_quantity.as_ref(),
         );
         let calculated_at = self.clock.now();
-        match calculate_sell_draft_quantity(
+        match calculate_sell_draft_quantity_with_history(
             signal,
+            stored,
             &facts,
             calculated_at,
             &inputs.evaluation.calendars,
@@ -584,7 +627,13 @@ where
             (costs.fx, &costs.commission),
         );
         let calculated_at = self.clock.now();
-        match calculate_buy_quantity(current, &facts, calculated_at, &inputs.calendars, &history) {
+        match calculate_buy_quantity_with_history(
+            current,
+            &facts,
+            calculated_at,
+            &inputs.calendars,
+            &history,
+        ) {
             BuyQuantityDecision::Plan(plan) => Ok((*plan, calculated_at)),
             BuyQuantityDecision::None(reason) => Err(DraftProposalError::Quantity(reason)),
         }
@@ -592,11 +641,11 @@ where
 
     fn recheck(
         &self,
-        current: &StoredSignal,
+        live_signal: &RaisedSignal,
         inputs: &DraftProposalInputs,
     ) -> Result<Option<Timestamp>, DraftProposalError> {
         let now = self.clock.now();
-        let task = signal_task(current);
+        let task = signal_task(live_signal);
         let state = market_state_at(
             &inputs.evaluation.calendars,
             &task.reference().instrument().market(),
@@ -619,7 +668,7 @@ where
         observation
             .validate_for_task(task, now)
             .map_err(DraftProposalError::Observation)?;
-        let submission = match &current.signal {
+        let submission = match live_signal {
             RaisedSignal::Buy(value) => value.facts().submission(),
             RaisedSignal::Sell(value) => value.facts().submission(),
         };
@@ -635,7 +684,7 @@ where
         snapshot: &SignalSnapshot,
         current: &StoredSignal,
     ) -> Result<Attempt, DraftProposalError> {
-        let transition = signal_transition(
+        let transition = signal_transition_from_history(
             Some(&current.signal),
             &SignalDecision::None(NoSignalReason::Expired),
         )
@@ -674,19 +723,6 @@ where
     }
 }
 
-fn signal_matches(stored: &RaisedSignal, reassessed: &SignalDecision) -> CheckResult {
-    match (stored, reassessed) {
-        (RaisedSignal::Buy(old), SignalDecision::Buy(fresh)) if old == fresh => CheckResult::Passed,
-        (RaisedSignal::Sell(old), SignalDecision::Sell(fresh)) => {
-            sell_signal_matches_reassessed(old, fresh)
-        }
-        (
-            RaisedSignal::Buy(_) | RaisedSignal::Sell(_),
-            SignalDecision::Buy(_) | SignalDecision::Sell(_) | SignalDecision::None(_),
-        ) => CheckResult::Failed,
-    }
-}
-
 fn limit_price(
     inputs: &DraftProposalInputs,
     side: OrderSide,
@@ -697,8 +733,43 @@ fn limit_price(
         .map_err(DraftProposalError::Limit)
 }
 
-fn signal_task(current: &StoredSignal) -> &domain::EstimateTask {
-    match &current.signal {
+fn capture_draft_evidence(
+    proposal: &Proposal<Draft>,
+    live_signal: &RaisedSignal,
+    inputs: &DraftProposalInputs,
+) -> Result<DraftRestoreEvidence, DraftProposalError> {
+    let basis = inputs
+        .evaluation
+        .restoration
+        .as_ref()
+        .ok_or(DraftProposalError::Evaluation(
+            EvaluateSignalError::RestorationUnavailable,
+        ))?;
+    basis
+        .estimate
+        .verify_matches_task(signal_task(live_signal), &inputs.master)
+        .map_err(DraftRestoreError::Estimate)
+        .map_err(DraftProposalError::Restoration)?;
+    let observation =
+        inputs
+            .evaluation
+            .target_price
+            .as_ref()
+            .ok_or(DraftProposalError::Observation(
+                SignalUnavailable::MissingTargetPrice,
+            ))?;
+    DraftRestoreEvidence::capture(
+        proposal,
+        basis.estimate.clone(),
+        &inputs.master,
+        ProposalLifetime::default(),
+        observation,
+    )
+    .map_err(DraftProposalError::Restoration)
+}
+
+fn signal_task(signal: &RaisedSignal) -> &domain::EstimateTask {
+    match signal {
         RaisedSignal::Buy(value) => value.facts().task(),
         RaisedSignal::Sell(value) => value.facts().task(),
     }
@@ -710,19 +781,16 @@ fn check_identity(
     issued: &CostEligibleTask,
     source: &MasterInstrument,
 ) -> Result<(), DraftProposalError> {
-    let side = match &current.signal {
-        RaisedSignal::Buy(_) => OrderSide::Buy,
-        RaisedSignal::Sell(_) => OrderSide::Sell,
-    };
+    let side = current.signal.side();
     let master = source
         .order_gate_facts()
         .and_then(|facts| facts.instrument_for(side))
         .map_err(DraftProposalError::Master)?;
-    let task = signal_task(current);
     if source.row().instrument_id != *instrument
-        || task.volatility().instrument() != instrument
-        || task.reference().instrument() != &master
-        || issued.task() != task
+        || current
+            .signal
+            .verify_task_identity(instrument, issued, &master)
+            .is_err()
     {
         return Err(DraftProposalError::InstrumentMismatch);
     }

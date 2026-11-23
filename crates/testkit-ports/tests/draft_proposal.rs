@@ -35,18 +35,65 @@ mod tests {
         }
     }
 
+    fn kr_stored_estimate(source: &MasterInstrument) -> domain::StoredEstimateEvidence {
+        let high = if source.row().instrument_id == fixtures::master().row().instrument_id {
+            "102"
+        } else {
+            "104"
+        };
+        let eligible = fixtures::eligible_for_master(high, source);
+        fixtures::candidate_stored_task(
+            eligible.task(),
+            source,
+            domain::Horizon::new(domain::HorizonSelection::FewDays),
+        )
+        .expect("과제 근거")
+    }
+
+    fn draft_evidence(
+        source: &MasterInstrument,
+        proposal: &domain::Proposal<domain::Draft>,
+    ) -> domain::DraftRestoreEvidence {
+        let card = source
+            .price_observation(
+                fixtures::price("100"),
+                fixtures::local(proposal.created_at()),
+            )
+            .expect("시세");
+        domain::DraftRestoreEvidence::capture(
+            proposal,
+            kr_stored_estimate(source),
+            source,
+            domain::ProposalLifetime::default(),
+            &card,
+        )
+        .expect("초안 근거")
+    }
+
     fn inputs(source: &MasterInstrument, now: Timestamp) -> EvaluateSignalInputs {
         let head = fixtures::head(0);
         let table = Calibration::try_new(fixtures::calibration_key(), &[]).expect("표");
-        let portfolio = domain::Portfolio::new(
+        let raw_portfolio = domain::Portfolio::new(
             vec![],
             domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), now),
             domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
         )
-        .expect("포트")
-        .evaluate(None);
+        .expect("포트");
+        let portfolio = raw_portfolio.evaluate(None);
         let assignments = sectors(source, now);
         let rate = CostRate::try_new(fixtures::ratio("0")).expect("수수료율");
+        let commission = CommissionRateFact::from_commissions_result(
+            Market::Kr,
+            rate,
+            CommissionValidity::try_new(None, None).expect("유효"),
+        );
+        let maturity = fixtures::at(
+            fixtures::day(65)
+                .utc_seconds()
+                .as_i64()
+                .checked_add(3600)
+                .expect("만기"),
+        );
         EvaluateSignalInputs {
             calibration: Some(CalibrationSnapshot::try_new(table, head.clone()).expect("스냅숏")),
             calibration_head: Some(head),
@@ -66,11 +113,17 @@ mod tests {
                 .collect(),
             quantity_costs: Some(SignalQuantityCosts {
                 fx: OrderFxRates::missing(),
-                commission: CommissionRateFact::from_commissions_result(
-                    Market::Kr,
-                    rate,
-                    CommissionValidity::try_new(None, None).expect("유효"),
-                ),
+                commission: commission.clone(),
+            }),
+            restoration: Some(application::SignalRestorationBasis {
+                master: source.clone(),
+                holding_masters: vec![],
+                estimate: kr_stored_estimate(source),
+                commission,
+                tax: domain::TradeTaxFact::from_schedule_result(Market::Kr, rate, rate),
+                maturity,
+                portfolio: Some(raw_portfolio),
+                rate: None,
             }),
         }
     }
@@ -160,6 +213,11 @@ mod tests {
     struct PairedData<'a> {
         inputs: DraftProposalInputs,
         barrier: &'a Barrier,
+    }
+    impl<'a> PairedData<'a> {
+        const fn new(inputs: DraftProposalInputs, barrier: &'a Barrier) -> Self {
+            Self { inputs, barrier }
+        }
     }
     impl DraftProposalData for PairedData<'_> {
         fn inputs(
@@ -278,6 +336,7 @@ mod tests {
     }
     struct StoredObserver {
         repository: Arc<MemorySignalEvaluationRepository>,
+        master: MasterInstrument,
         observed: Arc<RwLock<Vec<ProposalId>>>,
     }
     impl EventSubscriber for StoredObserver {
@@ -285,8 +344,8 @@ mod tests {
             let domain::DomainEvent::ProposalCreated(id) = event else {
                 return Err(SubscriberFailure::Unavailable);
             };
-            let stored =
-                run(self.repository.draft(id)).map_err(|_error| SubscriberFailure::Unavailable)?;
+            let stored = run(self.repository.draft(id, &self.master))
+                .map_err(|_error| SubscriberFailure::Unavailable)?;
             if stored.is_none() {
                 return Err(SubscriberFailure::Unavailable);
             }
@@ -500,6 +559,7 @@ mod tests {
             std::iter::once(domain::DomainEventKind::ProposalCreated).collect(),
             StoredObserver {
                 repository: Arc::clone(&repository),
+                master: source.clone(),
                 observed: Arc::clone(&observed),
             },
         );
@@ -540,9 +600,9 @@ mod tests {
         );
         assert_eq!(
             proposal.intent().terms(),
-            &domain::OrderTerms::KrLimit {
+            domain::HistoricalOrderTerms::KrLimit {
                 side: domain::OrderSide::Buy,
-                quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity("1"))
+                quantity: domain::HistoricalWholeQuantity::try_new(fixtures::quantity("1"))
                     .expect("수량"),
                 price: domain::KrOrderPrice::try_new(fixtures::price("100")).expect("가격"),
             }
@@ -630,7 +690,11 @@ mod tests {
             panic!("기존 초안")
         };
         assert_eq!(proposal_id, first_id);
-        assert!(run(repository.draft(&second_id)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(&second_id, &source))
+                .expect("조회")
+                .is_none()
+        );
         assert_eq!(
             events.read().expect("이벤트").as_slice(),
             &[domain::DomainEvent::ProposalCreated(first_id)]
@@ -713,15 +777,16 @@ mod tests {
             domain::HoldingObservation::new(Some(fixtures::price("9950")), None, now),
         )
         .expect("보유");
-        facts.evaluation.valuation = Some(
-            domain::Portfolio::new(
-                vec![holding],
-                domain::BuyingPower::new(fixtures::money("50", Currency::Krw), now),
-                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
-            )
-            .expect("포트")
-            .evaluate(None),
-        );
+        let raw_portfolio = domain::Portfolio::new(
+            vec![holding],
+            domain::BuyingPower::new(fixtures::money("50", Currency::Krw), now),
+            domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+        )
+        .expect("포트");
+        facts.evaluation.valuation = Some(raw_portfolio.evaluate(None));
+        let restoration = facts.evaluation.restoration.as_mut().expect("복원");
+        restoration.holding_masters = vec![other];
+        restoration.portfolio = Some(raw_portfolio);
         facts
     }
 
@@ -757,11 +822,23 @@ mod tests {
         else {
             panic!("현금 부족 계좌는 이전 계좌 초안을 재사용하지 않아야 한다: {second:?}")
         };
-        assert!(run(repository.draft(&first_id)).expect("대체").is_none());
+        assert!(
+            run(repository.draft(&first_id, &source))
+                .expect("대체")
+                .is_none()
+        );
         repository.select_account(AccountId::new(4321));
-        assert!(run(repository.draft(&first_id)).expect("복귀").is_none());
+        assert!(
+            run(repository.draft(&first_id, &source))
+                .expect("복귀")
+                .is_none()
+        );
         repository.select_account(AccountId::new(8765));
-        assert!(run(repository.draft(&second_id)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(&second_id, &source))
+                .expect("조회")
+                .is_none()
+        );
         assert_eq!(
             events.read().expect("이벤트").as_slice(),
             &[domain::DomainEvent::ProposalCreated(first_id)]
@@ -797,8 +874,16 @@ mod tests {
         };
         assert_eq!(proposal.id(), &second_id);
         assert_eq!(proposal.intent().account_id(), &AccountId::new(8765));
-        assert!(run(repository.draft(&first_id)).expect("이전").is_none());
-        assert!(run(repository.draft(&second_id)).expect("현재").is_some());
+        assert!(
+            run(repository.draft(&first_id, &source))
+                .expect("이전")
+                .is_none()
+        );
+        assert!(
+            run(repository.draft(&second_id, &source))
+                .expect("현재")
+                .is_some()
+        );
         assert_eq!(
             events.read().expect("이벤트").as_slice(),
             &[
@@ -815,15 +900,10 @@ mod tests {
         let seed_data = Data::new(market(&source, now));
         let repository = seeded(&source, &seed_data);
         let barrier = Barrier::new(2);
-        let data = PairedData {
-            inputs: market(&source, now),
-            barrier: &barrier,
-        };
-        let scheduler = Scheduler::default();
-        let clock = testkit_ports::SteppedClock::new(now);
+        let data = PairedData::new(market(&source, now), &barrier);
+        let (scheduler, clock) = (Scheduler::default(), testkit_ports::SteppedClock::new(now));
         let (bus, events) = event_bus();
-        let first_id = proposal_id("race-first");
-        let second_id = proposal_id("race-second");
+        let (first_id, second_id) = (proposal_id("race-first"), proposal_id("race-second"));
         let results =
             std::thread::scope(|scope| {
                 let run_one =
@@ -834,8 +914,7 @@ mod tests {
                         )
                         .expect("결과")
                     };
-                let first_key = first_id.clone();
-                let second_key = second_id.clone();
+                let (first_key, second_key) = (first_id.clone(), second_id.clone());
                 let first = scope.spawn(move || run_one(first_key));
                 let second = scope.spawn(move || run_one(second_key));
                 (
@@ -860,36 +939,62 @@ mod tests {
         } else {
             &first_id
         };
-        assert!(run(repository.draft(created)).expect("저장").is_some());
-        assert!(run(repository.draft(other)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(created, &source))
+                .expect("저장")
+                .is_some()
+        );
+        assert!(
+            run(repository.draft(other, &source))
+                .expect("조회")
+                .is_none()
+        );
         assert_eq!(
             events.read().expect("이벤트").as_slice(),
             &[domain::DomainEvent::ProposalCreated(created.clone())]
         );
     }
 
+    fn draft_candidate<'a>(
+        proposal: &'a domain::Proposal<domain::Draft>,
+        evidence: &'a domain::DraftRestoreEvidence,
+    ) -> application::DraftStoreCandidate<'a> {
+        application::DraftStoreCandidate { proposal, evidence }
+    }
+
+    fn draft_check<'a>(
+        account: &'a AccountId,
+        at: Timestamp,
+        observation: &'a domain::PriceObservation,
+        master: &'a MasterInstrument,
+    ) -> application::DraftCheck<'a> {
+        application::DraftCheck {
+            account,
+            at,
+            observation,
+            master,
+        }
+    }
+
     #[test]
     fn concurrent_conditional_stores_atomically_choose_one_draft() {
-        let source = fixtures::master();
-        let now = fixtures::day(60);
+        let (source, now) = (fixtures::master(), fixtures::day(60));
         let data = Data::new(market(&source, now));
         let first = independent_draft(&source, &data, now, proposal_id("atomic-first"));
         let second = independent_draft(&source, &data, now, proposal_id("atomic-second"));
         let repository = seeded(&source, &data);
         let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("신호");
-        let observation = current_observation(&data);
+        let (observation, account) = (current_observation(&data), AccountId::new(4321));
+        let check = draft_check(&account, now, &observation, &source);
         let barrier = Barrier::new(3);
         let attempt = |proposal: &domain::Proposal<domain::Draft>| {
+            let evidence = draft_evidence(&source, proposal);
             barrier.wait();
             run(repository.store_current_draft(
                 &source.row().instrument_id,
                 &snapshot,
-                proposal,
-                application::DraftCheck {
-                    account: &AccountId::new(4321),
-                    at: now,
-                    observation: &observation,
-                },
+                draft_candidate(proposal, &evidence),
+                check,
             ))
             .expect("저장")
         };
@@ -921,8 +1026,16 @@ mod tests {
         } else {
             first.id()
         };
-        assert!(run(repository.draft(winner)).expect("저장").is_some());
-        assert!(run(repository.draft(other)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(winner, &source))
+                .expect("저장")
+                .is_some()
+        );
+        assert!(
+            run(repository.draft(other, &source))
+                .expect("조회")
+                .is_none()
+        );
         assert_eq!(repository.draft_attempts(), 2);
     }
 
@@ -932,14 +1045,18 @@ mod tests {
         let now = fixtures::day(60);
         let data = Data::new(market(&source, now));
         let proposal = independent_draft(&source, &data, now, proposal_id("unkeyed"));
+        let evidence = draft_evidence(&source, &proposal);
         let repository = seeded(&source, &data);
         let error = SystemPortError::new(
             application::SystemPort::Repository,
             application::SystemFailure::InvalidData,
         );
-        assert_eq!(run(repository.store_draft(&proposal)), Err(error));
+        assert_eq!(
+            run(repository.store_draft(&proposal, &evidence, &source)),
+            Err(error)
+        );
         assert!(
-            run(repository.draft(proposal.id()))
+            run(repository.draft(proposal.id(), &source))
                 .expect("초안")
                 .is_none()
         );
@@ -989,9 +1106,13 @@ mod tests {
             panic!("다른 종목 초안")
         };
         assert_ne!(one.id(), two.id());
-        assert!(run(repository.draft(one.id())).expect("첫 조회").is_some());
         assert!(
-            run(repository.draft(two.id()))
+            run(repository.draft(one.id(), &first))
+                .expect("첫 조회")
+                .is_some()
+        );
+        assert!(
+            run(repository.draft(two.id(), &second))
                 .expect("두 번째 조회")
                 .is_some()
         );
@@ -1022,7 +1143,7 @@ mod tests {
         let evaluation_bus = EventBusBuilder::default().build();
         submit(&repository, &evaluation_bus, "task-new", &source);
         assert!(
-            run(repository.draft(&old_id))
+            run(repository.draft(&old_id, &source))
                 .expect("오래된 초안")
                 .is_none()
         );
@@ -1047,7 +1168,11 @@ mod tests {
             panic!("새 신호의 초안")
         };
         assert_eq!(proposal.id(), &new_id);
-        assert!(run(repository.draft(&old_id)).expect("이전 초안").is_none());
+        assert!(
+            run(repository.draft(&old_id, &source))
+                .expect("이전 초안")
+                .is_none()
+        );
         assert_eq!(events.read().expect("이벤트").len(), 2);
     }
 
@@ -1309,7 +1434,7 @@ mod tests {
             before
         );
         assert!(
-            run(repository.draft(&proposal_id("failure")))
+            run(repository.draft(&proposal_id("failure"), &source))
                 .expect("조회")
                 .is_none()
         );
@@ -1385,7 +1510,7 @@ mod tests {
         );
         assert_eq!(repository.draft_attempts(), 0);
         assert!(
-            run(repository.draft(&proposal_id("changed-head")))
+            run(repository.draft(&proposal_id("changed-head"), &source))
                 .expect("초안")
                 .is_none()
         );
@@ -1405,15 +1530,19 @@ mod tests {
             domain::HoldingObservation::new(Some(fixtures::price("100")), None, now),
         )
         .expect("보유");
-        facts.evaluation.valuation = Some(
-            domain::Portfolio::new(
-                vec![holding],
-                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), now),
-                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
-            )
-            .expect("포트")
-            .evaluate(None),
-        );
+        let raw_portfolio = domain::Portfolio::new(
+            vec![holding],
+            domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), now),
+            domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+        )
+        .expect("포트");
+        facts.evaluation.valuation = Some(raw_portfolio.evaluate(None));
+        facts
+            .evaluation
+            .restoration
+            .as_mut()
+            .expect("복원")
+            .portfolio = Some(raw_portfolio);
         let data = Data::new(facts);
         let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
         repository.select_account(AccountId::new(4321));
@@ -1451,7 +1580,7 @@ mod tests {
         let (data, repository) = sell_fixture(&source, now);
         let signal = run(repository.snapshot(&source.row().instrument_id)).expect("상태");
         let Some(StoredSignal {
-            signal: domain::RaisedSignal::Sell(_),
+            signal: domain::HistoricalSignal::Sell(_),
             ..
         }) = &signal.current
         else {
@@ -1488,6 +1617,7 @@ mod tests {
     #[test]
     fn sell_reversal_does_not_return_a_previous_buy_draft() {
         let source = fixtures::master();
+        let id = &source.row().instrument_id;
         let now = fixtures::day(60);
         let data = Data::new(market(&source, now));
         let repository = seeded(&source, &data);
@@ -1495,14 +1625,9 @@ mod tests {
         let clock = testkit_ports::SteppedClock::new(now);
         let (bus, events) = event_bus();
         let old_id = proposal_id("before-sell");
+        let dp = DraftProposal::new(&repository, &data, &scheduler, &clock, &bus);
         let Ok(DraftProposalOutcome::Created { .. }) =
-            run(
-                DraftProposal::new(&repository, &data, &scheduler, &clock, &bus).execute(
-                    &source.row().instrument_id,
-                    &AccountId::new(4321),
-                    old_id.clone(),
-                ),
-            )
+            run(dp.execute(id, &AccountId::new(4321), old_id.clone()))
         else {
             panic!("기존 매수 초안")
         };
@@ -1514,7 +1639,7 @@ mod tests {
             vec![fixtures::input("task-new", "1", &source)],
         ))
         .expect("제출");
-        let submitted = run(repository.snapshot(&source.row().instrument_id)).expect("신호");
+        let submitted = run(repository.snapshot(id)).expect("신호");
         repository.save_sources(
             submitted.submission.expect("과제"),
             application::SignalSourceFacts {
@@ -1525,26 +1650,23 @@ mod tests {
         );
         run(
             EvaluateSignals::new(&repository, &data, &evaluation_bus).execute(
-                &source.row().instrument_id,
+                id,
                 now,
                 BuySignalOccurrenceId::try_new("sell-reversal").expect("발생"),
             ),
         )
         .expect("매도 평가");
-        let result = run(
-            DraftProposal::new(&repository, &data, &scheduler, &clock, &bus).execute(
-                &source.row().instrument_id,
-                &AccountId::new(4321),
-                proposal_id("after-sell"),
-            ),
+        let err = run(dp.execute(id, &AccountId::new(4321), proposal_id("after-sell")))
+            .expect_err("매도가능수량 미확인");
+        assert_eq!(
+            err,
+            DraftProposalError::SellQuantity(domain::NoSellDraftQuantity::SellableQuantityUnknown)
         );
-        let Err(DraftProposalError::SellQuantity(
-            domain::NoSellDraftQuantity::SellableQuantityUnknown,
-        )) = result
-        else {
-            panic!("매도가능수량 미확인")
-        };
-        assert!(run(repository.draft(&old_id)).expect("이전 초안").is_none());
+        assert!(
+            run(repository.draft(&old_id, &source))
+                .expect("이전 초안")
+                .is_none()
+        );
         assert_eq!(events.read().expect("이벤트").len(), 1);
     }
 
@@ -1599,7 +1721,7 @@ mod tests {
         };
         assert_eq!(conflicting_repository.snapshot_reads() - before, 3);
         assert!(
-            run(conflicting_repository.draft(&proposal_id("retry-stop")))
+            run(conflicting_repository.draft(&proposal_id("retry-stop"), &source))
                 .expect("조회")
                 .is_none()
         );
@@ -1829,29 +1951,29 @@ mod tests {
         ))
         .expect("비활성화");
         let observation = current_observation(&data);
+        let evidence = draft_evidence(&source, &proposal);
+        let account = AccountId::new(4321);
+        let check = application::DraftCheck {
+            account: &account,
+            at: now,
+            observation: &observation,
+            master: &source,
+        };
+        let candidate = application::DraftStoreCandidate {
+            proposal: &proposal,
+            evidence: &evidence,
+        };
         assert_eq!(
             run(repository.store_current_draft(
                 &source.row().instrument_id,
                 &stale,
-                &proposal,
-                application::DraftCheck {
-                    account: &AccountId::new(4321),
-                    at: now,
-                    observation: &observation,
-                },
+                candidate,
+                check,
             )),
             Ok(application::ConditionalDraftOutcome::Conflict)
         );
         assert_eq!(
-            run(repository.current_draft(
-                &source.row().instrument_id,
-                &stale,
-                application::DraftCheck {
-                    account: &AccountId::new(4321),
-                    at: now,
-                    observation: &observation,
-                },
-            )),
+            run(repository.current_draft(&source.row().instrument_id, &stale, check)),
             Ok(application::CurrentDraftOutcome::Conflict)
         );
         assert!(
@@ -1882,6 +2004,7 @@ mod tests {
                 account: &AccountId::new(4321),
                 at: now,
                 observation: &observation,
+                master: &source,
             },
         ));
         assert_eq!(
@@ -1926,6 +2049,7 @@ mod tests {
                 account: &AccountId::new(4321),
                 at: now,
                 observation: &observation,
+                master: &source,
             },
         ));
         assert_eq!(
@@ -1934,7 +2058,7 @@ mod tests {
                 domain::ProposalExecutionError::ClockRollback,
             ))
         );
-        assert!(run(repository.draft(&id)).expect("보존").is_some());
+        assert!(run(repository.draft(&id, &source)).expect("보존").is_some());
         assert_eq!(events.read().expect("이벤트").len(), 1);
     }
 
@@ -2023,15 +2147,19 @@ mod tests {
         bid: &str,
     ) -> DraftProposalInputs {
         let mut result = market(source, now);
-        result.evaluation.valuation = Some(
-            domain::Portfolio::new(
-                vec![],
-                domain::BuyingPower::new(fixtures::money("100000", Currency::Krw), now),
-                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
-            )
-            .expect("포트")
-            .evaluate(None),
-        );
+        let raw_portfolio = domain::Portfolio::new(
+            vec![],
+            domain::BuyingPower::new(fixtures::money("100000", Currency::Krw), now),
+            domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+        )
+        .expect("포트");
+        result.evaluation.valuation = Some(raw_portfolio.evaluate(None));
+        result
+            .evaluation
+            .restoration
+            .as_mut()
+            .expect("복원")
+            .portfolio = Some(raw_portfolio);
         result.evaluation.target_price = Some(
             source
                 .price_observation(fixtures::price(ask), fixtures::local(now))
@@ -2104,7 +2232,11 @@ mod tests {
             panic!("새 초안")
         };
         assert_eq!(new.id(), &new_id);
-        assert!(run(repository.draft(&old_id)).expect("이전 초안").is_none());
+        assert!(
+            run(repository.draft(&old_id, &source))
+                .expect("이전 초안")
+                .is_none()
+        );
         assert_eq!(events.read().expect("이벤트").len(), 2);
     }
 
@@ -2143,7 +2275,11 @@ mod tests {
             panic!("저장 실패")
         };
         assert_eq!(actual, error);
-        assert!(run(repository.draft(&old_id)).expect("만료 초안").is_none());
+        assert!(
+            run(repository.draft(&old_id, &source))
+                .expect("만료 초안")
+                .is_none()
+        );
         let reverted = fixtures::at(*now.utc_seconds().as_i64() + 2);
         *data.0.write().expect("입력") = market_at_price(&source, reverted, "102", "101");
         let Ok(DraftProposalOutcome::Created { proposal, .. }) = harness.execute(
@@ -2293,21 +2429,26 @@ mod tests {
             application::SystemPort::Repository,
             application::SystemFailure::InvalidData,
         );
+        let buy_evidence = draft_evidence(&source, &buy_draft);
         assert_eq!(
             run(sell_repository.store_current_draft(
                 &source.row().instrument_id,
                 &sell_snapshot,
-                &buy_draft,
+                application::DraftStoreCandidate {
+                    proposal: &buy_draft,
+                    evidence: &buy_evidence,
+                },
                 application::DraftCheck {
                     account: &AccountId::new(4321),
                     at: now,
                     observation: &observation,
+                    master: &source,
                 },
             )),
             Err(error)
         );
         assert!(
-            run(sell_repository.draft(buy_draft.id()))
+            run(sell_repository.draft(buy_draft.id(), &source))
                 .expect("조회")
                 .is_none()
         );
@@ -2319,6 +2460,7 @@ mod tests {
         let now = fixtures::day(60);
         let data = Data::new(market(&source, now));
         let draft = independent_draft(&source, &data, now, proposal_id("wrong-account"));
+        let evidence = draft_evidence(&source, &draft);
         let repository = seeded(&source, &data);
         let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("상태");
         let observation = current_observation(&data);
@@ -2330,16 +2472,24 @@ mod tests {
             run(repository.store_current_draft(
                 &source.row().instrument_id,
                 &snapshot,
-                &draft,
+                application::DraftStoreCandidate {
+                    proposal: &draft,
+                    evidence: &evidence,
+                },
                 application::DraftCheck {
                     account: &AccountId::new(8765),
                     at: now,
                     observation: &observation,
+                    master: &source,
                 },
             )),
             Err(error)
         );
-        assert!(run(repository.draft(draft.id())).expect("조회").is_none());
+        assert!(
+            run(repository.draft(draft.id(), &source))
+                .expect("조회")
+                .is_none()
+        );
     }
 
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2349,8 +2499,10 @@ mod tests {
     }
     struct WinnerDraft {
         instrument: InstrumentId,
+        master: MasterInstrument,
         snapshot: application::SignalSnapshot,
         proposal: domain::Proposal<domain::Draft>,
+        evidence: domain::DraftRestoreEvidence,
         observation: domain::PriceObservation,
         at: Timestamp,
     }
@@ -2366,14 +2518,24 @@ mod tests {
             let Some(item) = pending else {
                 return Ok(());
             };
+            let intent = item.proposal.intent();
             let check = application::DraftCheck {
-                account: item.proposal.intent().account_id(),
+                account: intent.account_id(),
                 at: item.at,
                 observation: &item.observation,
+                master: &item.master,
             };
             let stored = self
                 .inner
-                .store_current_draft(&item.instrument, &item.snapshot, &item.proposal, check)
+                .store_current_draft(
+                    &item.instrument,
+                    &item.snapshot,
+                    application::DraftStoreCandidate {
+                        proposal: &item.proposal,
+                        evidence: &item.evidence,
+                    },
+                    check,
+                )
                 .await?;
             assert_eq!(stored, application::ConditionalDraftOutcome::Stored);
             if let Some(target) = self.advance_to {
@@ -2410,7 +2572,7 @@ mod tests {
             &self,
             instrument: &InstrumentId,
             identity: &domain::ResolvedOrderInstrument,
-        ) -> impl Future<Output = Result<Vec<domain::BuySignalRecord>, SystemPortError>> + Send
+        ) -> impl Future<Output = Result<Vec<domain::HistoricalSignalOccurrence>, SystemPortError>> + Send
         {
             self.inner.occurrences(instrument, identity)
         }
@@ -2424,7 +2586,7 @@ mod tests {
         fn current(
             &self,
             instrument: &InstrumentId,
-        ) -> impl Future<Output = Result<Vec<domain::RaisedSignal>, SystemPortError>> + Send
+        ) -> impl Future<Output = Result<Vec<domain::HistoricalSignal>, SystemPortError>> + Send
         {
             self.inner.current(instrument)
         }
@@ -2470,16 +2632,19 @@ mod tests {
         fn store_draft(
             &self,
             proposal: &domain::Proposal<domain::Draft>,
+            evidence: &domain::DraftRestoreEvidence,
+            master: &MasterInstrument,
         ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send
         {
-            self.inner.store_draft(proposal)
+            self.inner.store_draft(proposal, evidence, master)
         }
         fn draft(
             &self,
             proposal: &ProposalId,
+            master: &MasterInstrument,
         ) -> impl Future<Output = Result<Option<domain::Proposal<domain::Draft>>, SystemPortError>> + Send
         {
-            self.inner.draft(proposal)
+            self.inner.draft(proposal, master)
         }
         fn current_draft(
             &self,
@@ -2498,7 +2663,7 @@ mod tests {
             &self,
             instrument: &InstrumentId,
             expected: &application::SignalSnapshot,
-            proposal: &domain::Proposal<domain::Draft>,
+            candidate: application::DraftStoreCandidate<'_>,
             check: application::DraftCheck<'_>,
         ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
         {
@@ -2506,7 +2671,7 @@ mod tests {
             async move {
                 self.apply_pending(pending).await?;
                 self.inner
-                    .store_current_draft(instrument, expected, proposal, check)
+                    .store_current_draft(instrument, expected, candidate, check)
                     .await
             }
         }
@@ -2534,6 +2699,43 @@ mod tests {
         *proposal
     }
 
+    fn winner_draft(
+        source: &MasterInstrument,
+        seed_data: &Data,
+        winner_at: Timestamp,
+        winner_id: ProposalId,
+        snapshot: application::SignalSnapshot,
+    ) -> WinnerDraft {
+        let winner_data = Data::new(market(source, winner_at));
+        let proposal = draft_at_later_time(source, seed_data, &winner_data, winner_at, winner_id);
+        let evidence = draft_evidence(source, &proposal);
+        WinnerDraft {
+            instrument: source.row().instrument_id.clone(),
+            master: source.clone(),
+            snapshot,
+            proposal,
+            evidence,
+            observation: current_observation(&winner_data),
+            at: winner_at,
+        }
+    }
+
+    fn preempting<'a>(
+        inner: &'a MemorySignalEvaluationRepository,
+        clock: &'a testkit_ports::SteppedClock,
+        winner: WinnerDraft,
+        preempt_at: PreemptAt,
+        advance_to: Option<Timestamp>,
+    ) -> PreemptingRepository<'a> {
+        PreemptingRepository {
+            inner,
+            clock,
+            winner: RwLock::new(Some(winner)),
+            preempt_at,
+            advance_to,
+        }
+    }
+
     #[test]
     fn concurrent_monotonic_clock_race_returns_existing_and_rollback_fails_closed() {
         let source = fixtures::master();
@@ -2543,25 +2745,17 @@ mod tests {
         let retry_at = fixtures::at(now.utc_seconds().as_i64().checked_add(2).expect("시각"));
         let data = Data::new(market(&source, now));
         let winner_id = proposal_id("monotonic-winner");
-        let winner_data = Data::new(market(&source, winner_at));
-        let winner =
-            draft_at_later_time(&source, &data, &winner_data, winner_at, winner_id.clone());
         let repository = seeded(&source, &data);
         let snapshot = run(repository.snapshot(id)).expect("스냅숏");
         let clock = testkit_ports::SteppedClock::new(now);
-        let racing = PreemptingRepository {
-            inner: &repository,
-            clock: &clock,
-            winner: RwLock::new(Some(WinnerDraft {
-                instrument: id.clone(),
-                snapshot,
-                proposal: winner,
-                observation: current_observation(&winner_data),
-                at: winner_at,
-            })),
-            preempt_at: PreemptAt::Store,
-            advance_to: Some(retry_at),
-        };
+        let winner = winner_draft(&source, &data, winner_at, winner_id.clone(), snapshot);
+        let racing = preempting(
+            &repository,
+            &clock,
+            winner,
+            PreemptAt::Store,
+            Some(retry_at),
+        );
         let (bus, events) = event_bus();
         let scheduler = Scheduler::default();
         let loser = proposal_id("monotonic-loser");
@@ -2578,7 +2772,11 @@ mod tests {
         };
         assert_eq!(seen, winner_id);
         assert!(events.read().expect("이벤트").is_empty());
-        assert!(run(repository.draft(&loser)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(&loser, &source))
+                .expect("조회")
+                .is_none()
+        );
         let reads_before = repository.snapshot_reads();
         let harness = DraftHarness {
             repository: &repository,
@@ -2595,7 +2793,11 @@ mod tests {
             repository.snapshot_reads().checked_sub(reads_before),
             Some(3)
         );
-        assert!(run(repository.draft(&winner_id)).expect("보존").is_some());
+        assert!(
+            run(repository.draft(&winner_id, &source))
+                .expect("보존")
+                .is_some()
+        );
     }
 
     #[test]
@@ -2610,6 +2812,7 @@ mod tests {
         let winner_data = Data::new(market(&source, winner_at));
         let winner =
             draft_at_later_time(&source, &data, &winner_data, winner_at, winner_id.clone());
+        let winner_evidence = draft_evidence(&source, &winner);
         let repository = seeded(&source, &data);
         let snapshot = run(repository.snapshot(id)).expect("스냅숏");
         let reads_before = repository.snapshot_reads();
@@ -2619,8 +2822,10 @@ mod tests {
             clock: &clock,
             winner: RwLock::new(Some(WinnerDraft {
                 instrument: id.clone(),
+                master: source.clone(),
                 snapshot,
                 proposal: winner,
+                evidence: winner_evidence,
                 observation: current_observation(&winner_data),
                 at: winner_at,
             })),
@@ -2646,7 +2851,11 @@ mod tests {
         );
         assert_eq!(repository.draft_attempts(), 1);
         assert!(events.read().expect("이벤트").is_empty());
-        assert!(run(repository.draft(&loser)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(&loser, &source))
+                .expect("조회")
+                .is_none()
+        );
     }
 
     #[test]
@@ -2660,15 +2869,25 @@ mod tests {
         let winner_data = Data::new(market(&source, winner_at));
         let winner =
             draft_at_later_time(&source, &data, &winner_data, winner_at, winner_id.clone());
+        let winner_evidence = draft_evidence(&source, &winner);
         let repository = seeded(&source, &data);
         let snapshot = run(repository.snapshot(id)).expect("스냅숏");
         let check = application::DraftCheck {
             account: &AccountId::new(4321),
             at: winner_at,
             observation: &current_observation(&winner_data),
+            master: &source,
         };
         assert_eq!(
-            run(repository.store_current_draft(id, &snapshot, &winner, check)),
+            run(repository.store_current_draft(
+                id,
+                &snapshot,
+                application::DraftStoreCandidate {
+                    proposal: &winner,
+                    evidence: &winner_evidence,
+                },
+                check,
+            )),
             Ok(application::ConditionalDraftOutcome::Stored)
         );
         let reads_before = repository.snapshot_reads();
@@ -2695,7 +2914,11 @@ mod tests {
             Some(3)
         );
         assert_eq!(repository.draft_attempts(), 1);
-        assert!(run(repository.draft(&winner_id)).expect("보존").is_some());
+        assert!(
+            run(repository.draft(&winner_id, &source))
+                .expect("보존")
+                .is_some()
+        );
         assert!(events.read().expect("이벤트").is_empty());
     }
 
@@ -3106,18 +3329,67 @@ mod tests {
         (book, limits)
     }
 
+    fn us_stored_estimate(source: &MasterInstrument) -> domain::StoredEstimateEvidence {
+        let eligible = us_eligible(source);
+        domain::EstimateRestoreEvidence {
+            master: source.row().clone(),
+            side: domain::OrderSide::Buy,
+            candles: us_candles(source),
+            reference_price: us_price("100"),
+            reference_at: us_local(fixtures::day(60)),
+            task_at: fixtures::day(60),
+            horizon: domain::Horizon::new(domain::HorizonSelection::FewDays),
+            permission: domain::HoursPermissionState::Disabled,
+            appetite: domain::RiskAppetite::Neutral,
+        }
+        .capture(eligible.task(), source)
+        .expect("미국 과제 근거")
+    }
+
+    fn us_restoration(
+        source: &MasterInstrument,
+        raw_portfolio: domain::Portfolio,
+        mid_fx: domain::FxRate,
+        commission: CommissionRateFact,
+    ) -> application::SignalRestorationBasis {
+        let zero = CostRate::try_new(fixtures::ratio("0")).expect("수수료율");
+        let maturity = fixtures::at(
+            fixtures::day(65)
+                .utc_seconds()
+                .as_i64()
+                .checked_add(3600)
+                .expect("만기"),
+        );
+        application::SignalRestorationBasis {
+            master: source.clone(),
+            holding_masters: vec![],
+            estimate: us_stored_estimate(source),
+            commission,
+            tax: domain::TradeTaxFact::from_schedule_result(Market::Us, zero, zero),
+            maturity,
+            portfolio: Some(raw_portfolio),
+            rate: Some(mid_fx),
+        }
+    }
+
     fn us_market(source: &MasterInstrument, now: Timestamp) -> DraftProposalInputs {
         let (buy_fx, mid_fx) = us_fx_rates(now);
         let head = fixtures::head(0);
         let table = Calibration::try_new(fixtures::calibration_key(), &[]).expect("표");
-        let portfolio = domain::Portfolio::new(
+        let raw_portfolio = domain::Portfolio::new(
             vec![],
             domain::BuyingPower::new(fixtures::money("0", Currency::Krw), now),
             domain::BuyingPower::new(fixtures::money("11000", Currency::Usd), now),
         )
-        .expect("포트")
-        .evaluate(Some(mid_fx));
+        .expect("포트");
+        let portfolio = raw_portfolio.evaluate(Some(mid_fx));
         let (book, limits) = us_book_and_limits(source, now);
+        let zero = CostRate::try_new(fixtures::ratio("0")).expect("수수료율");
+        let commission = CommissionRateFact::from_commissions_result(
+            Market::Us,
+            zero,
+            CommissionValidity::try_new(None, None).expect("유효"),
+        );
         DraftProposalInputs {
             evaluation: EvaluateSignalInputs {
                 calibration: Some(
@@ -3140,12 +3412,9 @@ mod tests {
                     .collect(),
                 quantity_costs: Some(SignalQuantityCosts {
                     fx: OrderFxRates::from_broker_fx_result(buy_fx, mid_fx),
-                    commission: CommissionRateFact::from_commissions_result(
-                        Market::Us,
-                        CostRate::try_new(fixtures::ratio("0")).expect("수수료율"),
-                        CommissionValidity::try_new(None, None).expect("유효"),
-                    ),
+                    commission: commission.clone(),
                 }),
+                restoration: Some(us_restoration(source, raw_portfolio, mid_fx, commission)),
             },
             master: source.clone(),
             book,
@@ -3248,9 +3517,9 @@ mod tests {
         assert_eq!(proposal.intent().account_id(), &AccountId::new(7777));
         assert_eq!(
             proposal.intent().terms(),
-            &domain::OrderTerms::UsLimit {
+            domain::HistoricalOrderTerms::UsLimit {
                 side: domain::OrderSide::Buy,
-                quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity("1"))
+                quantity: domain::HistoricalWholeQuantity::try_new(fixtures::quantity("1"))
                     .expect("수량"),
                 price: domain::UsOrderPrice::try_new(us_price("100")).expect("가격"),
             }
@@ -3344,12 +3613,12 @@ mod tests {
         assert_eq!(proposal.id(), &proposal_id("fresh-8765"));
         assert_eq!(proposal.intent().account_id(), &AccountId::new(8765));
         assert!(
-            run(repository.draft(&proposal_id("fresh-8765")))
+            run(repository.draft(&proposal_id("fresh-8765"), &source))
                 .expect("새 초안")
                 .is_some()
         );
         assert!(
-            run(repository.draft(&proposal_id("stale-4321")))
+            run(repository.draft(&proposal_id("stale-4321"), &source))
                 .expect("옛 초안")
                 .is_none()
         );
@@ -3386,7 +3655,7 @@ mod tests {
             &self,
             instrument: &InstrumentId,
             identity: &domain::ResolvedOrderInstrument,
-        ) -> impl Future<Output = Result<Vec<domain::BuySignalRecord>, SystemPortError>> + Send
+        ) -> impl Future<Output = Result<Vec<domain::HistoricalSignalOccurrence>, SystemPortError>> + Send
         {
             self.inner.occurrences(instrument, identity)
         }
@@ -3400,7 +3669,7 @@ mod tests {
         fn current(
             &self,
             instrument: &InstrumentId,
-        ) -> impl Future<Output = Result<Vec<domain::RaisedSignal>, SystemPortError>> + Send
+        ) -> impl Future<Output = Result<Vec<domain::HistoricalSignal>, SystemPortError>> + Send
         {
             self.inner.current(instrument)
         }
@@ -3446,16 +3715,19 @@ mod tests {
         fn store_draft(
             &self,
             proposal: &domain::Proposal<domain::Draft>,
+            evidence: &domain::DraftRestoreEvidence,
+            master: &MasterInstrument,
         ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send
         {
-            self.inner.store_draft(proposal)
+            self.inner.store_draft(proposal, evidence, master)
         }
         fn draft(
             &self,
             proposal: &ProposalId,
+            master: &MasterInstrument,
         ) -> impl Future<Output = Result<Option<domain::Proposal<domain::Draft>>, SystemPortError>> + Send
         {
-            self.inner.draft(proposal)
+            self.inner.draft(proposal, master)
         }
         fn current_draft(
             &self,
@@ -3470,13 +3742,13 @@ mod tests {
             &self,
             instrument: &InstrumentId,
             expected: &application::SignalSnapshot,
-            proposal: &domain::Proposal<domain::Draft>,
+            candidate: application::DraftStoreCandidate<'_>,
             check: application::DraftCheck<'_>,
         ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
         {
             self.inner.select_account(self.switch_to.clone());
             self.inner
-                .store_current_draft(instrument, expected, proposal, check)
+                .store_current_draft(instrument, expected, candidate, check)
         }
     }
 
@@ -3508,7 +3780,7 @@ mod tests {
         assert_eq!(switched_err, DraftProposalError::AccountChanged);
         assert_eq!(repository.snapshot_reads() - before_reads, 1);
         assert!(
-            run(repository.draft(&proposal_id("before-store-switch")))
+            run(repository.draft(&proposal_id("before-store-switch"), &source))
                 .expect("조회")
                 .is_none()
         );
@@ -3528,10 +3800,14 @@ mod tests {
         )) else {
             panic!("선택 계좌 초안")
         };
-        assert!(run(repository.draft(&saved_id)).expect("조회").is_some());
+        assert!(
+            run(repository.draft(&saved_id, &source))
+                .expect("조회")
+                .is_some()
+        );
         repository.select_account(AccountId::new(4321));
         assert!(
-            run(repository.draft(&saved_id))
+            run(repository.draft(&saved_id, &source))
                 .expect("전환 은닉")
                 .is_none()
         );
@@ -3725,15 +4001,14 @@ mod tests {
         spec: DraftSpec,
     ) -> domain::Proposal<domain::Draft> {
         let current = snapshot.current.as_ref().expect("신호");
-        let task = match &current.signal {
-            domain::RaisedSignal::Buy(value) => value.facts().task(),
-            domain::RaisedSignal::Sell(value) => value.facts().task(),
-        };
         let observation = source
             .price_observation(fixtures::price("100"), fixtures::local(spec.created_at))
             .expect("시세");
-        let range = domain::ProposalPriceRange::from_estimate_task(task.range_facts(), observation)
-            .expect("범위");
+        let range = domain::ProposalPriceRange::from_estimate_task(
+            current.signal.range_facts(),
+            observation,
+        )
+        .expect("범위");
         let terms = domain::OrderTerms::KrLimit {
             side: spec.side,
             quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity("1")).expect("수량"),
@@ -3800,11 +4075,15 @@ mod tests {
         );
         for spec in invalid_store_specs(check, existing_id) {
             let draft = custom_draft(source, snapshot, spec);
+            let evidence = draft_evidence(source, &draft);
             assert_eq!(
                 run(repository.store_current_draft(
                     &source.row().instrument_id,
                     snapshot,
-                    &draft,
+                    application::DraftStoreCandidate {
+                        proposal: &draft,
+                        evidence: &evidence,
+                    },
                     check,
                 )),
                 Err(invalid_err)
@@ -3828,11 +4107,15 @@ mod tests {
                 id: proposal_id("future-rollback"),
             },
         );
+        let future_evidence = draft_evidence(source, &future_draft);
         assert_eq!(
             run(repository.store_current_draft(
                 &source.row().instrument_id,
                 snapshot,
-                &future_draft,
+                application::DraftStoreCandidate {
+                    proposal: &future_draft,
+                    evidence: &future_evidence,
+                },
                 check,
             )),
             Ok(application::ConditionalDraftOutcome::Invalid(
@@ -3870,10 +4153,15 @@ mod tests {
             account: &AccountId::new(8765),
             at: now,
             observation: &observation,
+            master: &source,
         };
         assert_four_invalid_stores_rejected(&source, &repository, &snapshot, check_8765, &valid_id);
         repository.select_account(AccountId::new(4321));
-        assert!(run(repository.draft(&valid_id)).expect("보존").is_some());
+        assert!(
+            run(repository.draft(&valid_id, &source))
+                .expect("보존")
+                .is_some()
+        );
     }
 
     #[test]
@@ -3904,9 +4192,14 @@ mod tests {
             account: &AccountId::new(4321),
             at: now,
             observation: &observation,
+            master: &source,
         };
         assert_four_invalid_stores_rejected(&source, &repository, &snapshot, check, &valid_id);
-        assert!(run(repository.draft(&valid_id)).expect("보존").is_some());
+        assert!(
+            run(repository.draft(&valid_id, &source))
+                .expect("보존")
+                .is_some()
+        );
     }
 
     #[test]
@@ -3960,11 +4253,15 @@ mod tests {
         )) else {
             panic!("초안 생성")
         };
-        assert!(run(repository.draft(&id)).expect("조회").is_some());
+        assert!(run(repository.draft(&id, &source)).expect("조회").is_some());
         repository
             .advance_calibration_head(fixtures::head(1))
             .expect("보정 원장 전진");
-        assert!(run(repository.draft(&id)).expect("전진 후 은닉").is_none());
+        assert!(
+            run(repository.draft(&id, &source))
+                .expect("전진 후 은닉")
+                .is_none()
+        );
     }
 
     #[test]
@@ -3992,6 +4289,7 @@ mod tests {
                 id: expired_id.clone(),
             },
         );
+        let expired_evidence = draft_evidence(&source, &expired);
         let later_obs = source
             .price_observation(fixtures::price("100"), fixtures::local(later))
             .expect("이후 시세");
@@ -3999,18 +4297,26 @@ mod tests {
             run(repository.store_current_draft(
                 &source.row().instrument_id,
                 &snapshot,
-                &expired,
+                application::DraftStoreCandidate {
+                    proposal: &expired,
+                    evidence: &expired_evidence,
+                },
                 application::DraftCheck {
                     account: &AccountId::new(4321),
                     at: later,
                     observation: &later_obs,
+                    master: &source,
                 },
             )),
             Ok(application::ConditionalDraftOutcome::Invalid(
                 domain::ProposalExecutionError::Expired,
             ))
         );
-        assert!(run(repository.draft(&expired_id)).expect("조회").is_none());
+        assert!(
+            run(repository.draft(&expired_id, &source))
+                .expect("조회")
+                .is_none()
+        );
     }
 
     #[test]
@@ -4048,16 +4354,106 @@ mod tests {
         assert!(events.read().expect("이벤트").is_empty());
     }
 
+    fn buy_plan_for(source: &MasterInstrument, now: Timestamp) -> domain::BuyQuantityPlan {
+        let data = Data::new(market(source, now));
+        let assignments = domain::EstimateAssignments::default()
+            .issue(
+                fixtures::task_id("task-old"),
+                fixtures::run_id(),
+                fixtures::eligible_for_master("102", source),
+            )
+            .expect("발급");
+        let repository = MemorySignalEvaluationRepository::new(assignments);
+        repository.select_account(AccountId::new(4321));
+        repository
+            .advance_calibration_head(fixtures::head(0))
+            .expect("위치");
+        let bus = EventBusBuilder::default().build();
+        submit(&repository, &bus, "task-old", source);
+        current_buy_plan(&repository, source, &data, now)
+    }
+
+    fn us_limit_for(source: &MasterInstrument, now: Timestamp) -> domain::CalculatedLimitPrice {
+        let (book, limits) = us_book_and_limits(source, now);
+        let table = domain::TickTable::from_master(source).expect("미국 호가 단위");
+        domain::calculate_limit_price(&book, Some(&table), &limits, domain::OrderSide::Buy, now)
+            .expect("미국 지정가")
+    }
+
+    #[test]
+    fn buy_intent_rejects_each_single_instrument_field_mismatch() {
+        let now = fixtures::day(60);
+        let mut base_row = fixtures::master().row().clone();
+        base_row.symbol = domain::Symbol::try_new("A00593").expect("공통 코드");
+        let source = MasterInstrument::try_new(base_row).expect("기준 마스터");
+        let plan = buy_plan_for(&source, now);
+        let key = ClientOrderId::try_new("single-field-mismatch").expect("ID");
+        let plan_id = plan.signal().facts().task().volatility().instrument();
+
+        let mut id_row = source.row().clone();
+        id_row.instrument_id = fixtures::id("different-internal-id");
+        let id_only = MasterInstrument::try_new(id_row).expect("내부 ID만 다름");
+        let id_limit = calculated_limit(&id_only, now, "100", domain::OrderSide::Buy);
+        assert_ne!(id_limit.instrument().instrument_id(), plan_id);
+        assert_eq!(id_limit.instrument().symbol(), plan.instrument().symbol());
+        assert_eq!(
+            Market::from(*id_limit.instrument().market()),
+            plan.instrument().market()
+        );
+        assert_eq!(
+            application::buy_limit_intent(&plan, &id_limit, AccountId::new(4321), key.clone()),
+            Err(application::BuyLimitIntentError::Instrument)
+        );
+
+        let mut symbol_row = source.row().clone();
+        symbol_row.symbol = domain::Symbol::try_new("B00593").expect("다른 코드");
+        let symbol_only = MasterInstrument::try_new(symbol_row).expect("심볼만 다름");
+        let symbol_limit = calculated_limit(&symbol_only, now, "100", domain::OrderSide::Buy);
+        assert_eq!(symbol_limit.instrument().instrument_id(), plan_id);
+        assert_ne!(
+            symbol_limit.instrument().symbol(),
+            plan.instrument().symbol()
+        );
+        assert_eq!(
+            Market::from(*symbol_limit.instrument().market()),
+            plan.instrument().market()
+        );
+        assert_eq!(
+            application::buy_limit_intent(&plan, &symbol_limit, AccountId::new(4321), key.clone()),
+            Err(application::BuyLimitIntentError::Instrument)
+        );
+
+        let mut market_row = source.row().clone();
+        market_row.listing_market = domain::MasterCode::try_new("NASDAQ").expect("미국 시장");
+        market_row.currency = Currency::Usd;
+        market_row.korean_detail = None;
+        let market_only = MasterInstrument::try_new(market_row).expect("시장만 다름");
+        let market_limit = us_limit_for(&market_only, now);
+        assert_eq!(market_limit.instrument().instrument_id(), plan_id);
+        assert_eq!(
+            market_limit.instrument().symbol(),
+            plan.instrument().symbol()
+        );
+        assert_ne!(
+            Market::from(*market_limit.instrument().market()),
+            plan.instrument().market()
+        );
+        assert_eq!(
+            application::buy_limit_intent(&plan, &market_limit, AccountId::new(4321), key),
+            Err(application::BuyLimitIntentError::Instrument)
+        );
+    }
+
     mod sell_draft_tests {
         use super::{
             AccountId, Barrier, BuySignalOccurrenceId, ClientOrderId, Currency, Data,
             DraftProposal, DraftProposalError, DraftProposalInputs, DraftProposalOutcome,
             EvaluateSignals, EventBusBuilder, InstrumentId, Market, MasterInstrument,
             MemorySignalEvaluationRepository, PairedData, ProposalId, ProposalRepository,
-            Scheduler, ScriptedClock, SignalRepository, StoredSignal, SubmitEstimate, Timestamp,
-            calculated_limit, calendars_with_day60, event_bus, fixtures, market, proposal_id, run,
-            seeded, us_book_and_limits, us_eligible, us_fx_rates, us_local, us_market, us_master,
-            us_price,
+            Scheduler, ScriptedClock, SignalRepository, SubmitEstimate, Timestamp,
+            calculated_limit, calendars_with_day60, draft_evidence, event_bus, fixtures,
+            kr_stored_estimate, market, proposal_id, run, seeded, us_book_and_limits, us_eligible,
+            us_fx_rates, us_local, us_market, us_master, us_price,
         };
 
         fn kr_sell_fact(
@@ -4066,9 +4462,13 @@ mod tests {
             quantity: &str,
             observed_at: Timestamp,
         ) -> domain::SellableQuantityFact {
+            let instrument = source
+                .order_gate_facts()
+                .and_then(|facts| facts.instrument_for(domain::OrderSide::Sell))
+                .expect("매도 종목");
             domain::SellableQuantityFact::from_lookup_result(
                 account,
-                source.order_instrument().expect("종목"),
+                instrument,
                 fixtures::quantity(quantity),
                 observed_at,
             )
@@ -4091,15 +4491,19 @@ mod tests {
                 domain::HoldingObservation::new(Some(fixtures::price("100")), None, now),
             )
             .expect("보유");
-            facts.evaluation.valuation = Some(
-                domain::Portfolio::new(
-                    vec![holding],
-                    domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), now),
-                    domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
-                )
-                .expect("포트")
-                .evaluate(None),
-            );
+            let raw_portfolio = domain::Portfolio::new(
+                vec![holding],
+                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+            )
+            .expect("포트");
+            facts.evaluation.valuation = Some(raw_portfolio.evaluate(None));
+            facts
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(raw_portfolio);
             facts.sellable_quantity =
                 sellable.map(|value| kr_sell_fact(source, account, value, now));
             facts
@@ -4169,15 +4573,19 @@ mod tests {
                 domain::HoldingObservation::new(Some(us_price("100")), None, us_local(now)),
             )
             .expect("미국 보유");
-            facts.evaluation.valuation = Some(
-                domain::Portfolio::new(
-                    vec![holding],
-                    domain::BuyingPower::new(fixtures::money("0", Currency::Krw), now),
-                    domain::BuyingPower::new(fixtures::money("11000", Currency::Usd), now),
-                )
-                .expect("포트")
-                .evaluate(Some(mid_fx)),
-            );
+            let raw_portfolio = domain::Portfolio::new(
+                vec![holding],
+                domain::BuyingPower::new(fixtures::money("0", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("11000", Currency::Usd), now),
+            )
+            .expect("포트");
+            facts.evaluation.valuation = Some(raw_portfolio.evaluate(Some(mid_fx)));
+            facts
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(raw_portfolio);
             facts.sellable_quantity = sellable.map(|value| {
                 domain::SellableQuantityFact::from_lookup_result(
                     account,
@@ -4255,23 +4663,42 @@ mod tests {
             (data, repository)
         }
 
-        fn current_sell_plan(
-            repository: &MemorySignalEvaluationRepository,
-            source: &MasterInstrument,
+        fn live_sell_plan(
+            eligible: &domain::CostEligibleTask,
             data: &Data,
             account: &AccountId,
             now: Timestamp,
         ) -> domain::SellDraftQuantityPlan {
-            let snapshot = run(repository.snapshot(&source.row().instrument_id)).expect("스냅숏");
-            let Some(StoredSignal {
-                signal: domain::RaisedSignal::Sell(signal),
-                ..
-            }) = snapshot.current
+            let inputs = data.0.read().expect("입력").clone();
+            let head = inputs.evaluation.calibration_head.as_ref().expect("위치");
+            let calibrated = domain::calibrate_signal_submission(
+                inputs.evaluation.calibration.as_ref(),
+                head,
+                fixtures::submission(eligible, "1"),
+            )
+            .expect("보정");
+            let estimate =
+                domain::SignalEstimate::create(eligible, &calibrated, domain::Margin::default())
+                    .expect("추정");
+            let items = [fixtures::item()];
+            let ledger = domain::SignalSourceLedger::new(&items, &[], &[]);
+            let valuation = inputs.evaluation.valuation.as_ref().expect("포트폴리오");
+            let context = domain::SignalContext::new(
+                Some(valuation),
+                &inputs.evaluation.policy,
+                (&inputs.evaluation.assignments, &inputs.evaluation.security),
+                &ledger,
+                domain::SignalAssessmentFacts::new(
+                    domain::SignalTiming::new(now, &inputs.evaluation.calendars),
+                    inputs.evaluation.target_price.clone(),
+                    Some(head.clone()),
+                ),
+            );
+            let domain::SignalDecision::Sell(signal) =
+                domain::SignalDecision::assess(&estimate, &context)
             else {
                 panic!("매도 신호 필요")
             };
-            let inputs = data.0.read().expect("입력").clone();
-            let valuation = inputs.evaluation.valuation.as_ref().expect("포트폴리오");
             let facts = domain::SellDraftQuantityFacts::new(
                 account,
                 valuation,
@@ -4287,7 +4714,25 @@ mod tests {
             .expect("매도 계획")
         }
 
-        fn kr_sell_terms(quantity: &str, price: &str) -> domain::OrderTerms {
+        fn kr_sell_terms(quantity: &str, price: &str) -> domain::HistoricalOrderTerms {
+            domain::HistoricalOrderTerms::KrLimit {
+                side: domain::OrderSide::Sell,
+                quantity: domain::HistoricalWholeQuantity::try_new(fixtures::quantity(quantity))
+                    .expect("정수"),
+                price: domain::KrOrderPrice::try_new(fixtures::price(price)).expect("가격"),
+            }
+        }
+
+        fn us_sell_terms(quantity: &str, price: &str) -> domain::HistoricalOrderTerms {
+            domain::HistoricalOrderTerms::UsLimit {
+                side: domain::OrderSide::Sell,
+                quantity: domain::HistoricalWholeQuantity::try_new(fixtures::quantity(quantity))
+                    .expect("정수"),
+                price: domain::UsOrderPrice::try_new(us_price(price)).expect("미국 가격"),
+            }
+        }
+
+        fn kr_order_terms(quantity: &str, price: &str) -> domain::OrderTerms {
             domain::OrderTerms::KrLimit {
                 side: domain::OrderSide::Sell,
                 quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity(quantity))
@@ -4296,7 +4741,7 @@ mod tests {
             }
         }
 
-        fn us_sell_terms(quantity: &str, price: &str) -> domain::OrderTerms {
+        fn us_order_terms(quantity: &str, price: &str) -> domain::OrderTerms {
             domain::OrderTerms::UsLimit {
                 side: domain::OrderSide::Sell,
                 quantity: domain::WholeOrderQuantity::try_new(fixtures::quantity(quantity))
@@ -4310,8 +4755,9 @@ mod tests {
             let source = fixtures::master();
             let now = fixtures::day(60);
             let account = AccountId::new(4321);
-            let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
-            let plan = current_sell_plan(&repository, &source, &data, &account, now);
+            let (data, _) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let eligible = fixtures::eligible_for_master("102", &source);
+            let plan = live_sell_plan(&eligible, &data, &account, now);
             let key = ClientOrderId::try_new("sell-limit-test").expect("ID");
             let buy_limit = calculated_limit(&source, now, "100", domain::OrderSide::Buy);
             assert_eq!(
@@ -4355,7 +4801,7 @@ mod tests {
             let reduced = plan.reduce_quantity(fixtures::quantity("5")).expect("축소");
             let intent = application::sell_limit_intent(&reduced, &valid_limit, &account, key)
                 .expect("축소 의도");
-            assert_eq!(intent.terms(), &kr_sell_terms("5", "98"));
+            assert_eq!(intent.terms(), &kr_order_terms("5", "98"));
             assert_eq!(intent.account_id(), &account);
         }
 
@@ -4366,9 +4812,9 @@ mod tests {
             us_row.symbol = domain::Symbol::try_new("AAPL01").expect("공통 심볼");
             let us_source = MasterInstrument::try_new(us_row).expect("미국 마스터");
             let account = AccountId::new(7777);
-            let (data, repository) =
-                us_sell_setup(&us_source, now, account.clone(), "12", Some("5"));
-            let plan = current_sell_plan(&repository, &us_source, &data, &account, now);
+            let (data, _) = us_sell_setup(&us_source, now, account.clone(), "12", Some("5"));
+            let eligible = us_eligible(&us_source);
+            let plan = live_sell_plan(&eligible, &data, &account, now);
             let key = ClientOrderId::try_new("us-sell-limit").expect("ID");
 
             let mut kr_same = fixtures::master().row().clone();
@@ -4398,7 +4844,7 @@ mod tests {
             let reduced = plan.reduce_quantity(fixtures::quantity("2")).expect("축소");
             let intent = application::sell_limit_intent(&reduced, &valid_us, &account, key)
                 .expect("미국 매도 의도");
-            assert_eq!(intent.terms(), &us_sell_terms("2", "99"));
+            assert_eq!(intent.terms(), &us_order_terms("2", "99"));
             assert_eq!(intent.account_id(), &account);
         }
 
@@ -4429,8 +4875,8 @@ mod tests {
             assert_eq!(proposal.id(), &id);
             assert_eq!(proposal.intent().account_id(), account);
             assert_eq!(proposal.intent().side(), domain::OrderSide::Sell);
-            assert_eq!(proposal.intent().terms(), &kr_sell_terms(expected, "99"));
-            let stored = run(repository.draft(&id))
+            assert_eq!(proposal.intent().terms(), kr_sell_terms(expected, "99"));
+            let stored = run(repository.draft(&id, source))
                 .expect("조회")
                 .expect("저장된 매도 초안");
             assert_eq!(stored.id(), proposal.id());
@@ -4474,7 +4920,7 @@ mod tests {
             .execute(&source.row().instrument_id, &account, id.clone())) else {
                 panic!("미국 정규장 매도 초안")
             };
-            assert_eq!(proposal.intent().terms(), &us_sell_terms("5", "99"));
+            assert_eq!(proposal.intent().terms(), us_sell_terms("5", "99"));
             assert_eq!(
                 events.read().expect("이벤트").as_slice(),
                 &[domain::DomainEvent::ProposalCreated(id)]
@@ -4515,7 +4961,7 @@ mod tests {
             else {
                 panic!("미국 데이마켓 매도 초안")
             };
-            assert_eq!(day_prop.intent().terms(), &us_sell_terms("8", "99"));
+            assert_eq!(day_prop.intent().terms(), us_sell_terms("8", "99"));
         }
 
         #[test]
@@ -4741,9 +5187,17 @@ mod tests {
                 &bus,
                 (id_ref, &account, sell_id.clone()),
             );
-            assert_eq!(sell_prop.intent().terms(), &kr_sell_terms("11", "99"));
-            assert!(run(buy_repo.draft(&buy_id)).expect("매수 은닉").is_none());
-            assert!(run(buy_repo.draft(&sell_id)).expect("매도 조회").is_some());
+            assert_eq!(sell_prop.intent().terms(), kr_sell_terms("11", "99"));
+            assert!(
+                run(buy_repo.draft(&buy_id, &source))
+                    .expect("매수 은닉")
+                    .is_none()
+            );
+            assert!(
+                run(buy_repo.draft(&sell_id, &source))
+                    .expect("매도 조회")
+                    .is_some()
+            );
             assert_eq!(events.read().expect("이벤트").len(), 2);
         }
 
@@ -4785,7 +5239,7 @@ mod tests {
             );
             assert_eq!(buy_prop.intent().side(), domain::OrderSide::Buy);
             assert!(
-                run(sell_repo.draft(&initial_sell))
+                run(sell_repo.draft(&initial_sell, &source))
                     .expect("매도 은닉")
                     .is_none()
             );
@@ -4827,9 +5281,9 @@ mod tests {
                 &bus,
                 (id_ref, &account_b, draft_b.clone()),
             );
-            assert_eq!(prop_b.intent().terms(), &kr_sell_terms("9", "99"));
+            assert_eq!(prop_b.intent().terms(), kr_sell_terms("9", "99"));
             assert!(
-                run(repository.draft(&draft_a))
+                run(repository.draft(&draft_a, &source))
                     .expect("구 계좌 은닉")
                     .is_none()
             );
@@ -4842,7 +5296,7 @@ mod tests {
                 .expect_err("지연 구 계좌 거부");
             assert_eq!(stale_err, DraftProposalError::AccountChanged);
             assert!(
-                run(repository.draft(&draft_b))
+                run(repository.draft(&draft_b, &source))
                     .expect("계좌 B 유지")
                     .is_some()
             );
@@ -4886,7 +5340,7 @@ mod tests {
             );
             repository.select_account(account_a);
             assert!(
-                run(repository.draft(&draft_a))
+                run(repository.draft(&draft_a, &source))
                     .expect("구 계좌 초안 대체 확인")
                     .is_none()
             );
@@ -4919,10 +5373,7 @@ mod tests {
             let account = AccountId::new(4321);
             let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
             let barrier = Barrier::new(2);
-            let paired = PairedData {
-                inputs: data.0.read().expect("입력").clone(),
-                barrier: &barrier,
-            };
+            let paired = PairedData::new(data.0.read().expect("입력").clone(), &barrier);
             let scheduler = Scheduler::default();
             let (bus, events) = event_bus();
             let deps = (&repository, &paired, &scheduler, &bus);
@@ -5019,15 +5470,19 @@ mod tests {
                 domain::HoldingObservation::new(Some(fixtures::price("100")), None, t30),
             )
             .expect("보유");
-            inputs_s.evaluation.valuation = Some(
-                domain::Portfolio::new(
-                    vec![holding_30],
-                    domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), t30),
-                    domain::BuyingPower::new(fixtures::money("0", Currency::Usd), t30),
-                )
-                .expect("포트")
-                .evaluate(None),
-            );
+            let raw_30 = domain::Portfolio::new(
+                vec![holding_30],
+                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), t30),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), t30),
+            )
+            .expect("포트");
+            inputs_s.evaluation.valuation = Some(raw_30.evaluate(None));
+            inputs_s
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(raw_30);
             inputs_s.sellable_quantity = Some(kr_sell_fact(&source, account.clone(), "11", t0));
             *data_s.0.write().expect("입력") = inputs_s;
             let (bus, events) = event_bus();
@@ -5070,7 +5525,7 @@ mod tests {
                 &bus,
                 (id_ref, &account, proposal_id("sell-requery-ok")),
             );
-            assert_eq!(created.intent().terms(), &kr_sell_terms("11", "99"));
+            assert_eq!(created.intent().terms(), kr_sell_terms("11", "99"));
             assert_eq!(events.read().expect("이벤트").len(), 1);
 
             let (drift_data, drift_repo) =
@@ -5149,10 +5604,14 @@ mod tests {
                 &bus,
                 (id_ref, &account, second.clone()),
             );
-            assert_eq!(rebuilt.intent().terms(), &kr_sell_terms("9", "99"));
-            assert!(run(repo.draft(&first)).expect("만료 초안 은닉").is_none());
+            assert_eq!(rebuilt.intent().terms(), kr_sell_terms("9", "99"));
             assert!(
-                run(repo.draft(&second))
+                run(repo.draft(&first, &source))
+                    .expect("만료 초안 은닉")
+                    .is_none()
+            );
+            assert!(
+                run(repo.draft(&second, &source))
                     .expect("재생성 초안 조회")
                     .is_some()
             );
@@ -5222,8 +5681,32 @@ mod tests {
                 &closed_bus,
                 (id_ref, &account, proposal_id("sell-after-open")),
             );
-            assert_eq!(opened.intent().terms(), &kr_sell_terms("11", "99"));
+            assert_eq!(opened.intent().terms(), kr_sell_terms("11", "99"));
             assert_eq!(closed_events.read().expect("이벤트").len(), 1);
+        }
+
+        fn kr_sell_setup_at(
+            source: &MasterInstrument,
+            at: Timestamp,
+            account: AccountId,
+            held: &str,
+            sellable: Option<&str>,
+        ) -> (Data, MemorySignalEvaluationRepository) {
+            let data = Data::new(kr_sell_inputs(source, at, account.clone(), held, sellable));
+            let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
+            repository.select_account(account);
+            repository
+                .advance_calibration_head(fixtures::head(0))
+                .expect("위치");
+            let eval_bus = EventBusBuilder::default().build();
+            submit_kr(&repository, &eval_bus, "task-old", "1", source);
+            run(EvaluateSignals::new(&repository, &data, &eval_bus).execute(
+                &source.row().instrument_id,
+                at,
+                BuySignalOccurrenceId::try_new("unused-at").expect("ID"),
+            ))
+            .expect("시각 매도 평가");
+            (data, repository)
         }
 
         #[test]
@@ -5234,28 +5717,8 @@ mod tests {
             let t10 = fixtures::at(t0.utc_seconds().as_i64().checked_add(10).expect("10초"));
             let account = AccountId::new(4321);
             let id_ref = &source.row().instrument_id;
-
-            let data = Data::new(kr_sell_inputs(
-                &source,
-                t10,
-                account.clone(),
-                "17",
-                Some("11"),
-            ));
-            let repository = MemorySignalEvaluationRepository::new(fixtures::assignments());
-            repository.select_account(account.clone());
-            repository
-                .advance_calibration_head(fixtures::head(0))
-                .expect("위치");
-            let eval_bus = EventBusBuilder::default().build();
-            submit_kr(&repository, &eval_bus, "task-old", "1", &source);
-            run(EvaluateSignals::new(&repository, &data, &eval_bus).execute(
-                id_ref,
-                t10,
-                BuySignalOccurrenceId::try_new("unused-t10").expect("ID"),
-            ))
-            .expect("t10 매도 평가");
-
+            let (data, repository) =
+                kr_sell_setup_at(&source, t10, account.clone(), "17", Some("11"));
             let mut older = kr_sell_inputs(&source, t10, account.clone(), "17", Some("11"));
             let old_holding = domain::Holding::new(
                 source.order_instrument().expect("종목"),
@@ -5265,15 +5728,19 @@ mod tests {
                 domain::HoldingObservation::new(Some(fixtures::price("100")), None, t5),
             )
             .expect("과거 보유");
-            older.evaluation.valuation = Some(
-                domain::Portfolio::new(
-                    vec![old_holding],
-                    domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), t5),
-                    domain::BuyingPower::new(fixtures::money("0", Currency::Usd), t5),
-                )
-                .expect("포트")
-                .evaluate(None),
-            );
+            let old_portfolio = domain::Portfolio::new(
+                vec![old_holding],
+                domain::BuyingPower::new(fixtures::money("10000", Currency::Krw), t5),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), t5),
+            )
+            .expect("포트");
+            older.evaluation.valuation = Some(old_portfolio.evaluate(None));
+            older
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .portfolio = Some(old_portfolio);
             *data.0.write().expect("과거 보유 주입") = older;
             let (bus, events) = event_bus();
             assert_eq!(
@@ -5368,16 +5835,196 @@ mod tests {
             .execute(&source.row().instrument_id, &account, ext_id.clone())) else {
                 panic!("프리마켓 매도 초안")
             };
-            assert!(run(repository.draft(&ext_id)).expect("조회").is_some());
+            assert!(
+                run(repository.draft(&ext_id, &source))
+                    .expect("조회")
+                    .is_some()
+            );
             repository
                 .advance_calibration_head(fixtures::head(1))
                 .expect("보정 전진");
             assert!(
-                run(repository.draft(&ext_id))
+                run(repository.draft(&ext_id, &source))
                     .expect("전진 후 은닉")
                     .is_none()
             );
             assert_eq!(events.read().expect("이벤트").len(), 1);
+        }
+
+        fn liquidation_candle(instrument_id: &InstrumentId, day_idx: i64) -> domain::Candle {
+            let text = if day_idx % 2 == 0 { "100" } else { "102" };
+            let px = fixtures::price(text);
+            let midnight = fixtures::local(fixtures::at(
+                fixtures::day(day_idx)
+                    .utc_seconds()
+                    .as_i64()
+                    .checked_sub(32_400)
+                    .expect("자정"),
+            ));
+            domain::Candle::try_new(
+                instrument_id.clone(),
+                domain::CandleTime::try_new(midnight, domain::CandlePeriod::Daily)
+                    .expect("일봉 시각"),
+                domain::PriceAdjustment::Adjusted(domain::AdjustmentBasis::new(fixtures::day(61))),
+                domain::Ohlcv::try_new(px, px, px, px, fixtures::quantity("13")).expect("OHLCV"),
+                domain::CandleObservation::new(fixtures::day(61), domain::CandleStatus::Finalized),
+            )
+            .expect("봉")
+        }
+
+        fn liquidation_task_and_evidence(
+            liq: &MasterInstrument,
+            now: Timestamp,
+        ) -> (domain::CostEligibleTask, domain::StoredEstimateEvidence) {
+            let candles: Vec<_> = (0_i64..61)
+                .map(|day_idx| liquidation_candle(&liq.row().instrument_id, day_idx))
+                .collect();
+            let sell_ref = liq
+                .price_observation_for(
+                    domain::OrderSide::Sell,
+                    fixtures::price("100"),
+                    fixtures::local(now),
+                )
+                .expect("매도 시세");
+            let task = domain::EstimateTask::create(
+                domain::EstimateContext::new(sell_ref, now),
+                domain::Volatility::calculate(&candles).expect("변동성"),
+                domain::Horizon::new(domain::HorizonSelection::FewDays),
+                domain::HoursPermission::default(),
+                domain::RiskAppetite::Neutral,
+            )
+            .expect("과제");
+            let zero = domain::CostRate::try_new(fixtures::ratio("0")).expect("비용");
+            let maturity = fixtures::at(
+                fixtures::day(65)
+                    .utc_seconds()
+                    .as_i64()
+                    .checked_add(3600)
+                    .expect("만기"),
+            );
+            let period =
+                domain::EstimateCostPeriod::from_calendar_result(&task, maturity).expect("기간");
+            let cost = domain::TradeCost::from_facts(
+                Some(domain::CommissionRateFact::from_commissions_result(
+                    Market::Kr,
+                    zero,
+                    domain::CommissionValidity::try_new(None, None).expect("유효"),
+                )),
+                Some(domain::TradeTaxFact::from_schedule_result(
+                    Market::Kr,
+                    zero,
+                    zero,
+                )),
+                period,
+            )
+            .expect("비용");
+            let eligible = domain::CostEligibleTask::assess(task.clone(), &cost).expect("적격");
+            let stored_est = domain::EstimateRestoreEvidence {
+                master: liq.row().clone(),
+                side: domain::OrderSide::Sell,
+                candles,
+                reference_price: fixtures::price("100"),
+                reference_at: fixtures::local(now),
+                task_at: now,
+                horizon: domain::Horizon::new(domain::HorizonSelection::FewDays),
+                permission: domain::HoursPermissionState::Disabled,
+                appetite: domain::RiskAppetite::Neutral,
+            }
+            .capture(&task, liq)
+            .expect("정리매매 과제 근거");
+            (eligible, stored_est)
+        }
+
+        fn submit_eligible_sell(
+            repo: &MemorySignalEvaluationRepository,
+            bus: &application::EventBus,
+            instrument_id: &InstrumentId,
+            eligible: &domain::CostEligibleTask,
+            task_label: &str,
+        ) {
+            let part = domain::ModelIdentityPart::try_new("model-v1").expect("모델");
+            let prompt_hash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+            run(SubmitEstimate::new(repo, bus).execute(
+                &fixtures::run_id(),
+                vec![application::EstimateSubmissionInput {
+                    task_id: fixtures::task_id(task_label),
+                    submission: fixtures::submission(eligible, "1"),
+                    narrative: domain::EstimateNarrative {
+                        rationale: domain::UntrustedText::try_new("근거").expect("근거"),
+                        counterargument: domain::UntrustedText::try_new("반론").expect("반론"),
+                    },
+                    metadata: domain::EstimateMetadata {
+                        effort: application::ReasoningEffort::High,
+                        cli_version: part.clone(),
+                        prompt: domain::EstimatePrompt {
+                            id: domain::ScorecardPromptId::try_new("prompt").expect("ID"),
+                            version: part,
+                            hash: domain::PromptHash::try_new(prompt_hash).expect("해시"),
+                        },
+                        evidence_bundle: domain::EvidenceBundleId::try_new("bundle-liq")
+                            .expect("묶음"),
+                    },
+                }],
+            ))
+            .expect("제출");
+            let snap = run(repo.snapshot(instrument_id)).expect("스냅숏");
+            repo.save_sources(
+                snap.submission.expect("과제"),
+                application::SignalSourceFacts {
+                    items: vec![fixtures::item()],
+                    disclosures: vec![],
+                    tools: vec![],
+                },
+            );
+        }
+
+        fn kr_liquidation_setup(
+            now: Timestamp,
+            account: AccountId,
+        ) -> (MasterInstrument, Data, MemorySignalEvaluationRepository) {
+            let base = fixtures::master();
+            let mut liq_row = base.row().clone();
+            liq_row.korean_detail.as_mut().expect("국내").liquidation =
+                domain::LiquidationTrading::Liquidation;
+            let liq = MasterInstrument::try_new(liq_row).expect("정리매매");
+            let (eligible, stored_est) = liquidation_task_and_evidence(&liq, now);
+            let mut facts = kr_sell_inputs(&base, now, account.clone(), "17", Some("11"));
+            facts.master = liq.clone();
+            facts.evaluation.target_price = Some(
+                liq.price_observation_for(
+                    domain::OrderSide::Sell,
+                    fixtures::price("100"),
+                    fixtures::local(now),
+                )
+                .expect("정리매매 시세"),
+            );
+            facts.evaluation.security = domain::MasterInstrumentFacts::try_new(vec![liq.clone()])
+                .expect("마스터")
+                .policy_security_facts();
+            let basis = facts.evaluation.restoration.as_mut().expect("복원");
+            basis.master = liq.clone();
+            basis.estimate = stored_est;
+            let data = Data::new(facts);
+            let assignments = domain::EstimateAssignments::default()
+                .issue(
+                    fixtures::task_id("task-liq"),
+                    fixtures::run_id(),
+                    eligible.clone(),
+                )
+                .expect("발급");
+            let repo = MemorySignalEvaluationRepository::new(assignments);
+            repo.select_account(account);
+            repo.advance_calibration_head(fixtures::head(0))
+                .expect("위치");
+            let bus = EventBusBuilder::default().build();
+            submit_eligible_sell(&repo, &bus, &liq.row().instrument_id, &eligible, "task-liq");
+            run(EvaluateSignals::new(&repo, &data, &bus).execute(
+                &liq.row().instrument_id,
+                now,
+                BuySignalOccurrenceId::try_new("unused-liq").expect("ID"),
+            ))
+            .expect("정리매매 매도 평가");
+            (liq, data, repo)
         }
 
         #[test]
@@ -5385,13 +6032,9 @@ mod tests {
             let source = fixtures::master();
             let now = fixtures::day(60);
             let account = AccountId::new(4321);
-            let (data, repository) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
-            let mut liq_row = source.row().clone();
-            liq_row.korean_detail.as_mut().expect("국내").liquidation =
-                domain::LiquidationTrading::Liquidation;
-            data.0.write().expect("입력").master =
-                MasterInstrument::try_new(liq_row).expect("정리매매");
+            let (liq, data, repository) = kr_liquidation_setup(now, account.clone());
             let (bus, _) = event_bus();
+            let liq_id = proposal_id("sell-liquidation");
             let Ok(DraftProposalOutcome::Created { proposal, .. }) = run(DraftProposal::new(
                 &repository,
                 &data,
@@ -5399,14 +6042,15 @@ mod tests {
                 &testkit_ports::SteppedClock::new(now),
                 &bus,
             )
-            .execute(
-                &source.row().instrument_id,
-                &account,
-                proposal_id("sell-liquidation"),
-            )) else {
+            .execute(&liq.row().instrument_id, &account, liq_id.clone())) else {
                 panic!("정리매매 매도 허용")
             };
-            assert_eq!(proposal.intent().terms(), &kr_sell_terms("11", "99"));
+            assert_eq!(proposal.intent().terms(), kr_sell_terms("11", "99"));
+            assert!(
+                run(repository.draft(&liq_id, &liq))
+                    .expect("정리매매 복원 조회")
+                    .is_some()
+            );
 
             let (sus_data, sus_repo) =
                 kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
@@ -5467,6 +6111,331 @@ mod tests {
             };
             assert_eq!(repository.draft_attempts(), 0);
             assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_draft_allows_parallel_sellable_after_stored_signal_and_rejects_pre_stored() {
+            let source = fixtures::master();
+            let t0 = fixtures::day(60);
+            let t_prev = fixtures::at(t0.utc_seconds().as_i64().checked_add(9).expect("9초"));
+            let t_sig = fixtures::at(t0.utc_seconds().as_i64().checked_add(10).expect("10초"));
+            let t_eval = fixtures::at(t0.utc_seconds().as_i64().checked_add(15).expect("15초"));
+            let t_sellable =
+                fixtures::at(t0.utc_seconds().as_i64().checked_add(119).expect("119초"));
+            let t_open = fixtures::at(t0.utc_seconds().as_i64().checked_add(120).expect("120초"));
+            let account = AccountId::new(4321);
+            let id_ref = &source.row().instrument_id;
+
+            let (data, repo) = kr_sell_setup(&source, t0, account.clone(), "17", Some("11"));
+            let mut parallel = kr_sell_inputs(&source, t_open, account.clone(), "17", Some("11"));
+            parallel.sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "11", t_sellable));
+            *data.0.write().expect("병렬 조회 입력") = parallel;
+            let (bus, _) = event_bus();
+            let created = create_draft_at(
+                &repo,
+                &data,
+                &testkit_ports::SteppedClock::new(t_open),
+                &bus,
+                (id_ref, &account, proposal_id("sell-parallel-ok")),
+            );
+            assert_eq!(created.intent().terms(), kr_sell_terms("11", "99"));
+
+            let (data_pre, repo_pre) =
+                kr_sell_setup_at(&source, t_sig, account.clone(), "17", Some("11"));
+            let mut stale_pre = kr_sell_inputs(&source, t_eval, account.clone(), "17", Some("11"));
+            stale_pre.sellable_quantity =
+                Some(kr_sell_fact(&source, account.clone(), "11", t_prev));
+            *data_pre.0.write().expect("저장 신호 이전 매도가능") = stale_pre;
+            assert_eq!(
+                run(DraftProposal::new(
+                    &repo_pre,
+                    &data_pre,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(t_eval),
+                    &bus,
+                )
+                .execute(id_ref, &account, proposal_id("sell-pre-stored")))
+                .expect_err("저장 신호 이전 매도가능 거부"),
+                DraftProposalError::SellQuantity(
+                    domain::NoSellDraftQuantity::StaleSellableQuantity
+                )
+            );
+            assert_eq!(repo_pre.draft_attempts(), 0);
+        }
+
+        fn sell_non_tradable_masters(base: &MasterInstrument) -> Vec<MasterInstrument> {
+            let mut suspended = base.row().clone();
+            suspended.korean_detail.as_mut().expect("국내").krx =
+                domain::TradingSuspension::Suspended;
+            let mut delisted = base.row().clone();
+            delisted.listing_status = domain::ListingStatus::Delisted;
+            let mut scheduled = base.row().clone();
+            scheduled.listing_status = domain::ListingStatus::Scheduled;
+            let mut unknown_type = base.row().clone();
+            unknown_type.security_type = domain::MasterSecurityType::from_code(
+                domain::MasterCode::try_new("UNKNOWN_SEC").expect("유형"),
+            );
+            let mut missing_detail = base.row().clone();
+            missing_detail.korean_detail = None;
+            [suspended, delisted, scheduled, unknown_type, missing_detail]
+                .into_iter()
+                .map(|row| MasterInstrument::try_new(row).expect("비거래 마스터"))
+                .collect()
+        }
+
+        fn assert_blocked_sell_master_rejected(
+            source: &MasterInstrument,
+            blocked: &MasterInstrument,
+            stale_check: application::DraftCheck<'_>,
+            valid: (
+                &domain::Proposal<domain::Draft>,
+                &domain::DraftRestoreEvidence,
+            ),
+        ) {
+            let now = stale_check.at;
+            let account = stale_check.account;
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let (data, repo) = kr_sell_setup(source, now, account.clone(), "17", Some("11"));
+            let snap = run(repo.snapshot(inst)).expect("스냅숏");
+            repo.save_master(blocked.clone());
+            assert_eq!(
+                run(repo.current_draft(inst, &snap, stale_check)),
+                Err(integrity)
+            );
+            assert_eq!(
+                run(repo.store_current_draft(
+                    inst,
+                    &snap,
+                    application::DraftStoreCandidate {
+                        proposal: valid.0,
+                        evidence: valid.1,
+                    },
+                    stale_check,
+                )),
+                Err(integrity)
+            );
+            let (bus, _) = event_bus();
+            let err = run(DraftProposal::new(
+                &repo,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(inst, account, proposal_id("sell-stale-master")))
+            .expect_err("저장소 비거래 전환 거부");
+            assert_eq!(err, DraftProposalError::Storage(integrity));
+        }
+
+        #[test]
+        fn sell_draft_fails_closed_when_stored_master_becomes_non_tradable() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let obs = source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("시세");
+            let stale_check = application::DraftCheck {
+                account: &account,
+                at: now,
+                observation: &obs,
+                master: &source,
+            };
+            let (cand_data, cand_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let (bus, _) = event_bus();
+            let valid_id = proposal_id("sell-master-valid");
+            let valid_prop = create_draft_at(
+                &cand_repo,
+                &cand_data,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+                (inst, &account, valid_id.clone()),
+            );
+            let valid_ev = draft_evidence(&source, &valid_prop);
+            let active_snap = run(cand_repo.snapshot(inst)).expect("스냅숏");
+            for blocked in sell_non_tradable_masters(&source) {
+                assert_blocked_sell_master_rejected(
+                    &source,
+                    &blocked,
+                    stale_check,
+                    (&valid_prop, &valid_ev),
+                );
+                cand_repo.save_master(blocked);
+                assert_eq!(
+                    run(cand_repo.draft(&valid_id, &source)).expect_err("낡은 조회 거부"),
+                    integrity
+                );
+                assert_eq!(
+                    run(cand_repo.current_draft(inst, &active_snap, stale_check)),
+                    Err(integrity)
+                );
+            }
+        }
+
+        #[test]
+        fn sell_absent_read_fails_closed_for_caller_blocked_or_other_master() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let obs = source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("시세");
+            let (_, absent_repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let absent_snap = run(absent_repo.snapshot(inst)).expect("스냅숏");
+            for blocked in sell_non_tradable_masters(&source)
+                .into_iter()
+                .chain(std::iter::once(fixtures::other_master()))
+            {
+                let blocked_check = application::DraftCheck {
+                    account: &account,
+                    at: now,
+                    observation: &obs,
+                    master: &blocked,
+                };
+                assert_eq!(
+                    run(absent_repo.current_draft(inst, &absent_snap, blocked_check)),
+                    Err(integrity)
+                );
+            }
+        }
+
+        #[test]
+        fn sell_draft_rejects_missing_and_mismatched_restoration_evidence() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let (bus, events) = event_bus();
+
+            let (missing_data, missing_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            missing_data
+                .0
+                .write()
+                .expect("근거 제거")
+                .evaluation
+                .restoration = None;
+            assert_eq!(
+                run(DraftProposal::new(
+                    &missing_repo,
+                    &missing_data,
+                    &Scheduler::default(),
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                )
+                .execute(inst, &account, proposal_id("sell-no-restoration")))
+                .expect_err("복원 근거 누락 거부"),
+                DraftProposalError::Evaluation(
+                    application::EvaluateSignalError::RestorationUnavailable
+                )
+            );
+            assert_eq!(missing_repo.draft_attempts(), 0);
+
+            let (bad_data, bad_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            bad_data
+                .0
+                .write()
+                .expect("타 종목 근거")
+                .evaluation
+                .restoration
+                .as_mut()
+                .expect("복원")
+                .estimate = kr_stored_estimate(&fixtures::other_master());
+            let err = run(DraftProposal::new(
+                &bad_repo,
+                &bad_data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(inst, &account, proposal_id("sell-wrong-estimate")))
+            .expect_err("추정 근거 불일치 거부");
+            let DraftProposalError::Restoration(domain::DraftRestoreError::Estimate(_)) = err
+            else {
+                panic!("추정 근거 오류여야 한다: {err:?}")
+            };
+            assert_eq!(bad_repo.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
+
+        #[test]
+        fn sell_store_rejects_tampered_draft_evidence_and_preserves_existing_draft() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let account = AccountId::new(4321);
+            let inst = &source.row().instrument_id;
+            let integrity = application::SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::RepositoryIntegrity,
+            );
+            let (bus, _) = event_bus();
+            let (ok_data, ok_repo) = kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let valid_id = proposal_id("sell-ev-keep");
+            assert_eq!(
+                create_draft_at(
+                    &ok_repo,
+                    &ok_data,
+                    &testkit_ports::SteppedClock::new(now),
+                    &bus,
+                    (inst, &account, valid_id.clone()),
+                )
+                .id(),
+                &valid_id
+            );
+            let (cand_data, cand_repo) =
+                kr_sell_setup(&source, now, account.clone(), "17", Some("11"));
+            let second_prop = create_draft_at(
+                &cand_repo,
+                &cand_data,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+                (inst, &account, proposal_id("sell-ev-tampered")),
+            );
+            let snap = run(ok_repo.snapshot(inst)).expect("스냅숏");
+            let mut tampered_ev = draft_evidence(&source, &second_prop);
+            tampered_ev.terms = kr_sell_terms("5", "99");
+            let obs = source
+                .price_observation(fixtures::price("100"), fixtures::local(now))
+                .expect("시세");
+            assert_eq!(
+                run(ok_repo.store_current_draft(
+                    inst,
+                    &snap,
+                    application::DraftStoreCandidate {
+                        proposal: &second_prop,
+                        evidence: &tampered_ev,
+                    },
+                    application::DraftCheck {
+                        account: &account,
+                        at: now,
+                        observation: &obs,
+                        master: &source,
+                    },
+                )),
+                Err(integrity)
+            );
+            assert!(
+                run(ok_repo.draft(&valid_id, &source))
+                    .expect("기존 매도 초안 보존")
+                    .is_some()
+            );
         }
     }
 }

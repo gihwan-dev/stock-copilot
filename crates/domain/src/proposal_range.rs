@@ -78,6 +78,9 @@ impl ProposalPriceRange {
             CheckResult::Failed
         }
     }
+    pub(crate) fn card(&self) -> &crate::PriceObservation {
+        &self.card
+    }
     pub(crate) fn instrument(&self) -> &crate::ResolvedOrderInstrument {
         self.facts.instrument()
     }

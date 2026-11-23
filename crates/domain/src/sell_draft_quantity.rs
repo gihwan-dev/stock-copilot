@@ -88,6 +88,7 @@ pub struct SellDraftQuantityPlan {
     adjustment: SellQuantityAdjustment,
     holding_observed_at: Timestamp,
     sellable_observed_at: Timestamp,
+    min_sellable_observed_at: Timestamp,
 }
 
 impl std::fmt::Debug for SellDraftQuantityPlan {
@@ -171,7 +172,7 @@ impl SellDraftQuantityPlan {
         }
         let whole = WholeOrderQuantity::try_new(requested)
             .map_err(|_error| SellDraftQuantityAdjustmentError::BelowMinimumUnit)?;
-        if whole.quantity() > self.quantity.quantity() {
+        if whole.quantity() > self.default_quantity.quantity() {
             return Err(SellDraftQuantityAdjustmentError::ExceedsAllowedQuantity);
         }
         let adjustment = if whole.quantity() < self.default_quantity.quantity() {
@@ -191,6 +192,7 @@ impl SellDraftQuantityPlan {
             adjustment,
             holding_observed_at: self.holding_observed_at,
             sellable_observed_at: self.sellable_observed_at,
+            min_sellable_observed_at: self.min_sellable_observed_at,
         })
     }
 
@@ -210,7 +212,11 @@ impl SellDraftQuantityPlan {
         {
             return Err(NoSellDraftQuantity::StaleHolding);
         }
-        check_sellable_freshness(&self.signal, self.sellable_observed_at, now)
+        check_sellable_freshness(
+            self.min_sellable_observed_at,
+            self.sellable_observed_at,
+            now,
+        )
     }
 }
 
@@ -237,7 +243,33 @@ pub fn calculate_sell_draft_quantity(
     now: Timestamp,
     calendars: &[MarketCalendar],
 ) -> SellDraftQuantityDecision {
-    match calculate(signal, facts, now, calendars) {
+    match calculate(signal, signal.observed_at(), facts, now, calendars) {
+        Ok(plan) => SellDraftQuantityDecision::Plan(Box::new(plan)),
+        Err(reason) => SellDraftQuantityDecision::None(reason),
+    }
+}
+
+#[must_use]
+pub fn calculate_sell_draft_quantity_with_history(
+    live: &SellSignal,
+    stored: &crate::HistoricalSignal,
+    facts: &SellDraftQuantityFacts<'_>,
+    now: Timestamp,
+    calendars: &[MarketCalendar],
+) -> SellDraftQuantityDecision {
+    let Some(stored_sell) = stored.sell_signal() else {
+        return SellDraftQuantityDecision::None(NoSellDraftQuantity::DifferentFact);
+    };
+    if stored_sell.facts() != live.facts() {
+        return SellDraftQuantityDecision::None(NoSellDraftQuantity::DifferentFact);
+    }
+    if stored_sell.held_quantity() != live.held_quantity() {
+        return SellDraftQuantityDecision::None(NoSellDraftQuantity::HoldingChanged);
+    }
+    if live.observed_at() < stored_sell.observed_at() {
+        return SellDraftQuantityDecision::None(NoSellDraftQuantity::StaleHolding);
+    }
+    match calculate(live, stored_sell.observed_at(), facts, now, calendars) {
         Ok(plan) => SellDraftQuantityDecision::Plan(Box::new(plan)),
         Err(reason) => SellDraftQuantityDecision::None(reason),
     }
@@ -245,6 +277,7 @@ pub fn calculate_sell_draft_quantity(
 
 fn calculate(
     signal: &SellSignal,
+    min_sellable_observed_at: Timestamp,
     facts: &SellDraftQuantityFacts<'_>,
     now: Timestamp,
     calendars: &[MarketCalendar],
@@ -255,7 +288,7 @@ fn calculate(
         .check(task, signal.facts().submission().submitted_at())
         .map_err(NoSellDraftQuantity::SignalUnavailable)?;
     let holding = verified_holding(signal, facts.valuation, timing)?;
-    let sellable = verified_sellable(signal, facts, now)?;
+    let sellable = verified_sellable(signal, min_sellable_observed_at, facts, now)?;
     let held_quantity = WholeOrderQuantity::try_new(holding.quantity())
         .map_err(|_error| NoSellDraftQuantity::FractionalQuantityUnsupported)?;
     let sellable_quantity = WholeOrderQuantity::try_new(sellable.quantity())
@@ -282,6 +315,7 @@ fn calculate(
         adjustment: SellQuantityAdjustment::Default,
         holding_observed_at: holding.observed_at(),
         sellable_observed_at: sellable.observed_at(),
+        min_sellable_observed_at,
     })
 }
 
@@ -316,6 +350,7 @@ fn verified_holding<'facts>(
 
 fn verified_sellable<'facts>(
     signal: &SellSignal,
+    min_observed_at: Timestamp,
     facts: &'facts SellDraftQuantityFacts<'_>,
     now: Timestamp,
 ) -> Result<&'facts SellableQuantityFact, NoSellDraftQuantity> {
@@ -326,7 +361,7 @@ fn verified_sellable<'facts>(
     if sellable.account_id() != facts.account || sellable.instrument() != instrument {
         return Err(NoSellDraftQuantity::DifferentFact);
     }
-    check_sellable_freshness(signal, sellable.observed_at(), now)?;
+    check_sellable_freshness(min_observed_at, sellable.observed_at(), now)?;
     if sellable.quantity().as_decimal().is_zero() {
         return Err(NoSellDraftQuantity::ZeroSellableQuantity);
     }
@@ -334,15 +369,14 @@ fn verified_sellable<'facts>(
 }
 
 fn check_sellable_freshness(
-    signal: &SellSignal,
+    min_observed_at: Timestamp,
     observed_at: Timestamp,
     now: Timestamp,
 ) -> Result<(), NoSellDraftQuantity> {
     let elapsed = observed_at
         .elapsed_until(now)
         .or(Err(NoSellDraftQuantity::StaleSellableQuantity))?;
-    if observed_at < signal.observed_at() || elapsed > crate::domain_time::SELLABLE_QUANTITY_MAX_AGE
-    {
+    if observed_at < min_observed_at || elapsed > crate::domain_time::SELLABLE_QUANTITY_MAX_AGE {
         return Err(NoSellDraftQuantity::StaleSellableQuantity);
     }
     Ok(())
@@ -353,7 +387,8 @@ mod tests {
     use super::{
         NoSellDraftQuantity, SellDraftQuantityAdjustmentError, SellDraftQuantityDecision,
         SellDraftQuantityFacts, SellDraftQuantityPlan, SellQuantityAdjustment,
-        SellQuantityConstraint, calculate_sell_draft_quantity, sell_signal_matches_reassessed,
+        SellQuantityConstraint, calculate_sell_draft_quantity,
+        calculate_sell_draft_quantity_with_history, sell_signal_matches_reassessed,
     };
     use crate::{
         AccountId, AcquisitionPrice, AiProbability, AiProbabilityInput, AllocationInstrument,
@@ -1235,8 +1270,17 @@ mod tests {
             assert_eq!(kept.adjustment(), SellQuantityAdjustment::Reduced);
             let min = reduced.reduce_quantity(qty("1")).expect("최소 1주");
             assert_eq!(min.quantity(), whole("1"));
+            let raised = min
+                .reduce_quantity(qty("8"))
+                .expect("기본 수량 이하 재증가");
+            assert_eq!(raised.quantity(), whole("8"));
+            assert_eq!(raised.default_quantity(), whole("11"));
+            assert_eq!(raised.adjustment(), SellQuantityAdjustment::Reduced);
+            let restored = raised.reduce_quantity(qty("11")).expect("기본 수량 복원");
+            assert_eq!(restored.quantity(), whole("11"));
+            assert_eq!(restored.adjustment(), SellQuantityAdjustment::Default);
             assert_eq!(
-                reduced.reduce_quantity(qty("8")),
+                reduced.reduce_quantity(qty("12")),
                 Err(SellDraftQuantityAdjustmentError::ExceedsAllowedQuantity)
             );
             assert_eq!(
@@ -1248,6 +1292,151 @@ mod tests {
                 Err(SellDraftQuantityAdjustmentError::ExceedsAllowedQuantity)
             );
         }
+    }
+
+    #[test]
+    fn with_history_allows_parallel_sellable_after_stored_signal_and_rejects_mismatches() {
+        let fixture = Fixture::new(Market::Kr, qty("17"));
+        let stored_at = later(fixture.now, 10, 0);
+        let live_at = later(fixture.now, 30, 0);
+        let parallel_sellable_at = later(fixture.now, 25, 0);
+        let stored_signal = sell_signal_for(&fixture, "17", stored_at, "1");
+        let stored_history =
+            crate::HistoricalSignal::from_signal(&crate::RaisedSignal::Sell(stored_signal));
+        let live_signal = sell_signal_for(&fixture, "17", live_at, "1");
+        let live_holding = holding_for(&fixture.instrument, qty("17"), live_at);
+        let live_val = valuation_with(&fixture.market, vec![live_holding], live_at);
+
+        let parallel_sellable = fixture.sellable(qty("11"), parallel_sellable_at);
+        let ok_facts =
+            SellDraftQuantityFacts::new(&fixture.account, &live_val, Some(&parallel_sellable));
+        let plan = calculate_sell_draft_quantity_with_history(
+            &live_signal,
+            &stored_history,
+            &ok_facts,
+            live_at,
+            &fixture.calendars,
+        )
+        .into_plan()
+        .expect("병렬 조회 허용");
+        assert_eq!(plan.quantity(), whole("11"));
+        assert_eq!(
+            plan.check_facts_at(later(parallel_sellable_at, 60, 0), &fixture.calendars),
+            Ok(())
+        );
+        assert_eq!(
+            plan.check_facts_at(later(parallel_sellable_at, 60, 1), &fixture.calendars),
+            Err(NoSellDraftQuantity::StaleSellableQuantity)
+        );
+
+        let pre_stored_sellable = fixture.sellable(qty("11"), later(fixture.now, 9, 0));
+        let stale_facts =
+            SellDraftQuantityFacts::new(&fixture.account, &live_val, Some(&pre_stored_sellable));
+        assert_eq!(
+            calculate_sell_draft_quantity_with_history(
+                &live_signal,
+                &stored_history,
+                &stale_facts,
+                live_at,
+                &fixture.calendars,
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::StaleSellableQuantity)
+        );
+    }
+
+    fn fixture_buy_signal(fixture: &Fixture) -> crate::RaisedSignal {
+        let eligible = eligible_task(&fixture.instrument, fixture.now, &fixture.calendars);
+        let (buy_estimate, buy_item, buy_head) =
+            sell_estimate_with_probability(&eligible, fixture.now, "99");
+        let items = [buy_item];
+        let ledger = SignalSourceLedger::new(&items, &[], &[]);
+        let policy = Policy::new(InvestorProfile::default());
+        let assignments = SectorAssignments::try_new(vec![SectorAssignment::new(
+            &fixture.instrument,
+            InstrumentClassification::EtfFund,
+        )])
+        .expect("분류");
+        let security = PolicySecurityFacts::from_master_lookup_results(
+            std::iter::once((
+                AllocationInstrument::new(&fixture.instrument),
+                ExcludedSecurityType::Stock,
+            ))
+            .collect(),
+        );
+        let buy_context = SignalContext::new(
+            Some(&fixture.valuation),
+            &policy,
+            (&assignments, &security),
+            &ledger,
+            SignalAssessmentFacts::new(
+                SignalTiming::new(fixture.now, &fixture.calendars),
+                Some(buy_estimate.task().reference().clone()),
+                Some(buy_head),
+            ),
+        );
+        SignalDecision::assess(&buy_estimate, &buy_context)
+            .into_signal()
+            .expect("매수 신호")
+    }
+
+    #[test]
+    fn with_history_rejects_mismatched_and_regressed_stored_signals() {
+        let fixture = Fixture::new(Market::Kr, qty("17"));
+        let stored_at = later(fixture.now, 10, 0);
+        let live_at = later(fixture.now, 30, 0);
+        let stored_signal = sell_signal_for(&fixture, "17", stored_at, "1");
+        let stored_history =
+            crate::HistoricalSignal::from_signal(&crate::RaisedSignal::Sell(stored_signal));
+        let live_signal = sell_signal_for(&fixture, "17", live_at, "1");
+        let live_holding = holding_for(&fixture.instrument, qty("17"), live_at);
+        let live_val = valuation_with(&fixture.market, vec![live_holding], live_at);
+        let parallel_sellable = fixture.sellable(qty("11"), later(fixture.now, 25, 0));
+        let ok_facts =
+            SellDraftQuantityFacts::new(&fixture.account, &live_val, Some(&parallel_sellable));
+        let buy_history = crate::HistoricalSignal::from_signal(&fixture_buy_signal(&fixture));
+        assert_eq!(
+            calculate_sell_draft_quantity_with_history(
+                &live_signal,
+                &buy_history,
+                &ok_facts,
+                live_at,
+                &fixture.calendars,
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::DifferentFact)
+        );
+        let diff_facts_live = sell_signal_for(&fixture, "17", live_at, "2");
+        assert_eq!(
+            calculate_sell_draft_quantity_with_history(
+                &diff_facts_live,
+                &stored_history,
+                &ok_facts,
+                live_at,
+                &fixture.calendars,
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::DifferentFact)
+        );
+        let diff_qty_live = sell_signal_for(&fixture, "15", live_at, "1");
+        assert_eq!(
+            calculate_sell_draft_quantity_with_history(
+                &diff_qty_live,
+                &stored_history,
+                &ok_facts,
+                live_at,
+                &fixture.calendars,
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::HoldingChanged)
+        );
+        let regressed_live = sell_signal_for(&fixture, "17", later(fixture.now, 5, 0), "1");
+        assert_eq!(
+            calculate_sell_draft_quantity_with_history(
+                &regressed_live,
+                &stored_history,
+                &ok_facts,
+                live_at,
+                &fixture.calendars,
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::StaleHolding)
+        );
     }
 
     #[test]
@@ -1317,7 +1506,7 @@ mod tests {
                 SellQuantityAdjustment::Default
             };
             assert_eq!(reduced.adjustment(), expected_adj);
-            assert_second_reduction(&reduced, first_raw, second_raw);
+            assert_second_reduction(&reduced, expected_default, second_raw);
         }
         let fractional_decimal = Decimal::from_i128_with_scale(i128::from(frac_part), 6_u32);
         let fractional = Quantity::try_new(fractional_decimal).expect("소수");
@@ -1327,7 +1516,11 @@ mod tests {
         );
     }
 
-    fn assert_second_reduction(reduced: &SellDraftQuantityPlan, first_raw: u64, second_raw: u64) {
+    fn assert_second_reduction(
+        reduced: &SellDraftQuantityPlan,
+        expected_default: u64,
+        second_raw: u64,
+    ) {
         let second_input = Quantity::try_new(Decimal::from(second_raw)).expect("재요청");
         let second_outcome = reduced.reduce_quantity(second_input);
         if second_raw == 0 {
@@ -1335,18 +1528,27 @@ mod tests {
                 second_outcome,
                 Err(SellDraftQuantityAdjustmentError::BelowMinimumUnit)
             );
-        } else if second_raw > first_raw {
+        } else if second_raw > expected_default {
             assert_eq!(
                 second_outcome,
                 Err(SellDraftQuantityAdjustmentError::ExceedsAllowedQuantity)
             );
         } else {
-            let twice = second_outcome.expect("추가 축소 허용");
+            let adjusted = second_outcome.expect("기본 수량 이하 재조정 허용");
             assert_eq!(
-                twice.quantity().quantity().as_decimal(),
+                adjusted.quantity().quantity().as_decimal(),
                 Decimal::from(second_raw)
             );
-            assert!(twice.quantity().quantity() <= reduced.quantity().quantity());
+            assert_eq!(
+                adjusted.default_quantity().quantity().as_decimal(),
+                Decimal::from(expected_default)
+            );
+            let expected_adj = if second_raw < expected_default {
+                SellQuantityAdjustment::Reduced
+            } else {
+                SellQuantityAdjustment::Default
+            };
+            assert_eq!(adjusted.adjustment(), expected_adj);
         }
     }
 

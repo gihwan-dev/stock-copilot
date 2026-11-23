@@ -61,6 +61,23 @@ mod tests {
     fn id(value: &str) -> InstrumentId {
         InstrumentId::try_new(value).expect("종목")
     }
+    fn master() -> domain::MasterInstrument {
+        domain::MasterInstrument::try_new(domain::MasterInstrumentRow {
+            listing_market: domain::MasterCode::try_new("NASDAQ").expect("시장"),
+            symbol: domain::Symbol::try_new("EXAMPLE").expect("심볼"),
+            instrument_id: id("fixture"),
+            name: domain::DisplayInstrumentName::try_new("가상 종목").expect("이름"),
+            security_type: domain::MasterSecurityType::from_code(
+                domain::MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency: domain::Currency::Usd,
+            listing_status: domain::ListingStatus::Active,
+            common_share: domain::CommonShare::Common,
+            korean_detail: None,
+            observed_at: at(0),
+        })
+        .expect("마스터")
+    }
     fn rate(value: &str, pair: FxPair, kind: FxRateKind, start: i64) -> FxRate {
         FxRate::parse(
             &NumericInput::try_new(value).expect("숫자"),
@@ -430,6 +447,7 @@ mod tests {
         run(contracts::proposal_repository_draft(
             &proposals,
             &proposal,
+            &master(),
             Ok(None),
         ));
         let valuations = testkit_ports::memory::MemoryValuationRepository::default();

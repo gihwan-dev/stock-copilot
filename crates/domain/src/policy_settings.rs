@@ -58,6 +58,9 @@ impl Default for PolicySecurityFacts {
     }
 }
 impl PolicySecurityFacts {
+    pub fn entries(&self) -> impl Iterator<Item = (&AllocationInstrument, &ExcludedSecurityType)> {
+        self.0.iter()
+    }
     pub(crate) fn from_master_lookup_results(
         values: BTreeMap<AllocationInstrument, ExcludedSecurityType>,
     ) -> Self {
