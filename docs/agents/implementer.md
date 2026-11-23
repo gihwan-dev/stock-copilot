@@ -20,7 +20,7 @@
 - 보호 파일(docs/harness.md 7.1)을 수정하지 않는다. 하네스가 편집이나 명령을 거부하면 다른 방법으로 같은 일을 하려 하지 말고 멈춘다. 어떤 규칙이 무엇을 막는지와 시도한 대안을 보고한다.
 - 구현이 불가능하거나 완료 기준이 서로 모순되면 억지로 통과시키지 말고 보고서 첫 줄을 "막힘:"으로 시작해 끝낸다. 이것은 실패가 아니라 정상 출구다.
 - 필요한 디자인 시스템 컴포넌트가 없으면 `shared/ds`에 만들지 말고 "막힘:"으로 보고한다.
-- 커밋은 작게 하고 서명 옵션을 쓰지 않는다. 자기 작업 브랜치의 `git push origin <현재 브랜치>`(`/usr/bin/git` 포함)와 독립 리뷰어(`claudeAgent` `claude-opus-5-5` `role=review`)·독립 비판자/실측(`antigravity` `gemini-4-neon` `thought_level=high` `role=review|research`)의 `isolation=worktree` 위임만 허용되며, `master`/`main`/`merge/*` 푸시·강제 푸시·다른 refspec·구현 모델(`xhigh`) 위임·타 제공자(Codex 등) 위임은 차단된다. 병합은 메인만 한다.
+- 커밋은 작게 하고 서명 옵션을 쓰지 않는다. 자기 작업 브랜치의 `git push origin <현재 브랜치>`(`/usr/bin/git` 포함), 메인이 원격 작업 브랜치에 올린 병합 커밋을 받는 `git merge --ff-only origin/<현재 브랜치>`(`/usr/bin/git` 포함, `--ff-only` 한 옵션과 정확히 같은 이름의 `origin/` 추적 참조만, 전역 옵션·다른 플래그·다른 브랜치·`master` 불가), 독립 리뷰어(`claudeAgent` `claude-opus-5-5` `role=review`)·독립 비판자/실측(`antigravity` `gemini-4-neon` `thought_level=high` `role=review|research`)의 `isolation=worktree` 위임만 허용되며, `master`/`main`/`merge/*` 푸시·강제 푸시·다른 refspec·구현 모델(`xhigh`) 위임·타 제공자(Codex 등) 위임은 차단된다. 병합은 메인만 한다.
 
 멈출 때와 계속할 때:
 - 검사 실패(린트, 구조 검사, 커버리지, 변이 생존, 생성물 불일치)는 막힘이 아니다. 고쳐서 통과시킨다. 커버리지는 도달 가능한 분기에 테스트를 쓰고, 도달할 수 없는 분기는 코드에서 없앤다.
@@ -72,6 +72,6 @@ fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. d
 ## 역할 배분 (Antigravity 구현 담당·비판자)
 
 - 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 최상위 별도 작업 사본(비-`master`·`main`·`merge/*`·`review/*`·`critic/*`·`t3/*` 브랜치, 비-`t3-*` 작업 사본, 비-`thread:delegated-task:*` 스레드)에서 담당한다. 이 조건 중 하나라도 확인되지 않으면 `ROLE.reviewer`로 닫힌다.
-- 구현 담당에게만 (1) `git push origin <현재 브랜치>`(`/usr/bin/git` 포함, 옵션·refspec `:`·`+`·강제·삭제 없음, `master`·`main`·`merge/*` 불가)와 (2) `mcp_t3-code_delegate_task`(`isolation=worktree`, `claudeAgent` `claude-opus-5-5` `role=review` 또는 `antigravity` `gemini-4-neon` `thought_level=high` `role=review|research`만)가 허용된다. `LEFTHOOK=0` 환경 우회는 계속 차단된다.
+- 구현 담당에게만 (1) `git push origin <현재 브랜치>`(`/usr/bin/git` 포함, 옵션·refspec `:`·`+`·강제·삭제 없음, `master`·`main`·`merge/*` 불가), (2) `git merge --ff-only origin/<현재 브랜치>`(`/usr/bin/git` 포함, `--ff-only` 한 옵션과 현재 작업 브랜치와 일치하는 `origin/` 추적 참조만, 전역 옵션·다른 플래그·다른 브랜치·`master` 불가), (3) `mcp_t3-code_delegate_task`(`isolation=worktree`, `claudeAgent` `claude-opus-5-5` `role=review` 또는 `antigravity` `gemini-4-neon` `thought_level=high` `role=review|research`만)가 허용된다. `LEFTHOOK=0` 환경 우회는 계속 차단된다.
 - 리뷰 비판자(`review-critic`)와 조사 역할은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 담당하며, Antigravity 세션 훅(`.agents/hooks.json`)이 `ROLE.reviewer`로 고정해 추적 파일 쓰기·변경형 git·`git push`·하위 `delegate_task`를 모두 차단한다(H-58의 분리 사본 루트 `rm -xrf target`/`.rv-*` 정리 허용 및 대소문자 별칭 차단 포함).
 - 적대적 리뷰(`adversarial-reviewer`)는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `claudeAgent` 형식 인스턴스 이름 허용)가 담당한다.

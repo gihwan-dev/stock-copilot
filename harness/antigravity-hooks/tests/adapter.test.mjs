@@ -1611,4 +1611,130 @@ test("Implementer role allows narrow own-branch git push, origin/master merge, a
     ).decision,
     "deny",
   );
+  assert.equal(
+    runIn(pushWorktree, "git merge --ff-only origin/h-61").decision,
+    "allow",
+  );
+  assert.equal(
+    runIn(pushWorktree, "/usr/bin/git merge --ff-only origin/h-61").decision,
+    "allow",
+  );
+  for (const [wt, cmd, opts] of [
+    [pushWorktree, "git merge --ff-only origin/master", {}],
+    [pushWorktree, "git merge --ff-only origin/main", {}],
+    [pushWorktree, "git merge --ff-only origin/other", {}],
+    [pushWorktree, "git merge --ff-only h-61", {}],
+    [pushWorktree, "git merge --ff-only upstream/h-61", {}],
+    [pushWorktree, "git merge --ff-only refs/remotes/origin/h-61", {}],
+    [pushWorktree, "git merge --ff-only origin/h-61~1", {}],
+    [pushWorktree, "git merge --ff-only --no-edit origin/h-61", {}],
+    [pushWorktree, "git merge --ff-only --no-verify origin/h-61", {}],
+    [pushWorktree, "git merge --ff-only --no-ff origin/h-61", {}],
+    [pushWorktree, "git merge origin/h-61 --ff-only", {}],
+    [pushWorktree, "git -C . merge --ff-only origin/h-61", {}],
+    [pushWorktree, "git -c merge.ff=true merge --ff-only origin/h-61", {}],
+    [pushWorktree, "git checkout h-61 && git merge --ff-only origin/h-61", {}],
+    [
+      pushWorktree,
+      "git merge --ff-only origin/h-61",
+      { modelName: "gemini-4-neon-high" },
+    ],
+    [
+      pushWorktree,
+      "git merge --ff-only origin/h-61",
+      { threadId: "thread:delegated-task:child" },
+    ],
+    [mergeWorktree, "git merge --ff-only origin/merge/h-61", {}],
+    [t3Worktree, "git merge --ff-only origin/t3/1234abcd", {}],
+    [t3NamedWorktree, "git merge --ff-only origin/h-62", {}],
+    [f.root, "git merge --ff-only origin/master", {}],
+  ]) {
+    const actual = runIn(wt, cmd, opts);
+    assert.equal(
+      actual.decision,
+      "deny",
+      `expected deny for ff-merge (${wt}) ${cmd} ${JSON.stringify(opts)} -> ${JSON.stringify(actual)}`,
+    );
+  }
+  assert.equal(
+    decideBash(
+      {
+        cwd: t3NamedWorktree,
+        agent_type: "implementer",
+        agent_id: "a1",
+        tool_input: { command: "git merge --ff-only origin/h-62" },
+      },
+      { ...extendedProject, ownedWorktree: t3NamedWorktree },
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    decideBash(
+      {
+        cwd: mergeWorktree,
+        agent_type: "implementer",
+        agent_id: "a1",
+        tool_input: { command: "git merge --ff-only origin/merge/h-61" },
+      },
+      { ...extendedProject, ownedWorktree: mergeWorktree },
+    ).decision,
+    "deny",
+  );
+});
+
+test("Antigravity reviewer inherits H-58 isolated temp directory cleanup parity", () => {
+  const remove =
+    process.platform === "darwin" ? "rm -xrf" : "rm -rf --one-file-system";
+  const rvDir = join(f.worktree, ".rv-antigravity");
+  const targetDir = join(f.worktree, "target");
+  const rvLink = join(f.worktree, ".rv-link");
+  mkdirSync(rvDir, { recursive: true });
+  mkdirSync(targetDir, { recursive: true });
+  rmSync(rvLink, { recursive: true, force: true });
+  symlinkSync(f.outside, rvLink);
+  const project = projectFor(f, { lock: LOCK.on });
+  const runReviewer = (command, cwd = f.worktree) =>
+    antigravityPreTool(
+      {
+        hookEventName: "PreToolUse",
+        cwd,
+        modelName: "gemini-4-neon-high",
+        toolCall: {
+          id: `tc-h58-${command.slice(0, 12)}`,
+          name: "run_command",
+          args: { CommandLine: command },
+        },
+      },
+      project,
+      cwd,
+      { home: fakeHome },
+    );
+  try {
+    assert.equal(runReviewer(`${remove} target`).decision, "allow");
+    assert.equal(runReviewer(`${remove} .rv-antigravity`).decision, "allow");
+    for (const denied of [
+      "rm -rf target",
+      "rm -rf .rv-antigravity",
+      `${remove} .rv-link`,
+      `${remove} docs`,
+      `${remove} .agents`,
+      `${remove} ${f.outside}`,
+      `${remove} ~`,
+      `${remove} target/`,
+      `${remove} .rv-antigravity/`,
+      `${remove} DOCS`,
+      `${remove} TARGET`,
+    ]) {
+      assert.equal(
+        runReviewer(denied).decision,
+        "deny",
+        `expected H-58 deny in Antigravity: ${denied}`,
+      );
+    }
+    assert.equal(runReviewer(`${remove} target`, f.root).decision, "deny");
+  } finally {
+    rmSync(rvDir, { recursive: true, force: true });
+    rmSync(targetDir, { recursive: true, force: true });
+    rmSync(rvLink, { recursive: true, force: true });
+  }
 });

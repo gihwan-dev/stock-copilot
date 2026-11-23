@@ -484,10 +484,54 @@ const isForbiddenPushBranch = (name, rules) =>
     (branch) => branch.toLowerCase() === name.toLowerCase(),
   ) || /^(?:merge|review|critic|t3)\//iu.test(name);
 
-const implementerPush = (parsed, invocation, context) => {
-  if (context.role !== ROLE.implementer) {
-    return false;
+const validWorkBranchRef = (ref, rules) =>
+  ref !== "" &&
+  ref !== "HEAD" &&
+  ref !== "@" &&
+  !ref.startsWith("+") &&
+  !ref.startsWith("refs/") &&
+  !ref.includes(":") &&
+  !ref.includes("..") &&
+  !ref.includes("@{") &&
+  !/[\s~^?*[\]\\]/u.test(ref) &&
+  !isForbiddenPushBranch(ref, rules);
+
+const implementerWorkBranch = (invocation, context) => {
+  if (context.role !== ROLE.implementer || context.moves.branch) {
+    return undefined;
   }
+  const directory = currentDirectory(invocation, context);
+  if (directory === undefined) {
+    return undefined;
+  }
+  const located = locate(
+    resolve(directory, ".push-probe"),
+    context.project.worktrees,
+  );
+  if (
+    located.root === undefined ||
+    located.problem !== undefined ||
+    located.root === context.project.root
+  ) {
+    return undefined;
+  }
+  if (
+    context.project.ownedWorktree !== undefined &&
+    located.root !== context.project.ownedWorktree
+  ) {
+    return undefined;
+  }
+  if (/^t3-[0-9a-f]{8}-/iu.test(basename(located.root))) {
+    return undefined;
+  }
+  const current = branchOfDirectory(directory);
+  return typeof current === "string" &&
+    validWorkBranchRef(current, context.rules)
+    ? current
+    : undefined;
+};
+
+const implementerPush = (parsed, invocation, context) => {
   if (parsed.globals.length > 0 || parsed.rest.length !== 2) {
     return false;
   }
@@ -506,54 +550,36 @@ const implementerPush = (parsed, invocation, context) => {
   if (!allowedRemotes.includes(remote.text)) {
     return false;
   }
-  const ref = target.text;
-  if (
-    ref === "" ||
-    ref === "HEAD" ||
-    ref === "@" ||
-    ref.startsWith("+") ||
-    ref.startsWith("refs/") ||
-    ref.includes(":") ||
-    ref.includes("..") ||
-    ref.includes("@{") ||
-    /[\s~^?*[\]\\]/u.test(ref) ||
-    isForbiddenPushBranch(ref, context.rules)
-  ) {
-    return false;
-  }
-  if (context.moves.branch) {
-    return false;
-  }
-  const directory = currentDirectory(invocation, context);
-  if (directory === undefined) {
-    return false;
-  }
-  const located = locate(
-    resolve(directory, ".push-probe"),
-    context.project.worktrees,
-  );
-  if (
-    located.root === undefined ||
-    located.problem !== undefined ||
-    located.root === context.project.root
-  ) {
-    return false;
-  }
-  if (
-    context.project.ownedWorktree !== undefined &&
-    located.root !== context.project.ownedWorktree
-  ) {
-    return false;
-  }
-  if (/^t3-[0-9a-f]{8}-/iu.test(basename(located.root))) {
-    return false;
-  }
-  const current = branchOfDirectory(directory);
+  const current = implementerWorkBranch(invocation, context);
   return (
-    typeof current === "string" &&
-    current.length > 0 &&
-    !isForbiddenPushBranch(current, context.rules) &&
-    ref === current
+    current !== undefined &&
+    validWorkBranchRef(target.text, context.rules) &&
+    target.text === current
+  );
+};
+
+const implementerFastForwardMerge = (parsed, invocation, context) => {
+  if (parsed.globals.length > 0 || parsed.rest.length !== 2) {
+    return false;
+  }
+  const [flag, target] = parsed.rest;
+  if (
+    flag.dynamic ||
+    flag.glob ||
+    flag.text !== "--ff-only" ||
+    target.dynamic ||
+    target.glob ||
+    target.text.startsWith("-")
+  ) {
+    return false;
+  }
+  const current = implementerWorkBranch(invocation, context);
+  if (current === undefined) {
+    return false;
+  }
+  const allowedRemotes = context.rules.git.implementerPush?.remotes ?? [];
+  return allowedRemotes.some(
+    (remote) => target.text === `${remote}/${current}`,
   );
 };
 
@@ -1605,7 +1631,8 @@ export const CHECKS = [
         sub === "merge" &&
         !(
           context.role === ROLE.implementer &&
-          implementerMerge(rest, context.rules)
+          (implementerMerge(rest, context.rules) ||
+            implementerFastForwardMerge(parsed, invocation, context))
         );
       if (sub === "remote" && subagentRemoteMutation(rest, context.rules)) {
         return [
@@ -1622,7 +1649,7 @@ export const CHECKS = [
         ? [
             finding(
               "git-subcommands",
-              `서브에이전트는 git ${sub}를 하지 않는다. 병합은 메인만 한다. 구현자는 git merge master|origin/master와 자기 작업 브랜치의 git push origin <브랜치>만 쓴다 (docs/workflow.md 2장, ADR 0017)`,
+              `서브에이전트는 git ${sub}를 하지 않는다. 병합은 메인만 한다. 구현자는 git merge master|origin/master, git merge --ff-only origin/<브랜치>, 자기 작업 브랜치의 git push origin <브랜치>만 쓴다 (docs/workflow.md 2장, ADR 0017)`,
             ),
           ]
         : [];

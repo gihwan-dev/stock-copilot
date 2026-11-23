@@ -5423,5 +5423,117 @@
     "decision": "deny",
     "rules": ["environment"],
     "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only origin/side",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "/usr/bin/git merge --ff-only origin/side",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only origin/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "command": "git merge --ff-only origin/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "review-critic"
+  },
+  {
+    "command": "git merge --ff-only origin/master",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only origin/master",
+    "cwd": "{root}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only origin/main",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only origin/other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only upstream/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only refs/remotes/origin/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only origin/side~1",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only --no-edit origin/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --ff-only --no-verify origin/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-no-verify", "git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {worktree} merge --ff-only origin/side",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge origin/side --ff-only",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
   }
 ]
