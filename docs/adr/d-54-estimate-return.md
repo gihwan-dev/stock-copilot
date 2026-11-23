@@ -215,3 +215,45 @@
 | 20 | 매도 비용률을 0으로 대체 | `estimate_return::tests::d54_maturity_uses_submission_price_and_proportional_costs` |
 | 21 | 초과 수익에서 벤치마크를 더함 | `estimate_return::arithmetic_tests::d54_return_examples_preserve_sign_cost_and_excess` |
 | 22 | 근사 수익률을 0으로 변환 | `estimate_return::arithmetic_tests::d54_nonterminating_division_is_marked_approximate_and_direction_is_retained` |
+
+## 인계 후 자동 변이와 최종 손 변형
+
+Codex 한도 초과로 인계받은 뒤(`969c8bd4a51c320e21e37bdf62a387bfc9212070`), 중단 전 검사 결과에 의존하지 않고 자동 변경분 변이와 손 변형을 다시 실행했다.
+
+- 자동 변이 1차(`just mutants-diff`, 병렬도 2): 130개 중 검출 75, 미검출 5, 시간 초과 0, 컴파일 불가 50이었다. 미검출 5건은 모두 `check_timing`의 만기 시각 경계(`entry.submitted_at() < at`의 `<`→`<=`·가드 상수화), 일봉 개장 경계 도달(`entry.submitted_at() < at`의 `<`→`<=`·가드 상수화), 일봉 청산 이후 거래일(`day == exit_day` 가드 상수화)이었다.
+- 제품 코드와 기존 테스트는 바꾸지 않고 경계 회귀 시험 3개(`d54_daily_open_boundary_hit_requires_strictly_earlier_submission`, `d54_check_timing_rejects_maturity_boundary_and_after_maturity`, `d54_check_timing_rejects_later_trading_day_without_calendar_lookup`)를 추가했다.
+- 자동 변이 재실행(`just mutants-diff`, 병렬도 2, 19분): **130개 중 검출 80, 미검출 0, 시간 초과 0, 컴파일 불가 50**(`mutants: 위반 없음`). 실행 직후 `target/mutants`를 삭제했다.
+- 손 변형: 작업 사본의 `target/D-54/` 아래 격리 복사본과 별도 Cargo 출력 디렉터리에서 33건을 하나씩 실행했고, `-D warnings` 아래 미사용 변수·상수·함수로 컴파일되지 않은 3건은 수에서 제외했다. 컴파일된 유효 변형 **30건 중 30건 검출, 생존 0건**을 확인한 뒤 격리 복사본을 즉시 삭제했다.
+
+| 번호 | 바꾼 것 | 검출한 시험 |
+|---|---|---|
+| 1 | 제출 종목 일치 검사를 실패 시에도 통과로 변경 | `estimate_return::tests::d54_submission_price_rejects_other_instruments_and_currencies` |
+| 2 | 제출 시각 일치 검사를 이전 관측만 거부하도록 완화 | `estimate_return::tests::d54_submission_price_preserves_submission_and_rejects_other_times` |
+| 3 | 제출 통화 일치 조건 반전 | `estimate_return::tests::d54_submission_price_rejects_other_instruments_and_currencies` |
+| 4 | 동시 시각 제출 가격과 기준 가격 불일치 검사 반전 | `estimate_return::tests::d54_inconsistent_simultaneous_prices_and_bad_action_are_rejected` |
+| 5 | 판정 재계산 결과 일치 비교 반전 | `estimate_return::tests::d54_resolved_outcome_uses_submission_price_and_goal_stop_or_maturity` |
+| 6 | 목표 청산 종류를 손절로 표기 | `estimate_return::tests::d54_resolved_outcome_uses_submission_price_and_goal_stop_or_maturity` |
+| 7 | 손절 청산 종류를 목표로 표기 | `estimate_return::tests::d54_resolved_outcome_uses_submission_price_and_goal_stop_or_maturity` |
+| 8 | 만기 청산 종류를 목표로 표기 | `estimate_return::tests::d54_maturity_uses_submission_price_and_proportional_costs` |
+| 9 | 확정 모호 실패를 미판정 오류로 합침 | `estimate_return::tests::d54_ambiguous_failure_has_a_distinct_exit_error` |
+| 10 | 일봉 도달의 같은 날 제출 검사를 항상 통과로 완화 | `estimate_return::tests::d54_preopen_submission_precedes_a_same_day_daily_exit` |
+| 11 | 같은 날 일봉 도달의 개장 전후 조건 반전 | `estimate_return::tests::d54_preopen_submission_precedes_a_same_day_daily_exit` |
+| 12 | 수정 기준 시각이 청산을 덮는지 검사 반전 | `estimate_return::tests::d54_adjustment_must_cover_exit_evidence` |
+| 13 | 제출가의 목표 경계 초과 검사를 제거 | `estimate_return::tests::d54_entry_outside_recorded_bounds_is_pending` |
+| 14 | 목표 갭 경계 비교 제거 | `estimate_return::tests::d54_gap_prices_wait_for_the_estimate_policy` |
+| 15 | 손절 갭 경계 비교 제거 | `estimate_return::tests::d54_gap_prices_wait_for_the_estimate_policy` |
+| 16 | 갭 가격 불일치 조건 반전 | `estimate_return::tests::d54_gap_prices_wait_for_the_estimate_policy` |
+| 17 | 비용의 시장 일치 검사 제거 | `estimate_return::tests::d54_cost_requires_the_same_market_and_maturity` |
+| 18 | 매수 비용률과 매도 비용률을 서로 뒤바꿈 | `estimate_return::tests::d54_maturity_uses_submission_price_and_proportional_costs` |
+| 19 | 벤치마크 달력 오류를 벤치마크 불일치로 치환 | `estimate_return::tests::d54_calendar_and_benchmark_failures_remain_explicit` |
+| 20 | 벤치마크 진입일 종료 시각 검사 생략 | `estimate_return::tests::d54_benchmark_rejects_each_mismatched_endpoint` |
+| 21 | 벤치마크 청산일 종료 시각 검사 생략 | `estimate_return::tests::d54_benchmark_rejects_each_mismatched_endpoint` |
+| 22 | 정확히 일치하는 종료 시각 정렬도 근사 표지로 변경 | `estimate_return::tests::d54_benchmark_alignment_uses_submission_instead_of_task_reference` |
+| 23 | 매수 비용을 투자 지출에서 뺌 | `estimate_return::tests::d54_maturity_uses_submission_price_and_proportional_costs` |
+| 24 | 매도 비용을 수취액에 더함 | `estimate_return::tests::d54_maturity_uses_submission_price_and_proportional_costs` |
+| 25 | 초과 수익 계산에서 벤치마크 수익률을 더함 | `estimate_return::tests::d54_nonzero_equal_benchmark_has_zero_excess` |
+| 26 | 보정 이력 상한에서 등호 제거(65,536건에서 Available 반환) | `estimate_return::tests::d54_capacity_reports_full_without_changing_existing_evidence` |
+| 27 | 제출 당일 분할을 제출가에 다시 적용 | `estimate_return::tests::d54_split_adjusts_entry_once_and_rejects_mismatched_actions` |
+| 28 | 만기 시각 일치 제출을 check_timing에서 허용(`<`를 `<=`로 변경) | `estimate_return::tests::d54_check_timing_rejects_maturity_boundary_and_after_maturity` |
+| 29 | 일봉 개장 경계 도달의 개장 시각 제출을 허용(`<`를 `<=`로 변경) | `estimate_return::tests::d54_daily_open_boundary_hit_requires_strictly_earlier_submission` |
+| 30 | 일봉 청산 이후 거래일 제출을 같은 날 달력 조회 분기로 보냄 | `estimate_return::tests::d54_check_timing_rejects_later_trading_day_without_calendar_lookup` |

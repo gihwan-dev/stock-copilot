@@ -2504,6 +2504,132 @@ mod tests {
         let empty = crate::Calibration::try_new(key, &[]).expect("빈 조합");
         assert_eq!(empty.capacity(), CalibrationCapacity::Available);
     }
+
+    #[test]
+    fn d54_daily_open_boundary_hit_requires_strictly_earlier_submission() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        let preopen = return_fixture_at("100", instant(62, -1));
+        let task = preopen.submission().task_key().task();
+        let factor = Ratio::new(
+            rust_decimal::Decimal::ONE
+                .checked_add(task.target().as_decimal())
+                .expect("목표"),
+        );
+        let target_money = task
+            .reference()
+            .price()
+            .as_money()
+            .checked_mul(&factor)
+            .expect("목표 가격");
+        let target_text = target_money.amount().as_decimal().to_string();
+        let mut bars = entry_bars();
+        bars.push(candle(
+            62,
+            0,
+            crate::CandlePeriod::Daily,
+            [&target_text, &target_text, &target_text, &target_text],
+        ));
+        let zero_cost = cost("0", "0", "0");
+        let allowed = calculate_return(&preopen, &bars, &zero_cost).expect("개장 전 제출");
+        assert_eq!(allowed.exit_kind(), crate::EstimateExitKind::Target);
+        assert_eq!(
+            allowed.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 0))
+        );
+        assert_eq!(allowed.exit_price().as_money(), target_money);
+        for submitted in [instant(62, 0), instant(62, 1)] {
+            assert_eq!(
+                calculate_return(&return_fixture_at("100", submitted), &bars, &zero_cost),
+                Err(crate::EstimateReturnError::EntryTimingPending)
+            );
+        }
+    }
+
+    #[test]
+    fn d54_check_timing_rejects_maturity_boundary_and_after_maturity() {
+        use crate::signal_return_contract::tests::{adjustment, calendars, cost, instant, task};
+        let source = task();
+        let calendar = calendars();
+        let adjustment = adjustment();
+        let now = instant(66, 4);
+        let bars = maturity_bars("100");
+        let outcome = crate::EstimateOutcome::evaluate_with_complete_data(
+            &source,
+            &calendar,
+            &adjustment,
+            &bars,
+            now,
+        );
+        let evidence = outcome.evidence().expect("판정 근거");
+        let facts = crate::EstimateReturnFacts::new(&calendar, &adjustment, &[], &bars, now);
+        let fill = crate::virtual_exit::tests::virtual_exit_fixture_fill(
+            &source,
+            price("100", Currency::Krw),
+            now,
+        )
+        .into_fill()
+        .expect("청산");
+        let at_maturity = return_fixture_at("100", now);
+        let after_maturity = return_fixture_at("100", instant(67, 1));
+        for entry in [&at_maturity, &after_maturity] {
+            assert_eq!(
+                super::check_timing(
+                    entry,
+                    crate::EstimateExitKind::Maturity,
+                    &fill,
+                    evidence,
+                    &facts,
+                ),
+                Err(crate::EstimateReturnError::EntryTimingPending)
+            );
+        }
+        assert_eq!(
+            calculate_return(&after_maturity, &bars, &cost("0", "0", "0")),
+            Err(crate::EstimateReturnError::EntryTimingPending)
+        );
+    }
+
+    #[test]
+    fn d54_check_timing_rejects_later_trading_day_without_calendar_lookup() {
+        use crate::signal_return_contract::tests::{
+            adjustment, calendars, candle, entry_bars, instant, task,
+        };
+        let source = task();
+        let calendar = calendars();
+        let adjustment = adjustment();
+        let now = instant(66, 4);
+        let mut daily_bars = entry_bars();
+        daily_bars.push(candle(
+            62,
+            0,
+            crate::CandlePeriod::Daily,
+            ["100", "200", "100", "100"],
+        ));
+        let daily_outcome = crate::EstimateOutcome::evaluate_with_complete_data(
+            &source,
+            &calendar,
+            &adjustment,
+            &daily_bars,
+            now,
+        );
+        let signal = crate::VirtualExitSignal::for_estimate(&source, now).expect("경계");
+        let daily_fill = crate::virtual_exit(&signal, &calendar, &adjustment, &daily_bars, now)
+            .into_fill()
+            .expect("일봉 청산");
+        let missing_calendar =
+            crate::EstimateReturnFacts::new(&[], &adjustment, &[], &daily_bars, now);
+        let later_day = return_fixture_at("100", instant(63, 1));
+        assert_eq!(
+            super::check_timing(
+                &later_day,
+                crate::EstimateExitKind::Target,
+                &daily_fill,
+                daily_outcome.evidence().expect("일봉 판정"),
+                &missing_calendar,
+            ),
+            Err(crate::EstimateReturnError::EntryTimingPending)
+        );
+    }
 }
 
 #[cfg(test)]
