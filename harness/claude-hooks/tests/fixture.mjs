@@ -1,6 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
-  cpSync,
   linkSync,
   mkdirSync,
   rmSync,
@@ -10,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { mkdtempSync } from "../../ci/test-temp.mjs";
+import { applyIndexToClone } from "../../ci/index-clone.mjs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -155,9 +155,7 @@ const mainHookProject = () => {
       { env: gitEnvironment() },
     );
     mainHookRoot = realpathSync(mainHookRoot);
-    cpSync(join(repoRoot, ".claude"), join(mainHookRoot, ".claude"), {
-      recursive: true,
-    });
+    applyIndexToClone(repoRoot, mainHookRoot, process.env.GIT_INDEX_FILE);
   }
   return mainHookRoot;
 };
