@@ -779,19 +779,29 @@ pub fn virtual_exit_adjustment(
     actions: &[OutcomeCorporateAction],
 ) -> Result<OutcomeAdjustment, OutcomeUnavailable> {
     let at = signal.entry().observed_at();
+    estimate_entry_adjustment(signal.task(), at, at.offset_calendar_date(), basis, actions)
+}
+
+pub(crate) fn estimate_entry_adjustment(
+    task: &EstimateTask,
+    at: Timestamp,
+    entry_day: crate::CalendarDate,
+    basis: AdjustmentBasis,
+    actions: &[OutcomeCorporateAction],
+) -> Result<OutcomeAdjustment, OutcomeUnavailable> {
     if *basis.as_timestamp() < at
         || actions
             .iter()
-            .any(|fact| fact.instrument() != signal.task().volatility().instrument())
+            .any(|fact| fact.instrument() != task.volatility().instrument())
     {
         return Err(OutcomeUnavailable::Adjustment);
     }
     let relevant = actions
         .iter()
-        .filter(|fact| fact.action().date() > at.offset_calendar_date())
+        .filter(|fact| fact.action().date() > entry_day)
         .cloned()
         .collect::<Vec<_>>();
-    OutcomeAdjustment::from_actions(signal.task(), basis, &relevant).map(|mut adjustment| {
+    OutcomeAdjustment::from_actions(task, basis, &relevant).map(|mut adjustment| {
         adjustment.reference_at = at;
         adjustment
     })

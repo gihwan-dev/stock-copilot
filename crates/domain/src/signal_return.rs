@@ -20,6 +20,15 @@ impl SignalReturnCost {
     const fn new(cost: TradeCost, buy: Ratio, sell: Ratio) -> Self {
         Self { cost, buy, sell }
     }
+    pub(crate) const fn trade_cost(&self) -> &TradeCost {
+        &self.cost
+    }
+    pub(crate) const fn buy_rate(&self) -> Ratio {
+        self.buy
+    }
+    pub(crate) const fn sell_rate(&self) -> Ratio {
+        self.sell
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignalReturnError {
