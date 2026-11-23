@@ -1366,38 +1366,6 @@ impl MemoryInstrumentMappingRepository {
         }
     }
 
-    pub fn link_confirmed_change(
-        &self,
-        change: &domain::ConfirmedIdentifierChange,
-    ) -> impl Future<Output = Result<InstrumentId, domain::MappingTransitionError>> + Send {
-        poll_fn(move |_| Poll::Ready(self.mappings.write().link_confirmed_change(change)))
-    }
-
-    pub fn correct_retirement(
-        &self,
-        correction: &domain::ConfirmedRetirementCorrection,
-    ) -> impl Future<Output = Result<InstrumentId, domain::MappingTransitionError>> + Send {
-        poll_fn(move |_| Poll::Ready(self.mappings.write().correct_retirement(correction)))
-    }
-
-    pub fn correct_link(
-        &self,
-        correction: &domain::ConfirmedLinkCorrection,
-    ) -> impl Future<Output = Result<InstrumentId, domain::MappingTransitionError>> + Send {
-        poll_fn(move |_| Poll::Ready(self.mappings.write().correct_link(correction)))
-    }
-
-    pub fn history(&self) -> impl Future<Output = Vec<domain::MappingHistoryEvent>> + Send {
-        poll_fn(move |_| Poll::Ready(self.mappings.write().history().to_vec()))
-    }
-
-    pub fn history_for_id(
-        &self,
-        id: &InstrumentId,
-    ) -> impl Future<Output = Vec<domain::MappingHistoryEvent>> + Send {
-        poll_fn(move |_| Poll::Ready(self.mappings.write().history_for_id(id)))
-    }
-
     fn ensure_now(
         &self,
         source: &InstrumentSource,

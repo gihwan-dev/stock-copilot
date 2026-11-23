@@ -3,9 +3,15 @@ use crate::{
     UserReason,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
+struct UserIdentityConfirmationSeal;
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct UserIdentityConfirmation(UserIdentityConfirmationSeal);
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum IdentityConfirmationOrigin {
-    UserConfirmed,
+    UserConfirmed(UserIdentityConfirmation),
     BrokerObservation,
     AiSuggestion,
 }
@@ -29,7 +35,7 @@ pub enum IdentityChangeEvidence {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct IdentityChangeConfirmation {
     origin: IdentityConfirmationOrigin,
     evidence: IdentityChangeEvidence,
@@ -51,8 +57,8 @@ impl IdentityChangeConfirmation {
     }
 
     #[must_use]
-    pub const fn origin(&self) -> IdentityConfirmationOrigin {
-        self.origin
+    pub const fn origin(&self) -> &IdentityConfirmationOrigin {
+        &self.origin
     }
 
     #[must_use]
@@ -66,7 +72,7 @@ impl IdentityChangeConfirmation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ConfirmedIdentifierChange {
     instrument_id: InstrumentId,
     previous: InstrumentSource,
@@ -121,7 +127,7 @@ pub enum MappingCorrectionEvidence {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct MappingCorrectionConfirmation {
     origin: IdentityConfirmationOrigin,
     evidence: MappingCorrectionEvidence,
@@ -143,8 +149,8 @@ impl MappingCorrectionConfirmation {
     }
 
     #[must_use]
-    pub const fn origin(&self) -> IdentityConfirmationOrigin {
-        self.origin
+    pub const fn origin(&self) -> &IdentityConfirmationOrigin {
+        &self.origin
     }
 
     #[must_use]
@@ -158,7 +164,7 @@ impl MappingCorrectionConfirmation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ConfirmedRetirementCorrection {
     instrument_id: InstrumentId,
     source: InstrumentSource,
@@ -195,7 +201,7 @@ impl ConfirmedRetirementCorrection {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ConfirmedLinkCorrection {
     instrument_id: InstrumentId,
     previous: InstrumentSource,
@@ -293,30 +299,57 @@ pub enum MappingTransitionError {
     LinkNotLatest,
 }
 
-pub(crate) struct VerifiedChangeEvidence<'a> {
-    pub(crate) disclosure: &'a DisclosureKey,
-    pub(crate) action: &'a CorporateAction,
-    pub(crate) note: &'a UserReason,
+pub(crate) struct VerifiedChange {
+    pub(crate) instrument_id: InstrumentId,
+    pub(crate) previous: InstrumentSource,
+    pub(crate) next: InstrumentSource,
+    pub(crate) disclosure: DisclosureKey,
+    pub(crate) action: CorporateAction,
+    pub(crate) note: UserReason,
     pub(crate) confirmed_at: Timestamp,
 }
 
-pub(crate) struct VerifiedCorrectionEvidence<'a> {
-    pub(crate) disclosure: &'a DisclosureKey,
-    pub(crate) note: &'a UserReason,
+pub(crate) struct VerifiedRetirementCorrection {
+    pub(crate) instrument_id: InstrumentId,
+    pub(crate) source: InstrumentSource,
+    pub(crate) disclosure: DisclosureKey,
+    pub(crate) note: UserReason,
+    pub(crate) corrected_at: Timestamp,
+}
+
+pub(crate) struct VerifiedLinkCorrection {
+    pub(crate) instrument_id: InstrumentId,
+    pub(crate) previous: InstrumentSource,
+    pub(crate) mistaken_next: InstrumentSource,
+    pub(crate) disclosure: DisclosureKey,
+    pub(crate) note: UserReason,
     pub(crate) corrected_at: Timestamp,
 }
 
 pub(crate) fn verify_change_evidence(
-    change: &ConfirmedIdentifierChange,
-) -> Result<VerifiedChangeEvidence<'_>, MappingTransitionError> {
-    match change.confirmation().origin() {
-        IdentityConfirmationOrigin::UserConfirmed => {}
+    change: ConfirmedIdentifierChange,
+) -> Result<VerifiedChange, MappingTransitionError> {
+    let ConfirmedIdentifierChange {
+        instrument_id,
+        previous,
+        next,
+        confirmation:
+            IdentityChangeConfirmation {
+                origin,
+                evidence,
+                confirmed_at,
+            },
+    } = change;
+    match origin {
+        IdentityConfirmationOrigin::UserConfirmed(UserIdentityConfirmation(
+            UserIdentityConfirmationSeal,
+        )) => {}
         IdentityConfirmationOrigin::BrokerObservation
         | IdentityConfirmationOrigin::AiSuggestion => {
             return Err(MappingTransitionError::IdentityUncertain);
         }
     }
-    let (disclosure, action, note) = match change.confirmation().evidence() {
+    let (disclosure, action, note) = match evidence {
         IdentityChangeEvidence::DisclosureAndAction {
             disclosure,
             action,
@@ -329,68 +362,119 @@ pub(crate) fn verify_change_evidence(
             return Err(MappingTransitionError::IdentityUncertain);
         }
     };
-    if change.previous().normalized_key() == change.next().normalized_key() {
+    if previous.normalized_key() == next.normalized_key() {
         return Err(MappingTransitionError::UnchangedSource);
     }
-    if change.previous().market() != change.next().market() {
+    if previous.market() != next.market() {
         return Err(MappingTransitionError::MarketMismatch);
     }
-    validate_change_action(change, action)?;
-    Ok(VerifiedChangeEvidence {
+    validate_change_action(&instrument_id, &previous, &next, &action)?;
+    Ok(VerifiedChange {
+        instrument_id,
+        previous,
+        next,
         disclosure,
         action,
         note,
-        confirmed_at: change.confirmation().confirmed_at(),
+        confirmed_at,
     })
 }
 
 fn validate_change_action(
-    change: &ConfirmedIdentifierChange,
+    instrument_id: &InstrumentId,
+    previous: &InstrumentSource,
+    next: &InstrumentSource,
     action: &CorporateAction,
 ) -> Result<(), MappingTransitionError> {
-    if action.id().instrument_id() != change.instrument_id() {
+    if action.id().instrument_id() != instrument_id {
         return Err(MappingTransitionError::InvalidEvidence);
     }
     match action.kind() {
         CorporateActionKind::SymbolChange { from, to } => {
-            if from.normalized_ascii() != change.previous().symbol().normalized_ascii()
-                || to.normalized_ascii() != change.next().symbol().normalized_ascii()
+            let from_norm = from.normalized_ascii();
+            let to_norm = to.normalized_ascii();
+            if from_norm == to_norm
+                || from_norm != previous.symbol().normalized_ascii()
+                || to_norm != next.symbol().normalized_ascii()
             {
                 return Err(MappingTransitionError::InvalidEvidence);
             }
             Ok(())
         }
-        CorporateActionKind::Delisting => Err(MappingTransitionError::InvalidEvidence),
-        CorporateActionKind::Split(_)
-        | CorporateActionKind::ReverseSplit(_)
-        | CorporateActionKind::BonusIssue { .. }
+        CorporateActionKind::Split(_) | CorporateActionKind::ReverseSplit(_) => Ok(()),
+        CorporateActionKind::Delisting | CorporateActionKind::Demerger => {
+            Err(MappingTransitionError::InvalidEvidence)
+        }
+        CorporateActionKind::BonusIssue { .. }
         | CorporateActionKind::StockDividend { .. }
         | CorporateActionKind::Merger
-        | CorporateActionKind::Demerger
-        | CorporateActionKind::Exchange => Ok(()),
+        | CorporateActionKind::Exchange => Err(MappingTransitionError::IdentityUncertain),
     }
 }
 
-pub(crate) fn verify_correction_evidence(
-    confirmation: &MappingCorrectionConfirmation,
-) -> Result<VerifiedCorrectionEvidence<'_>, MappingTransitionError> {
-    match confirmation.origin() {
-        IdentityConfirmationOrigin::UserConfirmed => {}
+fn verify_correction_confirmation(
+    confirmation: MappingCorrectionConfirmation,
+) -> Result<(DisclosureKey, UserReason, Timestamp), MappingTransitionError> {
+    let MappingCorrectionConfirmation {
+        origin,
+        evidence,
+        corrected_at,
+    } = confirmation;
+    match origin {
+        IdentityConfirmationOrigin::UserConfirmed(UserIdentityConfirmation(
+            UserIdentityConfirmationSeal,
+        )) => {}
         IdentityConfirmationOrigin::BrokerObservation
         | IdentityConfirmationOrigin::AiSuggestion => {
             return Err(MappingTransitionError::IdentityUncertain);
         }
     }
-    match confirmation.evidence() {
+    match evidence {
         MappingCorrectionEvidence::DisclosureAndNote { disclosure, note } => {
-            Ok(VerifiedCorrectionEvidence {
-                disclosure,
-                note,
-                corrected_at: confirmation.corrected_at(),
-            })
+            Ok((disclosure, note, corrected_at))
         }
         MappingCorrectionEvidence::None | MappingCorrectionEvidence::NoteOnly(_) => {
             Err(MappingTransitionError::IdentityUncertain)
         }
     }
 }
+
+pub(crate) fn verify_retirement_correction(
+    correction: ConfirmedRetirementCorrection,
+) -> Result<VerifiedRetirementCorrection, MappingTransitionError> {
+    let ConfirmedRetirementCorrection {
+        instrument_id,
+        source,
+        confirmation,
+    } = correction;
+    let (disclosure, note, corrected_at) = verify_correction_confirmation(confirmation)?;
+    Ok(VerifiedRetirementCorrection {
+        instrument_id,
+        source,
+        disclosure,
+        note,
+        corrected_at,
+    })
+}
+
+pub(crate) fn verify_link_correction(
+    correction: ConfirmedLinkCorrection,
+) -> Result<VerifiedLinkCorrection, MappingTransitionError> {
+    let ConfirmedLinkCorrection {
+        instrument_id,
+        previous,
+        mistaken_next,
+        confirmation,
+    } = correction;
+    let (disclosure, note, corrected_at) = verify_correction_confirmation(confirmation)?;
+    Ok(VerifiedLinkCorrection {
+        instrument_id,
+        previous,
+        mistaken_next,
+        disclosure,
+        note,
+        corrected_at,
+    })
+}
+
+mod history_cases;

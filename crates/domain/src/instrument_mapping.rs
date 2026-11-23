@@ -1,4 +1,6 @@
-use crate::instrument_mapping_change::{verify_change_evidence, verify_correction_evidence};
+use crate::instrument_mapping_change::{
+    verify_change_evidence, verify_link_correction, verify_retirement_correction,
+};
 use crate::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection, IdAdoption,
     InstrumentId, IsinCode, IssuedInstrumentId, KnownMarket, MappingHistoryEvent,
@@ -372,113 +374,120 @@ impl InstrumentMappings {
 
     pub fn link_confirmed_change(
         &mut self,
-        change: &ConfirmedIdentifierChange,
+        change: ConfirmedIdentifierChange,
     ) -> Result<InstrumentId, MappingTransitionError> {
-        let evidence = verify_change_evidence(change)?;
-        match self.find_owned_status(change.previous(), change.instrument_id())? {
+        let verified = verify_change_evidence(change)?;
+        match self.find_owned_status(&verified.previous, &verified.instrument_id)? {
             InstrumentMappingStatus::Active => {}
             InstrumentMappingStatus::Superseded | InstrumentMappingStatus::Retired => {
                 return Err(MappingTransitionError::SourceNotActive);
             }
         }
-        self.check_next_target(change.next(), change.instrument_id())?;
+        self.check_next_target(&verified.next, &verified.instrument_id)?;
         for entry in &mut self.records {
-            if entry.source == *change.previous() {
+            if entry.source == verified.previous {
                 entry.state = InstrumentMappingStatus::Superseded;
             }
         }
         self.records.push(InstrumentMappingRecord::new(
-            change.next().clone(),
-            change.instrument_id().clone(),
+            verified.next.clone(),
+            verified.instrument_id.clone(),
             InstrumentMappingStatus::Active,
         ));
         self.active_links.push(ActiveLink {
-            instrument_id: change.instrument_id().clone(),
-            previous: change.previous().clone(),
-            next: change.next().clone(),
+            instrument_id: verified.instrument_id.clone(),
+            previous: verified.previous.clone(),
+            next: verified.next.clone(),
         });
+        let result_id = verified.instrument_id.clone();
         self.history.push(MappingHistoryEvent::IdentifierChanged {
-            instrument_id: change.instrument_id().clone(),
-            previous: change.previous().clone(),
-            next: change.next().clone(),
-            disclosure: evidence.disclosure.clone(),
-            action: Box::new(evidence.action.clone()),
-            note: evidence.note.clone(),
-            confirmed_at: evidence.confirmed_at,
+            instrument_id: verified.instrument_id,
+            previous: verified.previous,
+            next: verified.next,
+            disclosure: verified.disclosure,
+            action: Box::new(verified.action),
+            note: verified.note,
+            confirmed_at: verified.confirmed_at,
         });
-        Ok(change.instrument_id().clone())
+        Ok(result_id)
     }
 
     pub fn correct_retirement(
         &mut self,
-        correction: &ConfirmedRetirementCorrection,
+        correction: ConfirmedRetirementCorrection,
     ) -> Result<InstrumentId, MappingTransitionError> {
-        let evidence = verify_correction_evidence(correction.confirmation())?;
-        match self.find_owned_status(correction.source(), correction.instrument_id())? {
+        let verified = verify_retirement_correction(correction)?;
+        match self.find_owned_status(&verified.source, &verified.instrument_id)? {
             InstrumentMappingStatus::Retired => {}
             InstrumentMappingStatus::Active | InstrumentMappingStatus::Superseded => {
                 return Err(MappingTransitionError::SourceNotRetired);
             }
         }
         for entry in &mut self.records {
-            if entry.source == *correction.source() {
+            if entry.source == verified.source {
                 entry.state = InstrumentMappingStatus::Active;
             }
         }
+        let result_id = verified.instrument_id.clone();
         self.history.push(MappingHistoryEvent::RetirementCorrected {
-            instrument_id: correction.instrument_id().clone(),
-            source: correction.source().clone(),
-            disclosure: evidence.disclosure.clone(),
-            note: evidence.note.clone(),
-            corrected_at: evidence.corrected_at,
+            instrument_id: verified.instrument_id,
+            source: verified.source,
+            disclosure: verified.disclosure,
+            note: verified.note,
+            corrected_at: verified.corrected_at,
         });
-        Ok(correction.instrument_id().clone())
+        Ok(result_id)
     }
 
     pub fn correct_link(
         &mut self,
-        correction: &ConfirmedLinkCorrection,
+        correction: ConfirmedLinkCorrection,
     ) -> Result<InstrumentId, MappingTransitionError> {
-        let evidence = verify_correction_evidence(correction.confirmation())?;
-        if correction.previous() == correction.mistaken_next() {
+        let verified = verify_link_correction(correction)?;
+        if verified.previous == verified.mistaken_next {
             return Err(MappingTransitionError::UnchangedSource);
         }
-        let _prev_status =
-            self.find_owned_status(correction.previous(), correction.instrument_id())?;
+        let _prev_status = self.find_owned_status(&verified.previous, &verified.instrument_id)?;
         let next_status =
-            self.find_owned_status(correction.mistaken_next(), correction.instrument_id())?;
+            self.find_owned_status(&verified.mistaken_next, &verified.instrument_id)?;
         let expected = ActiveLink {
-            instrument_id: correction.instrument_id().clone(),
-            previous: correction.previous().clone(),
-            next: correction.mistaken_next().clone(),
+            instrument_id: verified.instrument_id.clone(),
+            previous: verified.previous.clone(),
+            next: verified.mistaken_next.clone(),
         };
         let matches_latest = self
             .active_links
             .iter()
             .rev()
-            .filter(|link| link.instrument_id == *correction.instrument_id())
+            .filter(|link| link.instrument_id == verified.instrument_id)
             .take(1)
             .any(|latest| *latest == expected);
-        if !matches_latest || next_status != InstrumentMappingStatus::Active {
-            return Err(MappingTransitionError::LinkNotLatest);
+        match next_status {
+            InstrumentMappingStatus::Active if matches_latest => {}
+            InstrumentMappingStatus::Active
+            | InstrumentMappingStatus::Superseded
+            | InstrumentMappingStatus::Retired => {
+                return Err(MappingTransitionError::LinkNotLatest);
+            }
         }
         self.active_links.retain(|link| *link != expected);
         for entry in &mut self.records {
-            if entry.source == *correction.previous() {
+            if entry.source == verified.previous {
                 entry.state = InstrumentMappingStatus::Active;
             }
         }
         self.records
-            .retain(|entry| entry.source != *correction.mistaken_next());
+            .retain(|entry| entry.source != verified.mistaken_next);
+        let result_id = verified.instrument_id.clone();
         self.history.push(MappingHistoryEvent::LinkCorrected {
-            instrument_id: correction.instrument_id().clone(),
-            restored_previous: correction.previous().clone(),
-            unlinked_next: correction.mistaken_next().clone(),
-            disclosure: evidence.disclosure.clone(),
-            note: evidence.note.clone(),
-            corrected_at: evidence.corrected_at,
+            instrument_id: verified.instrument_id,
+            restored_previous: verified.previous,
+            unlinked_next: verified.mistaken_next,
+            disclosure: verified.disclosure,
+            note: verified.note,
+            corrected_at: verified.corrected_at,
         });
-        Ok(correction.instrument_id().clone())
+        Ok(result_id)
     }
 
     #[must_use]

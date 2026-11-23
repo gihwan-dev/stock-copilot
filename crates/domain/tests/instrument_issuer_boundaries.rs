@@ -42,7 +42,7 @@ mod tests {
         manifest
     }
 
-    const CASES: [(&str, &str, Option<&str>); 10] = [
+    const CASES: [(&str, &str, Option<&str>); 14] = [
             (
                 "valid_independent_issuer",
                 "use domain::{IndependentInstrumentIdIssuer, InstrumentMappings, InstrumentSource, IsinCode, KnownMarket, Symbol};
@@ -144,6 +144,41 @@ fn main() {
     let _dup = issuer.clone();
 }",
                 Some("error[E0599]"),
+            ),
+            (
+                "forged_user_confirmation_tuple",
+                "use domain::UserIdentityConfirmation;
+fn main() {
+    let _forged = UserIdentityConfirmation(());
+}",
+                Some("error[E0423]"),
+            ),
+            (
+                "no_default_user_confirmation",
+                "use domain::UserIdentityConfirmation;
+fn main() {
+    let _forged = UserIdentityConfirmation::default();
+}",
+                Some("error[E0599]"),
+            ),
+            (
+                "cannot_clone_user_confirmation",
+                "use domain::UserIdentityConfirmation;
+fn dup(confirmation: UserIdentityConfirmation) {
+    let _dup = confirmation.clone();
+}
+fn main() {}",
+                Some("error[E0599]"),
+            ),
+            (
+                "cannot_reuse_confirmed_change",
+                "use domain::{ConfirmedIdentifierChange, InstrumentMappings};
+fn reuse(mappings: &mut InstrumentMappings, change: ConfirmedIdentifierChange) {
+    let _first = mappings.link_confirmed_change(change);
+    let _second = mappings.link_confirmed_change(change);
+}
+fn main() {}",
+                Some("error[E0382]"),
             ),
         ];
 

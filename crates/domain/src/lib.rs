@@ -31,7 +31,7 @@ pub use instrument_mapping_change::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
     IdentityChangeConfirmation, IdentityChangeEvidence, IdentityConfirmationOrigin,
     MappingCorrectionConfirmation, MappingCorrectionEvidence, MappingHistoryEvent,
-    MappingTransitionError,
+    MappingTransitionError, UserIdentityConfirmation,
 };
 pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};

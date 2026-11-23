@@ -2,14 +2,8 @@
 mod tests {
     use application::{InstrumentIdIssuer, InstrumentMappingRepository, MappingStoreError};
     use domain::{
-        CalendarDate, ConfirmedIdentifierChange, ConfirmedLinkCorrection,
-        ConfirmedRetirementCorrection, CorporateAction, CorporateActionId, CorporateActionKind,
-        DartReceiptNo, Disclosure, IdAdoption, IdentityChangeConfirmation, IdentityChangeEvidence,
-        IdentityConfirmationOrigin, IndependentInstrumentIdIssuer, InstrumentId,
-        InstrumentMappingError, InstrumentSource, IsinCode, KindReceiptNo, KnownMarket,
-        MappingAssignment, MappingCorrectionConfirmation, MappingCorrectionEvidence,
-        MappingTransitionError, Nanosecond, NormalizedUrl, OffsetSeconds, ReceiptNo,
-        ReservationStatus, Symbol, Timestamp, UnixSeconds, UntrustedText, UserReason,
+        IdAdoption, IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingError,
+        InstrumentSource, IsinCode, KnownMarket, MappingAssignment, ReservationStatus, Symbol,
     };
     use std::{
         collections::BTreeSet,
@@ -37,81 +31,6 @@ mod tests {
             market,
             Symbol::try_new(symbol).expect("심볼"),
             IsinCode::try_new(isin).expect("ISIN"),
-        )
-    }
-
-    fn timestamp(seconds: i64) -> Timestamp {
-        Timestamp::from_parts(
-            UnixSeconds::new(seconds),
-            Nanosecond::new(0),
-            OffsetSeconds::new(32_400),
-        )
-        .expect("시각")
-    }
-
-    fn note(text: &str) -> UserReason {
-        UserReason::try_new(UntrustedText::try_new(text).expect("문구")).expect("사유")
-    }
-
-    fn symbol_change_request(
-        id: &InstrumentId,
-        original: &InstrumentSource,
-        renamed: &InstrumentSource,
-    ) -> ConfirmedIdentifierChange {
-        let disclosure = Disclosure::new(
-            ReceiptNo::Dart(DartReceiptNo::try_new("20261121000001").expect("DART")),
-            NormalizedUrl::try_new("https://dart.fss.or.kr/dsaf001/main.do?rcpNo=2").expect("URL"),
-            UntrustedText::try_new("코드 변경 공시").expect("제목"),
-            None,
-        )
-        .key()
-        .clone();
-        let action = CorporateAction::try_new(
-            CorporateActionId::new(id.clone()),
-            CalendarDate::from_parts(
-                domain::CalendarYear::new(2026),
-                domain::MonthNumber::new(11),
-                domain::DayNumber::new(21),
-            )
-            .expect("날짜"),
-            CorporateActionKind::SymbolChange {
-                from: original.symbol().clone(),
-                to: renamed.symbol().clone(),
-            },
-        )
-        .expect("기업행위");
-        ConfirmedIdentifierChange::new(
-            id.clone(),
-            original.clone(),
-            renamed.clone(),
-            IdentityChangeConfirmation::new(
-                IdentityConfirmationOrigin::UserConfirmed,
-                IdentityChangeEvidence::DisclosureAndAction {
-                    disclosure,
-                    action,
-                    note: note("코드 변경 확인"),
-                },
-                timestamp(1_700_010_000),
-            ),
-        )
-    }
-
-    fn kind_correction(reason: &str, at: i64) -> MappingCorrectionConfirmation {
-        let disclosure = Disclosure::new(
-            ReceiptNo::Kind(KindReceiptNo::try_new("20261121000002").expect("KIND")),
-            NormalizedUrl::try_new("https://kind.krx.co.kr/common/disclsviewer.do?2").expect("URL"),
-            UntrustedText::try_new("정정 공시").expect("제목"),
-            None,
-        )
-        .key()
-        .clone();
-        MappingCorrectionConfirmation::new(
-            IdentityConfirmationOrigin::UserConfirmed,
-            MappingCorrectionEvidence::DisclosureAndNote {
-                disclosure,
-                note: note(reason),
-            },
-            timestamp(at),
         )
     }
 
@@ -300,76 +219,58 @@ mod tests {
     }
 
     #[test]
-    fn memory_repository_supports_confirmed_changes_and_lazy_drops() {
-        let repo = MemoryInstrumentMappingRepository::with_existing_ids(&[InstrumentId::try_new(
-            "legacy-99",
-        )
-        .expect("기존 ID")]);
-        let issuer = MemoryInstrumentIdIssuer::default();
-        let original = source(KnownMarket::Kr, "005930", "KR7005930003");
-        let renamed = source(KnownMarket::Kr, "005931", "KR7005930003");
-        let MappingAssignment::Issued(id) =
-            run(repo.ensure(&original, run(issuer.issue()).expect("발급"))).expect("등록")
-        else {
-            panic!("발급");
-        };
-        let change = symbol_change_request(&id, &original, &renamed);
-        {
-            let _dropped = repo.link_confirmed_change(&change);
-        }
-        assert_eq!(run(repo.resolve(&original)), Ok(id.clone()));
-        assert_eq!(run(repo.link_confirmed_change(&change)), Ok(id.clone()));
-        assert_eq!(run(repo.resolve(&renamed)), Ok(id));
+    fn repository_with_existing_ids_blocks_colliding_candidate_and_adopts_idempotently() {
+        let first_seq = InstrumentId::try_new("inst-0000000000000001").expect("첫 순번 ID");
+        let legacy = InstrumentId::try_new("legacy-99").expect("기존 ID");
+        let repo =
+            MemoryInstrumentMappingRepository::with_existing_ids(&[first_seq.clone(), legacy]);
+        assert_eq!(repo.adopt_existing_id(first_seq), IdAdoption::AlreadyKnown);
+        let extra = InstrumentId::try_new("legacy-100").expect("추가 기존 ID");
+        assert_eq!(repo.adopt_existing_id(extra), IdAdoption::Adopted);
+
+        let mut rogue = IndependentInstrumentIdIssuer::new();
+        let colliding = rogue.issue().expect("충돌 후보");
+        let fresh = rogue.issue().expect("비충돌 후보");
+        let stock = source(KnownMarket::Kr, "005930", "KR7005930003");
         assert_eq!(
-            run(repo.resolve(&original)),
+            run(repo.ensure(&stock, colliding)),
             Err(MappingStoreError::Mapping(
-                InstrumentMappingError::Superseded
+                InstrumentMappingError::IdAlreadyUsed
+            ))
+        );
+        assert_eq!(
+            run(repo.ensure(&stock, fresh)),
+            Ok(MappingAssignment::Issued(
+                InstrumentId::try_new("inst-0000000000000002").expect("둘째 ID")
             ))
         );
     }
 
     #[test]
-    fn memory_repository_supports_link_and_retirement_corrections() {
-        let repo = MemoryInstrumentMappingRepository::default();
-        let issuer = MemoryInstrumentIdIssuer::default();
-        let original = source(KnownMarket::Kr, "005930", "KR7005930003");
-        let renamed = source(KnownMarket::Kr, "005931", "KR7005930003");
-        let MappingAssignment::Issued(id) =
-            run(repo.ensure(&original, run(issuer.issue()).expect("발급"))).expect("등록")
-        else {
-            panic!("발급");
-        };
-        run(repo.link_confirmed_change(&symbol_change_request(&id, &original, &renamed)))
-            .expect("연결");
-
-        let link_corr = ConfirmedLinkCorrection::new(
-            id.clone(),
-            original.clone(),
-            renamed.clone(),
-            kind_correction("연결 오기록 정정", 1_700_010_100),
-        );
-        assert_eq!(run(repo.correct_link(&link_corr)), Ok(id.clone()));
-        assert_eq!(run(repo.resolve(&original)), Ok(id.clone()));
+    fn dropping_unpolled_issuer_and_repository_futures_preserves_state() {
+        let global = MemoryGlobalInstrumentIds::default();
+        let issuer = global.issuer();
+        let repo = global.repository();
+        let stock = source(KnownMarket::Kr, "005930", "KR7005930003");
+        {
+            let _unpolled_issue = issuer.issue();
+        }
+        let first = run(issuer.issue()).expect("첫 발급");
+        assert_eq!(first.as_instrument_id().as_str(), "inst-0000000000000001");
+        {
+            let _unpolled_ensure = repo.ensure(&stock, first);
+        }
         assert_eq!(
-            run(repo.resolve(&renamed)),
-            Err(MappingStoreError::Mapping(
-                InstrumentMappingError::IdentityUncertain
+            run(repo.resolve(&stock)),
+            Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
+        );
+        let mut rogue = IndependentInstrumentIdIssuer::new();
+        let same_first = rogue.issue().expect("미예약 첫 후보");
+        assert_eq!(
+            run(repo.ensure(&stock, same_first)),
+            Ok(MappingAssignment::Issued(
+                InstrumentId::try_new("inst-0000000000000001").expect("첫 ID")
             ))
-        );
-
-        run(repo.retire(&original)).expect("폐지");
-        let retire_corr = ConfirmedRetirementCorrection::new(
-            id.clone(),
-            original.clone(),
-            kind_correction("폐지 오기록 정정", 1_700_010_200),
-        );
-        assert_eq!(run(repo.correct_retirement(&retire_corr)), Ok(id.clone()));
-        assert_eq!(run(repo.resolve(&original)), Ok(id.clone()));
-        assert_eq!(run(repo.history_for_id(&id)).len(), 3);
-        assert_eq!(run(repo.history()).len(), 3);
-        assert_eq!(
-            run(repo.correct_link(&link_corr)),
-            Err(MappingTransitionError::IdentityUncertain)
         );
     }
 }
