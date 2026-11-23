@@ -1367,4 +1367,352 @@ mod tests {
             )
             .expect("이력·정정 상태 기계 속성");
     }
+
+    #[test]
+    fn interleaved_link_correction_isolates_earlier_id_from_later_id_link() {
+        let mut generator = IndependentInstrumentIdIssuer::new();
+        let mut ledger = InstrumentMappings::default();
+        let a0 = source(KnownMarket::Kr, "005930", "KR7005930003");
+        let a1 = source(KnownMarket::Kr, "005930", "KR7005930004");
+        let b0 = source(KnownMarket::Kr, "000660", "KR7000660001");
+        let b1 = source(KnownMarket::Kr, "000660", "KR7000660002");
+        let id_a = seed_instrument(&mut ledger, &mut generator, &a0);
+        let id_b = seed_instrument(&mut ledger, &mut generator, &b0);
+        let disclosure = dart_disclosure("20261124000010");
+
+        link_change(
+            &mut ledger,
+            &id_a,
+            &a0,
+            &a1,
+            change_evidence(disclosure.clone(), split_action(&id_a), "A 분할 연결"),
+        )
+        .expect("A 연결");
+        link_change(
+            &mut ledger,
+            &id_b,
+            &b0,
+            &b1,
+            change_evidence(disclosure.clone(), split_action(&id_b), "B 분할 연결"),
+        )
+        .expect("B 연결");
+
+        assert_eq!(
+            ledger.correct_link(ConfirmedLinkCorrection::new(
+                id_a.clone(),
+                a0.clone(),
+                a1.clone(),
+                valid_correction(&disclosure),
+            )),
+            Ok(id_a.clone())
+        );
+        assert_eq!(ledger.resolve(&a0), Ok(id_a));
+        assert_eq!(
+            ledger.resolve(&a1),
+            Err(InstrumentMappingError::IdentityUncertain)
+        );
+        assert_eq!(ledger.resolve(&b0), Err(InstrumentMappingError::Superseded));
+        assert_eq!(ledger.resolve(&b1), Ok(id_b));
+    }
+
+    #[test]
+    fn interleaved_link_correction_on_other_id_does_not_clear_target_link_stack() {
+        let mut generator = IndependentInstrumentIdIssuer::new();
+        let mut ledger = InstrumentMappings::default();
+        let a0 = source(KnownMarket::Kr, "005930", "KR7005930003");
+        let a1 = source(KnownMarket::Kr, "005930", "KR7005930004");
+        let b0 = source(KnownMarket::Kr, "000660", "KR7000660001");
+        let b1 = source(KnownMarket::Kr, "000660", "KR7000660002");
+        let id_a = seed_instrument(&mut ledger, &mut generator, &a0);
+        let id_b = seed_instrument(&mut ledger, &mut generator, &b0);
+        let disclosure = dart_disclosure("20261124000011");
+
+        link_change(
+            &mut ledger,
+            &id_a,
+            &a0,
+            &a1,
+            change_evidence(disclosure.clone(), split_action(&id_a), "A 연결"),
+        )
+        .expect("A 연결");
+        link_change(
+            &mut ledger,
+            &id_b,
+            &b0,
+            &b1,
+            change_evidence(disclosure.clone(), split_action(&id_b), "B 연결"),
+        )
+        .expect("B 연결");
+        assert_eq!(
+            ledger.correct_link(ConfirmedLinkCorrection::new(
+                id_b.clone(),
+                b0.clone(),
+                b1.clone(),
+                valid_correction(&disclosure),
+            )),
+            Ok(id_b.clone())
+        );
+        assert_eq!(
+            ledger.correct_link(ConfirmedLinkCorrection::new(
+                id_a.clone(),
+                a0.clone(),
+                a1.clone(),
+                valid_correction(&disclosure),
+            )),
+            Ok(id_a.clone())
+        );
+        assert_eq!(ledger.resolve(&a0), Ok(id_a.clone()));
+        assert_eq!(
+            ledger.resolve(&a1),
+            Err(InstrumentMappingError::IdentityUncertain)
+        );
+        assert_eq!(ledger.resolve(&b0), Ok(id_b.clone()));
+        assert_eq!(
+            ledger.resolve(&b1),
+            Err(InstrumentMappingError::IdentityUncertain)
+        );
+        assert_eq!(ledger.history_for_id(&id_a).len(), 2);
+        assert_eq!(ledger.history_for_id(&id_b).len(), 2);
+    }
+
+    #[test]
+    fn link_correction_for_unlinked_id_is_rejected_even_when_other_id_has_active_link() {
+        let mut generator = IndependentInstrumentIdIssuer::new();
+        let mut ledger = InstrumentMappings::default();
+        let a0 = source(KnownMarket::Kr, "005930", "KR7005930003");
+        let a1 = source(KnownMarket::Kr, "005931", "KR7005930004");
+        let b0 = source(KnownMarket::Kr, "000660", "KR7000660001");
+        let b1 = source(KnownMarket::Kr, "000660", "KR7000660002");
+        let id_a = seed_instrument(&mut ledger, &mut generator, &a0);
+        let id_b = seed_instrument(&mut ledger, &mut generator, &b0);
+        let disclosure = dart_disclosure("20261124000012");
+
+        link_change(
+            &mut ledger,
+            &id_b,
+            &b0,
+            &b1,
+            change_evidence(disclosure.clone(), split_action(&id_b), "B만 연결"),
+        )
+        .expect("B 연결");
+        let snapshot = ledger.clone();
+
+        assert_eq!(
+            ledger.correct_link(ConfirmedLinkCorrection::new(
+                id_a.clone(),
+                a0.clone(),
+                a1,
+                valid_correction(&disclosure),
+            )),
+            Err(MappingTransitionError::Missing)
+        );
+        assert_eq!(
+            ledger.correct_link(ConfirmedLinkCorrection::new(
+                id_a.clone(),
+                b0,
+                b1.clone(),
+                valid_correction(&disclosure),
+            )),
+            Err(MappingTransitionError::SourceBoundToOtherId)
+        );
+        assert_eq!(ledger, snapshot);
+        assert_eq!(ledger.resolve(&a0), Ok(id_a));
+        assert_eq!(ledger.resolve(&b1), Ok(id_b));
+    }
+
+    struct IsolatedTrack {
+        id: InstrumentId,
+        sources: [InstrumentSource; 4],
+        depth: usize,
+        solo: InstrumentMappings,
+    }
+
+    impl IsolatedTrack {
+        fn new(
+            combined: &mut InstrumentMappings,
+            slot: u8,
+            market: KnownMarket,
+            prefix: &str,
+            salt: u16,
+        ) -> Self {
+            let sources = [0_u8, 1, 2, 3].map(|step| {
+                source(
+                    market,
+                    &format!("{prefix}{salt}S{step}"),
+                    &format!("{prefix}{salt}I{step}"),
+                )
+            });
+            let mut solo = InstrumentMappings::default();
+            let cand_combined = HistoryModel::candidate_at(slot);
+            let id = cand_combined.as_instrument_id().clone();
+            assert_eq!(
+                combined.ensure(&sources[0], cand_combined),
+                Ok(MappingAssignment::Issued(id.clone()))
+            );
+            assert_eq!(
+                solo.ensure(&sources[0], HistoryModel::candidate_at(slot)),
+                Ok(MappingAssignment::Issued(id.clone()))
+            );
+            Self {
+                id,
+                sources,
+                depth: 0,
+                solo,
+            }
+        }
+
+        fn step_link(&mut self, combined: &mut InstrumentMappings, disclosure: &DisclosureKey) {
+            if self.depth < 3 {
+                let next_depth = self.depth.saturating_add(1);
+                let prev = &self.sources[self.depth];
+                let next = &self.sources[next_depth];
+                let ev = change_evidence(disclosure.clone(), split_action(&self.id), "교차 연결");
+                let lhs = link_change(combined, &self.id, prev, next, ev.clone());
+                let rhs = link_change(&mut self.solo, &self.id, prev, next, ev);
+                assert_eq!(lhs, rhs);
+                assert_eq!(lhs, Ok(self.id.clone()));
+                self.depth = next_depth;
+            } else {
+                let ev = change_evidence(disclosure.clone(), split_action(&self.id), "순환 거부");
+                let lhs = link_change(
+                    combined,
+                    &self.id,
+                    &self.sources[3],
+                    &self.sources[0],
+                    ev.clone(),
+                );
+                let rhs = link_change(
+                    &mut self.solo,
+                    &self.id,
+                    &self.sources[3],
+                    &self.sources[0],
+                    ev,
+                );
+                assert_eq!(lhs, rhs);
+                assert_eq!(lhs, Err(MappingTransitionError::SourceAlreadyRecorded));
+            }
+        }
+
+        fn step_unwind(&mut self, combined: &mut InstrumentMappings, disclosure: &DisclosureKey) {
+            if self.depth > 0 {
+                let prev_depth = self.depth.saturating_sub(1);
+                let prev = self.sources[prev_depth].clone();
+                let next = self.sources[self.depth].clone();
+                let lhs = combined.correct_link(ConfirmedLinkCorrection::new(
+                    self.id.clone(),
+                    prev.clone(),
+                    next.clone(),
+                    valid_correction(disclosure),
+                ));
+                let rhs = self.solo.correct_link(ConfirmedLinkCorrection::new(
+                    self.id.clone(),
+                    prev,
+                    next,
+                    valid_correction(disclosure),
+                ));
+                assert_eq!(lhs, rhs);
+                assert_eq!(lhs, Ok(self.id.clone()));
+                self.depth = prev_depth;
+            } else {
+                let lhs = combined.correct_link(ConfirmedLinkCorrection::new(
+                    self.id.clone(),
+                    self.sources[0].clone(),
+                    self.sources[1].clone(),
+                    valid_correction(disclosure),
+                ));
+                let rhs = self.solo.correct_link(ConfirmedLinkCorrection::new(
+                    self.id.clone(),
+                    self.sources[0].clone(),
+                    self.sources[1].clone(),
+                    valid_correction(disclosure),
+                ));
+                assert_eq!(lhs, rhs);
+                assert_eq!(lhs, Err(MappingTransitionError::Missing));
+            }
+        }
+
+        fn step_non_latest(
+            &mut self,
+            combined: &mut InstrumentMappings,
+            disclosure: &DisclosureKey,
+        ) {
+            let lhs = combined.correct_link(ConfirmedLinkCorrection::new(
+                self.id.clone(),
+                self.sources[0].clone(),
+                self.sources[2].clone(),
+                valid_correction(disclosure),
+            ));
+            let rhs = self.solo.correct_link(ConfirmedLinkCorrection::new(
+                self.id.clone(),
+                self.sources[0].clone(),
+                self.sources[2].clone(),
+                valid_correction(disclosure),
+            ));
+            let expected = if self.depth < 2 {
+                MappingTransitionError::Missing
+            } else {
+                MappingTransitionError::LinkNotLatest
+            };
+            assert_eq!(lhs, rhs);
+            assert_eq!(lhs, Err(expected));
+        }
+
+        fn assert_matches(&self, combined: &InstrumentMappings) {
+            assert_eq!(combined.for_id(&self.id), self.solo.for_id(&self.id));
+            assert_eq!(
+                combined.history_for_id(&self.id),
+                self.solo.history_for_id(&self.id)
+            );
+            for src in &self.sources {
+                assert_eq!(combined.resolve(src), self.solo.resolve(src));
+                assert_eq!(combined.lookup(src), self.solo.lookup(src));
+            }
+        }
+    }
+
+    fn run_interleaved_pair(salt: u16, steps: &[(u8, u8)]) {
+        let mut combined = InstrumentMappings::default();
+        let mut track_a = IsolatedTrack::new(&mut combined, 0, KnownMarket::Kr, "A", salt);
+        let mut track_b = IsolatedTrack::new(&mut combined, 1, KnownMarket::Us, "B", salt);
+        let disclosure = dart_disclosure("20261124000013");
+        for &(who, action) in steps {
+            let track = if who == 0 { &mut track_a } else { &mut track_b };
+            match action {
+                0 => track.step_link(&mut combined, &disclosure),
+                1 => track.step_unwind(&mut combined, &disclosure),
+                _ => track.step_non_latest(&mut combined, &disclosure),
+            }
+            track_a.assert_matches(&combined);
+            track_b.assert_matches(&combined);
+        }
+    }
+
+    #[test]
+    fn interleaved_two_id_link_and_correction_matches_isolated_ledgers() {
+        let fixed = [
+            (0_u8, 1_u8),
+            (0, 2),
+            (0, 0),
+            (1, 0),
+            (0, 0),
+            (0, 2),
+            (0, 0),
+            (0, 0),
+            (1, 1),
+            (0, 1),
+            (0, 1),
+            (0, 1),
+        ];
+        run_interleaved_pair(1, &fixed);
+
+        TestRunner::new(Config::with_cases(testkit::property_cases()))
+            .run(
+                &(0_u16..5_000, vec((0_u8..2, 0_u8..3), 0..40)),
+                |(salt, steps)| {
+                    run_interleaved_pair(salt, &steps);
+                    Ok(())
+                },
+            )
+            .expect("두 ID 교차 연결·정정 격리 속성");
+    }
 }
