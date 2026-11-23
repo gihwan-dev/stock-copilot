@@ -28,6 +28,11 @@ struct RepositoryState {
     sources: Vec<(IssuedEstimateTaskId, SignalSourceFacts)>,
     heads: Vec<CalibrationLedgerHead>,
     fail_next_commit: Option<SystemPortError>,
+    drafts: Vec<domain::Proposal<domain::Draft>>,
+    fail_next_draft: Option<SystemPortError>,
+    draft_conflicts: usize,
+    draft_attempts: usize,
+    snapshot_reads: usize,
 }
 
 #[derive(Debug, Default)]
@@ -68,6 +73,98 @@ impl MemorySignalEvaluationRepository {
     pub fn fail_next_commit(&self, error: SystemPortError) {
         self.state.write().fail_next_commit = Some(error);
     }
+    pub fn fail_next_draft(&self, error: SystemPortError) {
+        self.state.write().fail_next_draft = Some(error);
+    }
+    pub fn conflict_next_drafts(&self, count: usize) {
+        self.state.write().draft_conflicts = count;
+    }
+    #[must_use]
+    pub fn draft_attempts(&self) -> usize {
+        self.state.write().draft_attempts
+    }
+    #[must_use]
+    pub fn snapshot_reads(&self) -> usize {
+        self.state.write().snapshot_reads
+    }
+}
+
+impl application::ProposalRepository for MemorySignalEvaluationRepository {
+    fn store_draft(
+        &self,
+        proposal: &domain::Proposal<domain::Draft>,
+    ) -> impl Future<Output = Result<application::WriteCompleted, SystemPortError>> + Send {
+        std::future::poll_fn(move |_context| {
+            self.state.write().drafts.push(proposal.clone());
+            std::task::Poll::Ready(Ok(application::WriteCompleted))
+        })
+    }
+
+    fn draft(
+        &self,
+        proposal: &domain::ProposalId,
+    ) -> impl Future<Output = Result<Option<domain::Proposal<domain::Draft>>, SystemPortError>> + Send
+    {
+        std::future::poll_fn(move |_context| {
+            std::task::Poll::Ready(Ok(self
+                .state
+                .write()
+                .drafts
+                .iter()
+                .rev()
+                .find(|value| value.id() == proposal)
+                .cloned()))
+        })
+    }
+
+    fn store_current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &SignalSnapshot,
+        proposal: &domain::Proposal<domain::Draft>,
+    ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::poll_fn(move |_context| {
+            std::task::Poll::Ready(store_draft_guarded(
+                &mut self.state.write(),
+                instrument,
+                expected,
+                proposal,
+            ))
+        })
+    }
+}
+
+fn store_draft_guarded(
+    state: &mut RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    proposal: &domain::Proposal<domain::Draft>,
+) -> Result<application::ConditionalDraftOutcome, SystemPortError> {
+    state.draft_attempts = state.draft_attempts.saturating_add(1);
+    if let Some(error) = state.fail_next_draft.take() {
+        return Err(error);
+    }
+    if state.draft_conflicts > 0 {
+        state.draft_conflicts = state.draft_conflicts.saturating_sub(1);
+        return Ok(application::ConditionalDraftOutcome::Conflict);
+    }
+    if snapshot(state, instrument) != *expected {
+        return Ok(application::ConditionalDraftOutcome::Conflict);
+    }
+    let current = expected.current.as_ref().ok_or_else(invalid)?;
+    let head = match &current.signal {
+        RaisedSignal::Buy(signal) => signal.facts().calibration_head(),
+        RaisedSignal::Sell(signal) => signal.facts().calibration_head(),
+    };
+    if state.heads.iter().find(|value| value.key() == head.key()) != Some(head) {
+        return Ok(application::ConditionalDraftOutcome::Conflict);
+    }
+    if state.drafts.iter().any(|value| value.id() == proposal.id()) {
+        return Err(invalid());
+    }
+    state.drafts.push(proposal.clone());
+    Ok(application::ConditionalDraftOutcome::Stored)
 }
 
 fn invalid() -> SystemPortError {
@@ -396,7 +493,9 @@ impl SignalRepository for MemorySignalEvaluationRepository {
         instrument: &InstrumentId,
     ) -> impl Future<Output = Result<SignalSnapshot, SystemPortError>> + Send {
         std::future::poll_fn(move |_context| {
-            std::task::Poll::Ready(Ok(snapshot(&self.state.write(), instrument)))
+            let mut state = self.state.write();
+            state.snapshot_reads = state.snapshot_reads.saturating_add(1);
+            std::task::Poll::Ready(Ok(snapshot(&state, instrument)))
         })
     }
     fn current(

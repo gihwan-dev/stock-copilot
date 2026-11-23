@@ -417,19 +417,9 @@ fn check_target_price(
         .target_price
         .as_ref()
         .ok_or_else(|| unavailable(SignalUnavailable::MissingTargetPrice))?;
-    let reference = estimate.task().reference();
-    if price.check_task_instrument(estimate.task()) != crate::CheckResult::Passed
-        || price.price().as_money().currency() != reference.price().as_money().currency()
-    {
-        return Err(unavailable(SignalUnavailable::InvalidTargetPrice));
-    }
-    if price.observed_at() < reference.observed_at()
-        || price.check(reference.instrument(), context.facts.timing.now())
-            != crate::CheckResult::Passed
-    {
-        return Err(unavailable(SignalUnavailable::StaleTargetPrice));
-    }
-    Ok(())
+    price
+        .validate_for_task(estimate.task(), context.facts.timing.now())
+        .map_err(unavailable)
 }
 fn sell_signal(
     estimate: &SignalEstimate,

@@ -142,6 +142,18 @@ pub trait ProposalRepository: Send + Sync {
         &self,
         proposal: &ProposalId,
     ) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send;
+    fn store_current_draft(
+        &self,
+        instrument: &InstrumentId,
+        expected: &crate::SignalSnapshot,
+        proposal: &Proposal<Draft>,
+    ) -> impl Future<Output = Result<ConditionalDraftOutcome, SystemPortError>> + Send;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionalDraftOutcome {
+    Stored,
+    Conflict,
 }
 
 pub trait ValuationRepository: Send + Sync {

@@ -14,11 +14,7 @@ impl<'facts> SignalTiming<'facts> {
     pub const fn now(self) -> Timestamp {
         self.now
     }
-    pub(crate) fn check(
-        self,
-        task: &EstimateTask,
-        submitted_at: Timestamp,
-    ) -> Result<(), NoSignalReason> {
+    pub fn check(self, task: &EstimateTask, submitted_at: Timestamp) -> Result<(), NoSignalReason> {
         if self.now < submitted_at {
             return Err(NoSignalReason::Unavailable(
                 SignalUnavailable::SubmissionFromFuture,
