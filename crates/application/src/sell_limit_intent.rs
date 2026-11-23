@@ -13,8 +13,9 @@ pub fn sell_limit_intent(
     account: &domain::AccountId,
     id: domain::ClientOrderId,
 ) -> Result<domain::OrderIntent, SellLimitIntentError> {
-    if limit.side() != domain::OrderSide::Sell {
-        return Err(SellLimitIntentError::Direction);
+    match limit.side() {
+        domain::OrderSide::Sell => {}
+        domain::OrderSide::Buy => return Err(SellLimitIntentError::Direction),
     }
     if plan.account_id() != account {
         return Err(SellLimitIntentError::Account);

@@ -1,8 +1,20 @@
 use crate::{
-    AccountId, EstimateTask, Holding, InstrumentId, MarketCalendar, NoSignalReason,
+    AccountId, CheckResult, Holding, InstrumentId, MarketCalendar, NoSignalReason,
     PortfolioValuation, Quantity, ResolvedOrderInstrument, SellSignal, SellableQuantityFact,
     SignalTiming, Timestamp, ValuedHolding, WholeOrderQuantity,
 };
+
+#[must_use]
+pub fn sell_signal_matches_reassessed(stored: &SellSignal, reassessed: &SellSignal) -> CheckResult {
+    if reassessed.facts() == stored.facts()
+        && reassessed.held_quantity() == stored.held_quantity()
+        && reassessed.observed_at() >= stored.observed_at()
+    {
+        CheckResult::Passed
+    } else {
+        CheckResult::Failed
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoSellDraftQuantity {
@@ -198,7 +210,7 @@ impl SellDraftQuantityPlan {
         {
             return Err(NoSellDraftQuantity::StaleHolding);
         }
-        check_sellable_freshness(task, self.sellable_observed_at, now)
+        check_sellable_freshness(&self.signal, self.sellable_observed_at, now)
     }
 }
 
@@ -243,7 +255,7 @@ fn calculate(
         .check(task, signal.facts().submission().submitted_at())
         .map_err(NoSellDraftQuantity::SignalUnavailable)?;
     let holding = verified_holding(signal, facts.valuation, timing)?;
-    let sellable = verified_sellable(task, facts, now)?;
+    let sellable = verified_sellable(signal, facts, now)?;
     let held_quantity = WholeOrderQuantity::try_new(holding.quantity())
         .map_err(|_error| NoSellDraftQuantity::FractionalQuantityUnsupported)?;
     let sellable_quantity = WholeOrderQuantity::try_new(sellable.quantity())
@@ -303,19 +315,18 @@ fn verified_holding<'facts>(
 }
 
 fn verified_sellable<'facts>(
-    task: &EstimateTask,
+    signal: &SellSignal,
     facts: &'facts SellDraftQuantityFacts<'_>,
     now: Timestamp,
 ) -> Result<&'facts SellableQuantityFact, NoSellDraftQuantity> {
     let Some(sellable) = facts.sellable else {
         return Err(NoSellDraftQuantity::SellableQuantityUnknown);
     };
-    if sellable.account_id() != facts.account
-        || sellable.instrument() != task.reference().instrument()
-    {
+    let instrument = signal.facts().task().reference().instrument();
+    if sellable.account_id() != facts.account || sellable.instrument() != instrument {
         return Err(NoSellDraftQuantity::DifferentFact);
     }
-    check_sellable_freshness(task, sellable.observed_at(), now)?;
+    check_sellable_freshness(signal, sellable.observed_at(), now)?;
     if sellable.quantity().as_decimal().is_zero() {
         return Err(NoSellDraftQuantity::ZeroSellableQuantity);
     }
@@ -323,14 +334,15 @@ fn verified_sellable<'facts>(
 }
 
 fn check_sellable_freshness(
-    task: &EstimateTask,
+    signal: &SellSignal,
     observed_at: Timestamp,
     now: Timestamp,
 ) -> Result<(), NoSellDraftQuantity> {
     let elapsed = observed_at
         .elapsed_until(now)
         .or(Err(NoSellDraftQuantity::StaleSellableQuantity))?;
-    if observed_at < task.created_at() || elapsed > crate::domain_time::SELLABLE_QUANTITY_MAX_AGE {
+    if observed_at < signal.observed_at() || elapsed > crate::domain_time::SELLABLE_QUANTITY_MAX_AGE
+    {
         return Err(NoSellDraftQuantity::StaleSellableQuantity);
     }
     Ok(())
@@ -341,12 +353,12 @@ mod tests {
     use super::{
         NoSellDraftQuantity, SellDraftQuantityAdjustmentError, SellDraftQuantityDecision,
         SellDraftQuantityFacts, SellDraftQuantityPlan, SellQuantityAdjustment,
-        SellQuantityConstraint, calculate_sell_draft_quantity,
+        SellQuantityConstraint, calculate_sell_draft_quantity, sell_signal_matches_reassessed,
     };
     use crate::{
         AccountId, AcquisitionPrice, AiProbability, AiProbabilityInput, AllocationInstrument,
         Amount, BuyingPower, Calibration, CalibrationKey, CalibrationLedgerHead, CalibrationModel,
-        CalibrationPosition, CalibrationSnapshot, CollectedItem, CommissionRateFact,
+        CalibrationPosition, CalibrationSnapshot, CheckResult, CollectedItem, CommissionRateFact,
         CommissionValidity, CostEligibleTask, CostRate, Currency, EstimateContext,
         EstimateCostPeriod, EstimateTask, Evidence, EvidenceRef, EvidenceUrl, ExcludedSecurityType,
         FxPair, FxRate, FxRateKind, FxSource, Holding, HoldingObservation, Horizon,
@@ -608,6 +620,14 @@ mod tests {
         eligible: &CostEligibleTask,
         now: Timestamp,
     ) -> (SignalEstimate, CollectedItem, CalibrationLedgerHead) {
+        sell_estimate_with_probability(eligible, now, "1")
+    }
+
+    fn sell_estimate_with_probability(
+        eligible: &CostEligibleTask,
+        now: Timestamp,
+        probability: &str,
+    ) -> (SignalEstimate, CollectedItem, CalibrationLedgerHead) {
         let part = ModelIdentityPart::try_new("d57").expect("모델");
         let key = CalibrationKey::new(
             CalibrationModel::new(part.clone(), part.clone(), part),
@@ -627,7 +647,8 @@ mod tests {
         let submission = SignalSubmission::create(
             SignalTaskKey::from_task(eligible),
             key.clone(),
-            AiProbability::parse(&AiProbabilityInput::try_new("1").expect("입력")).expect("확률"),
+            AiProbability::parse(&AiProbabilityInput::try_new(probability).expect("입력"))
+                .expect("확률"),
             evidence,
             now,
         )
@@ -653,8 +674,20 @@ mod tests {
         now: Timestamp,
         calendars: &[MarketCalendar],
     ) -> SellSignal {
-        let eligible = eligible_task(instrument, now, calendars);
-        let (estimate, item, head) = sell_estimate(&eligible, now);
+        build_sell_signal_at(instrument, valuation, (now, now), "1", calendars)
+    }
+
+    fn build_sell_signal_at(
+        instrument: &ResolvedOrderInstrument,
+        valuation: &PortfolioValuation,
+        times: (Timestamp, Timestamp),
+        probability: &str,
+        calendars: &[MarketCalendar],
+    ) -> SellSignal {
+        let (task_at, assess_at) = times;
+        let eligible = eligible_task(instrument, task_at, calendars);
+        let (estimate, item, head) =
+            sell_estimate_with_probability(&eligible, task_at, probability);
         let items = [item];
         let ledger = SignalSourceLedger::new(&items, &[], &[]);
         let policy = Policy::new(InvestorProfile::default());
@@ -676,7 +709,7 @@ mod tests {
             (&assignments, &security),
             &ledger,
             SignalAssessmentFacts::new(
-                SignalTiming::new(now, calendars),
+                SignalTiming::new(assess_at, calendars),
                 Some(estimate.task().reference().clone()),
                 Some(head),
             ),
@@ -963,28 +996,95 @@ mod tests {
             SellDraftQuantityDecision::None(NoSellDraftQuantity::StaleHolding)
         );
 
-        let later_now = later(fixture.now, 10, 0);
-        let later_holding = holding_for(&fixture.instrument, qty("17"), later_now);
-        let later_val = valuation_with(&fixture.market, vec![later_holding], later_now);
-        let later_signal = build_sell_signal(
+        let signal_at = later(fixture.now, 10, 0);
+        let signal_holding = holding_for(&fixture.instrument, qty("17"), signal_at);
+        let signal_val = valuation_with(&fixture.market, vec![signal_holding], signal_at);
+        let later_signal = build_sell_signal_at(
             &fixture.instrument,
-            &later_val,
-            later_now,
+            &signal_val,
+            (fixture.now, signal_at),
+            "1",
             &fixture.calendars,
         );
         let older_holding = holding_for(&fixture.instrument, qty("17"), later(fixture.now, 5, 0));
-        let older_val = valuation_with(&fixture.market, vec![older_holding], later_now);
-        let older_sellable = fixture.sellable(qty("17"), later_now);
+        let older_val = valuation_with(&fixture.market, vec![older_holding], signal_at);
+        let fresh_sellable_after = fixture.sellable(qty("17"), signal_at);
         let older_facts =
-            SellDraftQuantityFacts::new(&fixture.account, &older_val, Some(&older_sellable));
+            SellDraftQuantityFacts::new(&fixture.account, &older_val, Some(&fresh_sellable_after));
         assert_eq!(
             calculate_sell_draft_quantity(
                 &later_signal,
                 &older_facts,
-                later_now,
+                signal_at,
                 &fixture.calendars
             ),
             SellDraftQuantityDecision::None(NoSellDraftQuantity::StaleHolding)
+        );
+
+        let pre_signal_sellable = fixture.sellable(qty("17"), later(fixture.now, 5, 0));
+        let pre_signal_facts =
+            SellDraftQuantityFacts::new(&fixture.account, &signal_val, Some(&pre_signal_sellable));
+        assert_eq!(
+            calculate_sell_draft_quantity(
+                &later_signal,
+                &pre_signal_facts,
+                signal_at,
+                &fixture.calendars
+            ),
+            SellDraftQuantityDecision::None(NoSellDraftQuantity::StaleSellableQuantity)
+        );
+    }
+
+    fn sell_signal_for(
+        fixture: &Fixture,
+        held: &str,
+        observed_at: Timestamp,
+        probability: &str,
+    ) -> SellSignal {
+        let valuation = valuation_with(
+            &fixture.market,
+            vec![holding_for(&fixture.instrument, qty(held), observed_at)],
+            observed_at,
+        );
+        build_sell_signal_at(
+            &fixture.instrument,
+            &valuation,
+            (fixture.now, observed_at),
+            probability,
+            &fixture.calendars,
+        )
+    }
+
+    #[test]
+    fn sell_signal_matches_reassessed_accepts_fresher_observation_and_rejects_changes() {
+        let fixture = Fixture::new(Market::Kr, qty("17"));
+        let signal_at = later(fixture.now, 10, 0);
+        let newer_at = later(fixture.now, 25, 0);
+        let older_at = later(fixture.now, 5, 0);
+        let stored = sell_signal_for(&fixture, "17", signal_at, "1");
+        assert_eq!(
+            sell_signal_matches_reassessed(&stored, &stored),
+            CheckResult::Passed
+        );
+        let fresher = sell_signal_for(&fixture, "17", newer_at, "1");
+        assert_eq!(
+            sell_signal_matches_reassessed(&stored, &fresher),
+            CheckResult::Passed
+        );
+        let regressed = sell_signal_for(&fixture, "17", older_at, "1");
+        assert_eq!(
+            sell_signal_matches_reassessed(&stored, &regressed),
+            CheckResult::Failed
+        );
+        let qty_changed = sell_signal_for(&fixture, "16", newer_at, "1");
+        assert_eq!(
+            sell_signal_matches_reassessed(&stored, &qty_changed),
+            CheckResult::Failed
+        );
+        let diff_facts = sell_signal_for(&fixture, "17", newer_at, "2");
+        assert_eq!(
+            sell_signal_matches_reassessed(&stored, &diff_facts),
+            CheckResult::Failed
         );
     }
 

@@ -15,7 +15,8 @@ use domain::{
     SellDraftQuantityFacts, SellDraftQuantityPlan, SellSignal, SellableQuantityFact,
     SignalDecision, SignalTiming, SignalTransitionError, SignalUnavailable, TickSizeError,
     TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price,
-    calculate_sell_draft_quantity, market_state_at, signal_transition,
+    calculate_sell_draft_quantity, market_state_at, sell_signal_matches_reassessed,
+    signal_transition,
 };
 use std::future::Future;
 
@@ -114,9 +115,12 @@ enum Attempt {
     Retry(DraftProposalError),
 }
 
-struct DraftCandidate {
-    proposal: Proposal<Draft>,
-    sell_plan: Option<SellDraftQuantityPlan>,
+enum DraftCandidate {
+    Buy(Box<Proposal<Draft>>),
+    Sell {
+        proposal: Box<Proposal<Draft>>,
+        plan: Box<SellDraftQuantityPlan>,
+    },
 }
 
 #[derive(Debug)]
@@ -227,26 +231,29 @@ where
         let Some(write_at) = self.recheck(current, &prepared.inputs)? else {
             return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
         };
-        candidate
-            .proposal
-            .check_current(write_at, observation)
-            .map_err(DraftProposalError::DraftStatus)?;
-        if let Some(plan) = candidate.sell_plan.as_ref() {
-            plan.check_facts_at(write_at, &prepared.inputs.evaluation.calendars)
-                .map_err(DraftProposalError::SellQuantity)?;
-        }
+        let proposal = match candidate {
+            DraftCandidate::Buy(proposal) => {
+                proposal
+                    .check_current(write_at, observation)
+                    .map_err(DraftProposalError::DraftStatus)?;
+                *proposal
+            }
+            DraftCandidate::Sell { proposal, plan } => {
+                proposal
+                    .check_current(write_at, observation)
+                    .map_err(DraftProposalError::DraftStatus)?;
+                plan.check_facts_at(write_at, &prepared.inputs.evaluation.calendars)
+                    .map_err(DraftProposalError::SellQuantity)?;
+                *proposal
+            }
+        };
         let write_check = DraftCheck {
             account: request.account,
             at: write_at,
             observation,
         };
-        self.store_candidate(
-            request.instrument,
-            snapshot,
-            candidate.proposal,
-            write_check,
-        )
-        .await
+        self.store_candidate(request.instrument, snapshot, proposal, write_check)
+            .await
     }
 
     async fn check_existing_draft(
@@ -417,8 +424,11 @@ where
             }
             SignalDecision::Buy(_) | SignalDecision::Sell(_) => {}
         }
-        if reassessed.into_signal().as_ref() != Some(&current.signal) {
-            return Err(DraftProposalError::SignalChanged);
+        match signal_matches(&current.signal, &reassessed) {
+            CheckResult::Passed => {}
+            CheckResult::Failed | CheckResult::Unknown => {
+                return Err(DraftProposalError::SignalChanged);
+            }
         }
         let range = ProposalPriceRange::from_estimate_task(
             signal_task(current).range_facts(),
@@ -476,10 +486,7 @@ where
             ProposalLifetime::default(),
         )
         .map_err(DraftProposalError::Proposal)?;
-        Ok(DraftCandidate {
-            proposal,
-            sell_plan: None,
-        })
+        Ok(DraftCandidate::Buy(Box::new(proposal)))
     }
 
     fn make_sell_proposal(
@@ -505,9 +512,9 @@ where
             ProposalLifetime::default(),
         )
         .map_err(DraftProposalError::Proposal)?;
-        Ok(DraftCandidate {
-            proposal,
-            sell_plan: Some(plan),
+        Ok(DraftCandidate::Sell {
+            proposal: Box::new(proposal),
+            plan: Box::new(plan),
         })
     }
 
@@ -664,6 +671,19 @@ where
                 ))
             }
         }
+    }
+}
+
+fn signal_matches(stored: &RaisedSignal, reassessed: &SignalDecision) -> CheckResult {
+    match (stored, reassessed) {
+        (RaisedSignal::Buy(old), SignalDecision::Buy(fresh)) if old == fresh => CheckResult::Passed,
+        (RaisedSignal::Sell(old), SignalDecision::Sell(fresh)) => {
+            sell_signal_matches_reassessed(old, fresh)
+        }
+        (
+            RaisedSignal::Buy(_) | RaisedSignal::Sell(_),
+            SignalDecision::Buy(_) | SignalDecision::Sell(_) | SignalDecision::None(_),
+        ) => CheckResult::Failed,
     }
 }
 
