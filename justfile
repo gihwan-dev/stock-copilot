@@ -120,6 +120,8 @@ check-ts: check-node check-pnpm
     node --test 'harness/claude-hooks/tests/*.test.mjs'
     node --test 'harness/codex-hooks/tests/*.test.mjs'
     node harness/codex-hooks/config.mjs
+    node --test 'harness/antigravity-hooks/tests/*.test.mjs'
+    node harness/antigravity-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
     node harness/ci/linux/exclusions.mjs verify
@@ -285,6 +287,7 @@ check-fast-static:
     node harness/config-files/check.mjs
     node harness/claude-hooks/hashes.mjs
     node harness/codex-hooks/config.mjs
+    node harness/antigravity-hooks/config.mjs
     node harness/ci/workflow-policy/check.mjs
     node harness/ci/review-records/check.mjs
 

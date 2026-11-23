@@ -66,7 +66,7 @@ const launchRole = (message) => {
   const roles = [...message.matchAll(/^[-] 역할: (.+)$/gmu)];
   return roles.length === 1 ? roles[0][1] : undefined;
 };
-const delegateTargetFindings = (target, role) => {
+export const delegateTargetFindings = (target, role) => {
   if (!keys(target, ["driverKind", "model", "options", "providerInstanceId"]))
     return denied("허용하지 않은 T3 위임 인자다");
   if (target.driverKind === "codex")

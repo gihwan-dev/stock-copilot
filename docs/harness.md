@@ -702,41 +702,40 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 | 역할 | 실행 | 강제 |
 |---|---|---|
 | 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸·위임 가드 |
-| 구현·수정 | T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | 메인 Claude 위임 가드가 `provider=antigravity`·`model=gemini-4-neon`·`thought_level=xhigh`·작업 사본·브리프(`- 역할: implementation`)를 확인. 세션 중 편집·셸·종료 훅은 미적용이며 Git 커밋 훅·원격 CI·독립 리뷰가 보완 |
-| 조사·비판 | T3 Antigravity `gemini-4-neon`(`thought_level=high`), 별도 작업 사본 | 메인 Claude 위임 가드가 `driverKind=antigravity`·`model=gemini-4-neon`·`role=research|review`·`thought_level=high`를 확인 |
+| 구현·수정 | T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | 메인 Claude 위임 가드가 `provider=antigravity`·`model=gemini-4-neon`·`thought_level=xhigh`·작업 사본·브리프(`- 역할: implementation`)를 확인. Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`)이 공유 정책 원본으로 보호 경로 쓰기·홈 읽기·실제 토스 API/주문 명령·금지 셸·미커밋 종료를 차단하고, Git 커밋 훅·원격 CI·독립 리뷰가 보완 |
+| 조사·비판 | T3 Antigravity `gemini-4-neon`(`thought_level=high`), 별도 작업 사본 | 메인 Claude 위임 가드가 `driverKind=antigravity`·`model=gemini-4-neon`·`role=research\|review`·`thought_level=high`를 확인. Antigravity `.agents/hooks.json`이 비-`xhigh` 모델(`-high`)과 detached HEAD·리뷰 브랜치를 `ROLE.reviewer`로 고정해 추적 파일 쓰기·변경형 git·중첩 위임을 차단 |
 | 적대적 리뷰 | 새 Claude2(`claudeAgent_claude2`) `claude-opus-5-5` `adversarial-reviewer` | 메인 Claude 위임 가드가 `driverKind=claudeAgent`·`providerInstanceId=claudeAgent_claude2`·`model=claude-opus-5-5`·`role=review`·worktree 격리를 확인. 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
 
 메인 Claude의 `orchestrationFindings`가 모델·제공자·인스턴스·역할·옵션·격리·브리프를 판정한다. 허용되는 위임 대상은 Antigravity `gemini-4-neon`(구현 `thought_level=xhigh`, 조사·비판 `thought_level=high`)과 Claude2(`providerInstanceId=claudeAgent_claude2`) `claude-opus-5-5`(`role=review`, 옵션 생략 또는 `effort=high`)뿐이다. Codex(`codex`, gpt 계열), 첫 번째 Claude 계정(`providerInstanceId=claudeAgent` 또는 `providerInstanceId` 생략), 다른 모델·역할·옵션 키·혼합 키는 모두 거부한다. 메인의 T3 `t3_thread_send` 수정 회차는 소유한 `implementation`·`research` 스레드에만 허용한다. 등록된 주 작업 트리의 Claude만 메인이며, 나머지 진짜 git worktree의 Claude는 리뷰어로 고정한다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude `Agent` 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. (Codex를 다시 쓸 때만 해당: Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다.) 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
 
-#### Antigravity 세션의 집행 경계와 빈틈 (H-60)
+#### Antigravity 세션의 집행 경계와 빈틈 (H-60 → H-61)
 
-Antigravity 세션에는 이 저장소의 Codex 훅(`harness/codex-hooks/`)과 Claude 훅(`.claude/hooks/`)이 적용되지 않는다. 아래 표는 H-60 시점에서 여전히 기계로 강제되는 것과 더 이상 기계로 강제되지 않는 것을 구분한다. 미강제 항목은 `just known-gaps`에도 등록된다.
+Antigravity 세션에는 Codex·Claude 세션 훅이 직접 실행되지 않으므로, H-61에서 저장소 루트 `.agents/hooks.json`과 `harness/antigravity-hooks/`를 추가해 기존 단일 정책 원본(`.claude/hooks/lib/*`, `harness/agent-writable.txt`, `harness/claude-hooks/rules.json`, `harness/sandbox/policy.json`, `harness/arch-check/rules.toml`)을 Antigravity 훅으로 연결했다. 남은 빈틈은 `just known-gaps`에도 등록된다.
 
-**여전히 기계로 강제되는 것**
+**기계로 강제되는 것 (H-61 적용 후)**
 
 | 영역 | 강제 장치 | 범위와 조건 |
 |---|---|---|
-| 커밋 전 검사 | 로컬 Git 커밋 훅(`lefthook`: `fresh-build`, `commit-guard`, `just check-fast`) | 작업 브랜치 변경분 검사 및 하네스·문서·설정 변경 시 전체 `just check` 승격. `xtask test-diff`, `disable-check`, `hooks-installed` 포함 |
-| 푸시 전 검사 | 로컬 Git 푸시 훅(`just check-full`) | 전체 검사, 시각 회귀, 변경분 변이 |
-| 원격 CI | GitHub Actions (`ci.yml`, `signatures.yml`, `nightly.yml`) | Linux·macOS 전체 `just check`, 변경분 변이, 컨테이너 시각 회귀, 리뷰 기록 검사, 보호 경로·기존 테스트 서명 사후 탐지 |
-| 위임 통제 | 메인 Claude 세션의 `guard-orchestration.mjs` (`orchestrationFindings`) | 메인 Claude가 띄우는 제공자(`antigravity`, `claudeAgent_claude2`), 모델, 옵션, 역할, worktree 격리, 브리프, 소유 스레드 |
-| 독립 검토 | Claude2 Opus 5.5 적대적 리뷰 + Antigravity `gemini-4-neon`(`high`) 비판 + 메인의 대상 작업 사본 전후 스냅숏 비교 | 구현 보고서 격리, 결함 재현·반박, 리뷰 중 원본 변경 여부 확인 |
+| 세션 중 보호 경로 쓰기·금지 셸 차단 | `.agents/hooks.json` `PreToolUse` (`harness/antigravity-hooks/`) | `.agents/hooks.json`·하위 `.agents/**`·`GEMINI.md`·`.claude/settings.local.json`·`.cargo/config*`·`.git/**`·`docs/progress.md`·`docs/tasks.md`·심볼릭 링크·`..`·작업 사본 밖 경로·금지 셸(`--no-verify`, `LEFTHOOK=0`, `git push`, `RUSTFLAGS` 등)을 즉시 거부. `harness/agent-writable.txt` 밖 보호 경로(`justfile`, `harness/**`, 추적된 ADR 등)는 `lock.txt = on`에서 거부 |
+| 세션 중 홈 설정·메모리·자격 증명 읽기 차단 | `.agents/hooks.json` `PreToolUse` (`policy.mjs`) | `policy.json` `denyRead` + `rules.json` `protectedHome` + `~/.gemini`·셸 기록·작업 사본 밖 `MEMORY.md`·홈 루트·`~user`·`security` 키체인 조회를 `read_file`·탐색 별칭·셸 인자·`<` 리다이렉션·심볼릭 링크(끊긴 링크 포함)에서 차단 |
+| Antigravity 리뷰·비판 역할 쓰기·위임 차단 | `.agents/hooks.json` `PreToolUse` + `Stop` | 호스트 `process.cwd()`로 작업 사본을 고정하고 detached HEAD·`master`/`main`·`review/*`·`critic/*`·비-`xhigh` 모델(`-high`)을 `ROLE.reviewer`로 분류해 모든 편집·추적 파일 셸 쓰기·변경형 git·하위 위임을 차단. `Stop`에서 추적 파일 변경 잔류 시 `continue` 반환 |
+| 실제 주문·토스 API 호출 명령 차단 | `.agents/hooks.json` `PreToolUse` | `toss-smoke`·`broker-toss-trade`·`src-tauri`(`gen-bindings` 제외) 실행, `tauri dev`, `TOSS_*` 환경 변수, 네트워크 클라이언트의 `tossinvest.com` 및 `allowedDomains`·루프백 밖 연결을 차단 |
+| 닫힌 실패와 무결성 | `.agents/hooks.json` 래퍼 + `hashes.json` | 병합 후 주 작업 트리(`--git-common-dir`)의 `dispatch.mjs`를 우선 실행. Git·Node·JSON·미지 도구 오류 시 `PreToolUse`는 `deny`, `Stop`은 `continue`. `.agents/`와 `harness/antigravity-hooks/`를 `hashes.json`으로 해시 보호 |
+| 커밋·푸시·원격 CI·위임 통제 | 로컬 `lefthook`, `just check-full`, GitHub Actions CI, 메인 `guard-orchestration.mjs` | 변경분 검사·전체 승격·`test-diff`·서명 사후 탐지·독립 리뷰·비판과 대상 스냅숏 전후 비교 |
 
-**더 이상 기계로 강제되지 않는 것 (Antigravity 세션 기준)**
+**적용 조건과 미적용 세션 확인 절차**
 
-| 빈틈 | 과거 장치 (Claude·Codex) | 현재 상태와 완화 수단 |
+- T3 Code의 `antigravity acp` 세션은 각 턴 시작 시 작업 사본 루트의 `.agents/hooks.json`을 읽고 `runtimeMode: "full-access"`에서도 별도 수동 신뢰 창 없이 `PreToolUse`·`PostToolUse`·`Stop`을 실행한다(실측: `cli-1.5.14`).
+- 훅이 적용되지 않은 세션(예: 비신뢰 폴더, 사용자 전역 설정 `~/.gemini`가 훅을 끈 환경, 훅 파일이 없는 이전 커밋)을 확인하려면 상태 폴더(`~/.local/state/stock-copilot-harness/records/antigravityaudit-*.json`)와 실제 차단 응답, Git 커밋 훅 실행 여부를 함께 확인하고 리뷰 기록 `## 측정`의 `세션 훅` 행에 `적용(.agents/hooks.json)` 또는 `미적용(사유)`으로 기록한다. 미적용 세션의 변경은 대상 스냅숏 전후 비교와 원격 CI 전체 검사로 보완한다.
+
+**남은 빈틈 (H-61 이후에도 기계로 완전 강제되지 않는 것)**
+
+| 빈틈 | 이유 | 보완 수단 |
 |---|---|---|
-| 세션 중 보호 경로 쓰기 차단 | `PreToolUse` 편집 가드, 권한 `deny`, 샌드박스 `denyWrite` | 사전 차단 없음. 커밋 훅·원격 CI 서명 검사·독립 리뷰가 사후 탐지 |
-| 세션 중 홈 파일·자격 증명·하네스 상태 읽기 차단 | 샌드박스 `denyRead`, Claude `Read(~/.claude*/**)` 거부 | 기계 차단 없음. 규칙 준수와 사후 리뷰에 의존 |
-| 세션 중 금지 셸 명령 차단 (`--no-verify`, `LEFTHOOK=0`, `git push`, `RUSTFLAGS` 등) | `PreToolUse` Bash 가드 | 실행 시점 차단 없음. 커밋 훅 우회는 원격 CI와 메인 검증이 사후 탐지 |
-| 편집 직후 자동 린트 | `PostToolUse` `just lint-file` | 자동 실행 없음. 커밋 훅과 `just check-fast`에서 검증 |
-| 리뷰·비판 역할의 추적 파일 쓰기·중첩 위임 차단 | 역할별 편집·셸·위임 가드 | Antigravity 비판자 세션에는 차단 훅 없음. T3 worktree 격리와 메인의 대상 스냅숏 전후 비교로 오염 확인 |
-| 세션 종료 시 자동 전체 검사 | `Stop` / `SubagentStop` 훅 | 종료 훅 없음. 구현자가 `just check-fast`를 직접 실행하고 원격 CI가 전체 검사를 수행 |
-
-**Antigravity 세션에서 확인한 사실과 미확인 항목**
-
-- 확인한 사실: (1) Antigravity 세션은 작업 공간 루트의 `AGENTS.md`를 규칙으로 자동 로드한다. (2) 이 세션에 번들된 내장 스킬 문서(`agy-customizations`의 `SKILL.md`·`docs/hooks.md`·`docs/rules.md`, `antigravity-guide`의 `references/app.md`·`references/cli.md`)는 작업 공간 `.agents/hooks.json`(또는 `.agent/`·`_agents/`·`_agent/`)의 생명주기 훅(`SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`)과 `PreToolUse`의 `decision: "allow" | "deny" | "ask" | "force_ask"`, `Stop`의 `decision: "continue"` 계약, 전역 설정 위치(`~/.gemini/config/`, CLI `~/.gemini/antigravity-cli/settings.json`), 앱의 터미널 샌드박스·비작업공간 파일 접근 정책을 안내한다. (3) H-60 시점의 저장소에는 `.agents/`·`.agent/`·`_agents/`·`_agent/`·`GEMINI.md`가 없다. (4) T3의 `orchestrator_capabilities`는 `antigravity` 제공자, `gemini-4-neon`(`thought_level` 기본 `xhigh`), `claudeAgent_claude2` 제공자, `claude-opus-5-5`를 보고한다.
-- 미확인 항목: (1) T3 Code의 `antigravity-acp` 경로(`runtimeMode: "full-access"` 포함)에서 `.agents/hooks.json`이 실제로 로드·실행돼 도구 호출을 차단하고 종료를 막는지, (2) worktree 세션에서 훅 출처가 주 작업 트리인지 worktree인지와 폴더 신뢰 요구 여부, (3) 실제 `PreToolUse` 도구 이름·인자 형식과 훅 오류·시간 초과 시 닫힌 실패 보장 여부, (4) Antigravity 터미널 샌드박스·비작업공간 파일 접근 차단을 프로젝트 파일로 강제할 수 있는지, (5) `PostToolUse`로 `just lint-file` 실패 피드백을 돌려줄 수 있는지, (6) 사용자 홈 설정(`~/.gemini/...`)의 실제 병합 동작(홈 파일 열람 금지 규칙에 따라 읽지 않음).
+| 편집 직후 자동 `just lint-file` 차단 피드백 | Antigravity `PostToolUse` 계약이 `{}` 반환만 허용 | Git 커밋 훅(`lefthook`), `just check-fast`, 원격 CI |
+| OS 커널 수준 프로세스 샌드박스 | Antigravity 훅은 도구 인자·셸 구문 계층이며 Codex Seatbelt처럼 임의 컴파일 바이너리·스크립트 파일 내부 I/O까지 감싸지 않음 | 셸 인라인 코드·미지 도구 차단 + Git 커밋 훅 + 원격 CI 서명 검사 + 독립 리뷰 |
+| 사용자 홈 전역 설정(`~/.gemini/**`)과 폴더 신뢰 | 저장소 파일만으로 사용자 전역 훅 비활성화나 신뢰 거부를 막을 수 없음 | 리뷰 기록 `세션 훅` 확인 + 커밋 훅 + 원격 CI |
+| 종료 시 동기 전체 `just check` | `Stop` 훅은 리뷰어 추적 파일 무변경·구현자 미커밋 여부·`lefthook` 설치만 빠르게 검사 | 2026-11-23 결정에 따라 원격 GitHub Actions CI가 전체 `just check`와 변경분 변이 수행 |
 
 #### Claude 적대적 리뷰어 통제
 

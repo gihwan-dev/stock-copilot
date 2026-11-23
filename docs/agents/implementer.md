@@ -15,7 +15,8 @@
 - 기존 테스트를 지우거나, 단언을 약하게 바꾸거나, 건너뛰게 하지 않는다. 기존 테스트가 틀렸다고 판단되면 바꾸지 말고 "막힘:"으로 보고한다. 기존 테스트의 삭제·변경은 `xtask test-diff`가 실패시킨다. 병합으로 받은 `master`의 승인된 테스트 변경은 구현자가 직접 바꾼 것에 해당하지 않는다.
 - 테스트 준비 변경은 메인이 `master`에 미리 기록한 승인과 파일 전·후 해시·지적 목록이 정확히 일치하는 경우에만 workflow 2.9의 예외를 받는다. 구현자는 승인 파일을 만들거나 자신의 변경을 승인하지 않는다. 단언 삭제·약화는 승인할 수 없다.
 - 주석과 `useEffect` 계열을 쓰지 않는다. 원시 타입과 불린을 쓰지 않는다(전용 타입, 열거형). 검사 끄기는 규칙을 지킬 방법이 없을 때만 docs/harness.md 2.1의 형태로 쓰고, 끈 곳과 이유를 보고에 적는다. TypeScript는 Rust처럼 쓴다(docs/harness.md 4장).
-- 구현 중에는 `cargo nextest run --locked -p <crate>`와 `just base=<기준 SHA> check-fast`를 쓴다. fast도 인덱스와 작업 사본의 일치를 요구하므로 먼저 스테이징한다. 전체 검사는 원격 CI와 메인 병합에서 통과해야 끝난 것이다. Antigravity 세션에는 이 저장소의 Codex·Claude 세션 훅이 적용되지 않으므로 Git 커밋 훅 실행 결과와 직접 실행한 검사 결과를 기록하고, 세션 훅이 막아 주던 규칙(보호 경로 승인 외 수정 금지, 홈 파일·자격 증명 열람 금지, 리뷰 역할의 쓰기 금지)은 구현자가 스스로 지킨다. 검사를 끄거나 오류를 삼켜서 통과시키지 않는다.
+- 구현 중에는 `cargo nextest run --locked -p <crate>`와 `just base=<기준 SHA> check-fast`를 쓴다. fast도 인덱스와 작업 사본의 일치를 요구하므로 먼저 스테이징한다. 전체 검사는 원격 CI와 메인 병합에서 통과해야 끝난 것이다. Antigravity 세션에는 저장소 루트의 `.agents/hooks.json`(`harness/antigravity-hooks/`)이 공유 정책 원본으로 보호 경로 쓰기·홈 설정·자격 증명 읽기·리뷰 역할 쓰기·실제 토스 API/주문 명령·미커밋 종료를 강제한다. 훅이 적용되지 않은 세션(신뢰 거부·전역 설정 비활성화 등)을 탐지하면 리뷰 기록의 `세션 훅` 행에 사실대로 적고 규칙을 스스로 지킨다. 남은 빈틈은 `docs/harness.md` 7.4와 `just known-gaps`에 적는다. 검사를 끄거나 오류를 삼켜서 통과시키지 않는다.
+- T3 Antigravity 세션이 주입하는 `TMPDIR` 경로가 길어 macOS Unix 도메인 소켓 길이 제한(104바이트, `harness/ci/tests/h53-temp.test.mjs`)에 걸릴 수 있으므로, `git commit`과 `just check*` 실행 시 `TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"`와 `PATH="$HOME/Library/pnpm:$PATH"`를 함께 둔다.
 - 보호 파일(docs/harness.md 7.1)을 수정하지 않는다. 하네스가 편집이나 명령을 거부하면 다른 방법으로 같은 일을 하려 하지 말고 멈춘다. 어떤 규칙이 무엇을 막는지와 시도한 대안을 보고한다.
 - 구현이 불가능하거나 완료 기준이 서로 모순되면 억지로 통과시키지 말고 보고서 첫 줄을 "막힘:"으로 시작해 끝낸다. 이것은 실패가 아니라 정상 출구다.
 - 필요한 디자인 시스템 컴포넌트가 없으면 `shared/ds`에 만들지 말고 "막힘:"으로 보고한다.
@@ -33,7 +34,7 @@
 
 잠금(H-20) 전 운영 규칙. 잠금 뒤에는 이 절을 지운다:
 - "기존 테스트"는 `master`에 이미 있는 테스트다. 이 브랜치에서 새로 만든 테스트는 병합 전까지 고쳐도 된다. `test-diff`는 `master`와의 병합 기준과 비교한다. 작업 브랜치에서 `git merge --no-ff --no-edit master`로 받는다. 자동 병합에서는 인덱스가 HEAD와 `master` 끝의 충돌 없는 병합 트리와 같을 때 그 끝을 기준으로 검사한다. 충돌이 나면 해결하고 스테이징한 뒤 `git commit --no-edit`로 끝낸다. 이때 단일 `MERGE_HEAD`가 정확히 로컬 `master` 끝이어야 한다. 병합으로 받은 `master`의 승인된 테스트 변경은 막힘 사유가 아니다. 역방향·다중 부모·끝이 아닌 커밋의 병합에는 메타데이터 예외가 없다. 리뷰 수정 회차에서 자기 테스트를 고쳐야 한다는 이유로 멈추지 않는다.
-- 기존 스크립트의 쓰기 모드로 만드는 생성물은 구현 담당이 다시 만든다: `.codex/config.toml`(`node harness/codex-hooks/config.mjs --write`), `harness/sandbox/lock-fragment.json`(`node harness/sandbox/fragment.mjs --write`), `harness/claude-hooks/hashes.json`(`node harness/claude-hooks/hashes.mjs --write`)과 "X로 다시 생성하라"는 검사가 가리키는 파일. 새 ADR이나 새 보호 파일을 추적하면 이 순서로 다시 만든다. 손으로 고치지 않는다. 이 연쇄 때문에 멈추지 않는다.
+- 기존 스크립트의 쓰기 모드로 만드는 생성물은 구현 담당이 다시 만든다: `.agents/hooks.json`(`node harness/antigravity-hooks/config.mjs --write`), `.codex/config.toml`(`node harness/codex-hooks/config.mjs --write`), `harness/sandbox/lock-fragment.json`(`node harness/sandbox/fragment.mjs --write`), `harness/claude-hooks/hashes.json`(`node harness/claude-hooks/hashes.mjs --write`)과 "X로 다시 생성하라"는 검사가 가리키는 파일. 새 ADR이나 새 보호 파일을 추적하면 이 순서로 다시 만든다. 손으로 고치지 않는다. 이 연쇄 때문에 멈추지 않는다.
 - 작업에 꼭 필요한 허용 목록 추가(문서가 지정한 의존성, 새 검사의 등록)는 구현 담당이 한다. 기존 규칙을 지우거나 범위를 좁히는 변경은 하지 않는다. 더한 의존성은 이름, 버전, 켠 기능, 전이 의존성, 라이선스를 보고서에 표로 적는다.
 - ADR 초안은 번호 없이 `docs/adr/<작업 ID 소문자>-<주제>.md`로 만든다. 번호는 메인이 병합 때 붙인다. 테스트와 코드는 ADR 파일 이름을 참조하지 않는다.
 - 셸의 `PATH` 앞에 `$HOME/Library/pnpm`을 둔다. 커밋 명령에도 준다. 커밋 훅이 pnpm을 실행한다.

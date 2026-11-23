@@ -7,9 +7,9 @@
 | 역할 | 누가 | 하는 일 | 강제 |
 |---|---|---|---|
 | 메인 에이전트 | 사용자와 대화하는 세션 | 작업 선정, 브리프 작성, 평가, 수정 여부 판단, 리뷰 기록, 푸시, 사용자 보고. 코드를 직접 쓰지 않는다 | 편집 훅이 메인에게 `docs/**`(보호 문서 제외)만 허용 |
-| 구현 에이전트 | T3의 새 Antigravity `gemini-4-neon`(thought_level `xhigh`, 별도 작업 사본) | 작업 하나를 구현하고 변경분 검사(`just check-fast`)와 회귀·손 변형을 통과시킨다 | Git 커밋 훅, 원격 CI 전체 검사·변이, 독립 리뷰·비판 (Antigravity 세션에는 Codex·Claude 세션 훅이 미적용. 빈틈은 [harness.md](harness.md) 7.4와 `just known-gaps`) |
+| 구현 에이전트 | T3의 새 Antigravity `gemini-4-neon`(thought_level `xhigh`, 별도 작업 사본) | 작업 하나를 구현하고 변경분 검사(`just check-fast`)와 회귀·손 변형을 통과시킨다 | Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`), Git 커밋 훅, 원격 CI 전체 검사·변이, 독립 리뷰·비판 (남은 빈틈은 [harness.md](harness.md) 7.4와 `just known-gaps`) |
 | 적대적 리뷰어 | T3의 새 Claude2(`claudeAgent_claude2`) `claude-opus-5-5` (`adversarial-reviewer`, 별도 작업 사본) | 구현을 깨뜨릴 방법을 찾고 등급을 매긴다. 판정하지 않는다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
-| 비판자 | T3의 새 Antigravity `gemini-4-neon`(thought_level `high`, 별도 작업 사본) | 리뷰 지적을 하나씩 실행으로 반박해 본다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 (Antigravity 세션 훅 미적용) |
+| 비판자 | T3의 새 Antigravity `gemini-4-neon`(thought_level `high`, 별도 작업 사본) | 리뷰 지적을 하나씩 실행으로 반박해 본다 | Antigravity `.agents/hooks.json`(비-`xhigh`·detached HEAD `ROLE.reviewer` 쓰기·위임 차단), 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
 
 "새"는 앞 단계의 대화 맥락을 물려받지 않는다는 뜻이다. 각 에이전트는 브리프와 저장소만 본다. native Claude Agent 위임은 허용하지 않는다. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude2(`providerInstanceId=claudeAgent_claude2`, `driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`)가 한다. Codex(`codex`, gpt 계열)와 첫 번째 Claude 계정(`claudeAgent`)은 쓰지 않는다. Antigravity `delegate_task`는 `target.driverKind=antigravity`, `target.model=gemini-4-neon`에 `role`과 `thought_level`(`implementation`은 `xhigh`, `research`·`review`는 `high`)을 명시한다. 모두 `isolation=worktree`다. 포크와 재개는 쓰지 않는다.
 
@@ -66,7 +66,7 @@
 - 작업 하나에 브랜치 하나, 커밋은 작게. 구현 에이전트는 푸시하지 않고 서명 옵션을 쓰지 않는다.
 - `just check`가 통과해야 끝난 것이다. 통과시키기 위해 검사를 끄거나 테스트를 지우거나 약하게 만들지 않는다. 기존 테스트의 삭제·변경은 `xtask test-diff`가 실패시킨다.
 - 하네스가 막으면 우회하지 않고 멈춘 뒤 "막힘:"으로 보고한다 ([harness.md](harness.md) 8장).
-- Antigravity 세션에는 이 저장소의 Codex·Claude 세션 훅이 적용되지 않으므로 Git 커밋 훅 실행과 직접 돌린 검사 결과, 원격 CI 전체 검사와 대상 스냅숏을 메인이 확인한다. (Codex를 다시 쓸 때만 해당: Codex Stop 훅이 적용된 세션은 전체 검사를 돌린다. 실패하면 계속 고치게 하고, 계속된 회차가 "막힘:"으로 보고하면 실패 상태로 끝낼 수 있다. T3가 훅을 적용하지 않은 세션에서는 메인이 직접 검사와 대상 스냅숏을 확인한다.)
+- Antigravity 세션은 `.agents/hooks.json`(`harness/antigravity-hooks/`)이 보호 경로·홈 읽기·리뷰어 쓰기·토스 실API 명령·미커밋 종료를 검사하며, Git 커밋 훅 실행과 직접 돌린 검사 결과, 원격 CI 전체 검사와 대상 스냅숏을 메인이 확인한다. 훅이 미적용된 세션이면 리뷰 기록 `세션 훅` 행에 사실대로 적는다. (Codex를 다시 쓸 때만 해당: Codex Stop 훅이 적용된 세션은 전체 검사를 돌린다. 실패하면 계속 고치게 하고, 계속된 회차가 "막힘:"으로 보고하면 실패 상태로 끝낼 수 있다. T3가 훅을 적용하지 않은 세션에서는 메인이 직접 검사와 대상 스냅숏을 확인한다.)
 - 보고 형식: 첫 줄 "완료" 또는 "막힘: <한 줄 이유>", 커밋 SHA와 바꾼 파일, 완료 기준별 충족 근거(테스트 이름, 명령과 출력), `just check-fast`(또는 전체 `just check`) 마지막 요약 줄, 확신이 없는 부분과 범위 밖에서 발견한 문제.
 
 구현이 끝나면 메인이 확인한다:

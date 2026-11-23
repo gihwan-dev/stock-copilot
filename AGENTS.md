@@ -34,6 +34,6 @@
 
 문서와 사용자 화면은 한국어다. 코드 식별자는 영어다.
 
-구현 규칙의 원본은 [docs/agents/implementer.md](docs/agents/implementer.md)다. Antigravity 세션에는 이 저장소의 Codex·Claude 세션 훅이 적용되지 않으며 강제·미강제 경계는 [docs/harness.md](docs/harness.md) 7.4와 `just known-gaps`에 적는다.
+구현 규칙의 원본은 [docs/agents/implementer.md](docs/agents/implementer.md)다. Antigravity 세션에는 `.agents/hooks.json`(`harness/antigravity-hooks/`)이 기존 단일 정책 원본을 강제하며, 적용 조건과 남은 빈틈은 [docs/harness.md](docs/harness.md) 7.4와 `just known-gaps`에 적는다.
 
 Codex를 다시 쓸 때만 해당: Codex 시작 전에 프로젝트 신뢰와 훅 신뢰를 각각 확인한다. 기존 세션에 새 훅이 자동 적용된다고 가정하지 않는다.

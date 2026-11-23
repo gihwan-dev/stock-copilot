@@ -23,6 +23,14 @@ export const HASH_DIRECTORIES = [
   "harness/toolchain",
   "harness/codex-regression",
 ];
+export const ANTIGRAVITY_HASH_DIRECTORIES = [
+  ".agents",
+  "harness/antigravity-hooks",
+];
+const ALL_HASH_DIRECTORIES = [
+  ...HASH_DIRECTORIES,
+  ...ANTIGRAVITY_HASH_DIRECTORIES,
+];
 const trackedHooks = (root) => {
   const files = git(root, ["ls-files", "-z"]);
   if (files === undefined)
@@ -33,7 +41,7 @@ const trackedHooks = (root) => {
       (path) =>
         path &&
         (NAMED.includes(path) ||
-          HASH_DIRECTORIES.some((directory) =>
+          ALL_HASH_DIRECTORIES.some((directory) =>
             path.startsWith(directory + "/"),
           )),
     );

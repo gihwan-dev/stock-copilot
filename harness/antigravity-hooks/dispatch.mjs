@@ -1,0 +1,94 @@
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { stateDirectory, writeRecord } from "../../.claude/hooks/lib/state.mjs";
+import { sessionProject } from "../codex-hooks/session.mjs";
+import {
+  antigravityPostTool,
+  antigravityPreTool,
+  antigravityStop,
+  refusal,
+} from "./adapter.mjs";
+
+const hooksInstalled = (common) => {
+  const preCommit = join(common, "hooks", "pre-commit");
+  if (!existsSync(preCommit)) return false;
+  try {
+    return readFileSync(preCommit, "utf8").includes("lefthook");
+  } catch {
+    return false;
+  }
+};
+
+const safeRecord = (record, kind, id, payload) => {
+  try {
+    record(stateDirectory(), kind, id, payload);
+  } catch {
+    return;
+  }
+};
+
+export const dispatchEvent = (
+  input,
+  session,
+  record = writeRecord,
+  extraFacts = {},
+) => {
+  const event = input?.hookEventName ?? process.argv[2];
+  if (event === "PreToolUse") {
+    const output = antigravityPreTool(
+      input,
+      session.project,
+      session.root,
+      extraFacts,
+    );
+    const id = input?.toolCall?.id;
+    if (typeof id === "string" && id.length > 0) {
+      safeRecord(
+        record,
+        "antigravityaudit",
+        createHash("sha256").update(id).digest("hex"),
+        {
+          event: "PreToolUse",
+          tool: input?.toolCall?.name,
+          decision: output.decision,
+          worktree: session.root,
+        },
+      );
+    }
+    return output;
+  }
+  if (event === "PostToolUse") {
+    return antigravityPostTool(input);
+  }
+  if (event === "Stop") {
+    return antigravityStop(input, session, {
+      hooksReady: hooksInstalled(session.common),
+      ...extraFacts,
+    });
+  }
+  return refusal(`알 수 없는 Antigravity 훅 이벤트: ${String(event)}`);
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  let input;
+  const fallbackEvent = process.argv[2] ?? "PreToolUse";
+  try {
+    input = JSON.parse(readFileSync(0, "utf8"));
+    const session = sessionProject(process.cwd());
+    const output = dispatchEvent(input, session);
+    process.stdout.write(`${JSON.stringify(output)}\n`);
+  } catch (error) {
+    const reason = `Antigravity 하네스 오류: ${error.message}`;
+    process.stderr.write(`${reason}\n`);
+    const event = input?.hookEventName ?? fallbackEvent;
+    const output =
+      event === "PostToolUse"
+        ? {}
+        : event === "Stop"
+          ? { decision: "continue", reason }
+          : refusal(reason);
+    process.stdout.write(`${JSON.stringify(output)}\n`);
+  }
+}
