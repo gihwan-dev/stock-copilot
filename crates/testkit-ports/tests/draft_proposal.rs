@@ -5433,5 +5433,40 @@ mod tests {
             };
             assert_eq!(sus_repo.draft_attempts(), 0);
         }
+
+        #[test]
+        fn buy_signal_reassessment_rejects_changed_buy_limit() {
+            let source = fixtures::master();
+            let now = fixtures::day(60);
+            let data = Data::new(market(&source, now));
+            let repository = seeded(&source, &data);
+            let updated_portfolio = domain::Portfolio::new(
+                vec![],
+                domain::BuyingPower::new(fixtures::money("20000", Currency::Krw), now),
+                domain::BuyingPower::new(fixtures::money("0", Currency::Usd), now),
+            )
+            .expect("포트")
+            .evaluate(None);
+            data.0.write().expect("입력").evaluation.valuation = Some(updated_portfolio);
+            let (bus, events) = event_bus();
+            let err = run(DraftProposal::new(
+                &repository,
+                &data,
+                &Scheduler::default(),
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                &source.row().instrument_id,
+                &AccountId::new(4321),
+                proposal_id("buy-limit-changed"),
+            ))
+            .expect_err("매수 한도 변경 거부");
+            let DraftProposalError::SignalChanged = err else {
+                panic!("SignalChanged여야 한다: {err:?}")
+            };
+            assert_eq!(repository.draft_attempts(), 0);
+            assert!(events.read().expect("이벤트").is_empty());
+        }
     }
 }
