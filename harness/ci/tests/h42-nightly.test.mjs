@@ -27,6 +27,7 @@ test("H-42 mutation shards run independently and notify with their own title", (
     matrix: {
       shard: Array.from({ length: 128 }, (_, index) => `${index}/128`),
     },
+    "max-parallel": 2,
   });
   assert.deepEqual(jobs["notify-mutants"].needs, [
     "mutants",
