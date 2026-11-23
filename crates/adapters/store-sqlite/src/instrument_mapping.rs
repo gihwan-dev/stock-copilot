@@ -4,14 +4,14 @@ use application::{
 };
 use domain::{
     IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingError, InstrumentMappingRecord,
-    InstrumentMappingStatus, InstrumentMappings, InstrumentSource, IsinCode, IssuedInstrumentId,
-    IssuerSequence, KnownMarket, MappingAssignment, PersistedIssuerCursor, Symbol,
+    InstrumentMappingStatus, InstrumentSource, InstrumentSourceConflict, IsinCode,
+    IssuedInstrumentId, IssuerSequence, KnownMarket, MappingAssignment, PersistedIssuerCursor,
+    Symbol, instrument_source_conflicts,
 };
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use std::collections::BTreeSet;
 
 const STATUS_ACTIVE: &str = "active";
-const STATUS_SUPERSEDED: &str = "superseded";
 const STATUS_RETIRED: &str = "retired";
 
 #[derive(Debug)]
@@ -36,15 +36,46 @@ impl<'database> InstrumentIdIssuerStore<'database> {
     pub const fn new(database: &'database Database) -> Self {
         Self { database }
     }
-
-    pub async fn restore_issuer(&self) -> Result<IndependentInstrumentIdIssuer, SystemPortError> {
-        self.database.read(restore_domain_issuer).await
-    }
 }
 
 enum IdPresence {
     Present,
     Absent,
+}
+
+#[derive(Clone, Copy)]
+enum StoredStatus {
+    Active,
+    Retired,
+}
+
+impl StoredStatus {
+    const fn into_domain(self) -> InstrumentMappingStatus {
+        match self {
+            Self::Active => InstrumentMappingStatus::Active,
+            Self::Retired => InstrumentMappingStatus::Retired,
+        }
+    }
+}
+
+struct StoredRecord {
+    source: InstrumentSource,
+    id: InstrumentId,
+    status: StoredStatus,
+}
+
+impl StoredRecord {
+    fn to_domain(&self) -> InstrumentMappingRecord {
+        InstrumentMappingRecord::new(
+            self.source.clone(),
+            self.id.clone(),
+            self.status.into_domain(),
+        )
+    }
+
+    fn into_domain(self) -> InstrumentMappingRecord {
+        InstrumentMappingRecord::new(self.source, self.id, self.status.into_domain())
+    }
 }
 
 fn invalid<E>(_error: E) -> rusqlite::Error {
@@ -66,16 +97,15 @@ fn decode_market(raw: &str) -> rusqlite::Result<KnownMarket> {
     }
 }
 
-fn decode_status(raw: &str) -> rusqlite::Result<InstrumentMappingStatus> {
+fn decode_status(raw: &str) -> rusqlite::Result<StoredStatus> {
     match raw {
-        STATUS_ACTIVE => Ok(InstrumentMappingStatus::Active),
-        STATUS_SUPERSEDED => Ok(InstrumentMappingStatus::Superseded),
-        STATUS_RETIRED => Ok(InstrumentMappingStatus::Retired),
+        STATUS_ACTIVE => Ok(StoredStatus::Active),
+        STATUS_RETIRED => Ok(StoredStatus::Retired),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
 
-fn decode_row(row: &Row<'_>) -> rusqlite::Result<InstrumentMappingRecord> {
+fn decode_row(row: &Row<'_>) -> rusqlite::Result<StoredRecord> {
     let raw_id: String = row.get(0)?;
     let raw_market: String = row.get(1)?;
     let raw_symbol: String = row.get(2)?;
@@ -88,11 +118,11 @@ fn decode_row(row: &Row<'_>) -> rusqlite::Result<InstrumentMappingRecord> {
     let isin = IsinCode::try_new(&raw_isin).map_err(invalid)?;
     let status = decode_status(&raw_status)?;
 
-    Ok(InstrumentMappingRecord::new(
-        InstrumentSource::new(market, symbol, isin),
+    Ok(StoredRecord {
+        source: InstrumentSource::new(market, symbol, isin),
         id,
         status,
-    ))
+    })
 }
 
 fn encode_sequence_hex(sequence: IssuerSequence) -> String {
@@ -174,7 +204,9 @@ pub(crate) fn validate_schema(connection: &Connection) -> rusqlite::Result<()> {
     validate_all_triggers(connection)
 }
 
-fn read_issuer_cursor(connection: &Connection) -> rusqlite::Result<PersistedIssuerCursor> {
+pub(crate) fn read_issuer_cursor(
+    connection: &Connection,
+) -> rusqlite::Result<PersistedIssuerCursor> {
     let mut statement = connection.prepare(sql::ISSUER_CURSOR)?;
     let rows = statement
         .query_map([], |row| {
@@ -193,13 +225,41 @@ pub(crate) fn validate_issuer_cursor(connection: &Connection) -> rusqlite::Resul
     Ok(())
 }
 
+fn validate_records(records: &[StoredRecord]) -> rusqlite::Result<()> {
+    let mut seen_ids = BTreeSet::new();
+    let mut seen_sources = BTreeSet::new();
+    let mut sources = Vec::with_capacity(records.len());
+    for record in records {
+        if !seen_ids.insert(record.id.clone()) {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let exact_source = (
+            record.source.market(),
+            record.source.symbol().clone(),
+            record.source.isin().clone(),
+        );
+        if !seen_sources.insert(exact_source) {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        sources.push(record.source.clone());
+    }
+    for conflict in instrument_source_conflicts(&sources) {
+        match conflict {
+            InstrumentSourceConflict::Distinct => {}
+            InstrumentSourceConflict::IdentityUncertain => {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_ledger(connection: &Connection) -> rusqlite::Result<()> {
     let mut statement = connection.prepare(sql::ALL)?;
     let records = statement
         .query_map([], decode_row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let _ledger = InstrumentMappings::restore(records).map_err(invalid)?;
-    Ok(())
+    validate_records(&records)
 }
 
 pub(crate) fn validate_on_open(connection: &Connection) -> rusqlite::Result<()> {
@@ -208,14 +268,10 @@ pub(crate) fn validate_on_open(connection: &Connection) -> rusqlite::Result<()> 
     validate_issuer_cursor(connection)
 }
 
-fn restore_records(records: Vec<InstrumentMappingRecord>) -> rusqlite::Result<InstrumentMappings> {
-    InstrumentMappings::restore(records).map_err(invalid)
-}
-
 fn load_for_source(
     connection: &Connection,
     source: &InstrumentSource,
-) -> rusqlite::Result<InstrumentMappings> {
+) -> rusqlite::Result<Vec<StoredRecord>> {
     let mut statement = connection.prepare(sql::BY_SOURCE)?;
     let records = statement
         .query_map(
@@ -227,14 +283,15 @@ fn load_for_source(
             decode_row,
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    restore_records(records)
+    validate_records(&records)?;
+    Ok(records)
 }
 
 fn load_for_source_or_id(
     connection: &Connection,
     source: &InstrumentSource,
     candidate: &InstrumentId,
-) -> rusqlite::Result<InstrumentMappings> {
+) -> rusqlite::Result<Vec<StoredRecord>> {
     let mut statement = connection.prepare(sql::BY_SOURCE_OR_ID)?;
     let records = statement
         .query_map(
@@ -247,15 +304,46 @@ fn load_for_source_or_id(
             decode_row,
         )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    restore_records(records)
+    validate_records(&records)?;
+    Ok(records)
 }
 
-fn load_for_id(connection: &Connection, id: &InstrumentId) -> rusqlite::Result<InstrumentMappings> {
+fn load_for_id(connection: &Connection, id: &InstrumentId) -> rusqlite::Result<Vec<StoredRecord>> {
     let mut statement = connection.prepare(sql::BY_ID)?;
     let records = statement
         .query_map(params![id.as_str()], decode_row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    restore_records(records)
+    validate_records(&records)?;
+    Ok(records)
+}
+
+fn lookup_in_candidates<'a>(
+    records: &'a [StoredRecord],
+    source: &InstrumentSource,
+) -> Result<&'a StoredRecord, InstrumentMappingError> {
+    if let Some(entry) = records.iter().find(|entry| entry.source == *source) {
+        return Ok(entry);
+    }
+    let mut sources: Vec<InstrumentSource> =
+        records.iter().map(|entry| entry.source.clone()).collect();
+    sources.push(source.clone());
+    match instrument_source_conflicts(&sources).last() {
+        Some(InstrumentSourceConflict::IdentityUncertain) => {
+            Err(InstrumentMappingError::IdentityUncertain)
+        }
+        Some(InstrumentSourceConflict::Distinct) | None => Err(InstrumentMappingError::Missing),
+    }
+}
+
+fn resolve_in_candidates(
+    records: &[StoredRecord],
+    source: &InstrumentSource,
+) -> Result<InstrumentId, InstrumentMappingError> {
+    let entry = lookup_in_candidates(records, source)?;
+    match entry.status {
+        StoredStatus::Active => Ok(entry.id.clone()),
+        StoredStatus::Retired => Err(InstrumentMappingError::Retired),
+    }
 }
 
 fn mapping_id_presence(connection: &Connection, id: &InstrumentId) -> rusqlite::Result<IdPresence> {
@@ -313,68 +401,56 @@ fn issue_next(transaction: &Transaction<'_>) -> rusqlite::Result<IssuedInstrumen
     }
 }
 
-fn restore_domain_issuer(
-    connection: &Connection,
-) -> rusqlite::Result<IndependentInstrumentIdIssuer> {
-    let cursor = read_issuer_cursor(connection)?;
-    let mut statement = connection.prepare(sql::ALL_IDS)?;
-    let existing = statement
-        .query_map([], |row| {
-            let raw: String = row.get(0)?;
-            InstrumentId::try_new(&raw).map_err(invalid)
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(IndependentInstrumentIdIssuer::restore(cursor, &existing))
-}
-
 fn ensure_mapping(
     transaction: &Transaction<'_>,
     source: &InstrumentSource,
-    candidate: IssuedInstrumentId,
+    candidate: &IssuedInstrumentId,
 ) -> rusqlite::Result<Result<MappingAssignment, InstrumentMappingError>> {
-    let mut ledger = load_for_source_or_id(transaction, source, candidate.as_instrument_id())?;
-    let assignment = match ledger.ensure(source, candidate) {
-        Ok(value) => value,
+    let records = load_for_source_or_id(transaction, source, candidate.as_instrument_id())?;
+    match resolve_in_candidates(&records, source) {
+        Ok(existing_id) => return Ok(Ok(MappingAssignment::Existing(existing_id))),
+        Err(InstrumentMappingError::Missing) => {}
         Err(error) => return Ok(Err(error)),
-    };
-    match &assignment {
-        MappingAssignment::Existing(_) => Ok(Ok(assignment)),
-        MappingAssignment::Issued(issued_id) => {
-            let inserted = transaction.execute(
-                sql::INSERT,
-                params![
-                    issued_id.as_str(),
-                    market_tag(source.market()),
-                    source.symbol().as_str(),
-                    source.isin().as_str(),
-                    STATUS_ACTIVE,
-                ],
-            )?;
-            if inserted != 1 {
-                return Err(rusqlite::Error::InvalidQuery);
-            }
-            Ok(Ok(assignment))
-        }
     }
+    if records
+        .iter()
+        .any(|entry| entry.id == *candidate.as_instrument_id())
+    {
+        return Ok(Err(InstrumentMappingError::IdAlreadyUsed));
+    }
+    let issued_id = candidate.as_instrument_id().clone();
+    let inserted = transaction.execute(
+        sql::INSERT,
+        params![
+            issued_id.as_str(),
+            market_tag(source.market()),
+            source.symbol().as_str(),
+            source.isin().as_str(),
+            STATUS_ACTIVE,
+        ],
+    )?;
+    if inserted != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(Ok(MappingAssignment::Issued(issued_id)))
 }
 
 fn retire_mapping(
     transaction: &Transaction<'_>,
     source: &InstrumentSource,
 ) -> rusqlite::Result<Result<InstrumentId, InstrumentMappingError>> {
-    let ledger = load_for_source(transaction, source)?;
-    let existing = match ledger.lookup(source) {
+    let records = load_for_source(transaction, source)?;
+    let existing = match lookup_in_candidates(&records, source) {
         Ok(record) => record,
         Err(error) => return Ok(Err(error)),
     };
-    match existing.status() {
-        InstrumentMappingStatus::Retired => Ok(Ok(existing.id().clone())),
-        InstrumentMappingStatus::Superseded => Ok(Err(InstrumentMappingError::Superseded)),
-        InstrumentMappingStatus::Active => {
+    match existing.status {
+        StoredStatus::Retired => Ok(Ok(existing.id.clone())),
+        StoredStatus::Active => {
             let updated = transaction.execute(
                 sql::RETIRE,
                 params![
-                    existing.id().as_str(),
+                    existing.id.as_str(),
                     market_tag(source.market()),
                     source.symbol().as_str(),
                     source.isin().as_str(),
@@ -383,7 +459,7 @@ fn retire_mapping(
             if updated != 1 {
                 return Err(rusqlite::Error::InvalidQuery);
             }
-            Ok(Ok(existing.id().clone()))
+            Ok(Ok(existing.id.clone()))
         }
     }
 }
@@ -410,7 +486,8 @@ impl InstrumentMappingRepository for InstrumentMappingStore<'_> {
         map_result(
             self.database
                 .read(move |connection| {
-                    Ok(load_for_source(connection, &owned_source)?.resolve(&owned_source))
+                    let records = load_for_source(connection, &owned_source)?;
+                    Ok(resolve_in_candidates(&records, &owned_source))
                 })
                 .await,
         )
@@ -424,7 +501,8 @@ impl InstrumentMappingRepository for InstrumentMappingStore<'_> {
         map_result(
             self.database
                 .read(move |connection| {
-                    Ok(load_for_source(connection, &owned_source)?.lookup(&owned_source))
+                    let records = load_for_source(connection, &owned_source)?;
+                    Ok(lookup_in_candidates(&records, &owned_source).map(StoredRecord::to_domain))
                 })
                 .await,
         )
@@ -437,7 +515,16 @@ impl InstrumentMappingRepository for InstrumentMappingStore<'_> {
         let owned_id = id.clone();
         map_result(
             self.database
-                .read(move |connection| Ok(load_for_id(connection, &owned_id)?.for_id(&owned_id)))
+                .read(move |connection| {
+                    let records = load_for_id(connection, &owned_id)?;
+                    if records.is_empty() {
+                        return Ok(Err(InstrumentMappingError::Missing));
+                    }
+                    Ok(Ok(records
+                        .into_iter()
+                        .map(StoredRecord::into_domain)
+                        .collect()))
+                })
                 .await,
         )
     }
@@ -450,7 +537,7 @@ impl InstrumentMappingRepository for InstrumentMappingStore<'_> {
         let owned_source = source.clone();
         map_result(
             self.database
-                .write(move |transaction| ensure_mapping(transaction, &owned_source, candidate))
+                .write(move |transaction| ensure_mapping(transaction, &owned_source, &candidate))
                 .await,
         )
     }

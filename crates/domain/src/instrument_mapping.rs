@@ -138,13 +138,6 @@ pub enum InstrumentMappingError {
     IdAlreadyUsed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InstrumentMappingsRestoreError {
-    DuplicateRecord,
-    ConflictingSources,
-    SharedInstrumentId,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MappingAssignment {
     Issued(InstrumentId),
@@ -209,41 +202,6 @@ pub struct InstrumentMappings {
 }
 
 impl InstrumentMappings {
-    pub fn restore(
-        records: Vec<InstrumentMappingRecord>,
-    ) -> Result<Self, InstrumentMappingsRestoreError> {
-        let mut seen_ids = BTreeSet::new();
-        let mut seen_sources = BTreeSet::new();
-        let mut sources = Vec::with_capacity(records.len());
-        for record in &records {
-            if !seen_ids.insert(record.id().clone()) {
-                return Err(InstrumentMappingsRestoreError::SharedInstrumentId);
-            }
-            let exact_source = (
-                record.source().market(),
-                record.source().symbol().clone(),
-                record.source().isin().clone(),
-            );
-            if !seen_sources.insert(exact_source) {
-                return Err(InstrumentMappingsRestoreError::DuplicateRecord);
-            }
-            sources.push(record.source().clone());
-        }
-        for conflict in instrument_source_conflicts(&sources) {
-            match conflict {
-                InstrumentSourceConflict::Distinct => {}
-                InstrumentSourceConflict::IdentityUncertain => {
-                    return Err(InstrumentMappingsRestoreError::ConflictingSources);
-                }
-            }
-        }
-        Ok(Self {
-            records,
-            reserved_ids: seen_ids,
-            history: Vec::new(),
-        })
-    }
-
     fn find_source(
         &self,
         source: &InstrumentSource,

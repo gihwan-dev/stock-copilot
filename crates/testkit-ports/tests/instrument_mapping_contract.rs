@@ -234,4 +234,39 @@ mod tests {
             &ImmediateRuntime,
         );
     }
+
+    struct EagerNonSkippingIssuer {
+        next: std::sync::atomic::AtomicU64,
+    }
+
+    impl application::InstrumentIdIssuer for EagerNonSkippingIssuer {
+        fn issue(
+            &self,
+        ) -> impl Future<Output = Result<domain::IssuedInstrumentId, application::SystemPortError>>
+        {
+            let previous = self.next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let cursor = match domain::IssuerSequence::try_new(previous) {
+                Ok(seq) => domain::PersistedIssuerCursor::LastIssued(seq),
+                Err(domain::IssuerSequenceError::Zero) => domain::PersistedIssuerCursor::Initial,
+            };
+            let mut issuer = domain::IndependentInstrumentIdIssuer::restore(cursor, &[]);
+            let candidate = issuer.issue().expect("eager issue");
+            std::future::ready(Ok(candidate))
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "폐지된 기존 ID는 다시 발급되면 안 됨")]
+    fn issuer_contract_rejects_eager_non_skipping_issuer() {
+        let broken_issuer = EagerNonSkippingIssuer {
+            next: std::sync::atomic::AtomicU64::new(0),
+        };
+        let repo = MemoryInstrumentMappingRepository::default();
+        ImmediateRuntime.block_on(
+            instrument_mapping::issuer_persists_uniqueness_and_skips_retired_and_existing(
+                &broken_issuer,
+                &repo,
+            ),
+        );
+    }
 }

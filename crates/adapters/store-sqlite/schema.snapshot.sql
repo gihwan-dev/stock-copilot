@@ -41,7 +41,7 @@ CREATE TABLE instrument_mappings (
     market TEXT NOT NULL CHECK (market IN ('KR', 'US')),
     symbol TEXT NOT NULL CHECK (instr(symbol, char(0)) = 0 AND length(symbol) BETWEEN 1 AND 32 AND symbol GLOB '[A-Za-z0-9]*' AND symbol NOT GLOB '*[^A-Za-z0-9.-]*'),
     isin TEXT NOT NULL CHECK (instr(isin, char(0)) = 0 AND length(isin) BETWEEN 1 AND 64 AND isin NOT GLOB '*[^!-~]*'),
-    status TEXT NOT NULL CHECK (status IN ('active', 'superseded', 'retired')),
+    status TEXT NOT NULL CHECK (status IN ('active', 'retired')),
     UNIQUE (market, symbol, isin)
 ) STRICT;
 CREATE TABLE market_candles (

@@ -140,10 +140,12 @@ impl IndependentInstrumentIdIssuer {
     }
 
     pub fn issue(&mut self) -> Result<IssuedInstrumentId, InstrumentIdIssueError> {
-        while let Some(sequence) = self.next {
-            self.next = sequence.next();
+        let mut cursor = self.next;
+        while let Some(sequence) = cursor {
+            cursor = sequence.next();
             let candidate = InstrumentId::from_issued_sequence(sequence);
             if self.reserved.insert(candidate.clone()) {
+                self.next = cursor;
                 return Ok(IssuedInstrumentId(candidate));
             }
         }

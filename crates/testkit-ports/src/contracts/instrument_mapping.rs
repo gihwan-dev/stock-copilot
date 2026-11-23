@@ -418,33 +418,53 @@ async fn issue_next_candidate<I: InstrumentIdIssuer>(issuer: &I) -> Option<Issue
     result.ok()
 }
 
+async fn seed_preexisting_retired_and_active<P: InstrumentMappingRepository>(
+    repo: &P,
+) -> Option<(InstrumentId, InstrumentId)> {
+    let (Some(retired_src), Some(active_src), Some(external_first), Some(external_second)) = (
+        parse_source(KnownMarket::Kr, "005930", "KR7005930003"),
+        parse_source(KnownMarket::Us, "NVDA", "US67066G1040"),
+        issue_slot(0),
+        issue_slot(1),
+    ) else {
+        return None;
+    };
+    let external_first_id = external_first.as_instrument_id().clone();
+    let external_second_id = external_second.as_instrument_id().clone();
+    assert_eq!(
+        repo.ensure(&retired_src, external_first).await,
+        Ok(MappingAssignment::Issued(external_first_id.clone())),
+        "사전 등록 폐지 대상 발급"
+    );
+    assert_eq!(
+        repo.retire(&retired_src).await,
+        Ok(external_first_id.clone()),
+        "사전 등록 원본 폐지"
+    );
+    assert_eq!(
+        repo.ensure(&active_src, external_second).await,
+        Ok(MappingAssignment::Issued(external_second_id.clone())),
+        "사전 등록 활성 원본 발급"
+    );
+    Some((external_first_id, external_second_id))
+}
+
 pub async fn issuer_persists_uniqueness_and_skips_retired_and_existing<I, P>(issuer: &I, repo: &P)
 where
     I: InstrumentIdIssuer,
     P: InstrumentMappingRepository,
 {
-    let (Some(preexisting_src), Some(second_src), Some(third_src), Some(external_first)) = (
-        parse_source(KnownMarket::Kr, "005930", "KR7005930003"),
+    let Some((external_first_id, external_second_id)) =
+        seed_preexisting_retired_and_active(repo).await
+    else {
+        return;
+    };
+    let (Some(second_src), Some(third_src)) = (
         parse_source(KnownMarket::Us, "AAPL", "US0378331005"),
         parse_source(KnownMarket::Us, "MSFT", "US5949181045"),
-        issue_slot(0),
     ) else {
         return;
     };
-    let external_first_id = external_first.as_instrument_id().clone();
-    {
-        let _unpolled_issue = issuer.issue();
-    }
-    assert_eq!(
-        repo.ensure(&preexisting_src, external_first).await,
-        Ok(MappingAssignment::Issued(external_first_id.clone())),
-        "사전 등록 원본 발급"
-    );
-    assert_eq!(
-        repo.retire(&preexisting_src).await,
-        Ok(external_first_id.clone()),
-        "사전 등록 원본 폐지"
-    );
 
     let Some(second_cand) = issue_next_candidate(issuer).await else {
         return;
@@ -453,6 +473,10 @@ where
     assert_ne!(
         second_id, external_first_id,
         "폐지된 기존 ID는 다시 발급되면 안 됨"
+    );
+    assert_ne!(
+        second_id, external_second_id,
+        "활성 기존 ID는 다시 발급되면 안 됨"
     );
     assert_eq!(
         repo.ensure(&second_src, second_cand).await,
@@ -464,23 +488,21 @@ where
         Ok(second_id.clone()),
         "둘째 원본 폐지 성공"
     );
+    {
+        let _unpolled_issue = issuer.issue();
+    }
 
     let Some(third_cand) = issue_next_candidate(issuer).await else {
         return;
     };
     let third_id = third_cand.as_instrument_id().clone();
-    assert_ne!(
-        third_id, external_first_id,
-        "셋째 발급 ID는 첫째 폐지 ID와 달라야 함"
-    );
-    assert_ne!(
-        third_id, second_id,
-        "셋째 발급 ID는 둘째 폐지 ID와 달라야 함"
-    );
+    assert_ne!(third_id, external_first_id, "셋째 ID는 첫째와 달라야 함");
+    assert_ne!(third_id, external_second_id, "셋째 ID는 둘째와 달라야 함");
+    assert_ne!(third_id, second_id, "셋째 ID는 직전 폐지 ID와 달라야 함");
     assert_eq!(
         repo.ensure(&third_src, third_cand).await,
         Ok(MappingAssignment::Issued(third_id)),
-        "폐지 뒤 새 발급 후보로 등록 성공"
+        "미폴링 드롭과 폐지 뒤 새 발급 후보로 등록 성공"
     );
 }
 

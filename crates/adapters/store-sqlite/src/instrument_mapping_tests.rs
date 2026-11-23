@@ -10,7 +10,7 @@ use application::{
 use domain::{
     IndependentInstrumentIdIssuer, InstrumentId, InstrumentMappingError, InstrumentMappingRecord,
     InstrumentMappingStatus, InstrumentSource, IsinCode, IssuedInstrumentId, IssuerSequence,
-    KnownMarket, MappingAssignment, PersistedIssuerCursor, ReservationStatus, Symbol,
+    KnownMarket, MappingAssignment, PersistedIssuerCursor, Symbol,
 };
 use rusqlite::params;
 use std::{collections::BTreeSet, sync::mpsc, time::Duration};
@@ -283,7 +283,6 @@ fn instrument_mapping_sql_prepares_and_matches_migration_file() {
         sql::SCHEMA_OBJECTS,
         sql::ALL_TRIGGERS,
         sql::ALL,
-        sql::ALL_IDS,
         sql::ID_EXISTS,
         sql::BY_SOURCE,
         sql::BY_SOURCE_OR_ID,
@@ -725,10 +724,6 @@ fn validate_ledger_accepts_valid_unindexed_rows_and_rejects_duplicate_overlap_or
             sql::INSERT,
             params!["id-us", "US", "AAPL", "US0378331005", "retired"],
         )?;
-        tx.execute(
-            sql::INSERT,
-            params!["id-sup", "US", "FB", "US30303M1027", "superseded"],
-        )?;
         Ok(())
     }))
     .expect("seed positive control");
@@ -756,67 +751,79 @@ fn open_and_operations_reject_corrupted_column_values() {
 }
 
 #[test]
-fn superseded_row_enforces_d55_semantics_across_reads_writes_issuer_and_reopen() {
+fn open_and_operations_reject_orphan_superseded_status_in_s21_schema() {
     let rt = runtime();
     let fixture = Fixture::new();
     let path = DatabasePath::new(fixture.path());
     let db = Database::open(&path, &key(), &clock()).expect("open");
     let store = InstrumentMappingStore::new(&db);
     let fb = source(KnownMarket::Us, "FB", "US30303M1027");
-    let fresh = source(KnownMarket::Us, "MSFT", "US5949181045");
     let fb_cand = issued_slot(0);
     let fb_id = fb_cand.as_instrument_id().clone();
     rt.block_on(store.ensure(&fb, fb_cand)).expect("seed fb");
+
     rt.block_on(db.write(|tx| {
         tx.execute_batch(fixtures::DROP_GUARD_TRIGGERS)?;
+        let res = tx.execute(
+            fixtures::UPDATE_CORRUPT_STATUS,
+            params![SLOT_0_ID, "superseded"],
+        );
+        tx.execute_batch(fixtures::RESTORE_GUARD_TRIGGERS)?;
+        res?;
+        Ok(())
+    }))
+    .expect_err("CHECK must reject superseded status in S-21 1:1 schema");
+
+    rt.block_on(db.write(|tx| {
+        tx.execute_batch(fixtures::DROP_GUARD_TRIGGERS)?;
+        tx.execute_batch(fixtures::IGNORE_CHECKS_ON)?;
         tx.execute(
             fixtures::UPDATE_CORRUPT_STATUS,
             params![SLOT_0_ID, "superseded"],
         )?;
+        tx.execute_batch(fixtures::IGNORE_CHECKS_OFF)?;
         tx.execute_batch(fixtures::RESTORE_GUARD_TRIGGERS)?;
         Ok(())
     }))
-    .expect("mark row superseded with intact schema");
+    .expect("inject orphan superseded row with intact schema");
+
+    assert_eq!(rt.block_on(store.resolve(&fb)), Err(integrity_error()));
+    assert_eq!(rt.block_on(store.lookup(&fb)), Err(integrity_error()));
+    assert_eq!(rt.block_on(store.for_id(&fb_id)), Err(integrity_error()));
+    assert_eq!(
+        rt.block_on(store.ensure(&fb, issued_slot(1))),
+        Err(integrity_error())
+    );
+    assert_eq!(rt.block_on(store.retire(&fb)), Err(integrity_error()));
     rt.block_on(db.close()).expect("close");
 
-    let reopened = Database::open(&path, &key(), &clock()).expect("reopen with superseded row");
-    let reopened_store = InstrumentMappingStore::new(&reopened);
-    let issuer = InstrumentIdIssuerStore::new(&reopened);
-    let superseded_err = Err(MappingStoreError::Mapping(
-        InstrumentMappingError::Superseded,
-    ));
-    assert_eq!(rt.block_on(reopened_store.resolve(&fb)), superseded_err);
-    assert_eq!(rt.block_on(reopened_store.retire(&fb)), superseded_err);
     assert_eq!(
-        rt.block_on(reopened_store.ensure(&fb, issued_slot(1))),
-        Err(MappingStoreError::Mapping(
-            InstrumentMappingError::Superseded
-        ))
+        Database::open(&path, &key(), &clock())
+            .expect_err("reopen must reject orphan superseded row")
+            .failure(),
+        SystemFailure::RepositoryIntegrity
     );
+}
+
+#[test]
+fn unpolled_issuer_future_drop_leaves_cursor_table_empty() {
+    let rt = runtime();
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let db = Database::open(&path, &key(), &clock()).expect("open");
+    let issuer = InstrumentIdIssuerStore::new(&db);
+
+    {
+        let _unpolled = issuer.issue();
+    }
     assert_eq!(
-        rt.block_on(reopened_store.ensure(&fresh, issued_slot(0))),
-        Err(MappingStoreError::Mapping(
-            InstrumentMappingError::IdAlreadyUsed
-        ))
+        rt.block_on(db.read(crate::instrument_mapping::read_issuer_cursor))
+            .expect("read cursor"),
+        PersistedIssuerCursor::Initial
     );
-    let expected = InstrumentMappingRecord::new(
-        fb.clone(),
-        fb_id.clone(),
-        InstrumentMappingStatus::Superseded,
-    );
-    assert_eq!(
-        rt.block_on(reopened_store.lookup(&fb)),
-        Ok(expected.clone())
-    );
-    assert_eq!(
-        rt.block_on(reopened_store.for_id(&fb_id)),
-        Ok(vec![expected])
-    );
-    let next_id = rt
-        .block_on(issuer.issue())
-        .expect("issuer skips superseded id");
-    assert_eq!(next_id.as_instrument_id().as_str(), SLOT_1_ID);
-    rt.block_on(reopened.close()).expect("close");
+    let first = rt.block_on(issuer.issue()).expect("first polled issue");
+    assert_eq!(first.as_instrument_id().as_str(), "inst-0000000000000001");
+    rt.block_on(db.close()).expect("close");
 }
 
 #[test]
@@ -845,31 +852,17 @@ fn issuer_persists_monotonic_cursor_and_skips_retired_and_dropped_across_restart
         rt.block_on(store.ensure(&kr, first)),
         Ok(MappingAssignment::Issued(first_id.clone()))
     );
-    assert_eq!(rt.block_on(store.retire(&kr)), Ok(first_id.clone()));
+    assert_eq!(rt.block_on(store.retire(&kr)), Ok(first_id));
     rt.block_on(db.close()).expect("close");
 
     let reopened = Database::open(&path, &key(), &clock()).expect("reopen");
     let reopened_store = InstrumentMappingStore::new(&reopened);
     let reopened_issuer = InstrumentIdIssuerStore::new(&reopened);
 
-    let mut restored_domain = rt
-        .block_on(reopened_issuer.restore_issuer())
-        .expect("restore domain issuer");
     assert_eq!(
-        restored_domain.last_issued(),
+        rt.block_on(reopened.read(crate::instrument_mapping::read_issuer_cursor))
+            .expect("read persisted cursor"),
         PersistedIssuerCursor::LastIssued(IssuerSequence::try_new(2).expect("seq 2"))
-    );
-    assert_eq!(
-        restored_domain.reservation(&first_id),
-        ReservationStatus::Reserved
-    );
-    assert_eq!(
-        restored_domain
-            .issue()
-            .expect("domain next")
-            .as_instrument_id()
-            .as_str(),
-        "inst-0000000000000003"
     );
 
     let third = rt.block_on(reopened_issuer.issue()).expect("issue 3");
@@ -878,6 +871,11 @@ fn issuer_persists_monotonic_cursor_and_skips_retired_and_dropped_across_restart
     assert_eq!(
         rt.block_on(reopened_store.ensure(&us, third)),
         Ok(MappingAssignment::Issued(third_id))
+    );
+    assert_eq!(
+        rt.block_on(reopened.read(crate::instrument_mapping::read_issuer_cursor))
+            .expect("read advanced cursor"),
+        PersistedIssuerCursor::LastIssued(IssuerSequence::try_new(3).expect("seq 3"))
     );
     rt.block_on(reopened.close()).expect("close");
 }
@@ -901,18 +899,10 @@ fn issuer_skips_preexisting_external_and_retired_ids_and_exhausts_at_u64_max() {
 
     let skipped = rt.block_on(issuer.issue()).expect("skip slots 0 and 1");
     assert_eq!(skipped.as_instrument_id().as_str(), "inst-0000000000000003");
-    let restored = rt.block_on(issuer.restore_issuer()).expect("restore");
     assert_eq!(
-        restored.last_issued(),
+        rt.block_on(db.read(crate::instrument_mapping::read_issuer_cursor))
+            .expect("cursor after skip"),
         PersistedIssuerCursor::LastIssued(IssuerSequence::try_new(3).expect("seq 3"))
-    );
-    assert_eq!(
-        restored.reservation(&id(SLOT_0_ID)),
-        ReservationStatus::Reserved
-    );
-    assert_eq!(
-        restored.reservation(&id(SLOT_1_ID)),
-        ReservationStatus::Reserved
     );
 
     rt.block_on(db.write(|tx| {
