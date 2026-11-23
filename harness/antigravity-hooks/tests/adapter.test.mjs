@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
@@ -12,6 +13,26 @@ import {
 import { LOCK } from "../../../.claude/hooks/lib/project.mjs";
 
 const f = createFixture();
+const baseSha = execFileSync("git", ["-C", f.worktree, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
+writeFileSync(join(f.worktree, "docs", "r1-seed.md"), "seed\n");
+execFileSync("git", ["-C", f.worktree, "add", "docs/r1-seed.md"]);
+execFileSync("git", [
+  "-C",
+  f.worktree,
+  "-c",
+  "user.name=Test",
+  "-c",
+  "user.email=test@example.com",
+  "commit",
+  "-q",
+  "-m",
+  "seed commit",
+]);
+const headSha = execFileSync("git", ["-C", f.worktree, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
 const fakeHome = join(f.base, "fake-home");
 mkdirSync(join(fakeHome, ".ssh"), { recursive: true });
 mkdirSync(join(fakeHome, ".claude", "projects"), { recursive: true });
@@ -53,18 +74,20 @@ const call = (toolName, args, opts = {}) => {
     lock = LOCK.on,
     cwd = f.worktree,
     sessionCwd = f.worktree,
-    modelName = "gemini-4-neon-xhigh",
     agentType = undefined,
     projectOverrides = {},
     policyOverrides = undefined,
   } = opts;
+  const modelName = Object.hasOwn(opts, "modelName")
+    ? opts.modelName
+    : "gemini-4-neon-xhigh";
   const branch = Object.hasOwn(opts, "branch") ? opts.branch : "h-61";
   const project = projectFor(f, { lock, ...projectOverrides });
   return antigravityPreTool(
     {
       hookEventName: "PreToolUse",
       cwd,
-      modelName,
+      ...(modelName === undefined ? {} : { modelName }),
       ...(agentType === undefined ? {} : { agent_type: agentType }),
       toolCall: { id: "tc-1", name: toolName, args },
     },
@@ -546,8 +569,9 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
   );
   assert.equal(call("manage_task", { Action: "list" }).decision, "allow");
 
+  const validBrief = `- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n- 대상 SHA: ${headSha}\nH-61 변경을 리뷰하라.`;
   const validClaudeReview = {
-    task: "review H-61",
+    task: validBrief,
     toolSummary: "Adversarial review",
     role: "review",
     isolation: "worktree",
@@ -559,100 +583,193 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
     },
   };
   assert.equal(
-    call("mcp_t3-code_delegate_task", validClaudeReview).decision,
+    call("mcp_t3-code_delegate_task", validClaudeReview, { lock: LOCK.off })
+      .decision,
     "allow",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      target: {
-        driverKind: "claudeAgent",
-        providerInstanceId: "claudeAgent_claude2",
-        model: "claude-opus-5-5",
+    call("mcp_t3-code_delegate_task", validClaudeReview, { lock: LOCK.on })
+      .decision,
+    "deny",
+  );
+  assert.equal(
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        target: {
+          driverKind: "claudeAgent",
+          providerInstanceId: "claudeAgent_claude2",
+          model: "claude-opus-5-5",
+        },
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
     "allow",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      target: {
-        driverKind: "claudeAgent",
-        model: "claude-opus-5-5",
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        target: {
+          driverKind: "claudeAgent",
+          model: "claude-opus-5-5",
+        },
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
     "allow",
   );
   assert.equal(
     call("mcp_t3-code_delegate_task", validClaudeReview, {
+      lock: LOCK.off,
       modelName: "gemini-4-neon-high",
     }).decision,
     "deny",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      target: {
-        driverKind: "codex",
-        model: "gpt-6.1-sol",
-        options: { reasoningEffort: "high" },
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        task: `${validBrief}\n구현자 보고: 완료`,
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
     "deny",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      target: {
-        driverKind: "claudeAgent",
-        providerInstanceId: "codex",
-        model: "claude-opus-5-5",
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        task: `${validBrief}\n완료`,
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
     "deny",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      target: {
-        driverKind: "claudeAgent",
-        providerInstanceId: "",
-        model: "claude-opus-5-5",
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        task: "review H-61 without brief metadata",
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
     "deny",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      target: {
-        driverKind: "claudeAgent",
-        providerInstanceId: "claudeAgent",
-        model: "claude-sonnet-5-5",
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        role: "implementation",
+        target: {
+          driverKind: "antigravity",
+          providerInstanceId: "antigravity",
+          model: "gemini-4-neon",
+          options: { thought_level: "xhigh" },
+        },
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
     "deny",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      ...validClaudeReview,
-      isolation: "shared",
-    }).decision,
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        role: "research",
+        target: {
+          driverKind: "antigravity",
+          providerInstanceId: "antigravity",
+          model: "gemini-4-neon",
+          options: { thought_level: "high" },
+        },
+      },
+      { lock: LOCK.off },
+    ).decision,
     "deny",
   );
   assert.equal(
-    call("mcp_t3-code_delegate_task", {
-      task: "critique H-61",
-      toolSummary: "Critique review",
-      role: "review",
-      isolation: "worktree",
-      target: {
-        driverKind: "antigravity",
-        providerInstanceId: "antigravity",
-        model: "gemini-4-neon",
-        options: { thought_level: "high" },
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        target: {
+          driverKind: "codex",
+          model: "gpt-6.1-sol",
+          options: { reasoningEffort: "high" },
+        },
       },
-    }).decision,
+      { lock: LOCK.off },
+    ).decision,
+    "deny",
+  );
+  for (const badInstance of ["codex", "other", "myCodex", "gpt", ""]) {
+    assert.equal(
+      call(
+        "mcp_t3-code_delegate_task",
+        {
+          ...validClaudeReview,
+          target: {
+            driverKind: "claudeAgent",
+            providerInstanceId: badInstance,
+            model: "claude-opus-5-5",
+          },
+        },
+        { lock: LOCK.off },
+      ).decision,
+      "deny",
+    );
+  }
+  assert.equal(
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        target: {
+          driverKind: "claudeAgent",
+          providerInstanceId: "claudeAgent",
+          model: "claude-sonnet-5-5",
+        },
+      },
+      { lock: LOCK.off },
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...validClaudeReview,
+        isolation: "shared",
+      },
+      { lock: LOCK.off },
+    ).decision,
+    "deny",
+  );
+  assert.equal(
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        task: validBrief,
+        toolSummary: "Critique review",
+        role: "review",
+        isolation: "worktree",
+        target: {
+          driverKind: "antigravity",
+          providerInstanceId: "antigravity",
+          model: "gemini-4-neon",
+          options: { thought_level: "high" },
+        },
+      },
+      { lock: LOCK.off },
+    ).decision,
     "allow",
   );
 });
@@ -908,6 +1025,250 @@ test("lastUserInput conversation text with forbidden strings does not block beni
       actual.decision,
       "allow",
       `${name} should ignore lastUserInput: ${JSON.stringify(actual)}`,
+    );
+  }
+});
+
+test("Round 1 review hardening blocks .agents dir/git mutations, home ancestors/globs, fail-closed model/root, cargo/curl/wget/open, and write decoy keys", () => {
+  const denyCases = [
+    ["run_command", { CommandLine: "rm -rf .agents" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: "mv .agents agents-off" },
+      { lock: LOCK.off },
+    ],
+    [
+      "write_file",
+      { Path: join(f.worktree, ".agents"), Content: "x" },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git rm .agents/hooks.json" },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git rm .agents/hooks.json" },
+      { lock: LOCK.on },
+    ],
+    ["run_command", { CommandLine: "git rm -r .agents" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: "git mv .agents agents-off" },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: `git checkout ${baseSha}` },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: `git checkout ${baseSha} -- .agents` },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: `git checkout ${baseSha} -- .agents` },
+      { lock: LOCK.on },
+    ],
+    ["run_command", { CommandLine: "git checkout -- ." }, { lock: LOCK.off }],
+    ["run_command", { CommandLine: "git switch master" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: `git restore --source=${baseSha} .agents/hooks.json` },
+      { lock: LOCK.off },
+    ],
+    ["run_command", { CommandLine: "git stash -u" }, { lock: LOCK.on }],
+    ["run_command", { CommandLine: "git stash" }, { lock: LOCK.off }],
+    ["run_command", { CommandLine: "git clean -fd" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: "git checkout-index -a -f" },
+      { lock: LOCK.off },
+    ],
+    ["run_command", { CommandLine: "git read-tree HEAD" }, { lock: LOCK.off }],
+    ["run_command", { CommandLine: "git reset --merge" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: `cat ${join(f.base, "fake-h*")}/.ssh/id_probe` },
+    ],
+    [
+      "run_command",
+      { CommandLine: `cat ${join(f.base, "fake-*")}/.ssh/id_probe` },
+    ],
+    [
+      "run_command",
+      { CommandLine: `cat ${join(f.base, "fake-{home,x}")}/.ssh/id_probe` },
+    ],
+    [
+      "run_command",
+      { CommandLine: "cat ~/.local/st*/stock-copilot-harness/state.json" },
+    ],
+    ["run_command", { CommandLine: "grep -r BEGIN /" }],
+    ["run_command", { CommandLine: `rg -uu --hidden secret ${f.base}` }],
+    ["run_command", { CommandLine: `find ${f.base} -name id_probe` }],
+    ["grep_search", { SearchPath: f.base, Query: "BEGIN" }],
+    ["find_by_name", { SearchDirectory: f.base, Pattern: "*id*" }],
+    ["list_dir", { DirectoryPath: f.base }],
+    ["list_dir", { DirectoryPath: "/" }],
+    ["run_command", { CommandLine: "cat /**/.ssh/id_probe" }],
+    [
+      "write_file",
+      { Path: join(f.worktree, "crates/domain/src/lib.rs"), Content: "x" },
+      { modelName: undefined },
+    ],
+    [
+      "write_file",
+      { Path: join(f.worktree, "crates/domain/src/lib.rs"), Content: "x" },
+      { modelName: "gemini-4-neon (high)" },
+    ],
+    [
+      "write_file",
+      { Path: join(f.worktree, "crates/domain/src/lib.rs"), Content: "x" },
+      { modelName: "gemini-4-flash" },
+    ],
+    [
+      "write_file",
+      { Path: join(f.root, ".agents/hooks.json"), Content: "{}" },
+      { sessionCwd: f.root, cwd: f.root, lock: LOCK.off },
+    ],
+    [
+      "write_file",
+      {
+        Path: join(f.root, "harness/antigravity-hooks/dispatch.mjs"),
+        Content: "x",
+      },
+      { sessionCwd: f.root, cwd: f.root, lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git commit -m root-edit" },
+      { sessionCwd: f.root, cwd: f.root, lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "git push origin master" },
+      { sessionCwd: f.root, cwd: f.root, lock: LOCK.off },
+    ],
+    ["run_command", { CommandLine: "cargo run -ptoss-smoke" }],
+    ["run_command", { CommandLine: "cargo run -p=toss-smoke" }],
+    ["run_command", { CommandLine: "cargo run -p toss-smoke@0.1.0" }],
+    ["run_command", { CommandLine: "cargo run --package=toss-smoke@0.1.0" }],
+    ["run_command", { CommandLine: "cargo run -psrc-tauri" }],
+    ["run_command", { CommandLine: "cargo run -p=src-tauri" }],
+    [
+      "run_command",
+      {
+        CommandLine:
+          "cargo run -p src-tauri --bin src-tauri --bin gen-bindings",
+      },
+    ],
+    ["run_command", { CommandLine: "cargo -C crates/toss-smoke run" }],
+    ["run_command", { CommandLine: 'cargo run -p "$PKG"' }],
+    [
+      "run_command",
+      { CommandLine: "curl -K/tmp/c http://127.0.0.1:4173/health" },
+    ],
+    ["run_command", { CommandLine: "curl -sn http://127.0.0.1:4173/health" }],
+    [
+      "run_command",
+      {
+        CommandLine:
+          "curl -xhttp://proxy.example:8080 http://127.0.0.1:4173/health",
+      },
+    ],
+    [
+      "run_command",
+      { CommandLine: "curl -sK/tmp/c http://127.0.0.1:4173/health" },
+    ],
+    [
+      "run_command",
+      {
+        CommandLine: "curl -o.agents/hooks.json http://127.0.0.1:4173/health",
+      },
+      { lock: LOCK.off },
+    ],
+    [
+      "run_command",
+      { CommandLine: "wget -i/tmp/urls http://127.0.0.1:4173/health" },
+    ],
+    [
+      "run_command",
+      { CommandLine: "wget -qi/tmp/urls http://127.0.0.1:4173/health" },
+    ],
+    [
+      "run_command",
+      {
+        CommandLine:
+          "wget -ehttp_proxy=http://evil http://127.0.0.1:4173/health",
+      },
+    ],
+    [
+      "run_command",
+      { CommandLine: "open https://openapi.tossinvest.com/api/v1/orders" },
+    ],
+    ["run_command", { CommandLine: "open https://evil.example/exfil" }],
+    ["run_command", { CommandLine: "open -a Calculator" }],
+    [
+      "write_to_file",
+      {
+        Path: join(f.worktree, "docs/notes.md"),
+        TargetFile: join(f.worktree, "justfile"),
+      },
+      { lock: LOCK.on },
+    ],
+    [
+      "write_to_file",
+      {
+        Path: join(f.worktree, "docs/notes.md"),
+        TargetFile: join(f.worktree, ".agents/hooks.json"),
+      },
+      { lock: LOCK.off },
+    ],
+  ];
+
+  for (const [toolName, args, opts] of denyCases) {
+    const actual = call(toolName, args, opts ?? {});
+    assert.equal(
+      actual.decision,
+      "deny",
+      `expected deny for ${toolName} ${JSON.stringify(args)} (${JSON.stringify(opts ?? {})}) -> ${JSON.stringify(actual)}`,
+    );
+  }
+
+  const allowCases = [
+    [
+      "run_command",
+      { CommandLine: "git checkout -- crates/domain/src/lib.rs" },
+      { lock: LOCK.off },
+    ],
+    ["run_command", { CommandLine: "git stash list" }, { lock: LOCK.off }],
+    ["run_command", { CommandLine: "git clean -n" }, { lock: LOCK.off }],
+    [
+      "run_command",
+      { CommandLine: "git checkout --detach HEAD" },
+      { modelName: "gemini-4-neon-high" },
+    ],
+    ["grep_search", { SearchPath: f.worktree, Query: "fn" }],
+    [
+      "run_command",
+      { CommandLine: "cargo run -p src-tauri --bin gen-bindings" },
+    ],
+    ["run_command", { CommandLine: "curl -sS http://127.0.0.1:4173/health" }],
+    [
+      "read_file",
+      { Path: join(f.root, "docs/notes.md") },
+      { sessionCwd: f.root, cwd: f.root, lock: LOCK.off },
+    ],
+  ];
+  for (const [toolName, args, opts] of allowCases) {
+    const actual = call(toolName, args, opts ?? {});
+    assert.equal(
+      actual.decision,
+      "allow",
+      `expected allow for ${toolName} ${JSON.stringify(args)} -> ${JSON.stringify(actual)}`,
     );
   }
 });

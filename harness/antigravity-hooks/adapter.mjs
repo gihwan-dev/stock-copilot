@@ -1,13 +1,28 @@
-import { realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
+import {
+  AGENT_RULES_FILE,
+  knownReportDigests,
+  readAgentRules,
+} from "../../.claude/hooks/lib/agent-facts.mjs";
+import { reportProblems } from "../../.claude/hooks/lib/agent-guard.mjs";
 import {
   DEFINITIONS,
   WRITERS,
   bashFindings,
   unwrap,
 } from "../../.claude/hooks/lib/bash-guard.mjs";
+import {
+  parseBrief,
+  reviewTargetCommit,
+} from "../../.claude/hooks/lib/brief.mjs";
 import { editFindings } from "../../.claude/hooks/lib/edit-guard.mjs";
+import {
+  headOf,
+  isAncestor,
+  resolveCommit,
+} from "../../.claude/hooks/lib/git-facts.mjs";
 import { delegateTargetFindings } from "../../.claude/hooks/lib/orchestration.mjs";
 import {
   locate,
@@ -17,6 +32,7 @@ import {
 import { LOCK, git } from "../../.claude/hooks/lib/project.mjs";
 import { ROLE } from "../../.claude/hooks/lib/roles.mjs";
 import { parseScript } from "../../.claude/hooks/lib/shell.mjs";
+import { stateDirectory } from "../../.claude/hooks/lib/state.mjs";
 import { DECISION, decide } from "../../.claude/hooks/lib/verdict.mjs";
 import {
   patchPaths,
@@ -230,7 +246,69 @@ const WGET_DENIED_FLAGS = new Set([
   "-e",
   "--execute",
   "--netrc-file",
+  "--base",
+  "--post-file",
+  "--body-file",
+  "--load-cookies",
+  "--save-cookies",
+  "--ca-certificate",
+  "--certificate",
+  "--private-key",
 ]);
+
+const CURL_SHORT_VALUED = new Set([
+  "X",
+  "H",
+  "d",
+  "F",
+  "o",
+  "A",
+  "u",
+  "b",
+  "c",
+  "e",
+  "m",
+  "w",
+  "T",
+  "E",
+  "K",
+  "x",
+  "U",
+  "r",
+  "y",
+  "Y",
+  "z",
+  "D",
+  "C",
+  "Q",
+  "t",
+]);
+
+const CURL_SHORT_DENIED_READ = new Set(["n"]);
+const CURL_SHORT_DENIED_NET = new Set(["K", "x"]);
+
+const WGET_SHORT_VALUED = new Set([
+  "O",
+  "o",
+  "a",
+  "i",
+  "e",
+  "P",
+  "U",
+  "B",
+  "Q",
+  "t",
+  "T",
+  "w",
+  "l",
+  "A",
+  "R",
+  "D",
+  "X",
+  "I",
+]);
+
+const WGET_SHORT_DENIED = new Set(["i", "e"]);
 
 const CURL_VALUED_FLAGS = new Set([
   "-X",
@@ -261,6 +339,8 @@ const CURL_VALUED_FLAGS = new Set([
   "--connect-timeout",
   "-w",
   "--write-out",
+  "-T",
+  "--upload-file",
 ]);
 
 const CARGO_VALUED_GLOBALS = new Set([
@@ -297,8 +377,9 @@ export const refusal = (message) =>
 const currentBranch = (root) =>
   git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"])?.trim();
 
-const isReviewModelName = (modelName) =>
-  typeof modelName === "string" && /-(?:high|medium|low)$/iu.test(modelName);
+const isImplementerModelName = (modelName) =>
+  typeof modelName === "string" &&
+  /^gemini-4-neon-xhigh$/iu.test(modelName.trim());
 
 const isReviewBranch = (branch) =>
   branch === undefined ||
@@ -353,9 +434,12 @@ export const actorInput = (
   if (located.root === project.root) {
     return {
       root: located.root,
-      role: ROLE.main,
+      role: ROLE.reviewer,
       branch: undefined,
-      actor: {},
+      actor: {
+        agent_type: "review-critic",
+        agent_id: "antigravity-root-readonly",
+      },
     };
   }
   const branch = Object.hasOwn(extraFacts, "branch")
@@ -363,7 +447,7 @@ export const actorInput = (
     : currentBranch(located.root);
   const reviewer =
     isReviewBranch(branch) ||
-    isReviewModelName(input.modelName) ||
+    !isImplementerModelName(input.modelName) ||
     extraFacts.t3Role === "review" ||
     extraFacts.t3Role === "research";
   if (reviewer) {
@@ -388,10 +472,35 @@ export const actorInput = (
   };
 };
 
-const writePathFromArgs = (toolName, args) => {
-  if (!plainObject(args)) return undefined;
-  if (toolName === "NotebookEdit") return args.notebook_path ?? args.Path;
-  return args.Path ?? args.TargetFile ?? args.file_path ?? args.path;
+const writePathsFromArgs = (toolName, args) => {
+  if (!plainObject(args)) {
+    return { problem: "도구 인자가 객체가 아니다" };
+  }
+  const explicit = [
+    ...(toolName === "NotebookEdit" ? [args.notebook_path] : []),
+    args.Path,
+    args.TargetFile,
+    args.file_path,
+    args.path,
+    args.AbsolutePath,
+    args.File,
+  ].filter((value) => value !== undefined);
+  const extra = Object.entries(args)
+    .filter(
+      ([key, value]) =>
+        value !== undefined &&
+        /(?:path|file|dir|directory|root)$/iu.test(key) &&
+        !explicit.includes(value),
+    )
+    .map(([, value]) => value);
+  const candidates = [...new Set([...explicit, ...extra])];
+  if (candidates.length === 0) {
+    return { problem: `${toolName}의 대상 경로가 없다` };
+  }
+  if (candidates.some((value) => typeof value !== "string" || value === "")) {
+    return { problem: `${toolName}의 대상 경로가 문자열이 아니다` };
+  }
+  return { paths: candidates };
 };
 
 const readPathsFromArgs = (toolName, args, fallbackCwd) => {
@@ -516,16 +625,29 @@ const looksLikePath = (text) =>
 
 const parseGitSubcommand = (args) => {
   let index = 0;
+  const chdirs = [];
   while (index < args.length) {
-    const text = args[index].text;
+    const word = args[index];
+    const text = word.text;
     if (!text.startsWith("-")) {
-      return { sub: text, rest: args.slice(index + 1) };
+      return { sub: text, rest: args.slice(index + 1), chdirs };
+    }
+    if (text === "-C") {
+      if (args[index + 1] !== undefined) chdirs.push(args[index + 1]);
+      index += 2;
+      continue;
+    }
+    if (text.startsWith("-C") && text.length > 2) {
+      const value = text.startsWith("-C=") ? text.slice(3) : text.slice(2);
+      chdirs.push({ ...word, text: value });
+      index += 1;
+      continue;
     }
     const equals = text.indexOf("=");
     const flag = equals === -1 ? text : text.slice(0, equals);
     index += GIT_VALUED_GLOBALS.has(flag) && equals === -1 ? 2 : 1;
   }
-  return { sub: undefined, rest: [] };
+  return { sub: undefined, rest: [], chdirs };
 };
 
 const isGitMessageWord = (invocation, index) => {
@@ -611,22 +733,166 @@ const isAllowedNetworkHost = (host, policy) => {
 const cargoPackageOrBinTargets = (args) => {
   const targets = [];
   for (let index = 0; index < args.length; index += 1) {
-    const text = args[index].text;
+    const word = args[index];
+    const text = word.text;
     if (text === "--") break;
-    if (["-p", "--package", "--bin", "--manifest-path"].includes(text)) {
-      const next = args[index + 1]?.text;
-      if (next !== undefined) targets.push({ flag: text, value: next });
+    if (["-p", "--package", "--bin", "--manifest-path", "-C"].includes(text)) {
+      const next = args[index + 1];
+      if (next !== undefined) {
+        targets.push({
+          flag: text,
+          value: next.text,
+          dynamic: Boolean(next.dynamic),
+        });
+      }
       index += 1;
     } else if (
       text.startsWith("--package=") ||
       text.startsWith("--bin=") ||
-      text.startsWith("--manifest-path=")
+      text.startsWith("--manifest-path=") ||
+      text.startsWith("-p=") ||
+      text.startsWith("-C=")
     ) {
       const sep = text.indexOf("=");
-      targets.push({ flag: text.slice(0, sep), value: text.slice(sep + 1) });
+      targets.push({
+        flag: text.slice(0, sep),
+        value: text.slice(sep + 1),
+        dynamic: Boolean(word.dynamic),
+      });
+    } else if (text.startsWith("-p") && text.length > 2) {
+      targets.push({
+        flag: "-p",
+        value: text.slice(2),
+        dynamic: Boolean(word.dynamic),
+      });
+    } else if (text.startsWith("-C") && text.length > 2) {
+      targets.push({
+        flag: "-C",
+        value: text.slice(2),
+        dynamic: Boolean(word.dynamic),
+      });
     }
   }
   return targets;
+};
+
+const cargoPackageMatches = (raw, names) => {
+  const lower = raw.toLowerCase();
+  const afterHash = lower.includes("#")
+    ? lower.slice(lower.indexOf("#") + 1)
+    : lower;
+  const pkgName = afterHash.split(/[@:]/u)[0];
+  if (names.includes(pkgName)) return true;
+  return names.some((name) => lower.includes(`/${name}`));
+};
+
+const curlShortOptionFindings = (args) => {
+  const findings = [];
+  const skipIndexes = new Set();
+  for (let index = 0; index < args.length; index += 1) {
+    const text = args[index].text;
+    if (text === "--") break;
+    if (text.startsWith("--")) {
+      const option = flagName(text);
+      if (CURL_DENIED_FLAGS.has(option)) {
+        findings.push(
+          finding(
+            ["--netrc", "--netrc-optional", "--netrc-file"].includes(option)
+              ? "protected-home-read"
+              : "toss-live-api",
+            `curl의 금지 옵션(${option})은 허용하지 않는다`,
+          ),
+        );
+      }
+      if (CURL_VALUED_FLAGS.has(text)) {
+        skipIndexes.add(index + 1);
+        index += 1;
+      }
+      continue;
+    }
+    if (!text.startsWith("-") || text === "-") continue;
+    const cluster = text.slice(1);
+    for (let pos = 0; pos < cluster.length; pos += 1) {
+      const letter = cluster[pos];
+      if (CURL_SHORT_DENIED_READ.has(letter)) {
+        findings.push(
+          finding(
+            "protected-home-read",
+            `curl의 금지 옵션(-${letter})은 허용하지 않는다`,
+          ),
+        );
+        continue;
+      }
+      if (CURL_SHORT_DENIED_NET.has(letter)) {
+        findings.push(
+          finding(
+            "toss-live-api",
+            `curl의 금지 옵션(-${letter})은 허용하지 않는다`,
+          ),
+        );
+        if (pos === cluster.length - 1) {
+          skipIndexes.add(index + 1);
+          index += 1;
+        }
+        break;
+      }
+      if (CURL_SHORT_VALUED.has(letter)) {
+        if (pos === cluster.length - 1) {
+          skipIndexes.add(index + 1);
+          index += 1;
+        }
+        break;
+      }
+    }
+  }
+  return { findings, skipIndexes };
+};
+
+const wgetShortOptionFindings = (args) => {
+  const findings = [];
+  const skipIndexes = new Set();
+  for (let index = 0; index < args.length; index += 1) {
+    const text = args[index].text;
+    if (text === "--") break;
+    if (text.startsWith("--")) {
+      const option = flagName(text);
+      if (WGET_DENIED_FLAGS.has(option)) {
+        findings.push(
+          finding(
+            option === "--netrc-file" ? "protected-home-read" : "toss-live-api",
+            `wget의 금지 옵션(${option})은 허용하지 않는다`,
+          ),
+        );
+      }
+      continue;
+    }
+    if (!text.startsWith("-") || text === "-") continue;
+    const cluster = text.slice(1);
+    for (let pos = 0; pos < cluster.length; pos += 1) {
+      const letter = cluster[pos];
+      if (WGET_SHORT_DENIED.has(letter)) {
+        findings.push(
+          finding(
+            "toss-live-api",
+            `wget의 금지 옵션(-${letter})은 허용하지 않는다`,
+          ),
+        );
+        if (pos === cluster.length - 1) {
+          skipIndexes.add(index + 1);
+          index += 1;
+        }
+        break;
+      }
+      if (WGET_SHORT_VALUED.has(letter)) {
+        if (pos === cluster.length - 1) {
+          skipIndexes.add(index + 1);
+          index += 1;
+        }
+        break;
+      }
+    }
+  }
+  return { findings, skipIndexes };
 };
 
 const cargoSubcommand = (args) => {
@@ -782,10 +1048,27 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         ),
       );
     }
+    if (name === "open") {
+      findings.push(
+        finding(
+          "toss-live-api",
+          "macOS 앱·URL 실행 명령(open)은 에이전트 셸에서 허용하지 않는다",
+        ),
+      );
+    }
     if (name === "cargo") {
       const sub = cargoSubcommand(invocation.args);
       if (sub === "run" || sub === "r") {
         const targets = cargoPackageOrBinTargets(invocation.args);
+        const hasDynamicCargoTarget = targets.some((item) => item.dynamic);
+        if (hasDynamicCargoTarget) {
+          findings.push(
+            finding(
+              "toss-live-api",
+              "cargo run의 동적 패키지·바이너리·매니페스트 지정은 허용하지 않는다",
+            ),
+          );
+        }
         const packages = targets
           .filter((item) => ["-p", "--package"].includes(item.flag))
           .map((item) => item.value);
@@ -795,7 +1078,14 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         const manifests = targets
           .filter((item) => item.flag === "--manifest-path")
           .map((item) => item.value);
-        const cwdLower = (effectiveCwd ?? "").toLowerCase();
+        const cargoDirs = targets
+          .filter((item) => item.flag === "-C")
+          .map((item) => item.value);
+        const resolvedCargoCwd =
+          cargoDirs.length > 0 && effectiveCwd !== undefined
+            ? resolve(effectiveCwd, ...cargoDirs)
+            : effectiveCwd;
+        const cwdLower = (resolvedCargoCwd ?? "").toLowerCase();
         const cwdIsToss =
           packages.length === 0 &&
           manifests.length === 0 &&
@@ -804,15 +1094,15 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         if (
           cwdIsToss ||
           packages.some((pkg) =>
-            ["toss-smoke", "broker-toss-trade"].includes(pkg),
+            cargoPackageMatches(pkg, ["toss-smoke", "broker-toss-trade"]),
           ) ||
           bins.some((bin) =>
-            ["toss-smoke", "broker-toss-trade"].includes(bin),
+            cargoPackageMatches(bin, ["toss-smoke", "broker-toss-trade"]),
           ) ||
           manifests.some(
             (manifest) =>
-              manifest.includes("toss-smoke") ||
-              manifest.includes("broker-toss-trade"),
+              manifest.toLowerCase().includes("toss-smoke") ||
+              manifest.toLowerCase().includes("broker-toss-trade"),
           )
         ) {
           findings.push(
@@ -828,14 +1118,17 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
           cwdLower.includes("/src-tauri");
         const runsTauri =
           cwdIsTauri ||
-          packages.includes("src-tauri") ||
-          bins.includes("src-tauri") ||
-          manifests.some((manifest) => manifest.includes("src-tauri"));
-        if (runsTauri && !bins.includes("gen-bindings")) {
+          packages.some((pkg) => cargoPackageMatches(pkg, ["src-tauri"])) ||
+          bins.some((bin) => cargoPackageMatches(bin, ["src-tauri"])) ||
+          manifests.some((manifest) =>
+            manifest.toLowerCase().includes("src-tauri"),
+          );
+        const onlyGenBindings = bins.length === 1 && bins[0] === "gen-bindings";
+        if (runsTauri && !onlyGenBindings) {
           findings.push(
             finding(
               "toss-live-api",
-              "실제 앱 바이너리(src-tauri)는 gen-bindings 외에 에이전트가 직접 실행하지 않는다",
+              "실제 앱 바이너리(src-tauri)는 단독 --bin gen-bindings 외에 에이전트가 직접 실행하지 않는다",
             ),
           );
         }
@@ -886,37 +1179,16 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
       );
     }
     if (name !== undefined && NETWORK_CLIENTS.includes(name)) {
+      let skipOptionValues = new Set();
       if (name === "curl") {
-        for (const word of invocation.args) {
-          const option = flagName(word.text);
-          if (CURL_DENIED_FLAGS.has(option)) {
-            findings.push(
-              finding(
-                ["-n", "--netrc", "--netrc-optional", "--netrc-file"].includes(
-                  option,
-                )
-                  ? "protected-home-read"
-                  : "toss-live-api",
-                `curl의 금지 옵션(${option})은 허용하지 않는다`,
-              ),
-            );
-          }
-        }
+        const scanned = curlShortOptionFindings(invocation.args);
+        findings.push(...scanned.findings);
+        skipOptionValues = scanned.skipIndexes;
       }
       if (name === "wget") {
-        for (const word of invocation.args) {
-          const option = flagName(word.text);
-          if (WGET_DENIED_FLAGS.has(option)) {
-            findings.push(
-              finding(
-                option === "--netrc-file"
-                  ? "protected-home-read"
-                  : "toss-live-api",
-                `wget의 금지 옵션(${option})은 허용하지 않는다`,
-              ),
-            );
-          }
-        }
+        const scanned = wgetShortOptionFindings(invocation.args);
+        findings.push(...scanned.findings);
+        skipOptionValues = scanned.skipIndexes;
       }
       const clientText = invocation.args.map((word) => word.text);
       const hasToss = clientText.some((text) =>
@@ -980,7 +1252,13 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
             }
             continue;
           }
-          if (HTTP_CLIENTS.has(name) && CURL_VALUED_FLAGS.has(word.text)) {
+          if (skipOptionValues.has(index)) continue;
+          if (
+            HTTP_CLIENTS.has(name) &&
+            name !== "curl" &&
+            name !== "wget" &&
+            CURL_VALUED_FLAGS.has(word.text)
+          ) {
             index += 1;
             continue;
           }
@@ -1051,6 +1329,7 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
     const isPureEcho = ["echo", "printf"].includes(name ?? "");
     const isReader =
       name !== undefined &&
+      name !== "open" &&
       (context.rules.readers.includes(name) ||
         name === "git" ||
         name === "just");
@@ -1135,6 +1414,37 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
   return findings;
 };
 
+const extraAttachedWriteTargets = (invocation) => {
+  if (invocation.name === "curl") {
+    return invocation.args.flatMap((word) => {
+      if (word.text.startsWith("--output=") && word.text.length > 9) {
+        return [{ ...word, text: word.text.slice(9) }];
+      }
+      if (
+        word.text.startsWith("-o") &&
+        word.text.length > 2 &&
+        !word.text.startsWith("--")
+      ) {
+        return [{ ...word, text: word.text.slice(2) }];
+      }
+      return [];
+    });
+  }
+  if (invocation.name === "wget") {
+    return invocation.args.flatMap((word) => {
+      if (
+        word.text.startsWith("-O") &&
+        word.text.length > 2 &&
+        !word.text.startsWith("--")
+      ) {
+        return [{ ...word, text: word.text.slice(2) }];
+      }
+      return [];
+    });
+  }
+  return [];
+};
+
 const shellWriteTargets = (
   source,
   cwd,
@@ -1159,6 +1469,7 @@ const shellWriteTargets = (
       Object.hasOwn(WRITERS, invocation.name)
         ? WRITERS[invocation.name](invocation.args)
         : []),
+      ...extraAttachedWriteTargets(invocation),
     ];
     for (const target of targets) {
       if (target.dynamic || target.glob) continue;
@@ -1174,7 +1485,7 @@ const shellWriteTargets = (
       for (const candidate of [absolute, realTarget(absolute)]) {
         const located = locate(candidate, project.worktrees);
         if (located.root !== undefined && located.relative !== undefined) {
-          findings.push(...antigravityPathFindings(located.relative, role));
+          findings.push(...antigravityPathFindings(located.relative));
         }
       }
     }
@@ -1218,6 +1529,299 @@ const shellWriteTargets = (
         role,
         policy,
         home,
+        depth + 1,
+      ),
+    );
+  }
+  return findings;
+};
+
+const gitPathOperandFindings = (words, gitCwd, project, actor) => {
+  const findings = [];
+  if (words.length === 0) {
+    return [
+      finding(
+        "antigravity-hook-config",
+        "경로 지정 없는 git 파일 제거·복원은 허용하지 않는다",
+      ),
+    ];
+  }
+  for (const word of words) {
+    if (word.dynamic || word.glob || /[*?[\]]/u.test(word.text)) {
+      findings.push(
+        finding(
+          "antigravity-hook-config",
+          `동적·와일드카드 git 경로 인자(${word.raw})는 허용하지 않는다`,
+        ),
+      );
+      continue;
+    }
+    if (gitCwd === undefined) {
+      findings.push(
+        finding(
+          "antigravity-hook-config",
+          `현재 폴더를 알 수 없어 git 경로 인자(${word.text})를 검증할 수 없다`,
+        ),
+      );
+      continue;
+    }
+    const absolute = isAbsolute(word.text)
+      ? resolve(word.text)
+      : resolve(gitCwd, word.text);
+    for (const candidate of [...new Set([absolute, realTarget(absolute)])]) {
+      if (project.worktrees.some((wt) => candidate === wt)) {
+        findings.push(
+          finding(
+            "antigravity-hook-config",
+            `작업 사본 루트(${word.text})를 대상으로 하는 git 변경은 .agents/hooks.json을 훼손할 수 있어 거부한다`,
+          ),
+        );
+        continue;
+      }
+      const located = locate(candidate, project.worktrees);
+      if (located.root !== undefined && located.relative !== undefined) {
+        if (located.relative === "" || located.relative === ".") {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              `작업 사본 루트(${word.text})를 대상으로 하는 git 변경은 허용하지 않는다`,
+            ),
+          );
+        } else {
+          findings.push(...antigravityPathFindings(located.relative));
+        }
+      }
+      findings.push(
+        ...editFindings(
+          { ...actor, tool_input: { file_path: candidate } },
+          project,
+        ),
+      );
+    }
+  }
+  return findings;
+};
+
+const gitOperands = (rest, valuedFlags = new Set()) => {
+  const operands = [];
+  let afterDashDash = false;
+  for (let index = 0; index < rest.length; index += 1) {
+    const word = rest[index];
+    if (!afterDashDash && word.text === "--" && !word.dynamic) {
+      afterDashDash = true;
+      continue;
+    }
+    if (!afterDashDash && word.text.startsWith("-") && word.text !== "-") {
+      const equals = word.text.indexOf("=");
+      const flag = equals === -1 ? word.text : word.text.slice(0, equals);
+      if (valuedFlags.has(flag) && equals === -1) index += 1;
+      continue;
+    }
+    operands.push(word);
+  }
+  return operands;
+};
+
+const gitProtectedMutationFindings = (
+  source,
+  cwd,
+  project,
+  actor,
+  role,
+  depth = 0,
+) => {
+  if (depth > 8) return [];
+  const parsed = parseScript(source);
+  const findings = [];
+  let currentCwd = cwd;
+  for (const command of parsed.commands) {
+    const invocation = unwrap(command, DEFINITIONS, project.rules);
+    const effectiveCwd = invocation.cwdUnknown ? undefined : currentCwd;
+    if (invocation.name === "git") {
+      const { sub, rest, chdirs } = parseGitSubcommand(invocation.args);
+      let gitCwd = effectiveCwd;
+      for (const dirWord of chdirs) {
+        if (dirWord.dynamic || dirWord.glob || gitCwd === undefined) {
+          gitCwd = undefined;
+          break;
+        }
+        gitCwd = resolve(gitCwd, dirWord.text);
+      }
+      const hasPathspecFile = rest.some((word) =>
+        word.text.startsWith("--pathspec-from-file"),
+      );
+      if (sub === "rm" || sub === "mv") {
+        if (hasPathspecFile) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              `git ${sub}의 --pathspec-from-file은 허용하지 않는다`,
+            ),
+          );
+        } else {
+          const operands = gitOperands(rest);
+          findings.push(
+            ...gitPathOperandFindings(operands, gitCwd, project, actor),
+          );
+        }
+      }
+      if (sub === "switch" && role !== ROLE.reviewer && role !== ROLE.unknown) {
+        findings.push(
+          finding(
+            "antigravity-hook-config",
+            "Antigravity 구현자는 git switch로 브랜치나 커밋을 전환하지 않는다",
+          ),
+        );
+      }
+      if (
+        sub === "checkout" &&
+        role !== ROLE.reviewer &&
+        role !== ROLE.unknown
+      ) {
+        const dashDash = rest.findIndex(
+          (word) => word.text === "--" && !word.dynamic,
+        );
+        if (dashDash === -1) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              "Antigravity 구현자는 git checkout으로 커밋·브랜치를 전환하지 않는다. 단일 파일 복원은 -- <경로> 형식만 사용한다",
+            ),
+          );
+        } else {
+          findings.push(
+            ...gitPathOperandFindings(
+              rest.slice(dashDash + 1),
+              gitCwd,
+              project,
+              actor,
+            ),
+          );
+        }
+      }
+      if (sub === "restore") {
+        if (hasPathspecFile) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              "git restore의 --pathspec-from-file은 허용하지 않는다",
+            ),
+          );
+        } else {
+          const operands = gitOperands(rest, new Set(["-s", "--source"]));
+          findings.push(
+            ...gitPathOperandFindings(operands, gitCwd, project, actor),
+          );
+        }
+      }
+      if (sub === "stash") {
+        const stashAction = rest.find((word) => !word.text.startsWith("-"));
+        const isReadOnlyStash =
+          stashAction !== undefined &&
+          !stashAction.dynamic &&
+          ["list", "show"].includes(stashAction.text);
+        if (!isReadOnlyStash) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              "변경형 git stash는 작업 사본과 .agents/hooks.json을 되돌릴 수 있어 허용하지 않는다",
+            ),
+          );
+        }
+      }
+      if (sub === "clean") {
+        const dryRun = rest.some(
+          (word) => word.text === "-n" || word.text === "--dry-run",
+        );
+        const forced = rest.some(
+          (word) =>
+            word.text === "--force" ||
+            (/^-[a-zA-Z]*f[a-zA-Z]*$/u.test(word.text) &&
+              !word.text.startsWith("--")),
+        );
+        if (!dryRun || forced) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              "실제 파일을 삭제하는 git clean은 허용하지 않는다",
+            ),
+          );
+        }
+      }
+      if (sub === "checkout-index" || sub === "read-tree") {
+        findings.push(
+          finding(
+            "antigravity-hook-config",
+            `작업 트리·인덱스를 직접 덮어쓰는 git ${sub}는 허용하지 않는다`,
+          ),
+        );
+      }
+      if (sub === "reset") {
+        if (
+          rest.some((word) =>
+            ["--merge", "--keep"].includes(flagName(word.text)),
+          )
+        ) {
+          findings.push(
+            finding(
+              "antigravity-hook-config",
+              "작업 트리를 되돌리는 git reset --merge/--keep은 허용하지 않는다",
+            ),
+          );
+        }
+        const dashDash = rest.findIndex(
+          (word) => word.text === "--" && !word.dynamic,
+        );
+        if (dashDash !== -1) {
+          findings.push(
+            ...gitPathOperandFindings(
+              rest.slice(dashDash + 1),
+              gitCwd,
+              project,
+              actor,
+            ),
+          );
+        }
+      }
+    }
+    if (invocation.name === "cd" || invocation.name === "pushd") {
+      const target = invocation.args.find((word) => !word.text.startsWith("-"));
+      if (
+        target !== undefined &&
+        !target.dynamic &&
+        !target.glob &&
+        target.text !== "-" &&
+        effectiveCwd !== undefined
+      ) {
+        const nextDir = resolve(effectiveCwd, target.text);
+        currentCwd = isDirectory(nextDir) ? nextDir : undefined;
+      } else {
+        currentCwd = undefined;
+      }
+    } else if (invocation.name === "popd") {
+      currentCwd = undefined;
+    }
+    for (const nested of shellNestedScripts(invocation, project.rules)) {
+      findings.push(
+        ...gitProtectedMutationFindings(
+          nested,
+          effectiveCwd,
+          project,
+          actor,
+          role,
+          depth + 1,
+        ),
+      );
+    }
+  }
+  for (const substitution of parsed.substitutions) {
+    findings.push(
+      ...gitProtectedMutationFindings(
+        substitution,
+        currentCwd,
+        project,
+        actor,
+        role,
         depth + 1,
       ),
     );
@@ -1462,7 +2066,7 @@ const lockedConfigGeneratorFindings = (
   return findings;
 };
 
-const patchFindings = (patch, cwd, actor, role, project, owned, policy, home) =>
+const patchFindings = (patch, cwd, actor, project, owned, policy, home) =>
   patchPaths(patch).flatMap((path) => {
     const homeDenied = homeWriteFindings(path, policy, home);
     if (homeDenied.length > 0) return homeDenied;
@@ -1474,7 +2078,7 @@ const patchFindings = (patch, cwd, actor, role, project, owned, policy, home) =>
     const extra =
       located.relative === undefined
         ? []
-        : antigravityPathFindings(located.relative, role);
+        : antigravityPathFindings(located.relative);
     return [
       ...extra,
       ...editFindings(
@@ -1484,7 +2088,29 @@ const patchFindings = (patch, cwd, actor, role, project, owned, policy, home) =>
     ];
   });
 
-const delegateTaskFindings = (args, role) => {
+const loadAgentRulesFor = (projectRoot, extraFacts) => {
+  if (extraFacts.agentRules !== undefined) return extraFacts.agentRules;
+  const candidate = join(projectRoot, AGENT_RULES_FILE);
+  return existsSync(candidate) ? readAgentRules(projectRoot) : readAgentRules();
+};
+
+const loadReportDigestsFor = (extraFacts) => {
+  if (extraFacts.reportDigests !== undefined) return extraFacts.reportDigests;
+  try {
+    return knownReportDigests(stateDirectory());
+  } catch {
+    return new Set();
+  }
+};
+
+const delegateTaskFindings = (
+  args,
+  role,
+  branch,
+  root,
+  project,
+  extraFacts,
+) => {
   if (role === ROLE.reviewer || role === ROLE.unknown) {
     return [
       finding(
@@ -1532,7 +2158,60 @@ const delegateTaskFindings = (args, role) => {
   ) {
     return [finding("orchestration", "worktree 격리와 작업 문구가 필요하다")];
   }
-  return delegateTargetFindings(args.target, args.role);
+  if (args.role !== "review") {
+    return [
+      finding(
+        "role-without-delegation",
+        "Antigravity 구현자는 구현·조사 하위 에이전트를 위임하지 않는다",
+      ),
+    ];
+  }
+  const targetFindings = delegateTargetFindings(args.target, args.role);
+  if (targetFindings.length > 0) return targetFindings;
+  const brief = parseBrief(args.task);
+  const base =
+    brief.problem === undefined ? resolveCommit(root, brief.commit) : undefined;
+  const head = headOf(root);
+  const requested = reviewTargetCommit(args.task);
+  const targetCommit =
+    requested === undefined ? undefined : resolveCommit(root, requested);
+  if (
+    typeof branch !== "string" ||
+    branch === "" ||
+    brief.branch !== branch ||
+    base === undefined ||
+    head === undefined ||
+    targetCommit === undefined ||
+    base === targetCommit ||
+    targetCommit !== head ||
+    !isAncestor(root, base, targetCommit)
+  ) {
+    return [
+      finding(
+        "orchestration",
+        "리뷰 기준은 현재 작업 사본 브랜치와 커밋된 HEAD 이력의 커밋이어야 한다",
+      ),
+    ];
+  }
+  const agentRules = loadAgentRulesFor(project.root, extraFacts);
+  const reportDigests = loadReportDigestsFor(extraFacts);
+  const reportFindings = reportProblems(args.task, agentRules, reportDigests);
+  if (reportFindings.length > 0) return reportFindings;
+  if (/(?:^|\n)[ \t]*(?:#+\s*)?구현(?:자)?\s*보고[ \t]*:/u.test(args.task)) {
+    return [
+      finding(
+        "implementer-report",
+        "리뷰어·비판자에게 구현자의 보고를 넘기지 않는다 (docs/workflow.md 2.3, docs/harness.md 7.5)",
+      ),
+    ];
+  }
+  return [
+    finding(
+      "role-without-delegation",
+      "잠금 on에서는 Antigravity 서브에이전트가 하위 위임을 하지 않는다",
+      true,
+    ),
+  ];
 };
 
 export const antigravityPreTool = (
@@ -1542,7 +2221,7 @@ export const antigravityPreTool = (
   extraFacts = {},
 ) => {
   try {
-    const { root, role, actor } = actorInput(
+    const { root, role, branch, actor } = actorInput(
       input,
       project,
       sessionCwd,
@@ -1570,33 +2249,38 @@ export const antigravityPreTool = (
     const scoped = { ...project, ownedWorktree: root };
 
     if (WRITE_TOOLS.includes(toolName)) {
-      const target = writePathFromArgs(toolName, args);
-      if (typeof target !== "string" || target.length === 0) {
-        return refusal(`${toolName}의 대상 경로가 없다`);
+      const extracted = writePathsFromArgs(toolName, args);
+      if (extracted.problem !== undefined) return refusal(extracted.problem);
+      const allFindings = [];
+      for (const target of extracted.paths) {
+        const homeDenied = homeWriteFindings(target, policy, home);
+        if (homeDenied.length > 0) {
+          allFindings.push(...homeDenied);
+          continue;
+        }
+        const shape = shapeProblem(target);
+        const rawEditFindings = editFindings(
+          { ...actor, tool_input: { file_path: target } },
+          scoped,
+        );
+        const located =
+          shape === undefined ? locate(target, scoped.worktrees) : {};
+        const extraPathFindings =
+          located.relative === undefined
+            ? []
+            : antigravityPathFindings(located.relative);
+        const adjusted = rawEditFindings.map((item) =>
+          project.lock === LOCK.off &&
+          role === ROLE.implementer &&
+          item.rule === "main-only-path" &&
+          located.relative !== undefined &&
+          REVIEW_RECORD_PATTERN.test(located.relative)
+            ? { ...item, gated: true }
+            : item,
+        );
+        allFindings.push(...extraPathFindings, ...adjusted);
       }
-      const homeDenied = homeWriteFindings(target, policy, home);
-      if (homeDenied.length > 0) return denyOutput(homeDenied);
-      const shape = shapeProblem(target);
-      const rawEditFindings = editFindings(
-        { ...actor, tool_input: { file_path: target } },
-        scoped,
-      );
-      const located =
-        shape === undefined ? locate(target, scoped.worktrees) : {};
-      const extraPathFindings =
-        located.relative === undefined
-          ? []
-          : antigravityPathFindings(located.relative, role);
-      const adjusted = rawEditFindings.map((item) =>
-        project.lock === LOCK.off &&
-        role === ROLE.implementer &&
-        item.rule === "main-only-path" &&
-        located.relative !== undefined &&
-        REVIEW_RECORD_PATTERN.test(located.relative)
-          ? { ...item, gated: true }
-          : item,
-      );
-      const verdict = decide([...extraPathFindings, ...adjusted], project.lock);
+      const verdict = decide(allFindings, project.lock);
       return verdict.decision === DECISION.deny
         ? denyOutput(verdict.findings)
         : { decision: "allow" };
@@ -1626,7 +2310,7 @@ export const antigravityPreTool = (
           : item,
       );
       const patches = shellPatches(command).flatMap((patch) =>
-        patchFindings(patch, cwd, actor, role, scoped, root, policy, home),
+        patchFindings(patch, cwd, actor, scoped, root, policy, home),
       );
       const extraWrites = shellWriteTargets(
         command,
@@ -1635,6 +2319,13 @@ export const antigravityPreTool = (
         role,
         policy,
         home,
+      );
+      const gitMutations = gitProtectedMutationFindings(
+        command,
+        cwd,
+        scoped,
+        actor,
+        role,
       );
       const reviewerGit = reviewerGitFindings(command, role, project.rules);
       const lockedGenerators = lockedConfigGeneratorFindings(
@@ -1656,6 +2347,7 @@ export const antigravityPreTool = (
           ...adjustedBash,
           ...patches,
           ...extraWrites,
+          ...gitMutations,
           ...reviewerGit,
           ...lockedGenerators,
           ...readAndToss,
@@ -1668,8 +2360,18 @@ export const antigravityPreTool = (
     }
 
     if (toolName === "mcp_t3-code_delegate_task") {
-      const findings = delegateTaskFindings(args, role);
-      return findings.length > 0 ? denyOutput(findings) : { decision: "allow" };
+      const findings = delegateTaskFindings(
+        args,
+        role,
+        branch,
+        root,
+        scoped,
+        extraFacts,
+      );
+      const verdict = decide(findings, project.lock);
+      return verdict.decision === DECISION.deny
+        ? denyOutput(verdict.findings)
+        : { decision: "allow" };
     }
 
     if (toolName === "manage_task") {
@@ -1723,11 +2425,18 @@ export const antigravityStop = (input, session, facts = {}) => {
       return { decision: "allow" };
     }
     if (role === ROLE.reviewer || role === ROLE.unknown) {
-      const trackedDirty =
-        facts.trackedDirty ??
-        git(root, ["status", "--porcelain=v1", "-uno"])?.trim() ??
-        "";
-      if (trackedDirty !== "") {
+      const rawTracked =
+        facts.trackedDirty !== undefined
+          ? facts.trackedDirty
+          : git(root, ["status", "--porcelain=v1", "-uno"]);
+      if (typeof rawTracked !== "string") {
+        return {
+          decision: "continue",
+          reason:
+            "git status 실행에 실패해 리뷰어 작업 사본 상태를 확인할 수 없다 (닫힌 실패).",
+        };
+      }
+      if (rawTracked.trim() !== "") {
         return {
           decision: "continue",
           reason:
@@ -1745,11 +2454,18 @@ export const antigravityStop = (input, session, facts = {}) => {
             "Git 커밋 훅(lefthook)이 설치되어 있지 않다. 훅 상태를 확인한 뒤 보고하라.",
         };
       }
-      const dirty =
-        facts.dirty ??
-        git(root, ["status", "--porcelain=v1", "-uall"])?.trim() ??
-        "";
-      if (dirty !== "") {
+      const rawDirty =
+        facts.dirty !== undefined
+          ? facts.dirty
+          : git(root, ["status", "--porcelain=v1", "-uall"]);
+      if (typeof rawDirty !== "string") {
+        return {
+          decision: "continue",
+          reason:
+            "git status 실행에 실패해 작업 사본 상태를 확인할 수 없다 (닫힌 실패).",
+        };
+      }
+      if (rawDirty.trim() !== "") {
         return {
           decision: "continue",
           reason:

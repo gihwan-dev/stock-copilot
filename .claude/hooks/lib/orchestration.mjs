@@ -46,17 +46,15 @@ const antigravityFindings = (model, role, value, instanceId) => {
         `Antigravity gemini-4-neon의 ${role} 역할은 thought_level=${expected} 옵션만 명시적으로 허용한다. effort·reasoningEffort 등 다른 키와 혼합은 거부한다`,
       );
 };
-const OTHER_PROVIDER_INSTANCE =
-  /^(?:codex|antigravity|cursor|grok|opencode|fx|kiro|muse|pi)(?:$|[._-])/iu;
+const CLAUDE_INSTANCE_PATTERN = /^claudeAgent(?:$|[._-][A-Za-z0-9._-]+)$/u;
 const claudeReviewFindings = (model, role, value, instanceId) => {
   if (
     instanceId !== undefined &&
     (typeof instanceId !== "string" ||
-      instanceId.trim() === "" ||
-      OTHER_PROVIDER_INSTANCE.test(instanceId))
+      !CLAUDE_INSTANCE_PATTERN.test(instanceId))
   )
     return denied(
-      "적대적 리뷰의 providerInstanceId는 생략하거나 Claude 인스턴스 이름(비어 있지 않은 문자열)이어야 한다",
+      "적대적 리뷰의 providerInstanceId는 생략하거나 claudeAgent 형식의 Claude 인스턴스 이름이어야 한다",
     );
   if (model !== "claude-opus-5-5" || role !== "review")
     return denied(

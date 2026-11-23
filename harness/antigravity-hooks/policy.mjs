@@ -5,7 +5,6 @@ import {
   patternMatches,
   patternMatchesIgnoringCase,
 } from "../../.claude/hooks/lib/allowlist.mjs";
-import { ROLE } from "../../.claude/hooks/lib/roles.mjs";
 import { readPolicy } from "../sandbox/fragment.mjs";
 
 export const ANTIGRAVITY_DENY_READ = Object.freeze([
@@ -98,6 +97,63 @@ export const KEYCHAIN_DENIED_SUBCOMMANDS = Object.freeze([
 
 const folded = (text) => text.normalize("NFC").toLowerCase();
 
+const hasGlob = (text) => /[*?[\]{}]/u.test(text);
+
+const globSegmentRegex = (segment) => {
+  let pattern = "^";
+  let index = 0;
+  const source = folded(segment);
+  while (index < source.length) {
+    const ch = source[index];
+    if (ch === "*") {
+      pattern += "[^/]*";
+      index += 1;
+    } else if (ch === "?") {
+      pattern += "[^/]";
+      index += 1;
+    } else if (ch === "[") {
+      const close = source.indexOf("]", index + 1);
+      if (close !== -1) {
+        const inner = source.slice(index + 1, close);
+        const negated = inner.startsWith("!") || inner.startsWith("^");
+        const body = (negated ? inner.slice(1) : inner).replace(
+          /[\\]/gu,
+          "\\\\",
+        );
+        pattern += `[${negated ? "^" : ""}${body}]`;
+        index = close + 1;
+      } else {
+        pattern += "\\[";
+        index += 1;
+      }
+    } else if (ch === "{") {
+      const close = source.indexOf("}", index + 1);
+      if (close !== -1) {
+        pattern += "[^/]*";
+        index = close + 1;
+      } else {
+        pattern += "\\{";
+        index += 1;
+      }
+    } else {
+      pattern += ch.replace(/[.+^$()|\\]/gu, "\\$&");
+      index += 1;
+    }
+  }
+  return new RegExp(`${pattern}$`, "u");
+};
+
+const segmentMatchesGlob = (candidateSeg, literalSeg) => {
+  if (candidateSeg === "**") return true;
+  if (!hasGlob(candidateSeg))
+    return folded(candidateSeg) === folded(literalSeg);
+  try {
+    return globSegmentRegex(candidateSeg).test(folded(literalSeg));
+  } catch {
+    return true;
+  }
+};
+
 const realOrSelf = (path) => {
   try {
     return realpathSync.native(path);
@@ -183,11 +239,36 @@ const matchesHomeEntry = (pattern, absolutePath, homeRoot) => {
   return patternMatchesIgnoringCase(`${relativePattern}/**`, relative);
 };
 
+const matchesGlobUnderHome = (pattern, relativeCandidate) => {
+  const relativePattern = patternRelative(pattern);
+  if (relativePattern === undefined) return false;
+  const patternSegs = relativePattern
+    .replace(/\/\*\*$/u, "")
+    .split("/")
+    .filter(Boolean);
+  const candSegs = relativeCandidate.split("/").filter(Boolean);
+  const len = Math.min(patternSegs.length, candSegs.length);
+  if (len === 0) return false;
+  for (let index = 0; index < len; index += 1) {
+    const cSeg = candSegs[index];
+    const pSeg = patternSegs[index];
+    if (cSeg === "**" || pSeg === "**") return true;
+    if (!segmentMatchesGlob(cSeg, pSeg) && !segmentMatchesGlob(pSeg, cSeg)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const MISSING_PATH_CODES = new Set(["ENOENT", "ENOTDIR", "ENAMETOOLONG"]);
+
 export const resolveLinkChain = (lexicalPath) => {
   const visited = new Set([lexicalPath]);
   const results = [lexicalPath];
   const inspect = (path, depth) => {
-    if (depth > 16) return;
+    if (depth > 16) {
+      throw new Error(`심볼릭 링크 중첩 깊이가 상한을 넘었다: ${lexicalPath}`);
+    }
     const parts = path.split("/").slice(1);
     let current = "";
     for (let index = 0; index < parts.length; index += 1) {
@@ -195,15 +276,22 @@ export const resolveLinkChain = (lexicalPath) => {
       let stat;
       try {
         stat = lstatSync(current);
-      } catch {
-        return;
+      } catch (error) {
+        if (MISSING_PATH_CODES.has(error?.code)) return;
+        throw new Error(
+          `경로 상태를 확인할 수 없다(${error?.code ?? "unknown"}): ${current}`,
+          { cause: error },
+        );
       }
       if (stat.isSymbolicLink()) {
         let target;
         try {
           target = readlinkSync(current);
-        } catch {
-          return;
+        } catch (error) {
+          throw new Error(
+            `심볼릭 링크 대상을 읽을 수 없다(${error?.code ?? "unknown"}): ${current}`,
+            { cause: error },
+          );
         }
         const resolved = isAbsolute(target)
           ? resolve(target)
@@ -233,12 +321,47 @@ const within = (candidate, root) =>
   root.length > 0 &&
   (candidate === root || candidate.startsWith(`${root}/`));
 
+const matchesHomePrefixGlob = (candidate, homeRoot) => {
+  const homeSegs = homeRoot.split("/").filter(Boolean);
+  const candSegs = candidate.split("/").filter(Boolean);
+  if (candSegs.length === 0) return { kind: "ancestor" };
+  const starIdx = candSegs.indexOf("**");
+  if (
+    starIdx !== -1 &&
+    starIdx <= homeSegs.length &&
+    candSegs
+      .slice(0, starIdx)
+      .every((seg, i) => segmentMatchesGlob(seg, homeSegs[i]))
+  ) {
+    return { kind: "home-glob" };
+  }
+  if (
+    candSegs.length <= homeSegs.length &&
+    candSegs.every((seg, i) => segmentMatchesGlob(seg, homeSegs[i]))
+  ) {
+    return { kind: candSegs.length === homeSegs.length ? "home" : "ancestor" };
+  }
+  if (
+    candSegs.length > homeSegs.length &&
+    candSegs.slice(0, homeSegs.length).some(hasGlob) &&
+    candSegs
+      .slice(0, homeSegs.length)
+      .every((seg, i) => segmentMatchesGlob(seg, homeSegs[i]))
+  ) {
+    return { kind: "home-glob" };
+  }
+  return undefined;
+};
+
 export const isDeniedReadPath = (
   candidate,
   policy,
   ownedWorktree,
   home = homedir(),
 ) => {
+  const inWorktree =
+    within(candidate, ownedWorktree) ||
+    within(candidate, realOrSelf(ownedWorktree ?? ""));
   const homes = [
     ...new Set([
       home.replace(/\/+$/u, ""),
@@ -253,19 +376,40 @@ export const isDeniedReadPath = (
         message: `사용자 홈 폴더 전체를 직접 읽거나 탐색하지 않는다: ${candidate}`,
       };
     }
+    if (!inWorktree) {
+      const prefixHit = matchesHomePrefixGlob(candidate, homeRoot);
+      if (prefixHit !== undefined) {
+        return {
+          rule: "protected-home-read",
+          gated: false,
+          message:
+            prefixHit.kind === "home-glob"
+              ? `사용자 홈 폴더 이름의 와일드카드 경로는 읽지 않는다: ${candidate}`
+              : `사용자 홈 또는 상위 폴더를 직접 읽거나 탐색하지 않는다: ${candidate}`,
+        };
+      }
+    }
     const homePrefix = `${homeRoot}/`;
-    if (
-      candidate.startsWith(homePrefix) &&
-      !within(candidate, ownedWorktree) &&
-      !within(candidate, realOrSelf(ownedWorktree ?? ""))
-    ) {
-      const firstSegment = candidate.slice(homePrefix.length).split("/")[0];
-      if (/[*?[\]]/u.test(firstSegment)) {
+    if (candidate.startsWith(homePrefix) && !inWorktree) {
+      const relative = candidate.slice(homePrefix.length);
+      const firstSegment = relative.split("/")[0];
+      if (hasGlob(firstSegment)) {
         return {
           rule: "protected-home-read",
           gated: false,
           message: `사용자 홈 아래 와일드카드 경로는 읽지 않는다: ${candidate}`,
         };
+      }
+      if (hasGlob(relative)) {
+        for (const pattern of policy.denyRead) {
+          if (matchesGlobUnderHome(pattern, relative)) {
+            return {
+              rule: "protected-home-read",
+              gated: false,
+              message: `사용자 홈 보호 경로와 겹치는 와일드카드(${pattern})는 읽지 않는다: ${candidate}`,
+            };
+          }
+        }
       }
     }
     for (const pattern of policy.denyRead) {
@@ -278,11 +422,7 @@ export const isDeniedReadPath = (
       }
     }
   }
-  if (
-    MEMORY_BASENAMES.includes(folded(basename(candidate))) &&
-    !within(candidate, ownedWorktree) &&
-    !within(candidate, realOrSelf(ownedWorktree ?? ""))
-  ) {
+  if (MEMORY_BASENAMES.includes(folded(basename(candidate))) && !inWorktree) {
     return {
       rule: "protected-memory-read",
       gated: false,
@@ -363,6 +503,16 @@ export const homeWriteFindings = (rawPath, policy, home = homedir()) => {
   ];
   for (const candidate of resolveLinkChain(resolve(expanded.path))) {
     for (const homeRoot of homes) {
+      const prefixHit = matchesHomePrefixGlob(candidate, homeRoot);
+      if (prefixHit !== undefined && prefixHit.kind === "home-glob") {
+        return [
+          {
+            rule: "protected-home",
+            gated: false,
+            message: `사용자 홈 폴더 이름에 와일드카드를 포함한 경로에는 쓰지 않는다: ${candidate}`,
+          },
+        ];
+      }
       for (const pattern of policy.protectedHome) {
         if (matchesHomeEntry(pattern, candidate, homeRoot)) {
           return [
@@ -387,12 +537,13 @@ const nameMatches = (pattern, target) => {
   return new RegExp(`^${escaped}$`, "u").test(folded(target));
 };
 
-export const antigravityPathFindings = (relative, role) => {
+export const antigravityPathFindings = (relative) => {
   const findings = [];
-  const lower = folded(relative);
+  const lower = folded(relative).replace(/\/+$/u, "");
   if (
-    role !== ROLE.main &&
-    (lower === folded(ANTIGRAVITY_HOOK_CONFIG) || lower.startsWith(".agents/"))
+    lower === ".agents" ||
+    lower === folded(ANTIGRAVITY_HOOK_CONFIG) ||
+    lower.startsWith(".agents/")
   ) {
     findings.push({
       rule: "antigravity-hook-config",
@@ -400,10 +551,10 @@ export const antigravityPathFindings = (relative, role) => {
       message: `Antigravity 훅 설정(${relative})은 에이전트가 직접 수정하지 않는다`,
     });
   }
-  const name = relative.split("/").at(-1) ?? relative;
+  const name = lower.split("/").at(-1) ?? lower;
   if (
     ANTIGRAVITY_CONFIG_NAMES.some((pattern) =>
-      nameMatches(pattern, pattern.includes("/") ? relative : name),
+      nameMatches(pattern, pattern.includes("/") ? lower : name),
     ) &&
     !ANTIGRAVITY_CONFIG_ALLOWED.some((allowed) =>
       patternMatches(allowed, relative),

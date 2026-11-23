@@ -34,8 +34,19 @@ export const dispatchEvent = (
   session,
   record = writeRecord,
   extraFacts = {},
+  cliEvent = undefined,
 ) => {
-  const event = input?.hookEventName ?? process.argv[2];
+  if (
+    cliEvent !== undefined &&
+    input?.hookEventName !== undefined &&
+    input.hookEventName !== cliEvent
+  ) {
+    const mismatch = `Antigravity 훅 이벤트 불일치: CLI=${String(cliEvent)}, stdin=${String(input.hookEventName)}`;
+    return cliEvent === "Stop"
+      ? { decision: "continue", reason: mismatch }
+      : refusal(mismatch);
+  }
+  const event = cliEvent ?? input?.hookEventName;
   if (event === "PreToolUse") {
     const output = antigravityPreTool(
       input,
@@ -73,16 +84,17 @@ export const dispatchEvent = (
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let input;
-  const fallbackEvent = process.argv[2] ?? "PreToolUse";
+  const cliEvent = process.argv[2];
+  const fallbackEvent = cliEvent ?? "PreToolUse";
   try {
     input = JSON.parse(readFileSync(0, "utf8"));
     const session = sessionProject(process.cwd());
-    const output = dispatchEvent(input, session);
+    const output = dispatchEvent(input, session, writeRecord, {}, cliEvent);
     process.stdout.write(`${JSON.stringify(output)}\n`);
   } catch (error) {
     const reason = `Antigravity 하네스 오류: ${error.message}`;
     process.stderr.write(`${reason}\n`);
-    const event = input?.hookEventName ?? fallbackEvent;
+    const event = cliEvent ?? input?.hookEventName ?? fallbackEvent;
     const output =
       event === "PostToolUse"
         ? {}

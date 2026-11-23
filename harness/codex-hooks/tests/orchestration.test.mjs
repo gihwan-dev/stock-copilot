@@ -106,6 +106,9 @@ test("T3 Opus review requires the exact model role provider and worktree", () =>
   }
   for (const target of [
     { model: "claude-sonnet-5-5" },
+    { providerInstanceId: "other" },
+    { providerInstanceId: "myCodex" },
+    { providerInstanceId: "gpt" },
     { providerInstanceId: "" },
     { providerInstanceId: null },
     { providerInstanceId: "codex" },

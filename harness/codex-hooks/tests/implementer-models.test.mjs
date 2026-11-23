@@ -281,7 +281,7 @@ test("Claude Opus review matches driverKind claudeAgent and model claude-opus-5-
     undefined,
     "claudeAgent",
     "claudeAgent_claude2",
-    "claude-work",
+    "claudeAgent-work",
   ]) {
     for (const [options, expected] of [
       [undefined, 0],
@@ -311,6 +311,12 @@ test("Claude Opus review matches driverKind claudeAgent and model claude-opus-5-
     "   ",
     null,
     123,
+    "other",
+    "myCodex",
+    "gpt",
+    "openai",
+    "gemini",
+    "work",
     "codex",
     "antigravity",
     "cursor",
@@ -433,26 +439,24 @@ test("known-gaps records Antigravity session enforcement gaps", () => {
   assert.ok(
     gaps.some(
       (gap) =>
-        gap.text.includes("Antigravity") &&
-        gap.text.includes("보호 경로 쓰기 차단"),
-    ),
-  );
-  assert.ok(
-    gaps.some(
-      (gap) => gap.text.includes("Antigravity") && gap.text.includes("홈 파일"),
-    ),
-  );
-  assert.ok(
-    gaps.some(
-      (gap) =>
-        gap.text.includes("Antigravity") && gap.text.includes("리뷰·비판 역할"),
+        gap.text.includes("Antigravity") && gap.text.includes("PostToolUse"),
     ),
   );
   assert.ok(
     gaps.some(
       (gap) =>
         gap.text.includes("Antigravity") &&
-        gap.text.includes("종료 시 전체 검사"),
+        gap.text.includes("OS 커널 샌드박스"),
+    ),
+  );
+  assert.ok(
+    gaps.some(
+      (gap) => gap.text.includes("~/.gemini") && gap.text.includes("비활성화"),
+    ),
+  );
+  assert.ok(
+    gaps.some(
+      (gap) => gap.text.includes("Antigravity") && gap.text.includes("Stop"),
     ),
   );
 });

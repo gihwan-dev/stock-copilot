@@ -20,7 +20,7 @@
 - 보호 파일(docs/harness.md 7.1)을 수정하지 않는다. 하네스가 편집이나 명령을 거부하면 다른 방법으로 같은 일을 하려 하지 말고 멈춘다. 어떤 규칙이 무엇을 막는지와 시도한 대안을 보고한다.
 - 구현이 불가능하거나 완료 기준이 서로 모순되면 억지로 통과시키지 말고 보고서 첫 줄을 "막힘:"으로 시작해 끝낸다. 이것은 실패가 아니라 정상 출구다.
 - 필요한 디자인 시스템 컴포넌트가 없으면 `shared/ds`에 만들지 말고 "막힘:"으로 보고한다.
-- 커밋은 작게 하고 푸시하지 않는다. 서명 옵션을 쓰지 않는다. 서브에이전트를 띄우지 않는다(브리프가 독립 리뷰·비판 위임을 명시한 경우 제외).
+- 커밋은 작게 하고 푸시하지 않는다. 서명 옵션을 쓰지 않는다. 서브에이전트를 띄우지 않는다.
 
 멈출 때와 계속할 때:
 - 검사 실패(린트, 구조 검사, 커버리지, 변이 생존, 생성물 불일치)는 막힘이 아니다. 고쳐서 통과시킨다. 커버리지는 도달 가능한 분기에 테스트를 쓰고, 도달할 수 없는 분기는 코드에서 없앤다.
@@ -72,5 +72,6 @@ fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. d
 ## 역할 배분 (Antigravity 구현 담당·비판자)
 
 - 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 담당한다.
-- 리뷰 비판자(`review-critic`)와 조사 역할은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 담당하며, Antigravity 세션 훅(`.agents/hooks.json`)이 비-`xhigh` 모델과 리뷰 브랜치·detached HEAD를 읽기 전용 리뷰어 역할로 고정한다.
-- 적대적 리뷰(`adversarial-reviewer`)는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, 기기별 인스턴스 이름 허용)가 담당한다.
+- 리뷰 비판자(`review-critic`)와 조사 역할은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 담당하며, Antigravity 세션 훅(`.agents/hooks.json`)이 `gemini-4-neon-xhigh` 외 모델·주 작업 트리 세션·리뷰 브랜치·detached HEAD를 읽기 전용 리뷰어 역할로 고정한다.
+- 적대적 리뷰(`adversarial-reviewer`)는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `claudeAgent` 형식 인스턴스 이름 허용)가 담당한다.
+- Antigravity 세션의 `delegate_task` 위임은 잠금(`lock.txt = on`)에서 전면 차단된다. 잠금 전(`lock.txt = off`)에는 메인이 원격 리뷰 회차를 명시 위임한 경우에 한해 구현자 역할의 `role=review`만 허용하며, 현재 작업 사본 브랜치·커밋된 `HEAD`·조상 기준 SHA·구현자 보고서 차단(`reviewBriefCheck`·`reportProblems`)을 모두 통과해야 한다.

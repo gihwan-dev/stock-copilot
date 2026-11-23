@@ -659,18 +659,18 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 ### 7.3 에이전트 훅
 
-판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. 이 훅들은 Claude Code 세션과(Codex를 다시 쓸 때만 해당) Codex 세션에만 연결되며, Antigravity 세션에는 적용되지 않는다(7.4 "Antigravity 세션의 집행 경계와 빈틈"). Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`과 `.codex/config.toml`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
+판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. 이 훅들은 Claude Code 세션, Antigravity 세션(`.agents/hooks.json`, `harness/antigravity-hooks/`), 그리고 (Codex를 다시 쓸 때만 해당) Codex 세션에 같은 단일 정책 원본으로 연결된다. Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`, `.codex/config.toml`, `.agents/hooks.json`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
 
-| 항목 | Claude Code | Codex 0.168.0 (Codex를 다시 쓸 때만 해당) | Antigravity (H-60 시점) |
+| 항목 | Claude Code | Codex 0.168.0 (Codex를 다시 쓸 때만 해당) | Antigravity (H-61 적용) |
 |---|---|---|---|
-| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 | 세션 훅 미적용 (7.4 빈틈) |
-| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 | 세션 훅 미적용 (7.4 빈틈) |
-| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` | 세션 훅 미적용 (7.4 빈틈) |
-| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 | 세션 훅 미적용 (7.4 빈틈) |
-| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 | 세션 훅 미적용 (원격 CI·직접 `check-fast`) |
-| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 | 해당 없음 (미적용) |
-| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 | T3 `antigravity-acp` 경로 미확인 |
-| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 | T3 `antigravity-acp` 경로 미확인 |
+| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 | PreToolUse, 모든 경로 키·`.agents` 폴더·git 삭제/복원 포함 같은 코어로 판정 |
+| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 | PreToolUse `run_command`, 같은 코어 + 홈 읽기·토스 API·`open`·`curl`/`wget` 차단 |
+| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` | 계약상 `{}`만 반환 (Git 커밋 훅·`check-fast`·원격 CI 보완, 7.4 빈틈) |
+| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 | 전용 이벤트 없음. `.agents`/`.agents/hooks.json` 쓰기·이동·삭제·git 복원 즉시 차단 |
+| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 | Stop에서 리뷰어 추적 파일 무변경·구현자 미커밋·`lefthook` 설치 검사(git 실패 시 닫힌 실패). 전체 검사는 원격 CI |
+| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 | 래퍼·CLI 오류·이벤트 불일치 시 닫힌 실패 (`PreToolUse` `deny`, `Stop` `continue`) |
+| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 | OS 커널 샌드박스 없음(도구·셸 인자 훅 계층, 7.4 빈틈) |
+| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 | T3 `antigravity acp`에서 `full-access`에서도 별도 수동 신뢰 창 없이 실행(실측 `cli-1.5.14`), 전역 설정 비활성화는 7.4 빈틈 |
 
 (Codex를 다시 쓸 때만 해당) `just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
 
@@ -703,10 +703,10 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 |---|---|---|
 | 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸·위임 가드 |
 | 구현·수정 | T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | 메인 Claude 위임 가드가 `provider=antigravity`·`model=gemini-4-neon`·`thought_level=xhigh`·작업 사본·브리프(`- 역할: implementation`)를 확인. Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`)이 공유 정책 원본으로 보호 경로 쓰기·홈 읽기·실제 토스 API/주문 명령·금지 셸·미커밋 종료를 차단하고, Git 커밋 훅·원격 CI·독립 리뷰가 보완 |
-| 조사·비판 | T3 Antigravity `gemini-4-neon`(`thought_level=high`), 별도 작업 사본 | 메인 Claude 위임 가드가 `driverKind=antigravity`·`model=gemini-4-neon`·`role=research\|review`·`thought_level=high`를 확인. Antigravity `.agents/hooks.json`이 비-`xhigh` 모델(`-high`)과 detached HEAD·리뷰 브랜치를 `ROLE.reviewer`로 고정해 추적 파일 쓰기·변경형 git·중첩 위임을 차단 |
-| 적대적 리뷰 | 새 Claude(`driverKind=claudeAgent`) `claude-opus-5-5` `adversarial-reviewer` | 메인 Claude 위임 가드가 `driverKind=claudeAgent`·`model=claude-opus-5-5`·`role=review`·worktree 격리를 확인(기기별 인스턴스 이름 허용, 타 드라이버·빈 문자열 거부). 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
+| 조사·비판 | T3 Antigravity `gemini-4-neon`(`thought_level=high`), 별도 작업 사본 | 메인 Claude 위임 가드가 `driverKind=antigravity`·`model=gemini-4-neon`·`role=research\|review`·`thought_level=high`를 확인. Antigravity `.agents/hooks.json`이 허용 목록(`gemini-4-neon-xhigh`) 외 모델·주 작업 트리 세션·detached HEAD·리뷰 브랜치를 `ROLE.reviewer`로 고정해 추적 파일 쓰기·변경형 git·중첩 위임을 차단 |
+| 적대적 리뷰 | 새 Claude(`driverKind=claudeAgent`) `claude-opus-5-5` `adversarial-reviewer` | 메인 Claude 위임 가드가 `driverKind=claudeAgent`·`model=claude-opus-5-5`·`role=review`·worktree 격리를 확인(생략 또는 `claudeAgent` 접두 인스턴스 이름 허용, 그 외 이름·빈 문자열 거부). 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
 
-메인 Claude의 `orchestrationFindings`가 모델·제공자·드라이버·역할·옵션·격리·브리프를 판정한다. 허용되는 위임 대상은 Antigravity `gemini-4-neon`(구현 `thought_level=xhigh`, 조사·비판 `thought_level=high`)과 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, 옵션 생략 또는 `effort=high`)뿐이다. `providerInstanceId`는 기기마다 다를 수 있으므로(`claudeAgent`, `claudeAgent_claude2` 등) 생략하거나 비어 있지 않은 Claude 인스턴스 문자열을 허용하고 빈 문자열·`null`·타 드라이버 이름은 거부한다. Codex(`codex`, gpt 계열)와 다른 모델·역할·옵션 키·혼합 키는 모두 거부한다. 메인의 T3 `t3_thread_send` 수정 회차는 소유한 `implementation`·`research` 스레드에만 허용한다. 등록된 주 작업 트리의 Claude만 메인이며, 나머지 진짜 git worktree의 Claude는 리뷰어로 고정한다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude `Agent` 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. (Codex를 다시 쓸 때만 해당: Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다.) 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+메인 Claude의 `orchestrationFindings`가 모델·제공자·드라이버·역할·옵션·격리·브리프를 판정한다. 허용되는 위임 대상은 Antigravity `gemini-4-neon`(구현 `thought_level=xhigh`, 조사·비판 `thought_level=high`)과 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, 옵션 생략 또는 `effort=high`)뿐이다. `providerInstanceId`는 기기마다 다를 수 있으므로(`claudeAgent`, `claudeAgent_claude2` 등) 생략하거나 `claudeAgent` 접두 형식 문자열을 허용하고 빈 문자열·`null`·그 외 이름(`other`, `codex`, `antigravity`, `myCodex` 등)은 거부한다. Codex(`codex`, gpt 계열)와 다른 모델·역할·옵션 키·혼합 키는 모두 거부한다. 메인의 T3 `t3_thread_send` 수정 회차는 소유한 `implementation`·`research` 스레드에만 허용한다. 등록된 주 작업 트리의 Claude만 메인이며, 나머지 진짜 git worktree의 Claude는 리뷰어로 고정한다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude `Agent` 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. (Codex를 다시 쓸 때만 해당: Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다.) 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
 
 #### Antigravity 세션의 집행 경계와 빈틈 (H-60 → H-61)
 
@@ -716,11 +716,11 @@ Antigravity 세션에는 Codex·Claude 세션 훅이 직접 실행되지 않으�
 
 | 영역 | 강제 장치 | 범위와 조건 |
 |---|---|---|
-| 세션 중 보호 경로 쓰기·금지 셸 차단 | `.agents/hooks.json` `PreToolUse` (`harness/antigravity-hooks/`) | `.agents/hooks.json`·하위 `.agents/**`·`GEMINI.md`·`.claude/settings.local.json`·`.cargo/config*`·`.git/**`·`docs/progress.md`·`docs/tasks.md`·심볼릭 링크·`..`·작업 사본 밖 경로·금지 셸(`--no-verify`, `LEFTHOOK=0`, `git push`, `RUSTFLAGS` 등)을 즉시 거부. `harness/agent-writable.txt` 밖 보호 경로(`justfile`, `harness/**`, 추적된 ADR 등)는 `lock.txt = on`에서 거부 |
-| 세션 중 홈 설정·메모리·자격 증명 읽기 차단 | `.agents/hooks.json` `PreToolUse` (`policy.mjs`) | `policy.json` `denyRead` + `rules.json` `protectedHome` + `~/.gemini`·셸 기록·작업 사본 밖 `MEMORY.md`·홈 루트·홈 첫 세그먼트 와일드카드·`~user`·`security` 키체인 도구를 `read_file`·탐색 별칭·셸 인자(`key=value`, `export`, `-d@path` 포함)·`<` 리다이렉션·심볼릭 링크(끊긴 링크 포함)에서 차단 |
-| Antigravity 리뷰·비판 역할 쓰기·위임 차단 | `.agents/hooks.json` `PreToolUse` + `Stop` | 호스트 `process.cwd()`로 작업 사본을 고정하고 detached HEAD·`master`/`main`·`review/*`·`critic/*`·비-`xhigh` 모델(`-high`)을 `ROLE.reviewer`로 분류해 모든 편집·추적 파일 셸 쓰기·변경형 git(`add`/`commit`/`worktree`/`fetch`/`checkout` 변형 등, 단독 `git checkout --detach <SHA>`만 허용)·하위 위임을 차단. `Stop`에서 추적 파일 변경 잔류 시 `continue` 반환 |
-| 실제 주문·토스 API 호출 명령 차단 | `.agents/hooks.json` `PreToolUse` | `toss-smoke`·`broker-toss-trade`·`src-tauri`(`gen-bindings` 제외) 실행(`cargo r`, `--manifest-path`, crate 폴더 내부 `cargo run` 포함), `tauri dev`(`pnpm exec tauri dev`·직접 `tauri dev` 포함), `TOSS_*` 환경 변수, `rsync` 원격 전송, `curl`/`wget` 우회 플래그(`-K`/`--config`/`-x`/`--proxy`/`-i`), HTTP·원격 네트워크 클라이언트의 `tossinvest.com` 및 `allowedDomains`·루프백 밖 연결(정수 IP 포함 닫힌 실패)을 차단 |
-| 닫힌 실패·동등성·무결성 | `.agents/hooks.json` 래퍼 + `hashes.json` + `parity.test.mjs` | 병합 후 주 작업 트리(`--git-common-dir`)의 `dispatch.mjs`를 우선 실행. Git·Node·JSON·미지 도구 오류 시 `PreToolUse`는 `deny`, `Stop`은 `continue`. `lastUserInput` 대화 본문은 판정에 섞지 않고 도구 이름·인자만 검사. Claude `bash-cases.json`·`edit-cases.json` 전체 거부 코퍼스와의 동등성 테스트 및 `.agents/`·`harness/antigravity-hooks/` 해시 보호 |
+| 세션 중 보호 경로 쓰기·금지 셸 차단 | `.agents/hooks.json` `PreToolUse` (`harness/antigravity-hooks/`) | `.agents` 폴더·`.agents/hooks.json`·하위 `.agents/**`·`GEMINI.md`·`.claude/settings.local.json`·`.cargo/config*`·`.git/**`·`docs/progress.md`·`docs/tasks.md`·쓰기 도구의 모든 경로 키·`rm`/`mv`/`git rm`/`git mv`/`git checkout`/`git switch`/`git restore`/`git stash`/`git clean`의 `.agents`·보호 경로 변경·심볼릭 링크·`..`·작업 사본 밖 경로·금지 셸(`--no-verify`, `LEFTHOOK=0`, `git push`, `RUSTFLAGS` 등)을 즉시 거부. `harness/agent-writable.txt` 밖 보호 경로(`justfile`, `harness/**`, 추적된 ADR 등)는 `lock.txt = on`에서 거부 |
+| 세션 중 홈 설정·메모리·자격 증명 읽기 차단 | `.agents/hooks.json` `PreToolUse` (`policy.mjs`) | `policy.json` `denyRead` + `rules.json` `protectedHome` + `~/.gemini`·셸 기록·작업 사본 밖 `MEMORY.md`·홈 루트 및 상위 폴더(`/`, `/Users` 등)·홈 이름/하위 와일드카드(`/Users/cho*/...`, `~/.s?h/...`, `~/.local/st*/...`)·`~user`·`security` 키체인 도구를 `read_file`·탐색 별칭·셸 인자(`key=value`, `export`, `-d@path` 포함)·`<` 리다이렉션·심볼릭 링크(끊긴 링크·루프 포함)에서 차단 |
+| Antigravity 리뷰·비판 역할 쓰기·위임 차단 | `.agents/hooks.json` `PreToolUse` + `Stop` | 호스트 `process.cwd()`로 작업 사본을 고정하고 주 작업 트리 세션·detached HEAD·`master`/`main`·`review/*`·`critic/*`·허용 목록(`gemini-4-neon-xhigh`) 외 모델을 모두 `ROLE.reviewer`로 분류해 편집·추적 파일 셸 쓰기·변경형 git·하위 위임을 차단. 구현자 위임도 `lock.txt = on` 전면 차단, `lock.txt = off`에서는 `role=review`의 `reviewBriefCheck`+`reportProblems` 통과 건만 허용. `Stop`에서 추적 파일 변경 잔류 또는 `git status` 실패 시 `continue` 반환 |
+| 실제 주문·토스 API 호출 명령 차단 | `.agents/hooks.json` `PreToolUse` | `toss-smoke`·`broker-toss-trade`·`src-tauri`(단독 `--bin gen-bindings` 제외) 실행(`cargo r`, `-p<pkg>`, `-p=<pkg>`, `@version` pkgid, `-C`, `--manifest-path`, crate 폴더 내부 실행 포함), `tauri dev`, `TOSS_*` 환경 변수, `open` 실행 명령, `rsync` 원격 전송, `curl`/`wget` 붙여쓰기·묶음 우회 플래그(`-sn`, `-K...`, `-x...`, `-i...`), HTTP·원격 네트워크 클라이언트의 `tossinvest.com` 및 `allowedDomains`·루프백 밖 연결(정수 IP 포함 닫힌 실패)을 차단 |
+| 닫힌 실패·동등성·무결성 | `.agents/hooks.json` 래퍼 + `hashes.json` + `parity.test.mjs` | 병합 후 주 작업 트리(`--git-common-dir`)의 `dispatch.mjs`를 우선 실행. CLI 이벤트 인자를 우선 검증(불일치 거부)하며 Git·Node·JSON·미지 도구 오류 시 `PreToolUse`는 `deny`, `Stop`은 `continue`. `lastUserInput` 대화 본문은 판정에 섞지 않고 도구 이름·인자만 검사. Claude `bash-cases.json`·`edit-cases.json` 전체 거부 코퍼스와의 동등성 테스트 및 `.agents/`·`harness/antigravity-hooks/` 해시 보호 |
 | 커밋·푸시·원격 CI·위임 통제 | 로컬 `lefthook`, `just check-full`, GitHub Actions CI, 메인 `guard-orchestration.mjs` | 변경분 검사·전체 승격·`test-diff`·서명 사후 탐지·독립 리뷰·비판과 대상 스냅숏 전후 비교 |
 
 **적용 조건과 미적용 세션 확인 절차**
@@ -757,7 +757,7 @@ Antigravity 세션에는 Codex·Claude 세션 훅이 직접 실행되지 않으�
 
 ### 7.5 리뷰어 격리
 
-Claude2 적대적 리뷰어와 Antigravity 비판자는 T3의 `isolation: worktree`가 준비한 메인 저장소 밖 사본에서만 일한다. Claude Agent의 `isolation` 설정으로 추가 사본을 만들지 않는다. 정의 파일은 역할 안내로 사용한다. T3가 준 권한과 훅 적용 여부는 별도로 확인한다.
+Claude 적대적 리뷰어와 Antigravity 비판자는 T3의 `isolation: worktree`가 준비한 메인 저장소 밖 사본에서만 일한다. Claude Agent의 `isolation` 설정으로 추가 사본을 만들지 않는다. 정의 파일은 역할 안내로 사용한다. T3가 준 권한과 훅 적용 여부는 별도로 확인한다.
 
 #### 리뷰어의 대상 변경 감지
 

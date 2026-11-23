@@ -27,7 +27,7 @@
 
 - `t3_thread_launch`: `modelSelection.provider === "antigravity"`, `instanceId`는 생략 또는 `"antigravity"`, `model === "gemini-4-neon"`, `options`는 정확히 `{ thought_level: "xhigh" }` 단일 키 일반 객체(생략·`{}`·`[]`·`null`·다른 키·혼합 키 거부). 시작 메시지에는 정확히 한 개의 `- 역할: implementation` 줄이 줄 시작에 있어야 한다.
 - `delegate_task` (Antigravity): `target.driverKind === "antigravity"`, `providerInstanceId`는 생략 또는 `"antigravity"`, `model === "gemini-4-neon"`, `isolation === "worktree"`. `role`은 반드시 `"implementation"`, `"research"`, `"review"` 중 하나여야 하며 역할 생략은 거부한다(`guard-orchestration.mjs`가 역할 생략을 `implementation`으로 기록해 리뷰 스레드 재개로 이어지는 우회를 막는다). `options`는 `implementation`일 때 `{ thought_level: "xhigh" }`, `research`·`review`(비판)일 때 `{ thought_level: "high" }`만 허용한다.
-- `delegate_task` (Claude 적대적 리뷰): `target.driverKind === "claudeAgent"`, `model === "claude-opus-5-5"`, `role === "review"`, `isolation === "worktree"`. `providerInstanceId`는 기기별 차이를 수용해 생략 또는 비어 있지 않은 Claude 인스턴스 문자열(`claudeAgent`, `claudeAgent_claude2` 등)을 허용하되 빈 문자열·공백·`null`·비문자열·타 드라이버 이름(`codex`, `antigravity`, `cursor` 등)은 거부한다. `options`는 생략 또는 `{ effort: "high" }` 단일 키 일반 객체만 허용한다(`{}`·`[]`·`null`·`effort=max`·`thought_level`·`reasoningEffort`·`ultracode`·`fastMode` 등 거부).
+- `delegate_task` (Claude 적대적 리뷰): `target.driverKind === "claudeAgent"`, `model === "claude-opus-5-5"`, `role === "review"`, `isolation === "worktree"`. `providerInstanceId`는 기기별 차이를 수용해 생략 또는 `claudeAgent` 접두 형식(`claudeAgent`, `claudeAgent_claude2` 등 `/^claudeAgent(?:$|[._-][A-Za-z0-9._-]+)$/u`)을 허용하고 빈 문자열·`null`·비문자열·`other`·타 드라이버 이름(`codex`, `antigravity`, `myCodex`, `gpt` 등)은 거부한다. `options`는 생략 또는 `{ effort: "high" }` 단일 키 일반 객체만 허용한다(`{}`·`[]`·`null`·`effort=max`·`thought_level`·`reasoningEffort`·`ultracode`·`fastMode` 등 거부).
 - 거부 대상: 모든 Codex 호출(`driverKind=codex`·`provider=codex`, `gpt-6.1-sol`·`gpt-6.1-terra`·`gpt-6.2-sol` 등), 잘못된 `providerInstanceId`(빈 문자열·`null`·타 드라이버 이름), 목록 밖 모델(`gemini-4-carbon`·`gemini-4-argon`·`gemini-4-hydrogen`·`gemini-3.8-flash`·`claude-sonnet-5-5` 등), 목록 밖 제공자·역할·옵션 키·권한 확대.
 - Codex 전용 절차(프로젝트·훅 신뢰, `CODEX_HOME`, Codex 종료 훅, `just codex-regression`, `harness/codex-hooks/` 어댑터)는 삭제하지 않고 문서에서 "Codex를 다시 쓸 때만 해당"으로 구획해 되돌릴 수 있게 보존한다.
 
@@ -53,7 +53,9 @@
   5. `PostToolUse`가 `just lint-file` 실패 피드백을 모델에 돌려줄 수 있는지.
   6. 사용자 홈 설정(`~/.gemini/...`)의 실제 병합 동작(홈 파일 열람 금지 규칙에 따라 읽지 않음).
 
-## 알려진 빈틈
+## H-60 시점 빈틈 (H-61에서 해소)
+
+아래 항목은 H-60 단독 시점의 미강제 목록이며, 같은 브랜치의 H-61(`.agents/hooks.json`, `harness/antigravity-hooks/`)에서 해소되었으므로 `just known-gaps`에는 H-61의 잔여 빈틈만 집계한다.
 
 - Antigravity 세션에는 Codex·Claude 세션 훅이 적용되지 않아 세션 중 보호 경로 쓰기 차단(`PreToolUse` 편집 가드·권한 `deny`·샌드박스 `denyWrite`)이 기계로 강제되지 않는다. Git 커밋 훅·원격 CI 서명 검사·독립 리뷰가 사후 탐지한다.
 - Antigravity 세션에서는 홈 파일·자격 증명·하네스 상태 폴더 읽기 차단(샌드박스 `denyRead`, Claude `Read` 거부)이 기계로 강제되지 않는다. 규칙 준수와 사후 리뷰에 의존한다.
@@ -89,8 +91,8 @@
 | 15 | Antigravity `instanceId` 생략 허용 제거 | 검출: `Antigravity boundaries reject non-worktree, elevated mode, wrong provider, wrong instance, and foreign option keys` |
 | 16 | Antigravity 모델 정확 일치 제거 | 검출: `delegate exact model gemini-4-carbon role implementation` |
 | 17 | Antigravity 모델 접두사 허용 | 검출: `delegate exact model gemini-4-neon-extra role implementation` |
-| 18 | Claude2 인스턴스 검사에 첫 번째 계정 `claudeAgent` 허용 | 검출: `Claude2 Opus review requires claudeAgent_claude2 and accepts only omission or effort high` |
-| 19 | Claude2 인스턴스 생략 허용 | 검출: `Claude2 Opus review requires claudeAgent_claude2 and accepts only omission or effort high` |
+| 18 | `CLAUDE_INSTANCE_PATTERN` 허용 목록을 임의 비빈 문자열로 완화 | 검출: `Claude Opus review matches driverKind claudeAgent and model claude-opus-5-5 across instance names and accepts only omission or effort high` |
+| 19 | Claude 리뷰 `providerInstanceId` 생략 허용 제거 | 검출: `Antigravity boundaries reject non-worktree, elevated mode, wrong provider, wrong instance, and foreign option keys` |
 | 20 | Claude2 모델 검사 제거 | 검출: `T3 Opus review requires the exact model role provider and worktree` |
 | 21 | Claude2 `review` 역할 제한 제거 | 검출: `Claude2 Opus review requires claudeAgent_claude2 and accepts only omission or effort high` |
 | 22 | `launchRole` 비문자열 방어 제거 | 검출: `Antigravity launch requires one exact implementation role line` |

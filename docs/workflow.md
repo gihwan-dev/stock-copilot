@@ -236,7 +236,7 @@ macOS 변경분 변이는 먼저 같은 기준의 목록을 만들고 한 조각
 - 메인 Claude 세션은 원본 저장소에서 연다. 구현 에이전트는 T3가 만든 등록된 작업 사본에서 Antigravity `gemini-4-neon`(`thought_level=xhigh`)으로 연다.
 - 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`)가 한다. Codex(gpt 계열)는 쓰지 않는다. 브리프에는 `- 기준 커밋: <SHA>, 브랜치 \`<이름>\`` 줄이 반드시 있고, 그 브랜치는 `master`가 아닌 등록된 작업 사본이어야 한다.
 - 수정 회차는 같은 T3 구현 스레드에 수정 브리프를 보내 이어 가거나 새 Antigravity 스레드로 시작한다. 앞 단계의 브리프 기준 검사 성공이 확인되지 않았으면 기준은 `master` 끝이다.
-- 작업 끝의 전체 검사는 원격 GitHub Actions CI에서 돈다(사용자 결정 2026-11-23). 구현자는 구현·수정 회차마다 `just base=<기준 SHA> check-fast`와 손 변형을 실행하고, Git 커밋 훅 실행 여부와 세션 훅 부재를 리뷰 기록의 측정 표에 적는다.
+- 작업 끝의 전체 검사는 원격 GitHub Actions CI에서 돈다(사용자 결정 2026-11-23). 구현자는 구현·수정 회차마다 `just base=<기준 SHA> check-fast`와 손 변형을 실행하고, Git 커밋 훅 실행 여부와 세션 훅 적용 여부(`적용(.agents/hooks.json)` 또는 `미적용(사유)`)를 리뷰 기록의 측정 표에 적는다.
 - 병합 충돌은 구현자가 자기 브랜치에서 `git merge --no-ff --no-edit master`로 푼다. `rebase`는 쓰지 않는다.
 - 기존 테스트를 바꿔야 하는 변경은 커밋 훅이 막는다. 사전 승인된 변경(2.9) 또는 사용자 서명 커밋으로만 들어간다.
 - Claude Code를 업그레이드한 뒤에는 `just claude-regression`을 돌린다. "미확정"이 있으면 다시 돌리고, 실패면 결과 폴더(`target/claude-regression/`)와 `claude --version`을 기록한 뒤 하네스 작업으로 넘긴다.

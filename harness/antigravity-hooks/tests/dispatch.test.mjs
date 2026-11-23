@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { dispatchEvent } from "../dispatch.mjs";
@@ -234,4 +234,89 @@ test("dispatch CLI fails closed on malformed JSON and enforces PreToolUse from .
   );
   assert.equal(cleanStopCli.status, 0, cleanStopCli.stderr);
   assert.equal(JSON.parse(cleanStopCli.stdout).decision, "allow");
+
+  const spoofedEvent = runCli(
+    JSON.stringify({
+      hookEventName: "PostToolUse",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-xhigh",
+      toolCall: {
+        id: "cli-spoof",
+        name: "write_file",
+        args: {
+          Path: join(f.worktree, ".agents/hooks.json"),
+          Content: "{}",
+        },
+      },
+    }),
+    wtAgents,
+    "PreToolUse",
+  );
+  assert.equal(spoofedEvent.status, 0, spoofedEvent.stderr);
+  assert.equal(JSON.parse(spoofedEvent.stdout).decision, "deny");
+
+  const benignSpoofedEvent = runCli(
+    JSON.stringify({
+      hookEventName: "PostToolUse",
+      cwd: f.worktree,
+      modelName: "gemini-4-neon-xhigh",
+      toolCall: {
+        id: "cli-spoof-benign",
+        name: "read_file",
+        args: {
+          Path: join(f.worktree, "docs/notes.md"),
+        },
+      },
+    }),
+    wtAgents,
+    "PreToolUse",
+  );
+  assert.equal(benignSpoofedEvent.status, 0, benignSpoofedEvent.stderr);
+  const benignSpoofedParsed = JSON.parse(benignSpoofedEvent.stdout);
+  assert.equal(benignSpoofedParsed.decision, "deny");
+  assert.match(benignSpoofedParsed.reason, /이벤트 불일치/u);
+});
+
+test("Stop fails closed with continue when real git status fails without injected facts", () => {
+  const session = sessionProject(wtAgents);
+  const worktreeGitDir = join(f.root, ".git/worktrees/worktree");
+  const indexPath = join(worktreeGitDir, "index");
+  chmodSync(indexPath, 0o000);
+  try {
+    const implStop = dispatchEvent(
+      {
+        hookEventName: "Stop",
+        cwd: f.worktree,
+        modelName: "gemini-4-neon-xhigh",
+        terminationReason: "NO_TOOL_CALL",
+        fullyIdle: true,
+        continuationActive: false,
+      },
+      session,
+      () => {},
+      { branch: "h-61", hooksReady: true },
+      "Stop",
+    );
+    assert.equal(implStop.decision, "continue");
+    assert.match(implStop.reason, /git status/u);
+
+    const revStop = dispatchEvent(
+      {
+        hookEventName: "Stop",
+        cwd: f.worktree,
+        modelName: "gemini-4-neon-high",
+        terminationReason: "NO_TOOL_CALL",
+        fullyIdle: true,
+        continuationActive: false,
+      },
+      session,
+      () => {},
+      { branch: "h-61" },
+      "Stop",
+    );
+    assert.equal(revStop.decision, "continue");
+    assert.match(revStop.reason, /git status/u);
+  } finally {
+    chmodSync(indexPath, 0o644);
+  }
 });
