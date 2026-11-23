@@ -149,7 +149,7 @@ mod tests {
         async fn ensure(
             &self,
             source: &InstrumentSource,
-            candidate: &InstrumentId,
+            candidate: domain::IssuedInstrumentId,
         ) -> Result<MappingAssignment, MappingStoreError> {
             let call = self.5.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             match (self.4, call) {
@@ -292,13 +292,53 @@ mod tests {
             IsinCode::try_new(isin).expect("isin"),
         )
     }
+    fn issued(value: &str) -> domain::IssuedInstrumentId {
+        const LABELS: &[&str] = &[
+            "already-retired",
+            "ambiguous-1",
+            "ambiguous-2",
+            "candidate",
+            "collision-91",
+            "etf-id",
+            "etf-probe",
+            "existing-37",
+            "existing-id",
+            "existing-us-81",
+            "failed-candidate",
+            "first-id",
+            "old-19",
+            "old-37",
+            "old-delisted",
+            "old-id",
+            "one",
+            "opaque-72",
+            "opaque-91",
+            "opaque-b",
+            "other",
+            "other-id",
+            "retry-id",
+            "stock-id",
+            "stock-probe",
+            "two",
+            "unknown-id",
+        ];
+        let index = LABELS
+            .iter()
+            .position(|label| *label == value)
+            .expect("known test label");
+        let mut generator = domain::IndependentInstrumentIdIssuer::new();
+        for _ in 0..index {
+            let _skip = generator.issue().expect("skip slot");
+        }
+        generator.issue().expect("issued")
+    }
     fn id(value: &str) -> InstrumentId {
-        InstrumentId::try_new(value).expect("id")
+        issued(value).as_instrument_id().clone()
     }
     fn issuer(ids: &[&str]) -> ScriptedInstrumentIdIssuer {
         let issuer = ScriptedInstrumentIdIssuer::default();
         for value in ids {
-            issuer.push(Ok(id(value)));
+            issuer.push(Ok(issued(value)));
         }
         issuer
     }
@@ -422,7 +462,7 @@ mod tests {
         let authority = Authority::default();
         run(authority
             .repository
-            .ensure(&source("005930", "KR7005930099"), &id("existing-37")))
+            .ensure(&source("005930", "KR7005930099"), issued("existing-37")))
         .expect("seed");
         let reader = reader(&server, crate::support::time())
             .with_instrument_master(authority, issuer(&["opaque-72"]));
@@ -470,12 +510,12 @@ mod tests {
         let retired = source("005930", "KR7005930003");
         run(authority
             .repository
-            .ensure(&retired, &id("already-retired")))
+            .ensure(&retired, issued("already-retired")))
         .expect("seed retired");
         run(authority.repository.retire(&retired)).expect("retire");
         run(authority
             .repository
-            .ensure(&source("000001", "KR7000000001"), &id("collision-91")))
+            .ensure(&source("000001", "KR7000000001"), issued("collision-91")))
         .expect("seed collision");
         let reader = reader(&server, crate::support::time())
             .with_instrument_master(authority, issuer(&["collision-91"]));
@@ -506,11 +546,11 @@ mod tests {
         let authority = Authority::default();
         run(authority
             .repository
-            .ensure(&source("005930", "KR7005930003"), &id("old-19")))
+            .ensure(&source("005930", "KR7005930003"), issued("old-19")))
         .expect("seed first");
         run(authority
             .repository
-            .ensure(&source("069500", "KR7069500007"), &id("old-37")))
+            .ensure(&source("069500", "KR7069500007"), issued("old-37")))
         .expect("seed second");
         let reader =
             reader(&server, crate::support::time()).with_instrument_master(authority, issuer(&[]));
@@ -668,7 +708,10 @@ mod tests {
             Symbol::try_new("aapl").expect("symbol"),
             IsinCode::try_new("US0378331005").expect("isin"),
         );
-        run(authority.repository.ensure(&source, &id("existing-us-81"))).expect("seed");
+        run(authority
+            .repository
+            .ensure(&source, issued("existing-us-81")))
+        .expect("seed");
         let reader =
             reader(&server, crate::support::time()).with_instrument_master(authority, issuer(&[]));
         let master = run(reader.instruments(KnownMarket::Us))
@@ -917,7 +960,7 @@ mod tests {
         let authority = Authority::default();
         let repository = Arc::clone(&authority.repository);
         let delisted = source("005930", "KR7005930003");
-        run(repository.ensure(&delisted, &id("old-delisted"))).expect("seed");
+        run(repository.ensure(&delisted, issued("old-delisted"))).expect("seed");
         let reader = reader(&server, crate::support::time())
             .with_instrument_master(authority, issuer(&["other"]));
         let master = run(reader.instruments(KnownMarket::Kr)).expect("master");
@@ -956,7 +999,7 @@ mod tests {
         };
         let repository = Arc::clone(&authority.repository);
         let delisted = source("005930", "KR7005930003");
-        run(repository.ensure(&delisted, &id("old-delisted"))).expect("seed");
+        run(repository.ensure(&delisted, issued("old-delisted"))).expect("seed");
         let reader =
             reader(&server, crate::support::time()).with_instrument_master(authority, issuer(&[]));
         let error = run(reader.instruments(KnownMarket::Kr)).expect_err("retire failure");
@@ -1315,7 +1358,7 @@ mod tests {
         };
         let repository = Arc::clone(&authority.repository);
         let original = source("005930", "KR7005930003");
-        run(repository.ensure(&original, &id("old-id"))).expect("seed");
+        run(repository.ensure(&original, issued("old-id"))).expect("seed");
         let reader = reader(&server, crate::support::time())
             .with_instrument_master(authority, issuer(&["other-id"]));
         let master = run(reader.instruments(KnownMarket::Kr)).expect("master");
@@ -1341,7 +1384,7 @@ mod tests {
         let repository = Arc::clone(&authority.repository);
         let existing = source("005930", "KR7005930099");
         let observed = source("005930", "KR7005930003");
-        run(repository.ensure(&existing, &id("existing-id"))).expect("seed");
+        run(repository.ensure(&existing, issued("existing-id"))).expect("seed");
         let before = run(repository.lookup(&existing)).expect("existing record");
         let reader = reader(&server, crate::support::time())
             .with_instrument_master(authority, issuer(&["other-id"]));

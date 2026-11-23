@@ -34,7 +34,7 @@
   ".claude/hooks/post-edit.mjs": "093096a9f8995c948b5055a824ba164bbc878a7edfb9032aa3a3cd6f2fae758b",
   ".claude/hooks/reviewer-stop.mjs": "3e0938a7a570e6962b964a0f85fe97df5733f49585a852296851355f23dc82b9",
   ".claude/hooks/subagent-start.mjs": "1a7e0742a7bdafcd8c576fe5e00fab4514a7a175b99d93c8f9706e3c6378eeea",
-  ".codex/config.toml": "21d54946aab750e4f0ba09ceac0cc8b253c223e2f2a4ab04a974de55d0e46e2c",
+  ".codex/config.toml": "cef506fe97e2fe81f5dbd0703a446354abed2e30310bb5ea966c0d921334abcc",
   ".codex/hooks.json": "1f46f13202edd74c43db270d4f14dd160ec96c8c5374a77f1c967813e991aa76",
   "crates/testkit-ports/src/lib.rs": "b7ce523d4ac9d64a0203e2b95893eb2ac1bbe7a3923bc676a8a9140b5d4b0320",
   "crates/testkit-ports/src/script.rs": "d0d8ac1f007d6b7ed2564cf78f6d2e9ed510e8f6dc908855546d35265b32aa08",
