@@ -3923,4 +3923,124 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn draft_and_portfolio_debug_formats_emit_exact_redacted_markers() {
+        let qty = Quantity::parse(&NumericInput::try_new("3").expect("입력")).expect("수량");
+        let whole = domain::HistoricalWholeQuantity::try_new(qty).expect("정수");
+        let sell = domain::HistoricalSellQuantity::try_new(qty).expect("매도 수량");
+        let amount =
+            domain::HistoricalOrderAmount::try_new(money("50", Currency::Usd)).expect("금액");
+        assert_eq!(format!("{whole:?}"), "HistoricalWholeQuantity([비공개])");
+        assert_eq!(format!("{sell:?}"), "HistoricalSellQuantity([비공개])");
+        assert_eq!(format!("{amount:?}"), "HistoricalOrderAmount([비공개])");
+        let (draft, estimate, master, lifetime, card) = draft_fixture();
+        assert_eq!(format!("{:?}", draft.intent()), "DraftOrderIntent { .. }");
+        let saved =
+            domain::DraftRestoreEvidence::capture(&draft, estimate, &master, lifetime, &card)
+                .expect("초안 근거");
+        assert_eq!(format!("{:?}", saved.original), "DraftOriginalFacts { .. }");
+        assert_eq!(format!("{saved:?}"), "DraftRestoreEvidence { .. }");
+        let portfolio = domain::HistoricalPortfolio::capture(
+            &signal_portfolio(&master, "1"),
+            std::slice::from_ref(&master),
+        )
+        .expect("과거 포트");
+        let facts = portfolio.facts();
+        assert_eq!(
+            format!("{:?}", facts.holdings[0]),
+            "HistoricalHolding { .. }"
+        );
+        assert_eq!(format!("{:?}", facts.krw), "HistoricalBuyingPower { .. }");
+        assert_eq!(format!("{facts:?}"), "HistoricalPortfolioFacts { .. }");
+        assert_eq!(format!("{portfolio:?}"), "HistoricalPortfolio { .. }");
+    }
+
+    #[test]
+    fn signal_restore_debug_formats_and_commission_validity_accessors_are_exact() {
+        let (buy_signal, buy_input, _) = signal_fixture("99");
+        let (sell_signal, _, _) = signal_fixture("1");
+        let buy_hist = domain::HistoricalSignal::from_signal(&buy_signal);
+        let sell_hist = domain::HistoricalSignal::from_signal(&sell_signal);
+        let buy_facts = buy_hist.display_facts();
+        let sell_facts = sell_hist.display_facts();
+        assert_eq!(
+            format!("{:?}", buy_input.assessment),
+            "HistoricalSignalContext { .. }"
+        );
+        let qty = domain::HistoricalSignalQuantity::new(
+            Quantity::parse(&NumericInput::try_new("2").expect("입력")).expect("수량"),
+        );
+        let limit = domain::HistoricalSignalLimit::new(money("100", Currency::Usd));
+        assert_eq!(format!("{qty:?}"), "HistoricalSignalQuantity([비공개])");
+        assert_eq!(format!("{limit:?}"), "HistoricalSignalLimit([비공개])");
+        assert_eq!(format!("{:?}", buy_facts.direction), "Buy([비공개])");
+        assert_eq!(format!("{:?}", sell_facts.direction), "Sell([비공개])");
+        assert_eq!(format!("{buy_hist:?}"), "Buy(HistoricalBuySignal(..))");
+        assert_eq!(format!("{sell_hist:?}"), "Sell(HistoricalSellSignal(..))");
+        let start = at(60, 32_400).offset_calendar_date();
+        let end = at(65, 32_400).offset_calendar_date();
+        let validity =
+            domain::CommissionValidity::try_new(Some(start), Some(end)).expect("적용 기간");
+        assert_eq!(validity.start(), Some(start));
+        assert_eq!(validity.end(), Some(end));
+    }
+
+    #[test]
+    fn check_stored_offsets_and_verify_commit_binding_reject_each_single_clause() {
+        let input = evidence(HorizonSelection::FewDays, RiskAppetite::Neutral);
+        let master = MasterInstrument::try_new(row()).expect("마스터");
+        let task = original(&input, &master);
+        let saved = input.capture(&task, &master).expect("근거");
+        let mut expected_price = saved.clone();
+        expected_price.expected.reference_price = price("105");
+        assert_eq!(
+            saved.verify_same_as(&expected_price),
+            Err(EstimateRestoreError::ChangedEvidence)
+        );
+        let mut expected_ref_offset = saved.clone();
+        expected_ref_offset.expected.reference_at =
+            with_offset(expected_ref_offset.expected.reference_at, -14_400);
+        assert_eq!(
+            saved.verify_same_as(&expected_ref_offset),
+            Err(EstimateRestoreError::ChangedEvidence)
+        );
+        let (signal_saved, record, occ) = binding_fixture();
+        let single_mutations: [fn(&mut domain::StoredSignalOccurrence); 7] = [
+            |entry| entry.id = domain::BuySignalOccurrenceId::try_new("occ-diff-id").expect("ID"),
+            |entry| {
+                entry.expected_id =
+                    domain::BuySignalOccurrenceId::try_new("occ-diff-exp").expect("ID");
+            },
+            |entry| entry.raised_at = shifted(61, 1),
+            |entry| entry.raised_at = with_offset(entry.raised_at, 0),
+            |entry| {
+                entry.interval =
+                    domain::TimeInterval::try_new(entry.interval.start(), shifted(67, 25_201))
+                        .expect("구간");
+            },
+            |entry| {
+                entry.interval = domain::TimeInterval::try_new(
+                    with_offset(entry.interval.start(), 0),
+                    entry.interval.end(),
+                )
+                .expect("시작 오프셋");
+            },
+            |entry| {
+                entry.interval = domain::TimeInterval::try_new(
+                    entry.interval.start(),
+                    with_offset(entry.interval.end(), 0),
+                )
+                .expect("종료 오프셋");
+            },
+        ];
+        for mutate in single_mutations {
+            let mut copy = occ.clone();
+            mutate(&mut copy);
+            assert_eq!(
+                copy.verify_commit_binding(&signal_saved, &record),
+                Err(domain::SignalOccurrenceRestoreError::ChangedOccurrence)
+            );
+        }
+    }
 }

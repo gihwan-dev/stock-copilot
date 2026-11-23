@@ -914,14 +914,9 @@ impl ProposalRepository for MemoryProposalRepository {
         {
             MemoryReply::Return(value) => value,
             MemoryReply::Memory => {
-                let restored = evidence
-                    .restore(master)
+                evidence
+                    .verify_matches_proposal(proposal, master)
                     .map_err(|_error| proposal_integrity_error())?;
-                if crate::DraftRecord::from_draft(&restored)
-                    != crate::DraftRecord::from_draft(proposal)
-                {
-                    return Err(proposal_integrity_error());
-                }
                 let mut state = self.state.write();
                 state
                     .records

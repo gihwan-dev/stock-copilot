@@ -188,6 +188,53 @@ impl application::ProposalRepository for MemorySignalEvaluationRepository {
     }
 }
 
+fn stored_master_for<'a>(
+    masters: &'a [domain::MasterInstrument],
+    instrument: &InstrumentId,
+) -> Result<&'a domain::MasterInstrument, SystemPortError> {
+    masters
+        .iter()
+        .find(|master| &master.row().instrument_id == instrument)
+        .ok_or_else(integrity)
+}
+
+fn verify_live_draft_masters(
+    masters: &[domain::MasterInstrument],
+    instrument: &InstrumentId,
+    caller: &domain::MasterInstrument,
+    side: domain::OrderSide,
+) -> Result<(), SystemPortError> {
+    let stored = stored_master_for(masters, instrument)?;
+    if caller.row().instrument_id != *instrument {
+        return Err(integrity());
+    }
+    let stored_quote = stored.quote_instrument().map_err(|_error| integrity())?;
+    let caller_quote = caller.quote_instrument().map_err(|_error| integrity())?;
+    if stored_quote != caller_quote {
+        return Err(integrity());
+    }
+    stored
+        .order_gate_facts()
+        .and_then(|facts| facts.instrument_for(side))
+        .map_err(|_error| integrity())?;
+    caller
+        .order_gate_facts()
+        .and_then(|facts| facts.instrument_for(side))
+        .map_err(|_error| integrity())?;
+    Ok(())
+}
+
+fn restore_draft_with_masters(
+    evidence: &domain::DraftRestoreEvidence,
+    masters: &[domain::MasterInstrument],
+    instrument: &InstrumentId,
+    caller: &domain::MasterInstrument,
+) -> Result<domain::Proposal<domain::Draft>, SystemPortError> {
+    let stored = stored_master_for(masters, instrument)?;
+    evidence.restore(stored).map_err(|_error| integrity())?;
+    evidence.restore(caller).map_err(|_error| integrity())
+}
+
 fn read_draft(
     state: &RepositoryState,
     proposal: &domain::ProposalId,
@@ -214,11 +261,8 @@ fn read_draft(
     {
         return Ok(None);
     }
-    stored
-        .evidence
-        .restore(master)
+    restore_draft_with_masters(&stored.evidence, &state.masters, &stored.instrument, master)
         .map(Some)
-        .map_err(|_error| integrity())
 }
 
 fn check_existing_for_store(
@@ -237,10 +281,8 @@ fn check_existing_for_store(
     if old.snapshot != *expected {
         return Ok(None);
     }
-    let old_proposal = old
-        .evidence
-        .restore(check.master)
-        .map_err(|_error| integrity())?;
+    let old_proposal =
+        restore_draft_with_masters(&old.evidence, &state.masters, instrument, check.master)?;
     match old_proposal.check_current(check.at, check.observation) {
         Ok(()) if old_proposal.intent().account_id() == check.account => Ok(Some(
             application::ConditionalDraftOutcome::Existing(old_proposal.id().clone()),
@@ -266,6 +308,7 @@ fn verify_draft_evidence(
     if candidate.evidence.estimate.evidence.master.instrument_id != *instrument {
         return Err(integrity());
     }
+    let stored = stored_master_for(&state.masters, instrument)?;
     let saved_estimate = state
         .instruments
         .iter()
@@ -277,6 +320,10 @@ fn verify_draft_evidence(
         .evidence
         .estimate
         .verify_same_as(saved_estimate)
+        .map_err(|_error| integrity())?;
+    candidate
+        .evidence
+        .verify_matches_proposal(candidate.proposal, stored)
         .map_err(|_error| integrity())?;
     candidate
         .evidence
@@ -391,6 +438,21 @@ fn current_draft_guarded(
             domain::ProposalExecutionError::ObservationInvalid,
         ));
     }
+    verify_live_draft_masters(
+        &state.masters,
+        instrument,
+        check.master,
+        current.signal.side(),
+    )?;
+    inspect_existing_draft(state, instrument, expected, check)
+}
+
+fn inspect_existing_draft(
+    state: &mut RepositoryState,
+    instrument: &InstrumentId,
+    expected: &SignalSnapshot,
+    check: application::DraftCheck<'_>,
+) -> Result<application::CurrentDraftOutcome, SystemPortError> {
     let Some(old) = state
         .drafts
         .iter_mut()
@@ -402,10 +464,8 @@ fn current_draft_guarded(
         old.state = DraftState::Superseded;
         return Ok(application::CurrentDraftOutcome::Absent);
     }
-    let old_proposal = old
-        .evidence
-        .restore(check.master)
-        .map_err(|_error| integrity())?;
+    let old_proposal =
+        restore_draft_with_masters(&old.evidence, &state.masters, instrument, check.master)?;
     match old_proposal.check_current(check.at, check.observation) {
         Ok(()) if old_proposal.intent().account_id() == check.account => Ok(
             application::CurrentDraftOutcome::Existing(old_proposal.id().clone()),

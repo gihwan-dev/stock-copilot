@@ -1515,4 +1515,106 @@ mod tests {
                 .is_some()
         );
     }
+
+    #[test]
+    fn stale_caller_master_fails_closed_when_stored_master_is_non_tradable() {
+        let master = fixtures::master();
+        let now = fixtures::day(60);
+        let integrity =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity);
+        let inst = &master.row().instrument_id;
+        let obs = master
+            .price_observation(fixtures::price("100"), fixtures::local(now))
+            .expect("시세");
+        let stale_check = application::DraftCheck {
+            account: &domain::AccountId::new(4321),
+            at: now,
+            observation: &obs,
+            master: &master,
+        };
+        let (cand, cand_ev) = build_candidate_draft(&master, now, "stale-cand", "102");
+        for blocked in non_tradable_variants(&master) {
+            let (repository, inputs) = seeded_draft_repo(&master, now);
+            let snap = run(repository.snapshot(inst)).expect("스냅숏");
+            repository.save_master(blocked.clone());
+            assert_eq!(
+                run(repository.current_draft(inst, &snap, stale_check)),
+                Err(integrity)
+            );
+            assert_store_integrity_error(
+                &repository,
+                inst,
+                &snap,
+                application::DraftStoreCandidate {
+                    proposal: &cand,
+                    evidence: &cand_ev,
+                },
+                stale_check,
+            );
+            let bus = EventBusBuilder::default().build();
+            let err = run(application::DraftProposal::new(
+                &repository,
+                &DraftInputSource(inputs),
+                &NoopScheduler,
+                &testkit_ports::SteppedClock::new(now),
+                &bus,
+            )
+            .execute(
+                inst,
+                &domain::AccountId::new(4321),
+                ProposalId::new(ClientOrderId::try_new("stale-create").expect("ID")),
+            ))
+            .expect_err("저장소 비거래 전환 거부");
+            assert_eq!(err, application::DraftProposalError::Storage(integrity));
+        }
+    }
+
+    #[test]
+    fn existing_draft_and_absent_read_fail_closed_for_stored_or_caller_blocked_master() {
+        let master = fixtures::master();
+        let other = fixtures::other_master();
+        let now = fixtures::day(60);
+        let integrity =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity);
+        let inst = &master.row().instrument_id;
+        let obs = master
+            .price_observation(fixtures::price("100"), fixtures::local(now))
+            .expect("시세");
+        let (absent_repo, _) = seeded_draft_repo(&master, now);
+        let absent_snap = run(absent_repo.snapshot(inst)).expect("스냅숏");
+        for blocked in non_tradable_variants(&master)
+            .into_iter()
+            .chain(std::iter::once(other))
+        {
+            let check = application::DraftCheck {
+                account: &domain::AccountId::new(4321),
+                at: now,
+                observation: &obs,
+                master: &blocked,
+            };
+            assert_eq!(
+                run(absent_repo.current_draft(inst, &absent_snap, check)),
+                Err(integrity)
+            );
+        }
+        let stale_check = application::DraftCheck {
+            account: &domain::AccountId::new(4321),
+            at: now,
+            observation: &obs,
+            master: &master,
+        };
+        let (active_repo, valid_id) = seed_active_draft(&master, now, "stale-existing");
+        let active_snap = run(active_repo.snapshot(inst)).expect("스냅숏");
+        for blocked in non_tradable_variants(&master) {
+            active_repo.save_master(blocked);
+            assert_eq!(
+                run(active_repo.draft(&valid_id, &master)).expect_err("낡은 조회 거부"),
+                integrity
+            );
+            assert_eq!(
+                run(active_repo.current_draft(inst, &active_snap, stale_check)),
+                Err(integrity)
+            );
+        }
+    }
 }
