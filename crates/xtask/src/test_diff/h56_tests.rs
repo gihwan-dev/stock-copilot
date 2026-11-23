@@ -598,6 +598,7 @@ fn h56_reports_untrusted_approval_without_remote_master() {
     .expect("verdict");
     assert_eq!(remaining, findings);
     let reasons = String::from_utf8(output).expect("utf8");
+    assert_eq!(reasons.lines().count(), S06_FINDINGS.len(), "{reasons}");
     for finding in S06_FINDINGS {
         assert!(
             reasons.lines().any(|line| {
@@ -606,4 +607,107 @@ fn h56_reports_untrusted_approval_without_remote_master() {
             "{finding}: {reasons}"
         );
     }
+}
+
+#[test]
+fn h56_reports_untrusted_approval_only_in_branch_history() {
+    let before = s06_files("before");
+    let after = s06_files("after");
+    let (root, _) = s06_merge_fixture(&before, &after);
+    let earlier = git(&root, &["rev-parse", "HEAD^1^1"]);
+    git(
+        &root,
+        &["update-ref", "refs/remotes/origin/master", &earlier],
+    );
+    let (findings, _) = compare_files(&before, &after);
+    let mut output = Vec::new();
+    let remaining = approval::apply_to(
+        &root,
+        (&before, &after),
+        findings.clone(),
+        crate::git_base::BaseUse::Commit,
+        &mut output,
+    )
+    .expect("verdict");
+    assert_eq!(remaining, findings);
+    let reasons = String::from_utf8(output).expect("utf8");
+    assert_eq!(reasons.lines().count(), S06_FINDINGS.len(), "{reasons}");
+    for finding in S06_FINDINGS {
+        assert!(
+            reasons.lines().any(|line| {
+                line.contains(finding) && line.contains("승인 이력 또는 기준 커밋 신뢰 실패")
+            }),
+            "{finding}: {reasons}"
+        );
+    }
+}
+
+#[test]
+fn h56_reports_untrusted_approval_only_in_current_files() {
+    let before = s06_files("before");
+    let mut after = s06_files("after");
+    after.insert(
+        String::from("harness/test-diff/approvals.toml"),
+        s06_approvals().into_bytes(),
+    );
+    let root = fresh_directory(&repository_root(), "h56-current-approval");
+    git(&root, &["init", "--quiet", "-b", "master"]);
+    write_files(&root, &before);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "base"]);
+    let authority = git(&root, &["rev-parse", "HEAD"]);
+    git(
+        &root,
+        &["update-ref", "refs/remotes/origin/master", &authority],
+    );
+    let (findings, _) = compare_files(&before, &after);
+    let mut output = Vec::new();
+    let remaining = approval::apply_to(
+        &root,
+        (&before, &after),
+        findings.clone(),
+        crate::git_base::BaseUse::Commit,
+        &mut output,
+    )
+    .expect("verdict");
+    assert_eq!(remaining, findings);
+    let reasons = String::from_utf8(output).expect("utf8");
+    assert_eq!(reasons.lines().count(), S06_FINDINGS.len(), "{reasons}");
+    for finding in S06_FINDINGS {
+        assert!(
+            reasons.lines().any(|line| {
+                line.contains(finding) && line.contains("승인 이력 또는 기준 커밋 신뢰 실패")
+            }),
+            "{finding}: {reasons}"
+        );
+    }
+}
+
+#[test]
+fn h56_keeps_trusted_reasons_when_untrusted_copies_match() {
+    let before = s06_files("before");
+    let mut after = s06_files("after");
+    after.insert(
+        String::from("harness/test-diff/approvals.toml"),
+        s06_approvals().into_bytes(),
+    );
+    let (root, _) = s06_merge_fixture(&before, &after);
+    let (findings, _) = compare_files(&before, &after);
+    let mut output = Vec::new();
+    let remaining = approval::apply_to(
+        &root,
+        (&before, &after),
+        findings.clone(),
+        crate::git_base::BaseUse::Commit,
+        &mut output,
+    )
+    .expect("verdict");
+    assert_eq!(remaining, findings);
+    let reasons = String::from_utf8(output).expect("utf8");
+    assert_eq!(reasons.lines().count(), S06_FINDINGS.len(), "{reasons}");
+    assert!(
+        reasons.lines().all(|line| line.contains("클로저")),
+        "{reasons}"
+    );
+    assert!(!reasons.contains("신뢰 실패"), "{reasons}");
 }

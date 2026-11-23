@@ -1353,6 +1353,40 @@ pub(super) fn apply_with_authority(
     Ok(findings)
 }
 
+fn untrusted_approval_rows(contents: &str, findings: &Findings) -> BTreeMap<String, String> {
+    let Ok(groups) = parse(contents) else {
+        return BTreeMap::new();
+    };
+    findings
+        .iter()
+        .map(|finding| finding.rule.to_string())
+        .filter(|name| groups.values().any(|expected| expected.contains_key(name)))
+        .map(|name| (name, String::from("승인 이력 또는 기준 커밋 신뢰 실패")))
+        .collect()
+}
+
+fn untrusted_observed_rows(
+    root: &Path,
+    head: &str,
+    current: &Files,
+    findings: &Findings,
+) -> BTreeMap<String, String> {
+    if findings.is_empty() {
+        return BTreeMap::new();
+    }
+    let committed = git(root, &["show", &format!("{head}:{APPROVAL_FILE}")]);
+    let working = current
+        .get(APPROVAL_FILE)
+        .and_then(|bytes| std::str::from_utf8(bytes).ok());
+    let mut result = BTreeMap::new();
+    for contents in [committed.as_deref(), working].into_iter().flatten() {
+        for (name, reason) in untrusted_approval_rows(contents, findings) {
+            result.entry(name).or_insert(reason);
+        }
+    }
+    result
+}
+
 pub(super) fn apply_to(
     root: &Path,
     files: (&Files, &Files),
@@ -1380,13 +1414,17 @@ pub(super) fn apply_to(
         }
         _ => findings,
     };
-    for (finding, reason) in diagnose(
+    let mut reasons = diagnose(
         root,
         authority.as_deref(),
         &head,
         (before, current),
         &remaining,
-    ) {
+    );
+    for (finding, reason) in untrusted_observed_rows(root, &head, current, &remaining) {
+        reasons.entry(finding).or_insert(reason);
+    }
+    for (finding, reason) in reasons {
         if writeln!(output, "승인 거부: {finding}: {reason}").is_err() {
             break;
         }
