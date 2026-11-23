@@ -80,7 +80,6 @@ pub enum EstimateReturnError {
     UnresolvedOutcome,
     AmbiguousExit,
     EntryTimingPending,
-    GapPricePending,
     CostMismatch,
     ExitUnavailable(crate::OutcomeUnavailable),
     InvalidBounds,
@@ -204,7 +203,7 @@ pub fn estimate_return(
     let (signal, kind, fill) = resolved_exit(task, outcome, evidence, facts)?;
     check_timing(entry, kind, &fill, evidence, facts)?;
     adjustment_covers_exit(facts, &fill)?;
-    let entry_price = adjusted_entry(entry, &signal, kind, &fill, facts)?;
+    let entry_price = adjusted_entry(entry, &signal, facts)?;
     let cash = estimate_cash_flows(entry, entry_price, &fill, evidence, cost)?;
     let net = cash.net()?;
     let excess = estimate_excess(entry, net, &fill, facts, benchmark);
@@ -250,6 +249,26 @@ fn validated_outcome<'a>(
         .ok_or(EstimateReturnError::UnresolvedOutcome)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MinuteBarMatch {
+    Matched,
+    Mismatched,
+}
+
+fn minute_bar_match(
+    moment: crate::VirtualExitMoment,
+    evidence_at: crate::Timestamp,
+) -> MinuteBarMatch {
+    let crate::VirtualExitMoment::At(at) = moment else {
+        return MinuteBarMatch::Mismatched;
+    };
+    if at == evidence_at || at.elapsed_until(evidence_at) == Ok(crate::TimeSpan::MINUTE) {
+        MinuteBarMatch::Matched
+    } else {
+        MinuteBarMatch::Mismatched
+    }
+}
+
 fn resolved_exit(
     task: &crate::EstimateTask,
     outcome: &crate::EstimateOutcome,
@@ -273,6 +292,11 @@ fn resolved_exit(
         facts.now,
     );
     let (kind, fill) = classify_exit(outcome.state(), exit)?;
+    if evidence.period() == Some(crate::CandlePeriod::Minute)
+        && minute_bar_match(fill.moment(), evidence.at()) != MinuteBarMatch::Matched
+    {
+        return Err(EstimateReturnError::OutcomeMismatch);
+    }
     Ok((signal, kind, fill))
 }
 
@@ -285,22 +309,25 @@ fn classify_exit(
             Ok((EstimateExitKind::Target, value.into_fill()))
         }
         (
-            crate::OutcomeState::Failure(crate::OutcomeFailure::Stop),
+            crate::OutcomeState::Failure(
+                crate::OutcomeFailure::Stop | crate::OutcomeFailure::Ambiguous,
+            ),
             crate::VirtualExit::Stop(value),
         ) => Ok((EstimateExitKind::Stop, value.into_fill())),
         (
             crate::OutcomeState::Failure(crate::OutcomeFailure::Expired),
             crate::VirtualExit::Maturity(value),
         ) => Ok((EstimateExitKind::Maturity, value.into_fill())),
-        (crate::OutcomeState::Failure(crate::OutcomeFailure::Ambiguous), _) => {
-            Err(EstimateReturnError::AmbiguousExit)
-        }
         (crate::OutcomeState::Ongoing | crate::OutcomeState::Unavailable(_), _) => {
             Err(EstimateReturnError::UnresolvedOutcome)
         }
         (_, crate::VirtualExit::Unavailable(reason)) => {
             Err(EstimateReturnError::ExitUnavailable(reason))
         }
+        (
+            crate::OutcomeState::Failure(crate::OutcomeFailure::Ambiguous),
+            crate::VirtualExit::Target(_),
+        ) => Err(EstimateReturnError::AmbiguousExit),
         _ => Err(EstimateReturnError::OutcomeMismatch),
     }
 }
@@ -327,9 +354,15 @@ fn check_timing(
         (_, crate::VirtualExitMoment::At(at), Some(crate::CandlePeriod::Daily))
             if entry.submitted_at() < at => {}
         (_, crate::VirtualExitMoment::At(at), Some(crate::CandlePeriod::Minute)) => {
-            match entry.submitted_at().elapsed_until(at) {
-                Ok(elapsed) if elapsed >= crate::TimeSpan::MINUTE => {}
-                Ok(_) | Err(_) => return Err(EstimateReturnError::EntryTimingPending),
+            if at < evidence.at() {
+                if entry.submitted_at() >= at {
+                    return Err(EstimateReturnError::EntryTimingPending);
+                }
+            } else {
+                match entry.submitted_at().elapsed_until(at) {
+                    Ok(elapsed) if elapsed >= crate::TimeSpan::MINUTE => {}
+                    Ok(_) | Err(_) => return Err(EstimateReturnError::EntryTimingPending),
+                }
             }
         }
         _ => return Err(EstimateReturnError::EntryTimingPending),
@@ -402,8 +435,6 @@ fn regular_time(
 fn adjusted_entry(
     entry: &EstimateEntryPrice,
     signal: &crate::VirtualExitSignal,
-    kind: EstimateExitKind,
-    fill: &crate::VirtualExitFill,
     facts: &EstimateReturnFacts<'_>,
 ) -> Result<Price, EstimateReturnError> {
     let task = signal.task();
@@ -427,16 +458,6 @@ fn adjusted_entry(
         || price.as_money().amount().as_decimal() <= stop.as_money().amount().as_decimal()
     {
         return Err(EstimateReturnError::EntryTimingPending);
-    }
-    let boundary = match kind {
-        EstimateExitKind::Target => Some(target),
-        EstimateExitKind::Stop => Some(stop),
-        EstimateExitKind::Maturity => None,
-    };
-    if let Some(expected) = boundary
-        && fill.price() != expected
-    {
-        return Err(EstimateReturnError::GapPricePending);
     }
     Ok(price)
 }
@@ -1069,9 +1090,32 @@ mod tests {
             crate::OutcomeState::Failure(crate::OutcomeFailure::Ambiguous)
         );
         let facts = crate::EstimateReturnFacts::new(&calendar, &adjustment, &[], &bars, now);
+        let result =
+            crate::estimate_return(&entry, &outcome, &facts, &cost("0", "0", "0"), &benchmark())
+                .expect("모호 실패 손절가 청산");
+        assert_eq!(result.exit_kind(), crate::EstimateExitKind::Stop);
         assert_eq!(
-            crate::estimate_return(&entry, &outcome, &facts, &cost("0", "0", "0"), &benchmark()),
-            Err(crate::EstimateReturnError::AmbiguousExit)
+            result.outcome().state(),
+            crate::OutcomeState::Failure(crate::OutcomeFailure::Ambiguous)
+        );
+        let expected_stop = task
+            .reference()
+            .price()
+            .as_money()
+            .checked_mul(&Ratio::new(
+                rust_decimal::Decimal::ONE
+                    .checked_sub(task.stop().as_decimal())
+                    .expect("손절 경계"),
+            ))
+            .expect("손절 가격");
+        assert_eq!(result.exit_price().as_money(), expected_stop);
+        assert_eq!(
+            result.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 1))
+        );
+        assert_eq!(
+            super::ratio_value(result.net()),
+            Ratio::new(-task.stop().as_decimal())
         );
     }
 
@@ -1340,53 +1384,65 @@ mod tests {
             crate::CandlePeriod::Daily,
             ["200", "210", "190", "200"],
         ));
+        let gap_return =
+            calculate_return(&before_open, &gap, &cost("0", "0", "0")).expect("개장 전 갭 청산");
+        assert_eq!(gap_return.exit_kind(), crate::EstimateExitKind::Target);
+        assert_eq!(gap_return.exit_price(), price("200", Currency::Krw));
         assert_eq!(
-            calculate_return(&before_open, &gap, &cost("0", "0", "0")),
-            Err(crate::EstimateReturnError::GapPricePending)
+            gap_return.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 0))
         );
+        assert_eq!(gap_return.net(), crate::RatioQuotient::Exact(ratio("1")));
     }
 
     #[test]
     fn d54_gap_prices_wait_for_the_estimate_policy() {
         use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        use crate::{CandlePeriod, EstimateExitKind, RatioQuotient, VirtualExitMoment};
+        let free = cost("0", "0", "0");
+        let cases = [
+            (
+                ["200", "210", "190", "200"],
+                EstimateExitKind::Target,
+                "200",
+                "1",
+            ),
+            (
+                ["50", "60", "40", "50"],
+                EstimateExitKind::Stop,
+                "50",
+                "-0.5",
+            ),
+        ];
         for entry_at in [instant(61, 1), instant(62, -1)] {
             let entry = return_fixture_at("100", entry_at);
-            for values in [["200", "210", "190", "200"], ["50", "60", "40", "50"]] {
+            for (values, kind, expected_price, expected_return) in cases {
                 let mut bars = entry_bars();
-                bars.push(candle(62, 0, crate::CandlePeriod::Daily, values));
-                assert_eq!(
-                    calculate_return(&entry, &bars, &cost("0", "0", "0")),
-                    Err(crate::EstimateReturnError::GapPricePending)
-                );
+                bars.push(candle(62, 0, CandlePeriod::Daily, values));
+                let result = calculate_return(&entry, &bars, &free).expect("일봉 갭 시가");
+                assert_eq!(result.exit_kind(), kind);
+                assert_eq!(result.exit_price(), price(expected_price, Currency::Krw));
+                assert_eq!(result.exit_at(), VirtualExitMoment::At(instant(62, 0)));
+                assert_eq!(result.net(), RatioQuotient::Exact(ratio(expected_return)));
             }
-        }
-        for values in [["200", "210", "190", "200"], ["50", "60", "40", "50"]] {
-            let entry = return_fixture_at("100", instant(61, 1));
-            let mut bars = entry_bars();
-            bars[2] = candle(61, 3, crate::CandlePeriod::Minute, values);
-            assert_eq!(
-                calculate_return(&entry, &bars, &cost("0", "0", "0")),
-                Err(crate::EstimateReturnError::GapPricePending)
-            );
         }
         let half_minute = crate::TimeSpan::try_new(crate::SpanSeconds::new(30), Nanosecond::new(0))
             .expect("30초");
         let submitted = instant(61, 1).checked_add(half_minute).expect("제출 시각");
-        let mut bars = entry_bars();
-        bars[2] = candle(
-            61,
-            3,
-            crate::CandlePeriod::Minute,
-            ["200", "210", "190", "200"],
-        );
-        assert_eq!(
-            calculate_return(
-                &return_fixture_at("100", submitted),
-                &bars,
-                &cost("0", "0", "0")
-            ),
-            Err(crate::EstimateReturnError::EntryTimingPending)
-        );
+        for (entry_at, (values, kind, expected_price, expected_return)) in [
+            (instant(61, 1), cases[0]),
+            (instant(61, 1), cases[1]),
+            (submitted, cases[0]),
+        ] {
+            let mut bars = entry_bars();
+            bars[2] = candle(61, 3, CandlePeriod::Minute, values);
+            let result = calculate_return(&return_fixture_at("100", entry_at), &bars, &free)
+                .expect("분봉 갭 시가");
+            assert_eq!(result.exit_kind(), kind);
+            assert_eq!(result.exit_price(), price(expected_price, Currency::Krw));
+            assert_eq!(result.exit_at(), VirtualExitMoment::At(instant(61, 2)));
+            assert_eq!(result.net(), RatioQuotient::Exact(ratio(expected_return)));
+        }
     }
 
     #[test]
@@ -1740,13 +1796,6 @@ mod tests {
         .expect("분할");
         let facts =
             crate::EstimateReturnFacts::new(&calendar, &adjustment, &actions, &[], instant(66, 4));
-        let fill = crate::virtual_exit::tests::virtual_exit_fixture_fill(
-            &source,
-            price("100", Currency::Krw),
-            instant(66, 4),
-        )
-        .into_fill()
-        .expect("청산");
         let error = Err(crate::EstimateReturnError::ExitUnavailable(
             crate::OutcomeUnavailable::Adjustment,
         ));
@@ -1754,8 +1803,6 @@ mod tests {
             super::adjusted_entry(
                 &return_fixture("100"),
                 &estimate_signal_with_bounds("110", "90"),
-                crate::EstimateExitKind::Maturity,
-                &fill,
                 &facts
             ),
             error
@@ -1764,8 +1811,6 @@ mod tests {
             super::adjusted_entry(
                 &return_fixture("99"),
                 &estimate_signal_with_bounds("110", "90"),
-                crate::EstimateExitKind::Maturity,
-                &fill,
                 &facts
             ),
             error
@@ -1774,8 +1819,6 @@ mod tests {
             super::adjusted_entry(
                 &return_fixture("99"),
                 &estimate_signal_with_bounds("120", "98"),
-                crate::EstimateExitKind::Maturity,
-                &fill,
                 &facts
             ),
             error
@@ -1787,13 +1830,6 @@ mod tests {
         use crate::signal_return_contract::tests::{calendars, instant, task};
         let source = task();
         let calendar = calendars();
-        let fill = crate::virtual_exit::tests::virtual_exit_fixture_fill(
-            &source,
-            price("100", Currency::Krw),
-            instant(66, 4),
-        )
-        .into_fill()
-        .expect("청산");
         let early = crate::OutcomeAdjustment::from_actions(
             &source,
             crate::AdjustmentBasis::new(instant(61, 4)),
@@ -1806,8 +1842,6 @@ mod tests {
             super::adjusted_entry(
                 &return_fixture_at("100", instant(62, 1)),
                 &estimate_signal_with_bounds("110", "90"),
-                crate::EstimateExitKind::Maturity,
-                &fill,
                 &early_facts
             ),
             Err(crate::EstimateReturnError::ExitUnavailable(
@@ -1819,8 +1853,6 @@ mod tests {
             super::adjusted_entry(
                 &return_fixture_at("100", instant(62, 1)),
                 &estimate_signal_with_bounds("110", "90"),
-                crate::EstimateExitKind::Maturity,
-                &fill,
                 &missing,
             ),
             Err(crate::EstimateReturnError::ExitUnavailable(
@@ -1890,10 +1922,15 @@ mod tests {
             crate::CandlePeriod::Daily,
             ["200", "210", "190", "200"],
         ));
+        let gap_return =
+            calculate_return(&return_fixture("100"), &gap, &cost("0", "0", "0")).expect("일봉 갭");
+        assert_eq!(gap_return.exit_kind(), crate::EstimateExitKind::Target);
+        assert_eq!(gap_return.exit_price(), price("200", Currency::Krw));
         assert_eq!(
-            calculate_return(&return_fixture("100"), &gap, &cost("0", "0", "0")),
-            Err(crate::EstimateReturnError::GapPricePending)
+            gap_return.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 0))
         );
+        assert_eq!(gap_return.net(), crate::RatioQuotient::Exact(ratio("1")));
     }
 
     fn split_factor(day: i64, new_shares: u64) -> crate::OutcomeCorporateAction {
@@ -2629,6 +2666,1301 @@ mod tests {
             ),
             Err(crate::EstimateReturnError::EntryTimingPending)
         );
+    }
+
+    #[derive(Clone, Copy)]
+    enum BoundSide {
+        Target,
+        Stop,
+    }
+
+    fn bound_money(task: &crate::EstimateTask, side: BoundSide) -> Money {
+        let multiplier = match side {
+            BoundSide::Target => rust_decimal::Decimal::ONE
+                .checked_add(task.target().as_decimal())
+                .expect("목표 배율"),
+            BoundSide::Stop => rust_decimal::Decimal::ONE
+                .checked_sub(task.stop().as_decimal())
+                .expect("손절 배율"),
+        };
+        task.reference()
+            .price()
+            .as_money()
+            .checked_mul(&Ratio::new(multiplier))
+            .expect("경계 금액")
+    }
+
+    fn cents_text(cents: u32) -> String {
+        format!(
+            "{}.{:02}",
+            cents.checked_div(100).expect("정수부"),
+            cents.checked_rem(100).expect("소수부")
+        )
+    }
+
+    fn d58_daily_and_minute_gap(values: [&str; 4]) -> (Vec<crate::Candle>, Vec<crate::Candle>) {
+        use crate::signal_return_contract::tests::{candle, entry_bars};
+        let mut daily = entry_bars();
+        daily.push(candle(62, 0, crate::CandlePeriod::Daily, values));
+        let mut minute = entry_bars();
+        minute[2] = candle(61, 3, crate::CandlePeriod::Minute, values);
+        (daily, minute)
+    }
+
+    #[test]
+    fn d58_gap_open_uses_opening_price_for_regular_and_intraday_minute_bars() {
+        use crate::signal_return_contract::tests::{cost, instant};
+        use crate::{BenchmarkAlignment, EstimateExitKind, RatioQuotient};
+        let entry = return_fixture("100");
+        let free = cost("0", "0", "0");
+        let charged = cost("0.001", "0", "0.002");
+        for (values, kind, expected_price, free_net, charged_net) in [
+            (
+                ["150", "160", "140", "150"],
+                EstimateExitKind::Target,
+                "150",
+                "0.5",
+                "0.494005994005994005994005994",
+            ),
+            (
+                ["60", "70", "50", "60"],
+                EstimateExitKind::Stop,
+                "60",
+                "-0.4",
+                "-0.4023976023976023976023976024",
+            ),
+        ] {
+            let (daily, minute) = d58_daily_and_minute_gap(values);
+            for (bars, expected_at) in [(&daily, instant(62, 0)), (&minute, instant(61, 2))] {
+                let zero_res = calculate_return(&entry, bars, &free).expect("갭 무비용");
+                assert_eq!(zero_res.exit_kind(), kind);
+                assert_eq!(zero_res.exit_price(), price(expected_price, Currency::Krw));
+                assert_eq!(
+                    zero_res.exit_at(),
+                    crate::VirtualExitMoment::At(expected_at)
+                );
+                assert_eq!(zero_res.net(), RatioQuotient::Exact(ratio(free_net)));
+                assert_eq!(
+                    zero_res.excess().expect("초과").alignment(),
+                    BenchmarkAlignment::DailyCloseApproximation
+                );
+                let fee_res = calculate_return(&entry, bars, &charged).expect("갭 비용");
+                assert_eq!(super::ratio_value(fee_res.net()), ratio(charged_net));
+            }
+        }
+    }
+
+    #[test]
+    fn d58_boundary_open_and_inside_open_apply_gap_rule_only_at_or_outside_bounds() {
+        use crate::EstimateExitKind;
+        use crate::signal_return_contract::tests::{cost, instant};
+        let entry = return_fixture("100");
+        let task = entry.submission().task_key().task();
+        let free = cost("0", "0", "0");
+        let target_money = bound_money(task, BoundSide::Target);
+        let stop_money = bound_money(task, BoundSide::Stop);
+        let target_text = target_money.amount().as_decimal().to_string();
+        let stop_text = stop_money.amount().as_decimal().to_string();
+        for (text, kind, expected_money) in [
+            (target_text.as_str(), EstimateExitKind::Target, target_money),
+            (stop_text.as_str(), EstimateExitKind::Stop, stop_money),
+        ] {
+            let (daily, minute) = d58_daily_and_minute_gap([text; 4]);
+            for (bars, expected_at) in [(&daily, instant(62, 0)), (&minute, instant(61, 2))] {
+                let res = calculate_return(&entry, bars, &free).expect("경계 시가");
+                assert_eq!(res.exit_kind(), kind);
+                assert_eq!(res.exit_price().as_money(), expected_money);
+                assert_eq!(res.exit_at(), crate::VirtualExitMoment::At(expected_at));
+            }
+        }
+        for (values, kind, expected_money) in [
+            (
+                ["101", "200", "99", "102"],
+                EstimateExitKind::Target,
+                target_money,
+            ),
+            (
+                ["99", "101", "50", "98"],
+                EstimateExitKind::Stop,
+                stop_money,
+            ),
+        ] {
+            let (daily, minute) = d58_daily_and_minute_gap(values);
+            let daily_res = calculate_return(&entry, &daily, &free).expect("일봉 안쪽 시가");
+            assert_eq!(daily_res.exit_kind(), kind);
+            assert_eq!(daily_res.exit_price().as_money(), expected_money);
+            assert_eq!(
+                daily_res.exit_at(),
+                crate::VirtualExitMoment::TradingDay(instant(62, 0).offset_calendar_date())
+            );
+            let minute_res = calculate_return(&entry, &minute, &free).expect("분봉 안쪽 시가");
+            assert_eq!(minute_res.exit_kind(), kind);
+            assert_eq!(minute_res.exit_price().as_money(), expected_money);
+            assert_eq!(
+                minute_res.exit_at(),
+                crate::VirtualExitMoment::At(instant(61, 3))
+            );
+        }
+    }
+
+    #[test]
+    fn d58_minute_gap_timing_distinguishes_bar_start_from_bar_end() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        use crate::{CandlePeriod, EstimateExitKind, EstimateReturnError};
+        let free = cost("0", "0", "0");
+        let half_minute = crate::TimeSpan::try_new(crate::SpanSeconds::new(30), Nanosecond::new(0))
+            .expect("30초");
+        let thirty_seconds_before = instant(61, 1).checked_add(half_minute).expect("30초 전");
+        let one_nano_before = instant(61, 2)
+            .checked_sub(crate::TimeSpan::NANOSECOND)
+            .expect("1나노초 전");
+        let at_open = instant(61, 2);
+        let inside_gap = instant(61, 2).checked_add(half_minute).expect("봉 안쪽");
+        for (values, kind, expected_price) in [
+            (
+                ["200", "210", "190", "200"],
+                EstimateExitKind::Target,
+                "200",
+            ),
+            (["50", "60", "40", "50"], EstimateExitKind::Stop, "50"),
+        ] {
+            let mut bars = entry_bars();
+            bars[2] = candle(61, 3, CandlePeriod::Minute, values);
+            for allowed_at in [thirty_seconds_before, one_nano_before] {
+                let result = calculate_return(&return_fixture_at("100", allowed_at), &bars, &free)
+                    .expect("갭 분봉 시작 이전 제출");
+                assert_eq!(result.exit_kind(), kind);
+                assert_eq!(result.exit_price(), price(expected_price, Currency::Krw));
+                assert_eq!(
+                    result.exit_at(),
+                    crate::VirtualExitMoment::At(instant(61, 2))
+                );
+            }
+            for rejected_at in [at_open, inside_gap] {
+                assert_eq!(
+                    calculate_return(&return_fixture_at("100", rejected_at), &bars, &free),
+                    Err(EstimateReturnError::EntryTimingPending)
+                );
+            }
+        }
+        let one_nano_after = instant(61, 2)
+            .checked_add(crate::TimeSpan::NANOSECOND)
+            .expect("1나노초 후");
+        for values in [["100", "200", "100", "100"], ["100", "200", "1", "100"]] {
+            let mut bars = entry_bars();
+            bars[2] = candle(61, 3, CandlePeriod::Minute, values);
+            let allowed = calculate_return(&return_fixture_at("100", at_open), &bars, &free)
+                .expect("장중 도달 분봉 시작 정각 제출");
+            assert_eq!(
+                allowed.exit_at(),
+                crate::VirtualExitMoment::At(instant(61, 3))
+            );
+            for rejected_at in [one_nano_after, inside_gap] {
+                assert_eq!(
+                    calculate_return(&return_fixture_at("100", rejected_at), &bars, &free),
+                    Err(EstimateReturnError::EntryTimingPending)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn d58_daily_both_with_first_minute_gap_allows_preopen_submission() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        use crate::{CandlePeriod, EstimateExitKind, EstimateReturnError};
+        let free = cost("0", "0", "0");
+        let half_minute = crate::TimeSpan::try_new(crate::SpanSeconds::new(30), Nanosecond::new(0))
+            .expect("30초");
+        let mut bars = entry_bars();
+        bars.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["200", "210", "1", "100"],
+        ));
+        bars.push(candle(
+            62,
+            1,
+            CandlePeriod::Minute,
+            ["200", "210", "190", "200"],
+        ));
+        let preopen_30s = instant(62, 0)
+            .checked_sub(half_minute)
+            .expect("개장 30초 전");
+        let result = calculate_return(&return_fixture_at("100", preopen_30s), &bars, &free)
+            .expect("일봉 양쪽 도달 첫 분봉 목표 갭");
+        assert_eq!(result.exit_kind(), EstimateExitKind::Target);
+        assert_eq!(result.exit_price(), price("200", Currency::Krw));
+        assert_eq!(
+            result.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 0))
+        );
+        assert_eq!(
+            calculate_return(&return_fixture_at("100", instant(62, 0)), &bars, &free),
+            Err(EstimateReturnError::EntryTimingPending)
+        );
+    }
+
+    #[test]
+    fn d58_same_bar_ambiguous_failure_exits_at_stop_with_costs() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        use crate::{
+            BenchmarkAlignment, CandlePeriod, EstimateExitKind, OutcomeFailure, OutcomeState,
+        };
+        let buy_charged = cost("0", "0.001", "0");
+        let entry_101 = return_fixture("101");
+        let expected_stop = bound_money(entry_101.submission().task_key().task(), BoundSide::Stop);
+        let mut day62 = entry_bars();
+        day62.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["100", "200", "1", "100"],
+        ));
+        day62.push(candle(
+            62,
+            1,
+            CandlePeriod::Minute,
+            ["100", "200", "1", "100"],
+        ));
+        let charged_res =
+            calculate_return(&entry_101, &day62, &buy_charged).expect("매수 비용 모호 실패");
+        assert_eq!(
+            charged_res.outcome().state(),
+            OutcomeState::Failure(OutcomeFailure::Ambiguous)
+        );
+        assert_eq!(charged_res.exit_kind(), EstimateExitKind::Stop);
+        assert_eq!(charged_res.exit_price().as_money(), expected_stop);
+        assert_eq!(
+            charged_res.exit_at(),
+            crate::VirtualExitMoment::At(instant(62, 1))
+        );
+        let paid = amount("101", Currency::Krw)
+            .checked_add(
+                &amount("101", Currency::Krw)
+                    .checked_mul(&buy_charged.buy_rate())
+                    .expect("매수 비용"),
+            )
+            .expect("지출");
+        let expected_net = expected_stop
+            .checked_sub(&paid)
+            .expect("손익")
+            .checked_ratio(&paid)
+            .expect("순수익률");
+        assert_eq!(charged_res.net(), expected_net);
+        assert_eq!(
+            charged_res.excess().expect("초과").alignment(),
+            BenchmarkAlignment::DailyCloseApproximation
+        );
+    }
+
+    #[test]
+    fn d58_entry_day_ambiguous_failure_exits_at_stop_and_same_minute_stays_pending() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        use crate::{CandlePeriod, EstimateExitKind, EstimateReturnError};
+        let free = cost("0", "0", "0");
+        let entry = return_fixture("100");
+        let expected_stop = bound_money(entry.submission().task_key().task(), BoundSide::Stop);
+        let mut entry_day = entry_bars();
+        entry_day[1] = candle(61, 2, CandlePeriod::Minute, ["100", "200", "1", "100"]);
+        let day_res = calculate_return(&entry, &entry_day, &free).expect("기준일 모호 실패");
+        assert_eq!(day_res.exit_kind(), EstimateExitKind::Stop);
+        assert_eq!(day_res.exit_price().as_money(), expected_stop);
+        assert_eq!(
+            day_res.exit_at(),
+            crate::VirtualExitMoment::At(instant(61, 2))
+        );
+        let half_minute = crate::TimeSpan::try_new(crate::SpanSeconds::new(30), Nanosecond::new(0))
+            .expect("30초");
+        let same_minute = instant(61, 1).checked_add(half_minute).expect("같은 분봉");
+        assert_eq!(
+            calculate_return(&return_fixture_at("100", same_minute), &entry_day, &free),
+            Err(EstimateReturnError::EntryTimingPending)
+        );
+    }
+
+    #[test]
+    fn d58_ambiguous_failure_with_stop_gap_uses_open_and_target_gap_remains_pending() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, instant};
+        use crate::{
+            CandlePeriod, EstimateExitKind, EstimateReturnError, OutcomeFailure, OutcomeState,
+            RatioQuotient,
+        };
+        let free = cost("0", "0", "0");
+        let entry = return_fixture("100");
+        let mut minute_stop_gap = entry_bars();
+        minute_stop_gap[2] = candle(61, 3, CandlePeriod::Minute, ["50", "200", "40", "100"]);
+        let mut daily_stop_gap = entry_bars();
+        daily_stop_gap.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["50", "200", "40", "100"],
+        ));
+        daily_stop_gap.push(candle(
+            62,
+            1,
+            CandlePeriod::Minute,
+            ["50", "200", "40", "100"],
+        ));
+        for (bars, expected_at) in [
+            (&minute_stop_gap, instant(61, 2)),
+            (&daily_stop_gap, instant(62, 0)),
+        ] {
+            let res = calculate_return(&entry, bars, &free).expect("손절 갭 동반 모호 실패");
+            assert_eq!(
+                res.outcome().state(),
+                OutcomeState::Failure(OutcomeFailure::Ambiguous)
+            );
+            assert_eq!(res.exit_kind(), EstimateExitKind::Stop);
+            assert_eq!(res.exit_price(), price("50", Currency::Krw));
+            assert_eq!(res.exit_at(), crate::VirtualExitMoment::At(expected_at));
+            assert_eq!(res.net(), RatioQuotient::Exact(ratio("-0.5")));
+        }
+        let mut minute_target_gap = entry_bars();
+        minute_target_gap[2] = candle(61, 3, CandlePeriod::Minute, ["200", "210", "1", "100"]);
+        let mut daily_target_gap = entry_bars();
+        daily_target_gap.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["200", "210", "1", "100"],
+        ));
+        daily_target_gap.push(candle(
+            62,
+            1,
+            CandlePeriod::Minute,
+            ["200", "210", "1", "100"],
+        ));
+        for bars in [&minute_target_gap, &daily_target_gap] {
+            assert_eq!(
+                calculate_return(&entry, bars, &free),
+                Err(EstimateReturnError::AmbiguousExit)
+            );
+        }
+    }
+
+    fn hours_session(day: i64) -> crate::MarketSession {
+        use crate::signal_return_contract::tests::instant;
+        crate::MarketSession::try_new(
+            instant(day, 0).offset_calendar_date(),
+            crate::SessionInformation::Kr {
+                pre_market: None,
+                regular_market: Some(
+                    crate::SessionData::try_new(
+                        TimeInterval::try_new(instant(day, 0), instant(day, 16)).expect("16분 장"),
+                        None,
+                    )
+                    .expect("정규장"),
+                ),
+                after_market: None,
+            },
+        )
+        .expect("거래일")
+    }
+
+    fn hours_minute_candle(
+        instrument: &crate::InstrumentId,
+        minute: i64,
+        basis: crate::AdjustmentBasis,
+        now: Timestamp,
+        values: [&str; 4],
+    ) -> crate::Candle {
+        let [open, high, low, close] = values;
+        crate::Candle::try_new(
+            instrument.clone(),
+            crate::CandleTime::try_new(
+                crate::signal_return_contract::tests::instant(61, minute),
+                crate::CandlePeriod::Minute,
+            )
+            .expect("시각"),
+            crate::PriceAdjustment::Adjusted(basis),
+            crate::Ohlcv::try_new(
+                price(open, Currency::Krw),
+                price(high, Currency::Krw),
+                price(low, Currency::Krw),
+                price(close, Currency::Krw),
+                crate::Quantity::parse(&NumericInput::try_new("1").expect("입력")).expect("수량"),
+            )
+            .expect("OHLC"),
+            crate::CandleObservation::new(now, crate::CandleStatus::Finalized),
+        )
+        .expect("봉")
+    }
+
+    fn hours_record_for_submission(
+        eligible: crate::CostEligibleTask,
+        submission: crate::SignalSubmission,
+    ) -> crate::EstimateSubmissionRecord<crate::InstrumentId, crate::HorizonSelection> {
+        let id = crate::CalibrationEstimateId::try_new("hours-id").expect("추정 ID");
+        let run = crate::InstrumentId::try_new("run-d58").expect("실행 ID");
+        let ledger = crate::EstimateAssignments::default()
+            .issue(id.clone(), run, eligible)
+            .expect("과제 발급");
+        let issued = ledger.lookup(&id).expect("발급 과제");
+        let narrative = crate::EstimateNarrative {
+            rationale: crate::UntrustedText::try_new("근거").expect("근거"),
+            counterargument: crate::UntrustedText::try_new("반론").expect("반론"),
+        };
+        let metadata = crate::EstimateMetadata {
+            effort: crate::HorizonSelection::Hours,
+            cli_version: crate::ModelIdentityPart::try_new("cli").expect("CLI"),
+            prompt: crate::EstimatePrompt {
+                id: crate::ScorecardPromptId::try_new("prompt").expect("프롬프트"),
+                version: crate::ModelIdentityPart::try_new("version").expect("버전"),
+                hash: crate::PromptHash::try_new(&"ab".repeat(32)).expect("해시"),
+            },
+            evidence_bundle: crate::EvidenceBundleId::try_new("bundle").expect("근거 ID"),
+        };
+        crate::EstimateSubmissionRecord::create(issued, submission, narrative, metadata)
+            .expect("시간 단위 제출 기록")
+    }
+
+    fn hours_entry_fixture(
+        now: Timestamp,
+    ) -> (
+        crate::EstimateTask,
+        crate::EstimateEntryPrice,
+        crate::SignalReturnCost,
+    ) {
+        use crate::signal_return_contract::tests::{instant, key, task};
+        use crate::{
+            CalibrationKey, EstimateContext, EstimateTask, Horizon, HorizonSelection,
+            HoursPermission, HoursPermissionState, RiskAppetite,
+        };
+        let base = task();
+        let hours_task = EstimateTask::create(
+            EstimateContext::new(base.reference().clone(), base.created_at()),
+            base.volatility().clone(),
+            Horizon::new(HorizonSelection::Hours),
+            HoursPermission::restore_from_saved_state(HoursPermissionState::Enabled),
+            RiskAppetite::Neutral,
+        )
+        .expect("시간 단위 과제");
+        let eligible = eligible_for_task(&hours_task, now);
+        let hours_key =
+            CalibrationKey::new(key().model().clone(), Horizon::new(HorizonSelection::Hours));
+        let submission = crate::SignalSubmission::create(
+            crate::SignalTaskKey::from_task(&eligible),
+            hours_key,
+            crate::AiProbability::parse(&crate::AiProbabilityInput::try_new("60").expect("입력"))
+                .expect("확률"),
+            None,
+            instant(61, 1),
+        )
+        .expect("제출");
+        let entry = crate::EstimateEntryPrice::try_new(
+            &hours_record_for_submission(eligible, submission),
+            observed(
+                hours_task.volatility().instrument().clone(),
+                hours_task.reference().instrument().clone(),
+                price("100", Currency::Krw),
+                instant(61, 1),
+            ),
+        )
+        .expect("시간 단위 진입");
+        let fee = zero_cost_for(&hours_task, crate::Market::Kr, now);
+        (hours_task, entry, fee)
+    }
+
+    #[test]
+    fn d58_hours_horizon_applies_gap_open_and_ambiguous_stop_rules() {
+        use crate::signal_return_contract::tests::{benchmark, instant};
+        use crate::{
+            AdjustmentBasis, EstimateExitKind, EstimateOutcome, EstimateReturnFacts,
+            MarketCalendar, OutcomeAdjustment, VirtualExitMoment,
+        };
+        let now = instant(61, 4);
+        let (hours_task, entry, fee) = hours_entry_fixture(now);
+        let calendars =
+            [
+                MarketCalendar::try_new(hours_session(60), hours_session(61), hours_session(62))
+                    .expect("시간 단위 달력"),
+            ];
+        let basis = AdjustmentBasis::new(now);
+        let adj = OutcomeAdjustment::from_actions(&hours_task, basis, &[]).expect("조정");
+        let stop_money = bound_money(&hours_task, BoundSide::Stop);
+        let inst = hours_task.volatility().instrument();
+        for (third, kind, expected_money, moment) in [
+            (
+                ["200", "210", "190", "200"],
+                EstimateExitKind::Target,
+                amount("200", Currency::Krw),
+                VirtualExitMoment::At(instant(61, 2)),
+            ),
+            (
+                ["50", "60", "40", "50"],
+                EstimateExitKind::Stop,
+                amount("50", Currency::Krw),
+                VirtualExitMoment::At(instant(61, 2)),
+            ),
+            (
+                ["100", "200", "1", "100"],
+                EstimateExitKind::Stop,
+                stop_money,
+                VirtualExitMoment::At(instant(61, 3)),
+            ),
+        ] {
+            let bars = [
+                hours_minute_candle(inst, 1, basis, now, ["100"; 4]),
+                hours_minute_candle(inst, 2, basis, now, ["100"; 4]),
+                hours_minute_candle(inst, 3, basis, now, third),
+                hours_minute_candle(inst, 4, basis, now, ["100"; 4]),
+            ];
+            let outcome = EstimateOutcome::evaluate_with_complete_data(
+                &hours_task,
+                &calendars,
+                &adj,
+                &bars,
+                now,
+            );
+            let facts = EstimateReturnFacts::new(&calendars, &adj, &[], &bars, now);
+            let res = crate::estimate_return(&entry, &outcome, &facts, &fee, &benchmark())
+                .expect("시간 단위 수익률");
+            assert_eq!(res.exit_kind(), kind);
+            assert_eq!(res.exit_price().as_money(), expected_money);
+            assert_eq!(res.exit_at(), moment);
+        }
+    }
+
+    #[test]
+    fn d58_inconsistent_ambiguous_bars_are_rejected_as_outcome_mismatch() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars};
+        use crate::{CandlePeriod, EstimateReturnError};
+        let entry = return_fixture("100");
+        let free = cost("0", "0", "0");
+        let mut later_stop = entry_bars();
+        later_stop.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["100", "200", "1", "100"],
+        ));
+        later_stop
+            .extend((1_i64..=4).map(|minute| candle(62, minute, CandlePeriod::Minute, ["100"; 4])));
+        later_stop.push(candle(
+            63,
+            0,
+            CandlePeriod::Daily,
+            ["100", "100", "1", "100"],
+        ));
+        assert_eq!(
+            calculate_return(&entry, &later_stop, &free),
+            Err(EstimateReturnError::OutcomeMismatch)
+        );
+        let mut maturity_mismatch = entry_bars();
+        maturity_mismatch.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["100", "200", "1", "100"],
+        ));
+        maturity_mismatch
+            .extend((1_i64..=4).map(|minute| candle(62, minute, CandlePeriod::Minute, ["100"; 4])));
+        maturity_mismatch
+            .extend((63_i64..=66).map(|day| candle(day, 0, CandlePeriod::Daily, ["100"; 4])));
+        assert_eq!(
+            calculate_return(&entry, &maturity_mismatch, &free),
+            Err(EstimateReturnError::OutcomeMismatch)
+        );
+        let mut wrong_minute_open = entry_bars();
+        wrong_minute_open.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["50", "200", "40", "100"],
+        ));
+        wrong_minute_open.push(candle(62, 1, CandlePeriod::Minute, ["100"; 4]));
+        wrong_minute_open.push(candle(
+            62,
+            2,
+            CandlePeriod::Minute,
+            ["100", "200", "40", "100"],
+        ));
+        assert_eq!(
+            calculate_return(&entry, &wrong_minute_open, &free),
+            Err(EstimateReturnError::OutcomeMismatch)
+        );
+    }
+
+    #[test]
+    fn d58_partial_observation_ambiguous_bar_remains_unavailable() {
+        use crate::signal_return_contract::tests::{
+            benchmark, calendars, candle, entry_bars, instant,
+        };
+        use crate::{
+            AdjustmentBasis, CandlePeriod, EstimateOutcome, EstimateReturnError,
+            EstimateReturnFacts, OutcomeAdjustment, OutcomeFailure, OutcomeState,
+            OutcomeUnavailable,
+        };
+        let calendar = calendars();
+        let now = instant(66, 4);
+        let half_minute = crate::TimeSpan::try_new(crate::SpanSeconds::new(30), Nanosecond::new(0))
+            .expect("30초");
+        let partial_at = instant(61, 0).checked_add(half_minute).expect("부분 분");
+        let partial_task = task_with_reference_at("100", partial_at);
+        let partial_entry = return_fixture_for_task(&partial_task, "100", partial_at);
+        let partial_adj =
+            OutcomeAdjustment::from_actions(&partial_task, AdjustmentBasis::new(now), &[])
+                .expect("부분 기준");
+        let mut partial_bars = entry_bars();
+        partial_bars[0] = candle(61, 1, CandlePeriod::Minute, ["100", "200", "1", "100"]);
+        let partial_outcome = EstimateOutcome::evaluate_with_complete_data(
+            &partial_task,
+            &calendar,
+            &partial_adj,
+            &partial_bars,
+            now,
+        );
+        assert_eq!(
+            partial_outcome.state(),
+            OutcomeState::Failure(OutcomeFailure::Ambiguous)
+        );
+        let partial_facts =
+            EstimateReturnFacts::new(&calendar, &partial_adj, &[], &partial_bars, now);
+        assert_eq!(
+            crate::estimate_return(
+                &partial_entry,
+                &partial_outcome,
+                &partial_facts,
+                &zero_cost_for(&partial_task, crate::Market::Kr, now),
+                &benchmark(),
+            ),
+            Err(EstimateReturnError::ExitUnavailable(
+                OutcomeUnavailable::MissingCandles
+            ))
+        );
+    }
+
+    #[test]
+    fn d58_zero_volume_ambiguous_bar_remains_unavailable() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars};
+        use crate::{CandlePeriod, EstimateReturnError, OutcomeUnavailable};
+        let mut zero_vol = entry_bars();
+        zero_vol.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["100", "200", "1", "100"],
+        ));
+        let bar = candle(62, 1, CandlePeriod::Minute, ["100", "200", "1", "100"]);
+        let values = bar.values();
+        let zero = crate::Quantity::parse(&NumericInput::try_new("0").expect("입력")).expect("0");
+        zero_vol.push(
+            crate::Candle::try_new(
+                bar.instrument().clone(),
+                bar.time(),
+                bar.adjustment(),
+                crate::Ohlcv::try_new(
+                    values.open(),
+                    values.high(),
+                    values.low(),
+                    values.close(),
+                    zero,
+                )
+                .expect("OHLC"),
+                crate::CandleObservation::new(bar.collected_at(), bar.status()),
+            )
+            .expect("무거래 모호 봉"),
+        );
+        assert_eq!(
+            calculate_return(&return_fixture("100"), &zero_vol, &cost("0", "0", "0")),
+            Err(EstimateReturnError::ExitUnavailable(
+                OutcomeUnavailable::MissingCandles
+            ))
+        );
+    }
+
+    fn split_base_bars() -> Vec<crate::Candle> {
+        use crate::signal_return_contract::tests::candle;
+        let mut bars = (1_i64..=4)
+            .map(|minute| candle(61, minute, crate::CandlePeriod::Minute, ["50"; 4]))
+            .collect::<Vec<_>>();
+        bars.push(candle(62, 0, crate::CandlePeriod::Daily, ["50"; 4]));
+        bars.push(candle(63, 0, crate::CandlePeriod::Daily, ["50"; 4]));
+        bars
+    }
+
+    fn split_gap_and_ambiguous_bars() -> (Vec<crate::Candle>, Vec<crate::Candle>) {
+        use crate::signal_return_contract::tests::candle;
+        let mut split_gap = split_base_bars();
+        split_gap.push(candle(
+            64,
+            0,
+            crate::CandlePeriod::Daily,
+            ["100", "105", "95", "100"],
+        ));
+        let mut split_amb = split_base_bars();
+        split_amb.push(candle(
+            64,
+            0,
+            crate::CandlePeriod::Daily,
+            ["50", "100", "1", "50"],
+        ));
+        split_amb.push(candle(
+            64,
+            1,
+            crate::CandlePeriod::Minute,
+            ["50", "100", "1", "50"],
+        ));
+        (split_gap, split_amb)
+    }
+
+    #[test]
+    fn d58_two_for_one_split_preserves_gap_and_ambiguous_returns() {
+        use crate::signal_return_contract::tests::{benchmark, calendars, cost, instant};
+        use crate::{
+            AdjustmentBasis, EstimateOutcome, EstimateReturnFacts, OutcomeAdjustment, RatioQuotient,
+        };
+        let task = crate::signal_return_contract::tests::task();
+        let calendar = calendars();
+        let free = cost("0", "0", "0");
+        let now = instant(66, 4);
+        let split_two = [split_action(63)];
+        let adj_two = OutcomeAdjustment::from_actions(&task, AdjustmentBasis::new(now), &split_two)
+            .expect("1:2 분할");
+        let (split_gap, split_amb) = split_gap_and_ambiguous_bars();
+        let gap_out = EstimateOutcome::evaluate_with_complete_data(
+            &task, &calendar, &adj_two, &split_gap, now,
+        );
+        let gap_facts = EstimateReturnFacts::new(&calendar, &adj_two, &split_two, &split_gap, now);
+        for split_entry in [
+            return_fixture_at("100", instant(61, 1)),
+            return_fixture_at("50", instant(63, 1)),
+        ] {
+            let res =
+                crate::estimate_return(&split_entry, &gap_out, &gap_facts, &free, &benchmark())
+                    .expect("분할 후 갭 청산");
+            assert_eq!(res.exit_price(), price("100", Currency::Krw));
+            assert_eq!(res.net(), RatioQuotient::Exact(ratio("1")));
+        }
+        let amb_out = EstimateOutcome::evaluate_with_complete_data(
+            &task, &calendar, &adj_two, &split_amb, now,
+        );
+        let amb_facts = EstimateReturnFacts::new(&calendar, &adj_two, &split_two, &split_amb, now);
+        let pre = crate::estimate_return(
+            &return_fixture_at("100", instant(61, 1)),
+            &amb_out,
+            &amb_facts,
+            &free,
+            &benchmark(),
+        )
+        .expect("분할 전 모호 실패");
+        let post = crate::estimate_return(
+            &return_fixture_at("50", instant(63, 1)),
+            &amb_out,
+            &amb_facts,
+            &free,
+            &benchmark(),
+        )
+        .expect("분할 후 모호 실패");
+        assert_eq!(pre.net(), post.net());
+    }
+
+    #[test]
+    fn d58_unrepresentable_split_stays_pending_for_gap_and_ambiguous() {
+        use crate::signal_return_contract::tests::{benchmark, calendars, cost, instant};
+        use crate::{
+            AdjustmentBasis, EstimateOutcome, EstimateReturnError, EstimateReturnFacts,
+            OutcomeAdjustment, OutcomeUnavailable,
+        };
+        let entry = return_fixture("100");
+        let task = entry.submission().task_key().task();
+        let calendar = calendars();
+        let free = cost("0", "0", "0");
+        let now = instant(66, 4);
+        let (split_gap, split_amb) = split_gap_and_ambiguous_bars();
+        let split_three = [split_factor(63, 3)];
+        let adj_three =
+            OutcomeAdjustment::from_actions(task, AdjustmentBasis::new(now), &split_three)
+                .expect("1:3 분할");
+        for bars in [&split_gap, &split_amb] {
+            let out = EstimateOutcome::evaluate_with_complete_data(
+                task, &calendar, &adj_three, bars, now,
+            );
+            let facts = EstimateReturnFacts::new(&calendar, &adj_three, &split_three, bars, now);
+            assert_eq!(
+                crate::estimate_return(&entry, &out, &facts, &free, &benchmark()),
+                Err(EstimateReturnError::ExitUnavailable(
+                    OutcomeUnavailable::Adjustment
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn d58_missing_benchmark_keeps_net_for_gap_and_ambiguous() {
+        use crate::signal_return_contract::tests::{
+            adjustment, calendars, candle, cost, entry_bars, instant,
+        };
+        use crate::{
+            AdjustmentBasis, CandlePeriod, EstimateExitKind, EstimateOutcome, EstimateReturnError,
+            EstimateReturnFacts,
+        };
+        let entry = return_fixture("100");
+        let task = entry.submission().task_key().task();
+        let calendar = calendars();
+        let free = cost("0", "0", "0");
+        let now = instant(66, 4);
+        let shifted = crate::signal_return_scenarios::tests::benchmark(
+            1,
+            "100",
+            AdjustmentBasis::new(instant(68, 4)),
+        );
+        let mut gap_bars = entry_bars();
+        gap_bars.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["200", "210", "190", "200"],
+        ));
+        let mut amb_bars = entry_bars();
+        amb_bars.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["100", "200", "1", "100"],
+        ));
+        amb_bars.push(candle(
+            62,
+            1,
+            CandlePeriod::Minute,
+            ["100", "200", "1", "100"],
+        ));
+        let adj = adjustment();
+        for (bars, expected_kind) in [
+            (&gap_bars, EstimateExitKind::Target),
+            (&amb_bars, EstimateExitKind::Stop),
+        ] {
+            let out =
+                EstimateOutcome::evaluate_with_complete_data(task, &calendar, &adj, bars, now);
+            let facts = EstimateReturnFacts::new(&calendar, &adj, &[], bars, now);
+            let res = crate::estimate_return(&entry, &out, &facts, &free, &shifted)
+                .expect("벤치마크 결측 순수익률 유지");
+            assert_eq!(res.exit_kind(), expected_kind);
+            assert_eq!(
+                res.excess(),
+                Err(EstimateReturnError::Benchmark(
+                    crate::SignalReturnError::BenchmarkMismatch
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn d58_entry_price_at_exact_target_or_stop_boundary_remains_pending() {
+        use crate::signal_return_contract::tests::{candle, cost, entry_bars, task};
+        use crate::{CandlePeriod, EstimateReturnError};
+        let base_task = task();
+        let target_text = bound_money(&base_task, BoundSide::Target)
+            .amount()
+            .as_decimal()
+            .to_string();
+        let stop_text = bound_money(&base_task, BoundSide::Stop)
+            .amount()
+            .as_decimal()
+            .to_string();
+        let free = cost("0", "0", "0");
+        let mut gap_bars = entry_bars();
+        gap_bars.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["200", "210", "190", "200"],
+        ));
+        let mut amb_bars = entry_bars();
+        amb_bars.push(candle(
+            62,
+            0,
+            CandlePeriod::Daily,
+            ["100", "200", "1", "100"],
+        ));
+        amb_bars.push(candle(
+            62,
+            1,
+            CandlePeriod::Minute,
+            ["100", "200", "1", "100"],
+        ));
+        for boundary_text in [&target_text, &stop_text] {
+            let entry = return_fixture(boundary_text);
+            for bars in [&gap_bars, &amb_bars] {
+                assert_eq!(
+                    calculate_return(&entry, bars, &free),
+                    Err(EstimateReturnError::EntryTimingPending)
+                );
+            }
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum GapBarScope {
+        Daily,
+        Minute,
+    }
+
+    struct PropEnv {
+        task: crate::EstimateTask,
+        record: crate::EstimateSubmissionRecord<crate::InstrumentId, crate::HorizonSelection>,
+        calendar: Vec<crate::MarketCalendar>,
+        adjustment: crate::OutcomeAdjustment,
+        benchmark: crate::SignalBenchmark,
+        base_bars: Vec<crate::Candle>,
+        now: Timestamp,
+        target_money: Money,
+        stop_money: Money,
+    }
+
+    impl PropEnv {
+        fn new() -> Self {
+            use crate::signal_return_contract::tests::{
+                adjustment, benchmark, calendars, entry_bars, instant, key, task,
+            };
+            let task = task();
+            let now = instant(66, 4);
+            let eligible = eligible_for_task(&task, now);
+            let submission = crate::SignalSubmission::create(
+                crate::SignalTaskKey::from_task(&eligible),
+                key(),
+                crate::AiProbability::parse(
+                    &crate::AiProbabilityInput::try_new("60").expect("입력"),
+                )
+                .expect("확률"),
+                None,
+                instant(61, 1),
+            )
+            .expect("제출");
+            let record = record_for_submission(eligible, submission, "prop-d58");
+            let target_money = bound_money(&task, BoundSide::Target);
+            let stop_money = bound_money(&task, BoundSide::Stop);
+            Self {
+                task,
+                record,
+                calendar: calendars(),
+                adjustment: adjustment(),
+                benchmark: benchmark(),
+                base_bars: entry_bars(),
+                now,
+                target_money,
+                stop_money,
+            }
+        }
+
+        fn entry(&self, entry_text: &str) -> crate::EstimateEntryPrice {
+            crate::EstimateEntryPrice::try_new(
+                &self.record,
+                observed(
+                    self.task.volatility().instrument().clone(),
+                    self.task.reference().instrument().clone(),
+                    price(entry_text, Currency::Krw),
+                    self.record.submission().submitted_at(),
+                ),
+            )
+            .expect("속성 진입가")
+        }
+
+        fn make_candle(
+            &self,
+            day: i64,
+            minute: i64,
+            period: crate::CandlePeriod,
+            values: [&str; 4],
+        ) -> crate::Candle {
+            use crate::signal_return_contract::tests::instant;
+            let [open, high, low, close] = values;
+            let stamp = if period == crate::CandlePeriod::Daily {
+                instant(day, 0)
+                    .checked_sub(
+                        crate::TimeSpan::try_new(
+                            crate::SpanSeconds::new(32_400),
+                            Nanosecond::new(0),
+                        )
+                        .expect("9시"),
+                    )
+                    .expect("자정")
+            } else {
+                instant(day, minute)
+            };
+            crate::Candle::try_new(
+                self.task.volatility().instrument().clone(),
+                crate::CandleTime::try_new(stamp, period).expect("시각"),
+                crate::PriceAdjustment::Adjusted(self.adjustment.basis()),
+                crate::Ohlcv::try_new(
+                    price(open, Currency::Krw),
+                    price(high, Currency::Krw),
+                    price(low, Currency::Krw),
+                    price(close, Currency::Krw),
+                    crate::Quantity::parse(&NumericInput::try_new("1").expect("입력"))
+                        .expect("수량"),
+                )
+                .expect("OHLC"),
+                crate::CandleObservation::new(self.now, crate::CandleStatus::Finalized),
+            )
+            .expect("속성 봉")
+        }
+
+        fn gap_bars(&self, scope: GapBarScope, values: [&str; 4]) -> Vec<crate::Candle> {
+            let mut bars = self.base_bars.clone();
+            match scope {
+                GapBarScope::Minute => {
+                    bars[2] = self.make_candle(61, 3, crate::CandlePeriod::Minute, values);
+                }
+                GapBarScope::Daily => {
+                    bars.push(self.make_candle(62, 0, crate::CandlePeriod::Daily, values));
+                }
+            }
+            bars
+        }
+
+        fn ambiguous_bars(&self, scope: GapBarScope, values: [&str; 4]) -> Vec<crate::Candle> {
+            let mut bars = self.base_bars.clone();
+            match scope {
+                GapBarScope::Minute => {
+                    bars[1] = self.make_candle(61, 2, crate::CandlePeriod::Minute, values);
+                }
+                GapBarScope::Daily => {
+                    bars.push(self.make_candle(62, 0, crate::CandlePeriod::Daily, values));
+                    bars.push(self.make_candle(62, 1, crate::CandlePeriod::Minute, values));
+                }
+            }
+            bars
+        }
+
+        fn eval(
+            &self,
+            entry: &crate::EstimateEntryPrice,
+            bars: &[crate::Candle],
+            applied_cost: &crate::SignalReturnCost,
+        ) -> crate::EstimateReturn {
+            let outcome = crate::EstimateOutcome::evaluate_with_complete_data(
+                &self.task,
+                &self.calendar,
+                &self.adjustment,
+                bars,
+                self.now,
+            );
+            let facts = crate::EstimateReturnFacts::new(
+                &self.calendar,
+                &self.adjustment,
+                &[],
+                bars,
+                self.now,
+            );
+            crate::estimate_return(entry, &outcome, &facts, applied_cost, &self.benchmark)
+                .expect("속성 수익률")
+        }
+    }
+
+    fn assert_inside_open_property_case(
+        env: &PropEnv,
+        entry: &crate::EstimateEntryPrice,
+        scope: GapBarScope,
+        applied_cost: &crate::SignalReturnCost,
+        inside_and_nets: (&str, crate::RatioQuotient, crate::RatioQuotient),
+    ) -> Result<(), proptest::test_runner::TestCaseError> {
+        use proptest::prop_assert_eq;
+        let (inside_text, boundary_target_net, boundary_stop_net) = inside_and_nets;
+        let inside_target = env.eval(
+            entry,
+            &env.gap_bars(scope, [inside_text, "350", inside_text, inside_text]),
+            applied_cost,
+        );
+        prop_assert_eq!(inside_target.exit_price().as_money(), env.target_money);
+        prop_assert_eq!(inside_target.net(), boundary_target_net);
+        let inside_stop = env.eval(
+            entry,
+            &env.gap_bars(scope, [inside_text, inside_text, "1", inside_text]),
+            applied_cost,
+        );
+        prop_assert_eq!(inside_stop.exit_price().as_money(), env.stop_money);
+        prop_assert_eq!(inside_stop.net(), boundary_stop_net);
+        Ok(())
+    }
+
+    fn assert_gap_property_case(
+        env: &PropEnv,
+        entry: &crate::EstimateEntryPrice,
+        scope: GapBarScope,
+        costs: (&crate::SignalReturnCost, &crate::SignalReturnCost),
+        prices: (u32, u32, u32),
+    ) -> Result<(), proptest::test_runner::TestCaseError> {
+        use proptest::{prop_assert, prop_assert_eq};
+        let (applied_cost, full_charged) = costs;
+        let (target_gap_cents, stop_gap_cents, inside_open_cents) = prices;
+        let target_gap_text = cents_text(target_gap_cents);
+        let stop_gap_text = cents_text(stop_gap_cents);
+        let inside_text = cents_text(inside_open_cents);
+        let boundary_target = env.eval(
+            entry,
+            &env.gap_bars(scope, ["100", "350", "100", "100"]),
+            applied_cost,
+        );
+        let boundary_stop = env.eval(
+            entry,
+            &env.gap_bars(scope, ["100", "100", "1", "100"]),
+            applied_cost,
+        );
+        let gap_target_bars = env.gap_bars(scope, [target_gap_text.as_str(); 4]);
+        let gap_stop_bars = env.gap_bars(scope, [stop_gap_text.as_str(); 4]);
+        let gap_target = env.eval(entry, &gap_target_bars, applied_cost);
+        let gap_stop = env.eval(entry, &gap_stop_bars, applied_cost);
+        prop_assert_eq!(gap_target.exit_kind(), crate::EstimateExitKind::Target);
+        prop_assert_eq!(
+            gap_target.exit_price(),
+            price(&target_gap_text, Currency::Krw)
+        );
+        prop_assert!(
+            super::ratio_value(gap_target.net()) >= super::ratio_value(boundary_target.net())
+        );
+        prop_assert!(
+            super::ratio_value(env.eval(entry, &gap_target_bars, full_charged).net())
+                <= super::ratio_value(gap_target.net())
+        );
+        prop_assert_eq!(gap_stop.exit_kind(), crate::EstimateExitKind::Stop);
+        prop_assert_eq!(gap_stop.exit_price(), price(&stop_gap_text, Currency::Krw));
+        prop_assert!(super::ratio_value(gap_stop.net()) <= super::ratio_value(boundary_stop.net()));
+        prop_assert!(
+            super::ratio_value(env.eval(entry, &gap_stop_bars, full_charged).net())
+                <= super::ratio_value(gap_stop.net())
+        );
+        prop_assert_eq!(
+            &env.eval(entry, &gap_target_bars, applied_cost),
+            &gap_target
+        );
+        let mut reversed = gap_target_bars;
+        reversed.reverse();
+        prop_assert_eq!(env.eval(entry, &reversed, applied_cost), gap_target);
+        assert_inside_open_property_case(
+            env,
+            entry,
+            scope,
+            applied_cost,
+            (&inside_text, boundary_target.net(), boundary_stop.net()),
+        )
+    }
+
+    #[test]
+    fn d58_gap_return_dominates_boundary_and_inside_open_ignores_gap_rule() {
+        use crate::signal_return_contract::tests::cost;
+        use proptest::test_runner::{Config, TestRunner};
+        let env = PropEnv::new();
+        let free = cost("0", "0", "0");
+        let buy_charged = cost("0", "0.001", "0");
+        let full_charged = cost("0.001", "0", "0.002");
+        let mut runner = TestRunner::new(Config::with_cases(testkit::property_cases()));
+        runner
+            .run(
+                &(
+                    9800_u32..=10400,
+                    10500_u32..=30000,
+                    100_u32..=9700,
+                    9800_u32..=10400,
+                    0_u8..4,
+                ),
+                |(entry_cents, target_gap_cents, stop_gap_cents, inside_open_cents, mode)| {
+                    let entry = env.entry(&cents_text(entry_cents));
+                    let applied_cost = if mode.checked_rem(2) == Some(0) {
+                        &free
+                    } else {
+                        &buy_charged
+                    };
+                    let scope = if mode >= 2 {
+                        GapBarScope::Minute
+                    } else {
+                        GapBarScope::Daily
+                    };
+                    assert_gap_property_case(
+                        &env,
+                        &entry,
+                        scope,
+                        (applied_cost, &full_charged),
+                        (target_gap_cents, stop_gap_cents, inside_open_cents),
+                    )
+                },
+            )
+            .expect("갭 전용 속성");
+    }
+
+    fn assert_ambiguous_property_case(
+        env: &PropEnv,
+        entry: &crate::EstimateEntryPrice,
+        scope: GapBarScope,
+        costs: (&crate::SignalReturnCost, &crate::SignalReturnCost),
+        ohl: (u32, u32, u32),
+    ) -> Result<(), proptest::test_runner::TestCaseError> {
+        use crate::{EstimateExitKind, OutcomeFailure, OutcomeState};
+        use proptest::{prop_assert, prop_assert_eq};
+        let (free, charged) = costs;
+        let (open_cents, high_cents, low_cents) = ohl;
+        let (open, high, low) = (
+            cents_text(open_cents),
+            cents_text(high_cents),
+            cents_text(low_cents),
+        );
+        let (open_ref, high_ref, low_ref) = (open.as_str(), high.as_str(), low.as_str());
+        let ambiguous_bars = env.ambiguous_bars(scope, [open_ref, high_ref, low_ref, open_ref]);
+        let ambiguous_free = env.eval(entry, &ambiguous_bars, free);
+        let ambiguous_charged = env.eval(entry, &ambiguous_bars, charged);
+        let pure_stop = env.eval(
+            entry,
+            &env.ambiguous_bars(scope, [open_ref, open_ref, low_ref, open_ref]),
+            free,
+        );
+        let pure_target = env.eval(
+            entry,
+            &env.ambiguous_bars(scope, [open_ref, high_ref, open_ref, open_ref]),
+            free,
+        );
+        prop_assert_eq!(
+            ambiguous_free.outcome().state(),
+            OutcomeState::Failure(OutcomeFailure::Ambiguous)
+        );
+        prop_assert_eq!(ambiguous_free.exit_kind(), EstimateExitKind::Stop);
+        prop_assert_eq!(ambiguous_free.exit_price().as_money(), env.stop_money);
+        prop_assert_eq!(ambiguous_free.net(), pure_stop.net());
+        prop_assert!(
+            super::ratio_value(ambiguous_free.net()) < super::ratio_value(pure_target.net())
+        );
+        prop_assert!(
+            super::ratio_value(ambiguous_charged.net()) <= super::ratio_value(ambiguous_free.net())
+        );
+        prop_assert_eq!(env.eval(entry, &ambiguous_bars, free), ambiguous_free);
+        Ok(())
+    }
+
+    #[test]
+    fn d58_same_bar_ambiguous_failure_equals_stop_boundary_and_is_deterministic() {
+        use crate::signal_return_contract::tests::cost;
+        use proptest::test_runner::{Config, TestRunner};
+        let env = PropEnv::new();
+        let free = cost("0", "0", "0");
+        let charged = cost("0", "0.001", "0");
+        let mut runner = TestRunner::new(Config::with_cases(testkit::property_cases()));
+        runner
+            .run(
+                &(
+                    9800_u32..=10400,
+                    9800_u32..=10400,
+                    10500_u32..=25000,
+                    100_u32..=9700,
+                    0_u8..2,
+                ),
+                |(entry_cents, open_cents, high_cents, low_cents, daily_mode)| {
+                    let entry = env.entry(&cents_text(entry_cents));
+                    let scope = if daily_mode == 0 {
+                        GapBarScope::Minute
+                    } else {
+                        GapBarScope::Daily
+                    };
+                    assert_ambiguous_property_case(
+                        &env,
+                        &entry,
+                        scope,
+                        (&free, &charged),
+                        (open_cents, high_cents, low_cents),
+                    )
+                },
+            )
+            .expect("모호 실패 속성");
     }
 }
 
