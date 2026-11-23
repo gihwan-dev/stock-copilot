@@ -10,7 +10,7 @@ use super::{
     },
 };
 use application::{
-    CompleteTransactionObservation, IncompleteTransactions, ObservedTransaction,
+    CompleteTransactionObservation, IncompleteTransactions, MasterNotReady, ObservedTransaction,
     ObservedTransactionBatch, PortError, PortErrorKind, QuarantinedTransaction, RawTransactionRow,
     RetryDelay, TransactionRead,
 };
@@ -64,6 +64,18 @@ fn put_error(fields: &mut Fields, error: PortError) {
     put_read_endpoint(fields, error.endpoint());
     put_http_status(fields, error.status());
     match error.kind() {
+        PortErrorKind::MasterNotReady(reason) => {
+            fields.push(&("master-not-ready"));
+            fields.push(
+                &(match reason {
+                    MasterNotReady::StatusCoverage => "status-coverage",
+                    MasterNotReady::IdentityContinuity => "identity-continuity",
+                    MasterNotReady::Storage => "storage",
+                    MasterNotReady::Issuer => "issuer",
+                    MasterNotReady::MissingInstrument => "missing-instrument",
+                }),
+            );
+        }
         PortErrorKind::AccessDenied(value) => {
             fields.push(&("denied"));
             put_access_denial(fields, value);
@@ -103,6 +115,14 @@ fn error(fields: &mut Fields) -> rusqlite::Result<PortError> {
     let endpoint = get_read_endpoint(fields)?;
     let status = get_http_status(fields)?;
     let kind = match fields.take()?.as_str() {
+        "master-not-ready" => PortErrorKind::MasterNotReady(match fields.take()?.as_str() {
+            "status-coverage" => MasterNotReady::StatusCoverage,
+            "identity-continuity" => MasterNotReady::IdentityContinuity,
+            "storage" => MasterNotReady::Storage,
+            "issuer" => MasterNotReady::Issuer,
+            "missing-instrument" => MasterNotReady::MissingInstrument,
+            _ => return Err(invalid(())),
+        }),
         "denied" => PortErrorKind::AccessDenied(get_access_denial(fields)?),
         "unavailable" => {
             let cause = get_unavailable_cause(fields)?;
@@ -127,6 +147,7 @@ fn error(fields: &mut Fields) -> rusqlite::Result<PortError> {
     };
     Ok(PortError::new(endpoint, status, kind))
 }
+
 pub(super) fn put(fields: &mut Fields, observation: &Result<TransactionRead, PortError>) {
     match observation {
         Err(error) => {
@@ -283,5 +304,39 @@ pub(super) fn get(
             ))
         }
         _ => Err(invalid(())),
+    }
+}
+
+#[cfg(test)]
+mod t21_tests {
+    use super::{Fields, MasterNotReady, PortError, PortErrorKind, error, put_error};
+    use application::{HttpStatus, ReadEndpoint};
+
+    #[test]
+    fn unready_master_reasons_round_trip_and_unknown_reasons_fail() {
+        for reason in [
+            MasterNotReady::StatusCoverage,
+            MasterNotReady::IdentityContinuity,
+            MasterNotReady::Storage,
+            MasterNotReady::Issuer,
+            MasterNotReady::MissingInstrument,
+        ] {
+            let expected = PortError::new(
+                ReadEndpoint::Instruments,
+                HttpStatus::NotReceived,
+                PortErrorKind::MasterNotReady(reason),
+            );
+            let mut fields = Fields::default();
+            put_error(&mut fields, expected);
+            let mut decoded = Fields::decode(&fields.encode()).expect("decode");
+            assert_eq!(error(&mut decoded).expect("error"), expected);
+            decoded.finish().expect("complete");
+        }
+        let mut fields = Fields::default();
+        super::put_read_endpoint(&mut fields, ReadEndpoint::Instruments);
+        super::put_http_status(&mut fields, HttpStatus::NotReceived);
+        fields.push(&"master-not-ready");
+        fields.push(&"unknown");
+        let _error = error(&mut fields).expect_err("unknown reason");
     }
 }

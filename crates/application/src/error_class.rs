@@ -41,6 +41,7 @@ impl ClassifiedError for PortError {
 #[must_use]
 pub fn classify_port_error(error: PortError) -> ErrorClass {
     match error.kind() {
+        PortErrorKind::MasterNotReady(_) => ErrorClass::Wait(RetryDelay::Unknown),
         PortErrorKind::AccessDenied(denial) => ErrorClass::UserAction(match denial {
             AccessDenial::InvalidCredentials | AccessDenial::LoginUserNotFound => {
                 UserAction::CheckCredentials

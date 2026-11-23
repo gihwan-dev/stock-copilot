@@ -20,6 +20,22 @@ impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Rene
     }
 }
 impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Store, Time, Renewal> {
+    #[must_use]
+    pub fn with_instrument_master<
+        Authority: application::InstrumentMasterAuthority,
+        Issuer: application::InstrumentIdIssuer,
+    >(
+        self,
+        authority: Authority,
+        issuer: Issuer,
+    ) -> crate::TossInstrumentRead<Store, Time, Renewal, Authority, Issuer> {
+        crate::TossInstrumentRead {
+            reader: self,
+            authority,
+            issuer,
+        }
+    }
+
     pub fn new(
         tokens: TokenManager<Store, Time, Renewal>,
         clock: Time,
@@ -87,6 +103,11 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     #[must_use]
     pub fn with_candle_sessions(mut self, sessions: Vec<domain::MarketSession>) -> Self {
         self.candle_sessions = sessions;
+        self
+    }
+    #[must_use]
+    pub fn with_market_master(mut self, master: MasterInstrumentFacts) -> Self {
+        self.master = master;
         self
     }
     pub(crate) fn market_master(&self) -> &MasterInstrumentFacts {

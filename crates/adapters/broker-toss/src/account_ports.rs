@@ -3,7 +3,7 @@ use application::{
     BrokerRead, Clock, HoldingsObservation, HttpStatus, PortError, PortErrorKind, QuoteObservation,
     ReadEndpoint, SecretStore, TransactionRead,
 };
-use domain::{AccountId, BrokerAccountRows, MasterInstrumentFacts};
+use domain::{AccountId, BrokerAccountRows, InstrumentMaster};
 use domain::{
     BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, Currency, KnownMarket, Orderbook, PriceAdjustment, PriceLimits,
@@ -109,11 +109,11 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
     fn instruments(
         &self,
         _market: KnownMarket,
-    ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send {
+    ) -> impl Future<Output = Result<InstrumentMaster, PortError>> + Send {
         std::future::ready(Err(PortError::new(
             ReadEndpoint::Instruments,
             HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::Instruments),
+            PortErrorKind::MasterNotReady(application::MasterNotReady::StatusCoverage),
         )))
     }
     fn orderbook(

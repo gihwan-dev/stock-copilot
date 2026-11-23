@@ -17,16 +17,16 @@ mod tests {
         Currency, CurrencyAmounts, DisplayInstrumentName, FlowInterval, FxPair, FxRate, FxRateKind,
         FxSource, Holding, HoldingObservation, IndicatorCode, IndicatorUnit, InstrumentId,
         InvestorFlow, KnownMarket, ListingStatus, Market, MarketCalendar, MarketIndicatorCandle,
-        MarketIndicatorQuote, MarketSession, MasterCode, MasterInstrument, MasterInstrumentFacts,
-        MasterInstrumentRow, MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds,
-        OpenOrderCoverage, OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment,
-        PriceLimitRange, PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument,
-        RankingCautionFilter, RankingDuration, RankingKind, RankingLimit, RankingResponseInput,
-        Ratio, ReportedPortfolio, ResolvedOrderInstrument, SectorComposition,
-        SectorCompositionScope, SectorId, SellableQuantityFact, SessionInformation, Settlement,
-        SettlementWindow, SpanSeconds, StockRanking, StockWarning, StockWarnings, Symbol,
-        TimeInterval, TimeSpan, Timestamp, Transaction, TransactionData, TransactionFilter,
-        TransactionKind, UnixSeconds, UntrustedText,
+        MarketIndicatorQuote, MarketSession, MasterCode, MasterInstrument, MasterInstrumentRow,
+        MasterSecurityType, Money, Nanosecond, NumericInput, OffsetSeconds, OpenOrderCoverage,
+        OrderFxRates, OrderSide, Orderbook, OrderbookInput, PriceAdjustment, PriceLimitRange,
+        PriceLimits, PriceLimitsInput, Quantity, Quote, QuoteInstrument, RankingCautionFilter,
+        RankingDuration, RankingKind, RankingLimit, RankingResponseInput, Ratio, ReportedPortfolio,
+        ResolvedOrderInstrument, SectorComposition, SectorCompositionScope, SectorId,
+        SellableQuantityFact, SessionInformation, Settlement, SettlementWindow, SpanSeconds,
+        StockRanking, StockWarning, StockWarnings, Symbol, TimeInterval, TimeSpan, Timestamp,
+        Transaction, TransactionData, TransactionFilter, TransactionKind, UnixSeconds,
+        UntrustedText,
     };
     use std::{
         collections::BTreeSet,
@@ -381,10 +381,13 @@ mod tests {
         fn instruments(
             &self,
             market: KnownMarket,
-        ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send {
+        ) -> impl Future<Output = Result<domain::InstrumentMaster, PortError>> + Send {
             std::future::ready(outcome(
                 self.0,
-                MasterInstrumentFacts::try_new(vec![a20_master(market)]).expect("마스터 목록"),
+                domain::InstrumentMaster::try_new(vec![domain::InstrumentMasterEntry::Available(
+                    a20_master(market),
+                )])
+                .expect("마스터 목록"),
                 ReadEndpoint::Instruments,
             ))
         }
@@ -965,7 +968,7 @@ mod tests {
         assert_eq!(order, Err(failure(ReadEndpoint::Order)));
         let stock_warnings: Result<StockWarnings, PortError> = ready(port.stock_warnings(&stock));
         assert_eq!(stock_warnings, Err(failure(ReadEndpoint::StockWarnings)));
-        let instruments: Result<MasterInstrumentFacts, PortError> =
+        let instruments: Result<domain::InstrumentMaster, PortError> =
             ready(port.instruments(KnownMarket::Us));
         assert_eq!(instruments, Err(failure(ReadEndpoint::Instruments)));
         let orderbook: Result<Orderbook, PortError> = ready(port.orderbook(&quote));
@@ -1194,6 +1197,8 @@ mod tests {
         assert_eq!(
             ready(port.instruments(KnownMarket::Us))
                 .expect("마스터")
+                .complete_facts()
+                .expect("완전 마스터")
                 .instruments(),
             &[a20_master(KnownMarket::Us)]
         );
@@ -1456,7 +1461,10 @@ mod tests {
         let port = FakeBroker(Scenario::Complete);
         for market in [KnownMarket::Kr, KnownMarket::Us] {
             let master = ready(port.instruments(market)).expect("마스터");
-            assert_eq!(master.instruments(), &[a20_master(market)]);
+            assert_eq!(
+                master.complete_facts().expect("완전 마스터").instruments(),
+                &[a20_master(market)]
+            );
             let fee = ready(port.commission_rate(&AccountId::new(89), market)).expect("수수료");
             let expected = CommissionRateFact::from_commissions_result(
                 market.into(),
