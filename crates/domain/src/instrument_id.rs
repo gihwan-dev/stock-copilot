@@ -21,6 +21,10 @@ impl InstrumentId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub(crate) fn from_issued_sequence(sequence: crate::instrument_issuer::IssuerSequence) -> Self {
+        Self(format!("inst-{:016x}", sequence.as_u64()))
+    }
 }
 
 #[cfg(test)]

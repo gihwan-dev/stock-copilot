@@ -17,8 +17,25 @@ mod tests {
         )
     }
 
+    fn issued(value: &str) -> domain::IssuedInstrumentId {
+        let slot = match value {
+            "opaque-1" => 0_u8,
+            "opaque-2" => 1,
+            "domestic" => 2,
+            "foreign" => 3,
+            "opaque-left-independent" => 4,
+            "opaque-right-independent" => 5,
+            other => panic!("알 수 없는 후보 라벨: {other}"),
+        };
+        let mut issuer = domain::IndependentInstrumentIdIssuer::new();
+        for _ in 0..slot {
+            let _skip = issuer.issue().expect("건너뛰기");
+        }
+        issuer.issue().expect("후보 발급")
+    }
+
     fn id(value: &str) -> InstrumentId {
-        InstrumentId::try_new(value).expect("내부 ID")
+        issued(value).as_instrument_id().clone()
     }
 
     #[test]
@@ -33,11 +50,11 @@ mod tests {
             Err(InstrumentMappingError::Missing)
         );
         assert_eq!(
-            mappings.ensure(&first, &id("opaque-1")),
+            mappings.ensure(&first, issued("opaque-1")),
             Ok(MappingAssignment::Issued(id("opaque-1")))
         );
         assert_eq!(
-            mappings.ensure(&first, &id("opaque-2")),
+            mappings.ensure(&first, issued("opaque-2")),
             Ok(MappingAssignment::Existing(id("opaque-1")))
         );
         assert_eq!(mappings.resolve(&first), Ok(id("opaque-1")));
@@ -56,7 +73,9 @@ mod tests {
         let transferred = source(KnownMarket::Us, "AAPL", "KR7005930003");
         let independent = source(KnownMarket::Us, "MSFT", "US5949181045");
         let mut mappings = InstrumentMappings::default();
-        mappings.ensure(&original, &id("opaque-1")).expect("발급");
+        mappings
+            .ensure(&original, issued("opaque-1"))
+            .expect("발급");
         for candidate in [&renamed, &reused, &transferred] {
             assert_eq!(
                 mappings.resolve(candidate),
@@ -67,17 +86,17 @@ mod tests {
                 Err(InstrumentMappingError::IdentityUncertain)
             );
             assert_eq!(
-                mappings.ensure(candidate, &id("opaque-2")),
+                mappings.ensure(candidate, issued("opaque-2")),
                 Err(InstrumentMappingError::IdentityUncertain)
             );
         }
         assert_eq!(
-            mappings.ensure(&independent, &id("opaque-1")),
+            mappings.ensure(&independent, issued("opaque-1")),
             Err(InstrumentMappingError::IdAlreadyUsed)
         );
         assert_eq!(mappings.resolve(&original), Ok(id("opaque-1")));
         assert_eq!(
-            mappings.ensure(&independent, &id("opaque-2")),
+            mappings.ensure(&independent, issued("opaque-2")),
             Ok(MappingAssignment::Issued(id("opaque-2")))
         );
     }
@@ -92,7 +111,9 @@ mod tests {
             mappings.retire(&missing),
             Err(InstrumentMappingError::Missing)
         );
-        mappings.ensure(&original, &id("opaque-1")).expect("발급");
+        mappings
+            .ensure(&original, issued("opaque-1"))
+            .expect("발급");
         assert_eq!(mappings.retire(&original), Ok(id("opaque-1")));
         assert_eq!(mappings.retire(&original), Ok(id("opaque-1")));
         assert_eq!(
@@ -100,11 +121,11 @@ mod tests {
             Err(InstrumentMappingError::Retired)
         );
         assert_eq!(
-            mappings.ensure(&original, &id("opaque-2")),
+            mappings.ensure(&original, issued("opaque-2")),
             Err(InstrumentMappingError::Retired)
         );
         assert_eq!(
-            mappings.ensure(&reused, &id("opaque-2")),
+            mappings.ensure(&reused, issued("opaque-2")),
             Err(InstrumentMappingError::IdentityUncertain)
         );
         assert_eq!(
@@ -112,7 +133,7 @@ mod tests {
             Err(InstrumentMappingError::IdentityUncertain)
         );
         assert_eq!(
-            mappings.ensure(&missing, &id("opaque-1")),
+            mappings.ensure(&missing, issued("opaque-1")),
             Err(InstrumentMappingError::IdAlreadyUsed)
         );
     }
@@ -123,11 +144,11 @@ mod tests {
         let foreign = source(KnownMarket::Us, "ABC", "US0000000002");
         let mut mappings = InstrumentMappings::default();
         assert_eq!(
-            mappings.ensure(&domestic, &id("domestic")),
+            mappings.ensure(&domestic, issued("domestic")),
             Ok(MappingAssignment::Issued(id("domestic")))
         );
         assert_eq!(
-            mappings.ensure(&foreign, &id("foreign")),
+            mappings.ensure(&foreign, issued("foreign")),
             Ok(MappingAssignment::Issued(id("foreign")))
         );
         assert_eq!(mappings.resolve(&domestic), Ok(id("domestic")));
@@ -155,24 +176,24 @@ mod tests {
                     let mut forward = InstrumentMappings::default();
                     let mut reverse = InstrumentMappings::default();
                     prop_assert_eq!(
-                        forward.ensure(&left, &left_id),
+                        forward.ensure(&left, issued("opaque-left-independent")),
                         Ok(MappingAssignment::Issued(left_id.clone()))
                     );
                     prop_assert_eq!(
-                        forward.ensure(&right, &right_id),
+                        forward.ensure(&right, issued("opaque-right-independent")),
                         Ok(MappingAssignment::Issued(right_id.clone()))
                     );
                     prop_assert_eq!(
-                        reverse.ensure(&right, &right_id),
-                        Ok(MappingAssignment::Issued(right_id.clone()))
+                        reverse.ensure(&right, issued("opaque-right-independent")),
+                        Ok(MappingAssignment::Issued(right_id))
                     );
                     prop_assert_eq!(
-                        reverse.ensure(&left, &left_id),
+                        reverse.ensure(&left, issued("opaque-left-independent")),
                         Ok(MappingAssignment::Issued(left_id.clone()))
                     );
                     prop_assert_eq!(
-                        forward.ensure(&left, &right_id.clone()),
-                        Ok(MappingAssignment::Existing(left_id.clone()))
+                        forward.ensure(&left, issued("opaque-right-independent")),
+                        Ok(MappingAssignment::Existing(left_id))
                     );
                     prop_assert_eq!(forward.resolve(&left), reverse.resolve(&left));
                     prop_assert_eq!(forward.resolve(&right), reverse.resolve(&right));
@@ -192,10 +213,12 @@ mod tests {
         let symbol_variant = source(KnownMarket::Us, "aapl", "US0000000002");
         let isin_variant = source(KnownMarket::Us, "DIFF", "us0378331005");
         let mut mappings = InstrumentMappings::default();
-        mappings.ensure(&original, &id("opaque-1")).expect("발급");
+        mappings
+            .ensure(&original, issued("opaque-1"))
+            .expect("발급");
         for changed in [&symbol_variant, &isin_variant] {
             assert_eq!(
-                mappings.ensure(changed, &id("opaque-2")),
+                mappings.ensure(changed, issued("opaque-2")),
                 Err(InstrumentMappingError::IdentityUncertain)
             );
             assert_eq!(
@@ -210,7 +233,9 @@ mod tests {
         let original = source(KnownMarket::Kr, "005930", "KR7005930003");
         let unrelated = source(KnownMarket::Us, "AAPL", "US0378331005");
         let mut mappings = InstrumentMappings::default();
-        mappings.ensure(&original, &id("opaque-1")).expect("발급");
+        mappings
+            .ensure(&original, issued("opaque-1"))
+            .expect("발급");
         assert_eq!(
             mappings.retire(&unrelated),
             Err(InstrumentMappingError::Missing)

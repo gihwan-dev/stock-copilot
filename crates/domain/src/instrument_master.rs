@@ -76,6 +76,7 @@ fn identity(
             reason:
                 InstrumentMappingError::IdentityUncertain
                 | InstrumentMappingError::Retired
+                | InstrumentMappingError::Superseded
                 | InstrumentMappingError::IdAlreadyUsed,
         } => {
             let symbol = source.symbol().normalized_ascii();

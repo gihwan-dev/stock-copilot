@@ -10,16 +10,28 @@ pub use money_display::{
 mod account_id;
 mod client_order_id;
 mod instrument_id;
+mod instrument_issuer;
 mod instrument_mapping;
+mod instrument_mapping_change;
 mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
+pub use instrument_issuer::{
+    IdAdoption, IndependentInstrumentIdIssuer, InstrumentIdIssueError, IssuedInstrumentId,
+    ReservationStatus,
+};
 pub use instrument_mapping::{
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
     InstrumentSource, InstrumentSourceConflict, MappingAssignment, instrument_source_conflicts,
+};
+pub use instrument_mapping_change::{
+    ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
+    IdentityChangeConfirmation, IdentityChangeEvidence, IdentityConfirmationOrigin,
+    MappingCorrectionConfirmation, MappingCorrectionEvidence, MappingHistoryEvent,
+    MappingTransitionError, UserIdentityConfirmation,
 };
 pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentMasterError};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
