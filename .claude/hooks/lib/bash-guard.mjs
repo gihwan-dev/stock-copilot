@@ -912,15 +912,32 @@ const reviewerRemoval = (target, invocation, context) => {
     invocation.args
       .slice(firstOperand + 1)
       .some((word) => word.text.startsWith("-"));
+  const other = original.filter((item) => item.rule !== "role-without-writes");
+  const cleanupTarget =
+    !target.dynamic &&
+    !target.glob &&
+    (target.text === "target" ||
+      /^\.rv-[A-Za-z0-9_-][A-Za-z0-9._-]*$/u.test(target.text));
   if (!safeOptions || !oneFilesystem || trailingOption)
-    return original.length > 0
-      ? original
-      : [
-          finding(
-            "reviewer-cleanup",
-            "정리는 파일시스템 경계를 넘지 않아야 한다",
-          ),
-        ];
+    return other.length > 0
+      ? other
+      : cleanupTarget
+        ? [
+            finding(
+              "reviewer-cleanup",
+              macOS
+                ? "정리는 파일시스템 경계를 넘지 않아야 한다 (예: rm -xrf target 또는 rm -xrf .rv-<이름>)"
+                : "정리는 파일시스템 경계를 넘지 않아야 한다 (예: rm -rf --one-file-system target 또는 rm -rf --one-file-system .rv-<이름>)",
+            ),
+          ]
+        : original.length > 0
+          ? original
+          : [
+              finding(
+                "reviewer-cleanup",
+                "정리는 파일시스템 경계를 넘지 않아야 한다",
+              ),
+            ];
   if (target.dynamic || target.glob || target.text.split("/").includes("..")) {
     return original.length > 0
       ? original
@@ -948,7 +965,6 @@ const reviewerRemoval = (target, invocation, context) => {
       finding("reviewer-cleanup", "작업 사본 루트에서 폴더 이름만 지정한다"),
     ];
   }
-  const other = original.filter((item) => item.rule !== "role-without-writes");
   if (other.length > 0) return other;
   if (!(
     name === "target" || /^\.rv-[A-Za-z0-9_-][A-Za-z0-9._-]*$/u.test(name)

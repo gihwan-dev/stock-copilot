@@ -76,6 +76,24 @@ test("공통 역할 가드는 지정된 임시 디렉터리 정리만 허용한�
           "deny",
           `${role} ${command}`,
         );
+      for (const command of ["rm -rf target", "rm -rf .rv-owned"]) {
+        const project = {
+          ...projectFor(fixture, { lock: "on" }),
+          ownedWorktree: fixture.worktree,
+        };
+        const denied = decideBash(
+          {
+            cwd: fixture.worktree,
+            agent_type: role,
+            agent_id: "review",
+            tool_input: { command },
+          },
+          project,
+        );
+        assert.equal(denied.decision, "deny", `${role} ${command}`);
+        assert.equal(denied.findings[0].rule, "reviewer-cleanup");
+        assert.match(denied.findings[0].message, new RegExp(remove, "u"));
+      }
     }
     rmSync(join(fixture.worktree, "target"), { recursive: true });
     symlinkSync(fixture.outside, join(fixture.worktree, "target"));

@@ -65,3 +65,4 @@ A-27의 기준 `3cd28ce0690c687f996db5d5b74f45af41bbbd57`과 대상 `0bd771fb64d
 | (1차 수정) `format_group_diagnosis`에서 자기 지적 접두사 생략 조건 제거 | 검출: h56_support_approved_assertion_addition_reports_actual_failure_reason |
 | (1차 수정) `untrusted_approval_rows`에서 신뢰 그룹 존재 시 미신뢰 행 무시 | 검출: h56_stale_trusted_row_does_not_mask_new_untrusted_branch_row |
 | (1차 수정) `unsafe_method_reason`에서 메서드 삭제 상세 문구 제거 | 검출: h56_impl_method_and_assertion_problem_report_specific_causes |
+| (2차 수정) `untrusted_approval_rows`에서 그룹 전체 비교를 개별 행 비교로 회귀 | 검출: h56_modified_finding_set_in_untrusted_branch_group_reports_trust_failure |

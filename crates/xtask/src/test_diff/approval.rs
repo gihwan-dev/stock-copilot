@@ -1673,12 +1673,8 @@ fn untrusted_approval_rows(
         .filter_map(|finding| {
             let name = finding.rule.to_string();
             let has_untrusted = groups.iter().any(|(group, expected)| {
-                expected.get(&name).is_some_and(|mark| {
-                    trusted_groups
-                        .and_then(|trusted| trusted.get(group))
-                        .and_then(|trusted_expected| trusted_expected.get(&name))
-                        != Some(mark)
-                })
+                expected.contains_key(&name)
+                    && trusted_groups.and_then(|trusted| trusted.get(group)) != Some(expected)
             });
             has_untrusted.then(|| {
                 let reason = if approvable_rule(&finding.rule) {

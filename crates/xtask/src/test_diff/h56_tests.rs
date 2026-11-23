@@ -1208,3 +1208,32 @@ fn h56_impl_method_and_assertion_problem_report_specific_causes() {
         "{trivial_out}"
     );
 }
+
+#[test]
+fn h56_modified_finding_set_in_untrusted_branch_group_reports_trust_failure() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { let _x = 1; assert_eq!(1, 1); }\n}\n",
+    );
+    let mut after = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { let _x = 2; assert_eq!(1, 1); }\n}\n",
+    );
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let new_hash = format!("{:x}", Sha256::digest(after.get(path).expect("after")));
+    let finding = "test-diff:modified:sample tests::first";
+    let extra = "test-diff:modified:sample tests::extra";
+    let trusted_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"trusted\"\n\n[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{extra}\"\ndecision = \"approved\"\nreason = \"extra\"\n"
+    );
+    let branch_toml = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{finding}\"\ndecision = \"approved\"\nreason = \"trimmed on branch\"\n"
+    );
+    after.insert(
+        String::from("harness/test-diff/approvals.toml"),
+        branch_toml.into_bytes(),
+    );
+    let (rem, out) = single_file_approval_run("h56-group-diff", &before, &after, &trusted_toml);
+    assert_eq!(rem, 1, "{out}");
+    assert!(out.contains("지적 집합 불일치"), "{out}");
+    assert!(out.contains("승인 이력 또는 기준 커밋 신뢰 실패"), "{out}");
+}
