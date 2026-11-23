@@ -1,3 +1,4 @@
+pub mod instrument_mapping;
 pub mod scenarios;
 use application::{
     AuditEntry, AuditIntegrity, AuditLog, BrokerRead, CacheWriteOutcome, CollectedObservation,

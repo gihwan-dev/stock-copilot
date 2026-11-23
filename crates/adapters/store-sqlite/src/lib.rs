@@ -158,3 +158,10 @@ mod validation_report;
 pub use validation_report::ValidationReportStore;
 #[cfg(test)]
 mod proposal_boundary_tests;
+
+mod instrument_mapping;
+pub use instrument_mapping::InstrumentMappingStore;
+#[cfg(test)]
+mod instrument_mapping_contract_tests;
+#[cfg(test)]
+mod instrument_mapping_tests;

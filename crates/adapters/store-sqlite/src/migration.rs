@@ -32,6 +32,10 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("0006_thesis_store.sql", crate::sql::thesis::CREATE),
     ("0007_proposal_store.sql", crate::sql::proposal::CREATE),
+    (
+        "0008_instrument_mappings.sql",
+        crate::sql::instrument_mapping::CREATE,
+    ),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {
@@ -119,6 +123,7 @@ fn apply_guarded(
     )?;
     if migrations == MIGRATIONS {
         validate_schema(&transaction)?;
+        let _restored = crate::instrument_mapping::restore(&transaction)?;
     } else {
         crate::fts_schema::validate(&transaction, migrations)?;
     }
