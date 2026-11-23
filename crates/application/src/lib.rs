@@ -395,3 +395,9 @@ pub use evaluate_signals::{
     EvaluateSignalError, EvaluateSignalInputs, EvaluateSignalOutcome, EvaluateSignals,
     SignalEvaluationData, SignalQuantityCosts,
 };
+
+mod proposal_storage;
+pub use proposal_storage::{
+    ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
+    ValidationReportRepository,
+};

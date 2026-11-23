@@ -76,7 +76,41 @@ pub struct ValidationReport {
     expiry: CheckResult,
     price_range: CheckResult,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValidationReportResults {
+    pub instrument: CheckResult,
+    pub market_hours: CheckResult,
+    pub available_funds_or_quantity: CheckResult,
+    pub opposite_pending_order: CheckResult,
+    pub buy_warnings: CheckResult,
+    pub principles: CheckResult,
+    pub order_price: CheckResult,
+    pub market_order_permission: CheckResult,
+    pub account_match: CheckResult,
+    pub price_observation: CheckResult,
+    pub expiry: CheckResult,
+    pub price_range: CheckResult,
+}
+
 impl ValidationReport {
+    #[must_use]
+    pub const fn from_results(results: ValidationReportResults) -> Self {
+        Self {
+            instrument: results.instrument,
+            market_hours: results.market_hours,
+            available_funds_or_quantity: results.available_funds_or_quantity,
+            opposite_pending_order: results.opposite_pending_order,
+            buy_warnings: results.buy_warnings,
+            principles: results.principles,
+            order_price: results.order_price,
+            market_order_permission: results.market_order_permission,
+            account_match: results.account_match,
+            price_observation: results.price_observation,
+            expiry: results.expiry,
+            price_range: results.price_range,
+        }
+    }
+
     #[must_use]
     pub fn result(&self, check: ValidationCheck) -> CheckResult {
         match check {

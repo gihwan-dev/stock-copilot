@@ -1,0 +1,5 @@
+use domain::{Draft, PriceObservation, Proposal, Timestamp, ValidationReport};
+pub fn cannot_validate(draft: Proposal<Draft>, report: ValidationReport, at: Timestamp, price: PriceObservation) {
+    let _validated = draft.finish_validation(report, at, price);
+}
+fn main() {}

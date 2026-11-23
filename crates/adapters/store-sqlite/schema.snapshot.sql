@@ -1,3 +1,4 @@
+CREATE INDEX proposal_validation_reports_lookup ON proposal_validation_reports(proposal_id, id);
 CREATE INDEX transaction_entries_account_id ON transaction_entries(account, id);
 CREATE TABLE holdings_snapshots (
     id INTEGER PRIMARY KEY,
@@ -88,6 +89,25 @@ CREATE TABLE migration_ledger (
     sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
     applied_at INTEGER NOT NULL
 ) STRICT;
+CREATE TABLE proposal_consumptions (
+    proposal_id TEXT PRIMARY KEY
+) STRICT;
+CREATE TABLE proposal_validation_reports (
+    id INTEGER PRIMARY KEY,
+    proposal_id TEXT NOT NULL,
+    c01 TEXT NOT NULL CHECK (c01 IN ('passed', 'failed', 'unknown')),
+    c02 TEXT NOT NULL CHECK (c02 IN ('passed', 'failed', 'unknown')),
+    c03 TEXT NOT NULL CHECK (c03 IN ('passed', 'failed', 'unknown')),
+    c04 TEXT NOT NULL CHECK (c04 IN ('passed', 'failed', 'unknown')),
+    c05 TEXT NOT NULL CHECK (c05 IN ('passed', 'failed', 'unknown')),
+    c06 TEXT NOT NULL CHECK (c06 IN ('passed', 'failed', 'unknown')),
+    c07 TEXT NOT NULL CHECK (c07 IN ('passed', 'failed', 'unknown')),
+    c08 TEXT NOT NULL CHECK (c08 IN ('passed', 'failed', 'unknown')),
+    c09 TEXT NOT NULL CHECK (c09 IN ('passed', 'failed', 'unknown')),
+    c10 TEXT NOT NULL CHECK (c10 IN ('passed', 'failed', 'unknown')),
+    c11 TEXT NOT NULL CHECK (c11 IN ('passed', 'failed', 'unknown')),
+    c12 TEXT NOT NULL CHECK (c12 IN ('passed', 'failed', 'unknown'))
+) STRICT;
 CREATE TABLE snapshot_holdings (
     snapshot INTEGER NOT NULL REFERENCES holdings_snapshots(id) ON DELETE CASCADE,
     position INTEGER NOT NULL CHECK (position >= 0),
@@ -107,6 +127,15 @@ CREATE TABLE snapshot_holdings (
     PRIMARY KEY (snapshot, position),
     UNIQUE (snapshot, symbol, currency),
     CHECK ((valuation IS NULL AND profit IS NULL AND return_rate IS NULL AND daily_profit IS NULL AND daily_rate IS NULL) OR (valuation IS NOT NULL AND profit IS NOT NULL AND return_rate IS NOT NULL AND ((daily_profit IS NULL AND daily_rate IS NULL) OR (daily_profit IS NOT NULL AND daily_rate IS NOT NULL))))
+) STRICT;
+CREATE TABLE thesis_history (
+    instrument TEXT NOT NULL REFERENCES thesis_notes(instrument),
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    payload TEXT NOT NULL,
+    PRIMARY KEY (instrument, sequence)
+) STRICT;
+CREATE TABLE thesis_notes (
+    instrument TEXT PRIMARY KEY
 ) STRICT;
 CREATE TABLE transaction_entries (
     id INTEGER PRIMARY KEY,
@@ -149,3 +178,9 @@ CREATE TABLE transaction_sources (
     row_id INTEGER PRIMARY KEY REFERENCES transaction_rows(id),
     source TEXT NOT NULL
 ) STRICT;
+CREATE TRIGGER proposal_consumptions_no_delete BEFORE DELETE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
+CREATE TRIGGER proposal_consumptions_no_replace BEFORE INSERT ON proposal_consumptions WHEN EXISTS (SELECT 1 FROM proposal_consumptions WHERE proposal_id = NEW.proposal_id) BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
+CREATE TRIGGER proposal_consumptions_no_update BEFORE UPDATE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
+CREATE TRIGGER thesis_history_no_delete BEFORE DELETE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
+CREATE TRIGGER thesis_history_no_replace BEFORE INSERT ON thesis_history WHEN EXISTS (SELECT 1 FROM thesis_history WHERE instrument = NEW.instrument AND sequence = NEW.sequence) BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
+CREATE TRIGGER thesis_history_no_update BEFORE UPDATE ON thesis_history BEGIN SELECT RAISE(ABORT, 'thesis history is append only'); END;
