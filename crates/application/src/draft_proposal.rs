@@ -1,18 +1,21 @@
 use crate::{
     BuyLimitIntentError, Clock, ConditionalDraftOutcome, CurrentDraftOutcome, DeliveryReport,
     DraftCheck, EstimateSubmissionRepository, EvaluateSignalError, EvaluateSignalInputs, EventBus,
-    ProposalRepository, SignalCommitOutcome, SignalMutation, SignalRepository, SignalSnapshot,
-    StoredSignal, SystemPortError, WriteCompleted, buy_limit_intent,
+    ProposalRepository, SellLimitIntentError, SignalCommitOutcome, SignalMutation,
+    SignalRepository, SignalSnapshot, StoredSignal, SystemPortError, WriteCompleted,
+    buy_limit_intent, sell_limit_intent,
 };
 use domain::{
-    AccountId, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, CheckResult,
-    CostEligibleTask, CurrentBuySignal, DomainEvent, Draft, InstrumentId, IssuedEstimateTaskId,
-    LimitPriceError, MarketTradingStatus, MasterInstrument, MasterInstrumentError, NoBuyQuantity,
-    NoSignalReason, OrderSide, Orderbook, PriceLimits, Proposal, ProposalError,
-    ProposalExecutionError, ProposalId, ProposalLifetime, ProposalPriceRange, RaisedSignal,
+    AccountId, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, CalculatedLimitPrice,
+    CheckResult, CostEligibleTask, CurrentBuySignal, DomainEvent, Draft, InstrumentId,
+    IssuedEstimateTaskId, LimitPriceError, MarketTradingStatus, MasterInstrument,
+    MasterInstrumentError, NoBuyQuantity, NoSellDraftQuantity, NoSignalReason, OrderSide,
+    Orderbook, PriceLimits, Proposal, ProposalError, ProposalExecutionError, ProposalId,
+    ProposalLifetime, ProposalPriceRange, RaisedSignal, SellDraftQuantityDecision,
+    SellDraftQuantityFacts, SellDraftQuantityPlan, SellSignal, SellableQuantityFact,
     SignalDecision, SignalTiming, SignalTransitionError, SignalUnavailable, TickSizeError,
-    TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price, market_state_at,
-    signal_transition,
+    TickTable, Timestamp, calculate_buy_quantity, calculate_limit_price,
+    calculate_sell_draft_quantity, market_state_at, signal_transition,
 };
 use std::future::Future;
 
@@ -22,6 +25,7 @@ pub struct DraftProposalInputs {
     pub master: MasterInstrument,
     pub book: Orderbook,
     pub limits: PriceLimits,
+    pub sellable_quantity: Option<SellableQuantityFact>,
 }
 
 pub trait DraftProposalData: Send + Sync {
@@ -78,7 +82,8 @@ pub enum DraftProposalError {
     DraftStatus(ProposalExecutionError),
     Transition(SignalTransitionError),
     SubmissionDiscarded,
-    SellDraftUnavailable,
+    SellQuantity(NoSellDraftQuantity),
+    SellIntent(SellLimitIntentError),
     Schedule {
         error: SystemPortError,
         deliveries: Vec<DeliveryReport>,
@@ -107,6 +112,11 @@ enum Preparation {
 enum Attempt {
     Complete(DraftProposalOutcome),
     Retry(DraftProposalError),
+}
+
+struct DraftCandidate {
+    proposal: Proposal<Draft>,
+    sell_plan: Option<SellDraftQuantityPlan>,
 }
 
 #[derive(Debug)]
@@ -202,9 +212,6 @@ where
         if prepared.range.check(observation.price()) != CheckResult::Passed {
             return self.discard(request.instrument, snapshot, current).await;
         }
-        if let RaisedSignal::Sell(_) = &current.signal {
-            return Err(DraftProposalError::SellDraftUnavailable);
-        }
         let read_check = DraftCheck {
             account: request.account,
             at: read_at,
@@ -216,20 +223,30 @@ where
         {
             return Ok(outcome);
         }
-        let proposal = self.make_proposal(request, current, prepared).await?;
+        let candidate = self.make_proposal(request, current, prepared).await?;
         let Some(write_at) = self.recheck(current, &prepared.inputs)? else {
             return Ok(Attempt::Complete(DraftProposalOutcome::MarketClosed));
         };
-        proposal
+        candidate
+            .proposal
             .check_current(write_at, observation)
             .map_err(DraftProposalError::DraftStatus)?;
+        if let Some(plan) = candidate.sell_plan.as_ref() {
+            plan.check_facts_at(write_at, &prepared.inputs.evaluation.calendars)
+                .map_err(DraftProposalError::SellQuantity)?;
+        }
         let write_check = DraftCheck {
             account: request.account,
             at: write_at,
             observation,
         };
-        self.store_candidate(request.instrument, snapshot, proposal, write_check)
-            .await
+        self.store_candidate(
+            request.instrument,
+            snapshot,
+            candidate.proposal,
+            write_check,
+        )
+        .await
     }
 
     async fn check_existing_draft(
@@ -419,29 +436,31 @@ where
         request: &DraftRequest<'_>,
         current: &StoredSignal,
         prepared: &PreparedDraft,
-    ) -> Result<Proposal<Draft>, DraftProposalError> {
-        let RaisedSignal::Buy(buy) = &current.signal else {
-            return Err(DraftProposalError::SellDraftUnavailable);
-        };
-        let occurrence = current
-            .occurrence
-            .as_ref()
-            .ok_or(DraftProposalError::Quantity(NoBuyQuantity::Indeterminate))?;
+    ) -> Result<DraftCandidate, DraftProposalError> {
+        match &current.signal {
+            RaisedSignal::Buy(buy) => {
+                self.make_buy_proposal(request, (buy, current.occurrence.as_ref()), prepared)
+                    .await
+            }
+            RaisedSignal::Sell(signal) => self.make_sell_proposal(request, signal, prepared),
+        }
+    }
+
+    async fn make_buy_proposal(
+        &self,
+        request: &DraftRequest<'_>,
+        buy_signal: (&domain::BuySignal, Option<&domain::BuySignalRecord>),
+        prepared: &PreparedDraft,
+    ) -> Result<DraftCandidate, DraftProposalError> {
+        let (buy, stored_occurrence) = buy_signal;
+        let occurrence =
+            stored_occurrence.ok_or(DraftProposalError::Quantity(NoBuyQuantity::Indeterminate))?;
         let current_buy = CurrentBuySignal::try_new(buy.clone(), occurrence.clone())
             .map_err(DraftProposalError::Quantity)?;
         let (plan, calculated_at) = self
             .buy_plan(request, &current_buy, &prepared.inputs.evaluation)
             .await?;
-        let table =
-            TickTable::from_master(&prepared.inputs.master).map_err(DraftProposalError::Tick)?;
-        let limit = calculate_limit_price(
-            &prepared.inputs.book,
-            Some(&table),
-            &prepared.inputs.limits,
-            OrderSide::Buy,
-            calculated_at,
-        )
-        .map_err(DraftProposalError::Limit)?;
+        let limit = limit_price(&prepared.inputs, OrderSide::Buy, calculated_at)?;
         let intent = buy_limit_intent(
             &plan,
             &limit,
@@ -449,14 +468,77 @@ where
             request.id.as_client_order_id().clone(),
         )
         .map_err(DraftProposalError::BuyIntent)?;
-        Proposal::new(
+        let proposal = Proposal::new(
             request.id.clone(),
             intent,
             calculated_at,
             prepared.range.clone(),
             ProposalLifetime::default(),
         )
-        .map_err(DraftProposalError::Proposal)
+        .map_err(DraftProposalError::Proposal)?;
+        Ok(DraftCandidate {
+            proposal,
+            sell_plan: None,
+        })
+    }
+
+    fn make_sell_proposal(
+        &self,
+        request: &DraftRequest<'_>,
+        signal: &SellSignal,
+        prepared: &PreparedDraft,
+    ) -> Result<DraftCandidate, DraftProposalError> {
+        let (plan, calculated_at) = self.sell_plan(request, signal, &prepared.inputs)?;
+        let limit = limit_price(&prepared.inputs, OrderSide::Sell, calculated_at)?;
+        let intent = sell_limit_intent(
+            &plan,
+            &limit,
+            request.account,
+            request.id.as_client_order_id().clone(),
+        )
+        .map_err(DraftProposalError::SellIntent)?;
+        let proposal = Proposal::new(
+            request.id.clone(),
+            intent,
+            calculated_at,
+            prepared.range.clone(),
+            ProposalLifetime::default(),
+        )
+        .map_err(DraftProposalError::Proposal)?;
+        Ok(DraftCandidate {
+            proposal,
+            sell_plan: Some(plan),
+        })
+    }
+
+    fn sell_plan(
+        &self,
+        request: &DraftRequest<'_>,
+        signal: &SellSignal,
+        inputs: &DraftProposalInputs,
+    ) -> Result<(SellDraftQuantityPlan, Timestamp), DraftProposalError> {
+        let valuation = inputs
+            .evaluation
+            .valuation
+            .as_ref()
+            .ok_or(DraftProposalError::MissingQuantityFacts)?;
+        let facts = SellDraftQuantityFacts::new(
+            request.account,
+            valuation,
+            inputs.sellable_quantity.as_ref(),
+        );
+        let calculated_at = self.clock.now();
+        match calculate_sell_draft_quantity(
+            signal,
+            &facts,
+            calculated_at,
+            &inputs.evaluation.calendars,
+        ) {
+            SellDraftQuantityDecision::Plan(plan) => Ok((*plan, calculated_at)),
+            SellDraftQuantityDecision::None(reason) => {
+                Err(DraftProposalError::SellQuantity(reason))
+            }
+        }
     }
 
     async fn buy_plan(
@@ -583,6 +665,16 @@ where
             }
         }
     }
+}
+
+fn limit_price(
+    inputs: &DraftProposalInputs,
+    side: OrderSide,
+    at: Timestamp,
+) -> Result<CalculatedLimitPrice, DraftProposalError> {
+    let table = TickTable::from_master(&inputs.master).map_err(DraftProposalError::Tick)?;
+    calculate_limit_price(&inputs.book, Some(&table), &inputs.limits, side, at)
+        .map_err(DraftProposalError::Limit)
 }
 
 fn signal_task(current: &StoredSignal) -> &domain::EstimateTask {

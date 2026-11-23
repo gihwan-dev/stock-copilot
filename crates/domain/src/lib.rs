@@ -541,6 +541,12 @@ mod sell_quantity;
 pub use sell_quantity::{
     NoSellQuantity, SellQuantityMode, SellQuantityPlan, SellTarget, calculate_sell_quantity,
 };
+mod sell_draft_quantity;
+pub use sell_draft_quantity::{
+    NoSellDraftQuantity, SellDraftQuantityAdjustmentError, SellDraftQuantityDecision,
+    SellDraftQuantityFacts, SellDraftQuantityPlan, SellQuantityAdjustment, SellQuantityConstraint,
+    calculate_sell_draft_quantity,
+};
 
 mod limit_price;
 mod sell_quantity_review;

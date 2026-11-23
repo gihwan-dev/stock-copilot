@@ -27,6 +27,19 @@ pub(crate) fn maximum_buy_quantity() -> Quantity {
     Quantity(Decimal::MAX)
 }
 
+pub(crate) fn whole_excess(
+    held: crate::WholeOrderQuantity,
+    sellable: crate::WholeOrderQuantity,
+) -> Quantity {
+    let diff = held
+        .quantity()
+        .as_decimal()
+        .mantissa()
+        .saturating_sub(sellable.quantity().as_decimal().mantissa())
+        .max(0_i128);
+    Quantity(Decimal::from_i128_with_scale(diff, 0_u32))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{NumericError, NumericInput, Quantity};
