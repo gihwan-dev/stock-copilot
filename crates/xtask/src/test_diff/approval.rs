@@ -937,6 +937,115 @@ fn safe_finding(
     }
 }
 
+#[derive(Default)]
+struct DiagnosticControls {
+    kinds: BTreeSet<&'static str>,
+}
+
+impl<'ast> Visit<'ast> for DiagnosticControls {
+    fn visit_macro(&mut self, i: &'ast syn::Macro) {
+        let args = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+            .parse2(i.tokens.clone());
+        match args {
+            Ok(expressions) => {
+                for expression in &expressions {
+                    self.visit_expr(expression);
+                }
+            }
+            Err(_) if macro_contains_control(i.tokens.clone()) => {
+                self.kinds.insert("해석되지 않은 매크로의 제어 토큰");
+            }
+            Err(_) => {}
+        }
+    }
+    fn visit_expr_return(&mut self, i: &'ast syn::ExprReturn) {
+        self.kinds.insert("return");
+        visit::visit_expr_return(self, i);
+    }
+    fn visit_expr_break(&mut self, i: &'ast syn::ExprBreak) {
+        self.kinds.insert("break");
+        visit::visit_expr_break(self, i);
+    }
+    fn visit_expr_continue(&mut self, i: &'ast syn::ExprContinue) {
+        self.kinds.insert("continue");
+        visit::visit_expr_continue(self, i);
+    }
+    fn visit_expr_if(&mut self, i: &'ast syn::ExprIf) {
+        self.kinds.insert("if");
+        visit::visit_expr_if(self, i);
+    }
+    fn visit_expr_match(&mut self, i: &'ast syn::ExprMatch) {
+        self.kinds.insert("match");
+        visit::visit_expr_match(self, i);
+    }
+    fn visit_expr_loop(&mut self, i: &'ast syn::ExprLoop) {
+        self.kinds.insert("loop 반복");
+        visit::visit_expr_loop(self, i);
+    }
+    fn visit_expr_while(&mut self, i: &'ast syn::ExprWhile) {
+        self.kinds.insert("while 반복");
+        visit::visit_expr_while(self, i);
+    }
+    fn visit_expr_try_block(&mut self, i: &'ast syn::ExprTryBlock) {
+        self.kinds.insert("try 블록");
+        visit::visit_expr_try_block(self, i);
+    }
+    fn visit_expr_unsafe(&mut self, i: &'ast syn::ExprUnsafe) {
+        self.kinds.insert("unsafe 블록");
+        visit::visit_expr_unsafe(self, i);
+    }
+    fn visit_expr_call(&mut self, i: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(path) = i.func.as_ref()
+            && path
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "exit" || segment.ident == "abort")
+        {
+            self.kinds.insert("exit·abort 호출");
+        }
+        visit::visit_expr_call(self, i);
+    }
+    fn visit_expr_for_loop(&mut self, i: &'ast syn::ExprForLoop) {
+        self.kinds.insert("for 반복");
+        visit::visit_expr_for_loop(self, i);
+    }
+    fn visit_expr_closure(&mut self, i: &'ast syn::ExprClosure) {
+        self.kinds.insert("클로저");
+        visit::visit_expr_closure(self, i);
+    }
+    fn visit_expr_try(&mut self, i: &'ast syn::ExprTry) {
+        self.kinds.insert("오류 전파(?)");
+        visit::visit_expr_try(self, i);
+    }
+}
+
+fn assertion_problem(old: &syn::Stmt, new: &syn::Stmt, approval: AssertionChange) -> String {
+    if approval == AssertionChange::Forbidden {
+        return String::from("단언 변경에 명시 승인이 없다");
+    }
+    let mut control = SetupControl::default();
+    control.visit_stmt(old);
+    control.visit_stmt(new);
+    if control.blocked {
+        let mut details = DiagnosticControls::default();
+        details.visit_stmt(old);
+        details.visit_stmt(new);
+        return if details.kinds.is_empty() {
+            String::from("보호 문장에 제어 흐름이 있다")
+        } else {
+            format!(
+                "보호 문장에 제어 흐름이 있다: {}",
+                details.kinds.into_iter().collect::<Vec<_>>().join(", ")
+            )
+        };
+    }
+    if assertion_heads(old).is_none() || assertion_heads(new).is_none() {
+        return String::from("단언의 호출·블록 또는 매크로 인자를 안전하게 분석할 수 없다");
+    }
+    String::from("단언의 호출·매크로·연산 구조 또는 비자명성 조건이 다르다")
+}
+
 fn unsafe_item_reason(
     before: &str,
     after: &str,
@@ -969,12 +1078,17 @@ fn unsafe_item_reason(
             right.len()
         );
     }
-    if let Some(index) = left
+    if let Some((index, (previous, updated))) = left
         .iter()
         .zip(&right)
-        .position(|(previous, updated)| !same_assertion(previous, updated, approval))
+        .enumerate()
+        .find(|(_, (previous, updated))| !same_assertion(previous, updated, approval))
     {
-        return format!("보호된 단언 {}의 구조가 달라짐", index.saturating_add(1));
+        return format!(
+            "보호된 단언 {}: {}",
+            index.saturating_add(1),
+            assertion_problem(previous, updated, approval)
+        );
     }
     String::from("함수 구조 보존 규칙 위반")
 }
@@ -1118,7 +1232,7 @@ fn diagnostic_trusted(
 
 pub(super) fn diagnose(
     root: &Path,
-    authority: &str,
+    authority: Option<&str>,
     head: &str,
     files: (&Files, &Files),
     findings: &Findings,
@@ -1127,13 +1241,16 @@ pub(super) fn diagnose(
     if findings.is_empty() {
         return result;
     }
-    let Some(contents) = git(root, &["show", &format!("{authority}:{APPROVAL_FILE}")]) else {
+    let source = commit(root, MASTER)
+        .or_else(|| authority.map(String::from))
+        .unwrap_or_else(|| String::from(head));
+    let Some(contents) = git(root, &["show", &format!("{source}:{APPROVAL_FILE}")]) else {
         return result;
     };
     let Ok(groups) = parse(&contents) else {
         return result;
     };
-    let trusted = diagnostic_trusted(root, authority, head, &groups);
+    let trusted = authority.is_some() && diagnostic_trusted(root, &source, head, &groups);
     let (before, current) = files;
     let base_scan = scan(before);
     let helpers = new_helper_names(&base_scan, &scan(current));
@@ -1159,7 +1276,13 @@ pub(super) fn diagnose(
             String::from("승인 이력 또는 기준 커밋 신뢰 실패")
         };
         for item in applicable {
-            result.insert(item, reason.clone());
+            result
+                .entry(item)
+                .and_modify(|previous: &mut String| {
+                    previous.push_str("; ");
+                    previous.push_str(&reason);
+                })
+                .or_insert_with(|| reason.clone());
         }
     }
     result
@@ -1230,13 +1353,14 @@ pub(super) fn apply_with_authority(
     Ok(findings)
 }
 
-pub(super) fn apply(
+pub(super) fn apply_to(
     root: &Path,
-    before: &Files,
-    current: &Files,
+    files: (&Files, &Files),
     findings: Findings,
     _base_use: BaseUse,
+    output: &mut impl Write,
 ) -> Result<Findings, String> {
+    let (before, current) = files;
     let eligible = findings.iter().any(|finding| match &finding.rule {
         Rule::Modified(_) | Rule::SupportModified(_) => true,
         Rule::Removed(_)
@@ -1249,19 +1373,39 @@ pub(super) fn apply(
     let Some(head) = commit(root, "HEAD") else {
         return Ok(findings);
     };
-    let Some(authority) = trusted_authority(root, &head) else {
-        return Ok(findings);
+    let authority = trusted_authority(root, &head);
+    let remaining = match (eligible, authority.as_deref()) {
+        (true, Some(selected)) => {
+            apply_with_authority(root, selected, &head, (before, current), findings)?
+        }
+        _ => findings,
     };
-    let remaining = if eligible {
-        apply_with_authority(root, &authority, &head, (before, current), findings)?
-    } else {
-        findings
-    };
-    let source = commit(root, MASTER).unwrap_or_else(|| authority.clone());
-    for (finding, reason) in diagnose(root, &source, &head, (before, current), &remaining) {
-        if writeln!(std::io::stderr().lock(), "승인 거부: {finding}: {reason}").is_err() {
+    for (finding, reason) in diagnose(
+        root,
+        authority.as_deref(),
+        &head,
+        (before, current),
+        &remaining,
+    ) {
+        if writeln!(output, "승인 거부: {finding}: {reason}").is_err() {
             break;
         }
     }
     Ok(remaining)
+}
+
+pub(super) fn apply(
+    root: &Path,
+    before: &Files,
+    current: &Files,
+    findings: Findings,
+    base_use: BaseUse,
+) -> Result<Findings, String> {
+    apply_to(
+        root,
+        (before, current),
+        findings,
+        base_use,
+        &mut std::io::stderr().lock(),
+    )
 }
