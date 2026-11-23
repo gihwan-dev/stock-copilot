@@ -174,7 +174,7 @@ test("색인의 바이너리와 심볼릭 링크 내용을 복제한다", () => 
   write(source, "root.txt", "base\n");
   git(source, "add", ".");
   git(source, "commit", "--quiet", "-m", "base");
-  git(source, "clone", "--quiet", "--shared", ".", clone);
+  git(source, "clone", "--quiet", "--no-local", ".", clone);
   writeFileSync(join(source, "data.bin"), Buffer.from([0, 255, 47, 127]));
   symlinkSync("root.txt", join(source, "link"));
   git(source, "add", "data.bin", "link");
