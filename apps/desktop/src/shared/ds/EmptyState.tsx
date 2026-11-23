@@ -11,7 +11,7 @@ type Props = {
   readonly action?: Action;
 };
 export const EmptyState = (props: Props): ReactElement => (
-  <div className="flex flex-col items-center gap-space-2 py-space-10 px-space-6 text-center text-ink-muted">
+  <div className="status-sentence flex flex-col items-center gap-space-2 py-space-10 px-space-6 text-center text-ink-muted">
     <span className="text-ink-subtle">
       <Icon name={props.icon ?? "info"} size="icon-lg" />
     </span>

@@ -10,10 +10,10 @@ use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate,
-    FxRateKind, IndicatorCode, InstrumentId, InvestorFlow, InvestorProfile,
+    FxRateKind, IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
-    MarketIndicatorQuote, MasterInstrumentFacts, NewsItem, OrderFxRates, Orderbook, Portfolio,
-    PriceAdjustment, PriceLimits, ProgramTrade, ProposalId, Quote, QuoteInstrument, RankingLimit,
+    MarketIndicatorQuote, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
+    PriceLimits, ProgramTrade, ProposalId, Quote, QuoteInstrument, RankingLimit,
     ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
     SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
     SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
@@ -237,7 +237,7 @@ impl BrokerRead for ScriptedBrokerRead {
             .push(BrokerReadCall::StockWarnings(instrument.clone()));
         self.stock_warnings.run((instrument.clone(),)).await
     }
-    async fn instruments(&self, market: KnownMarket) -> Result<MasterInstrumentFacts, PortError> {
+    async fn instruments(&self, market: KnownMarket) -> Result<InstrumentMaster, PortError> {
         self.calls.write().push(BrokerReadCall::Instruments(market));
         self.instruments.run((market,)).await
     }
@@ -812,7 +812,7 @@ pub type ScriptedBrokerReadOrderScript =
 pub type ScriptedBrokerReadStockWarningsScript =
     Script<(ResolvedOrderInstrument,), Result<StockWarnings, PortError>>;
 pub type ScriptedBrokerReadInstrumentsScript =
-    Script<(KnownMarket,), Result<MasterInstrumentFacts, PortError>>;
+    Script<(KnownMarket,), Result<InstrumentMaster, PortError>>;
 pub type ScriptedBrokerReadOrderbookScript =
     Script<(QuoteInstrument,), Result<Orderbook, PortError>>;
 pub type ScriptedBrokerReadPriceLimitsScript =

@@ -1,0 +1,6 @@
+use application::ProposalRepository;
+use domain::{Proposal, Validated};
+pub async fn cannot_store<R: ProposalRepository>(repo: &R, value: &Proposal<Validated>) {
+    let _saved = repo.store_validated(value).await;
+}
+fn main() {}

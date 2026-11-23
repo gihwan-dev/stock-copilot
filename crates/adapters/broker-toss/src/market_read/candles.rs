@@ -9,6 +9,12 @@ use std::collections::BTreeMap;
 const ENDPOINT: ReadEndpoint = ReadEndpoint::Candles;
 const PAGE_LIMIT: usize = 64;
 
+#[derive(Clone, Copy)]
+pub(crate) struct CandleMode {
+    pub adjustment: PriceAdjustment,
+    pub master_errors: crate::account_read::MasterErrorMode,
+}
+
 pub(crate) fn format_time(value: Timestamp) -> Result<String, PortError> {
     let parsed = time::OffsetDateTime::from_unix_timestamp(*value.utc_seconds().as_i64())
         .and_then(|value_time| value_time.replace_nanosecond(*value.nanosecond().as_u32()))
@@ -57,7 +63,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
     instrument: &QuoteInstrument,
     window: TimeInterval,
     period: CandlePeriod,
-    adjustment: PriceAdjustment,
+    mode: CandleMode,
 ) -> Result<Vec<Candle>, PortError> {
     let mut before = format_time(window.end())?;
     let mut boundary = window.end();
@@ -65,7 +71,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
     for _page in 0..PAGE_LIMIT {
         let value = reader
             .market_read(
-                candle_request(instrument, period, adjustment, &before),
+                candle_request(instrument, period, mode.adjustment, &before),
                 ENDPOINT,
             )
             .await?;
@@ -85,7 +91,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
             if at < window.start() || at >= window.end() {
                 continue;
             }
-            let candle = assemble(reader, parsed, instrument, adjustment)?;
+            let candle = assemble(reader, parsed, instrument, mode.adjustment)?;
             if result.get(&at).is_some_and(|old| !same(old, &candle)) {
                 return Err(invalid(ENDPOINT));
             }
@@ -94,7 +100,7 @@ pub(crate) async fn candles<S: SecretStore, T: Clock, R: TokenRenewal>(
         if previous.is_some_and(|at| at <= window.start()) || decoded.next_before.is_none() {
             let candles = result.into_values().collect::<Vec<_>>();
             validate_gaps(reader, instrument, period, &candles)?;
-            validate_adjusted_moves(reader, instrument, period, adjustment, &candles)?;
+            validate_adjusted_moves(reader, instrument, period, mode, &candles)?;
             return Ok(candles);
         }
         let next = decoded.next_before.ok_or_else(|| invalid(ENDPOINT))?;
@@ -251,14 +257,14 @@ fn validate_adjusted_moves<S: SecretStore, T: Clock, R: TokenRenewal>(
     reader: &TossAccountRead<S, T, R>,
     instrument: &QuoteInstrument,
     period: CandlePeriod,
-    adjustment: PriceAdjustment,
+    mode: CandleMode,
     candles: &[Candle],
 ) -> Result<(), PortError> {
     match period {
         CandlePeriod::Minute => return Ok(()),
         CandlePeriod::Daily => {}
     }
-    match adjustment {
+    match mode.adjustment {
         PriceAdjustment::Raw => return Ok(()),
         PriceAdjustment::Adjusted(_) => {}
     }
@@ -271,7 +277,12 @@ fn validate_adjusted_moves<S: SecretStore, T: Clock, R: TokenRenewal>(
                 .quote_instrument()
                 .is_ok_and(|quoted| &quoted == instrument)
         })
-        .ok_or_else(|| unsupported(application::BrokerCapability::AdjustedHistory))?;
+        .ok_or_else(|| {
+            mode.master_errors.missing(
+                ENDPOINT,
+                unsupported(application::BrokerCapability::AdjustedHistory),
+            )
+        })?;
     for [previous, current] in candles.array_windows::<2>() {
         check_move(
             master,

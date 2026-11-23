@@ -87,7 +87,12 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
         sector: &SectorId,
         market: KnownMarket,
     ) -> impl Future<Output = Result<SectorEtfs, PortError>> + Send {
-        crate::market_sector::etfs(self, sector, market)
+        crate::market_sector::etfs(
+            self,
+            sector,
+            market,
+            crate::account_read::MasterErrorMode::Legacy,
+        )
     }
     async fn indicator_quotes(
         &self,
@@ -131,7 +136,12 @@ impl<S: SecretStore, T: Clock, R: TokenRenewal> MarketInfo for TossAccountRead<S
         sector: &SectorId,
         market: KnownMarket,
     ) -> impl Future<Output = Result<SectorComposition, PortError>> + Send {
-        crate::market_sector::composition(self, sector, market)
+        crate::market_sector::composition(
+            self,
+            sector,
+            market,
+            crate::account_read::MasterErrorMode::Legacy,
+        )
     }
     async fn calendar(&self, market: KnownMarket) -> Result<MarketCalendar, PortError> {
         crate::market_calendar::fetch(self, market).await

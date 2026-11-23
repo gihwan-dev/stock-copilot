@@ -6,8 +6,18 @@ type Props = {
 };
 export const Heading = (props: Props): ReactElement => {
   if (props.level === 1)
-    return <h1 className="text-title-lg text-ink">{props.children}</h1>;
+    return (
+      <h1 className="status-sentence text-title-lg text-ink">
+        {props.children}
+      </h1>
+    );
   if (props.level === 3)
-    return <h3 className="text-title-sm text-ink">{props.children}</h3>;
-  return <h2 className="text-title-md text-ink">{props.children}</h2>;
+    return (
+      <h3 className="status-sentence text-title-sm text-ink">
+        {props.children}
+      </h3>
+    );
+  return (
+    <h2 className="status-sentence text-title-md text-ink">{props.children}</h2>
+  );
 };

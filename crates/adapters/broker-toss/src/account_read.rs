@@ -8,6 +8,32 @@ use domain::{
     BrokerAccountTypeCode, MasterInstrumentFacts, Timestamp,
 };
 
+#[derive(Clone, Copy)]
+pub(crate) enum MasterErrorMode {
+    Legacy,
+    Dedicated,
+}
+
+impl MasterErrorMode {
+    pub(crate) fn missing(self, endpoint: ReadEndpoint, legacy: PortError) -> PortError {
+        match self {
+            Self::Legacy => legacy,
+            Self::Dedicated => PortError::new(
+                endpoint,
+                HttpStatus::Success,
+                PortErrorKind::MasterNotReady(application::MasterNotReady::MissingInstrument),
+            ),
+        }
+    }
+
+    pub(crate) fn conflict(self, endpoint: ReadEndpoint, legacy: PortError) -> PortError {
+        match self {
+            Self::Legacy => legacy,
+            Self::Dedicated => invalid(endpoint, ResponseMismatch::Validation),
+        }
+    }
+}
+
 pub struct TossAccountRead<Store, Time, Renewal> {
     tokens: TokenManager<Store, Time, Renewal>,
     clock: Time,
@@ -20,6 +46,22 @@ impl<Store, Time, Renewal> std::fmt::Debug for TossAccountRead<Store, Time, Rene
     }
 }
 impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Store, Time, Renewal> {
+    #[must_use]
+    pub fn with_instrument_master<
+        Authority: application::InstrumentMasterAuthority,
+        Issuer: application::InstrumentIdIssuer,
+    >(
+        self,
+        authority: Authority,
+        issuer: Issuer,
+    ) -> crate::TossInstrumentRead<Store, Time, Renewal, Authority, Issuer> {
+        crate::TossInstrumentRead {
+            reader: self,
+            authority,
+            issuer,
+        }
+    }
+
     pub fn new(
         tokens: TokenManager<Store, Time, Renewal>,
         clock: Time,
@@ -70,11 +112,12 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub(crate) async fn fetch_holdings(
         &self,
         account: &AccountId,
+        master_errors: MasterErrorMode,
     ) -> Result<HoldingsObservation, PortError> {
         let request = ReadRequest::new(ReadRoute::Holdings)
             .with_account(SecretValue::new(account.as_i64().to_string().into_bytes()));
         let value = self.read(request, ReadEndpoint::Holdings).await?;
-        crate::holding_read::holdings(&value, &self.master, self.clock.now())
+        crate::holding_read::holdings(&value, &self.master, self.clock.now(), master_errors)
     }
     pub(crate) async fn fetch_transactions(
         &self,
@@ -87,6 +130,11 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     #[must_use]
     pub fn with_candle_sessions(mut self, sessions: Vec<domain::MarketSession>) -> Self {
         self.candle_sessions = sessions;
+        self
+    }
+    #[must_use]
+    pub fn with_market_master(mut self, master: MasterInstrumentFacts) -> Self {
+        self.master = master;
         self
     }
     pub(crate) fn market_master(&self) -> &MasterInstrumentFacts {
