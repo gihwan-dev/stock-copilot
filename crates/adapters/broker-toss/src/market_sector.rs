@@ -248,14 +248,23 @@ pub(crate) async fn etfs<S: SecretStore, T: Clock, R: TokenRenewal>(
                 })
             })
             .ok_or_else(|| master_errors.missing(endpoint, missing_master_mapping(endpoint)))?;
-        if !matches_etf_type(master) {
-            return Err(master_errors.conflict(endpoint, missing_master_mapping(endpoint)));
+        match master.row().security_type.knowledge() {
+            domain::SecurityTypeKnowledge::Unknown => return Err(missing_master_mapping(endpoint)),
+            domain::SecurityTypeKnowledge::Known(
+                domain::ExcludedSecurityType::Etf | domain::ExcludedSecurityType::ForeignEtf,
+            ) => {}
+            domain::SecurityTypeKnowledge::Known(
+                domain::ExcludedSecurityType::Stock
+                | domain::ExcludedSecurityType::ForeignStock
+                | domain::ExcludedSecurityType::DepositaryReceipt
+                | domain::ExcludedSecurityType::InfrastructureFund
+                | domain::ExcludedSecurityType::Reit
+                | domain::ExcludedSecurityType::Etn
+                | domain::ExcludedSecurityType::StockWarrants,
+            ) => {
+                return Err(master_errors.conflict(endpoint, missing_master_mapping(endpoint)));
+            }
         }
     }
     Ok(etfs)
-}
-
-fn matches_etf_type(master: &domain::MasterInstrument) -> bool {
-    master.row().security_type.known() == Some(domain::ExcludedSecurityType::Etf)
-        || master.row().security_type.known() == Some(domain::ExcludedSecurityType::ForeignEtf)
 }

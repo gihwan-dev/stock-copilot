@@ -1331,6 +1331,86 @@ mod tests {
     }
 
     #[test]
+    fn review3_real_ledger_rejects_uncertain_retirement_without_changing_history() {
+        let mut details = details();
+        details["result"][1]["status"] = json!("DELISTED");
+        let mut replies = responses();
+        *replies.last_mut().expect("details reply") = response("200 OK", &details);
+        let server = ScriptedHttpServer::start(replies).expect("server");
+        let authority = Authority::default();
+        let repository = Arc::clone(&authority.repository);
+        let existing = source("005930", "KR7005930099");
+        let observed = source("005930", "KR7005930003");
+        run(repository.ensure(&existing, &id("existing-id"))).expect("seed");
+        let before = run(repository.lookup(&existing)).expect("existing record");
+        let reader = reader(&server, crate::support::time())
+            .with_instrument_master(authority, issuer(&["other-id"]));
+        let master = run(reader.instruments(KnownMarket::Kr)).expect("master");
+        assert_eq!(
+            master.entries()[0],
+            InstrumentMasterEntry::Unavailable {
+                source: observed.clone(),
+                reason: InstrumentMappingError::IdentityUncertain,
+            }
+        );
+        assert_eq!(run(repository.lookup(&existing)), Ok(before));
+        assert_eq!(
+            run(repository.resolve(&observed)),
+            Err(MappingStoreError::Mapping(
+                InstrumentMappingError::IdentityUncertain
+            ))
+        );
+        server.finish().expect("requests");
+    }
+
+    #[test]
+    fn review3_unknown_etf_type_is_not_a_proven_response_conflict() {
+        let mut list = list();
+        list["result"][0]["securityType"] = json!("NEW_KIND");
+        let mut details = details();
+        details["result"][1]["securityType"] = json!("NEW_KIND");
+        let master_server = ScriptedHttpServer::start(vec![
+            token(),
+            response("200 OK", &list),
+            response("200 OK", &empty()),
+            response("200 OK", &empty()),
+            response("200 OK", &details),
+        ])
+        .expect("server");
+        let master_reader = reader(&master_server, crate::support::time())
+            .with_instrument_master(Authority::default(), issuer(&["unknown-id", "etf-id"]));
+        let master = run(master_reader.instruments(KnownMarket::Kr))
+            .expect("master")
+            .complete_facts()
+            .expect("complete");
+        master_server.finish().expect("requests");
+        let body = json!({"result":{"etfs":[{"symbol":"005930","name":"합성 하나"}]}});
+        let sector = domain::SectorId::try_new("100").expect("sector");
+        let legacy_server =
+            ScriptedHttpServer::start(vec![token(), response("200 OK", &body)]).expect("server");
+        let legacy =
+            reader(&legacy_server, crate::support::time()).with_market_master(master.clone());
+        let legacy_error = run(legacy.sector_etfs(&sector, KnownMarket::Kr)).expect_err("unknown");
+        assert_eq!(
+            legacy_error.kind(),
+            application::PortErrorKind::Unsupported(application::BrokerCapability::Instruments)
+        );
+        legacy_server.finish().expect("requests");
+        let server =
+            ScriptedHttpServer::start(vec![token(), response("200 OK", &body)]).expect("server");
+        let reader = reader(&server, crate::support::time())
+            .with_market_master(master)
+            .with_instrument_master(Authority::default(), issuer(&[]));
+        let error = run(reader.sector_etfs(&sector, KnownMarket::Kr)).expect_err("unknown");
+        assert_eq!(
+            error.kind(),
+            application::PortErrorKind::Unsupported(application::BrokerCapability::Instruments)
+        );
+        assert_eq!(error.status(), application::HttpStatus::Success);
+        server.finish().expect("requests");
+    }
+
+    #[test]
     fn review_regression_etf_type_conflict_is_not_a_missing_instrument() {
         let mut replies = responses();
         replies.push(response(
