@@ -64,9 +64,15 @@ pub async fn signal_replacement<P: SignalRepository>(
     port: &P,
     instruments: (&InstrumentId, &InstrumentId),
     versions: (&RaisedSignal, &RaisedSignal, &RaisedSignal),
+    evidence: (
+        &application::SignalCommitEvidence,
+        &application::SignalCommitEvidence,
+        &application::SignalCommitEvidence,
+    ),
 ) {
     let (instrument, other) = instruments;
     let (first_signal, second_signal, other_first) = versions;
+    let (first_evidence, second_evidence, other_evidence) = evidence;
     let first = std::slice::from_ref(first_signal);
     let second = std::slice::from_ref(second_signal);
     assert_ne!(
@@ -78,18 +84,33 @@ pub async fn signal_replacement<P: SignalRepository>(
     assert_ne!(first, second, "ADR 계약: 독립된 증인과 저장·조회 의미 보존");
     super::signal_repository_current(port, instrument, Ok(vec![])).await;
     assert_eq!(
-        signal_evaluate(port, instrument, Some(first_signal.clone())).await,
+        signal_evaluate(
+            port,
+            instrument,
+            Some((first_signal.clone(), first_evidence.clone()))
+        )
+        .await,
         Ok(()),
         "ADR 계약: 조건부 신호 전이가 성공해야 함"
     );
     super::signal_repository_current(port, instrument, Ok(first.to_vec())).await;
     assert_eq!(
-        signal_evaluate(port, other, Some(other_first.clone())).await,
+        signal_evaluate(
+            port,
+            other,
+            Some((other_first.clone(), other_evidence.clone()))
+        )
+        .await,
         Ok(()),
         "ADR 계약: 조건부 신호 전이가 성공해야 함"
     );
     assert_eq!(
-        signal_evaluate(port, instrument, Some(second_signal.clone())).await,
+        signal_evaluate(
+            port,
+            instrument,
+            Some((second_signal.clone(), second_evidence.clone()))
+        )
+        .await,
         Ok(()),
         "ADR 계약: 조건부 신호 전이가 성공해야 함"
     );
@@ -167,10 +188,7 @@ fn signal_calibration_head(
         domain::SignalDecision::Buy(value) => value.facts().submission().calibration_key(),
         domain::SignalDecision::Sell(value) => value.facts().submission().calibration_key(),
         domain::SignalDecision::None(_) => match &snapshot.current {
-            Some(current) => match &current.signal {
-                RaisedSignal::Buy(value) => value.facts().submission().calibration_key(),
-                RaisedSignal::Sell(value) => value.facts().submission().calibration_key(),
-            },
+            Some(current) => current.signal.calibration_key(),
             None => {
                 return Err(application::SystemPortError::new(
                     application::SystemPort::Repository,
@@ -188,15 +206,22 @@ fn signal_calibration_head(
 async fn signal_evaluate<P: SignalRepository>(
     port: &P,
     instrument: &InstrumentId,
-    next: Option<RaisedSignal>,
+    next: Option<(RaisedSignal, application::SignalCommitEvidence)>,
 ) -> Result<(), application::SystemPortError> {
     let snapshot = port.snapshot(instrument).await?;
-    let decision = match next {
-        Some(RaisedSignal::Buy(value)) => domain::SignalDecision::Buy(value),
-        Some(RaisedSignal::Sell(value)) => domain::SignalDecision::Sell(value),
-        None => domain::SignalDecision::None(domain::NoSignalReason::Expired),
+    let (decision, evidence) = match next {
+        Some((RaisedSignal::Buy(value), evidence)) => {
+            (domain::SignalDecision::Buy(value), Some(evidence))
+        }
+        Some((RaisedSignal::Sell(value), evidence)) => {
+            (domain::SignalDecision::Sell(value), Some(evidence))
+        }
+        None => (
+            domain::SignalDecision::None(domain::NoSignalReason::Expired),
+            None,
+        ),
     };
-    let transition = domain::signal_transition(
+    let transition = domain::signal_transition_from_history(
         snapshot.current.as_ref().map(|value| &value.signal),
         &decision,
     )
@@ -224,6 +249,7 @@ async fn signal_evaluate<P: SignalRepository>(
         transition,
         calibration_head: Some(head),
         occurrence: None,
+        evidence,
     }));
     super::signal_repository_commit(
         port,
@@ -287,8 +313,15 @@ pub async fn proposal_roundtrip<P: ProposalRepository>(
     port: &P,
     versions: (&Proposal<Draft>, &Proposal<Draft>),
     other: &Proposal<Draft>,
+    evidence: (
+        &domain::DraftRestoreEvidence,
+        &domain::DraftRestoreEvidence,
+        &domain::DraftRestoreEvidence,
+    ),
+    master: &domain::MasterInstrument,
 ) {
     let (first, second) = versions;
+    let (first_evidence, second_evidence, other_evidence) = evidence;
     assert_eq!(first.id(), second.id(), "같은 제안의 다른 저장 사실");
     assert_ne!(first.id(), other.id(), "서로 다른 제안 키 증인");
     assert_ne!(
@@ -296,25 +329,37 @@ pub async fn proposal_roundtrip<P: ProposalRepository>(
         crate::DraftRecord::from_draft(second),
         "가격 범위 등 다른 사실 증인"
     );
-    super::proposal_repository_draft(port, first.id(), Ok(None)).await;
-    super::proposal_repository_store_draft(port, first, Ok(WriteCompleted)).await;
+    super::proposal_repository_draft(port, first.id(), master, Ok(None)).await;
+    super::proposal_repository_store_draft(port, first, first_evidence, master, Ok(WriteCompleted))
+        .await;
     super::proposal_repository_draft(
         port,
         first.id(),
+        master,
         Ok(Some(crate::DraftRecord::from_draft(first))),
     )
     .await;
-    super::proposal_repository_store_draft(port, second, Ok(WriteCompleted)).await;
-    super::proposal_repository_store_draft(port, other, Ok(WriteCompleted)).await;
+    super::proposal_repository_store_draft(
+        port,
+        second,
+        second_evidence,
+        master,
+        Ok(WriteCompleted),
+    )
+    .await;
+    super::proposal_repository_store_draft(port, other, other_evidence, master, Ok(WriteCompleted))
+        .await;
     super::proposal_repository_draft(
         port,
         first.id(),
+        master,
         Ok(Some(crate::DraftRecord::from_draft(second))),
     )
     .await;
     super::proposal_repository_draft(
         port,
         other.id(),
+        master,
         Ok(Some(crate::DraftRecord::from_draft(other))),
     )
     .await;

@@ -1,9 +1,10 @@
 use crate::{RecordOutcome, SystemPortError, WriteCompleted};
 use domain::{
-    AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, EstimateOutcome, FxPair,
-    FxRate, FxRateKind, InstrumentId, InvestorProfile, NewsItem, Portfolio, PriceAdjustment,
-    Proposal, ProposalId, Quote, RiskSettings, SettledRowSet, SignalSubmission, SignalTaskKey,
-    SyncRecord, Thesis, TimeInterval, Timestamp, ValuationSnapshot,
+    AccountId, Calibration, CalibrationKey, Candle, CandlePeriod, Draft, DraftRestoreEvidence,
+    EstimateOutcome, FxPair, FxRate, FxRateKind, InstrumentId, InvestorProfile, MasterInstrument,
+    NewsItem, Portfolio, PriceAdjustment, Proposal, ProposalId, Quote, RiskSettings, SettledRowSet,
+    SignalSubmission, SignalTaskKey, SyncRecord, Thesis, TimeInterval, Timestamp,
+    ValuationSnapshot,
 };
 use std::future::Future;
 
@@ -137,10 +138,13 @@ pub trait ProposalRepository: Send + Sync {
     fn store_draft(
         &self,
         proposal: &Proposal<Draft>,
+        evidence: &DraftRestoreEvidence,
+        master: &MasterInstrument,
     ) -> impl Future<Output = Result<WriteCompleted, SystemPortError>> + Send;
     fn draft(
         &self,
         proposal: &ProposalId,
+        master: &MasterInstrument,
     ) -> impl Future<Output = Result<Option<Proposal<Draft>>, SystemPortError>> + Send;
 }
 

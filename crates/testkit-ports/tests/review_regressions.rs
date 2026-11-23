@@ -2,6 +2,7 @@
 mod tests {
     mod a27_fixtures;
     use a27_fixtures as a27;
+    use application::ProposalRepository;
     use application::{
         AuditEntry, AuditKind, FxRateQuery, MarketDataRepository, RiskChangeConfirmation,
         SecretKey, SecretValue, SettingsRepository, SignalRepository, SystemFailure, SystemPort,
@@ -519,6 +520,46 @@ mod tests {
         .expect("범위");
         Proposal::new(key, intent, day(60), range, ProposalLifetime::default()).expect("초안")
     }
+    fn draft_restore_evidence(
+        proposal: &Proposal<Draft>,
+        high: &str,
+        source: &MasterInstrument,
+    ) -> domain::DraftRestoreEvidence {
+        let candles = (0_i64..61)
+            .map(|index| {
+                let value = price(if index % 2 == 0 { "100" } else { high });
+                Candle::try_new(
+                    source.row().instrument_id.clone(),
+                    CandleTime::try_new(local_midnight(index), CandlePeriod::Daily).expect("일봉"),
+                    PriceAdjustment::Adjusted(AdjustmentBasis::new(day(61))),
+                    Ohlcv::try_new(value, value, value, value, quantity("13")).expect("봉"),
+                    CandleObservation::new(day(61), CandleStatus::Finalized),
+                )
+                .expect("봉")
+            })
+            .collect();
+        let task = eligible_for_master(high, source);
+        let input = domain::EstimateRestoreEvidence {
+            master: source.row().clone(),
+            side: OrderSide::Buy,
+            candles,
+            reference_price: price("100"),
+            reference_at: local(day(60)),
+            task_at: day(60),
+            horizon: Horizon::new(HorizonSelection::FewDays),
+            permission: HoursPermissionState::Disabled,
+            appetite: RiskAppetite::Neutral,
+        };
+        let stored = input.capture(task.task(), source).expect("과제 근거");
+        domain::DraftRestoreEvidence::capture(
+            proposal,
+            stored,
+            source,
+            ProposalLifetime::default(),
+            task.task().reference(),
+        )
+        .expect("초안 근거")
+    }
     fn snapshot(value: i64) -> ValuationSnapshot {
         let at = day(value);
         let calendar =
@@ -576,7 +617,48 @@ mod tests {
             &proposals,
             (&draft("102"), &draft("107")),
             &draft_for("other-draft", "113"),
+            (
+                &draft_restore_evidence(&draft("102"), "102", &master()),
+                &draft_restore_evidence(&draft("107"), "107", &master()),
+                &draft_restore_evidence(&draft_for("other-draft", "113"), "113", &master()),
+            ),
+            &master(),
         ));
+    }
+    #[test]
+    fn proposal_port_rejects_inconsistent_evidence_and_current_master() {
+        let repository = MemoryProposalRepository::default();
+        let proposal = draft("102");
+        let master = master();
+        let mut evidence = draft_restore_evidence(&proposal, "102", &master);
+        evidence.card.price = price("107");
+        memory(repository.script_store_draft(), 2);
+        let integrity =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity);
+        assert_eq!(
+            run(repository.store_draft(&proposal, &evidence, &master)),
+            Err(integrity)
+        );
+        let valid = draft_restore_evidence(&proposal, "102", &master);
+        assert_eq!(
+            run(repository.store_draft(&proposal, &valid, &master)),
+            Ok(WriteCompleted)
+        );
+        let mut different_row = master.row().clone();
+        different_row.instrument_id = id("other");
+        let different = MasterInstrument::try_new(different_row).expect("다른 종목");
+        memory(repository.script_draft(), 2);
+        match run(repository.draft(proposal.id(), &different)) {
+            Err(error) => assert_eq!(error, integrity),
+            Ok(_) => panic!("다른 종목 거부"),
+        }
+        let loaded = run(repository.draft(proposal.id(), &master))
+            .expect("조회")
+            .expect("초안");
+        assert_eq!(
+            testkit_ports::DraftRecord::from_draft(&loaded),
+            testkit_ports::DraftRecord::from_draft(&proposal)
+        );
     }
     fn run_candle_contract<P: MarketDataRepository>(candles: &P) {
         run(contracts::scenarios::candle_history(
@@ -725,6 +807,34 @@ mod tests {
             .into_signal()
             .expect("다른 종목 신호")
     }
+    fn signal_proof(signal: &RaisedSignal) -> application::SignalCommitEvidence {
+        let facts = match signal {
+            RaisedSignal::Buy(value) => value.facts(),
+            RaisedSignal::Sell(value) => value.facts(),
+        };
+        if facts.task().volatility().instrument() == &id("sample-b") {
+            let decision = match signal {
+                RaisedSignal::Buy(value) => SignalDecision::Buy(value.clone()),
+                RaisedSignal::Sell(value) => SignalDecision::Sell(value.clone()),
+            };
+            return a27::evidence_for_decision(&decision, None).expect("다른 종목 근거");
+        }
+        let item = CollectedItem::from_web(
+            NormalizedUrl::try_new("https://example.com/evidence").expect("주소"),
+            UntrustedText::try_new("근거").expect("제목"),
+            None,
+        );
+        a27::evidence_for_signal(
+            signal,
+            None,
+            "131",
+            item,
+            &(
+                SectorAssignments::try_new(vec![]).expect("분류"),
+                PolicySecurityFacts::default(),
+            ),
+        )
+    }
     #[test]
     fn generic_signal_contract_requires_nonempty_replacement_and_clearing() {
         let repository = prepared_signal_repository();
@@ -732,6 +842,11 @@ mod tests {
             &repository,
             (&id("sample-a"), &id("sample-b")),
             (&signal("7"), &signal("11"), &other_signal()),
+            (
+                &signal_proof(&signal("7")),
+                &signal_proof(&signal("11")),
+                &signal_proof(&other_signal()),
+            ),
         ));
     }
     #[derive(Default)]
@@ -786,7 +901,7 @@ mod tests {
             &self,
             _: &InstrumentId,
             _: &ResolvedOrderInstrument,
-        ) -> Result<Vec<domain::BuySignalRecord>, SystemPortError> {
+        ) -> Result<Vec<domain::HistoricalSignalOccurrence>, SystemPortError> {
             std::future::ready(Ok(vec![])).await
         }
         async fn sources(
@@ -795,7 +910,10 @@ mod tests {
         ) -> Result<application::SignalSourceFacts, SystemPortError> {
             std::future::ready(Ok(application::SignalSourceFacts::default())).await
         }
-        async fn current(&self, _: &InstrumentId) -> Result<Vec<RaisedSignal>, SystemPortError> {
+        async fn current(
+            &self,
+            _: &InstrumentId,
+        ) -> Result<Vec<domain::HistoricalSignal>, SystemPortError> {
             std::future::ready(Ok(vec![])).await
         }
     }
@@ -807,6 +925,11 @@ mod tests {
                 &discard,
                 (&id("sample-a"), &id("sample-b")),
                 (&signal("7"), &signal("11"), &other_signal()),
+                (
+                    &signal_proof(&signal("7")),
+                    &signal_proof(&signal("11")),
+                    &signal_proof(&other_signal()),
+                ),
             ));
         });
         outcome.expect_err("쓰기를 버리는 구현 거부");
@@ -822,6 +945,11 @@ mod tests {
                 &discard,
                 (&id("sample-a"), &id("sample-b")),
                 (&first[0], &second[0], &other_signal()),
+                (
+                    &signal_proof(&first[0]),
+                    &signal_proof(&second[0]),
+                    &signal_proof(&other_signal()),
+                ),
             ));
         })
         .expect_err("쓰기를 버리는 구현 거부");
@@ -834,6 +962,7 @@ mod tests {
             run(contracts::proposal_repository_draft(
                 &repository,
                 expected.id(),
+                &master(),
                 Ok(Some(testkit_ports::DraftRecord::from_draft(&expected))),
             ));
         })

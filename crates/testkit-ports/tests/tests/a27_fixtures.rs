@@ -448,3 +448,216 @@ pub(super) fn decision_with_horizon(
     );
     SignalDecision::assess(&estimate, &context)
 }
+
+fn restore_candles(high: &str, source: &MasterInstrument) -> Vec<Candle> {
+    (0_i64..61)
+        .map(|index| {
+            let value = price(if index % 2 == 0 { "100" } else { high });
+            Candle::try_new(
+                source.row().instrument_id.clone(),
+                CandleTime::try_new(local_midnight(index), CandlePeriod::Daily).expect("일봉"),
+                PriceAdjustment::Adjusted(AdjustmentBasis::new(day(61))),
+                Ohlcv::try_new(value, value, value, value, quantity("13")).expect("봉"),
+                CandleObservation::new(day(61), CandleStatus::Finalized),
+            )
+            .expect("봉")
+        })
+        .collect()
+}
+
+pub(super) fn candidate_stored_task(
+    task: &EstimateTask,
+    source: &MasterInstrument,
+    horizon: Horizon,
+) -> Option<domain::StoredEstimateEvidence> {
+    for high in [
+        "101", "102", "103", "104", "105", "106", "107", "108", "110", "112", "113", "114", "116",
+    ] {
+        let input = domain::EstimateRestoreEvidence {
+            master: source.row().clone(),
+            side: domain::OrderSide::Buy,
+            candles: restore_candles(high, source),
+            reference_price: price("100"),
+            reference_at: local(day(60)),
+            task_at: day(60),
+            horizon,
+            permission: domain::HoursPermissionState::Disabled,
+            appetite: RiskAppetite::Neutral,
+        };
+        if let Ok(result) = input.capture(task, source) {
+            return Some(result);
+        }
+    }
+    None
+}
+
+fn portfolio_for_signal(
+    source: &MasterInstrument,
+    signal: &domain::RaisedSignal,
+    cash: &str,
+) -> Portfolio {
+    let holdings = match signal {
+        domain::RaisedSignal::Buy(_) => vec![],
+        domain::RaisedSignal::Sell(sell) => vec![
+            Holding::new(
+                source.order_instrument().expect("종목"),
+                sell.held_quantity(),
+                AcquisitionPrice::try_new(money("87", Currency::Krw)).expect("원가"),
+                HoldingObservation::new(
+                    None,
+                    Some(
+                        ReportedHolding::new(
+                            money("113", Currency::Krw),
+                            money("7", Currency::Krw),
+                            ratio("0.07"),
+                        )
+                        .expect("평가"),
+                    ),
+                    sell.observed_at(),
+                ),
+            )
+            .expect("보유"),
+        ],
+    };
+    Portfolio::new(
+        holdings,
+        BuyingPower::new(money(cash, Currency::Krw), day(60)),
+        BuyingPower::new(money("0", Currency::Usd), day(60)),
+    )
+    .expect("포트")
+}
+
+pub(super) fn evidence_for_signal(
+    signal: &domain::RaisedSignal,
+    occurrence: Option<&domain::BuySignalRecord>,
+    cash: &str,
+    item: CollectedItem,
+    classification: &(SectorAssignments, domain::PolicySecurityFacts),
+) -> application::SignalCommitEvidence {
+    let estimate = match signal {
+        domain::RaisedSignal::Buy(value) => value.facts(),
+        domain::RaisedSignal::Sell(value) => value.facts(),
+    };
+    let source = if estimate.task().volatility().instrument() == &master().row().instrument_id {
+        master()
+    } else {
+        other_master()
+    };
+    let submission = estimate.submission();
+    let key = submission.calibration_key().clone();
+    let horizon = key.horizon();
+    let stored = candidate_stored_task(estimate.task(), &source, horizon).expect("과제 근거");
+    let head = estimate.calibration_head().clone();
+    let snapshot = CalibrationSnapshot::try_new(
+        Calibration::try_new(key.clone(), &[]).expect("보정"),
+        head.clone(),
+    )
+    .expect("스냅숏");
+    let zero = CostRate::try_new(ratio("0")).expect("비용");
+    let maturity = at(day(last_day(horizon.selection()))
+        .utc_seconds()
+        .as_i64()
+        .checked_add(3600)
+        .expect("만기"));
+    let evidence = domain::SignalRestoreEvidence {
+        estimate: stored,
+        commission: CommissionRateFact::from_commissions_result(
+            Market::Kr,
+            zero,
+            CommissionValidity::try_new(None, None).expect("기간"),
+        ),
+        tax: TradeTaxFact::from_schedule_result(Market::Kr, zero, zero),
+        maturity,
+        calibration: snapshot,
+        calibration_key: key,
+        probability: submission.probability(),
+        source: submission.evidence().cloned(),
+        submitted_at: submission.submitted_at(),
+        margin: Margin::default(),
+        assessment: signal_restore_context(
+            &source,
+            signal,
+            (cash, item, classification),
+            (horizon, head),
+        ),
+    }
+    .capture(signal, &source)
+    .expect("신호 복원 근거");
+    let recorded = occurrence.and_then(|value| {
+        domain::StoredSignalOccurrence::capture(value, evidence.clone(), &source).ok()
+    });
+    application::SignalCommitEvidence {
+        master: source,
+        signal: evidence,
+        occurrence: recorded,
+    }
+}
+
+fn signal_restore_context(
+    source: &MasterInstrument,
+    signal: &domain::RaisedSignal,
+    facts: (
+        &str,
+        CollectedItem,
+        &(SectorAssignments, domain::PolicySecurityFacts),
+    ),
+    calibration: (Horizon, CalibrationLedgerHead),
+) -> domain::HistoricalSignalContext {
+    let (cash, item, classification) = facts;
+    let (horizon, head) = calibration;
+    let estimate = match signal {
+        domain::RaisedSignal::Buy(value) => value.facts(),
+        domain::RaisedSignal::Sell(value) => value.facts(),
+    };
+    domain::HistoricalSignalContext {
+        portfolio: Some(domain::HistoricalPortfolio::capture(&portfolio_for_signal(
+            source, signal, cash,
+        ))),
+        rate: None,
+        policy: Policy::new(InvestorProfile::default()),
+        classifications: domain::HistoricalClassifications::capture(
+            &classification.0,
+            &classification.1,
+        ),
+        items: vec![item],
+        disclosures: vec![],
+        tools: vec![],
+        calendars: (60..=last_day(horizon.selection())
+            .checked_add(1)
+            .expect("마지막"))
+            .map(|value| calendar(value, &Market::Kr))
+            .collect(),
+        evaluated_at: day(60),
+        target: Some(domain::StoredPriceObservation::from_price_observation(
+            estimate.task().reference(),
+        )),
+        calibration_head: Some(head),
+    }
+}
+
+pub(super) fn evidence_for_decision(
+    decision: &SignalDecision,
+    occurrence: Option<&domain::BuySignalRecord>,
+) -> Option<application::SignalCommitEvidence> {
+    let signal = decision.clone().into_signal()?;
+    let facts = match &signal {
+        domain::RaisedSignal::Buy(value) => value.facts(),
+        domain::RaisedSignal::Sell(value) => value.facts(),
+    };
+    let source = if facts.task().volatility().instrument() == &master().row().instrument_id {
+        master()
+    } else {
+        other_master()
+    };
+    let assignments = mapping_for(&source, day(60));
+    let security = MasterInstrumentFacts::try_new(vec![source])
+        .expect("마스터")
+        .policy_security_facts();
+    Some(evidence_for_signal(
+        &signal,
+        occurrence,
+        "10000",
+        item(),
+        &(assignments, security),
+    ))
+}

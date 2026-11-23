@@ -38,6 +38,32 @@ impl BuyingPower {
     pub const fn observed_at(self) -> Timestamp {
         self.observed_at
     }
+
+    pub(crate) fn from_historical(
+        currency: Currency,
+        money: Result<Money, PortfolioError>,
+        observed_at: Timestamp,
+    ) -> Result<Self, PortfolioError> {
+        match money {
+            Ok(value) if value.currency() == currency => {
+                let power = Self::new(value, observed_at);
+                if power.money == money {
+                    Ok(power)
+                } else {
+                    Err(PortfolioError::NegativeBuyingPower)
+                }
+            }
+            Ok(_) => Err(PortfolioError::CurrencyMismatch),
+            Err(PortfolioError::NegativeBuyingPower | PortfolioError::CashLookupFailed(_)) => {
+                Ok(Self {
+                    money,
+                    currency,
+                    observed_at,
+                })
+            }
+            Err(error) => Err(error),
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Portfolio {

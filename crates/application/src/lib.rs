@@ -377,9 +377,9 @@ mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
 mod signal_ports;
 pub use signal_ports::{
-    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalInvalidationOutcome,
-    SignalInvalidationRepository, SignalMutation, SignalRevision, SignalSnapshot,
-    SignalSourceFacts, StoredSignal,
+    SignalCommit, SignalCommitEvidence, SignalCommitOutcome, SignalEvaluation,
+    SignalInvalidationOutcome, SignalInvalidationRepository, SignalMutation, SignalRevision,
+    SignalSnapshot, SignalSourceFacts, StoredSignal,
 };
 
 pub mod resolve_estimates;
@@ -393,7 +393,7 @@ pub use information_storage::{
 mod evaluate_signals;
 pub use evaluate_signals::{
     EvaluateSignalError, EvaluateSignalInputs, EvaluateSignalOutcome, EvaluateSignals,
-    SignalEvaluationData, SignalQuantityCosts,
+    SignalEvaluationData, SignalQuantityCosts, SignalRestorationBasis,
 };
 
 mod proposal_storage;

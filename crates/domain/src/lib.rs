@@ -392,7 +392,7 @@ mod buy_signal_history;
 mod concentration_policy;
 pub use buy_quantity::{
     BuyQuantityConstraint, BuyQuantityDecision, BuyQuantityFacts, BuyQuantityPlan, NoBuyQuantity,
-    calculate_buy_quantity,
+    calculate_buy_quantity, calculate_buy_quantity_with_history,
 };
 pub use buy_signal_history::{BuySignalOccurrenceId, BuySignalRecord, CurrentBuySignal};
 pub use concentration_policy::concentration_for_policy;
@@ -620,4 +620,37 @@ mod valuation_recompute_contract;
 mod valuation_recompute;
 pub use valuation_recompute::{
     DatedSnapshotLedgers, ValuationHistoryEvidence, ValuationRecomputeInput,
+};
+
+mod estimate_restore;
+pub use estimate_restore::{
+    EstimateDisplayFacts, EstimateRestoreError, EstimateRestoreEvidence, HistoricalEstimate,
+    StoredEstimateEvidence,
+};
+
+mod draft_restore;
+pub use draft_restore::{
+    DraftOriginalFacts, DraftRestoreError, DraftRestoreEvidence, StoredPriceIdentity,
+    StoredPriceObservation,
+};
+
+mod historical_signal_context;
+mod signal_restore;
+pub use historical_signal_context::{
+    HistoricalBuyingPower, HistoricalClassificationError, HistoricalClassifications,
+    HistoricalHolding, HistoricalPortfolio, HistoricalPortfolioError, HistoricalPortfolioFacts,
+    HistoricalSectorAssignment, HistoricalSecurityType,
+};
+pub use signal_restore::{
+    HistoricalBuySignal, HistoricalSellSignal, HistoricalSignal, HistoricalSignalContext,
+    HistoricalSignalDirection, HistoricalSignalLimit, HistoricalSignalOccurrence,
+    HistoricalSignalQuantity, SignalDisplayFacts, SignalOccurrenceRestoreError, SignalRestoreError,
+    SignalRestoreEvidence, StoredSignalEvidence, StoredSignalOccurrence,
+    signal_transition_from_history,
+};
+
+mod draft_order_intent;
+pub use draft_order_intent::{
+    DraftOrderIntent, HistoricalOrderAmount, HistoricalOrderTerms, HistoricalSellQuantity,
+    HistoricalWholeQuantity,
 };

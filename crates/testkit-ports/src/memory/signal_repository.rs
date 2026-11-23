@@ -1,14 +1,15 @@
 use crate::script::State;
 use application::{
     AiRunId, EstimateCommitOutcome, EstimateSubmissionRepository, ReasoningEffort, SignalCommit,
-    SignalCommitOutcome, SignalInvalidationOutcome, SignalInvalidationRepository, SignalMutation,
-    SignalRepository, SignalRevision, SignalSnapshot, SignalSourceFacts, StoredSignal,
-    SystemFailure, SystemPort, SystemPortError,
+    SignalCommitEvidence, SignalCommitOutcome, SignalInvalidationOutcome,
+    SignalInvalidationRepository, SignalMutation, SignalRepository, SignalRevision, SignalSnapshot,
+    SignalSourceFacts, StoredSignal, SystemFailure, SystemPort, SystemPortError,
 };
 use domain::{
     BuySignalRecord, CalibrationLedgerHead, CurrentBuySignal, EstimateAssignments,
-    EstimateSubmissionRecord, InstrumentId, IssuedEstimateTaskId, NoSignalReason, RaisedSignal,
-    ResolvedOrderInstrument, SignalDecision, SignalTransition, signal_transition,
+    EstimateSubmissionRecord, HistoricalSignal, HistoricalSignalOccurrence, InstrumentId,
+    IssuedEstimateTaskId, NoSignalReason, RaisedSignal, ResolvedOrderInstrument, SignalDecision,
+    SignalTransition, signal_transition_from_history,
 };
 
 #[derive(Debug, Default)]
@@ -16,7 +17,14 @@ struct InstrumentState {
     instrument: Option<InstrumentId>,
     revision: u64,
     current: Option<StoredSignal>,
+    evidence: Option<SignalCommitEvidence>,
     discarded: Vec<IssuedEstimateTaskId>,
+}
+
+#[derive(Debug, Clone)]
+struct SignalHistoryEntry {
+    record: BuySignalRecord,
+    evidence: domain::StoredSignalOccurrence,
 }
 
 #[derive(Debug, Default)]
@@ -24,9 +32,10 @@ struct RepositoryState {
     assignments: EstimateAssignments<AiRunId>,
     records: Vec<EstimateSubmissionRecord<AiRunId, ReasoningEffort>>,
     instruments: Vec<InstrumentState>,
-    history: Vec<BuySignalRecord>,
+    history: Vec<SignalHistoryEntry>,
     sources: Vec<(IssuedEstimateTaskId, SignalSourceFacts)>,
     heads: Vec<CalibrationLedgerHead>,
+    masters: Vec<domain::MasterInstrument>,
     fail_next_commit: Option<SystemPortError>,
 }
 
@@ -68,12 +77,25 @@ impl MemorySignalEvaluationRepository {
     pub fn fail_next_commit(&self, error: SystemPortError) {
         self.state.write().fail_next_commit = Some(error);
     }
+    pub fn save_master(&self, master: domain::MasterInstrument) {
+        let mut state = self.state.write();
+        state
+            .masters
+            .retain(|old| old.row().instrument_id != master.row().instrument_id);
+        state.masters.push(master);
+    }
 }
 
 fn invalid() -> SystemPortError {
     SystemPortError::new(SystemPort::Repository, SystemFailure::InvalidData)
 }
-fn snapshot(state: &RepositoryState, instrument: &InstrumentId) -> SignalSnapshot {
+fn integrity() -> SystemPortError {
+    SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity)
+}
+fn snapshot(
+    state: &RepositoryState,
+    instrument: &InstrumentId,
+) -> Result<SignalSnapshot, SystemPortError> {
     let entry = state
         .instruments
         .iter()
@@ -87,11 +109,97 @@ fn snapshot(state: &RepositoryState, instrument: &InstrumentId) -> SignalSnapsho
             .instrument()
             == instrument
     });
-    SignalSnapshot {
+    let current = entry
+        .map(|value| checked_current(state, value))
+        .transpose()?
+        .flatten();
+    Ok(SignalSnapshot {
         revision: SignalRevision::new(entry.map_or(0, |value| value.revision)),
         submission: submission.map(|value| value.task_id().clone()),
-        current: entry.and_then(|value| value.current.clone()),
+        current,
+    })
+}
+fn checked_current(
+    state: &RepositoryState,
+    entry: &InstrumentState,
+) -> Result<Option<StoredSignal>, SystemPortError> {
+    match (&entry.current, &entry.evidence) {
+        (None, None) => Ok(None),
+        (Some(current), Some(evidence)) => {
+            let restored = restore_signal(&evidence.signal, &state.masters)?;
+            if restored != current.signal {
+                return Err(integrity());
+            }
+            if let Some(occurrence) = &current.occurrence {
+                let saved = state
+                    .history
+                    .iter()
+                    .find(|value| value.record.id() == occurrence.id())
+                    .ok_or_else(integrity)?;
+                if checked_occurrence(saved, &state.masters)? != *occurrence {
+                    return Err(integrity());
+                }
+            }
+            Ok(Some(current.clone()))
+        }
+        (None, Some(_)) | (Some(_), None) => Err(integrity()),
     }
+}
+fn checked_occurrence(
+    value: &SignalHistoryEntry,
+    masters: &[domain::MasterInstrument],
+) -> Result<HistoricalSignalOccurrence, SystemPortError> {
+    let restored = restore_occurrence(&value.evidence, masters)?;
+    if restored != HistoricalSignalOccurrence::from_record(&value.record) {
+        return Err(integrity());
+    }
+    Ok(restored)
+}
+fn rebuild_signal(
+    evidence: &domain::StoredSignalEvidence,
+    masters: &[domain::MasterInstrument],
+) -> Result<domain::StoredSignalEvidence, SystemPortError> {
+    let mut reconstructed = evidence.clone();
+    for assessment in [
+        &mut reconstructed.evidence.assessment,
+        &mut reconstructed.original.assessment,
+    ] {
+        if let Some(portfolio) = &assessment.portfolio {
+            assessment.portfolio = Some(
+                domain::HistoricalPortfolio::from_saved_facts(portfolio.facts().clone(), masters)
+                    .map_err(|_error| integrity())?,
+            );
+        }
+    }
+    Ok(reconstructed)
+}
+fn master_for_signal<'a>(
+    evidence: &domain::StoredSignalEvidence,
+    masters: &'a [domain::MasterInstrument],
+) -> Result<&'a domain::MasterInstrument, SystemPortError> {
+    let id = &evidence.evidence.estimate.evidence.master.instrument_id;
+    masters
+        .iter()
+        .find(|master| &master.row().instrument_id == id)
+        .ok_or_else(integrity)
+}
+fn restore_signal(
+    evidence: &domain::StoredSignalEvidence,
+    masters: &[domain::MasterInstrument],
+) -> Result<HistoricalSignal, SystemPortError> {
+    let current = master_for_signal(evidence, masters)?;
+    rebuild_signal(evidence, masters)?
+        .restore_history(current)
+        .map_err(|_error| integrity())
+}
+fn restore_occurrence(
+    evidence: &domain::StoredSignalOccurrence,
+    masters: &[domain::MasterInstrument],
+) -> Result<HistoricalSignalOccurrence, SystemPortError> {
+    let mut reconstructed = evidence.clone();
+    reconstructed.signal = rebuild_signal(&reconstructed.signal, masters)?;
+    let current = master_for_signal(&reconstructed.signal, masters)?;
+    reconstructed.restore(current).map_err(|_error| integrity())
 }
 fn signal_submission(signal: &RaisedSignal) -> &domain::SignalSubmission {
     match signal {
@@ -111,8 +219,8 @@ fn add_occurrence(
     prior: Option<&StoredSignal>,
     supplied: Option<&BuySignalRecord>,
     transition: &SignalTransition,
-    history: &[BuySignalRecord],
-) -> Result<(Option<BuySignalRecord>, Option<BuySignalRecord>), SystemPortError> {
+    history: &[SignalHistoryEntry],
+) -> Result<(Option<HistoricalSignalOccurrence>, Option<BuySignalRecord>), SystemPortError> {
     match signal {
         RaisedSignal::Sell(_) => {
             if supplied.is_some() {
@@ -124,7 +232,7 @@ fn add_occurrence(
             let occurrence = match transition {
                 SignalTransition::Raised(_) | SignalTransition::Reversed(_) => {
                     let record = supplied.ok_or_else(invalid)?;
-                    if history.iter().any(|old| old.id() == record.id()) {
+                    if history.iter().any(|old| old.record.id() == record.id()) {
                         return Err(invalid());
                     }
                     if record.originating_task().task() != buy.facts().task() {
@@ -132,7 +240,10 @@ fn add_occurrence(
                     }
                     CurrentBuySignal::try_new(buy.clone(), record.clone())
                         .map_err(|_error| invalid())?;
-                    return Ok((Some(record.clone()), Some(record.clone())));
+                    return Ok((
+                        Some(HistoricalSignalOccurrence::from_record(record)),
+                        Some(record.clone()),
+                    ));
                 }
                 SignalTransition::Unchanged | SignalTransition::Updated(_) => {
                     if supplied.is_some() {
@@ -144,7 +255,7 @@ fn add_occurrence(
                 }
                 SignalTransition::Cleared(_) => return Err(invalid()),
             };
-            CurrentBuySignal::try_new(buy.clone(), occurrence.clone())
+            CurrentBuySignal::try_from_history(buy.clone(), occurrence.clone())
                 .map_err(|_error| invalid())?;
             Ok((Some(occurrence), None))
         }
@@ -153,7 +264,8 @@ fn add_occurrence(
 #[derive(Debug)]
 struct Change {
     current: Option<StoredSignal>,
-    occurrence: Option<BuySignalRecord>,
+    occurrence: Option<SignalHistoryEntry>,
+    evidence: Option<SignalCommitEvidence>,
     discarded: Option<IssuedEstimateTaskId>,
     events: Vec<domain::DomainEvent>,
     reason: Option<NoSignalReason>,
@@ -184,7 +296,7 @@ fn prepare_evaluation(
         return Ok(None);
     }
     let previous = expected.current.as_ref().map(|value| &value.signal);
-    if signal_transition(previous, &evaluation.decision).map_err(|_error| invalid())?
+    if signal_transition_from_history(previous, &evaluation.decision).map_err(|_error| invalid())?
         != evaluation.transition
     {
         return Err(invalid());
@@ -195,9 +307,20 @@ fn prepare_evaluation(
     };
     let (current, occurrence) =
         prepare_current((state, instrument, expected), evaluation, record, head)?;
+    let saved_occurrence = match occurrence {
+        Some(history_record) => {
+            let evidence = evaluation.evidence.as_ref().ok_or_else(invalid)?;
+            Some(SignalHistoryEntry {
+                record: history_record,
+                evidence: evidence.occurrence.clone().ok_or_else(invalid)?,
+            })
+        }
+        None => None,
+    };
     Ok(Some(Change {
         current,
-        occurrence,
+        occurrence: saved_occurrence,
+        evidence: evaluation.evidence.clone(),
         discarded: None,
         events: evaluation.transition.events(),
         reason,
@@ -212,7 +335,7 @@ fn prepare_current(
 ) -> Result<(Option<StoredSignal>, Option<BuySignalRecord>), SystemPortError> {
     let (state, instrument, expected) = context;
     let Some(signal) = evaluation.decision.clone().into_signal() else {
-        if evaluation.occurrence.is_some() {
+        if evaluation.occurrence.is_some() || evaluation.evidence.is_some() {
             return Err(invalid());
         }
         return Ok((None, None));
@@ -234,9 +357,34 @@ fn prepare_current(
         &evaluation.transition,
         &state.history,
     )?;
+    let evidence = evaluation.evidence.as_ref().ok_or_else(invalid)?;
+    let mut masters = state.masters.clone();
+    if !masters
+        .iter()
+        .any(|master| master.row().instrument_id == evidence.master.row().instrument_id)
+    {
+        masters.push(evidence.master.clone());
+    }
+    let historical = restore_signal(&evidence.signal, &masters).map_err(|_error| invalid())?;
+    if historical != HistoricalSignal::from_signal(&signal) {
+        return Err(invalid());
+    }
+    let expected_occurrence = evaluation
+        .occurrence
+        .as_ref()
+        .map(HistoricalSignalOccurrence::from_record);
+    let stored_occurrence = evidence
+        .occurrence
+        .as_ref()
+        .map(|value| restore_occurrence(value, &masters))
+        .transpose()
+        .map_err(|_error| invalid())?;
+    if expected_occurrence != stored_occurrence {
+        return Err(invalid());
+    }
     Ok((
         Some(StoredSignal {
-            signal,
+            signal: HistoricalSignal::from_signal(&signal),
             submission: record.task_id().clone(),
             occurrence,
         }),
@@ -252,7 +400,8 @@ fn prepare_discard(
         return Err(invalid());
     };
     let decision = SignalDecision::None(NoSignalReason::Expired);
-    if signal_transition(Some(&current.signal), &decision).map_err(|_error| invalid())?
+    if signal_transition_from_history(Some(&current.signal), &decision)
+        .map_err(|_error| invalid())?
         != *transition
     {
         return Err(invalid());
@@ -260,6 +409,7 @@ fn prepare_discard(
     Ok(Change {
         current: None,
         occurrence: None,
+        evidence: None,
         discarded: Some(current.submission.clone()),
         events: transition.events(),
         reason: None,
@@ -272,6 +422,14 @@ fn apply_change(
     revision: u64,
     change: Change,
 ) -> SignalCommitOutcome {
+    if let Some(evidence) = &change.evidence
+        && !state
+            .masters
+            .iter()
+            .any(|master| master.row().instrument_id == evidence.master.row().instrument_id)
+    {
+        state.masters.push(evidence.master.clone());
+    }
     if let Some(record) = change.occurrence {
         state.history.push(record);
     }
@@ -282,6 +440,7 @@ fn apply_change(
     {
         entry.revision = revision;
         entry.current = change.current;
+        entry.evidence = change.evidence;
         if let Some(task) = change.discarded {
             entry.discarded.push(task);
         }
@@ -290,6 +449,7 @@ fn apply_change(
             instrument: Some(instrument.clone()),
             revision,
             current: change.current,
+            evidence: change.evidence,
             discarded: change.discarded.into_iter().collect(),
         });
     }
@@ -308,7 +468,7 @@ fn commit_signal(
     if let Some(error) = state.fail_next_commit.take() {
         return Err(error);
     }
-    if snapshot(state, instrument) != *expected {
+    if snapshot(state, instrument)? != *expected {
         return Ok(SignalCommitOutcome::Conflict);
     }
     if let SignalMutation::Evaluate(evaluation) = mutation
@@ -396,34 +556,41 @@ impl SignalRepository for MemorySignalEvaluationRepository {
         instrument: &InstrumentId,
     ) -> impl Future<Output = Result<SignalSnapshot, SystemPortError>> + Send {
         std::future::poll_fn(move |_context| {
-            std::task::Poll::Ready(Ok(snapshot(&self.state.write(), instrument)))
+            std::task::Poll::Ready(snapshot(&self.state.write(), instrument))
         })
     }
     fn current(
         &self,
         instrument: &InstrumentId,
-    ) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<Vec<HistoricalSignal>, SystemPortError>> + Send {
         std::future::poll_fn(move |_context| {
-            let current = snapshot(&self.state.write(), instrument).current;
-            std::task::Poll::Ready(Ok(current.into_iter().map(|entry| entry.signal).collect()))
+            let result = snapshot(&self.state.write(), instrument).map(|value| {
+                value
+                    .current
+                    .into_iter()
+                    .map(|entry| entry.signal)
+                    .collect()
+            });
+            std::task::Poll::Ready(result)
         })
     }
     fn occurrences(
         &self,
         instrument: &InstrumentId,
         identity: &ResolvedOrderInstrument,
-    ) -> impl Future<Output = Result<Vec<BuySignalRecord>, SystemPortError>> + Send {
+    ) -> impl Future<Output = Result<Vec<HistoricalSignalOccurrence>, SystemPortError>> + Send {
         std::future::poll_fn(move |_context| {
-            std::task::Poll::Ready(Ok(self
-                .state
-                .write()
+            let state = self.state.write();
+            let result = state
                 .history
                 .iter()
                 .filter(|value| {
-                    value.instrument_id() == instrument || value.instrument() == identity
+                    value.record.instrument_id() == instrument
+                        || value.record.instrument() == identity
                 })
-                .cloned()
-                .collect()))
+                .map(|value| checked_occurrence(value, &state.masters))
+                .collect();
+            std::task::Poll::Ready(result)
         })
     }
     fn sources(
@@ -466,7 +633,7 @@ fn invalidate_signal(
     if let Some(error) = state.fail_next_commit.take() {
         return Err(error);
     }
-    if snapshot(state, instrument) != *expected {
+    if snapshot(state, instrument)? != *expected {
         return Ok(SignalInvalidationOutcome::Conflict);
     }
     if expected.submission.as_ref().is_some_and(|submission| {

@@ -8,6 +8,7 @@ mod tests {
         SignalRepository, SignalSnapshot, SubmitEstimate, SystemFailure, SystemPort,
         SystemPortError,
     };
+    use domain::signal_transition_from_history;
     use domain::{
         BuySignalOccurrenceId, BuySignalRecord, DomainEvent, EstimateAssignments,
         EstimateSubmissionRecord, InstrumentId, IssuedEstimateTask, Market, NoSignalReason,
@@ -60,17 +61,19 @@ mod tests {
         decision: SignalDecision,
         occurrence: Option<BuySignalRecord>,
     ) -> SignalMutation {
-        let transition = signal_transition(
+        let transition = signal_transition_from_history(
             snapshot.current.as_ref().map(|entry| &entry.signal),
             &decision,
         )
         .expect("전이");
+        let evidence = fixtures::evidence_for_decision(&decision, occurrence.as_ref());
         SignalMutation::Evaluate(Box::new(SignalEvaluation {
             submission: snapshot.submission.clone().expect("과제"),
             decision,
             transition,
             calibration_head: Some(fixtures::head(0)),
             occurrence,
+            evidence,
         }))
     }
     fn record(
@@ -113,6 +116,7 @@ mod tests {
             transition: SignalTransition::Unchanged,
             calibration_head: None,
             occurrence: None,
+            evidence: None,
         }));
         assert_eq!(
             run(repository.commit(&instrument, &state, &mutation)),
@@ -320,6 +324,7 @@ mod tests {
             transition: SignalTransition::Unchanged,
             calibration_head: None,
             occurrence: None,
+            evidence: None,
         }));
         assert_eq!(
             run(repository.commit(&instrument, &state, &no_signal)),
@@ -361,5 +366,13 @@ mod tests {
             Err(invalid())
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(state));
+    }
+    #[test]
+    fn empty_history_transition_matches_live_decision() {
+        let decision = fixtures::decision(&fixtures::master(), "10", Some("7"));
+        assert_eq!(
+            signal_transition(None, &decision),
+            signal_transition_from_history(None, &decision)
+        );
     }
 }

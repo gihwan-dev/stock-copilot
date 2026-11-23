@@ -601,8 +601,14 @@ pub async fn signal_repository_commit<P: SignalRepository>(
 pub async fn signal_repository_current<P: SignalRepository>(
     port: &P,
     instrument: &InstrumentId,
-    expected: Result<Vec<RaisedSignal>, SystemPortError>,
+    expected_current: Result<Vec<RaisedSignal>, SystemPortError>,
 ) {
+    let expected = expected_current.map(|signals| {
+        signals
+            .iter()
+            .map(domain::HistoricalSignal::from_signal)
+            .collect()
+    });
     assert_eq!(
         port.current(instrument).await,
         expected,
@@ -735,10 +741,12 @@ pub async fn user_presence_risk_change<P: application::user_presence::UserPresen
 pub async fn proposal_repository_store_draft<P: application::ProposalRepository>(
     port: &P,
     proposal: &domain::Proposal<domain::Draft>,
+    evidence: &domain::DraftRestoreEvidence,
+    master: &domain::MasterInstrument,
     expected: Result<WriteCompleted, SystemPortError>,
 ) {
     assert_eq!(
-        port.store_draft(proposal).await,
+        port.store_draft(proposal, evidence, master).await,
         expected,
         "초안 저장 결과 보존"
     );
@@ -746,10 +754,11 @@ pub async fn proposal_repository_store_draft<P: application::ProposalRepository>
 pub async fn proposal_repository_draft<P: application::ProposalRepository>(
     port: &P,
     id: &domain::ProposalId,
+    master: &domain::MasterInstrument,
     expected: Result<Option<crate::DraftRecord>, SystemPortError>,
 ) {
     assert_eq!(
-        port.draft(id)
+        port.draft(id, master)
             .await
             .map(|value| value.as_ref().map(crate::DraftRecord::from_draft)),
         expected,

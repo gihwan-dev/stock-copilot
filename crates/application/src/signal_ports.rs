@@ -1,8 +1,9 @@
 use crate::SystemPortError;
 use domain::{
-    BuySignalRecord, CalibrationLedgerHead, CollectedItem, Disclosure, DomainEvent, InstrumentId,
-    IssuedEstimateTaskId, NoSignalReason, RaisedSignal, ResolvedOrderInstrument, SignalDecision,
-    SignalSourceLedger, SignalTransition, ToolReference,
+    BuySignalRecord, CalibrationLedgerHead, CollectedItem, Disclosure, DomainEvent,
+    HistoricalSignal, HistoricalSignalOccurrence, InstrumentId, IssuedEstimateTaskId,
+    MasterInstrument, NoSignalReason, ResolvedOrderInstrument, SignalDecision, SignalSourceLedger,
+    SignalTransition, StoredSignalEvidence, StoredSignalOccurrence, ToolReference,
 };
 use std::future::Future;
 
@@ -21,9 +22,9 @@ impl SignalRevision {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredSignal {
-    pub signal: RaisedSignal,
+    pub signal: HistoricalSignal,
     pub submission: IssuedEstimateTaskId,
-    pub occurrence: Option<BuySignalRecord>,
+    pub occurrence: Option<HistoricalSignalOccurrence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,12 +35,20 @@ pub struct SignalSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalCommitEvidence {
+    pub master: MasterInstrument,
+    pub signal: StoredSignalEvidence,
+    pub occurrence: Option<StoredSignalOccurrence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalEvaluation {
     pub submission: IssuedEstimateTaskId,
     pub decision: SignalDecision,
     pub transition: SignalTransition,
     pub calibration_head: Option<CalibrationLedgerHead>,
     pub occurrence: Option<BuySignalRecord>,
+    pub evidence: Option<SignalCommitEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,7 +98,7 @@ pub trait SignalRepository: Send + Sync {
         &self,
         instrument: &InstrumentId,
         identity: &ResolvedOrderInstrument,
-    ) -> impl Future<Output = Result<Vec<BuySignalRecord>, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<Vec<HistoricalSignalOccurrence>, SystemPortError>> + Send;
     fn sources(
         &self,
         task: &IssuedEstimateTaskId,
@@ -97,7 +106,7 @@ pub trait SignalRepository: Send + Sync {
     fn current(
         &self,
         instrument: &InstrumentId,
-    ) -> impl Future<Output = Result<Vec<RaisedSignal>, SystemPortError>> + Send;
+    ) -> impl Future<Output = Result<Vec<HistoricalSignal>, SystemPortError>> + Send;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
