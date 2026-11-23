@@ -10,11 +10,16 @@ pub use money_display::{
 mod account_id;
 mod client_order_id;
 mod instrument_id;
+mod instrument_mapping;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
+pub use instrument_mapping::{
+    InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentMappings,
+    InstrumentSource, MappingAssignment,
+};
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 
 mod cluster;
@@ -123,7 +128,7 @@ mod volatility_display;
 mod volatility_reference;
 pub use proposal::{
     CheckResult, Draft, Proposal, ProposalError, ProposalExecutionError, Validated,
-    ValidationCheck, ValidationReport,
+    ValidationCheck, ValidationReport, ValidationReportResults,
 };
 mod proposal_id;
 pub use proposal_id::ProposalId;

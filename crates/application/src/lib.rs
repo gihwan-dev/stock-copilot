@@ -260,6 +260,8 @@ pub mod user_presence;
 pub use user_presence::{OrderConfirmation, RiskChangeConfirmation};
 mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
+mod instrument_mapping;
+pub use instrument_mapping::{InstrumentMappingRepository, MappingStoreError};
 mod storage_ports;
 pub use storage_ports::ValuationCloseEvidenceRepository;
 pub use storage_ports::{
@@ -375,8 +377,9 @@ mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
 mod signal_ports;
 pub use signal_ports::{
-    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalMutation, SignalRevision,
-    SignalSnapshot, SignalSourceFacts, StoredSignal,
+    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalInvalidationOutcome,
+    SignalInvalidationRepository, SignalMutation, SignalRevision, SignalSnapshot,
+    SignalSourceFacts, StoredSignal,
 };
 
 pub mod resolve_estimates;
@@ -385,4 +388,16 @@ mod information_storage;
 pub use information_storage::{
     DisclosureRepository, InformationKey, InformationLinks, InformationSearch, SearchLimit,
     SearchLimitError,
+};
+
+mod evaluate_signals;
+pub use evaluate_signals::{
+    EvaluateSignalError, EvaluateSignalInputs, EvaluateSignalOutcome, EvaluateSignals,
+    SignalEvaluationData, SignalQuantityCosts,
+};
+
+mod proposal_storage;
+pub use proposal_storage::{
+    ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
+    ValidationReportRepository,
 };

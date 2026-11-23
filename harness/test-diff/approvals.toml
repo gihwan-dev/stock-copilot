@@ -1,0 +1,20 @@
+[[approval]]
+task = "S-06"
+path = "crates/adapters/store-sqlite/src/migration_tests.rs"
+before_sha256 = "ae361c8482934f37387b6301a1f800dfd64f02e547a52fa9c36d098f7f0a8892"
+after_sha256 = "dbf33466db87285fb773ecd6cd8d096ef45f9544d6305ea9b935eb5e4fca99e1"
+finding = "test-diff:modified:store-sqlite migration_tests::fresh_open_records_clock_and_reopen_preserves_ledger"
+decision = "approved"
+reason = "migrations 0006 and 0007 raise the fixed ledger and schema object counts; reviewed by the main agent"
+assertion_change = true
+
+[[approval]]
+task = "S-06"
+path = "crates/adapters/store-sqlite/src/tests.rs"
+before_sha256 = "200945cca683d59e6b3278f7927f0b15be671ea374931d945227abce1a4a5929"
+after_sha256 = "d29a3e513e90295682cc083ba69ba288b4c5d8c450e549e54df5a48633801e28"
+finding = "test-diff:modified:store-sqlite tests::raw_key_is_independently_readable_and_debug_is_closed"
+decision = "approved"
+reason = "migrations 0006 and 0007 raise the fixed ledger and schema object counts; reviewed by the main agent"
+assertion_change = true
+

@@ -3598,6 +3598,7 @@ dependencies = [
  "domain",
  "rusqlite",
  "sha2",
+ "testkit",
  "testkit-ports",
  "tokio",
  "zeroize",
