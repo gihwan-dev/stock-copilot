@@ -14,7 +14,7 @@
 
 신호 근거는 비용 원자료·비용 기간, 보정 스냅숏과 원장 위치, 제출 확률과 출처, 당시 평가 문맥을 보존한다. 기존 비용 적격, 보정, 임계값, 출처·정책·시간 판정을 다시 실행해 당시 표시·방향과 비교한다. `HistoricalSignal`과 `HistoricalSignalOccurrence`는 화면·이력용이며 `BuySignal`이나 현재 수량 산정 입력으로 직접 변환하지 않는다. `display_facts`는 당시 매수 한도와 매도 수량까지 제공하되 과거 값 타입으로 감싼다. 발생 이력은 원래 매수 신호와 달력을 다시 사용해 구간을 계산하고 저장된 구간과 대조한다.
 
-제안 포트의 저장은 `Proposal<Draft>`, 복원 근거와 현재 마스터 조회를 함께 받는다. 조회는 제안 ID와 현재 마스터 조회를 받는다. 메모리 가짜도 근거로 복원한 초안과 저장 요청을 대조하고, 현재 식별이 다르거나 거래 불가로 바뀌면 실패한다.
+제안 포트의 저장(`store_draft`, `store_current_draft`)은 `Proposal<Draft>`, 복원 근거(`DraftRestoreEvidence` 또는 `DraftStoreCandidate`)와 현재 마스터 조회(`MasterInstrument` 또는 `DraftCheck.master`)를 함께 받는다. 조회(`draft`, `current_draft`) 역시 현재 마스터 조회를 받는다. `DraftProposal` 유스케이스는 저장된 `HistoricalSignal`과 현재 시세·달력·마스터로 재평가한 라이브 `RaisedSignal`이 일치할 때만 초안을 만들고, `StoredEstimateEvidence::verify_matches_task`로 해당 신호의 추정 과제 일치를 검증한 뒤 `DraftRestoreEvidence::capture`를 조립해 `store_current_draft`에 넘긴다. 메모리 가짜(`MemorySignalEvaluationRepository`)는 초안 사본을 별도로 신뢰하지 않고 `DraftRestoreEvidence`만 저장하며, `store_current_draft`·`current_draft`(기존 초안 존재·부재 경로 모두)·`draft` 조회마다 저장소 현재 마스터(`state.masters`)와 호출자 마스터 둘 다로 라이브 주문 게이트(`LiveOrderGate`)와 제안 본문·오프셋 일치(`DraftRestoreEvidence::verify_matches_proposal`, 현재 신호 추정 근거 `StoredEstimateEvidence::verify_same_as`)를 검증한다. 둘 중 어느 쪽이라도 식별이 다르거나 거래 불가로 바뀌었거나 근거가 손상됐으면 기존 유효 초안을 건드리지 않고 닫힌 실패로 거부한다. `MemoryProposalRepository::store_draft` 역시 `verify_matches_proposal`로 오프셋까지 대조한다.
 
 신호 평가 포트의 원자적 커밋은 발생 신호가 있을 때 `SignalCommitEvidence`를 함께 받는다. 현재 신호와 이력 조회는 각각 `HistoricalSignal`, `HistoricalSignalOccurrence`를 반환한다. 평가 입력에는 과제·수수료·세율·만기·원래 포트폴리오·환율과 보유 종목 마스터 목록(`holding_masters`)의 복원 근거가 필요하다. 근거가 없거나 마스터가 충돌하거나 실제 평가와 맞지 않으면 신호 커밋과 이벤트를 내지 않는다. 메모리 가짜는 대상 종목 마스터의 식별자 일치(`evidence.master`↔`evidence.signal`)와 발생 이력 근거의 신호 근거·오프셋 결합(`StoredSignalOccurrence::verify_commit_binding`)을 확인하고, 대상 종목과 보유 종목 마스터를 검증·병합해 커밋 근거를 원자적으로 저장하며(이미 등록된 현재 마스터를 덮어쓰지 않고 신규 신호 커밋 시 현재 저장소 마스터의 주문 게이트까지 확인한다), 조회 때마다 저장된 근거와 현재 마스터 목록으로 `HistoricalSignal`·`HistoricalSignalOccurrence`를 다시 복원한다.
 
@@ -26,15 +26,16 @@
 
 ## 확인 중
 
-- 3회차 적대적 리뷰·독립 비판과 최종 수정(`119137a7`), `origin/master`(`0b223855`) `--no-ff` 병합(`9b60ce3d`), `domain` 줄·영역 커버리지 100%(`coverage-check: 위반 없음`), `check-fast-static`, `disable-report-since`(새 끄기 0건), `test-diff`(승인 29건 정확 일치), 최종 손 변형 27/27(누적 75/75) 검출을 완료했다. Docker 부재로 원격 CI에서 전체 검사를 최종 확인한다.
+- 3회차 적대적 리뷰·독립 비판과 최종 수정(`119137a7`), `origin/merge/d-55`(`308f21d6`, A-14·D-54·H-56~59·D-55 포함) `--no-ff` 병합(`3afd02e4`), 병합 후 A-14 × D-56 통합 추가 적대적 리뷰·독립 비판 및 수정(`acbe5260`)을 완료했다.
+- `domain` 줄·영역 커버리지 100%(`coverage-check: 위반 없음`), `just base=308f21d64d016cc956d6f71de6cad2fa7612635d check-fast-static`, `disable-report-since 308f21d64d016cc956d6f71de6cad2fa7612635d`(새 끄기 0건), `hooks-installed`(위반 없음), `just mutants-daily 308f21d64d016cc956d6f71de6cad2fa7612635d 0/1`(`335 mutants tested in 86m: 204 caught, 131 unviable`, `mutants: 위반 없음`), 손 변형 누적 75/75 검출을 완료했다. Docker 부재로 원격 CI에서 전체 검사를 최종 확인한다.
 
 ## 인계
 
 - E-01·A-12·S-18: 추정 과제를 발급·저장하고 신호 평가 입력을 조립하는 측이 `StoredEstimateEvidence`(당시 마스터 행, 일봉, 기준 시세, 과제 시각·기간·허용 상태·성향)와 비용·만기 근거(`commission`, `tax`, `maturity`) 및 보유 종목별 `holding_masters`를 함께 보존·공급해야 한다.
-- A-14: 제안 초안을 생성·저장할 때 추정 근거(`StoredEstimateEvidence`), 카드 시세, 유효 기간으로 `DraftRestoreEvidence`를 조립해 `ProposalRepository::store_draft`에 넘겨야 한다.
-- S-22: SQL·JSON 형식과 원자적 저장, 현재 마스터 조회를 주입하는 제안·신호 및 발생 이력의 SQLite 연결은 별도다. `HistoricalHolding::instrument_id` 기준 보유별 현재 마스터 조회와 누락·중복·식별 불일치의 닫힌 실패, 상장폐지 심볼 재사용 공존 허용과 비폐지(`Scheduled`·`Active`) 마스터 심볼 유일성 제약, 커밋 시 `evidence.master`↔`evidence.signal` 식별자 일치 및 `StoredSignalOccurrence::verify_commit_binding`(오프셋 포함) 대조, 비거래 종목의 과거 이력 조회 허용과 실거래 초안 복원·신규 신호 커밋 거부를 구현해야 한다.
+- A-14: `origin/merge/d-55` 병합으로 `DraftProposal`·`DraftStoreCandidate`·`DraftCheck.master`와 `DraftRestoreEvidence` 연결이 완료됐다.
+- S-22: SQL·JSON 형식과 원자적 저장, 현재 마스터 조회를 주입하는 제안·신호 및 발생 이력의 SQLite 연결은 별도다. `HistoricalHolding::instrument_id` 기준 보유별 현재 마스터 조회와 누락·중복·식별 불일치의 닫힌 실패, 상장폐지 심볼 재사용 공존 허용과 비폐지(`Scheduled`·`Active`) 마스터 심볼 유일성 제약, 커밋 시 `evidence.master`↔`evidence.signal` 식별자 일치 및 `StoredSignalOccurrence::verify_commit_binding`(오프셋 포함) 대조, 비거래 종목의 과거 이력 조회 허용과 실거래 초안 복원·신규 신호 커밋 거부를 구현해야 한다. 초안 저장·조회(`store_current_draft`·`current_draft`·`draft`) 트랜잭션에서는 저장소 최신 마스터와 호출자 마스터를 이중 검증해 TOCTOU로 낡은 거래 가능 마스터가 정지·폐지 종목의 초안을 생성·반환하지 못하게 막아야 한다.
 - D-55: 확인된 티커 변경 이력을 도입할 때 대상 종목뿐 아니라 과거 보유 종목(`HistoricalHolding`)의 이전 심볼 이력 대조·조정 경로도 함께 정의해야 한다.
-- O-04·O-08: 주문 전 제안 조회 시 현재 마스터 조회를 선행해 `ProposalRepository::draft`에 전달하며, 필요하면 두 포트의 마스터 조회 주입 방식을 저장소 어댑터 기준으로 통일하는 후속 정리를 검토할 수 있다.
+- O-04·O-08: 주문 전 제안 조회 시 현재 마스터 조회를 선행해 `ProposalRepository::draft`에 전달한다. 현재 `ProposalRepository`가 비거래 마스터 전환과 저장소 데이터 손상을 모두 `SystemFailure::RepositoryIntegrity`로 닫힘 실패시키는 부분은 S-22·O-04에서 전용 조회 결과 타입으로 구분하도록 인계한다.
 
 ## 손 변형
 
