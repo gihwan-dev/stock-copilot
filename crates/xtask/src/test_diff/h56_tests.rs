@@ -711,3 +711,209 @@ fn h56_keeps_trusted_reasons_when_untrusted_copies_match() {
     );
     assert!(!reasons.contains("신뢰 실패"), "{reasons}");
 }
+
+fn simple_test_files(body: &str) -> Files {
+    BTreeMap::from([
+        (
+            String::from("Cargo.toml"),
+            b"[workspace]\nmembers = [\"crates/sample\"]\n".to_vec(),
+        ),
+        (
+            String::from("crates/sample/Cargo.toml"),
+            b"[package]\nname = \"sample\"\n".to_vec(),
+        ),
+        (
+            String::from("crates/sample/src/lib.rs"),
+            body.as_bytes().to_vec(),
+        ),
+    ])
+}
+
+fn direct_master_base(before: &Files, parent_approval: &str) -> PathBuf {
+    let root = fresh_directory(&repository_root(), "h56-direct-master");
+    git(&root, &["init", "--quiet", "-b", "master"]);
+    write_files(&root, before);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "base"]);
+    let approval_path = root.join("harness/test-diff/approvals.toml");
+    fs::create_dir_all(approval_path.parent().expect("parent")).expect("mkdir");
+    fs::write(&approval_path, parent_approval).expect("write parent approval");
+    git(&root, &["add", "harness/test-diff/approvals.toml"]);
+    git(&root, &["commit", "--quiet", "-m", "owner approval"]);
+    root
+}
+
+fn assert_parent_structural_reason(
+    root: &Path,
+    before: &Files,
+    after: &Files,
+    findings: &BTreeSet<crate::check_support::Finding<super::Rule>>,
+) {
+    let mut output = Vec::new();
+    let remaining = approval::apply_to(
+        root,
+        (before, after),
+        findings.clone(),
+        crate::git_base::BaseUse::Commit,
+        &mut output,
+    )
+    .expect("verdict");
+    assert_eq!(&remaining, findings);
+    let rendered = String::from_utf8(output).expect("utf8");
+    assert!(
+        rendered.contains("단언 변경에 명시 승인이 없다"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("신뢰 실패"), "{rendered}");
+}
+
+#[test]
+fn h56_diagnose_uses_selected_master_parent_authority_on_direct_master_commit() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { assert_eq!(1, 1); }\n}\n",
+    );
+    let after = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { assert_eq!(1, 2); }\n}\n",
+    );
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let new_hash = format!("{:x}", Sha256::digest(after.get(path).expect("after")));
+    let parent_approval = format!(
+        "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"test-diff:modified:sample tests::first\"\ndecision = \"approved\"\nreason = \"reviewed change\"\n"
+    );
+    let root = direct_master_base(&before, &parent_approval);
+    let head_approval = format!(
+        "{parent_approval}\n[[approval]]\ntask = \"H-56\"\npath = \"crates/sample/src/other.rs\"\nbefore_sha256 = \"{}\"\nafter_sha256 = \"{}\"\nfinding = \"test-diff:modified:sample tests::other\"\ndecision = \"approved\"\nreason = \"unrelated head change\"\n",
+        "1".repeat(64),
+        "2".repeat(64),
+    );
+    fs::write(root.join("harness/test-diff/approvals.toml"), head_approval).expect("write head");
+    git(&root, &["add", "harness/test-diff/approvals.toml"]);
+    git(&root, &["commit", "--quiet", "-m", "unrelated head row"]);
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["update-ref", "refs/remotes/origin/master", &head]);
+    let (findings, _) = compare_files(&before, &after);
+    assert_parent_structural_reason(&root, &before, &after, &findings);
+
+    let parent_commit = git(&root, &["rev-parse", "HEAD^1"]);
+    git(&root, &["reset", "--quiet", "--hard", &parent_commit]);
+    git(
+        &root,
+        &["rm", "--quiet", "harness/test-diff/approvals.toml"],
+    );
+    git(&root, &["commit", "--quiet", "-m", "remove approval file"]);
+    let deleted_head = git(&root, &["rev-parse", "HEAD"]);
+    git(
+        &root,
+        &["update-ref", "refs/remotes/origin/master", &deleted_head],
+    );
+    assert_parent_structural_reason(&root, &before, &after, &findings);
+}
+
+fn unapprovable_cases(path: &str) -> [crate::check_support::Finding<super::Rule>; 6] {
+    [
+        crate::check_support::Finding::whole_file(
+            path,
+            super::Rule::Removed(String::from("sample tests::first")),
+        ),
+        crate::check_support::Finding::whole_file(
+            "cargo nextest list",
+            super::Rule::NotListed(String::from("sample tests::first")),
+        ),
+        crate::check_support::Finding::whole_file(
+            "cargo nextest list",
+            super::Rule::CountDecreased {
+                base: 2,
+                current: 1,
+            },
+        ),
+        crate::check_support::Finding::whole_file(
+            path,
+            super::Rule::Unreachable(String::from(path)),
+        ),
+        crate::check_support::Finding::whole_file(
+            path,
+            super::Rule::SupportRemoved(String::from("sample tests::fn helper")),
+        ),
+        crate::check_support::Finding::whole_file(
+            path,
+            super::Rule::Shadowing(String::from("sample tests::fn helper")),
+        ),
+    ]
+}
+
+fn assert_ineligible_reasons(
+    root: &Path,
+    before: &Files,
+    after: &Files,
+    cases: &[crate::check_support::Finding<super::Rule>],
+) {
+    let findings: BTreeSet<_> = cases.iter().cloned().collect();
+    let mut output = Vec::new();
+    let remaining = approval::apply_to(
+        root,
+        (before, after),
+        findings.clone(),
+        crate::git_base::BaseUse::Commit,
+        &mut output,
+    )
+    .expect("verdict");
+    assert_eq!(remaining, findings);
+    let rendered = String::from_utf8(output).expect("utf8");
+    assert_eq!(rendered.lines().count(), cases.len(), "{rendered}");
+    for item in cases {
+        let name = item.rule.to_string();
+        assert!(
+            rendered
+                .lines()
+                .any(|line| line.contains(&name) && line.contains("승인 불가 지적 종류")),
+            "{name}: {rendered}"
+        );
+    }
+    assert!(!rendered.contains("신뢰 실패"), "{rendered}");
+}
+
+#[test]
+fn h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds() {
+    let before = simple_test_files(
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn first() { assert_eq!(1, 1); }\n}\n",
+    );
+    let after = simple_test_files("#[cfg(test)]\nmod tests {}\n");
+    let path = "crates/sample/src/lib.rs";
+    let old_hash = format!("{:x}", Sha256::digest(before.get(path).expect("before")));
+    let new_hash = format!("{:x}", Sha256::digest(after.get(path).expect("after")));
+    let cases = unapprovable_cases(path);
+    let mut toml_body = String::new();
+    for item in &cases {
+        write!(
+            toml_body,
+            "[[approval]]\ntask = \"H-56\"\npath = \"{path}\"\nbefore_sha256 = \"{old_hash}\"\nafter_sha256 = \"{new_hash}\"\nfinding = \"{}\"\ndecision = \"approved\"\nreason = \"ineligible test\"\n",
+            item.rule
+        )
+        .expect("record");
+    }
+
+    let untrusted_root = fresh_directory(&repository_root(), "h56-ineligible-untrusted");
+    git(&untrusted_root, &["init", "--quiet", "-b", "master"]);
+    write_files(&untrusted_root, &before);
+    git(&untrusted_root, &["add", "."]);
+    git(&untrusted_root, &["commit", "--quiet", "-m", "base"]);
+    let mut current_with_approval = after.clone();
+    current_with_approval.insert(
+        String::from("harness/test-diff/approvals.toml"),
+        toml_body.as_bytes().to_vec(),
+    );
+    assert_ineligible_reasons(&untrusted_root, &before, &current_with_approval, &cases);
+
+    let trusted_root = direct_master_base(&before, &toml_body);
+    let authority = git(&trusted_root, &["rev-parse", "HEAD"]);
+    git(
+        &trusted_root,
+        &["update-ref", "refs/remotes/origin/master", &authority],
+    );
+    git(&trusted_root, &["checkout", "--quiet", "-b", "branch"]);
+    write_files(&trusted_root, &after);
+    git(&trusted_root, &["add", "."]);
+    git(&trusted_root, &["commit", "--quiet", "-m", "branch"]);
+    assert_ineligible_reasons(&trusted_root, &before, &after, &cases);
+}

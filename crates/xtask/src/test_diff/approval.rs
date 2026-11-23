@@ -1230,6 +1230,68 @@ fn diagnostic_trusted(
         && trusted_history(root, authority, head, groups)
 }
 
+fn approvable_rule(rule: &Rule) -> bool {
+    match rule {
+        Rule::Modified(_) | Rule::SupportModified(_) => true,
+        Rule::Removed(_)
+        | Rule::NotListed(_)
+        | Rule::CountDecreased { .. }
+        | Rule::Unreachable(_)
+        | Rule::SupportRemoved(_)
+        | Rule::Shadowing(_) => false,
+    }
+}
+
+fn append_reason(result: &mut BTreeMap<String, String>, name: String, reason: String) {
+    match result.get_mut(&name) {
+        Some(previous) => {
+            if !previous.split("; ").any(|part| part == reason) {
+                previous.push_str("; ");
+                previous.push_str(&reason);
+            }
+        }
+        None => {
+            result.insert(name, reason);
+        }
+    }
+}
+
+fn diagnose_group(
+    context: &Diagnosis<'_>,
+    group: &Group,
+    expected: &ApprovedFindings,
+    trusted: Option<()>,
+    result: &mut BTreeMap<String, String>,
+) {
+    let applicable: Vec<(&Finding<Rule>, String)> = context
+        .findings
+        .iter()
+        .filter_map(|item| {
+            let name = item.rule.to_string();
+            expected.contains_key(&name).then_some((item, name))
+        })
+        .collect();
+    if applicable.is_empty() {
+        return;
+    }
+    let group_reason = trusted.and_then(|()| {
+        applicable
+            .iter()
+            .any(|(item, _)| approvable_rule(&item.rule))
+            .then(|| context.reason(group, expected))
+    });
+    for (item, name) in applicable {
+        let reason = if !approvable_rule(&item.rule) {
+            String::from("승인 불가 지적 종류")
+        } else if let Some(detail) = &group_reason {
+            detail.clone()
+        } else {
+            String::from("승인 이력 또는 기준 커밋 신뢰 실패")
+        };
+        append_reason(result, name, reason);
+    }
+}
+
 pub(super) fn diagnose(
     root: &Path,
     authority: Option<&str>,
@@ -1241,8 +1303,9 @@ pub(super) fn diagnose(
     if findings.is_empty() {
         return result;
     }
-    let source = commit(root, MASTER)
-        .or_else(|| authority.map(String::from))
+    let source = authority
+        .map(String::from)
+        .or_else(|| commit(root, MASTER))
         .unwrap_or_else(|| String::from(head));
     let Some(contents) = git(root, &["show", &format!("{source}:{APPROVAL_FILE}")]) else {
         return result;
@@ -1250,7 +1313,8 @@ pub(super) fn diagnose(
     let Ok(groups) = parse(&contents) else {
         return result;
     };
-    let trusted = authority.is_some() && diagnostic_trusted(root, &source, head, &groups);
+    let trusted =
+        (authority.is_some() && diagnostic_trusted(root, &source, head, &groups)).then_some(());
     let (before, current) = files;
     let base_scan = scan(before);
     let helpers = new_helper_names(&base_scan, &scan(current));
@@ -1262,28 +1326,7 @@ pub(super) fn diagnose(
         helpers,
     };
     for (group, expected) in groups {
-        let applicable: Vec<String> = findings
-            .iter()
-            .map(|item| item.rule.to_string())
-            .filter(|name| expected.contains_key(name))
-            .collect();
-        if applicable.is_empty() {
-            continue;
-        }
-        let reason = if trusted {
-            context.reason(&group, &expected)
-        } else {
-            String::from("승인 이력 또는 기준 커밋 신뢰 실패")
-        };
-        for item in applicable {
-            result
-                .entry(item)
-                .and_modify(|previous: &mut String| {
-                    previous.push_str("; ");
-                    previous.push_str(&reason);
-                })
-                .or_insert_with(|| reason.clone());
-        }
+        diagnose_group(&context, &group, &expected, trusted, &mut result);
     }
     result
 }
@@ -1359,9 +1402,20 @@ fn untrusted_approval_rows(contents: &str, findings: &Findings) -> BTreeMap<Stri
     };
     findings
         .iter()
-        .map(|finding| finding.rule.to_string())
-        .filter(|name| groups.values().any(|expected| expected.contains_key(name)))
-        .map(|name| (name, String::from("승인 이력 또는 기준 커밋 신뢰 실패")))
+        .filter_map(|finding| {
+            let name = finding.rule.to_string();
+            groups
+                .values()
+                .any(|expected| expected.contains_key(&name))
+                .then(|| {
+                    let reason = if approvable_rule(&finding.rule) {
+                        String::from("승인 이력 또는 기준 커밋 신뢰 실패")
+                    } else {
+                        String::from("승인 불가 지적 종류")
+                    };
+                    (name, reason)
+                })
+        })
         .collect()
 }
 
@@ -1395,15 +1449,9 @@ pub(super) fn apply_to(
     output: &mut impl Write,
 ) -> Result<Findings, String> {
     let (before, current) = files;
-    let eligible = findings.iter().any(|finding| match &finding.rule {
-        Rule::Modified(_) | Rule::SupportModified(_) => true,
-        Rule::Removed(_)
-        | Rule::NotListed(_)
-        | Rule::CountDecreased { .. }
-        | Rule::Unreachable(_)
-        | Rule::SupportRemoved(_)
-        | Rule::Shadowing(_) => false,
-    });
+    let eligible = findings
+        .iter()
+        .any(|finding| approvable_rule(&finding.rule));
     let Some(head) = commit(root, "HEAD") else {
         return Ok(findings);
     };

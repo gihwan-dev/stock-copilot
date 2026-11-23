@@ -10,7 +10,7 @@ A-27은 기존 테스트 변경의 승인 행을 입력해도 여섯 지적이 �
 
 승인 판정과 별도로, 남은 지적과 정확히 같은 승인 행이 있으면 파일 해시, 지적 집합, 이력 신뢰와 구조 보존 실패를 표시한다. 한 파일의 승인은 파일 전체 지적을 함께 검증하므로 같은 파일의 다른 지적이 거부 원인인 경우도 표시한다. 같은 지적에 여러 승인 후보가 있으면 해시가 맞지 않는 오래된 행이 다른 행의 구조 거부 사유를 덮어쓰지 않도록 모든 후보의 사유를 함께 표시한다. 진단은 승인 범위를 바꾸지 않는다.
 
-원격 추적 master가 없거나 원격 기준에 해당 승인 행이 없을 때도 HEAD와 현재 파일에 보이는 승인 행을 진단용으로만 읽어 신뢰 실패를 출력한다. 이 행으로 승인을 허용하지 않으며, 원격 추적 master가 없거나 승인 행이 브랜치 이력에만 있는 실제 이력 복사본에서 기존에는 두 위반에 이유가 없던 사례를 재현했다. 신뢰된 행과 일치하는 지적에는 그 행의 구체 사유를 우선하고, 행이 파싱되지 않거나 어느 출처에도 보이지 않으면 진단을 만들지 못한다.
+원격 추적 master가 없거나 원격 기준에 해당 승인 행이 없을 때도 HEAD와 현재 파일에 보이는 승인 행을 진단용으로만 읽어 신뢰 실패를 출력한다. 이 행으로 승인을 허용하지 않으며, 원격 추적 master가 없거나 승인 행이 브랜치 이력에만 있는 실제 이력 복사본에서 기존에는 두 위반에 이유가 없던 사례를 재현했다. 진단은 `trusted_authority`가 실제로 고른 기준 커밋을 `refs/remotes/origin/master`보다 우선해 사용하므로, `HEAD == origin/master`인 직접 커밋에서 실제 판정이 `master^1`을 따를 때도 `master^1`의 구조 거부 사유가 최신 커밋의 승인 파일 변경·삭제로 가려지지 않는다. 또 `Removed`·`NotListed`·`CountDecreased`·`Unreachable`·`SupportRemoved`·`Shadowing`처럼 승인 자체가 허용되지 않는 지적 종류는 신뢰된 행과 미신뢰 행 모두에서 신뢰 실패가 아니라 `승인 불가 지적 종류`를 출력한다. 신뢰된 행과 일치하는 지적에는 그 행의 구체 사유를 우선하고, 행이 파싱되지 않거나 어느 출처에도 보이지 않으면 진단을 만들지 못한다.
 
 A-27의 기준 `3cd28ce0690c687f996db5d5b74f45af41bbbd57`과 대상 `0bd771fb64d8c7b4f48dba76be06c210197923c9`의 세 파일을 원문과 SHA-256 그대로 보관하여 임시 저장소에 기준·작업·승인·병합 이력을 구성했다. `assertion_change` 유무 모두 여섯 건이 남았다. 판정기는 기존 구조 보존 규칙에 따라 거부했다. 종속 포트 교체로 단언 구조가 달라지고 새 보조 메서드가 호출되며, 기존 `replace` 메서드가 사라지고 `struct`가 바뀐다. 파일별 모든 지적이 함께 승인되어야 하므로 하나라도 구조 조건에 맞지 않으면 그 파일의 다른 승인도 해소되지 않는다. 이와 같은 변경의 수용 여부는 메인이 내용을 확인하는 예외 병합으로 처리한다.
 
@@ -50,3 +50,8 @@ A-27의 기준 `3cd28ce0690c687f996db5d5b74f45af41bbbd57`과 대상 `0bd771fb64d
 | 현재 파일의 승인 행 진단 제거 | 검출: h56_reports_untrusted_approval_only_in_current_files |
 | 브랜치 HEAD 승인 행 진단 제거 | 검출: h56_reports_untrusted_approval_only_in_branch_history |
 | 신뢰된 거부 사유를 미신뢰 행으로 덮어쓰기 | 검출: h56_keeps_trusted_reasons_when_untrusted_copies_match |
+| (인계 후 재실행) `diagnose`에서 선택된 `authority`보다 `origin/master` 우선 | 검출: h56_diagnose_uses_selected_master_parent_authority_on_direct_master_commit |
+| (인계 후 재실행) `approvable_rule`에서 `Removed`를 승인 가능으로 분류 | 검출: h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds |
+| (인계 후 재실행) `diagnose_group`에서 비승인 지적 종류 분기 제거 | 검출: h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds |
+| (인계 후 재실행) `untrusted_approval_rows`에서 비승인 지적 종류 분기 제거 | 검출: h56_reports_ineligible_rule_reason_for_all_unapprovable_finding_kinds |
+| (인계 후 재실행) `append_reason` 중복 사유 검사 반전 | 검출: h56_reports_every_candidate_when_one_finding_has_multiple_approvals |
