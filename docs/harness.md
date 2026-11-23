@@ -659,20 +659,20 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 ### 7.3 에이전트 훅
 
-판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`과 `.codex/config.toml`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
+판정 코어는 `.claude/hooks/lib/{edit-guard,bash-guard,paths,verdict}.mjs` 하나다. 이 훅들은 Claude Code 세션과(Codex를 다시 쓸 때만 해당) Codex 세션에만 연결되며, Antigravity 세션에는 적용되지 않는다(7.4 "Antigravity 세션의 집행 경계와 빈틈"). Codex 어댑터는 `harness/codex-hooks/`다. `.codex/hooks.json`과 `.codex/config.toml`은 보호 경로다. 보호 경로의 기준은 `agent-writable.txt`의 허용 목록 밖이다. 잠금 조각·해시도 검사한다.
 
-| 항목 | Claude Code | Codex 0.168.0 |
-|---|---|---|
-| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 |
-| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 |
-| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` |
-| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 |
-| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 |
-| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 |
-| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 |
-| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 |
+| 항목 | Claude Code | Codex 0.168.0 (Codex를 다시 쓸 때만 해당) | Antigravity (H-60 시점) |
+|---|---|---|---|
+| 편집 전 보호 경로 | PreToolUse, 잠금 off면 경고 | apply_patch의 모든 대상·이동 전후 경로를 같은 코어로 판정 | 세션 훅 미적용 (7.4 빈틈) |
+| 금지 셸 | PreToolUse Bash | PreToolUse Bash, 같은 코어 | 세션 훅 미적용 (7.4 빈틈) |
+| 편집 뒤 린트 | PostToolUse Edit/Write | PostToolUse apply_patch·단독 Bash heredoc 패치의 모든 대상에 `just lint-file` | 세션 훅 미적용 (7.4 빈틈) |
+| 설정 변경 | ConfigChange 차단 | 전용 이벤트 없음. 편집·셸 판정과 샌드박스만 적용 | 세션 훅 미적용 (7.4 빈틈) |
+| 종료 검사 | SubagentStop | Stop에서 `just base=<병합 기준> check`. 적용 여부와 브리프 기준은 메인이 확인 | 세션 훅 미적용 (원격 CI·직접 `check-fast`) |
+| 훅 실행 실패 | onFailure block (Stop 제외) | 실행 자체 실패·시간 초과는 강제 차단을 보장하지 못함 | 해당 없음 (미적용) |
+| 샌드박스 | 정책 준비, H-20 전 비활성 | 프로젝트 권한 프로필. T3가 샌드박스를 덮으면 미적용 | T3 `antigravity-acp` 경로 미확인 |
+| 프로젝트 신뢰 | 작업 공간 신뢰 | 프로젝트 신뢰와 훅 정의 해시 신뢰가 각각 필요 | T3 `antigravity-acp` 경로 미확인 |
 
-`just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
+(Codex를 다시 쓸 때만 해당) `just codex-regression`은 대표 10개 도구 시도를 헤드리스로 확인한다. 실제 시도가 없으면 미확정이다. `just check`에는 토큰 없는 어댑터·판정·설정 테스트만 넣는다. 실측과 한계는 ADR 0021에 있다.
 
 셸 훅이 거부하는 것:
 
@@ -701,12 +701,42 @@ E2E는 밤 macOS의 연기 테스트 3~5개뿐이다. WebdriverIO `@wdio/tauri-s
 
 | 역할 | 실행 | 강제 |
 |---|---|---|
-| 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸 가드 |
-| 구현·수정 | T3 Codex `gpt-6.1-sol` 또는 `gpt-6.1-terra`(메인이 스레드를 띄울 때 정한다), 별도 작업 사본. sol high, terra max. 수정은 같은 스레드에서 계속 가능 | Claude 위임 가드가 정확한 두 모델·작업 사본·브리프를 확인. Terra만 implementation 역할 명시를 요구하며 sol 역할 생략은 기존 호환으로 허용 |
-| 조사·비판 | T3 Codex `gpt-6.1-sol` high, 별도 작업 사본 | Claude 위임 가드가 sol만 허용 |
-| 적대적 리뷰 | 새 Claude Opus 5.5 adversarial-reviewer | T3 격리, 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
+| 메인 | Claude, 오케스트레이션과 docs | 기존 편집·셸·위임 가드 |
+| 구현·수정 | T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 별도 작업 사본. 수정은 같은 스레드에서 계속 가능 | 메인 Claude 위임 가드가 `provider=antigravity`·`model=gemini-4-neon`·`thought_level=xhigh`·작업 사본·브리프(`- 역할: implementation`)를 확인. 세션 중 편집·셸·종료 훅은 미적용이며 Git 커밋 훅·원격 CI·독립 리뷰가 보완 |
+| 조사·비판 | T3 Antigravity `gemini-4-neon`(`thought_level=high`), 별도 작업 사본 | 메인 Claude 위임 가드가 `driverKind=antigravity`·`model=gemini-4-neon`·`role=research|review`·`thought_level=high`를 확인 |
+| 적대적 리뷰 | 새 Claude2(`claudeAgent_claude2`) `claude-opus-5-5` `adversarial-reviewer` | 메인 Claude 위임 가드가 `driverKind=claudeAgent`·`providerInstanceId=claudeAgent_claude2`·`model=claude-opus-5-5`·`role=review`·worktree 격리를 확인. 읽기 전용 지시와 메인의 대상 스냅숏 재확인 |
 
-Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모델별 위임 판정은 메인 Claude의 orchestrationFindings가 수행한다. sol high는 운영 기본 요청이며 기존 옵션 생략·빈 객체·빈 배열에서는 실제 강도가 T3 상속·기본값에 따른다. Terra에는 max 옵션을 명시하며 생략·빈 옵션은 거부한다. 메인의 T3 t3_thread_send 수정 회차는 허용한다. 등록된 주 작업 트리는 메인, 나머지 진짜 git worktree는 구현 담당이다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude Agent 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. 적대적 리뷰는 정확한 Opus 모델·review 역할·worktree 격리의 T3 위임만 허용한다. 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+메인 Claude의 `orchestrationFindings`가 모델·제공자·인스턴스·역할·옵션·격리·브리프를 판정한다. 허용되는 위임 대상은 Antigravity `gemini-4-neon`(구현 `thought_level=xhigh`, 조사·비판 `thought_level=high`)과 Claude2(`providerInstanceId=claudeAgent_claude2`) `claude-opus-5-5`(`role=review`, 옵션 생략 또는 `effort=high`)뿐이다. Codex(`codex`, gpt 계열), 첫 번째 Claude 계정(`providerInstanceId=claudeAgent` 또는 `providerInstanceId` 생략), 다른 모델·역할·옵션 키·혼합 키는 모두 거부한다. 메인의 T3 `t3_thread_send` 수정 회차는 소유한 `implementation`·`research` 스레드에만 허용한다. 등록된 주 작업 트리의 Claude만 메인이며, 나머지 진짜 git worktree의 Claude는 리뷰어로 고정한다. 역할은 모델이 전달한 이름을 믿지 않는다. native Claude `Agent` 호출은 적대적 리뷰를 포함해 진입 가드가 거부한다. (Codex를 다시 쓸 때만 해당: Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다.) 기존 라이브러리는 회귀 자료와 판정 코어로 남긴다.
+
+#### Antigravity 세션의 집행 경계와 빈틈 (H-60)
+
+Antigravity 세션에는 이 저장소의 Codex 훅(`harness/codex-hooks/`)과 Claude 훅(`.claude/hooks/`)이 적용되지 않는다. 아래 표는 H-60 시점에서 여전히 기계로 강제되는 것과 더 이상 기계로 강제되지 않는 것을 구분한다. 미강제 항목은 `just known-gaps`에도 등록된다.
+
+**여전히 기계로 강제되는 것**
+
+| 영역 | 강제 장치 | 범위와 조건 |
+|---|---|---|
+| 커밋 전 검사 | 로컬 Git 커밋 훅(`lefthook`: `fresh-build`, `commit-guard`, `just check-fast`) | 작업 브랜치 변경분 검사 및 하네스·문서·설정 변경 시 전체 `just check` 승격. `xtask test-diff`, `disable-check`, `hooks-installed` 포함 |
+| 푸시 전 검사 | 로컬 Git 푸시 훅(`just check-full`) | 전체 검사, 시각 회귀, 변경분 변이 |
+| 원격 CI | GitHub Actions (`ci.yml`, `signatures.yml`, `nightly.yml`) | Linux·macOS 전체 `just check`, 변경분 변이, 컨테이너 시각 회귀, 리뷰 기록 검사, 보호 경로·기존 테스트 서명 사후 탐지 |
+| 위임 통제 | 메인 Claude 세션의 `guard-orchestration.mjs` (`orchestrationFindings`) | 메인 Claude가 띄우는 제공자(`antigravity`, `claudeAgent_claude2`), 모델, 옵션, 역할, worktree 격리, 브리프, 소유 스레드 |
+| 독립 검토 | Claude2 Opus 5.5 적대적 리뷰 + Antigravity `gemini-4-neon`(`high`) 비판 + 메인의 대상 작업 사본 전후 스냅숏 비교 | 구현 보고서 격리, 결함 재현·반박, 리뷰 중 원본 변경 여부 확인 |
+
+**더 이상 기계로 강제되지 않는 것 (Antigravity 세션 기준)**
+
+| 빈틈 | 과거 장치 (Claude·Codex) | 현재 상태와 완화 수단 |
+|---|---|---|
+| 세션 중 보호 경로 쓰기 차단 | `PreToolUse` 편집 가드, 권한 `deny`, 샌드박스 `denyWrite` | 사전 차단 없음. 커밋 훅·원격 CI 서명 검사·독립 리뷰가 사후 탐지 |
+| 세션 중 홈 파일·자격 증명·하네스 상태 읽기 차단 | 샌드박스 `denyRead`, Claude `Read(~/.claude*/**)` 거부 | 기계 차단 없음. 규칙 준수와 사후 리뷰에 의존 |
+| 세션 중 금지 셸 명령 차단 (`--no-verify`, `LEFTHOOK=0`, `git push`, `RUSTFLAGS` 등) | `PreToolUse` Bash 가드 | 실행 시점 차단 없음. 커밋 훅 우회는 원격 CI와 메인 검증이 사후 탐지 |
+| 편집 직후 자동 린트 | `PostToolUse` `just lint-file` | 자동 실행 없음. 커밋 훅과 `just check-fast`에서 검증 |
+| 리뷰·비판 역할의 추적 파일 쓰기·중첩 위임 차단 | 역할별 편집·셸·위임 가드 | Antigravity 비판자 세션에는 차단 훅 없음. T3 worktree 격리와 메인의 대상 스냅숏 전후 비교로 오염 확인 |
+| 세션 종료 시 자동 전체 검사 | `Stop` / `SubagentStop` 훅 | 종료 훅 없음. 구현자가 `just check-fast`를 직접 실행하고 원격 CI가 전체 검사를 수행 |
+
+**Antigravity 세션에서 확인한 사실과 미확인 항목**
+
+- 확인한 사실: (1) Antigravity 세션은 작업 공간 루트의 `AGENTS.md`를 규칙으로 자동 로드한다. (2) 이 세션에 번들된 내장 스킬 문서(`agy-customizations`의 `SKILL.md`·`docs/hooks.md`·`docs/rules.md`, `antigravity-guide`의 `references/app.md`·`references/cli.md`)는 작업 공간 `.agents/hooks.json`(또는 `.agent/`·`_agents/`·`_agent/`)의 생명주기 훅(`SessionStart`, `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`)과 `PreToolUse`의 `decision: "allow" | "deny" | "ask" | "force_ask"`, `Stop`의 `decision: "continue"` 계약, 전역 설정 위치(`~/.gemini/config/`, CLI `~/.gemini/antigravity-cli/settings.json`), 앱의 터미널 샌드박스·비작업공간 파일 접근 정책을 안내한다. (3) H-60 시점의 저장소에는 `.agents/`·`.agent/`·`_agents/`·`_agent/`·`GEMINI.md`가 없다. (4) T3의 `orchestrator_capabilities`는 `antigravity` 제공자, `gemini-4-neon`(`thought_level` 기본 `xhigh`), `claudeAgent_claude2` 제공자, `claude-opus-5-5`를 보고한다.
+- 미확인 항목: (1) T3 Code의 `antigravity-acp` 경로(`runtimeMode: "full-access"` 포함)에서 `.agents/hooks.json`이 실제로 로드·실행돼 도구 호출을 차단하고 종료를 막는지, (2) worktree 세션에서 훅 출처가 주 작업 트리인지 worktree인지와 폴더 신뢰 요구 여부, (3) 실제 `PreToolUse` 도구 이름·인자 형식과 훅 오류·시간 초과 시 닫힌 실패 보장 여부, (4) Antigravity 터미널 샌드박스·비작업공간 파일 접근 차단을 프로젝트 파일로 강제할 수 있는지, (5) `PostToolUse`로 `just lint-file` 실패 피드백을 돌려줄 수 있는지, (6) 사용자 홈 설정(`~/.gemini/...`)의 실제 병합 동작(홈 파일 열람 금지 규칙에 따라 읽지 않음).
 
 #### Claude 적대적 리뷰어 통제
 
@@ -728,7 +758,7 @@ Codex 훅은 내부 서브에이전트와 T3 도구를 기본 거부한다. 모�
 
 ### 7.5 리뷰어 격리
 
-Claude 적대적 리뷰어와 Codex 비판자는 T3의 `isolation: worktree`가 준비한 메인 저장소 밖 사본에서만 일한다. Claude Agent의 `isolation` 설정으로 추가 사본을 만들지 않는다. 정의 파일은 역할 안내로 사용한다. T3가 준 권한과 훅 적용 여부는 별도로 확인한다.
+Claude2 적대적 리뷰어와 Antigravity 비판자는 T3의 `isolation: worktree`가 준비한 메인 저장소 밖 사본에서만 일한다. Claude Agent의 `isolation` 설정으로 추가 사본을 만들지 않는다. 정의 파일은 역할 안내로 사용한다. T3가 준 권한과 훅 적용 여부는 별도로 확인한다.
 
 #### 리뷰어의 대상 변경 감지
 

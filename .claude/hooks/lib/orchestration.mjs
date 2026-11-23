@@ -2,41 +2,121 @@ import { baseVerdict, reportProblems } from "./agent-guard.mjs";
 import { parseBrief, reviewTargetCommit } from "./brief.mjs";
 import { ROLE, roleOf } from "./roles.mjs";
 const denied = (message) => [{ rule: "orchestration", gated: false, message }];
+const plainObject = (value) =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 const keys = (value, allowed) =>
-  value !== null &&
-  typeof value === "object" &&
+  plainObject(value) &&
   Object.keys(value).every((key) => allowed.includes(key));
+const exactKey = (value, key) =>
+  plainObject(value) &&
+  Object.keys(value).length === 1 &&
+  Object.hasOwn(value, key);
 const safeMode = (args) =>
   args.runtimeMode === undefined ||
   ["inherit", "approval-required"].includes(args.runtimeMode);
-const expectedEffort = (model) => (model === "gpt-6.1-terra" ? "max" : "high");
-const options = (value, model) =>
-  (model !== "gpt-6.1-terra" ||
-    value?.effort === "max" ||
-    value?.reasoningEffort === "max") &&
-  (value === undefined ||
-    (keys(value, ["effort"]) &&
-      (value.effort === undefined || value.effort === expectedEffort(model))) ||
-    (["gpt-6.1-sol", "gpt-6.1-terra"].includes(model) &&
-      keys(value, ["reasoningEffort"]) &&
-      value.reasoningEffort === expectedEffort(model)));
-const codexModel = (model, role) =>
-  model === "gpt-6.1-sol" ||
-  (role === "implementation" && model === "gpt-6.1-terra");
-const codexFindings = (model, role, value) => {
-  if (!codexModel(model, role))
+const antigravityThoughtLevel = (role) =>
+  role === "implementation"
+    ? "xhigh"
+    : role === "research" || role === "review"
+      ? "high"
+      : undefined;
+const antigravityOptions = (value, role) => {
+  const expected = antigravityThoughtLevel(role);
+  return (
+    expected !== undefined &&
+    exactKey(value, "thought_level") &&
+    value.thought_level === expected
+  );
+};
+const claudeReviewOptions = (value) =>
+  value === undefined || (exactKey(value, "effort") && value.effort === "high");
+const antigravityFindings = (model, role, value, instanceId) => {
+  if (instanceId !== undefined && instanceId !== "antigravity")
     return denied(
-      "Codex 허용 모델은 gpt-6.1-sol 또는 gpt-6.1-terra이며 역할은 terra에 implementation을 명시한다. 조사·비판은 sol만 허용한다",
+      "Antigravity 제공자 인스턴스는 생략 또는 antigravity만 허용한다",
     );
-  return options(value, model)
+  const expected = antigravityThoughtLevel(role);
+  if (model !== "gemini-4-neon" || expected === undefined)
+    return denied(
+      "Antigravity 허용 모델은 gemini-4-neon이며 역할은 implementation(xhigh), research·review(high)만 허용한다",
+    );
+  return antigravityOptions(value, role)
     ? []
     : denied(
-        "Codex 추론 강도는 sol high, terra max이며 Terra의 max 옵션을 명시한다. effort와 reasoningEffort는 혼합하지 않고 한 키만 쓴다",
+        `Antigravity gemini-4-neon의 ${role} 역할은 thought_level=${expected} 옵션만 명시적으로 허용한다. effort·reasoningEffort 등 다른 키와 혼합은 거부한다`,
+      );
+};
+const claudeReviewFindings = (model, role, value, instanceId) => {
+  if (instanceId !== "claudeAgent_claude2")
+    return denied(
+      "적대적 리뷰는 두 번째 Claude 계정(providerInstanceId=claudeAgent_claude2)만 허용한다. 첫 번째 계정(claudeAgent)과 생략은 거부한다",
+    );
+  if (model !== "claude-opus-5-5" || role !== "review")
+    return denied(
+      "Claude2 허용 대상은 claude-opus-5-5의 review 역할만 허용한다",
+    );
+  return claudeReviewOptions(value)
+    ? []
+    : denied(
+        "Claude2 claude-opus-5-5 리뷰는 옵션 생략 또는 effort=high만 허용한다. 다른 키와 혼합은 거부한다",
       );
 };
 const launchRole = (message) => {
-  const roles = [...String(message).matchAll(/^[-] 역할: (.+)$/gmu)];
+  if (typeof message !== "string") return undefined;
+  const roles = [...message.matchAll(/^[-] 역할: (.+)$/gmu)];
   return roles.length === 1 ? roles[0][1] : undefined;
+};
+const delegateTargetFindings = (target, role) => {
+  if (!keys(target, ["driverKind", "model", "options", "providerInstanceId"]))
+    return denied("허용하지 않은 T3 위임 인자다");
+  if (target.driverKind === "codex")
+    return denied(
+      "Codex 제공자는 더 이상 허용하지 않는다. 구현·조사·비판은 antigravity(gemini-4-neon), 적대적 리뷰는 claudeAgent_claude2(claude-opus-5-5)만 사용한다",
+    );
+  if (target.driverKind === "antigravity")
+    return antigravityFindings(
+      target.model,
+      role,
+      target.options,
+      target.providerInstanceId,
+    );
+  if (target.driverKind === "claudeAgent")
+    return claudeReviewFindings(
+      target.model,
+      role,
+      target.options,
+      target.providerInstanceId,
+    );
+  return denied("허용하지 않은 T3 위임 인자다");
+};
+const launchSelectionFindings = (selection, message) => {
+  if (!keys(selection, ["provider", "instanceId", "model", "options"]))
+    return denied("현재 프로젝트를 상속하는 Antigravity worktree만 시작한다");
+  if (selection.provider === "codex")
+    return denied(
+      "Codex 제공자는 더 이상 허용하지 않는다. 구현 스레드는 antigravity의 gemini-4-neon(thought_level=xhigh)만 시작한다",
+    );
+  if (selection.provider !== "antigravity")
+    return denied("현재 프로젝트를 상속하는 Antigravity worktree만 시작한다");
+  if (
+    selection.instanceId !== undefined &&
+    selection.instanceId !== "antigravity"
+  )
+    return denied(
+      "Antigravity 제공자 인스턴스는 생략 또는 antigravity만 허용한다",
+    );
+  if (
+    selection.model !== "gemini-4-neon" ||
+    launchRole(message) !== "implementation"
+  )
+    return denied(
+      "Antigravity 구현 스레드는 gemini-4-neon 모델과 정확히 한 개의 '- 역할: implementation' 줄만 허용한다",
+    );
+  return antigravityOptions(selection.options, "implementation")
+    ? []
+    : denied(
+        "Antigravity gemini-4-neon 구현 스레드는 thought_level=xhigh 옵션만 명시적으로 허용한다. effort·reasoningEffort 등 다른 키와 혼합은 거부한다",
+      );
 };
 const briefCheck = (text, rules, facts) => {
   const result = baseVerdict(
@@ -82,14 +162,8 @@ export const orchestrationFindings = (input, rules, facts) => {
   )
     return denied("권한 확대는 허용하지 않는다");
   if (tool === "delegate_task") {
-    if (args.target?.driverKind === "codex") {
-      const problems = codexFindings(
-        args.target.model,
-        args.role,
-        args.target.options,
-      );
-      if (problems.length > 0) return problems;
-    }
+    const targetProblems = delegateTargetFindings(args.target, args.role);
+    if (targetProblems.length > 0) return targetProblems;
     if (
       !keys(args, [
         "task",
@@ -103,27 +177,7 @@ export const orchestrationFindings = (input, rules, facts) => {
         "clientRequestId",
         "timeoutMs",
       ]) ||
-      !keys(args.target, [
-        "driverKind",
-        "model",
-        "options",
-        "providerInstanceId",
-      ]) ||
-      !(
-        (args.target.driverKind === "codex" &&
-          codexModel(args.target.model, args.role) &&
-          (args.target.providerInstanceId === undefined ||
-            args.target.providerInstanceId === "codex")) ||
-        (args.target.driverKind === "claudeAgent" &&
-          args.target.model === "claude-opus-5-5" &&
-          args.role === "review" &&
-          (args.target.providerInstanceId === undefined ||
-            args.target.providerInstanceId === "claudeAgent"))
-      ) ||
-      !options(args.target.options, args.target.model) ||
       args.isolation !== "worktree" ||
-      (args.role !== undefined &&
-        !["implementation", "research", "review"].includes(args.role)) ||
       (args.mode !== undefined && !["wait", "async"].includes(args.mode)) ||
       typeof args.task !== "string"
     )
@@ -133,14 +187,11 @@ export const orchestrationFindings = (input, rules, facts) => {
       : briefCheck(args.task, rules, facts);
   }
   if (tool === "t3_thread_launch") {
-    if (args.modelSelection?.provider === "codex") {
-      const problems = codexFindings(
-        args.modelSelection.model,
-        launchRole(args.message),
-        args.modelSelection.options,
-      );
-      if (problems.length > 0) return problems;
-    }
+    const selectionProblems = launchSelectionFindings(
+      args.modelSelection,
+      args.message,
+    );
+    if (selectionProblems.length > 0) return selectionProblems;
     if (
       !keys(args, [
         "title",
@@ -151,10 +202,6 @@ export const orchestrationFindings = (input, rules, facts) => {
         "interactionMode",
         "clientRequestId",
       ]) ||
-      !keys(args.modelSelection, ["provider", "model", "options"]) ||
-      args.modelSelection.provider !== "codex" ||
-      !codexModel(args.modelSelection.model, launchRole(args.message)) ||
-      !options(args.modelSelection.options, args.modelSelection.model) ||
       !keys(args.workspaceStrategy, [
         "type",
         "branch",
@@ -164,7 +211,7 @@ export const orchestrationFindings = (input, rules, facts) => {
       args.workspaceStrategy.type !== "worktree" ||
       typeof args.message !== "string"
     )
-      return denied("현재 프로젝트를 상속하는 Codex worktree만 시작한다");
+      return denied("현재 프로젝트를 상속하는 Antigravity worktree만 시작한다");
     const brief = parseBrief(args.message);
     const strategy = args.workspaceStrategy;
     if (typeof strategy.branch !== "string" || strategy.branch !== brief.branch)

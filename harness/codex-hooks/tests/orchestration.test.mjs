@@ -23,8 +23,28 @@ const call = {
   tool_name: "mcp__t3_code__delegate_task",
   tool_input: {
     isolation: "worktree",
-    target: { driverKind: "codex", model: "gpt-6.1-sol" },
+    role: "implementation",
+    target: {
+      driverKind: "antigravity",
+      providerInstanceId: "antigravity",
+      model: "gemini-4-neon",
+      options: { thought_level: "xhigh" },
+    },
     task: `- 기준 커밋: ${base}, 브랜치 \`h-41\``,
+  },
+};
+const criticCall = {
+  tool_name: "mcp__t3_code__delegate_task",
+  tool_input: {
+    isolation: "worktree",
+    role: "review",
+    target: {
+      driverKind: "antigravity",
+      providerInstanceId: "antigravity",
+      model: "gemini-4-neon",
+      options: { thought_level: "high" },
+    },
+    task: `- 기준 커밋: ${base}, 브랜치 \`h-41\`\n- 대상 SHA: ${"b".repeat(40)}`,
   },
 };
 
@@ -61,17 +81,17 @@ test("only T3 worktree delegation is allowed and native reviews are denied", () 
 });
 
 test("T3 Opus review requires the exact model role provider and worktree", () => {
-  const input = structuredClone(call);
-  input.tool_input.role = "review";
-  input.tool_input.task += `\n- 대상 SHA: ${"b".repeat(40)}`;
+  const input = structuredClone(criticCall);
   input.tool_input.target = {
     driverKind: "claudeAgent",
     model: "claude-opus-5-5",
-    providerInstanceId: "claudeAgent",
+    providerInstanceId: "claudeAgent_claude2",
   };
   assert.deepEqual(orchestrationFindings(input, rules, facts), []);
   for (const target of [
     { model: "claude-sonnet-5-5" },
+    { providerInstanceId: "claudeAgent" },
+    { providerInstanceId: undefined },
     { providerInstanceId: "other" },
     { options: { effort: "max" } },
   ]) {
@@ -107,9 +127,7 @@ test("T3 Opus review requires the exact model role provider and worktree", () =>
 });
 
 test("pinned review bases survive parallel master movement but must belong to the target", () => {
-  const input = structuredClone(call);
-  input.tool_input.role = "review";
-  input.tool_input.task += `\n- 대상 SHA: ${"b".repeat(40)}`;
+  const input = structuredClone(criticCall);
   const moved = { ...facts, baseTip: "c".repeat(40) };
   assert.deepEqual(orchestrationFindings(input, rules, moved), []);
   assert.equal(
@@ -132,9 +150,7 @@ test("pinned review bases survive parallel master movement but must belong to th
 });
 
 test("review delegation rejects implementation reports missing targets and wrong target heads", () => {
-  const input = structuredClone(call);
-  input.tool_input.role = "review";
-  input.tool_input.task += `\n- 대상 SHA: ${"b".repeat(40)}`;
+  const input = structuredClone(criticCall);
   assert.deepEqual(orchestrationFindings(input, rules, facts), []);
   for (const task of [
     call.tool_input.task,

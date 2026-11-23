@@ -118,6 +118,7 @@ O 주문 개발 (E와 함께 진행, 스위치는 꺼진 채) ┤
 | H-53 | 테스트·검사가 만든 임시 폴더를 남기지 않음 | 하네스 테스트와 검사 스크립트가 시스템 임시 폴더에 만든 폴더를 끝날 때(성공·실패·중단) 지움. 전체 검사 한 번을 돌린 전후로 임시 폴더에 이 저장소가 만든 항목이 늘지 않음을 확인하는 검사. 일부러 남기는 예제가 그 검사에 걸림 | H-52 |
 | H-54 | 작업 브랜치의 원격 검사가 로컬 master 참조 없이 통과 | 원격 CI의 브랜치 실행(`macos-branch` 포함)에서 `refs/heads/master`가 없어 실패하는 테스트·검사를 고침: 기준은 원격 추적 참조 또는 워크플로가 명시적으로 준비한 참조. 로컬에 `master` 브랜치가 없는 복제본에서 전체 검사가 통과하는 회귀 테스트 | H-52 |
 | H-55 | 승인된 기존 테스트 변경의 범위 확장 | `harness/test-diff/approvals.toml`이 메인이 명시적으로 승인한 단언 변경과 `impl` 지원 코드 변경(`support-modified`의 함수 외 항목)도 정확한 대조로 해소. 승인되지 않은 단언 변경·삭제, 목록 밖 변경, 해시 불일치는 계속 거부. `mutants-diff`의 test-diff 사전 조건이 승인된 변경을 통과로 봄 | H-52 |
+| H-60 | 구현 제공자를 Antigravity(Gemini)로 전환 | 문서(`AGENTS.md`, `CLAUDE.md`, `docs/agents/implementer.md`, `docs/workflow.md`)와 오케스트레이션 가드·테스트가 구현·수정을 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판을 `gemini-4-neon`(`high`), 적대적 리뷰를 Claude2(`claudeAgent_claude2`) `claude-opus-5-5`로 고정하고 Codex·첫 번째 Claude 계정·허용 목록 밖 모델·옵션을 거부. Codex 전용 절차는 "Codex를 다시 쓸 때만 해당"으로 보존. Antigravity 세션의 강제·미강제 경계와 확인/미확인 사실을 `docs/harness.md`·`just known-gaps`·ADR에 기록 | H-50, H-52 |
 | D-42 | 병합된 domain 코드의 변이 미검출 보강 | H-46 실측의 미검출(D-29 15건과 시간 초과 3건, D-37 4건)을 현행 코드에서 다시 돌려, 각 미검출을 잡는 테스트를 더하거나 동치임을 기록. 제품 코드의 동작은 바꾸지 않음 (ADR 0078) 미검출 14건 중 12건은 예제 테스트로 잡고 2건은 동치로 기록. bootstrap의 시간 초과 3건은 4스레드에서 남음(H-47 인계) (ADR 0083) | H-46 |
 
 ## DS. 디자인 시스템
