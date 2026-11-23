@@ -71,7 +71,8 @@ pub use domain_time::{
 };
 pub use market_session::{
     AuctionBoundary, MarketCalendar, MarketCalendarError, MarketSegment, MarketSession,
-    MarketSessionError, MarketState, MarketTransition, SessionData, SessionInformation,
+    MarketSessionError, MarketState, MarketTradingStatus, MarketTransition, SessionData,
+    SessionInformation, market_state_at,
 };
 mod probability;
 pub use probability::{

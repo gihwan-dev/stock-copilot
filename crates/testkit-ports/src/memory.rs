@@ -870,6 +870,31 @@ impl MemoryProposalRepository {
     }
 }
 impl ProposalRepository for MemoryProposalRepository {
+    fn current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &application::SignalSnapshot,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::CurrentDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::ready(Err(SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )))
+    }
+    fn store_current_draft(
+        &self,
+        _instrument: &InstrumentId,
+        _expected: &application::SignalSnapshot,
+        _proposal: &Proposal<Draft>,
+        _check: application::DraftCheck<'_>,
+    ) -> impl Future<Output = Result<application::ConditionalDraftOutcome, SystemPortError>> + Send
+    {
+        std::future::ready(Err(SystemPortError::new(
+            application::SystemPort::Repository,
+            application::SystemFailure::InvalidData,
+        )))
+    }
     async fn store_draft(
         &self,
         proposal: &Proposal<Draft>,

@@ -223,6 +223,25 @@ impl Proposal<Draft> {
             price_range: self.range.check(current.price()),
         }
     }
+    pub fn check_current(
+        &self,
+        now: Timestamp,
+        current: &PriceObservation,
+    ) -> Result<(), ProposalExecutionError> {
+        if now < self.created_at {
+            return Err(ProposalExecutionError::ClockRollback);
+        }
+        if self.expiry(now) != CheckResult::Passed {
+            return Err(ProposalExecutionError::Expired);
+        }
+        if current.check(self.intent.instrument(), now) != CheckResult::Passed {
+            return Err(ProposalExecutionError::ObservationInvalid);
+        }
+        if self.range.check(current.price()) != CheckResult::Passed {
+            return Err(ProposalExecutionError::PriceOutsideRange);
+        }
+        Ok(())
+    }
     pub fn validate(
         self,
         now: Timestamp,
@@ -510,6 +529,30 @@ mod tests {
         report.market_order_permission = CheckResult::Passed;
         report.account_match = CheckResult::Passed;
         report
+    }
+    #[test]
+    fn draft_liveness_distinguishes_clock_expiry_observation_and_range() {
+        let proposal = draft();
+        assert_eq!(
+            proposal.check_current(at(0), &observation("100", 0)),
+            Ok(())
+        );
+        assert_eq!(
+            proposal.check_current(at(-1), &observation("100", -1)),
+            Err(ProposalExecutionError::ClockRollback)
+        );
+        assert_eq!(
+            proposal.check_current(at(600), &observation("100", 600)),
+            Err(ProposalExecutionError::Expired)
+        );
+        assert_eq!(
+            proposal.check_current(at(5), &observation("100", 0)),
+            Err(ProposalExecutionError::ObservationInvalid)
+        );
+        assert_eq!(
+            proposal.check_current(at(0), &observation("105", 0)),
+            Err(ProposalExecutionError::PriceOutsideRange)
+        );
     }
     #[test]
     fn m14_execution_token_preserves_identity_observations_and_rejects_rollback() {
