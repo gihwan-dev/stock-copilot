@@ -477,8 +477,9 @@ impl Calibration {
         }
     }
     pub fn with_fact(&self, fact: CalibrationFact) -> Result<Self, CalibrationError> {
-        if self.capacity() == CalibrationCapacity::Exhausted {
-            return Err(CalibrationError::TooManyFacts);
+        match self.capacity() {
+            CalibrationCapacity::Exhausted => return Err(CalibrationError::TooManyFacts),
+            CalibrationCapacity::Available => (),
         }
         let mut combined = self.facts.clone();
         combined.push(fact);

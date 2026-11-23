@@ -57,8 +57,8 @@ mod exact_arithmetic;
 pub use exact_arithmetic::{ApproximateRatio, RatioQuotient};
 mod estimate_return;
 pub use estimate_return::{
-    BenchmarkCashFlows, EstimateCashFlows, EstimateEntryError, EstimateEntryPrice,
-    EstimateReturnError,
+    EstimateEntryError, EstimateEntryPrice, EstimateExcess, EstimateExitKind, EstimateReturn,
+    EstimateReturnError, EstimateReturnFacts, estimate_return,
 };
 mod domain_time;
 mod market_session;
