@@ -29,7 +29,10 @@ mod tests {
             Symbol::try_new("AAPL").expect("symbol"),
             IsinCode::try_new("US0378331005").expect("isin"),
         );
-        let id = InstrumentId::try_new("opaque-1").expect("id");
+        let issued = domain::IndependentInstrumentIdIssuer::new()
+            .issue()
+            .expect("후보");
+        let id: InstrumentId = issued.as_instrument_id().clone();
         assert_eq!(
             run(repository.for_id(&id)),
             Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
@@ -38,7 +41,7 @@ mod tests {
             run(repository.lookup(&source)),
             Err(MappingStoreError::Mapping(InstrumentMappingError::Missing))
         );
-        run(repository.ensure(&source, &id)).expect("발급");
+        run(repository.ensure(&source, issued)).expect("발급");
         let ambiguous = InstrumentSource::new(
             KnownMarket::Us,
             Symbol::try_new("AAPL").expect("symbol"),

@@ -173,30 +173,49 @@ const stepFindings = (job, step, policy, toolSpec) => {
   return found;
 };
 
+const mutationStrategyMatches = (name, strategy, policy) => {
+  const expected =
+    name === "mutants" ? policy.mutationStrategy : policy.dailyMutationStrategy;
+  const maximum = strategy?.["max-parallel"];
+  return (
+    isObject(strategy) &&
+    isObject(expected) &&
+    expected["max-parallel"] === 2 &&
+    Number.isInteger(maximum) &&
+    maximum > 0 &&
+    maximum <= 2 &&
+    isDeepStrictEqual({ ...strategy, "max-parallel": 2 }, expected)
+  );
+};
+
 const jobFindings = (path, name, job, jobs, policy, toolSpec) => {
   if (!isObject(job)) {
     return [finding("missing-key", `jobs.${name}`)];
   }
   const expected = policy.jobPermissions[`${path}#${name}`];
   const timeout = job["timeout-minutes"];
+  const isMutationJob =
+    path === ".github/workflows/nightly.yml" &&
+    ["mutants", "mutants-daily"].includes(name);
+  const expectedJobConcurrency =
+    policy.expected[path]?.jobs?.[name]?.concurrency;
+  const requireJobConcurrency =
+    isMutationJob && "mutants" in jobs && "mutants-daily" in jobs;
+  const allowedJobKeys = [
+    ...policy.jobKeys,
+    ...(isMutationJob ? ["strategy"] : []),
+    ...(isMutationJob &&
+    expectedJobConcurrency !== undefined &&
+    isDeepStrictEqual(job.concurrency, expectedJobConcurrency)
+      ? ["concurrency"]
+      : []),
+  ];
   return [
-    ...keyFindings(
-      job,
-      path === ".github/workflows/nightly.yml" &&
-        ["mutants", "mutants-daily"].includes(name)
-        ? [...policy.jobKeys, "strategy"]
-        : policy.jobKeys,
-      policy.requiredJobKeys,
-      `jobs.${name}`,
-    ),
-    ...(path !== ".github/workflows/nightly.yml" ||
-    !["mutants", "mutants-daily"].includes(name) ||
-    isDeepStrictEqual(
-      job.strategy,
-      name === "mutants"
-        ? policy.mutationStrategy
-        : policy.dailyMutationStrategy,
-    )
+    ...keyFindings(job, allowedJobKeys, policy.requiredJobKeys, `jobs.${name}`),
+    ...(requireJobConcurrency && !("concurrency" in job)
+      ? [finding("missing-key", `jobs.${name}.concurrency`)]
+      : []),
+    ...(!isMutationJob || mutationStrategyMatches(name, job.strategy, policy)
       ? []
       : [finding("strategy", name)]),
     ...(isDeepStrictEqual(job.permissions, expected)
@@ -243,8 +262,21 @@ export const workflowFindings = (path, text, policy, toolSpec) => {
     return [finding("not-canonical-json")];
   }
   const jobs = isObject(parsed.jobs) ? parsed.jobs : {};
+  const expectedConcurrency = policy.expected[path]?.concurrency;
+  const allowedKeys =
+    expectedConcurrency !== undefined &&
+    isDeepStrictEqual(parsed.concurrency, expectedConcurrency)
+      ? [...policy.topKeys, "concurrency"]
+      : policy.topKeys;
+  const requiredConcurrency =
+    path === ".github/workflows/ci.yml" &&
+    "macos" in jobs &&
+    "macos-branch" in jobs;
   const found = [
-    ...keyFindings(parsed, policy.topKeys, policy.topKeys, "top"),
+    ...keyFindings(parsed, allowedKeys, policy.topKeys, "top"),
+    ...(requiredConcurrency && !("concurrency" in parsed)
+      ? [finding("missing-key", "top.concurrency")]
+      : []),
     ...eventFindings(parsed.on, policy),
     ...(isDeepStrictEqual(parsed.permissions, policy.permissions)
       ? []

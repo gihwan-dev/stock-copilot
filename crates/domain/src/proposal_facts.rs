@@ -71,6 +71,24 @@ impl PriceObservation {
             CheckResult::Failed
         }
     }
+    pub fn validate_for_task(
+        &self,
+        task: &crate::EstimateTask,
+        now: Timestamp,
+    ) -> Result<(), crate::SignalUnavailable> {
+        let reference = task.reference();
+        if self.check_task_instrument(task) != CheckResult::Passed
+            || self.price().as_money().currency() != reference.price().as_money().currency()
+        {
+            return Err(crate::SignalUnavailable::InvalidTargetPrice);
+        }
+        if self.observed_at() < reference.observed_at()
+            || self.check(reference.instrument(), now) != CheckResult::Passed
+        {
+            return Err(crate::SignalUnavailable::StaleTargetPrice);
+        }
+        Ok(())
+    }
     pub(crate) fn check(
         &self,
         instrument: &ResolvedOrderInstrument,

@@ -10,6 +10,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { mkdtempSync } from "../ci/managed-temp.mjs";
+import {
+  commitIndexSnapshot,
+  historicalMasterRef,
+} from "../ci/index-clone.mjs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +43,15 @@ const run = (command, args, cwd, environment = process.env) =>
   execFileSync(command, args, {
     cwd,
     encoding: "utf8",
-    env: environment,
+    env: {
+      ...Object.fromEntries(
+        Object.entries(environment).filter(
+          ([name]) => !name.startsWith("GIT_"),
+        ),
+      ),
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 
@@ -88,11 +100,19 @@ export const snapshotTargets = (experiments, values) => [
 const snapshot = (targets) =>
   Object.fromEntries(targets.map((target) => [target, snapshotOf(target)]));
 
-const addWorktree = (copy, experiment, worktree) => {
+const addWorktree = (copy, experiment, worktree, originalHead, changed) => {
   const path = join(experiment, "stock-copilot-wt", worktree.name);
   run(
     "git",
-    ["worktree", "add", "--quiet", "-b", worktree.branch, path, worktree.from],
+    [
+      "worktree",
+      "add",
+      "--quiet",
+      "-b",
+      worktree.branch,
+      path,
+      historicalMasterRef(worktree.from, originalHead, changed),
+    ],
     copy,
   );
   if (worktree.commit !== undefined) {
@@ -109,9 +129,15 @@ const addWorktree = (copy, experiment, worktree) => {
 
 const prepareIn = (experiment, setup) => {
   const copy = join(experiment, "stock-copilot");
-  const head = run("git", ["rev-parse", "HEAD"], repoRoot);
+  const originalHead = run("git", ["rev-parse", "HEAD"], repoRoot);
   run("git", ["clone", "--quiet", repoRoot, copy], experiment);
-  run("git", ["checkout", "--quiet", "-B", "master", head], copy);
+  run("git", ["checkout", "--quiet", "-B", "master", originalHead], copy);
+  const snapshot = commitIndexSnapshot(
+    repoRoot,
+    copy,
+    process.env.GIT_INDEX_FILE,
+  );
+  const head = snapshot.head;
   run("git", ["remote", "remove", "origin"], copy);
   run(
     "pnpm",
@@ -126,7 +152,7 @@ const prepareIn = (experiment, setup) => {
   );
   mkdirSync(join(experiment, "stock-copilot-wt"), { recursive: true });
   const worktrees = setup.worktrees.map((worktree) =>
-    addWorktree(copy, experiment, worktree),
+    addWorktree(copy, experiment, worktree, originalHead, snapshot.changed),
   );
   run("lefthook", ["install"], copy);
   run(

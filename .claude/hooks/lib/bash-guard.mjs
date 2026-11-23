@@ -1,7 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import {
   MODE,
   TEMPORARY_ROOTS,
@@ -818,6 +825,220 @@ const targetFindings = (target, invocation, context) => {
   );
 };
 
+const hasAncestorIdentity = (entry, directory) => {
+  let path = entry;
+  for (;;) {
+    try {
+      const found = statSync(path);
+      if (found.dev === directory.dev && found.ino === directory.ino)
+        return true;
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    }
+    const parent = dirname(path);
+    if (parent === path) return false;
+    path = parent;
+  }
+};
+
+const trackedTopEntries = (root, options) => {
+  const indexed = execFileSync("git", ["ls-files", "-z"], {
+    ...options,
+    encoding: "utf8",
+  });
+  const committed = execFileSync(
+    "git",
+    ["ls-tree", "-z", "--name-only", "HEAD"],
+    { ...options, encoding: "utf8" },
+  );
+  const names = new Set();
+  for (const entry of indexed.split("\0")) {
+    if (entry !== "") names.add(entry.split("/")[0]);
+  }
+  for (const entry of committed.split("\0")) {
+    if (entry !== "") names.add(entry);
+  }
+  return [...names];
+};
+
+const hasTrackedAlias = (root, name, info, options) => {
+  const lowered = name.toLowerCase();
+  return trackedTopEntries(root, options).some((entry) => {
+    if (entry.toLowerCase() === lowered) return true;
+    try {
+      const entryInfo = lstatSync(join(root, entry));
+      return entryInfo.dev === info.dev && entryInfo.ino === info.ino;
+    } catch (error) {
+      if (error.code === "ENOENT" || error.code === "ENOTDIR") return false;
+      throw error;
+    }
+  });
+};
+
+const reviewerRemoval = (target, invocation, context) => {
+  const original = targetFindings(target, invocation, context);
+  const macOS = process.platform === "darwin";
+  const linux = process.platform === "linux";
+  const shortOptions = macOS ? /^-[rRfx]+$/u : /^-[rRf]+$/u;
+  const optionEnd = invocation.args.findIndex(
+    (word) => word.text === "--" || !word.text.startsWith("-"),
+  );
+  const options = invocation.args.slice(
+    0,
+    optionEnd < 0 ? invocation.args.length : optionEnd,
+  );
+  const safeOptions = invocation.args.every(
+    (word) =>
+      !word.dynamic &&
+      !word.glob &&
+      (!word.text.startsWith("-") ||
+        word.text === "--" ||
+        shortOptions.test(word.text) ||
+        (linux && word.text === "--one-file-system")),
+  );
+  const oneFilesystem = options.some(
+    (word) =>
+      !word.dynamic &&
+      !word.glob &&
+      (macOS
+        ? /^-[rRfx]*x[rRfx]*$/u.test(word.text)
+        : linux && word.text === "--one-file-system"),
+  );
+  const firstOperand = invocation.args.findIndex(
+    (word) => !word.text.startsWith("-"),
+  );
+  const trailingOption =
+    firstOperand >= 0 &&
+    invocation.args
+      .slice(firstOperand + 1)
+      .some((word) => word.text.startsWith("-"));
+  const other = original.filter((item) => item.rule !== "role-without-writes");
+  const cleanupTarget =
+    !target.dynamic &&
+    !target.glob &&
+    (target.text === "target" ||
+      /^\.rv-[A-Za-z0-9_-][A-Za-z0-9._-]*$/u.test(target.text));
+  if (!safeOptions || !oneFilesystem || trailingOption)
+    return other.length > 0
+      ? other
+      : cleanupTarget
+        ? [
+            finding(
+              "reviewer-cleanup",
+              macOS
+                ? "정리는 파일시스템 경계를 넘지 않아야 한다 (예: rm -xrf target 또는 rm -xrf .rv-<이름>)"
+                : "정리는 파일시스템 경계를 넘지 않아야 한다 (예: rm -rf --one-file-system target 또는 rm -rf --one-file-system .rv-<이름>)",
+            ),
+          ]
+        : original.length > 0
+          ? original
+          : [
+              finding(
+                "reviewer-cleanup",
+                "정리는 파일시스템 경계를 넘지 않아야 한다",
+              ),
+            ];
+  if (target.dynamic || target.glob || target.text.split("/").includes("..")) {
+    return original.length > 0
+      ? original
+      : [finding("reviewer-cleanup", "상위 경로는 정리할 수 없다")];
+  }
+  const root = context.project.ownedWorktree ?? context.project.root;
+  const path = absoluteTarget(
+    target.text,
+    currentDirectory(invocation, context),
+  );
+  if (path === undefined || typeof root !== "string") {
+    return original.length > 0
+      ? original
+      : [finding("reviewer-cleanup", "작업 사본을 확인할 수 없다")];
+  }
+  if (
+    !Array.isArray(context.project.worktrees) ||
+    !context.project.worktrees.includes(root)
+  ) {
+    return [finding("reviewer-cleanup", "등록된 작업 사본이 아니다")];
+  }
+  const name = relative(root, path);
+  if (currentDirectory(invocation, context) !== root || target.text !== name) {
+    return [
+      finding("reviewer-cleanup", "작업 사본 루트에서 폴더 이름만 지정한다"),
+    ];
+  }
+  if (other.length > 0) return other;
+  if (!(
+    name === "target" || /^\.rv-[A-Za-z0-9_-][A-Za-z0-9._-]*$/u.test(name)
+  )) {
+    return original.length > 0
+      ? original
+      : [finding("reviewer-cleanup", "허용된 임시 폴더가 아니다")];
+  }
+  try {
+    const info = lstatSync(path);
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      realpathSync(root) !== root ||
+      realpathSync(path) !== path
+    ) {
+      return [
+        finding("reviewer-cleanup", "심볼릭 링크 또는 폴더가 아닌 경로다"),
+      ];
+    }
+    const options = {
+      cwd: root,
+      env: {
+        ...gitEnvironment(),
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+      },
+      timeout: 5000,
+    };
+    const directories = execFileSync(
+      "git",
+      [
+        "rev-parse",
+        "--absolute-git-dir",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ],
+      { ...options, encoding: "utf8" },
+    )
+      .trim()
+      .split("\n");
+    if (
+      directories.length !== 2 ||
+      realpathSync(directories[0]) === realpathSync(directories[1])
+    ) {
+      return [finding("reviewer-cleanup", "분리된 작업 사본이 아니다")];
+    }
+    const registered = execFileSync(
+      "git",
+      ["worktree", "list", "--porcelain", "-z"],
+      { ...options, encoding: "utf8" },
+    );
+    const worktrees = registered
+      .split("\0")
+      .filter((entry) => entry.startsWith("worktree "))
+      .map((entry) => entry.slice("worktree ".length));
+    if (!worktrees.includes(root)) {
+      return [finding("reviewer-cleanup", "Git에 등록된 작업 사본이 아니다")];
+    }
+    if (worktrees.some((entry) => hasAncestorIdentity(entry, info))) {
+      return [
+        finding("reviewer-cleanup", "다른 등록 작업 사본이 포함되어 있다"),
+      ];
+    }
+    return hasTrackedAlias(root, name, info, options)
+      ? [finding("reviewer-cleanup", "추적 파일을 포함한 폴더다")]
+      : [];
+  } catch {
+    return [
+      finding("reviewer-cleanup", "정리 대상 또는 추적 파일을 확인할 수 없다"),
+    ];
+  }
+};
+
 const scopedTarget = (target, invocation, context) => {
   if (target.dynamic || target.glob) {
     return false;
@@ -1618,12 +1839,10 @@ export const CHECKS = [
   {
     id: "write-targets",
     check: (invocation, context) => {
-      const targets = [
-        ...invocation.command.redirects
-          .filter((item) => !["<", "<&"].includes(item.operator))
-          .map((item) => item.target),
-        ...writeTargets(invocation, context.definitions.writers),
-      ];
+      const redirects = invocation.command.redirects
+        .filter((item) => !["<", "<&"].includes(item.operator))
+        .map((item) => item.target);
+      const targets = writeTargets(invocation, context.definitions.writers);
       const linked = hardLinkCreation(invocation)
         ? [
             finding(
@@ -1634,8 +1853,13 @@ export const CHECKS = [
         : [];
       return [
         ...linked,
-        ...targets.flatMap((target) =>
+        ...redirects.flatMap((target) =>
           targetFindings(target, invocation, context),
+        ),
+        ...targets.flatMap((target) =>
+          context.role === ROLE.reviewer && invocation.name === "rm"
+            ? reviewerRemoval(target, invocation, context)
+            : targetFindings(target, invocation, context),
         ),
       ];
     },

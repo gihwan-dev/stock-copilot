@@ -23,8 +23,29 @@ mod tests {
         )
     }
 
+    fn issued_slot(slot: u8) -> domain::IssuedInstrumentId {
+        let mut issuer = domain::IndependentInstrumentIdIssuer::new();
+        for _ in 0..slot {
+            let _skip = issuer.issue().expect("건너뛰기");
+        }
+        issuer.issue().expect("후보 발급")
+    }
+
+    fn issued(value: &str) -> domain::IssuedInstrumentId {
+        let slot = match value {
+            "opaque-1" => 0_u8,
+            "opaque-2" => 1,
+            "unknown" => 2,
+            "candidate-0" => 3,
+            "candidate-1" => 4,
+            "candidate-2" => 5,
+            other => panic!("알 수 없는 후보 라벨: {other}"),
+        };
+        issued_slot(slot)
+    }
+
     fn id(value: &str) -> InstrumentId {
-        InstrumentId::try_new(value).expect("내부 ID")
+        issued(value).as_instrument_id().clone()
     }
 
     #[test]
@@ -41,8 +62,8 @@ mod tests {
             mappings.for_id(&id("opaque-1")),
             Err(InstrumentMappingError::Missing)
         );
-        mappings.ensure(&first, &id("opaque-1")).expect("발급");
-        mappings.ensure(&other, &id("opaque-2")).expect("발급");
+        mappings.ensure(&first, issued("opaque-1")).expect("발급");
+        mappings.ensure(&other, issued("opaque-2")).expect("발급");
         let active = mappings.lookup(&first).expect("활성 조회");
         assert_eq!(active.source(), &first);
         assert_eq!(active.id(), &id("opaque-1"));
@@ -264,10 +285,7 @@ mod tests {
                 .sources
                 .get(usize::from(source_number))
                 .expect("원본 범위");
-            let candidate = self
-                .candidates
-                .get(usize::from(candidate_number))
-                .expect("후보 범위");
+            let candidate = issued(&format!("candidate-{candidate_number}"));
             let actual = self.ledger.ensure(source, candidate);
             if expected.is_err() {
                 prop_assert_eq!(&self.ledger, &before);
