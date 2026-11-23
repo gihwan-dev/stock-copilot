@@ -17,8 +17,8 @@
 
 ## 반드시 지킬 것
 
-1. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 한다. 조사·비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`), 적대적 리뷰는 T3 Claude2(`claudeAgent_claude2`) `claude-opus-5-5`다. Codex(`codex`, gpt 계열)와 첫 번째 Claude 계정(`claudeAgent`)은 쓰지 않는다. T3가 별도 작업 사본에서 시작한다. 수정은 같은 T3 스레드에서 계속할 수 있다. 메인 에이전트는 코드를 직접 쓰지 않는다.
-2. 구현이 끝나면 새 Claude2(`claudeAgent_claude2`) Opus 5.5의 적대적 리뷰(`adversarial-reviewer`)와 새 Antigravity `gemini-4-neon`(`high`)의 비판을 거친다. 메인은 브리프에 `리뷰 등급: N`을 적는다. 등급 3은 하네스, 보안·권한, 금액·수량·환율 계산, 주문 관련이며 최대 3회차다. 등급 2는 일반 유스케이스, 저장소, 외부 연동이며 최대 2회차다. 등급 1은 문서, 기계적 연결, 화면 배치·표시이며 1회차다. 구현자는 계산·보안 범위를 발견하면 등급을 올릴 수 있으나 내릴 수 없다. 마지막 회차에서 실행으로 재현한 차단·중요 지적은 고친 뒤 추가 독립 리뷰 없이 수정 범위와 회귀·변이 결과를 기록하고 메인이 평가한다. 메인 Claude는 오케스트레이션·평가와 `docs/**` 편집을 한다. 리뷰어와 비판자에게 구현자의 보고서를 주지 않는다.
+1. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 한다. 조사·비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, 인스턴스 이름은 기기별 설정 사용)다. Codex(`codex`, gpt 계열)는 쓰지 않는다. T3가 별도 작업 사본에서 시작한다. 수정은 같은 T3 스레드에서 계속할 수 있다. 메인 에이전트는 코드를 직접 쓰지 않는다.
+2. 구현이 끝나면 새 Claude(`driverKind=claudeAgent`) Opus 5.5의 적대적 리뷰(`adversarial-reviewer`)와 새 Antigravity `gemini-4-neon`(`high`)의 비판을 거친다. 메인은 브리프에 `리뷰 등급: N`을 적는다. 등급 3은 하네스, 보안·권한, 금액·수량·환율 계산, 주문 관련이며 최대 3회차다. 등급 2는 일반 유스케이스, 저장소, 외부 연동이며 최대 2회차다. 등급 1은 문서, 기계적 연결, 화면 배치·표시이며 1회차다. 구현자는 계산·보안 범위를 발견하면 등급을 올릴 수 있으나 내릴 수 없다. 마지막 회차에서 실행으로 재현한 차단·중요 지적은 고친 뒤 추가 독립 리뷰 없이 수정 범위와 회귀·변이 결과를 기록하고 메인이 평가한다. 메인 Claude는 오케스트레이션·평가와 `docs/**` 편집을 한다. 리뷰어와 비판자에게 구현자의 보고서를 주지 않는다.
 3. 구현자 보고의 첫 줄은 "완료" 또는 "막힘: <한 줄 이유>"다.
 4. 작업 중에는 `cargo nextest run -p <crate>`와 `just base=<기준 SHA> check-fast`를 쓴다. 작업 브랜치 커밋은 변경분 검사, `master` 직접 커밋과 CI는 전체 `just check`를 쓴다. 메인의 `--no-ff` 병합 커밋은 전체 검사가 원칙이며 [workflow.md](docs/workflow.md)의 `merge-gate` 조건이 모두 통과하면 정적 검사만 다시 한다. 검사를 끄거나 테스트를 약하게 만들어 통과시키지 않는다.
 5. 보호 파일(docs/harness.md 7.1)과 기존 테스트를 바꾸지 않는다. 바꿔야 하면 멈추고 보고한다. 이런 변경은 사용자 서명 커밋으로만 들어간다.

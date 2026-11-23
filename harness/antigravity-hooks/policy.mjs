@@ -49,8 +49,22 @@ export const NETWORK_CLIENTS = Object.freeze([
   "sftp",
   "ssh",
   "scp",
+  "slogin",
+  "rsh",
+  "rcp",
+  "tftp",
   "aria2c",
   "lwp-request",
+  "fetch",
+  "lynx",
+  "w3m",
+  "links",
+  "whois",
+  "dig",
+  "nslookup",
+  "host",
+  "ping",
+  "traceroute",
 ]);
 
 export const TOSS_LIVE_BINARIES = Object.freeze([
@@ -74,6 +88,12 @@ export const KEYCHAIN_DENIED_SUBCOMMANDS = Object.freeze([
   "find-certificate",
   "find-identity",
   "find-key",
+  "show-keychain-info",
+  "list-keychains",
+  "unlock-keychain",
+  "dump-trust-settings",
+  "cms",
+  "import",
 ]);
 
 const folded = (text) => text.normalize("NFC").toLowerCase();
@@ -232,6 +252,21 @@ export const isDeniedReadPath = (
         gated: false,
         message: `사용자 홈 폴더 전체를 직접 읽거나 탐색하지 않는다: ${candidate}`,
       };
+    }
+    const homePrefix = `${homeRoot}/`;
+    if (
+      candidate.startsWith(homePrefix) &&
+      !within(candidate, ownedWorktree) &&
+      !within(candidate, realOrSelf(ownedWorktree ?? ""))
+    ) {
+      const firstSegment = candidate.slice(homePrefix.length).split("/")[0];
+      if (/[*?[\]]/u.test(firstSegment)) {
+        return {
+          rule: "protected-home-read",
+          gated: false,
+          message: `사용자 홈 아래 와일드카드 경로는 읽지 않는다: ${candidate}`,
+        };
+      }
     }
     for (const pattern of policy.denyRead) {
       if (matchesHomeEntry(pattern, candidate, homeRoot)) {

@@ -1,6 +1,6 @@
 # 구현 담당 (Antigravity Gemini)
 
-구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 한다. 조사·비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`), 적대적 리뷰는 T3 Claude2(`claudeAgent_claude2`) `claude-opus-5-5`다. Codex(gpt 계열)와 첫 번째 Claude 계정(`claudeAgent`)은 쓰지 않는다. T3가 새 작업 사본에서 시작한다. 조사는 별도 작업 사본에서 한다. 메인이 허용한 수정 회차는 같은 T3 스레드에서 계속할 수 있다.
+구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 한다. 조사·비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, 기기별 인스턴스 이름 사용)다. Codex(gpt 계열)는 쓰지 않는다. T3가 새 작업 사본에서 시작한다. 조사는 별도 작업 사본에서 한다. 메인이 허용한 수정 회차는 같은 T3 스레드에서 계속할 수 있다.
 
 너는 이 저장소의 구현 담당이다. 브리프에 적힌 작업 또는 메인이 한 브리프로 묶은 이어지는 작은 작업만 구현한다.
 
@@ -68,3 +68,9 @@ fast 문서 소비 표: docs/architecture.md는 ds-tokens 검사 입력이다. d
 | docs/toss-openapi-1.2.28.json | xtask gen_schema_tests | 전체 검사(xtask 테스트 포함) |
 | docs/harness.md | Codex 설정·Claude 훅 정책/회귀 | 전체 검사 |
 | docs/design.md 및 나머지 docs/** | 소비 범위를 확정하지 못함 | 전체 승격 |
+
+## 역할 배분 (Antigravity 구현 담당·비판자)
+
+- 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 담당한다.
+- 리뷰 비판자(`review-critic`)와 조사 역할은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 담당하며, Antigravity 세션 훅(`.agents/hooks.json`)이 비-`xhigh` 모델과 리뷰 브랜치·detached HEAD를 읽기 전용 리뷰어 역할로 고정한다.
+- 적대적 리뷰(`adversarial-reviewer`)는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, 기기별 인스턴스 이름 허용)가 담당한다.

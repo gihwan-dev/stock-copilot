@@ -6,7 +6,7 @@
 
 ## 사용자 결정
 
-2026-11-23 사용자 결정에 따라 구현·수정과 조사·비판의 제공자를 Antigravity(Gemini)로, 적대적 리뷰의 계정을 두 번째 Claude 계정(`claudeAgent_claude2`)으로 전환한다. Codex(`codex`, gpt 계열)와 첫 번째 Claude 계정(`claudeAgent`)은 사용하지 않는다.
+2026-11-23 사용자 결정과 후속 기기 이식 결정에 따라 구현·수정과 조사·비판의 제공자를 Antigravity(Gemini)로 고정하고, 적대적 리뷰는 드라이버 종류 `claudeAgent` + 모델 `claude-opus-5-5`로 맞춘다(인스턴스 이름은 기기마다 `claudeAgent`·`claudeAgent_claude2` 등으로 달라질 수 있어 고정하지 않는다). Codex(`codex`, gpt 계열)는 사용하지 않는다.
 
 이 결정과 `docs/workflow.md`의 H-60 규칙은 [ADR 0021](0021-codex-compatible-harness.md)과 [ADR 0125](0125-implementer-models.md)(H-50)의 제공자·모델·옵션·리뷰 계정 규칙을 대체한다. 작업 사본 격리, 기준 SHA·조상 검증, 소유 스레드 제한, 구현자 보고서 격리 규칙은 그대로 유지한다. 이미 병합된 리뷰 기록과 과거 ADR의 모델 표기는 고치지 않는다(단, `docs/adr/0021-codex-compatible-harness.md` 109행의 `known-gaps:` 총계 줄만 H-51 선례에 따라 새 총계로 맞춘다).
 
@@ -19,7 +19,7 @@
 | 메인 | Claude (오케스트레이션·`docs/**`) | Claude (오케스트레이션·`docs/**`, 유지) |
 | 구현·수정 | T3 Codex `gpt-6.1-sol`(`high`) 또는 `gpt-6.1-terra`(`max`) | T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`) |
 | 조사·비판 | T3 Codex `gpt-6.1-sol`(`high`) | T3 Antigravity `gemini-4-neon`(`thought_level=high`) |
-| 적대적 리뷰 | T3 Claude(`claudeAgent`) `claude-opus-5-5` | T3 Claude2(`claudeAgent_claude2`) `claude-opus-5-5` |
+| 적대적 리뷰 | T3 Claude(`claudeAgent`) `claude-opus-5-5` | T3 Claude(`driverKind=claudeAgent`, `claude-opus-5-5`, 기기별 인스턴스 이름 허용) |
 
 ### 위임 가드 계약 (`.claude/hooks/lib/orchestration.mjs`)
 
@@ -27,8 +27,8 @@
 
 - `t3_thread_launch`: `modelSelection.provider === "antigravity"`, `instanceId`는 생략 또는 `"antigravity"`, `model === "gemini-4-neon"`, `options`는 정확히 `{ thought_level: "xhigh" }` 단일 키 일반 객체(생략·`{}`·`[]`·`null`·다른 키·혼합 키 거부). 시작 메시지에는 정확히 한 개의 `- 역할: implementation` 줄이 줄 시작에 있어야 한다.
 - `delegate_task` (Antigravity): `target.driverKind === "antigravity"`, `providerInstanceId`는 생략 또는 `"antigravity"`, `model === "gemini-4-neon"`, `isolation === "worktree"`. `role`은 반드시 `"implementation"`, `"research"`, `"review"` 중 하나여야 하며 역할 생략은 거부한다(`guard-orchestration.mjs`가 역할 생략을 `implementation`으로 기록해 리뷰 스레드 재개로 이어지는 우회를 막는다). `options`는 `implementation`일 때 `{ thought_level: "xhigh" }`, `research`·`review`(비판)일 때 `{ thought_level: "high" }`만 허용한다.
-- `delegate_task` (Claude2 적대적 리뷰): `target.driverKind === "claudeAgent"`, `target.providerInstanceId === "claudeAgent_claude2"`(필수, 생략과 `"claudeAgent"` 거부), `model === "claude-opus-5-5"`, `role === "review"`, `isolation === "worktree"`. `options`는 생략 또는 `{ effort: "high" }` 단일 키 일반 객체만 허용한다(`{}`·`[]`·`null`·`effort=max`·`thought_level`·`reasoningEffort`·`ultracode`·`fastMode` 등 거부).
-- 거부 대상: 모든 Codex 호출(`driverKind=codex`·`provider=codex`, `gpt-6.1-sol`·`gpt-6.1-terra`·`gpt-6.2-sol` 등), 첫 번째 Claude 계정(`providerInstanceId=claudeAgent` 또는 생략), 목록 밖 모델(`gemini-4-carbon`·`gemini-4-argon`·`gemini-4-hydrogen`·`gemini-3.8-flash`·`claude-sonnet-5-5` 등), 목록 밖 제공자·역할·옵션 키·권한 확대.
+- `delegate_task` (Claude 적대적 리뷰): `target.driverKind === "claudeAgent"`, `model === "claude-opus-5-5"`, `role === "review"`, `isolation === "worktree"`. `providerInstanceId`는 기기별 차이를 수용해 생략 또는 비어 있지 않은 Claude 인스턴스 문자열(`claudeAgent`, `claudeAgent_claude2` 등)을 허용하되 빈 문자열·공백·`null`·비문자열·타 드라이버 이름(`codex`, `antigravity`, `cursor` 등)은 거부한다. `options`는 생략 또는 `{ effort: "high" }` 단일 키 일반 객체만 허용한다(`{}`·`[]`·`null`·`effort=max`·`thought_level`·`reasoningEffort`·`ultracode`·`fastMode` 등 거부).
+- 거부 대상: 모든 Codex 호출(`driverKind=codex`·`provider=codex`, `gpt-6.1-sol`·`gpt-6.1-terra`·`gpt-6.2-sol` 등), 잘못된 `providerInstanceId`(빈 문자열·`null`·타 드라이버 이름), 목록 밖 모델(`gemini-4-carbon`·`gemini-4-argon`·`gemini-4-hydrogen`·`gemini-3.8-flash`·`claude-sonnet-5-5` 등), 목록 밖 제공자·역할·옵션 키·권한 확대.
 - Codex 전용 절차(프로젝트·훅 신뢰, `CODEX_HOME`, Codex 종료 훅, `just codex-regression`, `harness/codex-hooks/` 어댑터)는 삭제하지 않고 문서에서 "Codex를 다시 쓸 때만 해당"으로 구획해 되돌릴 수 있게 보존한다.
 
 ## 집행 경계 (강제되는 것 vs 강제되지 않는 것)

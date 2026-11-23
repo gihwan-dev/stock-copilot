@@ -8,10 +8,10 @@
 |---|---|---|---|
 | 메인 에이전트 | 사용자와 대화하는 세션 | 작업 선정, 브리프 작성, 평가, 수정 여부 판단, 리뷰 기록, 푸시, 사용자 보고. 코드를 직접 쓰지 않는다 | 편집 훅이 메인에게 `docs/**`(보호 문서 제외)만 허용 |
 | 구현 에이전트 | T3의 새 Antigravity `gemini-4-neon`(thought_level `xhigh`, 별도 작업 사본) | 작업 하나를 구현하고 변경분 검사(`just check-fast`)와 회귀·손 변형을 통과시킨다 | Antigravity `.agents/hooks.json`(`harness/antigravity-hooks/`), Git 커밋 훅, 원격 CI 전체 검사·변이, 독립 리뷰·비판 (남은 빈틈은 [harness.md](harness.md) 7.4와 `just known-gaps`) |
-| 적대적 리뷰어 | T3의 새 Claude2(`claudeAgent_claude2`) `claude-opus-5-5` (`adversarial-reviewer`, 별도 작업 사본) | 구현을 깨뜨릴 방법을 찾고 등급을 매긴다. 판정하지 않는다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
+| 적대적 리뷰어 | T3의 새 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, `adversarial-reviewer`, 별도 작업 사본) | 구현을 깨뜨릴 방법을 찾고 등급을 매긴다. 판정하지 않는다 | 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
 | 비판자 | T3의 새 Antigravity `gemini-4-neon`(thought_level `high`, 별도 작업 사본) | 리뷰 지적을 하나씩 실행으로 반박해 본다 | Antigravity `.agents/hooks.json`(비-`xhigh`·detached HEAD `ROLE.reviewer` 쓰기·위임 차단), 읽기 전용 지시, T3 격리 사본, 메인의 대상 스냅숏 재확인 |
 
-"새"는 앞 단계의 대화 맥락을 물려받지 않는다는 뜻이다. 각 에이전트는 브리프와 저장소만 본다. native Claude Agent 위임은 허용하지 않는다. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude2(`providerInstanceId=claudeAgent_claude2`, `driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`)가 한다. Codex(`codex`, gpt 계열)와 첫 번째 Claude 계정(`claudeAgent`)은 쓰지 않는다. Antigravity `delegate_task`는 `target.driverKind=antigravity`, `target.model=gemini-4-neon`에 `role`과 `thought_level`(`implementation`은 `xhigh`, `research`·`review`는 `high`)을 명시한다. 모두 `isolation=worktree`다. 포크와 재개는 쓰지 않는다.
+"새"는 앞 단계의 대화 맥락을 물려받지 않는다는 뜻이다. 각 에이전트는 브리프와 저장소만 본다. native Claude Agent 위임은 허용하지 않는다. 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, 기기별 인스턴스 이름 허용)가 한다. Codex(`codex`, gpt 계열)는 쓰지 않는다. Antigravity `delegate_task`는 `target.driverKind=antigravity`, `target.model=gemini-4-neon`에 `role`과 `thought_level`(`implementation`은 `xhigh`, `research`·`review`는 `high`)을 명시한다. 모두 `isolation=worktree`다. 포크와 재개는 쓰지 않는다.
 
 ## 2. 순서
 
@@ -74,7 +74,7 @@
 | 확인 | 기준 |
 |---|---|
 | 하네스 기록 | 실제 종료 코드와 검사 출력, Git 커밋 훅 실행 여부가 있는가. T3 Antigravity·Codex 결과를 Claude의 `PostToolUse(Agent)` 기록으로 취급하지 않는다 |
-| 실제 모델 | 구현·수정은 Antigravity `gemini-4-neon`(`xhigh`), 조사·비판은 Antigravity `gemini-4-neon`(`high`), 적대적 리뷰는 Claude2(`claudeAgent_claude2`) `claude-opus-5-5`인가. 실제 사용한 제공자·모델·옵션을 기록했는가 |
+| 실제 모델 | 구현·수정은 Antigravity `gemini-4-neon`(`xhigh`), 조사·비판은 Antigravity `gemini-4-neon`(`high`), 적대적 리뷰는 Claude(`driverKind=claudeAgent`) `claude-opus-5-5`인가. 실제 사용한 제공자·모델·옵션을 기록했는가 |
 | 범위 | 대상 커밋의 변경 파일이 브리프의 "손댈 범위" 안에 있는가 |
 | 작업 사본 | `git status`에 커밋되지 않은 파일, 특히 보호 대상이 될 새 파일이 없는가 |
 | 막힘 | "막힘:"이면 2.7로 간다 |
@@ -143,7 +143,7 @@
 
 ### 2.6 수정과 재검토
 
-- 수정은 같은 T3 구현 스레드에 새 브리프를 보내 이어 갈 수 있다. 적대적 리뷰어는 매번 새 Claude2(`claudeAgent_claude2`) `claude-opus-5-5` 하위 작업이다.
+- 수정은 같은 T3 구현 스레드에 새 브리프를 보내 이어 갈 수 있다. 적대적 리뷰어는 매번 새 Claude(`driverKind=claudeAgent`) `claude-opus-5-5` 하위 작업이다.
 - 수정 브리프에는 원래 브리프, 새 기준 커밋(앞 단계의 대상 SHA), 평가 결과, 고칠 지적을 넣는다.
 - 차단이나 중요 등급을 고쳤으면 3단계부터 다시 한다. 리뷰어와 비판자도 새로 띄운다.
 - 사소 등급만 고쳤으면 메인이 차이와 하네스 기록을 확인하고 끝낸다.
@@ -234,7 +234,7 @@ macOS 변경분 변이는 먼저 같은 기준의 목록을 만들고 한 조각
 2026-11-23 사용자 결정(H-60)이 [ADR 0021](adr/0021-codex-compatible-harness.md)과 [ADR 0125](adr/0125-implementer-models.md)(H-50)의 제공자·모델·옵션·리뷰 계정 규칙을 대체한다. 격리·기준·소유권·리뷰 보고 차단 규칙은 그대로 유지한다.
 
 - 메인 Claude 세션은 원본 저장소에서 연다. 구현 에이전트는 T3가 만든 등록된 작업 사본에서 Antigravity `gemini-4-neon`(`thought_level=xhigh`)으로 연다.
-- 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude2(`claudeAgent_claude2`) `claude-opus-5-5`가 한다. Codex(gpt 계열)와 첫 번째 Claude 계정(`claudeAgent`)은 쓰지 않는다. 브리프에는 `- 기준 커밋: <SHA>, 브랜치 \`<이름>\`` 줄이 반드시 있고, 그 브랜치는 `master`가 아닌 등록된 작업 사본이어야 한다.
+- 구현·수정 회차는 T3 Antigravity `gemini-4-neon`(`thought_level=xhigh`), 조사·비판은 T3 Antigravity `gemini-4-neon`(`thought_level=high`), 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`)가 한다. Codex(gpt 계열)는 쓰지 않는다. 브리프에는 `- 기준 커밋: <SHA>, 브랜치 \`<이름>\`` 줄이 반드시 있고, 그 브랜치는 `master`가 아닌 등록된 작업 사본이어야 한다.
 - 수정 회차는 같은 T3 구현 스레드에 수정 브리프를 보내 이어 가거나 새 Antigravity 스레드로 시작한다. 앞 단계의 브리프 기준 검사 성공이 확인되지 않았으면 기준은 `master` 끝이다.
 - 작업 끝의 전체 검사는 원격 GitHub Actions CI에서 돈다(사용자 결정 2026-11-23). 구현자는 구현·수정 회차마다 `just base=<기준 SHA> check-fast`와 손 변형을 실행하고, Git 커밋 훅 실행 여부와 세션 훅 부재를 리뷰 기록의 측정 표에 적는다.
 - 병합 충돌은 구현자가 자기 브랜치에서 `git merge --no-ff --no-edit master`로 푼다. `rebase`는 쓰지 않는다.
@@ -256,12 +256,12 @@ macOS 변경분 변이는 먼저 같은 기준의 목록을 만들고 한 조각
 - Claude `SendMessage`와 native `Agent` 위임은 계속 금지한다. 구현 수정 회차는 T3의 소유 스레드 가드로 통제한다.
 - 메인은 이 프로젝트의 T3 문맥에서 `t3_thread_launch`로 구현을 시작한다. `modelSelection`은 `provider=antigravity`, `model=gemini-4-neon`, `options={ thought_level: "xhigh" }`이며(`instanceId`는 생략 또는 `antigravity`), 옵션 생략·빈 객체·빈 배열·다른 키(`effort`, `reasoningEffort` 등)·혼합 키는 거부한다. 시작 브리프에는 정확히 한 개의 `- 역할: implementation` 줄을 넣는다. 정확히 이 형식인 줄만 역할 선언으로 센다. 인식된 선언이 없거나 중복되거나 `implementation`이 아니면 거부한다. 다른 들여쓰기·목록 표기와 코드 펜스에 역할을 쓰지 않는다. 가드는 본문 의미와 코드 펜스를 해석하지 않는다.
 - `delegate_task`의 Antigravity 위임은 `driverKind=antigravity`, `providerInstanceId` 생략 또는 `antigravity`, `model=gemini-4-neon`, `isolation=worktree`만 허용한다. `role`은 반드시 명시한다: `implementation`은 `options={ thought_level: "xhigh" }`, `research`·`review`(비판)는 `options={ thought_level: "high" }`만 허용한다. 역할 생략이나 다른 역할·옵션 생략·다른 키는 거부한다.
-- 적대적 리뷰는 `delegate_task`의 `driverKind=claudeAgent`, `providerInstanceId=claudeAgent_claude2`, `model=claude-opus-5-5`, `role=review`, `isolation=worktree`만 허용한다. `options`는 생략 또는 `{ effort: "high" }`만 허용한다. 첫 번째 Claude 계정(`providerInstanceId=claudeAgent` 또는 `providerInstanceId` 생략)과 Codex(`codex`, gpt 계열)는 모두 거부한다.
+- 적대적 리뷰는 `delegate_task`의 `driverKind=claudeAgent`, `model=claude-opus-5-5`, `role=review`, `isolation=worktree`만 허용한다. `providerInstanceId`는 기기마다 다를 수 있으므로(`claudeAgent`, `claudeAgent_claude2` 등) 생략하거나 비어 있지 않은 Claude 인스턴스 문자열을 허용하고 빈 문자열·`null`·타 드라이버 이름은 거부한다. `options`는 생략 또는 `{ effort: "high" }`만 허용한다. Codex(`codex`, gpt 계열)는 모두 거부한다.
 - `workspaceStrategy`는 `type=worktree`, `branch=브리프 브랜치`, 로컬은 `baseRef=브리프 SHA`·`startFromOrigin=false`다. 원격은 `baseRef=origin/master`·`startFromOrigin=true`이며 브리프 SHA는 그 원격 추적 끝과 같아야 한다.
 - `projectId`·`environmentId`·`scratch`·다른 제공자·권한 확대는 넘기지 않는다. 현재 프로젝트와 환경을 상속한다. `runtimeMode`는 생략 또는 `inherit`·`approval-required`다.
 - 실행 결과의 `threadId`를 메인 세션 소유 기록에 저장한다. 그 기록과 등록된 worktree가 있는 스레드만 `t3_thread_read`·`t3_thread_wait`·`t3_thread_send`로 접근한다. 허용 인자 밖은 거부한다.
 - 수정은 같은 스레드의 `t3_thread_send`(`mode=auto` 또는 생략)로 계속할 수 있다. 수정 브리프는 기준 SHA와 기존 브랜치를 포함한다. SHA는 `master` 끝의 자손이며 해당 작업 사본 HEAD의 조상이어야 한다. 메인이 앞 구현의 검사와 리뷰 판정을 확인한다. Claude의 `passedTargets`가 없어도 같은 스레드 수정은 가능하다.
-- 적대적 리뷰어는 매번 새 Claude2(`claudeAgent_claude2`) Opus 5.5다. 구현자 보고를 넘기지 않고 격리·오염 감지를 그대로 적용한다.
+- 적대적 리뷰어는 매번 새 Claude(`driverKind=claudeAgent`) Opus 5.5다. 구현자 보고를 넘기지 않고 격리·오염 감지를 그대로 적용한다.
 - 새 가드 적용 전에 시작된 스레드는 소유 기록이 없다. 자동으로 외부 스레드를 채택하지 않는다. 메인은 새 가드로 시작한 스레드부터 이 절차를 적용한다.
 - 구현 담당은 `docs/progress.md`를 편집하지 않는다. 진행 상태는 보고서에 쓰고 메인이 한 줄 메모나 완료 행을 반영한다.
 

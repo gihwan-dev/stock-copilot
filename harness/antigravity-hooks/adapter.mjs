@@ -1,6 +1,6 @@
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import {
   DEFINITIONS,
   WRITERS,
@@ -24,7 +24,6 @@ import {
   toolDirectory,
 } from "../codex-hooks/adapter.mjs";
 import {
-  KEYCHAIN_DENIED_SUBCOMMANDS,
   LOOPBACK_HOSTS,
   NETWORK_CLIENTS,
   TOSS_LIVE_BINARIES,
@@ -117,6 +116,19 @@ const REVIEWER_DENIED_GIT_SUBCOMMANDS = new Set([
   "notes",
   "init",
   "clone",
+  "worktree",
+  "fetch",
+  "submodule",
+  "sparse-checkout",
+  "bisect",
+  "gc",
+  "prune",
+  "repack",
+  "pack-refs",
+  "update-index",
+  "read-tree",
+  "write-tree",
+  "checkout-index",
 ]);
 
 const REVIEWER_READONLY_BRANCH_FLAGS = new Set([
@@ -164,6 +176,60 @@ const HTTP_CLIENTS = new Set([
   "xh",
   "aria2c",
   "lwp-request",
+  "fetch",
+  "lynx",
+  "w3m",
+  "links",
+]);
+
+const RAW_REMOTE_CLIENTS = new Set([
+  "nc",
+  "ncat",
+  "socat",
+  "telnet",
+  "ssh",
+  "scp",
+  "sftp",
+  "ftp",
+  "slogin",
+  "rsh",
+  "rcp",
+  "tftp",
+  "whois",
+  "dig",
+  "nslookup",
+  "host",
+  "ping",
+  "traceroute",
+]);
+
+const CURL_DENIED_FLAGS = new Set([
+  "-n",
+  "--netrc",
+  "--netrc-optional",
+  "--netrc-file",
+  "-K",
+  "--config",
+  "-x",
+  "--proxy",
+  "--preproxy",
+  "--socks4",
+  "--socks4a",
+  "--socks5",
+  "--socks5-hostname",
+  "--resolve",
+  "--connect-to",
+  "--unix-socket",
+  "--abstract-unix-socket",
+]);
+
+const WGET_DENIED_FLAGS = new Set([
+  "-i",
+  "--input-file",
+  "--config",
+  "-e",
+  "--execute",
+  "--netrc-file",
 ]);
 
 const CURL_VALUED_FLAGS = new Set([
@@ -193,12 +259,27 @@ const CURL_VALUED_FLAGS = new Set([
   "-m",
   "--max-time",
   "--connect-timeout",
-  "-K",
-  "--config",
-  "--netrc-file",
   "-w",
   "--write-out",
 ]);
+
+const CARGO_VALUED_GLOBALS = new Set([
+  "-C",
+  "--manifest-path",
+  "--config",
+  "--color",
+  "-Z",
+  "--target-dir",
+  "--explain",
+]);
+
+const realOrSelf = (path) => {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+};
 
 const plainObject = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -317,7 +398,7 @@ const readPathsFromArgs = (toolName, args, fallbackCwd) => {
   if (!plainObject(args)) {
     return { problem: "도구 인자가 객체가 아니다" };
   }
-  const candidates = [
+  const explicit = [
     args.Path,
     args.AbsolutePath,
     args.TargetFile,
@@ -328,6 +409,15 @@ const readPathsFromArgs = (toolName, args, fallbackCwd) => {
     args.file_path,
     args.path,
   ].filter((value) => value !== undefined);
+  const extra = Object.entries(args)
+    .filter(
+      ([key, value]) =>
+        value !== undefined &&
+        /(?:path|file|dir|directory|root)$/iu.test(key) &&
+        !explicit.includes(value),
+    )
+    .map(([, value]) => value);
+  const candidates = [...explicit, ...extra];
   if (candidates.length === 0) {
     if (["Glob", "Grep", "grep_search", "find_by_name"].includes(toolName)) {
       return { paths: [fallbackCwd] };
@@ -378,12 +468,40 @@ const isDirectory = (path) => {
 };
 
 const extractOptionPath = (text) => {
-  if (text.startsWith("@") && text.length > 1) return [text.slice(1)];
-  if (!text.startsWith("-")) return [text];
+  const results = [];
+  if (text.startsWith("@") && text.length > 1) {
+    results.push(text.slice(1));
+    return results;
+  }
   const equals = text.indexOf("=");
-  if (equals === -1) return [];
-  const value = text.slice(equals + 1);
-  return value.startsWith("@") && value.length > 1 ? [value.slice(1)] : [value];
+  if (text.startsWith("-")) {
+    if (equals !== -1) {
+      const value = text.slice(equals + 1);
+      results.push(
+        value.startsWith("@") && value.length > 1 ? value.slice(1) : value,
+      );
+      return results;
+    }
+    const atIndex = text.indexOf("@");
+    if (atIndex > 1 && atIndex < text.length - 1) {
+      results.push(text.slice(atIndex + 1));
+    }
+    const attachedHome = /^-[a-zA-Z]((?:~|\$HOME|\$\{HOME\}|\/).*)$/u.exec(
+      text,
+    );
+    if (attachedHome !== null) {
+      results.push(attachedHome[1]);
+    }
+    return results;
+  }
+  results.push(text);
+  if (equals > 0 && equals < text.length - 1) {
+    const value = text.slice(equals + 1);
+    results.push(
+      value.startsWith("@") && value.length > 1 ? value.slice(1) : value,
+    );
+  }
+  return results;
 };
 
 const looksLikePath = (text) =>
@@ -511,9 +629,23 @@ const cargoPackageOrBinTargets = (args) => {
   return targets;
 };
 
-const cargoSubcommand = (args) =>
-  args.find((word) => !word.text.startsWith("-") && !word.text.startsWith("+"))
-    ?.text;
+const cargoSubcommand = (args) => {
+  for (let index = 0; index < args.length; index += 1) {
+    const text = args[index].text;
+    if (text === "--") return undefined;
+    if (text.startsWith("+")) continue;
+    if (text.startsWith("-")) {
+      const equals = text.indexOf("=");
+      const flag = equals === -1 ? text : text.slice(0, equals);
+      if (CARGO_VALUED_GLOBALS.has(flag) && equals === -1) {
+        index += 1;
+      }
+      continue;
+    }
+    return text;
+  }
+  return undefined;
+};
 
 const envChdirTargets = (words) => {
   const targets = [];
@@ -528,6 +660,15 @@ const envChdirTargets = (words) => {
   }
   return targets;
 };
+
+const flagName = (text) => {
+  const equals = text.indexOf("=");
+  return equals === -1 ? text : text.slice(0, equals);
+};
+
+const isRemoteRsyncOperand = (text) =>
+  !text.startsWith("-") &&
+  (text.startsWith("rsync://") || /^[^/\s]+:.*$/u.test(text));
 
 const analyzeScriptTossAndReads = (source, context, depth = 0) => {
   if (depth > 8) {
@@ -585,12 +726,31 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
       context.rules.environment.exporters.includes(invocation.name)
     ) {
       for (const word of invocation.args) {
-        const name = word.text.split(/\+?=/u)[0];
+        const equals = word.text.indexOf("=");
+        const name = (
+          equals === -1 ? word.text : word.text.slice(0, equals)
+        ).replace(/\+$/u, "");
+        const valueText = equals === -1 ? "" : word.text.slice(equals + 1);
         if (/^TOSS_/iu.test(name)) {
           findings.push(
             finding(
               "toss-live-api",
               `실제 토스 환경 변수(${name})를 내보내지 않는다`,
+            ),
+          );
+        }
+        if (name === "PATH") {
+          for (const piece of valueText.split(":")) {
+            if (piece && looksLikePath(piece)) checkReadCandidate(piece, cwd);
+          }
+        } else if (valueText && looksLikePath(valueText)) {
+          checkReadCandidate(valueText, cwd);
+        }
+        if (valueText.toLowerCase().includes(context.policy.tossHost)) {
+          findings.push(
+            finding(
+              "toss-live-api",
+              `토스 운영 호스트(${context.policy.tossHost})를 환경 변수로 내보내지 않는다`,
             ),
           );
         }
@@ -607,17 +767,12 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
     const name = invocation.name;
     const effectiveCwd = invocation.cwdUnknown ? undefined : cwd;
     if (name === "security") {
-      const sub = invocation.args.find(
-        (word) => !word.text.startsWith("-"),
-      )?.text;
-      if (sub === undefined || KEYCHAIN_DENIED_SUBCOMMANDS.includes(sub)) {
-        findings.push(
-          finding(
-            "protected-home-read",
-            `macOS 키체인 조회 명령(security ${sub ?? ""})은 허용하지 않는다`,
-          ),
-        );
-      }
+      findings.push(
+        finding(
+          "protected-home-read",
+          "macOS 키체인 도구(security)는 에이전트 셸에서 허용하지 않는다",
+        ),
+      );
     }
     if (name !== undefined && TOSS_LIVE_BINARIES.includes(name)) {
       findings.push(
@@ -629,7 +784,7 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
     }
     if (name === "cargo") {
       const sub = cargoSubcommand(invocation.args);
-      if (sub === "run") {
+      if (sub === "run" || sub === "r") {
         const targets = cargoPackageOrBinTargets(invocation.args);
         const packages = targets
           .filter((item) => ["-p", "--package"].includes(item.flag))
@@ -640,7 +795,14 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         const manifests = targets
           .filter((item) => item.flag === "--manifest-path")
           .map((item) => item.value);
+        const cwdLower = (effectiveCwd ?? "").toLowerCase();
+        const cwdIsToss =
+          packages.length === 0 &&
+          manifests.length === 0 &&
+          (cwdLower.includes("/toss-smoke") ||
+            cwdLower.includes("/broker-toss-trade"));
         if (
+          cwdIsToss ||
           packages.some((pkg) =>
             ["toss-smoke", "broker-toss-trade"].includes(pkg),
           ) ||
@@ -660,7 +822,12 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
             ),
           );
         }
+        const cwdIsTauri =
+          packages.length === 0 &&
+          manifests.length === 0 &&
+          cwdLower.includes("/src-tauri");
         const runsTauri =
+          cwdIsTauri ||
           packages.includes("src-tauri") ||
           bins.includes("src-tauri") ||
           manifests.some((manifest) => manifest.includes("src-tauri"));
@@ -674,10 +841,10 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         }
       }
       if (sub === "tauri") {
-        const nextSub = invocation.args
-          .filter((word) => !word.text.startsWith("-"))
-          .at(1)?.text;
-        if (nextSub === "dev") {
+        const nonOptions = invocation.args.filter(
+          (word) => !word.text.startsWith("-") && !word.text.startsWith("+"),
+        );
+        if (nonOptions.at(1)?.text === "dev") {
           findings.push(
             finding(
               "toss-live-api",
@@ -686,6 +853,17 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
           );
         }
       }
+    }
+    if (
+      name === "tauri" &&
+      invocation.args.some((word) => word.text === "dev")
+    ) {
+      findings.push(
+        finding(
+          "toss-live-api",
+          "tauri dev 실앱 실행은 에이전트가 하지 않는다",
+        ),
+      );
     }
     if (
       ["pnpm", "npm", "yarn", "npx"].includes(name ?? "") &&
@@ -699,22 +877,46 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         ),
       );
     }
+    if (
+      name === "rsync" &&
+      invocation.args.some((word) => isRemoteRsyncOperand(word.text))
+    ) {
+      findings.push(
+        finding("toss-live-api", "원격 rsync 연결은 허용하지 않는다"),
+      );
+    }
     if (name !== undefined && NETWORK_CLIENTS.includes(name)) {
-      if (
-        name === "curl" &&
-        invocation.args.some(
-          (word) =>
-            word.text === "-n" ||
-            word.text === "--netrc" ||
-            word.text === "--netrc-optional",
-        )
-      ) {
-        findings.push(
-          finding(
-            "protected-home-read",
-            "curl의 netrc 읽기 옵션(-n/--netrc)은 허용하지 않는다",
-          ),
-        );
+      if (name === "curl") {
+        for (const word of invocation.args) {
+          const option = flagName(word.text);
+          if (CURL_DENIED_FLAGS.has(option)) {
+            findings.push(
+              finding(
+                ["-n", "--netrc", "--netrc-optional", "--netrc-file"].includes(
+                  option,
+                )
+                  ? "protected-home-read"
+                  : "toss-live-api",
+                `curl의 금지 옵션(${option})은 허용하지 않는다`,
+              ),
+            );
+          }
+        }
+      }
+      if (name === "wget") {
+        for (const word of invocation.args) {
+          const option = flagName(word.text);
+          if (WGET_DENIED_FLAGS.has(option)) {
+            findings.push(
+              finding(
+                option === "--netrc-file"
+                  ? "protected-home-read"
+                  : "toss-live-api",
+                `wget의 금지 옵션(${option})은 허용하지 않는다`,
+              ),
+            );
+          }
+        }
       }
       const clientText = invocation.args.map((word) => word.text);
       const hasToss = clientText.some((text) =>
@@ -739,6 +941,45 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
             );
             break;
           }
+          if (name === "curl" && word.text === "--url") {
+            const targetUrl = invocation.args[index + 1];
+            index += 1;
+            const host =
+              targetUrl === undefined
+                ? undefined
+                : (hostFromWord(targetUrl.text) ??
+                  bareHostFromWord(targetUrl.text));
+            if (
+              targetUrl === undefined ||
+              targetUrl.dynamic ||
+              host === undefined ||
+              !isAllowedNetworkHost(host, context.policy)
+            ) {
+              findings.push(
+                finding(
+                  "toss-live-api",
+                  `네트워크 도구(curl)로 허용 목록 밖 대상(${targetUrl?.text ?? ""})에 연결하지 않는다`,
+                ),
+              );
+            }
+            continue;
+          }
+          if (name === "curl" && word.text.startsWith("--url=")) {
+            const rawUrl = word.text.slice("--url=".length);
+            const host = hostFromWord(rawUrl) ?? bareHostFromWord(rawUrl);
+            if (
+              host === undefined ||
+              !isAllowedNetworkHost(host, context.policy)
+            ) {
+              findings.push(
+                finding(
+                  "toss-live-api",
+                  `네트워크 도구(curl)로 허용 목록 밖 대상(${rawUrl})에 연결하지 않는다`,
+                ),
+              );
+            }
+            continue;
+          }
           if (HTTP_CLIENTS.has(name) && CURL_VALUED_FLAGS.has(word.text)) {
             index += 1;
             continue;
@@ -747,7 +988,19 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
           const host =
             hostFromWord(word.text) ??
             (HTTP_CLIENTS.has(name) ? bareHostFromWord(word.text) : undefined);
-          if (
+          if (HTTP_CLIENTS.has(name)) {
+            if (
+              host === undefined ||
+              !isAllowedNetworkHost(host, context.policy)
+            ) {
+              findings.push(
+                finding(
+                  "toss-live-api",
+                  `네트워크 도구(${name})로 허용 목록 밖 호스트(${host ?? word.text})에 연결하지 않는다`,
+                ),
+              );
+            }
+          } else if (
             host !== undefined &&
             !isAllowedNetworkHost(host, context.policy)
           ) {
@@ -759,18 +1012,7 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
             );
           }
         }
-        if (
-          [
-            "nc",
-            "ncat",
-            "socat",
-            "telnet",
-            "ssh",
-            "scp",
-            "sftp",
-            "ftp",
-          ].includes(name)
-        ) {
+        if (RAW_REMOTE_CLIENTS.has(name)) {
           const positionals = invocation.args.filter(
             (word) => !word.text.startsWith("-"),
           );
@@ -793,12 +1035,14 @@ const analyzeScriptTossAndReads = (source, context, depth = 0) => {
         }
         if (
           name === "openssl" &&
-          invocation.args.some((word) => word.text === "s_client")
+          invocation.args.some(
+            (word) => word.text === "s_client" || word.text === "s_time",
+          )
         ) {
           findings.push(
             finding(
               "toss-live-api",
-              "openssl s_client 외부 연결은 허용하지 않는다",
+              "openssl 외부 연결 하위 명령(s_client, s_time)은 허용하지 않는다",
             ),
           );
         }
@@ -1014,8 +1258,27 @@ const reviewerGitFindings = (source, role, rules, depth = 0) => {
         }
       }
       if (sub === "checkout" || sub === "switch") {
+        const deniedCheckoutFlag = rest.some(
+          (word) =>
+            word.dynamic ||
+            word.text === "--" ||
+            [
+              "-b",
+              "-B",
+              "--orphan",
+              "-f",
+              "--force",
+              "--ours",
+              "--theirs",
+              "-p",
+              "--patch",
+            ].includes(flagName(word.text)),
+        );
+        const positionals = rest.filter((word) => !word.text.startsWith("-"));
         const isDetach =
           sub === "checkout" &&
+          !deniedCheckoutFlag &&
+          positionals.length === 1 &&
           rest.some((word) => word.text === "--detach" || word.text === "-d");
         if (!isDetach) {
           findings.push(
@@ -1070,45 +1333,130 @@ const isStaticPrelockGenerator = (source) => {
   );
 };
 
-const lockedConfigGeneratorFindings = (source, lock, rules, depth = 0) => {
+const lockedScriptMatches = (text, target, cwd, worktrees) => {
+  const normalized = text.replace(/^(?:\.\/)+/u, "");
+  if (normalized === target || normalized.endsWith(`/${target}`)) {
+    return true;
+  }
+  const absolute = isAbsolute(text)
+    ? resolve(text)
+    : cwd === undefined
+      ? undefined
+      : resolve(cwd, text);
+  if (absolute === undefined) {
+    return basename(text) === basename(target);
+  }
+  const real = realOrSelf(absolute);
+  return worktrees.some(
+    (root) =>
+      realOrSelf(join(root, target)) === real ||
+      join(root, target) === absolute,
+  );
+};
+
+const nodeScriptArg = (args, valuedOptions) => {
+  let index = 0;
+  while (index < args.length) {
+    const word = args[index];
+    if (word.dynamic) return { index, word };
+    if (word.text === "--") {
+      return index + 1 < args.length
+        ? { index: index + 1, word: args[index + 1] }
+        : undefined;
+    }
+    if (!word.text.startsWith("-") || word.text === "-") {
+      return { index, word };
+    }
+    index += valuedOptions.includes(word.text) ? 2 : 1;
+  }
+  return undefined;
+};
+
+const lockedConfigGeneratorFindings = (
+  source,
+  lock,
+  rules,
+  cwd,
+  worktrees,
+  depth = 0,
+) => {
   if (lock === LOCK.off || depth > 8) return [];
   const parsed = parseScript(source);
   const findings = [];
+  let currentCwd = cwd;
   for (const command of parsed.commands) {
     const invocation = unwrap(command, DEFINITIONS, rules);
+    const effectiveCwd = invocation.cwdUnknown ? undefined : currentCwd;
     if (invocation.name === "node") {
-      const hasWrite = invocation.args.some(
-        (word) => word.dynamic || word.text === "--write",
+      const found = nodeScriptArg(
+        invocation.args,
+        rules.harnessNodeValueOptions ?? [],
       );
-      if (hasWrite) {
-        const hit = invocation.args.find((word) => {
-          const normalized = word.text.replace(/^(?:\.\/)+/u, "");
-          return (
-            LOCKED_CONFIG_GENERATORS.has(normalized) ||
-            [...LOCKED_CONFIG_GENERATORS].some((target) =>
-              normalized.endsWith(`/${target}`),
-            )
+      if (found !== undefined) {
+        const rest = invocation.args.slice(found.index + 1);
+        const writes = rest.some(
+          (word) => word.dynamic || word.text === "--write",
+        );
+        const matchesGenerator =
+          found.word.dynamic ||
+          [...LOCKED_CONFIG_GENERATORS].some((target) =>
+            lockedScriptMatches(
+              found.word.text,
+              target,
+              effectiveCwd,
+              worktrees,
+            ),
           );
-        });
-        if (hit !== undefined) {
+        if (writes && matchesGenerator) {
           findings.push(
             finding(
               "harness-write-mode",
-              `${hit.text} --write는 잠금 on에서 허용하지 않는다`,
+              `${found.word.text} --write는 잠금 on에서 허용하지 않는다`,
             ),
           );
         }
       }
     }
+    if (invocation.name === "cd" || invocation.name === "pushd") {
+      const target = invocation.args.find((word) => !word.text.startsWith("-"));
+      if (
+        target !== undefined &&
+        !target.dynamic &&
+        !target.glob &&
+        target.text !== "-" &&
+        effectiveCwd !== undefined
+      ) {
+        const nextDir = resolve(effectiveCwd, target.text);
+        currentCwd = isDirectory(nextDir) ? nextDir : undefined;
+      } else {
+        currentCwd = undefined;
+      }
+    } else if (invocation.name === "popd") {
+      currentCwd = undefined;
+    }
     for (const nested of shellNestedScripts(invocation, rules)) {
       findings.push(
-        ...lockedConfigGeneratorFindings(nested, lock, rules, depth + 1),
+        ...lockedConfigGeneratorFindings(
+          nested,
+          lock,
+          rules,
+          effectiveCwd,
+          worktrees,
+          depth + 1,
+        ),
       );
     }
   }
   for (const substitution of parsed.substitutions) {
     findings.push(
-      ...lockedConfigGeneratorFindings(substitution, lock, rules, depth + 1),
+      ...lockedConfigGeneratorFindings(
+        substitution,
+        lock,
+        rules,
+        currentCwd,
+        worktrees,
+        depth + 1,
+      ),
     );
   }
   return findings;
@@ -1293,6 +1641,8 @@ export const antigravityPreTool = (
         command,
         project.lock,
         project.rules,
+        cwd,
+        scoped.worktrees,
       );
       const readAndToss = analyzeScriptTossAndReads(command, {
         cwd,

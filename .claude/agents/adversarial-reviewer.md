@@ -40,3 +40,8 @@ AGENTS.md, docs/harness.md, docs/architecture.md와 브리프가 가리키는 �
 - "추정" 여부
 
 이어서 harness.md 9장 항목별 확인 결과(해당 없음 포함)를 쓴다. 지적이 없으면 확인한 항목과 각 항목에서 돌린 명령을 목록으로 쓴다.
+
+## 역할 배분 (Antigravity 구현·비판)
+
+- 적대적 리뷰는 T3 Claude(`driverKind=claudeAgent`, 모델 `claude-opus-5-5`, 기기별 인스턴스 이름 허용)가 별도 격리 작업 사본에서 수행한다.
+- 구현·수정은 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`), 독립 비판은 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 맡는다.

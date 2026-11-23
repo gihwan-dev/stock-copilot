@@ -276,35 +276,44 @@ test("Antigravity requires an explicit thought_level option and rejects omission
     1,
   );
 });
-test("Claude2 Opus review requires claudeAgent_claude2 and accepts only omission or effort high", () => {
-  for (const [options, expected] of [
-    [undefined, 0],
-    [{ effort: "high" }, 0],
-    [{}, 1],
-    [[], 1],
-    [null, 1],
-    [{ effort: undefined }, 1],
-    [{ effort: "max" }, 1],
-    [{ effort: "medium" }, 1],
-    [{ reasoningEffort: "high" }, 1],
-    [{ thought_level: "high" }, 1],
-    [{ thought_level: "xhigh" }, 1],
-    [{ effort: "high", thought_level: "high" }, 1],
-    [{ ultracode: true }, 1],
-    [{ fastMode: true }, 1],
-  ]) {
-    const input = delegate("claude-opus-5-5", "review", options, {
-      driverKind: "claudeAgent",
-      providerInstanceId: "claudeAgent_claude2",
-    });
-    assert.equal(verdict(input).length, expected);
-  }
+test("Claude Opus review matches driverKind claudeAgent and model claude-opus-5-5 across instance names and accepts only omission or effort high", () => {
   for (const providerInstanceId of [
     undefined,
     "claudeAgent",
-    "other",
+    "claudeAgent_claude2",
+    "claude-work",
+  ]) {
+    for (const [options, expected] of [
+      [undefined, 0],
+      [{ effort: "high" }, 0],
+      [{}, 1],
+      [[], 1],
+      [null, 1],
+      [{ effort: undefined }, 1],
+      [{ effort: "max" }, 1],
+      [{ effort: "medium" }, 1],
+      [{ reasoningEffort: "high" }, 1],
+      [{ thought_level: "high" }, 1],
+      [{ thought_level: "xhigh" }, 1],
+      [{ effort: "high", thought_level: "high" }, 1],
+      [{ ultracode: true }, 1],
+      [{ fastMode: true }, 1],
+    ]) {
+      const input = delegate("claude-opus-5-5", "review", options, {
+        driverKind: "claudeAgent",
+        providerInstanceId,
+      });
+      assert.equal(verdict(input).length, expected);
+    }
+  }
+  for (const providerInstanceId of [
     "",
+    "   ",
     null,
+    123,
+    "codex",
+    "antigravity",
+    "cursor",
   ]) {
     const input = delegate(
       "claude-opus-5-5",
@@ -314,7 +323,7 @@ test("Claude2 Opus review requires claudeAgent_claude2 and accepts only omission
     );
     const findings = verdict(input);
     assert.equal(findings.length, 1);
-    assert.match(findings[0].message, /claudeAgent_claude2/u);
+    assert.match(findings[0].message, /providerInstanceId/u);
   }
   for (const role of ["implementation", "research", undefined]) {
     const input = delegate(
@@ -323,7 +332,7 @@ test("Claude2 Opus review requires claudeAgent_claude2 and accepts only omission
       { effort: "high" },
       {
         driverKind: "claudeAgent",
-        providerInstanceId: "claudeAgent_claude2",
+        providerInstanceId: "claudeAgent",
       },
     );
     assert.equal(verdict(input).length, 1);
@@ -334,7 +343,7 @@ test("Claude2 Opus review requires claudeAgent_claude2 and accepts only omission
         "claude-opus-5-5",
         "implementation",
         { effort: "high" },
-        { provider: "claudeAgent", instanceId: "claudeAgent_claude2" },
+        { provider: "claudeAgent", instanceId: "claudeAgent" },
       ),
       true,
     ).length,

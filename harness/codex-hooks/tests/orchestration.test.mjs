@@ -85,14 +85,31 @@ test("T3 Opus review requires the exact model role provider and worktree", () =>
   input.tool_input.target = {
     driverKind: "claudeAgent",
     model: "claude-opus-5-5",
-    providerInstanceId: "claudeAgent_claude2",
+    providerInstanceId: "claudeAgent",
   };
   assert.deepEqual(orchestrationFindings(input, rules, facts), []);
+  for (const providerInstanceId of [undefined, "claudeAgent_claude2"]) {
+    assert.deepEqual(
+      orchestrationFindings(
+        {
+          ...input,
+          tool_input: {
+            ...input.tool_input,
+            target: { ...input.tool_input.target, providerInstanceId },
+          },
+        },
+        rules,
+        facts,
+      ),
+      [],
+    );
+  }
   for (const target of [
     { model: "claude-sonnet-5-5" },
-    { providerInstanceId: "claudeAgent" },
-    { providerInstanceId: undefined },
-    { providerInstanceId: "other" },
+    { providerInstanceId: "" },
+    { providerInstanceId: null },
+    { providerInstanceId: "codex" },
+    { providerInstanceId: "antigravity" },
     { options: { effort: "max" } },
   ]) {
     assert.equal(

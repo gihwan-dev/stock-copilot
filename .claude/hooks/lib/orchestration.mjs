@@ -46,19 +46,26 @@ const antigravityFindings = (model, role, value, instanceId) => {
         `Antigravity gemini-4-neon의 ${role} 역할은 thought_level=${expected} 옵션만 명시적으로 허용한다. effort·reasoningEffort 등 다른 키와 혼합은 거부한다`,
       );
 };
+const OTHER_PROVIDER_INSTANCE =
+  /^(?:codex|antigravity|cursor|grok|opencode|fx|kiro|muse|pi)(?:$|[._-])/iu;
 const claudeReviewFindings = (model, role, value, instanceId) => {
-  if (instanceId !== "claudeAgent_claude2")
+  if (
+    instanceId !== undefined &&
+    (typeof instanceId !== "string" ||
+      instanceId.trim() === "" ||
+      OTHER_PROVIDER_INSTANCE.test(instanceId))
+  )
     return denied(
-      "적대적 리뷰는 두 번째 Claude 계정(providerInstanceId=claudeAgent_claude2)만 허용한다. 첫 번째 계정(claudeAgent)과 생략은 거부한다",
+      "적대적 리뷰의 providerInstanceId는 생략하거나 Claude 인스턴스 이름(비어 있지 않은 문자열)이어야 한다",
     );
   if (model !== "claude-opus-5-5" || role !== "review")
     return denied(
-      "Claude2 허용 대상은 claude-opus-5-5의 review 역할만 허용한다",
+      "Claude 적대적 리뷰 허용 대상은 driverKind=claudeAgent, model=claude-opus-5-5의 review 역할만 허용한다",
     );
   return claudeReviewOptions(value)
     ? []
     : denied(
-        "Claude2 claude-opus-5-5 리뷰는 옵션 생략 또는 effort=high만 허용한다. 다른 키와 혼합은 거부한다",
+        "Claude claude-opus-5-5 리뷰는 옵션 생략 또는 effort=high만 허용한다. 다른 키와 혼합은 거부한다",
       );
 };
 const launchRole = (message) => {
@@ -71,7 +78,7 @@ export const delegateTargetFindings = (target, role) => {
     return denied("허용하지 않은 T3 위임 인자다");
   if (target.driverKind === "codex")
     return denied(
-      "Codex 제공자는 더 이상 허용하지 않는다. 구현·조사·비판은 antigravity(gemini-4-neon), 적대적 리뷰는 claudeAgent_claude2(claude-opus-5-5)만 사용한다",
+      "Codex 제공자는 더 이상 허용하지 않는다. 구현·조사·비판은 antigravity(gemini-4-neon), 적대적 리뷰는 claudeAgent(claude-opus-5-5)만 사용한다",
     );
   if (target.driverKind === "antigravity")
     return antigravityFindings(
