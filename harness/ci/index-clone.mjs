@@ -1,5 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { existsSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { mkdtempSync } from "./managed-temp.mjs";
 
 const cleanEnvironment = () => ({
   ...Object.fromEntries(
@@ -8,6 +11,46 @@ const cleanEnvironment = () => ({
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
 });
+
+const applyPatch = (source, clone, sourceEnvironment, environment) => {
+  const directory = mkdtempSync(join(tmpdir(), "index-clone-"));
+  const patchFile = join(directory, "index.patch");
+  try {
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "diff.noprefix=false",
+        "-c",
+        "diff.mnemonicPrefix=false",
+        "diff",
+        "--cached",
+        "--binary",
+        "--full-index",
+        "--no-ext-diff",
+        "--no-textconv",
+        `--output=${patchFile}`,
+        "HEAD",
+        "--",
+      ],
+      { cwd: source, env: sourceEnvironment },
+    );
+    const changed = existsSync(patchFile) && statSync(patchFile).size > 0;
+    if (changed) {
+      execFileSync(
+        "git",
+        ["apply", "--index", "--binary", "--whitespace=nowarn", patchFile],
+        {
+          cwd: clone,
+          env: environment,
+        },
+      );
+    }
+    return changed;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
 
 export const applyIndexToClone = (source, clone, indexFile) => {
   const environment = cleanEnvironment();
@@ -20,31 +63,7 @@ export const applyIndexToClone = (source, clone, indexFile) => {
     env: sourceEnvironment,
     encoding: "utf8",
   }).trim();
-  const patch = execFileSync(
-    "git",
-    [
-      "diff",
-      "--cached",
-      "--binary",
-      "--full-index",
-      "--no-ext-diff",
-      "--no-textconv",
-      "HEAD",
-      "--",
-    ],
-    { cwd: source, env: sourceEnvironment },
-  );
-  if (patch.length > 0) {
-    execFileSync(
-      "git",
-      ["apply", "--index", "--binary", "--whitespace=nowarn", "-"],
-      {
-        cwd: clone,
-        env: environment,
-        input: patch,
-      },
-    );
-  }
+  const changed = applyPatch(source, clone, sourceEnvironment, environment);
   const cloneTree = execFileSync("git", ["write-tree"], {
     cwd: clone,
     env: environment,
@@ -53,7 +72,7 @@ export const applyIndexToClone = (source, clone, indexFile) => {
   if (cloneTree !== sourceTree) {
     throw new Error("복제본의 색인 트리가 원본과 다르다");
   }
-  return patch.length > 0;
+  return changed;
 };
 
 export const commitIndexSnapshot = (source, clone, indexFile) => {

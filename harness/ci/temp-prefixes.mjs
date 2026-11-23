@@ -13,6 +13,7 @@ export const prefixes = [
   "h54-",
   "h57-",
   "harness-prefetch-",
+  "index-clone-",
   "knip-config-",
   "main-hook-context-",
   "reviewer-empty-head-",

@@ -202,3 +202,71 @@ test("복제본의 기준 트리가 다르면 빈 패치라도 실패한다", ()
   git(source, "commit", "--quiet", "-m", "new");
   assert.throws(() => applyIndexToClone(source, clone), /색인 트리/u);
 });
+
+test("1 MiB를 넘는 스테이징 바이너리와 로컬 diff 접두사 설정에서도 색인을 복제한다", () => {
+  const parent = mkdtempSync(join(tmpdir(), "h57-large-config-"));
+  const source = join(parent, "source");
+  const clone = join(parent, "clone");
+  mkdirSync(source);
+  git(source, "init", "--quiet", "-b", "master");
+  write(source, "base.txt", "base\n");
+  git(source, "add", ".");
+  git(source, "commit", "--quiet", "-m", "base");
+  git(source, "config", "diff.noprefix", "true");
+  git(source, "config", "diff.mnemonicPrefix", "true");
+  git(source, "config", "diff.relative", "true");
+  git(source, "clone", "--quiet", "--no-local", ".", clone);
+  const large = Buffer.alloc(1300 * 1024);
+  let state = 0x12345678;
+  for (let index = 0; index < large.length; index += 4) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    large.writeInt32LE(state | 0, index);
+  }
+  writeFileSync(join(source, "large.bin"), large);
+  write(source, "base.txt", "updated\n");
+  git(source, "add", "large.bin", "base.txt");
+  write(source, "base.txt", "unstaged\n");
+  const changed = applyIndexToClone(source, clone);
+  assert.equal(changed, true);
+  assert.equal(
+    Buffer.compare(readFileSync(join(clone, "large.bin")), large),
+    0,
+  );
+  assert.equal(readFileSync(join(clone, "base.txt"), "utf8"), "updated\n");
+});
+
+test("복제 패치 생성 중 오류가 나도 임시 패치 폴더를 남기지 않는다", () => {
+  const parent = mkdtempSync(join(tmpdir(), "h57-patch-cleanup-"));
+  const scratchTmp = join(parent, "tmp");
+  const source = join(parent, "source");
+  const clone = join(parent, "clone");
+  mkdirSync(scratchTmp);
+  mkdirSync(source);
+  git(source, "init", "--quiet", "-b", "master");
+  write(source, "file.txt", "base\n");
+  git(source, "add", ".");
+  git(source, "commit", "--quiet", "-m", "base");
+  git(source, "clone", "--quiet", "--shared", ".", clone);
+  write(source, "file.txt", "staged\n");
+  git(source, "add", "file.txt");
+  write(clone, "file.txt", "conflicting\n");
+  git(clone, "add", "file.txt");
+  git(clone, "commit", "--quiet", "-m", "diverge");
+  const script = [
+    "import { applyIndexToClone } from './harness/ci/index-clone.mjs';",
+    "import { readdirSync } from 'node:fs';",
+    `let failed = false; try { applyIndexToClone(${JSON.stringify(source)}, ${JSON.stringify(clone)}); } catch { failed = true; }`,
+    `if (!failed || readdirSync(${JSON.stringify(scratchTmp)}).length !== 0) process.exit(1);`,
+  ].join(" ");
+  const result = execFileSync(
+    process.execPath,
+    ["--input-type=module", "-e", script],
+    {
+      cwd: process.cwd(),
+      env: { ...env, TMPDIR: scratchTmp, TMP: scratchTmp, TEMP: scratchTmp },
+    },
+  );
+  assert.equal(result.length, 0);
+});

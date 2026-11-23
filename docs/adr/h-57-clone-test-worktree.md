@@ -8,7 +8,7 @@
 
 ## 결정
 
-HEAD 복제 직후 원본의 HEAD와 지정된 색인 사이 바이너리 패치를 복제본의 작업 사본과 색인에 적용한다. 색인의 추가·변경·삭제와 파일 모드를 보존하고 미스테이지·미추적 파일은 복사하지 않는다. 별도 `GIT_INDEX_FILE`은 원본 조회에만 쓰고 복제본의 Git 명령에서는 제거한다. 패치를 적용할 수 없거나 적용 뒤 두 색인의 트리 ID가 다르면 실패한다.
+HEAD 복제 직후 원본의 HEAD와 지정된 색인 사이 바이너리 패치를 복제본의 작업 사본과 색인에 적용한다. 색인의 추가·변경·삭제와 파일 모드를 보존하고 미스테이지·미추적 파일은 복사하지 않는다. 별도 `GIT_INDEX_FILE`은 원본 조회에만 쓰고 복제본의 Git 명령에서는 제거한다. Node 기본 `maxBuffer`(1 MiB) 초과(`ENOBUFS`)와 저장소 로컬 `diff.noprefix`/`diff.mnemonicPrefix` 설정 영향을 막기 위해 `git -c diff.noprefix=false -c diff.mnemonicPrefix=false diff --output=<임시 패치>`로 관리된 임시 폴더(`index-clone-`)에 패치를 쓰고 `finally`에서 즉시 정리한다. 패치를 적용할 수 없거나 적용 뒤 두 색인의 트리 ID가 다르면 실패한다.
 
 H-54의 브랜치 검사 fixture와 Claude 훅 진입 fixture에 적용한다. Claude 실제 세션 회귀의 실험 저장소에서는 색인만을 임시 커밋으로 만들고, `master~1` 등 기존 기준 이력을 가리키는 참조는 원래 HEAD 기준으로 풀어 실험 의미를 보존한다. H-47의 얕은 복제는 실제 이력 경계를 검증하므로 HEAD만 복제하는 의미를 유지한다.
 
