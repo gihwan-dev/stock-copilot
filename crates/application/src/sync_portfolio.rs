@@ -89,6 +89,7 @@ impl<'a, Broker: BrokerRead, Repository: PortfolioRepository, Time: Clock>
         if failures.iter().any(|error| match error.kind() {
             PortErrorKind::AccessDenied(_) => true,
             PortErrorKind::Unavailable { .. }
+            | PortErrorKind::MasterNotReady(_)
             | PortErrorKind::NotFound(_)
             | PortErrorKind::InvalidResponse(_)
             | PortErrorKind::Unsupported(_)
@@ -130,6 +131,7 @@ fn failed_outcome(error: PortError) -> SyncOutcome<Portfolio> {
     match error.kind() {
         PortErrorKind::AccessDenied(_) => SyncOutcome::AccessBlocked,
         PortErrorKind::Unavailable { .. }
+        | PortErrorKind::MasterNotReady(_)
         | PortErrorKind::NotFound(_)
         | PortErrorKind::InvalidResponse(_)
         | PortErrorKind::Unsupported(_)
@@ -185,7 +187,9 @@ fn cash_failure(kind: PortErrorKind) -> Option<CashObservationFailure> {
                 }
             }))
         }
-        PortErrorKind::AccessDenied(_) | PortErrorKind::Unsupported(_) => None,
+        PortErrorKind::AccessDenied(_)
+        | PortErrorKind::Unsupported(_)
+        | PortErrorKind::MasterNotReady(_) => None,
         PortErrorKind::Unavailable { cause, retry } => Some(CashObservationFailure::Unavailable {
             cause: cash_unavailable(cause),
             retry: match retry {
