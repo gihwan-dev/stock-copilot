@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests {
     mod a27_fixtures;
+    mod d56_evidence;
     use a27_fixtures as fixtures;
     use application::{
         EstimateSubmissionRepository, EventBusBuilder, SignalCommitOutcome, SignalEvaluation,
         SignalMutation, SignalRepository, SignalRevision, SignalSourceFacts, SubmitEstimate,
         SystemFailure, SystemPort, SystemPortError,
     };
+    use domain::signal_transition_from_history;
     use domain::{
         BuySignalOccurrenceId, BuySignalRecord, CurrentBuySignal, DartReceiptNo, Disclosure,
         DomainEvent, HorizonSelection, InstrumentId, Market, NoSignalReason, NormalizedUrl,
@@ -18,6 +20,12 @@ mod tests {
         sync::Barrier,
         task::{Context, Poll, Waker},
     };
+    struct HistoricalDecision(Option<domain::HistoricalSignal>);
+    impl HistoricalDecision {
+        fn into_signal(self) -> Option<domain::HistoricalSignal> {
+            self.0
+        }
+    }
     use testkit_ports::memory::MemorySignalEvaluationRepository;
 
     fn run<F: Future>(future: F) -> F::Output {
@@ -127,17 +135,19 @@ mod tests {
         decision: SignalDecision,
         occurrence: Option<BuySignalRecord>,
     ) -> SignalMutation {
-        let transition = signal_transition(
+        let transition = signal_transition_from_history(
             snapshot.current.as_ref().map(|entry| &entry.signal),
             &decision,
         )
         .expect("전이");
+        let evidence = d56_evidence::evidence_for_decision(&decision, occurrence.as_ref());
         SignalMutation::Evaluate(Box::new(SignalEvaluation {
             submission: snapshot.submission.clone().expect("판정 근거 제출"),
             decision,
             transition,
             calibration_head: Some(fixtures::head(0)),
             occurrence,
+            evidence,
         }))
     }
 
@@ -220,11 +230,11 @@ mod tests {
         submit(&repository, "task-new", "99", InstrumentChoice::First);
         let newest = run(repository.snapshot(&instrument)).expect("최신");
         assert_ne!(old.submission, newest.submission);
-        let new_decision = fixtures::decision(&fixtures::master(), "99", None);
+        let live_decision = fixtures::decision(&fixtures::master(), "99", None);
         let new_mutation = evaluation(
             &newest,
-            new_decision.clone(),
-            Some(buy_record(&new_decision, "new-occ")),
+            live_decision.clone(),
+            Some(buy_record(&live_decision, "new-occ")),
         );
         committed(run(repository.commit(&instrument, &newest, &new_mutation)));
         assert_eq!(
@@ -235,6 +245,12 @@ mod tests {
             .expect("현재")
             .current
             .expect("신호");
+        let new_decision = HistoricalDecision(
+            live_decision
+                .into_signal()
+                .as_ref()
+                .map(domain::HistoricalSignal::from_signal),
+        );
         assert_eq!(current.submission, newest.submission.expect("최신 제출"));
         assert_eq!(Some(current.signal), new_decision.into_signal());
         assert_eq!(
@@ -333,8 +349,8 @@ mod tests {
         let instrument = fixtures::id("sample-a");
         let initial = run(repository.snapshot(&instrument)).expect("초기");
         let decision = fixtures::decision(&fixtures::master(), "99", None);
-        let occurrence = buy_record(&decision, "stable-occ");
-        let mutation = evaluation(&initial, decision, Some(occurrence.clone()));
+        let live_occurrence = buy_record(&decision, "stable-occ");
+        let mutation = evaluation(&initial, decision, Some(live_occurrence.clone()));
         let error = SystemPortError::new(SystemPort::Repository, SystemFailure::PermissionDenied);
         repository.fail_next_commit(error);
         assert_eq!(
@@ -357,6 +373,7 @@ mod tests {
             run(repository.commit(&instrument, &updated, &evaluation(&updated, next, None)))
                 .expect("갱신");
         assert_eq!(committed(Ok(result)).events, vec![]);
+        let occurrence = domain::HistoricalSignalOccurrence::from_record(&live_occurrence);
         assert_eq!(
             run(repository.occurrences(
                 &instrument,
@@ -487,11 +504,11 @@ mod tests {
         submit(&repository, "task-old", "99", InstrumentChoice::First);
         let initial = run(repository.snapshot(&instrument)).expect("초기");
         let decision = fixtures::decision(&fixtures::master(), "99", None);
-        let record = buy_record(&decision, "same-id");
+        let live_record = buy_record(&decision, "same-id");
         committed(run(repository.commit(
             &instrument,
             &initial,
-            &evaluation(&initial, decision, Some(record.clone())),
+            &evaluation(&initial, decision, Some(live_record.clone())),
         )));
         let raised = run(repository.snapshot(&instrument)).expect("발생");
         committed(run(repository.commit(
@@ -512,6 +529,7 @@ mod tests {
             Err(invalid())
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(latest));
+        let record = domain::HistoricalSignalOccurrence::from_record(&live_record);
         assert_eq!(
             run(repository.occurrences(&instrument, &identity)),
             Ok(vec![record.clone()])
@@ -749,11 +767,11 @@ mod tests {
         submit(&repository, "task-old", "99", InstrumentChoice::First);
         let initial = run(repository.snapshot(&instrument)).expect("초기");
         let decision = fixtures::decision(&fixtures::master(), "99", None);
-        let record = buy_record(&decision, "forgery-original");
+        let live_record = buy_record(&decision, "forgery-original");
         committed(run(repository.commit(
             &instrument,
             &initial,
-            &evaluation(&initial, decision, Some(record.clone())),
+            &evaluation(&initial, decision, Some(live_record.clone())),
         )));
         let raised = run(repository.snapshot(&instrument)).expect("발생");
         let forged = SignalMutation::Evaluate(Box::new(SignalEvaluation {
@@ -762,7 +780,9 @@ mod tests {
             transition: SignalTransition::Unchanged,
             calibration_head: Some(fixtures::head(0)),
             occurrence: None,
+            evidence: None,
         }));
+        let record = domain::HistoricalSignalOccurrence::from_record(&live_record);
         for mutation in [
             forged,
             SignalMutation::Discard(Box::new(SignalTransition::Unchanged)),
@@ -847,11 +867,11 @@ mod tests {
         submit(&repository, "task-new", "99", InstrumentChoice::First);
         let latest = run(repository.snapshot(&instrument)).expect("새 제출");
         let buy = fixtures::decision(&fixtures::master(), "99", None);
-        let original = buy_record(&buy, "actual-occurrence");
+        let live_original = buy_record(&buy, "actual-occurrence");
         committed(run(repository.commit(
             &instrument,
             &latest,
-            &evaluation(&latest, buy.clone(), Some(original.clone())),
+            &evaluation(&latest, buy.clone(), Some(live_original.clone())),
         )));
         let raised = run(repository.snapshot(&instrument)).expect("발생");
         assert_eq!(
@@ -859,6 +879,7 @@ mod tests {
             Err(invalid())
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(raised));
+        let original = domain::HistoricalSignalOccurrence::from_record(&live_original);
         assert_eq!(
             run(repository.occurrences(
                 &instrument,
@@ -875,11 +896,11 @@ mod tests {
         submit(&repository, "task-old", "99", InstrumentChoice::First);
         let initial = run(repository.snapshot(&instrument)).expect("초기");
         let first = fixtures::decision(&fixtures::master(), "99", None);
-        let original = buy_record(&first, "update-original");
+        let live_original = buy_record(&first, "update-original");
         committed(run(repository.commit(
             &instrument,
             &initial,
-            &evaluation(&initial, first, Some(original.clone())),
+            &evaluation(&initial, first, Some(live_original.clone())),
         )));
         submit(&repository, "task-new", "98", InstrumentChoice::First);
         let latest = run(repository.snapshot(&instrument)).expect("새 제출");
@@ -898,6 +919,7 @@ mod tests {
             Err(invalid())
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(latest));
+        let original = domain::HistoricalSignalOccurrence::from_record(&live_original);
         assert_eq!(
             run(repository.occurrences(
                 &instrument,
@@ -939,11 +961,11 @@ mod tests {
         submit(&repository, "task-old", "99", InstrumentChoice::First);
         let initial = run(repository.snapshot(&instrument)).expect("초기");
         let decision = fixtures::decision(&fixtures::master(), "99", None);
-        let record = buy_record(&decision, "race-original");
+        let live_record = buy_record(&decision, "race-original");
         committed(run(repository.commit(
             &instrument,
             &initial,
-            &evaluation(&initial, decision.clone(), Some(record.clone())),
+            &evaluation(&initial, decision.clone(), Some(live_record.clone())),
         )));
         let raised = run(repository.snapshot(&instrument)).expect("발생");
         let evaluation_mutation = evaluation(&raised, decision.clone(), None);
@@ -983,6 +1005,7 @@ mod tests {
             Ok(SignalCommitOutcome::SubmissionDiscarded)
         );
         assert_eq!(run(repository.snapshot(&instrument)), Ok(after));
+        let record = domain::HistoricalSignalOccurrence::from_record(&live_record);
         assert_eq!(
             run(repository.occurrences(
                 &instrument,
@@ -1194,11 +1217,11 @@ mod tests {
         let instrument = fixtures::id("sample-a");
         let initial = run(repository.snapshot(&instrument)).expect("짧은 제출");
         let first = fixtures::decision(&source, "99", None);
-        let original = buy_record(&first, "keep-original-horizon");
+        let live_original = buy_record(&first, "keep-original-horizon");
         committed(run(repository.commit(
             &instrument,
             &initial,
-            &evaluation(&initial, first, Some(original.clone())),
+            &evaluation(&initial, first, Some(live_original.clone())),
         )));
         submit_long_horizon(&repository, &long_task, &long_head);
         let snapshot = run(repository.snapshot(&instrument)).expect("새 제출");
@@ -1224,10 +1247,82 @@ mod tests {
             .expect("갱신")
             .current
             .expect("매수");
+        let original = domain::HistoricalSignalOccurrence::from_record(&live_original);
         assert_eq!(current.occurrence, Some(original.clone()));
         assert_eq!(
             run(repository.occurrences(&instrument, &source.order_instrument().expect("종목"))),
             Ok(vec![original])
+        );
+    }
+    #[test]
+    fn signal_commit_rejects_missing_or_corrupted_restore_evidence_atomically() {
+        let repository = repository();
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let instrument = fixtures::id("sample-a");
+        let snapshot = run(repository.snapshot(&instrument)).expect("상태");
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        let occurrence = buy_record(&decision, "evidence-check");
+        let mutation = evaluation(&snapshot, decision, Some(occurrence));
+        let mut missing = mutation.clone();
+        let SignalMutation::Evaluate(missing_value) = &mut missing else {
+            panic!("평가")
+        };
+        missing_value.evidence = None;
+        assert_eq!(
+            run(repository.commit(&instrument, &snapshot, &missing)),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(snapshot.clone()));
+        let mut damaged = mutation.clone();
+        let SignalMutation::Evaluate(value) = &mut damaged else {
+            panic!("평가")
+        };
+        let proof = value.evidence.as_mut().expect("복원 근거");
+        proof.signal.evidence.probability =
+            domain::AiProbability::parse(&domain::AiProbabilityInput::try_new("10").expect("입력"))
+                .expect("확률");
+        assert_eq!(
+            run(repository.commit(&instrument, &snapshot, &damaged)),
+            Err(invalid())
+        );
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(snapshot.clone()));
+        assert_eq!(
+            committed(run(repository.commit(&instrument, &snapshot, &mutation))).events,
+            vec![DomainEvent::SignalRaised(instrument)]
+        );
+    }
+    #[test]
+    fn persisted_history_uses_the_current_master_lookup_each_time() {
+        let repository = repository();
+        submit(&repository, "task-old", "99", InstrumentChoice::First);
+        let instrument = fixtures::id("sample-a");
+        let snapshot = run(repository.snapshot(&instrument)).expect("상태");
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        let occurrence = buy_record(&decision, "master-refresh");
+        let mutation = evaluation(&snapshot, decision, Some(occurrence));
+        committed(run(repository.commit(&instrument, &snapshot, &mutation)));
+        let before = run(repository.snapshot(&instrument)).expect("정상 조회");
+        let source = fixtures::master();
+        let identity = source.order_instrument().expect("종목");
+        let mut changed = source.row().clone();
+        changed.symbol = domain::Symbol::try_new("000123").expect("심볼");
+        repository.save_master(domain::MasterInstrument::try_new(changed).expect("마스터"));
+        let integrity =
+            SystemPortError::new(SystemPort::Repository, SystemFailure::RepositoryIntegrity);
+        assert_eq!(run(repository.snapshot(&instrument)), Err(integrity));
+        assert_eq!(
+            run(repository.occurrences(&instrument, &identity)),
+            Err(integrity)
+        );
+        repository.save_master(source);
+        assert_eq!(run(repository.snapshot(&instrument)), Ok(before));
+    }
+    #[test]
+    fn new_signal_transition_agrees_with_empty_history() {
+        let decision = fixtures::decision(&fixtures::master(), "99", None);
+        assert_eq!(
+            signal_transition(None, &decision),
+            signal_transition_from_history(None, &decision)
         );
     }
 }

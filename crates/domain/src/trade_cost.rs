@@ -34,6 +34,18 @@ pub struct CommissionRateFact {
 }
 impl CommissionRateFact {
     #[must_use]
+    pub const fn market(&self) -> &Market {
+        &self.market
+    }
+    #[must_use]
+    pub const fn rate(&self) -> CostRate {
+        self.rate
+    }
+    #[must_use]
+    pub const fn validity(&self) -> crate::CommissionValidity {
+        self.validity
+    }
+    #[must_use]
     pub fn from_commissions_result(
         market: Market,
         rate: CostRate,
@@ -94,6 +106,18 @@ pub struct TradeTaxFact {
     sell: CostRate,
 }
 impl TradeTaxFact {
+    #[must_use]
+    pub const fn market(&self) -> &Market {
+        &self.market
+    }
+    #[must_use]
+    pub const fn buy_rate(&self) -> CostRate {
+        self.buy
+    }
+    #[must_use]
+    pub const fn sell_rate(&self) -> CostRate {
+        self.sell
+    }
     #[must_use]
     pub fn from_schedule_result(market: Market, buy: CostRate, sell: CostRate) -> Self {
         Self { market, buy, sell }

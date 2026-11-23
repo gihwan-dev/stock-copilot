@@ -97,6 +97,12 @@ pub struct CurrentBuySignal {
     occurrence: BuySignalRecord,
 }
 impl CurrentBuySignal {
+    pub fn try_from_history(
+        signal: BuySignal,
+        occurrence: crate::HistoricalSignalOccurrence,
+    ) -> Result<Self, NoBuyQuantity> {
+        Self::try_new(signal, occurrence.into_record())
+    }
     pub fn try_new(signal: BuySignal, occurrence: BuySignalRecord) -> Result<Self, NoBuyQuantity> {
         if occurrence.instrument() != signal.facts().task().reference().instrument()
             || occurrence.instrument_id() != signal.facts().task().volatility().instrument()
