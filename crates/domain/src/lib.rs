@@ -637,8 +637,9 @@ pub use draft_restore::{
 mod historical_signal_context;
 mod signal_restore;
 pub use historical_signal_context::{
-    HistoricalBuyingPower, HistoricalClassificationError, HistoricalClassifications,
-    HistoricalHolding, HistoricalPortfolio, HistoricalPortfolioError, HistoricalPortfolioFacts,
+    HistoricalBuyingPower, HistoricalBuyingPowerState, HistoricalCashMoney,
+    HistoricalClassificationError, HistoricalClassifications, HistoricalHolding,
+    HistoricalPortfolio, HistoricalPortfolioError, HistoricalPortfolioFacts,
     HistoricalSectorAssignment, HistoricalSecurityType,
 };
 pub use signal_restore::{
@@ -651,6 +652,6 @@ pub use signal_restore::{
 
 mod draft_order_intent;
 pub use draft_order_intent::{
-    DraftOrderIntent, HistoricalOrderAmount, HistoricalOrderTerms, HistoricalSellQuantity,
-    HistoricalWholeQuantity,
+    DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
+    HistoricalSellQuantity, HistoricalWholeQuantity,
 };

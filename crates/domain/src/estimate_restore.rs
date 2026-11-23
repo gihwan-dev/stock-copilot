@@ -92,13 +92,19 @@ impl HistoricalEstimate {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MasterReplayMode {
+    LiveOrderGate,
+    HistoricalIdentity,
+}
+
 impl EstimateRestoreEvidence {
     pub fn capture(
         &self,
         original: &EstimateTask,
         current: &MasterInstrument,
     ) -> Result<StoredEstimateEvidence, EstimateRestoreError> {
-        let rebuilt = self.replay(current)?;
+        let (rebuilt, _) = self.replay(current, MasterReplayMode::LiveOrderGate)?;
         if &rebuilt != original {
             return Err(EstimateRestoreError::ChangedResult);
         }
@@ -113,7 +119,8 @@ impl EstimateRestoreEvidence {
     pub(crate) fn replay(
         &self,
         current: &MasterInstrument,
-    ) -> Result<EstimateTask, EstimateRestoreError> {
+        mode: MasterReplayMode,
+    ) -> Result<(EstimateTask, crate::QuoteInstrument), EstimateRestoreError> {
         let historical = MasterInstrument::try_new(self.master.clone())
             .map_err(EstimateRestoreError::HistoricalMaster)?;
         let old_quote = historical
@@ -125,17 +132,18 @@ impl EstimateRestoreEvidence {
         if old_quote != fresh_quote {
             return Err(EstimateRestoreError::CurrentInstrumentMismatch);
         }
-        current
-            .order_gate_facts()
-            .and_then(|facts| facts.instrument_for(self.side))
-            .map_err(EstimateRestoreError::CurrentMaster)?;
         historical
             .order_gate_facts()
             .and_then(|facts| facts.instrument_for(self.side))
             .map_err(EstimateRestoreError::HistoricalMaster)?;
-        let reference = current
-            .price_observation_for(self.side, self.reference_price, self.reference_at)
-            .map_err(EstimateRestoreError::CurrentMaster)?;
+        let reference = match mode {
+            MasterReplayMode::LiveOrderGate => current
+                .price_observation_for(self.side, self.reference_price, self.reference_at)
+                .map_err(EstimateRestoreError::CurrentMaster)?,
+            MasterReplayMode::HistoricalIdentity => fresh_quote
+                .historical_price_observation(self.reference_price, self.reference_at)
+                .map_err(EstimateRestoreError::CurrentMaster)?,
+        };
         if self
             .candles
             .iter()
@@ -145,14 +153,15 @@ impl EstimateRestoreEvidence {
         }
         let volatility =
             Volatility::calculate(&self.candles).map_err(EstimateRestoreError::Volatility)?;
-        EstimateTask::create(
+        let task = EstimateTask::create(
             EstimateContext::new(reference, self.task_at),
             volatility,
             self.horizon,
             HoursPermission::restore_from_saved_state(self.permission),
             self.appetite,
         )
-        .map_err(EstimateRestoreError::Task)
+        .map_err(EstimateRestoreError::Task)?;
+        Ok((task, fresh_quote))
     }
 }
 
@@ -160,8 +169,9 @@ impl StoredEstimateEvidence {
     pub(crate) fn replay(
         &self,
         current: &MasterInstrument,
-    ) -> Result<EstimateTask, EstimateRestoreError> {
-        let result = self.evidence.replay(current)?;
+        mode: MasterReplayMode,
+    ) -> Result<(EstimateTask, crate::QuoteInstrument), EstimateRestoreError> {
+        let (result, quote) = self.evidence.replay(current, mode)?;
         if self.evidence.reference_at.offset_seconds()
             != self.original.reference_at.offset_seconds()
             || self.evidence.task_at.offset_seconds() != self.original.task_at.offset_seconds()
@@ -200,14 +210,15 @@ impl StoredEstimateEvidence {
         {
             return Err(EstimateRestoreError::ChangedEvidence);
         }
-        Ok(result)
+        Ok((result, quote))
     }
 
     pub fn restore_history(
         &self,
         current: &MasterInstrument,
     ) -> Result<HistoricalEstimate, EstimateRestoreError> {
-        self.replay(current).map(HistoricalEstimate)
+        self.replay(current, MasterReplayMode::HistoricalIdentity)
+            .map(|(task, _)| HistoricalEstimate(task))
     }
 }
 

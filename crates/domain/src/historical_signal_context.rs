@@ -1,11 +1,13 @@
 use crate::{
-    AcquisitionPrice, BuyingPower, Currency, HistoricalSignalQuantity, Holding, HoldingError,
-    HoldingObservation, Market, MasterInstrument, Money, Portfolio, PortfolioError, Price,
-    ReportedHolding, ReportedPortfolio, Symbol, Timestamp,
+    AcquisitionPrice, BuyingPower, CashObservationFailure, Currency, FxRate, HistoricalDecimalText,
+    HistoricalSignalQuantity, Holding, HoldingError, HoldingObservation, InstrumentId, Market,
+    MasterInstrument, Money, Portfolio, PortfolioError, PortfolioValuation, Price, ReportedHolding,
+    ReportedPortfolio, Symbol, Timestamp,
 };
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct HistoricalHolding {
+    pub instrument_id: InstrumentId,
     pub market: Market,
     pub symbol: Symbol,
     pub quantity: HistoricalSignalQuantity,
@@ -22,9 +24,64 @@ impl std::fmt::Debug for HistoricalHolding {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+pub struct HistoricalCashMoney(Money);
+
+impl HistoricalCashMoney {
+    pub fn try_new(money: Money) -> Result<Self, PortfolioError> {
+        if money.amount().as_decimal() < rust_decimal::Decimal::ZERO {
+            return Err(PortfolioError::NegativeBuyingPower);
+        }
+        Ok(Self(money))
+    }
+
+    #[must_use]
+    pub fn currency(self) -> Currency {
+        self.0.currency()
+    }
+
+    #[must_use]
+    pub fn display_text(self) -> HistoricalDecimalText {
+        HistoricalDecimalText::from_amount(self.0.amount())
+    }
+
+    pub(crate) const fn from_verified(money: Money) -> Self {
+        Self(money)
+    }
+
+    pub(crate) const fn money(self) -> Money {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for HistoricalCashMoney {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("HistoricalCashMoney([비공개])")
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HistoricalBuyingPowerState {
+    Available(HistoricalCashMoney),
+    NegativeBuyingPower,
+    CashLookupFailed(CashObservationFailure),
+}
+
+impl std::fmt::Debug for HistoricalBuyingPowerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Available(_) => f.write_str("Available([비공개])"),
+            Self::NegativeBuyingPower => f.write_str("NegativeBuyingPower"),
+            Self::CashLookupFailed(failure) => {
+                f.debug_tuple("CashLookupFailed").field(failure).finish()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct HistoricalBuyingPower {
     pub currency: Currency,
-    pub money: Result<Money, PortfolioError>,
+    pub state: HistoricalBuyingPowerState,
     pub observed_at: Timestamp,
 }
 
@@ -59,7 +116,6 @@ impl PartialEq for HistoricalPortfolio {
         let right = &other.0;
         let offset = |value: Timestamp| value.offset_seconds();
         left == right
-            && self.1 == other.1
             && offset(left.krw.observed_at) == offset(right.krw.observed_at)
             && offset(left.usd.observed_at) == offset(right.usd.observed_at)
             && left.reported.map(|value| offset(value.observed_at()))
@@ -83,6 +139,7 @@ impl std::fmt::Debug for HistoricalPortfolio {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HistoricalPortfolioError {
     MasterMissingOrAmbiguous,
+    InstrumentMismatch,
     Master(crate::MasterInstrumentError),
     Holding(HoldingError),
     Portfolio(PortfolioError),
@@ -93,36 +150,27 @@ impl HistoricalBuyingPower {
     fn capture(value: BuyingPower) -> Self {
         Self {
             currency: value.currency(),
-            money: value.money(),
+            state: value.into_historical_state(),
             observed_at: value.observed_at(),
         }
     }
 
     fn replay(self) -> Result<BuyingPower, HistoricalPortfolioError> {
-        BuyingPower::from_historical(self.currency, self.money, self.observed_at)
+        BuyingPower::from_historical(self.currency, self.state, self.observed_at)
             .map_err(HistoricalPortfolioError::Portfolio)
     }
 }
 
 impl HistoricalHolding {
-    fn capture(value: &Holding) -> Self {
-        Self {
-            market: value.instrument().market(),
-            symbol: value.instrument().symbol().clone(),
-            quantity: HistoricalSignalQuantity::new(value.quantity()),
-            acquisition_price: value.acquisition_price(),
-            current_price: value.current_price(),
-            reported: value.reported(),
-            observed_at: value.observed_at(),
-        }
-    }
-
-    fn replay(&self, masters: &[MasterInstrument]) -> Result<Holding, HistoricalPortfolioError> {
+    fn capture(
+        value: &Holding,
+        masters: &[MasterInstrument],
+    ) -> Result<Self, HistoricalPortfolioError> {
         let mut matches = masters.iter().filter(|master| {
-            master.row().symbol == self.symbol
+            master.row().symbol == *value.instrument().symbol()
                 && master
                     .quote_instrument()
-                    .is_ok_and(|quote| Market::from(*quote.market()) == self.market)
+                    .is_ok_and(|quote| Market::from(*quote.market()) == value.instrument().market())
         });
         let master = matches
             .next()
@@ -130,12 +178,39 @@ impl HistoricalHolding {
         if matches.next().is_some() {
             return Err(HistoricalPortfolioError::MasterMissingOrAmbiguous);
         }
-        let instrument = master
-            .order_gate_facts()
-            .and_then(|facts| facts.instrument_for(crate::OrderSide::Sell))
+        Ok(Self {
+            instrument_id: master.row().instrument_id.clone(),
+            market: value.instrument().market(),
+            symbol: value.instrument().symbol().clone(),
+            quantity: HistoricalSignalQuantity::new(value.quantity()),
+            acquisition_price: value.acquisition_price(),
+            current_price: value.current_price(),
+            reported: value.reported(),
+            observed_at: value.observed_at(),
+        })
+    }
+
+    fn replay(&self, masters: &[MasterInstrument]) -> Result<Holding, HistoricalPortfolioError> {
+        let mut matches = masters
+            .iter()
+            .filter(|master| master.row().instrument_id == self.instrument_id);
+        let master = matches
+            .next()
+            .ok_or(HistoricalPortfolioError::MasterMissingOrAmbiguous)?;
+        if matches.next().is_some() {
+            return Err(HistoricalPortfolioError::MasterMissingOrAmbiguous);
+        }
+        let quote = master
+            .quote_instrument()
             .map_err(HistoricalPortfolioError::Master)?;
+        if quote.symbol() != &self.symbol
+            || Market::from(*quote.market()) != self.market
+            || quote.currency() != self.acquisition_price.money().currency()
+        {
+            return Err(HistoricalPortfolioError::InstrumentMismatch);
+        }
         Holding::new(
-            instrument,
+            quote.historical_instrument(),
             self.quantity.quantity(),
             self.acquisition_price,
             HoldingObservation::new(self.current_price, self.reported, self.observed_at),
@@ -145,19 +220,22 @@ impl HistoricalHolding {
 }
 
 impl HistoricalPortfolio {
-    #[must_use]
-    pub fn capture(value: &Portfolio) -> Self {
+    pub fn capture(
+        value: &Portfolio,
+        masters: &[MasterInstrument],
+    ) -> Result<Self, HistoricalPortfolioError> {
+        let holdings = value
+            .holdings()
+            .iter()
+            .map(|holding| HistoricalHolding::capture(holding, masters))
+            .collect::<Result<Vec<_>, _>>()?;
         let facts = HistoricalPortfolioFacts {
-            holdings: value
-                .holdings()
-                .iter()
-                .map(HistoricalHolding::capture)
-                .collect(),
+            holdings,
             krw: HistoricalBuyingPower::capture(value.buying_power(Currency::Krw)),
             usd: HistoricalBuyingPower::capture(value.buying_power(Currency::Usd)),
             reported: value.reported(),
         };
-        Self(facts, value.clone())
+        Ok(Self(facts, value.clone()))
     }
 
     pub fn from_saved_facts(
@@ -174,7 +252,7 @@ impl HistoricalPortfolio {
         if let Some(reported) = facts.reported {
             portfolio = portfolio.with_reported(reported);
         }
-        if Self::capture(&portfolio).0 != facts {
+        if Self::capture(&portfolio, masters)?.0 != facts {
             return Err(HistoricalPortfolioError::ChangedFacts);
         }
         Ok(Self(facts, portfolio))
@@ -185,8 +263,8 @@ impl HistoricalPortfolio {
         &self.0
     }
 
-    pub(crate) const fn portfolio(&self) -> &Portfolio {
-        &self.1
+    pub(crate) fn evaluate(&self, rate: Option<FxRate>) -> PortfolioValuation {
+        self.1.evaluate(rate)
     }
 }
 

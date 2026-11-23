@@ -155,6 +155,7 @@ mod tests {
         let restored = proof.signal.evidence;
         application::SignalRestorationBasis {
             master: proof.master,
+            holding_masters: vec![],
             estimate: restored.estimate,
             commission: restored.commission,
             tax: restored.tax,

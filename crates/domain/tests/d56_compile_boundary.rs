@@ -50,7 +50,7 @@ mod tests {
         ]
     }
 
-    fn history_cases() -> [CompileCase; 7] {
+    fn history_cases() -> [CompileCase; 11] {
         [
             (
                 "historical_holding_quantity",
@@ -78,9 +78,29 @@ mod tests {
                 Some("error[E0308]"),
             ),
             (
-                "past_portfolio",
+                "past_portfolio_removed",
                 "use domain::*; fn check(h: &HistoricalPortfolio) -> &Portfolio { h.portfolio() } fn main() { let _ = check; }",
+                Some("error[E0599]"),
+            ),
+            (
+                "past_portfolio_evaluate",
+                "use domain::*; fn check(h: &HistoricalPortfolio) -> PortfolioValuation { h.evaluate(None) } fn main() { let _ = check; }",
                 Some("error[E0624]"),
+            ),
+            (
+                "past_buying_power_money_field",
+                "use domain::*; fn check(b: HistoricalBuyingPower) { let _ = b.money; } fn main() { let _ = check; }",
+                Some("error[E0609]"),
+            ),
+            (
+                "past_buying_power_into_live",
+                "use domain::*; fn check(b: HistoricalBuyingPower) -> Option<BuyingPower> { match b.state { HistoricalBuyingPowerState::Available(cash) => Some(BuyingPower::new(cash, b.observed_at)), _ => None } } fn main() { let _ = check; }",
+                Some("error[E0308]"),
+            ),
+            (
+                "historical_decimal_not_order_wire",
+                "use domain::*; fn check(q: HistoricalWholeQuantity) -> OrderWireValue { q.display_text() } fn main() { let _ = check; }",
+                Some("error[E0308]"),
             ),
             (
                 "past_classifications",

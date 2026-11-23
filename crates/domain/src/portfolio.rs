@@ -8,27 +8,39 @@ pub enum PortfolioError {
     CashLookupFailed(crate::CashObservationFailure),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuyingPowerAmount {
+    Available(Money),
+    NegativeBuyingPower,
+    CashLookupFailed(crate::CashObservationFailure),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuyingPower {
-    money: Result<Money, PortfolioError>,
+    amount: BuyingPowerAmount,
     currency: Currency,
     observed_at: Timestamp,
 }
 impl BuyingPower {
     #[must_use]
     pub fn new(money: Money, observed_at: Timestamp) -> Self {
-        let value = if money.amount().as_decimal() < rust_decimal::Decimal::ZERO {
-            Err(PortfolioError::NegativeBuyingPower)
+        let amount = if money.amount().as_decimal() < rust_decimal::Decimal::ZERO {
+            BuyingPowerAmount::NegativeBuyingPower
         } else {
-            Ok(money)
+            BuyingPowerAmount::Available(money)
         };
         Self {
-            money: value,
+            amount,
             currency: money.currency(),
             observed_at,
         }
     }
     pub const fn money(self) -> Result<Money, PortfolioError> {
-        self.money
+        match self.amount {
+            BuyingPowerAmount::Available(value) => Ok(value),
+            BuyingPowerAmount::NegativeBuyingPower => Err(PortfolioError::NegativeBuyingPower),
+            BuyingPowerAmount::CashLookupFailed(reason) => {
+                Err(PortfolioError::CashLookupFailed(reason))
+            }
+        }
     }
     #[must_use]
     pub const fn currency(self) -> Currency {
@@ -39,29 +51,47 @@ impl BuyingPower {
         self.observed_at
     }
 
+    pub(crate) const fn into_historical_state(self) -> crate::HistoricalBuyingPowerState {
+        match self.amount {
+            BuyingPowerAmount::Available(value) => crate::HistoricalBuyingPowerState::Available(
+                crate::HistoricalCashMoney::from_verified(value),
+            ),
+            BuyingPowerAmount::NegativeBuyingPower => {
+                crate::HistoricalBuyingPowerState::NegativeBuyingPower
+            }
+            BuyingPowerAmount::CashLookupFailed(reason) => {
+                crate::HistoricalBuyingPowerState::CashLookupFailed(reason)
+            }
+        }
+    }
+
     pub(crate) fn from_historical(
         currency: Currency,
-        money: Result<Money, PortfolioError>,
+        state: crate::HistoricalBuyingPowerState,
         observed_at: Timestamp,
     ) -> Result<Self, PortfolioError> {
-        match money {
-            Ok(value) if value.currency() == currency => {
-                let power = Self::new(value, observed_at);
-                if power.money == money {
-                    Ok(power)
-                } else {
-                    Err(PortfolioError::NegativeBuyingPower)
+        match state {
+            crate::HistoricalBuyingPowerState::Available(cash) => {
+                let value = cash.money();
+                if value.currency() != currency {
+                    return Err(PortfolioError::CurrencyMismatch);
                 }
-            }
-            Ok(_) => Err(PortfolioError::CurrencyMismatch),
-            Err(PortfolioError::NegativeBuyingPower | PortfolioError::CashLookupFailed(_)) => {
                 Ok(Self {
-                    money,
+                    amount: BuyingPowerAmount::Available(value),
                     currency,
                     observed_at,
                 })
             }
-            Err(error) => Err(error),
+            crate::HistoricalBuyingPowerState::NegativeBuyingPower => Ok(Self {
+                amount: BuyingPowerAmount::NegativeBuyingPower,
+                currency,
+                observed_at,
+            }),
+            crate::HistoricalBuyingPowerState::CashLookupFailed(reason) => Ok(Self {
+                amount: BuyingPowerAmount::CashLookupFailed(reason),
+                currency,
+                observed_at,
+            }),
         }
     }
 }
@@ -259,7 +289,7 @@ pub(crate) fn buying_power_from_observation(observation: crate::CashObservation)
             reason,
             observed_at,
         } => BuyingPower {
-            money: Err(PortfolioError::CashLookupFailed(reason)),
+            amount: BuyingPowerAmount::CashLookupFailed(reason),
             currency,
             observed_at,
         },

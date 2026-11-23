@@ -28,6 +28,7 @@ pub struct SignalQuantityCosts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalRestorationBasis {
     pub master: MasterInstrument,
+    pub holding_masters: Vec<MasterInstrument>,
     pub estimate: StoredEstimateEvidence,
     pub commission: CommissionRateFact,
     pub tax: TradeTaxFact,
@@ -91,6 +92,8 @@ pub enum EvaluateSignalError {
     ConcurrentUpdate,
     RestorationUnavailable,
     RestorationValuationMismatch,
+    RestorationMasters(domain::MasterInstrumentError),
+    RestorationPortfolio(domain::HistoricalPortfolioError),
     Restoration(SignalRestoreError),
     RestorationOccurrence(SignalOccurrenceRestoreError),
 }
@@ -491,6 +494,8 @@ fn restoration_evidence(
     if valuation != inputs.valuation {
         return Err(EvaluateSignalError::RestorationValuationMismatch);
     }
+    let combined = combine_masters(&basis.master, &basis.holding_masters)
+        .map_err(EvaluateSignalError::RestorationMasters)?;
     let snapshot = inputs
         .calibration
         .clone()
@@ -507,7 +512,7 @@ fn restoration_evidence(
         source: submission.evidence().cloned(),
         submitted_at: submission.submitted_at(),
         margin: Margin::for_appetite(inputs.policy.profile().risk_appetite()),
-        assessment: historical_context(basis, inputs, sources, now),
+        assessment: historical_context(basis, combined.instruments(), inputs, sources, now)?,
     }
     .capture(&signal, &basis.master)
     .map_err(EvaluateSignalError::Restoration)?;
@@ -517,22 +522,44 @@ fn restoration_evidence(
         .map_err(EvaluateSignalError::RestorationOccurrence)?;
     Ok(Some(SignalCommitEvidence {
         master: basis.master.clone(),
+        holding_masters: basis.holding_masters.clone(),
         signal: evidence,
         occurrence: stored_occurrence,
     }))
 }
 
+fn combine_masters(
+    primary: &MasterInstrument,
+    extras: &[MasterInstrument],
+) -> Result<domain::MasterInstrumentFacts, domain::MasterInstrumentError> {
+    let mut all = vec![primary.clone()];
+    for extra in extras {
+        if !all.iter().any(|existing| {
+            existing == extra
+                && existing.row().observed_at.offset_seconds()
+                    == extra.row().observed_at.offset_seconds()
+        }) {
+            all.push(extra.clone());
+        }
+    }
+    domain::MasterInstrumentFacts::try_new(all)
+}
+
 fn historical_context(
     basis: &SignalRestorationBasis,
+    masters: &[MasterInstrument],
     inputs: &EvaluateSignalInputs,
     sources: &crate::SignalSourceFacts,
     now: Timestamp,
-) -> domain::HistoricalSignalContext {
-    domain::HistoricalSignalContext {
-        portfolio: basis
-            .portfolio
-            .as_ref()
-            .map(domain::HistoricalPortfolio::capture),
+) -> Result<domain::HistoricalSignalContext, EvaluateSignalError> {
+    let portfolio = basis
+        .portfolio
+        .as_ref()
+        .map(|value| domain::HistoricalPortfolio::capture(value, masters))
+        .transpose()
+        .map_err(EvaluateSignalError::RestorationPortfolio)?;
+    Ok(domain::HistoricalSignalContext {
+        portfolio,
         rate: basis.rate,
         policy: inputs.policy.clone(),
         classifications: domain::HistoricalClassifications::capture(
@@ -549,5 +576,5 @@ fn historical_context(
             .as_ref()
             .map(StoredPriceObservation::from_price_observation),
         calibration_head: inputs.calibration_head.clone(),
-    }
+    })
 }

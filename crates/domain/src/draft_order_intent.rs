@@ -1,8 +1,28 @@
 use crate::{
-    AccountId, ClientOrderId, KrOrderPrice, Market, Money, OrderIntent, OrderSide, OrderTerms,
-    OrderValueError, OrderWireValue, Quantity, ResolvedOrderInstrument, SellOrderQuantity, Symbol,
-    UsOrderPrice, UsdOrderAmount, WholeOrderQuantity,
+    AccountId, Amount, ClientOrderId, KrOrderPrice, Market, Money, OrderIntent, OrderSide,
+    OrderTerms, OrderValueError, OrderWireValue, Quantity, ResolvedOrderInstrument,
+    SellOrderQuantity, Symbol, UsOrderPrice, UsdOrderAmount, WholeOrderQuantity,
 };
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct HistoricalDecimalText(String);
+impl std::fmt::Debug for HistoricalDecimalText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("HistoricalDecimalText([비공개])")
+    }
+}
+impl HistoricalDecimalText {
+    pub(crate) fn from_amount(amount: Amount) -> Self {
+        Self(OrderWireValue::from_amount(amount).as_str().to_owned())
+    }
+    pub(crate) fn from_wire(wire: &OrderWireValue) -> Self {
+        Self(wire.as_str().to_owned())
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct HistoricalWholeQuantity(WholeOrderQuantity);
@@ -16,8 +36,8 @@ impl HistoricalWholeQuantity {
         WholeOrderQuantity::try_new(quantity).map(Self)
     }
     #[must_use]
-    pub fn wire_value(self) -> OrderWireValue {
-        self.0.wire_value()
+    pub fn display_text(self) -> HistoricalDecimalText {
+        HistoricalDecimalText::from_wire(&self.0.wire_value())
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -32,8 +52,8 @@ impl HistoricalSellQuantity {
         SellOrderQuantity::try_new(quantity).map(Self)
     }
     #[must_use]
-    pub fn wire_value(self) -> OrderWireValue {
-        self.0.wire_value()
+    pub fn display_text(self) -> HistoricalDecimalText {
+        HistoricalDecimalText::from_wire(&self.0.wire_value())
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,8 +68,8 @@ impl HistoricalOrderAmount {
         UsdOrderAmount::try_new(amount).map(Self)
     }
     #[must_use]
-    pub fn wire_value(self) -> OrderWireValue {
-        self.0.wire_value()
+    pub fn display_text(self) -> HistoricalDecimalText {
+        HistoricalDecimalText::from_wire(&self.0.wire_value())
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,17 +273,15 @@ mod tests {
     }
     #[test]
     fn historical_quantity_and_amount_have_display_but_no_live_value_accessor() {
-        assert_eq!(
-            HistoricalWholeQuantity::try_new(quantity("3"))
-                .expect("정수")
-                .wire_value()
-                .as_str(),
-            "3"
-        );
+        let whole = HistoricalWholeQuantity::try_new(quantity("3"))
+            .expect("정수")
+            .display_text();
+        assert_eq!(whole.as_str(), "3");
+        assert_eq!(format!("{whole:?}"), "HistoricalDecimalText([비공개])");
         assert_eq!(
             HistoricalSellQuantity::try_new(quantity("2.345"))
                 .expect("소수")
-                .wire_value()
+                .display_text()
                 .as_str(),
             "2.345"
         );
@@ -276,7 +294,7 @@ mod tests {
                 .expect("금액")
             )
             .expect("달러")
-            .wire_value()
+            .display_text()
             .as_str(),
             "77.25"
         );

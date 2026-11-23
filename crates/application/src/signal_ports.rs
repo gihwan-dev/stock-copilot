@@ -37,6 +37,7 @@ pub struct SignalSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignalCommitEvidence {
     pub master: MasterInstrument,
+    pub holding_masters: Vec<MasterInstrument>,
     pub signal: StoredSignalEvidence,
     pub occurrence: Option<StoredSignalOccurrence>,
 }

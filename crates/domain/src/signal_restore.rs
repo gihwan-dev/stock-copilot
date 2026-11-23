@@ -55,8 +55,8 @@ impl HistoricalSignalQuantity {
         Self(quantity)
     }
     #[must_use]
-    pub fn wire_value(self) -> crate::OrderWireValue {
-        crate::OrderWireValue::from_amount(crate::Amount::new(self.0.as_decimal()))
+    pub fn display_text(self) -> crate::HistoricalDecimalText {
+        crate::HistoricalDecimalText::from_amount(crate::Amount::new(self.0.as_decimal()))
     }
     pub(crate) const fn quantity(self) -> Quantity {
         self.0
@@ -80,8 +80,8 @@ impl HistoricalSignalLimit {
         self.0.currency()
     }
     #[must_use]
-    pub fn wire_value(self) -> crate::OrderWireValue {
-        crate::OrderWireValue::from_amount(self.0.amount())
+    pub fn display_text(self) -> crate::HistoricalDecimalText {
+        crate::HistoricalDecimalText::from_amount(self.0.amount())
     }
 }
 impl std::fmt::Debug for HistoricalSignalLimit {
@@ -253,10 +253,11 @@ impl SignalRestoreEvidence {
         &self,
         current: &MasterInstrument,
         calibration: &CalibrationSnapshot,
-    ) -> Result<SignalEstimate, SignalRestoreError> {
-        let task = self
+        mode: crate::estimate_restore::MasterReplayMode,
+    ) -> Result<(SignalEstimate, crate::QuoteInstrument), SignalRestoreError> {
+        let (task, quote) = self
             .estimate
-            .replay(current)
+            .replay(current, mode)
             .map_err(SignalRestoreError::Estimate)?;
         let period = EstimateCostPeriod::from_calendar_result(&task, self.maturity)
             .map_err(SignalRestoreError::Cost)?;
@@ -283,16 +284,21 @@ impl SignalRestoreEvidence {
         )
         .map_err(SignalRestoreError::Calibration)?;
         SignalEstimate::create(&eligible, &calibrated, self.margin)
+            .map(|estimate| (estimate, quote))
             .map_err(SignalRestoreError::Preparation)
     }
 
-    fn replay(&self, current: &MasterInstrument) -> Result<RaisedSignal, SignalRestoreError> {
-        let estimate = self.estimate_for(current, &self.calibration)?;
+    fn replay(
+        &self,
+        current: &MasterInstrument,
+        mode: crate::estimate_restore::MasterReplayMode,
+    ) -> Result<RaisedSignal, SignalRestoreError> {
+        let (estimate, quote) = self.estimate_for(current, &self.calibration, mode)?;
         let input = &self.assessment;
         let valuation = input
             .portfolio
             .as_ref()
-            .map(|portfolio| portfolio.portfolio().evaluate(input.rate));
+            .map(|portfolio| portfolio.evaluate(input.rate));
         let (assignments, security) = input
             .classifications
             .replay()
@@ -300,7 +306,14 @@ impl SignalRestoreEvidence {
         let ledger = SignalSourceLedger::new(&input.items, &input.disclosures, &input.tools);
         let target = input
             .target
-            .map(|value| value.replay(current, self.estimate.evidence.side))
+            .map(|value| match mode {
+                crate::estimate_restore::MasterReplayMode::LiveOrderGate => {
+                    value.replay_live(current, self.estimate.evidence.side)
+                }
+                crate::estimate_restore::MasterReplayMode::HistoricalIdentity => {
+                    value.replay_historical(&quote)
+                }
+            })
             .transpose()
             .map_err(SignalRestoreError::Target)?;
         let assessment = SignalAssessmentFacts::new(
@@ -327,7 +340,10 @@ impl SignalRestoreEvidence {
         original: &RaisedSignal,
         current: &MasterInstrument,
     ) -> Result<StoredSignalEvidence, SignalRestoreError> {
-        let rebuilt = self.replay(current)?;
+        let rebuilt = self.replay(
+            current,
+            crate::estimate_restore::MasterReplayMode::LiveOrderGate,
+        )?;
         let actual = SignalDisplayFacts::from_signal(&rebuilt);
         let expected = SignalDisplayFacts::from_signal(original);
         let rebuilt_estimate = signal_estimate(&rebuilt);
@@ -370,7 +386,10 @@ impl StoredSignalEvidence {
         &self,
         current: &MasterInstrument,
     ) -> Result<HistoricalSignal, SignalRestoreError> {
-        let signal = self.evidence.replay(current)?;
+        let signal = self.evidence.replay(
+            current,
+            crate::estimate_restore::MasterReplayMode::HistoricalIdentity,
+        )?;
         if self.evidence != self.original
             || self.evidence.maturity.offset_seconds() != self.original.maturity.offset_seconds()
             || self.evidence.submitted_at.offset_seconds()
@@ -502,8 +521,9 @@ impl StoredSignalOccurrence {
             .signal
             .restore_history(current)
             .map_err(SignalOccurrenceRestoreError::Signal)?;
-        let HistoricalSignal::Buy(buy) = history else {
-            return Err(SignalOccurrenceRestoreError::NotBuy);
+        let buy = match history {
+            HistoricalSignal::Buy(buy) => buy,
+            HistoricalSignal::Sell(_) => return Err(SignalOccurrenceRestoreError::NotBuy),
         };
         let record = crate::BuySignalRecord::from_signal_checked(
             self.id.clone(),
@@ -741,19 +761,8 @@ mod tests {
             maturity,
         }
     }
-    fn eligible_context(
-        master: &MasterInstrument,
-        item: CollectedItem,
-        head: CalibrationLedgerHead,
-    ) -> (
-        Portfolio,
-        SectorAssignments,
-        crate::PolicySecurityFacts,
-        Vec<MarketCalendar>,
-        crate::PriceObservation,
-        HistoricalSignalContext,
-    ) {
-        let portfolio = Portfolio::new(
+    fn eligible_portfolio() -> Portfolio {
+        Portfolio::new(
             vec![],
             BuyingPower::new(
                 Money::parse(
@@ -769,7 +778,21 @@ mod tests {
                 at(61, -18_000),
             ),
         )
-        .expect("포트폴리오");
+        .expect("포트폴리오")
+    }
+    fn eligible_context(
+        master: &MasterInstrument,
+        item: CollectedItem,
+        head: CalibrationLedgerHead,
+    ) -> (
+        Portfolio,
+        SectorAssignments,
+        crate::PolicySecurityFacts,
+        Vec<MarketCalendar>,
+        crate::PriceObservation,
+        HistoricalSignalContext,
+    ) {
+        let portfolio = eligible_portfolio();
         let catalog = SectorCatalog::from_response(vec![], at(61, -18_000)).expect("목록");
         let assignments = SectorAssignments::try_new(vec![
             sector_assignment_from_compositions(master, &catalog, &[]).expect("분류"),
@@ -793,7 +816,10 @@ mod tests {
             .expect("시세");
         let policy = Policy::new(InvestorProfile::default());
         let historical = HistoricalSignalContext {
-            portfolio: Some(HistoricalPortfolio::capture(&portfolio)),
+            portfolio: Some(
+                HistoricalPortfolio::capture(&portfolio, std::slice::from_ref(master))
+                    .expect("포트폴리오 근거"),
+            ),
             rate: None,
             policy,
             classifications: HistoricalClassifications::capture(&assignments, &security),

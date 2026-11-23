@@ -10,7 +10,7 @@ mod tests {
         Volatility,
     };
     use proptest::{
-        prop_assert_eq, sample,
+        sample,
         test_runner::{Config, TestRunner},
     };
 
@@ -99,12 +99,137 @@ mod tests {
         )
         .expect("원래 과제")
     }
+    fn prop_candles_for(instrument_id: &str, low: Price, high: Price) -> Vec<Candle> {
+        (0_i64..61_i64)
+            .map(|day| {
+                let value = if day.checked_rem(2_i64) == Some(0_i64) {
+                    low
+                } else {
+                    high
+                };
+                Candle::try_new(
+                    InstrumentId::try_new(instrument_id).expect("식별자"),
+                    CandleTime::try_new(at(day, 0), CandlePeriod::Daily).expect("일봉"),
+                    PriceAdjustment::Adjusted(AdjustmentBasis::new(at(70, 0))),
+                    Ohlcv::try_new(
+                        value,
+                        value,
+                        value,
+                        value,
+                        Quantity::parse(&NumericInput::try_new("3").expect("입력")).expect("수량"),
+                    )
+                    .expect("봉"),
+                    CandleObservation::new(at(70, 0), CandleStatus::Finalized),
+                )
+                .expect("봉")
+            })
+            .collect()
+    }
+    fn prop_master_for(market: domain::KnownMarket) -> (MasterInstrumentRow, Currency, i32) {
+        let (currency, offset, listing, symbol, detail) = match market {
+            domain::KnownMarket::Kr => (
+                Currency::Krw,
+                32_400_i32,
+                "KOSPI",
+                "005930",
+                Some(domain::KoreanMasterDetail {
+                    liquidation: domain::LiquidationTrading::Regular,
+                    krx: domain::TradingSuspension::Clear,
+                    nxt: domain::NxtTrading::Unsupported,
+                }),
+            ),
+            domain::KnownMarket::Us => (Currency::Usd, -18_000_i32, "NASDAQ", "EXAMPLE", None),
+        };
+        let row = MasterInstrumentRow {
+            listing_market: MasterCode::try_new(listing).expect("시장"),
+            symbol: Symbol::try_new(symbol).expect("심볼"),
+            instrument_id: InstrumentId::try_new("prop-est").expect("식별자"),
+            name: DisplayInstrumentName::try_new("속성 종목").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: detail,
+            observed_at: at(61, offset),
+        };
+        (row, currency, offset)
+    }
+    #[derive(Clone, Copy)]
+    struct EstimateCase {
+        market: domain::KnownMarket,
+        side: OrderSide,
+        selection: HorizonSelection,
+        appetite: RiskAppetite,
+        base: u32,
+        delta: u32,
+    }
+    fn check_estimate_property(case: EstimateCase) {
+        let (master_row, currency, offset) = prop_master_for(case.market);
+        let master = MasterInstrument::try_new(master_row.clone()).expect("조회");
+        let mk_price = |val: u32| {
+            Price::parse(
+                &NumericInput::try_new(&val.to_string()).expect("입력"),
+                currency,
+            )
+            .expect("가격")
+        };
+        let step = case
+            .base
+            .checked_mul(case.delta)
+            .expect("변동폭")
+            .checked_div(10_000)
+            .expect("비율")
+            .max(1);
+        let low = mk_price(case.base);
+        let high = mk_price(case.base.checked_add(step).expect("고가"));
+        let ref_price = mk_price(
+            case.base
+                .checked_add(step.checked_div(2).expect("중간").max(1))
+                .expect("기준"),
+        );
+        let input = EstimateRestoreEvidence {
+            master: master_row,
+            side: case.side,
+            candles: prop_candles_for("prop-est", low, high),
+            reference_price: ref_price,
+            reference_at: at(61, offset),
+            task_at: at(61, offset),
+            horizon: Horizon::new(case.selection),
+            permission: HoursPermissionState::Disabled,
+            appetite: case.appetite,
+        };
+        let task = EstimateTask::create(
+            EstimateContext::new(
+                master
+                    .price_observation_for(case.side, ref_price, at(61, offset))
+                    .expect("시세"),
+                at(61, offset),
+            ),
+            Volatility::calculate(&input.candles).expect("변동성"),
+            input.horizon,
+            HoursPermission::default(),
+            case.appetite,
+        )
+        .expect("원래 과제");
+        let saved = input.capture(&task, &master).expect("근거 수집");
+        let historical = saved.restore_history(&master).expect("과거 판정");
+        assert_eq!(historical.reference_price(), task.reference().price());
+        assert_eq!(historical.created_at(), task.created_at());
+        assert_eq!(historical.horizon(), task.horizon());
+        assert_eq!(historical.target(), task.target());
+        assert_eq!(historical.stop(), task.stop());
+        assert_eq!(historical.base_probability(), task.base_probability());
+    }
     #[test]
     fn replay_preserves_independently_created_task_facts() {
         let mut runner = TestRunner::new(Config::with_cases(testkit::property_cases()));
         runner
             .run(
                 &(
+                    sample::select(vec![domain::KnownMarket::Kr, domain::KnownMarket::Us]),
+                    sample::select(vec![OrderSide::Buy, OrderSide::Sell]),
                     sample::select(vec![
                         HorizonSelection::FewDays,
                         HorizonSelection::WeeksToMonths,
@@ -115,19 +240,18 @@ mod tests {
                         RiskAppetite::Neutral,
                         RiskAppetite::Aggressive,
                     ]),
+                    200_u32..=2000_u32,
+                    50_u32..=400_u32,
                 ),
-                |(selection, appetite)| {
-                    let input = evidence(selection, appetite);
-                    let master = MasterInstrument::try_new(row()).expect("현재 조회");
-                    let original = original(&input, &master);
-                    let saved = input.capture(&original, &master).expect("근거 수집");
-                    let historical = saved.restore_history(&master).expect("과거 판정");
-                    prop_assert_eq!(historical.reference_price(), original.reference().price());
-                    prop_assert_eq!(historical.created_at(), original.created_at());
-                    prop_assert_eq!(historical.horizon(), original.horizon());
-                    prop_assert_eq!(historical.target(), original.target());
-                    prop_assert_eq!(historical.stop(), original.stop());
-                    prop_assert_eq!(historical.base_probability(), original.base_probability());
+                |(market, side, selection, appetite, base, delta)| {
+                    check_estimate_property(EstimateCase {
+                        market,
+                        side,
+                        selection,
+                        appetite,
+                        base,
+                        delta,
+                    });
                     Ok(())
                 },
             )
@@ -442,9 +566,13 @@ mod tests {
             .price_observation(price("105"), at(61, -18_000))
             .expect("시세");
         domain::HistoricalSignalContext {
-            portfolio: Some(domain::HistoricalPortfolio::capture(&signal_portfolio(
-                master, percent,
-            ))),
+            portfolio: Some(
+                domain::HistoricalPortfolio::capture(
+                    &signal_portfolio(master, percent),
+                    std::slice::from_ref(master),
+                )
+                .expect("포트폴리오 근거"),
+            ),
             rate: None,
             policy: domain::Policy::new(domain::InvestorProfile::default()),
             classifications: domain::HistoricalClassifications::capture(&assignments, &security),
@@ -605,7 +733,7 @@ mod tests {
             domain::HistoricalSignalQuantity::new(sell.held_quantity())
         );
         assert_eq!(
-            quantity.wire_value().as_str(),
+            quantity.display_text().as_str(),
             sell.held_quantity().as_decimal().to_string()
         );
         assert_eq!(observed_at, sell.observed_at());
@@ -653,11 +781,12 @@ mod tests {
             Quantity::parse(&NumericInput::try_new("17.125").expect("입력")).expect("수량"),
         );
         let limit = domain::HistoricalSignalLimit::new(money("1357.89", Currency::Krw));
-        assert_eq!(quantity.wire_value().as_str(), "17.125");
-        assert_eq!(limit.wire_value().as_str(), "1357.89");
+        assert_eq!(quantity.display_text().as_str(), "17.125");
+        assert_eq!(limit.display_text().as_str(), "1357.89");
         assert_eq!(limit.currency(), Currency::Krw);
         assert!(!format!("{quantity:?}").contains("17.125"));
         assert!(!format!("{limit:?}").contains("1357.89"));
+        assert!(!format!("{:?}", quantity.display_text()).contains("17.125"));
     }
     #[test]
     fn signal_history_rejects_missing_source_or_changed_calibration() {
@@ -1194,7 +1323,7 @@ mod tests {
             domain::HistoricalSignalDirection::Buy { limit } => limit,
             domain::HistoricalSignalDirection::Sell { .. } => panic!("매수 신호"),
         };
-        let value = limit.wire_value();
+        let value = limit.display_text();
         assert!(!format!("{saved_signal:?}").contains(value.as_str()));
         let portfolio = saved_signal
             .evidence
@@ -1203,8 +1332,14 @@ mod tests {
             .as_ref()
             .expect("포트");
         let cash = portfolio.facts().krw;
-        let cash_text = cash.money.expect("현금").amount().as_decimal().to_string();
-        assert!(!format!("{cash:?}").contains(&cash_text));
+        let cash_text = match cash.state {
+            domain::HistoricalBuyingPowerState::Available(cash_money) => cash_money.display_text(),
+            domain::HistoricalBuyingPowerState::NegativeBuyingPower
+            | domain::HistoricalBuyingPowerState::CashLookupFailed(_) => panic!("현금"),
+        };
+        assert!(!format!("{cash:?}").contains(cash_text.as_str()));
+        assert!(!format!("{:?}", cash.state).contains(cash_text.as_str()));
+        assert!(!format!("{cash_text:?}").contains(cash_text.as_str()));
         let (sell, input, sell_master) = signal_fixture("1");
         let history = input
             .capture(&sell, &sell_master)
@@ -1248,37 +1383,161 @@ mod tests {
         invalid.restore(&master).expect_err("손상 거부");
     }
 
-    fn check_proposal_property(seconds: u64, current_value: u32) {
-        let (old, estimate, master, _, card) = draft_fixture();
-        let lifetime =
-            domain::ProposalLifetime::try_new(domain::SpanSeconds::new(seconds)).expect("기간");
-        let quantity = domain::WholeOrderQuantity::try_new(
+    #[derive(Debug, Clone, Copy)]
+    enum PropOrderKind {
+        KrLimitBuy,
+        KrMarketSell,
+        UsLimitBuy,
+        UsMarketBuy,
+        UsMarketSell,
+        UsMarketAmountBuy,
+    }
+    #[derive(Debug, Clone, Copy)]
+    enum ExpiryWindow {
+        BeforeExpiry,
+        AtExpiry,
+    }
+    #[derive(Clone, Copy)]
+    struct ProposalCase {
+        kind: PropOrderKind,
+        account: i64,
+        seconds: u64,
+        card_value: u32,
+        current_value: u32,
+        identified: domain::StoredPriceIdentity,
+        window: ExpiryWindow,
+    }
+    fn prop_order_terms(kind: PropOrderKind) -> domain::OrderTerms {
+        let whole = domain::WholeOrderQuantity::try_new(
             Quantity::parse(&NumericInput::try_new("7").expect("입력")).expect("수량"),
         )
         .expect("정수");
+        match kind {
+            PropOrderKind::KrLimitBuy => domain::OrderTerms::KrLimit {
+                side: OrderSide::Buy,
+                quantity: whole,
+                price: domain::KrOrderPrice::try_new(
+                    Price::parse(
+                        &NumericInput::try_new("51000").expect("입력"),
+                        Currency::Krw,
+                    )
+                    .expect("가격"),
+                )
+                .expect("호가"),
+            },
+            PropOrderKind::KrMarketSell => domain::OrderTerms::KrMarket {
+                side: OrderSide::Sell,
+                quantity: whole,
+            },
+            PropOrderKind::UsLimitBuy => domain::OrderTerms::UsLimit {
+                side: OrderSide::Buy,
+                quantity: whole,
+                price: domain::UsOrderPrice::try_new(price("105.25")).expect("달러 가격"),
+            },
+            PropOrderKind::UsMarketBuy => domain::OrderTerms::UsMarketBuy { quantity: whole },
+            PropOrderKind::UsMarketSell => domain::OrderTerms::UsMarketSell {
+                quantity: domain::SellOrderQuantity::try_new(
+                    Quantity::parse(&NumericInput::try_new("2.5").expect("입력")).expect("수량"),
+                )
+                .expect("매도 수량"),
+            },
+            PropOrderKind::UsMarketAmountBuy => domain::OrderTerms::UsMarketAmountBuy {
+                amount: domain::UsdOrderAmount::try_new(money("250.50", Currency::Usd))
+                    .expect("금액"),
+            },
+        }
+    }
+    fn prop_market_fixture(
+        kind: PropOrderKind,
+    ) -> (
+        Currency,
+        i32,
+        MasterInstrument,
+        domain::StoredEstimateEvidence,
+        EstimateTask,
+    ) {
+        match kind {
+            PropOrderKind::KrLimitBuy | PropOrderKind::KrMarketSell => {
+                let cost = kr_signal_cost_fixture();
+                let task = cost.eligible.task().clone();
+                (Currency::Krw, 32_400_i32, cost.master, cost.stored, task)
+            }
+            PropOrderKind::UsLimitBuy
+            | PropOrderKind::UsMarketBuy
+            | PropOrderKind::UsMarketSell
+            | PropOrderKind::UsMarketAmountBuy => {
+                let ev = evidence(HorizonSelection::FewDays, RiskAppetite::Neutral);
+                let master = MasterInstrument::try_new(row()).expect("조회");
+                let task = original(&ev, &master);
+                let stored = ev.capture(&task, &master).expect("과제");
+                (Currency::Usd, -18_000_i32, master, stored, task)
+            }
+        }
+    }
+    fn prop_price_for(currency: Currency, value: u32) -> Price {
+        let scaled = match currency {
+            Currency::Krw => value.checked_mul(500).expect("원화"),
+            Currency::Usd => value,
+        };
+        Price::parse(
+            &NumericInput::try_new(&scaled.to_string()).expect("입력"),
+            currency,
+        )
+        .expect("가격")
+    }
+    fn check_proposal_property(case: ProposalCase) {
+        let (currency, offset, master, estimate, base_task) = prop_market_fixture(case.kind);
+        let card_price = prop_price_for(currency, case.card_value);
+        let card = match case.identified {
+            domain::StoredPriceIdentity::Identified => master
+                .price_observation(card_price, at(61, offset))
+                .expect("식별 시세"),
+            domain::StoredPriceIdentity::Unidentified => {
+                domain::PriceObservation::from_quote_parts(
+                    master.order_instrument().expect("종목"),
+                    card_price,
+                    at(61, offset),
+                )
+                .expect("미식별 시세")
+            }
+        };
+        let id = domain::ProposalId::new(
+            domain::ClientOrderId::try_new(&format!("prop-{}", case.account)).expect("ID"),
+        );
+        let lifetime = domain::ProposalLifetime::try_new(domain::SpanSeconds::new(case.seconds))
+            .expect("기간");
+        let range =
+            domain::ProposalPriceRange::from_estimate_task(base_task.range_facts(), card.clone())
+                .expect("범위");
         let intent = domain::OrderIntent::new(
-            domain::AccountId::new(418),
+            domain::AccountId::new(case.account),
             master.order_instrument().expect("종목"),
-            old.id().as_client_order_id().clone(),
-            domain::OrderTerms::UsMarketBuy { quantity },
+            id.as_client_order_id().clone(),
+            prop_order_terms(case.kind),
         )
         .expect("주문");
-        let original = domain::Proposal::new(
-            old.id().clone(),
-            intent,
-            old.created_at(),
-            old.price_range().clone(),
-            lifetime,
-        )
-        .expect("초안");
+        let original =
+            domain::Proposal::new(id, intent, at(61, offset), range, lifetime).expect("초안");
         let saved =
             domain::DraftRestoreEvidence::capture(&original, estimate, &master, lifetime, &card)
                 .expect("근거 수집");
         let restored = saved.restore(&master).expect("초안 복원");
         let current = master
-            .price_observation(price(&current_value.to_string()), at(61, -18_000))
+            .price_observation(prop_price_for(currency, case.current_value), at(61, offset))
             .expect("시세");
-        let now = shifted(61, seconds);
+        let eval_seconds = match case.window {
+            ExpiryWindow::BeforeExpiry => case.seconds.saturating_sub(1),
+            ExpiryWindow::AtExpiry => case.seconds,
+        };
+        let now = at(61, offset)
+            .checked_add(
+                domain::TimeSpan::try_new(
+                    domain::SpanSeconds::new(eval_seconds),
+                    Nanosecond::new(0),
+                )
+                .expect("기간"),
+            )
+            .expect("시각");
         assert_eq!(restored.id(), original.id());
         assert_eq!(restored.intent(), original.intent());
         assert_eq!(restored.expires_at(), original.expires_at());
@@ -1288,18 +1547,95 @@ mod tests {
             original.report(now, &current)
         );
     }
-    fn check_signal_property(percentage: &str) {
-        let (signal, input, master) = signal_fixture(percentage);
-        let history = input
-            .capture(&signal, &master)
-            .expect("신호 저장")
-            .restore_history(&master)
-            .expect("신호 복원");
-        let (side, facts) = match &signal {
-            domain::RaisedSignal::Buy(value) => (OrderSide::Buy, value.facts()),
-            domain::RaisedSignal::Sell(value) => (OrderSide::Sell, value.facts()),
+    fn signal_cost_for_appetite(appetite: RiskAppetite) -> SignalCostFixture {
+        let mut input = evidence(HorizonSelection::FewDays, appetite);
+        input.master.security_type =
+            MasterSecurityType::from_code(MasterCode::try_new("ETF").expect("유형"));
+        let master = MasterInstrument::try_new(input.master.clone()).expect("조회");
+        let task = original(&input, &master);
+        let stored = input.capture(&task, &master).expect("과제 근거");
+        let zero = domain::CostRate::try_new(
+            domain::Ratio::parse(&NumericInput::try_new("0").expect("입력")).expect("비율"),
+        )
+        .expect("요율");
+        let commission = domain::CommissionRateFact::from_commissions_result(
+            domain::Market::Us,
+            zero,
+            domain::CommissionValidity::try_new(None, None).expect("기간"),
+        );
+        let tax = domain::TradeTaxFact::from_schedule_result(domain::Market::Us, zero, zero);
+        let maturity = shifted(67, 25_200);
+        let cost = domain::TradeCost::from_facts(
+            Some(commission.clone()),
+            Some(tax.clone()),
+            domain::EstimateCostPeriod::from_calendar_result(&task, maturity).expect("기간"),
+        )
+        .expect("비용");
+        let eligible = domain::CostEligibleTask::assess(task, &cost).expect("적격");
+        SignalCostFixture {
+            master,
+            stored,
+            eligible,
+            commission,
+            tax,
+            maturity,
+        }
+    }
+    fn prop_signal_portfolio(
+        master: &MasterInstrument,
+        side: OrderSide,
+        cash_units: u32,
+        held_shares: u32,
+    ) -> domain::Portfolio {
+        let holdings = match side {
+            OrderSide::Buy => vec![],
+            OrderSide::Sell => vec![
+                domain::Holding::new(
+                    master.order_instrument().expect("종목"),
+                    Quantity::parse(
+                        &NumericInput::try_new(&held_shares.to_string()).expect("입력"),
+                    )
+                    .expect("수량"),
+                    domain::AcquisitionPrice::try_new(money("90", Currency::Usd)).expect("원가"),
+                    domain::HoldingObservation::new(Some(price("104")), None, at(61, -18_000)),
+                )
+                .expect("보유"),
+            ],
         };
-        assert_eq!(history.side(), side);
+        let krw_cash = u64::from(cash_units).checked_mul(10_000).expect("현금");
+        domain::Portfolio::new(
+            holdings,
+            domain::BuyingPower::new(money(&krw_cash.to_string(), Currency::Krw), at(61, -18_000)),
+            domain::BuyingPower::new(money("0", Currency::Usd), at(61, -18_000)),
+        )
+        .expect("포트")
+    }
+    fn assert_signal_roundtrip(
+        signal: &domain::RaisedSignal,
+        saved: domain::StoredSignalEvidence,
+        master: &MasterInstrument,
+        cals: &[domain::MarketCalendar],
+        occ_tag: &str,
+    ) {
+        let history = saved.restore_history(master).expect("신호 복원");
+        let (expected_side, facts, decision) = match signal {
+            domain::RaisedSignal::Buy(value) => (
+                OrderSide::Buy,
+                value.facts(),
+                domain::SignalDecision::Buy(value.clone()),
+            ),
+            domain::RaisedSignal::Sell(value) => (
+                OrderSide::Sell,
+                value.facts(),
+                domain::SignalDecision::Sell(value.clone()),
+            ),
+        };
+        assert_eq!(history.side(), expected_side);
+        assert_eq!(history.display_facts(), saved.expected);
+        assert_eq!(
+            domain::signal_transition_from_history(Some(&history), &decision),
+            domain::signal_transition(Some(signal), &decision)
+        );
         assert_eq!(
             history.display_probability().expect("복원 확률"),
             facts.display_probability().expect("원래 확률")
@@ -1314,15 +1650,161 @@ mod tests {
                 facts.thresholds().display(kind).expect("원래 임계값")
             );
         }
+        if let domain::RaisedSignal::Buy(buy) = signal {
+            let record = domain::BuySignalRecord::from_signal_checked(
+                domain::BuySignalOccurrenceId::try_new(occ_tag).expect("ID"),
+                buy,
+                at(61, -18_000),
+                cals,
+            )
+            .expect("발생");
+            let stored_occ =
+                domain::StoredSignalOccurrence::capture(&record, saved, master).expect("이력 근거");
+            let restored_occ = stored_occ.restore(master).expect("이력 복원");
+            assert_eq!(restored_occ.interval(), record.interval());
+            assert_eq!(restored_occ.raised_at(), record.raised_at());
+        }
+    }
+    fn assess_prop_signal(
+        cost_fix: &SignalCostFixture,
+        model: &SignalModelFixture,
+        portfolio: &domain::Portfolio,
+        cals: &[domain::MarketCalendar],
+    ) -> (domain::RaisedSignal, domain::HistoricalSignalContext) {
+        let master = &cost_fix.master;
+        let valuation = portfolio.evaluate(None);
+        let (assignments, security) = signal_classifications(master);
+        let target = master
+            .price_observation(price("105"), at(61, -18_000))
+            .expect("시세");
+        let assessment = domain::HistoricalSignalContext {
+            portfolio: Some(
+                domain::HistoricalPortfolio::capture(portfolio, std::slice::from_ref(master))
+                    .expect("포트폴리오 근거"),
+            ),
+            rate: None,
+            policy: domain::Policy::new(domain::InvestorProfile::default()),
+            classifications: domain::HistoricalClassifications::capture(&assignments, &security),
+            items: vec![model.item.clone()],
+            disclosures: vec![],
+            tools: vec![],
+            calendars: cals.to_vec(),
+            evaluated_at: at(61, -18_000),
+            target: Some(domain::StoredPriceObservation::from_price_observation(
+                &target,
+            )),
+            calibration_head: Some(model.head.clone()),
+        };
+        let ledger = domain::SignalSourceLedger::new(&assessment.items, &[], &[]);
+        let facts_ctx = domain::SignalAssessmentFacts::new(
+            domain::SignalTiming::new(assessment.evaluated_at, cals),
+            Some(target),
+            Some(model.head.clone()),
+        );
+        let context = domain::SignalContext::new(
+            Some(&valuation),
+            &assessment.policy,
+            (&assignments, &security),
+            &ledger,
+            facts_ctx,
+        );
+        let signal = domain::SignalDecision::assess(&model.estimate, &context)
+            .into_signal()
+            .expect("신호");
+        (signal, assessment)
+    }
+    fn check_signal_property(
+        appetite: RiskAppetite,
+        side: OrderSide,
+        prob_offset: u8,
+        cash_units: u32,
+        held_shares: u32,
+    ) {
+        let prob_value = match side {
+            OrderSide::Buy => 95_u8.checked_add(prob_offset).expect("매수 확률"),
+            OrderSide::Sell => 1_u8.checked_add(prob_offset).expect("매도 확률"),
+        };
+        let cost_fix = signal_cost_for_appetite(appetite);
+        let master = cost_fix.master.clone();
+        let model = signal_model_fixture(&cost_fix, &prob_value.to_string());
+        let portfolio = prop_signal_portfolio(&master, side, cash_units, held_shares);
+        let cals = calendars();
+        let (signal, assessment) = assess_prop_signal(&cost_fix, &model, &portfolio, &cals);
+        let saved = domain::SignalRestoreEvidence {
+            estimate: cost_fix.stored,
+            commission: cost_fix.commission,
+            tax: cost_fix.tax,
+            maturity: cost_fix.maturity,
+            calibration: model.snapshot,
+            calibration_key: model.key,
+            probability: model.probability,
+            source: Some(model.source),
+            submitted_at: at(61, -18_000),
+            margin: model.margin,
+            assessment,
+        }
+        .capture(&signal, &master)
+        .expect("신호 저장");
+        assert_signal_roundtrip(
+            &signal,
+            saved,
+            &master,
+            &cals,
+            &format!("occ-{prob_value}-{cash_units}"),
+        );
     }
     #[test]
     fn proposal_and_signal_roundtrip_property_preserves_behavior() {
+        let kinds = vec![
+            PropOrderKind::KrLimitBuy,
+            PropOrderKind::KrMarketSell,
+            PropOrderKind::UsLimitBuy,
+            PropOrderKind::UsMarketBuy,
+            PropOrderKind::UsMarketSell,
+            PropOrderKind::UsMarketAmountBuy,
+        ];
+        let appetites = vec![
+            RiskAppetite::Conservative,
+            RiskAppetite::Neutral,
+            RiskAppetite::Aggressive,
+        ];
         TestRunner::new(Config::with_cases(testkit::property_cases()))
             .run(
-                &(1_u64..=600, 50_u32..200, sample::select(vec!["1", "99"])),
-                |(seconds, current_value, percentage)| {
-                    check_proposal_property(seconds, current_value);
-                    check_signal_property(percentage);
+                &(
+                    (
+                        sample::select(kinds),
+                        1_i64..=9_999_i64,
+                        1_u64..=600_u64,
+                        80_u32..=140_u32,
+                        50_u32..=200_u32,
+                        sample::select(vec![
+                            domain::StoredPriceIdentity::Identified,
+                            domain::StoredPriceIdentity::Unidentified,
+                        ]),
+                        sample::select(vec![ExpiryWindow::BeforeExpiry, ExpiryWindow::AtExpiry]),
+                    ),
+                    (
+                        sample::select(appetites),
+                        sample::select(vec![OrderSide::Buy, OrderSide::Sell]),
+                        0_u8..=4_u8,
+                        10_u32..=500_u32,
+                        1_u32..=50_u32,
+                    ),
+                ),
+                |(
+                    (kind, account, seconds, card_value, current_value, identified, window),
+                    (appetite, side, prob_offset, cash_units, held_shares),
+                )| {
+                    check_proposal_property(ProposalCase {
+                        kind,
+                        account,
+                        seconds,
+                        card_value,
+                        current_value,
+                        identified,
+                        window,
+                    });
+                    check_signal_property(appetite, side, prob_offset, cash_units, held_shares);
                     Ok(())
                 },
             )
@@ -1479,6 +1961,14 @@ mod tests {
         bad_ref.reference_at = at(61, 0);
         assert_eq!(
             bad_ref.capture(&task, &master),
+            Err(EstimateRestoreError::CurrentMaster(
+                domain::MasterInstrumentError::InvalidPriceObservation
+            ))
+        );
+        let mut stored_bad_ref = input.capture(&task, &master).expect("저장");
+        stored_bad_ref.evidence.reference_at = at(61, 0);
+        assert_eq!(
+            stored_bad_ref.restore_history(&master),
             Err(EstimateRestoreError::CurrentMaster(
                 domain::MasterInstrumentError::InvalidPriceObservation
             ))
@@ -1731,53 +2221,59 @@ mod tests {
     #[test]
     fn historical_portfolio_covers_reported_and_master_errors() {
         let (_, _, master) = signal_fixture("1");
-        let base_portfolio = signal_portfolio(&master, "1");
         let amounts = domain::CurrencyAmounts::new(
             money("1000000", Currency::Krw),
             Some(money("416", Currency::Usd)),
         )
         .expect("통화 금액");
         let reported = domain::ReportedPortfolio::new(amounts, amounts, amounts, at(61, -18_000));
-        let hist = domain::HistoricalPortfolio::capture(&base_portfolio.with_reported(reported));
+        let hist = domain::HistoricalPortfolio::capture(
+            &signal_portfolio(&master, "1").with_reported(reported),
+            std::slice::from_ref(&master),
+        )
+        .expect("과거 포트폴리오");
         assert!(!format!("{hist:?}").contains("1000000"));
         assert!(!format!("{:?}", hist.facts()).contains("1000000"));
         assert!(!format!("{:?}", hist.facts().holdings[0]).contains("90"));
-        let rebuilt = domain::HistoricalPortfolio::from_saved_facts(
-            hist.facts().clone(),
-            std::slice::from_ref(&master),
-        )
-        .expect("보고 포함 복원");
-        assert_eq!(rebuilt, hist);
-        let mut diff_rep_facts = hist.facts().clone();
-        diff_rep_facts.reported = Some(domain::ReportedPortfolio::new(
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                hist.facts().clone(),
+                std::slice::from_ref(&master),
+            ),
+            Ok(hist.clone())
+        );
+        let mut diff_rep = hist.facts().clone();
+        diff_rep.reported = Some(domain::ReportedPortfolio::new(
             amounts,
             amounts,
             amounts,
             with_offset(at(61, -18_000), -14_400),
         ));
-        let diff_rep = domain::HistoricalPortfolio::from_saved_facts(
-            diff_rep_facts,
-            std::slice::from_ref(&master),
-        )
-        .expect("다른 오프셋 보고");
-        assert_ne!(diff_rep, hist);
-        let mut delisted_row = master.row().clone();
-        delisted_row.listing_status = ListingStatus::Delisted;
-        let delisted = MasterInstrument::try_new(delisted_row).expect("폐지");
+        assert_ne!(
+            domain::HistoricalPortfolio::from_saved_facts(diff_rep, std::slice::from_ref(&master))
+                .expect("다른 오프셋 보고"),
+            hist
+        );
+        let mut delisted = master.row().clone();
+        delisted.listing_status = ListingStatus::Delisted;
+        let delisted_master = MasterInstrument::try_new(delisted).expect("폐지");
         assert_eq!(
-            domain::HistoricalPortfolio::from_saved_facts(
-                hist.facts().clone(),
-                std::slice::from_ref(&delisted),
-            ),
+            domain::HistoricalPortfolio::from_saved_facts(hist.facts().clone(), &[delisted_master]),
+            Ok(hist.clone())
+        );
+        let mut unknown = master.row().clone();
+        unknown.listing_market = MasterCode::try_new("XETRA").expect("미지");
+        let unknown_master = MasterInstrument::try_new(unknown).expect("미지");
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(hist.facts().clone(), &[unknown_master]),
             Err(domain::HistoricalPortfolioError::Master(
-                domain::MasterInstrumentError::NotListed
+                domain::MasterInstrumentError::UnknownMarket
             ))
         );
-        let mut dup_facts = hist.facts().clone();
-        let first_h = dup_facts.holdings[0].clone();
-        dup_facts.holdings.push(first_h);
+        let mut dup = hist.facts().clone();
+        dup.holdings.push(dup.holdings[0].clone());
         assert_eq!(
-            domain::HistoricalPortfolio::from_saved_facts(dup_facts, std::slice::from_ref(&master)),
+            domain::HistoricalPortfolio::from_saved_facts(dup, &[master]),
             Err(domain::HistoricalPortfolioError::Portfolio(
                 domain::PortfolioError::DuplicateInstrument
             ))
@@ -1786,9 +2282,13 @@ mod tests {
     #[test]
     fn historical_portfolio_covers_buying_power_variants_and_unsorted_facts() {
         let (_, _, master) = signal_fixture("1");
-        let base_facts = domain::HistoricalPortfolio::capture(&signal_portfolio(&master, "1"))
-            .facts()
-            .clone();
+        let base_facts = domain::HistoricalPortfolio::capture(
+            &signal_portfolio(&master, "1"),
+            std::slice::from_ref(&master),
+        )
+        .expect("과거 포트폴리오")
+        .facts()
+        .clone();
         let mut bad_usd = base_facts.clone();
         bad_usd.usd.currency = Currency::Krw;
         assert_eq!(
@@ -1797,39 +2297,64 @@ mod tests {
                 domain::PortfolioError::CurrencyMismatch
             ))
         );
-        let mut neg_ok = base_facts.clone();
-        neg_ok.krw.money = Ok(money("-100", Currency::Krw));
         assert_eq!(
-            domain::HistoricalPortfolio::from_saved_facts(neg_ok, std::slice::from_ref(&master)),
+            domain::HistoricalCashMoney::try_new(money("-100", Currency::Krw)),
+            Err(domain::PortfolioError::NegativeBuyingPower)
+        );
+        let zero_cash =
+            domain::HistoricalCashMoney::try_new(money("0", Currency::Krw)).expect("영원");
+        assert_eq!(zero_cash.currency(), Currency::Krw);
+        assert_eq!(zero_cash.display_text().as_str(), "0");
+        assert_eq!(format!("{zero_cash:?}"), "HistoricalCashMoney([비공개])");
+        let mut wrong_cash = base_facts.clone();
+        wrong_cash.krw.state = domain::HistoricalBuyingPowerState::Available(
+            domain::HistoricalCashMoney::try_new(money("100", Currency::Usd)).expect("달러"),
+        );
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                wrong_cash,
+                std::slice::from_ref(&master)
+            ),
             Err(domain::HistoricalPortfolioError::Portfolio(
-                domain::PortfolioError::NegativeBuyingPower
+                domain::PortfolioError::CurrencyMismatch
             ))
         );
-        let mut err_preserved = base_facts.clone();
-        err_preserved.krw.money = Err(domain::PortfolioError::NegativeBuyingPower);
-        err_preserved.usd.money = Err(domain::PortfolioError::CashLookupFailed(
+        let mut err_preserved = base_facts;
+        err_preserved.krw.state = domain::HistoricalBuyingPowerState::NegativeBuyingPower;
+        err_preserved.usd.state = domain::HistoricalBuyingPowerState::CashLookupFailed(
             domain::CashObservationFailure::NotFound(domain::CashMissingData::Stock),
-        ));
-        let preserved = domain::HistoricalPortfolio::from_saved_facts(
-            err_preserved.clone(),
+        );
+        assert_eq!(
+            format!("{:?}", err_preserved.krw.state),
+            "NegativeBuyingPower"
+        );
+        assert!(format!("{:?}", err_preserved.usd.state).starts_with("CashLookupFailed("));
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                err_preserved.clone(),
+                std::slice::from_ref(&master),
+            )
+            .expect("오류 현금 보존")
+            .facts(),
+            &err_preserved
+        );
+    }
+    #[test]
+    fn historical_portfolio_rejects_unsorted_holdings_facts() {
+        let (_, _, master) = signal_fixture("1");
+        let mut unsorted = domain::HistoricalPortfolio::capture(
+            &signal_portfolio(&master, "1"),
             std::slice::from_ref(&master),
         )
-        .expect("오류 현금 보존");
-        assert_eq!(preserved.facts(), &err_preserved);
-        let mut bad_err = base_facts.clone();
-        bad_err.krw.money = Err(domain::PortfolioError::DuplicateInstrument);
-        assert_eq!(
-            domain::HistoricalPortfolio::from_saved_facts(bad_err, std::slice::from_ref(&master)),
-            Err(domain::HistoricalPortfolioError::Portfolio(
-                domain::PortfolioError::DuplicateInstrument
-            ))
-        );
+        .expect("과거 포트폴리오")
+        .facts()
+        .clone();
         let mut second_row = master.row().clone();
         second_row.symbol = Symbol::try_new("AAA").expect("심볼");
         second_row.instrument_id = InstrumentId::try_new("sample-aaa").expect("ID");
         let second_master = MasterInstrument::try_new(second_row).expect("둘째 마스터");
-        let mut unsorted = base_facts;
         let mut second_holding = unsorted.holdings[0].clone();
+        second_holding.instrument_id = InstrumentId::try_new("sample-aaa").expect("ID");
         second_holding.symbol = Symbol::try_new("AAA").expect("심볼");
         unsorted.holdings.push(second_holding);
         assert_eq!(
@@ -2073,7 +2598,13 @@ mod tests {
             )
             .expect("시세");
         let historical = domain::HistoricalSignalContext {
-            portfolio: Some(domain::HistoricalPortfolio::capture(&portfolio)),
+            portfolio: Some(
+                domain::HistoricalPortfolio::capture(
+                    &portfolio,
+                    std::slice::from_ref(&cost.master),
+                )
+                .expect("포트폴리오 근거"),
+            ),
             rate: None,
             policy: domain::Policy::new(domain::InvestorProfile::default()),
             classifications: domain::HistoricalClassifications::capture(&assignments, &security),
@@ -2297,6 +2828,646 @@ mod tests {
                 &input.assessment.calendars,
                 std::slice::from_ref(&record),
             )
+        );
+    }
+
+    fn non_tradable_kr_masters(base: &MasterInstrument) -> Vec<MasterInstrument> {
+        let mut suspended = base.row().clone();
+        suspended.korean_detail = Some(domain::KoreanMasterDetail {
+            liquidation: domain::LiquidationTrading::Regular,
+            krx: domain::TradingSuspension::Suspended,
+            nxt: domain::NxtTrading::Unsupported,
+        });
+        let mut delisted = base.row().clone();
+        delisted.listing_status = ListingStatus::Delisted;
+        let mut scheduled = base.row().clone();
+        scheduled.listing_status = ListingStatus::Scheduled;
+        let mut liquidation = base.row().clone();
+        liquidation.korean_detail = Some(domain::KoreanMasterDetail {
+            liquidation: domain::LiquidationTrading::Liquidation,
+            krx: domain::TradingSuspension::Clear,
+            nxt: domain::NxtTrading::Unsupported,
+        });
+        let mut unknown_type = base.row().clone();
+        unknown_type.security_type =
+            MasterSecurityType::from_code(MasterCode::try_new("UNKNOWN_SEC").expect("유형"));
+        let mut missing_status = base.row().clone();
+        missing_status.korean_detail = None;
+        [
+            suspended,
+            delisted,
+            scheduled,
+            liquidation,
+            unknown_type,
+            missing_status,
+        ]
+        .into_iter()
+        .map(|row| MasterInstrument::try_new(row).expect("비거래 마스터"))
+        .collect()
+    }
+
+    fn kr_non_tradable_bundle() -> (
+        SignalCostFixture,
+        domain::RaisedSignal,
+        domain::SignalRestoreEvidence,
+        domain::BuySignalRecord,
+        domain::DraftRestoreEvidence,
+    ) {
+        let cost = kr_signal_cost_fixture();
+        let model = signal_model_fixture(&cost, "99");
+        let (portfolio, target, historical) =
+            kr_signal_assessment(&cost, &model, kr_auction_calendars(32_400_i32, 32_400_i32));
+        let valuation = portfolio.evaluate(None);
+        let (assignments, security) = signal_classifications(&cost.master);
+        let ledger = domain::SignalSourceLedger::new(&historical.items, &[], &[]);
+        let facts = domain::SignalAssessmentFacts::new(
+            domain::SignalTiming::new(at(61, 32_400), &historical.calendars),
+            Some(target.clone()),
+            Some(model.head),
+        );
+        let context = domain::SignalContext::new(
+            Some(&valuation),
+            &historical.policy,
+            (&assignments, &security),
+            &ledger,
+            facts,
+        );
+        let signal = domain::SignalDecision::assess(&model.estimate, &context)
+            .into_signal()
+            .expect("신호");
+        let buy = match &signal {
+            domain::RaisedSignal::Buy(value) => value.clone(),
+            domain::RaisedSignal::Sell(_) => panic!("매수 필요"),
+        };
+        let record = domain::BuySignalRecord::from_signal_checked(
+            domain::BuySignalOccurrenceId::try_new("occ-nt-1").expect("ID"),
+            &buy,
+            at(61, 32_400),
+            &historical.calendars,
+        )
+        .expect("발생");
+        let input = domain::SignalRestoreEvidence {
+            estimate: cost.stored.clone(),
+            commission: cost.commission.clone(),
+            tax: cost.tax.clone(),
+            maturity: cost.maturity,
+            calibration: model.snapshot,
+            calibration_key: model.key,
+            probability: model.probability,
+            source: Some(model.source),
+            submitted_at: at(61, -18_000),
+            margin: model.margin,
+            assessment: historical,
+        };
+        let saved_draft = kr_non_tradable_draft(&cost, &target);
+        (cost, signal, input, record, saved_draft)
+    }
+
+    fn kr_non_tradable_draft(
+        cost: &SignalCostFixture,
+        target: &domain::PriceObservation,
+    ) -> domain::DraftRestoreEvidence {
+        let range = domain::ProposalPriceRange::from_estimate_task(
+            cost.eligible.task().range_facts(),
+            target.clone(),
+        )
+        .expect("범위");
+        let id = domain::ProposalId::new(domain::ClientOrderId::try_new("nt-draft").expect("ID"));
+        let intent = domain::OrderIntent::new(
+            domain::AccountId::new(7),
+            cost.master.order_instrument().expect("종목"),
+            id.as_client_order_id().clone(),
+            domain::OrderTerms::KrMarket {
+                side: OrderSide::Buy,
+                quantity: domain::WholeOrderQuantity::try_new(
+                    Quantity::parse(&NumericInput::try_new("2").expect("입력")).expect("수량"),
+                )
+                .expect("정수"),
+            },
+        )
+        .expect("의도");
+        let lifetime = domain::ProposalLifetime::default();
+        let draft =
+            domain::Proposal::new(id, intent, at(61, 32_400), range, lifetime).expect("초안");
+        domain::DraftRestoreEvidence::capture(
+            &draft,
+            cost.stored.clone(),
+            &cost.master,
+            lifetime,
+            target,
+        )
+        .expect("초안 근거")
+    }
+
+    #[test]
+    fn historical_restore_survives_non_tradable_current_master_while_live_draft_rejects_it() {
+        let (cost, signal, input, record, saved_draft) = kr_non_tradable_bundle();
+        let saved_signal = input.capture(&signal, &cost.master).expect("신호 근거");
+        let saved_occ =
+            domain::StoredSignalOccurrence::capture(&record, saved_signal.clone(), &cost.master)
+                .expect("이력 근거");
+        for non_tradable in non_tradable_kr_masters(&cost.master) {
+            cost.stored
+                .restore_history(&non_tradable)
+                .expect("과거 과제 복원 허용");
+            let history = saved_signal
+                .restore_history(&non_tradable)
+                .expect("과거 신호 복원 허용");
+            assert_eq!(history.display_facts(), saved_signal.expected);
+            let occ = saved_occ
+                .restore(&non_tradable)
+                .expect("과거 발생 복원 허용");
+            assert_eq!(occ.interval(), record.interval());
+            saved_draft
+                .restore(&non_tradable)
+                .expect_err("실거래 초안 복원 거부");
+            input
+                .capture(&signal, &non_tradable)
+                .expect_err("실거래 신호 저장 거부");
+        }
+    }
+
+    #[test]
+    fn historical_target_observation_covers_unidentified_and_error_paths() {
+        let (signal, input, master) = signal_fixture("99");
+        let saved = input.capture(&signal, &master).expect("식별 저장");
+        let mut delisted_row = master.row().clone();
+        delisted_row.listing_status = ListingStatus::Delisted;
+        let delisted = MasterInstrument::try_new(delisted_row).expect("폐지");
+        let mut unid = saved.clone();
+        unid.evidence.assessment.target = Some(domain::StoredPriceObservation {
+            price: price("105"),
+            observed_at: at(61, -18_000),
+            identity: domain::StoredPriceIdentity::Unidentified,
+        });
+        assert_eq!(
+            unid.restore_history(&delisted),
+            Err(domain::SignalRestoreError::NoSignal(
+                domain::NoSignalReason::Unavailable(domain::SignalUnavailable::InvalidTargetPrice)
+            ))
+        );
+        let mut overflow = saved;
+        let max_ts = Timestamp::from_parts(
+            UnixSeconds::new(253_402_300_799_i64),
+            Nanosecond::new(0),
+            OffsetSeconds::new(0),
+        )
+        .expect("최대 시각");
+        overflow.evidence.assessment.target = Some(domain::StoredPriceObservation {
+            price: price("105"),
+            observed_at: max_ts,
+            identity: domain::StoredPriceIdentity::Unidentified,
+        });
+        assert_eq!(
+            overflow.restore_history(&delisted),
+            Err(domain::SignalRestoreError::Target(
+                domain::DraftRestoreError::Time(domain::TimeError::Overflow)
+            ))
+        );
+    }
+    #[test]
+    fn historical_identified_target_rejects_currency_and_offset_errors() {
+        let (sig_id, input_id, master_id) = signal_fixture("99");
+        let mut delisted_row = master_id.row().clone();
+        delisted_row.listing_status = ListingStatus::Delisted;
+        let delisted = MasterInstrument::try_new(delisted_row).expect("폐지");
+        let saved_id = input_id.capture(&sig_id, &master_id).expect("식별 저장");
+        let mut wrong_cur = saved_id.clone();
+        wrong_cur.evidence.assessment.target = Some(domain::StoredPriceObservation {
+            price: Price::parse(&NumericInput::try_new("1000").expect("입력"), Currency::Krw)
+                .expect("원화"),
+            observed_at: at(61, -18_000),
+            identity: domain::StoredPriceIdentity::Identified,
+        });
+        assert_eq!(
+            wrong_cur.restore_history(&delisted),
+            Err(domain::SignalRestoreError::Target(
+                domain::DraftRestoreError::Master(domain::MasterInstrumentError::CurrencyMismatch)
+            ))
+        );
+        let mut wrong_offset = saved_id;
+        wrong_offset.evidence.assessment.target = Some(domain::StoredPriceObservation {
+            price: price("105"),
+            observed_at: at(61, 0),
+            identity: domain::StoredPriceIdentity::Identified,
+        });
+        assert_eq!(
+            wrong_offset.restore_history(&delisted),
+            Err(domain::SignalRestoreError::Target(
+                domain::DraftRestoreError::Master(
+                    domain::MasterInstrumentError::InvalidPriceObservation
+                )
+            ))
+        );
+    }
+
+    fn dual_market_abcdef_rows() -> (MasterInstrumentRow, MasterInstrumentRow) {
+        let kr_row = MasterInstrumentRow {
+            listing_market: MasterCode::try_new("KOSPI").expect("시장"),
+            symbol: Symbol::try_new("ABCDEF").expect("심볼"),
+            instrument_id: InstrumentId::try_new("dual-id").expect("식별자"),
+            name: DisplayInstrumentName::try_new("동일 심볼 한국").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency: Currency::Krw,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: Some(domain::KoreanMasterDetail {
+                liquidation: domain::LiquidationTrading::Regular,
+                krx: domain::TradingSuspension::Clear,
+                nxt: domain::NxtTrading::Unsupported,
+            }),
+            observed_at: at(61, 32_400),
+        };
+        let us_row = MasterInstrumentRow {
+            listing_market: MasterCode::try_new("NASDAQ").expect("시장"),
+            symbol: Symbol::try_new("ABCDEF").expect("심볼"),
+            instrument_id: InstrumentId::try_new("dual-id").expect("식별자"),
+            name: DisplayInstrumentName::try_new("동일 심볼 미국").expect("이름"),
+            security_type: MasterSecurityType::from_code(
+                MasterCode::try_new("STOCK").expect("유형"),
+            ),
+            currency: Currency::Usd,
+            listing_status: ListingStatus::Active,
+            common_share: CommonShare::Common,
+            korean_detail: None,
+            observed_at: at(61, -18_000),
+        };
+        (kr_row, us_row)
+    }
+
+    #[test]
+    fn historical_holding_identity_rejects_symbol_reuse_and_currency_mismatch() {
+        let (_, _, master) = signal_fixture("1");
+        let base_portfolio = signal_portfolio(&master, "1");
+        assert_eq!(
+            domain::HistoricalPortfolio::capture(&base_portfolio, &[]),
+            Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
+        );
+        assert_eq!(
+            domain::HistoricalPortfolio::capture(
+                &base_portfolio,
+                &[master.clone(), master.clone()]
+            ),
+            Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
+        );
+        let hist =
+            domain::HistoricalPortfolio::capture(&base_portfolio, std::slice::from_ref(&master))
+                .expect("캡처");
+        let mut reused_row = master.row().clone();
+        reused_row.instrument_id = InstrumentId::try_new("reused-id").expect("새 식별자");
+        let reused_master = MasterInstrument::try_new(reused_row).expect("심볼 재사용 마스터");
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                hist.facts().clone(),
+                std::slice::from_ref(&reused_master),
+            ),
+            Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
+        );
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                hist.facts().clone(),
+                &[master.clone(), reused_master],
+            ),
+            Err(domain::HistoricalPortfolioError::MasterMissingOrAmbiguous)
+        );
+        let mut renamed_row = master.row().clone();
+        renamed_row.symbol = Symbol::try_new("NEWNAME").expect("변경 심볼");
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                hist.facts().clone(),
+                &[MasterInstrument::try_new(renamed_row).expect("변경")],
+            ),
+            Err(domain::HistoricalPortfolioError::InstrumentMismatch)
+        );
+    }
+    #[test]
+    fn historical_holding_rejects_acquisition_and_current_price_currency_mismatch() {
+        let (_, _, master) = signal_fixture("1");
+        let hist = domain::HistoricalPortfolio::capture(
+            &signal_portfolio(&master, "1"),
+            std::slice::from_ref(&master),
+        )
+        .expect("캡처");
+        let mut wrong_acq = hist.facts().clone();
+        wrong_acq.holdings[0].acquisition_price =
+            domain::AcquisitionPrice::try_new(money("90", Currency::Krw)).expect("원화 원가");
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(wrong_acq, std::slice::from_ref(&master)),
+            Err(domain::HistoricalPortfolioError::InstrumentMismatch)
+        );
+        let mut bad_cur_price = hist.facts().clone();
+        bad_cur_price.holdings[0].current_price = Some(
+            Price::parse(&NumericInput::try_new("90").expect("입력"), Currency::Krw).expect("원화"),
+        );
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                bad_cur_price,
+                std::slice::from_ref(&master),
+            ),
+            Err(domain::HistoricalPortfolioError::Holding(
+                domain::HoldingError::CurrencyMismatch
+            ))
+        );
+    }
+
+    #[test]
+    fn identical_symbol_across_kr_and_us_markets_is_rejected_for_estimate_and_holding() {
+        let (kr_abcdef_row, us_abcdef_row) = dual_market_abcdef_rows();
+        let kr_abcdef = MasterInstrument::try_new(kr_abcdef_row.clone()).expect("한국");
+        let us_abcdef = MasterInstrument::try_new(us_abcdef_row).expect("미국");
+        let kr_portfolio = domain::Portfolio::new(
+            vec![
+                domain::Holding::new(
+                    kr_abcdef.order_instrument().expect("종목"),
+                    Quantity::parse(&NumericInput::try_new("3").expect("입력")).expect("수량"),
+                    domain::AcquisitionPrice::try_new(money("50000", Currency::Krw)).expect("원가"),
+                    domain::HoldingObservation::new(None, None, at(61, 32_400)),
+                )
+                .expect("보유"),
+            ],
+            domain::BuyingPower::new(money("100000", Currency::Krw), at(61, 32_400)),
+            domain::BuyingPower::new(money("0", Currency::Usd), at(61, 32_400)),
+        )
+        .expect("포트");
+        let kr_hist =
+            domain::HistoricalPortfolio::capture(&kr_portfolio, std::slice::from_ref(&kr_abcdef))
+                .expect("한국 캡처");
+        assert_eq!(
+            domain::HistoricalPortfolio::from_saved_facts(
+                kr_hist.facts().clone(),
+                std::slice::from_ref(&us_abcdef),
+            ),
+            Err(domain::HistoricalPortfolioError::InstrumentMismatch)
+        );
+        let kr_price = Price::parse(
+            &NumericInput::try_new("51000").expect("입력"),
+            Currency::Krw,
+        )
+        .expect("가격");
+        let est_input = EstimateRestoreEvidence {
+            master: kr_abcdef_row,
+            side: OrderSide::Buy,
+            candles: kr_candles("dual-id"),
+            reference_price: kr_price,
+            reference_at: at(61, 32_400),
+            task_at: at(61, 32_400),
+            horizon: Horizon::new(HorizonSelection::FewDays),
+            permission: HoursPermissionState::Disabled,
+            appetite: RiskAppetite::Neutral,
+        };
+        let est_task = original(&est_input, &kr_abcdef);
+        assert_eq!(
+            est_input.capture(&est_task, &us_abcdef),
+            Err(EstimateRestoreError::CurrentInstrumentMismatch)
+        );
+        let est_saved = est_input.capture(&est_task, &kr_abcdef).expect("저장");
+        assert_eq!(
+            est_saved.restore_history(&us_abcdef),
+            Err(EstimateRestoreError::CurrentInstrumentMismatch)
+        );
+    }
+
+    fn candle_offset_variants(first_candle: &Candle) -> [Candle; 2] {
+        let PriceAdjustment::Adjusted(basis) = first_candle.adjustment() else {
+            panic!("수정 봉");
+        };
+        [
+            Candle::try_new(
+                first_candle.instrument().clone(),
+                first_candle.time(),
+                first_candle.adjustment(),
+                first_candle.values(),
+                CandleObservation::new(
+                    with_offset(first_candle.collected_at(), 32_400),
+                    first_candle.status(),
+                ),
+            )
+            .expect("봉"),
+            Candle::try_new(
+                first_candle.instrument().clone(),
+                first_candle.time(),
+                PriceAdjustment::Adjusted(AdjustmentBasis::new(with_offset(
+                    *basis.as_timestamp(),
+                    32_400,
+                ))),
+                first_candle.values(),
+                CandleObservation::new(first_candle.collected_at(), first_candle.status()),
+            )
+            .expect("봉"),
+        ]
+    }
+    fn twelve_hour_candles(offset: i32) -> Vec<Candle> {
+        (0_i64..61_i64)
+            .map(|day| {
+                let value = if day.checked_rem(2_i64) == Some(0_i64) {
+                    price("100")
+                } else {
+                    price("103")
+                };
+                let utc = 1_767_225_600_i64
+                    .checked_add(day.checked_mul(86_400).expect("일"))
+                    .expect("시각")
+                    .checked_add(43_200)
+                    .expect("정오");
+                let ts = Timestamp::from_parts(
+                    UnixSeconds::new(utc),
+                    Nanosecond::new(0),
+                    OffsetSeconds::new(offset),
+                )
+                .expect("시각");
+                Candle::try_new(
+                    InstrumentId::try_new("sample").expect("식별자"),
+                    CandleTime::try_new(ts, CandlePeriod::Daily).expect("일봉"),
+                    PriceAdjustment::Adjusted(AdjustmentBasis::new(at(70, 0))),
+                    Ohlcv::try_new(
+                        value,
+                        value,
+                        value,
+                        value,
+                        Quantity::parse(&NumericInput::try_new("3").expect("입력")).expect("수량"),
+                    )
+                    .expect("봉"),
+                    CandleObservation::new(at(70, 0), CandleStatus::Finalized),
+                )
+                .expect("봉")
+            })
+            .collect()
+    }
+    #[test]
+    fn estimate_restore_kills_candle_time_offset_mutation_on_same_utc_instant() {
+        let mut input = evidence(HorizonSelection::FewDays, RiskAppetite::Neutral);
+        input.candles = twelve_hour_candles(-43_200);
+        input.reference_at = at(62, -18_000);
+        input.task_at = at(62, -18_000);
+        let master = MasterInstrument::try_new(row()).expect("마스터");
+        let saved = input
+            .capture(&original(&input, &master), &master)
+            .expect("과제 근거");
+        let mut shifted_candles = saved;
+        shifted_candles.evidence.candles = twelve_hour_candles(43_200);
+        assert_eq!(
+            shifted_candles.restore_history(&master),
+            Err(EstimateRestoreError::ChangedEvidence)
+        );
+    }
+    #[test]
+    fn estimate_restore_kills_task_master_and_candle_offset_mutations() {
+        let input = evidence(HorizonSelection::FewDays, RiskAppetite::Neutral);
+        let master = MasterInstrument::try_new(row()).expect("마스터");
+        let saved = input
+            .capture(&original(&input, &master), &master)
+            .expect("과제 근거");
+        let mut task_offset_both = saved.clone();
+        let shifted_task_at = with_offset(task_offset_both.evidence.task_at, -14_400);
+        task_offset_both.evidence.task_at = shifted_task_at;
+        task_offset_both.expected.created_at = shifted_task_at;
+        assert_eq!(
+            task_offset_both.restore_history(&master),
+            Err(EstimateRestoreError::ChangedEvidence)
+        );
+        let mut master_obs_offset = saved.clone();
+        master_obs_offset.evidence.master.observed_at =
+            with_offset(master_obs_offset.evidence.master.observed_at, -14_400);
+        assert_eq!(
+            master_obs_offset.restore_history(&master),
+            Err(EstimateRestoreError::ChangedEvidence)
+        );
+        for candle in candle_offset_variants(&saved.evidence.candles[0]) {
+            let mut mutated = saved.clone();
+            mutated.evidence.candles[0] = candle;
+            assert_eq!(
+                mutated.restore_history(&master),
+                Err(EstimateRestoreError::ChangedEvidence)
+            );
+        }
+    }
+
+    #[test]
+    fn draft_restore_kills_created_and_expiry_paired_offset_mutation() {
+        let (draft, estimate, draft_master, lifetime, card) = draft_fixture();
+        let mut draft_created_both =
+            domain::DraftRestoreEvidence::capture(&draft, estimate, &draft_master, lifetime, &card)
+                .expect("초안 근거");
+        draft_created_both.created_at = with_offset(draft_created_both.created_at, -14_400);
+        draft_created_both.expires_at = with_offset(draft_created_both.expires_at, -14_400);
+        assert_eq!(
+            draft_created_both
+                .restore(&draft_master)
+                .expect_err("초안 생성 오프셋"),
+            domain::DraftRestoreError::ChangedDraft
+        );
+    }
+
+    #[test]
+    fn signal_restore_kills_capture_eval_and_target_offset_mutations() {
+        let (_, evidence_99, master) = signal_fixture("99");
+        let (signal_98, _, _) = signal_fixture("98");
+        assert_eq!(
+            evidence_99.capture(&signal_98, &master),
+            Err(domain::SignalRestoreError::ChangedSignal)
+        );
+        let (signal_99, input_99, master_99) = signal_fixture("99");
+        let saved = input_99.capture(&signal_99, &master_99).expect("근거");
+        let mut eval_offset = saved.clone();
+        eval_offset.evidence.assessment.evaluated_at =
+            with_offset(eval_offset.evidence.assessment.evaluated_at, -14_400);
+        assert_eq!(
+            eval_offset.restore_history(&master_99),
+            Err(domain::SignalRestoreError::ChangedSignal)
+        );
+        let mut target_offset = saved;
+        let old_target = target_offset.evidence.assessment.target.expect("시세");
+        target_offset.evidence.assessment.target = Some(domain::StoredPriceObservation {
+            observed_at: with_offset(old_target.observed_at, -14_400),
+            ..old_target
+        });
+        assert_eq!(
+            target_offset.restore_history(&master_99),
+            Err(domain::SignalRestoreError::ChangedSignal)
+        );
+    }
+    #[test]
+    fn signal_restore_kills_expected_display_field_mutations() {
+        let (signal_99, input_99, master_99) = signal_fixture("99");
+        let saved = input_99.capture(&signal_99, &master_99).expect("근거");
+        let expected_changes: [fn(&mut domain::StoredSignalEvidence); 6] = [
+            |value| {
+                value.expected.probability = domain::AiProbability::parse(
+                    &domain::AiProbabilityInput::try_new("98").expect("입력"),
+                )
+                .expect("확률")
+                .into_probability();
+            },
+            |value| value.expected.operation = domain::SignalOperation::EligibleBeforeE91,
+            |value| {
+                value.expected.buy_threshold =
+                    domain::Ratio::parse(&NumericInput::try_new("0.51").expect("입력"))
+                        .expect("비율");
+            },
+            |value| {
+                value.expected.sell_threshold =
+                    domain::Ratio::parse(&NumericInput::try_new("0.49").expect("입력"))
+                        .expect("비율");
+            },
+            |value| {
+                value.expected.breakeven_threshold =
+                    domain::Ratio::parse(&NumericInput::try_new("0.505").expect("입력"))
+                        .expect("비율");
+            },
+            |value| {
+                value.expected.direction = domain::HistoricalSignalDirection::Buy {
+                    limit: domain::HistoricalSignalLimit::new(money("1234", Currency::Krw)),
+                };
+            },
+        ];
+        for change in expected_changes {
+            let mut mutated = saved.clone();
+            change(&mut mutated);
+            assert_eq!(
+                mutated.restore_history(&master_99),
+                Err(domain::SignalRestoreError::ChangedSignal)
+            );
+        }
+    }
+
+    #[test]
+    fn occurrence_restore_kills_interval_start_and_end_offset_mutations() {
+        let (signal_99, input_99, master_99) = signal_fixture("99");
+        let saved = input_99.capture(&signal_99, &master_99).expect("근거");
+        let buy = match &signal_99 {
+            domain::RaisedSignal::Buy(value) => value,
+            domain::RaisedSignal::Sell(_) => panic!("매수"),
+        };
+        let record = domain::BuySignalRecord::from_signal_checked(
+            domain::BuySignalOccurrenceId::try_new("occ-s6").expect("ID"),
+            buy,
+            at(61, -18_000),
+            &input_99.assessment.calendars,
+        )
+        .expect("발생");
+        let occ =
+            domain::StoredSignalOccurrence::capture(&record, saved, &master_99).expect("이력 근거");
+        let mut end_offset = occ.clone();
+        end_offset.interval = domain::TimeInterval::try_new(
+            occ.interval.start(),
+            with_offset(occ.interval.end(), -14_400),
+        )
+        .expect("종료 오프셋");
+        assert_eq!(
+            end_offset.restore(&master_99),
+            Err(domain::SignalOccurrenceRestoreError::ChangedOccurrence)
+        );
+        let mut start_offset = occ;
+        start_offset.interval = domain::TimeInterval::try_new(
+            with_offset(start_offset.interval.start(), -14_400),
+            start_offset.interval.end(),
+        )
+        .expect("시작 오프셋");
+        assert_eq!(
+            start_offset.restore(&master_99),
+            Err(domain::SignalOccurrenceRestoreError::ChangedOccurrence)
         );
     }
 }

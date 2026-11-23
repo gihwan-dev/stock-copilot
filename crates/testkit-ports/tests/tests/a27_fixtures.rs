@@ -588,6 +588,7 @@ pub(super) fn evidence_for_signal(
     });
     application::SignalCommitEvidence {
         master: source,
+        holding_masters: vec![],
         signal: evidence,
         occurrence: recorded,
     }
@@ -610,9 +611,13 @@ fn signal_restore_context(
         domain::RaisedSignal::Sell(value) => value.facts(),
     };
     domain::HistoricalSignalContext {
-        portfolio: Some(domain::HistoricalPortfolio::capture(&portfolio_for_signal(
-            source, signal, cash,
-        ))),
+        portfolio: Some(
+            domain::HistoricalPortfolio::capture(
+                &portfolio_for_signal(source, signal, cash),
+                std::slice::from_ref(source),
+            )
+            .expect("포트폴리오 근거"),
+        ),
         rate: None,
         policy: Policy::new(InvestorProfile::default()),
         classifications: domain::HistoricalClassifications::capture(

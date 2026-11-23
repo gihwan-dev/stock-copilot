@@ -31,7 +31,7 @@ impl StoredPriceObservation {
             },
         }
     }
-    pub(crate) fn replay(
+    pub(crate) fn replay_live(
         self,
         current: &MasterInstrument,
         side: crate::OrderSide,
@@ -48,6 +48,22 @@ impl StoredPriceObservation {
                 PriceObservation::from_quote_parts(instrument, self.price, self.observed_at)
                     .map_err(DraftRestoreError::Time)
             }
+        }
+    }
+    pub(crate) fn replay_historical(
+        self,
+        quote: &crate::QuoteInstrument,
+    ) -> Result<PriceObservation, DraftRestoreError> {
+        match self.identity {
+            StoredPriceIdentity::Identified => quote
+                .historical_price_observation(self.price, self.observed_at)
+                .map_err(DraftRestoreError::Master),
+            StoredPriceIdentity::Unidentified => PriceObservation::from_quote_parts(
+                quote.historical_instrument(),
+                self.price,
+                self.observed_at,
+            )
+            .map_err(DraftRestoreError::Time),
         }
     }
 }
@@ -129,8 +145,7 @@ impl DraftRestoreEvidence {
             },
         };
         let rebuilt = saved.restore(current)?;
-        if rebuilt.intent() != original.intent() || rebuilt.price_range() != original.price_range()
-        {
+        if rebuilt.price_range() != original.price_range() {
             return Err(DraftRestoreError::ChangedDraft);
         }
         Ok(saved)
@@ -155,12 +170,15 @@ impl DraftRestoreEvidence {
         {
             return Err(DraftRestoreError::ChangedRange);
         }
-        let task = self
+        let (task, _) = self
             .estimate
-            .replay(current)
+            .replay(
+                current,
+                crate::estimate_restore::MasterReplayMode::LiveOrderGate,
+            )
             .map_err(DraftRestoreError::Estimate)?;
         let side = self.terms.side();
-        let card = self.card.replay(current, side)?;
+        let card = self.card.replay_live(current, side)?;
         let instrument = card.instrument().clone();
         let range = ProposalPriceRange::from_estimate_task(task.range_facts(), card)
             .map_err(DraftRestoreError::Proposal)?;
