@@ -108,7 +108,17 @@ pub enum RequestRejection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterNotReady {
+    StatusCoverage,
+    IdentityContinuity,
+    Storage(crate::SystemPortError),
+    Issuer(crate::SystemPortError),
+    MissingInstrument,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortErrorKind {
+    MasterNotReady(MasterNotReady),
     AccessDenied(AccessDenial),
     Unavailable {
         cause: UnavailableCause,

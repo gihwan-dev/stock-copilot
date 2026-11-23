@@ -10,9 +10,9 @@ use super::{
     },
 };
 use application::{
-    CompleteTransactionObservation, IncompleteTransactions, ObservedTransaction,
+    CompleteTransactionObservation, IncompleteTransactions, MasterNotReady, ObservedTransaction,
     ObservedTransactionBatch, PortError, PortErrorKind, QuarantinedTransaction, RawTransactionRow,
-    RetryDelay, TransactionRead,
+    RetryDelay, SystemFailure, SystemPort, SystemPortError, TransactionRead,
 };
 use domain::{
     AccountId, CompletionAttestation, Nanosecond, SettlementWindow, SpanSeconds, TimeSpan,
@@ -60,10 +60,91 @@ pub(super) fn put_window(fields: &mut Fields, window: SettlementWindow) {
 pub(super) fn window(fields: &mut Fields) -> rusqlite::Result<SettlementWindow> {
     SettlementWindow::try_new(fields.date()?, fields.date()?).map_err(invalid)
 }
+
+fn put_retry(fields: &mut Fields, retry: RetryDelay) {
+    match retry {
+        RetryDelay::Unknown => fields.push(&"unknown"),
+        RetryDelay::Known(span) => {
+            fields.push(&"known");
+            let (seconds, nanos) = span.as_parts();
+            fields.push(&seconds.as_u64());
+            fields.push(&nanos.as_u32());
+        }
+    }
+}
+
+fn retry(fields: &mut Fields) -> rusqlite::Result<RetryDelay> {
+    match fields.take()?.as_str() {
+        "unknown" => Ok(RetryDelay::Unknown),
+        "known" => Ok(RetryDelay::Known(
+            TimeSpan::try_new(
+                SpanSeconds::new(fields.number()?),
+                Nanosecond::new(fields.number()?),
+            )
+            .map_err(invalid)?,
+        )),
+        _ => Err(invalid(())),
+    }
+}
+
+fn put_system_error(fields: &mut Fields, error: SystemPortError) {
+    fields.push(&match error.port() {
+        SystemPort::Repository => "repository",
+        SystemPort::AuditLog => "audit-log",
+        SystemPort::SecretStore => "secret-store",
+        SystemPort::Notifier => "notifier",
+    });
+    match error.failure() {
+        SystemFailure::PermissionDenied => fields.push(&"permission-denied"),
+        SystemFailure::Unavailable(delay) => {
+            fields.push(&"unavailable");
+            put_retry(fields, delay);
+        }
+        SystemFailure::InvalidData => fields.push(&"invalid-data"),
+        SystemFailure::RepositoryIntegrity => fields.push(&"repository-integrity"),
+        SystemFailure::SecretIntegrity => fields.push(&"secret-integrity"),
+    }
+}
+
+fn system_error(fields: &mut Fields) -> rusqlite::Result<SystemPortError> {
+    let port = match fields.take()?.as_str() {
+        "repository" => SystemPort::Repository,
+        "audit-log" => SystemPort::AuditLog,
+        "secret-store" => SystemPort::SecretStore,
+        "notifier" => SystemPort::Notifier,
+        _ => return Err(invalid(())),
+    };
+    let failure = match fields.take()?.as_str() {
+        "permission-denied" => SystemFailure::PermissionDenied,
+        "unavailable" => SystemFailure::Unavailable(retry(fields)?),
+        "invalid-data" => SystemFailure::InvalidData,
+        "repository-integrity" => SystemFailure::RepositoryIntegrity,
+        "secret-integrity" => SystemFailure::SecretIntegrity,
+        _ => return Err(invalid(())),
+    };
+    Ok(SystemPortError::new(port, failure))
+}
+
 fn put_error(fields: &mut Fields, error: PortError) {
     put_read_endpoint(fields, error.endpoint());
     put_http_status(fields, error.status());
     match error.kind() {
+        PortErrorKind::MasterNotReady(reason) => {
+            fields.push(&("master-not-ready"));
+            match reason {
+                MasterNotReady::StatusCoverage => fields.push(&"status-coverage"),
+                MasterNotReady::IdentityContinuity => fields.push(&"identity-continuity"),
+                MasterNotReady::Storage(system_error) => {
+                    fields.push(&"storage");
+                    put_system_error(fields, system_error);
+                }
+                MasterNotReady::Issuer(system_error) => {
+                    fields.push(&"issuer");
+                    put_system_error(fields, system_error);
+                }
+                MasterNotReady::MissingInstrument => fields.push(&"missing-instrument"),
+            }
+        }
         PortErrorKind::AccessDenied(value) => {
             fields.push(&("denied"));
             put_access_denial(fields, value);
@@ -71,15 +152,7 @@ fn put_error(fields: &mut Fields, error: PortError) {
         PortErrorKind::Unavailable { cause, retry } => {
             fields.push(&("unavailable"));
             put_unavailable_cause(fields, cause);
-            match retry {
-                RetryDelay::Unknown => fields.push(&("unknown")),
-                RetryDelay::Known(span) => {
-                    fields.push(&("known"));
-                    let (seconds, nanos) = span.as_parts();
-                    fields.push(&(seconds.as_u64()));
-                    fields.push(&(nanos.as_u32()));
-                }
-            }
+            put_retry(fields, retry);
         }
         PortErrorKind::NotFound(value) => {
             fields.push(&("missing"));
@@ -103,20 +176,18 @@ fn error(fields: &mut Fields) -> rusqlite::Result<PortError> {
     let endpoint = get_read_endpoint(fields)?;
     let status = get_http_status(fields)?;
     let kind = match fields.take()?.as_str() {
+        "master-not-ready" => PortErrorKind::MasterNotReady(match fields.take()?.as_str() {
+            "status-coverage" => MasterNotReady::StatusCoverage,
+            "identity-continuity" => MasterNotReady::IdentityContinuity,
+            "storage" => MasterNotReady::Storage(system_error(fields)?),
+            "issuer" => MasterNotReady::Issuer(system_error(fields)?),
+            "missing-instrument" => MasterNotReady::MissingInstrument,
+            _ => return Err(invalid(())),
+        }),
         "denied" => PortErrorKind::AccessDenied(get_access_denial(fields)?),
         "unavailable" => {
             let cause = get_unavailable_cause(fields)?;
-            let retry = match fields.take()?.as_str() {
-                "unknown" => RetryDelay::Unknown,
-                "known" => RetryDelay::Known(
-                    TimeSpan::try_new(
-                        SpanSeconds::new(fields.number()?),
-                        Nanosecond::new(fields.number()?),
-                    )
-                    .map_err(invalid)?,
-                ),
-                _ => return Err(invalid(())),
-            };
+            let retry = retry(fields)?;
             PortErrorKind::Unavailable { cause, retry }
         }
         "missing" => PortErrorKind::NotFound(get_missing_data(fields)?),
@@ -127,6 +198,7 @@ fn error(fields: &mut Fields) -> rusqlite::Result<PortError> {
     };
     Ok(PortError::new(endpoint, status, kind))
 }
+
 pub(super) fn put(fields: &mut Fields, observation: &Result<TransactionRead, PortError>) {
     match observation {
         Err(error) => {
@@ -283,5 +355,79 @@ pub(super) fn get(
             ))
         }
         _ => Err(invalid(())),
+    }
+}
+
+#[cfg(test)]
+mod t21_tests {
+    use super::{Fields, MasterNotReady, PortError, PortErrorKind, error, put_error};
+    use application::{
+        HttpStatus, ReadEndpoint, RetryDelay, SystemFailure, SystemPort, SystemPortError,
+    };
+    use domain::{Nanosecond, SpanSeconds, TimeSpan};
+
+    fn assert_round_trip(reason: MasterNotReady) {
+        let expected = PortError::new(
+            ReadEndpoint::Instruments,
+            HttpStatus::NotReceived,
+            PortErrorKind::MasterNotReady(reason),
+        );
+        let mut fields = Fields::default();
+        put_error(&mut fields, expected);
+        let mut decoded = Fields::decode(&fields.encode()).expect("decode");
+        assert_eq!(error(&mut decoded).expect("error"), expected);
+        decoded.finish().expect("complete");
+    }
+
+    #[test]
+    fn unready_master_reasons_round_trip_and_unknown_reasons_fail() {
+        for reason in [
+            MasterNotReady::StatusCoverage,
+            MasterNotReady::IdentityContinuity,
+            MasterNotReady::MissingInstrument,
+        ] {
+            let expected = PortError::new(
+                ReadEndpoint::Instruments,
+                HttpStatus::NotReceived,
+                PortErrorKind::MasterNotReady(reason),
+            );
+            let mut fields = Fields::default();
+            put_error(&mut fields, expected);
+            let mut decoded = Fields::decode(&fields.encode()).expect("decode");
+            assert_eq!(error(&mut decoded).expect("error"), expected);
+            decoded.finish().expect("complete");
+        }
+        let mut fields = Fields::default();
+        super::put_read_endpoint(&mut fields, ReadEndpoint::Instruments);
+        super::put_http_status(&mut fields, HttpStatus::NotReceived);
+        fields.push(&"master-not-ready");
+        fields.push(&"unknown");
+        let _error = error(&mut fields).expect_err("unknown reason");
+    }
+
+    #[test]
+    fn system_errors_and_retry_delays_round_trip_without_losing_the_cause() {
+        let known_delay = RetryDelay::Known(
+            TimeSpan::try_new(SpanSeconds::new(53), Nanosecond::new(17)).expect("delay"),
+        );
+        for port in [
+            SystemPort::Repository,
+            SystemPort::AuditLog,
+            SystemPort::SecretStore,
+            SystemPort::Notifier,
+        ] {
+            for failure in [
+                SystemFailure::PermissionDenied,
+                SystemFailure::Unavailable(RetryDelay::Unknown),
+                SystemFailure::Unavailable(known_delay),
+                SystemFailure::InvalidData,
+                SystemFailure::RepositoryIntegrity,
+                SystemFailure::SecretIntegrity,
+            ] {
+                let system = SystemPortError::new(port, failure);
+                assert_round_trip(MasterNotReady::Storage(system));
+                assert_round_trip(MasterNotReady::Issuer(system));
+            }
+        }
     }
 }

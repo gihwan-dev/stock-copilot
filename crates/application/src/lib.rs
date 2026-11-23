@@ -3,9 +3,9 @@ mod port_error;
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
     CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, CreditTrade, Currency,
-    FlowInterval, FxPair, FxRate, FxRateKind, IndicatorCode, InvestorFlow, InvestorTradingRankings,
-    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote,
-    MasterInstrumentFacts, OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, ProgramTrade,
+    FlowInterval, FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
+    InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
+    MarketIndicatorQuote, OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, ProgramTrade,
     QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog, SectorComposition,
     SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
     SettlementWindow, ShortSelling, StockRanking, StockWarnings, TimeInterval, Timestamp,
@@ -16,7 +16,7 @@ pub use observations::{
     QuoteObservation, TransactionRead,
 };
 pub use port_error::{
-    AccessDenial, HttpStatus, MissingData, PortError, PortErrorKind, ReadEndpoint,
+    AccessDenial, HttpStatus, MasterNotReady, MissingData, PortError, PortErrorKind, ReadEndpoint,
     RequestRejection, ResponseMismatch, RetryDelay, UnavailableCause,
 };
 use std::{collections::BTreeSet, future::Future};
@@ -66,6 +66,12 @@ impl BrokerCapabilities {
     #[must_use]
     pub const fn new(supported: BTreeSet<BrokerCapability>) -> Self {
         Self(supported)
+    }
+
+    #[must_use]
+    pub fn with_supported(mut self, capability: BrokerCapability) -> Self {
+        self.0.insert(capability);
+        self
     }
 
     #[must_use]
@@ -132,7 +138,7 @@ pub trait BrokerRead: Send + Sync {
     fn instruments(
         &self,
         market: KnownMarket,
-    ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send;
+    ) -> impl Future<Output = Result<InstrumentMaster, PortError>> + Send;
     fn orderbook(
         &self,
         instrument: &QuoteInstrument,
@@ -261,7 +267,10 @@ pub use user_presence::{OrderConfirmation, RiskChangeConfirmation};
 mod audit_log;
 pub use audit_log::{AuditEntry, AuditIntegrity, AuditKind, AuditLog};
 mod instrument_mapping;
-pub use instrument_mapping::{InstrumentMappingRepository, MappingStoreError};
+pub use instrument_mapping::{
+    InstrumentIdIssuer, InstrumentMappingRepository, InstrumentMasterAuthority,
+    InstrumentMasterObservation, InstrumentMasterSession, MappingStoreError,
+};
 mod storage_ports;
 pub use storage_ports::ValuationCloseEvidenceRepository;
 pub use storage_ports::{
@@ -377,8 +386,9 @@ mod store_fx_rate;
 pub use store_fx_rate::{RefreshFxRate, RefreshFxRateError, RefreshFxRateReport, StoreFxRate};
 mod signal_ports;
 pub use signal_ports::{
-    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalMutation, SignalRevision,
-    SignalSnapshot, SignalSourceFacts, StoredSignal,
+    SignalCommit, SignalCommitOutcome, SignalEvaluation, SignalInvalidationOutcome,
+    SignalInvalidationRepository, SignalMutation, SignalRevision, SignalSnapshot,
+    SignalSourceFacts, StoredSignal,
 };
 
 pub mod resolve_estimates;
@@ -387,4 +397,16 @@ mod information_storage;
 pub use information_storage::{
     DisclosureRepository, InformationKey, InformationLinks, InformationSearch, SearchLimit,
     SearchLimitError,
+};
+
+mod evaluate_signals;
+pub use evaluate_signals::{
+    EvaluateSignalError, EvaluateSignalInputs, EvaluateSignalOutcome, EvaluateSignals,
+    SignalEvaluationData, SignalQuantityCosts,
+};
+
+mod proposal_storage;
+pub use proposal_storage::{
+    ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
+    ValidationReportRepository,
 };

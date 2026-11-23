@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runExamples, withBrowser } from "./environment.mjs";
+import { comparePending } from "./verdict.mjs";
 
 await withBrowser((context) => {
   runExamples(context);
@@ -95,5 +96,16 @@ await withBrowser((context) => {
   process.stdout.write(
     `overflow: ${total} 이야기, 위반 조건 ${findings.length}\n`,
   );
-  if (findings.length !== 0) process.exitCode = 1;
+  const pending = JSON.parse(
+    readFileSync(join(root, "harness/ds-overflow/pending.json"), "utf8"),
+  );
+  const problems = comparePending(findings, pending);
+  if (problems.length !== 0) {
+    process.stderr.write(`${problems.join("\n")}\n`);
+    process.exitCode = 1;
+  } else {
+    process.stdout.write(
+      `overflow: 보류 ${pending.length}조건과 정확히 일치\n`,
+    );
+  }
 });

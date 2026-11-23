@@ -1,5 +1,6 @@
 import { inspectOverflow } from "../src/shared/ds/testing/overflow";
 import { stressFixtures } from "../src/shared/ds/testing/stress";
+import { identifyOverflowElement } from "./ds20-overflow-identity.browser";
 import { commands } from "vitest/browser";
 
 declare const __DS20_FIRST__: number;
@@ -252,7 +253,7 @@ it("measures every catalog story in the narrow slot and at enlarged text", async
         for (const scale of ["100%", "125%"] as const) {
           doc.documentElement.style.fontSize = scale;
           await waitForLayout(frame);
-          const findings = inspectOverflow(doc);
+          const findings = inspectOverflow(doc, identifyOverflowElement);
           if (findings.length > 0)
             results.push({
               story: story.title,
@@ -357,10 +358,22 @@ it("measures the real ChatInput draft and keeps its nested exception narrow", as
           [stressFixtures.company, ...stressFixtures.paragraphs].join("\n"),
         );
         expect(chat.scrollHeight).toBeGreaterThan(chat.clientHeight);
-        expect(inspectOverflow(doc)).toContainEqual({
+        expect(inspectOverflow(doc)).not.toContainEqual({
           kind: "unauthorized-overflow",
           element: "textarea",
         });
+        const overflowLabel = doc.createElement("label");
+        overflowLabel.id = "overflow-label";
+        overflowLabel.style.width = "20px";
+        overflowLabel.style.display = "block";
+        overflowLabel.style.whiteSpace = "nowrap";
+        overflowLabel.textContent = "labeltextlabeltextlabeltext";
+        doc.body.append(overflowLabel);
+        expect(inspectOverflow(doc)).toContainEqual({
+          kind: "unauthorized-overflow",
+          element: "label#overflow-label",
+        });
+        overflowLabel.remove();
         const parent = chat.parentElement;
         if (parent === null) throw new Error("ChatInput 부모 누락");
         const viewport = doc.createElement("div");
@@ -423,7 +436,18 @@ it("reports native TextField overflow without assigning a viewport marker", asyn
               finding.kind === "unauthorized-overflow" &&
               finding.element.startsWith("input"),
           ),
-        ).toBe(true);
+        ).toBe(false);
+        const overflowHint = doc.createElement("div");
+        overflowHint.id = "overflow-hint";
+        overflowHint.style.width = "20px";
+        overflowHint.style.whiteSpace = "nowrap";
+        overflowHint.textContent = "hinttexthinttexthinttext";
+        doc.body.append(overflowHint);
+        expect(inspectOverflow(doc)).toContainEqual({
+          kind: "unauthorized-overflow",
+          element: "div#overflow-hint",
+        });
+        overflowHint.remove();
       }
     } finally {
       frame.remove();

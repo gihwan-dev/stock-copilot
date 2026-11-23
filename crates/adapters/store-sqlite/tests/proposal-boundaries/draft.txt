@@ -1,0 +1,7 @@
+use application::ProposalRepository;
+use domain::{Draft, Proposal, ProposalId};
+pub async fn use_draft<R: ProposalRepository>(repo: &R, value: &Proposal<Draft>, id: &ProposalId) {
+    let _saved = repo.store_draft(value).await;
+    let _loaded: Option<Proposal<Draft>> = repo.draft(id).await.expect("load");
+}
+fn main() {}

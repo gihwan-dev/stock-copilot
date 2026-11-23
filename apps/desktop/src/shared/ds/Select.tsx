@@ -27,7 +27,7 @@ export const Select = (props: Props): ReactElement => {
   };
   return (
     <div className="flex flex-col gap-space-1 text-ink">
-      <label htmlFor={inputId} className="text-label">
+      <label htmlFor={inputId} className="status-sentence text-label">
         {props.label}
       </label>
       <select
@@ -55,11 +55,15 @@ export const Select = (props: Props): ReactElement => {
         ))}
       </select>
       {props.error !== undefined ? (
-        <span id={id} role="alert" className="text-caption text-alert">
+        <span
+          id={id}
+          role="alert"
+          className="status-sentence text-caption text-alert"
+        >
           {props.error}
         </span>
       ) : (
-        <span id={id} className="text-caption text-ink-subtle">
+        <span id={id} className="status-sentence text-caption text-ink-subtle">
           {props.hint}
         </span>
       )}
