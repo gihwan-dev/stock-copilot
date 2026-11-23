@@ -293,6 +293,23 @@ defining-crate = "application"
 impl-crates = ["platform-macos"]
 impl-files = ["crates/testkit-ports/src/scripted_presence.rs"]
 
+[source.identity-confirmation]
+confirmation-type = "UserIdentityConfirmation"
+seal-type = "UserIdentityConfirmationSeal"
+issuer-function = "issue_after_user_confirmation"
+defining-file = "crates/domain/src/instrument_mapping_change.rs"
+defining-test-file = "crates/domain/src/instrument_mapping_change/history_cases.rs"
+use-case-file = "crates/application/src/confirm_instrument_identity.rs"
+issuance-allowed-files = [
+    "crates/application/src/confirm_instrument_identity.rs",
+    "crates/testkit-ports/src/scripted_identity_confirmation.rs",
+]
+prompt-trait = "IdentityConfirmationPrompt"
+prompt-module = "identity_confirmation_prompt"
+prompt-defining-crate = "application"
+prompt-impl-crates = ["platform-macos"]
+prompt-impl-files = ["crates/testkit-ports/src/scripted_identity_confirmation.rs"]
+
 [source.toss-order]
 write-means = [
     "post",
