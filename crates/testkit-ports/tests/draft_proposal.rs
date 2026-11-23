@@ -4039,4 +4039,94 @@ mod tests {
         );
         assert!(events.read().expect("이벤트").is_empty());
     }
+
+    fn buy_plan_for(source: &MasterInstrument, now: Timestamp) -> domain::BuyQuantityPlan {
+        let data = Data::new(market(source, now));
+        let assignments = domain::EstimateAssignments::default()
+            .issue(
+                fixtures::task_id("task-old"),
+                fixtures::run_id(),
+                fixtures::eligible_for_master("102", source),
+            )
+            .expect("발급");
+        let repository = MemorySignalEvaluationRepository::new(assignments);
+        repository.select_account(AccountId::new(4321));
+        repository
+            .advance_calibration_head(fixtures::head(0))
+            .expect("위치");
+        let bus = EventBusBuilder::default().build();
+        submit(&repository, &bus, "task-old", source);
+        current_buy_plan(&repository, source, &data, now)
+    }
+
+    fn us_limit_for(source: &MasterInstrument, now: Timestamp) -> domain::CalculatedLimitPrice {
+        let (book, limits) = us_book_and_limits(source, now);
+        let table = domain::TickTable::from_master(source).expect("미국 호가 단위");
+        domain::calculate_limit_price(&book, Some(&table), &limits, domain::OrderSide::Buy, now)
+            .expect("미국 지정가")
+    }
+
+    #[test]
+    fn buy_intent_rejects_each_single_instrument_field_mismatch() {
+        let now = fixtures::day(60);
+        let mut base_row = fixtures::master().row().clone();
+        base_row.symbol = domain::Symbol::try_new("A00593").expect("공통 코드");
+        let source = MasterInstrument::try_new(base_row).expect("기준 마스터");
+        let plan = buy_plan_for(&source, now);
+        let key = ClientOrderId::try_new("single-field-mismatch").expect("ID");
+        let plan_id = plan.signal().facts().task().volatility().instrument();
+
+        let mut id_row = source.row().clone();
+        id_row.instrument_id = fixtures::id("different-internal-id");
+        let id_only = MasterInstrument::try_new(id_row).expect("내부 ID만 다름");
+        let id_limit = calculated_limit(&id_only, now, "100", domain::OrderSide::Buy);
+        assert_ne!(id_limit.instrument().instrument_id(), plan_id);
+        assert_eq!(id_limit.instrument().symbol(), plan.instrument().symbol());
+        assert_eq!(
+            Market::from(*id_limit.instrument().market()),
+            plan.instrument().market()
+        );
+        assert_eq!(
+            application::buy_limit_intent(&plan, &id_limit, AccountId::new(4321), key.clone()),
+            Err(application::BuyLimitIntentError::Instrument)
+        );
+
+        let mut symbol_row = source.row().clone();
+        symbol_row.symbol = domain::Symbol::try_new("B00593").expect("다른 코드");
+        let symbol_only = MasterInstrument::try_new(symbol_row).expect("심볼만 다름");
+        let symbol_limit = calculated_limit(&symbol_only, now, "100", domain::OrderSide::Buy);
+        assert_eq!(symbol_limit.instrument().instrument_id(), plan_id);
+        assert_ne!(
+            symbol_limit.instrument().symbol(),
+            plan.instrument().symbol()
+        );
+        assert_eq!(
+            Market::from(*symbol_limit.instrument().market()),
+            plan.instrument().market()
+        );
+        assert_eq!(
+            application::buy_limit_intent(&plan, &symbol_limit, AccountId::new(4321), key.clone()),
+            Err(application::BuyLimitIntentError::Instrument)
+        );
+
+        let mut market_row = source.row().clone();
+        market_row.listing_market = domain::MasterCode::try_new("NASDAQ").expect("미국 시장");
+        market_row.currency = Currency::Usd;
+        market_row.korean_detail = None;
+        let market_only = MasterInstrument::try_new(market_row).expect("시장만 다름");
+        let market_limit = us_limit_for(&market_only, now);
+        assert_eq!(market_limit.instrument().instrument_id(), plan_id);
+        assert_eq!(
+            market_limit.instrument().symbol(),
+            plan.instrument().symbol()
+        );
+        assert_ne!(
+            Market::from(*market_limit.instrument().market()),
+            plan.instrument().market()
+        );
+        assert_eq!(
+            application::buy_limit_intent(&plan, &market_limit, AccountId::new(4321), key),
+            Err(application::BuyLimitIntentError::Instrument)
+        );
+    }
 }
