@@ -43,35 +43,39 @@
 
 ## 손 변형
 
-리뷰 수정 뒤 인덱스 트리 `e88c6e94b253bbebed03aab5e92d26835a52b819`의 별도 임시 사본에서 변형마다 한 번씩 컴파일·실행했다. 기준과 복원 후 시험은 통과했고, 컴파일된 28개는 모두 검출됐다. 7번 장 닫힘 변형은 사용되지 않는 열거형 오류로 컴파일되지 않아 수에 넣지 않았다. 임시 사본은 삭제했다.
+3차 리뷰 수정·`origin/master` 병합·회귀 보강 뒤 인덱스 트리 `a379f52d2a7d907937631f95d084e0a29eb88181`의 별도 임시 사본(`target/A-14/mutations/copy`)에서 변형마다 한 번씩 컴파일·실행했다. 기준과 복원 후 시험은 통과했고, 32개 모두 컴파일·검출됐다(생존 0, 컴파일 불가 0). 임시 사본은 실행 직후 삭제했다.
 
 | 번호 | 바꾼 것 | 검출한 테스트 |
 |---|---|---|
 | 1 | 재시도 상한 3→2 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
 | 2 | 재시도 상한 3→4 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
 | 3 | 스냅숏 제출 일치 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 4 | 제출 기록 일치 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
+| 4 | 제출 기록 일치 비교 반전 | `tests::account_switch_before_store_rejects_and_hides_old_draft` |
 | 5 | 추정 가격 범위 판정 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 6 | 불명 장을 닫힌 장으로 | `tests::closed_and_unknown_market_never_write_or_discard` |
-| 8 | 마스터 내부 ID 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 9 | 과제 내부 ID 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 10 | 마스터 시장·심볼 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 11 | 발급 과제 내용 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 12 | 재평가한 신호 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 13 | 저장 충돌 시 즉시 중단 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 14 | 생성 이벤트를 만료 이벤트로 | `tests::conflicts_reread_entire_snapshot_and_stop_after_three_attempts` |
-| 15 | 신호 없음을 닫힌 장으로 | `tests::no_current_signal_returns_without_a_draft` |
-| 16 | 매수 지정가 방향 비교 반전 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
-| 17 | 지정가 내부 ID 비교 반전 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
-| 18 | 지정가 심볼 비교 반전 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
-| 19 | 매수 계획 가격 상한 비교 반전 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
-| 20 | 시세 내부 ID 비교 반전 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
-| 21 | 정확히 5초인 오래된 시세 허용 | `tests::clock_advancing_during_input_read_rejects_stale_price` |
-| 22 | 조건부 저장 스냅숏 비교 반전 | `tests::conflicts_reread_entire_snapshot_and_stop_after_three_attempts` |
-| 23 | 매수 호가를 매도 방향으로 계산 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 24 | 제안 계좌를 다른 계좌로 변경 | `tests::open_market_saves_draft_and_public_validation_remains_closed` |
-| 25 | 조건부 저장의 보정 원장 대조 제거 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
-| 26 | 제출·신호 불일치를 저장 충돌로 분류 | `tests::failed_a13_identity_transition_leaves_old_signal_unusable_for_drafting` |
-| 27 | 마지막 재시도 원인을 버림 | `tests::failed_a13_identity_transition_leaves_old_signal_unusable_for_drafting` |
-| 28 | 캘린더 충돌 검사 제거 | `tests::conflicting_market_calendars_fail_closed_without_changing_signal` |
-| 29 | 닫힌 장 전에 매수 제한 검사 | `tests::closed_market_takes_precedence_over_buy_restriction` |
+| 6 | 초기 판정의 불명 장을 닫힌 장으로 | `tests::closed_and_unknown_market_never_write_or_discard` |
+| 7 | 재판정의 불명 장을 닫힌 장으로 | `tests::recheck_unknown_market_fails_closed_instead_of_market_closed` |
+| 8 | 재판정의 신호 유효기간 검사 제거 | `tests::pre_store_recheck_rejects_signal_expired_within_price_freshness` |
+| 9 | 매도 검사를 가격 범위 검사 앞으로 이동 | `tests::sell_signal_outside_price_range_discards_and_schedules_reestimate` |
+| 10 | 조회 경로 계좌 변경 거부를 부재로 통과 | `tests::stale_account_request_after_account_switch_never_supersedes_new_draft` |
+| 11 | 저장 경로 계좌 변경 거부를 동시 갱신 재시도로 | `tests::account_switch_before_store_rejects_and_hides_old_draft` |
+| 12 | 조회 경로 시계 역행 재시도 제거 | `tests::concurrent_monotonic_clock_race_returns_existing_and_rollback_fails_closed` |
+| 13 | 저장 경로 시계 역행 재시도 제거 | `tests::concurrent_monotonic_clock_race_returns_existing_and_rollback_fails_closed` |
+| 14 | 저장 직전 `proposal.check_current` 제거 | `tests::pre_store_check_current_rejects_local_clock_rollback_without_storing` |
+| 15 | 저장 직전 두 번째 `recheck` 대신 `read_at` 재사용 | `tests::pre_store_recheck_rejects_late_market_close_and_stale_price` |
+| 16 | 마스터 내부 ID 일치 검사 제거 | `tests::reused_symbol_with_different_master_instrument_id_fails_closed` |
+| 17 | 마스터 시장·심볼 일치 검사 제거 | `tests::changed_master_identity_does_not_turn_old_signal_into_draft` |
+| 18 | 발급 과제 내용 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
+| 19 | 재평가한 신호 일치 비교 반전 | `tests::calibration_head_advancing_without_signal_revision_never_saves_stale_draft` |
+| 20 | 생성 이벤트를 만료 이벤트로 변경 | `tests::concurrent_drafts_for_one_instrument_create_and_emit_once` |
+| 21 | 매수 지정가 방향 검사 반전 | `tests::account_switch_before_store_rejects_and_hides_old_draft` |
+| 22 | 지정가 내부 ID 비교 반전 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
+| 23 | 매수 지정가 상한 초과 거부 제거 | `tests::buy_intent_rejects_wrong_direction_internal_id_and_higher_limit` |
+| 24 | 복수 캘린더 상충 검사 제거 | `tests::conflicting_market_calendars_fail_closed_without_changing_signal` |
+| 25 | 프리마켓을 닫힌 장으로 분류 | `tests::kr_extended_open_sessions_create_drafts` |
+| 26 | 정확히 5초인 오래된 시세 허용 | `tests::clock_advancing_during_input_read_rejects_stale_price` |
+| 27 | `draft(id)` 조회의 선택 계좌 대조 제거 | `tests::account_switch_before_store_rejects_and_hides_old_draft` |
+| 28 | `draft(id)` 조회의 보정 원장 위치 대조 제거 | `tests::draft_lookup_hides_proposal_after_calibration_head_advances` |
+| 29 | `store_current_draft`의 `proposal.check_current` 제거 | `tests::store_current_draft_preserves_existing_draft_on_validation_errors` |
+| 30 | `current_draft`의 선택 계좌 대조 제거 | `tests::stale_account_request_after_account_switch_never_supersedes_new_draft` |
+| 31 | `store_current_draft`의 선택 계좌 대조 제거 | `tests::account_switch_before_store_rejects_and_hides_old_draft` |
+| 32 | `store_current_draft`의 방향 일치 검사 제거 | `tests::store_current_draft_preserves_existing_draft_on_validation_errors` |

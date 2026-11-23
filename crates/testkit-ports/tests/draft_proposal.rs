@@ -3320,9 +3320,10 @@ mod tests {
             proposal_id("stale-4321"),
         ));
         assert_eq!(
-            older.expect_err("옛 계좌 거부"),
+            older.expect_err("옛 계좌"),
             DraftProposalError::AccountChanged
         );
+        assert_eq!(repository.draft_attempts(), 1);
         let newer = interleaving
             .switched
             .write()
@@ -3478,6 +3479,7 @@ mod tests {
         let data = Data::new(market(&source, now));
         let repository = seeded(&source, &data);
         let (bus, events) = event_bus();
+        let before_reads = repository.snapshot_reads();
         let switching = SwitchBeforeStoreRepository {
             inner: &repository,
             switch_to: AccountId::new(8765),
@@ -3496,6 +3498,7 @@ mod tests {
         ))
         .expect_err("저장 직전 계좌 전환 거부");
         assert_eq!(switched_err, DraftProposalError::AccountChanged);
+        assert_eq!(repository.snapshot_reads() - before_reads, 1);
         assert!(
             run(repository.draft(&proposal_id("before-store-switch")))
                 .expect("조회")
@@ -3558,6 +3561,7 @@ mod tests {
         ))
         .expect_err("미선택 계좌 거부");
         assert_eq!(err, DraftProposalError::AccountChanged);
+        assert_eq!(unselected.draft_attempts(), 0);
         assert!(events.read().expect("이벤트").is_empty());
     }
 
@@ -3999,5 +4003,40 @@ mod tests {
             ))
         );
         assert!(run(repository.draft(&expired_id)).expect("조회").is_none());
+    }
+
+    #[test]
+    fn reused_symbol_with_different_master_instrument_id_fails_closed() {
+        let source = fixtures::master();
+        let now = fixtures::day(60);
+        let data = Data::new(market(&source, now));
+        let repository = seeded(&source, &data);
+        let mut row = source.row().clone();
+        row.instrument_id = fixtures::id("kr-005930-reissued");
+        data.0.write().expect("입력").master =
+            MasterInstrument::try_new(row).expect("재발급 마스터");
+        let (bus, events) = event_bus();
+        let err = run(DraftProposal::new(
+            &repository,
+            &data,
+            &Scheduler::default(),
+            &testkit_ports::SteppedClock::new(now),
+            &bus,
+        )
+        .execute(
+            &source.row().instrument_id,
+            &AccountId::new(4321),
+            proposal_id("reissued-master-id"),
+        ))
+        .expect_err("동일 심볼 다른 내부 ID 거부");
+        assert_eq!(err, DraftProposalError::InstrumentMismatch);
+        assert_eq!(repository.draft_attempts(), 0);
+        assert!(
+            run(repository.snapshot(&source.row().instrument_id))
+                .expect("신호 보존")
+                .current
+                .is_some()
+        );
+        assert!(events.read().expect("이벤트").is_empty());
     }
 }
