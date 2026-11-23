@@ -5,6 +5,36 @@ use domain::{
 };
 use std::future::Future;
 
+pub trait InstrumentIdIssuer: Send + Sync {
+    fn issue(&self) -> impl Future<Output = Result<InstrumentId, SystemPortError>> + Send;
+}
+
+pub trait InstrumentMasterAuthority: Send + Sync {
+    type Session<'a>: InstrumentMasterSession + Send + Sync + 'a
+    where
+        Self: 'a;
+
+    fn begin(
+        &self,
+        market: domain::KnownMarket,
+    ) -> impl Future<Output = Result<Self::Session<'_>, crate::MasterNotReady>> + Send;
+}
+
+pub trait InstrumentMasterSession: InstrumentMappingRepository {
+    fn verify_observation(
+        &self,
+        observations: &[InstrumentMasterObservation],
+    ) -> impl Future<Output = Result<(), crate::MasterNotReady>> + Send;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstrumentMasterObservation {
+    pub source: InstrumentSource,
+    pub listing_market: domain::MasterCode,
+    pub listing_status: domain::ListingStatus,
+    pub observed_at: domain::Timestamp,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MappingStoreError {
     Mapping(InstrumentMappingError),

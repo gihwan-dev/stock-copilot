@@ -3,7 +3,7 @@ use application::{
     BrokerRead, Clock, HoldingsObservation, HttpStatus, PortError, PortErrorKind, QuoteObservation,
     ReadEndpoint, SecretStore, TransactionRead,
 };
-use domain::{AccountId, BrokerAccountRows, MasterInstrumentFacts};
+use domain::{AccountId, BrokerAccountRows, InstrumentMaster};
 use domain::{
     BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower, Candle, CandlePeriod, ClosedOrderSet,
     CommissionRateFact, Currency, KnownMarket, Orderbook, PriceAdjustment, PriceLimits,
@@ -17,7 +17,8 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
         self.fetch_accounts().await
     }
     async fn holdings(&self, account: &AccountId) -> Result<HoldingsObservation, PortError> {
-        self.fetch_holdings(account).await
+        self.fetch_holdings(account, crate::account_read::MasterErrorMode::Legacy)
+            .await
     }
     fn transactions(
         &self,
@@ -40,7 +41,16 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
         period: CandlePeriod,
         adjustment: PriceAdjustment,
     ) -> impl Future<Output = Result<Vec<Candle>, PortError>> + Send {
-        crate::market_read::candles(self, instrument, window, period, adjustment)
+        crate::market_read::candles(
+            self,
+            instrument,
+            window,
+            period,
+            crate::market_read::candles::CandleMode {
+                adjustment,
+                master_errors: crate::account_read::MasterErrorMode::Legacy,
+            },
+        )
     }
     fn buying_power(
         &self,
@@ -109,11 +119,11 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
     fn instruments(
         &self,
         _market: KnownMarket,
-    ) -> impl Future<Output = Result<MasterInstrumentFacts, PortError>> + Send {
+    ) -> impl Future<Output = Result<InstrumentMaster, PortError>> + Send {
         std::future::ready(Err(PortError::new(
             ReadEndpoint::Instruments,
             HttpStatus::NotReceived,
-            PortErrorKind::Unsupported(application::BrokerCapability::Instruments),
+            PortErrorKind::MasterNotReady(application::MasterNotReady::StatusCoverage),
         )))
     }
     fn orderbook(
