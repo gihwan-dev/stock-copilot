@@ -62,3 +62,8 @@ sha256 = "45c3fd10363fae257b80a0d24f82bab4b297ddf58ab697253975c3cf268c26c4"
 number = 13
 file = "0013_chat_and_run_ledgers.sql"
 sha256 = "dc1710434598326318541fc04ea42be7834b36873d69118c58735a7925b0151f"
+
+[[migration]]
+number = 14
+file = "0014_settings.sql"
+sha256 = "98463e1d7b3b6a7f0c02daf120e1151669593c44316a95c9cb586e44f6320df1"

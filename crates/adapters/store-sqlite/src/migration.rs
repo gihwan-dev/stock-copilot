@@ -50,6 +50,7 @@ pub(crate) const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("0012_audit_log.sql", crate::sql::audit::CREATE),
     ("0013_chat_and_run_ledgers.sql", crate::sql::chat::CREATE),
+    ("0014_settings.sql", crate::sql::settings::CREATE),
 ];
 
 pub(crate) fn run(connection: &mut Connection, at: Timestamp) -> Result<(), SystemPortError> {

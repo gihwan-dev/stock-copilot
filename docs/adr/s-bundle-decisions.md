@@ -13,3 +13,5 @@
 | S-09 | `ChatStore` 하나가 `ChatRepository`·`ChatRunLedger`·`ToolCallLedger`를 구현한다(마이그레이션 `0013_chat_and_run_ledgers.sql`). 대화 항목·실행 원장·MCP 호출 원장은 수정·삭제 금지 트리거, 대화 항목은 세션별 연속 위치 트리거. 세션 목록은 세션 ID 순(가짜의 `BTreeMap`과 같게) | 세션·원장마다 별도 저장소 타입 |
 | S-09 | 실행 원장은 같은 항목 전체를 다시 넣으면 `AlreadyRecorded`(가짜와 같음), MCP 호출 원장은 가짜처럼 매번 새 행으로 추가한다. MCP 결과는 포트가 주는 JSON 그대로 저장하고 해시로 줄이지 않는다 | 결과 해시만 저장 |
 | S-09 | "AI 작업 원장"은 `application`에 채팅 실행 원장 밖의 포트가 없어 `ChatRunLedger`까지만 구현했다. 백그라운드 AI 작업 원장은 포트가 생기면 같은 마이그레이션 방식으로 더한다 | 포트 없이 테이블만 먼저 만듦 |
+| S-10 | `SettingsStore`가 `SettingsRepository`를 구현한다. `settings(name, schema_version, payload)` 한 테이블(마이그레이션 `0014_settings.sql`)에 투자 성향·위험 설정·토스 스펙 해시를 항목별 행으로 두고, 읽을 때 `schema_version`으로 올림 함수를 거친다. 지금은 1판만 있어 1판은 그대로, 모르는 판은 무결성 오류다. 성향을 쓰면 위험 설정의 시간·비중·성향 필드를, 위험 설정을 쓰면 성향의 같은 필드를 한 트랜잭션에서 맞춘다(가짜와 같은 계약) | 설정 전체를 한 덩어리로 저장 |
+| S-10 | 토스 스펙 해시는 `application`에 포트가 없어 `SettingsStore`의 고유 메서드(`store_toss_spec_hash`, `toss_spec_hash`)와 `store-sqlite`의 `TossSpecHash`(소문자 16진 64자)로 둔다 | `application`에 새 포트 추가 |

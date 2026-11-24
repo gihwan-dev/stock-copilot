@@ -22,14 +22,14 @@ use domain::{
     UntrustedText,
 };
 
-pub(super) fn put_hours_permission(out: &mut Encoder, state: HoursPermissionState) {
+pub(crate) fn put_hours_permission(out: &mut Encoder, state: HoursPermissionState) {
     out.push(match state {
         HoursPermissionState::Disabled => "disabled",
         HoursPermissionState::Enabled => "enabled",
     });
 }
 
-pub(super) fn take_hours_permission(
+pub(crate) fn take_hours_permission(
     input: &mut Decoder<'_>,
 ) -> rusqlite::Result<HoursPermissionState> {
     match input.next()? {
