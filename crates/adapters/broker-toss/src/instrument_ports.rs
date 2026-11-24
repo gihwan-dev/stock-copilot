@@ -5,8 +5,8 @@ use application::{
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower, Candle,
-    CandlePeriod, ClosedOrderSet, CommissionRateFact, Currency, InstrumentMaster, KnownMarket,
-    Orderbook, PriceAdjustment, PriceLimits, QuoteInstrument, ResolvedOrderInstrument,
+    CandlePeriod, CommissionRateFact, Currency, InstrumentMaster, KnownMarket, Orderbook,
+    PriceAdjustment, PriceLimits, ProvenClosedOrderSet, QuoteInstrument, ResolvedOrderInstrument,
     SellableQuantityFact, SettlementWindow, StockWarnings, TimeInterval, TransactionFilter,
 };
 
@@ -110,7 +110,7 @@ impl<
         &self,
         account: &AccountId,
         evaluation_window: TimeInterval,
-    ) -> Result<ClosedOrderSet, PortError> {
+    ) -> Result<ProvenClosedOrderSet, PortError> {
         self.reader.closed_orders(account, evaluation_window).await
     }
     async fn order(

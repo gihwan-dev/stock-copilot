@@ -16,18 +16,18 @@ use application::{
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
-    CommissionRateFact, CreditTrade, Currency, Draft, DraftRestoreEvidence, EstimateOutcome,
-    FlowInterval, FxPair, FxRate, FxRateKind, HistoricalSignal, HistoricalSignalOccurrence,
-    IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
-    InvestorTradingRankings, IssuedEstimateTaskId, KnownMarket, MarketCalendar,
-    MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrument, NewsItem, OrderFxRates,
-    Orderbook, Portfolio, PriceAdjustment, PriceLimits, ProgramTrade, Proposal, ProposalId, Quote,
-    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog,
-    SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
-    SellableQuantityFact, SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission,
-    SignalTaskKey, StockRanking, StockWarnings, Symbol, SyncRecord, Thesis, TimeInterval,
-    Timestamp, TransactionFilter, UntrustedText, ValuationSnapshot,
+    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, CommissionRateFact,
+    CreditTrade, Currency, Draft, DraftRestoreEvidence, EstimateOutcome, FlowInterval, FxPair,
+    FxRate, FxRateKind, HistoricalSignal, HistoricalSignalOccurrence, IndicatorCode, InstrumentId,
+    InstrumentMaster, InvestorFlow, InvestorProfile, InvestorTradingRankings, IssuedEstimateTaskId,
+    KnownMarket, MarketCalendar, MarketIndicatorCandle, MarketIndicatorQuote, MasterInstrument,
+    NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment, PriceLimits, ProgramTrade,
+    Proposal, ProposalId, ProvenClosedOrderSet, Quote, QuoteInstrument, RankingLimit,
+    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
+    SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
+    SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
+    Symbol, SyncRecord, Thesis, TimeInterval, Timestamp, TransactionFilter, UntrustedText,
+    ValuationSnapshot,
 };
 impl BrokerRead for Unavailable {
     fn accounts(&self) -> impl Future<Output = Result<BrokerAccountRows, PortError>> + Send {
@@ -118,7 +118,7 @@ impl BrokerRead for Unavailable {
         &self,
         _account: &AccountId,
         _evaluation_window: TimeInterval,
-    ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send {
+    ) -> impl Future<Output = Result<ProvenClosedOrderSet, PortError>> + Send {
         std::future::ready(Err(PortError::new(
             ReadEndpoint::ClosedOrders,
             HttpStatus::NotReceived,

@@ -78,3 +78,7 @@ pub use scripted_http_server::{GateObservation, HoldPosition, ResponseGate, Scri
 pub mod fake_ai_cli;
 mod fake_ai_cli_replay;
 mod fake_mcp_client;
+mod ws_server;
+pub use ws_server::{
+    FakeWsServer, FakeWsSessionPlan, FakeWsStep, WsRecordedConnection, WsUpgradeReply,
+};

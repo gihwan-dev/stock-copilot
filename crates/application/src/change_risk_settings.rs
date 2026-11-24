@@ -1,11 +1,12 @@
 use crate::{
-    DeliveryReport, EventBus, RiskChangeConfirmation, SettingsRepository, SystemPortError,
-    user_presence::UserPresence,
+    AuditEntry, AuditKind, AuditLog, Clock, DeliveryReport, EventBus, RiskChangeConfirmation,
+    SettingsRepository, SystemPortError, user_presence::UserPresence,
 };
 use domain::{
     HoursPermission, HoursPermissionState, InvestorProfile, InvestorProfileError, OrderPermission,
     RiskChange, RiskSettings, SavedMarketOrderSetting, WeightCapChange,
 };
+use std::future::Future;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RiskSettingsChangeOutcome {
@@ -16,14 +17,50 @@ pub enum RiskSettingsChangeOutcome {
     ProfileRejected(InvestorProfileError),
 }
 
+pub trait RiskAuditSink: Send + Sync {
+    fn record(&self, kind: AuditKind) -> impl Future<Output = Result<(), SystemPortError>> + Send;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct WithoutRiskAudit;
+
+impl RiskAuditSink for WithoutRiskAudit {
+    fn record(&self, _kind: AuditKind) -> impl Future<Output = Result<(), SystemPortError>> + Send {
+        std::future::ready(Ok(()))
+    }
+}
+
 #[derive(Debug)]
-pub struct ChangeRiskSettings<'a, Repository, Presence> {
+pub struct RiskAudit<'a, Audit, Time> {
+    audit: &'a Audit,
+    clock: &'a Time,
+}
+
+impl<'a, Audit: AuditLog, Time: Clock> RiskAudit<'a, Audit, Time> {
+    #[must_use]
+    pub const fn new(audit: &'a Audit, clock: &'a Time) -> Self {
+        Self { audit, clock }
+    }
+}
+
+impl<Audit: AuditLog, Time: Clock> RiskAuditSink for RiskAudit<'_, Audit, Time> {
+    async fn record(&self, kind: AuditKind) -> Result<(), SystemPortError> {
+        self.audit
+            .append(&AuditEntry::new(self.clock.now(), kind))
+            .await
+            .map(|_recorded| ())
+    }
+}
+
+#[derive(Debug)]
+pub struct ChangeRiskSettings<'a, Repository, Presence, Audit = WithoutRiskAudit> {
     repository: &'a Repository,
     presence: &'a Presence,
     events: &'a EventBus,
+    audit: Audit,
 }
 impl<'a, Repository: SettingsRepository, Presence: UserPresence>
-    ChangeRiskSettings<'a, Repository, Presence>
+    ChangeRiskSettings<'a, Repository, Presence, WithoutRiskAudit>
 {
     #[must_use]
     pub const fn new(
@@ -35,9 +72,31 @@ impl<'a, Repository: SettingsRepository, Presence: UserPresence>
             repository,
             presence,
             events,
+            audit: WithoutRiskAudit,
         }
     }
-
+}
+impl<'a, Repository: SettingsRepository, Presence: UserPresence, Audit: AuditLog, Time: Clock>
+    ChangeRiskSettings<'a, Repository, Presence, RiskAudit<'a, Audit, Time>>
+{
+    #[must_use]
+    pub const fn with_audit(
+        repository: &'a Repository,
+        presence: &'a Presence,
+        events: &'a EventBus,
+        audit: RiskAudit<'a, Audit, Time>,
+    ) -> Self {
+        Self {
+            repository,
+            presence,
+            events,
+            audit,
+        }
+    }
+}
+impl<Repository: SettingsRepository, Presence: UserPresence, Audit: RiskAuditSink>
+    ChangeRiskSettings<'_, Repository, Presence, Audit>
+{
     pub async fn execute(
         &self,
         requested: RiskSettings,
@@ -61,8 +120,15 @@ impl<'a, Repository: SettingsRepository, Presence: UserPresence>
         {
             return Ok(RiskSettingsChangeOutcome::ProfileRejected(error));
         }
-        for change in changes {
-            match self.presence.confirm_risk_change(change).await {
+        for change in &changes {
+            let outcome = self.presence.confirm_risk_change(change.clone()).await;
+            self.audit
+                .record(AuditKind::RiskChangeConfirmationRecorded {
+                    change: change.clone(),
+                    outcome,
+                })
+                .await?;
+            match outcome {
                 RiskChangeConfirmation::Confirmed => (),
                 RiskChangeConfirmation::Denied => return Ok(RiskSettingsChangeOutcome::Denied),
                 RiskChangeConfirmation::Unavailable => {
@@ -71,6 +137,11 @@ impl<'a, Repository: SettingsRepository, Presence: UserPresence>
             }
         }
         self.repository.store_risk_settings(&requested).await?;
+        for change in changes {
+            self.audit
+                .record(AuditKind::RiskSettingsChanged(change))
+                .await?;
+        }
         Ok(RiskSettingsChangeOutcome::Changed(
             self.events.publish(domain::DomainEvent::SettingsChanged),
         ))

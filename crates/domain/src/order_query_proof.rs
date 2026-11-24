@@ -232,6 +232,16 @@ impl ProvenClosedOrderSet {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn assume_proven(orders: ClosedOrderSet) -> ProvenClosedOrderSet {
+    let proof = ClosedOrderCompletenessProof {
+        scope: ClosedOrderQueryScope::unfiltered(orders.account_id().clone(), orders.covered()),
+        exhaustion: OrderPageExhaustion::Exhausted,
+        completeness: orders.completeness(),
+    };
+    ProvenClosedOrderSet { orders, proof }
+}
+
 impl fmt::Debug for ProvenClosedOrderSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProvenClosedOrderSet")
@@ -666,7 +676,7 @@ mod tests {
         AccountId, BrokerOrderMoney, BrokerOrderStatus, CalendarDate, CalendarYear,
         ClosedOrderCompleteness, ClosedOrderIncomplete, Currency, DayNumber, MonthNumber,
         NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope,
-        OpenOrderCoverage, OrderSide, Quantity, Symbol, net_purchase_amount,
+        OpenOrderCoverage, OrderSide, Quantity, Symbol, net_purchase::net_purchase_amount,
     };
     use rust_decimal::Decimal;
 
