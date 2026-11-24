@@ -53,7 +53,7 @@ pub struct ToolErrorPayload {
 
 impl ToolErrorPayload {
     #[must_use]
-    pub fn invalid_input(field: Option<&str>, message: &str) -> Self {
+    pub fn invalid_input(field: Option<&str>, message: &'static str) -> Self {
         Self::non_retryable(ToolErrorCode::InvalidInput, field, message)
     }
 
@@ -76,12 +76,12 @@ impl ToolErrorPayload {
     }
 
     #[must_use]
-    pub fn non_retryable(code: ToolErrorCode, field: Option<&str>, message: &str) -> Self {
+    pub fn non_retryable(code: ToolErrorCode, field: Option<&str>, message: &'static str) -> Self {
         Self::build(code, RetryPolicy::NonRetryable, field, message)
     }
 
     #[must_use]
-    pub fn retryable(code: ToolErrorCode, field: Option<&str>, message: &str) -> Self {
+    pub fn retryable(code: ToolErrorCode, field: Option<&str>, message: &'static str) -> Self {
         Self::build(code, RetryPolicy::Retryable, field, message)
     }
 
@@ -89,7 +89,7 @@ impl ToolErrorPayload {
         code: ToolErrorCode,
         retryable: RetryPolicy,
         field: Option<&str>,
-        message: &str,
+        message: &'static str,
     ) -> Self {
         let safe_message = sanitize_fixed_message(message);
         let safe_field = field
@@ -181,7 +181,7 @@ pub struct ToolSpec {
 impl ToolSpec {
     pub fn try_new(
         name: ToolName,
-        description: &str,
+        description: &'static str,
         access: ToolAccessKind,
         input_schema: JsonObject,
         output_schema: Option<JsonObject>,

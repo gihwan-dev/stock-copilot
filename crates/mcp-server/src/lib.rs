@@ -5,6 +5,7 @@ mod server;
 mod socket;
 mod token;
 mod tools;
+mod untrusted;
 
 pub use handler::{ConnectionEvent, ConnectionRejection};
 pub use pagination::{
@@ -33,4 +34,9 @@ pub use tools::{
     ToolFuture, ToolInvocation, ToolLedgerMode, ToolRegistry, ToolRegistryError, ToolSpec,
     UnconfiguredToolLedger, build_object_schema, make_cursor_store,
     validate_arguments_against_schema,
+};
+pub use untrusted::{
+    DEFAULT_UNTRUSTED_TEXT_CHARS, MAX_UNTRUSTED_TEXT_CHARS, NormalizedUntrustedText, Truncation,
+    UNTRUSTED_TEXT_FIELD, UntrustedTextLimit, UntrustedTextLimitError, is_removed_char,
+    untrusted_text_value,
 };
