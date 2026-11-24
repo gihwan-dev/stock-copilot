@@ -81,31 +81,24 @@ const envAttribute = (recipe, name) => {
 
 const testkitProblems = (text, policy) => {
   const problems = [];
-  const workingMatch =
-    /pub const WORKING_PROPERTY_CASES:\s*u32\s*=\s*(\d+);/u.exec(text);
-  const fullMatch = /pub const FULL_PROPERTY_CASES:\s*u32\s*=\s*(\d+);/u.exec(
-    text,
-  );
-  if (
-    workingMatch === null ||
-    Number(workingMatch[1]) !== policy.workingCases
-  ) {
-    problems.push(
-      `crates/testkit/src/lib.rs: WORKING_PROPERTY_CASES가 ${policy.workingCases}와 다르다`,
-    );
-  }
-  if (fullMatch === null || Number(fullMatch[1]) !== policy.fullCases) {
-    problems.push(
-      `crates/testkit/src/lib.rs: FULL_PROPERTY_CASES가 ${policy.fullCases}와 다르다`,
-    );
-  }
-  if (
-    !/fn cases_for\([^)]*\)\s*->\s*u32\s*\{[\s\S]*?None\s*=>\s*WORKING_PROPERTY_CASES,[\s\S]*?Some\(_\)\s*=>\s*FULL_PROPERTY_CASES,/u.test(
+  const casesMatch =
+    /fn cases_for\([^)]*\)\s*->\s*u32\s*\{[\s\S]*?None\s*=>\s*(\d+),[\s\S]*?Some\(_\)\s*=>\s*(\d+),/u.exec(
       text,
-    )
-  ) {
+    );
+  if (casesMatch === null) {
     problems.push(
-      "crates/testkit/src/lib.rs: cases_for가 WORKING_PROPERTY_CASES와 FULL_PROPERTY_CASES를 쓰지 않는다",
+      "crates/testkit/src/lib.rs: cases_for의 working/full 분기를 찾지 못했다",
+    );
+    return problems;
+  }
+  if (Number(casesMatch[1]) !== policy.workingCases) {
+    problems.push(
+      `crates/testkit/src/lib.rs: cases_for(None) 값(${casesMatch[1]})이 ${policy.workingCases}와 다르다`,
+    );
+  }
+  if (Number(casesMatch[2]) !== policy.fullCases) {
+    problems.push(
+      `crates/testkit/src/lib.rs: cases_for(Some(_)) 값(${casesMatch[2]})이 ${policy.fullCases}와 다르다`,
     );
   }
   return problems;

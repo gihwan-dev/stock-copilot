@@ -147,14 +147,11 @@ test("H68 proptest policy rejects lowering working below 256 or full below 4096"
     const libPath = join(testkitMismatch, "crates/testkit/src/lib.rs");
     writeFileSync(
       libPath,
-      readFileSync(libPath, "utf8").replace(
-        "pub const WORKING_PROPERTY_CASES: u32 = 256;",
-        "pub const WORKING_PROPERTY_CASES: u32 = 128;",
-      ),
+      readFileSync(libPath, "utf8").replace("None => 256,", "None => 128,"),
     );
     assert.ok(
       proptestProblems(testkitMismatch).some((item) =>
-        item.includes("WORKING_PROPERTY_CASES"),
+        item.includes("cases_for(None)"),
       ),
     );
   } finally {

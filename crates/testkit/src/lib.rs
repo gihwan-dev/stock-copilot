@@ -1,6 +1,3 @@
-pub const WORKING_PROPERTY_CASES: u32 = 256;
-pub const FULL_PROPERTY_CASES: u32 = 4096;
-
 #[must_use]
 pub fn property_cases() -> u32 {
     cases_for(
@@ -17,8 +14,8 @@ pub fn property_cases_at_least(minimum: u32) -> u32 {
 
 fn cases_for(ci: Option<&str>) -> u32 {
     match ci {
-        None => WORKING_PROPERTY_CASES,
-        Some(_) => FULL_PROPERTY_CASES,
+        None => 256,
+        Some(_) => 4096,
     }
 }
 

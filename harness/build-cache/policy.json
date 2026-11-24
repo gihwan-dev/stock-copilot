@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "cacheSubdir": "registry/stock-copilot-rustc-cache",
-  "defaultMaxMegabytes": 4096,
+  "defaultMaxMegabytes": 6144,
   "pruneTargetRatio": 0.8,
   "minEntryAgeSeconds": 300,
   "staleTempAgeSeconds": 1800,
