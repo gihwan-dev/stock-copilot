@@ -8,6 +8,7 @@ pub use money_display::{
 };
 
 mod account_id;
+mod ai_job_id;
 mod client_order_id;
 mod instrument_id;
 mod instrument_issuer;
@@ -17,6 +18,7 @@ mod instrument_master;
 mod symbol;
 
 pub use account_id::{AccountId, MaskedAccountNumber, MaskedAccountNumberError};
+pub use ai_job_id::{AiJobId, AiJobIdError};
 pub use client_order_id::{ClientOrderId, ClientOrderIdError};
 pub use instrument_id::{InstrumentId, InstrumentIdError};
 pub use instrument_issuer::{

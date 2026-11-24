@@ -1,3 +1,5 @@
+mod ai_job_records;
+pub use ai_job_records::MemoryAiJobRecords;
 mod script;
 pub use script::Script;
 mod instrument_id_issuer;

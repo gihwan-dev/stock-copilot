@@ -200,6 +200,7 @@ pub enum UiEvent {
     FxRateUpdated(UiFxPair),
     DisclosureTriggerRecorded(UiDisclosureKey),
     SourceStatusChanged(UiDataSource),
+    AiJobFinished(String),
 }
 
 impl From<DomainEvent> for UiEvent {
@@ -262,6 +263,7 @@ impl From<DomainEvent> for UiEvent {
                 Self::DisclosureTriggerRecorded(id.into())
             }
             DomainEvent::SourceStatusChanged(source) => Self::SourceStatusChanged(source.into()),
+            DomainEvent::AiJobFinished(id) => Self::AiJobFinished(id.as_str().to_owned()),
         }
     }
 }

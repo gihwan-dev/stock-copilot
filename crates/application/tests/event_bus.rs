@@ -135,6 +135,7 @@ mod tests {
             DomainEvent::DisclosureArrived(disclosure.clone()),
             DomainEvent::DisclosureTriggerRecorded(disclosure),
             DomainEvent::SourceStatusChanged(domain::DataSource::KindDisclosure),
+            DomainEvent::AiJobFinished(domain::AiJobId::try_new("job-1").expect("가짜 실행 ID")),
         ]
     }
     fn events() -> Vec<DomainEvent> {
@@ -192,6 +193,7 @@ mod tests {
             DomainEvent::FxRateUpdated(_) => DomainEventKind::FxRateUpdated,
             DomainEvent::DisclosureTriggerRecorded(_) => DomainEventKind::DisclosureTriggerRecorded,
             DomainEvent::SourceStatusChanged(_) => DomainEventKind::SourceStatusChanged,
+            DomainEvent::AiJobFinished(_) => DomainEventKind::AiJobFinished,
         }
     }
 
@@ -218,7 +220,7 @@ mod tests {
         for event in &published {
             assert_eq!(bus.publish(event.clone()), DeliveryReport::default());
         }
-        assert_eq!(receivers.len(), 39);
+        assert_eq!(receivers.len(), 40);
         for (kind, receiver) in receivers {
             let expected: Vec<_> = published
                 .iter()
