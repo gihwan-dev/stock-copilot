@@ -2,15 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseSessionGroupsOutput, runTempAudit } from "../temp-audit.mjs";
 
 const root = resolve("target/H-53");
 const environment = () =>
@@ -233,9 +236,11 @@ test("소유 세션 조회기를 실행하지 못하면 감사는 실패한다",
 
 test("소유 세션 조회 결과가 불완전하면 감사는 실패한다", (t) => {
   const directory = fixture(t);
-  writeFileSync(join(directory, "python3"), "#!/bin/sh\nexit 0\n", {
-    mode: 0o700,
-  });
+  const systemTrue = ["/usr/bin/true", "/bin/true"].find((candidate) =>
+    existsSync(candidate),
+  );
+  assert.ok(systemTrue !== undefined);
+  symlinkSync(systemTrue, join(directory, "python3"));
   const result = spawnSync(
     process.execPath,
     [audit, "/bin/sh", "-c", "exit 0"],
@@ -248,6 +253,139 @@ test("소유 세션 조회 결과가 불완전하면 감사는 실패한다", (t
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /소유 세션을 확인하지 못했다/u);
   assert.deepEqual(readdirSync(directory), ["python3"]);
+});
+
+test("세션 조회 출력 파서는 불완전하거나 잘못된 응답을 모두 거부한다", () => {
+  for (const invalid of [
+    { status: 0, stdout: "" },
+    { status: 1, stdout: "ok\n" },
+    { status: 0, stdout: "ok\n", error: new Error("enoent") },
+    { status: 0, stdout: "123\n" },
+    { status: 0, stdout: "ok\n\n123\n" },
+    { status: 0, stdout: "ok\nabc\n" },
+    { status: 0, stdout: "ok\n+123\n" },
+    { status: 0, stdout: "ok\n 123\n" },
+    { status: 0, stdout: "ok\n0x10\n" },
+    { status: 0, stdout: "ok\n1e2\n" },
+    { status: 0, stdout: "ok\n0\n" },
+    { status: 0, stdout: "ok\n-5\n" },
+    { status: 0, stdout: "ok\n9007199254740993\n" },
+  ]) {
+    assert.equal(parseSessionGroupsOutput(invalid), undefined);
+  }
+  assert.deepEqual(parseSessionGroupsOutput({ status: 0, stdout: "ok\n" }), []);
+  assert.deepEqual(
+    parseSessionGroupsOutput({ status: 0, stdout: "ok\n42\n42\n99\n" }),
+    [42, 99],
+  );
+});
+
+test("주입한 세션 조회 가짜가 불완전한 결과를 주면 감사는 부하와 무관하게 즉시 실패한다", async (t) => {
+  const directory = fixture(t);
+  let out = "";
+  let err = "";
+  let calledWith;
+  const outcome = await runTempAudit("/bin/sh", ["-c", "exit 0"], {
+    baseTempDir: directory,
+    env: environment(),
+    stdio: "ignore",
+    stdout: {
+      write: (chunk) => {
+        out += chunk;
+      },
+    },
+    stderr: {
+      write: (chunk) => {
+        err += chunk;
+      },
+    },
+    inspectSessionGroups: (pid) => {
+      calledWith = pid;
+      return undefined;
+    },
+  });
+  assert.equal(typeof calledWith, "number");
+  assert.equal(outcome.exitCode, 1);
+  assert.match(err, /소유 세션을 확인하지 못했다/u);
+  assert.match(out, /temp-audit: before=0 after=0/u);
+  assert.deepEqual(readdirSync(directory), []);
+});
+
+test("주입한 세션 조회 가짜가 잔존 그룹을 보고하면 종료 신호를 보내고 실패한다", async (t) => {
+  const directory = fixture(t);
+  let err = "";
+  const signals = [];
+  let calls = 0;
+  const outcome = await runTempAudit("/bin/sh", ["-c", "exit 0"], {
+    baseTempDir: directory,
+    env: environment(),
+    stdio: "ignore",
+    stdout: { write: () => {} },
+    stderr: {
+      write: (chunk) => {
+        err += chunk;
+      },
+    },
+    wait: async () => {},
+    signalGroup: (group, signal) => {
+      signals.push([group, signal]);
+    },
+    inspectSessionGroups: () => {
+      calls += 1;
+      return calls <= 24 ? [777] : [];
+    },
+  });
+  assert.equal(outcome.exitCode, 1);
+  assert.match(err, /자손 프로세스/u);
+  assert.deepEqual(signals, [
+    [777, "SIGTERM"],
+    [777, "SIGKILL"],
+  ]);
+  assert.deepEqual(readdirSync(directory), []);
+});
+
+test("없는 명령을 실행하면 임시 폴더를 정리하고 예외 없이 실패한다", async (t) => {
+  const directory = fixture(t);
+  let err = "";
+  const unhandled = [];
+  const onUnhandled = (reason) => {
+    unhandled.push(reason);
+  };
+  process.on("unhandledRejection", onUnhandled);
+  t.after(() => process.removeListener("unhandledRejection", onUnhandled));
+  const outcome = await runTempAudit(
+    "/nonexistent/stock-copilot-missing-cmd",
+    [],
+    {
+      baseTempDir: directory,
+      env: environment(),
+      stdio: "ignore",
+      stdout: { write: () => {} },
+      stderr: {
+        write: (chunk) => {
+          err += chunk;
+        },
+      },
+    },
+  );
+  await new Promise((done) => setTimeout(done, 50));
+  assert.equal(outcome.exitCode, 1);
+  assert.match(err, /ENOENT/u);
+  assert.deepEqual(unhandled, []);
+  assert.deepEqual(readdirSync(directory), []);
+  const cli = spawnSync(
+    process.execPath,
+    [audit, "/nonexistent/stock-copilot-missing-cmd"],
+    {
+      encoding: "utf8",
+      env: { ...environment(), TMPDIR: directory },
+      timeout: 10000,
+    },
+  );
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /ENOENT/u);
+  assert.doesNotMatch(cli.stderr, /scandir/u);
+  assert.deepEqual(readdirSync(directory), []);
 });
 
 test("임시 검사기는 Node의 컴파일 캐시를 정리하면서 누출은 계속 거부한다", (t) => {
