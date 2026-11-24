@@ -1,11 +1,11 @@
 use application::{ClassifiedError, RiskSettingsChangeOutcome, SystemPortError};
 use domain::{
-    HorizonSelection, HoursPermissionState, OrderPermission, RiskAppetite, RiskSettings,
-    SavedMarketOrderSetting,
+    HorizonSelection, HoursPermissionState, InvestorProfile, OrderPermission, RiskAppetite,
+    RiskSettings, SavedMarketOrderSetting,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::State;
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::error::IpcError;
 use super::state::{LoadedSettings, ScreenState, SecretPresence};
@@ -163,8 +163,13 @@ const fn map_order_permission(permission: OrderPermission) -> UiOrderPermission 
     }
 }
 
-fn to_settings_view(loaded: LoadedSettings) -> UiSettingsView {
-    let profile = loaded.profile.unwrap_or_default();
+fn saturating_count(count: usize) -> u16 {
+    u16::try_from(count).ok().unwrap_or(u16::MAX)
+}
+
+fn to_settings_view(loaded: &LoadedSettings) -> UiSettingsView {
+    let fallback = InvestorProfile::default();
+    let profile = loaded.profile.as_ref().unwrap_or(&fallback);
     let risk = loaded.risk_settings.unwrap_or_else(|| {
         RiskSettings::new(
             OrderPermission::Disabled,
@@ -185,10 +190,8 @@ fn to_settings_view(loaded: LoadedSettings) -> UiSettingsView {
         instrument_cap_percent: ratio_to_percent_string(caps.instrument_cap().as_ratio()),
         instrument_warning_percent: ratio_to_percent_string(caps.instrument_warning().as_ratio()),
         sector_cap_percent: ratio_to_percent_string(caps.sector_cap().as_ratio()),
-        excluded_sector_count: u16::try_from(profile.exclusions().sectors().len())
-            .unwrap_or(u16::MAX),
-        excluded_security_type_count: u16::try_from(profile.exclusions().security_types().len())
-            .unwrap_or(u16::MAX),
+        excluded_sector_count: saturating_count(profile.exclusions().sectors().len()),
+        excluded_security_type_count: saturating_count(profile.exclusions().security_types().len()),
         order_enabled: map_order_permission(risk.orders()),
         ai_budget_percent: String::from("70"),
         dart_key: map_optional_key(loaded.dart_key),
@@ -218,7 +221,7 @@ pub async fn load_settings_view(state: &ScreenState) -> Result<UiSettingsView, I
         .load_settings()
         .await
         .map_err(|error| map_system_error(&error))?;
-    Ok(to_settings_view(loaded))
+    Ok(to_settings_view(&loaded))
 }
 
 pub async fn apply_order_permission(
@@ -230,7 +233,8 @@ pub async fn apply_order_permission(
         .load_settings()
         .await
         .map_err(|error| map_system_error(&error))?;
-    let profile = loaded.profile.unwrap_or_default();
+    let fallback = InvestorProfile::default();
+    let profile = loaded.profile.as_ref().unwrap_or(&fallback);
     let current = loaded.risk_settings.unwrap_or_else(|| {
         RiskSettings::new(
             OrderPermission::Disabled,
@@ -281,21 +285,21 @@ pub async fn apply_order_permission(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_settings(
-    state: State<'_, ScreenState>,
+pub async fn get_settings<R: Runtime>(
+    app: AppHandle<R>,
     request: GetSettingsRequest,
 ) -> Result<UiSettingsView, IpcError> {
     let GetSettingsRequest {
         scope: SettingsQueryScope::All,
     } = request;
-    load_settings_view(state.inner()).await
+    load_settings_view(app.state::<ScreenState>().inner()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn set_order_permission(
-    state: State<'_, ScreenState>,
+pub async fn set_order_permission<R: Runtime>(
+    app: AppHandle<R>,
     request: SetOrderPermissionRequest,
 ) -> Result<UiOrderSwitchOutcome, IpcError> {
-    apply_order_permission(state.inner(), request.permission).await
+    apply_order_permission(app.state::<ScreenState>().inner(), request.permission).await
 }
