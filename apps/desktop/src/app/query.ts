@@ -18,6 +18,10 @@ export const createAppQueryClient = (): QueryClient =>
       queries: {
         retry: false,
         refetchOnWindowFocus: false,
+        networkMode: "always",
+      },
+      mutations: {
+        networkMode: "always",
       },
     },
   });
