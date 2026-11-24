@@ -3,7 +3,7 @@ use application::{
     AuditEntry, AuditIntegrity, AuditLog, CollectedUrlCatalog, ExternalUrlOpened,
     ExternalUrlOpener, ExternalUrlOpenerError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId, RecordOutcome, SecretKey, SecretStore, SecretValue,
-    SystemPortError, ToolCallLedger, ToolCallRecord, WriteCompleted,
+    SystemPortError, ToolCallHistory, ToolCallLedger, ToolCallRecord, WriteCompleted,
 };
 use domain::{AuthorizedExternalUrl, NormalizedUrl, ParsedExternalUrl};
 use std::sync::Arc;
@@ -313,6 +313,21 @@ impl MemoryToolCallLedger {
     #[must_use]
     pub fn records(&self) -> Vec<ToolCallRecord> {
         self.records.write().clone()
+    }
+}
+
+impl ToolCallHistory for MemoryToolCallLedger {
+    fn calls_in_run(
+        &self,
+        run: &application::AiRunId,
+    ) -> impl Future<Output = Result<Vec<ToolCallRecord>, SystemPortError>> + Send {
+        std::future::ready(Ok(self
+            .records
+            .write()
+            .iter()
+            .filter(|record| record.run_id() == run)
+            .cloned()
+            .collect()))
     }
 }
 

@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import type {
+  CandlePoint,
   ChartProps,
   ChartPoint,
   ChartAxisLabels,
@@ -7,7 +8,7 @@ import type {
 } from "./chart-types";
 import { ChartNumber } from "./Numbers";
 import { ScrollArea } from "./ScrollArea";
-import { text } from "../lib";
+import { text, type UiText } from "../lib";
 type Props = ChartProps & {
   readonly onHighlight: (point: ChartPoint | undefined) => void;
   readonly layout: "trend" | "donut" | "treemap";
@@ -110,6 +111,100 @@ export const ChartStatusBody = (props: {
           <span />
         ) : (
           <ChartNumber value={props.selected.value} />
+        )}
+      </ScrollArea>
+    )}
+  </>
+);
+
+export const CandleTable = (props: {
+  readonly data: readonly CandlePoint[];
+  readonly label: UiText;
+  readonly onHighlight: (point: CandlePoint | undefined) => void;
+}): ReactElement => (
+  <div className="sr-only">
+    <table className="sr-only">
+      <caption>{props.label}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{props.label}</th>
+          <th scope="col">{text("ds.candleOpen", "ko")}</th>
+          <th scope="col">{text("ds.candleHigh", "ko")}</th>
+          <th scope="col">{text("ds.candleLow", "ko")}</th>
+          <th scope="col">{text("ds.candleClose", "ko")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {props.data.map((point) => (
+          <tr
+            key={point.id}
+            onPointerEnter={(): void => {
+              props.onHighlight(point);
+            }}
+            onPointerLeave={(): void => {
+              props.onHighlight(undefined);
+            }}
+          >
+            <th scope="row" className="text-left status-sentence">
+              {point.label}
+            </th>
+            <td className="text-right status-sentence">
+              <ChartNumber value={point.open} />
+            </td>
+            <td className="text-right status-sentence">
+              <ChartNumber value={point.high} />
+            </td>
+            <td className="text-right status-sentence">
+              <ChartNumber value={point.low} />
+            </td>
+            <td className="text-right status-sentence">
+              <ChartNumber value={point.close} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+export const CandleStatusBody = (props: {
+  readonly selected: CandlePoint | undefined;
+  readonly keepMounted: "keep" | "hide";
+}): ReactElement => (
+  <>
+    {props.selected === undefined ? null : (
+      <span className="status-sentence">
+        {props.selected.label}
+        {text("ds.chartSeparator", "ko")}
+      </span>
+    )}
+    {props.selected === undefined && props.keepMounted === "hide" ? null : (
+      <ScrollArea direction="horizontal">
+        {props.selected === undefined ? (
+          <span />
+        ) : (
+          <span className="flex items-center gap-space-2 w-max">
+            <span>
+              {text("ds.candleOpen", "ko")}
+              {text("ds.chartSeparator", "ko")}
+              <ChartNumber value={props.selected.open} />
+            </span>
+            <span>
+              {text("ds.candleHigh", "ko")}
+              {text("ds.chartSeparator", "ko")}
+              <ChartNumber value={props.selected.high} />
+            </span>
+            <span>
+              {text("ds.candleLow", "ko")}
+              {text("ds.chartSeparator", "ko")}
+              <ChartNumber value={props.selected.low} />
+            </span>
+            <span>
+              {text("ds.candleClose", "ko")}
+              {text("ds.chartSeparator", "ko")}
+              <ChartNumber value={props.selected.close} />
+            </span>
+          </span>
         )}
       </ScrollArea>
     )}
