@@ -1,8 +1,7 @@
 use crate::{Script, memory::MemoryReply, script::State};
 use application::{
     AuditEntry, AuditIntegrity, AuditLog, CollectedUrlCatalog, ExternalUrlOpened,
-    ExternalUrlOpener, ExternalUrlOpenerError, RecordOutcome, SecretKey, SecretStore, SecretValue,
-    AuditEntry, AuditIntegrity, AuditLog, PeerProcessInfo, PeerProcessInspector,
+    ExternalUrlOpener, ExternalUrlOpenerError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId, RecordOutcome, SecretKey, SecretStore, SecretValue,
     SystemPortError, WriteCompleted,
 };

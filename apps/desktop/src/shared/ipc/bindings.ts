@@ -46,6 +46,7 @@ export type OpenExternalResponse = {
 };
 
 export type OpenExternalStatus = "opened";
+
 export type UiDataSource =
   | "KindDisclosure"
   | "DartDisclosureApi"
