@@ -4,6 +4,7 @@ mod dart_disclosures;
 mod endpoint;
 mod headers;
 mod http;
+mod kind_disclosures;
 mod news_rss;
 mod rate_limiter;
 mod registry;
@@ -28,6 +29,14 @@ pub use headers::{
 pub use http::{
     SourceCredential, SourceFetch, SourceFetchOutcome, SourceHttpClient, SourceHttpError,
     SourcePayload, http_error_to_information, http_status_to_error, outcome_to_attempt,
+};
+pub use kind_disclosures::{
+    CorpCodeCandidate, CorpCodeResolution, CorpNameCodeResolver, DartFallbackCoverage,
+    DartRssClient, DomesticDisclosureBatch, DomesticDisclosureCollector, DomesticDisclosureRoute,
+    KindCorpMatchFailureReason, KindCorpResolutionReport, KindDisclosureClient,
+    KindDisclosureEntry, KindDisclosureFeed, KindFetchWindow, KindMarket, MatchedKindDisclosure,
+    ReceiptCorrespondence, UnmatchedKindDisclosure, kind_dart_receipt_correspondence,
+    normalize_corp_name, parse_kind_rss,
 };
 pub use news_rss::{PressMacroSource, RssNewsFeed};
 pub use rate_limiter::{SourceWait, TokioSourceWait};
