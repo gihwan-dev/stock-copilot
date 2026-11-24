@@ -51,6 +51,4 @@ export type {
   CanvasCandleMark,
   CandleCanvasScene,
 } from "./canvas-chart";
-export type { FreeText, ExternalUrl } from "./brand";
-export { parseFreeText, emptyFreeText, parseExternalUrl } from "./brand";
 export { queryKeys, type AppRoutePath } from "./query-keys";
