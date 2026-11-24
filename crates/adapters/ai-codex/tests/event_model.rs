@@ -530,4 +530,33 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn exec_and_app_server_turn_completed_reject_unclosed_tool_before_finish() {
+        let mut exec = CodexExecDecoder::new(IsolationCheck::Passed);
+        exec.decode_line(
+            r#"{"type":"item.started","item":{"id":"u_open","type":"mcp_tool_call","server":"app","tool":"get_portfolio","arguments":{},"status":"in_progress"}}"#,
+        )
+        .expect("exec item.started");
+        assert_eq!(
+            exec.decode_line(
+                r#"{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":2}}"#
+            ),
+            Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall)),
+            "exec turn.completed must reject unclosed tool immediately before finish"
+        );
+
+        let mut app = CodexAppServerDecoder::new(analysis_expectation());
+        app.decode_line(startup_thread_ok()).expect("thread");
+        app.decode_line(startup_mcp_ok()).expect("mcp");
+        app.decode_line(
+            r#"{"method":"item/started","params":{"item":{"id":"m_open","type":"mcpToolCall","server":"app","tool":"get_portfolio","arguments":{},"status":"inProgress"}}}"#,
+        )
+        .expect("app item/started");
+        assert_eq!(
+            app.decode_line(r#"{"method":"turn/completed","params":{"status":"completed"}}"#),
+            Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall)),
+            "app-server turn/completed must reject unclosed tool immediately before finish"
+        );
+    }
 }

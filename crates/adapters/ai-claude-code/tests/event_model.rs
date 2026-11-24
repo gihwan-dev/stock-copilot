@@ -582,4 +582,20 @@ mod tests {
             assert!(!body.contains("/Users/"), "no user home path in {name}");
         }
     }
+
+    #[test]
+    fn result_rejects_unclosed_tool_call_immediately_before_finish() {
+        let mut decoder = ClaudeEventDecoder::new(analysis_expectation());
+        decoder.decode_line(valid_init_line()).expect("init");
+        decoder
+            .decode_line(
+                r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"open_turn","name":"mcp__app__get_portfolio","input":{}}]}}"#,
+            )
+            .expect("tool_use");
+        assert_eq!(
+            decoder.decode_line(r#"{"type":"result","subtype":"success","is_error":false}"#),
+            Err(StreamDecodeError::Order(StreamOrderError::UnclosedToolCall)),
+            "result line must reject unclosed tool immediately before finish"
+        );
+    }
 }

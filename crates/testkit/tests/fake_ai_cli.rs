@@ -32,7 +32,7 @@ mod tests {
             let path = target_dir
                 .join("a11-test-tmp")
                 .join(format!("{label}-{}-{seq}", std::process::id()));
-            fs::create_dir_all(&path).expect("create temp test dir");
+            fs::create_dir_all(&path).expect("make scratch dir");
             Self(path)
         }
 
