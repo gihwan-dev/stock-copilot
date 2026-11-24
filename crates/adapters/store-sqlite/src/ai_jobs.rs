@@ -2,8 +2,9 @@ use crate::estimates::codec::{Decoder, Encoder, invalid, put_timestamp, take_tim
 use crate::{Database, sql::ai_jobs as sql};
 use application::{
     AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
-    PrinciplesRepository, PromptDigest, PromptHasher, PromptId, PromptRef, PromptSource,
-    PromptVersion, RunKind, RunPurpose, SystemPortError, TokenCount, TokenUsage, WriteCompleted,
+    PrinciplesRepository, PromptDigest, PromptHasher, PromptId, PromptLocationError, PromptRef,
+    PromptSource, PromptVersion, RunKind, RunPurpose, SystemPortError, TokenCount, TokenUsage,
+    WriteCompleted,
 };
 use domain::{
     AiJobId, CashFloor, ConcentrationFloor, InvestmentPrinciples, PolicyText, PrincipleNote,
@@ -123,9 +124,19 @@ fn decode_prompt(input: &mut Decoder<'_>) -> rusqlite::Result<Option<PromptRef>>
 pub struct Sha256PromptHasher;
 
 impl PromptHasher for Sha256PromptHasher {
-    fn digest(&self, source: &PromptSource) -> PromptDigest {
+    fn digest(&self, source: &PromptSource) -> Result<PromptDigest, PromptLocationError> {
         use sha2::{Digest, Sha256};
-        PromptDigest::from_sha256(Sha256::digest(source.as_str().as_bytes()).into())
+        use std::fmt::Write;
+        let hex = Sha256::digest(source.as_str().as_bytes()).iter().fold(
+            String::with_capacity(64),
+            |mut text, byte| {
+                match write!(text, "{byte:02x}") {
+                    Ok(()) | Err(_) => {}
+                }
+                text
+            },
+        );
+        PromptDigest::try_new(&hex)
     }
 }
 

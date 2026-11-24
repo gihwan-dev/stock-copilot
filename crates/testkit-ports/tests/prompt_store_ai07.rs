@@ -35,8 +35,8 @@ mod tests {
     }
     struct FixedHasher;
     impl PromptHasher for FixedHasher {
-        fn digest(&self, _source: &PromptSource) -> PromptDigest {
-            PromptDigest::try_new(DIGEST).expect("해시")
+        fn digest(&self, _source: &PromptSource) -> Result<PromptDigest, PromptLocationError> {
+            PromptDigest::try_new(DIGEST)
         }
     }
     const fn digest() -> &'static FixedHasher {

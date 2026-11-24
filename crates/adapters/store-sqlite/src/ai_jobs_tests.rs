@@ -215,7 +215,10 @@ fn prompt_reference_round_trips_and_hash_comes_from_the_text() {
     use application::{LoadedPrompt, PromptHasher, PromptSource, PromptTask, PromptVersion};
     let hasher = crate::Sha256PromptHasher;
     assert_eq!(
-        hasher.digest(&PromptSource::new("abc")).as_str(),
+        hasher
+            .digest(&PromptSource::new("abc"))
+            .expect("해시")
+            .as_str(),
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
     let source = PromptSource::new(
@@ -232,7 +235,7 @@ fn prompt_reference_round_trips_and_hash_comes_from_the_text() {
     changed_text.push('\n');
     let changed = PromptSource::new(&changed_text);
     assert_ne!(
-        hasher.digest(&changed),
+        hasher.digest(&changed).expect("해시"),
         loaded.prompt_ref().digest().clone()
     );
     let with_prompt = record(

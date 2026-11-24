@@ -194,10 +194,6 @@ impl PromptDigest {
         Ok(Self(value.to_owned()))
     }
     #[must_use]
-    pub fn from_sha256(bytes: [u8; 32]) -> Self {
-        Self(bytes.into_iter().fold(String::with_capacity(64), push_hex))
-    }
-    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -211,7 +207,7 @@ pub struct PromptRef {
 }
 
 pub trait PromptHasher {
-    fn digest(&self, source: &PromptSource) -> PromptDigest;
+    fn digest(&self, source: &PromptSource) -> Result<PromptDigest, PromptLocationError>;
 }
 
 impl PromptRef {
@@ -259,7 +255,7 @@ impl LoadedPrompt {
         }
         Ok(Self {
             file,
-            digest: hasher.digest(source),
+            digest: hasher.digest(source)?,
         })
     }
     #[must_use]
@@ -274,12 +270,4 @@ impl LoadedPrompt {
             digest: self.digest.clone(),
         }
     }
-}
-
-fn push_hex(mut text: String, byte: u8) -> String {
-    use std::fmt::Write;
-    match write!(text, "{byte:02x}") {
-        Ok(()) | Err(_) => {}
-    }
-    text
 }
