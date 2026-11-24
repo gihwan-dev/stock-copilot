@@ -25,3 +25,4 @@
 | M-04 | 인자 범위 | `market`은 KR·US(생략 시 KR), `get_investor_flow`는 KR만, `get_candles`는 `days` 1~250(기본 60)과 `limit`·`cursor` 페이지, `get_rankings`의 `kind`는 거래대금·상승·하락·외국인 순매수·기관 순매수. 지수·금리 값은 단위(`unit`)를 붙인 십진 문자열 | 미국 수급 허용, 일봉 한 번에 전부 |
 | M-03 | 거래 커서 | 위치 기반 커서를 유지한다. 쪽 사이에 새 거래가 맨 앞에 들어오면 다음 쪽에 중복이 생길 수 있으나 커서 TTL 10분·질의 지문 범위 안의 표시 문제라 받아들인다 | 시점 고정 스냅샷 커서(저장소 버전 필요) |
 | 묶음 | 리뷰 위임 경로 | 세션 훅이 기본 `Agent` 리뷰를 막아 T3 `delegate_task`(별도 작업 사본, `role: review`, 기준 커밋·브랜치·대상 커밋 줄)로만 위임 | 기본 Agent |
+| M-05 | 주문 0건 고정 방식 | `BrokerTrade`는 `order-execution`에만 있고 `mcp-server`는 arch-check의 `transitive-forbidden`으로 닿지 못하므로, "가짜 `BrokerTrade` 호출 0"은 구조로 보장하고 테스트는 세 가지로 고정: ① `build_analysis_catalog`의 모든 도구(새 도구 자동 포함)를 proptest 무작위 인자로 호출해 객체 결과나 정해진 구조화 오류만 나오고 포트 호출은 읽기 변형뿐, ② 도구 이름에 주문·승인·설정·키 조각이 없고 상태 변경 도구는 고정 허용 목록(현재 0개)뿐, ③ `mcp-server` 매니페스트에 주문·키 crate 의존이 없음 | `mcp-server`에 `trade-fakes` 개발 의존을 넣어 직접 셈(arch-check 위반) |
