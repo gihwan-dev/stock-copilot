@@ -51,7 +51,8 @@ export type CoreUiEvent =
   | { readonly category: "portfolio"; readonly kind: PortfolioEventKind }
   | { readonly category: "transactions"; readonly kind: TransactionEventKind }
   | { readonly category: "status"; readonly kind: StatusEventKind }
-  | { readonly category: "activity"; readonly kind: ActivityEventKind };
+  | { readonly category: "activity"; readonly kind: ActivityEventKind }
+  | { readonly category: "briefing"; readonly kind: "BriefingFinished" };
 
 const nonEmptyId = z.string().min(1);
 const marketSchema = z.enum(["Kr", "Us"]);
@@ -75,6 +76,13 @@ const informationSourceSchema = z.union([
   z.object({ News: newsSourceSchema }).strict(),
   z.object({ Disclosure: disclosureSourceSchema }).strict(),
 ]);
+
+const briefingIdSchema = z
+  .object({
+    kind: z.enum(["Morning", "ClosingReview", "PreUsMarket"]),
+    date: nonEmptyId,
+  })
+  .strict();
 
 const unitEntry = (event: CoreUiEvent): readonly [string, CoreUiEvent] => [
   event.kind,
@@ -153,6 +161,10 @@ const keyedEvents: ReadonlyMap<string, KeyedEntry> = new Map<
   keyedEntry(
     { category: "activity", kind: "DisclosureTriggerRecorded" },
     disclosureKeySchema,
+  ),
+  keyedEntry(
+    { category: "briefing", kind: "BriefingFinished" },
+    briefingIdSchema,
   ),
   ...idActivityKinds.map((kind) =>
     keyedEntry({ category: "activity", kind }, nonEmptyId),

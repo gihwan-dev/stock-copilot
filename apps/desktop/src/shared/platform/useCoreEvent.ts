@@ -40,6 +40,8 @@ const invalidationForCoreEvent = (
       };
     case "activity":
       return { scope: "keys", keys: [] };
+    case "briefing":
+      return { scope: "keys", keys: [queryKeys.briefings] };
   }
 };
 

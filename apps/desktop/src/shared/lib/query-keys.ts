@@ -1,5 +1,5 @@
 export type AppRoutePath =
-  "/" | "/transactions" | "/settings" | "/settings/status";
+  "/" | "/transactions" | "/briefings" | "/settings" | "/settings/status";
 
 export const queryKeys = {
   appVersion: ["app-version"] as const,

@@ -1,6 +1,29 @@
 export const responses = {
   appVersion: { version: "0.1.0" },
   cancelChatTurn: { outcome: "NotRunning", turn_id: "turn-1" },
+  getBriefings: {
+    latest: {
+      body: "밤사이 미국장은 올랐습니다 [1]",
+      failure: "none",
+      finished_at: "2026-11-25T08:20:00+09:00",
+      id: { date: "2026-11-25", kind: "Morning" },
+      sources: [
+        { kind: "news", title: "연합 기사", url: "https://example.com/a" },
+        { kind: "web", title: "웹 요약", url: null },
+      ],
+      status: "completed",
+    },
+    past: [
+      {
+        body: "",
+        failure: "ai-unavailable",
+        finished_at: "2026-11-25T07:20:00+09:00",
+        id: { date: "2026-11-24", kind: "ClosingReview" },
+        sources: [],
+        status: "failed",
+      },
+    ],
+  },
   getChatHistory: {
     active_turn: { last_sequence: 3, state: "Finished", turn_id: "turn-1" },
     entries: [
