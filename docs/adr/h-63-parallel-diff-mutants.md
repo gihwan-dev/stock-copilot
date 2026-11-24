@@ -63,3 +63,21 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
 - `domain`·`application`·`order-execution` 대규모 변경(100~160건 이상)이 Linux ARM 병렬 러너에서 macOS 예산 소모 없이 완주한다.
 - `store-sqlite` 변경도 CI와 야간 변이가 공유하는 `macos-mutants-slot-{0,1}` 2슬롯 상한 안에서 최대 8조각으로 병렬 실행되고, `diff-mutants-verdict`가 모든 조각의 완료·성공과 건너뛴 플랫폼 항목을 닫힌 실패로 합산한다.
 - 바뀌면 다시 볼 조건: Linux ARM 러너 한도나 `store-sqlite` 변이 규모가 커져 `MUTANTS_PER_SHARD = 20` 또는 `MAX_SHARDS = 8`로 90/150분 안에 끝나지 않을 때, 또는 계정 macOS 러너 한도가 바뀔 때.
+
+## 손 변형 검증 (격리 임시 복제본, 13/13 검출)
+
+| 번호 | 파일 | 변형 | 잡은 테스트 | 결과 |
+|---|---|---|---|---|
+| M-13 | `crates/xtask/src/mutants_check/scope.rs` | `TargetPlatform::Linux` 필터 반전 | `h63_platform_filter_routes_neutral_crates_to_linux_and_excluded_to_macos` | 검출(실패) |
+| M-14 | `crates/xtask/src/mutants_check.rs` | 조각 실행에서 `--platform all` 허용 | `h63_platform_cli_accepts_canonical_plan_and_shards_and_rejects_invalid` | 검출(실패) |
+| M-15 | `crates/xtask/src/test_diff.rs` | `check_for_linux`에서 AST `compare_sources` 생략 | `h63_linux_precondition_accepts_h62_bundle_and_rejects_unapproved_change` | 검출(실패) |
+| M-16 | `harness/ci/diff-mutants-plan.mjs` | 조각 수 상한 `MAX_SHARDS = 8` 제거 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-17 | `harness/ci/diff-mutants-plan.mjs` | 미선언 파일 경로를 예외 대신 `domain`으로 기본 라우팅 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-18 | `harness/ci/diff-mutants-shard.mjs` | 조각 요약에서 `timeout.txt` 비어 있음 검사 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-19 | `harness/ci/diff-mutants-shard.mjs` | `MUTATION_OUTCOME` 누락 시 통과 허용 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-20 | `harness/ci/diff-mutants-aggregate.mjs` | 누락된 조각 작업 무시 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-21 | `harness/ci/diff-mutants-aggregate.mjs` | 페이지네이션 잘림(`total_count` 불일치) 검사 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-22 | `harness/ci/workflow-policy/check.mjs` | `diff-mutants-macos` 동시 실행 상한 2 → 4 완화 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-23 | `harness/ci/remote-check.mjs` | `checkRun`에서 실패한 조각 작업 거부 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-25 | `harness/ci/diff-mutants-aggregate.mjs` | 건너뛴 플랫폼 작업에 실행 단계가 있어도 허용 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |
+| M-26 | `harness/ci/workflow-policy/check.mjs` | CI·야간 macOS 변이 공통 2슬롯 대기열 공유 검사 생략 | `harness/ci/tests/h63-diff-mutants.test.mjs` | 검출(실패) |

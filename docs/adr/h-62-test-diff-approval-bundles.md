@@ -84,3 +84,22 @@ H-55·H-56(ADR 0153)은 `harness/test-diff/approvals.toml`의 승인 행으로 �
 - 승인된 구조 외 테스트 변경이 있는 병합에서 별도 35분 검사 스레드와 훅 우회 없이 정식 CI(`ci.yml`)가 초록으로 통과한다.
 - H-63의 Linux/macOS 병렬 변경분 변이 선행 `test-diff`도 동일한 `approval::apply_for_base`를 호출해 승인 묶음 구간에서 즉시 변이를 시작한다.
 - 바뀌면 다시 볼 조건: `cargo-nextest` 출력 형식이나 `test-diff` 지적 문자열 형식이 바뀌어 기존 묶음 호환성이 깨질 때, 또는 승인 묶음 수가 누적되어 보관·아카이브 정책이 필요해질 때.
+
+## 손 변형 검증 (격리 임시 복제본, 14/14 검출)
+
+| 번호 | 파일 | 변형 | 잡은 테스트 | 결과 |
+|---|---|---|---|---|
+| M-01 | `crates/xtask/src/test_diff/bundle/parse.rs` | 승인 불가 지적 규칙(Removed 등) 허용 | `h62_malformed_wildcard_and_removed_finding_bundles_fail_closed` | 검출(실패) |
+| M-02 | `crates/xtask/src/test_diff/bundle/parse.rs` | `before_sha256 == after_sha256` 허용 | `h62_malformed_wildcard_and_removed_finding_bundles_fail_closed` | 검출(실패) |
+| M-03 | `crates/xtask/src/test_diff/bundle/parse.rs` | 복수 대상 지정자(`merge_head`+`target_commit`) 허용 | `h62_malformed_wildcard_and_removed_finding_bundles_fail_closed` | 검출(실패) |
+| M-04 | `crates/xtask/src/test_diff/bundle.rs` | 묶음에 없는 추가 지적 무시(부분 일치 허용) | `h62_missing_finding_extra_finding_and_wrong_hash_reject_the_entire_bundle` | 검출(실패) |
+| M-05 | `crates/xtask/src/test_diff/bundle.rs` | 파일 `after_sha256` 검증 생략 | `h62_missing_finding_extra_finding_and_wrong_hash_reject_the_entire_bundle` | 검출(실패) |
+| M-06 | `crates/xtask/src/test_diff/bundle.rs` | `target_commit` 모드에서 비병합 커밋(부모 1개) 거부 생략 | `h62_historical_target_commit_and_target_tree_modes_match_only_their_exact_merge_interval` | 검출(실패) |
+| M-07 | `crates/xtask/src/test_diff/bundle.rs` | 묶음 도입 커밋에 묶음 외 파일 포함 허용 | `h62_intro_commit_with_extra_file_is_rejected` | 검출(실패) |
+| M-08 | `crates/xtask/src/test_diff/bundle.rs` | 병합 커밋 메시지 트레일러 대조 생략(`Test-Diff-Findings`) | `h62_mismatched_merge_commit_trailers_are_rejected` | 검출(실패) |
+| M-09 | `crates/xtask/src/test_diff/bundle.rs` | 병합으로 도입된 묶음 신뢰 거부 생략(`parents.len() != 1` 제거) | `h62_merge_introduced_bundle_is_rejected` | 검출(실패) |
+| M-10 | `crates/xtask/src/test_diff/bundle.rs` | 동일 구간 중복 묶음 닫힌 실패 생략 | `h62_duplicate_matching_bundles_fail_closed` | 검출(실패) |
+| M-11 | `crates/xtask/src/test_diff/bundle.rs` | 해시 미등록 파일의 지적 기여(coverage) 검사 생략 | `h62_draft_bundle_auto_mode_and_unlisted_file_coverage_are_strict` | 검출(실패) |
+| M-12 | `harness/agent-writable.txt` | `harness/test-diff/bundles/**`를 에이전트 쓰기 허용 목록에 추가 | `harness/claude-hooks/tests/h62-bundle-protection.test.mjs` | 검출(실패) |
+| M-24 | `crates/xtask/src/test_diff/bundle.rs` | `merge_head` 병합 커밋의 필수 트레일러 누락 허용(`OptionalConsistent`로 완화) | `h62_missing_half_present_and_unreadable_trailers_are_rejected` | 검출(실패) |
+| M-27 | `crates/xtask/src/test_diff/bundle/parse.rs` | 초안 기본 `reason`("승인 사유를 적는다") 거부 생략 | `h62_malformed_wildcard_and_removed_finding_bundles_fail_closed` | 검출(실패) |
