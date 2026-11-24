@@ -16,3 +16,6 @@ pub(crate) const SYNCHRONOUS: &str = "PRAGMA synchronous";
 pub(crate) const SET_SYNCHRONOUS: &str = "PRAGMA synchronous = FULL";
 pub(crate) const SET_AUTO_VACUUM: &str = "PRAGMA auto_vacuum = INCREMENTAL";
 pub(crate) const INCREMENTAL_VACUUM: &str = "PRAGMA incremental_vacuum";
+pub(crate) const CIPHER_INTEGRITY: &str = "PRAGMA cipher_integrity_check";
+pub(crate) const QUICK_CHECK: &str = "PRAGMA quick_check";
+pub(crate) const SET_JOURNAL_DELETE: &str = "PRAGMA journal_mode = DELETE";

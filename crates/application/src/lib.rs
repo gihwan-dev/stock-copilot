@@ -502,3 +502,5 @@ pub use warm_chat::{
     WarmChatProbe, WarmChatReadiness, WarmChatRejection, WarmChatRequest, WarmChatRuntime,
     WarmChatSession, WarmFreshness, WarmMatch,
 };
+mod database_restore;
+pub use database_restore::{RestoreOutcome, announce_restore};
