@@ -7,7 +7,12 @@
       [".claude", "settings.local.json"]
     ],
     "mainPatterns": ["docs/**"],
-    "mainOnly": ["docs/reviews/**", "docs/tasks.md", "docs/progress.md"],
+    "mainOnly": [
+      "docs/reviews/**",
+      "docs/tasks.md",
+      "docs/progress.md",
+      "harness/test-diff/bundles/**"
+    ],
     "adr": {
       "directory": "docs/adr",
       "reference": "HEAD"

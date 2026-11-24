@@ -78,6 +78,7 @@ fn main() -> ExitCode {
             test_diff::selected_command(base, packages, base_use)
         }
         [command, rest @ ..] if command == "test-diff" => test_diff::command(rest, base_use),
+        [command, rest @ ..] if command == "test-diff-bundle" => test_diff::bundle_command(rest),
         [command, rest @ ..] if command == "test-changes" => test_diff::changes_command(rest),
         [command, rest @ ..] if command == "manifest-changes" => manifest_changes::command(rest),
         _ => arch_check::usage(),

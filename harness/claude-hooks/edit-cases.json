@@ -947,6 +947,42 @@
     "rules": []
   },
   {
+    "path": "{root}/harness/test-diff/bundles/D-56.toml",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/harness/test-diff/bundles/D-56.toml",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer",
+    "lock": "on"
+  },
+  {
+    "path": "{root}/harness/test-diff/Bundles/D-56.toml",
+    "decision": "deny",
+    "rules": ["main-only-path"],
+    "role": "implementer"
+  },
+  {
+    "path": "{root}/harness/test-diff/bundles/D-56.toml",
+    "decision": "deny",
+    "rules": ["role-without-edits"],
+    "role": "adversarial-reviewer"
+  },
+  {
+    "path": "{root}/harness/test-diff/bundles/D-56.toml",
+    "decision": "deny",
+    "rules": ["role-without-edits"],
+    "role": "review-critic"
+  },
+  {
+    "path": "{root}/harness/test-diff/bundles/D-56.toml",
+    "decision": "allow",
+    "rules": []
+  },
+  {
     "path": "{root}/apps/desktop/src/zz/eslint.config.mjs",
     "decision": "deny",
     "rules": ["misplaced-config"],

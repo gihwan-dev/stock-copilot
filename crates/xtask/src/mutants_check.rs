@@ -506,7 +506,7 @@ fn scope_for(
     }
 }
 
-fn checked_scope(
+pub(crate) fn checked_scope(
     root: &Path,
     arguments: &[String],
     base_use: crate::git_base::BaseUse,

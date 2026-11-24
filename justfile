@@ -201,6 +201,15 @@ coverage-check:
 test-diff commit:
     cargo run --locked --quiet --package xtask -- test-diff "$1"
 
+test-diff-bundle-draft task base target mode="":
+    if [ -n "$4" ]; then cargo run --locked --quiet --package xtask -- test-diff-bundle draft "$1" "$2" "$3" --mode "$4"; else cargo run --locked --quiet --package xtask -- test-diff-bundle draft "$1" "$2" "$3"; fi
+
+test-diff-bundle-check bundle base target:
+    cargo run --locked --quiet --package xtask -- test-diff-bundle check "$1" "$2" "$3"
+
+test-diff-bundle-message bundle:
+    cargo run --locked --quiet --package xtask -- test-diff-bundle message "$1"
+
 mutants-diff commit:
     cargo run --locked --quiet --package xtask -- mutants --in-diff "$1"
 
