@@ -471,6 +471,11 @@ pub use send_chat_message::{
     build_chat_prompt, check_analysis_tool,
 };
 
+mod chat_web_research;
+pub use chat_web_research::{
+    ChatWebResearch, ChatWebResearchFailure, ChatWebResearchFindings, ChatWebResearchRequest,
+};
+
 mod peer_process;
 pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
