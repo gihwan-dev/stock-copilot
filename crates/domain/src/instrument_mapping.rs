@@ -1,6 +1,6 @@
 use crate::instrument_mapping_change::{
-    validate_change_action, verify_change_evidence, verify_link_correction,
-    verify_retirement_correction,
+    VerifiedChange, VerifiedLinkCorrection, VerifiedRetirementCorrection, validate_change_action,
+    verify_change_evidence, verify_link_correction, verify_retirement_correction,
 };
 use crate::{
     ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection, IdAdoption,
@@ -195,6 +195,192 @@ impl InstrumentMappingRecord {
     }
 }
 
+fn find_owned_status_in(
+    records: &[InstrumentMappingRecord],
+    source: &InstrumentSource,
+    expected_id: &InstrumentId,
+) -> Result<InstrumentMappingStatus, MappingTransitionError> {
+    if let Some(entry) = records.iter().find(|entry| entry.source == *source) {
+        if entry.id != *expected_id {
+            return Err(MappingTransitionError::SourceBoundToOtherId);
+        }
+        return Ok(entry.state);
+    }
+    for entry in records {
+        match entry.source.relation(source) {
+            SourceRelation::Uncertain => return Err(MappingTransitionError::IdentityUncertain),
+            SourceRelation::Distinct => {}
+        }
+    }
+    Err(MappingTransitionError::Missing)
+}
+
+fn check_next_target_in(
+    records: &[InstrumentMappingRecord],
+    next: &InstrumentSource,
+    target_id: &InstrumentId,
+) -> Result<(), MappingTransitionError> {
+    if let Some(existing) = records.iter().find(|entry| entry.source == *next) {
+        if existing.id != *target_id {
+            return Err(MappingTransitionError::SourceBoundToOtherId);
+        }
+        return Err(MappingTransitionError::SourceAlreadyRecorded);
+    }
+    let next_key = next.normalized_key();
+    if records
+        .iter()
+        .any(|entry| entry.id == *target_id && entry.source.normalized_key() == next_key)
+    {
+        return Err(MappingTransitionError::SourceAlreadyRecorded);
+    }
+    for entry in records {
+        if entry.id == *target_id {
+            continue;
+        }
+        match entry.source.relation(next) {
+            SourceRelation::Uncertain => {
+                return Err(MappingTransitionError::IdentityUncertain);
+            }
+            SourceRelation::Distinct => {}
+        }
+    }
+    Ok(())
+}
+
+fn latest_active_link_in<'a>(
+    history: &'a [MappingHistoryEvent],
+    id: &InstrumentId,
+) -> Option<(&'a InstrumentSource, &'a InstrumentSource)> {
+    let mut stack = Vec::new();
+    for event in history {
+        match event {
+            MappingHistoryEvent::IdentifierChanged {
+                instrument_id,
+                previous,
+                next,
+                ..
+            } if instrument_id == id => stack.push((previous, next)),
+            MappingHistoryEvent::LinkCorrected { instrument_id, .. } if instrument_id == id => {
+                let _popped = stack.pop();
+            }
+            MappingHistoryEvent::IdentifierChanged { .. }
+            | MappingHistoryEvent::RetirementCorrected { .. }
+            | MappingHistoryEvent::LinkCorrected { .. } => {}
+        }
+    }
+    stack.pop()
+}
+
+fn plan_change_inner(
+    related_records: &[InstrumentMappingRecord],
+    change: ConfirmedIdentifierChange,
+) -> Result<VerifiedChange, MappingTransitionError> {
+    let verified = verify_change_evidence(change)?;
+    match find_owned_status_in(related_records, &verified.previous, &verified.instrument_id)? {
+        InstrumentMappingStatus::Active => {}
+        InstrumentMappingStatus::Superseded | InstrumentMappingStatus::Retired => {
+            return Err(MappingTransitionError::SourceNotActive);
+        }
+    }
+    check_next_target_in(related_records, &verified.next, &verified.instrument_id)?;
+    Ok(verified)
+}
+
+fn plan_retirement_inner(
+    related_records: &[InstrumentMappingRecord],
+    correction: ConfirmedRetirementCorrection,
+) -> Result<VerifiedRetirementCorrection, MappingTransitionError> {
+    let verified = verify_retirement_correction(correction)?;
+    match find_owned_status_in(related_records, &verified.source, &verified.instrument_id)? {
+        InstrumentMappingStatus::Retired => {}
+        InstrumentMappingStatus::Active | InstrumentMappingStatus::Superseded => {
+            return Err(MappingTransitionError::SourceNotRetired);
+        }
+    }
+    Ok(verified)
+}
+
+fn plan_link_inner(
+    related_records: &[InstrumentMappingRecord],
+    history: &[MappingHistoryEvent],
+    correction: ConfirmedLinkCorrection,
+) -> Result<VerifiedLinkCorrection, MappingTransitionError> {
+    let verified = verify_link_correction(correction)?;
+    if verified.previous == verified.mistaken_next {
+        return Err(MappingTransitionError::UnchangedSource);
+    }
+    let prev_status =
+        find_owned_status_in(related_records, &verified.previous, &verified.instrument_id)?;
+    let next_status = find_owned_status_in(
+        related_records,
+        &verified.mistaken_next,
+        &verified.instrument_id,
+    )?;
+    let matches_latest = latest_active_link_in(history, &verified.instrument_id)
+        == Some((&verified.previous, &verified.mistaken_next));
+    match (prev_status, next_status) {
+        (InstrumentMappingStatus::Superseded, InstrumentMappingStatus::Active)
+            if matches_latest => {}
+        (
+            InstrumentMappingStatus::Active
+            | InstrumentMappingStatus::Superseded
+            | InstrumentMappingStatus::Retired,
+            InstrumentMappingStatus::Active
+            | InstrumentMappingStatus::Superseded
+            | InstrumentMappingStatus::Retired,
+        ) => {
+            return Err(MappingTransitionError::LinkNotLatest);
+        }
+    }
+    Ok(verified)
+}
+
+pub fn plan_confirmed_identifier_change(
+    related_records: &[InstrumentMappingRecord],
+    change: ConfirmedIdentifierChange,
+) -> Result<MappingHistoryEvent, MappingTransitionError> {
+    let verified = plan_change_inner(related_records, change)?;
+    Ok(MappingHistoryEvent::IdentifierChanged {
+        instrument_id: verified.instrument_id,
+        previous: verified.previous,
+        next: verified.next,
+        disclosure: verified.disclosure,
+        action: Box::new(verified.action),
+        note: verified.note,
+        confirmed_at: verified.confirmed_at,
+    })
+}
+
+pub fn plan_confirmed_retirement_correction(
+    related_records: &[InstrumentMappingRecord],
+    correction: ConfirmedRetirementCorrection,
+) -> Result<MappingHistoryEvent, MappingTransitionError> {
+    let verified = plan_retirement_inner(related_records, correction)?;
+    Ok(MappingHistoryEvent::RetirementCorrected {
+        instrument_id: verified.instrument_id,
+        source: verified.source,
+        disclosure: verified.disclosure,
+        note: verified.note,
+        corrected_at: verified.corrected_at,
+    })
+}
+
+pub fn plan_confirmed_link_correction(
+    related_records: &[InstrumentMappingRecord],
+    history: &[MappingHistoryEvent],
+    correction: ConfirmedLinkCorrection,
+) -> Result<MappingHistoryEvent, MappingTransitionError> {
+    let verified = plan_link_inner(related_records, history, correction)?;
+    Ok(MappingHistoryEvent::LinkCorrected {
+        instrument_id: verified.instrument_id,
+        restored_previous: verified.previous,
+        unlinked_next: verified.mistaken_next,
+        disclosure: verified.disclosure,
+        note: verified.note,
+        corrected_at: verified.corrected_at,
+    })
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InstrumentMappings {
     records: Vec<InstrumentMappingRecord>,
@@ -217,59 +403,6 @@ impl InstrumentMappings {
             }
         }
         Err(InstrumentMappingError::Missing)
-    }
-
-    fn find_owned_status(
-        &self,
-        source: &InstrumentSource,
-        expected_id: &InstrumentId,
-    ) -> Result<InstrumentMappingStatus, MappingTransitionError> {
-        if let Some(entry) = self.records.iter().find(|entry| entry.source == *source) {
-            if entry.id != *expected_id {
-                return Err(MappingTransitionError::SourceBoundToOtherId);
-            }
-            return Ok(entry.state);
-        }
-        for entry in &self.records {
-            match entry.source.relation(source) {
-                SourceRelation::Uncertain => return Err(MappingTransitionError::IdentityUncertain),
-                SourceRelation::Distinct => {}
-            }
-        }
-        Err(MappingTransitionError::Missing)
-    }
-
-    fn check_next_target(
-        &self,
-        next: &InstrumentSource,
-        target_id: &InstrumentId,
-    ) -> Result<(), MappingTransitionError> {
-        if let Some(existing) = self.records.iter().find(|entry| entry.source == *next) {
-            if existing.id != *target_id {
-                return Err(MappingTransitionError::SourceBoundToOtherId);
-            }
-            return Err(MappingTransitionError::SourceAlreadyRecorded);
-        }
-        let next_key = next.normalized_key();
-        if self
-            .records
-            .iter()
-            .any(|entry| entry.id == *target_id && entry.source.normalized_key() == next_key)
-        {
-            return Err(MappingTransitionError::SourceAlreadyRecorded);
-        }
-        for entry in &self.records {
-            if entry.id == *target_id {
-                continue;
-            }
-            match entry.source.relation(next) {
-                SourceRelation::Uncertain => {
-                    return Err(MappingTransitionError::IdentityUncertain);
-                }
-                SourceRelation::Distinct => {}
-            }
-        }
-        Ok(())
     }
 
     pub fn resolve(
@@ -365,42 +498,11 @@ impl InstrumentMappings {
         Err(failure)
     }
 
-    fn latest_active_link(
-        &self,
-        id: &InstrumentId,
-    ) -> Option<(&InstrumentSource, &InstrumentSource)> {
-        let mut stack = Vec::new();
-        for event in &self.history {
-            match event {
-                MappingHistoryEvent::IdentifierChanged {
-                    instrument_id,
-                    previous,
-                    next,
-                    ..
-                } if instrument_id == id => stack.push((previous, next)),
-                MappingHistoryEvent::LinkCorrected { instrument_id, .. } if instrument_id == id => {
-                    let _popped = stack.pop();
-                }
-                MappingHistoryEvent::IdentifierChanged { .. }
-                | MappingHistoryEvent::RetirementCorrected { .. }
-                | MappingHistoryEvent::LinkCorrected { .. } => {}
-            }
-        }
-        stack.pop()
-    }
-
     pub fn link_confirmed_change(
         &mut self,
         change: ConfirmedIdentifierChange,
     ) -> Result<InstrumentId, MappingTransitionError> {
-        let verified = verify_change_evidence(change)?;
-        match self.find_owned_status(&verified.previous, &verified.instrument_id)? {
-            InstrumentMappingStatus::Active => {}
-            InstrumentMappingStatus::Superseded | InstrumentMappingStatus::Retired => {
-                return Err(MappingTransitionError::SourceNotActive);
-            }
-        }
-        self.check_next_target(&verified.next, &verified.instrument_id)?;
+        let verified = plan_change_inner(&self.records, change)?;
         for entry in &mut self.records {
             if entry.source == verified.previous {
                 entry.state = InstrumentMappingStatus::Superseded;
@@ -428,13 +530,7 @@ impl InstrumentMappings {
         &mut self,
         correction: ConfirmedRetirementCorrection,
     ) -> Result<InstrumentId, MappingTransitionError> {
-        let verified = verify_retirement_correction(correction)?;
-        match self.find_owned_status(&verified.source, &verified.instrument_id)? {
-            InstrumentMappingStatus::Retired => {}
-            InstrumentMappingStatus::Active | InstrumentMappingStatus::Superseded => {
-                return Err(MappingTransitionError::SourceNotRetired);
-            }
-        }
+        let verified = plan_retirement_inner(&self.records, correction)?;
         for entry in &mut self.records {
             if entry.source == verified.source {
                 entry.state = InstrumentMappingStatus::Active;
@@ -455,23 +551,7 @@ impl InstrumentMappings {
         &mut self,
         correction: ConfirmedLinkCorrection,
     ) -> Result<InstrumentId, MappingTransitionError> {
-        let verified = verify_link_correction(correction)?;
-        if verified.previous == verified.mistaken_next {
-            return Err(MappingTransitionError::UnchangedSource);
-        }
-        let _prev_status = self.find_owned_status(&verified.previous, &verified.instrument_id)?;
-        let next_status =
-            self.find_owned_status(&verified.mistaken_next, &verified.instrument_id)?;
-        let matches_latest = self.latest_active_link(&verified.instrument_id)
-            == Some((&verified.previous, &verified.mistaken_next));
-        match next_status {
-            InstrumentMappingStatus::Active if matches_latest => {}
-            InstrumentMappingStatus::Active
-            | InstrumentMappingStatus::Superseded
-            | InstrumentMappingStatus::Retired => {
-                return Err(MappingTransitionError::LinkNotLatest);
-            }
-        }
+        let verified = plan_link_inner(&self.records, &self.history, correction)?;
         for entry in &mut self.records {
             if entry.source == verified.previous {
                 entry.state = InstrumentMappingStatus::Active;

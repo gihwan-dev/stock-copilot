@@ -164,6 +164,8 @@ pub use instrument_mapping::{InstrumentIdIssuerStore, InstrumentMappingStore};
 #[cfg(test)]
 mod instrument_mapping_contract_tests;
 #[cfg(test)]
+mod instrument_mapping_correction_tests;
+#[cfg(test)]
 mod instrument_mapping_history_tests;
 #[cfg(test)]
 mod instrument_mapping_tests;

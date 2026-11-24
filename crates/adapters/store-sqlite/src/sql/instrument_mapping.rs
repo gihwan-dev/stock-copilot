@@ -14,15 +14,29 @@ pub(crate) const BY_SOURCE: &str = "SELECT instrument_id, market, symbol, isin, 
 
 pub(crate) const BY_SOURCE_OR_ID: &str = "SELECT instrument_id, market, symbol, isin, status, superseded_event_seq FROM instrument_mappings WHERE (market = ?1 AND upper(symbol) = upper(?2)) OR upper(isin) = upper(?3) OR instrument_id = ?4 ORDER BY instrument_id, market, symbol, isin, status";
 
+pub(crate) const BY_TWO_SOURCES_OR_ID: &str = "SELECT instrument_id, market, symbol, isin, status, superseded_event_seq FROM instrument_mappings WHERE (market = ?1 AND upper(symbol) = upper(?2)) OR upper(isin) = upper(?3) OR (market = ?4 AND upper(symbol) = upper(?5)) OR upper(isin) = upper(?6) OR instrument_id = ?7 ORDER BY instrument_id, market, symbol, isin, status";
+
 pub(crate) const BY_ID: &str = "SELECT instrument_id, market, symbol, isin, status, superseded_event_seq FROM instrument_mappings WHERE instrument_id = ?1 ORDER BY instrument_id, market, symbol, isin, status";
 
 pub(crate) const ALL_EVENTS: &str = "SELECT seq, event_kind, instrument_id, market, prev_symbol, prev_isin, next_symbol, next_isin, disclosure_source, disclosure_receipt_no, action_kind, action_year, action_month, action_day, action_from_symbol, action_to_symbol, action_from_count, action_to_count, note, recorded_seconds, recorded_nanos, recorded_offset FROM instrument_mapping_events ORDER BY seq";
 
 pub(crate) const EVENTS_FOR_ID: &str = "SELECT seq, event_kind, instrument_id, market, prev_symbol, prev_isin, next_symbol, next_isin, disclosure_source, disclosure_receipt_no, action_kind, action_year, action_month, action_day, action_from_symbol, action_to_symbol, action_from_count, action_to_count, note, recorded_seconds, recorded_nanos, recorded_offset FROM instrument_mapping_events WHERE instrument_id = ?1 ORDER BY seq";
 
+pub(crate) const MAX_EVENT_SEQ: &str = "SELECT max(seq) FROM instrument_mapping_events";
+
+pub(crate) const INSERT_EVENT: &str = "INSERT INTO instrument_mapping_events(seq, event_kind, instrument_id, market, prev_symbol, prev_isin, next_symbol, next_isin, disclosure_source, disclosure_receipt_no, action_kind, action_year, action_month, action_day, action_from_symbol, action_to_symbol, action_from_count, action_to_count, note, recorded_seconds, recorded_nanos, recorded_offset) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)";
+
 pub(crate) const INSERT: &str = "INSERT INTO instrument_mappings(instrument_id, market, symbol, isin, status) VALUES (?1, ?2, ?3, ?4, ?5)";
 
 pub(crate) const RETIRE: &str = "UPDATE instrument_mappings SET status = 'retired' WHERE instrument_id = ?1 AND market = ?2 AND symbol = ?3 AND isin = ?4 AND status = 'active'";
+
+pub(crate) const MARK_SUPERSEDED: &str = "UPDATE instrument_mappings SET status = 'superseded', superseded_event_seq = ?1 WHERE instrument_id = ?2 AND market = ?3 AND symbol = ?4 AND isin = ?5 AND status = 'active' AND superseded_event_seq IS NULL";
+
+pub(crate) const RESTORE_RETIRED: &str = "UPDATE instrument_mappings SET status = 'active' WHERE instrument_id = ?1 AND market = ?2 AND symbol = ?3 AND isin = ?4 AND status = 'retired' AND superseded_event_seq IS NULL";
+
+pub(crate) const DELETE_UNLINKED_ACTIVE: &str = "DELETE FROM instrument_mappings WHERE instrument_id = ?1 AND market = ?2 AND symbol = ?3 AND isin = ?4 AND status = 'active' AND superseded_event_seq IS NULL";
+
+pub(crate) const RESTORE_SUPERSEDED: &str = "UPDATE instrument_mappings SET status = 'active', superseded_event_seq = NULL WHERE instrument_id = ?1 AND market = ?2 AND symbol = ?3 AND isin = ?4 AND status = 'superseded' AND superseded_event_seq = ?5";
 
 pub(crate) const ISSUER_CURSOR: &str =
     "SELECT slot, last_issued FROM instrument_id_issuer ORDER BY slot";

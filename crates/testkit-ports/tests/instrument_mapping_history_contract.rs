@@ -13,7 +13,10 @@ mod tests {
         contracts::instrument_mapping::{
             empty_history_contract, history_contract_dataset, populated_history_contract,
         },
-        memory::{MemoryInstrumentMappingHistoryStore, MemoryInstrumentMappingRepository},
+        memory::{
+            MemoryInstrumentMappingHistoryStore, MemoryInstrumentMappingRepository,
+            MemoryInstrumentMappingStore,
+        },
     };
 
     fn run<F: Future>(future: F) -> F::Output {
@@ -30,7 +33,8 @@ mod tests {
     #[test]
     fn memory_repository_passes_shared_empty_history_contract() {
         let repo = MemoryInstrumentMappingRepository::default();
-        run(empty_history_contract(&repo, &repo));
+        let store = MemoryInstrumentMappingStore::new(&repo);
+        run(empty_history_contract(&store, &store));
     }
 
     #[test]

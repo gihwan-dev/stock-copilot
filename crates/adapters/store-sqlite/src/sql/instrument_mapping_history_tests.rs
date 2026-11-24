@@ -134,3 +134,27 @@ pub(crate) const SELECT_SUPERSEDED_SEQ: &str = "SELECT superseded_event_seq FROM
 pub(crate) const TRACKER_RENAME_SCRIPT: &str = "CREATE TABLE instrument_id_issuer (slot INTEGER PRIMARY KEY) STRICT;\nCREATE INDEX legacy_only_idx ON instrument_id_issuer(slot);\nCREATE TRIGGER legacy_only_trg BEFORE DELETE ON instrument_id_issuer BEGIN SELECT 1; END;\nALTER TABLE instrument_id_issuer RENAME TO instrument_id_issuer_legacy;\n";
 
 pub(crate) const TRACKER_DROP_SCRIPT: &str = "DROP TABLE instrument_id_issuer_legacy;\n";
+
+pub(crate) const COUNT_EVENTS: &str = "SELECT count(*) FROM instrument_mapping_events";
+
+pub(crate) const FAULT_ON_MARK_SUPERSEDED: &str = "CREATE TRIGGER test_fault_trigger BEFORE UPDATE ON instrument_mappings WHEN NEW.status = 'superseded' BEGIN SELECT RAISE(ABORT, 'injected fault on mark superseded'); END;";
+
+pub(crate) const FAULT_ON_INSERT_NEXT_ACTIVE: &str = "CREATE TRIGGER test_fault_trigger BEFORE INSERT ON instrument_mappings WHEN NEW.symbol = 'FAILNEXT' BEGIN SELECT RAISE(ABORT, 'injected fault on insert next'); END;";
+
+pub(crate) const FAULT_ON_RESTORE_RETIRED: &str = "CREATE TRIGGER test_fault_trigger BEFORE UPDATE ON instrument_mappings WHEN OLD.status = 'retired' AND NEW.status = 'active' BEGIN SELECT RAISE(ABORT, 'injected fault on restore retired'); END;";
+
+pub(crate) const FAULT_ON_DELETE_UNLINKED: &str = "CREATE TRIGGER test_fault_trigger BEFORE DELETE ON instrument_mappings BEGIN SELECT RAISE(ABORT, 'injected fault on delete unlinked'); END;";
+
+pub(crate) const FAULT_ON_RESTORE_SUPERSEDED: &str = "CREATE TRIGGER test_fault_trigger BEFORE UPDATE ON instrument_mappings WHEN OLD.status = 'superseded' AND NEW.status = 'active' BEGIN SELECT RAISE(ABORT, 'injected fault on restore superseded'); END;";
+
+pub(crate) const DROP_FAULT_TRIGGER: &str = "DROP TRIGGER test_fault_trigger";
+
+pub(crate) const EXPLAIN_BY_TWO_SOURCES_OR_ID: &str = "EXPLAIN QUERY PLAN SELECT instrument_id, market, symbol, isin, status, superseded_event_seq FROM instrument_mappings WHERE (market = 'US' AND upper(symbol) = upper('FB')) OR upper(isin) = upper('US30303M1027') OR (market = 'US' AND upper(symbol) = upper('META')) OR upper(isin) = upper('US30303M9999') OR instrument_id = 'inst-0000000000000001' ORDER BY instrument_id, market, symbol, isin, status";
+
+pub(crate) const EXPLAIN_MARK_SUPERSEDED: &str = "EXPLAIN QUERY PLAN UPDATE instrument_mappings SET status = 'superseded', superseded_event_seq = 1 WHERE instrument_id = 'inst-0000000000000001' AND market = 'US' AND symbol = 'FB' AND isin = 'US30303M1027' AND status = 'active' AND superseded_event_seq IS NULL";
+
+pub(crate) const EXPLAIN_RESTORE_RETIRED: &str = "EXPLAIN QUERY PLAN UPDATE instrument_mappings SET status = 'active' WHERE instrument_id = 'inst-0000000000000001' AND market = 'KR' AND symbol = '005930' AND isin = 'KR7005930003' AND status = 'retired' AND superseded_event_seq IS NULL";
+
+pub(crate) const EXPLAIN_DELETE_UNLINKED_ACTIVE: &str = "EXPLAIN QUERY PLAN DELETE FROM instrument_mappings WHERE instrument_id = 'inst-0000000000000001' AND market = 'US' AND symbol = 'META' AND isin = 'US30303M1027' AND status = 'active' AND superseded_event_seq IS NULL";
+
+pub(crate) const EXPLAIN_RESTORE_SUPERSEDED: &str = "EXPLAIN QUERY PLAN UPDATE instrument_mappings SET status = 'active', superseded_event_seq = NULL WHERE instrument_id = 'inst-0000000000000001' AND market = 'US' AND symbol = 'FB' AND isin = 'US30303M1027' AND status = 'superseded' AND superseded_event_seq = 1";

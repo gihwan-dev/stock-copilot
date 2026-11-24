@@ -1,17 +1,19 @@
 use crate::{Database, sql::instrument_mapping as sql};
 use application::{
-    InstrumentIdIssuer, InstrumentMappingHistoryRepository, InstrumentMappingRepository,
-    MappingStoreError, SystemPortError,
+    InstrumentIdIssuer, InstrumentMappingCorrectionRepository, InstrumentMappingHistoryRepository,
+    InstrumentMappingRepository, MappingStoreError, MappingTransitionStoreError, SystemPortError,
 };
 use domain::{
-    CalendarDate, CalendarYear, CorporateAction, CorporateActionId, CorporateActionKind,
+    CalendarDate, CalendarYear, ConfirmedIdentifierChange, ConfirmedLinkCorrection,
+    ConfirmedRetirementCorrection, CorporateAction, CorporateActionId, CorporateActionKind,
     DartReceiptNo, DayNumber, DisclosureKey, IndependentInstrumentIdIssuer, InstrumentId,
     InstrumentMappingError, InstrumentMappingRecord, InstrumentMappingStatus, InstrumentSource,
     InstrumentSourceConflict, IsinCode, IssuedInstrumentId, IssuerSequence, KindReceiptNo,
-    KnownMarket, MappingAssignment, MappingHistoryEvent, MonthNumber, Nanosecond, OffsetSeconds,
-    PersistedIssuerCursor, ReceiptNo, SecEdgarReceiptNo, ShareCount, ShareRatio, Symbol, Timestamp,
-    UnixSeconds, UntrustedText, UserReason, instrument_source_conflicts,
-    verify_persisted_mapping_ledger,
+    KnownMarket, MappingAssignment, MappingHistoryEvent, MappingTransitionError, MonthNumber,
+    Nanosecond, OffsetSeconds, PersistedIssuerCursor, ReceiptNo, SecEdgarReceiptNo, ShareCount,
+    ShareRatio, Symbol, Timestamp, UnixSeconds, UntrustedText, UserReason,
+    instrument_source_conflicts, plan_confirmed_identifier_change, plan_confirmed_link_correction,
+    plan_confirmed_retirement_correction, verify_persisted_mapping_ledger,
 };
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use std::collections::{BTreeMap, BTreeSet};
@@ -648,24 +650,32 @@ fn load_all_events(connection: &Connection) -> rusqlite::Result<Vec<StoredEvent>
     Ok(events)
 }
 
-fn load_events_for_id(
+fn load_stored_events_for_id(
     connection: &Connection,
     id: &InstrumentId,
-) -> rusqlite::Result<Vec<MappingHistoryEvent>> {
+) -> rusqlite::Result<Vec<StoredEvent>> {
     let mut statement = connection.prepare(sql::EVENTS_FOR_ID)?;
     let stored = statement
         .query_map([id.as_str()], decode_event_row)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut previous_seq = 0_i64;
-    let mut events = Vec::with_capacity(stored.len());
-    for entry in stored {
+    for entry in &stored {
         if entry.seq <= previous_seq {
             return Err(rusqlite::Error::InvalidQuery);
         }
         previous_seq = entry.seq;
-        events.push(entry.event);
     }
-    Ok(events)
+    Ok(stored)
+}
+
+fn load_events_for_id(
+    connection: &Connection,
+    id: &InstrumentId,
+) -> rusqlite::Result<Vec<MappingHistoryEvent>> {
+    Ok(load_stored_events_for_id(connection, id)?
+        .into_iter()
+        .map(|entry| entry.event)
+        .collect())
 }
 
 #[derive(Default)]
@@ -886,6 +896,257 @@ fn load_for_id(connection: &Connection, id: &InstrumentId) -> rusqlite::Result<V
     Ok(records)
 }
 
+fn validate_owned_subset(records: &[StoredRecord], id: &InstrumentId) -> rusqlite::Result<()> {
+    let mut presence = IdPresence::Absent;
+    let mut terminal_count = 0_usize;
+    for record in records {
+        if record.id == *id {
+            presence = IdPresence::Present;
+            match record.status {
+                StoredStatus::Active | StoredStatus::Retired => {
+                    terminal_count = terminal_count
+                        .checked_add(1)
+                        .ok_or(rusqlite::Error::InvalidQuery)?;
+                }
+                StoredStatus::Superseded(_) => {}
+            }
+        }
+    }
+    match presence {
+        IdPresence::Present if terminal_count != 1 => Err(rusqlite::Error::InvalidQuery),
+        IdPresence::Present | IdPresence::Absent => Ok(()),
+    }
+}
+
+fn load_for_two_sources_or_id(
+    connection: &Connection,
+    first: &InstrumentSource,
+    second: &InstrumentSource,
+    id: &InstrumentId,
+) -> rusqlite::Result<Vec<StoredRecord>> {
+    let mut statement = connection.prepare(sql::BY_TWO_SOURCES_OR_ID)?;
+    let records = statement
+        .query_map(
+            params![
+                market_tag(first.market()),
+                first.symbol().as_str(),
+                first.isin().as_str(),
+                market_tag(second.market()),
+                second.symbol().as_str(),
+                second.isin().as_str(),
+                id.as_str(),
+            ],
+            decode_row,
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    validate_records(&records, TerminalRequirement::AllowPartialSlice)?;
+    validate_owned_subset(&records, id)?;
+    Ok(records)
+}
+
+fn next_event_seq(connection: &Connection) -> rusqlite::Result<i64> {
+    let current: Option<i64> = connection.query_row(sql::MAX_EVENT_SEQ, [], |row| row.get(0))?;
+    match current {
+        None => Ok(1),
+        Some(value) if value > 0 => value.checked_add(1).ok_or(rusqlite::Error::InvalidQuery),
+        Some(_) => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn encode_disclosure(disclosure: &DisclosureKey) -> (&'static str, &str) {
+    match disclosure.receipt_no() {
+        ReceiptNo::Dart(value) => (DISCLOSURE_DART, value.as_str()),
+        ReceiptNo::Kind(value) => (DISCLOSURE_KIND, value.as_str()),
+        ReceiptNo::SecEdgar(value) => (DISCLOSURE_SEC_EDGAR, value.as_str()),
+    }
+}
+
+struct EncodedAction<'a> {
+    kind: &'static str,
+    year: i64,
+    month: i64,
+    day: i64,
+    from_symbol: Option<&'a str>,
+    to_symbol: Option<&'a str>,
+    from_count: Option<String>,
+    to_count: Option<String>,
+}
+
+fn encode_action(action: &CorporateAction) -> rusqlite::Result<EncodedAction<'_>> {
+    let date = action.date();
+    let year = i64::from(*date.year().as_i32());
+    let month = i64::from(*date.month().as_u8());
+    let day = i64::from(*date.day().as_u8());
+    match action.kind() {
+        CorporateActionKind::SymbolChange { from, to } => Ok(EncodedAction {
+            kind: ACTION_SYMBOL_CHANGE,
+            year,
+            month,
+            day,
+            from_symbol: Some(from.as_str()),
+            to_symbol: Some(to.as_str()),
+            from_count: None,
+            to_count: None,
+        }),
+        CorporateActionKind::Split(ratio) => Ok(EncodedAction {
+            kind: ACTION_SPLIT,
+            year,
+            month,
+            day,
+            from_symbol: None,
+            to_symbol: None,
+            from_count: Some(ratio.old_shares().as_u64().to_string()),
+            to_count: Some(ratio.new_shares().as_u64().to_string()),
+        }),
+        CorporateActionKind::ReverseSplit(ratio) => Ok(EncodedAction {
+            kind: ACTION_REVERSE_SPLIT,
+            year,
+            month,
+            day,
+            from_symbol: None,
+            to_symbol: None,
+            from_count: Some(ratio.old_shares().as_u64().to_string()),
+            to_count: Some(ratio.new_shares().as_u64().to_string()),
+        }),
+        CorporateActionKind::BonusIssue { .. }
+        | CorporateActionKind::StockDividend { .. }
+        | CorporateActionKind::Delisting
+        | CorporateActionKind::Merger
+        | CorporateActionKind::Demerger
+        | CorporateActionKind::Exchange => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+struct EncodedEvent<'a> {
+    kind: &'static str,
+    instrument_id: &'a InstrumentId,
+    previous: &'a InstrumentSource,
+    next: Option<&'a InstrumentSource>,
+    disclosure: &'a DisclosureKey,
+    action: Option<&'a CorporateAction>,
+    note: &'a UserReason,
+    recorded_at: Timestamp,
+}
+
+impl<'a> EncodedEvent<'a> {
+    fn from_domain(event: &'a MappingHistoryEvent) -> Self {
+        match event {
+            MappingHistoryEvent::IdentifierChanged {
+                instrument_id,
+                previous,
+                next,
+                disclosure,
+                action,
+                note,
+                confirmed_at,
+            } => Self {
+                kind: EVENT_IDENTIFIER_CHANGED,
+                instrument_id,
+                previous,
+                next: Some(next),
+                disclosure,
+                action: Some(action),
+                note,
+                recorded_at: *confirmed_at,
+            },
+            MappingHistoryEvent::RetirementCorrected {
+                instrument_id,
+                source,
+                disclosure,
+                note,
+                corrected_at,
+            } => Self {
+                kind: EVENT_RETIREMENT_CORRECTED,
+                instrument_id,
+                previous: source,
+                next: None,
+                disclosure,
+                action: None,
+                note,
+                recorded_at: *corrected_at,
+            },
+            MappingHistoryEvent::LinkCorrected {
+                instrument_id,
+                restored_previous,
+                unlinked_next,
+                disclosure,
+                note,
+                corrected_at,
+            } => Self {
+                kind: EVENT_LINK_CORRECTED,
+                instrument_id,
+                previous: restored_previous,
+                next: Some(unlinked_next),
+                disclosure,
+                action: None,
+                note,
+                recorded_at: *corrected_at,
+            },
+        }
+    }
+}
+
+fn insert_event(
+    transaction: &Transaction<'_>,
+    seq: i64,
+    event: &MappingHistoryEvent,
+) -> rusqlite::Result<()> {
+    let encoded = EncodedEvent::from_domain(event);
+    let (disc_source, disc_receipt) = encode_disclosure(encoded.disclosure);
+    let action = encoded.action.map(encode_action).transpose()?;
+    let inserted = transaction.execute(
+        sql::INSERT_EVENT,
+        params![
+            seq,
+            encoded.kind,
+            encoded.instrument_id.as_str(),
+            market_tag(encoded.previous.market()),
+            encoded.previous.symbol().as_str(),
+            encoded.previous.isin().as_str(),
+            encoded.next.map(|value| value.symbol().as_str()),
+            encoded.next.map(|value| value.isin().as_str()),
+            disc_source,
+            disc_receipt,
+            action.as_ref().map(|parts| parts.kind),
+            action.as_ref().map(|parts| parts.year),
+            action.as_ref().map(|parts| parts.month),
+            action.as_ref().map(|parts| parts.day),
+            action.as_ref().and_then(|parts| parts.from_symbol),
+            action.as_ref().and_then(|parts| parts.to_symbol),
+            action
+                .as_ref()
+                .and_then(|parts| parts.from_count.as_deref()),
+            action.as_ref().and_then(|parts| parts.to_count.as_deref()),
+            encoded.note.as_untrusted_text().as_untrusted_str(),
+            *encoded.recorded_at.utc_seconds().as_i64(),
+            i64::from(*encoded.recorded_at.nanosecond().as_u32()),
+            i64::from(*encoded.recorded_at.offset_seconds().as_i32()),
+        ],
+    )?;
+    if inserted != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(())
+}
+
+fn latest_active_link_seq(events: &[StoredEvent], id: &InstrumentId) -> Option<i64> {
+    let mut stack = Vec::new();
+    for entry in events {
+        match &entry.event {
+            MappingHistoryEvent::IdentifierChanged { instrument_id, .. } if instrument_id == id => {
+                stack.push(entry.seq);
+            }
+            MappingHistoryEvent::LinkCorrected { instrument_id, .. } if instrument_id == id => {
+                let _popped = stack.pop();
+            }
+            MappingHistoryEvent::IdentifierChanged { .. }
+            | MappingHistoryEvent::RetirementCorrected { .. }
+            | MappingHistoryEvent::LinkCorrected { .. } => {}
+        }
+    }
+    stack.pop()
+}
+
 fn lookup_in_candidates<'a>(
     records: &'a [StoredRecord],
     source: &InstrumentSource,
@@ -1035,6 +1296,167 @@ fn retire_mapping(
     }
 }
 
+fn link_confirmed_change_mapping(
+    transaction: &Transaction<'_>,
+    change: ConfirmedIdentifierChange,
+) -> rusqlite::Result<Result<InstrumentId, MappingTransitionError>> {
+    let related = load_for_two_sources_or_id(
+        transaction,
+        change.previous(),
+        change.next(),
+        change.instrument_id(),
+    )?;
+    let domain_records: Vec<InstrumentMappingRecord> =
+        related.iter().map(StoredRecord::to_domain).collect();
+    let event = match plan_confirmed_identifier_change(&domain_records, change) {
+        Ok(planned) => planned,
+        Err(error) => return Ok(Err(error)),
+    };
+    let (instrument_id, previous, next) = match &event {
+        MappingHistoryEvent::IdentifierChanged {
+            instrument_id,
+            previous,
+            next,
+            ..
+        } => (instrument_id, previous, next),
+        MappingHistoryEvent::RetirementCorrected { .. }
+        | MappingHistoryEvent::LinkCorrected { .. } => return Err(rusqlite::Error::InvalidQuery),
+    };
+    let seq = next_event_seq(transaction)?;
+    insert_event(transaction, seq, &event)?;
+    let updated = transaction.execute(
+        sql::MARK_SUPERSEDED,
+        params![
+            seq,
+            instrument_id.as_str(),
+            market_tag(previous.market()),
+            previous.symbol().as_str(),
+            previous.isin().as_str(),
+        ],
+    )?;
+    if updated != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let inserted = transaction.execute(
+        sql::INSERT,
+        params![
+            instrument_id.as_str(),
+            market_tag(next.market()),
+            next.symbol().as_str(),
+            next.isin().as_str(),
+            STATUS_ACTIVE,
+        ],
+    )?;
+    if inserted != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(Ok(instrument_id.clone()))
+}
+
+fn correct_retirement_mapping(
+    transaction: &Transaction<'_>,
+    correction: ConfirmedRetirementCorrection,
+) -> rusqlite::Result<Result<InstrumentId, MappingTransitionError>> {
+    let related =
+        load_for_source_or_id(transaction, correction.source(), correction.instrument_id())?;
+    validate_owned_subset(&related, correction.instrument_id())?;
+    let domain_records: Vec<InstrumentMappingRecord> =
+        related.iter().map(StoredRecord::to_domain).collect();
+    let event = match plan_confirmed_retirement_correction(&domain_records, correction) {
+        Ok(planned) => planned,
+        Err(error) => return Ok(Err(error)),
+    };
+    let (instrument_id, source) = match &event {
+        MappingHistoryEvent::RetirementCorrected {
+            instrument_id,
+            source,
+            ..
+        } => (instrument_id, source),
+        MappingHistoryEvent::IdentifierChanged { .. }
+        | MappingHistoryEvent::LinkCorrected { .. } => return Err(rusqlite::Error::InvalidQuery),
+    };
+    let seq = next_event_seq(transaction)?;
+    insert_event(transaction, seq, &event)?;
+    let updated = transaction.execute(
+        sql::RESTORE_RETIRED,
+        params![
+            instrument_id.as_str(),
+            market_tag(source.market()),
+            source.symbol().as_str(),
+            source.isin().as_str(),
+        ],
+    )?;
+    if updated != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(Ok(instrument_id.clone()))
+}
+
+fn correct_link_mapping(
+    transaction: &Transaction<'_>,
+    correction: ConfirmedLinkCorrection,
+) -> rusqlite::Result<Result<InstrumentId, MappingTransitionError>> {
+    let related = load_for_two_sources_or_id(
+        transaction,
+        correction.previous(),
+        correction.mistaken_next(),
+        correction.instrument_id(),
+    )?;
+    let stored_events = load_stored_events_for_id(transaction, correction.instrument_id())?;
+    let domain_records: Vec<InstrumentMappingRecord> =
+        related.iter().map(StoredRecord::to_domain).collect();
+    let id_history: Vec<MappingHistoryEvent> = stored_events
+        .iter()
+        .map(|entry| entry.event.clone())
+        .collect();
+    let event = match plan_confirmed_link_correction(&domain_records, &id_history, correction) {
+        Ok(planned) => planned,
+        Err(error) => return Ok(Err(error)),
+    };
+    let (instrument_id, restored_previous, unlinked_next) = match &event {
+        MappingHistoryEvent::LinkCorrected {
+            instrument_id,
+            restored_previous,
+            unlinked_next,
+            ..
+        } => (instrument_id, restored_previous, unlinked_next),
+        MappingHistoryEvent::IdentifierChanged { .. }
+        | MappingHistoryEvent::RetirementCorrected { .. } => {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    };
+    let latest_seq = latest_active_link_seq(&stored_events, instrument_id)
+        .ok_or(rusqlite::Error::InvalidQuery)?;
+    let seq = next_event_seq(transaction)?;
+    insert_event(transaction, seq, &event)?;
+    let deleted = transaction.execute(
+        sql::DELETE_UNLINKED_ACTIVE,
+        params![
+            instrument_id.as_str(),
+            market_tag(unlinked_next.market()),
+            unlinked_next.symbol().as_str(),
+            unlinked_next.isin().as_str(),
+        ],
+    )?;
+    if deleted != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let updated = transaction.execute(
+        sql::RESTORE_SUPERSEDED,
+        params![
+            instrument_id.as_str(),
+            market_tag(restored_previous.market()),
+            restored_previous.symbol().as_str(),
+            restored_previous.isin().as_str(),
+            latest_seq,
+        ],
+    )?;
+    if updated != 1 {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    Ok(Ok(instrument_id.clone()))
+}
+
 fn map_result<T>(
     outcome: Result<Result<T, InstrumentMappingError>, SystemPortError>,
 ) -> Result<T, MappingStoreError> {
@@ -1042,6 +1464,16 @@ fn map_result<T>(
         Ok(Ok(value)) => Ok(value),
         Ok(Err(error)) => Err(MappingStoreError::Mapping(error)),
         Err(error) => Err(MappingStoreError::Storage(error)),
+    }
+}
+
+fn map_transition_result<T>(
+    outcome: Result<Result<T, MappingTransitionError>, SystemPortError>,
+) -> Result<T, MappingTransitionStoreError> {
+    match outcome {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(MappingTransitionStoreError::Transition(error)),
+        Err(error) => Err(MappingTransitionStoreError::Storage(error)),
     }
 }
 
@@ -1143,5 +1575,40 @@ impl InstrumentMappingHistoryRepository for InstrumentMappingStore<'_> {
         self.database
             .read(move |connection| load_events_for_id(connection, &owned_id))
             .await
+    }
+}
+
+impl InstrumentMappingCorrectionRepository for InstrumentMappingStore<'_> {
+    async fn link_confirmed_change(
+        &self,
+        change: ConfirmedIdentifierChange,
+    ) -> Result<InstrumentId, MappingTransitionStoreError> {
+        map_transition_result(
+            self.database
+                .write(move |transaction| link_confirmed_change_mapping(transaction, change))
+                .await,
+        )
+    }
+
+    async fn correct_retirement(
+        &self,
+        correction: ConfirmedRetirementCorrection,
+    ) -> Result<InstrumentId, MappingTransitionStoreError> {
+        map_transition_result(
+            self.database
+                .write(move |transaction| correct_retirement_mapping(transaction, correction))
+                .await,
+        )
+    }
+
+    async fn correct_link(
+        &self,
+        correction: ConfirmedLinkCorrection,
+    ) -> Result<InstrumentId, MappingTransitionStoreError> {
+        map_transition_result(
+            self.database
+                .write(move |transaction| correct_link_mapping(transaction, correction))
+                .await,
+        )
     }
 }

@@ -1,7 +1,8 @@
 use crate::SystemPortError;
 use domain::{
+    ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
     InstrumentId, InstrumentMappingError, InstrumentMappingRecord, InstrumentSource,
-    IssuedInstrumentId, MappingAssignment, MappingHistoryEvent,
+    IssuedInstrumentId, MappingAssignment, MappingHistoryEvent, MappingTransitionError,
 };
 use std::future::Future;
 
@@ -78,4 +79,27 @@ pub trait InstrumentMappingHistoryRepository: Send + Sync {
         &self,
         id: &InstrumentId,
     ) -> impl Future<Output = Result<Vec<MappingHistoryEvent>, SystemPortError>> + Send;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MappingTransitionStoreError {
+    Transition(MappingTransitionError),
+    Storage(SystemPortError),
+}
+
+pub trait InstrumentMappingCorrectionRepository: Send + Sync {
+    fn link_confirmed_change(
+        &self,
+        change: ConfirmedIdentifierChange,
+    ) -> impl Future<Output = Result<InstrumentId, MappingTransitionStoreError>> + Send;
+
+    fn correct_retirement(
+        &self,
+        correction: ConfirmedRetirementCorrection,
+    ) -> impl Future<Output = Result<InstrumentId, MappingTransitionStoreError>> + Send;
+
+    fn correct_link(
+        &self,
+        correction: ConfirmedLinkCorrection,
+    ) -> impl Future<Output = Result<InstrumentId, MappingTransitionStoreError>> + Send;
 }

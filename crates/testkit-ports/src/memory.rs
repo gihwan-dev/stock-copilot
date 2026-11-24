@@ -1550,12 +1550,62 @@ impl InstrumentMappingRepository for MemoryInstrumentMappingRepository {
     }
 }
 
-impl application::InstrumentMappingHistoryRepository for MemoryInstrumentMappingRepository {
+#[derive(Debug, Clone, Copy)]
+pub struct MemoryInstrumentMappingStore<'repo> {
+    repo: &'repo MemoryInstrumentMappingRepository,
+}
+
+impl<'repo> MemoryInstrumentMappingStore<'repo> {
+    #[must_use]
+    pub const fn new(repo: &'repo MemoryInstrumentMappingRepository) -> Self {
+        Self { repo }
+    }
+}
+
+impl InstrumentMappingRepository for MemoryInstrumentMappingStore<'_> {
+    fn resolve(
+        &self,
+        source: &InstrumentSource,
+    ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send {
+        self.repo.resolve(source)
+    }
+
+    fn lookup(
+        &self,
+        source: &InstrumentSource,
+    ) -> impl Future<Output = Result<InstrumentMappingRecord, MappingStoreError>> + Send {
+        self.repo.lookup(source)
+    }
+
+    fn for_id(
+        &self,
+        id: &InstrumentId,
+    ) -> impl Future<Output = Result<Vec<InstrumentMappingRecord>, MappingStoreError>> + Send {
+        self.repo.for_id(id)
+    }
+
+    fn ensure(
+        &self,
+        source: &InstrumentSource,
+        candidate: domain::IssuedInstrumentId,
+    ) -> impl Future<Output = Result<MappingAssignment, MappingStoreError>> + Send {
+        self.repo.ensure(source, candidate)
+    }
+
+    fn retire(
+        &self,
+        source: &InstrumentSource,
+    ) -> impl Future<Output = Result<InstrumentId, MappingStoreError>> + Send {
+        self.repo.retire(source)
+    }
+}
+
+impl application::InstrumentMappingHistoryRepository for MemoryInstrumentMappingStore<'_> {
     fn history(
         &self,
     ) -> impl Future<Output = Result<Vec<domain::MappingHistoryEvent>, SystemPortError>> + Send
     {
-        poll_fn(move |_| Poll::Ready(Ok(self.mappings.write().history().to_vec())))
+        poll_fn(move |_| Poll::Ready(Ok(self.repo.mappings.write().history().to_vec())))
     }
 
     fn history_for_id(
@@ -1564,7 +1614,84 @@ impl application::InstrumentMappingHistoryRepository for MemoryInstrumentMapping
     ) -> impl Future<Output = Result<Vec<domain::MappingHistoryEvent>, SystemPortError>> + Send
     {
         let owned_id = id.clone();
-        poll_fn(move |_| Poll::Ready(Ok(self.mappings.write().history_for_id(&owned_id))))
+        poll_fn(move |_| Poll::Ready(Ok(self.repo.mappings.write().history_for_id(&owned_id))))
+    }
+}
+
+impl application::InstrumentMappingCorrectionRepository for MemoryInstrumentMappingStore<'_> {
+    fn link_confirmed_change(
+        &self,
+        change: domain::ConfirmedIdentifierChange,
+    ) -> impl Future<Output = Result<InstrumentId, application::MappingTransitionStoreError>> + Send
+    {
+        let mut pending = Some(change);
+        poll_fn(move |_| {
+            let Some(request) = pending.take() else {
+                return Poll::Ready(Err(application::MappingTransitionStoreError::Storage(
+                    SystemPortError::new(
+                        application::SystemPort::Repository,
+                        application::SystemFailure::RepositoryIntegrity,
+                    ),
+                )));
+            };
+            Poll::Ready(
+                self.repo
+                    .mappings
+                    .write()
+                    .link_confirmed_change(request)
+                    .map_err(application::MappingTransitionStoreError::Transition),
+            )
+        })
+    }
+
+    fn correct_retirement(
+        &self,
+        correction: domain::ConfirmedRetirementCorrection,
+    ) -> impl Future<Output = Result<InstrumentId, application::MappingTransitionStoreError>> + Send
+    {
+        let mut pending = Some(correction);
+        poll_fn(move |_| {
+            let Some(request) = pending.take() else {
+                return Poll::Ready(Err(application::MappingTransitionStoreError::Storage(
+                    SystemPortError::new(
+                        application::SystemPort::Repository,
+                        application::SystemFailure::RepositoryIntegrity,
+                    ),
+                )));
+            };
+            Poll::Ready(
+                self.repo
+                    .mappings
+                    .write()
+                    .correct_retirement(request)
+                    .map_err(application::MappingTransitionStoreError::Transition),
+            )
+        })
+    }
+
+    fn correct_link(
+        &self,
+        correction: domain::ConfirmedLinkCorrection,
+    ) -> impl Future<Output = Result<InstrumentId, application::MappingTransitionStoreError>> + Send
+    {
+        let mut pending = Some(correction);
+        poll_fn(move |_| {
+            let Some(request) = pending.take() else {
+                return Poll::Ready(Err(application::MappingTransitionStoreError::Storage(
+                    SystemPortError::new(
+                        application::SystemPort::Repository,
+                        application::SystemFailure::RepositoryIntegrity,
+                    ),
+                )));
+            };
+            Poll::Ready(
+                self.repo
+                    .mappings
+                    .write()
+                    .correct_link(request)
+                    .map_err(application::MappingTransitionStoreError::Transition),
+            )
+        })
     }
 }
 

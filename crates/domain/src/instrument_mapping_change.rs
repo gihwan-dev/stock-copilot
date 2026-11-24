@@ -485,14 +485,24 @@ pub(crate) fn verify_link_correction(
 }
 
 mod history_cases;
+
 #[cfg(test)]
 mod tests {
+    use super::UserIdentityConfirmation;
+
     use super::{
         ConfirmedIdentifierChange, ConfirmedLinkCorrection, ConfirmedRetirementCorrection,
         IdentityChangeConfirmation, IdentityChangeEvidence, IdentityConfirmationOrigin,
         MappingCorrectionConfirmation, MappingCorrectionEvidence, MappingTransitionError,
-        UserIdentityConfirmation, UserIdentityConfirmationSeal,
+        UserIdentityConfirmationSeal,
     };
+
+    #[test]
+    fn canonical_issuance_returns_sealed_confirmation() {
+        let first = UserIdentityConfirmation::issue_after_user_confirmation();
+        let second = UserIdentityConfirmation::issue_after_user_confirmation();
+        assert_eq!(first, second);
+    }
     use crate::{
         CalendarDate, CalendarYear, Cancellation, CorporateAction, CorporateActionId,
         CorporateActionKind, Currency, DartReceiptNo, DayNumber, DisclosureKey,
@@ -501,7 +511,8 @@ mod tests {
         MappingHistoryEvent, Market, Money, MonthNumber, Nanosecond, NumericInput, OffsetSeconds,
         ReceiptNo, Settlement, ShareCount, ShareRatio, Symbol, Timestamp, Transaction,
         TransactionData, TransactionKind, UnixSeconds, UntrustedText, UserReason,
-        verify_persisted_mapping_ledger,
+        plan_confirmed_identifier_change, plan_confirmed_link_correction,
+        plan_confirmed_retirement_correction, verify_persisted_mapping_ledger,
     };
     use proptest::{
         prelude::{Strategy, prop},
@@ -862,20 +873,24 @@ mod tests {
             }
         }
 
+        fn observe_event(&self, event: &MappingHistoryEvent) {
+            match event {
+                MappingHistoryEvent::IdentifierChanged { .. } => {
+                    self.id_changed.set(self.id_changed.get().saturating_add(1));
+                }
+                MappingHistoryEvent::RetirementCorrected { .. } => {
+                    self.retire_corr
+                        .set(self.retire_corr.get().saturating_add(1));
+                }
+                MappingHistoryEvent::LinkCorrected { .. } => {
+                    self.link_corr.set(self.link_corr.get().saturating_add(1));
+                }
+            }
+        }
+
         fn observe_history(&self, mappings: &InstrumentMappings, ids: &[InstrumentId; 3]) {
             for event in mappings.history() {
-                match event {
-                    MappingHistoryEvent::IdentifierChanged { .. } => {
-                        self.id_changed.set(self.id_changed.get().saturating_add(1));
-                    }
-                    MappingHistoryEvent::RetirementCorrected { .. } => {
-                        self.retire_corr
-                            .set(self.retire_corr.get().saturating_add(1));
-                    }
-                    MappingHistoryEvent::LinkCorrected { .. } => {
-                        self.link_corr.set(self.link_corr.get().saturating_add(1));
-                    }
-                }
+                self.observe_event(event);
             }
             let max_len = ids
                 .iter()
@@ -1119,6 +1134,16 @@ mod tests {
         }
     }
 
+    fn collect_records(
+        mappings: &InstrumentMappings,
+        ids: &[InstrumentId; 3],
+    ) -> Vec<InstrumentMappingRecord> {
+        ids.iter()
+            .filter_map(|tracked_id| mappings.for_id(tracked_id).ok())
+            .flatten()
+            .collect()
+    }
+
     fn verify_ops_sequence(ops: Vec<Op>, stats: &PropStats) {
         let sources = [
             source(KnownMarket::Kr, "005930", "KR7005930003"),
@@ -1142,12 +1167,7 @@ mod tests {
 
         for (step, op) in ops.into_iter().enumerate() {
             stats.observe_outcome(apply_op(&mut mappings, &sources, &ids, step, op));
-            let mut all_records = Vec::new();
-            for tracked_id in &ids {
-                if let Ok(rows) = mappings.for_id(tracked_id) {
-                    all_records.extend(rows);
-                }
-            }
+            let all_records = collect_records(&mappings, &ids);
             assert_eq!(
                 verify_persisted_mapping_ledger(&all_records, mappings.history()),
                 Ok(())
@@ -1175,9 +1195,180 @@ mod tests {
     }
 
     #[test]
-    fn canonical_issuance_returns_sealed_confirmation() {
-        let first = UserIdentityConfirmation::issue_after_user_confirmation();
-        let second = UserIdentityConfirmation::issue_after_user_confirmation();
-        assert_eq!(first, second);
+    fn plan_confirmed_identifier_change_emits_event_and_propagates_error() {
+        let mut issuer = IndependentInstrumentIdIssuer::new();
+        let id = issuer.issue().expect("id").into_instrument_id();
+        let prev = source(KnownMarket::Us, "FB", "US30303M1027");
+        let next = source(KnownMarket::Us, "META", "US30303M1027");
+        let disc = disclosure(1);
+        let act = split_action(&id);
+        let note = reason("연결 계획 검증");
+        let at = ts(1_764_010_000);
+        let active_rows = vec![InstrumentMappingRecord::new(
+            prev.clone(),
+            id.clone(),
+            InstrumentMappingStatus::Active,
+        )];
+        let bad_link = ConfirmedIdentifierChange::new(
+            id.clone(),
+            next.clone(),
+            prev.clone(),
+            IdentityChangeConfirmation::new(
+                user_origin(),
+                IdentityChangeEvidence::DisclosureAndAction {
+                    disclosure: disc.clone(),
+                    action: act.clone(),
+                    note: note.clone(),
+                },
+                at,
+            ),
+        );
+        assert_eq!(
+            plan_confirmed_identifier_change(&active_rows, bad_link),
+            Err(MappingTransitionError::IdentityUncertain)
+        );
+        let ok_link = ConfirmedIdentifierChange::new(
+            id.clone(),
+            prev.clone(),
+            next.clone(),
+            IdentityChangeConfirmation::new(
+                user_origin(),
+                IdentityChangeEvidence::DisclosureAndAction {
+                    disclosure: disc.clone(),
+                    action: act.clone(),
+                    note: note.clone(),
+                },
+                at,
+            ),
+        );
+        assert_eq!(
+            plan_confirmed_identifier_change(&active_rows, ok_link),
+            Ok(MappingHistoryEvent::IdentifierChanged {
+                instrument_id: id,
+                previous: prev,
+                next,
+                disclosure: disc,
+                action: Box::new(act),
+                note,
+                confirmed_at: at,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_confirmed_retirement_correction_emits_event_and_propagates_error() {
+        let mut issuer = IndependentInstrumentIdIssuer::new();
+        let id = issuer.issue().expect("id").into_instrument_id();
+        let prev = source(KnownMarket::Us, "FB", "US30303M1027");
+        let disc = disclosure(1);
+        let note = reason("폐지 정정 계획 검증");
+        let at = ts(1_764_010_010);
+        let active_rows = vec![InstrumentMappingRecord::new(
+            prev.clone(),
+            id.clone(),
+            InstrumentMappingStatus::Active,
+        )];
+        let bad_retire = ConfirmedRetirementCorrection::new(
+            id.clone(),
+            prev.clone(),
+            MappingCorrectionConfirmation::new(
+                user_origin(),
+                MappingCorrectionEvidence::DisclosureAndNote {
+                    disclosure: disc.clone(),
+                    note: note.clone(),
+                },
+                at,
+            ),
+        );
+        assert_eq!(
+            plan_confirmed_retirement_correction(&active_rows, bad_retire),
+            Err(MappingTransitionError::SourceNotRetired)
+        );
+        let retired_rows = vec![InstrumentMappingRecord::new(
+            prev.clone(),
+            id.clone(),
+            InstrumentMappingStatus::Retired,
+        )];
+        let ok_retire = ConfirmedRetirementCorrection::new(
+            id.clone(),
+            prev.clone(),
+            MappingCorrectionConfirmation::new(
+                user_origin(),
+                MappingCorrectionEvidence::DisclosureAndNote {
+                    disclosure: disc.clone(),
+                    note: note.clone(),
+                },
+                at,
+            ),
+        );
+        assert_eq!(
+            plan_confirmed_retirement_correction(&retired_rows, ok_retire),
+            Ok(MappingHistoryEvent::RetirementCorrected {
+                instrument_id: id,
+                source: prev,
+                disclosure: disc,
+                note,
+                corrected_at: at,
+            })
+        );
+    }
+
+    #[test]
+    fn plan_confirmed_link_correction_emits_event_and_propagates_error() {
+        let mut issuer = IndependentInstrumentIdIssuer::new();
+        let id = issuer.issue().expect("id").into_instrument_id();
+        let prev = source(KnownMarket::Us, "FB", "US30303M1027");
+        let next = source(KnownMarket::Us, "META", "US30303M1027");
+        let disc = disclosure(1);
+        let act = split_action(&id);
+        let note = reason("연결 정정 계획 검증");
+        let at = ts(1_764_010_020);
+        let link_event = MappingHistoryEvent::IdentifierChanged {
+            instrument_id: id.clone(),
+            previous: prev.clone(),
+            next: next.clone(),
+            disclosure: disc.clone(),
+            action: Box::new(act),
+            note: note.clone(),
+            confirmed_at: at,
+        };
+        let linked_rows = vec![
+            InstrumentMappingRecord::new(
+                prev.clone(),
+                id.clone(),
+                InstrumentMappingStatus::Superseded,
+            ),
+            InstrumentMappingRecord::new(next.clone(), id.clone(), InstrumentMappingStatus::Active),
+        ];
+        let make_undo = || {
+            ConfirmedLinkCorrection::new(
+                id.clone(),
+                prev.clone(),
+                next.clone(),
+                MappingCorrectionConfirmation::new(
+                    user_origin(),
+                    MappingCorrectionEvidence::DisclosureAndNote {
+                        disclosure: disc.clone(),
+                        note: note.clone(),
+                    },
+                    at,
+                ),
+            )
+        };
+        assert_eq!(
+            plan_confirmed_link_correction(&linked_rows, &[], make_undo()),
+            Err(MappingTransitionError::LinkNotLatest)
+        );
+        assert_eq!(
+            plan_confirmed_link_correction(&linked_rows, &[link_event], make_undo()),
+            Ok(MappingHistoryEvent::LinkCorrected {
+                instrument_id: id,
+                restored_previous: prev,
+                unlinked_next: next,
+                disclosure: disc,
+                note,
+                corrected_at: at,
+            })
+        );
     }
 }
