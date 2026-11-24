@@ -303,6 +303,7 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
         "h-chart-height-lg",
       ],
     ],
+    ["src/shared/ds/CandleChart.tsx", ["h-chart-height"]],
     [
       "src/shared/ds/Page.tsx",
       ["min-h-toolbar-height", "max-w-content-max", "wrap-slot"],
@@ -336,7 +337,7 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
       "max-w-dialog-width-wide",
       "h-[37px]",
       "max-w-[41rem]",
-      ...(file.includes("Skeleton")
+      ...(file.includes("Skeleton") || file.includes("CandleChart")
         ? ["max-w-dialog-width"]
         : ["skeleton-line", "h-chart-height"]),
     ]) {

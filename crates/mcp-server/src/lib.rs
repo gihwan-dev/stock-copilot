@@ -1,4 +1,5 @@
 pub mod catalog;
+mod estimate_input;
 mod handler;
 mod pagination;
 mod peer;
@@ -13,6 +14,10 @@ mod contract_tests;
 
 pub use catalog::market::register_market_tools;
 pub use catalog::portfolio::register_portfolio_tools;
+pub use catalog::{AnalysisCatalogPorts, build_analysis_catalog};
+pub use estimate_input::{
+    SUBMIT_ESTIMATE_TOOL, parse_submit_estimate_arguments, submit_estimate_schema,
+};
 pub use handler::{ConnectionEvent, ConnectionRejection};
 pub use pagination::{
     CursorStore, DEFAULT_CURSOR_TTL_SECS, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, MAX_STORED_CURSORS,

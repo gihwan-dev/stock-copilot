@@ -414,6 +414,36 @@ pub use submit_estimate::{
     EstimateTaskRepository, SubmitEstimate, SubmitEstimateError,
 };
 
+mod analysis_tools;
+pub use analysis_tools::{
+    GetProfile, GetScorecard, GetScorecardError, ProfileView, ScorecardObservationRepository,
+    ScorecardSelection, ScorecardView,
+};
+
+mod estimate_cycle;
+pub use estimate_cycle::{
+    BackgroundBudget, CycleAdmission, CycleProgress, EstimateCycleReport, RunEstimateCycle,
+    SingleEstimateOutcome, SingleEstimateRunner,
+};
+
+mod skip_signal;
+pub use skip_signal::{SignalSkip, SignalSkipRepository, SkipReason, SkipReasonError, SkipSignal};
+
+mod prompt_replay;
+pub use prompt_replay::{
+    ComparePromptReplay, PromptReplayRunner, ReplayCase, ReplayComparison, ReplayCount,
+    ReplayMetrics, ReplayOutput,
+};
+
+mod prompt_file;
+pub use prompt_file::{PromptFile, PromptFileError};
+
+mod submit_estimate_tool;
+pub use submit_estimate_tool::{
+    EstimateRunContext, EstimateToolArguments, SubmitEstimateTool, SubmitEstimateToolError,
+    ToolCallHistory,
+};
+
 mod transaction_observation;
 pub use transaction_observation::{
     CompleteTransactionObservation, ObservedTransaction, ObservedTransactionBatch,
@@ -476,6 +506,18 @@ pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
     OpenExternalError, OpenExternalOutcome, OpenExternalUrl,
 };
+mod watchlist;
+pub use watchlist::{
+    ManageWatchlist, TrackedUniverse, TrackingOrigin, TrackingTarget, Watchlist, WatchlistCount,
+    WatchlistEntry, WatchlistError, WatchlistMembership, WatchlistOutcome, WatchlistRepository,
+    WatchlistStoreOutcome,
+};
+mod estimate_tasks;
+pub use estimate_tasks::{
+    CreateEstimateTask, CreateEstimateTaskError, CreateEstimateTaskInput,
+    CreateEstimateTaskOutcome, EstimateAssignmentRepository, EstimateTaskView, GetEstimateTask,
+    GetEstimateTaskError, GetEstimateTaskInput,
+};
 
 mod source_status;
 pub use source_status::{
@@ -516,6 +558,11 @@ pub use news_data_settings::{
     SourceSwitch, StockAlias, UpdateNewsDataSettings,
 };
 
+mod deep_research;
+pub use deep_research::{
+    GatherEvidenceError, GatherResearchEvidence, GatheredEvidence, ResearchEvidenceSource,
+    ResearchWebCollector, ResearchWebOutcome, ResearchWebStore,
+};
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
 
@@ -554,6 +601,8 @@ pub use peer_process::{
     ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
     PeerProcessLookupError, ProcessId,
 };
+mod order_button;
+pub use order_button::ReadOrderButton;
 mod order_rate_limit;
 pub use order_rate_limit::{CheckOrderRateLimit, OrderRateRepository};
 
