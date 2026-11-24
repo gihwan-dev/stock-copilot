@@ -5,13 +5,13 @@ mod tests {
         ReconcileSubmittedOrders, ResponseMismatch, SubmissionLedger, SystemPortError,
     };
     use domain::{
-        AccountId, BrokerOrderId, BrokerOrderMoney, BrokerOrderPrice, BrokerOrderRow,
-        BrokerOrderSet, BrokerOrderSize, BrokerOrderStatus, BrokerOrderTime, BrokerOrderType,
-        BrokerTimeInForce, ClientOrderId, ClosedOrderPageCollector, ClosedOrderQueryScope,
-        CommonShare, Currency, DisplayInstrumentName, InstrumentId, ListingStatus, LocalSubmission,
-        LocalSubmissionResult, MasterCode, MasterInstrument, MasterInstrumentRow,
-        MasterSecurityType, Nanosecond, NumericInput, OffsetSeconds, OpenOrderCoverage,
-        OrderPageBoundary, OrderSide, OrderTerms, Quantity, ReconciliationIssue,
+        AccountId, BrokerOrderCoverage, BrokerOrderId, BrokerOrderMoney, BrokerOrderPrice,
+        BrokerOrderRow, BrokerOrderSet, BrokerOrderSize, BrokerOrderStatus, BrokerOrderTime,
+        BrokerOrderType, BrokerTimeInForce, ClientOrderId, ClosedOrderPageCollector,
+        ClosedOrderQueryScope, CommonShare, Currency, DisplayInstrumentName, InstrumentId,
+        ListingStatus, LocalSubmission, LocalSubmissionResult, MasterCode, MasterInstrument,
+        MasterInstrumentRow, MasterSecurityType, Nanosecond, NumericInput, OffsetSeconds,
+        OpenOrderCoverage, OrderPageBoundary, OrderSide, OrderTerms, Quantity, ReconciliationIssue,
         ReconciliationStatus, ResolvedOrderInstrument, Symbol, TimeInterval, Timestamp,
         UnixSeconds, WholeOrderQuantity,
     };
@@ -121,7 +121,7 @@ mod tests {
         }
     }
 
-    fn broker(closed_complete: bool) -> ScriptedBrokerRead {
+    fn broker(closed: BrokerOrderCoverage) -> ScriptedBrokerRead {
         let broker = ScriptedBrokerRead::default();
         broker
             .script_open_orders()
@@ -137,7 +137,7 @@ mod tests {
             window(),
         ));
         let _intake = collector.accept_row(row("b1", BrokerOrderStatus::Filled));
-        if closed_complete {
+        if closed == BrokerOrderCoverage::Complete {
             collector.record_page_boundary(OrderPageBoundary::LastPage);
         } else {
             collector.record_page_limit_reached();
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn complete_broker_history_reports_only_the_missing_accepted_order() {
         let ledger = ledger();
-        let broker = broker(true);
+        let broker = broker(BrokerOrderCoverage::Complete);
         let clock = SteppedClock::new(at(960));
         let report = run(ReconcileSubmittedOrders::new(&ledger, &broker, &clock)
             .execute(&AccountId::new(7), window()))
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn incomplete_broker_history_never_claims_missing_orders() {
         let ledger = ledger();
-        let broker = broker(false);
+        let broker = broker(BrokerOrderCoverage::Incomplete);
         let clock = SteppedClock::new(at(960));
         let report = run(ReconcileSubmittedOrders::new(&ledger, &broker, &clock)
             .execute(&AccountId::new(7), window()))

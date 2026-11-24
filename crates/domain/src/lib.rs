@@ -633,6 +633,10 @@ pub use market_query_facts::{
     SectorRankingItem, SectorRankingRow, SectorRate, SectorRateRow,
 };
 
+mod order_progress;
+pub use order_progress::{
+    OrderProgress, OrderProgressChange, order_progress, order_progress_change,
+};
 mod order_reconciliation;
 pub use order_reconciliation::{
     BrokerOrderCoverage, LocalSubmission, LocalSubmissionResult, ReconciliationIssue,
