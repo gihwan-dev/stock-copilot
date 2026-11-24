@@ -5,7 +5,8 @@ mod tests {
     use std::sync::Arc;
 
     use application::{AiRunId, ToolName};
-    use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
+    use application::{ArticleFetchFailure, WebResearchToolOutcome};
+    use domain::{Nanosecond, OffsetSeconds, Symbol, Timestamp, UnixSeconds, UntrustedText};
     use mcp_server::{
         AnalysisCatalogPorts, ToolErrorCode, ToolInvocation, ToolRegistry, build_analysis_catalog,
         make_cursor_store, validate_arguments_against_schema,
@@ -15,10 +16,11 @@ mod tests {
     use serde_json::{Map, Value};
     use testkit_ports::SteppedClock;
     use testkit_ports::tool_read_fakes::{
-        FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+        FixedArticleToolPort, FixedMarketToolReads, FixedNewsToolReads, FixedPortfolioToolReads,
+        FixedWebResearchToolPort,
     };
 
-    const STATE_CHANGING_ALLOWED: [&str; 0] = [];
+    const STATE_CHANGING_ALLOWED: [&str; 1] = ["request_web_research"];
 
     const FORBIDDEN_FRAGMENTS: [&str; 16] = [
         "order",
@@ -51,6 +53,25 @@ mod tests {
         news: Arc<FixedNewsToolReads>,
     }
 
+    fn research_fake() -> FixedWebResearchToolPort {
+        let known: Vec<Symbol> = ["005930", "000660", "AAPL", "035420"]
+            .into_iter()
+            .map(|code| Symbol::try_new(code).expect("종목"))
+            .collect();
+        FixedWebResearchToolPort::new(
+            Ok(known),
+            Ok(WebResearchToolOutcome {
+                summary: UntrustedText::try_new("조사 요약").expect("요약"),
+                collected_at: Timestamp::from_parts(
+                    UnixSeconds::new(1_764_000_000_i64),
+                    Nanosecond::new(0_u32),
+                    OffsetSeconds::new(0_i32),
+                )
+                .expect("시각"),
+            }),
+        )
+    }
+
     fn catalog() -> Catalog {
         let clock = Arc::new(SteppedClock::new(
             Timestamp::from_parts(
@@ -64,9 +85,16 @@ mod tests {
             portfolio: Arc::new(FixedPortfolioToolReads::default()),
             market: Arc::new(FixedMarketToolReads::default()),
             news: Arc::new(FixedNewsToolReads::default()),
+            research: Arc::new(research_fake()),
+            article: Arc::new(FixedArticleToolPort::new(
+                Vec::new(),
+                Vec::new(),
+                Err(ArticleFetchFailure::NotFound),
+            )),
         };
         let registry =
-            build_analysis_catalog(&ports, &make_cursor_store(clock)).expect("카탈로그 조립");
+            build_analysis_catalog(&ports, &clock, &make_cursor_store(Arc::clone(&clock)))
+                .expect("카탈로그 조립");
         Catalog {
             registry,
             portfolio: ports.portfolio,
@@ -264,7 +292,8 @@ mod tests {
                 | ToolErrorCode::ResponseTooLarge
                 | ToolErrorCode::LedgerUnavailable
                 | ToolErrorCode::DataUnavailable
-                | ToolErrorCode::UpstreamUnavailable => Ok(Reach::Body),
+                | ToolErrorCode::UpstreamUnavailable
+                | ToolErrorCode::RateLimited => Ok(Reach::Body),
             },
         }
     }

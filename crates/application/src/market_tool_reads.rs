@@ -19,7 +19,7 @@ pub struct QuoteToolView {
     pub collected_at: Timestamp,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CandleWindow(u16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,17 +28,15 @@ pub enum CandleWindowError {
 }
 
 impl CandleWindow {
-    pub const MAX: u16 = 250_u16;
-
     pub const fn try_new(days: u16) -> Result<Self, CandleWindowError> {
-        if days == 0_u16 || days > Self::MAX {
+        if days == 0_u16 || days > 250_u16 {
             return Err(CandleWindowError::OutOfRange);
         }
         Ok(Self(days))
     }
 
     #[must_use]
-    pub const fn days(self) -> u16 {
+    pub const fn as_u16(&self) -> u16 {
         self.0
     }
 }
