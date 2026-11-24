@@ -6,6 +6,7 @@ mod isolation;
 mod parse;
 mod process;
 mod provider;
+mod quota;
 
 pub use command::{
     ALLOWED_HOST_ENV_KEYS, ApiKeyEnvState, CommandBuildError, CommandPlan, CommandPlanInput,
@@ -15,13 +16,20 @@ pub use command::{
 };
 pub use decoder::{ClaudeEventDecoder, decode_stream_lines, decode_stream_text};
 pub use discovery::{
-    ClaudeStartupReport, DiscoveryConfig, DiscoveryOutcome, DiscoverySource, LoginCheckOutcome,
-    LoginShellPathResolver, StaticPathResolver, SystemLoginShellPathResolver, check_login_status,
-    default_known_locations, find_claude_executable, run_claude_startup_check,
+    ClaudeStartupReport, DEFAULT_PROBE_TIMEOUT_MS, DiscoveryConfig, DiscoveryOutcome,
+    DiscoverySource, LoginCheckOutcome, LoginShellPathResolver, StaticPathResolver,
+    SystemLoginShellPathResolver, check_login_status, check_login_status_with_timeout,
+    default_known_locations, extract_marked_shell_path, find_claude_executable,
+    run_claude_startup_check, run_claude_startup_check_with_timeout,
 };
 pub use error::{FieldName, SchemaFailure, StreamDecodeError, StreamOrderError, ValidationFailure};
 pub use isolation::IsolationExpectation;
 pub use process::{MAX_STREAM_LINE_BYTES, ProcessSignal, send_signal_to_process_group};
 pub use provider::{
     ClaudeCodeConfig, ClaudeCodeProvider, ClaudeEventStream, ModelDefaults, PREFLIGHT_MESSAGE,
+};
+pub use quota::{
+    BudgetSummaryKind, DEFAULT_SCHEDULED_CAP_PERCENT, DEFAULT_UNKNOWN_RESET_COOLDOWN_SECONDS,
+    QuotaConfigError, QuotaDecision, QuotaPolicy, QuotaState, QuotaTracker, QuotaTransition,
+    ResetSource, WorkCategory, utilization_from_percent,
 };

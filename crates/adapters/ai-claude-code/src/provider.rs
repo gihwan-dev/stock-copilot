@@ -2,16 +2,17 @@ use crate::command::{
     CommandBuildError, CommandPlan, CommandPlanInput, HostEnvironment, McpBridgeConfig,
     McpConfigSource, RunWorkspace, TokenEnvInclusion, build_command_plan, prepare_run_workspace,
 };
-use crate::decoder::ClaudeEventDecoder;
+use crate::decoder::{ClaudeEventDecoder, DecodedLineKind};
 use crate::isolation::IsolationExpectation;
 use crate::process::{
     ActiveRunRegistry, ChildCancelGuard, SharedChild, SpawnSpec, map_line_read_failure,
     read_bounded_line, spawn_isolated_child, write_user_message_line,
 };
+use crate::quota::{QuotaPolicy, QuotaTracker};
 use application::{
-    AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, ChatHistory, ChatRole, CollectionQuery,
-    CollectionTopic, InformationError, IsolationCheck, ModelName, ModelSelection, ReasoningEffort,
-    ResetTime, ResponseMismatch, RunInput, RunKind, RunSpec, SecretValue,
+    AiEvent, AiEventStream, AiProvider, AiRunId, AiUsage, ChatHistory, ChatRole, Clock,
+    CollectionQuery, CollectionTopic, InformationError, IsolationCheck, ModelName, ModelSelection,
+    ReasoningEffort, ResetTime, ResponseMismatch, RunInput, RunKind, RunSpec, SecretValue,
 };
 use domain::UntrustedText;
 use std::collections::BTreeSet;
@@ -224,6 +225,8 @@ pub struct ClaudeCodeProvider {
     config: ClaudeCodeConfig,
     active_runs: Arc<ActiveRunRegistry>,
     last_usage: Arc<Mutex<AiUsage>>,
+    quota_tracker: Option<Arc<Mutex<QuotaTracker>>>,
+    clock: Option<Arc<dyn Clock>>,
     last_cli_version: Arc<Mutex<Option<String>>>,
 }
 
@@ -231,6 +234,7 @@ impl fmt::Debug for ClaudeCodeProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClaudeCodeProvider")
             .field("config", &self.config)
+            .field("has_clock", &self.clock.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -242,7 +246,23 @@ impl ClaudeCodeProvider {
             config,
             active_runs: ActiveRunRegistry::new(),
             last_usage: Arc::new(Mutex::new(AiUsage::Unknown)),
+            quota_tracker: None,
+            clock: None,
             last_cli_version: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    #[must_use]
+    pub fn with_clock_and_quota(mut self, clock: Arc<dyn Clock>, policy: QuotaPolicy) -> Self {
+        self.clock = Some(clock);
+        self.quota_tracker = Some(Arc::new(Mutex::new(QuotaTracker::new(policy))));
+        self
+    }
+
+    pub async fn quota_tracker(&self) -> Option<QuotaTracker> {
+        match &self.quota_tracker {
+            Some(tracker) => Some(tracker.lock().await.clone()),
+            None => None,
         }
     }
 
@@ -316,6 +336,8 @@ impl ClaudeCodeProvider {
             expectation,
             active_runs: Arc::clone(&self.active_runs),
             last_usage: Arc::clone(&self.last_usage),
+            quota_tracker: self.quota_tracker.as_ref().map(Arc::clone),
+            clock: self.clock.as_ref().map(Arc::clone),
             last_cli_version: Arc::clone(&self.last_cli_version),
             tx,
             workspace,
@@ -324,8 +346,8 @@ impl ClaudeCodeProvider {
             .name(String::from("claude-stream-reader"))
             .spawn(move || run_reader_loop(reader_ctx));
         if spawned_thread.is_err() {
-            let _reaped = shared_for_fallback.force_kill_and_reap_blocking();
-            self.active_runs.unregister_blocking(spec.id().as_str());
+            let _reaped = shared_for_fallback.force_kill_and_reap().await;
+            self.active_runs.unregister(spec.id().as_str()).await;
             return Err(InformationError::Unavailable(ResetTime::NotProvided));
         }
         Ok(ClaudeEventStream {
@@ -355,6 +377,10 @@ impl AiProvider for ClaudeCodeProvider {
     }
 
     async fn usage(&self) -> Result<AiUsage, InformationError> {
+        if let (Some(tracker), Some(clock)) = (&self.quota_tracker, &self.clock) {
+            let mut guard = tracker.lock().await;
+            return Ok(guard.current_usage(clock.now()));
+        }
         let guard = self.last_usage.lock().await;
         Ok(*guard)
     }
@@ -475,6 +501,8 @@ struct ReaderContext {
     expectation: IsolationExpectation,
     active_runs: Arc<ActiveRunRegistry>,
     last_usage: Arc<Mutex<AiUsage>>,
+    quota_tracker: Option<Arc<Mutex<QuotaTracker>>>,
+    clock: Option<Arc<dyn Clock>>,
     last_cli_version: Arc<Mutex<Option<String>>>,
     tx: mpsc::Sender<ChannelMessage>,
     workspace: RunWorkspace,
@@ -518,60 +546,59 @@ enum EchoFilterState {
 }
 
 struct StreamSinks<'a> {
+    shared: &'a SharedChild,
     last_usage: &'a Mutex<AiUsage>,
+    quota_tracker: Option<&'a Mutex<QuotaTracker>>,
+    clock: Option<&'a dyn Clock>,
     tx: &'a mpsc::Sender<ChannelMessage>,
     rate_limit_seen: &'a mut RateLimitSeen,
 }
 
-fn run_reader_loop(ctx: ReaderContext) {
-    let ReaderContext {
-        run_id,
-        shared,
-        mut stdin,
-        stdout,
-        prompt_text,
-        expectation,
-        active_runs,
-        last_usage,
-        last_cli_version,
-        tx,
-        workspace,
-    } = ctx;
-    let mut decoder = ClaudeEventDecoder::new(expectation);
-    let mut reader = BufReader::new(stdout);
+fn run_reader_loop(mut ctx: ReaderContext) {
+    let mut decoder = ClaudeEventDecoder::new(ctx.expectation);
+    let mut reader = BufReader::new(ctx.stdout);
     let mut rate_limit_seen = RateLimitSeen::No;
     let preflight_stop = run_preflight_turn(
-        &mut stdin,
+        &mut ctx.stdin,
         &mut reader,
         &mut decoder,
-        &last_cli_version,
-        &tx,
+        &ctx.last_cli_version,
+        &ctx.tx,
     );
     let stop = match preflight_stop {
         PreflightOutcome::Passed => {
             let mut sinks = StreamSinks {
-                last_usage: &last_usage,
-                tx: &tx,
+                shared: &ctx.shared,
+                last_usage: &ctx.last_usage,
+                quota_tracker: ctx.quota_tracker.as_deref(),
+                clock: ctx.clock.as_deref(),
+                tx: &ctx.tx,
                 rate_limit_seen: &mut rate_limit_seen,
             };
-            continue_after_preflight(stdin, prompt_text, &mut reader, &mut decoder, &mut sinks)
+            continue_after_preflight(
+                ctx.stdin,
+                ctx.prompt_text,
+                &mut reader,
+                &mut decoder,
+                &mut sinks,
+            )
         }
         PreflightOutcome::Stop(reason) => {
-            let _closed_stdin = stdin;
+            let _closed_stdin = ctx.stdin;
             reason
         }
     };
     {
         let _closed_reader = reader;
     }
-    let exit_status = reap_for_stop(&shared, stop);
-    let interrupted = if shared.was_interrupted() {
+    let exit_status = reap_for_stop(&ctx.shared, stop);
+    let interrupted = if ctx.shared.was_interrupted() {
         InterruptState::Interrupted
     } else {
         InterruptState::NotInterrupted
     };
-    active_runs.unregister_blocking(&run_id);
-    workspace.cleanup();
+    ctx.active_runs.unregister_blocking(&ctx.run_id);
+    ctx.workspace.cleanup();
     finalize_stream(
         stop,
         decoder,
@@ -580,7 +607,7 @@ fn run_reader_loop(ctx: ReaderContext) {
             rate_limit_seen,
             interrupted,
         },
-        &tx,
+        &ctx.tx,
     );
 }
 
@@ -694,11 +721,6 @@ fn decode_stdout_loop(
         let Some(line) = maybe_line else {
             return finish_echo_filter_on_eof(filter, sinks);
         };
-        let line_kind = if is_json_type(&line, "result") {
-            DecodedLineKind::Result
-        } else {
-            DecodedLineKind::Other
-        };
         let events = match decoder.decode_line(&line) {
             Ok(items) => items,
             Err(error) => return StopReason::DecodeError(error.to_information_error()),
@@ -706,30 +728,13 @@ fn decode_stdout_loop(
         if let Some(stop) = process_decoded_line(
             &mut filter,
             events,
-            line_kind,
+            decoder.last_line_kind(),
             decoder.last_result_num_turns(),
             sinks,
         ) {
             return stop;
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DecodedLineKind {
-    Result,
-    Other,
-}
-
-fn is_json_type(line: &str, expected: &str) -> bool {
-    serde_json::from_str::<serde_json::Value>(line)
-        .ok()
-        .and_then(|val| {
-            val.get("type")
-                .and_then(serde_json::Value::as_str)
-                .map(String::from)
-        })
-        .is_some_and(|kind| kind == expected)
 }
 
 fn is_echo_bufferable(event: &AiEvent) -> bool {
@@ -832,9 +837,15 @@ fn finish_echo_filter_on_eof(filter: EchoFilterState, sinks: &mut StreamSinks<'_
         EchoFilterState::PassedThrough {
             saw_preflight_zero: PreflightZeroSeen::Yes,
             real_turn: RealTurnSeen::No,
-        } => StopReason::DecodeError(InformationError::InvalidResponse(
-            ResponseMismatch::Validation,
-        )),
+        } => {
+            if sinks.shared.was_interrupted() {
+                StopReason::NaturalEof
+            } else {
+                StopReason::DecodeError(InformationError::InvalidResponse(
+                    ResponseMismatch::Validation,
+                ))
+            }
+        }
         EchoFilterState::PassedThrough { .. } => StopReason::NaturalEof,
     }
 }
@@ -849,7 +860,7 @@ fn emit_event_batch(events: Vec<AiEvent>, sinks: &mut StreamSinks<'_>) -> Option
 }
 
 fn emit_event(event: AiEvent, sinks: &mut StreamSinks<'_>) -> Option<StopReason> {
-    record_usage_observation(&event, sinks.last_usage, sinks.rate_limit_seen);
+    record_usage_observation(&event, sinks);
     let is_rejected = matches_rejected(&event);
     if sinks
         .tx
@@ -864,14 +875,14 @@ fn emit_event(event: AiEvent, sinks: &mut StreamSinks<'_>) -> Option<StopReason>
     None
 }
 
-fn record_usage_observation(
-    event: &AiEvent,
-    last_usage: &Mutex<AiUsage>,
-    rate_limit_seen: &mut RateLimitSeen,
-) {
+fn record_usage_observation(event: &AiEvent, sinks: &mut StreamSinks<'_>) {
+    if let (Some(tracker), Some(clock)) = (sinks.quota_tracker, sinks.clock) {
+        let mut guard = tracker.blocking_lock();
+        let _transition = guard.observe_event(event, clock.now());
+    }
     match event {
         AiEvent::Quota(usage) => {
-            let mut guard = last_usage.blocking_lock();
+            let mut guard = sinks.last_usage.blocking_lock();
             if let (
                 AiUsage::Waiting(ResetTime::Known(existing)),
                 AiUsage::Waiting(ResetTime::NotProvided),
@@ -882,12 +893,12 @@ fn record_usage_observation(
                 *guard = *usage;
             }
             if let AiUsage::Waiting(_) = usage {
-                *rate_limit_seen = RateLimitSeen::Yes;
+                *sinks.rate_limit_seen = RateLimitSeen::Yes;
             }
         }
         AiEvent::RateLimited { resets_at } => {
-            *rate_limit_seen = RateLimitSeen::Yes;
-            let mut guard = last_usage.blocking_lock();
+            *sinks.rate_limit_seen = RateLimitSeen::Yes;
+            let mut guard = sinks.last_usage.blocking_lock();
             match (*guard, *resets_at) {
                 (AiUsage::Waiting(ResetTime::Known(_)), ResetTime::NotProvided) => {}
                 (_, next_reset) => {

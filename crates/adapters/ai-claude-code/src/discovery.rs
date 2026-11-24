@@ -1,9 +1,9 @@
 use crate::command::{ApiKeyEnvState, HostEnvironment, McpConfigSource, prepare_run_workspace};
-use crate::process::{ProcessSignal, SharedChild, send_signal_to_process_group};
+use crate::process::{ProcessSignal, send_signal_to_process_group};
 use application::{
     AiCheckObservation, AiEnvironmentProblem, AiRunId, BugDiagnostic, CheckState,
-    ClaudeInstallProblem, ClaudeLoginProblem, IsolationFailure, ResponseMismatch, RunKind,
-    SelfCheckInput, isolation_check_observation,
+    ClaudeInstallProblem, ClaudeLoginProblem, IsolationFailure, ResponseMismatch, RetryDelay,
+    RunKind, SelfCheckInput, isolation_check_observation,
 };
 use serde_json::Value;
 use std::fs;
@@ -11,11 +11,18 @@ use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
+use std::time::Duration;
 
 const MAX_PROBE_STDOUT_BYTES: usize = 16_384_usize;
-const PROBE_REAP_GRACE_MS: u64 = 1_500_u64;
+pub const DEFAULT_PROBE_TIMEOUT_MS: u64 = 10_000_u64;
+const POST_EXIT_STDOUT_GRACE_MS: u64 = 150_u64;
+const POST_KILL_STDOUT_GRACE_MS: u64 = 500_u64;
+const PROBE_POLL_STEP_MS: u64 = 10_u64;
+const PATH_MARKER_BEGIN: &str = "__SC_LOGIN_PATH_BEGIN__";
+const PATH_MARKER_END: &str = "__SC_LOGIN_PATH_END__";
 
 static DISCOVERY_PROBE_SEQ: AtomicU64 = AtomicU64::new(1_u64);
 
@@ -58,15 +65,28 @@ impl LoginShellPathResolver for StaticPathResolver {
     }
 }
 
+#[must_use]
+pub fn extract_marked_shell_path(raw_stdout: &str) -> Option<&str> {
+    let (_, after_begin) = raw_stdout.rsplit_once(PATH_MARKER_BEGIN)?;
+    let (between, _) = after_begin.split_once(PATH_MARKER_END)?;
+    let trimmed = between.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemLoginShellPathResolver;
 
 impl LoginShellPathResolver for SystemLoginShellPathResolver {
     fn resolve_login_shell_path(&self, host_env: &HostEnvironment) -> Option<String> {
         let env = host_env.build_child_env(RunKind::Collection, None).ok()?;
+        let script = format!("printf '{PATH_MARKER_BEGIN}%s{PATH_MARKER_END}' \"$PATH\"");
         let mut command = Command::new("/bin/zsh");
         command
-            .args(["-l", "-c", "printf '%s' \"$PATH\""])
+            .args(["-l", "-c", &script])
             .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -75,11 +95,15 @@ impl LoginShellPathResolver for SystemLoginShellPathResolver {
         for (key, value) in env {
             command.env(key, value);
         }
-        let outcome = run_short_probe_command(&mut command)?;
-        if outcome.exit != ProbeExit::Succeeded || outcome.stdout.trim().is_empty() {
+        let ProbeRunResult::Completed(outcome) =
+            run_short_probe_command(&mut command, DEFAULT_PROBE_TIMEOUT_MS)
+        else {
+            return None;
+        };
+        if outcome.exit != ProbeExit::Succeeded {
             return None;
         }
-        Some(outcome.stdout)
+        extract_marked_shell_path(&outcome.stdout).map(String::from)
     }
 }
 
@@ -205,6 +229,7 @@ pub enum LoginCheckOutcome {
     LoggedIn,
     LoginRequired,
     EnvironmentRejected(IsolationFailure),
+    TimedOut,
     CheckUnavailable,
 }
 
@@ -230,6 +255,16 @@ pub fn check_login_status(
     executable: &Path,
     work_root: &Path,
     host_env: &HostEnvironment,
+) -> LoginCheckOutcome {
+    check_login_status_with_timeout(executable, work_root, host_env, DEFAULT_PROBE_TIMEOUT_MS)
+}
+
+#[must_use]
+pub fn check_login_status_with_timeout(
+    executable: &Path,
+    work_root: &Path,
+    host_env: &HostEnvironment,
+    timeout_ms: u64,
 ) -> LoginCheckOutcome {
     if host_env.api_key_state() != ApiKeyEnvState::Absent {
         return LoginCheckOutcome::EnvironmentRejected(IsolationFailure::ApiKeySource);
@@ -257,12 +292,13 @@ pub fn check_login_status(
     for (key, value) in env_entries {
         command.env(key, value);
     }
-    let probe_result = run_short_probe_command(&mut command);
+    let probe_result = run_short_probe_command(&mut command, timeout_ms);
     workspace.cleanup();
-    let Some(output) = probe_result else {
-        return LoginCheckOutcome::CheckUnavailable;
-    };
-    parse_auth_status_output(&output.stdout, output.exit)
+    match probe_result {
+        ProbeRunResult::Completed(output) => parse_auth_status_output(&output.stdout, output.exit),
+        ProbeRunResult::TimedOut => LoginCheckOutcome::TimedOut,
+        ProbeRunResult::Failed => LoginCheckOutcome::CheckUnavailable,
+    }
 }
 
 #[must_use]
@@ -270,6 +306,16 @@ pub fn run_claude_startup_check<R: LoginShellPathResolver>(
     config: &DiscoveryConfig,
     login_shell: &R,
     work_root: &Path,
+) -> ClaudeStartupReport {
+    run_claude_startup_check_with_timeout(config, login_shell, work_root, DEFAULT_PROBE_TIMEOUT_MS)
+}
+
+#[must_use]
+pub fn run_claude_startup_check_with_timeout<R: LoginShellPathResolver>(
+    config: &DiscoveryConfig,
+    login_shell: &R,
+    work_root: &Path,
+    timeout_ms: u64,
 ) -> ClaudeStartupReport {
     match find_claude_executable(config, login_shell) {
         DiscoveryOutcome::NotInstalled => ClaudeStartupReport {
@@ -280,7 +326,8 @@ pub fn run_claude_startup_check<R: LoginShellPathResolver>(
             ai_environment: CheckState::Healthy,
         },
         DiscoveryOutcome::Found { path, source } => {
-            let login_outcome = check_login_status(&path, work_root, config.host_env());
+            let login_outcome =
+                check_login_status_with_timeout(&path, work_root, config.host_env(), timeout_ms);
             report_from_login_outcome(path, source, login_outcome)
         }
     }
@@ -321,6 +368,11 @@ fn report_from_login_outcome(
                 ),
             }
         }
+        LoginCheckOutcome::TimedOut => (
+            CheckState::Healthy,
+            CheckState::Waiting(RetryDelay::Unknown),
+            CheckState::Healthy,
+        ),
         LoginCheckOutcome::CheckUnavailable => (
             CheckState::Healthy,
             CheckState::Bug(BugDiagnostic::Response(ResponseMismatch::Validation)),
@@ -372,30 +424,106 @@ struct ProbeCommandOutput {
     exit: ProbeExit,
 }
 
-fn run_short_probe_command(command: &mut Command) -> Option<ProbeCommandOutput> {
-    let mut child = command.spawn().ok()?;
-    let pgid = child.id();
-    let stdout = child.stdout.take()?;
-    let shared = SharedChild::new(child);
-    let Ok(reader_handle) = std::thread::Builder::new()
-        .name(String::from("claude-probe-reader"))
-        .spawn(move || read_bounded_stdout(stdout))
-    else {
-        let _reaped = shared.force_kill_and_reap_blocking();
-        return None;
-    };
-    let exit_status = shared.reap_with_grace_blocking(PROBE_REAP_GRACE_MS);
-    if exit_status.is_none() {
-        send_signal_to_process_group(pgid, ProcessSignal::Kill);
+enum ProbeRunResult {
+    Completed(ProbeCommandOutput),
+    TimedOut,
+    Failed,
+}
+
+enum ChildWaitOutcome {
+    Exited(ExitStatus),
+    TimedOut,
+    Failed,
+}
+
+fn wait_child_bounded(child: &mut Child, pgid: u32, timeout_ms: u64) -> ChildWaitOutcome {
+    let (_wait_tx, wait_rx) = mpsc::channel::<()>();
+    let mut waited_ms = 0_u64;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return ChildWaitOutcome::Exited(status),
+            Ok(None) => {}
+            Err(_) => {
+                force_kill_probe_group(child, pgid);
+                return ChildWaitOutcome::Failed;
+            }
+        }
+        if waited_ms >= timeout_ms {
+            force_kill_probe_group(child, pgid);
+            return ChildWaitOutcome::TimedOut;
+        }
+        match wait_rx.recv_timeout(Duration::from_millis(PROBE_POLL_STEP_MS)) {
+            Ok(()) | Err(_) => {}
+        }
+        waited_ms = waited_ms.saturating_add(PROBE_POLL_STEP_MS);
     }
-    let raw_bytes = reader_handle.join().ok()??;
-    let text = String::from_utf8(raw_bytes).ok()?;
-    let exit = if exit_status.is_some_and(|status| status.success()) {
+}
+
+fn force_kill_probe_group(child: &mut Child, pgid: u32) {
+    send_signal_to_process_group(pgid, ProcessSignal::Terminate);
+    send_signal_to_process_group(pgid, ProcessSignal::Kill);
+    match child.kill() {
+        Ok(()) | Err(_) => {}
+    }
+    match child.wait() {
+        Ok(_) | Err(_) => {}
+    }
+    send_signal_to_process_group(pgid, ProcessSignal::Kill);
+}
+
+fn run_short_probe_command(command: &mut Command, timeout_ms: u64) -> ProbeRunResult {
+    let Ok(mut child) = command.spawn() else {
+        return ProbeRunResult::Failed;
+    };
+    let pgid = child.id();
+    let Some(stdout) = child.stdout.take() else {
+        force_kill_probe_group(&mut child, pgid);
+        return ProbeRunResult::Failed;
+    };
+    let (read_tx, read_rx) = mpsc::sync_channel::<Option<Vec<u8>>>(1_usize);
+    let spawned_reader = std::thread::Builder::new()
+        .name(String::from("claude-probe-reader"))
+        .spawn(move || {
+            let bytes = read_bounded_stdout(stdout);
+            match read_tx.send(bytes) {
+                Ok(()) | Err(_) => {}
+            }
+        });
+    if spawned_reader.is_err() {
+        force_kill_probe_group(&mut child, pgid);
+        return ProbeRunResult::Failed;
+    }
+    let exit_status = match wait_child_bounded(&mut child, pgid, timeout_ms) {
+        ChildWaitOutcome::Exited(status) => status,
+        ChildWaitOutcome::TimedOut => return ProbeRunResult::TimedOut,
+        ChildWaitOutcome::Failed => return ProbeRunResult::Failed,
+    };
+    let maybe_bytes = collect_probe_stdout(pgid, &read_rx);
+    let Some(raw_bytes) = maybe_bytes else {
+        return ProbeRunResult::Failed;
+    };
+    let Ok(text) = String::from_utf8(raw_bytes) else {
+        return ProbeRunResult::Failed;
+    };
+    let exit = if exit_status.success() {
         ProbeExit::Succeeded
     } else {
         ProbeExit::NonZero
     };
-    Some(ProbeCommandOutput { stdout: text, exit })
+    ProbeRunResult::Completed(ProbeCommandOutput { stdout: text, exit })
+}
+
+fn collect_probe_stdout(pgid: u32, read_rx: &mpsc::Receiver<Option<Vec<u8>>>) -> Option<Vec<u8>> {
+    let first = read_rx.recv_timeout(Duration::from_millis(POST_EXIT_STDOUT_GRACE_MS));
+    send_signal_to_process_group(pgid, ProcessSignal::Kill);
+    if let Ok(bytes) = first {
+        bytes
+    } else {
+        read_rx
+            .recv_timeout(Duration::from_millis(POST_KILL_STDOUT_GRACE_MS))
+            .ok()
+            .flatten()
+    }
 }
 
 fn read_bounded_stdout(stdout: std::process::ChildStdout) -> Option<Vec<u8>> {

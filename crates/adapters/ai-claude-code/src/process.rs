@@ -152,23 +152,32 @@ impl SharedChild {
 
     pub(crate) fn force_kill_and_reap_blocking(&self) -> Option<ExitStatus> {
         let mut guard = self.state.blocking_lock();
-        match &mut *guard {
-            ChildState::Running { child, pgid } => {
-                let target_pgid = *pgid;
-                terminate_running_child(child, target_pgid);
-                let waited = child.wait();
-                send_signal_to_process_group(target_pgid, ProcessSignal::Kill);
-                if let Ok(status) = waited {
-                    *guard = ChildState::Reaped(status);
-                    Some(status)
-                } else {
-                    *guard = ChildState::ReapFailed;
-                    None
-                }
+        reap_guard_forced(&mut guard)
+    }
+
+    pub(crate) async fn force_kill_and_reap(&self) -> Option<ExitStatus> {
+        let mut guard = self.state.lock().await;
+        reap_guard_forced(&mut guard)
+    }
+}
+
+fn reap_guard_forced(guard: &mut ChildState) -> Option<ExitStatus> {
+    match guard {
+        ChildState::Running { child, pgid } => {
+            let target_pgid = *pgid;
+            terminate_running_child(child, target_pgid);
+            let waited = child.wait();
+            send_signal_to_process_group(target_pgid, ProcessSignal::Kill);
+            if let Ok(status) = waited {
+                *guard = ChildState::Reaped(status);
+                Some(status)
+            } else {
+                *guard = ChildState::ReapFailed;
+                None
             }
-            ChildState::Reaped(status) => Some(*status),
-            ChildState::ReapFailed => None,
         }
+        ChildState::Reaped(status) => Some(*status),
+        ChildState::ReapFailed => None,
     }
 }
 
@@ -378,6 +387,11 @@ impl ActiveRunRegistry {
 
     pub(crate) fn unregister_blocking(&self, run_id: &str) {
         let mut guard = self.runs.blocking_lock();
+        guard.remove(run_id);
+    }
+
+    pub(crate) async fn unregister(&self, run_id: &str) {
+        let mut guard = self.runs.lock().await;
         guard.remove(run_id);
     }
 
