@@ -1,0 +1,9 @@
+{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1","model":"gpt-6.1-sol","future_extra_key":"ignored"}}
+{"id":2,"result":{"data":[{"name":"app","runtimeStatus":"connected","tools":[{"name":"get_portfolio"}]}]}}
+{"method":"item/started","params":{"item":{"id":"item_01","type":"mcpToolCall","server":"app","tool":"get_portfolio","arguments":{"currency":"KRW"},"status":"inProgress"}}}
+{"method":"item/completed","params":{"item":{"id":"item_01","type":"mcpToolCall","server":"app","tool":"get_portfolio","arguments":{"currency":"KRW"},"result":{"content":[{"type":"text","text":"{\"holdings\":[{\"symbol\":\"TEST\",\"weight\":\"0.60\"}]}"}]},"error":null,"status":"completed"}}}
+{"method":"account/rateLimits/updated","params":{"ordinaryUsageAllowed":true,"rateLimits":{"primary":{"usedPercent":11,"windowDurationMins":10080,"resetsAt":1794906000},"rateLimitReachedType":null}}}
+{"method":"item/agentMessage/delta","params":{"delta":"TEST 60%"}}
+{"method":"item/completed","params":{"item":{"id":"item_02","type":"agentMessage","text":"TEST 60%"}}}
+{"method":"thread/tokenUsage/updated","params":{"last":{"inputTokens":1200,"outputTokens":340,"cachedInputTokens":500,"cacheWriteInputTokens":80}}}
+{"method":"turn/completed","params":{"status":"completed","model":"gpt-6.1-sol"}}

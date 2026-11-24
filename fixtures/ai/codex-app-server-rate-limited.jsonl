@@ -1,0 +1,4 @@
+{"id":1,"result":{"sandbox":{"type":"readOnly","networkAccess":false},"instructionSources":[],"multiAgentMode":false,"cliVersion":"0.167.1","model":"gpt-6.1-sol"}}
+{"id":2,"result":{"data":[{"name":"app","runtimeStatus":"connected","tools":["get_portfolio"]}]}}
+{"method":"account/rateLimits/updated","params":{"ordinaryUsageAllowed":false,"rateLimits":{"primary":{"usedPercent":100,"windowDurationMins":10080,"resetsAt":1794394800},"rateLimitReachedType":"primary"}}}
+{"method":"turn/completed","params":{"status":"failed","error":{"codexErrorInfo":"usageLimitExceeded","resetsAt":1794394800}}}

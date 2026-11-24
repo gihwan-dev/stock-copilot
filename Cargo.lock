@@ -26,10 +26,24 @@ dependencies = [
 [[package]]
 name = "ai-claude-code"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "proptest",
+ "serde_json",
+ "testkit",
+]
 
 [[package]]
 name = "ai-codex"
 version = "0.1.0"
+dependencies = [
+ "application",
+ "domain",
+ "proptest",
+ "serde_json",
+ "testkit",
+]
 
 [[package]]
 name = "android_system_properties"

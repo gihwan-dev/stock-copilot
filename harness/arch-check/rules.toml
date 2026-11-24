@@ -465,3 +465,15 @@ crates = ["broker-toss"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
 reason = "T-18: tokio 런타임의 socket2 및 작업 공간 tokio-macros 기능 통합으로 생기는 syn/proc-macro2 경로"
+
+[[external-location-exception]]
+crates = ["ai-claude-code", "ai-codex"]
+externals = ["syn", "proc-macro2"]
+through = "serde_json"
+reason = "AI-01: AI CLI 스트림 JSON 줄 파싱의 serde_json 작업 공간 기능 통합"
+
+[[external-location-exception]]
+crates = ["ai-claude-code", "ai-codex"]
+externals = ["syn", "proc-macro2"]
+through = "proptest"
+reason = "AI-01: 개발 의존 proptest의 작업 공간 기능 통합 절차 매크로 경로"
