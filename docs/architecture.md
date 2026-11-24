@@ -426,7 +426,7 @@ v0.1의 `Idea`, `ProposalOutcome`은 없앤다. 장이 닫혀 있을 때의 신�
 | `StoredDataChanged` | 없음 | U-15 전체 삭제 또는 S-11 백업 복구 절차가 저장소 교체를 완료했을 때 | 스케줄러, UI 갱신(저장 데이터 조회 전체 무효화) | design 8장 시스템의 전체 삭제, U-15, S-11의 복구 테스트; 새 복원 화면을 추가하는 계약이 아님 | 아니오 | - | - |
 | `FxRateUpdated` | `FxPair` | 환율 수집·캐시가 해당 통화쌍의 환율을 저장했을 때 | UI 갱신(해당 통화쌍의 모든 환율 종류 재조회) | ACC-3의 쓴 환율 종류·시각 표시, T-08, S-04, A-08 | 아니오 | - | - |
 | `DisclosureTriggerRecorded` | `DisclosureKey` | N-12가 보유 종목의 긴급·높음 공시 기준 충족을 판정해 기록했을 때 | 스케줄러, UI 갱신, 알림(기록된 긴급만) | design 5.3의 보유 종목 긴급·높음 공시 즉시, 정정 한 단계 낮춤; UX-3 긴급 공시 알림 | 아니오 | - | - |
-| `AiJobFinished` | 미정(AI 작업 ID) | AI 실행기가 작업 종료 결과를 저장했을 때 | 스케줄러, UI 갱신 | architecture 2.3의 실행 ID, AI-7 동시 채팅·예약 실행 | 정의 대기 | AI-17 | 동시 실행이 둘이므로 단일 현재 작업 키가 없고, 어느 실행의 후속 단계를 이어갈지 구별할 실행 ID·조회 계약이 필요함 |
+| `AiJobFinished` | `AiJobId` | AI 실행기가 실행 하나의 종료 기록(종류·목적·결과·종료 시각)을 저장했을 때. 같은 실행의 기록이 이미 있으면 내지 않는다 | 스케줄러, UI 갱신 | architecture 2.3의 실행 ID, AI-7 동시 채팅·예약 실행; 구독자가 `AiJobRecordStore::finished(AiJobId)`로 그 실행의 종료 기록을 다시 읽는다 | 아니오 | - | - |
 | `BriefingFinished` | `BriefingId` | J-03·J-04·J-05가 브리핑 결과(완료)를 `BriefingRepository`에 저장했을 때. 실패 기록은 저장만 하고 내지 않는다 | UI 갱신, 알림 | UX-3, J-07의 현재·지난 브리핑 카드. `BriefingId`는 (종류, KST 날짜)이며 `BriefingRepository::find`로 그 기록을 다시 읽는다 | 아니오 | - | - |
 | `SourceStatusChanged` | `DataSource` | 수집기와 상태 기록 유스케이스가 소스별 상태(정상·데이터 없음·미설정·실패·마지막 성공 시각)를 저장했을 때 | UI 갱신(고급 상태) | REL-5, N-01 소스 레지스트리 | 아니오 | - | - |
 
