@@ -2,20 +2,340 @@
   "until": "첫 사용처가 생길 때까지. 운영 코드(main.tsx에서 닿는 코드)가 처음 가져오면 knip이 더 보고하지 않으므로 항목이 남아 있으면 실패한다",
   "entries": [
     {
-      "issue": "dependencies package.json @base-ui/react",
-      "reason": "DS-03 입력 경계가 lib 공개 진입점을 참조하여 파일 단위 유예를 실제 미사용 API 원소별로 세분화. 화면의 첫 소비까지 정확한 항목만 유예"
+      "issue": "exports src/shared/ds/AreaChart.tsx AreaChart",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "dependencies package.json @tauri-apps/api",
-      "reason": "IPC 호출 어댑터(shared/ipc/call.ts)를 부르는 화면이 아직 없다 (U-04)"
+      "issue": "exports src/shared/ds/Badge.tsx Badge",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "dependencies package.json zod",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "exports src/shared/ds/ChatInput.tsx ChatInput",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "files src/shared/ds/Badge.tsx src/shared/ds/Badge.tsx",
-      "reason": "DS-04 의미 변형 Badge·StatusBar와 목록 이야기. 첫 화면 사용 전 정확한 파일만 유예"
+      "issue": "exports src/shared/ds/ChatInput.tsx chatInputStressStories",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/ChatInput.tsx chatInputStressWithDraft",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Checkbox.tsx Checkbox",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Dialog.tsx Dialog",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Disclosure.tsx Disclosure",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/DonutChart.tsx DonutChart",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/DonutChart.tsx donutArcs",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Grid.tsx Grid",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/GridItem.tsx GridItem",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Inline.tsx Inline",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/LineChart.tsx LineChart",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/LineChart.tsx lineCoordinates",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Markdown.tsx Markdown",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx DirectionBadge",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx Money",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx Percent",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx PriceChange",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx Probability",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Numbers.tsx Quantity",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/SegmentedControl.tsx SegmentedControl",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Select.tsx Select",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Split.tsx Split",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/StatusBar.tsx StatusBar",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Switch.tsx Switch",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Table.tsx Table",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/TextField.tsx TextField",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Toolbar.tsx Toolbar",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Treemap.tsx Treemap",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/Treemap.tsx treemapRectangles",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts AreaChart",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Badge",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Button",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts ChatInput",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Checkbox",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Dialog",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts DirectionBadge",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Disclosure",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Divider",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts DonutChart",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Grid",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts GridItem",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Heading",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Icon",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts IconButton",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Inline",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts LineChart",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Markdown",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Money",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Percent",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts PriceChange",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Probability",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Quantity",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts SegmentedControl",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Select",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Split",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts StatusBar",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Switch",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Table",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts TextField",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Toolbar",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/ds/index.ts Treemap",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
+    },
+    {
+      "issue": "exports src/shared/lib/brand.ts parseChartDecimal",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/brand.ts parseCount",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/brand.ts parseTicker",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/brand.ts parseTimestamp",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseChartDecimal",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseCount",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseMoney",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parsePercentDisplay",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parsePrice",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseProbability",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseQuantity",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseRatio",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseTicker",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/index.ts parseTimestamp",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/money.ts parseMoney",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/money.ts parsePercentDisplay",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/money.ts parsePrice",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/money.ts parseProbability",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/money.ts parseQuantity",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
+    },
+    {
+      "issue": "exports src/shared/lib/money.ts parseRatio",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
       "issue": "files src/shared/ds/Base.stories.tsx src/shared/ds/Base.stories.tsx",
@@ -26,40 +346,24 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/Button.tsx src/shared/ds/Button.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Card.tsx src/shared/ds/Card.tsx",
-      "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
-    },
-    {
       "issue": "files src/shared/ds/Catalog.stories.tsx src/shared/ds/Catalog.stories.tsx",
       "reason": "DS-07 가상 자료 이야기. 제품 화면이 실제 소비하기 전 정확한 파일만 유예"
+    },
+    {
+      "issue": "files src/shared/ds/Charts.stories.tsx src/shared/ds/Charts.stories.tsx",
+      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
     },
     {
       "issue": "files src/shared/ds/Checkbox.stories.tsx src/shared/ds/Checkbox.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/Checkbox.tsx src/shared/ds/Checkbox.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Dialog.tsx src/shared/ds/Dialog.tsx",
-      "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
+      "issue": "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
+      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
     },
     {
       "issue": "files src/shared/ds/Disclosure.stories.tsx src/shared/ds/Disclosure.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Disclosure.tsx src/shared/ds/Disclosure.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/EmptyState.tsx src/shared/ds/EmptyState.tsx",
-      "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
     },
     {
       "issue": "files src/shared/ds/Feedback.stories.tsx src/shared/ds/Feedback.stories.tsx",
@@ -70,15 +374,7 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/Heading.tsx src/shared/ds/Heading.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
       "issue": "files src/shared/ds/Icon.stories.tsx src/shared/ds/Icon.stories.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Icon.tsx src/shared/ds/Icon.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
@@ -86,27 +382,15 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/IconButton.tsx src/shared/ds/IconButton.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
+      "issue": "files src/shared/ds/Layout.stories.tsx src/shared/ds/Layout.stories.tsx",
+      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
     },
     {
       "issue": "files src/shared/ds/Numbers.stories.tsx src/shared/ds/Numbers.stories.tsx",
       "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/Numbers.tsx src/shared/ds/Numbers.tsx",
-      "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/ScrollArea.tsx src/shared/ds/ScrollArea.tsx",
-      "reason": "DS-23에서 DS-11의 ScrollArea를 선행 구현. 첫 운영 화면 소비 전 정확한 파일만 유예"
-    },
-    {
       "issue": "files src/shared/ds/SegmentedControl.stories.tsx src/shared/ds/SegmentedControl.stories.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/SegmentedControl.tsx src/shared/ds/SegmentedControl.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
@@ -114,19 +398,7 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/Select.tsx src/shared/ds/Select.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Skeleton.tsx src/shared/ds/Skeleton.tsx",
-      "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
-    },
-    {
       "issue": "files src/shared/ds/Status.stories.tsx src/shared/ds/Status.stories.tsx",
-      "reason": "DS-04 의미 변형 Badge·StatusBar와 목록 이야기. 첫 화면 사용 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/StatusBar.tsx src/shared/ds/StatusBar.tsx",
       "reason": "DS-04 의미 변형 Badge·StatusBar와 목록 이야기. 첫 화면 사용 전 정확한 파일만 유예"
     },
     {
@@ -134,56 +406,12 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ds/Switch.tsx src/shared/ds/Switch.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Table.tsx src/shared/ds/Table.tsx",
-      "reason": "DS-04 기본 컴포넌트와 별도 이야기 진입점. 첫 화면 소비 전 정확한 파일만 유예"
-    },
-    {
       "issue": "files src/shared/ds/Text.stories.tsx src/shared/ds/Text.stories.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Text.tsx src/shared/ds/Text.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
       "issue": "files src/shared/ds/TextField.stories.tsx src/shared/ds/TextField.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/TextField.tsx src/shared/ds/TextField.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/button-variants.tsx src/shared/ds/button-variants.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/control-types.ts src/shared/ds/control-types.ts",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/icon-paths-0.tsx src/shared/ds/icon-paths-0.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/icon-paths-1.tsx src/shared/ds/icon-paths-1.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/icon-paths-2.tsx src/shared/ds/icon-paths-2.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/icon-paths.tsx src/shared/ds/icon-paths.tsx",
-      "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/index.ts src/shared/ds/index.ts",
-      "reason": "DS-03 공개 컴포넌트의 첫 화면 사용처 전 유예"
     },
     {
       "issue": "files src/shared/ds/stories.ts src/shared/ds/stories.ts",
@@ -194,20 +422,32 @@
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },
     {
-      "issue": "files src/shared/ipc/bindings.ts src/shared/ipc/bindings.ts",
-      "reason": "생성된 IPC 바인딩. 호출 어댑터를 부르는 화면이 아직 없다 (U-04)"
+      "issue": "files src/shared/ds/testing/Stress.stories.tsx src/shared/ds/testing/Stress.stories.tsx",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
     },
     {
-      "issue": "files src/shared/ipc/call.ts src/shared/ipc/call.ts",
-      "reason": "IPC 호출 어댑터를 부르는 화면이 아직 없다 (U-04)"
+      "issue": "files src/shared/ds/testing/StressContent.stories.tsx src/shared/ds/testing/StressContent.stories.tsx",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
     },
     {
-      "issue": "files src/shared/ipc/index.ts src/shared/ipc/index.ts",
-      "reason": "IPC 공개 API를 가져오는 화면이 아직 없다 (U-04)"
+      "issue": "files src/shared/ds/testing/StressLayout.stories.tsx src/shared/ds/testing/StressLayout.stories.tsx",
+      "reason": "DS-11 레이아웃 부하 이야기 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
     },
     {
-      "issue": "files src/shared/ipc/schema.ts src/shared/ipc/schema.ts",
-      "reason": "IPC 응답 스키마. 호출 어댑터를 부르는 화면이 아직 없다 (U-04)"
+      "issue": "files src/shared/ds/testing/messages.ts src/shared/ds/testing/messages.ts",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/overflow-geometry.ts src/shared/ds/testing/overflow-geometry.ts",
+      "reason": "DS-20 실제 DOM 배치 측정 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/overflow.ts src/shared/ds/testing/overflow.ts",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+    },
+    {
+      "issue": "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
+      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
     },
     {
       "issue": "files src/shared/ipc/testing/fakes.ts src/shared/ipc/testing/fakes.ts",
@@ -222,184 +462,88 @@
       "reason": "테스트 전용 생성물(Rust가 기록한 대표 응답). 운영 코드는 가져오지 않는다 (harness.md 5장)"
     },
     {
-      "issue": "files src/shared/lib/brand.ts src/shared/lib/brand.ts",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "types src/shared/ds/AppShell.tsx PanelState",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "files src/shared/lib/format.ts src/shared/lib/format.ts",
-      "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
+      "issue": "types src/shared/ds/index.ts ChartPoint",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "files src/shared/lib/index.ts src/shared/lib/index.ts",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "types src/shared/ds/index.ts PanelState",
+      "reason": "후속 화면(U-09~U-27, C·E·O 묶음)에서 소비될 DS 공개 컴포넌트·보조 내보내기"
     },
     {
-      "issue": "files src/shared/lib/messages.ts src/shared/lib/messages.ts",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "types src/shared/lib/brand.ts Count",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/lib/money.ts src/shared/lib/money.ts",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "types src/shared/lib/brand.ts Ticker",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/lib/result.ts src/shared/lib/result.ts",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "types src/shared/lib/brand.ts Timestamp",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/platform/input.ts src/shared/platform/input.ts",
-      "reason": "DS-03 공개 컴포넌트·입력 경계·이야기 자료의 첫 화면 사용처 전 유예. DS-07은 이야기 진입점에 실행 환경을 붙인다."
+      "issue": "types src/shared/lib/index.ts Count",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/AreaChart.tsx src/shared/ds/AreaChart.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts Currency",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/ChartFrame.tsx src/shared/ds/ChartFrame.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts DecimalParseError",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/ChartTable.tsx src/shared/ds/ChartTable.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts Err",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/Charts.stories.tsx src/shared/ds/Charts.stories.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts Locale",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/DonutChart.tsx src/shared/ds/DonutChart.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts MessageKey",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/LineChart.tsx src/shared/ds/LineChart.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts Ok",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/Treemap.tsx src/shared/ds/Treemap.tsx",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts Probability",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/chart-types.ts src/shared/ds/chart-types.ts",
-      "reason": "DS-06 SVG 차트. U-10 및 DS-07 첫 실제 사용까지 해당 파일만 유예"
+      "issue": "types src/shared/lib/index.ts Ratio",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "dependencies package.json react-markdown",
-      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+      "issue": "types src/shared/lib/index.ts Ticker",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/ChatInput.tsx src/shared/ds/ChatInput.tsx",
-      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+      "issue": "types src/shared/lib/index.ts Timestamp",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/Content.stories.tsx src/shared/ds/Content.stories.tsx",
-      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+      "issue": "types src/shared/lib/money.ts Currency",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/Markdown.tsx src/shared/ds/Markdown.tsx",
-      "reason": "DS-18 컴포넌트의 첫 화면 C-03과 목록 화면 DS-07 사용 전 유예"
+      "issue": "types src/shared/lib/money.ts DecimalParseError",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/testing/Stress.stories.tsx src/shared/ds/testing/Stress.stories.tsx",
-      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
+      "issue": "types src/shared/lib/money.ts Probability",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     },
     {
-      "issue": "files src/shared/ds/testing/StressContent.stories.tsx src/shared/ds/testing/StressContent.stories.tsx",
-      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
-    },
-    {
-      "issue": "files src/shared/ds/testing/messages.ts src/shared/ds/testing/messages.ts",
-      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
-    },
-    {
-      "issue": "files src/shared/ds/testing/overflow.ts src/shared/ds/testing/overflow.ts",
-      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
-    },
-    {
-      "issue": "files src/shared/ds/testing/overflow-geometry.ts src/shared/ds/testing/overflow-geometry.ts",
-      "reason": "DS-20 실제 DOM 배치 측정 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
-    },
-    {
-      "issue": "files src/shared/ds/testing/stress.ts src/shared/ds/testing/stress.ts",
-      "reason": "DS-20 부하 이야기와 실측 검사 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
-    },
-    {
-      "issue": "files src/shared/ds/Divider.tsx src/shared/ds/Divider.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Grid.tsx src/shared/ds/Grid.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/GridItem.tsx src/shared/ds/GridItem.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Inline.tsx src/shared/ds/Inline.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Layout.stories.tsx src/shared/ds/Layout.stories.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Page.tsx src/shared/ds/Page.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Section.tsx src/shared/ds/Section.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Split.tsx src/shared/ds/Split.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Stack.tsx src/shared/ds/Stack.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/Toolbar.tsx src/shared/ds/Toolbar.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/grid-spans-a.ts src/shared/ds/grid-spans-a.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/grid-spans-b.ts src/shared/ds/grid-spans-b.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/grid-spans-c.ts src/shared/ds/grid-spans-c.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/inline-classes-a.ts src/shared/ds/inline-classes-a.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/inline-classes-b.ts src/shared/ds/inline-classes-b.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/inline-classes-c.ts src/shared/ds/inline-classes-c.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/inline-classes-d.ts src/shared/ds/inline-classes-d.ts",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/layout-children.tsx src/shared/ds/layout-children.tsx",
-      "reason": "DS-11 레이아웃 컴포넌트와 목록·부하 이야기. 첫 화면 사용처 전 정확한 파일만 유예"
-    },
-    {
-      "issue": "files src/shared/ds/testing/StressLayout.stories.tsx src/shared/ds/testing/StressLayout.stories.tsx",
-      "reason": "DS-11 레이아웃 부하 이야기 전용 파일. 제품 코드에서는 가져오지 않고 DS-12와 화면 테스트가 사용한다"
-    },
-    {
-      "issue": "files src/shared/ds/AppShell.tsx src/shared/ds/AppShell.tsx",
-      "reason": "DS-08 AppShell 컴포넌트. U-04에서 App.tsx에 연결하기 전까지 유예"
+      "issue": "types src/shared/lib/money.ts Ratio",
+      "reason": "후속 화면과 IPC 스키마에서 소비될 공유 타입·파서"
     }
   ]
 }

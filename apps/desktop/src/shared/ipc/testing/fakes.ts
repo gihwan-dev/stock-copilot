@@ -56,7 +56,21 @@ export const rejectWithUndefined = (): void => {
   });
 };
 
+export const hangAppVersion = (): void => {
+  mockCommands({
+    appVersion: () => new Promise(() => undefined),
+  });
+};
+
+export const enableFakeCommandTimers = (): void => {
+  const timers = vi.useFakeTimers();
+  return timers === timers ? undefined : undefined;
+};
+
+export const advanceCommandTimers = (): Promise<void> =>
+  vi.advanceTimersByTimeAsync(10_000).then((): void => undefined);
+
 export const resetCommands = (): VitestUtils => {
   clearMocks();
-  return vi.unstubAllGlobals();
+  return vi.useRealTimers().unstubAllGlobals();
 };
