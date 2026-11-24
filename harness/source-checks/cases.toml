@@ -923,3 +923,43 @@ expect = ["macro:_fn_datatype"]
 example = "macro-fn-datatype-internal.rs"
 path = "apps/desktop/src-tauri/src/lib.rs"
 expect = ["macro:_fn_datatype_internal"]
+
+[[source]]
+example = "clean-toss-smoke-main.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = []
+
+[[source]]
+example = "clean-toss-smoke-main.rs"
+path = "crates/toss-smoke/src/other.rs"
+expect = ["clock-env:now", "test-awareness:env::args_os"]
+
+[[source]]
+example = "env-var.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = ["clock-env:var"]
+
+[[source]]
+example = "env-var-os.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = ["clock-env:var_os"]
+
+[[source]]
+example = "env-vars.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = ["clock-env:vars"]
+
+[[source]]
+example = "env-vars-os.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = ["clock-env:vars_os"]
+
+[[source]]
+example = "env-macro-in-concat.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = ["clock-env:env"]
+
+[[source]]
+example = "env-option-macro.rs"
+path = "crates/toss-smoke/src/main.rs"
+expect = ["clock-env:option_env"]

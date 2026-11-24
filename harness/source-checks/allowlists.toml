@@ -112,3 +112,8 @@ reason = "S-01: 새 동시 쓰기 회귀에서 실행 스레드 동일성과 호
 path = "crates/adapters/platform-macos/src/system_clock.rs"
 names = ["clock-env:now"]
 reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"
+
+[[clock-environment]]
+path = "crates/toss-smoke/src/main.rs"
+names = ["test-awareness:env::args_os", "clock-env:now"]
+reason = "T-12 연결 확인 CLI 진입점. 명령행 인자와 HTTP 제한기용 벽시계만 읽고 환경 변수 읽기는 전면 금지한다"
