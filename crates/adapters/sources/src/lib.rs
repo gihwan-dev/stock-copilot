@@ -1,4 +1,5 @@
 mod article_reader;
+mod dart_disclosures;
 mod endpoint;
 mod headers;
 mod http;
@@ -8,6 +9,11 @@ mod registry;
 mod rss;
 
 pub use article_reader::{ArticleReadError, ArticleReader};
+pub use dart_disclosures::{
+    DartAmendmentKind, DartCorpClass, DartCorpCode, DartCorrectionGroupKey, DartCorrectionStatus,
+    DartDisclosureClient, DartDisclosureEntry, DartDisclosureFeed, DartDisclosurePage,
+    group_dart_amendments, parse_correction_info,
+};
 pub use endpoint::SourceEndpoint;
 pub use headers::{
     BROWSER_USER_AGENT, ConditionalValidators, ContactUserAgent, STANDARD_USER_AGENT,

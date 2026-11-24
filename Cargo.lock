@@ -3508,8 +3508,12 @@ version = "0.1.0"
 dependencies = [
  "application",
  "domain",
+ "flate2",
+ "form_urlencoded",
  "quick-xml",
  "reqwest",
+ "serde",
+ "serde_json",
  "testkit",
  "testkit-ports",
  "time",
