@@ -7,7 +7,19 @@ export default {
         method: "alphabetical",
         order: [
           "레이아웃",
-          ["Card"],
+          [
+            "AppShell",
+            "Page",
+            "Section",
+            "Grid",
+            "GridItem",
+            "Stack",
+            "Inline",
+            "Split",
+            "Card",
+            "Toolbar",
+            "Divider",
+          ],
           "기본",
           [
             "Text",

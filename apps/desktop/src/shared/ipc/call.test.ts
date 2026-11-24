@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { appVersion } from "./call";
 import {
+  advanceCommandTimers,
   answerWithMalformedResponse,
   answerWithRecordedResponses,
+  enableFakeCommandTimers,
+  hangAppVersion,
   installCommandWindow,
   rejectWithErrorObject,
   rejectWithUndefined,
@@ -68,5 +71,16 @@ test("an undefined rejection becomes a framework failure", async () => {
   await expect(appVersion()).resolves.toStrictEqual({
     kind: "err",
     error: { kind: "framework" },
+  });
+});
+
+test("a hanging IPC command resolves to a timeout failure", async () => {
+  enableFakeCommandTimers();
+  hangAppVersion();
+  const pending = appVersion();
+  await advanceCommandTimers();
+  await expect(pending).resolves.toStrictEqual({
+    kind: "err",
+    error: { kind: "timeout" },
   });
 });
