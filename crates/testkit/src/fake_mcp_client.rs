@@ -442,6 +442,7 @@ fn spawn_stdio_server(config: &StdioServerConfig) -> io::Result<JsonRpcChannel> 
 fn v2026_meta() -> Value {
     json!({
         "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
         "clientCapabilities": {}
     })
 }
