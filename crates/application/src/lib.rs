@@ -479,7 +479,7 @@ pub use watchlist::{
 mod estimate_tasks;
 pub use estimate_tasks::{
     CreateEstimateTask, CreateEstimateTaskError, CreateEstimateTaskInput,
-    CreateEstimateTaskOutcome, EstimateTaskRepository, EstimateTaskView, GetEstimateTask,
+    CreateEstimateTaskOutcome, EstimateAssignmentRepository, EstimateTaskView, GetEstimateTask,
     GetEstimateTaskError, GetEstimateTaskInput,
 };
 

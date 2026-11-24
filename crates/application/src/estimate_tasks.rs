@@ -8,7 +8,7 @@ use domain::{
 };
 use std::future::Future;
 
-pub trait EstimateTaskRepository: Send + Sync {
+pub trait EstimateAssignmentRepository: Send + Sync {
     fn load_assignments(
         &self,
     ) -> impl Future<Output = Result<EstimateAssignments<AiRunId>, SystemPortError>> + Send;
@@ -54,7 +54,7 @@ pub struct CreateEstimateTask<'a, Repository> {
     repository: &'a Repository,
 }
 
-impl<'a, Repository: EstimateTaskRepository> CreateEstimateTask<'a, Repository> {
+impl<'a, Repository: EstimateAssignmentRepository> CreateEstimateTask<'a, Repository> {
     #[must_use]
     pub const fn new(repository: &'a Repository) -> Self {
         Self { repository }
@@ -236,7 +236,7 @@ pub struct GetEstimateTask<'a, Repository> {
     repository: &'a Repository,
 }
 
-impl<'a, Repository: EstimateTaskRepository> GetEstimateTask<'a, Repository> {
+impl<'a, Repository: EstimateAssignmentRepository> GetEstimateTask<'a, Repository> {
     #[must_use]
     pub const fn new(repository: &'a Repository) -> Self {
         Self { repository }
@@ -266,8 +266,8 @@ impl<'a, Repository: EstimateTaskRepository> GetEstimateTask<'a, Repository> {
 mod tests {
     use super::{
         CreateEstimateTask, CreateEstimateTaskError, CreateEstimateTaskInput,
-        CreateEstimateTaskOutcome, EstimateTaskRepository, GetEstimateTask, GetEstimateTaskError,
-        GetEstimateTaskInput,
+        CreateEstimateTaskOutcome, EstimateAssignmentRepository, GetEstimateTask,
+        GetEstimateTaskError, GetEstimateTaskInput,
     };
     use crate::{
         AiRunId, EstimateCommitOutcome, SystemFailure, SystemPort, SystemPortError, TrackingTarget,
@@ -385,7 +385,7 @@ mod tests {
         conflict: RwLock<bool>,
     }
 
-    impl EstimateTaskRepository for MemoryTaskRepo {
+    impl EstimateAssignmentRepository for MemoryTaskRepo {
         fn load_assignments(
             &self,
         ) -> impl Future<Output = Result<EstimateAssignments<AiRunId>, SystemPortError>> + Send
