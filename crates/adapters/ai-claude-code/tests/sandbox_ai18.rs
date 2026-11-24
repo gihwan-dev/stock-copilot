@@ -188,6 +188,40 @@ mod tests {
     }
 
     #[test]
+    fn profile_uses_real_paths_and_rejects_dot_segments() {
+        let dir = TempDirGuard::new("real");
+        let real_root = fs::canonicalize(dir.path()).expect("real root");
+        let target = real_root.join("data");
+        fs::create_dir_all(&target).expect("data");
+        std::os::unix::fs::symlink(&target, real_root.join("link")).expect("symlink");
+        let profile = SandboxProfile::try_new(&[
+            dir.path().join("link"),
+            dir.path().join("missing").join("child"),
+        ])
+        .expect("profile");
+        assert_eq!(
+            profile.denied_paths(),
+            &[target.clone(), real_root.join("missing").join("child")],
+            "심볼릭 링크와 /tmp 같은 별칭은 실제 경로로 바꾼다"
+        );
+        assert!(
+            profile
+                .text()
+                .contains(&format!("(subpath \"{}\")", target.display()))
+        );
+        assert_eq!(
+            SandboxProfile::try_new(&[dir.path().join("x").join("..").join("data")]),
+            Err(SandboxProfileError::NotNormalized)
+        );
+        assert_eq!(
+            SandboxProfile::try_new(&[dir.path().join(".").join("data")])
+                .expect("현재 폴더 표기")
+                .denied_paths(),
+            std::slice::from_ref(&target)
+        );
+    }
+
+    #[test]
     fn probe_reports_unavailable_when_sandbox_does_not_run_and_cleans_scratch() {
         let dir = TempDirGuard::new("probe");
         for sandbox_exec in [

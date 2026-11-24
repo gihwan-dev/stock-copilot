@@ -8,6 +8,7 @@ pub const SYSTEM_SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 const PROBE_ALLOWED_TOKEN: &str = "sandbox-probe-allowed";
 const PROBE_DENIED_TOKEN: &str = "sandbox-probe-denied";
 const PROBE_OUTPUT_LIMIT: u64 = 4_096_u64;
+const PROBE_WAIT_STEPS: u32 = 500_u32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SandboxProfileError {
@@ -15,6 +16,7 @@ pub enum SandboxProfileError {
     RelativePath,
     UnsafeCharacter,
     RootPath,
+    NotNormalized,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -36,15 +38,20 @@ impl SandboxProfile {
         if denied.is_empty() {
             return Err(SandboxProfileError::NoDeniedPaths);
         }
-        let mut text = String::from("(version 1)\n(allow default)\n");
+        let mut resolved = Vec::with_capacity(denied.len());
         for path in denied {
+            sbpl_path_literal(path)?;
+            resolved.push(resolve_real_path(path)?);
+        }
+        let mut text = String::from("(version 1)\n(allow default)\n");
+        for path in &resolved {
             let literal = sbpl_path_literal(path)?;
             text.push_str("(deny file-read* file-write* (subpath \"");
             text.push_str(literal);
             text.push_str("\"))\n");
         }
         Ok(Self {
-            denied: denied.to_vec(),
+            denied: resolved,
             text,
         })
     }
@@ -63,6 +70,47 @@ impl SandboxProfile {
         let mut denied = self.denied.clone();
         denied.push(extra.to_path_buf());
         Self::try_new(&denied)
+    }
+}
+
+fn resolve_real_path(path: &Path) -> Result<PathBuf, SandboxProfileError> {
+    if path
+        .components()
+        .any(|component| matches_dot_component(component))
+    {
+        return Err(SandboxProfileError::NotNormalized);
+    }
+    let mut existing = path.to_path_buf();
+    let mut missing = Vec::new();
+    loop {
+        match fs::canonicalize(&existing) {
+            Ok(real) => {
+                let mut full = real;
+                for part in missing.iter().rev() {
+                    full.push(part);
+                }
+                return Ok(full);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let Some(name) = existing.file_name().map(std::ffi::OsStr::to_os_string) else {
+                    return Err(SandboxProfileError::NotNormalized);
+                };
+                missing.push(name);
+                if !existing.pop() {
+                    return Err(SandboxProfileError::NotNormalized);
+                }
+            }
+            Err(_) => return Err(SandboxProfileError::NotNormalized),
+        }
+    }
+}
+
+const fn matches_dot_component(component: std::path::Component<'_>) -> bool {
+    match component {
+        std::path::Component::CurDir | std::path::Component::ParentDir => true,
+        std::path::Component::Prefix(_)
+        | std::path::Component::RootDir
+        | std::path::Component::Normal(_) => false,
     }
 }
 
@@ -192,15 +240,15 @@ fn run_probe(layer: &SandboxLayer, allowed_dir: &Path, denied_dir: &Path) -> San
     else {
         return SandboxProbeOutcome::Unavailable;
     };
+    let Some(status) = wait_with_deadline(&mut child) else {
+        return SandboxProbeOutcome::Unavailable;
+    };
     let mut stdout = String::new();
     let read_ok = child.stdout.take().is_some_and(|pipe| {
         pipe.take(PROBE_OUTPUT_LIMIT)
             .read_to_string(&mut stdout)
             .is_ok()
     });
-    let Ok(status) = child.wait() else {
-        return SandboxProbeOutcome::Unavailable;
-    };
     if !read_ok {
         return SandboxProbeOutcome::Unavailable;
     }
@@ -210,6 +258,25 @@ fn run_probe(layer: &SandboxLayer, allowed_dir: &Path, denied_dir: &Path) -> San
         ProbeExit::Failure
     };
     classify_sandbox_probe(exit, &stdout)
+}
+
+fn wait_with_deadline(child: &mut std::process::Child) -> Option<std::process::ExitStatus> {
+    let (_keep, pause) = std::sync::mpsc::channel::<()>();
+    for _attempt in 0_u32..PROBE_WAIT_STEPS {
+        match child.try_wait() {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) => match pause.recv_timeout(std::time::Duration::from_millis(10)) {
+                Ok(()) | Err(_) => {}
+            },
+            Err(_) => break,
+        }
+    }
+    match child.kill() {
+        Ok(()) | Err(_) => {}
+    }
+    match child.wait() {
+        Ok(_) | Err(_) => None,
+    }
 }
 
 fn remove_quietly(path: &Path) {
