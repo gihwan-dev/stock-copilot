@@ -106,11 +106,7 @@ impl<'database> SignalSkipStore<'database> {
                         let instrument =
                             InstrumentId::try_new(&row.get::<_, String>(0)?).map_err(invalid)?;
                         let reason = match row.get::<_, Option<String>>(1)? {
-                            Some(raw) => Some(
-                                SkipReason::try_new(&raw)
-                                    .map_err(invalid)?
-                                    .ok_or_else(|| invalid(()))?,
-                            ),
+                            Some(raw) => Some(SkipReason::try_new(&raw).map_err(invalid)?),
                             None => None,
                         };
                         let skipped_at = decode_time(row.get(2)?, row.get(3)?, row.get(4)?)?;

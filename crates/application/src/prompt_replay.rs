@@ -24,7 +24,7 @@ pub trait PromptReplayRunner: Send + Sync {
     ) -> impl Future<Output = Result<ReplayOutput, SystemPortError>> + Send;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ReplayMetrics {
     pub cases: ReplayCount,
     pub schema_passed: ReplayCount,
@@ -32,12 +32,12 @@ pub struct ReplayMetrics {
     pub numeric_mismatches: ReplayCount,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct ReplayCount(usize);
 
 impl ReplayCount {
     #[must_use]
-    pub const fn as_usize(self) -> usize {
+    pub const fn as_usize(&self) -> usize {
         self.0
     }
 
@@ -103,17 +103,25 @@ fn record(metrics: ReplayMetrics, output: &ReplayOutput, case: &ReplayCase) -> R
             } else {
                 counted.with_sources.increment()
             },
-            numeric_mismatches: if has_numeric_mismatch(arguments, &case.ledger) {
-                counted.numeric_mismatches.increment()
-            } else {
-                counted.numeric_mismatches
+            numeric_mismatches: match numeric_citation(arguments, &case.ledger) {
+                NumericCitation::Mismatched => counted.numeric_mismatches.increment(),
+                NumericCitation::Matched => counted.numeric_mismatches,
             },
             ..counted
         },
     }
 }
 
-fn has_numeric_mismatch(arguments: &EstimateToolArguments, ledger: &[ToolCallRecord]) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NumericCitation {
+    Matched,
+    Mismatched,
+}
+
+fn numeric_citation(
+    arguments: &EstimateToolArguments,
+    ledger: &[ToolCallRecord],
+) -> NumericCitation {
     let cited: Vec<&str> = arguments
         .sources
         .iter()
@@ -133,13 +141,13 @@ fn has_numeric_mismatch(arguments: &EstimateToolArguments, ledger: &[ToolCallRec
         arguments.counterargument.as_untrusted_str(),
     ]
     .iter()
-    .flat_map(|text| numbers(text))
-    .any(|number| !cited.iter().any(|result| result.contains(number)))
-}
-
-fn numbers(text: &str) -> Vec<&str> {
-    text.split(|character: char| !(character.is_ascii_digit() || character == '.'))
-        .map(|token| token.trim_matches('.'))
-        .filter(|token| token.bytes().any(|byte| byte.is_ascii_digit()))
-        .collect()
+    .flat_map(|text| {
+        text.split(|character: char| !(character.is_ascii_digit() || character == '.'))
+            .map(|token| token.trim_matches('.'))
+            .filter(|token| token.bytes().any(|byte| byte.is_ascii_digit()))
+    })
+    .find(|number| !cited.iter().any(|result| result.contains(number)))
+    .map_or(NumericCitation::Matched, |_number| {
+        NumericCitation::Mismatched
+    })
 }
