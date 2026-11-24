@@ -64,8 +64,9 @@ impl<'a, Broker: BrokerRead> TrackSubmittedOrders<'a, Broker> {
     pub async fn refresh(&self, tracked: &[TrackedOrder]) -> Vec<TrackedOrderUpdate> {
         let mut updates = Vec::with_capacity(tracked.len());
         for item in tracked {
-            if is_terminal(item.last_seen) {
-                continue;
+            match item.last_seen {
+                Some(OrderProgress::Filled | OrderProgress::Ended) => continue,
+                Some(OrderProgress::Unfilled | OrderProgress::PartiallyFilled) | None => {}
             }
             let update = match self.broker.order(&item.account, &item.order_id).await {
                 Ok(order) => self.refreshed(item, order),
@@ -99,12 +100,5 @@ impl<'a, Broker: BrokerRead> TrackSubmittedOrders<'a, Broker> {
             change,
             delivery,
         }
-    }
-}
-
-const fn is_terminal(last_seen: Option<OrderProgress>) -> bool {
-    match last_seen {
-        Some(OrderProgress::Filled | OrderProgress::Ended) => true,
-        Some(OrderProgress::Unfilled | OrderProgress::PartiallyFilled) | None => false,
     }
 }
