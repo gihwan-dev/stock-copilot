@@ -726,6 +726,7 @@ Antigravity 세션에는 Codex·Claude 세션 훅이 직접 실행되지 않으�
 **적용 조건과 미적용 세션 확인 절차**
 
 - T3 Code의 `antigravity acp` 세션은 각 턴 시작 시 작업 사본 루트의 `.agents/hooks.json`을 읽고 `runtimeMode: "full-access"`에서도 별도 수동 신뢰 창 없이 `PreToolUse`·`PostToolUse`·`Stop`을 실행한다(실측: `cli-1.5.14`).
+- 세션 훅(`dispatch.mjs` → `sessionProject` → `loadProject(mainRoot)`)은 작업 사본이 자기 `rules.json`을 고쳐 훅을 약화하지 못하도록 **주 작업 트리(`master`)의 `harness/claude-hooks/rules.json`**을 읽는다. 따라서 허용 목록을 넓히는 변경(예: `implementerMerge`의 `origin/master`, `implementerPush`의 `origin` 허용)은 `master`에 병합되고 주 작업 트리가 갱신된 뒤에야 실시간 세션에 적용된다(의도된 보안 성질).
 - 훅이 적용되지 않은 세션(예: 비신뢰 폴더, 사용자 전역 설정 `~/.gemini`가 훅을 끈 환경, 훅 파일이 없는 이전 커밋)을 확인하려면 상태 폴더(`~/.local/state/stock-copilot-harness/records/antigravityaudit-*.json`)와 실제 차단 응답, Git 커밋 훅 실행 여부를 함께 확인하고 리뷰 기록 `## 측정`의 `세션 훅` 행에 `적용(.agents/hooks.json)` 또는 `미적용(사유)`으로 기록한다. 미적용 세션의 변경은 대상 스냅숏 전후 비교와 원격 CI 전체 검사로 보완한다.
 
 **남은 빈틈 (H-61 이후에도 기계로 완전 강제되지 않는 것)**

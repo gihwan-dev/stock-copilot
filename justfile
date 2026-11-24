@@ -187,7 +187,7 @@ commit-check:
     if [ -f "$(git rev-parse --git-path stock-copilot-merge-gate.json)" ]; then node harness/ci/merge-gate.mjs --hook; else base="$("{{just_executable()}}" commit-base)"; STOCK_COPILOT_BASE_USE=commit "{{just_executable()}}" base="$base" "$("{{just_executable()}}" commit-recipe)"; fi
 
 push-check:
-    base="$(cargo run --locked --quiet --package xtask -- push-base)"; "{{just_executable()}}" base="$base" check-full
+    cargo run --locked --quiet --package xtask -- push-check "{{just_executable()}}"
 
 remote-check sha:
     node harness/ci/remote-check.mjs "$1"

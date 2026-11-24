@@ -1243,9 +1243,9 @@
       "attributes": [],
       "body": [
         [
-          "base=\"$(cargo run --locked --quiet --package xtask -- push-base)\"; \"",
+          "cargo run --locked --quiet --package xtask -- push-check \"",
           [["call", "just_executable"]],
-          "\" base=\"$base\" check-full"
+          "\""
         ]
       ],
       "dependencies": [],
