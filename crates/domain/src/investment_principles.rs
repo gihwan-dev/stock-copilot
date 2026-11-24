@@ -71,7 +71,7 @@ pub enum ConcentrationFloor {
 impl ConcentrationFloor {
     #[must_use]
     pub const fn threshold(self) -> ConcentrationThreshold {
-        ConcentrationThreshold::from_count(match self {
+        ConcentrationThreshold::new(match self {
             Self::Three => 3,
             Self::Four => 4,
             Self::Five => 5,
