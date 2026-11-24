@@ -33,6 +33,7 @@ export const responses = {
     { kind: "bug" },
     { kind: "no-data" },
   ],
+  openExternal: { status: "opened" },
   resubscribeChatTurn: {
     replayed_count: 2,
     state: "Finished",

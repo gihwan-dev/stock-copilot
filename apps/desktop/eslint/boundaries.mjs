@@ -129,6 +129,7 @@ export const boundaryPolicies = ({
           "src/shared/ds/Select.tsx",
           "src/shared/ds/Dialog.tsx",
           "src/shared/ds/ChartFrame.tsx",
+          "src/shared/ds/AppShell.tsx",
         ],
       },
     },

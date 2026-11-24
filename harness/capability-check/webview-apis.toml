@@ -73,8 +73,8 @@ reason = "U-02 제품 조립의 모의 이벤트 발행 회귀만 허용한다. 
 
 [[api]]
 names = ["WebviewWindowBuilder"]
-allowed-files = ["src/security.rs", "src/tests/exit.rs"]
-reason = "제품 주 창은 탐색 차단과 함께 만들고 U-01 테스트는 mock 네이티브 창을 만든다"
+allowed-files = ["src/security.rs", "src/tests/exit.rs", "src/tests/residency.rs"]
+reason = "제품 주 창은 탐색 차단과 함께 만들고 U-01·U-18 테스트는 mock 네이티브 창을 만든다"
 
 [[api]]
 names = ["invoke_key"]

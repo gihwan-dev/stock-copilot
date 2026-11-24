@@ -231,6 +231,22 @@ mod tests {
             }
             kinds.push(AuditKind::RiskSettingsChanged(change));
         }
+        let digest = domain::WebSearchQueryDigest::of_query(&domain::WebSearchCandidateQuery::new(
+            "fixture-query",
+        ));
+        kinds.push(AuditKind::WebSearchChecked(
+            application::WebSearchAuditRecord::code_approved(digest.clone()),
+        ));
+        kinds.push(AuditKind::WebSearchChecked(
+            application::WebSearchAuditRecord::try_code_rejected(
+                digest.clone(),
+                vec![domain::WebSearchRejectionReason::MultiDigitNumber],
+            )
+            .expect("거부 사유"),
+        ));
+        kinds.push(AuditKind::WebSearchChecked(
+            application::WebSearchAuditRecord::user_direct(digest),
+        ));
         kinds
     }
 
@@ -260,6 +276,7 @@ mod tests {
                 AuditKind::RiskSettingsChanged(change) => {
                     AuditKind::RiskSettingsChanged(change.clone())
                 }
+                AuditKind::WebSearchChecked(record) => AuditKind::WebSearchChecked(record.clone()),
             }
         }
         for kind in audit_kinds() {

@@ -65,6 +65,18 @@
         "react-markdown": {
           "target": "react-markdown",
           "reason": "DS-18 Markdown wrapper (architecture 5.2 10.1.0)"
+        },
+        "@tanstack/react-query": {
+          "target": "@tanstack/react-query",
+          "reason": "U-04 서버 상태 쿼리 계층 (architecture 5.2 TanStack Query 5.107.1)"
+        },
+        "@tanstack/react-router": {
+          "target": "@tanstack/react-router",
+          "reason": "U-04 화면 라우팅 (architecture 5.2 TanStack Router 1.170.46)"
+        },
+        "react-error-boundary": {
+          "target": "react-error-boundary",
+          "reason": "U-04 클래스 없는 오류 경계 (architecture 5.2)"
         }
       },
       "devDependencies": {

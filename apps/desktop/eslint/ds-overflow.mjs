@@ -63,6 +63,24 @@ export const LENGTH_EXCEPTIONS = [
       "h-chart-height-lg",
     ],
   ],
+  [
+    "src/shared/ds/Page.tsx",
+    ["min-h-toolbar-height", "max-w-content-max", "wrap-slot"],
+  ],
+  [
+    "src/shared/ds/Split.tsx",
+    [
+      "w-sidebar-width",
+      "w-sidebar-collapsed",
+      "w-chat-width",
+      "w-chat-width-min",
+      "wrap-slot",
+    ],
+  ],
+  [
+    "src/shared/ds/Divider.tsx",
+    ["h-border-hairline", "w-border-hairline", "min-h-control-height-sm"],
+  ],
 ];
 const lengthException = (file) =>
   LENGTH_EXCEPTIONS.find(([path]) => path === file)?.[1] ?? [];

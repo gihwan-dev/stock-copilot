@@ -1,3 +1,4 @@
+use crate::platform::notifier::{FilteredNotifier, UnavailableNotificationDelivery};
 use crate::ports::PortTypes;
 use crate::unavailable::{Unavailable, UnavailableFeed};
 #[derive(Debug)]
@@ -26,6 +27,6 @@ impl PortTypes for ProductPorts {
     type AuditLog = Unavailable;
     type SecretStore = Unavailable;
     type Clock = platform_macos::SystemClock;
-    type Notifier = Unavailable;
+    type Notifier = FilteredNotifier<UnavailableNotificationDelivery>;
     type UserPresence = platform_macos::UnavailablePresence;
 }

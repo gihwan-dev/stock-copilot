@@ -21,6 +21,7 @@ const SOURCE_PACKAGES = [
   ["crates/application/src/", "application"],
   ["crates/order-execution/src/", "order-execution"],
   ["crates/adapters/store-sqlite/src/", "store-sqlite"],
+  ["crates/mcp-server/src/", "mcp-server"],
 ];
 
 export const validCatalog = (catalog) =>

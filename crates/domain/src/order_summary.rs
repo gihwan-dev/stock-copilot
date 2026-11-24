@@ -74,6 +74,34 @@ impl PendingOrderConfirmation {
     pub fn summary(&self) -> &OrderSummary {
         &self.summary
     }
+    #[must_use]
+    pub fn id(&self) -> &crate::ProposalId {
+        self.token.id()
+    }
+    #[must_use]
+    pub fn intent(&self) -> &crate::OrderIntent {
+        self.token.intent()
+    }
+    #[must_use]
+    pub fn validated_at(&self) -> crate::Timestamp {
+        self.token.validated_at()
+    }
+    #[must_use]
+    pub fn checked_at(&self) -> crate::Timestamp {
+        self.token.checked_at()
+    }
+    #[must_use]
+    pub fn expires_at(&self) -> crate::Timestamp {
+        self.token.expires_at()
+    }
+    #[must_use]
+    pub fn validation_observation(&self) -> &crate::PriceObservation {
+        self.token.validation_observation()
+    }
+    #[must_use]
+    pub fn execution_observation(&self) -> &crate::PriceObservation {
+        self.token.execution_observation()
+    }
     pub fn recheck(
         self,
         now: crate::Timestamp,
