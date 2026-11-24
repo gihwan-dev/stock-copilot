@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use crate::git_base;
 
 pub(crate) const BASE_BRANCH: &str = "refs/heads/master";
+const REMOTE_BASE_BRANCH: &str = "refs/remotes/origin/master";
 
 fn first_line(root: &Path, arguments: &[&str], label: &str) -> Result<String, String> {
     let mut command = git_base::git(root);
@@ -20,9 +21,18 @@ fn first_line(root: &Path, arguments: &[&str], label: &str) -> Result<String, St
         .ok_or_else(|| format!("{label}: 출력이 없다"))
 }
 
-pub(crate) fn commit_base(root: &Path) -> Result<String, String> {
+fn is_strict_ancestor(root: &Path, older: &str, newer: &str) -> bool {
+    if older == newer {
+        return false;
+    }
+    let mut command = git_base::git(root);
+    command.args(["merge-base", "--is-ancestor", older, newer]);
+    command.status().is_ok_and(|status| status.success())
+}
+
+fn effective_base(root: &Path) -> Result<(&'static str, String), String> {
     let branch = format!("{BASE_BRANCH}^{{commit}}");
-    first_line(
+    let local_tip = first_line(
         root,
         &["rev-parse", "--verify", "--quiet", &branch],
         "rev-parse master",
@@ -32,12 +42,27 @@ pub(crate) fn commit_base(root: &Path) -> Result<String, String> {
             "기준 브랜치 master가 없다. 커밋 훅은 master와의 분기점을 기준으로 검사한다 ({failure})"
         )
     })?;
+    let remote = format!("{REMOTE_BASE_BRANCH}^{{commit}}");
+    if let Ok(remote_tip) = first_line(
+        root,
+        &["rev-parse", "--verify", "--quiet", &remote],
+        "rev-parse origin/master",
+    ) && git_base::is_commit_id(&remote_tip)
+        && is_strict_ancestor(root, &local_tip, &remote_tip)
+    {
+        return Ok((REMOTE_BASE_BRANCH, remote_tip));
+    }
+    Ok((BASE_BRANCH, local_tip))
+}
+
+pub(crate) fn commit_base(root: &Path) -> Result<String, String> {
+    let (base_ref, _) = effective_base(root)?;
     if let MergeBase::IncomingDefault(base) = merge_base_kind(root)? {
         return Ok(base);
     }
     first_line(
         root,
-        &["merge-base", "HEAD", BASE_BRANCH],
+        &["merge-base", "HEAD", base_ref],
         "merge-base HEAD master",
     )
 }
@@ -98,7 +123,7 @@ pub(crate) fn merge_base_kind(root: &Path) -> Result<MergeBase, String> {
     if work_branch(root)? != WorkBranch::NamedWork {
         return Ok(MergeBase::ForkPoint);
     }
-    let tip = first_line(root, &["rev-parse", "--verify", BASE_BRANCH], "master 끝")?;
+    let (_, tip) = effective_base(root)?;
     if *incoming == tip {
         Ok(MergeBase::IncomingDefault(tip))
     } else {
@@ -110,7 +135,7 @@ fn automatic_base(root: &Path) -> Result<MergeBase, String> {
     if work_branch(root)? != WorkBranch::NamedWork {
         return Ok(MergeBase::ForkPoint);
     }
-    let tip = first_line(root, &["rev-parse", "--verify", BASE_BRANCH], "master 끝")?;
+    let (_, tip) = effective_base(root)?;
     match tree_base::tree_match(root, &tip)? {
         tree_base::TreeMatch::Equal => Ok(MergeBase::IncomingDefault(tip)),
         tree_base::TreeMatch::Different => Ok(MergeBase::ForkPoint),

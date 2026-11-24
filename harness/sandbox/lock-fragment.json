@@ -2,6 +2,7 @@
   "sandbox": {
     "filesystem": {
       "denyWrite": [
+        "./.agents",
         "./.cargo",
         "./.claude/agents",
         "./.claude/hooks",

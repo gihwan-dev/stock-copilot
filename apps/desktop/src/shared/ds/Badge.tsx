@@ -8,11 +8,11 @@ type Props = {
 };
 const styles = {
   neutral:
-    "inline-flex items-center gap-space-1 px-space-2 rounded-sm text-size-sm leading-md font-medium whitespace-nowrap bg-surface-sunken text-ink-muted",
+    "inline-flex items-center gap-space-1 px-space-2 rounded-sm text-size-sm leading-md font-medium status-sentence max-w-full bg-surface-sunken text-ink-muted",
   primary:
-    "inline-flex items-center gap-space-1 px-space-2 rounded-sm text-size-sm leading-md font-medium whitespace-nowrap bg-primary-soft text-primary",
+    "inline-flex items-center gap-space-1 px-space-2 rounded-sm text-size-sm leading-md font-medium status-sentence max-w-full bg-primary-soft text-primary",
   alert:
-    "inline-flex items-center gap-space-1 px-space-2 rounded-sm text-size-sm leading-md font-medium whitespace-nowrap bg-alert-soft text-alert",
+    "inline-flex items-center gap-space-1 px-space-2 rounded-sm text-size-sm leading-md font-medium status-sentence max-w-full bg-alert-soft text-alert",
 } as const;
 const fonts = {
   normal: "font-sans text-size-sm",

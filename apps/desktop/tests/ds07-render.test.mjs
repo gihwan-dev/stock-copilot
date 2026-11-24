@@ -96,8 +96,17 @@ window.invalidTheme=theme=>preview.decorators[0](()=>null,{parameters:{theme}});
         page.parameters.sample.toString(),
       );
       assert.equal(root.children.length, 1);
+      assert.equal(root.firstElementChild.tagName, "SECTION");
+      assert.ok(
+        root.firstElementChild.querySelector("[data-scroll-viewport]"),
+        `${component}/${page.parameters.sample}/${page.parameters.theme}`,
+      );
+      const content = root.firstElementChild.querySelector(
+        "[data-catalog-content]",
+      );
+      assert.ok(content);
       assert.deepEqual(
-        summary(root.firstElementChild, w.document),
+        summary(content, w.document),
         expectedSummary,
         `${component}/${page.parameters.sample}/${page.parameters.theme}`,
       );

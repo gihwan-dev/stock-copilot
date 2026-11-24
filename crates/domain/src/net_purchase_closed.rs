@@ -1,6 +1,6 @@
 use crate::{
-    AccountId, BrokerOrder, BrokerOrderId, BrokerOrderMoney, NetPurchaseInputError, OrderOpenState,
-    TimeInterval, Timestamp,
+    AccountId, BrokerOrder, BrokerOrderId, BrokerOrderMoney, ClosedOrderCompletenessProof,
+    NetPurchaseInputError, OrderOpenState, TimeInterval, Timestamp,
 };
 use std::{collections::BTreeMap, fmt};
 
@@ -22,9 +22,36 @@ pub struct ClosedOrderSet {
     covered: TimeInterval,
     observed: Timestamp,
     completeness: ClosedOrderCompleteness,
+    proof: Option<ClosedOrderCompletenessProof>,
 }
 impl ClosedOrderSet {
     pub fn new(
+        account: AccountId,
+        orders: Vec<BrokerOrder>,
+        covered: TimeInterval,
+        observed: Timestamp,
+        completeness: ClosedOrderCompleteness,
+    ) -> Result<Self, NetPurchaseInputError> {
+        Self::build(account, orders, covered, observed, completeness)
+    }
+    pub(crate) fn from_verified_proof(
+        account: AccountId,
+        orders: BTreeMap<BrokerOrderId, BrokerOrder>,
+        covered: TimeInterval,
+        observed: Timestamp,
+        proof: ClosedOrderCompletenessProof,
+    ) -> Self {
+        let completeness = proof.completeness();
+        Self {
+            account,
+            orders,
+            covered,
+            observed,
+            completeness,
+            proof: Some(proof),
+        }
+    }
+    fn build(
         account: AccountId,
         orders: Vec<BrokerOrder>,
         covered: TimeInterval,
@@ -47,6 +74,7 @@ impl ClosedOrderSet {
             covered,
             observed,
             completeness,
+            proof: None,
         })
     }
     #[must_use]
@@ -68,6 +96,10 @@ impl ClosedOrderSet {
     #[must_use]
     pub const fn completeness(&self) -> ClosedOrderCompleteness {
         self.completeness
+    }
+    #[must_use]
+    pub const fn completeness_proof(&self) -> Option<&ClosedOrderCompletenessProof> {
+        self.proof.as_ref()
     }
 }
 impl fmt::Debug for ClosedOrderSet {

@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash
 permissionMode: default
 ---
 
-이 정의는 안내용이다. Claude Agent로 호출하지 않는다. T3가 새 Codex `gpt-6.1-sol`을 별도 작업 사본에서 시작한다.
+이 정의는 안내용이다. Claude Agent로 호출하지 않는다. T3가 새 Antigravity `gemini-4-neon`(thought_level `high`)을 별도 작업 사본에서 시작한다.
 
 너는 리뷰 비판자다. 리뷰어의 지적이 맞는지 실행으로 검증한다. 리뷰어 편도 구현자 편도 들지 않는다. 토론하지 말고 증거를 만든다.
 
@@ -32,3 +32,8 @@ T3가 `isolation: worktree`로 준비한 저장소 밖 작업 사본에서만 �
 1. 지적 번호별 판정표: 번호, 판정, (고친) 등급, 근거 요약
 2. 판정별 증거: 명령과 출력
 3. 추가 지적 목록
+
+## Antigravity 비판자 조항
+
+- 비판자는 T3 Antigravity `gemini-4-neon`(thought_level `high`)이 별도 격리 작업 사본에서 맡는다. 구현 담당은 T3 Antigravity `gemini-4-neon`(thought_level `xhigh`)이 맡는다.
+- Antigravity 세션 훅(`.agents/hooks.json`, `harness/antigravity-hooks/`)은 `-high` 모델과 detached HEAD·리뷰 브랜치를 `ROLE.reviewer`로 분류해 추적 파일 편집·쓰기, 변경형 `git` 명령, 하위 에이전트 위임을 차단한다.
