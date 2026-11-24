@@ -112,6 +112,23 @@ pub(crate) struct SourceRules {
     pub(crate) host_needle: String,
     pub(crate) host_crates: BTreeSet<CrateName>,
     pub(crate) host_files: BTreeSet<String>,
+    pub(crate) identity_confirmation: IdentityConfirmationRules,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IdentityConfirmationRules {
+    pub(crate) confirmation_type: String,
+    pub(crate) seal_type: String,
+    pub(crate) issuer_function: String,
+    pub(crate) defining_file: String,
+    pub(crate) defining_test_file: String,
+    pub(crate) use_case_file: String,
+    pub(crate) issuance_allowed_files: BTreeSet<String>,
+    pub(crate) prompt_trait: String,
+    pub(crate) prompt_module: String,
+    pub(crate) prompt_defining_crate: String,
+    pub(crate) prompt_impl_crates: BTreeSet<CrateName>,
+    pub(crate) prompt_impl_files: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -432,6 +449,44 @@ fn presence_rules(table: &Table) -> Result<&Table, CheckFailure> {
     Ok(presence)
 }
 
+fn identity_confirmation_rules(table: &Table) -> Result<IdentityConfirmationRules, CheckFailure> {
+    let section = sub_table(table, "identity-confirmation")?;
+    only_keys(
+        section,
+        "source.identity-confirmation",
+        &[
+            "confirmation-type",
+            "seal-type",
+            "issuer-function",
+            "defining-file",
+            "defining-test-file",
+            "use-case-file",
+            "issuance-allowed-files",
+            "prompt-trait",
+            "prompt-module",
+            "prompt-defining-crate",
+            "prompt-impl-crates",
+            "prompt-impl-files",
+        ],
+    )?;
+    Ok(IdentityConfirmationRules {
+        confirmation_type: text(section, "confirmation-type")?,
+        seal_type: text(section, "seal-type")?,
+        issuer_function: text(section, "issuer-function")?,
+        defining_file: text(section, "defining-file")?,
+        defining_test_file: text(section, "defining-test-file")?,
+        use_case_file: text(section, "use-case-file")?,
+        issuance_allowed_files: texts(section, "issuance-allowed-files")?
+            .into_iter()
+            .collect(),
+        prompt_trait: text(section, "prompt-trait")?,
+        prompt_module: text(section, "prompt-module")?,
+        prompt_defining_crate: text(section, "prompt-defining-crate")?,
+        prompt_impl_crates: names(section, "prompt-impl-crates")?,
+        prompt_impl_files: texts(section, "prompt-impl-files")?.into_iter().collect(),
+    })
+}
+
 fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     only_keys(
         table,
@@ -440,6 +495,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
             "reexport",
             "schema-surface",
             "user-presence",
+            "identity-confirmation",
             "toss-order",
             "http-write",
             "process",
@@ -450,6 +506,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
     let reexport = sub_table(table, "reexport")?;
     only_keys(reexport, "source.reexport", &["crates"])?;
     let presence = presence_rules(table)?;
+    let identity_confirmation = identity_confirmation_rules(table)?;
     let order = sub_table(table, "toss-order")?;
     only_keys(
         order,
@@ -488,6 +545,7 @@ fn source_rules(table: &Table) -> Result<SourceRules, CheckFailure> {
         host_needle: text(host, "needle")?,
         host_crates: names(host, "allowed-crates")?,
         host_files: texts(host, "allowed-files")?.into_iter().collect(),
+        identity_confirmation,
     })
 }
 

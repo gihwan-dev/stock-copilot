@@ -192,6 +192,10 @@ forbidden-in = ["domain"]
 crates = ["cargo_metadata", "syn", "proc-macro2", "ra-ap-rustc_lexer", "toml"]
 allowed-in = ["xtask"]
 
+[[external-location]]
+crates = ["paste"]
+allowed-in = []
+
 [[external-location-exception]]
 crates = ["broker-toss", "broker-toss-trade", "sources"]
 externals = [
@@ -222,9 +226,9 @@ reason = "tauri의 Android·iOS reqwest 의존은 전체 대상 metadata에 포�
 
 [[external-location-exception]]
 crates = ["src-tauri"]
-externals = ["cargo_metadata", "toml", "syn", "proc-macro2"]
+externals = ["cargo_metadata", "toml", "syn", "proc-macro2", "paste"]
 through = "tauri"
-reason = "tauri → tauri-macros → tauri-codegen → tauri-utils(cargo_metadata, cargo_toml → toml)와 절차 매크로(syn, proc-macro2), tauri → muda → gtk → system-deps → toml(Linux 대상)"
+reason = "tauri → tauri-macros → tauri-codegen → tauri-utils(cargo_metadata, cargo_toml → toml)와 절차 매크로(syn, proc-macro2), tauri(specta 기능) → specta → paste, tauri → muda → gtk → system-deps → toml(Linux 대상)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
@@ -234,21 +238,21 @@ reason = "src-tauri/build.rs의 빌드 의존 tauri-build → tauri-utils(cargo_
 
 [[external-location-exception]]
 crates = ["src-tauri"]
-externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework", "cargo_metadata", "toml", "syn", "proc-macro2"]
+externals = ["reqwest", "hyper", "hyper-util", "socket2", "hyper-rustls", "rustls", "tokio-rustls", "security-framework", "cargo_metadata", "toml", "syn", "proc-macro2", "paste"]
 through = "tauri-specta"
-reason = "tauri-specta 2.0.0-rc.28은 tauri(specta 기능)에 의존하므로 위의 tauri 예외와 같은 전이 crate를 들인다. 절차 매크로(tauri-specta-macros)도 syn, proc-macro2를 쓴다 (ADR 0016)"
+reason = "tauri-specta 2.0.0-rc.28은 tauri(specta 기능)와 paste에 의존하므로 위의 tauri 예외와 같은 전이 crate를 들인다. 절차 매크로(tauri-specta-macros)도 syn, proc-macro2를 쓴다 (ADR 0016)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
-externals = ["syn", "proc-macro2"]
+externals = ["syn", "proc-macro2", "paste"]
 through = "specta"
-reason = "specta의 derive 기능(specta-macros)이 절차 매크로로 syn, proc-macro2를 쓴다 (ADR 0016)"
+reason = "specta의 derive 기능(specta-macros)이 절차 매크로로 syn, proc-macro2를 쓰고 specta가 paste에 의존한다 (ADR 0016)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
-externals = ["syn", "proc-macro2"]
+externals = ["syn", "proc-macro2", "paste"]
 through = "specta-typescript"
-reason = "specta-typescript → specta(derive) → specta-macros의 절차 매크로 의존 (ADR 0016)"
+reason = "specta-typescript → specta(derive) → specta-macros/paste의 절차 매크로 의존 (ADR 0016)"
 
 [[external-location-exception]]
 crates = ["src-tauri"]
@@ -292,6 +296,23 @@ trait-name = "UserPresence"
 defining-crate = "application"
 impl-crates = ["platform-macos"]
 impl-files = ["crates/testkit-ports/src/scripted_presence.rs"]
+
+[source.identity-confirmation]
+confirmation-type = "UserIdentityConfirmation"
+seal-type = "UserIdentityConfirmationSeal"
+issuer-function = "issue_after_user_confirmation"
+defining-file = "crates/domain/src/instrument_mapping_change.rs"
+defining-test-file = "crates/domain/src/instrument_mapping_change/history_cases.rs"
+use-case-file = "crates/application/src/confirm_instrument_identity.rs"
+issuance-allowed-files = [
+    "crates/application/src/confirm_instrument_identity.rs",
+    "crates/testkit-ports/src/scripted_identity_confirmation.rs",
+]
+prompt-trait = "IdentityConfirmationPrompt"
+prompt-module = "identity_confirmation_prompt"
+prompt-defining-crate = "application"
+prompt-impl-crates = ["platform-macos"]
+prompt-impl-files = ["crates/testkit-ports/src/scripted_identity_confirmation.rs"]
 
 [source.toss-order]
 write-means = [

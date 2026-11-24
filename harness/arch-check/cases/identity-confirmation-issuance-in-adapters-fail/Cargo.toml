@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/adapters/store-sqlite",
+    "crates/adapters/broker-toss",
+    "crates/adapters/broker-toss-trade",
+    "crates/adapters/sources",
+    "crates/adapters/ai-claude-code",
+    "crates/adapters/ai-codex",
+    "crates/adapters/secrets-keychain",
+    "crates/adapters/platform-macos",
+    "crates/mcp-server",
+    "crates/scheduler",
+    "apps/desktop/src-tauri",
+]
