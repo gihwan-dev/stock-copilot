@@ -85,6 +85,7 @@ mod tests {
                 },
             )),
             thesis_repository: Arc::new(LatestThesisRepository::default()),
+            tool_history: Arc::new(MemoryToolCallLedger::recording()),
             estimates: Arc::new(EstimateToolPorts {
                 assignments: Arc::new(
                     FixedEstimateAssignments::new(EstimateAssignments::default()),
