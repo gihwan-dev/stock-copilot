@@ -6,8 +6,10 @@ pub mod ipc;
 pub mod lifecycle;
 pub mod platform;
 pub mod ports;
+pub mod product_events;
 pub mod product_ports;
 mod security;
+pub mod sqlite_ports;
 pub mod startup;
 pub mod unavailable;
 
@@ -32,7 +34,7 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             security::create_windows(app)?;
             let _policy = platform::residency::apply_accessory_policy(app);
             app.manage(platform::residency::ResidencyState::new());
-            let database = tauri::async_runtime::block_on(database::open_database(
+            let opened = tauri::async_runtime::block_on(database::open_database(
                 ports.secrets.as_ref(),
                 Arc::clone(&ports.database),
                 || {
@@ -51,6 +53,8 @@ pub fn build_app<R: Runtime, P: PortTypes>(
                         })
                 },
             ));
+            let status = opened.status();
+            let (shared_database, database) = share_database(app, opened);
             let refresh = tauri::async_runtime::block_on(startup::start(&ports, |data| {
                 publish_main(app.handle(), data)
             }))?;
@@ -58,8 +62,8 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             let chat_state = ipc::chat_hub::ChatIpcState::from_ports(&ports);
             app.manage(ports);
             let _scheduling = platform::scheduling::start_background::<R, P>(app);
-            let shutdown_hook = prepare_process_shutdown_hook(app);
-            app.manage(database.status());
+            let shutdown_hook = database_shutdown_hook(app, shared_database);
+            app.manage(status);
             app.manage(chat_state);
             app.manage(Lifecycle::with_shutdown_hook(
                 refresh,
@@ -70,6 +74,39 @@ pub fn build_app<R: Runtime, P: PortTypes>(
             Ok(())
         })
         .build(context)
+}
+
+fn share_database<R: Runtime>(
+    app: &App<R>,
+    database: database::DatabaseState,
+) -> (
+    Option<sqlite_ports::SharedDatabase>,
+    database::DatabaseState,
+) {
+    let shared = app
+        .try_state::<sqlite_ports::SharedDatabase>()
+        .map(|state| state.inner().clone());
+    let remaining = match (shared.as_ref(), database) {
+        (Some(target), database::DatabaseState::Ready(opened)) => {
+            let _previous = tauri::async_runtime::block_on(target.install(opened));
+            database::DatabaseState::NotConfigured
+        }
+        (_, other) => other,
+    };
+    (shared, remaining)
+}
+
+fn database_shutdown_hook<R: Runtime>(
+    app: &App<R>,
+    shared: Option<sqlite_ports::SharedDatabase>,
+) -> Arc<dyn platform::process_cleanup::ShutdownHook> {
+    let inner = prepare_process_shutdown_hook(app);
+    match shared {
+        Some(database) => Arc::new(sqlite_ports::SharedDatabaseShutdownHook::new(
+            inner, database,
+        )),
+        None => inner,
+    }
 }
 
 fn prepare_process_shutdown_hook<R: Runtime>(
@@ -93,6 +130,9 @@ fn prepare_process_shutdown_hook<R: Runtime>(
 }
 
 fn ensure_default_runtimes<R: Runtime>(app: &App<R>) {
+    if let Some(slot) = app.try_state::<Arc<product_events::UiEventSlot<R>>>() {
+        let _binding = slot.bind(ipc::event_bridge::UiEventBridge::new(app.handle().clone()));
+    }
     if app
         .try_state::<ipc::open_external::ExternalLinkRuntime>()
         .is_none()

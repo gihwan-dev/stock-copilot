@@ -183,7 +183,7 @@ pub enum PromptLocationError {
 pub struct PromptDigest(String);
 
 impl PromptDigest {
-    pub fn try_from_hex(value: &str) -> Result<Self, PromptLocationError> {
+    pub fn try_new(value: &str) -> Result<Self, PromptLocationError> {
         if value.len() != 64
             || !value
                 .bytes()
