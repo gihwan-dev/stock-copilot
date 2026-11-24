@@ -374,6 +374,14 @@ pub use market_overview::{
     OverviewFreshness, OverviewObservation, OverviewRequest,
 };
 
+mod portfolio_tool_reads;
+pub use portfolio_tool_reads::{
+    AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
+    BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
+    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
+    SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
+    TransactionToolLine, TransactionsToolView,
+};
 mod portfolio_views;
 pub use portfolio_views::{
     GetAllocationView, GetPortfolioView, RecordedView, StoredView, ViewFreshness,

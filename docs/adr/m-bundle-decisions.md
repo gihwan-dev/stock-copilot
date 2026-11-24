@@ -16,3 +16,7 @@
 | M-09 | 2026-07-28 `ping` | `server/discover` 뒤 `_meta`를 실은 `ping`이 rmcp에서 `-32601`로 끝나 스냅샷에서 뺐다. 2025-06-18 세대 `ping`만 스냅샷에 고정 | rmcp 동작을 바꾸는 우회 |
 | M-09 | 가짜 MCP 클라이언트의 `_meta` 키 | rmcp 3.9.0은 SEP-2575 `io.modelcontextprotocol/clientCapabilities`를 요구하는데 `fake_mcp_client`는 `clientCapabilities`만 실어 2026 세대 도구 목록이 비었다. 기존 테스트를 고치지 않고 두 키를 함께 싣도록 추가 | 기존 testkit 단언 변경(기존 테스트 변경 금지) |
 | M-09 | `tools/list` 골든 파일 | M-09는 고정 도구 레지스트리의 목록을 스냅샷에 포함하고, 제품 도구 목록 골든(`fixtures/mcp/tools_list.json`)은 첫 제품 도구가 들어오는 M-03에서 카탈로그 조립 함수와 함께 시작 | 빈 카탈로그 골든 |
+| M-03 | 포트폴리오 도구의 자료원 | `application::PortfolioToolReads` 포트가 도구별 보기 레코드(`PortfolioToolView` 등)를 돌려주고, `mcp-server`는 인자 검증·정렬·JSON 렌더링만 한다. 계좌는 `MaskedAccountNumber`(뒤 4자리)만 레코드에 들어갈 수 있어 전체 번호가 도구에 닿지 않는다. 가짜는 `testkit-ports::tool_read_fakes::FixedPortfolioToolReads`. 포트 구현(저장소+`GetPortfolioView`·`GetAllocationView` 조립)은 앱 조립 작업(U-01)에 인계 | 도구가 `PortfolioValuation`을 직접 렌더링(도메인 내부 구조에 MCP 출력이 묶임) |
+| M-03 | 표본 부족 처리 | `SampleSufficiency::Insufficient`이면 `sample: "insufficient"`와 함께 위험 지표(변동성·최대 낙폭)를 `null`로 고정해 내보내고 기간 수익률·벤치마크는 그대로 준다 | 수익률까지 숨김 |
+| M-03 | 외부 이름 | 종목명·섹터 이름은 브로커 자료지만 외부 텍스트로 보고 `untrusted_text`로 정규화해 준다. 시각은 오프셋을 붙인 RFC 3339 문자열, 금액은 `{amount, currency}` 십진 문자열 | 이름을 평문 문자열로 노출 |
+| M-03 | `get_transactions` 범위 | 인자는 `kind`(all·trades·dividends·cash_flows), `limit`, `cursor`뿐. 최신순(같으면 종류·종목순) 정렬, 커서는 `kind`별 질의 지문에 묶음 | 기간 인자(문서 미정) |
