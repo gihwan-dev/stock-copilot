@@ -1,21 +1,21 @@
 use src_tauri::audit_queue::AuditEventQueue;
-use src_tauri::ipc::briefing::{BriefingHistory, BriefingIpcState};
+use src_tauri::ipc::briefing::BriefingIpcState;
 use src_tauri::ipc::open_external::ExternalLinkRuntime;
-use src_tauri::ipc::state::BoxFuture;
 use src_tauri::platform::notifier::{
     AsyncRuntimeNotificationDispatch, FilteredNotifier, NotificationDelivery,
     NotificationEventSubscriber, NotificationPreferences, UnavailableNotificationDelivery,
 };
+use src_tauri::platform::scheduling::SpecWatchInputs;
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::product_events::{
     BridgedUiEvents, FlushingAuditSink, RecordedTriggerUrgency, UiEventSlot, ui_event_kinds,
 };
-use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories, not_opened};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
 };
 use std::sync::Arc;
+use store_sqlite::{SharedDatabase, SqliteRepositories};
 
 fn product_context() -> tauri::Context<tauri::Wry> {
     #[expect(
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let ports = product_ports(&repositories, notifier, &shared_clock, events);
     let app = build_app(
-        product_builder(scheduler_events, &repositories, ui_events),
+        product_builder(scheduler_events, &repositories, ui_events, &shared_clock),
         ports,
         context,
     )?;
@@ -79,8 +79,8 @@ fn product_ports(
     notifier: Arc<ProductNotifier>,
     shared_clock: &Arc<platform_macos::SystemClock>,
     events: application::EventBus,
-) -> Ports<ProductPorts> {
-    Ports::<ProductPorts> {
+) -> Ports<ProductPorts<SqliteRepositories>> {
+    Ports::<ProductPorts<SqliteRepositories>> {
         broker_read: Arc::new(Unavailable),
         market_info: Arc::new(Unavailable),
         macro_series: Arc::new(Unavailable),
@@ -116,35 +116,36 @@ fn product_builder(
     scheduler_events: Arc<scheduler::SchedulerEventBridge>,
     repositories: &Arc<SqliteRepositories>,
     ui_events: Arc<UiEventSlot<tauri::Wry>>,
+    clock: &Arc<platform_macos::SystemClock>,
 ) -> tauri::Builder<tauri::Wry> {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(ExternalLinkRuntime::new(
             Arc::new(Unavailable),
             Arc::new(Unavailable),
         ))
         .manage(scheduler_events)
-        .manage(repositories.shared().clone())
-        .manage(BriefingIpcState::new(Arc::new(ProductBriefings(
-            repositories.shared().clone(),
-        ))))
-        .manage(ui_events)
+        .manage(Arc::clone(repositories))
+        .manage(BriefingIpcState::from_repository(Arc::clone(repositories)))
+        .manage(ui_events);
+    match spec_watch_inputs(clock) {
+        Some(inputs) => builder.manage(inputs),
+        None => builder,
+    }
 }
 
-struct ProductBriefings(SharedDatabase);
-
-impl BriefingHistory for ProductBriefings {
-    fn recent(
-        &self,
-    ) -> BoxFuture<'_, Result<Vec<application::BriefingRecord>, application::SystemPortError>> {
-        Box::pin(async move {
-            let guard = self.0.read().await;
-            let database = guard
-                .as_ref()
-                .ok_or_else(|| not_opened(application::SystemPort::Repository))?;
-            application::BriefingRepository::recent(&store_sqlite::BriefingStore::new(database))
-                .await
-        })
-    }
+fn spec_watch_inputs(clock: &Arc<platform_macos::SystemClock>) -> Option<SpecWatchInputs> {
+    let shared: Arc<dyn application::Clock> = Arc::<platform_macos::SystemClock>::clone(clock);
+    let http = broker_toss::TossHttpClient::new(
+        &broker_toss::TossEndpoint::production(),
+        shared,
+        Arc::new(broker_toss::TokioRequestWait),
+    )
+    .ok()?;
+    let baseline = broker_toss::pinned_spec_baseline().ok()?;
+    Some(SpecWatchInputs {
+        source: Arc::new(broker_toss::TossSpecClient::new(http)),
+        baseline,
+    })
 }
 
 type ProductNotifier = FilteredNotifier<UnavailableNotificationDelivery>;
@@ -430,9 +431,9 @@ mod product_bus_tests {
         NotificationToggle,
     };
     use src_tauri::product_events::UiEventSlot;
-    use src_tauri::sqlite_ports::{SharedDatabase, SqliteRepositories};
     use std::sync::{Arc, mpsc};
     use std::time::Duration;
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
 
     type Sent = (Notification, NotificationMessage);
 
@@ -490,15 +491,14 @@ mod product_bus_tests {
 }
 
 #[cfg(test)]
-mod product_briefing_tests {
-    use super::ProductBriefings;
+mod briefing_store_tests {
     use application::{BriefingOutcome, BriefingRecord, BriefingRepository, SecretValue};
     use domain::{
         BriefingId, BriefingKind, CalendarDate, CalendarYear, DayNumber, MonthNumber, UntrustedText,
     };
     use src_tauri::ipc::briefing::{BriefingIpcState, UiBriefingStatus, load_briefings_view};
-    use src_tauri::sqlite_ports::SharedDatabase;
     use std::sync::Arc;
+    use store_sqlite::{SharedDatabase, SqliteRepositories};
 
     fn finished_at() -> domain::Timestamp {
         broker_toss::TossTimestamp::try_from("2026-11-24T23:20:00Z")
@@ -506,23 +506,26 @@ mod product_briefing_tests {
             .into_domain()
     }
 
+    fn clock() -> testkit_ports::SteppedClock {
+        testkit_ports::SteppedClock::new(finished_at())
+    }
+
     #[test]
-    fn product_briefing_ipc_reads_briefings_saved_in_the_installed_database() {
+    fn installed_database_serves_saved_briefings_to_the_briefing_ipc() {
         let directory = std::path::PathBuf::from("../../../target/chat2")
-            .join(format!("product-briefings-{}", std::process::id()));
+            .join(format!("sqlite-briefings-{}", std::process::id()));
         let shared = SharedDatabase::new();
-        let state = BriefingIpcState::new(Arc::new(ProductBriefings(shared.clone())));
+        let repositories = Arc::new(SqliteRepositories::new(shared.clone()));
+        let state = BriefingIpcState::from_repository(Arc::clone(&repositories));
         tauri::async_runtime::block_on(async {
-            assert!(
-                load_briefings_view(&state).await.is_err(),
-                "설치 전에는 읽지 못한다"
-            );
+            let missing = load_briefings_view(&state).await;
+            assert!(missing.is_err(), "설치 전에는 읽지 못한다");
             let path = store_sqlite::DatabasePath::new(directory.join("store.db"));
             src_tauri::database::prepare_directory(&path).expect("폴더");
-            let clock = testkit_ports::SteppedClock::new(finished_at());
             let database =
-                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock)
+                store_sqlite::Database::open(&path, &SecretValue::new(vec![83; 32]), &clock())
                     .expect("열기");
+            assert!(shared.install(database).await.is_none());
             let date = CalendarDate::from_parts(
                 CalendarYear::new(2026),
                 MonthNumber::new(11),
@@ -537,11 +540,7 @@ mod product_briefing_tests {
                     sources: Vec::new(),
                 },
             };
-            let _saved = store_sqlite::BriefingStore::new(&database)
-                .save(&record)
-                .await
-                .expect("저장");
-            assert!(shared.install(database).await.is_none());
+            let _saved = repositories.save(&record).await.expect("저장");
             let view = load_briefings_view(&state).await.expect("조회");
             let latest = view.latest.expect("최근 브리핑");
             assert_eq!(latest.body, "오늘 브리핑");

@@ -1,8 +1,7 @@
 use crate::ports::{PortTypes, Ports};
-use crate::sqlite_ports::SqliteRepositories;
 use application::{
     CheckTossSpec, FullInspectionRun, RunFullInspection, SecretKey, SecretStore, SpecDriftStatus,
-    TossSpecSource, TransactionSchedule,
+    TossSpecBaseline, TossSpecSource, TransactionSchedule,
 };
 use domain::{InspectionRangeDays, Timestamp};
 use scheduler::{
@@ -11,7 +10,7 @@ use scheduler::{
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
-use store_sqlite::{BackupDirectory, BackupOutcome};
+use store_sqlite::SqliteRepositories;
 use tauri::{AppHandle, Manager, Runtime};
 
 pub const FULL_INSPECTION_RANGE_DAYS: u32 = 31;
@@ -52,15 +51,17 @@ fn storage(error: impl std::fmt::Debug) -> JobError {
 impl<R: Runtime, P: PortTypes> IntradayCompactionPort for AppStoredJobs<R, P> {
     async fn compact_before(&self, _cutoff: Timestamp) -> Result<CompactionResult, JobError> {
         let ports = self.ports()?;
-        let _written =
-            crate::sqlite_ports::compact_intraday(&self.repositories, ports.clock.as_ref())
-                .await
-                .map_err(storage)?;
+        let _written = self
+            .repositories
+            .compact_intraday(ports.clock.as_ref())
+            .await
+            .map_err(storage)?;
         Ok(CompactionResult { compacted_days: 1 })
     }
 
     async fn incremental_vacuum(&self) -> Result<(), JobError> {
-        crate::sqlite_ports::reclaim_space(&self.repositories)
+        self.repositories
+            .reclaim_space()
             .await
             .map(|_written| ())
             .map_err(storage)
@@ -86,17 +87,12 @@ impl<R: Runtime, P: PortTypes> DatabaseBackupPort for AppStoredJobs<R, P> {
             .app_data_dir()
             .map_err(|_error| JobError::PortUnavailable(String::from("app-data-dir")))?
             .join("backups");
-        match crate::sqlite_ports::back_up(
-            &self.repositories,
-            &BackupDirectory::new(directory),
-            &key,
-            ports.clock.as_ref(),
-        )
-        .await
+        match self
+            .repositories
+            .back_up(directory, &key, ports.clock.as_ref())
+            .await
         {
-            Ok(BackupOutcome::Created | BackupOutcome::AlreadyCreated) => {
-                Ok(BackupResult::Confirmed { retained_copies: 1 })
-            }
+            Ok(_outcome) => Ok(BackupResult::Confirmed { retained_copies: 1 }),
             Err(_error) => Ok(BackupResult::VerificationFailed),
         }
     }
@@ -147,6 +143,7 @@ impl<R: Runtime, P: PortTypes> TransactionSyncPort for AppStoredJobs<R, P> {
 pub struct AppSpecWatch<R: Runtime, P: PortTypes, S> {
     stored: AppStoredJobs<R, P>,
     source: Arc<S>,
+    baseline: TossSpecBaseline,
 }
 
 impl<R: Runtime, P: PortTypes, S> std::fmt::Debug for AppSpecWatch<R, P, S> {
@@ -157,23 +154,29 @@ impl<R: Runtime, P: PortTypes, S> std::fmt::Debug for AppSpecWatch<R, P, S> {
 
 impl<R: Runtime, P: PortTypes, S: TossSpecSource> AppSpecWatch<R, P, S> {
     #[must_use]
-    pub const fn new(stored: AppStoredJobs<R, P>, source: Arc<S>) -> Self {
-        Self { stored, source }
+    pub const fn new(
+        stored: AppStoredJobs<R, P>,
+        source: Arc<S>,
+        baseline: TossSpecBaseline,
+    ) -> Self {
+        Self {
+            stored,
+            source,
+            baseline,
+        }
     }
 }
 
 impl<R: Runtime, P: PortTypes, S: TossSpecSource> SpecWatchPort for AppSpecWatch<R, P, S> {
     async fn check(&self, _now: Timestamp) -> Result<SpecWatchResult, JobError> {
         let ports = self.stored.ports()?;
-        let baseline = broker_toss::pinned_spec_baseline()
-            .map_err(|error| JobError::ExecutionFailed(format!("{error:?}")))?;
         let report = CheckTossSpec::new(
             self.source.as_ref(),
             &self.stored.repositories,
             ports.clock.as_ref(),
             &ports.events,
         )
-        .check(&baseline)
+        .check(&self.baseline)
         .await
         .map_err(storage)?;
         match report.record.status() {

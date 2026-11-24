@@ -80,12 +80,12 @@ fn share_database<R: Runtime>(
     app: &App<R>,
     database: database::DatabaseState,
 ) -> (
-    Option<sqlite_ports::SharedDatabase>,
+    Option<store_sqlite::SharedDatabase>,
     database::DatabaseState,
 ) {
     let shared = app
-        .try_state::<sqlite_ports::SharedDatabase>()
-        .map(|state| state.inner().clone());
+        .try_state::<Arc<store_sqlite::SqliteRepositories>>()
+        .map(|state| state.shared().clone());
     let remaining = match (shared.as_ref(), database) {
         (Some(target), database::DatabaseState::Ready(opened)) => {
             let _previous = tauri::async_runtime::block_on(target.install(opened));
@@ -98,7 +98,7 @@ fn share_database<R: Runtime>(
 
 fn database_shutdown_hook<R: Runtime>(
     app: &App<R>,
-    shared: Option<sqlite_ports::SharedDatabase>,
+    shared: Option<store_sqlite::SharedDatabase>,
 ) -> Arc<dyn platform::process_cleanup::ShutdownHook> {
     let inner = prepare_process_shutdown_hook(app);
     match shared {

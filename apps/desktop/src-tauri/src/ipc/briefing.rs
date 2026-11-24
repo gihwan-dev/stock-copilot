@@ -174,12 +174,12 @@ fn map_record(record: &BriefingRecord) -> Option<UiBriefing> {
     let (status, failure, body, cited) = match &record.outcome {
         BriefingOutcome::Completed {
             body,
-            sources: evidence,
+            sources: origins,
         } => (
             UiBriefingStatus::Completed,
             UiBriefingFailure::None,
             body.as_untrusted_str().to_owned(),
-            evidence.iter().map(map_source).collect(),
+            origins.iter().map(map_source).collect(),
         ),
         BriefingOutcome::Failed(failure) => (
             UiBriefingStatus::Failed,

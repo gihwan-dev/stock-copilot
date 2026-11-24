@@ -239,12 +239,14 @@ mod tests {
         assert_eq!(first.env_observation.openai_api_key, EnvPresence::Absent);
         assert_eq!(first.env_observation.mcp_token, EnvPresence::Absent);
         assert_eq!(first.argv.first().map(String::as_str), Some("app-server"));
-        assert!(
-            first
-                .argv
-                .iter()
-                .any(|arg| arg == "web_search=\"disabled\"")
-        );
+        for flag in [
+            "web_search=\"disabled\"",
+            "shell_tool",
+            "unified_exec",
+            "history.persistence=\"none\"",
+        ] {
+            assert!(first.argv.iter().any(|arg| arg == flag), "{flag}");
+        }
         let work_root = dir.path().join("work");
         assert_eq!(
             fs::read_dir(&work_root).expect("root").count(),

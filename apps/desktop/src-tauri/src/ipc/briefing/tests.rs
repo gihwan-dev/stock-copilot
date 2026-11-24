@@ -107,8 +107,8 @@ fn newest_briefing_is_latest_and_the_rest_are_past_in_descending_order() {
     assert_eq!(view.past[0].status, UiBriefingStatus::Failed);
     assert_eq!(view.past[0].failure, UiBriefingFailure::AiUnavailable);
     assert_eq!(view.past[0].body, "");
-    let uncited = &view.past[0].sources;
-    assert_eq!(uncited, &Vec::new());
+    let past_cited = &view.past[0].sources;
+    assert_eq!(past_cited, &Vec::new());
 }
 
 #[test]
