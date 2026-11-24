@@ -5,10 +5,10 @@ use application::{
 };
 use domain::{AccountId, BrokerAccountRows, InstrumentMaster};
 use domain::{
-    BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower, Candle, CandlePeriod, ClosedOrderSet,
+    BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower, Candle, CandlePeriod,
     CommissionRateFact, Currency, KnownMarket, Orderbook, PriceAdjustment, PriceLimits,
-    QuoteInstrument, ResolvedOrderInstrument, SellableQuantityFact, SettlementWindow,
-    StockWarnings, TimeInterval, TransactionFilter,
+    ProvenClosedOrderSet, QuoteInstrument, ResolvedOrderInstrument, SellableQuantityFact,
+    SettlementWindow, StockWarnings, TimeInterval, TransactionFilter,
 };
 impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
     for TossAccountRead<Store, Time, Renewal>
@@ -76,7 +76,7 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> BrokerRead
         &self,
         account: &AccountId,
         evaluation_window: TimeInterval,
-    ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send {
+    ) -> impl Future<Output = Result<ProvenClosedOrderSet, PortError>> + Send {
         crate::order_read::closed_orders(self, account, evaluation_window)
     }
     fn order(

@@ -1,7 +1,8 @@
 use crate::{
-    AccountId, BrokerOrder, BrokerOrderId, BrokerOrderMoney, ClosedOrderCompletenessProof,
-    NetPurchaseInputError, OrderOpenState, TimeInterval, Timestamp,
+    AccountId, BrokerOrder, BrokerOrderId, ClosedOrderCompletenessProof, TimeInterval, Timestamp,
 };
+#[cfg(test)]
+use crate::{BrokerOrderMoney, NetPurchaseInputError, OrderOpenState};
 use std::{collections::BTreeMap, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,7 +26,8 @@ pub struct ClosedOrderSet {
     proof: Option<ClosedOrderCompletenessProof>,
 }
 impl ClosedOrderSet {
-    pub fn new(
+    #[cfg(test)]
+    pub(crate) fn new(
         account: AccountId,
         orders: Vec<BrokerOrder>,
         covered: TimeInterval,
@@ -51,6 +53,7 @@ impl ClosedOrderSet {
             proof: Some(proof),
         }
     }
+    #[cfg(test)]
     fn build(
         account: AccountId,
         orders: Vec<BrokerOrder>,
@@ -107,6 +110,7 @@ impl fmt::Debug for ClosedOrderSet {
         f.debug_struct("ClosedOrderSet").finish_non_exhaustive()
     }
 }
+#[cfg(test)]
 fn validate_order(
     order: &BrokerOrder,
     account: &AccountId,

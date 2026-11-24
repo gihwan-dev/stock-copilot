@@ -2,14 +2,14 @@ mod observations;
 mod port_error;
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Candle, CandlePeriod, ClosedOrderSet, CommissionRateFact, CreditTrade, Currency,
-    FlowInterval, FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
+    CalendarDate, Candle, CandlePeriod, CommissionRateFact, CreditTrade, Currency, FlowInterval,
+    FxPair, FxRate, FxRateKind, IndicatorCode, InstrumentMaster, InvestorFlow,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
     MarketIndicatorQuote, OrderFxRates, Orderbook, PriceAdjustment, PriceLimits, ProgramTrade,
-    QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog, SectorComposition,
-    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
-    SettlementWindow, ShortSelling, StockRanking, StockWarnings, TimeInterval, Timestamp,
-    TransactionFilter,
+    ProvenClosedOrderSet, QuoteInstrument, RankingLimit, ResolvedOrderInstrument, SectorCatalog,
+    SectorComposition, SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending,
+    SellableQuantityFact, SettlementWindow, ShortSelling, StockRanking, StockWarnings,
+    TimeInterval, Timestamp, TransactionFilter,
 };
 pub use observations::{
     HoldingsObservation, IncompleteReason, IncompleteTransactions, QuarantinedTransaction,
@@ -125,7 +125,7 @@ pub trait BrokerRead: Send + Sync {
         &self,
         account: &AccountId,
         evaluation_window: TimeInterval,
-    ) -> impl Future<Output = Result<ClosedOrderSet, PortError>> + Send;
+    ) -> impl Future<Output = Result<ProvenClosedOrderSet, PortError>> + Send;
     fn order(
         &self,
         account: &AccountId,
