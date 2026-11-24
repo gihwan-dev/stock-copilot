@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn profile_and_scorecard_are_code_computed_views() {
+    fn profile_and_pending_scorecard_are_code_computed_views() {
         runtime().block_on(async {
             let empty = fixture(0_usize).await;
             let profile = call(&empty.registry, "alpha", "get_profile", json!({}))
@@ -411,7 +411,7 @@ mod tests {
             assert_eq!(
                 cards["cards"][0]["status"],
                 json!("pending_under_30_judged"),
-                "30건 미만은 판정 보류"
+                "판정된 결과가 30건에 못 미치면 domain 판정대로 보류로 표시"
             );
             assert_eq!(cards["cards"][0]["key"]["horizon"], json!("few_days"));
             assert_eq!(
