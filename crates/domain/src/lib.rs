@@ -653,6 +653,9 @@ pub use valuation_price_evidence::{
 
 mod valuation_recompute_contract;
 
+mod valuation_day_inputs;
+pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
+
 mod valuation_recompute;
 pub use valuation_recompute::{
     DatedSnapshotLedgers, ValuationHistoryEvidence, ValuationRecomputeInput,

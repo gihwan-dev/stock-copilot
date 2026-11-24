@@ -402,7 +402,9 @@ pub use transaction_observation::{
 
 mod valuation_gap;
 pub use valuation_gap::{
-    PlanValuationGap, ValuationCalendarSource, ValuationDayRepository, ValuationGapError,
+    BackfillValuationDays, PlanValuationGap, ValuationBackfillError, ValuationCalendarSource,
+    ValuationDayInputSource, ValuationDayRepository, ValuationDaySuccessSource, ValuationGapError,
+    ValuationInputError,
 };
 mod run_full_inspection;
 pub use run_full_inspection::{
