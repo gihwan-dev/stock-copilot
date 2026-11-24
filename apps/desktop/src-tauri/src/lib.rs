@@ -3,6 +3,7 @@ pub mod database;
 pub mod exit;
 pub mod ipc;
 pub mod lifecycle;
+pub mod platform;
 pub mod ports;
 pub mod product_ports;
 mod security;
@@ -28,6 +29,8 @@ pub fn build_app<R: Runtime, P: PortTypes>(
         .setup(move |app| {
             ipc::registry::specta_builder::<R>().mount_events(app);
             security::create_windows(app)?;
+            let _policy = platform::residency::apply_accessory_policy(app);
+            app.manage(platform::residency::ResidencyState::new());
             let database = tauri::async_runtime::block_on(database::open_database(
                 ports.secrets.as_ref(),
                 Arc::clone(&ports.database),
@@ -83,7 +86,9 @@ fn show_prepared_main<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), tauri
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| tauri::Error::AssetNotFound("main-window".into()))?;
-    window.show()
+    window.show()?;
+    platform::residency::record_main_shown(app);
+    Ok(())
 }
 
 pub fn run_app<R: Runtime, Finish>(app: App<R>, finish: Finish)
@@ -91,8 +96,15 @@ where
     Finish: Fn(&tauri::AppHandle<R>, exit::ExitCode) + Send + Sync + 'static,
 {
     let finalizer = Arc::new(finish);
-    app.run(move |handle, event| {
-        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+    app.run(move |handle, event| match event {
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } => {
+            let _action = platform::residency::handle_close_requested(handle, &label, &api);
+        }
+        tauri::RunEvent::ExitRequested { api, code, .. } => {
             exit::request(
                 handle,
                 &api,
@@ -100,6 +112,26 @@ where
                 Arc::clone(&finalizer),
             );
         }
+        tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } => {
+            let visibility = if has_visible_windows {
+                platform::residency::VisibleWindowPresence::SomeVisible
+            } else {
+                platform::residency::VisibleWindowPresence::NoneVisible
+            };
+            if let Err(_error) = platform::residency::handle_reopen(handle, visibility) {}
+        }
+        tauri::RunEvent::Exit
+        | tauri::RunEvent::WindowEvent { .. }
+        | tauri::RunEvent::WebviewEvent { .. }
+        | tauri::RunEvent::Ready
+        | tauri::RunEvent::Resumed
+        | tauri::RunEvent::MainEventsCleared
+        | tauri::RunEvent::Opened { .. }
+        | tauri::RunEvent::MenuEvent(_)
+        | _ => {}
     });
 }
 

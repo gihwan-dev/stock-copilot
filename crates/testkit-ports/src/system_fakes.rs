@@ -1,7 +1,8 @@
 use crate::{Script, memory::MemoryReply, script::State};
 use application::{
     AuditEntry, AuditIntegrity, AuditLog, CollectedUrlCatalog, ExternalUrlOpened,
-    ExternalUrlOpener, ExternalUrlOpenerError, RecordOutcome, SecretKey, SecretStore, SecretValue,
+    ExternalUrlOpener, ExternalUrlOpenerError, PeerProcessInfo, PeerProcessInspector,
+    PeerProcessLookupError, ProcessId, RecordOutcome, SecretKey, SecretStore, SecretValue,
     SystemPortError, WriteCompleted,
 };
 use domain::{AuthorizedExternalUrl, NormalizedUrl, ParsedExternalUrl};
@@ -243,3 +244,36 @@ pub type MemoryCollectedUrlCatalogFindScript =
     Script<ParsedExternalUrl, MemoryReply<Result<Option<NormalizedUrl>, SystemPortError>>>;
 pub type ScriptedExternalUrlOpenerScript =
     Script<AuthorizedExternalUrl, Result<ExternalUrlOpened, ExternalUrlOpenerError>>;
+pub type PeerProcessInspectorScript =
+    Script<ProcessId, Result<PeerProcessInfo, PeerProcessLookupError>>;
+
+#[derive(Debug, Default)]
+pub struct ScriptedPeerProcessInspector {
+    inspect: PeerProcessInspectorScript,
+}
+
+impl ScriptedPeerProcessInspector {
+    pub fn new<Replies: IntoIterator<Item = Result<PeerProcessInfo, PeerProcessLookupError>>>(
+        replies: Replies,
+    ) -> Self {
+        Self {
+            inspect: Script::new(replies),
+        }
+    }
+
+    #[must_use]
+    pub fn script(&self) -> &PeerProcessInspectorScript {
+        &self.inspect
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<ProcessId> {
+        self.inspect.calls()
+    }
+}
+
+impl PeerProcessInspector for ScriptedPeerProcessInspector {
+    async fn inspect(&self, pid: ProcessId) -> Result<PeerProcessInfo, PeerProcessLookupError> {
+        self.inspect.run(pid).await
+    }
+}

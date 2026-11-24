@@ -107,6 +107,7 @@ fn run_app_dispatches_the_real_mock_exit_event_and_waits_for_cleanup() {
         let closing = trigger.clone();
         trigger
             .run_on_main_thread(move || {
+                crate::platform::residency::begin_quit(&closing);
                 closing
                     .get_webview_window("main")
                     .expect("주 창")
