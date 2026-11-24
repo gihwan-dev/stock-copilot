@@ -1129,19 +1129,17 @@ fn insert_event(
     Ok(())
 }
 
-fn latest_active_link_seq(events: &[StoredEvent], id: &InstrumentId) -> Option<i64> {
+fn latest_active_link_seq(events: &[StoredEvent]) -> Option<i64> {
     let mut stack = Vec::new();
     for entry in events {
         match &entry.event {
-            MappingHistoryEvent::IdentifierChanged { instrument_id, .. } if instrument_id == id => {
+            MappingHistoryEvent::IdentifierChanged { .. } => {
                 stack.push(entry.seq);
             }
-            MappingHistoryEvent::LinkCorrected { instrument_id, .. } if instrument_id == id => {
+            MappingHistoryEvent::LinkCorrected { .. } => {
                 let _popped = stack.pop();
             }
-            MappingHistoryEvent::IdentifierChanged { .. }
-            | MappingHistoryEvent::RetirementCorrected { .. }
-            | MappingHistoryEvent::LinkCorrected { .. } => {}
+            MappingHistoryEvent::RetirementCorrected { .. } => {}
         }
     }
     stack.pop()
@@ -1425,8 +1423,8 @@ fn correct_link_mapping(
             return Err(rusqlite::Error::InvalidQuery);
         }
     };
-    let latest_seq = latest_active_link_seq(&stored_events, instrument_id)
-        .ok_or(rusqlite::Error::InvalidQuery)?;
+    let latest_seq =
+        latest_active_link_seq(&stored_events).ok_or(rusqlite::Error::InvalidQuery)?;
     let seq = next_event_seq(transaction)?;
     insert_event(transaction, seq, &event)?;
     let deleted = transaction.execute(

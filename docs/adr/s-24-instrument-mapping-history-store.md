@@ -106,7 +106,7 @@ S-24는 D-55의 `UserIdentityConfirmation` 봉인 경계와 맞물려 있으므�
 
 ## 기존 테스트 변경 (기계적 고정 개수 갱신)
 
-마이그레이션 `0009` 추가에 따라 마이그레이션 원장 개수와 `sqlite_master` 스키마 객체 개수를 고정 상수로 단언하는 기존 테스트 2건과 미래 마이그레이션 상수 2줄만 기계적으로 갱신했다(`crates/adapters/store-sqlite/src/instrument_mapping_tests.rs`는 0줄 변경, 기존 단언 삭제·약화 0건).
+마이그레이션 `0009` 추가에 따라 마이그레이션 원장 개수와 `sqlite_master` 스키마 객체 개수를 고정 상수로 단언하는 기존 테스트 2건(`migration_tests.rs` `8→9`, `tests.rs` `55→64`), 미래 마이그레이션 픽스처 상수 2줄(`sql/holdings_tests.rs` `GAP`/`FUTURE` `9→10`), 그리고 S-21 테스트 6건이 공유하는 `0009` 무제약 테이블·트리거 복구 픽스처 SQL 2상수(`sql/instrument_mapping_tests.rs` `RECREATE_UNCONSTRAINED_STRICT`·`RESTORE_GUARD_TRIGGERS`, `0009` 트리거 정의와 바이트 단위 일치)를 기계적으로 동기화했다(`crates/adapters/store-sqlite/src/instrument_mapping_tests.rs` 본체는 0줄 변경, 기존 단언 삭제·약화 0건).
 
 > 참고: 메인 지시대로 아래 2건의 승인 행은 구조 보존 규칙(`for`·`?`·클로저) 때문에 `approvals.toml`로 해소되지 않을 수 있으며, 메인이 병합 커밋에서 정확히 이 2건만 지적되는지 확인한다.
 
