@@ -158,7 +158,71 @@ impl fmt::Debug for QuoteInstrument {
         f.debug_struct("QuoteInstrument").finish_non_exhaustive()
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedQuoteInstrument {
+    pub market: crate::KnownMarket,
+    pub currency: Currency,
+    pub symbol: Symbol,
+    pub instrument_id: InstrumentId,
+}
 impl QuoteInstrument {
+    #[must_use]
+    pub fn saved_state(&self) -> SavedQuoteInstrument {
+        SavedQuoteInstrument {
+            market: self.market,
+            currency: self.currency,
+            symbol: self.symbol.clone(),
+            instrument_id: self.instrument_id.clone(),
+        }
+    }
+    pub fn restore_from_saved_state(
+        saved: SavedQuoteInstrument,
+    ) -> Result<Self, MasterInstrumentError> {
+        if saved
+            .symbol
+            .as_str()
+            .bytes()
+            .any(|byte| byte.is_ascii_lowercase())
+        {
+            return Err(MasterInstrumentError::SymbolMismatch);
+        }
+        match saved.market {
+            crate::KnownMarket::Kr => {
+                if saved.currency != Currency::Krw {
+                    return Err(MasterInstrumentError::CurrencyMismatch);
+                }
+                if saved.symbol.as_str().len() != 6
+                    || !saved
+                        .symbol
+                        .as_str()
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric())
+                {
+                    return Err(MasterInstrumentError::SymbolMismatch);
+                }
+            }
+            crate::KnownMarket::Us => {
+                if saved.currency != Currency::Usd {
+                    return Err(MasterInstrumentError::CurrencyMismatch);
+                }
+                if !saved
+                    .symbol
+                    .as_str()
+                    .bytes()
+                    .next()
+                    .is_some_and(|byte| byte.is_ascii_alphabetic())
+                {
+                    return Err(MasterInstrumentError::SymbolMismatch);
+                }
+            }
+        }
+        Ok(Self {
+            market: saved.market,
+            currency: saved.currency,
+            symbol: saved.symbol,
+            instrument_id: saved.instrument_id,
+        })
+    }
     #[must_use]
     pub const fn market(&self) -> &crate::KnownMarket {
         &self.market

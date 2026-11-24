@@ -394,8 +394,8 @@ pub use transaction_schedule::{
 
 mod submit_estimate;
 pub use submit_estimate::{
-    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository, SubmitEstimate,
-    SubmitEstimateError,
+    EstimateCommitOutcome, EstimateSubmissionInput, EstimateSubmissionRepository,
+    EstimateTaskRepository, SubmitEstimate, SubmitEstimateError,
 };
 
 mod transaction_observation;
@@ -453,8 +453,22 @@ pub use source_status::{
     SourceStatusError, SourceStatusReport, SourceStatusRepository,
 };
 
+mod collection_schedule;
+pub use collection_schedule::{
+    CatchUpItems, CollectionCadence, CollectionConditions, CollectionInputs, CollectionMinutes,
+    CollectionMinutesError, CollectionPhase, CollectionPlan, CollectionScheduler, CollectionTarget,
+    DartCallCount, DartDailyUsage, DartKeyState, DartQuotaLevel, FomcDay, PlanCollectionSchedule,
+    PlannedCollection, StartupCatchUp, collection_cadence, collection_phase, startup_catch_up,
+};
+
+mod record_wake_trigger;
+pub use record_wake_trigger::{
+    RecordWakeTriggers, TriggerWrite, WakeTriggerOutcome, WakeTriggerRepository,
+};
+
 mod web_search_guard;
 pub use web_search_guard::{UserDirectWebSearchQuery, WebSearchGuard, WebSearchGuardError};
+
 mod order_gate;
 pub use order_gate::{
     IntentRecheckOutcome, OrderGateCollectedFacts, OrderGateError, OrderGateOutcome,

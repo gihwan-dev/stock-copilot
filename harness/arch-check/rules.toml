@@ -433,7 +433,7 @@ through = "serde_json"
 reason = "T-16: serde_json → serde(derive) → serde_derive의 절차 매크로 의존. 주문 생성 본문을 JSON으로 쓰고 응답을 읽는 데 쓴다 (ADR 0016)"
 
 [[external-location-exception]]
-crates = ["broker-toss-schema", "broker-toss", "toss-smoke"]
+crates = ["broker-toss-schema", "broker-toss", "broker-toss-trade", "toss-smoke"]
 externals = ["syn", "proc-macro2"]
 through = "serde_json"
 reason = "T-01/T-12: 생성 타입·응답 형태 검증·선택적 녹화용 serde_json의 작업 공간 serde derive 기능 통합 경로"
