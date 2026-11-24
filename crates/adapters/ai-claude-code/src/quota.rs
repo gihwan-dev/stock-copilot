@@ -150,6 +150,18 @@ impl QuotaTracker {
         self.policy
     }
 
+    pub fn update_policy(&mut self, policy: QuotaPolicy, now: Timestamp) -> QuotaTransition {
+        let before = self.budget_summary_raw();
+        let _refreshed = self.refresh(now);
+        self.policy = policy;
+        let after = self.budget_summary_raw();
+        if before == after {
+            QuotaTransition::Unchanged
+        } else {
+            QuotaTransition::Changed
+        }
+    }
+
     pub fn refresh(&mut self, now: Timestamp) -> QuotaTransition {
         let before = self.budget_summary_raw();
         if let QuotaState::Waiting { resumes_at, .. } = self.state

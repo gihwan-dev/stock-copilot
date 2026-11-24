@@ -7,6 +7,7 @@ mod isolation;
 mod parse;
 mod process;
 mod provider;
+mod queue;
 mod quota;
 
 pub use chat_session::{
@@ -33,6 +34,11 @@ pub use isolation::IsolationExpectation;
 pub use process::{MAX_STREAM_LINE_BYTES, ProcessSignal, send_signal_to_process_group};
 pub use provider::{
     ClaudeCodeConfig, ClaudeCodeProvider, ClaudeEventStream, ModelDefaults, PREFLIGHT_MESSAGE,
+};
+pub use queue::{
+    AiRunnerQueue, ChatSlotAdmission, ChatSlotGrant, QueueSnapshot, RunCredentials,
+    ScheduledReleaseOutcome, ScheduledResumeKind, ScheduledSlotAdmission, ScheduledSlotGrant,
+    generate_run_token, issue_unique_run_id,
 };
 pub use quota::{
     BudgetSummaryKind, DEFAULT_SCHEDULED_CAP_PERCENT, DEFAULT_UNKNOWN_RESET_COOLDOWN_SECONDS,
