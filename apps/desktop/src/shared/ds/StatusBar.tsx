@@ -12,10 +12,10 @@ type Props = {
 };
 const styles = {
   warning:
-    "flex items-center gap-space-2 min-h-control-height py-space-1 px-space-6 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
+    "flex flex-wrap items-center gap-space-2 min-h-control-height py-space-1 px-space-4 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
   error:
-    "flex items-center gap-space-2 min-h-control-height py-space-1 px-space-6 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
-  info: "flex items-center gap-space-2 min-h-control-height py-space-1 px-space-6 text-size-md leading-md bg-surface-sunken text-ink border-b-hairline border-solid border-line",
+    "flex flex-wrap items-center gap-space-2 min-h-control-height py-space-1 px-space-4 text-size-md leading-md bg-alert-soft text-ink border-b-hairline border-solid border-alert",
+  info: "flex flex-wrap items-center gap-space-2 min-h-control-height py-space-1 px-space-4 text-size-md leading-md bg-surface-sunken text-ink border-b-hairline border-solid border-line",
 } as const;
 const statusIcon = (tone: Tone): IconName => {
   switch (tone) {
@@ -38,7 +38,11 @@ const statusAction = (action: Props["action"]): ReactElement | null =>
     </Button>
   );
 const statusIndicator = (tone: Tone): ReactElement => (
-  <span className={tone === "info" ? "text-ink-muted" : "text-alert"}>
+  <span
+    className={
+      tone === "info" ? "flex-none text-ink-muted" : "flex-none text-alert"
+    }
+  >
     <Icon name={statusIcon(tone)} />
   </span>
 );
@@ -54,7 +58,7 @@ export const StatusBar = (props: Props): ReactElement => {
     <div className="flex-none">
       <div className={present ? styles[tone] : emptyStyles[tone]}>
         {present ? statusIndicator(tone) : null}
-        <div className="flex-1 status-sentence">
+        <div className="flex-1 status-sentence wrap-slot">
           <div role="status" aria-atomic="true">
             {tone === "error" ? undefined : props.children}
           </div>

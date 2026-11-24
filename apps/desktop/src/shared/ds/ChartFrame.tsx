@@ -5,6 +5,7 @@ import { chartNavigation } from "../platform/input";
 import { EmptyState } from "./EmptyState";
 import { ChartTable, ChartAxes } from "./ChartTable";
 import { ChartNumber, chartNumberText } from "./Numbers";
+import { ScrollArea } from "./ScrollArea";
 type Props = ChartProps & { readonly geometry: ChartGeometry };
 type Ready = ChartProps & {
   readonly geometry: Extract<ChartGeometry, { readonly kind: "ready" }>;
@@ -103,7 +104,7 @@ const ChartNavigation = (props: NavigationProps): ReactElement => {
       <button
         type="button"
         aria-describedby={id}
-        className="text-body-sm text-primary rounded-sm px-space-2 py-space-1 focus-visible:outline-focus"
+        className="text-body-sm text-primary rounded-sm px-space-2 py-space-1 focus-visible:outline-focus status-sentence max-w-full text-left"
         onFocus={(): void => {
           props.onSelect(props.selected ?? props.marks.at(0));
         }}
@@ -119,15 +120,17 @@ const ChartNavigation = (props: NavigationProps): ReactElement => {
         {text("ds.chartSeparator", "ko")}
         {props.label}
       </button>
-      <p id={id} role="status" className="text-body-sm status-sentence">
-        {props.selected === undefined ? null : (
-          <>
-            {props.selected.label}
-            {text("ds.chartSeparator", "ko")}
-            <ChartNumber value={props.selected.value} />
-          </>
-        )}
-      </p>
+      <ScrollArea direction="horizontal">
+        <p id={id} role="status" className="text-body-sm w-max">
+          {props.selected === undefined ? null : (
+            <>
+              {props.selected.label}
+              {text("ds.chartSeparator", "ko")}
+              <ChartNumber value={props.selected.value} />
+            </>
+          )}
+        </p>
+      </ScrollArea>
     </>
   );
 };

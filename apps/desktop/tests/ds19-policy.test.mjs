@@ -288,8 +288,9 @@ test("DS19 component dimension exceptions equal the approved exact file token pa
     ["src/shared/ds/Card.tsx", ["min-h-toolbar-height"]],
     [
       "src/shared/ds/Icon.tsx",
-      ["size-icon-sm", "size-icon-md", "size-icon-lg"],
+      ["size-icon-sm", "size-icon-md", "size-icon-lg", "size-space-3"],
     ],
+    ["src/shared/ds/ScrollArea.tsx", ["scroll-track-x", "scroll-track-y"]],
     [
       "src/shared/ds/Skeleton.tsx",
       [

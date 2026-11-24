@@ -46,7 +46,11 @@ export const LENGTH_EXCEPTIONS = [
   [PROSE_FILE, ["markdown-content", "max-w-prose-max"]],
   ["src/shared/ds/EmptyState.tsx", ["max-w-dialog-width"]],
   ["src/shared/ds/Card.tsx", ["min-h-toolbar-height"]],
-  ["src/shared/ds/Icon.tsx", ["size-icon-sm", "size-icon-md", "size-icon-lg"]],
+  [
+    "src/shared/ds/Icon.tsx",
+    ["size-icon-sm", "size-icon-md", "size-icon-lg", "size-space-3"],
+  ],
+  ["src/shared/ds/ScrollArea.tsx", ["scroll-track-x", "scroll-track-y"]],
   [
     "src/shared/ds/Skeleton.tsx",
     [

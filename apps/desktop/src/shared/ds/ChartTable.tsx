@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import type { ChartProps, ChartPoint, ChartAxisLabels } from "./chart-types";
 import { ChartNumber } from "./Numbers";
+import { ScrollArea } from "./ScrollArea";
 import { text } from "../lib";
 type Props = ChartProps & {
   readonly onHighlight: (point: ChartPoint | undefined) => void;
@@ -45,7 +46,7 @@ export const ChartTable = (props: Props): ReactElement => {
   return props.layout === "trend" ? (
     <div className="sr-only">{content}</div>
   ) : (
-    content
+    <ScrollArea direction="horizontal">{content}</ScrollArea>
   );
 };
 const classes = {
@@ -67,16 +68,20 @@ export const ChartAxes = (props: {
       </span>
     </div>
     <div className="flex flex-col @content-medium:flex-row justify-between gap-space-2">
-      <span className="text-caption text-ink-muted status-sentence">
-        {text("ds.chartMinimum", "ko")}
-        {text("ds.chartSeparator", "ko")}
-        <ChartNumber value={props.axes.minimum} />
-      </span>
-      <span className="text-caption text-ink-muted status-sentence">
-        {text("ds.chartMaximum", "ko")}
-        {text("ds.chartSeparator", "ko")}
-        <ChartNumber value={props.axes.maximum} />
-      </span>
+      <ScrollArea direction="horizontal">
+        <span className="block w-max text-caption text-ink-muted">
+          {text("ds.chartMinimum", "ko")}
+          {text("ds.chartSeparator", "ko")}
+          <ChartNumber value={props.axes.minimum} />
+        </span>
+      </ScrollArea>
+      <ScrollArea direction="horizontal">
+        <span className="block w-max text-caption text-ink-muted">
+          {text("ds.chartMaximum", "ko")}
+          {text("ds.chartSeparator", "ko")}
+          <ChartNumber value={props.axes.maximum} />
+        </span>
+      </ScrollArea>
     </div>
   </div>
 );
