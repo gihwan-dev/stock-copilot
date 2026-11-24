@@ -237,6 +237,10 @@ pub enum UiEvent {
     BriefingFinished(UiBriefingId),
 }
 
+fn proposal_text(id: &domain::ProposalId) -> String {
+    id.as_client_order_id().as_str().to_owned()
+}
+
 impl From<DomainEvent> for UiEvent {
     fn from(value: DomainEvent) -> Self {
         match value {
@@ -248,21 +252,11 @@ impl From<DomainEvent> for UiEvent {
             DomainEvent::NewsActivityIncreased(id) => {
                 Self::NewsActivityIncreased(id.as_str().to_owned())
             }
-            DomainEvent::ProposalCreated(id) => {
-                Self::ProposalCreated(id.as_client_order_id().as_str().to_owned())
-            }
-            DomainEvent::ProposalExpired(id) => {
-                Self::ProposalExpired(id.as_client_order_id().as_str().to_owned())
-            }
-            DomainEvent::ProposalApproved(id) => {
-                Self::ProposalApproved(id.as_client_order_id().as_str().to_owned())
-            }
-            DomainEvent::ProposalRejected(id) => {
-                Self::ProposalRejected(id.as_client_order_id().as_str().to_owned())
-            }
-            DomainEvent::ProposalSkipped(id) => {
-                Self::ProposalSkipped(id.as_client_order_id().as_str().to_owned())
-            }
+            DomainEvent::ProposalCreated(id) => Self::ProposalCreated(proposal_text(&id)),
+            DomainEvent::ProposalExpired(id) => Self::ProposalExpired(proposal_text(&id)),
+            DomainEvent::ProposalApproved(id) => Self::ProposalApproved(proposal_text(&id)),
+            DomainEvent::ProposalRejected(id) => Self::ProposalRejected(proposal_text(&id)),
+            DomainEvent::ProposalSkipped(id) => Self::ProposalSkipped(proposal_text(&id)),
             DomainEvent::OrderSubmitted(id) => Self::OrderSubmitted(id.as_str().to_owned()),
             DomainEvent::OrderOutcomeUnknown(id) => {
                 Self::OrderOutcomeUnknown(id.as_str().to_owned())
