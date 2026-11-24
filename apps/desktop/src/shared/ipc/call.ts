@@ -1,16 +1,12 @@
-import { err, ok, type ExternalUrl, type Result } from "../lib";
+import { err, type ExternalUrl, type Result } from "../lib";
 import { commands } from "./bindings";
 import {
-  appVersionSchema,
-  commandErrorSchema,
-  openExternalResultSchema,
+  settleAppVersion,
+  settleOpenExternal,
   type AppVersion,
-  type CommandError,
+  type IpcFailure,
   type OpenExternalResult,
 } from "./schema";
-import { err, type Result } from "../lib";
-import { commands } from "./bindings";
-import { settleAppVersion, type AppVersion, type IpcFailure } from "./schema";
 import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
@@ -37,31 +33,24 @@ export const appVersion = (): Promise<Result<AppVersion, IpcFailure>> => {
       timer.cancel();
       return settleAppVersion(outcome);
     })
-    .catch((): Result<AppVersion, IpcFailure> => err(frameworkFailure));
+    .catch((): Result<AppVersion, IpcFailure> => {
+      timer.cancel();
+      return err(frameworkFailure);
+    });
+  return Promise.race([request, timer.promise]);
+};
 
 export const openExternal = (
   url: ExternalUrl,
-): Promise<Result<OpenExternalResult, IpcFailure>> =>
-  commands
+): Promise<Result<OpenExternalResult, IpcFailure>> => {
+  const timer = createTimeout<OpenExternalResult>();
+  const request = commands
     .openExternal({ url })
     .then((outcome): Result<OpenExternalResult, IpcFailure> => {
-      switch (outcome.status) {
-        case "ok": {
-          const parsed = openExternalResultSchema.safeParse(outcome.data);
-          return parsed.success
-            ? ok(parsed.data)
-            : err({ kind: "invalid-response" });
-        }
-        case "error": {
-          const parsed = commandErrorSchema.safeParse(outcome.error);
-          return parsed.success
-            ? err({ kind: "command", error: parsed.data })
-            : err(frameworkFailure);
-        }
-      }
+      timer.cancel();
+      return settleOpenExternal(outcome);
     })
-    .catch((): Result<OpenExternalResult, IpcFailure> => err(frameworkFailure));
-    .catch((): Result<AppVersion, IpcFailure> => {
+    .catch((): Result<OpenExternalResult, IpcFailure> => {
       timer.cancel();
       return err(frameworkFailure);
     });
