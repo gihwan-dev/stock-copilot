@@ -11,6 +11,11 @@ export const queryKeys = {
   settings: ["settings"] as const,
   selfCheck: ["self-check"] as const,
   status: ["status"] as const,
+  signals: ["signals"] as const,
+  scorecard: ["scorecard"] as const,
+  instruments: ["instruments"] as const,
+  briefings: ["briefings"] as const,
+  thesis: ["thesis"] as const,
 } as const;
 
 export const screenKeys = {
@@ -19,6 +24,10 @@ export const screenKeys = {
   transactions: [...queryKeys.transactions, "view"] as const,
   selfCheck: [...queryKeys.selfCheck, "view"] as const,
   status: [...queryKeys.status, "view"] as const,
+  signals: [...queryKeys.signals, "view"] as const,
+  scorecard: [...queryKeys.scorecard, "view"] as const,
+  instruments: [...queryKeys.instruments, "view"] as const,
+  briefings: [...queryKeys.briefings, "view"] as const,
 } as const;
 
 export const settingsKeys = {
