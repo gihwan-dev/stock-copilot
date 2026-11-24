@@ -67,3 +67,13 @@ sha256 = "dc1710434598326318541fc04ea42be7834b36873d69118c58735a7925b0151f"
 number = 14
 file = "0014_settings.sql"
 sha256 = "98463e1d7b3b6a7f0c02daf120e1151669593c44316a95c9cb586e44f6320df1"
+
+[[migration]]
+number = 15
+file = "0015_order_rate_limit.sql"
+sha256 = "c60f5c315721cf06d14f7eea7236f43258d6ec3a5e4dc405087b5db30104f95d"
+
+[[migration]]
+number = 16
+file = "0016_source_and_spec_status.sql"
+sha256 = "503e4da9ffd360ed8c23721ea4f616157cd2e9022c7dcc792d0e764f08abce73"
