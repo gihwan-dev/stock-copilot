@@ -421,13 +421,13 @@ crates = ["typify", "typify-impl"]
 allowed-in = ["xtask"]
 
 [[external-location-exception]]
-crates = ["broker-toss-schema", "broker-toss"]
+crates = ["broker-toss-schema", "broker-toss", "broker-toss-trade"]
 externals = ["syn", "proc-macro2"]
 through = "serde"
 reason = "T-01 생성 타입 및 왕복 테스트의 serde derive 절차 매크로"
 
 [[external-location-exception]]
-crates = ["broker-toss-schema", "broker-toss", "toss-smoke"]
+crates = ["broker-toss-schema", "broker-toss", "broker-toss-trade", "toss-smoke"]
 externals = ["syn", "proc-macro2"]
 through = "serde_json"
 reason = "T-01/T-12: 생성 타입·응답 형태 검증·선택적 녹화용 serde_json의 작업 공간 serde derive 기능 통합 경로"
@@ -467,7 +467,7 @@ through = "rusqlite"
 reason = "S-01: rusqlite → bitflags → serde_core의 작업 공간 serde derive 기능 통합으로 보이는 절차 매크로 경로"
 
 [[external-location-exception]]
-crates = ["broker-toss", "toss-smoke"]
+crates = ["broker-toss", "broker-toss-trade", "toss-smoke"]
 externals = ["socket2", "syn", "proc-macro2"]
 through = "tokio"
 reason = "T-18/T-12: tokio 런타임의 socket2 및 작업 공간 tokio-macros 기능 통합으로 생기는 syn/proc-macro2 경로"

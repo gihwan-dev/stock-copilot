@@ -11,16 +11,18 @@ pub struct TossEndpoint {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EndpointMode {
+pub enum EndpointMode {
     Production,
     Loopback,
 }
 
 impl TossEndpoint {
-    pub(crate) fn origin(&self) -> &str {
+    #[must_use]
+    pub fn origin(&self) -> &str {
         &self.origin
     }
-    pub(crate) const fn mode(&self) -> EndpointMode {
+    #[must_use]
+    pub const fn mode(&self) -> EndpointMode {
         self.mode
     }
     #[must_use]

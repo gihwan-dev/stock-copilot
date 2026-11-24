@@ -360,39 +360,19 @@ test("the post-agent context reports the record and treats a missing one as unch
   );
 });
 
-test("top-level Claude linked sessions are read-only reviewers regardless of input claims", async () => {
+test("top-level Claude linked sessions keep the role the hook input gives", async () => {
   const { claudeSessionInput } =
     await import("../../../.claude/hooks/lib/session-role.mjs");
-  const { editFindings } =
-    await import("../../../.claude/hooks/lib/edit-guard.mjs");
-  const { orchestrationFindings } =
-    await import("../../../.claude/hooks/lib/orchestration.mjs");
-  const fixture = createFixture();
-  try {
-    const raw = {
-      cwd: fixture.root,
-      agent_type: "implementer",
-      tool_input: { file_path: join(fixture.root, "docs/notes.md") },
-    };
-    const actor = claudeSessionInput(raw, fixture.worktree);
-    assert.equal(actor.agent_type, "adversarial-reviewer");
-    assert.equal(editFindings(actor, {}).at(0).rule, "role-without-edits");
-    assert.equal(
-      orchestrationFindings(
-        { ...actor, tool_name: "mcp__t3_code__delegate_task" },
-        {},
-        {},
-      ).length,
-      1,
-    );
-    assert.deepEqual(claudeSessionInput({}, fixture.root), {});
-    assert.equal(claudeSessionInput({}, fixture.outside).agent_type, "unknown");
-  } finally {
-    rmSync(fixture.base, { recursive: true, force: true });
-  }
+  const raw = {
+    cwd: "/x",
+    agent_type: "implementer",
+    tool_input: { file_path: "/x/docs/notes.md" },
+  };
+  assert.deepEqual(claudeSessionInput(raw), raw);
+  assert.deepEqual(claudeSessionInput({}), {});
 });
 
-test("real Claude guard entries deny linked reviewer writes and nested delegation", () => {
+test("real Claude guard entries treat linked top-level sessions as main", () => {
   const fixture = createFixture();
   try {
     cpSync(
@@ -405,6 +385,10 @@ test("real Claude guard entries deny linked reviewer writes and nested delegatio
         join(repoRoot, "harness/claude-hooks", file),
         join(fixture.worktree, "harness/claude-hooks", file),
       );
+    cpSync(
+      join(repoRoot, "harness/agent-writable.txt"),
+      join(fixture.worktree, "harness/agent-writable.txt"),
+    );
     const invoke = (script, tool_input, tool_name) => {
       const result = spawnSync(
         process.execPath,
@@ -419,29 +403,27 @@ test("real Claude guard entries deny linked reviewer writes and nested delegatio
         },
       );
       assert.equal(result.status, 0, result.stderr);
-      return JSON.parse(result.stdout).hookSpecificOutput;
+      return result.stdout === ""
+        ? {}
+        : JSON.parse(result.stdout).hookSpecificOutput;
     };
-    assert.match(
+    assert.equal(
       invoke(
         "guard-edit.mjs",
         { file_path: join(fixture.root, "docs/notes.md") },
         "Write",
-      ).permissionDecisionReason,
-      /role-without-edits/u,
+      ).permissionDecision,
+      undefined,
     );
     assert.equal(
       invoke("guard-bash.mjs", { command: "git push origin HEAD" }, "Bash")
         .permissionDecision,
-      "deny",
+      undefined,
     );
-    assert.match(
+    assert.doesNotMatch(
       invoke("guard-orchestration.mjs", {}, "mcp__t3_code__delegate_task")
         .permissionDecisionReason,
       /서브에이전트는 위임하지 않는다/u,
-    );
-    assert.equal(
-      readFileSync(join(fixture.root, "docs/notes.md"), "utf8"),
-      "fixture\n",
     );
   } finally {
     rmSync(fixture.base, { recursive: true, force: true });
