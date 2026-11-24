@@ -1,3 +1,4 @@
+use src_tauri::ipc::open_external::ExternalLinkRuntime;
 use src_tauri::platform::notifier::{
     FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
 };
@@ -59,21 +60,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
-    run_app(
-        build_app(
-            tauri::Builder::default().manage(
-                src_tauri::ipc::open_external::ExternalLinkRuntime::new(
-                    Arc::new(Unavailable),
-                    Arc::new(Unavailable),
-                ),
-            ),
-            ports,
-            context,
-        )?,
-        |handle, code| handle.exit(code.as_i32()),
-    );
-    Ok(())
-    let app = build_app(tauri::Builder::default(), ports, context)?;
+    let app = build_app(
+        tauri::Builder::default().manage(ExternalLinkRuntime::new(
+            Arc::new(Unavailable),
+            Arc::new(Unavailable),
+        )),
+        ports,
+        context,
+    )?;
     let socket_path = SocketPath::try_new(
         tauri::Manager::path(&app)
             .app_data_dir()?
@@ -293,6 +287,9 @@ mod tests {
                 .is_none(),
             "원격 출처 거부"
         );
+    }
+
+    #[test]
     fn composition_root_constructs_sources_client_without_broker_credentials_or_hosts() {
         let clock = std::sync::Arc::new(testkit_ports::SteppedClock::new(
             broker_toss::TossTimestamp::try_from("2026-11-16T00:00:00Z")

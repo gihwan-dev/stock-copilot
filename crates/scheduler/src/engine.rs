@@ -91,7 +91,8 @@ impl EventSubscriber for SchedulerEventSubscriber {
             | DomainEvent::AccountSelectionChanged
             | DomainEvent::StoredDataChanged
             | DomainEvent::FxRateUpdated(_)
-            | DomainEvent::DisclosureTriggerRecorded(_) => Ok(()),
+            | DomainEvent::DisclosureTriggerRecorded(_)
+            | DomainEvent::SourceStatusChanged(_) => Ok(()),
         }
     }
 }
