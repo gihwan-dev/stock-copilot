@@ -1,0 +1,3 @@
+pub(crate) const CREATE: &str = "CREATE TABLE settings (\n    name TEXT PRIMARY KEY CHECK (name IN ('investor_profile', 'risk_settings', 'toss_spec_hash')),\n    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),\n    payload TEXT NOT NULL\n) STRICT;\nCREATE TRIGGER settings_no_delete BEFORE DELETE ON settings BEGIN SELECT RAISE(ABORT, 'settings are replaced, not deleted'); END;\n";
+pub(crate) const FIND: &str = "SELECT schema_version, payload FROM settings WHERE name = ?1";
+pub(crate) const UPSERT: &str = "INSERT INTO settings(name, schema_version, payload) VALUES (?1, ?2, ?3) ON CONFLICT(name) DO UPDATE SET schema_version = excluded.schema_version, payload = excluded.payload";

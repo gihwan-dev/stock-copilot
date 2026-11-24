@@ -8,16 +8,17 @@ use application::{
 };
 use domain::{
     AccountId, BrokerAccountRows, BrokerOrder, BrokerOrderId, BrokerOrderSet, BuyingPower,
-    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, ClosedOrderSet,
-    CommissionRateFact, CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate,
-    FxRateKind, IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
+    CalendarDate, Calibration, CalibrationKey, Candle, CandlePeriod, CommissionRateFact,
+    CreditTrade, Currency, EstimateOutcome, FlowInterval, FxPair, FxRate, FxRateKind,
+    IndicatorCode, InstrumentId, InstrumentMaster, InvestorFlow, InvestorProfile,
     InvestorTradingRankings, KnownMarket, MarketCalendar, MarketIndicatorCandle,
     MarketIndicatorQuote, NewsItem, OrderFxRates, Orderbook, Portfolio, PriceAdjustment,
-    PriceLimits, ProgramTrade, ProposalId, Quote, QuoteInstrument, RankingLimit,
-    ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition, SectorDetail,
-    SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact, SettledRowSet,
-    SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking, StockWarnings,
-    Symbol, SyncRecord, TimeInterval, Timestamp, TransactionFilter, ValuationSnapshot,
+    PriceLimits, ProgramTrade, ProposalId, ProvenClosedOrderSet, Quote, QuoteInstrument,
+    RankingLimit, ResolvedOrderInstrument, RiskSettings, SectorCatalog, SectorComposition,
+    SectorDetail, SectorEtfs, SectorId, SectorRanking, SecuritiesLending, SellableQuantityFact,
+    SettledRowSet, SettlementWindow, ShortSelling, SignalSubmission, SignalTaskKey, StockRanking,
+    StockWarnings, Symbol, SyncRecord, TimeInterval, Timestamp, TransactionFilter,
+    ValuationSnapshot,
 };
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrokerReadCall {
@@ -209,7 +210,7 @@ impl BrokerRead for ScriptedBrokerRead {
         &self,
         account: &AccountId,
         evaluation_window: TimeInterval,
-    ) -> Result<ClosedOrderSet, PortError> {
+    ) -> Result<ProvenClosedOrderSet, PortError> {
         self.calls.write().push(BrokerReadCall::ClosedOrders(
             account.clone(),
             evaluation_window,
@@ -806,7 +807,7 @@ pub type ScriptedBrokerReadBuyingPowerScript =
 pub type ScriptedBrokerReadOpenOrdersScript =
     Script<(AccountId,), Result<BrokerOrderSet, PortError>>;
 pub type ScriptedBrokerReadClosedOrdersScript =
-    Script<(AccountId, TimeInterval), Result<ClosedOrderSet, PortError>>;
+    Script<(AccountId, TimeInterval), Result<ProvenClosedOrderSet, PortError>>;
 pub type ScriptedBrokerReadOrderScript =
     Script<(AccountId, BrokerOrderId), Result<BrokerOrder, PortError>>;
 pub type ScriptedBrokerReadStockWarningsScript =

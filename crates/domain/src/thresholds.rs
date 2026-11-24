@@ -59,6 +59,11 @@ pub enum SignalCondition {
     Met,
     Unmet,
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedCostEligibleTask {
+    pub task: crate::SavedEstimateTask,
+    pub cost_delta: Ratio,
+}
 #[derive(Clone, PartialEq, Eq)]
 pub struct CostEligibleTask {
     task: EstimateTask,
@@ -78,6 +83,28 @@ impl CostEligibleTask {
             ThresholdNumber::new(cost.rate().as_decimal()),
         )?;
         Ok(Self { task, delta })
+    }
+    #[must_use]
+    pub fn saved_state(&self) -> SavedCostEligibleTask {
+        SavedCostEligibleTask {
+            task: self.task.saved_state(),
+            cost_delta: Ratio::new(self.delta.as_decimal()),
+        }
+    }
+    pub fn restore_from_saved_state(saved: SavedCostEligibleTask) -> Result<Self, NoThresholds> {
+        let task = EstimateTask::restore_from_saved_state(saved.task)
+            .map_err(|_error| NoThresholds::NumericalDomain)?;
+        let value = saved.cost_delta.as_decimal();
+        if value < Decimal::ZERO {
+            return Err(NoThresholds::NumericalDomain);
+        }
+        if value > Decimal::new(5, 2) {
+            return Err(NoThresholds::ExcessiveCost);
+        }
+        Ok(Self {
+            task,
+            delta: ThresholdNumber::new(value),
+        })
     }
     #[must_use]
     pub fn task(&self) -> &EstimateTask {

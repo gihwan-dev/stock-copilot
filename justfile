@@ -345,4 +345,4 @@ check-lite: check-node check-pnpm
     "{{just_executable()}}" migration-check
     "{{just_executable()}}" capability-check
     node harness/generated-files/check.mjs
-    env -u STOCK_COPILOT_PROPTEST_CASES cargo nextest run --workspace --locked --exclude xtask
+    env -u STOCK_COPILOT_PROPTEST_CASES cargo nextest run --workspace --locked
