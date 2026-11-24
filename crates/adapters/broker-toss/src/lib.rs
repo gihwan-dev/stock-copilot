@@ -11,8 +11,10 @@ mod endpoint;
 mod http;
 mod request;
 mod token;
-pub use endpoint::TossEndpoint;
-pub use http::{PublicDocsRoute, RawResponse, ResponseHeaders, TossHttpClient, TossHttpError};
+pub use endpoint::{TossEndpoint, TossWsEndpoint};
+pub use http::{
+    PublicDocsRoute, RawResponse, ResponseHeaders, TossHttpClient, TossHttpError, TossWsConnector,
+};
 pub use request::{QueryKey, ReadRequest, ReadRoute, RouteId};
 pub use token::issue_token;
 
@@ -53,4 +55,16 @@ pub use sha256::{sha256_digest, sha256_hex};
 pub use spec_check::{
     PINNED_LAST_MODIFIED, PINNED_NORMALIZED_SPEC_SHA256, PINNED_SPEC_VERSION, TossSpecClient,
     normalized_json_sha256, pinned_spec_baseline,
+};
+mod ws;
+mod ws_frame;
+mod ws_protocol;
+pub use ws::{
+    TossWsClient, TossWsDeps, WsAccountSlotPool, WsClientError, WsConfig, WsDisconnectCause,
+    WsDispatchedEvent, WsReconcileReport, compute_backoff,
+};
+pub use ws_protocol::{
+    MAX_TOPICS_PER_CONNECTION, WsChannel, WsErrorCode, WsOrderEventKind, WsOrderNotice,
+    WsOrderbookTick, WsProtocolError, WsRejectedCode, WsRejectedTopic, WsServerEvent,
+    WsSubscriptionSet, WsTopic, WsTradeTick, decode_server_text,
 };
