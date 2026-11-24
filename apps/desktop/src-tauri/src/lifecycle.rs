@@ -109,7 +109,13 @@ impl Lifecycle {
         let pending = self.work.lock().await.take();
         let hook = self.shutdown_hook.lock().await.take();
         if let Some(work) = pending {
-            *outcome = Some(cleanup::finish_with_hook(work, hook, cleanup::close_database).await);
+            *outcome = Some(match hook {
+                Some(active_hook) => {
+                    cleanup::finish_with_hook(work, Some(active_hook), cleanup::close_database)
+                        .await
+                }
+                None => cleanup::finish(work, cleanup::close_database).await,
+            });
         }
         *self.phase.lock().await = LifecyclePhase::Stopped;
     }

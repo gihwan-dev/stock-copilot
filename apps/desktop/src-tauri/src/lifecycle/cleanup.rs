@@ -4,7 +4,6 @@ use crate::platform::process_cleanup::ShutdownHook;
 use application::SystemPortError;
 use std::sync::Arc;
 
-#[cfg(test)]
 pub(super) async fn finish<Close, Closing>(work: Work, close: Close) -> ShutdownOutcome
 where
     Close: FnOnce(DatabaseState) -> Closing,
