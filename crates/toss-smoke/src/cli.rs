@@ -1,11 +1,16 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-pub const USAGE_TEXT: &str = "\
+use crate::input::NO_ECHO_GUIDE_COMMANDS;
+
+#[must_use]
+pub fn usage_text() -> String {
+    format!(
+        "\
 사용법:
   toss-smoke
   toss-smoke --help
-  toss-smoke check [--record <저장소_밖_파일_경로>] [--lock-file <잠금_파일_경로>] [--local-port <포트>]
+  toss-smoke check [--record <저장소_밖_파일_경로>]
 
 설명:
   인자 없이 실행하면 네트워크와 표준 입력에 닿지 않고 이 안내만 출력하고 종료(0)합니다.
@@ -18,22 +23,14 @@ pub const USAGE_TEXT: &str = "\
   3줄(선택): 앱을 껐습니다  (앱 종료 상태를 잠금 파일로 증명할 수 없을 때 필수)
 
 화면에 되비침 없이 실행하는 예 (zsh/bash):
-printf 'Client ID: ' >&2; IFS= read -rs id; printf '\\n' >&2
-printf 'Client Secret: ' >&2; IFS= read -rs secret; printf '\\n' >&2
-printf '%s\\n%s\\n%s\\n' \"$id\" \"$secret\" '앱을 껐습니다' | cargo run --locked -p toss-smoke -- check; unset id secret
-";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TargetEndpoint {
-    Live,
-    LocalPort(u16),
+{NO_ECHO_GUIDE_COMMANDS}
+"
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckOptions {
-    pub target: TargetEndpoint,
     pub record_path: Option<PathBuf>,
-    pub lock_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,7 +46,6 @@ pub enum CliError {
     MissingValue,
     DuplicateOption,
     UnexpectedArgument,
-    InvalidPort,
     ForbiddenSecretOption,
     NonUtf8Argument,
 }
@@ -63,7 +59,6 @@ impl CliError {
             Self::MissingValue => "선택지에 필요한 값이 비어 있습니다.",
             Self::DuplicateOption => "같은 선택지를 두 번 지정할 수 없습니다.",
             Self::UnexpectedArgument => "허용되지 않은 위치 인자가 있습니다.",
-            Self::InvalidPort => "`--local-port`는 1부터 65535 사이의 정수여야 합니다.",
             Self::ForbiddenSecretOption => {
                 "키·토큰·환경 설정은 명령행 인자로 받지 않습니다. 표준 입력 파이프로만 전달하세요."
             }
@@ -99,17 +94,6 @@ fn is_forbidden_secret_option(token: &str) -> bool {
     SECRET_OPTION_NAMES.contains(&base) || base == "-s" || base == "-t" || base == "-p"
 }
 
-fn parse_port(raw: &OsString) -> Result<u16, CliError> {
-    let text = raw.to_str().ok_or(CliError::NonUtf8Argument)?;
-    let port = text
-        .parse::<u16>()
-        .map_err(|_error| CliError::InvalidPort)?;
-    if port == 0 {
-        return Err(CliError::InvalidPort);
-    }
-    Ok(port)
-}
-
 fn parse_non_empty_path(raw: &OsString) -> Result<PathBuf, CliError> {
     if raw.is_empty() {
         return Err(CliError::MissingValue);
@@ -125,10 +109,7 @@ fn take_next(args: &[OsString], index: &mut usize) -> Result<OsString, CliError>
 }
 
 fn parse_check_options(args: &[OsString]) -> Result<Command, CliError> {
-    let mut target = TargetEndpoint::Live;
-    let mut local_port_seen = PortSlot::Unset;
     let mut record_path: Option<PathBuf> = None;
-    let mut lock_file: Option<PathBuf> = None;
     let mut index = 0_usize;
     while let Some(raw_arg) = args.get(index) {
         let token = raw_arg.to_str().ok_or(CliError::NonUtf8Argument)?;
@@ -146,38 +127,12 @@ fn parse_check_options(args: &[OsString]) -> Result<Command, CliError> {
                 let next_val = take_next(args, &mut index)?;
                 record_path = Some(parse_non_empty_path(&next_val)?);
             }
-            "--lock-file" => {
-                if lock_file.is_some() {
-                    return Err(CliError::DuplicateOption);
-                }
-                let next_val = take_next(args, &mut index)?;
-                lock_file = Some(parse_non_empty_path(&next_val)?);
-            }
-            "--local-port" => {
-                match local_port_seen {
-                    PortSlot::Set => return Err(CliError::DuplicateOption),
-                    PortSlot::Unset => {}
-                }
-                let next_val = take_next(args, &mut index)?;
-                target = TargetEndpoint::LocalPort(parse_port(&next_val)?);
-                local_port_seen = PortSlot::Set;
-            }
             other if other.starts_with('-') => return Err(CliError::UnknownOption),
             _ => return Err(CliError::UnexpectedArgument),
         }
         index = index.saturating_add(1);
     }
-    Ok(Command::Check(CheckOptions {
-        target,
-        record_path,
-        lock_file,
-    }))
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PortSlot {
-    Unset,
-    Set,
+    Ok(Command::Check(CheckOptions { record_path }))
 }
 
 pub fn parse_args(args: &[OsString]) -> Result<Command, CliError> {

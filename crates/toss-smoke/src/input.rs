@@ -5,24 +5,25 @@ use application::SecretValue;
 
 pub const CONFIRM_APP_STOPPED_PHRASE: &str = "앱을 껐습니다";
 
-pub const NO_ECHO_GUIDE_COMMANDS: &str = "\
-printf 'Client ID: ' >&2; IFS= read -rs id; printf '\\n' >&2
-printf 'Client Secret: ' >&2; IFS= read -rs secret; printf '\\n' >&2
-printf '%s\\n%s\\n%s\\n' \"$id\" \"$secret\" '앱을 껐습니다' | cargo run --locked -p toss-smoke -- check; unset id secret";
+pub const NO_ECHO_GUIDE_COMMANDS: &str = "( trap 'unset id sec confirm' EXIT INT TERM; printf 'Client ID: ' >&2 && IFS= read -rs id && printf '\\nClient Secret: ' >&2 && IFS= read -rs sec && printf '\\n앱 종료 확인(앱을 껐습니다): ' >&2 && IFS= read -r confirm && printf '%s\\n%s\\n%s\\n' \"$id\" \"$sec\" \"$confirm\" | cargo run --locked -p toss-smoke -- check )";
 
-pub const NO_ECHO_GUIDE: &str = "\
+#[must_use]
+pub fn no_echo_guide() -> String {
+    format!(
+        "\
 터미널 표준 입력에서는 키를 직접 읽지 않고 중단합니다 (화면 노출 방지).
-화면에 되비침 없이 파이프로 전달하려면 아래 세 줄을 그대로 실행하세요 (zsh/bash):
+화면에 되비침 없이 파이프로 전달하려면 아래 한 줄을 그대로 실행하세요 (zsh/bash):
 
-printf 'Client ID: ' >&2; IFS= read -rs id; printf '\\n' >&2
-printf 'Client Secret: ' >&2; IFS= read -rs secret; printf '\\n' >&2
-printf '%s\\n%s\\n%s\\n' \"$id\" \"$secret\" '앱을 껐습니다' | cargo run --locked -p toss-smoke -- check; unset id secret
+{NO_ECHO_GUIDE_COMMANDS}
 
 안내:
-  - `read -rs`는 화면에 키를 표시하지 않고 셸 기록·환경 변수·프로세스 인자에도 남기지 않습니다.
-  - `printf`는 셸 내장 명령으로 파이프에 전달되며 실행 직후 `unset id secret`으로 지웁니다.
+  - 한 줄 서브셸로 실행되어 macOS bash/zsh 어디에 붙여넣어도 키가 셸 기록·화면에 남지 않습니다.
+  - Ctrl-C로 중간 중단해도 서브셸과 trap이 변수를 지워 현재 셸에 키가 남지 않습니다.
+  - 앱이 꺼진 것을 직접 확인한 뒤 프롬프트에 `앱을 껐습니다`를 입력하세요(잠금 파일로 종료가 증명되면 빈 줄 Enter 가능).
   - 응답 녹화가 필요하면 `check` 뒤에 `--record <저장소_밖_파일_경로>`를 붙이세요.
-";
+"
+    )
+}
 
 const MAX_INPUT_BYTES: usize = 8192;
 const MAX_CLIENT_ID_BYTES: usize = 512;
@@ -85,24 +86,26 @@ pub enum InputError {
 
 impl InputError {
     #[must_use]
-    pub const fn message(self) -> &'static str {
+    pub fn message(self) -> String {
         match self {
-            Self::TerminalStdin => NO_ECHO_GUIDE,
-            Self::ReadFailed => "표준 입력을 읽는 중 입출력 오류가 발생했습니다.",
-            Self::TooLarge => "표준 입력 크기가 허용 상한(8192바이트)을 넘었습니다.",
-            Self::InvalidUtf8 => "표준 입력이 올바른 UTF-8 문자열이 아닙니다.",
-            Self::MissingClientId => "표준 입력 1줄(client_id)이 비어 있습니다.",
-            Self::MissingClientSecret => "표준 입력 2줄(client_secret)이 없습니다.",
-            Self::InvalidClientId => {
-                "표준 입력 1줄(client_id)에 공백·제어 문자·비ASCII 문자가 있거나 길이가 초과되었습니다."
+            Self::TerminalStdin => no_echo_guide(),
+            Self::ReadFailed => String::from("표준 입력을 읽는 중 입출력 오류가 발생했습니다."),
+            Self::TooLarge => String::from("표준 입력 크기가 허용 상한(8192바이트)을 넘었습니다."),
+            Self::InvalidUtf8 => String::from("표준 입력이 올바른 UTF-8 문자열이 아닙니다."),
+            Self::MissingClientId => String::from("표준 입력 1줄(client_id)이 비어 있습니다."),
+            Self::MissingClientSecret => String::from("표준 입력 2줄(client_secret)이 없습니다."),
+            Self::InvalidClientId => String::from(
+                "표준 입력 1줄(client_id)에 공백·제어 문자·비ASCII 문자가 있거나 길이가 초과되었습니다.",
+            ),
+            Self::InvalidClientSecret => String::from(
+                "표준 입력 2줄(client_secret)에 공백·제어 문자·비ASCII 문자가 있거나 길이가 초과되었습니다.",
+            ),
+            Self::InvalidConfirmation => String::from(
+                "표준 입력 3줄의 앱 종료 확인 문구가 정확히 `앱을 껐습니다`와 일치하지 않습니다.",
+            ),
+            Self::UnexpectedExtraInput => {
+                String::from("표준 입력에 예상하지 못한 추가 줄이 있습니다.")
             }
-            Self::InvalidClientSecret => {
-                "표준 입력 2줄(client_secret)에 공백·제어 문자·비ASCII 문자가 있거나 길이가 초과되었습니다."
-            }
-            Self::InvalidConfirmation => {
-                "표준 입력 3줄의 앱 종료 확인 문구가 정확히 `앱을 껐습니다`와 일치하지 않습니다."
-            }
-            Self::UnexpectedExtraInput => "표준 입력에 예상하지 못한 추가 줄이 있습니다.",
         }
     }
 }

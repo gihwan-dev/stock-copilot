@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use application::Clock;
-use broker_toss::{TokioRequestWait, TossEndpoint, TossHttpError};
+use broker_toss::{TokioRequestWait, TossEndpoint};
 use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
 use toss_smoke::RuntimeContext;
-use toss_smoke::cli::{Command, TargetEndpoint, USAGE_TEXT, parse_args};
+use toss_smoke::cli::{Command, parse_args, usage_text};
 use toss_smoke::exit_code::SmokeExitCode;
 use toss_smoke::input::StdinKind;
 use toss_smoke::lock::{APP_DATA_DIR_NAME, LOCK_FILE_NAME};
@@ -82,13 +82,6 @@ impl Clock for SmokeSystemClock {
     }
 }
 
-fn build_endpoint(target: TargetEndpoint) -> Result<TossEndpoint, TossHttpError> {
-    match target {
-        TargetEndpoint::Live => Ok(TossEndpoint::production()),
-        TargetEndpoint::LocalPort(port) => TossEndpoint::local(port),
-    }
-}
-
 fn write_stderr_line(text: &str) {
     let mut stderr = io::stderr().lock();
     match writeln!(stderr, "{text}") {
@@ -101,10 +94,12 @@ fn main() -> ExitCode {
     match parse_args(&args) {
         Ok(Command::Usage) => {
             let mut stdout = io::stdout().lock();
-            match writeln!(stdout, "{}", USAGE_TEXT.trim_end()) {
-                Ok(()) | Err(_) => {}
+            let text = usage_text();
+            if writeln!(stdout, "{}", text.trim_end()).is_ok() {
+                return ExitCode::from(SmokeExitCode::Success.as_u8());
             }
-            return ExitCode::from(SmokeExitCode::Success.as_u8());
+            write_stderr_line("표준 출력에 사용법을 기록하지 못했습니다.");
+            return ExitCode::from(SmokeExitCode::RuntimeError.as_u8());
         }
         Err(error) => {
             write_stderr_line(error.message());
@@ -128,8 +123,7 @@ fn main() -> ExitCode {
     } else {
         StdinKind::NonTerminal
     };
-    let default_lock_path =
-        dirs::data_dir().map(|base| base.join(APP_DATA_DIR_NAME).join(LOCK_FILE_NAME));
+    let lock_path = dirs::data_dir().map(|base| base.join(APP_DATA_DIR_NAME).join(LOCK_FILE_NAME));
     let repo_roots = match std::env::current_dir() {
         Ok(dir) => detect_repo_roots(&dir),
         Err(_) => Vec::new(),
@@ -139,11 +133,11 @@ fn main() -> ExitCode {
         stdin: io::stdin().lock(),
         stdout: io::stdout().lock(),
         stderr: io::stderr().lock(),
-        default_lock_path,
+        lock_path,
         repo_roots,
         clock: Arc::new(clock),
         wait: Arc::new(TokioRequestWait),
-        build_endpoint,
+        endpoint: Some(TossEndpoint::production()),
     };
     let code = runtime.block_on(toss_smoke::execute(&args, &mut context));
     ExitCode::from(code.as_u8())

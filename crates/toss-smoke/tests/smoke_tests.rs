@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
-    use std::fs::{self, OpenOptions};
-    use std::io::{self, Cursor, Read};
+    use std::fs::{self, OpenOptions, Permissions};
+    use std::io::{self, Cursor, Read, Write};
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::pin::Pin;
@@ -15,18 +15,20 @@ mod tests {
     use domain::{Nanosecond, OffsetSeconds, Timestamp, UnixSeconds};
     use serde_json::Value;
     use testkit::{ConnectionObservation, ConnectionProbe, ScriptedHttpServer};
-    use toss_smoke::cli::{CliError, Command, TargetEndpoint, USAGE_TEXT, parse_args};
+    use toss_smoke::cli::{CliError, Command, parse_args, usage_text};
     use toss_smoke::exit_code::SmokeExitCode;
     use toss_smoke::input::{
-        AppStopConfirmation, CONFIRM_APP_STOPPED_PHRASE, InputError, NO_ECHO_GUIDE,
-        NO_ECHO_GUIDE_COMMANDS, StdinKind, read_input,
+        AppStopConfirmation, CONFIRM_APP_STOPPED_PHRASE, InputError, StdinKind, no_echo_guide,
+        read_input,
     };
     use toss_smoke::lock::{
-        DESKTOP_STOPPED_CONTENT, LOCK_FILE_NAME, LockError, LockMode, SMOKE_RUNNING_CONTENT,
-        SMOKE_STOPPED_CONTENT, acquire_token_lock,
+        DESKTOP_RUNNING_CONTENT, DESKTOP_STOPPED_CONTENT, LOCK_FILE_NAME, LockError, LockMode,
+        SMOKE_RUNNING_CONTENT, SMOKE_STOPPED_CONTENT, acquire_token_lock,
     };
     use toss_smoke::record::{RecordError, detect_repo_roots, prepare_recording};
     use toss_smoke::{RuntimeContext, execute};
+
+    const EXPECTED_NO_ECHO_COMMAND: &str = "( trap 'unset id sec confirm' EXIT INT TERM; printf 'Client ID: ' >&2 && IFS= read -rs id && printf '\\nClient Secret: ' >&2 && IFS= read -rs sec && printf '\\n앱 종료 확인(앱을 껐습니다): ' >&2 && IFS= read -r confirm && printf '%s\\n%s\\n%s\\n' \"$id\" \"$sec\" \"$confirm\" | cargo run --locked -p toss-smoke -- check )";
 
     static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
@@ -133,12 +135,15 @@ mod tests {
             .block_on(future)
     }
 
-    fn build_local_only(
-        target: TargetEndpoint,
-    ) -> Result<TossEndpoint, broker_toss::TossHttpError> {
-        match target {
-            TargetEndpoint::Live => Err(broker_toss::TossHttpError::InvalidEndpoint),
-            TargetEndpoint::LocalPort(port) => TossEndpoint::local(port),
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed stdout"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed stdout"))
         }
     }
 
@@ -272,27 +277,26 @@ mod tests {
                 stdin: reader,
                 stdout: &mut stdout,
                 stderr: &mut stderr,
-                default_lock_path: None,
+                lock_path: None,
                 repo_roots: Vec::new(),
                 clock,
                 wait,
-                build_endpoint: build_local_only,
+                endpoint: None,
             };
             let code = run_async(execute(&args, &mut ctx));
             assert_eq!(code, SmokeExitCode::Success);
             assert_eq!(reads.load(Ordering::SeqCst), 0);
-            assert!(
-                String::from_utf8(stdout)
-                    .expect("utf8")
-                    .contains(NO_ECHO_GUIDE_COMMANDS)
-            );
+            let out_text = String::from_utf8(stdout).expect("utf8");
+            assert!(out_text.contains(EXPECTED_NO_ECHO_COMMAND), "{out_text}");
+            assert!(!out_text.contains("--lock-file"), "{out_text}");
+            assert!(!out_text.contains("--local-port"), "{out_text}");
             assert_eq!(stderr.len(), 0);
         }
         assert_eq!(
             probe.observe().expect("probe"),
             ConnectionObservation::NoConnection
         );
-        assert!(USAGE_TEXT.contains(CONFIRM_APP_STOPPED_PHRASE));
+        assert!(usage_text().contains(CONFIRM_APP_STOPPED_PHRASE));
     }
 
     #[test]
@@ -330,11 +334,11 @@ mod tests {
                 stdin: reader,
                 stdout: &mut stdout,
                 stderr: &mut stderr,
-                default_lock_path: None,
+                lock_path: None,
                 repo_roots: Vec::new(),
                 clock,
                 wait,
-                build_endpoint: build_local_only,
+                endpoint: None,
             };
             let code = run_async(execute(&os_args(&bad_args), &mut ctx));
             assert_eq!(code, SmokeExitCode::UsageError);
@@ -346,10 +350,14 @@ mod tests {
     }
 
     #[test]
-    fn cli_rejects_invalid_options_and_accepts_only_safe_check_fields() {
+    fn cli_rejects_invalid_and_test_only_options_and_accepts_only_record() {
         assert_eq!(
-            parse_args(&os_args(&["check", "--local-port", "0"])),
-            Err(CliError::InvalidPort)
+            parse_args(&os_args(&["check", "--local-port", "8080"])),
+            Err(CliError::UnknownOption)
+        );
+        assert_eq!(
+            parse_args(&os_args(&["check", "--lock-file", "/tmp/bypass.lock"])),
+            Err(CliError::UnknownOption)
         );
         assert_eq!(
             parse_args(&os_args(&["check", "--unknown"])),
@@ -374,16 +382,6 @@ mod tests {
             Err(CliError::DuplicateOption)
         );
         assert_eq!(
-            parse_args(&os_args(&[
-                "check",
-                "--local-port",
-                "8080",
-                "--local-port",
-                "8081"
-            ])),
-            Err(CliError::DuplicateOption)
-        );
-        assert_eq!(
             parse_args(&os_args(&["--help", "--client-secret", "SECRET"])),
             Err(CliError::ForbiddenSecretOption)
         );
@@ -398,11 +396,7 @@ mod tests {
 
     fn matches_check_only_safe_fields(command: Command) -> bool {
         match command {
-            Command::Check(opts) => {
-                opts.target == TargetEndpoint::Live
-                    && opts.record_path.is_none()
-                    && opts.lock_file.is_none()
-            }
+            Command::Check(opts) => opts.record_path.is_none(),
             Command::Usage => false,
         }
     }
@@ -418,26 +412,24 @@ mod tests {
             stdin: reader,
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: None,
+            lock_path: None,
             repo_roots: Vec::new(),
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: None,
         };
         let code = run_async(execute(&os_args(&["check"]), &mut ctx));
         assert_eq!(code, SmokeExitCode::TerminalInputRejected);
         assert_eq!(reads.load(Ordering::SeqCst), 0);
         assert_eq!(stdout.len(), 0);
         let err_text = String::from_utf8(stderr).expect("utf8");
-        assert!(err_text.contains(NO_ECHO_GUIDE), "{err_text}");
-        assert!(NO_ECHO_GUIDE.contains(NO_ECHO_GUIDE_COMMANDS));
-        assert!(
-            NO_ECHO_GUIDE.lines().count() <= 20,
-            "guide must fit on one screen"
-        );
-        assert!(NO_ECHO_GUIDE_COMMANDS.contains("IFS= read -rs id"));
-        assert!(NO_ECHO_GUIDE_COMMANDS.contains("IFS= read -rs secret"));
-        assert!(NO_ECHO_GUIDE_COMMANDS.contains("unset id secret"));
+        assert!(err_text.contains(EXPECTED_NO_ECHO_COMMAND), "{err_text}");
+        assert!(!EXPECTED_NO_ECHO_COMMAND.contains('\n'));
+        assert!(!err_text.contains("'앱을 껐습니다' |"), "{err_text}");
+        let guide = no_echo_guide();
+        assert!(guide.contains(EXPECTED_NO_ECHO_COMMAND), "{guide}");
+        assert!(guide.lines().count() <= 20, "guide must fit on one screen");
+        assert!(usage_text().contains(EXPECTED_NO_ECHO_COMMAND));
     }
 
     #[test]
@@ -448,6 +440,14 @@ mod tests {
         assert_eq!(format!("{parsed:?}"), "SmokeInput(<redacted>)");
         assert!(!format!("{parsed:?}").contains("id-123"));
         assert!(!format!("{parsed:?}").contains("sec-456"));
+
+        let mut empty_third = Cursor::new(b"id-123\nsec-456\n\n");
+        let parsed_empty_third =
+            read_input(StdinKind::NonTerminal, &mut empty_third).expect("empty third line");
+        assert_eq!(
+            parsed_empty_third.confirmation(),
+            AppStopConfirmation::NotProvided
+        );
 
         let confirmed_bytes = format!("id-123\nsec-456\n{CONFIRM_APP_STOPPED_PHRASE}\n");
         let parsed_confirmed = read_input(
@@ -752,7 +752,7 @@ mod tests {
         let record_path = dir.path().join("t13-record.json");
         let sentinels = Sentinels::sample();
         let server = ScriptedHttpServer::start(happy_responses(&sentinels)).expect("server");
-        let port_str = server.port().to_string();
+        let port = server.port();
         let stdin_data = format!(
             "{}\n{}\n{}\n",
             sentinels.client_id, sentinels.client_secret, CONFIRM_APP_STOPPED_PHRASE
@@ -765,18 +765,14 @@ mod tests {
             stdin: Cursor::new(stdin_data.into_bytes()),
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: None,
+            lock_path: Some(lock_path.clone()),
             repo_roots: Vec::new(),
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: TossEndpoint::local(port).ok(),
         };
         let args = os_args(&[
             "check",
-            "--local-port",
-            &port_str,
-            "--lock-file",
-            lock_path.to_str().expect("lock path"),
             "--record",
             record_path.to_str().expect("record path"),
         ]);
@@ -802,7 +798,7 @@ mod tests {
         responses: Vec<Vec<u8>>,
     ) -> (SmokeExitCode, String, String) {
         let server = ScriptedHttpServer::start(responses).expect("server");
-        let port_str = server.port().to_string();
+        let port = server.port();
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let (clock, wait) = fake_time();
@@ -811,16 +807,13 @@ mod tests {
             stdin: Cursor::new(b"id-abc\nsec-xyz\n".to_vec()),
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: Some(lock_path.to_path_buf()),
+            lock_path: Some(lock_path.to_path_buf()),
             repo_roots: Vec::new(),
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: TossEndpoint::local(port).ok(),
         };
-        let code = run_async(execute(
-            &os_args(&["check", "--local-port", &port_str]),
-            &mut ctx,
-        ));
+        let code = run_async(execute(&os_args(&["check"]), &mut ctx));
         let wire = String::from_utf8_lossy(&server.finish().expect("finish")).into_owned();
         (code, String::from_utf8(stdout).expect("utf8"), wire)
     }
@@ -959,7 +952,7 @@ mod tests {
         fs::create_dir_all(repo.join(".git")).expect("git");
         let lock_path = stopped_lock_file(&dir);
         let probe = ConnectionProbe::bind().expect("probe");
-        let port_str = probe.port().expect("port").to_string();
+        let port = probe.port().expect("port");
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let (clock, wait) = fake_time();
@@ -968,21 +961,15 @@ mod tests {
             stdin: Cursor::new(b"id-1\nsec-1\n".to_vec()),
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: Some(lock_path),
+            lock_path: Some(lock_path),
             repo_roots: vec![repo.clone()],
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: TossEndpoint::local(port).ok(),
         };
         let inside = repo.join("leak.json");
         let code = run_async(execute(
-            &os_args(&[
-                "check",
-                "--local-port",
-                &port_str,
-                "--record",
-                inside.to_str().expect("str"),
-            ]),
+            &os_args(&["check", "--record", inside.to_str().expect("str")]),
             &mut ctx,
         ));
         assert_eq!(code, SmokeExitCode::RecordPathRejected);
@@ -997,7 +984,7 @@ mod tests {
         let dir = TempDirGuard::new("early-lock");
         let lock_path = stopped_lock_file(&dir);
         let probe = ConnectionProbe::bind().expect("probe");
-        let port_str = probe.port().expect("port").to_string();
+        let port = probe.port().expect("port");
         let held = OpenOptions::new()
             .read(true)
             .write(true)
@@ -1012,16 +999,13 @@ mod tests {
             stdin: Cursor::new(format!("id-1\nsec-1\n{CONFIRM_APP_STOPPED_PHRASE}\n").into_bytes()),
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: Some(lock_path),
+            lock_path: Some(lock_path),
             repo_roots: Vec::new(),
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: TossEndpoint::local(port).ok(),
         };
-        let code = run_async(execute(
-            &os_args(&["check", "--local-port", &port_str]),
-            &mut ctx,
-        ));
+        let code = run_async(execute(&os_args(&["check"]), &mut ctx));
         assert_eq!(code, SmokeExitCode::AppRunning);
         assert_eq!(
             probe.observe().expect("probe"),
@@ -1059,7 +1043,7 @@ mod tests {
         let dir = TempDirGuard::new("lock-edge");
         let lock_path = dir.path().join("app").join(LOCK_FILE_NAME);
         fs::create_dir_all(lock_path.parent().expect("parent")).expect("dir");
-        fs::write(&lock_path, "version=1\nowner=desktop-app\nstate=running\n").expect("crashed");
+        fs::write(&lock_path, DESKTOP_RUNNING_CONTENT).expect("crashed");
         assert_eq!(
             acquire_token_lock(&lock_path, AppStopConfirmation::NotProvided)
                 .expect_err("crashed desktop unconfirmed"),
@@ -1082,9 +1066,45 @@ mod tests {
     }
 
     #[test]
+    fn lock_refuses_unrecognized_existing_file_and_hardlink_without_modification() {
+        let dir = TempDirGuard::new("lock-protect");
+        let victim = dir.path().join("victim.txt");
+        let original = "IMPORTANT USER DATA DO NOT TOUCH\n";
+        fs::write(&victim, original).expect("write victim");
+        fs::set_permissions(&victim, Permissions::from_mode(0o644)).expect("chmod");
+        assert_eq!(
+            acquire_token_lock(&victim, AppStopConfirmation::Confirmed).expect_err("victim"),
+            LockError::UnsafePath
+        );
+        assert_eq!(fs::read_to_string(&victim).expect("read victim"), original);
+        assert_eq!(
+            fs::metadata(&victim).expect("meta").permissions().mode() & 0o777,
+            0o644
+        );
+
+        let target = dir.path().join("orig.lock");
+        let linked = dir.path().join("hard.lock");
+        fs::write(&target, SMOKE_STOPPED_CONTENT).expect("write target");
+        fs::set_permissions(&target, Permissions::from_mode(0o644)).expect("chmod target");
+        fs::hard_link(&target, &linked).expect("hard link");
+        assert_eq!(
+            acquire_token_lock(&linked, AppStopConfirmation::Confirmed).expect_err("hardlink"),
+            LockError::UnsafePath
+        );
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            SMOKE_STOPPED_CONTENT
+        );
+        assert_eq!(
+            fs::metadata(&target).expect("meta").permissions().mode() & 0o777,
+            0o644
+        );
+    }
+
+    #[test]
     fn missing_default_lock_path_exits_with_lock_io_error_before_network() {
         let probe = ConnectionProbe::bind().expect("probe");
-        let port_str = probe.port().expect("port").to_string();
+        let port = probe.port().expect("port");
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let (clock, wait) = fake_time();
@@ -1093,16 +1113,13 @@ mod tests {
             stdin: Cursor::new(b"id-1\nsec-1\n".to_vec()),
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: None,
+            lock_path: None,
             repo_roots: Vec::new(),
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: TossEndpoint::local(port).ok(),
         };
-        let code = run_async(execute(
-            &os_args(&["check", "--local-port", &port_str]),
-            &mut ctx,
-        ));
+        let code = run_async(execute(&os_args(&["check"]), &mut ctx));
         assert_eq!(code, SmokeExitCode::LockIoError);
         assert_eq!(
             probe.observe().expect("probe"),
@@ -1199,7 +1216,6 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
         let port = listener.local_addr().expect("addr").port();
         drop_listener(listener);
-        let port_str = port.to_string();
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let (clock, wait) = fake_time();
@@ -1208,19 +1224,64 @@ mod tests {
             stdin: Cursor::new(b"id-abc\nsec-xyz\n".to_vec()),
             stdout: &mut stdout,
             stderr: &mut stderr,
-            default_lock_path: Some(lock_path),
+            lock_path: Some(lock_path),
             repo_roots: Vec::new(),
             clock,
             wait,
-            build_endpoint: build_local_only,
+            endpoint: TossEndpoint::local(port).ok(),
         };
-        let code = run_async(execute(
-            &os_args(&["check", "--local-port", &port_str]),
-            &mut ctx,
-        ));
+        let code = run_async(execute(&os_args(&["check"]), &mut ctx));
         assert_eq!(code, SmokeExitCode::TokenStepFailed);
         let out_text = String::from_utf8(stdout).expect("utf8");
         assert!(out_text.contains("네트워크 전송 실패"), "{out_text}");
+    }
+
+    #[test]
+    fn stdout_write_failure_returns_runtime_error_instead_of_success() {
+        let (reader, _reads) = SpyReader::new();
+        let mut stderr = Vec::new();
+        let (clock, wait) = fake_time();
+        let mut usage_ctx = RuntimeContext {
+            stdin_kind: StdinKind::Terminal,
+            stdin: reader,
+            stdout: FailingWriter,
+            stderr: &mut stderr,
+            lock_path: None,
+            repo_roots: Vec::new(),
+            clock,
+            wait,
+            endpoint: None,
+        };
+        assert_eq!(
+            run_async(execute(&os_args(&[]), &mut usage_ctx)),
+            SmokeExitCode::RuntimeError
+        );
+
+        let dir = TempDirGuard::new("broken-stdout");
+        let lock_path = stopped_lock_file(&dir);
+        let sentinels = Sentinels::sample();
+        let server = ScriptedHttpServer::start(happy_responses(&sentinels)).expect("server");
+        let port = server.port();
+        let mut check_stderr = Vec::new();
+        let (clock2, wait2) = fake_time();
+        let mut check_ctx = RuntimeContext {
+            stdin_kind: StdinKind::NonTerminal,
+            stdin: Cursor::new(
+                format!("{}\n{}\n", sentinels.client_id, sentinels.client_secret).into_bytes(),
+            ),
+            stdout: FailingWriter,
+            stderr: &mut check_stderr,
+            lock_path: Some(lock_path),
+            repo_roots: Vec::new(),
+            clock: clock2,
+            wait: wait2,
+            endpoint: TossEndpoint::local(port).ok(),
+        };
+        assert_eq!(
+            run_async(execute(&os_args(&["check"]), &mut check_ctx)),
+            SmokeExitCode::RuntimeError
+        );
+        let _wire = server.finish().expect("finish");
     }
 
     fn drop_listener(listener: std::net::TcpListener) {

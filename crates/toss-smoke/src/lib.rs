@@ -13,9 +13,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use application::Clock;
-use broker_toss::{RequestWait, TossEndpoint, TossHttpClient, TossHttpError};
+use broker_toss::{RequestWait, TossEndpoint, TossHttpClient};
 
-use crate::cli::{Command, TargetEndpoint, USAGE_TEXT, parse_args};
+use crate::cli::{Command, parse_args, usage_text};
 use crate::exit_code::SmokeExitCode;
 use crate::input::{InputError, StdinKind, read_input};
 use crate::lock::{LockError, acquire_token_lock};
@@ -23,19 +23,19 @@ use crate::record::{RecordHandle, prepare_recording};
 use crate::report::write_reports;
 use crate::steps::run_all;
 
-pub struct RuntimeContext<R, Out, Err, F> {
+pub struct RuntimeContext<R, Out, Err> {
     pub stdin_kind: StdinKind,
     pub stdin: R,
     pub stdout: Out,
     pub stderr: Err,
-    pub default_lock_path: Option<PathBuf>,
+    pub lock_path: Option<PathBuf>,
     pub repo_roots: Vec<PathBuf>,
     pub clock: Arc<dyn Clock>,
     pub wait: Arc<dyn RequestWait>,
-    pub build_endpoint: F,
+    pub endpoint: Option<TossEndpoint>,
 }
 
-impl<R, Out, Err, F> std::fmt::Debug for RuntimeContext<R, Out, Err, F> {
+impl<R, Out, Err> std::fmt::Debug for RuntimeContext<R, Out, Err> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RuntimeContext")
             .field("stdin_kind", &self.stdin_kind)
@@ -43,7 +43,7 @@ impl<R, Out, Err, F> std::fmt::Debug for RuntimeContext<R, Out, Err, F> {
     }
 }
 
-fn write_line_lossy<W: Write>(writer: &mut W, text: &str) {
+fn write_stderr_line<W: Write>(writer: &mut W, text: &str) {
     match writeln!(writer, "{text}") {
         Ok(()) | Err(_) => {}
     }
@@ -74,6 +74,25 @@ fn input_error_exit(error: InputError) -> SmokeExitCode {
     }
 }
 
+fn promote_if_success(base: SmokeExitCode, fallback: SmokeExitCode) -> SmokeExitCode {
+    match base {
+        SmokeExitCode::Success => fallback,
+        other @ (SmokeExitCode::UsageError
+        | SmokeExitCode::TerminalInputRejected
+        | SmokeExitCode::InputInvalid
+        | SmokeExitCode::AppRunning
+        | SmokeExitCode::AppStateUnconfirmed
+        | SmokeExitCode::RecordPathRejected
+        | SmokeExitCode::LockIoError
+        | SmokeExitCode::RuntimeError
+        | SmokeExitCode::TokenStepFailed
+        | SmokeExitCode::AccountsStepFailed
+        | SmokeExitCode::HoldingsStepFailed
+        | SmokeExitCode::AdditionalStepFailed
+        | SmokeExitCode::RecordWriteFailed) => other,
+    }
+}
+
 fn prepare_optional_recording<Err: Write>(
     record_path: Option<&PathBuf>,
     repo_roots: &[PathBuf],
@@ -84,14 +103,14 @@ fn prepare_optional_recording<Err: Write>(
     };
     match prepare_recording(path, repo_roots) {
         Ok(handle) => {
-            write_line_lossy(
+            write_stderr_line(
                 stderr,
                 "안내: 녹화 파일에는 읽기 응답 본문이 저장되며 키·토큰은 제외됩니다. 저장소 밖에서만 보관하고 T-14 비식별화 전까지 저장소에 넣지 마세요.",
             );
             Ok(Some(handle))
         }
         Err(error) => {
-            write_line_lossy(stderr, error.message());
+            write_stderr_line(stderr, error.message());
             Err(SmokeExitCode::RecordPathRejected)
         }
     }
@@ -113,26 +132,25 @@ fn persist_recording<Err: Write>(
     match handle.write_all(run_result.recordings(), &secrets) {
         Ok(()) => Ok(Some(handle.path().to_path_buf())),
         Err(error) => {
-            write_line_lossy(stderr, error.message());
+            write_stderr_line(stderr, error.message());
             Err(SmokeExitCode::RecordWriteFailed)
         }
     }
 }
 
 fn acquire_lock_for_run<Err: Write>(
-    explicit: Option<&PathBuf>,
-    default_path: Option<&PathBuf>,
+    lock_path: Option<&PathBuf>,
     confirmation: input::AppStopConfirmation,
     stderr: &mut Err,
 ) -> Result<lock::LockGuard, SmokeExitCode> {
-    let Some(lock_path) = explicit.or(default_path) else {
-        write_line_lossy(stderr, LockError::MissingDefaultPath.message());
+    let Some(path) = lock_path else {
+        write_stderr_line(stderr, LockError::MissingDefaultPath.message());
         return Err(SmokeExitCode::LockIoError);
     };
-    match acquire_token_lock(lock_path, confirmation) {
+    match acquire_token_lock(path, confirmation) {
         Ok(guard) => Ok(guard),
         Err(error) => {
-            write_line_lossy(stderr, error.message());
+            write_stderr_line(stderr, error.message());
             Err(lock_error_exit(error))
         }
     }
@@ -148,60 +166,41 @@ fn finalize_run<Out: Write, Err: Write>(
     let (final_code, recorded_path) =
         match persist_recording(record_handle, smoke_input, run_result, stderr) {
             Ok(path) => (run_result.exit_code(), path),
-            Err(write_code) => {
-                let code = match run_result.exit_code() {
-                    SmokeExitCode::Success => write_code,
-                    other @ (SmokeExitCode::UsageError
-                    | SmokeExitCode::TerminalInputRejected
-                    | SmokeExitCode::InputInvalid
-                    | SmokeExitCode::AppRunning
-                    | SmokeExitCode::AppStateUnconfirmed
-                    | SmokeExitCode::RecordPathRejected
-                    | SmokeExitCode::LockIoError
-                    | SmokeExitCode::RuntimeError
-                    | SmokeExitCode::TokenStepFailed
-                    | SmokeExitCode::AccountsStepFailed
-                    | SmokeExitCode::HoldingsStepFailed
-                    | SmokeExitCode::AdditionalStepFailed
-                    | SmokeExitCode::RecordWriteFailed) => other,
-                };
-                (code, None)
-            }
+            Err(write_code) => (promote_if_success(run_result.exit_code(), write_code), None),
         };
-    match write_reports(
+    if write_reports(
         stdout,
         run_result.reports(),
         final_code,
         recorded_path.as_deref(),
-    ) {
-        Ok(()) | Err(_) => {}
+    )
+    .is_ok()
+    {
+        final_code
+    } else {
+        write_stderr_line(stderr, "표준 출력에 결과를 기록하지 못했습니다.");
+        promote_if_success(final_code, SmokeExitCode::RuntimeError)
     }
-    final_code
 }
 
-fn build_client<R, Out, Err, F>(
-    target: TargetEndpoint,
-    context: &mut RuntimeContext<R, Out, Err, F>,
+fn build_client<R, Out, Err>(
+    context: &mut RuntimeContext<R, Out, Err>,
 ) -> Result<TossHttpClient, SmokeExitCode>
 where
     Err: Write,
-    F: FnMut(TargetEndpoint) -> Result<TossEndpoint, TossHttpError>,
 {
-    let endpoint = match (context.build_endpoint)(target) {
-        Ok(value) => value,
-        Err(_error) => {
-            write_line_lossy(&mut context.stderr, "엔드포인트 구성에 실패했습니다.");
-            return Err(SmokeExitCode::RuntimeError);
-        }
+    let Some(endpoint) = context.endpoint.as_ref() else {
+        write_stderr_line(&mut context.stderr, "엔드포인트 구성에 실패했습니다.");
+        return Err(SmokeExitCode::RuntimeError);
     };
     match TossHttpClient::new(
-        &endpoint,
+        endpoint,
         Arc::clone(&context.clock),
         Arc::clone(&context.wait),
     ) {
         Ok(built) => Ok(built),
         Err(_error) => {
-            write_line_lossy(
+            write_stderr_line(
                 &mut context.stderr,
                 "HTTP 클라이언트 초기화에 실패했습니다.",
             );
@@ -210,31 +209,38 @@ where
     }
 }
 
-pub async fn execute<R, Out, Err, F>(
+pub async fn execute<R, Out, Err>(
     args: &[OsString],
-    context: &mut RuntimeContext<R, Out, Err, F>,
+    context: &mut RuntimeContext<R, Out, Err>,
 ) -> SmokeExitCode
 where
     R: Read,
     Out: Write,
     Err: Write,
-    F: FnMut(TargetEndpoint) -> Result<TossEndpoint, TossHttpError>,
 {
     let options = match parse_args(args) {
         Ok(Command::Usage) => {
-            write_line_lossy(&mut context.stdout, USAGE_TEXT.trim_end());
-            return SmokeExitCode::Success;
+            let text = usage_text();
+            if writeln!(&mut context.stdout, "{}", text.trim_end()).is_ok() {
+                return SmokeExitCode::Success;
+            }
+            write_stderr_line(
+                &mut context.stderr,
+                "표준 출력에 사용법을 기록하지 못했습니다.",
+            );
+            return SmokeExitCode::RuntimeError;
         }
         Ok(Command::Check(parsed)) => parsed,
         Err(error) => {
-            write_line_lossy(&mut context.stderr, error.message());
+            write_stderr_line(&mut context.stderr, error.message());
             return SmokeExitCode::UsageError;
         }
     };
     let smoke_input = match read_input(context.stdin_kind, &mut context.stdin) {
         Ok(parsed) => parsed,
         Err(error) => {
-            write_line_lossy(&mut context.stderr, error.message());
+            let message = error.message();
+            write_stderr_line(&mut context.stderr, &message);
             return input_error_exit(error);
         }
     };
@@ -247,15 +253,14 @@ where
         Err(code) => return code,
     };
     let _lock_guard = match acquire_lock_for_run(
-        options.lock_file.as_ref(),
-        context.default_lock_path.as_ref(),
+        context.lock_path.as_ref(),
         smoke_input.confirmation(),
         &mut context.stderr,
     ) {
         Ok(guard) => guard,
         Err(code) => return code,
     };
-    let client = match build_client(options.target, context) {
+    let client = match build_client(context) {
         Ok(built) => built,
         Err(code) => return code,
     };

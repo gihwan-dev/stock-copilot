@@ -8,6 +8,7 @@ use crate::input::AppStopConfirmation;
 
 pub const APP_DATA_DIR_NAME: &str = "dev.stockcopilot.desktop";
 pub const LOCK_FILE_NAME: &str = "toss-token.lock";
+pub const DESKTOP_RUNNING_CONTENT: &str = "version=1\nowner=desktop-app\nstate=running\n";
 pub const DESKTOP_STOPPED_CONTENT: &str = "version=1\nowner=desktop-app\nstate=stopped\n";
 pub const SMOKE_RUNNING_CONTENT: &str = "version=1\nowner=toss-smoke\nstate=running\n";
 pub const SMOKE_STOPPED_CONTENT: &str = "version=1\nowner=toss-smoke\nstate=stopped\n";
@@ -36,10 +37,10 @@ impl LockError {
     pub const fn message(self) -> &'static str {
         match self {
             Self::MissingDefaultPath => {
-                "기본 앱 데이터 경로를 찾을 수 없습니다. `--lock-file <경로>`로 잠금 파일 경로를 지정하세요."
+                "기본 앱 데이터 경로를 찾을 수 없어 잠금 파일 위치를 확정할 수 없습니다."
             }
             Self::UnsafePath => {
-                "잠금 파일 또는 상위 폴더가 심볼릭 링크이거나 안전한 일반 파일 경로가 아닙니다."
+                "잠금 파일 또는 상위 폴더가 심볼릭 링크·하드 링크이거나 이 앱의 잠금 파일 형식이 아닙니다. 기존 파일을 보호하기 위해 중단했습니다."
             }
             Self::AppRunning => {
                 "앱 또는 다른 연결 확인 프로세스가 토큰 잠금을 보유 중입니다. 토스 계정은 토큰이 하나뿐이므로 앱을 완전히 종료한 뒤 다시 실행하세요."
@@ -161,7 +162,14 @@ fn try_exclusive_lock(file: &File) -> Result<(), LockError> {
 
 const MAX_LOCK_READ_LIMIT: u64 = 257;
 
-fn read_lock_content(file: &mut File) -> Result<String, LockError> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LockContent {
+    DesktopStopped,
+    OverwritableMarker,
+    Unrecognized,
+}
+
+fn classify_lock_content(file: &mut File) -> Result<LockContent, LockError> {
     file.seek(SeekFrom::Start(0))
         .map_err(|_error| LockError::IoError)?;
     let mut raw = Vec::new();
@@ -169,17 +177,30 @@ fn read_lock_content(file: &mut File) -> Result<String, LockError> {
         .read_to_end(&mut raw)
         .map_err(|_error| LockError::IoError)?;
     if raw.len() > MAX_LOCK_CONTENT_BYTES {
-        return Ok(String::new());
+        return Ok(LockContent::Unrecognized);
     }
-    match String::from_utf8(raw) {
-        Ok(text) => Ok(text),
-        Err(_) => Ok(String::new()),
+    let Ok(text) = std::str::from_utf8(&raw) else {
+        return Ok(LockContent::Unrecognized);
+    };
+    if text == DESKTOP_STOPPED_CONTENT {
+        Ok(LockContent::DesktopStopped)
+    } else if text == DESKTOP_RUNNING_CONTENT
+        || text == SMOKE_RUNNING_CONTENT
+        || text == SMOKE_STOPPED_CONTENT
+    {
+        Ok(LockContent::OverwritableMarker)
+    } else {
+        Ok(LockContent::Unrecognized)
     }
 }
 
 fn open_and_verify_existing(path: &Path) -> Result<File, LockError> {
     let link_meta = fs::symlink_metadata(path).map_err(|_error| LockError::IoError)?;
-    if link_meta.file_type().is_symlink() || link_meta.is_dir() || !link_meta.is_file() {
+    if link_meta.file_type().is_symlink()
+        || link_meta.is_dir()
+        || !link_meta.is_file()
+        || link_meta.nlink() != 1
+    {
         return Err(LockError::UnsafePath);
     }
     let file = OpenOptions::new()
@@ -190,6 +211,7 @@ fn open_and_verify_existing(path: &Path) -> Result<File, LockError> {
     let open_meta = file.metadata().map_err(|_error| LockError::IoError)?;
     if open_meta.is_dir()
         || !open_meta.is_file()
+        || open_meta.nlink() != 1
         || open_meta.ino() != link_meta.ino()
         || open_meta.dev() != link_meta.dev()
     {
@@ -201,12 +223,15 @@ fn open_and_verify_existing(path: &Path) -> Result<File, LockError> {
 fn lock_existing(path: &Path, confirmation: AppStopConfirmation) -> Result<LockGuard, LockError> {
     let mut file = open_and_verify_existing(path)?;
     try_exclusive_lock(&file)?;
-    let content = read_lock_content(&mut file)?;
-    if content == DESKTOP_STOPPED_CONTENT {
-        return Ok(LockGuard {
-            file,
-            mode: LockMode::DesktopVerifiedStopped,
-        });
+    match classify_lock_content(&mut file)? {
+        LockContent::DesktopStopped => {
+            return Ok(LockGuard {
+                file,
+                mode: LockMode::DesktopVerifiedStopped,
+            });
+        }
+        LockContent::Unrecognized => return Err(LockError::UnsafePath),
+        LockContent::OverwritableMarker => {}
     }
     match confirmation {
         AppStopConfirmation::NotProvided => return Err(LockError::UnconfirmedIndeterminate),
