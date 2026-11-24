@@ -21,6 +21,13 @@ const catalog = {
   "ds.chartTreemapOrder": {
     ko: "왼쪽부터 아래 목록의 순서예요. 값이 0인 항목은 제외해요" as UiText,
   },
+  "ds.candleOpen": { ko: "시가" as UiText },
+  "ds.candleHigh": { ko: "고가" as UiText },
+  "ds.candleLow": { ko: "저가" as UiText },
+  "ds.candleClose": { ko: "종가" as UiText },
+  "ds.candleOrder": {
+    ko: "화살표 키로 봉을 옮겨 시가·고가·저가·종가를 살펴볼 수 있어요" as UiText,
+  },
   "ds.chartInvalid": { ko: "차트 값을 읽을 수 없어요" as UiText },
   "ds.chartSeparator": { ko: " · " as UiText },
   "number.jo": { ko: "조" as UiText },
@@ -91,7 +98,6 @@ const catalog = {
   "app.errorBody": { ko: "잠시 뒤 다시 시도해 주세요." as UiText },
   "app.retry": { ko: "다시 시도" as UiText },
   "app.stockListEmpty": { ko: "표시할 종목이 없어요" as UiText },
-  "app.chatReady": { ko: "현황을 보면서 바로 질문할 수 있어요." as UiText },
   "app.sectionOverview": { ko: "요약" as UiText },
   "app.readySummary": { ko: "앱이 준비됐어요." as UiText },
   "app.ipcRetryable": { ko: "잠시 뒤 다시 시도해 주세요." as UiText },

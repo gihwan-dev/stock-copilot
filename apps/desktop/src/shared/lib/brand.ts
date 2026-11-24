@@ -17,7 +17,7 @@ const tickerSchema = z
   .regex(/^[0-9A-Z]{6}$/u)
   .brand<"Ticker">();
 const timestampSchema = z.iso.datetime({ offset: true }).brand<"Timestamp">();
-const countSchema = z.number().int().nonnegative().brand<"Count">();
+export const countSchema = z.number().int().nonnegative().brand<"Count">();
 
 const fromParse = <T>(
   parsed: Readonly<z.ZodSafeParseResult<T>>,
@@ -61,15 +61,30 @@ export const chartPath = (input: string): ChartPath => input as ChartPath;
 export type FormattedNumber = string & Brand<"FormattedNumber">;
 
 export type FreeText = string & Brand<"FreeText">;
-const freeTextSchema = z.string().brand<"FreeText">();
+export const freeTextSchema = z.string().brand<"FreeText">();
 export const parseFreeText = (input: unknown): Result<FreeText, BrandError> =>
   fromParse(freeTextSchema.safeParse(input));
 export const emptyFreeText = "" as FreeText;
+export const appendFreeText = (head: FreeText, tail: FreeText): FreeText =>
+  (head + tail) as FreeText;
 export type ExternalUrl = string & Brand<"ExternalUrl">;
-const externalUrlSchema = z
+export const externalUrlSchema = z
   .url({ protocol: /^https$/u })
   .brand<"ExternalUrl">();
+export const chatIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[0-9A-Za-z_.-]+$/u)
+  .brand<"EntityId">();
 export const parseExternalUrl = (
   input: unknown,
 ): Result<ExternalUrl, BrandError> =>
   fromParse(externalUrlSchema.safeParse(input));
+
+export type CanvasColor = string & Brand<"CanvasColor">;
+const canvasColorSchema = z.string().trim().min(1).brand<"CanvasColor">();
+export const parseCanvasColor = (
+  input: unknown,
+): Result<CanvasColor, BrandError> =>
+  fromParse(canvasColorSchema.safeParse(input));
