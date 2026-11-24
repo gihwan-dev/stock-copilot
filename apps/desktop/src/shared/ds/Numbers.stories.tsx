@@ -1,17 +1,21 @@
 import type { ReactElement } from "react";
 import {
+  parseChartDecimal,
   parseMoney,
   parsePercentDisplay,
-  parseQuantity,
   parsePrice,
+  parseQuantity,
+  parseTimestamp,
 } from "../lib";
 import {
+  DataText,
+  DirectionBadge,
   Money,
   Percent,
-  Quantity,
-  Probability,
   PriceChange,
-  DirectionBadge,
+  Probability,
+  Quantity,
+  TimestampText,
 } from "./Numbers";
 
 type Story = {
@@ -21,7 +25,9 @@ type Story = {
     | "Quantity"
     | "Probability"
     | "PriceChange"
-    | "DirectionBadge";
+    | "DirectionBadge"
+    | "DataText"
+    | "TimestampText";
   readonly themes: readonly ["light", "dark"];
   readonly render: () => ReactElement | null;
 };
@@ -120,6 +126,22 @@ export const numberComponentStories: readonly Story[] = [
     render: (): ReactElement | null => {
       const value = parsePrice("182.34", "USD");
       return value.kind === "ok" ? <Money value={value.value} /> : null;
+    },
+  },
+  {
+    component: "DataText",
+    themes: ["light", "dark"],
+    render: (): ReactElement | null => {
+      const value = parseChartDecimal("42");
+      return value.kind === "ok" ? <DataText value={value.value} /> : null;
+    },
+  },
+  {
+    component: "TimestampText",
+    themes: ["light", "dark"],
+    render: (): ReactElement | null => {
+      const value = parseTimestamp("2026-11-24T15:30:00+09:00");
+      return value.kind === "ok" ? <TimestampText value={value.value} /> : null;
     },
   },
 ];

@@ -110,6 +110,18 @@ const catalog = {
     ko: "앱과 연결하지 못했어요. 다시 시도해 주세요." as UiText,
   },
   "app.ipcNoData": { ko: "아직 불러온 자료가 없어요." as UiText },
+  "notice.aiContent": {
+    ko: "이 분석과 제안은 AI가 만들었습니다. 사실과 다르거나 오래된 내용이 있을 수 있습니다. 숫자는 앱이 계산한 값이고, 근거 글은 AI가 쓴 것입니다. 투자 판단과 그 결과에 대한 책임은 본인에게 있습니다." as UiText,
+  },
+  "notice.signalCard": {
+    ko: "AI 제안 · 원금 손실 가능 · 승인 전 직접 확인" as UiText,
+  },
+  "notice.chatData": {
+    ko: "AI를 쓰면 보유 주식·비중·손익·거래내역·투자 원칙·노트가 선택한 AI 제공자(Anthropic 또는 OpenAI)의 서버로 전송됩니다. 토스 키와 전체 계좌번호는 보내지 않습니다." as UiText,
+  },
+  "notice.appInfo": {
+    ko: "개인 본인용 도구입니다. 금융투자업자(투자자문·투자일임)가 아니며, 다른 사람에게 투자 조언을 제공하지 않습니다." as UiText,
+  },
 } as const;
 
 export type MessageKey = keyof typeof catalog;
