@@ -6,3 +6,17 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+application = { path = "../application" }
+domain = { path = "../domain" }
+getrandom = { version = "=0.4.3", default-features = false }
+rmcp = { version = "=3.9.0", default-features = false, features = ["server", "transport-async-rw"] }
+subtle = { version = "=2.6.1", default-features = false }
+tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "net", "rt", "sync", "time"] }
+zeroize = { version = "=1.9.1", default-features = false, features = ["alloc"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+testkit = { path = "../testkit" }
+testkit-ports = { path = "../testkit-ports" }

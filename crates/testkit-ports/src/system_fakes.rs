@@ -1,6 +1,7 @@
 use crate::{Script, memory::MemoryReply, script::State};
 use application::{
-    AuditEntry, AuditIntegrity, AuditLog, RecordOutcome, SecretKey, SecretStore, SecretValue,
+    AuditEntry, AuditIntegrity, AuditLog, PeerProcessInfo, PeerProcessInspector,
+    PeerProcessLookupError, ProcessId, RecordOutcome, SecretKey, SecretStore, SecretValue,
     SystemPortError, WriteCompleted,
 };
 use std::sync::Arc;
@@ -144,3 +145,37 @@ pub type MemorySecretStoreRemoveScript =
 
 pub type MemorySecretStoreStoreScript =
     Script<(SecretKey, Arc<SecretValue>), MemoryReply<Result<WriteCompleted, SystemPortError>>>;
+
+pub type PeerProcessInspectorScript =
+    Script<ProcessId, Result<PeerProcessInfo, PeerProcessLookupError>>;
+
+#[derive(Debug, Default)]
+pub struct ScriptedPeerProcessInspector {
+    inspect: PeerProcessInspectorScript,
+}
+
+impl ScriptedPeerProcessInspector {
+    pub fn new<Replies: IntoIterator<Item = Result<PeerProcessInfo, PeerProcessLookupError>>>(
+        replies: Replies,
+    ) -> Self {
+        Self {
+            inspect: Script::new(replies),
+        }
+    }
+
+    #[must_use]
+    pub fn script(&self) -> &PeerProcessInspectorScript {
+        &self.inspect
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<ProcessId> {
+        self.inspect.calls()
+    }
+}
+
+impl PeerProcessInspector for ScriptedPeerProcessInspector {
+    async fn inspect(&self, pid: ProcessId) -> Result<PeerProcessInfo, PeerProcessLookupError> {
+        self.inspect.run(pid).await
+    }
+}

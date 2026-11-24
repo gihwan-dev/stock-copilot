@@ -112,3 +112,8 @@ reason = "S-01: 새 동시 쓰기 회귀에서 실행 스레드 동일성과 호
 path = "crates/adapters/platform-macos/src/system_clock.rs"
 names = ["clock-env:now"]
 reason = "U-01 SystemClock의 운영체제 벽시계 읽기 한 곳"
+
+[[clock-environment]]
+path = "crates/mcp-server/tests/server_security.rs"
+names = ["clock-env:temp_dir"]
+reason = "M-01: Unix 도메인 소켓 테스트가 macOS sun_path 104바이트 한도 안의 짧은 임시 경로를 쓰기 위해 temp_dir을 읽는다. 제품 코드에는 허용하지 않는다"

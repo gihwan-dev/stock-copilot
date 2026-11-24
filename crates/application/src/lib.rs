@@ -428,3 +428,8 @@ pub use proposal_storage::{
     ConsumptionOutcome, ConsumptionStatus, ProposalConsumptionRepository,
     ValidationReportRepository,
 };
+mod peer_process;
+pub use peer_process::{
+    ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
+    PeerProcessLookupError, ProcessId,
+};
