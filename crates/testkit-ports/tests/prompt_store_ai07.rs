@@ -34,7 +34,7 @@ mod tests {
         )
     }
     fn digest() -> PromptDigest {
-        PromptDigest::try_from_hex(DIGEST).expect("해시")
+        PromptDigest::try_new(DIGEST).expect("해시")
     }
 
     #[test]
@@ -111,7 +111,7 @@ mod tests {
             &DIGEST.to_uppercase(),
         ] {
             assert_eq!(
-                PromptDigest::try_from_hex(bad),
+                PromptDigest::try_new(bad),
                 Err(PromptLocationError::InvalidDigest),
                 "{bad}"
             );
