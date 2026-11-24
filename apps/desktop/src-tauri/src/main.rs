@@ -1,3 +1,4 @@
+use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
     database::DatabaseFactory, ports::Ports, product_ports::ProductPorts, unavailable::Unavailable,
@@ -52,11 +53,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         saved_accounts: Vec::new(),
         database: Arc::new(database_factory(shared_clock)),
     };
-    run_app(
-        build_app(tauri::Builder::default(), ports, context)?,
-        |handle, code| handle.exit(code.as_i32()),
-    );
-    Ok(())
+    let app = build_app(tauri::Builder::default(), ports, context)?;
+    let socket_path = SocketPath::try_new(
+        tauri::Manager::path(&app)
+            .app_data_dir()?
+            .join("instance.sock"),
+    )
+    .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    let single_instance = attach_to_app(app.handle(), socket_path)
+        .map_err(|error| std::io::Error::other(format!("{error:?}")))?;
+    match single_instance {
+        InstanceAcquisition::Primary(_guard) => {
+            run_app(app, |handle, code| handle.exit(code.as_i32()));
+            Ok(())
+        }
+        InstanceAcquisition::SecondaryNotified => Ok(()),
+    }
 }
 
 fn database_factory<C: application::Clock + 'static>(clock: Arc<C>) -> DatabaseFactory {

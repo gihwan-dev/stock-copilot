@@ -26,7 +26,7 @@ pub enum DatabaseClosure {
 
 #[derive(Debug)]
 pub struct Lifecycle {
-    phase: Mutex<ExitPhase>,
+    phase: Mutex<LifecyclePhase>,
     work: Mutex<Option<Work>>,
     outcome: Mutex<Option<ShutdownOutcome>>,
 }
@@ -44,9 +44,17 @@ impl Lifecycle {
         database: DatabaseState,
     ) -> Self {
         Self {
-            phase: Mutex::new(ExitPhase::Running),
+            phase: Mutex::new(LifecyclePhase::Running),
             work: Mutex::new(Some(Work { refresh, database })),
             outcome: Mutex::new(None),
+        }
+    }
+
+    #[must_use]
+    pub fn phase(&self) -> LifecyclePhase {
+        match self.phase.try_lock() {
+            Ok(phase) => *phase,
+            Err(_error) => LifecyclePhase::Stopping,
         }
     }
 
@@ -54,12 +62,12 @@ impl Lifecycle {
     pub fn exit_decision(&self) -> ExitDecision {
         match self.phase.try_lock() {
             Ok(mut phase) => match *phase {
-                ExitPhase::Running => {
-                    *phase = ExitPhase::Stopping;
+                LifecyclePhase::Running => {
+                    *phase = LifecyclePhase::Stopping;
                     ExitDecision::Start
                 }
-                ExitPhase::Stopping => ExitDecision::Defer,
-                ExitPhase::Stopped => ExitDecision::Allow,
+                LifecyclePhase::Stopping => ExitDecision::Defer,
+                LifecyclePhase::Stopped => ExitDecision::Allow,
             },
             Err(_error) => ExitDecision::Defer,
         }
@@ -75,12 +83,12 @@ impl Lifecycle {
         if let Some(work) = pending {
             *outcome = Some(cleanup::finish(work, cleanup::close_database).await);
         }
-        *self.phase.lock().await = ExitPhase::Stopped;
+        *self.phase.lock().await = LifecyclePhase::Stopped;
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExitPhase {
+pub enum LifecyclePhase {
     Running,
     Stopping,
     Stopped,
@@ -94,7 +102,7 @@ pub enum ExitDecision {
 
 #[cfg(test)]
 mod tests {
-    use super::{ExitDecision, Lifecycle};
+    use super::{ExitDecision, Lifecycle, LifecyclePhase};
     use crate::database::DatabaseState;
     #[test]
     fn a_busy_phase_defers_instead_of_blocking_the_event_loop() {
@@ -108,6 +116,6 @@ mod tests {
     fn assert_busy_phase(lifecycle: &Lifecycle) {
         let guard = lifecycle.phase.try_lock().expect("진입점 잠금");
         assert_eq!(lifecycle.exit_decision(), ExitDecision::Defer);
-        assert_eq!(*guard, super::ExitPhase::Running);
+        assert_eq!(*guard, LifecyclePhase::Running);
     }
 }
