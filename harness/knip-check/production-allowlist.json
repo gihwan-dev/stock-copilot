@@ -98,6 +98,10 @@
       "reason": "DS-05 숫자 표시와 목록 이야기. 첫 화면 사용처 및 DS-07 목록 연결 전 정확한 파일만 유예"
     },
     {
+      "issue": "files src/shared/ds/ScrollArea.tsx src/shared/ds/ScrollArea.tsx",
+      "reason": "DS-23에서 DS-11의 ScrollArea를 선행 구현. 첫 운영 화면 소비 전 정확한 파일만 유예"
+    },
+    {
       "issue": "files src/shared/ds/SegmentedControl.stories.tsx src/shared/ds/SegmentedControl.stories.tsx",
       "reason": "DS-03 기본 컴포넌트와 이야기. 화면·DS-07의 첫 사용처까지 정확한 파일만 유예"
     },

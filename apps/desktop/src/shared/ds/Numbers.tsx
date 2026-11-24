@@ -34,7 +34,7 @@ const Unavailable = (): ReactElement => (
   <span
     role="img"
     aria-label={text("number.invalid", "ko")}
-    className="tabular-nums whitespace-nowrap text-alert"
+    className="tabular-nums whitespace-nowrap w-max text-alert"
   >
     {text("number.unavailable", "ko")}
   </span>
@@ -43,7 +43,7 @@ const Directed = (props: {
   readonly display: Extract<Display, { readonly kind: "available" }>;
   readonly direction: Direction;
 }): ReactElement => (
-  <span className="tabular-nums whitespace-nowrap">
+  <span className="tabular-nums whitespace-nowrap w-max">
     <span className={colors[props.direction]}>
       <span role="img" aria-label={text(names[props.direction], "ko")}>
         {text(symbols[props.direction], "ko")}
@@ -60,7 +60,7 @@ const Numeric = (props: {
   if (props.display.kind === "unavailable") return <Unavailable />;
   if (props.direction === undefined)
     return (
-      <span className="tabular-nums whitespace-nowrap">
+      <span className="tabular-nums whitespace-nowrap w-max">
         {props.display.text}
       </span>
     );

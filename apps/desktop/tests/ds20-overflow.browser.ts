@@ -1846,3 +1846,599 @@ describe("non-editable native textarea", () => {
     },
   );
 });
+
+const catalogStory = async (
+  component: string,
+  exportName: string,
+  width: "normal" | "narrow",
+  scale: "100%" | "125%",
+): Promise<{ doc: Document; slot: HTMLElement }> => {
+  const { doc, slot } = await narrowStory(component, exportName);
+  slot.style.boxSizing = width === "narrow" ? "content-box" : "";
+  slot.style.width = width === "narrow" ? "126px" : "";
+  doc.documentElement.style.fontSize = scale;
+  const view = doc.defaultView;
+  if (view === null) throw new Error(`${component} view missing`);
+  await new Promise<void>((resolve) =>
+    view.requestAnimationFrame(() =>
+      view.requestAnimationFrame(() => resolve()),
+    ),
+  );
+  return { doc, slot };
+};
+
+const singleLine = (doc: Document, element: Element): boolean => {
+  const range = doc.createRange();
+  range.selectNodeContents(element);
+  const tops = [...range.getClientRects()]
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .map((rect) => Math.round(rect.top));
+  return tops.length > 0 && new Set(tops).size === 1;
+};
+
+describe("DS-23 layout, numeric preservation, and scroll area guarantees", () => {
+  it.each([
+    ["Money", "Light0"],
+    ["Percent", "Light4"],
+    ["Quantity", "Light1"],
+    ["PriceChange", "Light0"],
+    ["Card", "Light0"],
+    ["Table", "Light0"],
+    ["DonutChart", "Light0"],
+  ])(
+    "keeps %s numbers on a single unclipped line inside a horizontal scroll area",
+    async (component, story) => {
+      const { doc } = await catalogStory(component, story, "narrow", "125%");
+      const numbers = [
+        ...doc.querySelectorAll<HTMLElement>(".tabular-nums.whitespace-nowrap"),
+      ].filter((el) => el.closest("table.sr-only") === null);
+      expect(numbers.length).toBeGreaterThan(0);
+      for (const number of numbers) {
+        const style = getComputedStyle(number);
+        expect(style.whiteSpace).toBe("nowrap");
+        expect(style.textOverflow).not.toBe("ellipsis");
+        expect(singleLine(doc, number)).toBe(true);
+        const viewport = number.closest<HTMLElement>("[data-scroll-viewport]");
+        expect(viewport).not.toBeNull();
+        if (viewport === null) throw new Error("horizontal viewport missing");
+        const viewportStyle = getComputedStyle(viewport);
+        expect(viewportStyle.overflowX).toBe("auto");
+        expect(viewportStyle.overflowY).toBe("hidden");
+      }
+      expect(inspectOverflow(doc)).toEqual([]);
+    },
+    20000,
+  );
+
+  it("shows horizontal scrollbar and keyboard focus only when content overflows", async () => {
+    const narrow = await catalogStory("Money", "Light0", "narrow", "100%");
+    const narrowViewport = narrow.doc.querySelector<HTMLElement>(
+      ".scroll-viewport-x[data-scroll-viewport]",
+    );
+    if (narrowViewport === null) throw new Error("narrow viewport missing");
+    expect(narrowViewport.scrollWidth).toBeGreaterThan(
+      narrowViewport.clientWidth,
+    );
+    expect(narrowViewport.tabIndex).toBe(0);
+    narrowViewport.focus();
+    expect(narrow.doc.activeElement).toBe(narrowViewport);
+    narrowViewport.scrollLeft = narrowViewport.scrollWidth;
+    expect(narrowViewport.scrollLeft).toBeGreaterThan(0);
+    const narrowBar = narrow.doc.querySelector<HTMLElement>(
+      '[data-orientation="horizontal"]',
+    );
+    expect(narrowBar).not.toBeNull();
+    if (narrowBar !== null)
+      expect(getComputedStyle(narrowBar).position).toBe("absolute");
+
+    const normal = await catalogStory("Money", "Light0", "normal", "100%");
+    const normalViewport = normal.doc.querySelector<HTMLElement>(
+      ".scroll-viewport-x[data-scroll-viewport]",
+    );
+    if (normalViewport === null) throw new Error("normal viewport missing");
+    expect(normalViewport.scrollWidth).toBeLessThanOrEqual(
+      normalViewport.clientWidth,
+    );
+    expect(normalViewport.tabIndex).toBe(-1);
+    expect(
+      normal.doc.querySelector('[data-orientation="horizontal"]'),
+    ).toBeNull();
+  }, 20000);
+
+  it("shows vertical stage scrollbar and keyboard focus only when tall, without shrinking content width", async () => {
+    const tall = await catalogStory("Markdown", "Light2", "normal", "100%");
+    const tallViewport = tall.doc.querySelector<HTMLElement>(
+      ".scroll-viewport-y[data-scroll-viewport]",
+    );
+    const tallContent = tall.doc.querySelector<HTMLElement>(
+      "[data-catalog-content]",
+    );
+    if (tallViewport === null || tallContent === null)
+      throw new Error("tall stage missing");
+    expect(tallViewport.scrollHeight).toBeGreaterThan(
+      tallViewport.clientHeight,
+    );
+    expect(tallViewport.tabIndex).toBe(0);
+    tallViewport.focus();
+    expect(tall.doc.activeElement).toBe(tallViewport);
+    tallViewport.scrollTop = 40;
+    expect(tallViewport.scrollTop).toBeGreaterThan(0);
+    const tallBar = tall.doc.querySelector<HTMLElement>(
+      '[data-orientation="vertical"]',
+    );
+    expect(tallBar).not.toBeNull();
+    if (tallBar !== null)
+      expect(getComputedStyle(tallBar).position).toBe("absolute");
+
+    const short = await catalogStory("Button", "Light0", "normal", "100%");
+    const shortViewport = short.doc.querySelector<HTMLElement>(
+      ".scroll-viewport-y[data-scroll-viewport]",
+    );
+    const shortContent = short.doc.querySelector<HTMLElement>(
+      "[data-catalog-content]",
+    );
+    if (shortViewport === null || shortContent === null)
+      throw new Error("short stage missing");
+    expect(shortViewport.scrollHeight).toBeLessThanOrEqual(
+      shortViewport.clientHeight,
+    );
+    expect(shortViewport.tabIndex).toBe(-1);
+    expect(short.doc.querySelector('[data-orientation="vertical"]')).toBeNull();
+    expect(tallContent.clientWidth).toBe(shortContent.clientWidth);
+  }, 20000);
+
+  it("still reports real horizontal overflow and nested vertical scroll inside the catalog stage", async () => {
+    const { doc } = await catalogStory("Button", "Light0", "narrow", "100%");
+    const content = doc.querySelector<HTMLElement>("[data-catalog-content]");
+    if (content === null) throw new Error("catalog content missing");
+
+    const badText = doc.createElement("div");
+    badText.id = "ds23-bad-overflow";
+    badText.style.width = "40px";
+    badText.style.whiteSpace = "nowrap";
+    badText.textContent = "verylongunbreakabletextverylongunbreakabletext";
+    content.append(badText);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "unauthorized-overflow",
+      element: "div#ds23-bad-overflow",
+    });
+    badText.remove();
+
+    const wideBox = doc.createElement("div");
+    wideBox.id = "ds23-wide-box";
+    wideBox.style.width = "240px";
+    wideBox.style.height = "20px";
+    wideBox.textContent = "wide";
+    content.append(wideBox);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#ds23-wide-box",
+    });
+    wideBox.remove();
+
+    const nested = doc.createElement("div");
+    nested.id = "ds23-nested-scroll";
+    nested.setAttribute("data-scroll-viewport", "");
+    nested.style.height = "80px";
+    nested.style.overflowY = "auto";
+    nested.innerHTML = '<div style="height:200px">nested</div>';
+    content.append(nested);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "nested-scroll",
+      element: "div#ds23-nested-scroll",
+    });
+    nested.remove();
+  }, 20000);
+
+  it("wraps secret TextField paste button below the input only when narrow", async () => {
+    const normal = await catalogStory("TextField", "Light4", "normal", "100%");
+    const normalInput = normal.slot.querySelector<HTMLElement>("input");
+    const normalButtons = [
+      ...normal.slot.querySelectorAll<HTMLElement>("button"),
+    ];
+    const normalPaste = normalButtons.at(-1);
+    if (normalInput === null || normalPaste === undefined)
+      throw new Error("normal secret field missing");
+    const normalInputRect = normalInput.getBoundingClientRect();
+    const normalPasteRect = normalPaste.getBoundingClientRect();
+    expect(Math.abs(normalPasteRect.top - normalInputRect.top)).toBeLessThan(
+      normalInputRect.height,
+    );
+    expect(inspectOverflow(normal.doc)).toEqual([]);
+
+    const narrow = await catalogStory("TextField", "Light4", "narrow", "100%");
+    const narrowInput = narrow.slot.querySelector<HTMLElement>("input");
+    const narrowButtons = [
+      ...narrow.slot.querySelectorAll<HTMLElement>("button"),
+    ];
+    const narrowPaste = narrowButtons.at(-1);
+    if (narrowInput === null || narrowPaste === undefined)
+      throw new Error("narrow secret field missing");
+    expect(narrowPaste.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      narrowInput.getBoundingClientRect().bottom,
+    );
+    expect(inspectOverflow(narrow.doc)).toEqual([]);
+  }, 20000);
+
+  it("scrolls Dialog body while keeping header and footer fixed", async () => {
+    const { doc } = await catalogStory("Dialog", "Light4", "narrow", "125%");
+    const dialog = doc.querySelector<HTMLElement>('[role="dialog"]');
+    const header = dialog?.querySelector<HTMLElement>("header");
+    const footer = dialog?.querySelector<HTMLElement>("footer");
+    const body = dialog?.querySelector<HTMLElement>("[data-scroll-viewport]");
+    if (dialog === null || header == null || footer == null || body == null)
+      throw new Error("dialog parts missing");
+    expect(body.contains(header)).toBe(false);
+    expect(body.contains(footer)).toBe(false);
+    expect(getComputedStyle(body).overflowY).toBe("auto");
+    expect(inspectOverflow(doc)).toEqual([]);
+
+    const spacer = doc.createElement("div");
+    spacer.style.height = "900px";
+    spacer.textContent = "긴 대화 본문";
+    body.firstElementChild?.append(spacer);
+    const view = doc.defaultView;
+    if (view === null) throw new Error("dialog view missing");
+    await new Promise<void>((resolve) =>
+      view.requestAnimationFrame(() =>
+        view.requestAnimationFrame(() => resolve()),
+      ),
+    );
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(body.tabIndex).toBe(0);
+    const headerBefore = header.getBoundingClientRect().top;
+    const footerBefore = footer.getBoundingClientRect().top;
+    body.scrollTop = 120;
+    expect(body.scrollTop).toBeGreaterThan(0);
+    expect(header.getBoundingClientRect().top).toBe(headerBefore);
+    expect(footer.getBoundingClientRect().top).toBe(footerBefore);
+    expect(inspectOverflow(doc)).toEqual([]);
+  }, 20000);
+
+  it("expands Button height, wraps StatusBar action, and keeps Checkbox mark inside its border", async () => {
+    const buttonView = await catalogStory(
+      "Button",
+      "Light12",
+      "narrow",
+      "100%",
+    );
+    const button = buttonView.slot.querySelector<HTMLElement>("button");
+    if (button === null) throw new Error("button missing");
+    expect(button.getBoundingClientRect().height).toBeGreaterThan(36);
+    expect(inspectOverflow(buttonView.doc)).toEqual([]);
+
+    const statusView = await catalogStory(
+      "StatusBar",
+      "Light10",
+      "narrow",
+      "125%",
+    );
+    const statusText =
+      statusView.slot.querySelector<HTMLElement>('[role="status"]');
+    const statusAction = statusView.slot.querySelector<HTMLElement>("button");
+    if (statusText === null || statusAction === null)
+      throw new Error("status bar missing");
+    expect(statusAction.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      statusText.getBoundingClientRect().bottom,
+    );
+    expect(inspectOverflow(statusView.doc)).toEqual([]);
+
+    const checkboxView = await catalogStory(
+      "Checkbox",
+      "Light2",
+      "narrow",
+      "100%",
+    );
+    const box = checkboxView.slot.querySelector<HTMLElement>(
+      'button[role="checkbox"]',
+    );
+    const svg = box?.querySelector<SVGElement>("svg");
+    if (box === null || svg == null) throw new Error("checkbox missing");
+    const boxRect = box.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    expect(Math.round(boxRect.width)).toBe(16);
+    expect(Math.round(boxRect.height)).toBe(16);
+    expect(svgRect.left).toBeGreaterThanOrEqual(boxRect.left);
+    expect(svgRect.right).toBeLessThanOrEqual(boxRect.right);
+    expect(svgRect.top).toBeGreaterThanOrEqual(boxRect.top);
+    expect(svgRect.bottom).toBeLessThanOrEqual(boxRect.bottom);
+    expect(inspectOverflow(checkboxView.doc)).toEqual([]);
+
+    for (const [component, story] of [
+      ["Badge", "Light6"],
+      ["SegmentedControl", "Light3"],
+      ["Disclosure", "Light2"],
+    ] as const) {
+      const view = await catalogStory(component, story, "narrow", "125%");
+      expect(inspectOverflow(view.doc)).toEqual([]);
+    }
+  }, 20000);
+
+  it("keeps focused LineChart status number scrollable by keyboard and unclipped", async () => {
+    const { doc, slot } = await catalogStory(
+      "LineChart",
+      "Light6",
+      "narrow",
+      "125%",
+    );
+    const explore = slot.querySelector<HTMLElement>("button");
+    if (explore === null) throw new Error("chart explore button missing");
+    explore.focus();
+    const view = doc.defaultView;
+    if (view === null) throw new Error("chart view missing");
+    const flush = (): Promise<void> =>
+      new Promise<void>((resolve) =>
+        view.requestAnimationFrame(() =>
+          view.requestAnimationFrame(() => resolve()),
+        ),
+      );
+    await flush();
+    const status = slot.querySelector<HTMLElement>('[role="status"]');
+    const number = status?.querySelector<HTMLElement>(
+      ".tabular-nums.whitespace-nowrap",
+    );
+    if (status === null || number == null)
+      throw new Error("chart status number missing");
+    expect(singleLine(doc, number)).toBe(true);
+    const viewport = number.closest<HTMLElement>("[data-scroll-viewport]");
+    expect(viewport).not.toBeNull();
+    if (viewport === null) throw new Error("chart status viewport missing");
+    expect(getComputedStyle(viewport).overflowX).toBe("auto");
+    expect(getComputedStyle(viewport).overflowY).toBe("hidden");
+    expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
+    expect(viewport.tabIndex).toBe(0);
+    expect(inspectOverflow(doc)).toEqual([]);
+
+    viewport.focus();
+    await flush();
+    expect(doc.activeElement).toBe(viewport);
+    expect(status.textContent).not.toBe("");
+    expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
+    expect(viewport.tabIndex).toBe(0);
+    viewport.scrollLeft = 40;
+    expect(viewport.scrollLeft).toBeGreaterThan(0);
+
+    viewport.blur();
+    await flush();
+    expect(status.textContent).toBe("");
+  }, 20000);
+
+  it("updates ScrollArea scrollbar and tabIndex when content grows without viewport resize", async () => {
+    const card = await catalogStory("Card", "Light0", "normal", "100%");
+    card.slot.style.width = "300px";
+    const cardView = card.doc.defaultView;
+    if (cardView === null) throw new Error("card view missing");
+    const flush = (win: Window): Promise<void> =>
+      new Promise<void>((resolve) =>
+        win.requestAnimationFrame(() =>
+          win.requestAnimationFrame(() => resolve()),
+        ),
+      );
+    await flush(cardView);
+    const cardVp = card.slot.querySelector<HTMLElement>(
+      ".scroll-viewport-x[data-scroll-viewport]",
+    );
+    if (cardVp === null) throw new Error("card viewport missing");
+    expect(cardVp.scrollWidth).toBeLessThanOrEqual(cardVp.clientWidth);
+    expect(cardVp.tabIndex).toBe(-1);
+    expect(
+      cardVp.parentElement?.querySelector('[data-orientation="horizontal"]'),
+    ).toBeNull();
+    const widthBefore = cardVp.clientWidth;
+    const wide = card.doc.createElement("span");
+    wide.className = "tabular-nums whitespace-nowrap w-max";
+    wide.textContent = "9,876,543,210,987,654,321,098,765,432,109,876원";
+    cardVp.firstElementChild?.firstElementChild?.append(wide);
+    await flush(cardView);
+    expect(cardVp.clientWidth).toBe(widthBefore);
+    expect(cardVp.scrollWidth).toBeGreaterThan(cardVp.clientWidth);
+    expect(cardVp.tabIndex).toBe(0);
+    expect(
+      cardVp.parentElement?.querySelector('[data-orientation="horizontal"]'),
+    ).not.toBeNull();
+
+    const stage = await catalogStory("Button", "Light0", "normal", "100%");
+    const stageVp = stage.doc.querySelector<HTMLElement>(
+      ".scroll-viewport-y[data-scroll-viewport]",
+    );
+    const stageContent = stage.doc.querySelector<HTMLElement>(
+      "[data-catalog-content]",
+    );
+    const stageView = stage.doc.defaultView;
+    if (stageVp === null || stageContent === null || stageView === null)
+      throw new Error("stage viewport missing");
+    const heightBefore = stageVp.clientHeight;
+    expect(stageVp.tabIndex).toBe(-1);
+    const tall = stage.doc.createElement("div");
+    tall.style.height = "1200px";
+    tall.textContent = "긴 동적 본문";
+    stageContent.append(tall);
+    await flush(stageView);
+    expect(stageVp.clientHeight).toBe(heightBefore);
+    expect(stageVp.scrollHeight).toBeGreaterThan(stageVp.clientHeight);
+    expect(stageVp.tabIndex).toBe(0);
+    expect(
+      stageVp.parentElement?.querySelector('[data-orientation="vertical"]'),
+    ).not.toBeNull();
+  }, 20000);
+
+  it("allows horizontal scroll without clipping when Dialog body contains a long number", async () => {
+    const { doc } = await catalogStory("Dialog", "Light0", "narrow", "125%");
+    const frame = doc.defaultView?.frameElement;
+    if (frame instanceof HTMLIFrameElement) frame.width = "320";
+    const view = doc.defaultView;
+    if (view === null) throw new Error("dialog view missing");
+    const flush = (): Promise<void> =>
+      new Promise<void>((resolve) =>
+        view.requestAnimationFrame(() =>
+          view.requestAnimationFrame(() => resolve()),
+        ),
+      );
+    await flush();
+    const dialog = doc.querySelector<HTMLElement>('[role="dialog"]');
+    const body = dialog?.querySelector<HTMLElement>("[data-scroll-viewport]");
+    if (dialog === null || body == null) throw new Error("dialog body missing");
+    expect(getComputedStyle(body).overflowX).toBe("auto");
+    expect(getComputedStyle(body).overflowY).toBe("auto");
+    const amount = doc.createElement("span");
+    amount.className = "tabular-nums whitespace-nowrap w-max";
+    amount.textContent = "9,876,543,210,987,654,321원";
+    body.firstElementChild?.firstElementChild?.append(amount);
+    await flush();
+    expect(singleLine(doc, amount)).toBe(true);
+    expect(body.scrollWidth).toBeGreaterThan(body.clientWidth);
+    expect(body.tabIndex).toBe(0);
+    expect(
+      body.parentElement?.querySelector('[data-orientation="horizontal"]'),
+    ).not.toBeNull();
+    expect(inspectOverflow(doc)).toEqual([]);
+    body.scrollLeft = 40;
+    expect(body.scrollLeft).toBeGreaterThan(0);
+  }, 20000);
+
+  it("keeps unidirectional vertical ScrollArea unfocusable on hidden-axis overflow while still reporting clipped", async () => {
+    const { doc } = await catalogStory("Button", "Light0", "normal", "100%");
+    const viewport = doc.querySelector<HTMLElement>(
+      ".scroll-viewport-y[data-scroll-viewport]",
+    );
+    const content = doc.querySelector<HTMLElement>("[data-catalog-content]");
+    const view = doc.defaultView;
+    if (viewport === null || content === null || view === null)
+      throw new Error("stage missing");
+    expect(viewport.scrollHeight).toBeLessThanOrEqual(viewport.clientHeight);
+    expect(viewport.tabIndex).toBe(-1);
+    const wide = doc.createElement("div");
+    wide.id = "ds23-hidden-axis-wide";
+    wide.style.width = "1600px";
+    wide.style.height = "20px";
+    wide.textContent = "hidden-axis-wide";
+    content.append(wide);
+    await new Promise<void>((resolve) =>
+      view.requestAnimationFrame(() =>
+        view.requestAnimationFrame(() => resolve()),
+      ),
+    );
+    expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth);
+    expect(viewport.tabIndex).toBe(-1);
+    expect(inspectOverflow(doc)).toContainEqual({
+      kind: "clipped",
+      element: "div#ds23-hidden-axis-wide",
+    });
+    wide.remove();
+  }, 20000);
+
+  it("right-aligns ChartAxes maximum at wide container width and keeps horizontal scrollbar clear of text", async () => {
+    const wide = await catalogStory("LineChart", "Light0", "normal", "100%");
+    const frame = wide.doc.defaultView?.frameElement;
+    if (frame instanceof HTMLIFrameElement) frame.width = "1100";
+    const view = wide.doc.defaultView;
+    if (view === null) throw new Error("wide chart view missing");
+    await new Promise<void>((resolve) =>
+      view.requestAnimationFrame(() =>
+        view.requestAnimationFrame(() => resolve()),
+      ),
+    );
+    const spans = [...wide.slot.querySelectorAll<HTMLElement>("span")];
+    const lastDate = spans.find((el) => el.textContent?.includes("11월 13일"));
+    const maxAxis = spans.find((el) => el.textContent?.includes("최대"));
+    if (lastDate === undefined || maxAxis === undefined)
+      throw new Error("chart axis labels missing");
+    expect(
+      Math.abs(
+        maxAxis.getBoundingClientRect().right -
+          lastDate.getBoundingClientRect().right,
+      ),
+    ).toBeLessThanOrEqual(4);
+
+    const money = await catalogStory("Money", "Light0", "narrow", "100%");
+    const number = money.slot.querySelector<HTMLElement>(
+      ".tabular-nums.whitespace-nowrap",
+    );
+    const bar = money.slot.querySelector<HTMLElement>(
+      '[data-orientation="horizontal"]',
+    );
+    if (number === null || bar === null)
+      throw new Error("money scrollbar missing");
+    expect(bar.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      number.getBoundingClientRect().bottom - 1,
+    );
+  }, 20000);
+
+  it("keeps StatusBar icon beside its message at narrow widths while wrapping the action below", async () => {
+    const { doc, slot } = await catalogStory(
+      "StatusBar",
+      "Light10",
+      "narrow",
+      "100%",
+    );
+    slot.style.width = "180px";
+    const view = doc.defaultView;
+    if (view === null) throw new Error("status view missing");
+    await new Promise<void>((resolve) =>
+      view.requestAnimationFrame(() =>
+        view.requestAnimationFrame(() => resolve()),
+      ),
+    );
+    const icon = slot.querySelector<SVGElement>("svg");
+    const status = slot.querySelector<HTMLElement>('[role="status"]');
+    const button = slot.querySelector<HTMLElement>("button");
+    if (icon === null || status === null || button === null)
+      throw new Error("status parts missing");
+    expect(icon.getBoundingClientRect().bottom).toBeGreaterThan(
+      status.getBoundingClientRect().top,
+    );
+    expect(button.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      status.getBoundingClientRect().bottom,
+    );
+    expect(inspectOverflow(doc)).toEqual([]);
+  }, 20000);
+
+  it("lets Card horizontal ScrollArea absorb nested wrappers with long numbers without double horizontal scroll", async () => {
+    const { doc, slot } = await catalogStory(
+      "Card",
+      "Light0",
+      "narrow",
+      "100%",
+    );
+    const cardVp = slot.querySelector<HTMLElement>(
+      ".scroll-viewport-x[data-scroll-viewport]",
+    );
+    const view = doc.defaultView;
+    if (cardVp === null || view === null) throw new Error("card missing");
+    const flush = (): Promise<void> =>
+      new Promise<void>((resolve) =>
+        view.requestAnimationFrame(() =>
+          view.requestAnimationFrame(() => resolve()),
+        ),
+      );
+    const nestedWrap = doc.createElement("div");
+    nestedWrap.className = "flex flex-col gap-space-2";
+    const amount = doc.createElement("span");
+    amount.className = "tabular-nums whitespace-nowrap w-max";
+    amount.textContent = "9,876,543,210,987원";
+    nestedWrap.append(amount);
+    cardVp.firstElementChild?.firstElementChild?.append(nestedWrap);
+    await flush();
+    expect(nestedWrap.scrollWidth).toBeLessThanOrEqual(nestedWrap.clientWidth);
+    expect(cardVp.scrollWidth).toBeGreaterThan(cardVp.clientWidth);
+    expect(cardVp.tabIndex).toBe(0);
+    expect(inspectOverflow(doc)).toEqual([]);
+    nestedWrap.remove();
+    await flush();
+
+    const innerScroll = doc.createElement("div");
+    innerScroll.setAttribute("data-scroll-viewport", "");
+    innerScroll.className = "scroll-viewport-x w-full max-w-full scroll-flex";
+    const innerAmount = doc.createElement("span");
+    innerAmount.className = "block tabular-nums whitespace-nowrap w-max";
+    innerAmount.textContent = "9,876,543,210,987,654,321원";
+    innerScroll.append(innerAmount);
+    cardVp.firstElementChild?.firstElementChild?.append(innerScroll);
+    await flush();
+    expect(cardVp.scrollWidth).toBeGreaterThan(cardVp.clientWidth);
+    expect(innerScroll.scrollWidth).toBeLessThanOrEqual(
+      innerScroll.clientWidth,
+    );
+    expect(inspectOverflow(doc)).toEqual([]);
+  }, 20000);
+});

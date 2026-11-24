@@ -67,7 +67,7 @@ test("Button design variants, sizes, Tab/Enter/Space and disabled callbacks", as
       await action(w, () => w.user.hover(button));
       await action(w, () => w.user.keyboard("{Enter} "));
       assert.deepEqual(calls(w), ["clicked", "clicked"]);
-      assert.ok(button.classList.contains("h-" + size));
+      assert.ok(button.classList.contains("min-h-" + size));
       w.show("Button", { variant, size, disabled: "disabled" });
       const disabled = w.q.getByRole("button", {
         name: "주식 코파일럿",

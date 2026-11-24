@@ -1,0 +1,18 @@
+task = "T-11"
+base_commit = "1c9fb859cef006c6806b1303daa5f30a2654f28e"
+merge_head = "21b3b7041710a66550a3705ef9ca630f3be8699d"
+reason = "T-11 implements the sellable quantity read so the capability test moves SellableQuantity from the unsupported list to the supported list, and H-61 changes the fixed check recipe tail because push-check now delegates to xtask push-check; both reviewed by the main agent against the task rows"
+findings = [
+  "test-diff:modified:broker-toss::fx_market tests::capabilities_match_implemented_market_endpoints",
+  "test-diff:modified:xtask::bin/xtask git_hooks::tests::check_ends_with_the_new_disables_and_the_hook_installation",
+]
+
+[[file]]
+path = "crates/adapters/broker-toss/tests/fx_market.rs"
+before_sha256 = "ba96bbf37fb0a0d47ba0945b53e897308a26d2fe08a5282f5e7653f1bca7508b"
+after_sha256 = "70b433b55c68838fc67409fbd37a8434c84a786c60ddea1cedb6b8c4d2868630"
+
+[[file]]
+path = "crates/xtask/src/git_hooks/tests.rs"
+before_sha256 = "6ae22a0f05748ac194c3c5ec500849c49406c556b08d0a3bcd77071bb68a122b"
+after_sha256 = "617eef9fa1ae627374706b21bc6ca8c6a0735374cb867c1f5611c906348a5cf8"

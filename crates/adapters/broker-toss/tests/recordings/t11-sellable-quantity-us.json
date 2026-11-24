@@ -1,0 +1,12 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/sellable-quantity",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1sellable-quantity/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "sellableQuantity": "5.5125"
+    }
+  }
+}

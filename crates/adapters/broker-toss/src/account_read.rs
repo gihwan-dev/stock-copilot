@@ -140,6 +140,17 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
     pub(crate) fn market_master(&self) -> &MasterInstrumentFacts {
         &self.master
     }
+    pub(crate) fn tokens(&self) -> &TokenManager<Store, Time, Renewal> {
+        &self.tokens
+    }
+    pub(crate) async fn fetch_order(
+        &self,
+        account: &AccountId,
+        order_id: &domain::BrokerOrderId,
+        master_errors: MasterErrorMode,
+    ) -> Result<domain::BrokerOrder, PortError> {
+        crate::order_read::order(self, account, order_id, master_errors).await
+    }
     pub(crate) async fn market_read(
         &self,
         request: ReadRequest,
@@ -161,6 +172,12 @@ impl<Store: SecretStore, Time: Clock, Renewal: TokenRenewal> TossAccountRead<Sto
                 application::BrokerCapability::MinuteCandles,
                 application::BrokerCapability::AdjustedHistory,
                 application::BrokerCapability::RawHistory,
+                application::BrokerCapability::SellableQuantity,
+                application::BrokerCapability::OpenOrders,
+                application::BrokerCapability::ClosedOrders,
+                application::BrokerCapability::Order,
+                application::BrokerCapability::StockWarnings,
+                application::BrokerCapability::CommissionRate,
                 application::BrokerCapability::IndicatorQuotes,
                 application::BrokerCapability::IndicatorCandles,
                 application::BrokerCapability::Calendar,

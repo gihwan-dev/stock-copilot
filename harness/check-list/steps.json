@@ -492,6 +492,26 @@
     },
     {
       "recipe": "check-ts",
+      "command": "node --test 'harness/antigravity-hooks/tests/*.test.mjs'",
+      "kind": "runner",
+      "cases": "harness/antigravity-hooks/tests/adapter.test.mjs",
+      "test": {
+        "file": "harness/antigravity-hooks/tests/adapter.test.mjs",
+        "name": "Antigravity pre-tool enforces the allow and deny matrix across all four scopes"
+      }
+    },
+    {
+      "recipe": "check-ts",
+      "command": "node harness/antigravity-hooks/config.mjs",
+      "kind": "check",
+      "cases": "harness/antigravity-hooks/tests/config.test.mjs",
+      "test": {
+        "file": "harness/antigravity-hooks/tests/config.test.mjs",
+        "name": "Antigravity hooks config covers pre post stop resolves common git dir and fails closed"
+      }
+    },
+    {
+      "recipe": "check-ts",
       "command": "cargo run --locked --quiet --package xtask -- gen-tokens --check",
       "kind": "check",
       "cases": "apps/desktop/tests/ds-generation.test.mjs",

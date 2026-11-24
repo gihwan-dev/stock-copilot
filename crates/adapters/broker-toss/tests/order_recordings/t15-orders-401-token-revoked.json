@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/orders",
+  "method": "get",
+  "status": "401",
+  "schema": "#/components/responses/Unauthorized/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-orders-401",
+      "code": "token-revoked",
+      "message": "토큰이 무효화되었습니다."
+    }
+  }
+}

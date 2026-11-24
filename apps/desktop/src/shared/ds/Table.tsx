@@ -1,5 +1,6 @@
 import { createContext, use, type ReactElement } from "react";
 import { text, type UiText } from "../lib";
+import { ScrollArea } from "./ScrollArea";
 type Children = { readonly children?: ReactElement | readonly ReactElement[] };
 type Density = "normal" | "dense";
 const DensityContext = createContext<Density>("normal");
@@ -11,23 +12,25 @@ const root = (
   },
 ): ReactElement => (
   <DensityContext value={props.dense ?? "normal"}>
-    <div className="bg-surface border-hairline border-solid border-line rounded-lg">
-      <table className="w-full border-collapse tabular-nums">
-        {props.caption === undefined ? null : (
-          <caption className="text-left p-space-3 text-body-sm text-ink-muted">
-            {props.caption}
-          </caption>
-        )}
-        {props.children ?? (
-          <tbody>
-            <tr>
-              <td className="py-space-8 px-space-3 text-center text-ink-muted">
-                {props.empty ?? text("ds.tableEmpty", "ko")}
-              </td>
-            </tr>
-          </tbody>
-        )}
-      </table>
+    <div className="bg-surface border-hairline border-solid border-line rounded-lg max-w-full scroll-flex">
+      <ScrollArea direction="horizontal">
+        <table className="w-full border-collapse tabular-nums">
+          {props.caption === undefined ? null : (
+            <caption className="text-left p-space-3 text-body-sm text-ink-muted">
+              {props.caption}
+            </caption>
+          )}
+          {props.children ?? (
+            <tbody>
+              <tr>
+                <td className="py-space-8 px-space-3 text-center text-ink-muted">
+                  {props.empty ?? text("ds.tableEmpty", "ko")}
+                </td>
+              </tr>
+            </tbody>
+          )}
+        </table>
+      </ScrollArea>
     </div>
   </DensityContext>
 );

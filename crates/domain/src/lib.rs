@@ -543,7 +543,7 @@ mod net_purchase_closed;
 mod net_purchase_daily;
 pub use net_purchase::{
     NetPurchaseError, NetPurchaseIncomplete, NetPurchaseInputError, NetPurchaseScope, NetPurchases,
-    net_purchase_amount, net_purchases,
+    net_purchase_amount, net_purchases, proven_net_purchase_amount, proven_net_purchases,
 };
 pub use net_purchase_closed::{ClosedOrderCompleteness, ClosedOrderIncomplete, ClosedOrderSet};
 pub use net_purchase_daily::{
@@ -683,4 +683,11 @@ mod draft_order_intent;
 pub use draft_order_intent::{
     DraftOrderIntent, HistoricalDecimalText, HistoricalOrderAmount, HistoricalOrderTerms,
     HistoricalSellQuantity, HistoricalWholeQuantity,
+};
+mod order_query_proof;
+pub use order_query_proof::{
+    ClosedOrderCompletenessProof, ClosedOrderPageCollector, ClosedOrderQueryScope,
+    OpenOrderCollector, OpenOrderQueryScope, OrderDateFilter, OrderPageBoundary,
+    OrderPageExhaustion, OrderQueryFilterState, OrderRowIntake, OrderSymbolFilter,
+    OrderedAtDateBounds, ProvenClosedOrderSet,
 };
