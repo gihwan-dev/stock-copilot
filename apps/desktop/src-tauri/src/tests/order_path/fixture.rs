@@ -29,7 +29,9 @@ use domain::{
 };
 use std::collections::BTreeMap;
 use std::future::Future;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
+use std::task::Poll;
 use testkit_ports::memory::{MemoryReply, MemorySettingsRepository};
 use testkit_ports::proposal_memory::{
     MemoryProposalConsumptionRepository, MemoryValidationReportRepository,
@@ -122,7 +124,7 @@ fn volatility(master: &MasterInstrument) -> Volatility {
     Volatility::calculate(&candles).expect("변동성")
 }
 
-fn draft(master: &MasterInstrument) -> Proposal<Draft> {
+fn draft(master: &MasterInstrument, size: OrderSize) -> Proposal<Draft> {
     let client_id = ClientOrderId::try_new(PROPOSAL).expect("주문 키");
     let obs = master
         .price_observation(price("35000"), now())
@@ -142,7 +144,7 @@ fn draft(master: &MasterInstrument) -> Proposal<Draft> {
         client_id.clone(),
         OrderTerms::KrLimit {
             side: OrderSide::Buy,
-            quantity: WholeOrderQuantity::try_new(quantity("2")).expect("정수 수량"),
+            quantity: WholeOrderQuantity::try_new(quantity(size.quantity())).expect("정수 수량"),
             price: KrOrderPrice::try_new(price("35000")).expect("지정가"),
         },
     )
@@ -157,10 +159,10 @@ fn draft(master: &MasterInstrument) -> Proposal<Draft> {
     .expect("초안")
 }
 
-fn context(master: &MasterInstrument) -> OrderGatePolicyContext {
+fn context(master: &MasterInstrument, size: OrderSize) -> OrderGatePolicyContext {
     let portfolio = Portfolio::new(
         Vec::new(),
-        BuyingPower::new(money("5000000", Currency::Krw), now()),
+        BuyingPower::new(money(size.cash(), Currency::Krw), now()),
         BuyingPower::new(money("0", Currency::Usd), now()),
     )
     .expect("포트폴리오")
@@ -207,12 +209,16 @@ fn calendar() -> MarketCalendar {
 }
 
 fn quote(master: &MasterInstrument) -> QuoteObservation {
+    quote_at(master, "35000")
+}
+
+fn quote_at(master: &MasterInstrument, quoted: &str) -> QuoteObservation {
     QuoteObservation {
         instrument: master.quote_instrument().expect("시세 종목"),
         result: Ok(Quote::try_new(
             master.row().symbol.clone(),
             Currency::Krw,
-            Some(price("35000")),
+            Some(price(quoted)),
             Some(now()),
             now(),
         )
@@ -224,8 +230,12 @@ fn push_gate_round(
     broker: &ScriptedBrokerRead,
     market: &ScriptedMarketInfo,
     master: &MasterInstrument,
+    quoted: &str,
+    size: OrderSize,
 ) {
-    broker.script_quotes().push(Ok(vec![quote(master)]));
+    broker
+        .script_quotes()
+        .push(Ok(vec![quote_at(master, quoted)]));
     broker
         .script_accounts()
         .push(Ok(BrokerAccountRows::try_new(vec![
@@ -269,9 +279,10 @@ fn push_gate_round(
             .expect("요율"),
             CommissionValidity::try_new(None, None).expect("기간"),
         )));
-    broker
-        .script_buying_power()
-        .push(Ok(BuyingPower::new(money("5000000", Currency::Krw), now())));
+    broker.script_buying_power().push(Ok(BuyingPower::new(
+        money(size.cash(), Currency::Krw),
+        now(),
+    )));
     broker
         .script_stock_warnings()
         .push(Ok(StockWarnings::from_lookup_result(
@@ -282,20 +293,23 @@ fn push_gate_round(
     market.script_calendar().push(Ok(calendar()));
 }
 
-pub(crate) struct NoRates;
+pub(crate) struct FixedRates {
+    limit: Option<HourlyOrderLimit>,
+    recent: Vec<Timestamp>,
+}
 
-impl OrderRateRepository for NoRates {
+impl OrderRateRepository for FixedRates {
     fn hourly_limit(
         &self,
     ) -> impl Future<Output = Result<Option<HourlyOrderLimit>, SystemPortError>> + Send {
-        std::future::ready(Ok(None))
+        std::future::ready(Ok(self.limit))
     }
 
     fn recent_submission_times(
         &self,
         _since: Timestamp,
     ) -> impl Future<Output = Result<Vec<Timestamp>, SystemPortError>> + Send {
-        std::future::ready(Ok(Vec::new()))
+        std::future::ready(Ok(self.recent.clone()))
     }
 }
 
@@ -339,14 +353,28 @@ impl ProposalRepository for FixedProposals {
     }
 }
 
-pub(crate) struct FixedContexts(BTreeMap<ProposalId, OrderGatePolicyContext>);
+pub(crate) const GATE_OPEN: u8 = 0;
+pub(crate) const GATE_HELD: u8 = 1;
+
+pub(crate) struct FixedContexts {
+    contexts: BTreeMap<ProposalId, OrderGatePolicyContext>,
+    gate: Arc<AtomicU8>,
+}
 
 impl ProposalContextPort for FixedContexts {
     fn policy_context(
         &self,
         proposal_id: &ProposalId,
     ) -> impl Future<Output = Result<Option<OrderGatePolicyContext>, SystemPortError>> + Send {
-        std::future::ready(Ok(self.0.get(proposal_id).cloned()))
+        let found = self.contexts.get(proposal_id).cloned();
+        let gate = Arc::clone(&self.gate);
+        std::future::poll_fn(move |_context| {
+            if gate.load(Ordering::SeqCst) == GATE_HELD {
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(found.clone()))
+            }
+        })
     }
 }
 
@@ -374,7 +402,14 @@ impl SymbolFreezePort for NeverFrozen {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LedgerMode {
+    Atomic,
+    WriteFails,
+}
+
 pub(crate) struct LedgerTx {
+    mode: LedgerMode,
     consumption: Arc<MemoryProposalConsumptionRepository>,
     audit: Arc<MemoryAuditLog>,
     prepared: RwLock<Vec<PreparedSubmissionRecord>>,
@@ -394,6 +429,12 @@ impl PreSubmitTransactionPort for LedgerTx {
         &self,
         record: &PreparedSubmissionRecord,
     ) -> Result<PreSubmitCommitOutcome, SystemPortError> {
+        if self.mode == LedgerMode::WriteFails {
+            return Err(SystemPortError::new(
+                application::SystemPort::Repository,
+                application::SystemFailure::InvalidData,
+            ));
+        }
         match self.consumption.consume(&record.proposal_id).await? {
             ConsumptionOutcome::AlreadyConsumed => Ok(PreSubmitCommitOutcome::AlreadyConsumed),
             ConsumptionOutcome::Recorded => {
@@ -427,7 +468,7 @@ impl ApprovalServiceTypes for PathTypes {
     type Broker = ScriptedBrokerRead;
     type Market = ScriptedMarketInfo;
     type Settings = MemorySettingsRepository;
-    type Rates = NoRates;
+    type Rates = FixedRates;
     type Proposals = FixedProposals;
     type Consumption = MemoryProposalConsumptionRepository;
     type Reports = MemoryValidationReportRepository;
@@ -444,12 +485,81 @@ impl ApprovalServiceTypes for PathTypes {
 pub(crate) type ApprovalServiceOf = ApprovalService<PathTypes>;
 
 pub(crate) struct PathFixture {
+    pub(crate) clock: Arc<SteppedClock>,
     pub(crate) service: Arc<ApprovalService<PathTypes>>,
     pub(crate) trade: Arc<RecordingBroker>,
     pub(crate) tx: Arc<LedgerTx>,
 }
 
-fn enabled_settings() -> MemorySettingsRepository {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AuditMode {
+    Writable,
+    Broken,
+}
+
+pub(crate) struct Options {
+    pub(crate) permission: OrderPermission,
+    pub(crate) hourly_full: HourlyState,
+    pub(crate) post_presence_price: &'static str,
+    pub(crate) audit: AuditMode,
+    pub(crate) ledger: LedgerMode,
+    pub(crate) gate: Arc<AtomicU8>,
+    pub(crate) size: OrderSize,
+    pub(crate) reply: ReplyKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OrderSize {
+    Small,
+    HighValue,
+}
+
+impl OrderSize {
+    const fn quantity(self) -> &'static str {
+        match self {
+            Self::Small => "2",
+            Self::HighValue => "2300",
+        }
+    }
+
+    const fn cash(self) -> &'static str {
+        match self {
+            Self::Small => "5000000",
+            Self::HighValue => "1000000000",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReplyKind {
+    Accept,
+    RejectHighValue,
+    TransportThenAccept,
+    Maintenance,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HourlyState {
+    Room,
+    Full,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            permission: OrderPermission::Enabled,
+            hourly_full: HourlyState::Room,
+            post_presence_price: "35000",
+            audit: AuditMode::Writable,
+            ledger: LedgerMode::Atomic,
+            gate: Arc::new(AtomicU8::new(GATE_OPEN)),
+            size: OrderSize::Small,
+            reply: ReplyKind::Accept,
+        }
+    }
+}
+
+fn settings_with(permission: OrderPermission) -> MemorySettingsRepository {
     let settings = MemorySettingsRepository::default();
     settings
         .script_store_risk_settings()
@@ -458,7 +568,7 @@ fn enabled_settings() -> MemorySettingsRepository {
         settings.script_risk_settings().push(MemoryReply::Memory);
     }
     let risk = RiskSettings::new(
-        OrderPermission::Enabled,
+        permission,
         SavedMarketOrderSetting::Disabled,
         HoursPermissionState::Disabled,
         WeightCaps::default(),
@@ -470,14 +580,29 @@ fn enabled_settings() -> MemorySettingsRepository {
 }
 
 pub(crate) fn fixture(presence: Arc<ScriptedPresence>, accept: &str) -> PathFixture {
-    let master = master();
-    let proposal = draft(&master);
-    let id = proposal.id().clone();
-    let broker = Arc::new(ScriptedBrokerRead::default());
-    let market = Arc::new(ScriptedMarketInfo::default());
-    broker.script_quotes().push(Ok(vec![quote(&master)]));
-    push_gate_round(&broker, &market, &master);
-    push_gate_round(&broker, &market, &master);
+    fixture_with(presence, accept, Options::default())
+}
+
+fn rates(state: HourlyState) -> FixedRates {
+    match state {
+        HourlyState::Room => FixedRates {
+            limit: None,
+            recent: Vec::new(),
+        },
+        HourlyState::Full => FixedRates {
+            limit: Some(HourlyOrderLimit::try_new(domain::OrderCount::new(1)).expect("상한")),
+            recent: vec![now()],
+        },
+    }
+}
+
+type Storage = (
+    Arc<MemoryProposalConsumptionRepository>,
+    Arc<MemoryValidationReportRepository>,
+    Arc<MemoryAuditLog>,
+);
+
+fn storage(mode: AuditMode) -> Storage {
     let consumption = Arc::new(MemoryProposalConsumptionRepository::default());
     let reports = Arc::new(MemoryValidationReportRepository::default());
     let audit = Arc::new(MemoryAuditLog::default());
@@ -485,12 +610,48 @@ pub(crate) fn fixture(presence: Arc<ScriptedPresence>, accept: &str) -> PathFixt
         consumption.script_status().push(MemoryReply::Memory);
         consumption.script_consume().push(MemoryReply::Memory);
         reports.script_append().push(MemoryReply::Memory);
-        audit.script_append().push(MemoryReply::Memory);
+        audit.script_append().push(match mode {
+            AuditMode::Writable => MemoryReply::Memory,
+            AuditMode::Broken => MemoryReply::Return(Err(SystemPortError::new(
+                application::SystemPort::AuditLog,
+                application::SystemFailure::InvalidData,
+            ))),
+        });
     }
-    let trade = Arc::new(RecordingBroker::with_replies([BrokerReply::Accept(
-        BrokerOrderId::try_new(accept).expect("주문번호"),
-    )]));
+    (consumption, reports, audit)
+}
+
+pub(crate) fn fixture_with(
+    presence: Arc<ScriptedPresence>,
+    accept: &str,
+    options: Options,
+) -> PathFixture {
+    let master = master();
+    let proposal = draft(&master, options.size);
+    let id = proposal.id().clone();
+    let broker = Arc::new(ScriptedBrokerRead::default());
+    let market = Arc::new(ScriptedMarketInfo::default());
+    broker.script_quotes().push(Ok(vec![quote(&master)]));
+    push_gate_round(&broker, &market, &master, "35000", options.size);
+    push_gate_round(
+        &broker,
+        &market,
+        &master,
+        options.post_presence_price,
+        options.size,
+    );
+    let (consumption, reports, audit) = storage(options.audit);
+    let clock = Arc::new(SteppedClock::new(now()));
+    let accepted = BrokerReply::Accept(BrokerOrderId::try_new(accept).expect("주문번호"));
+    let replies = match options.reply {
+        ReplyKind::Accept => vec![accepted],
+        ReplyKind::RejectHighValue => vec![BrokerReply::high_value_confirmation_required()],
+        ReplyKind::TransportThenAccept => vec![BrokerReply::transport_unknown(), accepted],
+        ReplyKind::Maintenance => vec![BrokerReply::maintenance_unknown(), accepted],
+    };
+    let trade = Arc::new(RecordingBroker::with_replies(replies));
     let tx = Arc::new(LedgerTx {
+        mode: options.ledger,
         consumption: Arc::clone(&consumption),
         audit: Arc::clone(&audit),
         prepared: RwLock::new(Vec::new()),
@@ -498,20 +659,28 @@ pub(crate) fn fixture(presence: Arc<ScriptedPresence>, accept: &str) -> PathFixt
     let service = Arc::new(ApprovalService::new(ApprovalServiceParts::<PathTypes> {
         broker,
         market,
-        settings: Arc::new(enabled_settings()),
-        rates: Arc::new(NoRates),
+        settings: Arc::new(settings_with(options.permission)),
+        rates: Arc::new(rates(options.hourly_full)),
         proposals: Arc::new(FixedProposals(BTreeMap::from([(id.clone(), proposal)]))),
         consumption,
         reports,
         audit,
-        contexts: Arc::new(FixedContexts(BTreeMap::from([(id, context(&master))]))),
+        contexts: Arc::new(FixedContexts {
+            contexts: BTreeMap::from([(id, context(&master, options.size))]),
+            gate: options.gate,
+        }),
         redrafter: Arc::new(NoRedraft),
         freeze: Arc::new(NeverFrozen),
-        clock: Arc::new(SteppedClock::new(now())),
+        clock: Arc::clone(&clock),
         presence,
         tx_port: Arc::clone(&tx),
         trade: Arc::clone(&trade),
         events: EventBusBuilder::default().build(),
     }));
-    PathFixture { service, trade, tx }
+    PathFixture {
+        clock,
+        service,
+        trade,
+        tx,
+    }
 }

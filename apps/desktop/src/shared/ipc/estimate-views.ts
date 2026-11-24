@@ -1,6 +1,7 @@
 import type {
   ChartDecimal,
   EntityId,
+  ExternalUrl,
   FreeText,
   InputValue,
   Money,
@@ -120,11 +121,33 @@ export type InstrumentDetailView = {
     | undefined;
 };
 
-export type BriefingSummary = {
+export type BriefingKind = "morning" | "closing-review" | "pre-us-market";
+
+export type BriefingSourceKind = "web" | "news" | "disclosure";
+
+export type BriefingFailure =
+  "ai-unavailable" | "rate-limited" | "empty" | "rejected";
+
+export type BriefingSourceView = {
   readonly id: EntityId;
   readonly title: FreeText;
+  readonly url: ExternalUrl | undefined;
+  readonly kind: BriefingSourceKind;
+};
+
+export type BriefingOutcome =
+  | {
+      readonly kind: "completed";
+      readonly body: FreeText;
+      readonly sources: readonly BriefingSourceView[];
+    }
+  | { readonly kind: "failed"; readonly reason: BriefingFailure };
+
+export type BriefingSummary = {
+  readonly id: EntityId;
+  readonly kind: BriefingKind;
   readonly finishedAt: Timestamp;
-  readonly body: FreeText;
+  readonly outcome: BriefingOutcome;
 };
 
 export type BriefingsView = {

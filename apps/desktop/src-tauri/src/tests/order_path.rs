@@ -1,4 +1,6 @@
+mod extended;
 mod fixture;
+mod unknown_retry;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -46,7 +48,11 @@ fn assembled(
     crate::build_app(mock_builder().manage(runtime), ports, context).expect("제품 조립")
 }
 
-fn invoke(cmd: &str, origin: &str, body: serde_json::Value) -> tauri::webview::InvokeRequest {
+pub(super) fn invoke(
+    cmd: &str,
+    origin: &str,
+    body: serde_json::Value,
+) -> tauri::webview::InvokeRequest {
     tauri::webview::InvokeRequest {
         cmd: cmd.into(),
         callback: tauri::ipc::CallbackFn(13),
@@ -58,14 +64,17 @@ fn invoke(cmd: &str, origin: &str, body: serde_json::Value) -> tauri::webview::I
     }
 }
 
-const LOCAL: &str = "tauri://localhost";
+pub(super) const LOCAL: &str = "tauri://localhost";
 
-fn approval(proposal_id: &str) -> serde_json::Value {
+pub(super) fn approval(proposal_id: &str) -> serde_json::Value {
     serde_json::json!({"request": {"proposal_id": proposal_id}})
 }
 
-fn run_with<Check>(presence: &Arc<ScriptedPresence>, path: &Arc<PathFixture>, check: Check)
-where
+pub(super) fn run_with<Check>(
+    presence: &Arc<ScriptedPresence>,
+    path: &Arc<PathFixture>,
+    check: Check,
+) where
     Check: Fn(&tauri::AppHandle<MockRuntime>) + 'static,
 {
     let handler: Arc<dyn OrderApprovalHandler> =
@@ -106,7 +115,7 @@ where
     assert_eq!(exits.load(Ordering::SeqCst), 1, "정리 뒤 종료 요청");
 }
 
-fn response_of(
+pub(super) fn response_of(
     handle: &tauri::AppHandle<MockRuntime>,
     cmd: &str,
     origin: &str,

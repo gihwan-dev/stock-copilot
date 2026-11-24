@@ -4,6 +4,7 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { FirstRunGate, OnboardingClientProvider } from "../features/onboarding";
 import { EmptyState, Page } from "../shared/ds";
 import {
+  getBriefings,
   pendingScreenSources,
   type ScreenSources,
   type SettingsClient,
@@ -19,6 +20,11 @@ type AppProps = {
   readonly queryClient?: QueryClient | undefined;
   readonly sources?: ScreenSources | undefined;
   readonly settingsClient?: SettingsClient | undefined;
+};
+
+const coreScreenSources: ScreenSources = {
+  ...pendingScreenSources,
+  briefings: getBriefings,
 };
 
 const CoreEventBridge = (): null => {
@@ -45,7 +51,7 @@ const AppErrorFallback = (props: Readonly<FallbackProps>): ReactElement => (
 export const App = (props: AppProps): ReactElement => {
   const [defaultClient] = useState(createAppQueryClient);
   const client = props.queryClient ?? defaultClient;
-  const sources = props.sources ?? pendingScreenSources;
+  const sources = props.sources ?? coreScreenSources;
   return (
     <ErrorBoundary FallbackComponent={AppErrorFallback}>
       <QueryClientProvider client={client}>
