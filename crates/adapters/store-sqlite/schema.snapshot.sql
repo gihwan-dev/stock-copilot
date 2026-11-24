@@ -275,6 +275,11 @@ CREATE TABLE proposal_validation_reports (
     c11 TEXT NOT NULL CHECK (c11 IN ('passed', 'failed', 'unknown')),
     c12 TEXT NOT NULL CHECK (c12 IN ('passed', 'failed', 'unknown'))
 ) STRICT;
+CREATE TABLE settings (
+    name TEXT PRIMARY KEY CHECK (name IN ('investor_profile', 'risk_settings', 'toss_spec_hash')),
+    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
+    payload TEXT NOT NULL
+) STRICT;
 CREATE TABLE signal_discarded_submissions (
     id INTEGER PRIMARY KEY,
     instrument TEXT NOT NULL,
@@ -441,6 +446,7 @@ CREATE TRIGGER proposal_consumptions_no_replace BEFORE INSERT ON proposal_consum
 CREATE TRIGGER proposal_consumptions_no_update BEFORE UPDATE ON proposal_consumptions BEGIN SELECT RAISE(ABORT, 'proposal consumption is append only'); END;
 CREATE TRIGGER proposal_drafts_no_delete BEFORE DELETE ON proposal_drafts BEGIN SELECT RAISE(ABORT, 'proposal drafts are append only'); END;
 CREATE TRIGGER proposal_drafts_supersede_only BEFORE UPDATE ON proposal_drafts WHEN OLD.state != 'current' OR NEW.state != 'superseded' OR NEW.id != OLD.id OR NEW.proposal_id != OLD.proposal_id OR NEW.mode != OLD.mode OR NEW.instrument != OLD.instrument OR NEW.account != OLD.account OR NEW.expires_seconds != OLD.expires_seconds OR NEW.expires_nanos != OLD.expires_nanos OR NEW.expires_offset != OLD.expires_offset OR coalesce(NEW.snapshot_payload, '') != coalesce(OLD.snapshot_payload, '') OR (NEW.snapshot_payload IS NULL) != (OLD.snapshot_payload IS NULL) OR NEW.evidence_payload != OLD.evidence_payload BEGIN SELECT RAISE(ABORT, 'proposal draft can only transition from current to superseded'); END;
+CREATE TRIGGER settings_no_delete BEFORE DELETE ON settings BEGIN SELECT RAISE(ABORT, 'settings are replaced, not deleted'); END;
 CREATE TRIGGER signal_discarded_submissions_no_delete BEFORE DELETE ON signal_discarded_submissions BEGIN SELECT RAISE(ABORT, 'signal discarded submissions are append only'); END;
 CREATE TRIGGER signal_discarded_submissions_no_replace BEFORE INSERT ON signal_discarded_submissions WHEN EXISTS (SELECT 1 FROM signal_discarded_submissions WHERE instrument = NEW.instrument AND task_id = NEW.task_id) BEGIN SELECT RAISE(ABORT, 'signal discarded submissions are append only'); END;
 CREATE TRIGGER signal_discarded_submissions_no_update BEFORE UPDATE ON signal_discarded_submissions BEGIN SELECT RAISE(ABORT, 'signal discarded submissions are append only'); END;
