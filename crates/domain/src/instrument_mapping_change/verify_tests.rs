@@ -283,7 +283,20 @@ struct LinkOp<'a> {
     timestamp: i64,
 }
 
-fn apply_link_op(mappings: &mut InstrumentMappings, input: LinkOp<'_>) {
+#[derive(Clone, Copy)]
+enum OpOutcome {
+    Accepted,
+    Rejected,
+}
+
+fn outcome_of<T, E>(result: Result<T, E>) -> OpOutcome {
+    match result {
+        Ok(_) => OpOutcome::Accepted,
+        Err(_) => OpOutcome::Rejected,
+    }
+}
+
+fn apply_link_op(mappings: &mut InstrumentMappings, input: LinkOp<'_>) -> OpOutcome {
     let action = match input.action_kind {
         LinkActionKind::Split => split_action(input.id),
         LinkActionKind::Other if input.prev.symbol() == input.next.symbol() => {
@@ -309,7 +322,7 @@ fn apply_link_op(mappings: &mut InstrumentMappings, input: LinkOp<'_>) {
             ts(input.timestamp),
         ),
     );
-    let _res = mappings.link_confirmed_change(change);
+    outcome_of(mappings.link_confirmed_change(change))
 }
 
 fn correction_confirmation(
@@ -331,6 +344,8 @@ use std::cell::Cell;
 
 #[derive(Default)]
 struct PropStats {
+    ok_ops: Cell<usize>,
+    err_ops: Cell<usize>,
     id_changed: Cell<usize>,
     retire_corr: Cell<usize>,
     link_corr: Cell<usize>,
@@ -349,6 +364,13 @@ fn superseded_count_for_id(mappings: &InstrumentMappings, id: &InstrumentId) -> 
 }
 
 impl PropStats {
+    fn observe_outcome(&self, outcome: OpOutcome) {
+        match outcome {
+            OpOutcome::Accepted => self.ok_ops.set(self.ok_ops.get().saturating_add(1)),
+            OpOutcome::Rejected => self.err_ops.set(self.err_ops.get().saturating_add(1)),
+        }
+    }
+
     fn observe_history(&self, mappings: &InstrumentMappings, ids: &[InstrumentId; 3]) {
         for event in mappings.history() {
             match event {
@@ -428,7 +450,7 @@ fn apply_correct_link(
     fallback: (&InstrumentSource, &InstrumentSource),
     serial: u8,
     timestamp: i64,
-) {
+) -> OpOutcome {
     let (target_prev, target_next) = latest_link_for_id(mappings, id)
         .unwrap_or_else(|| (fallback.0.clone(), fallback.1.clone()));
     let correction = ConfirmedLinkCorrection::new(
@@ -437,16 +459,20 @@ fn apply_correct_link(
         target_next,
         correction_confirmation(serial, "속성 테스트 연결 정정", timestamp),
     );
-    let _res = mappings.correct_link(correction);
+    outcome_of(mappings.correct_link(correction))
 }
 
-fn apply_ensure_op(mappings: &mut InstrumentMappings, source: &InstrumentSource, id_slot: usize) {
+fn apply_ensure_op(
+    mappings: &mut InstrumentMappings,
+    source: &InstrumentSource,
+    id_slot: usize,
+) -> OpOutcome {
     let mut local = IndependentInstrumentIdIssuer::new();
     for _ in 0..id_slot {
         let _skip = local.issue().expect("건너뛰기");
     }
     let cand = local.issue().expect("후보");
-    let _res = mappings.ensure(source, cand);
+    outcome_of(mappings.ensure(source, cand))
 }
 
 fn apply_correct_retirement_op(
@@ -455,14 +481,14 @@ fn apply_correct_retirement_op(
     fallback: &InstrumentSource,
     serial: u8,
     timestamp: i64,
-) {
+) -> OpOutcome {
     let target = current_retired_source(mappings, id).unwrap_or_else(|| fallback.clone());
     let correction = ConfirmedRetirementCorrection::new(
         id.clone(),
         target,
         correction_confirmation(serial, "속성 테스트 폐지 정정", timestamp),
     );
-    let _res = mappings.correct_retirement(correction);
+    outcome_of(mappings.correct_retirement(correction))
 }
 
 fn pick_link_next(
@@ -489,9 +515,9 @@ fn apply_retire_op(
     mappings: &mut InstrumentMappings,
     id: &InstrumentId,
     fallback: &InstrumentSource,
-) {
+) -> OpOutcome {
     let target = current_active_source(mappings, id).unwrap_or_else(|| fallback.clone());
-    let _res = mappings.retire(&target);
+    outcome_of(mappings.retire(&target))
 }
 
 fn apply_op(
@@ -500,11 +526,11 @@ fn apply_op(
     ids: &[InstrumentId; 3],
     step: usize,
     op: Op,
-) {
+) -> OpOutcome {
     let serial = u8::try_from(step.rem_euclid(90).saturating_add(1)).expect("순번");
     match op {
         Op::Ensure { source, id_slot } => {
-            apply_ensure_op(mappings, sources.get(source).expect("원본"), id_slot);
+            apply_ensure_op(mappings, sources.get(source).expect("원본"), id_slot)
         }
         Op::Retire { id_slot, source } => apply_retire_op(
             mappings,
@@ -532,7 +558,7 @@ fn apply_op(
                     serial,
                     timestamp,
                 },
-            );
+            )
         }
         Op::CorrectRetirement {
             id_slot,
@@ -624,7 +650,7 @@ fn verify_ops_sequence(ops: Vec<Op>, stats: &PropStats) {
     let mut mappings = InstrumentMappings::default();
 
     for (step, op) in ops.into_iter().enumerate() {
-        apply_op(&mut mappings, &sources, &ids, step, op);
+        stats.observe_outcome(apply_op(&mut mappings, &sources, &ids, step, op));
         let mut all_records = Vec::new();
         for tracked_id in &ids {
             if let Ok(rows) = mappings.for_id(tracked_id) {
@@ -649,6 +675,8 @@ fn every_valid_domain_state_passes_persisted_ledger_verification() {
             Ok(())
         })
         .expect("도메인 원장 검증 속성");
+    assert!(stats.ok_ops.get() > 0);
+    assert!(stats.err_ops.get() > 0);
     assert!(stats.id_changed.get() > 0);
     assert!(stats.retire_corr.get() > 0);
     assert!(stats.link_corr.get() > 0);

@@ -1658,6 +1658,67 @@ fn history_roundtrips_user_reason_containing_nul_byte() {
 }
 
 #[test]
+fn history_roundtrips_512_byte_boundary_user_reasons() {
+    let rt = runtime();
+    let fixture = Fixture::new();
+    let path = DatabasePath::new(fixture.path());
+    let db = Database::open(&path, &key(), &clock()).expect("open");
+    let target_id = id("inst-0000000000000001");
+    let src = source(KnownMarket::Kr, "005930", "KR7005930003");
+    let ascii_512 = "a".repeat(512);
+    let korean_512 = ["가".repeat(170), "aa".to_owned()].concat();
+    let emoji_512 = "😀".repeat(128);
+    let leading_nul_512 = ["\0".to_owned(), "a".repeat(511)].concat();
+    let raw_cases = [
+        (ascii_512, "20261124000080"),
+        (korean_512, "20261124000081"),
+        (emoji_512, "20261124000082"),
+        (leading_nul_512, "20261124000083"),
+    ];
+    let events: Vec<MappingHistoryEvent> = raw_cases
+        .into_iter()
+        .enumerate()
+        .map(|(offset, (raw_note, receipt))| {
+            assert_eq!(raw_note.len(), 512);
+            let note = UserReason::try_new(UntrustedText::try_new(&raw_note).expect("untrusted"))
+                .expect("512-byte note");
+            MappingHistoryEvent::RetirementCorrected {
+                instrument_id: target_id.clone(),
+                source: src.clone(),
+                disclosure: DisclosureKey::from_receipt(ReceiptNo::Dart(
+                    DartReceiptNo::try_new(receipt).expect("dart"),
+                )),
+                note,
+                corrected_at: Timestamp::from_parts(
+                    UnixSeconds::new(1_763_942_400),
+                    Nanosecond::new(u32::try_from(offset).expect("offset")),
+                    OffsetSeconds::new(32_400),
+                )
+                .expect("timestamp"),
+            }
+        })
+        .collect();
+    let seeded_events = events.clone();
+    let seeded_id = target_id.clone();
+    rt.block_on(db.write(move |tx| {
+        insert_active_mapping(tx, &seeded_id, &src)?;
+        for (index, event) in seeded_events.iter().enumerate() {
+            let seq = i64::try_from(index.checked_add(1).expect("seq")).expect("seq");
+            apply_seed_retirement_corrected(tx, seq, event, &seeded_id, &src)?;
+        }
+        Ok(())
+    }))
+    .expect("seed 512-byte boundary notes");
+    rt.block_on(db.close()).expect("close");
+
+    let reopened = Database::open(&path, &key(), &clock()).expect("reopen with 512-byte notes");
+    let store = InstrumentMappingStore::new(&reopened);
+    assert_eq!(rt.block_on(store.history()), Ok(events.clone()));
+    assert_eq!(rt.block_on(store.history_for_id(&target_id)), Ok(events));
+    rt.block_on(reopened.close()).expect("close reopened");
+}
+
+#[test]
 fn migration_schema_tracker_tracks_rename_and_drop_of_tables_indexes_and_triggers() {
     let mut tracker = crate::instrument_mapping::MigrationSchemaTracker::default();
     tracker.apply_script(history_sql::TRACKER_RENAME_SCRIPT);
