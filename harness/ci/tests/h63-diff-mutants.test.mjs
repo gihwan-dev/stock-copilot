@@ -312,6 +312,7 @@ test("H-63 조각 요약은 영수증·목록·완주·시간 초과·놓침 증
 });
 
 test("H-63 조각 요약은 실패·시간 초과·취소 시에도 missed.txt와 timeout.txt 증거를 요약에 남기고 0이 아닌 판정을 낸다", () => {
+  mkdirSync(join(repoRoot, "target"), { recursive: true });
   const dir = mkdtempSync(join(repoRoot, "target/h63-shard-"));
   try {
     const out = join(dir, "target/mutants/mutants.out");
@@ -858,45 +859,117 @@ test("H-63 건너뛴 매트릭스 플랫폼 작업 응답을 실제 GitHub Actio
     ]),
     "INVALID_EVIDENCE",
   );
+  assert.equal(
+    failureCode(HEAD, { ...run, conclusion: "cancelled" }, [
+      baseJobs[0],
+      baseJobs[1],
+      {
+        ...planJob,
+        conclusion: "cancelled",
+        runner_id: 21,
+        runner_name: "hosted",
+      },
+      {
+        ...baseJobs[3],
+        conclusion: "cancelled",
+        runner_id: 22,
+        runner_name: "hosted",
+      },
+      skippedJob("diff-mutants-linux", { conclusion: "cancelled" }),
+      skippedJob("diff-mutants-macos", { conclusion: "cancelled" }),
+    ]),
+    "RETRY_CANCELLED",
+  );
+  assert.equal(
+    failureCode(HEAD, { ...run, conclusion: "failure" }, [
+      baseJobs[0],
+      {
+        ...baseJobs[1],
+        conclusion: "timed_out",
+        runner_id: 19,
+        runner_name: "hosted",
+      },
+      planJob,
+      {
+        ...baseJobs[3],
+        conclusion: "cancelled",
+        runner_id: 22,
+        runner_name: "hosted",
+      },
+      makeJob(
+        "diff-mutants-linux (0/2)",
+        ["diff mutants shard", "diff mutants summary"],
+        { conclusion: "failure", runner_id: 23, runner_name: "hosted" },
+      ),
+      skippedMacos,
+    ]),
+    "CHECK_FAILED",
+  );
 });
 
 test("H-63과 H-59 macOS 변이 작업은 워크플로 간 공통 2슬롯 대기열을 공유해야 통과한다", () => {
   const ci = JSON.parse(readFileSync(join(repoRoot, CI_PATH), "utf8"));
-  const nightly = JSON.parse(
-    readFileSync(join(repoRoot, ".github/workflows/nightly.yml"), "utf8"),
-  );
+  const nightlyPath = ".github/workflows/nightly.yml";
+  const nightly = JSON.parse(readFileSync(join(repoRoot, nightlyPath), "utf8"));
   const ciConcurrency = ci.jobs["diff-mutants-macos"].concurrency;
   assert.deepEqual(ciConcurrency, nightly.jobs.mutants.concurrency);
   assert.deepEqual(ciConcurrency, nightly.jobs["mutants-daily"].concurrency);
   assert.equal(ciConcurrency.group.includes("github.workflow"), false);
   assert.deepEqual(repositoryFindings(repoRoot, POLICY, TOOL_SPEC), []);
 
-  const separatedPolicy = structuredClone(POLICY);
-  const separatedGroup = "${{ github.workflow }}-diff-mutants-macos-slot-0";
-  separatedPolicy.expected[CI_PATH].jobs[
-    "diff-mutants-macos"
-  ].concurrency.group = separatedGroup;
-  const dir = mkdtempSync(join(repoRoot, "target/h63-slot-"));
-  try {
-    cpSync(join(repoRoot, ".github"), join(dir, ".github"), {
-      recursive: true,
-    });
-    const ciCopy = structuredClone(ci);
+  const assertSlotRejected = (mutate) => {
+    const mutatedPolicy = structuredClone(POLICY);
+    const mutatedCi = structuredClone(ci);
+    const mutatedNightly = structuredClone(nightly);
+    mutate(mutatedPolicy, mutatedCi, mutatedNightly);
+    mkdirSync(join(repoRoot, "target"), { recursive: true });
+    const dir = mkdtempSync(join(repoRoot, "target/h63-slot-"));
+    try {
+      cpSync(join(repoRoot, ".github"), join(dir, ".github"), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(dir, CI_PATH),
+        `${JSON.stringify(mutatedCi, undefined, 2)}\n`,
+      );
+      writeFileSync(
+        join(dir, nightlyPath),
+        `${JSON.stringify(mutatedNightly, undefined, 2)}\n`,
+      );
+      const findings = repositoryFindings(dir, mutatedPolicy, TOOL_SPEC);
+      assert.ok(
+        findings.some(
+          (item) =>
+            item.path === CI_PATH &&
+            item.rule === "strategy:shared-macos-mutants-slot",
+        ),
+        JSON.stringify(findings),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  assertSlotRejected((policyCopy, ciCopy) => {
+    const separatedGroup = "${{ github.workflow }}-diff-mutants-macos-slot-0";
+    policyCopy.expected[CI_PATH].jobs["diff-mutants-macos"].concurrency.group =
+      separatedGroup;
     ciCopy.jobs["diff-mutants-macos"].concurrency.group = separatedGroup;
-    writeFileSync(
-      join(dir, CI_PATH),
-      `${JSON.stringify(ciCopy, undefined, 2)}\n`,
-    );
-    const findings = repositoryFindings(dir, separatedPolicy, TOOL_SPEC);
-    assert.ok(
-      findings.some(
-        (item) =>
-          item.path === CI_PATH &&
-          item.rule === "strategy:shared-macos-mutants-slot",
-      ),
-      JSON.stringify(findings),
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  });
+  assertSlotRejected((policyCopy, _ciCopy, nightlyCopy) => {
+    const otherGroup = "other-weekly-slot-0";
+    policyCopy.expected[nightlyPath].jobs.mutants.concurrency.group =
+      otherGroup;
+    nightlyCopy.jobs.mutants.concurrency.group = otherGroup;
+  });
+  assertSlotRejected((policyCopy, _ciCopy, nightlyCopy) => {
+    const otherGroup = "other-daily-slot-0";
+    policyCopy.expected[nightlyPath].jobs["mutants-daily"].concurrency.group =
+      otherGroup;
+    nightlyCopy.jobs["mutants-daily"].concurrency.group = otherGroup;
+  });
+  assertSlotRejected((policyCopy, ciCopy) => {
+    delete policyCopy.expected[CI_PATH].jobs["diff-mutants-macos"].concurrency;
+    delete ciCopy.jobs["diff-mutants-macos"].concurrency;
+  });
 });

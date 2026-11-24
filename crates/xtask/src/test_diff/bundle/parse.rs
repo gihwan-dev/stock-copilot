@@ -6,6 +6,7 @@ use crate::git_base;
 use crate::test_diff::approval::{valid_hash, valid_path, valid_task};
 
 pub(super) const BUNDLES_DIR: &str = "harness/test-diff/bundles";
+pub(super) const DRAFT_REASON: &str = "승인 사유를 적는다";
 
 const BASE_KEYS: [&str; 5] = ["task", "base_commit", "reason", "findings", "file"];
 const TARGET_KEYS: [&str; 3] = ["merge_head", "target_commit", "target_tree"];
@@ -200,6 +201,11 @@ pub(super) fn parse(label: &str, contents: &str) -> Result<Bundle, String> {
     }
     let target = parse_target(&table, label, base_commit)?;
     let reason = require_text(&table, label, "reason")?;
+    if reason.trim() == DRAFT_REASON {
+        return Err(format!(
+            "{label}: 초안 기본 reason(\"{DRAFT_REASON}\")을 실제 승인 사유로 바꿔야 한다"
+        ));
+    }
     let findings = parse_findings(&table, label)?;
     let files = parse_files(&table, label)?;
     Ok(Bundle {

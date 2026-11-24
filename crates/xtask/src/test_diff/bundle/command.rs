@@ -10,14 +10,13 @@ use crate::test_diff::{
     Files, RootScans, Rule, base_files, compare_files, current_files, in_scope,
 };
 
-use super::parse::{BUNDLES_DIR, Bundle, FileEntry, Target, parse, render};
+use super::parse::{BUNDLES_DIR, Bundle, DRAFT_REASON, FileEntry, Target, parse, render};
 use super::{
     TrailerPolicy, check_intro_isolation_path, commit_parents, compare_findings_and_files,
     current_worktree_tree, trailer_problems, tree_of,
 };
 
 const WORKTREE_TARGET: &str = "WORKTREE";
-const DRAFT_REASON: &str = "승인 사유를 적는다";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DraftMode {
@@ -107,9 +106,8 @@ fn prune_unneeded_files(
 ) -> Files {
     let mut subset = Files::new();
     for path in changed {
-        if selected.insert(path.clone())
-            && let Some(bytes) = after.get(path)
-        {
+        selected.insert(path.clone());
+        if let Some(bytes) = after.get(path) {
             subset.insert(path.clone(), bytes.clone());
         }
     }

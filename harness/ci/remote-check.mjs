@@ -137,20 +137,33 @@ const isShardJob = (job) =>
   (job.name.startsWith("diff-mutants-linux") ||
     job.name.startsWith("diff-mutants-macos"));
 
-const validSkippedPlatformJob = (sha, run, job) =>
+const validSkippedPlatformJob = (sha, run, job, allowCancelled = false) =>
   isSkippedPlatformJob(job) &&
   job.status === "completed" &&
-  job.conclusion === "skipped" &&
+  (job.conclusion === "skipped" ||
+    (allowCancelled &&
+      run.conclusion === "cancelled" &&
+      job.conclusion === "cancelled")) &&
   job.head_sha === sha &&
   job.run_attempt === run.run_attempt &&
   Array.isArray(job.steps) &&
   job.steps.length === 0;
 
-const validSkippedPlatformEntries = (sha, run, jobs, shardJobs) => {
+const validSkippedPlatformEntries = (
+  sha,
+  run,
+  jobs,
+  shardJobs,
+  allowCancelled = false,
+) => {
   const skipped = jobs.filter(isSkippedPlatformJob);
   const names = new Set(skipped.map((job) => job.name));
   if (names.size !== skipped.length) return false;
-  if (!skipped.every((job) => validSkippedPlatformJob(sha, run, job)))
+  if (
+    !skipped.every((job) =>
+      validSkippedPlatformJob(sha, run, job, allowCancelled),
+    )
+  )
     return false;
   return skipped.every(
     (job) => !shardJobs.some((shard) => shard.name.startsWith(`${job.name} (`)),
@@ -339,7 +352,7 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
         job.run_attempt !== run.run_attempt,
     ) ||
     (workflow.file === "ci.yml" &&
-      !validSkippedPlatformEntries(sha, run, jobs, shardJobs))
+      !validSkippedPlatformEntries(sha, run, jobs, shardJobs, true))
   ) {
     return "INVALID_EVIDENCE";
   }
@@ -426,6 +439,13 @@ export const failureCode = (sha, run, jobs, workflow = WORKFLOWS[0]) => {
         !unassigned(job) &&
         !uncertainAssignment(job) &&
         (!timedOutStep(job) || failedStep(job)),
+    ) ||
+    failedShards.some(
+      (job) =>
+        job.conclusion === "failure" &&
+        !unassigned(job) &&
+        !uncertainAssignment(job) &&
+        !shardTimedOut(job),
     )
   )
     return "CHECK_FAILED";

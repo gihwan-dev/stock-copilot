@@ -325,17 +325,16 @@ const filesUnder = (root, relative) =>
   );
 
 const sharedMacosSlotFindings = (ci, nightly) => {
-  const ciSlot = ci?.jobs?.["diff-mutants-macos"]?.concurrency;
-  const weeklySlot = nightly?.jobs?.mutants?.concurrency;
-  const dailySlot = nightly?.jobs?.["mutants-daily"]?.concurrency;
-  if (
-    ciSlot === undefined ||
-    weeklySlot === undefined ||
-    dailySlot === undefined
-  ) {
+  if (!isObject(ci) || !isObject(nightly)) {
     return [];
   }
+  const ciSlot = ci.jobs?.["diff-mutants-macos"]?.concurrency;
+  const weeklySlot = nightly.jobs?.mutants?.concurrency;
+  const dailySlot = nightly.jobs?.["mutants-daily"]?.concurrency;
   const shared =
+    isObject(ciSlot) &&
+    isObject(weeklySlot) &&
+    isObject(dailySlot) &&
     isDeepStrictEqual(ciSlot, weeklySlot) &&
     isDeepStrictEqual(ciSlot, dailySlot) &&
     typeof ciSlot.group === "string" &&

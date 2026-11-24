@@ -34,7 +34,7 @@ H-55·H-56(ADR 0153)은 `harness/test-diff/approvals.toml`의 승인 행으로 �
 
 | 항목 | 명령 | 결과 |
 |---|---|---|
-| 4개 실제 사례 재현 + 거부 경계 18건 | `cargo nextest run --locked -p xtask test_diff::h62_tests` | 18 passed, 0 failed (D-55 30건, D-56 76건, S-21 2건, D-57 5건 정확 일치 통과 및 변조·재사용·비병합·미신뢰·트레일러 누락·미푸시 묶음 거부 확인) |
+| 4개 실제 사례 재현 + 거부 경계 20건 | `cargo nextest run --locked -p xtask test_diff::h62_tests` | 20 passed, 0 failed (D-55 30건, D-56 76건, S-21 2건, D-57 5건 정확 일치 통과 및 변조·재사용·비병합·미신뢰·트레일러 누락·미푸시 묶음·자리표시 사유 거부·`master` 후속 푸시 뒤 재검증·다중 파일 최소 집합 추출 확인) |
 | 실제 저장소 D-57 초안 생성 | `cargo run --locked --quiet --package xtask -- test-diff-bundle draft D-57 4c13d306ed6190f2fbd970822a92ddf88f1a7529 a5ebb1d03fd351bc3fce6f2177508636d02170d8` | 표준 출력으로 정규 TOML 출력(지적 5건, 파일 2건 전·후 SHA-256), 작업 트리 무변경 |
 | 보호 경로 검증 | `node --test harness/claude-hooks/tests/h62-bundle-protection.test.mjs harness/claude-hooks/tests/edit-guard.test.mjs` | 통과 (`harness/test-diff/bundles/**`가 `approvals.toml`과 동일하게 `agent-writable.txt` 밖 `protected-path`·샌드박스·Codex·편집 가드·merge-gate·서명 검사로 보호됨) |
 
@@ -46,7 +46,7 @@ H-55·H-56(ADR 0153)은 `harness/test-diff/approvals.toml`의 승인 행으로 �
 | 묶음은 `task`, `base_commit`(40자리), 대상 지정자(`merge_head` \| `target_commit` \| `target_tree` 중 정확히 하나), `reason`, `findings`(전체 지적 문자열 목록), `[[file]]`(`path`, `before_sha256`, `after_sha256`)로 고정하고 정확 일치(all-or-nothing)로만 해소한다 | 지적 하나라도 더 있거나 빠지거나 파일 SHA-256이 1바이트라도 다르면 전부 거부해 부분 승인·누락을 막는다 | 부분 해소(일부 지적만 제거하고 나머지 남김) | H-62 메인 결정 1 |
 | 묶음은 해당 병합 커밋의 첫 부모 → 병합 커밋 한 구간(또는 진행 중 `MERGE_HEAD` 병합)에만 유효하다. 비병합 커밋·후속 커밋·`master`가 진행된 뒤 병합에서는 적용하지 않는다 | 묶음이 다른 구간이나 후속 커밋의 무단 테스트 변경에 재사용되는 경로를 차단한다 | `base_commit`의 모든 자손 커밋에 묶음 허용 | H-62 메인 결정 2 |
 | 신뢰 검증은 `approvals.toml`과 같은 방식(`refs/remotes/origin/master`의 `trusted_authority`에서 읽고, 얕은 저장소 거부, 단일 부모 직계 이력만 허용, 묶음 도입 커밋에 테스트 파일 변경 금지, `merge_head` 모드는 도입 커밋이 해당 묶음 파일 하나만 변경)을 쓴다 | 작업 트리나 미푸시 로컬 커밋·작업 브랜치에서 위조한 묶음이 `test-diff`를 통과하지 못하게 한다 | 작업 트리나 로컬 미푸시 `master`의 묶음 파일을 그대로 신뢰 | H-62 메인 결정 3, 1회차 리뷰 지적 2 |
-| `merge_head` 모드의 커밋된 병합 커밋은 트레일러 `Test-Diff-Bundle: harness/test-diff/bundles/<작업 ID>.toml`과 `Test-Diff-Findings: <건수>`를 **필수**로 요구한다(진행 중 `MERGE_HEAD` 병합은 아직 커밋 메시지가 없으므로 커밋 후 훅·CI·`test-diff-bundle check`에서 검증). 과거 불변 커밋 사후 검증용 `target_commit`·`target_tree` 모드는 두 트레일러가 모두 없거나 모두 정확히 일치할 때만 허용하며 `git show` 실패는 닫힌 실패로 거부한다 | 감사 이력을 git 로그에 강제하고 의도치 않은 묶음 매칭·트레일러 누락·도구 실패 시 열린 통과를 원천 차단한다 | 트레일러가 없으면 통과시키기 | H-62 메인 결정 4, 1회차 리뷰 지적 1 |
+| `merge_head` 모드의 커밋된 병합 커밋은 트레일러 `Test-Diff-Bundle: harness/test-diff/bundles/<작업 ID>.toml`과 `Test-Diff-Findings: <건수>`를 **필수**로 요구한다(진행 중 `MERGE_HEAD` 병합은 아직 커밋 메시지가 없으므로 커밋 이후 `pre-push` 훅·CI·`test-diff-bundle check`에서 검증). 또한 `reason`이 초안 자리표시 문자열(`"승인 사유를 적는다"`) 그대로이면 파싱 단계에서 거부한다. 과거 불변 커밋 사후 검증용 `target_commit`·`target_tree` 모드는 두 트레일러가 모두 없거나 모두 정확히 일치할 때만 허용하며 `git show` 실패는 닫힌 실패로 거부한다 | 감사 이력을 git 로그에 강제하고 자리표시 사유·트레일러 누락·의도치 않은 묶음 매칭·도구 실패 시 열린 통과를 원천 차단한다 | 트레일러가 없으면 통과시키거나 초안 기본 사유를 그대로 허용하기 | H-62 메인 결정 4, 1·2회차 리뷰 |
 | `approval.rs`의 구조 보존 규칙은 S-21 등 기존 거부 케이스에 대해 넓히지 않는다 | 제어 흐름 안의 단언 약화 우회를 막는다 | `for`/`?`/클로저 내부 리터럴 변경 허용 | H-62 메인 결정 4·ADR 0153 |
 | 메인용 보조 명령 3종(`just test-diff-bundle-draft`, `just test-diff-bundle-check`, `just test-diff-bundle-message`)을 제공하고 `draft`는 파일을 직접 쓰지 않고 표준 출력으로만 TOML을 낸다 | 메인만 승인 묶음을 검토·저장하는 경계를 지키면서 수작업 35분 대조를 도구로 대체한다 | 도구가 `harness/test-diff/bundles/`에 직접 파일 쓰기 | H-62 메인 결정 4 |
 

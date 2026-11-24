@@ -310,11 +310,9 @@ fn evaluate_committed_merge_head(
     let first_parent = head_parents.first().map(String::as_str);
     let second_parent = head_parents.get(1).map(String::as_str);
     let base_ok = context.base == intro || context.base == loaded.bundle.base_commit;
-    if first_parent == Some(intro)
-        && context.authority == intro
-        && second_parent == Some(merge_head)
-        && base_ok
-    {
+    let authority_ok =
+        context.authority == intro || first_parent_ancestor(root, context.head, context.authority);
+    if first_parent == Some(intro) && authority_ok && second_parent == Some(merge_head) && base_ok {
         if !current_scope_matches_head(root, context.head, context.current) {
             return (
                 IntervalMatch::Mismatch,

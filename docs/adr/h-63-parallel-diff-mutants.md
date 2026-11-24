@@ -30,18 +30,33 @@ D-54 병합에서 `domain` 선택 변이 130건을 단일 `macos-15` 러너(`mac
 | `harness/ci/linux/exclusions.json`을 단일 기준으로 삼아 플랫폼 중립 크레이트(`domain`, `application`+`testkit-ports`, `order-execution`) 변이는 `ubuntu-24.04-arm`(`max-parallel: 4`, `offline.mjs` 네트워크 격리)에서 실행하고, macOS 전용 크레이트(`store-sqlite`)만 `macos-15`(`max-parallel: 2`)에서 실행한다. CI `diff-mutants-macos`와 야간 `nightly.yml`의 `mutants`·`mutants-daily`는 모두 워크플로 이름 접두사가 없는 공통 2슬롯 `concurrency` 그룹(`macos-mutants-slot-{0,1}`, `queue: "max"`, `cancel-in-progress: false`)을 공유하며 `workflow-policy/check.mjs`가 이 교차 워크플로 일치를 강제한다 | 대부분의 변경(`domain`/`application`/`order-execution`)이 macOS 러너를 0분만 쓰면서도 4배 병렬로 빠르게 끝난다. `store-sqlite` 변경과 야간 변이가 겹쳐도 계정 전체 macOS 변이 동시 점유가 H-59(ADR 0156) 상한 2를 넘지 않는다 | `ci.yml`과 `nightly.yml`에 `${{ github.workflow }}`를 붙여 별도 그룹을 두기(2+2=4점유로 계정 한도 5 중 검사 자리 침범), 또는 모든 변이를 macOS에서만 실행 | H-63·H-59·ADR 0156·1회차 리뷰 지적 3 |
 | 조각 수는 플랫폼별 선택 변이 수에 따라 `MUTANTS_PER_SHARD = 20`, `MAX_SHARDS = 8` (`0/N..(N-1)/N`)로 계산하고, 선택 변이가 0개인 플랫폼 작업은 건너뛴다 | D-54(130건) 기준 Linux 7조각(조각당 약 19건)으로 `max-parallel: 4` 2파에 여유 있게 완주하며, 문서·TS·단일 플랫폼 변경에서 불필요한 러너를 띄우지 않는다 | 항상 고정 4조각 또는 8조각 실행(소규모 변경에 러너 낭비) | H-63 완료 기준 |
 | 각 조각 작업 끝에 `if: always()` 단계(`diff-mutants-shard.mjs summary`)를 두어 `missed.txt`, `timeout.txt`, `caught.txt`, `unviable.txt`를 표준 출력과 `$GITHUB_STEP_SUMMARY`에 남기고, 영수증(`diff-shard.json`)·카탈로그·조각 일치·Baseline 성공·시간 초과 0건을 검증해 불완전·실패·시간 초과 시 0이 아닌 종료를 낸다 | 조각이 실패·시간 초과·취소되어도 놓친 변이와 시간 초과 증거가 로그와 요약에 영구 보존되며, 불완전한 조각이 성공으로 통과할 수 없다 | `cargo mutants` 종료 코드만 보고 요약 생략 | H-63 완료 기준 |
-| 최종 판정 작업(`diff-mutants-verdict`, `if: always() && github.event_name == 'push'`, 권한 `contents: read, actions: read`)이 `diff-mutants-aggregate.mjs`로 GitHub Actions Jobs API(페이지네이션 전수 조회)를 읽어 `diff-mutants-plan`과 계획된 모든 `diff-mutants-linux (<shard>)`·`diff-mutants-macos (<shard>)` 작업 및 필수 단계(`diff mutants shard`, `diff mutants summary`)의 완료·성공을 닫힌 실패로 검증한다. 선택 변이가 0개여서 `if`로 건너뛴 플랫폼 작업은 GitHub API가 돌려주는 `name: "diff-mutants-linux"\|"diff-mutants-macos"`, `status: "completed"`, `conclusion: "skipped"`, `steps: []`(SHA·회차 일치, 1건 이하, 같은 플랫폼 조각과 공존 금지)만 허용하고 그 외 모든 변형을 거부한다. `notify.needs`와 `remote-check.mjs`도 동일한 규칙을 강제한다 | 실제 GitHub Actions `/jobs` API의 건너뛴 매트릭스 작업 응답과 일치하면서도, 조각 하나라도 누락·실패·시간 초과·취소·건너뜀·중복·비일치가 있으면 최종 판정과 원격 증거 검사(`remote-check`) 모두 실패로 닫힌다 | GitHub Actions `needs` 상태만 믿거나, 건너뛴 플랫폼 작업 항목을 무조건 거부해 단일 플랫폼·0변이 푸시를 막기 | H-63 완료 기준, 1회차 비판 추가 지적 1 |
+| 최종 판정 작업(`diff-mutants-verdict`, `if: always() && github.event_name == 'push'`, 권한 `contents: read, actions: read`)이 `diff-mutants-aggregate.mjs`로 GitHub Actions Jobs API(페이지네이션 전수 조회)를 읽어 `diff-mutants-plan`과 계획된 모든 `diff-mutants-linux (<shard>)`·`diff-mutants-macos (<shard>)` 작업 및 필수 단계(`diff mutants shard`, `diff mutants summary`)의 완료·성공을 닫힌 실패로 검증한다. 선택 변이가 0개여서 `if`로 건너뛴 플랫폼 작업은 GitHub API가 돌려주는 `name: "diff-mutants-linux"\|"diff-mutants-macos"`, `status: "completed"`, `conclusion: "skipped"`, `steps: []`(SHA·회차 일치, 1건 이하, 같은 플랫폼 조각과 공존 금지)만 허용하고 그 외 모든 변형을 거부한다. `notify.needs`는 `diff-mutants-verdict`에 의존해 최종 판정 실패 시 알림을 보내고, `remote-check.mjs`는 동일한 조각·건너뜀·`run_attempt` 일치 규칙을 독립적으로 강제한다 | 실제 GitHub Actions `/jobs` API의 건너뛴 매트릭스 작업 응답과 일치하면서도, 조각 하나라도 누락·실패·시간 초과·취소·건너뜀·중복·비일치가 있으면 최종 판정과 원격 증거 검사(`remote-check`) 모두 실패로 닫힌다 | GitHub Actions `needs` 상태만 믿거나, 건너뛴 플랫폼 작업 항목을 무조건 거부해 단일 플랫폼·0변이 푸시를 막기 | H-63 완료 기준, 1회차 비판 추가 지적 1, 2회차 리뷰 지적 8 |
 | Linux 계획·조각 실행의 선행 `test-diff`는 `test_diff::check_for_linux`를 사용한다: 전체 저장소 `.rs` 파일의 AST 변경 비교는 macOS와 동일하게 전부 수행하고, `cargo nextest list`만 `exclusions.json`의 macOS 전용 크레이트를 제외하며, `approval::apply_for_base`를 그대로 호출한다 | Linux에서 빌드할 수 없는 macOS 전용 크레이트 때문에 `nextest list`가 깨지지 않으면서도, macOS 전용 크레이트의 무단 테스트 수정은 AST 비교로 잡히고 H-62 승인 묶음·H-55 승인 행은 Linux와 macOS에서 동일하게 통과한다 | Linux에서 `test-diff`를 건너뛰기(무단 테스트 약화 뒤 변이 실행 위험) | H-62·H-63 완료 기준 |
 | 분할·요약·합산·정책 검증 로직을 `xtask`와 `harness/ci/diff-mutants-{plan,shard,aggregate}.mjs`에 두고 워크플로는 호출만 한다 | 워크플로 YAML/JSON에 로직을 넣지 않아 로컬 단위·부정 변형 테스트로 전 경로를 검증할 수 있다 | 워크플로 인라인 셸 스크립트로 합산 구현 | H-63 완료 기준 |
 
+## 기존 테스트 파일 기계적 갱신 내역 (AGENTS.md 5)
+
+새 CI 작업 구조(`diff-mutants-plan`·`diff-mutants-linux`·`diff-mutants-macos`·`diff-mutants-verdict`)와 공통 `macos-mutants-slot-{0,1}` 그룹을 반영하기 위해 아래 6개 기존 테스트 파일을 기계적으로 갱신했다(기존 단언 약화·삭제 없음; 최종 `master` 반영은 사용자 서명 커밋으로 진행한다).
+
+| 파일 | 변경 요약 |
+|---|---|
+| `harness/ci/tests/workflow-policy.test.mjs` | `jobPermissions` 기대에 `.github/workflows/ci.yml#diff-mutants-verdict` 추가 |
+| `harness/ci/tests/h52-ci-contract.test.mjs` | `macos-branch` 120분 유지 및 `diff-mutants-{plan,linux,macos,verdict}` 계약 단언으로 갱신 |
+| `harness/ci/tests/h52-remote-check.test.mjs` | `ci.yml` 필수 작업·단계 목록과 변이 조각 타임아웃 분류 픽스처를 새 작업 구조에 맞춤 |
+| `harness/ci/tests/h52-review2.test.mjs` | `ci.yml` 필수 작업 픽스처에 `diff-mutants-plan`·`diff-mutants-verdict` 추가 |
+| `harness/ci/tests/h52-review3.test.mjs` | 필수 단계 누락 테스트 픽스처에 `diff-mutants-plan`·`diff-mutants-verdict` 추가 |
+| `harness/ci/tests/h59-capacity.test.mjs` | `mutationSlotConcurrency.group` 기대 문자열을 공통 `macos-mutants-slot-{0,1}`로 갱신 |
+
 ## 보류 결정과 선택지
 
-1. **조각 크기와 Linux 병렬도 튜닝**:
-   - 현재 `MUTANTS_PER_SHARD = 20`, `MAX_SHARDS = 8`, Linux `max-parallel = 4`, 단계 제한 시간 Linux 90분 / macOS 150분이다. 실제 대형 변경의 원격 CI 실행 시간을 관측한 뒤 조정할 수 있다.
-2. **구 `harness/ci/diff-mutants.mjs`·`diff-mutants-verdict.mjs` 정리 시점**:
+1. **조각 크기와 Linux 병렬도·macOS 선행 빌드 비용 튜닝**:
+   - 현재 `MUTANTS_PER_SHARD = 20`, `MAX_SHARDS = 8`, Linux `max-parallel = 4`, 단계 제한 시간 Linux 90분 / macOS 150분이다. macOS 조각은 선행 `test-diff`에서 작업 공간 전체 `cargo nextest list` 콜드 빌드를 포함하므로 원격 CI 실행 시간과 공통 2슬롯 점유를 관측한 뒤 조정할 수 있다.
+2. **실패 조각 재시도 운영 방식**:
+   - `diff-mutants-aggregate.mjs`와 `remote-check.mjs`는 기존 H-52 계약과 동일하게 모든 작업의 `run_attempt` 일치를 요구한다. 조각 타임아웃·미배정 재시도 시 부분 재실행(Re-run failed jobs)이 아닌 **전체 재실행(Re-run all jobs)**을 사용한다.
+3. **구 `harness/ci/diff-mutants.mjs`·`diff-mutants-verdict.mjs` 정리 시점**:
    - 현재 기존 H-54 테스트(`h54-diff-mutants.test.mjs`)를 깨지 않도록 두 스크립트를 보존했다. H-63 병합 뒤 원격 안정화가 확인되면 후속 정리 작업에서 폐기 여부를 결정한다.
-3. **보호 문서(`docs/harness.md`, `docs/workflow.md`) 동기화**:
-   - `docs/harness.md`(69·510행)와 `docs/workflow.md`(180행)는 보호 문서이므로 본 브랜치에서 직접 수정하지 않고 메인 서명 커밋으로 후속 동기화한다.
+4. **보호 문서(`docs/harness.md`, `docs/workflow.md`) 동기화**:
+   - `docs/harness.md`(61·69·510행)와 `docs/workflow.md`(180행)는 보호 문서이므로 본 브랜치에서 직접 수정하지 않고 메인 서명 커밋으로 후속 동기화한다.
 
 ## 결과
 

@@ -247,6 +247,18 @@ fn write_files(root: &Path, files: &Files) {
     }
 }
 
+fn drafted_with_reason(
+    root: &Path,
+    task: &str,
+    base: &str,
+    target: &str,
+    mode: DraftMode,
+) -> String {
+    draft_bundle(root, task, base, target, mode)
+        .expect("draft bundle")
+        .replace("승인 사유를 적는다", "승인된 기존 테스트 변경")
+}
+
 struct LiveMergeRepo {
     root: PathBuf,
     pre_bundle: String,
@@ -273,14 +285,13 @@ fn setup_live_merge(spec: &CaseSpec, label: &str) -> LiveMergeRepo {
     git(&root, &["commit", "--quiet", "-m", "feature"]);
     let feature = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["checkout", "--quiet", "master"]);
-    let bundle_toml = draft_bundle(
+    let bundle_toml = drafted_with_reason(
         &root,
         spec.task,
         &pre_bundle,
         &feature,
         DraftMode::MergeHead,
-    )
-    .expect("draft bundle");
+    );
     let bundle_path = format!("harness/test-diff/bundles/{}.toml", spec.task);
     assert!(
         !root.join(&bundle_path).exists(),
@@ -445,14 +456,13 @@ fn replace_bundle_and_remerge(
     git(&root, &["commit", "--quiet", "-m", "feature"]);
     let feature = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["checkout", "--quiet", "master"]);
-    let drafted = draft_bundle(
+    let drafted = drafted_with_reason(
         &root,
         spec.task,
         &pre_bundle,
         &feature,
         DraftMode::MergeHead,
-    )
-    .expect("draft");
+    );
     let mutated = mutate(&drafted);
     let bundle_path = format!("harness/test-diff/bundles/{}.toml", spec.task);
     let full = root.join(&bundle_path);
@@ -596,14 +606,13 @@ fn h62_s21_structural_checker_is_not_widened_and_bundle_resolves_only_the_approv
     assert!(diag.contains("클로저"), "{diag}");
 
     git(&repo.root, &["checkout", "--quiet", "master"]);
-    let bundle_toml = draft_bundle(
+    let bundle_toml = drafted_with_reason(
         &repo.root,
         "S-21",
         &approval_authority,
         &repo.feature,
         DraftMode::MergeHead,
-    )
-    .expect("s21 draft");
+    );
     let bundle_path = "harness/test-diff/bundles/S-21.toml";
     fs::create_dir_all(repo.root.join(bundle_path).parent().expect("parent")).expect("mkdir");
     fs::write(repo.root.join(bundle_path), bundle_toml).expect("write s21 bundle");
@@ -662,7 +671,7 @@ fn h62_historical_target_commit_and_target_tree_modes_match_only_their_exact_mer
             &["merge", "--quiet", "--no-ff", "--no-edit", "feature"],
         );
         let merge = git(&root, &["rev-parse", "HEAD"]);
-        let drafted = draft_bundle(&root, "D-57", &base, &merge, mode).expect("draft");
+        let drafted = drafted_with_reason(&root, "D-57", &base, &merge, mode);
         let bundle_path = "harness/test-diff/bundles/D-57.toml";
         fs::create_dir_all(root.join(bundle_path).parent().expect("parent")).expect("mkdir");
         fs::write(root.join(bundle_path), drafted).expect("write");
@@ -708,7 +717,7 @@ fn h62_pending_master_merge_and_master_advance_invalidation_work_strictly() {
     let feature = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["checkout", "--quiet", "master"]);
     let bundle_toml =
-        draft_bundle(&root, "D-57", &pre_bundle, &feature, DraftMode::MergeHead).expect("draft");
+        drafted_with_reason(&root, "D-57", &pre_bundle, &feature, DraftMode::MergeHead);
     let bundle_path = "harness/test-diff/bundles/D-57.toml";
     fs::create_dir_all(root.join(bundle_path).parent().expect("parent")).expect("mkdir");
     fs::write(root.join(bundle_path), bundle_toml).expect("write");
@@ -764,8 +773,7 @@ fn h62_untrusted_branch_bundle_is_rejected() {
     git(&branch_root, &["add", "."]);
     git(&branch_root, &["commit", "--quiet", "-m", "feature"]);
     let feature = git(&branch_root, &["rev-parse", "HEAD"]);
-    let drafted =
-        draft_bundle(&branch_root, "D-57", &base, &feature, DraftMode::MergeHead).expect("draft");
+    let drafted = drafted_with_reason(&branch_root, "D-57", &base, &feature, DraftMode::MergeHead);
     fs::create_dir_all(branch_root.join(bundle_path).parent().expect("parent")).expect("mkdir");
     fs::write(branch_root.join(bundle_path), &drafted).expect("write");
     git(&branch_root, &["add", bundle_path]);
@@ -791,14 +799,13 @@ fn h62_merge_introduced_bundle_is_rejected() {
     git(&merge_intro, &["add", "."]);
     git(&merge_intro, &["commit", "--quiet", "-m", "feature"]);
     let m_feature = git(&merge_intro, &["rev-parse", "HEAD"]);
-    let m_draft = draft_bundle(
+    let m_draft = drafted_with_reason(
         &merge_intro,
         "D-57",
         &m_base,
         &m_feature,
         DraftMode::MergeHead,
-    )
-    .expect("draft");
+    );
     git(
         &merge_intro,
         &["checkout", "--quiet", "-b", "side", &m_base],
@@ -871,7 +878,7 @@ fn h62_intro_commit_with_extra_file_is_rejected() {
     git(&root, &["commit", "--quiet", "-m", "feature"]);
     let feature = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["checkout", "--quiet", "master"]);
-    let drafted = draft_bundle(&root, "D-57", &pre, &feature, DraftMode::MergeHead).expect("draft");
+    let drafted = drafted_with_reason(&root, "D-57", &pre, &feature, DraftMode::MergeHead);
     let bundle_path = "harness/test-diff/bundles/D-57.toml";
     fs::create_dir_all(root.join(bundle_path).parent().expect("parent")).expect("mkdir");
     fs::write(root.join(bundle_path), &drafted).expect("write");
@@ -1011,8 +1018,7 @@ fn h62_local_unpushed_bundle_is_rejected_until_origin_master_advances() {
     git(&root, &["commit", "--quiet", "-m", "feature"]);
     let feature = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["checkout", "--quiet", "master"]);
-    let drafted =
-        draft_bundle(&root, "D-57", &pre_bundle, &feature, DraftMode::MergeHead).expect("draft");
+    let drafted = drafted_with_reason(&root, "D-57", &pre_bundle, &feature, DraftMode::MergeHead);
     let bundle_path = "harness/test-diff/bundles/D-57.toml";
     fs::create_dir_all(root.join(bundle_path).parent().expect("parent")).expect("mkdir");
     fs::write(root.join(bundle_path), drafted).expect("write");
@@ -1081,14 +1087,13 @@ fn h62_check_bundle_file_enforces_intro_isolation_and_tree_merge() {
         "{intro_issues:?}"
     );
 
-    let tree_draft = draft_bundle(
+    let tree_draft = drafted_with_reason(
         &repo.root,
         "D-57",
         &repo.bundle_commit,
         &repo.merge,
         DraftMode::TargetTree,
-    )
-    .expect("tree draft");
+    );
     let tree_probe = repo.root.join("target-tree-probe/D-57.toml");
     fs::create_dir_all(tree_probe.parent().expect("parent")).expect("mkdir");
     fs::write(&tree_probe, tree_draft).expect("write tree probe");
@@ -1122,8 +1127,8 @@ fn h62_duplicate_matching_bundles_fail_closed() {
         &["merge", "--quiet", "--no-ff", "--no-edit", "feature"],
     );
     let d_merge = git(&dup, &["rev-parse", "HEAD"]);
-    let b1 = draft_bundle(&dup, "D-57", &d_base, &d_merge, DraftMode::TargetCommit).expect("b1");
-    let b2 = draft_bundle(&dup, "D-58", &d_base, &d_merge, DraftMode::TargetCommit).expect("b2");
+    let b1 = drafted_with_reason(&dup, "D-57", &d_base, &d_merge, DraftMode::TargetCommit);
+    let b2 = drafted_with_reason(&dup, "D-58", &d_base, &d_merge, DraftMode::TargetCommit);
     fs::create_dir_all(dup.join("harness/test-diff/bundles")).expect("mkdir");
     fs::write(dup.join("harness/test-diff/bundles/D-57.toml"), b1).expect("w1");
     fs::write(dup.join("harness/test-diff/bundles/D-58.toml"), b2).expect("w2");
@@ -1219,6 +1224,12 @@ fn h62_malformed_wildcard_and_removed_finding_bundles_fail_closed() {
                 "task = \"H-62\"\nbase_commit = \"{base}\"\nmerge_head = \"{feature}\"\nreason = \"bad\"\nfindings = [\"test-diff:modified:sample tests::a\"]\n[[file]]\npath = \"crates/sample/src/lib.rs\"\nbefore_sha256 = \"{old_h}\"\nafter_sha256 = \"{old_h}\"\n"
             ),
         ),
+        (
+            "placeholder-reason",
+            format!(
+                "task = \"H-62\"\nbase_commit = \"{base}\"\nmerge_head = \"{feature}\"\nreason = \"승인 사유를 적는다\"\nfindings = [\"test-diff:modified:sample tests::a\"]\n[[file]]\npath = \"crates/sample/src/lib.rs\"\nbefore_sha256 = \"{old_h}\"\nafter_sha256 = \"{new_h}\"\n"
+            ),
+        ),
     ] {
         let probe = root.join(format!("target-{name}/H-62.toml"));
         fs::create_dir_all(probe.parent().expect("parent")).expect("mkdir");
@@ -1264,8 +1275,7 @@ fn setup_mutants_bundle_repo() -> (PathBuf, String, &'static str, &'static str) 
     git(&root, &["commit", "--quiet", "-m", "feature"]);
     let feature = git(&root, &["rev-parse", "HEAD"]);
     git(&root, &["checkout", "--quiet", "master"]);
-    let drafted =
-        draft_bundle(&root, "H-62", &pre_bundle, &feature, DraftMode::MergeHead).expect("draft");
+    let drafted = drafted_with_reason(&root, "H-62", &pre_bundle, &feature, DraftMode::MergeHead);
     let bundle_path = "harness/test-diff/bundles/H-62.toml";
     fs::create_dir_all(root.join(bundle_path).parent().expect("parent")).expect("mkdir");
     fs::write(root.join(bundle_path), drafted).expect("write bundle");
@@ -1343,4 +1353,138 @@ fn h62_draft_bundle_auto_mode_and_unlisted_file_coverage_are_strict() {
         without_one_file_diag.contains("해시가 없는 파일"),
         "{without_one_file_diag}"
     );
+}
+
+fn multifile_fixture() -> (Files, Files) {
+    let base = BTreeMap::from([
+        (
+            String::from("Cargo.toml"),
+            b"[workspace]\nmembers = [\"crates/sample\"]\n".to_vec(),
+        ),
+        (
+            String::from("crates/sample/Cargo.toml"),
+            b"[package]\nname = \"sample\"\n".to_vec(),
+        ),
+        (
+            String::from("crates/sample/src/lib.rs"),
+            b"pub mod existing;\n".to_vec(),
+        ),
+        (
+            String::from("crates/sample/src/existing.rs"),
+            b"#[cfg(test)] mod tests { #[test] fn keep() { for n in [1_usize] { assert_eq!(n, 1); } } }\n"
+                .to_vec(),
+        ),
+        (
+            String::from("crates/sample/src/helper.rs"),
+            b"pub fn helper() -> usize { 1 }\n".to_vec(),
+        ),
+    ]);
+    let mut after = base.clone();
+    after.insert(
+        String::from("crates/sample/src/lib.rs"),
+        b"pub mod existing;\npub mod helper;\n".to_vec(),
+    );
+    after.insert(
+        String::from("crates/sample/src/existing.rs"),
+        b"#[cfg(test)] mod tests { #[test] fn keep() { for n in [2_usize] { assert_eq!(n, 2); } } }\n"
+            .to_vec(),
+    );
+    after.insert(
+        String::from("crates/sample/src/helper.rs"),
+        b"pub fn helper() -> usize { 1 }\n#[cfg(test)] mod tests { #[test] fn added() { assert_eq!(super::helper(), 1); } }\n"
+            .to_vec(),
+    );
+    (base, after)
+}
+
+#[test]
+fn h62_draft_bundle_prunes_unrelated_multi_file_changes() {
+    let root = fresh_directory(&repository_root(), "h62-prune-multifile");
+    let (before, after) = multifile_fixture();
+    git(&root, &["init", "--quiet", "-b", "master"]);
+    write_files(&root, &before);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "base"]);
+    let base = git(&root, &["rev-parse", "HEAD"]);
+    git(&root, &["checkout", "--quiet", "-b", "feature"]);
+    write_files(&root, &after);
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "--quiet", "-m", "multi-file"]);
+    let feature = git(&root, &["rev-parse", "HEAD"]);
+    let drafted = drafted_with_reason(&root, "H-62", &base, &feature, DraftMode::MergeHead);
+    assert!(
+        drafted.contains("crates/sample/src/existing.rs"),
+        "{drafted}"
+    );
+    assert!(
+        !drafted.contains("crates/sample/src/helper.rs"),
+        "{drafted}"
+    );
+    assert!(!drafted.contains("crates/sample/src/lib.rs"), "{drafted}");
+    let probe = root.join("probe/H-62.toml");
+    fs::create_dir_all(probe.parent().expect("parent")).expect("mkdir");
+    fs::write(&probe, drafted).expect("write");
+    let issues = check_bundle_file(&root, &probe, &base, &feature).expect("check");
+    assert!(issues.is_empty(), "{issues:?}");
+}
+
+#[test]
+fn h62_committed_merge_head_bundle_survives_master_advance_and_non_master_recheck() {
+    let repo = setup_live_merge(&D57_CASE, "h62-master-advance-recheck");
+    git(
+        &repo.root,
+        &["update-ref", "refs/remotes/origin/master", &repo.merge],
+    );
+    let (on_merge_branch, branch_diag) =
+        evaluate(&repo.root, &repo.bundle_commit, &repo.before, &repo.after);
+    assert_eq!(
+        on_merge_branch, 0,
+        "non-master branch at origin/master: {branch_diag}"
+    );
+
+    git(&repo.root, &["checkout", "--quiet", "master"]);
+    git(
+        &repo.root,
+        &["merge", "--quiet", "--ff-only", "merge-check"],
+    );
+    fs::write(repo.root.join("followup.txt"), "next\n").expect("followup");
+    git(&repo.root, &["add", "followup.txt"]);
+    git(
+        &repo.root,
+        &["commit", "--quiet", "-m", "followup on master"],
+    );
+    let followup = git(&repo.root, &["rev-parse", "HEAD"]);
+    git(
+        &repo.root,
+        &["update-ref", "refs/remotes/origin/master", &followup],
+    );
+    git(
+        &repo.root,
+        &["checkout", "--quiet", "--detach", &repo.merge],
+    );
+    let (after_followup, followup_diag) =
+        evaluate(&repo.root, &repo.bundle_commit, &repo.before, &repo.after);
+    assert_eq!(
+        after_followup, 0,
+        "detached merge CI after subsequent master push: {followup_diag}"
+    );
+
+    git(
+        &repo.root,
+        &[
+            "checkout",
+            "--quiet",
+            "-b",
+            "forged-branch",
+            &repo.bundle_commit,
+        ],
+    );
+    let trailers = message_trailers(&repo.root, Path::new(&repo.bundle_path)).expect("trailers");
+    let msg = format!("Forged merge D-57\n\n{trailers}");
+    git(
+        &repo.root,
+        &["merge", "--quiet", "--no-ff", "-m", &msg, "feature"],
+    );
+    let (forged_rem, _) = evaluate(&repo.root, &repo.bundle_commit, &repo.before, &repo.after);
+    assert_eq!(forged_rem, 5, "off-master duplicate merge must be rejected");
 }
