@@ -63,6 +63,11 @@ impl WebFinding {
         }
     }
 
+    #[must_use]
+    pub fn collected(&self) -> CollectedItem {
+        CollectedItem::from_web(self.url.clone(), self.title.clone(), self.summary.clone())
+    }
+
     fn into_collected(self) -> CollectedItem {
         CollectedItem::from_web(self.url, self.title, self.summary)
     }
