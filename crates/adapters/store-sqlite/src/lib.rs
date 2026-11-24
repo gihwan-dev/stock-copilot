@@ -248,7 +248,7 @@ mod signal_store_boundary_tests;
 mod close_evidence_tests;
 
 mod ai_jobs;
-pub use ai_jobs::{AiJobStore, PrinciplesStore};
+pub use ai_jobs::{AiJobStore, PrinciplesStore, Sha256PromptHasher};
 #[cfg(test)]
 mod ai_jobs_tests;
 
