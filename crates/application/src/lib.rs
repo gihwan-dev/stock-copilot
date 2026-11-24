@@ -468,4 +468,8 @@ mod send_chat_message;
 pub use send_chat_message::{
     AnalysisToolAllowance, ChatModelConfig, SendChatMessage, SendChatOutcome, SendChatRequest,
     build_chat_prompt, check_analysis_tool,
+mod peer_process;
+pub use peer_process::{
+    ExecutablePath, PeerProcessError, PeerProcessInfo, PeerProcessInspector,
+    PeerProcessLookupError, ProcessId,
 };
