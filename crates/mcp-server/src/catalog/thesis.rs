@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use application::{
     AiRunId, CollectedItemHandle, ThesisRepository, ThesisRunMetadata, ThesisToolPort,
-    ThesisUpdateFailure, ToolName, UpdateThesis,
+    ThesisUpdateFailure, ToolCallHistory, ToolCallOutcome, ToolName, UpdateThesis,
 };
 use domain::{
     ChangeDisposition, ChangeReason, Claim, ClaimContent, ClaimId, ClaimRole, ClaimVerdict,
@@ -28,11 +28,12 @@ enum ThesisToolKind {
     Update,
 }
 
-struct ThesisTool<T, R> {
+struct ThesisTool<T, R, H> {
     kind: ThesisToolKind,
     spec: ToolSpec,
     port: Arc<T>,
     repository: Arc<R>,
+    history: Arc<H>,
 }
 
 fn invalid(field: &str, message: &'static str) -> ToolErrorPayload {
@@ -94,7 +95,7 @@ fn rejected(_error: &domain::ThesisError) -> ToolErrorPayload {
     )
 }
 
-impl<T: ThesisToolPort, R: ThesisRepository> ThesisTool<T, R> {
+impl<T: ThesisToolPort, R: ThesisRepository, H: ToolCallHistory> ThesisTool<T, R, H> {
     async fn resolve(
         &self,
         run: &AiRunId,
@@ -117,22 +118,54 @@ impl<T: ThesisToolPort, R: ThesisRepository> ThesisTool<T, R> {
             })
     }
 
-    async fn evidence_item(&self, item: &Value) -> Result<EvidenceRef, ToolErrorPayload> {
+    async fn tool_reference(
+        &self,
+        run: &AiRunId,
+        raw: &str,
+    ) -> Result<EvidenceRef, ToolErrorPayload> {
+        let reference = ToolReference::try_new(raw).map_err(|_err| {
+            invalid("evidence", "tool evidence must look like tool:<request id>")
+        })?;
+        let calls = self
+            .history
+            .calls_in_run(run)
+            .await
+            .map_err(|error| upstream_error(&error))?;
+        let suffix = reference.as_str().strip_prefix("tool:");
+        let found = calls.iter().any(|call| {
+            call.run_id() == run
+                && call.outcome() == ToolCallOutcome::Succeeded
+                && suffix == Some(call.request_id().as_str())
+        });
+        if found {
+            Ok(EvidenceRef::Tool(reference))
+        } else {
+            Err(invalid(
+                "evidence",
+                "tool evidence must reference a successful tool call of this run",
+            ))
+        }
+    }
+
+    async fn evidence_item(
+        &self,
+        run: &AiRunId,
+        instrument: &InstrumentId,
+        item: &Value,
+    ) -> Result<EvidenceRef, ToolErrorPayload> {
         let kind = item.get("kind").and_then(Value::as_str);
         let raw = item
             .get("value")
             .and_then(Value::as_str)
             .ok_or_else(|| invalid("evidence", "evidence value is missing"))?;
         match kind {
-            Some("tool") => ToolReference::try_new(raw)
-                .map(EvidenceRef::Tool)
-                .map_err(|_err| invalid("evidence", "tool evidence must look like tool:<name>")),
+            Some("tool") => self.tool_reference(run, raw).await,
             Some("collected") => {
                 let handle = CollectedItemHandle::try_new(raw).map_err(|_err| {
                     invalid("evidence", "collected evidence needs an item handle")
                 })?;
                 self.port
-                    .collected_evidence(&handle)
+                    .collected_evidence(run, instrument, &handle)
                     .await
                     .map_err(|error| upstream_error(&error))?
                     .ok_or_else(|| invalid("evidence", "handle is not an item the app collected"))
@@ -151,14 +184,19 @@ impl<T: ThesisToolPort, R: ThesisRepository> ThesisTool<T, R> {
         }
     }
 
-    async fn evidence(&self, change: &Map<String, Value>) -> Result<Evidence, ToolErrorPayload> {
+    async fn evidence(
+        &self,
+        run: &AiRunId,
+        instrument: &InstrumentId,
+        change: &Map<String, Value>,
+    ) -> Result<Evidence, ToolErrorPayload> {
         let items = change
             .get("evidence")
             .and_then(Value::as_array)
             .ok_or_else(|| invalid("evidence", "every change needs evidence"))?;
         let mut refs = Vec::new();
         for item in items {
-            refs.push(self.evidence_item(item).await?);
+            refs.push(self.evidence_item(run, instrument, item).await?);
         }
         Evidence::try_new(refs).map_err(|error| rejected(&error))
     }
@@ -203,6 +241,8 @@ impl<T: ThesisToolPort, R: ThesisRepository> ThesisTool<T, R> {
 
     async fn patch(
         &self,
+        run: &AiRunId,
+        instrument: &InstrumentId,
         args: &Map<String, Value>,
         metadata: &ThesisRunMetadata,
     ) -> Result<ThesisPatch, ToolErrorPayload> {
@@ -216,7 +256,7 @@ impl<T: ThesisToolPort, R: ThesisRepository> ThesisTool<T, R> {
                 .as_object()
                 .ok_or_else(|| invalid("changes", "each change must be an object"))?;
             let operation = Self::operation(change)?;
-            let evidence = self.evidence(change).await?;
+            let evidence = self.evidence(run, instrument, change).await?;
             let reason = ChangeReason::try_new(
                 text_field(change, "reason")?,
                 metadata.model.clone(),
@@ -245,7 +285,7 @@ impl<T: ThesisToolPort, R: ThesisRepository> ThesisTool<T, R> {
             .run_metadata(run)
             .await
             .map_err(|error| upstream_error(&error))?;
-        let patch = self.patch(args, &metadata).await?;
+        let patch = self.patch(run, &instrument, args, &metadata).await?;
         let thesis = UpdateThesis::new(self.repository.as_ref())
             .execute(&instrument, base, patch)
             .await
@@ -428,7 +468,12 @@ fn render_thesis(thesis: &Thesis) -> Result<Value, ToolErrorPayload> {
     ]))
 }
 
-impl<T: ThesisToolPort + 'static, R: ThesisRepository + 'static> McpTool for ThesisTool<T, R> {
+impl<T, R, H> McpTool for ThesisTool<T, R, H>
+where
+    T: ThesisToolPort + 'static,
+    R: ThesisRepository + 'static,
+    H: ToolCallHistory + 'static,
+{
     fn spec(&self) -> ToolSpec {
         self.spec.clone()
     }
@@ -485,14 +530,16 @@ fn change_schema() -> Value {
     })
 }
 
-pub fn register_thesis_tools<T, R>(
+pub fn register_thesis_tools<T, R, H>(
     registry: &mut ToolRegistry,
     port: &Arc<T>,
     repository: &Arc<R>,
+    history: &Arc<H>,
 ) -> Result<(), ToolRegistryError>
 where
     T: ThesisToolPort + 'static,
     R: ThesisRepository + 'static,
+    H: ToolCallHistory + 'static,
 {
     let mut get_props = Map::new();
     get_props.insert(String::from("symbol"), symbol_schema());
@@ -517,7 +564,7 @@ where
         (
             ThesisToolKind::Update,
             "update_thesis",
-            "Propose claim-level changes to the thesis note of one app-known symbol against base_version from get_thesis. Evidence is tool:<name>, a collected item handle, or a web address; changes backed only by web addresses wait for user review. History is kept.",
+            "Propose claim-level changes to the thesis note of one app-known symbol against base_version from get_thesis. Evidence is tool:<request id> of a successful call in this run, a handle of an item collected for this symbol, or a web address; changes backed only by web addresses wait for user review. History is kept.",
             ToolAccessKind::StateChanging,
             build_object_schema(update_props, &["symbol", "base_version", "changes"]),
         ),
@@ -531,6 +578,7 @@ where
             spec,
             port: Arc::clone(port),
             repository: Arc::clone(repository),
+            history: Arc::clone(history),
         }))?;
     }
     Ok(())

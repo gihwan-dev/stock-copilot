@@ -22,6 +22,8 @@ pub trait ThesisToolPort: Send + Sync {
 
     fn collected_evidence(
         &self,
+        run: &AiRunId,
+        instrument: &InstrumentId,
         handle: &CollectedItemHandle,
     ) -> impl Future<Output = Result<Option<EvidenceRef>, SystemPortError>> + Send;
 
