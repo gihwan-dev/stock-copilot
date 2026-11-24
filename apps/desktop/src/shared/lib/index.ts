@@ -41,10 +41,11 @@ export type { ChartDecimal, ChartCoordinate, ChartPath } from "./brand";
 export { parseChartDecimal, chartCoordinate, chartPath } from "./brand";
 export type { FreeText, ExternalUrl, CanvasColor } from "./brand";
 export {
-  parseFreeText,
+  appendFreeText,
   emptyFreeText,
-  parseExternalUrl,
   parseCanvasColor,
+  parseExternalUrl,
+  parseFreeText,
 } from "./brand";
 export type {
   CandleThemePalette,
@@ -52,3 +53,9 @@ export type {
   CandleCanvasScene,
 } from "./canvas-chart";
 export { queryKeys, type AppRoutePath } from "./query-keys";
+export {
+  chatIdSchema,
+  countSchema,
+  externalUrlSchema,
+  freeTextSchema,
+} from "./brand";

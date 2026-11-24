@@ -677,6 +677,12 @@ pub use valuation_price_evidence::{
 
 mod valuation_recompute_contract;
 
+mod deep_research;
+pub use deep_research::{
+    EvidenceBundle, EvidenceBundleError, EvidenceItem, EvidenceItemId, EvidenceItemIdError,
+    EvidenceKind, ResearchTopic, research_search_plan,
+};
+
 mod valuation_day_inputs;
 pub use valuation_day_inputs::{DayCashLedger, ValuationDayHistory, ValuationDayInputs};
 

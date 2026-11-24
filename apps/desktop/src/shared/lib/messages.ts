@@ -98,7 +98,6 @@ const catalog = {
   "app.errorBody": { ko: "잠시 뒤 다시 시도해 주세요." as UiText },
   "app.retry": { ko: "다시 시도" as UiText },
   "app.stockListEmpty": { ko: "표시할 종목이 없어요" as UiText },
-  "app.chatReady": { ko: "현황을 보면서 바로 질문할 수 있어요." as UiText },
   "app.sectionOverview": { ko: "요약" as UiText },
   "app.readySummary": { ko: "앱이 준비됐어요." as UiText },
   "app.ipcRetryable": { ko: "잠시 뒤 다시 시도해 주세요." as UiText },

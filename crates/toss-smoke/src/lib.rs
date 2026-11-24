@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod deidentify;
 pub mod exit_code;
 pub mod input;
 pub mod lock;
