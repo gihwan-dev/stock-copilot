@@ -4,11 +4,6 @@ import {
   AiSettingsSection,
 } from "../features/settings-ai";
 import {
-  AdvancedSettings,
-  BasicSettingsClientProvider,
-  BasicSettingsSection,
-} from "../features/settings-basic";
-import {
   NewsSettingsClientProvider,
   NewsSettingsSection,
 } from "../features/settings-news";
@@ -27,29 +22,22 @@ export const SettingsClients = (props: {
   readonly client: SettingsClient;
   readonly children: ReactElement;
 }): ReactElement => (
-  <BasicSettingsClientProvider client={props.client}>
-    <SystemSettingsClientProvider client={props.client}>
-      <AiSettingsClientProvider client={props.client}>
-        <NewsSettingsClientProvider client={props.client}>
-          <PrinciplesSettingsClientProvider client={props.client}>
-            {props.children}
-          </PrinciplesSettingsClientProvider>
-        </NewsSettingsClientProvider>
-      </AiSettingsClientProvider>
-    </SystemSettingsClientProvider>
-  </BasicSettingsClientProvider>
+  <SystemSettingsClientProvider client={props.client}>
+    <AiSettingsClientProvider client={props.client}>
+      <NewsSettingsClientProvider client={props.client}>
+        <PrinciplesSettingsClientProvider client={props.client}>
+          {props.children}
+        </PrinciplesSettingsClientProvider>
+      </NewsSettingsClientProvider>
+    </AiSettingsClientProvider>
+  </SystemSettingsClientProvider>
 );
 
 export const SettingsSections = (): ReactElement => (
   <Stack gap="space-8">
-    <BasicSettingsSection />
-    <AdvancedSettings>
-      <Stack gap="space-8">
-        <AiSettingsSection />
-        <NewsSettingsSection />
-        <PrinciplesSettingsSection />
-        <SystemSettingsSection />
-      </Stack>
-    </AdvancedSettings>
+    <AiSettingsSection />
+    <NewsSettingsSection />
+    <PrinciplesSettingsSection />
+    <SystemSettingsSection />
   </Stack>
 );

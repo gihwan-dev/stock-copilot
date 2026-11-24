@@ -14,11 +14,6 @@ import type {
   WakeCriteria,
 } from "./news-schema";
 import type {
-  InvestmentProfile,
-  OrderSwitch,
-  OrderSwitchState,
-} from "./profile-schema";
-import type {
   AccountRef,
   ConfigPathText,
   ContactText,
@@ -86,20 +81,7 @@ type NewsClient = {
   readonly setPrinciples: (principles: Principles) => Reply<Principles>;
 };
 
-type BasicClient = {
-  readonly investmentProfile: () => Reply<InvestmentProfile>;
-  readonly setInvestmentProfile: (
-    profile: InvestmentProfile,
-  ) => Reply<InvestmentProfile>;
-  readonly orderSwitch: () => Reply<OrderSwitch>;
-  readonly requestOrderSwitch: (state: OrderSwitchState) => Reply<OrderSwitch>;
-};
-
-export type SettingsClient = SetupClient &
-  SystemClient &
-  AiClient &
-  NewsClient &
-  BasicClient;
+export type SettingsClient = SetupClient & SystemClient & AiClient & NewsClient;
 
 const noData: IpcFailure = { kind: "command", error: { kind: "no-data" } };
 
@@ -129,8 +111,4 @@ export const unavailableSettingsClient: SettingsClient = {
   setAliases: unavailable,
   principles: unavailable,
   setPrinciples: unavailable,
-  investmentProfile: unavailable,
-  setInvestmentProfile: unavailable,
-  orderSwitch: unavailable,
-  requestOrderSwitch: unavailable,
 };

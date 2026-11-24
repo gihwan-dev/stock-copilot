@@ -33,10 +33,7 @@ export const Disclosure = (props: Props): ReactElement => {
         </span>
         <span className="status-sentence flex-1">{props.title}</span>
       </Collapsible.Trigger>
-      <Collapsible.Panel
-        keepMounted
-        className="pb-space-4 flex flex-col gap-space-4"
-      >
+      <Collapsible.Panel className="pb-space-4 flex flex-col gap-space-4">
         {props.children}
       </Collapsible.Panel>
     </Collapsible.Root>
