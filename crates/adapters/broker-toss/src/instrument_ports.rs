@@ -118,7 +118,13 @@ impl<
         account: &AccountId,
         order_id: &BrokerOrderId,
     ) -> Result<BrokerOrder, PortError> {
-        self.reader.order(account, order_id).await
+        self.reader
+            .fetch_order(
+                account,
+                order_id,
+                crate::account_read::MasterErrorMode::Dedicated,
+            )
+            .await
     }
     async fn stock_warnings(
         &self,

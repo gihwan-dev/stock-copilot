@@ -1,0 +1,32 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/orders/{orderId}",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1orders~1{orderId}/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": {
+      "orderId": "synthetic-order-us-amt-002",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "orderType": "MARKET",
+      "timeInForce": "DAY",
+      "status": "FILLED",
+      "price": null,
+      "quantity": "0",
+      "orderAmount": "250.5",
+      "currency": "USD",
+      "orderedAt": "2026-03-28T23:30:00+09:00",
+      "canceledAt": null,
+      "execution": {
+        "filledQuantity": "1.352226",
+        "averageFilledPrice": "185.25",
+        "filledAmount": "250.5",
+        "commission": "0.25",
+        "tax": "0",
+        "filledAt": "2026-03-28T23:30:05+09:00",
+        "settlementDate": "2026-03-30"
+      }
+    }
+  }
+}

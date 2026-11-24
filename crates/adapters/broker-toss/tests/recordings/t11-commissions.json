@@ -1,0 +1,23 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/commissions",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1commissions/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": [
+      {
+        "marketCountry": "KR",
+        "commissionRate": "0.00015",
+        "startDate": "2026-01-01",
+        "endDate": "2026-12-31"
+      },
+      {
+        "marketCountry": "US",
+        "commissionRate": "0.001",
+        "startDate": null,
+        "endDate": "2026-06-30"
+      }
+    ]
+  }
+}

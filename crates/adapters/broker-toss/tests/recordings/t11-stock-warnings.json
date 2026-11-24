@@ -1,0 +1,23 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/stocks/{symbol}/warnings",
+  "method": "get",
+  "status": "200",
+  "schema": "#/paths/~1api~1v1~1stocks~1{symbol}~1warnings/get/responses/200/content/application~1json/schema",
+  "body": {
+    "result": [
+      {
+        "warningType": "OVERHEATED",
+        "exchange": "KRX",
+        "startDate": "2026-03-20",
+        "endDate": "2026-03-27"
+      },
+      {
+        "warningType": "VI_STATIC",
+        "exchange": "KRX",
+        "startDate": "2026-03-26",
+        "endDate": null
+      }
+    ]
+  }
+}

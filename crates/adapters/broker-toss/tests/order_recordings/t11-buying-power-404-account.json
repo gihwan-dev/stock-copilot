@@ -1,0 +1,14 @@
+{
+  "origin": "synthetic",
+  "path": "/api/v1/buying-power",
+  "method": "get",
+  "status": "404",
+  "schema": "#/paths/~1api~1v1~1buying-power/get/responses/404/content/application~1json/schema",
+  "body": {
+    "error": {
+      "requestId": "synthetic-bp-404",
+      "code": "account-not-found",
+      "message": "계좌를 찾을 수 없습니다."
+    }
+  }
+}
