@@ -75,6 +75,7 @@ pub struct AiJobFinishRecord {
     outcome: AiJobOutcome,
     timing: AiJobTiming,
     tokens: TokenUsage,
+    prompt: Option<crate::PromptRef>,
 }
 
 impl AiJobFinishRecord {
@@ -92,7 +93,17 @@ impl AiJobFinishRecord {
             outcome,
             timing,
             tokens,
+            prompt: None,
         }
+    }
+    #[must_use]
+    pub fn with_prompt(mut self, prompt: crate::PromptRef) -> Self {
+        self.prompt = Some(prompt);
+        self
+    }
+    #[must_use]
+    pub const fn prompt(&self) -> Option<&crate::PromptRef> {
+        self.prompt.as_ref()
     }
     #[must_use]
     pub const fn job(&self) -> &AiJobId {

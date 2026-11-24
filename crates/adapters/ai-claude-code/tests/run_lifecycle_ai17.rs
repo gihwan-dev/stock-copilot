@@ -335,4 +335,31 @@ mod tests {
             );
         });
     }
+
+    #[test]
+    fn provider_reports_cli_version_seen_in_preflight() {
+        run_async(async {
+            let dir = TempDirGuard::new("version");
+            let prepared = PreparedFakeAiCli::prepare(
+                dir.path(),
+                "fake-version",
+                &scenario(vec![
+                    preflight_turn(),
+                    turn(vec![text_line("answer"), result_line()]),
+                ]),
+            )
+            .expect("prepare");
+            let provider = provider(prepared.executable_path().to_path_buf(), dir.path());
+            assert_eq!(
+                application::CliVersionSource::observed_version(&provider).await,
+                None
+            );
+            let mut stream = provider.run(spec("run-version")).await.expect("run");
+            drain(&mut stream).await.expect("stream");
+            assert_eq!(
+                application::CliVersionSource::observed_version(&provider).await,
+                Some(application::CliVersion::try_new("2.1.322").expect("version"))
+            );
+        });
+    }
 }

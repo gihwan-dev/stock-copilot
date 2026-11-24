@@ -336,6 +336,11 @@ pub use ai_job_record::{
     AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
     AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
 };
+mod cli_version_gate;
+pub use cli_version_gate::{
+    AiGate, CliVersion, CliVersionGateOutcome, CliVersionGateReport, CliVersionSource,
+    EnsureVerifiedCliVersion, LoginRecheck, VerifiedCliVersions,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
@@ -458,7 +463,8 @@ pub use prompt_replay::{
 
 mod prompt_file;
 pub use prompt_file::{
-    PromptBody, PromptFile, PromptFileError, PromptId, PromptSource, PromptTask, PromptVersion,
+    LoadedPrompt, PromptBody, PromptDigest, PromptFile, PromptFileError, PromptId,
+    PromptLocationError, PromptRef, PromptSource, PromptTask, PromptVersion,
 };
 
 mod submit_estimate_tool;
