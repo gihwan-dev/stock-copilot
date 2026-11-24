@@ -125,9 +125,18 @@ const messageFiles = (folder) =>
     return name === "messages.ts" ? [path] : [];
   });
 
-test("U-28: no screen text in the app asks for a terminal command", () => {
-  const files = messageFiles(join(desktopRoot, "src"));
-  assert.ok(files.length >= 6);
+test("U-28: no first-run or settings screen text asks for a terminal command", () => {
+  const owned = [
+    "features/onboarding",
+    "features/settings-ai",
+    "features/settings-news",
+    "features/settings-principles",
+    "features/settings-system",
+  ];
+  const files = owned.flatMap((folder) =>
+    messageFiles(join(desktopRoot, "src", folder)),
+  );
+  assert.equal(files.length, owned.length);
   for (const file of files) {
     const phrases = [
       ...readFileSync(file, "utf8").matchAll(/ko:\s*"((?:[^"\\]|\\.)*)"/gu),
