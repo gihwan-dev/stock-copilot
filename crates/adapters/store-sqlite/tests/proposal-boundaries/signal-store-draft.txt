@@ -1,0 +1,8 @@
+use application::ProposalRepository;
+use domain::{Draft, DraftRestoreEvidence, MasterInstrument, Proposal, ProposalId};
+use store_sqlite::SignalStore;
+pub async fn use_draft(store: &SignalStore<'_>, value: &Proposal<Draft>, id: &ProposalId, evidence: &DraftRestoreEvidence, master: &MasterInstrument) {
+    let _saved = store.store_draft(value, evidence, master).await;
+    let _loaded: Option<Proposal<Draft>> = store.draft(id, master).await.expect("load");
+}
+fn main() {}

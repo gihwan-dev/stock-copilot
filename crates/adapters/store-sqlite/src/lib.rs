@@ -235,3 +235,22 @@ mod watchlist;
 pub use watchlist::{SignalSkipStore, WatchlistStore};
 #[cfg(test)]
 mod watchlist_tests;
+
+mod briefing;
+pub use briefing::BriefingStore;
+#[cfg(test)]
+mod briefing_tests;
+
+#[cfg(test)]
+mod signal_store_boundary_tests;
+
+#[cfg(test)]
+mod close_evidence_tests;
+
+mod ai_jobs;
+pub use ai_jobs::{AiJobStore, PrinciplesStore};
+#[cfg(test)]
+mod ai_jobs_tests;
+
+#[cfg(test)]
+mod scorecard_tests;

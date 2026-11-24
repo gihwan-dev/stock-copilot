@@ -336,6 +336,11 @@ pub use ai_job_record::{
     AiJobFinishRecord, AiJobOutcome, AiJobRecordStore, AiJobRecordWrite, AiJobRun, AiJobTiming,
     AiJobTimingError, AiJobUsageMeter, ListAiJobUsage, ListAiJobUsageError, RecordAiJobFinished,
 };
+mod cli_version_gate;
+pub use cli_version_gate::{
+    AiGate, CliVersion, CliVersionGateOutcome, CliVersionGateReport, CliVersionSource,
+    EnsureVerifiedCliVersion, LoginRecheck, VerifiedCliVersions,
+};
 mod ai_provider;
 pub use ai_provider::{
     AiEvent, AiEventStream, AiProvider, AiUsage, IsolationCheck, IsolationFailure, ResetTime,
@@ -396,13 +401,24 @@ pub use news_tool_reads::{
     CollectedItemHandle, CollectedItemQuery, DisclosureToolLine, LookbackDays, NewsKeyword,
     NewsToolLine, NewsToolReads, ToolQueryTextError,
 };
+mod article_tool;
+pub use article_tool::{
+    ArticleBody, ArticleFetchFailure, ArticleLocation, ArticleToolPort, BodyReadingSetting,
+};
 mod portfolio_tool_reads;
+mod thesis_tool;
+pub use thesis_tool::{ThesisRunMetadata, ThesisToolPort, ThesisUpdateFailure, UpdateThesis};
+mod web_research_tool;
 pub use portfolio_tool_reads::{
     AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
     BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
     PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
     SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
     TransactionToolLine, TransactionsToolView,
+};
+pub use web_research_tool::{
+    ResearchTopic, WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort,
+    WebResearchToolRequest,
 };
 mod portfolio_views;
 pub use portfolio_views::{
@@ -447,7 +463,8 @@ pub use prompt_replay::{
 
 mod prompt_file;
 pub use prompt_file::{
-    PromptBody, PromptFile, PromptFileError, PromptId, PromptSource, PromptTask, PromptVersion,
+    LoadedPrompt, PromptBody, PromptDigest, PromptFile, PromptFileError, PromptId,
+    PromptLocationError, PromptRef, PromptSource, PromptTask, PromptVersion,
 };
 
 mod submit_estimate_tool;
