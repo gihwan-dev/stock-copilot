@@ -26,6 +26,6 @@ export const responses = {
     { kind: "bug" },
     { kind: "no-data" },
   ],
-  setOrderPermission: { kind: "denied", order_enabled: "off" },
   openExternal: { status: "opened" },
+  setOrderPermission: { kind: "denied", order_enabled: "off" },
 } as const;

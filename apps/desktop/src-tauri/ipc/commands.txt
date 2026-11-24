@@ -1,4 +1,4 @@
 app_version
 get_settings
-set_order_permission
 open_external
+set_order_permission

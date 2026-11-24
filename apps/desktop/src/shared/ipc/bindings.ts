@@ -16,6 +16,7 @@ export const commands = {
   setOrderPermission: (request: SetOrderPermissionRequest) =>
     typedError<UiOrderSwitchOutcome, IpcError>(
       __TAURI_INVOKE("set_order_permission", { request }),
+    ),
   openExternal: (request: OpenExternalRequest) =>
     typedError<OpenExternalResponse, IpcError>(
       __TAURI_INVOKE("open_external", { request }),
@@ -48,13 +49,6 @@ export type IpcError = {
 
 export type IpcErrorKind = "user-fixable" | "retryable" | "bug" | "no-data";
 
-export type SetOrderPermissionRequest = {
-  permission: UiOrderPermission;
-};
-
-export type SettingsQueryScope = "all";
-
-export type UiConnectionState = "connected" | "needs-key";
 export type OpenExternalRequest = {
   url: string;
 };
@@ -64,6 +58,14 @@ export type OpenExternalResponse = {
 };
 
 export type OpenExternalStatus = "opened";
+
+export type SetOrderPermissionRequest = {
+  permission: UiOrderPermission;
+};
+
+export type SettingsQueryScope = "all";
+
+export type UiConnectionState = "connected" | "needs-key";
 
 export type UiDataSource =
   | "KindDisclosure"

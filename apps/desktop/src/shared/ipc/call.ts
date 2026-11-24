@@ -1,11 +1,13 @@
-import { err, ok, type Result } from "../lib";
+import { err, ok, type ExternalUrl, type Result } from "../lib";
 import { commands, events } from "./bindings";
 import {
   parseUiEvent,
   settleAppVersion,
+  settleOpenExternal,
   type AppVersion,
   type CoreUiEvent,
   type IpcFailure,
+  type OpenExternalResult,
 } from "./schema";
 import {
   settleOrderSwitchOutcome,
@@ -14,15 +16,6 @@ import {
   type OrderSwitchOutcome,
   type SettingsView,
 } from "./settings-schema";
-import { err, type ExternalUrl, type Result } from "../lib";
-import { commands } from "./bindings";
-import {
-  settleAppVersion,
-  settleOpenExternal,
-  type AppVersion,
-  type IpcFailure,
-  type OpenExternalResult,
-} from "./schema";
 import { startIpcTimeout } from "./timer";
 
 export type { IpcFailure } from "./schema";
@@ -65,6 +58,12 @@ export const getSettings = (): Promise<Result<SettingsView, IpcFailure>> => {
       return settleSettingsView(outcome);
     })
     .catch((): Result<SettingsView, IpcFailure> => {
+      timer.cancel();
+      return err(frameworkFailure);
+    });
+  return Promise.race([request, timer.promise]);
+};
+
 export const openExternal = (
   url: ExternalUrl,
 ): Promise<Result<OpenExternalResult, IpcFailure>> => {
