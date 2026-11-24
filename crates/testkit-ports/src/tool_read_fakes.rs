@@ -1,11 +1,14 @@
 use application::{
-    AllocationToolView, CandleWindow, CandlesToolView, CollectedItemQuery, DisclosureToolLine,
-    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, NewsToolLine, NewsToolReads,
-    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, QuoteToolView,
-    RankingToolKind, RankingsToolView, SectorsToolView, SystemPortError, TransactionsToolView,
+    AiRunId, AllocationToolView, ArticleBody, ArticleFetchFailure, ArticleLocation,
+    ArticleToolPort, BodyReadingSetting, CandleWindow, CandlesToolView, CollectedItemHandle,
+    CollectedItemQuery, DisclosureToolLine, InvestorFlowToolView, MarketOverviewToolView,
+    MarketToolReads, NewsToolLine, NewsToolReads, PerformancePeriod, PerformanceToolView,
+    PortfolioToolReads, PortfolioToolView, QuoteToolView, RankingToolKind, RankingsToolView,
+    SectorsToolView, SystemPortError, TransactionsToolView, WebResearchToolFailure,
+    WebResearchToolOutcome, WebResearchToolPort, WebResearchToolRequest,
 };
 
-use domain::{KnownMarket, Symbol};
+use domain::{KnownMarket, NewsSource, NormalizedUrl, Symbol};
 use std::future::{Future, ready};
 
 use crate::script::State;
@@ -299,5 +302,134 @@ impl NewsToolReads for FixedNewsToolReads {
             .write()
             .push(NewsReadCall::Disclosures(query.clone()));
         ready(self.disclosures.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WebResearchCall {
+    KnownTargets(AiRunId),
+    Request(AiRunId, WebResearchToolRequest),
+}
+
+#[derive(Debug)]
+pub struct FixedWebResearchToolPort {
+    known: Result<Vec<Symbol>, SystemPortError>,
+    outcome: Result<WebResearchToolOutcome, WebResearchToolFailure>,
+    calls: State<Vec<WebResearchCall>>,
+}
+
+impl FixedWebResearchToolPort {
+    #[must_use]
+    pub fn new(
+        known: Result<Vec<Symbol>, SystemPortError>,
+        outcome: Result<WebResearchToolOutcome, WebResearchToolFailure>,
+    ) -> Self {
+        Self {
+            known,
+            outcome,
+            calls: State::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<WebResearchCall> {
+        self.calls.write().clone()
+    }
+}
+
+impl WebResearchToolPort for FixedWebResearchToolPort {
+    fn known_targets(
+        &self,
+        run: &AiRunId,
+    ) -> impl Future<Output = Result<Vec<Symbol>, SystemPortError>> + Send {
+        self.calls
+            .write()
+            .push(WebResearchCall::KnownTargets(run.clone()));
+        ready(self.known.clone())
+    }
+
+    fn request_research(
+        &self,
+        run: &AiRunId,
+        request: &WebResearchToolRequest,
+    ) -> impl Future<Output = Result<WebResearchToolOutcome, WebResearchToolFailure>> + Send {
+        self.calls
+            .write()
+            .push(WebResearchCall::Request(run.clone(), request.clone()));
+        ready(self.outcome.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArticleCall {
+    Locate(CollectedItemHandle),
+    BodyReading(NewsSource),
+    FetchBody(NormalizedUrl),
+}
+
+#[derive(Debug)]
+pub struct FixedArticleToolPort {
+    locations: Vec<(CollectedItemHandle, ArticleLocation)>,
+    enabled: Vec<NewsSource>,
+    body: Result<ArticleBody, ArticleFetchFailure>,
+    calls: State<Vec<ArticleCall>>,
+}
+
+impl FixedArticleToolPort {
+    #[must_use]
+    pub fn new(
+        locations: Vec<(CollectedItemHandle, ArticleLocation)>,
+        enabled: Vec<NewsSource>,
+        body: Result<ArticleBody, ArticleFetchFailure>,
+    ) -> Self {
+        Self {
+            locations,
+            enabled,
+            body,
+            calls: State::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<ArticleCall> {
+        self.calls.write().clone()
+    }
+}
+
+impl ArticleToolPort for FixedArticleToolPort {
+    fn locate(
+        &self,
+        handle: &CollectedItemHandle,
+    ) -> impl Future<Output = Result<Option<ArticleLocation>, SystemPortError>> + Send {
+        self.calls.write().push(ArticleCall::Locate(handle.clone()));
+        let found = self
+            .locations
+            .iter()
+            .find(|(known, _location)| known == handle)
+            .map(|(_known, location)| location.clone());
+        ready(Ok(found))
+    }
+
+    fn body_reading(
+        &self,
+        source: &NewsSource,
+    ) -> impl Future<Output = Result<BodyReadingSetting, SystemPortError>> + Send {
+        self.calls
+            .write()
+            .push(ArticleCall::BodyReading(source.clone()));
+        let setting = if self.enabled.contains(source) {
+            BodyReadingSetting::Enabled
+        } else {
+            BodyReadingSetting::Disabled
+        };
+        ready(Ok(setting))
+    }
+
+    fn fetch_body(
+        &self,
+        url: &NormalizedUrl,
+    ) -> impl Future<Output = Result<ArticleBody, ArticleFetchFailure>> + Send {
+        self.calls.write().push(ArticleCall::FetchBody(url.clone()));
+        ready(self.body.clone())
     }
 }

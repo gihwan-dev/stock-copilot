@@ -2,8 +2,9 @@
 mod tests {
     use application::{
         AiRunId, ComparePromptReplay, EstimateToolArguments, PromptFile, PromptReplayRunner,
-        ReplayCase, ReplayCount, ReplayOutput, SystemPortError, ToolCallOutcome, ToolCallRecord,
-        ToolCallRecordInput, ToolName, ToolPayloadJson, ToolProtocolVersion, ToolRequestId,
+        PromptSource, ReplayCase, ReplayCount, ReplayOutput, SystemPortError, ToolCallOutcome,
+        ToolCallRecord, ToolCallRecordInput, ToolName, ToolPayloadJson, ToolProtocolVersion,
+        ToolRequestId,
     };
     use domain::{
         AiProbabilityInput, CalibrationEstimateId, EvidenceBundleId, Nanosecond, OffsetSeconds,
@@ -33,9 +34,9 @@ mod tests {
         .expect("시각")
     }
     fn prompt(version: &str) -> PromptFile {
-        PromptFile::parse(&format!(
+        PromptFile::parse(&PromptSource::new(&format!(
             "---\nid: estimate\nversion: {version}\ntask: estimate\ninputs: task_id\noutput_schema: submit_estimate\ntools: submit_estimate\n---\n본문\n"
-        ))
+        )))
         .expect("프롬프트")
     }
     fn call(request: &str, result: &str) -> ToolCallRecord {
@@ -78,7 +79,7 @@ mod tests {
             prompt: &PromptFile,
             case: &ReplayCase,
         ) -> impl Future<Output = Result<ReplayOutput, SystemPortError>> + Send {
-            let output = match (prompt.version(), case.bundle.as_str()) {
+            let output = match (prompt.version().as_str(), case.bundle.as_str()) {
                 ("v1", "bundle-a") => submitted("현재가 71200원, PER 12.5배", &["tool:q1"]),
                 ("v1", "bundle-b") => submitted("현재가 80000원", &["tool:q1"]),
                 ("v1", _) => submitted("근거만 있다", &[]),
