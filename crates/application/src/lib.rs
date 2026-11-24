@@ -542,6 +542,12 @@ pub use chat_types::{
 mod chat_ports;
 pub use chat_ports::{ChatChunkSink, ChatQueuePort, ChatRepository, ChatRunLedger, ChatStopSignal};
 
+mod chat_number_check;
+pub use chat_number_check::{
+    ChatNumberCheck, ChatNumberEvidence, ChatNumberEvidenceSet, NoNumberEvidence,
+    check_chat_numbers,
+};
+
 mod send_chat_message;
 pub use send_chat_message::{
     AnalysisToolAllowance, ChatModelConfig, SendChatMessage, SendChatOutcome, SendChatRequest,

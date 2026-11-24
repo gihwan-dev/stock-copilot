@@ -92,6 +92,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       ToolCallFinished?: never;
@@ -106,6 +107,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -121,6 +123,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -134,6 +137,7 @@ export type ChatChunkDto_Deserialize =
     } & {
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -148,7 +152,22 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
+      TextDelta?: never;
+      ToolCallFinished?: never;
+      ToolCallStarted?: never;
+    })
+  | ({
+      NumberCheck: {
+        status: ChatNumberCheckDto;
+      };
+    } & {
+      Card?: never;
+      Done?: never;
+      Failed?: never;
+      RateLimited?: never;
+      Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
       ToolCallStarted?: never;
@@ -166,6 +185,7 @@ export type ChatChunkDto_Deserialize =
     } & {
       Card?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -182,6 +202,7 @@ export type ChatChunkDto_Deserialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
@@ -194,6 +215,7 @@ export type ChatChunkDto_Deserialize =
     } & {
       Card?: never;
       Done?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -210,6 +232,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       ToolCallFinished?: never;
@@ -224,6 +247,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -239,6 +263,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -252,6 +277,7 @@ export type ChatChunkDto_Serialize =
     } & {
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -266,7 +292,22 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
+      TextDelta?: never;
+      ToolCallFinished?: never;
+      ToolCallStarted?: never;
+    })
+  | ({
+      NumberCheck: {
+        status: ChatNumberCheckDto;
+      };
+    } & {
+      Card?: never;
+      Done?: never;
+      Failed?: never;
+      RateLimited?: never;
+      Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
       ToolCallStarted?: never;
@@ -284,6 +325,7 @@ export type ChatChunkDto_Serialize =
     } & {
       Card?: never;
       Failed?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -300,6 +342,7 @@ export type ChatChunkDto_Serialize =
       Card?: never;
       Done?: never;
       Failed?: never;
+      NumberCheck?: never;
       Sources?: never;
       TextDelta?: never;
       ToolCallFinished?: never;
@@ -312,6 +355,7 @@ export type ChatChunkDto_Serialize =
     } & {
       Card?: never;
       Done?: never;
+      NumberCheck?: never;
       RateLimited?: never;
       Sources?: never;
       TextDelta?: never;
@@ -364,6 +408,8 @@ export type ChatModelSelectionDto =
         name: string;
       };
     };
+
+export type ChatNumberCheckDto = "NoNumbers" | "Verified" | "Unverified";
 
 export type ChatReasoningEffortDto =
   "Default" | "Low" | "Medium" | "High" | "XHigh" | "Max";

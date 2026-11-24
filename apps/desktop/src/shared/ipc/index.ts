@@ -20,6 +20,7 @@ export type {
   ChatHistoryEntry,
   ChatHorizon,
   ChatMarket,
+  ChatNumberCheck,
   ChatRole,
   ChatScreenContext,
   ChatSource,
