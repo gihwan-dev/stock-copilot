@@ -191,7 +191,7 @@ pub use signals::SignalStore;
 mod signals_tests;
 
 mod audit;
-pub use audit::AuditStore;
+pub use audit::{AnchoredAuditStore, AuditStore};
 #[cfg(test)]
 mod audit_tests;
 
@@ -207,3 +207,6 @@ mod settings_tests;
 
 #[cfg(test)]
 mod maintenance_tests;
+
+#[cfg(test)]
+mod audit_anchor_tests;

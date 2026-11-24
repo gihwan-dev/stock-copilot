@@ -273,7 +273,8 @@ mod confirm_instrument_identity;
 pub use confirm_instrument_identity::{ConfirmInstrumentIdentity, IdentityConfirmationOutcome};
 mod audit_log;
 pub use audit_log::{
-    AuditEntry, AuditIntegrity, AuditKind, AuditLog, WebSearchAuditError, WebSearchAuditOutcome,
+    AuditChainHash, AuditEntry, AuditHead, AuditHeadAnchor, AuditHeadError, AuditIntegrity,
+    AuditKind, AuditLog, AuditSequence, WebSearchAuditError, WebSearchAuditOutcome,
     WebSearchAuditRecord, WebSearchQueryMode,
 };
 mod instrument_mapping;

@@ -5,3 +5,4 @@ pub(crate) const FIND_ENTRY: &str =
 pub(crate) const INSERT: &str = "INSERT INTO audit_log(seq, at_payload, kind, payload, prev_hash, hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
 pub(crate) const ALL: &str =
     "SELECT seq, at_payload, kind, payload, prev_hash, hash FROM audit_log ORDER BY seq";
+pub(crate) const HASH_AT: &str = "SELECT hash FROM audit_log WHERE seq = ?1";
