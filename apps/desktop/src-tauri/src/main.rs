@@ -1,3 +1,6 @@
+use src_tauri::platform::notifier::{
+    FilteredNotifier, NotificationPreferences, UnavailableNotificationDelivery,
+};
 use src_tauri::platform::single_instance::{InstanceAcquisition, SocketPath, attach_to_app};
 use src_tauri::{build_app, run_app};
 use src_tauri::{
@@ -45,7 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         settings: Arc::new(Unavailable),
         audit: Arc::new(Unavailable),
         secrets: Arc::new(Unavailable),
-        notifier: Arc::new(Unavailable),
+        notifier: Arc::new(FilteredNotifier::new(
+            UnavailableNotificationDelivery,
+            NotificationPreferences::default(),
+        )),
         news_feeds: Vec::new(),
         clock: Arc::clone(&shared_clock),
         presence: Arc::new(platform_macos::UnavailablePresence),

@@ -5,6 +5,7 @@ mod database;
 mod exit;
 mod ipc_contract;
 mod lifecycle;
+mod notifier;
 mod residency;
 mod startup;
 mod support;
