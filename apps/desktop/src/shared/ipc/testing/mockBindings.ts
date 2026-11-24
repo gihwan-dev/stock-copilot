@@ -527,6 +527,7 @@ export type OrderApprovalReason =
   | "proposal-unavailable"
   | "market-closed"
   | "conditions-changed"
+  | "high-value-rejected"
   | "other";
 
 export type OrderApprovalRequest = {

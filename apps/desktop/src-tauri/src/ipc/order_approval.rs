@@ -5,6 +5,7 @@ use application::ClassifiedError;
 use approval_command::execute::{
     ApprovalCommandError, ApprovalCommandOutcome, ApprovalCommandRejection,
 };
+use approval_command::ports::BrokerOrderRejectionReason;
 use approval_command::prepare::{PrepareError, PrepareRejection};
 use approval_command::service::OrderApprovalHandler;
 use domain::{ClientOrderId, ProposalId};
@@ -57,6 +58,8 @@ pub enum OrderApprovalReason {
     MarketClosed,
     #[serde(rename = "conditions-changed")]
     ConditionsChanged,
+    #[serde(rename = "high-value-rejected")]
+    HighValueRejected,
     #[serde(rename = "other")]
     Other,
 }
@@ -117,14 +120,43 @@ fn map_outcome(outcome: &ApprovalCommandOutcome) -> OrderApprovalResponse {
         ApprovalCommandOutcome::Submitted { .. } => {
             response(OrderApprovalStatus::Submitted, OrderApprovalReason::None)
         }
-        ApprovalCommandOutcome::BrokerRejected { .. } => response(
+        ApprovalCommandOutcome::BrokerRejected { reason, .. } => response(
             OrderApprovalStatus::BrokerRejected,
-            OrderApprovalReason::Other,
+            map_broker_rejection(*reason),
         ),
         ApprovalCommandOutcome::OutcomeUnknown { .. } => response(
             OrderApprovalStatus::OutcomeUnknown,
             OrderApprovalReason::None,
         ),
+    }
+}
+
+const fn map_broker_rejection(reason: BrokerOrderRejectionReason) -> OrderApprovalReason {
+    match reason {
+        BrokerOrderRejectionReason::ConfirmHighValueRequired => {
+            OrderApprovalReason::HighValueRejected
+        }
+        BrokerOrderRejectionReason::InvalidRequest
+        | BrokerOrderRejectionReason::AccountHeaderRequired
+        | BrokerOrderRejectionReason::AuthenticationRequired
+        | BrokerOrderRejectionReason::AccessForbidden
+        | BrokerOrderRejectionReason::OppositePendingOrderExists
+        | BrokerOrderRejectionReason::InsufficientBuyingPower
+        | BrokerOrderRejectionReason::InsufficientSellableQuantity
+        | BrokerOrderRejectionReason::OrderHoursClosed
+        | BrokerOrderRejectionReason::StockRestricted
+        | BrokerOrderRejectionReason::PriceOutOfRange
+        | BrokerOrderRejectionReason::OrderTypeNotAllowed
+        | BrokerOrderRejectionReason::PrerequisiteRequired
+        | BrokerOrderRejectionReason::MarketNotSupportedForStock
+        | BrokerOrderRejectionReason::InvestorExchangeNotIntegrated
+        | BrokerOrderRejectionReason::AmountOrderOutsideRegularHours
+        | BrokerOrderRejectionReason::FractionalQuantityOutsideRegularHours
+        | BrokerOrderRejectionReason::AccountRestricted
+        | BrokerOrderRejectionReason::MaxOrderAmountExceeded
+        | BrokerOrderRejectionReason::IdempotencyKeyConflict
+        | BrokerOrderRejectionReason::RateLimited
+        | BrokerOrderRejectionReason::OtherRejected => OrderApprovalReason::Other,
     }
 }
 

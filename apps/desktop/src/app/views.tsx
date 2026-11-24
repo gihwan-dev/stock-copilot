@@ -9,6 +9,7 @@ import { PortfolioOverview } from "../features/portfolio";
 import { SelfCheckBar } from "../features/self-check";
 import { SettingsScreen } from "../features/settings";
 import { RiskEditors } from "../features/settings-risk";
+import { ScorecardPanel } from "../features/scorecard";
 import { SignalCards } from "../features/signal";
 import { StatusScreen } from "../features/status";
 import { TransactionsScreen } from "../features/transactions";
@@ -101,6 +102,7 @@ const HomeBody = (props: { readonly retry: () => void }): ReactElement => {
             }}
           />
           <SignalCards sources={sources} />
+          <ScorecardPanel load={sources.scorecard} />
           <PortfolioOverview
             sources={sources}
             onOpenTransactions={(): void => {
