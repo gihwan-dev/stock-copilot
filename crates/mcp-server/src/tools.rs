@@ -34,6 +34,7 @@ pub enum ToolErrorCode {
     DataUnavailable,
     UpstreamUnavailable,
     ForbiddenOperation,
+    RateLimited,
     InternalError,
 }
 

@@ -1,8 +1,10 @@
 use application::{
-    AllocationToolView, CandleWindow, CandlesToolView, CollectedItemQuery, DisclosureToolLine,
-    InvestorFlowToolView, MarketOverviewToolView, MarketToolReads, NewsToolLine, NewsToolReads,
-    PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, QuoteToolView,
-    RankingToolKind, RankingsToolView, SectorsToolView, SystemPortError, TransactionsToolView,
+    AiRunId, AllocationToolView, CandleWindow, CandlesToolView, CollectedItemQuery,
+    DisclosureToolLine, InvestorFlowToolView, MarketOverviewToolView, MarketToolReads,
+    NewsToolLine, NewsToolReads, PerformancePeriod, PerformanceToolView, PortfolioToolReads,
+    PortfolioToolView, QuoteToolView, RankingToolKind, RankingsToolView, SectorsToolView,
+    SystemPortError, TransactionsToolView, WebResearchToolFailure, WebResearchToolOutcome,
+    WebResearchToolPort, WebResearchToolRequest,
 };
 
 use domain::{KnownMarket, Symbol};
@@ -299,5 +301,60 @@ impl NewsToolReads for FixedNewsToolReads {
             .write()
             .push(NewsReadCall::Disclosures(query.clone()));
         ready(self.disclosures.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WebResearchCall {
+    KnownTargets(AiRunId),
+    Request(AiRunId, WebResearchToolRequest),
+}
+
+#[derive(Debug)]
+pub struct FixedWebResearchToolPort {
+    known: Result<Vec<Symbol>, SystemPortError>,
+    outcome: Result<WebResearchToolOutcome, WebResearchToolFailure>,
+    calls: State<Vec<WebResearchCall>>,
+}
+
+impl FixedWebResearchToolPort {
+    #[must_use]
+    pub fn new(
+        known: Result<Vec<Symbol>, SystemPortError>,
+        outcome: Result<WebResearchToolOutcome, WebResearchToolFailure>,
+    ) -> Self {
+        Self {
+            known,
+            outcome,
+            calls: State::default(),
+        }
+    }
+
+    #[must_use]
+    pub fn calls(&self) -> Vec<WebResearchCall> {
+        self.calls.write().clone()
+    }
+}
+
+impl WebResearchToolPort for FixedWebResearchToolPort {
+    fn known_targets(
+        &self,
+        run: &AiRunId,
+    ) -> impl Future<Output = Result<Vec<Symbol>, SystemPortError>> + Send {
+        self.calls
+            .write()
+            .push(WebResearchCall::KnownTargets(run.clone()));
+        ready(self.known.clone())
+    }
+
+    fn request_research(
+        &self,
+        run: &AiRunId,
+        request: &WebResearchToolRequest,
+    ) -> impl Future<Output = Result<WebResearchToolOutcome, WebResearchToolFailure>> + Send {
+        self.calls
+            .write()
+            .push(WebResearchCall::Request(run.clone(), request.clone()));
+        ready(self.outcome.clone())
     }
 }

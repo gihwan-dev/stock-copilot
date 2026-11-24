@@ -397,12 +397,17 @@ pub use news_tool_reads::{
     NewsToolLine, NewsToolReads, ToolQueryTextError,
 };
 mod portfolio_tool_reads;
+mod web_research_tool;
 pub use portfolio_tool_reads::{
     AllocationAxis, AllocationLabel, AllocationLabelError, AllocationLine, AllocationToolView,
     BenchmarkReturnLine, BuyingPowerLine, ConcentrationLine, HoldingToolLine, PerformanceBenchmark,
     PerformancePeriod, PerformanceToolView, PortfolioToolReads, PortfolioToolView, RiskMetrics,
     SampleSufficiency, TransactionAdmission, TransactionToolFilter, TransactionToolKind,
     TransactionToolLine, TransactionsToolView,
+};
+pub use web_research_tool::{
+    ResearchTopic, WebResearchToolFailure, WebResearchToolOutcome, WebResearchToolPort,
+    WebResearchToolRequest,
 };
 mod portfolio_views;
 pub use portfolio_views::{

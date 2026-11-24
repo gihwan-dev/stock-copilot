@@ -15,6 +15,9 @@ mod contract_tests;
 pub use catalog::market::register_market_tools;
 pub use catalog::news::register_news_tools;
 pub use catalog::portfolio::register_portfolio_tools;
+pub use catalog::research::{
+    MAX_RESEARCH_REQUESTS_PER_RUN, MIN_RESEARCH_INTERVAL_SECS, register_web_research_tool,
+};
 pub use catalog::{AnalysisCatalogPorts, build_analysis_catalog};
 pub use estimate_input::{
     SUBMIT_ESTIMATE_TOOL, parse_submit_estimate_arguments, submit_estimate_schema,
