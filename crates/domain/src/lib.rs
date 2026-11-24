@@ -39,20 +39,30 @@ pub use instrument_master::{InstrumentMaster, InstrumentMasterEntry, InstrumentM
 pub use symbol::{Market, MarketCode, MarketError, Symbol, SymbolError, UnknownMarketCode};
 
 mod ai_read_policy;
+mod ai_wake;
 mod cluster;
 mod collected_item;
 mod data_source;
 mod disclosure;
+mod news_clustering;
 mod news_item;
 
 pub use ai_read_policy::{
     AiBodyReadPolicy, AiBodyReadSettingError, AiBodyReadToggle, AiNewsInput,
     SourceAiBodyReadSettings, prepare_news_for_ai,
 };
+pub use ai_wake::{
+    DisclosureAction, DisclosureGrade, DisclosureRevision, HoldingStatus, TriggerJudgement,
+    WakeTrigger, daily_move_trigger, disclosure_action, grade_disclosure, news_burst_trigger,
+};
 pub use cluster::{Cluster, ClusterError};
 pub use collected_item::{CollectedItem, InformationSource, UntrustedText, UntrustedTextError};
 pub use data_source::{DataSource, DataSourceCategory};
 pub use disclosure::{Disclosure, DisclosureKey, DisclosureSource, ReceiptNo, ReceiptNoError};
+pub use news_clustering::{
+    ClusterDecision, NewsClusterBook, StockNewsCluster, TimedNews, TitleBigrams, TitleSimilarity,
+    dedupe_by_url,
+};
 pub use news_item::{NewsItem, NewsSource, NormalizedUrl, UrlError};
 
 pub use disclosure::{DartReceiptNo, KindReceiptNo, SecEdgarReceiptNo};

@@ -63,3 +63,7 @@ pub(crate) mod audit_tests;
 pub(crate) mod chat;
 #[cfg(test)]
 pub(crate) mod chat_tests;
+
+pub(crate) mod settings;
+#[cfg(test)]
+pub(crate) mod settings_tests;
