@@ -76,3 +76,11 @@ pub(crate) mod order_rate_tests;
 pub(crate) mod status;
 #[cfg(test)]
 pub(crate) mod status_tests;
+
+pub(crate) mod wake;
+#[cfg(test)]
+pub(crate) mod wake_tests;
+
+pub(crate) mod watchlist;
+#[cfg(test)]
+pub(crate) mod watchlist_tests;

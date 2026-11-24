@@ -225,3 +225,13 @@ mod status;
 pub use status::{NewsDataSettingsStore, SourceStatusStore, SpecStatusStore};
 #[cfg(test)]
 mod status_tests;
+
+mod wake;
+pub use wake::{WakeTriggerStore, WebItemStore};
+#[cfg(test)]
+mod wake_tests;
+
+mod watchlist;
+pub use watchlist::{SignalSkipStore, WatchlistStore};
+#[cfg(test)]
+mod watchlist_tests;
