@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"session-fixture-002","cwd":"/tmp/empty","tools":["WebSearch"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk","slash_commands":[],"skills":[],"plugins":[{"name":"cc-plugin-privacy","path":"builtin"}],"apiKeySource":"none","claude_code_version":"2.1.322"}
+{"type":"assistant","message":{"model":"claude-haiku-5-5","content":[{"type":"tool_use","id":"toolu_web_01","name":"WebSearch","input":{"query":"KOSPI index today","action":"search"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_web_01","content":"found 3 items","is_error":false}]}}
+{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"collected"}}}
+{"type":"result","subtype":"success","is_error":false,"num_turns":1,"usage":{"input_tokens":400,"output_tokens":90,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}

@@ -94,6 +94,11 @@ pub struct DisclosureKey(ReceiptNo);
 
 impl DisclosureKey {
     #[must_use]
+    pub const fn from_receipt(receipt_no: ReceiptNo) -> Self {
+        Self(receipt_no)
+    }
+
+    #[must_use]
     pub const fn source(&self) -> DisclosureSource {
         self.0.source()
     }
