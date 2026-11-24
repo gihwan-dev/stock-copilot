@@ -497,7 +497,23 @@ const DOCKER_FIXED_PATHS: [&str; 4] = [
     "/Applications/Docker.app/Contents/Resources/bin/docker",
 ];
 
-fn detect_container_runtime_with(program: &str, fixed_paths: &[&Path]) -> ContainerRuntime {
+const CONTAINER_RUNTIME_PROBE: &str = "harness/git-hooks/container-runtime.mjs";
+
+struct RuntimeProbe<'a> {
+    program: &'a str,
+    script: &'a Path,
+    set_env: &'a [(&'a str, &'a str)],
+    remove_env: &'a [&'a str],
+}
+
+fn detect_container_runtime_with(
+    program: &str,
+    fixed_paths: &[&Path],
+    probe: &RuntimeProbe<'_>,
+) -> ContainerRuntime {
+    if fixed_paths.iter().any(|path| path.exists()) {
+        return ContainerRuntime::Present;
+    }
     let binary_present = Command::new(program)
         .arg("--version")
         .stdin(Stdio::null())
@@ -505,16 +521,38 @@ fn detect_container_runtime_with(program: &str, fixed_paths: &[&Path]) -> Contai
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success());
-    if binary_present || fixed_paths.iter().any(|path| path.exists()) {
-        ContainerRuntime::Present
-    } else {
+    if binary_present {
+        return ContainerRuntime::Present;
+    }
+    let mut command = Command::new(probe.program);
+    command
+        .arg(probe.script)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null());
+    for key in probe.remove_env {
+        command.env_remove(key);
+    }
+    command.envs(probe.set_env.iter().copied());
+    let user_absent = command.output().is_ok_and(|output| {
+        output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "absent"
+    });
+    if user_absent {
         ContainerRuntime::Absent
+    } else {
+        ContainerRuntime::Present
     }
 }
 
-fn detect_container_runtime() -> ContainerRuntime {
+fn detect_container_runtime(root: &Path) -> ContainerRuntime {
     let fixed: Vec<&Path> = DOCKER_FIXED_PATHS.iter().map(Path::new).collect();
-    detect_container_runtime_with("docker", &fixed)
+    let script = root.join(CONTAINER_RUNTIME_PROBE);
+    let probe = RuntimeProbe {
+        program: "node",
+        script: &script,
+        set_env: &[],
+        remove_env: &[],
+    };
+    detect_container_runtime_with("docker", &fixed, &probe)
 }
 
 fn is_implementer_work_branch(reference: &str) -> bool {
@@ -597,7 +635,11 @@ fn run_push_check(just: &str) -> Result<(), String> {
         .read_to_string(&mut input)
         .map_err(|error| format!("표준 입력: {error}"))?;
     let members = load_members(None).map_err(|failure| failure.0)?;
-    let plan = push_plan(&members.root, &input, detect_container_runtime())?;
+    let plan = push_plan(
+        &members.root,
+        &input,
+        detect_container_runtime(&members.root),
+    )?;
     if plan.recipe == PushRecipe::Fast {
         writeln!(
             io::stderr().lock(),

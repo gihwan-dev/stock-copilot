@@ -5235,6 +5235,7 @@
   },
   {
     "command": "git merge --no-ff --no-edit origin/master",
+    "cwd": "{worktree}",
     "decision": "allow",
     "rules": [],
     "role": "implementer"
@@ -5534,6 +5535,184 @@
     "cwd": "{worktree}",
     "decision": "deny",
     "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge origin/master",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {root} merge --no-ff --no-edit origin/master",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git merge --no-ff --no-edit origin/master",
+    "cwd": "{root}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git -C {root} merge master",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git worktree add ../evil master",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git worktree add ../wt-main master",
+    "cwd": "{root}",
+    "decision": "allow",
+    "rules": [],
+    "role": "main"
+  },
+  {
+    "command": "git worktree remove ../evil",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git tag",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git tag -l",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git tag -v v1",
+    "cwd": "{worktree}",
+    "decision": "allow",
+    "rules": [],
+    "role": "implementer"
+  },
+  {
+    "command": "git tag v1",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git tag -f v1",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git tag origin/side HEAD",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-subcommands"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch -m master hijacked",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "main"
+  },
+  {
+    "command": "git branch --move main hijacked",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "main"
+  },
+  {
+    "command": "git branch --force main HEAD",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "main"
+  },
+  {
+    "command": "git branch -C x master",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "main"
+  },
+  {
+    "command": "git branch -m side other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch --move side other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch -M side other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch -c side other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch --copy side other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch -C side other",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch origin/side HEAD",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch origin/master HEAD",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
+    "role": "implementer"
+  },
+  {
+    "command": "git branch master HEAD",
+    "cwd": "{worktree}",
+    "decision": "deny",
+    "rules": ["git-history"],
     "role": "implementer"
   }
 ]

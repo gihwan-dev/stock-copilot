@@ -1,13 +1,23 @@
-import { realpathSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
+import { reportProblems } from "../../.claude/hooks/lib/agent-guard.mjs";
 import {
   DEFINITIONS,
   WRITERS,
   bashFindings,
   unwrap,
 } from "../../.claude/hooks/lib/bash-guard.mjs";
+import {
+  parseBrief,
+  reviewTargetCommit,
+} from "../../.claude/hooks/lib/brief.mjs";
 import { editFindings } from "../../.claude/hooks/lib/edit-guard.mjs";
+import {
+  headOf,
+  isAncestor,
+  resolveCommit,
+} from "../../.claude/hooks/lib/git-facts.mjs";
 import { delegateTargetFindings } from "../../.claude/hooks/lib/orchestration.mjs";
 import {
   locate,
@@ -2432,7 +2442,25 @@ const DELEGATE_ALLOWED_KEYS = Object.freeze([
   "toolSummary",
 ]);
 
-const delegateTaskFindings = (role, args, actor) => {
+const readAgentRules = (projectRoot) => {
+  try {
+    const parsed = JSON.parse(
+      readFileSync(
+        join(projectRoot, "harness/claude-hooks/agent-rules.json"),
+        "utf8",
+      ),
+    );
+    return plainObject(parsed) &&
+      plainObject(parsed.reportFirstLines) &&
+      Array.isArray(parsed.reportMarkers)
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const delegateTaskFindings = (role, args, actor, root, branch, project) => {
   if (role !== ROLE.implementer) {
     const detail =
       actor?.agent_id === "antigravity-delegated-child"
@@ -2480,7 +2508,53 @@ const delegateTaskFindings = (role, args, actor) => {
       ),
     ];
   }
-  return delegateTargetFindings(args.target, args.role);
+  const targetFindings = delegateTargetFindings(args.target, args.role);
+  if (targetFindings.length > 0) {
+    return targetFindings;
+  }
+  const agentRules = readAgentRules(project.root);
+  if (agentRules === undefined) {
+    return [
+      finding(
+        "orchestration",
+        "주 작업 트리의 agent-rules.json을 읽을 수 없어 위임을 닫힌 실패로 거부한다",
+      ),
+    ];
+  }
+  const report = reportProblems(args.task, agentRules, new Set());
+  if (report.length > 0) {
+    return report;
+  }
+  if (args.role === "review") {
+    const brief = parseBrief(args.task);
+    const base =
+      brief.problem === undefined
+        ? resolveCommit(root, brief.commit)
+        : undefined;
+    const head = headOf(root);
+    const requested = reviewTargetCommit(args.task);
+    const targetCommit =
+      requested === undefined ? undefined : resolveCommit(root, requested);
+    if (
+      brief.problem !== undefined ||
+      typeof branch !== "string" ||
+      brief.branch !== branch ||
+      base === undefined ||
+      head === undefined ||
+      targetCommit === undefined ||
+      base === targetCommit ||
+      targetCommit !== head ||
+      !isAncestor(root, base, targetCommit)
+    ) {
+      return [
+        finding(
+          "orchestration",
+          "리뷰 기준은 현재 작업 사본 브랜치와 이력의 기준·대상 커밋(HEAD)이어야 한다",
+        ),
+      ];
+    }
+  }
+  return [];
 };
 
 export const antigravityPreTool = (
@@ -2490,7 +2564,7 @@ export const antigravityPreTool = (
   extraFacts = {},
 ) => {
   try {
-    const { root, role, actor } = actorInput(
+    const { root, role, branch, actor } = actorInput(
       input,
       project,
       sessionCwd,
@@ -2640,7 +2714,14 @@ export const antigravityPreTool = (
     }
 
     if (DELEGATE_TASK_TOOLS.includes(toolName)) {
-      const findings = delegateTaskFindings(role, args, actor);
+      const findings = delegateTaskFindings(
+        role,
+        args,
+        actor,
+        root,
+        branch,
+        project,
+      );
       return findings.length > 0 ? denyOutput(findings) : { decision: "allow" };
     }
 

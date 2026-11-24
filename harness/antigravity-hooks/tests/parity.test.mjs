@@ -97,7 +97,7 @@ test("Antigravity PreToolUse denies every Claude bash-cases denial without weake
       },
       project,
       opts.sessionCwd,
-      { home: fakeHome, branch: opts.branch },
+      { home: fakeHome, branch: opts.branch, threadId: undefined },
     );
 
     if (
@@ -124,7 +124,7 @@ test("Antigravity PreToolUse denies every Claude bash-cases denial without weake
         },
         lockedProject,
         opts.sessionCwd,
-        { home: fakeHome, branch: opts.branch },
+        { home: fakeHome, branch: opts.branch, threadId: undefined },
       );
       assert.equal(lockedResult.decision, "deny", `lock=on ${command}`);
       continue;
@@ -172,7 +172,7 @@ test("Antigravity PreToolUse denies every Claude edit-cases denial without weake
       },
       project,
       opts.sessionCwd,
-      { home: fakeHome, branch: opts.branch },
+      { home: fakeHome, branch: opts.branch, threadId: undefined },
     );
 
     if (
@@ -212,7 +212,7 @@ test("Antigravity PreToolUse denies every Claude edit-cases denial without weake
       },
       lockedProject,
       fixture.worktree,
-      { home: fakeHome, branch: "h-61" },
+      { home: fakeHome, branch: "h-61", threadId: undefined },
     ).decision,
     "deny",
   );

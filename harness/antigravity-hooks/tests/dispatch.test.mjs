@@ -22,20 +22,31 @@ mkdirSync(wtAgents, { recursive: true });
 
 after(() => rmSync(f.base, { recursive: true, force: true }));
 
-const runCli = (stdinText, cwd = wtAgents, eventArg = "PreToolUse") =>
-  spawnSync(
+const runCli = (
+  stdinText,
+  cwd = wtAgents,
+  eventArg = "PreToolUse",
+  extraEnv = {},
+) => {
+  const env = {
+    ...process.env,
+    STOCK_COPILOT_HARNESS_STATE: join(f.base, "state"),
+    ...extraEnv,
+  };
+  if (!Object.hasOwn(extraEnv, "T3CODE_THREAD_ID")) {
+    delete env.T3CODE_THREAD_ID;
+  }
+  return spawnSync(
     process.execPath,
     [join(repoRoot, "harness/antigravity-hooks/dispatch.mjs"), eventArg],
     {
       cwd,
       input: stdinText,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        STOCK_COPILOT_HARNESS_STATE: join(f.base, "state"),
-      },
+      env,
     },
   );
+};
 
 test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () => {
   const session = sessionProject(wtAgents);
@@ -133,7 +144,12 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", hooksReady: true, dirty: " M crates/domain/src/lib.rs" },
+    {
+      branch: "h-61",
+      threadId: undefined,
+      hooksReady: true,
+      dirty: " M crates/domain/src/lib.rs",
+    },
   );
   assert.equal(dirtyImplementerStop.decision, "continue");
 
@@ -149,7 +165,12 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", hooksReady: true, dirty: " M crates/domain/src/lib.rs" },
+    {
+      branch: "h-61",
+      threadId: undefined,
+      hooksReady: true,
+      dirty: " M crates/domain/src/lib.rs",
+    },
   );
   assert.equal(continuedDirtyStop.decision, "continue");
 
@@ -165,7 +186,7 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", trackedDirty: " M docs/notes.md" },
+    { branch: "h-61", threadId: undefined, trackedDirty: " M docs/notes.md" },
   );
   assert.equal(continuedReviewerDirtyStop.decision, "continue");
 
@@ -181,7 +202,7 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", hooksReady: true, dirty: "" },
+    { branch: "h-61", threadId: undefined, hooksReady: true, dirty: "" },
   );
   assert.equal(continuedCleanStop.decision, "allow");
 
@@ -197,7 +218,12 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", hooksReady: true, dirty: " M crates/domain/src/lib.rs" },
+    {
+      branch: "h-61",
+      threadId: undefined,
+      hooksReady: true,
+      dirty: " M crates/domain/src/lib.rs",
+    },
   );
   assert.equal(cappedStop.decision, "allow");
 
@@ -212,7 +238,7 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", hooksReady: false, dirty: "" },
+    { branch: "h-61", threadId: undefined, hooksReady: false, dirty: "" },
   );
   assert.equal(missingHooksStop.decision, "continue");
 
@@ -227,7 +253,7 @@ test("dispatchEvent handles PreToolUse PostToolUse Stop and records audit", () =
     },
     session,
     record,
-    { branch: "h-61", hooksReady: false, dirty: " M x" },
+    { branch: "h-61", threadId: undefined, hooksReady: false, dirty: " M x" },
   );
   assert.equal(errorTerminationStop.decision, "allow");
 
@@ -344,7 +370,7 @@ test("Stop fails closed with continue when real git status fails without injecte
       },
       session,
       () => {},
-      { branch: "h-61", hooksReady: true },
+      { branch: "h-61", threadId: undefined, hooksReady: true },
       "Stop",
     );
     assert.equal(implStop.decision, "continue");
@@ -361,7 +387,7 @@ test("Stop fails closed with continue when real git status fails without injecte
       },
       session,
       () => {},
-      { branch: "h-61" },
+      { branch: "h-61", threadId: undefined },
       "Stop",
     );
     assert.equal(revStop.decision, "continue");

@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import {
@@ -467,16 +467,94 @@ const isAbort = (sub, rest, rules) =>
   !rest[0].dynamic &&
   rest[0].text === "--abort";
 
-const implementerMerge = (rest, rules) => {
-  const allowed = rules.git.implementerMerge;
-  const options = rest.filter((word) => isOption(word));
-  const positionals = rest.filter((word) => !isOption(word));
-  return (
-    options.every((word) => allowed.options.includes(word.text)) &&
-    positionals.length === 1 &&
-    !positionals[0].dynamic &&
-    allowed.branches.includes(positionals[0].text)
+const gitRefCleanEnv = () => ({
+  ...gitEnvironment(),
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+});
+
+const hasShadowingRef = (directory, target, expectedFullRef) => {
+  const isRemote = expectedFullRef.startsWith("refs/remotes/");
+  const shadowRefs = isRemote
+    ? [`refs/heads/${target}`, `refs/tags/${target}`, `refs/${target}`]
+    : [`refs/tags/${target}`, `refs/${target}`];
+  const options = {
+    encoding: "utf8",
+    env: gitRefCleanEnv(),
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 5000,
+  };
+  for (const ref of shadowRefs) {
+    const probe = spawnSync(
+      "git",
+      ["-C", directory, "show-ref", "--verify", "--quiet", ref],
+      options,
+    );
+    if (probe.error !== undefined || probe.status !== 1) {
+      return true;
+    }
+  }
+  const resolved = spawnSync(
+    "git",
+    [
+      "-C",
+      directory,
+      "rev-parse",
+      "--symbolic-full-name",
+      "--verify",
+      "--quiet",
+      "--end-of-options",
+      target,
+    ],
+    options,
   );
+  if (resolved.error !== undefined) {
+    return true;
+  }
+  if (resolved.status === 0) {
+    return resolved.stdout.trim() !== expectedFullRef;
+  }
+  return false;
+};
+
+const implementerMerge = (parsed, invocation, context) => {
+  if (parsed.globals.length > 0) {
+    return false;
+  }
+  const allowed = context.rules.git.implementerMerge;
+  const options = parsed.rest.filter((word) => isOption(word));
+  const positionals = parsed.rest.filter((word) => !isOption(word));
+  if (
+    !options.every((word) => allowed.options.includes(word.text)) ||
+    positionals.length !== 1 ||
+    positionals[0].dynamic ||
+    !allowed.branches.includes(positionals[0].text)
+  ) {
+    return false;
+  }
+  const target = positionals[0].text;
+  const isRemoteTarget = target.includes("/");
+  if (isRemoteTarget) {
+    if (
+      !options.some((word) => word.text === "--no-ff") ||
+      implementerWorkBranch(invocation, context) === undefined
+    ) {
+      return false;
+    }
+  } else if (
+    context.project.ownedWorktree !== undefined &&
+    implementerWorkBranch(invocation, context) === undefined
+  ) {
+    return false;
+  }
+  const directory = currentDirectory(invocation, context);
+  if (directory === undefined) {
+    return false;
+  }
+  const expectedFullRef = isRemoteTarget
+    ? `refs/remotes/${target}`
+    : `refs/heads/${target}`;
+  return !hasShadowingRef(directory, target, expectedFullRef);
 };
 
 const isForbiddenPushBranch = (name, rules) =>
@@ -578,9 +656,88 @@ const implementerFastForwardMerge = (parsed, invocation, context) => {
     return false;
   }
   const allowedRemotes = context.rules.git.implementerPush?.remotes ?? [];
-  return allowedRemotes.some(
-    (remote) => target.text === `${remote}/${current}`,
+  if (
+    !allowedRemotes.some((remote) => target.text === `${remote}/${current}`)
+  ) {
+    return false;
+  }
+  const directory = currentDirectory(invocation, context);
+  return (
+    directory !== undefined &&
+    !hasShadowingRef(directory, target.text, `refs/remotes/${target.text}`)
   );
+};
+
+const subagentWorktreeMutation = (rest, rules) => {
+  if (rest.length === 0 || rest.some((word) => word.dynamic)) {
+    return true;
+  }
+  const action = rest.find((word) => !isOption(word));
+  if (action === undefined) {
+    return true;
+  }
+  const readOnly = rules.git.worktreeReadOnly ?? [];
+  return !readOnly.includes(action.text);
+};
+
+const TAG_LIST_VALUE_OPTIONS = new Set([
+  "--sort",
+  "--contains",
+  "--no-contains",
+  "--merged",
+  "--no-merged",
+  "--points-at",
+  "--format",
+  "--color",
+]);
+
+const subagentTagMutation = (rest) => {
+  if (rest.length === 0) {
+    return false;
+  }
+  if (rest.some((word) => word.dynamic)) {
+    return true;
+  }
+  let readOnlyMode = false;
+  let expectingValue = false;
+  for (const word of rest) {
+    const text = word.text;
+    if (expectingValue) {
+      expectingValue = false;
+      continue;
+    }
+    if (text === "--") {
+      if (!readOnlyMode) return true;
+      break;
+    }
+    if (
+      text === "-l" ||
+      text === "--list" ||
+      text === "-v" ||
+      text === "--verify"
+    ) {
+      readOnlyMode = true;
+      continue;
+    }
+    if (/^-n[0-9]*$/u.test(text) || text === "-i" || text === "--ignore-case") {
+      readOnlyMode = true;
+      continue;
+    }
+    const equals = text.indexOf("=");
+    const flag = equals === -1 ? text : text.slice(0, equals);
+    if (TAG_LIST_VALUE_OPTIONS.has(flag)) {
+      readOnlyMode = true;
+      if (equals === -1) expectingValue = true;
+      continue;
+    }
+    if (text.startsWith("-")) {
+      return true;
+    }
+    if (!readOnlyMode) {
+      return true;
+    }
+  }
+  return expectingValue;
 };
 
 const subagentRemoteMutation = (rest, rules) => {
@@ -1631,7 +1788,7 @@ export const CHECKS = [
         sub === "merge" &&
         !(
           context.role === ROLE.implementer &&
-          (implementerMerge(rest, context.rules) ||
+          (implementerMerge(parsed, invocation, context) ||
             implementerFastForwardMerge(parsed, invocation, context))
         );
       if (sub === "remote" && subagentRemoteMutation(rest, context.rules)) {
@@ -1639,6 +1796,22 @@ export const CHECKS = [
           finding(
             "git-subcommands",
             "서브에이전트는 git remote로 원격 저장소 설정이나 추적 참조를 바꾸지 않는다 (docs/harness.md 7.3)",
+          ),
+        ];
+      }
+      if (sub === "worktree" && subagentWorktreeMutation(rest, context.rules)) {
+        return [
+          finding(
+            "git-subcommands",
+            "서브에이전트는 git worktree list 외의 작업 사본 생성·변경·삭제를 하지 않는다 (docs/harness.md 7.3)",
+          ),
+        ];
+      }
+      if (sub === "tag" && subagentTagMutation(rest)) {
+        return [
+          finding(
+            "git-subcommands",
+            "서브에이전트는 git tag 조회 외의 태그 생성·변경·삭제를 하지 않는다 (docs/harness.md 7.3)",
           ),
         ];
       }
@@ -1749,6 +1922,39 @@ export const CHECKS = [
               ),
             ]
           : [];
+      const allowedRemotes = git.implementerPush?.remotes ?? [];
+      const branchIsListOnly = options.some((option) =>
+        [
+          "-l",
+          "--list",
+          "--show-current",
+          "--contains",
+          "--no-contains",
+          "--merged",
+          "--no-merged",
+          "--points-at",
+        ].includes(option.long ?? `-${option.short}`),
+      );
+      const shadowingBranchCreate =
+        subagent &&
+        sub === "branch" &&
+        !branchIsListOnly &&
+        statics.length > 0 &&
+        (allowedRemotes.some((remote) =>
+          statics[0].word.text
+            .toLowerCase()
+            .startsWith(`${remote.toLowerCase()}/`),
+        ) ||
+          git.baseBranch.branches.some(
+            (base) => base.toLowerCase() === statics[0].word.text.toLowerCase(),
+          ))
+          ? [
+              finding(
+                "git-history",
+                `서브에이전트는 원격 추적·기준 참조를 가리는 브랜치(${statics[0].word.text})를 만들거나 바꾸지 않는다 (docs/harness.md 7.3)`,
+              ),
+            ]
+          : [];
       const dynamic = git.dynamicSensitive.includes(sub)
         ? positionals
             .filter(({ word, ended }) => word.dynamic && !ended)
@@ -1765,6 +1971,7 @@ export const CHECKS = [
         ...refspec,
         ...forced,
         ...remoteBranchMutation,
+        ...shadowingBranchCreate,
         ...baseBranchFindings(
           sub,
           options,

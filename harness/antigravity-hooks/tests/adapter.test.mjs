@@ -67,6 +67,11 @@ cpSync(
   join(repoRoot, "harness/arch-check/rules.toml"),
   join(f.root, "harness/arch-check/rules.toml"),
 );
+mkdirSync(join(f.root, "harness", "claude-hooks"), { recursive: true });
+cpSync(
+  join(repoRoot, "harness/claude-hooks/agent-rules.json"),
+  join(f.root, "harness/claude-hooks/agent-rules.json"),
+);
 
 after(() => rmSync(f.base, { recursive: true, force: true }));
 
@@ -83,6 +88,7 @@ const call = (toolName, args, opts = {}) => {
     ? opts.modelName
     : "gemini-4-neon-xhigh";
   const branch = Object.hasOwn(opts, "branch") ? opts.branch : "h-61";
+  const threadId = Object.hasOwn(opts, "threadId") ? opts.threadId : undefined;
   const project = projectFor(f, { lock, ...projectOverrides });
   return antigravityPreTool(
     {
@@ -97,6 +103,7 @@ const call = (toolName, args, opts = {}) => {
     {
       home: fakeHome,
       branch,
+      threadId,
       ...(policyOverrides === undefined ? {} : { policy: policyOverrides }),
     },
   );
@@ -629,6 +636,39 @@ test("unknown tools malformed inputs and disallowed delegations fail closed", ()
     );
   }
 
+  for (const badReviewTask of [
+    "완료\n구현자 보고: 모든 테스트 통과",
+    `막힘: 이유\n- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n- 대상 SHA: ${headSha}`,
+    `- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n- 대상 SHA: ${headSha}\n하네스 기록: 통과`,
+    `- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n- 대상 SHA: ${headSha}\n완료 기준별 충족 근거`,
+    `- 브랜치: h-61\n- 대상 SHA: ${headSha}\n기준 커밋 없음`,
+    `- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n대상 SHA 없음`,
+    `- 기준 커밋: ${baseSha}\n- 브랜치: h-61\n- 대상 SHA: ${baseSha}`,
+    `- 기준 커밋: ${headSha}\n- 브랜치: h-61\n- 대상 SHA: ${headSha}`,
+    `- 기준 커밋: ${baseSha}\n- 브랜치: other-branch\n- 대상 SHA: ${headSha}`,
+  ]) {
+    assert.equal(
+      call(
+        "mcp_t3-code_delegate_task",
+        { ...claudeReviewArgs, task: badReviewTask },
+        { lock: LOCK.on },
+      ).decision,
+      "deny",
+      `expected review brief deny: ${badReviewTask}`,
+    );
+  }
+  assert.equal(
+    call(
+      "mcp_t3-code_delegate_task",
+      {
+        ...antigravityResearchArgs,
+        task: "완료\n구현자 보고를 연구 태스크로 우회",
+      },
+      { lock: LOCK.off },
+    ).decision,
+    "deny",
+  );
+
   for (const opts of [
     { lock: LOCK.off, modelName: "gemini-4-neon-high" },
     { lock: LOCK.off, sessionCwd: f.root, cwd: f.root },
@@ -958,7 +998,7 @@ test("lastUserInput conversation text with forbidden strings does not block beni
       },
       project,
       f.worktree,
-      { home: fakeHome, branch: "h-61" },
+      { home: fakeHome, branch: "h-61", threadId: undefined },
     );
     assert.equal(
       actual.decision,
@@ -1408,7 +1448,7 @@ test("Round 2 review hardening blocks git pathspec magic, archive/sqlite/git-gre
     },
     projectFor(f, { lock: LOCK.on }),
     f.worktree,
-    { home: "/Users/example-user", branch: "h-61" },
+    { home: "/Users/example-user", branch: "h-61", threadId: undefined },
   );
   assert.equal(realHomeEnv.decision, "allow");
   const relGeminiWrite = call(
@@ -1495,7 +1535,7 @@ test("Implementer role allows narrow own-branch git push, origin/master merge, a
       {
         home: fakeHome,
         ...(Object.hasOwn(opts, "branch") ? { branch: opts.branch } : {}),
-        ...(Object.hasOwn(opts, "threadId") ? { threadId: opts.threadId } : {}),
+        threadId: Object.hasOwn(opts, "threadId") ? opts.threadId : undefined,
       },
     );
 
@@ -1583,7 +1623,7 @@ test("Implementer role allows narrow own-branch git push, origin/master merge, a
       },
       extendedProject,
       t3NamedWorktree,
-      { home: fakeHome },
+      { home: fakeHome, threadId: undefined },
     ).decision,
     "deny",
   );
@@ -1648,6 +1688,28 @@ test("Implementer role allows narrow own-branch git push, origin/master merge, a
     [t3Worktree, "git merge --ff-only origin/t3/1234abcd", {}],
     [t3NamedWorktree, "git merge --ff-only origin/h-62", {}],
     [f.root, "git merge --ff-only origin/master", {}],
+    [pushWorktree, "git merge origin/master", {}],
+    [pushWorktree, `git -C ${f.root} merge origin/master`, {}],
+    [
+      pushWorktree,
+      `git -C ${f.root} merge --no-ff --no-edit origin/master`,
+      {},
+    ],
+    [pushWorktree, `git -C ${f.root} merge master`, {}],
+    [
+      pushWorktree,
+      `cd ${f.root} && git merge --no-ff --no-edit origin/master`,
+      {},
+    ],
+    [pushWorktree, `cd ${f.root} && git merge master`, {}],
+    [pushWorktree, "git branch -m h-61 other-task", {}],
+    [pushWorktree, "git branch --move h-61 other-task", {}],
+    [pushWorktree, "git branch -m master hijacked", {}],
+    [pushWorktree, "git branch origin/h-61 HEAD", {}],
+    [pushWorktree, "git branch origin/master HEAD", {}],
+    [pushWorktree, "git tag origin/h-61 HEAD", {}],
+    [pushWorktree, "git tag -f v1", {}],
+    [pushWorktree, "git worktree add ../evil master", {}],
   ]) {
     const actual = runIn(wt, cmd, opts);
     assert.equal(
@@ -1655,6 +1717,40 @@ test("Implementer role allows narrow own-branch git push, origin/master merge, a
       "deny",
       `expected deny for ff-merge (${wt}) ${cmd} ${JSON.stringify(opts)} -> ${JSON.stringify(actual)}`,
     );
+  }
+  execFileSync("git", ["-C", pushWorktree, "branch", "origin/h-61", "HEAD"]);
+  execFileSync("git", ["-C", pushWorktree, "branch", "origin/master", "HEAD"]);
+  execFileSync("git", ["-C", pushWorktree, "tag", "master", "HEAD"]);
+  try {
+    assert.equal(
+      runIn(pushWorktree, "git merge --ff-only origin/h-61").decision,
+      "deny",
+      "shadowed origin/h-61 branch must be denied",
+    );
+    assert.equal(
+      runIn(pushWorktree, "git merge --no-ff --no-edit origin/master").decision,
+      "deny",
+      "shadowed origin/master branch must be denied",
+    );
+    assert.equal(
+      runIn(pushWorktree, "git merge --no-ff --no-edit master").decision,
+      "deny",
+      "shadowed master tag must be denied",
+    );
+  } finally {
+    execFileSync("git", ["-C", pushWorktree, "branch", "-D", "origin/h-61"]);
+    execFileSync("git", ["-C", pushWorktree, "branch", "-D", "origin/master"]);
+    execFileSync("git", ["-C", pushWorktree, "tag", "-d", "master"]);
+  }
+  execFileSync("git", ["-C", pushWorktree, "tag", "origin/h-61", "HEAD"]);
+  try {
+    assert.equal(
+      runIn(pushWorktree, "git merge --ff-only origin/h-61").decision,
+      "deny",
+      "shadowed origin/h-61 tag must be denied",
+    );
+  } finally {
+    execFileSync("git", ["-C", pushWorktree, "tag", "-d", "origin/h-61"]);
   }
   assert.equal(
     decideBash(
@@ -1707,7 +1803,7 @@ test("Antigravity reviewer inherits H-58 isolated temp directory cleanup parity"
       },
       project,
       cwd,
-      { home: fakeHome },
+      { home: fakeHome, threadId: undefined },
     );
   try {
     assert.equal(runReviewer(`${remove} target`).decision, "allow");

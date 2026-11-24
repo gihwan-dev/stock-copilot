@@ -6,7 +6,10 @@ use crate::harness_workspace_tests::{
     fresh_directory, place_git_directory_outside, repository_root,
 };
 
-use super::{ContainerRuntime, PushPlan, PushRecipe, detect_container_runtime_with, push_plan};
+use super::{
+    CONTAINER_RUNTIME_PROBE, ContainerRuntime, PushPlan, PushRecipe, RuntimeProbe,
+    detect_container_runtime_with, push_plan,
+};
 
 const ZERO: &str = "0000000000000000000000000000000000000000";
 
@@ -167,22 +170,137 @@ fn push_plan_keeps_full_for_renames_deletions_detached_and_multi_refs() {
     );
 }
 
+fn detect_with_node(
+    program: &str,
+    fixed: &Path,
+    script: &Path,
+    set_env: &[(&str, &str)],
+    remove_env: &[&str],
+) -> ContainerRuntime {
+    let probe = RuntimeProbe {
+        program: "node",
+        script,
+        set_env,
+        remove_env,
+    };
+    detect_container_runtime_with(program, &[fixed], &probe)
+}
+
 #[test]
 fn container_runtime_detector_reports_absent_and_present_deterministically() {
-    let dir = fresh_directory(&repository_root(), "push-check-docker-detect");
+    let root = repository_root();
+    let script = root.join(CONTAINER_RUNTIME_PROBE);
+    let dir = fresh_directory(&root, "push-check-docker-detect");
     let missing = dir.join("no-such-socket");
     let present = dir.join("fake-docker");
+    let empty_home = dir.join("empty-home");
+    fs::create_dir_all(&empty_home).expect("create empty home");
     fs::write(&present, "stub").expect("write stub");
+    let home = empty_home.to_str().expect("utf-8 home");
+    let absent = "nonexistent-docker-binary-h61";
+    let only_home = [("HOME", home)];
+    let no_host = ["DOCKER_HOST"];
     assert_eq!(
-        detect_container_runtime_with("nonexistent-docker-binary-h61", &[missing.as_path()]),
+        detect_with_node(absent, &missing, &script, &only_home, &no_host),
         ContainerRuntime::Absent
     );
     assert_eq!(
-        detect_container_runtime_with("nonexistent-docker-binary-h61", &[present.as_path()]),
+        detect_with_node(
+            absent,
+            &missing,
+            &script,
+            &[("HOME", home), ("DOCKER_HOST", "   ")],
+            &[]
+        ),
+        ContainerRuntime::Absent
+    );
+    assert_eq!(
+        detect_with_node(absent, &present, &script, &only_home, &no_host),
         ContainerRuntime::Present
     );
     assert_eq!(
-        detect_container_runtime_with("git", &[missing.as_path()]),
+        detect_with_node(
+            absent,
+            &missing,
+            &script,
+            &[("HOME", home), ("DOCKER_HOST", "unix:///tmp/custom.sock")],
+            &[],
+        ),
         ContainerRuntime::Present
     );
+    assert_eq!(
+        detect_with_node("git", &missing, &script, &only_home, &no_host),
+        ContainerRuntime::Present
+    );
+}
+
+#[test]
+fn container_runtime_detector_fails_closed_when_probe_fails() {
+    let root = repository_root();
+    let script = root.join(CONTAINER_RUNTIME_PROBE);
+    let dir = fresh_directory(&root, "push-check-docker-fail-closed");
+    let missing = dir.join("no-such-socket");
+    let empty_home = dir.join("empty-home");
+    fs::create_dir_all(&empty_home).expect("create empty home");
+    let home = empty_home.to_str().expect("utf-8 home");
+    let set_home = [("HOME", home)];
+    let broken_program = RuntimeProbe {
+        program: "nonexistent-node-binary-h61",
+        script: &script,
+        set_env: &set_home,
+        remove_env: &["DOCKER_HOST"],
+    };
+    assert_eq!(
+        detect_container_runtime_with(
+            "nonexistent-docker-binary-h61",
+            &[&missing],
+            &broken_program
+        ),
+        ContainerRuntime::Present
+    );
+    let missing_script = dir.join("missing-probe.mjs");
+    assert_eq!(
+        detect_with_node(
+            "nonexistent-docker-binary-h61",
+            &missing,
+            &missing_script,
+            &[("HOME", home)],
+            &["DOCKER_HOST"],
+        ),
+        ContainerRuntime::Present
+    );
+}
+
+#[test]
+fn container_runtime_detector_checks_home_docker_sockets_and_binaries() {
+    let root = repository_root();
+    let script = root.join(CONTAINER_RUNTIME_PROBE);
+    let dir = fresh_directory(&root, "push-check-docker-home");
+    let missing = dir.join("no-such-socket");
+    for (label, relative) in [
+        ("colima", ".colima/default/docker.sock"),
+        ("docker-sock", ".docker/run/docker.sock"),
+        ("docker-bin", ".docker/bin/docker"),
+        ("orbstack-sock", ".orbstack/run/docker.sock"),
+        ("orbstack-bin", ".orbstack/bin/docker"),
+        ("rd-sock", ".rd/docker.sock"),
+        ("rd-bin", ".rd/bin/docker"),
+    ] {
+        let home = dir.join(label);
+        let file = home.join(relative);
+        fs::create_dir_all(file.parent().expect("parent")).expect("create dir");
+        fs::write(&file, "stub").expect("write stub");
+        let home_text = home.to_str().expect("utf-8 home");
+        assert_eq!(
+            detect_with_node(
+                "nonexistent-docker-binary-h61",
+                &missing,
+                &script,
+                &[("HOME", home_text)],
+                &["DOCKER_HOST"],
+            ),
+            ContainerRuntime::Present,
+            "{label}"
+        );
+    }
 }

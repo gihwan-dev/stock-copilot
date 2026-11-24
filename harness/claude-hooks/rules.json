@@ -266,6 +266,7 @@
       "remotes": ["origin"]
     },
     "remoteReadOnly": ["show", "get-url"],
+    "worktreeReadOnly": ["list"],
     "subagentOptions": [
       {
         "rule": "git-index-only",
@@ -296,10 +297,16 @@
         "subcommands": ["switch"],
         "long": ["--force-create"],
         "short": ["C"]
+      },
+      {
+        "rule": "git-history",
+        "subcommands": ["branch"],
+        "long": ["--move", "--copy"],
+        "short": ["m", "M", "c", "C"]
       }
     ],
     "forcedBranch": {
-      "options": ["-f", "--force", "-M", "-D", "-C"],
+      "options": ["-f", "--force", "-m", "--move", "-M", "-D", "-C"],
       "branches": ["master", "main"]
     },
     "fetchRefspec": true,
