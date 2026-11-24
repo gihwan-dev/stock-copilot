@@ -26,7 +26,7 @@
   ".claude/hooks/lib/reviewer-guard.mjs": "61209ec8c591c52837ec7ae0f0c92ede6f3ea3e13d58a2d956c39b5c37658938",
   ".claude/hooks/lib/roles.mjs": "bd5988821b3f18db8f1ddc4266061cb446d444f5582bd95bf0f099618b745c99",
   ".claude/hooks/lib/sandbox-glob.mjs": "5f22d3a69875e09a9e6f5d5228aee4229cde4b386cdc68b86c893e19d908dd85",
-  ".claude/hooks/lib/session-role.mjs": "15fe8c61c4a64c2438c785a622fd1b7187310e18e4439bc66d18d10070cef4f4",
+  ".claude/hooks/lib/session-role.mjs": "0d72b048c892142808ff95de36b7a7609126b17ce7d42f079014d1736c98cde5",
   ".claude/hooks/lib/shell.mjs": "a081854257f0cc0c56047819e28d727f5445d23fa5dd92b58dcce3a6e4db9185",
   ".claude/hooks/lib/state.mjs": "03fc5cfb42e797709c220a4a4b30423969d5fcae1cba32f01d6d9d6e2d05f61e",
   ".claude/hooks/lib/subagent-start.mjs": "50d422e77e2e1b9f0364ee2ba4190240ee42e5d5eebd18c9b19dd471499af013",
