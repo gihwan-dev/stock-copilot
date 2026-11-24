@@ -438,6 +438,7 @@ pub use spec_check::{
     SpecDocumentSnapshot, SpecDriftStatus, SpecFetchError, SpecHash, SpecStatusRecord,
     SpecVersionLabel, TossSpecBaseline, TossSpecObservation, TossSpecSource,
     TossSpecStatusRepository, evaluate_spec_drift,
+};
 mod open_external;
 pub use open_external::{
     CollectedUrlCatalog, ExternalUrlOpened, ExternalUrlOpener, ExternalUrlOpenerError,
