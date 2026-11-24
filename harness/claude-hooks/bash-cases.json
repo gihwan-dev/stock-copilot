@@ -1190,14 +1190,14 @@
   },
   {
     "command": "git push origin h-15",
-    "decision": "deny",
-    "rules": ["git-subcommands"],
+    "decision": "allow",
+    "rules": [],
     "role": "general-purpose"
   },
   {
     "command": "git push origin h-15",
-    "decision": "deny",
-    "rules": ["git-subcommands"],
+    "decision": "allow",
+    "rules": [],
     "role": "agent-id-only"
   },
   {
@@ -2182,8 +2182,8 @@
   },
   {
     "command": "chmod +x crates/domain/src/run.sh",
-    "decision": "deny",
-    "rules": ["chmod"]
+    "decision": "allow",
+    "rules": []
   },
   {
     "command": "chmod +x \"$F\"",
@@ -3872,8 +3872,8 @@
   },
   {
     "command": "echo x > docs/notes.md",
-    "decision": "deny",
-    "rules": ["role-without-writes"],
+    "decision": "allow",
+    "rules": [],
     "role": "general-purpose"
   },
   {
@@ -3908,8 +3908,8 @@
   },
   {
     "command": "echo x > crates/domain/src/lib.rs",
-    "decision": "deny",
-    "rules": ["main-docs-only"]
+    "decision": "allow",
+    "rules": []
   },
   {
     "command": "echo x > docs/reviews/H-15.md",

@@ -10,6 +10,10 @@ impl PortTypes for ProductPorts {
     type NewsFeed = UnavailableFeed;
     type Fundamentals = Unavailable;
     type AiProvider = Unavailable;
+    type ChatRepository = Unavailable;
+    type ChatRunLedger = Unavailable;
+    type ChatQueuePort = Unavailable;
+    type WarmChatRuntime = Unavailable;
     type PortfolioRepository = Unavailable;
     type TransactionRepository = Unavailable;
     type MarketDataRepository = Unavailable;

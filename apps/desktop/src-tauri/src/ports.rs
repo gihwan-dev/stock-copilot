@@ -1,10 +1,11 @@
 use crate::database::DatabaseFactory;
 use application::user_presence::UserPresence;
 use application::{
-    AiProvider, AuditLog, BrokerRead, Clock, EstimateRepository, EventBus, Fundamentals,
-    MacroSeries, MarketDataRepository, MarketInfo, NewsFeed, NewsRepository, Notifier,
-    PortfolioRepository, ProposalRepository, SecretStore, SettingsRepository, SignalRepository,
-    ThesisRepository, TransactionRepository, ValuationRepository,
+    AiProvider, AuditLog, BrokerRead, ChatQueuePort, ChatRepository, ChatRunLedger, Clock,
+    EstimateRepository, EventBus, Fundamentals, MacroSeries, MarketDataRepository, MarketInfo,
+    NewsFeed, NewsRepository, Notifier, PortfolioRepository, ProposalRepository, SecretStore,
+    SettingsRepository, SignalRepository, ThesisRepository, TransactionRepository,
+    ValuationRepository, WarmChatRuntime,
 };
 use domain::AccountId;
 use std::sync::Arc;
@@ -15,6 +16,10 @@ pub trait PortTypes: Send + Sync + 'static {
     type NewsFeed: NewsFeed + 'static;
     type Fundamentals: Fundamentals + 'static;
     type AiProvider: AiProvider + 'static;
+    type ChatRepository: ChatRepository + 'static;
+    type ChatRunLedger: ChatRunLedger + 'static;
+    type ChatQueuePort: ChatQueuePort + 'static;
+    type WarmChatRuntime: WarmChatRuntime + 'static;
     type PortfolioRepository: PortfolioRepository + 'static;
     type TransactionRepository: TransactionRepository + 'static;
     type MarketDataRepository: MarketDataRepository + 'static;
@@ -38,6 +43,10 @@ pub struct Ports<P: PortTypes> {
     pub news_feeds: Vec<Arc<P::NewsFeed>>,
     pub fundamentals: Arc<P::Fundamentals>,
     pub ai_provider: Arc<P::AiProvider>,
+    pub chat_repository: Arc<P::ChatRepository>,
+    pub chat_ledger: Arc<P::ChatRunLedger>,
+    pub chat_queue: Arc<P::ChatQueuePort>,
+    pub warm_chat: Arc<P::WarmChatRuntime>,
     pub portfolios: Arc<P::PortfolioRepository>,
     pub transactions: Arc<P::TransactionRepository>,
     pub market_data: Arc<P::MarketDataRepository>,
